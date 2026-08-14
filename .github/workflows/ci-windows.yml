@@ -1,0 +1,82 @@
+# 검증 게이트.
+#
+# 65는 검증 로직이 정교한데 .github 이 아예 없어 서버 측 강제가 0이었고, 게이트가
+# 로컬 git hook 전용이라 --no-verify 로 우회됐다. RA는 CI 인프라는 있는데 검증
+# 스텝이 없었다. 여기서는 처음부터 양쪽을 붙인다(개발계획 §8).
+
+name: CI - Windows
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    env:
+      # conftest 가 여기서 <이름>_test 를 파생해 만든다. 개발 DB를 건드리지 않는
+      # 구조가 CI에서도 그대로 성립한다.
+      DATABASE_URL: postgresql+psycopg://postgres:root@localhost:5432/matnexus
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # windows 러너 이미지에는 PostgreSQL 이 설치돼 있지만 꺼져 있다.
+      - name: PostgreSQL 시작
+        shell: pwsh
+        run: |
+          $service = Get-Service -Name postgresql* | Select-Object -First 1
+          Set-Service -InputObject $service -StartupType Automatic
+          Start-Service -InputObject $service
+          $env:PGPASSWORD = 'root'
+          & "$env:PGBIN\pg_isready" --timeout=30
+
+      - name: 백엔드 의존성
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: 린트 (ruff)
+        working-directory: backend
+        run: |
+          python -m ruff check .
+          python -m ruff format --check .
+
+      - name: 타입 (mypy strict)
+        working-directory: backend
+        run: python -m mypy
+
+      # 계약 baseline·경계 검사·인증 흐름이 모두 여기서 돈다.
+      - name: 테스트 (pytest)
+        working-directory: backend
+        run: python -m pytest
+
+      - name: 프론트엔드 의존성
+        working-directory: frontend
+        run: npm ci
+
+      - name: 프론트엔드 빌드 (tsc strict + vite)
+        working-directory: frontend
+        run: npm run build
+
+      # 생성 타입이 커밋된 것과 다르면 누군가 재생성을 빠뜨린 것이다(D13).
+      - name: 생성 타입 최신성
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          npm run api:types
+          $diff = git diff --name-only -- src/shared/api/schema.d.ts
+          if ($diff) {
+            Write-Error "schema.d.ts 가 최신이 아닙니다. 'npm run api:types' 를 실행하고 커밋하세요."
+            exit 1
+          }

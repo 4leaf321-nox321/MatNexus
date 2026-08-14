@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* 경로 별칭 — 화면 코드가 상대경로 ../../.. 로 서로를 부르기 시작하면
+       모듈 경계가 흐려진다 (개발계획 §4.2) */
+    "paths": { "@/*": ["./src/*"] },
+
+    /* Linting — strict 는 템플릿에 없어서 명시적으로 켠다 (개발계획 §8.1).
+       65가 TypeScript strict 로 얻은 이점을 그대로 가져오는 지점이다. */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}

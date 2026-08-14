@@ -1,0 +1,19 @@
+# 줄바꿈을 저장소와 작업 트리 양쪽에서 고정한다.
+#
+# 고정하지 않으면 윈도우에서 체크아웃할 때 LF 가 CRLF 로 바뀌는데, 그러면 CI 의
+# "생성 타입 최신성" 검사가 거짓으로 실패한다 — openapi-typescript 는 LF 로 쓰는데
+# 작업 트리 파일은 CRLF 라 매번 diff 가 생긴다.
+* text=auto eol=lf
+
+# PowerShell 스크립트만 CRLF 로 둔다. 운영 서버에서 메모장으로 열어 볼 수 있어야
+# 하고, 그 환경의 기본이 CRLF 다. (UTF-8 BOM 은 tests/architecture 가 따로 검사)
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# 바이너리 — 줄바꿈 변환 금지
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.parquet binary
+*.xlsx binary
+*.zip binary

@@ -1,0 +1,41 @@
+# frontend/package.json 의 version 이 올라가면 태그를 만든다.
+#
+# 버전을 올리는 행위가 곧 "이걸 배포하겠다"는 결정이다. 버전을 올리지 않은 커밋은
+# 릴리스를 만들지 않으므로, main 에 자유롭게 커밋하면서 배포 시점만 따로 정할 수
+# 있다(52에서 검증된 방식).
+
+name: Auto tag on version bump
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'frontend/package.json'
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 버전 읽기
+        id: version
+        run: echo "value=$(node -p "require('./frontend/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: 태그 생성 (이미 있으면 조용히 넘어간다)
+        env:
+          TAG: v${{ steps.version.outputs.value }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "$TAG 태그가 이미 있습니다 — 넘어갑니다."
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"

@@ -1,0 +1,34 @@
+/**
+ * 앱 껍데기 — 사이드바 + 헤더 + 본문.
+ *
+ * 본문만 스크롤한다. 헤더·사이드바가 함께 스크롤되면 워크벤치처럼 세로로 긴
+ * 화면에서 탭 위치를 잃는다.
+ */
+
+import { useState } from 'react'
+import { Outlet, useParams } from 'react-router-dom'
+
+import { Header } from '@/shared/layout/Header'
+import { Sidebar } from '@/shared/layout/Sidebar'
+import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
+
+export function AppShell() {
+  const [collapsed, setCollapsed] = useState(false)
+  const { slug } = useParams<{ slug?: string }>()
+  const workspaceSlug = slug ?? DEFAULT_WORKSPACE
+
+  return (
+    <div className="flex h-svh overflow-hidden">
+      <Sidebar collapsed={collapsed} workspaceSlug={workspaceSlug} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Header
+          onToggleSidebar={() => setCollapsed((value) => !value)}
+          workspaceSlug={workspaceSlug}
+        />
+        <main className="flex-1 overflow-auto p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  )
+}

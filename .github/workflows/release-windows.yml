@@ -1,0 +1,60 @@
+# 태그가 붙으면 배포 패키지를 만들어 릴리스로 발행한다.
+#
+# 서버는 이 자산 하나만 받으면 된다 — 코드·SPA·wheel 번들·배포 스크립트가 모두
+# 안에 있다. 폐쇄망이면 같은 zip 을 손으로 반입하고 deploy.ps1 -ZipPath 를 쓴다.
+
+name: Release - Windows package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # wheel 의 ABI 태그가 이 버전에 묶인다. 서버 파이썬과 같아야 하며,
+          # deploy.ps1 이 BUILD_INFO.txt 로 그것을 검사한다.
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 패키지 생성
+        shell: pwsh
+        run: pwsh -File .\scripts\ci\package_deploy.ps1
+
+      # 패키징이 실패한 채 빈 릴리스가 남지 않도록 발행 전에 자산을 확인한다.
+      - name: 산출물 확인
+        shell: pwsh
+        run: |
+          if (-not (Test-Path './deploy/deploy_package.zip')) {
+            Write-Error 'deploy/deploy_package.zip 이 없습니다'
+            exit 1
+          }
+          $mb = [math]::Round((Get-Item './deploy/deploy_package.zip').Length / 1MB, 1)
+          Write-Host "패키지 확인: ${mb}MB"
+
+      - name: 릴리스 발행
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            Windows 배포 패키지.
+
+            설치(신규):  .\install.ps1 -AppPath 'C:\Server\MatNexus' -ZipPath .\deploy_package.zip -DbPassword '...'
+            갱신:        .\deploy.ps1  -AppPath 'C:\Server\MatNexus' -ZipPath .\deploy_package.zip
+            롤백:        .\rollback.ps1 -AppPath 'C:\Server\MatNexus'
+          draft: false
+          prerelease: false
+          files: ./deploy/deploy_package.zip

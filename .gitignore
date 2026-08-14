@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+.vite/
+
+# 운영 데이터 — 배포 패키지에도 git에도 넣지 않는다 (deploy.ps1이 이전 폴더에서 이관)
+backend/.env
+backend/filestore/
+backend/logs/
+
+# 배포 산출물
+deploy/
+*.zip
+
+# 로컬 도구
+.idea/
+.vscode/
+*.local
