@@ -119,5 +119,10 @@ export const api = {
     request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  // DELETE 에도 본문을 허용한다 — 계정 삭제는 "누구에게 승계할지"를 함께 받는다.
+  delete: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: 'DELETE',
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
 }

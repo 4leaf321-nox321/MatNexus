@@ -10,7 +10,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -18,6 +18,7 @@ from app.modules.accounts.schemas import AccountOut
 from app.modules.auth import security
 from app.modules.auth.models import RefreshToken
 from app.modules.workspaces.models import Workspace, WorkspaceMember
+from app.shared.dependents import Reference, references_to, transfer_ownership
 from app.shared.errors import AppError, Conflict, NotFound
 
 
@@ -228,6 +229,98 @@ def set_status(db: Session, *, user_id: uuid.UUID, status: str, actor: User) -> 
             token.revoked_at = _now()
     db.commit()
     return user
+
+
+def delete_account(
+    db: Session, *, user_id: uuid.UUID, actor: User, transfer_to_id: uuid.UUID | None
+) -> list[Reference]:
+    """계정을 지운다 — 행을 없애지 않고 `deleted_at` 을 찍는다.
+
+    **자료는 남기고 접근만 끊는다**(구조결정 4). 그 사람이 등록한 시험 데이터의
+    소유자 참조가 살아 있어야 "누가 만든 데이터인가"를 잃지 않는다. 소유권만
+    `transfer_to_id` 로 넘긴다.
+
+    옮긴 내역을 돌려준다 — 화면이 "무엇이 넘어갔는지" 보여 줘야 관리자가
+    결과를 확인할 수 있다.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFound("MNX-ACCOUNTS-0003", "계정을 찾을 수 없습니다.")
+    if user.id == actor.id:
+        raise Conflict("MNX-ACCOUNTS-0006", "자기 계정은 지울 수 없습니다.")
+    if user.deleted_at is not None:
+        raise Conflict("MNX-ACCOUNTS-0009", "이미 삭제된 계정입니다.")
+
+    if user.is_system_admin:
+        remaining = db.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.is_system_admin.is_(True),
+                User.deleted_at.is_(None),
+                User.id != user.id,
+            )
+        )
+        if not remaining:
+            raise Conflict(
+                "MNX-ACCOUNTS-0010",
+                "마지막 시스템 관리자는 지울 수 없습니다. 다른 관리자를 먼저 지정하세요.",
+            )
+
+    moved: list[Reference] = []
+    if transfer_to_id is not None:
+        successor = db.get(User, transfer_to_id)
+        if successor is None or successor.deleted_at is not None:
+            raise NotFound("MNX-ACCOUNTS-0011", "승계받을 계정을 찾을 수 없습니다.")
+        if successor.id == user.id:
+            raise Conflict("MNX-ACCOUNTS-0012", "같은 계정으로는 승계할 수 없습니다.")
+        moved = transfer_ownership(db, table="users", from_pk=user.id, to_pk=successor.id)
+
+    # 부서 멤버십은 정리한다. 남겨 두면 부서 멤버 목록에 지워진 계정이 계속 뜬다.
+    # 다만 그 부서의 마지막 관리자였다면 부서가 잠기므로 먼저 막는다.
+    memberships = list(
+        db.scalars(select(WorkspaceMember).where(WorkspaceMember.user_id == user.id))
+    )
+    for membership in memberships:
+        if membership.role != "manager":
+            continue
+        another = db.scalar(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == membership.workspace_id,
+                WorkspaceMember.role == "manager",
+                WorkspaceMember.user_id != user.id,
+            )
+        )
+        if another is None:
+            workspace = db.get(Workspace, membership.workspace_id)
+            raise Conflict(
+                "MNX-ACCOUNTS-0013",
+                f"'{workspace.name if workspace else membership.workspace_id}' 부서의"
+                " 마지막 관리자입니다. 다른 사람을 관리자로 지정한 뒤 지우세요.",
+            )
+    for membership in memberships:
+        db.delete(membership)
+
+    for token in db.scalars(
+        select(RefreshToken).where(
+            RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None)
+        )
+    ):
+        token.revoked_at = _now()
+
+    user.deleted_at = _now()
+    user.status = "suspended"
+    user.home_workspace_id = None
+    db.commit()
+    return moved
+
+
+def dependents_of(db: Session, *, user_id: uuid.UUID) -> list[Reference]:
+    """삭제 전에 무엇이 딸려 있는지 미리 보여 준다."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFound("MNX-ACCOUNTS-0003", "계정을 찾을 수 없습니다.")
+    return references_to(db, table="users", pk=user.id)
 
 
 def list_accounts(db: Session, *, status: str | None, limit: int, offset: int) -> list[User]:

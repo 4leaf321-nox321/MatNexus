@@ -9,8 +9,18 @@
  */
 
 import { useState } from 'react'
-import { KeyRound, Loader2, ShieldOff, ShieldCheck, UserCheck, UserPlus, UserX } from 'lucide-react'
+import {
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+  ShieldOff,
+  Trash2,
+  UserCheck,
+  UserPlus,
+  UserX,
+} from 'lucide-react'
 
+import { DeleteAccountDialog } from '@/modules/accounts/DeleteAccountDialog'
 import { accountsApi } from '@/modules/accounts/api'
 import type { Account, AccountStatus } from '@/modules/accounts/api'
 import { workspacesApi } from '@/modules/workspaces/api'
@@ -62,7 +72,9 @@ export default function AccountsAdminPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [secret, setSecret] = useState<Secret | null>(null)
   const [rejecting, setRejecting] = useState<Account | null>(null)
+  const [deleting, setDeleting] = useState<Account | null>(null)
   const [creating, setCreating] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const accounts = useResource(
     () => accountsApi.list(tab === 'pending' ? ('pending' as AccountStatus) : undefined),
@@ -104,6 +116,15 @@ export default function AccountsAdminPage() {
           <TabsTrigger value="all">전체</TabsTrigger>
         </TabsList>
       </Tabs>
+
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+          <span>{notice}</span>
+          <button type="button" className="opacity-60" onClick={() => setNotice(null)}>
+            닫기
+          </button>
+        </div>
+      )}
 
       <ErrorNotice error={error ?? accounts.error} className="mb-4" />
 
@@ -227,6 +248,18 @@ export default function AccountsAdminPage() {
                         활성화
                       </Button>
                     )}
+
+                    {account.status !== 'pending' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busyId === account.id}
+                        onClick={() => setDeleting(account)}
+                        aria-label="계정 삭제"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -240,6 +273,17 @@ export default function AccountsAdminPage() {
         onClose={() => setRejecting(null)}
         onDone={() => {
           setRejecting(null)
+          accounts.reload()
+        }}
+      />
+
+      <DeleteAccountDialog
+        account={deleting}
+        candidates={rows.filter((row) => row.status === 'active' && row.id !== deleting?.id)}
+        onClose={() => setDeleting(null)}
+        onDeleted={(summary) => {
+          setDeleting(null)
+          setNotice(summary)
           accounts.reload()
         }}
       />

@@ -11,6 +11,8 @@ import type { components } from '@/shared/api/schema'
 
 export type Account = components['schemas']['AccountOut']
 export type AccountStatus = 'pending' | 'active' | 'suspended'
+export type Reference = components['schemas']['ReferenceOut']
+type DeleteResult = components['schemas']['DeleteAccountResponse']
 type TemporaryPassword = components['schemas']['TemporaryPasswordResponse']
 type SignupRequest = components['schemas']['SignupRequest']
 type CreateAccountRequest = components['schemas']['CreateAccountRequest']
@@ -36,4 +38,10 @@ export const accountsApi = {
   activate: (id: string) => api.post<Account>(`/accounts/${id}/activate`),
 
   resetPassword: (id: string) => api.post<TemporaryPassword>(`/accounts/${id}/reset-password`),
+
+  /** 삭제 전 미리보기 — 무엇이 딸려 있는지 보고 결정한다. */
+  dependents: (id: string) => api.get<Reference[]>(`/accounts/${id}/dependents`),
+
+  remove: (id: string, transferToId: string | null) =>
+    api.delete<DeleteResult>(`/accounts/${id}`, { transfer_to_id: transferToId }),
 }

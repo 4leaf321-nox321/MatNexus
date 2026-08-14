@@ -42,6 +42,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Account
+         * @description 계정을 지운다. 행은 남고 접근만 끊긴다 — 자료의 소유자 참조를 잃지 않기 위해서다.
+         */
+        delete: operations["delete_account_api_accounts__account_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{account_id}/activate": {
         parameters: {
             query?: never;
@@ -70,6 +90,26 @@ export interface paths {
         put?: never;
         /** Approve */
         post: operations["approve_api_accounts__account_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{account_id}/dependents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dependents
+         * @description 삭제 전 미리보기. 무엇이 딸려 있는지 보고 나서 결정하게 한다.
+         */
+        get: operations["dependents_api_accounts__account_id__dependents_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -434,6 +474,16 @@ export interface components {
             /** Workspace Slug */
             workspace_slug: string;
         };
+        /** DeleteAccountRequest */
+        DeleteAccountRequest: {
+            /** Transfer To Id */
+            transfer_to_id?: string | null;
+        };
+        /** DeleteAccountResponse */
+        DeleteAccountResponse: {
+            /** Transferred */
+            transferred: components["schemas"]["ReferenceOut"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -525,6 +575,24 @@ export interface components {
             prefix: string;
             /** Revoked At */
             revoked_at: string | null;
+        };
+        /**
+         * ReferenceOut
+         * @description 이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다.
+         */
+        ReferenceOut: {
+            /** Blocks Delete */
+            blocks_delete: boolean;
+            /** Column */
+            column: string;
+            /** Count */
+            count: number;
+            /** Label */
+            label: string;
+            /** On Delete */
+            on_delete: string | null;
+            /** Table */
+            table: string;
         };
         /** RejectRequest */
         RejectRequest: {
@@ -760,6 +828,41 @@ export interface operations {
             };
         };
     };
+    delete_account_api_accounts__account_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     activate_api_accounts__account_id__activate_post: {
         parameters: {
             query?: never;
@@ -813,6 +916,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dependents_api_accounts__account_id__dependents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceOut"][];
                 };
             };
             /** @description Validation Error */

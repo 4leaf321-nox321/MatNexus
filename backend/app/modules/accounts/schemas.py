@@ -60,6 +60,27 @@ class CreateAccountRequest(BaseModel):
     is_system_admin: bool = False
 
 
+class ReferenceOut(BaseModel):
+    """이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다."""
+
+    table: str
+    label: str
+    column: str
+    count: int
+    on_delete: str | None
+    blocks_delete: bool
+
+
+class DeleteAccountRequest(BaseModel):
+    transfer_to_id: uuid.UUID | None = None
+    """소유 자료를 넘겨받을 계정. 비우면 소유자 참조가 그대로 남는다."""
+
+
+class DeleteAccountResponse(BaseModel):
+    transferred: list[ReferenceOut]
+    """무엇이 넘어갔는지. 화면이 결과를 보여 줄 수 있어야 한다."""
+
+
 class TemporaryPasswordResponse(BaseModel):
     """임시 비밀번호는 이 응답에서 한 번만 나온다.
 

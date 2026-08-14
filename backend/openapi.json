@@ -187,6 +187,40 @@
         "title": "CreateAccountRequest",
         "type": "object"
       },
+      "DeleteAccountRequest": {
+        "properties": {
+          "transfer_to_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transfer To Id"
+          }
+        },
+        "title": "DeleteAccountRequest",
+        "type": "object"
+      },
+      "DeleteAccountResponse": {
+        "properties": {
+          "transferred": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceOut"
+            },
+            "title": "Transferred",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transferred"
+        ],
+        "title": "DeleteAccountResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -429,6 +463,52 @@
           "revoked_at"
         ],
         "title": "PatOut",
+        "type": "object"
+      },
+      "ReferenceOut": {
+        "description": "이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다.",
+        "properties": {
+          "blocks_delete": {
+            "title": "Blocks Delete",
+            "type": "boolean"
+          },
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "on_delete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Delete"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "label",
+          "column",
+          "count",
+          "on_delete",
+          "blocks_delete"
+        ],
+        "title": "ReferenceOut",
         "type": "object"
       },
       "RejectRequest": {
@@ -921,6 +1001,60 @@
         ]
       }
     },
+    "/api/accounts/{account_id}": {
+      "delete": {
+        "description": "계정을 지운다. 행은 남고 접근만 끊긴다 — 자료의 소유자 참조를 잃지 않기 위해서다.",
+        "operationId": "delete_account_api_accounts__account_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteAccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/accounts/{account_id}/activate": {
       "post": {
         "operationId": "activate_api_accounts__account_id__activate_post",
@@ -1012,6 +1146,54 @@
           }
         },
         "summary": "Approve",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/dependents": {
+      "get": {
+        "description": "삭제 전 미리보기. 무엇이 딸려 있는지 보고 나서 결정하게 한다.",
+        "operationId": "dependents_api_accounts__account_id__dependents_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReferenceOut"
+                  },
+                  "title": "Response Dependents Api Accounts  Account Id  Dependents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dependents",
         "tags": [
           "accounts"
         ]

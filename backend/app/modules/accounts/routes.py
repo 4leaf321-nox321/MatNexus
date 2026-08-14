@@ -19,6 +19,9 @@ from app.modules.accounts.schemas import (
     AccountOut,
     ApproveRequest,
     CreateAccountRequest,
+    DeleteAccountRequest,
+    DeleteAccountResponse,
+    ReferenceOut,
     RejectRequest,
     SignupRequest,
     TemporaryPasswordResponse,
@@ -119,6 +122,52 @@ def activate(
 ) -> AccountOut:
     user = services.set_status(db, user_id=account_id, status="active", actor=admin)
     return services.account_out(db, user)
+
+
+@router.get("/{account_id}/dependents", response_model=list[ReferenceOut])
+def dependents(
+    account_id: uuid.UUID,
+    _: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[ReferenceOut]:
+    """삭제 전 미리보기. 무엇이 딸려 있는지 보고 나서 결정하게 한다."""
+    return [
+        ReferenceOut(
+            table=ref.table,
+            label=ref.label,
+            column=ref.column,
+            count=ref.count,
+            on_delete=ref.on_delete,
+            blocks_delete=ref.blocks_delete,
+        )
+        for ref in services.dependents_of(db, user_id=account_id)
+    ]
+
+
+@router.delete("/{account_id}", response_model=DeleteAccountResponse)
+def delete_account(
+    account_id: uuid.UUID,
+    payload: DeleteAccountRequest,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> DeleteAccountResponse:
+    """계정을 지운다. 행은 남고 접근만 끊긴다 — 자료의 소유자 참조를 잃지 않기 위해서다."""
+    moved = services.delete_account(
+        db, user_id=account_id, actor=admin, transfer_to_id=payload.transfer_to_id
+    )
+    return DeleteAccountResponse(
+        transferred=[
+            ReferenceOut(
+                table=ref.table,
+                label=ref.label,
+                column=ref.column,
+                count=ref.count,
+                on_delete=ref.on_delete,
+                blocks_delete=ref.blocks_delete,
+            )
+            for ref in moved
+        ]
+    )
 
 
 @router.post("/{account_id}/reset-password", response_model=TemporaryPasswordResponse)
