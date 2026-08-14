@@ -76,9 +76,13 @@ def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-def client(db: Session) -> Iterator[TestClient]:
+def client(db: Session, engine) -> Iterator[TestClient]:  # type: ignore[no-untyped-def]
     application = create_app()
     application.dependency_overrides[get_db] = lambda: db
+    # 요청 처리 밖에서 DB 를 쓰는 곳(접근 로그 미들웨어)도 테스트 DB 를 보게 한다.
+    application.state.session_factory = sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False
+    )
     with TestClient(application, raise_server_exceptions=False) as test_client:
         yield test_client
     application.dependency_overrides.clear()

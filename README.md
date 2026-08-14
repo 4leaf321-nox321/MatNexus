@@ -110,6 +110,23 @@ cd C:\Server\tools\MatNexus
 .\rollback.ps1 -AppPath 'C:\Server\MatNexus'
 ```
 
+### 백업
+
+**DB와 파일스토어를 같은 시각에 함께 받는다.** DB에는 곡선의 경로와 해시가,
+파일스토어에는 그 내용이 있어서 한쪽만 되돌리면 "DB에는 있는데 파일이 없는" 행이
+생긴다.
+
+```powershell
+cd C:\Server\tools\MatNexus
+.\backup.ps1 -AppPath 'C:\Server\MatNexus' -BackupRoot 'D:\backup\matnexus' -KeepDays 30
+```
+
+받은 폴더의 `MANIFEST.txt` 에 복구 절차가 함께 적혀 있다. **한 번은 실제로 복구해
+보라** — 받아만 두고 복구해 본 적 없는 백업은 백업이 아니다. 65도 RA도 이 절차
+자체가 없었다.
+
+정기 실행은 작업 스케줄러에 등록한다(반입물 없음).
+
 ### 관리자 계정
 
 로그인 아이디는 **이메일 형식이 아니어도 된다** (`admin` 같은 짧은 아이디 허용).

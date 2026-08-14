@@ -44,6 +44,9 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
         if user is None:
             logger.warning("PAT 인증 실패 (prefix=%s)", token[: len(security.PAT_PREFIX) + 6])
             raise AppError("MNX-AUTH-0101", "토큰이 유효하지 않습니다.", status=401)
+        # 접근 로그 미들웨어가 "누가" 를 알 수 있게 scope 에 남긴다. 미들웨어는
+        # 인증보다 바깥에 있어서 스스로는 사용자를 알 수 없다.
+        request.scope["mnx_user_id"] = user.id
         return user
 
     payload = security.decode_access_token(token)
@@ -55,6 +58,7 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     if user is None:
         raise Forbidden("MNX-AUTH-0002", "삭제된 계정입니다. 관리자에게 문의하세요.")
     services.ensure_can_sign_in(user)
+    request.scope["mnx_user_id"] = user.id
     return user
 
 

@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
+from app.database import SessionLocal
 from app.logging_setup import setup_logging
 from app.modules.accounts import routes as accounts_routes
 from app.modules.auth import routes as auth_routes
@@ -22,6 +23,7 @@ from app.modules.notices import routes as notices_routes
 from app.modules.notifications import routes as notifications_routes
 from app.modules.voc import routes as voc_routes
 from app.modules.workspaces import routes as workspaces_routes
+from app.shared.access_log import AccessLogMiddleware
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
 
@@ -107,7 +109,15 @@ def create_app() -> FastAPI:
         openapi_url=f"{API_PREFIX}/openapi.json",
     )
 
+    # 순서가 중요하다. add_middleware 는 **나중에 더한 것이 바깥**이므로 아래
+    # 두 줄은 RequestId(바깥) → AccessLog(안쪽) 이 된다. 접근 로그가 요청 id 를
+    # 읽으려면 그 id 가 먼저 설정돼 있어야 한다.
+    app.add_middleware(AccessLogMiddleware)
     app.add_middleware(RequestIdMiddleware)
+
+    # 요청 처리 밖에서 DB 를 쓰는 곳(접근 로그)이 참조한다. 테스트는 이 값을
+    # 자기 DB 로 바꿔 끼운다.
+    app.state.session_factory = SessionLocal
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,

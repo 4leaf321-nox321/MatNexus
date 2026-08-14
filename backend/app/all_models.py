@@ -10,6 +10,7 @@ from __future__ import annotations
 from app.database import Base
 from app.jobs.models import Job
 from app.modules.accounts.models import User
+from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.notices.models import Notice, NoticeRead
 from app.modules.notifications.models import (
@@ -21,6 +22,7 @@ from app.modules.voc.models import VocItem
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 
 __all__ = [
+    "AccessLog",
     "Base",
     "Job",
     "Notice",
