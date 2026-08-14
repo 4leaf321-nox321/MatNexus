@@ -94,13 +94,26 @@ type LoginResponse = components['schemas']['LoginResponse']
 `deploy_package.zip` 하나에 코드·SPA·wheel 번들·배포 스크립트가 모두 들어 있다.
 
 ```powershell
-# 신규 서버 (Day 0) — zip 을 펼쳐 스크립트를 꺼낸 뒤
-.\install.ps1 -AppPath 'C:\Server\MatNexus' -ZipPath .\deploy_package.zip -DbPassword '...'
+# 최초 1회 — 릴리스에서 배포 스크립트를 꺼낸다
+gh release download --repo 4leaf321-nox321/MatNexus --pattern deploy_package.zip
+Expand-Archive .\deploy_package.zip .\unpacked
+New-Item -ItemType Directory -Force -Path 'C:\Server\tools\MatNexus'
+Copy-Item .\unpacked\install.ps1, .\unpacked\precheck.ps1, .\unpacked\deploy.ps1,
+          .\unpacked\rollback.ps1 'C:\Server\tools\MatNexus\'
+
+cd C:\Server\tools\MatNexus
+.\precheck.ps1 -AppPath 'C:\Server\MatNexus' -DatabaseUrl 'postgresql+psycopg://postgres:<암호>@localhost:5432/matnexus'
+.\install.ps1  -AppPath 'C:\Server\MatNexus' -DbPassword '<암호>'
 
 # 갱신 — 앱을 먼저 중지할 것
-.\deploy.ps1  -AppPath 'C:\Server\MatNexus' -ZipPath .\deploy_package.zip
+.\deploy.ps1   -AppPath 'C:\Server\MatNexus'
 .\rollback.ps1 -AppPath 'C:\Server\MatNexus'
 ```
+
+**스크립트를 `tools\MatNexus\` 하위에 둔다.** `C:\Server\tools` 바로 아래에 두면
+같은 서버에 사는 다른 앱의 `deploy.ps1`·`rollback.ps1` 과 이름이 겹쳐 서로를
+덮어쓴다(실측: 이 PC의 `C:\Server\tools` 에 이미 다른 프로젝트의 같은 이름
+스크립트가 있었다).
 
 폴더 배치:
 
@@ -109,6 +122,7 @@ C:\Server\MatNexus          코드 (배포마다 교체)
 C:\Server\MatNexus_prev     직전 버전 (롤백용)
 C:\Server\MatNexus_venvs    가상환경 (requirements 가 바뀔 때만 재생성)
 C:\Server\MatNexus_data     filestore · logs ← 배포가 건드리지 않는다. 백업 대상
+C:\Server\tools\MatNexus    배포 스크립트 (앱 폴더 바깥, 프로젝트별로 분리)
 ```
 
 **`.ps1` 파일은 UTF-8 BOM 으로 저장해야 한다.** Windows PowerShell 5.1 이 BOM 없는

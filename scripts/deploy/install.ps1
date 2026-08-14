@@ -18,7 +18,12 @@ Day 0 — 신규 서버 설치.
 각 단계는 멱등하다. 중간에 끊겨 다시 실행해도 같은 결과가 나오고, 특히 이미 있는
 관리자 계정의 비밀번호를 되돌리지 않는다.
 
+스크립트는 `C:\Server\tools\MatNexus\` 처럼 **프로젝트별 하위 폴더**에 둔다.
+`C:\Server\tools` 바로 아래에 두면 같은 서버의 다른 앱과 파일명이 겹쳐 서로를
+덮어쓴다(실측).
+
 사용:
+  .\install.ps1 -AppPath 'C:\Server\MatNexus' -DbPassword '...'
   .\install.ps1 -AppPath 'C:\Server\MatNexus' -ZipPath 'C:\tmp\deploy_package.zip' `
                 -DbHost localhost -DbUser postgres -DbPassword '...'
 #>
