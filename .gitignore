@@ -18,8 +18,11 @@ backend/.env
 backend/filestore/
 backend/logs/
 
-# 배포 산출물
-deploy/
+# 배포 산출물 — **앞의 슬래시가 중요하다.**
+# `deploy/` 라고만 쓰면 어느 깊이의 deploy 폴더든 걸려서 `scripts/deploy/` 의
+# 배포 스크립트 5개가 통째로 빠진다(실측: 릴리스 패키지에 venv_sync.ps1 이 없어
+# 설치가 실패했다).
+/deploy/
 *.zip
 
 # 로컬 도구

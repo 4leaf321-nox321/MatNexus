@@ -23,12 +23,24 @@ REPO = Path(__file__).resolve().parents[3]
 BOM = b"\xef\xbb\xbf"
 
 
-#: 빌드 산출물(deploy/)은 원본을 복사한 것이라 따로 검사하지 않는다.
-_SKIP_DIRS = {"node_modules", ".venv", "deploy"}
+_SKIP_ANYWHERE = {"node_modules", ".venv"}
+
+#: 저장소 루트의 `deploy/` 는 빌드 산출물(원본 복사본)이라 검사하지 않는다.
+#: 이름만으로 거르면 `scripts/deploy/` 까지 함께 빠져 정작 검사해야 할 배포
+#: 스크립트 5개가 조용히 제외된다(실측). 그래서 최상위 경로로 판정한다.
+_SKIP_TOP_LEVEL = {"deploy"}
 
 
 def _scripts() -> list[Path]:
-    return [p for p in REPO.rglob("*.ps1") if not _SKIP_DIRS & set(p.parts)]
+    found = []
+    for path in REPO.rglob("*.ps1"):
+        parts = path.relative_to(REPO).parts
+        if _SKIP_ANYWHERE & set(parts):
+            continue
+        if parts[0] in _SKIP_TOP_LEVEL:
+            continue
+        found.append(path)
+    return found
 
 
 @pytest.mark.parametrize("path", _scripts(), ids=lambda p: p.name)
