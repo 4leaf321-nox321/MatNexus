@@ -82,3 +82,47 @@ def client(db: Session) -> Iterator[TestClient]:
     with TestClient(application, raise_server_exceptions=False) as test_client:
         yield test_client
     application.dependency_overrides.clear()
+
+
+ADMIN_PASSWORD = "admin-password-1"
+
+
+@pytest.fixture
+def workspace(db: Session):  # type: ignore[no-untyped-def]
+    """기본 부서 하나. 계정은 부서 없이 존재할 수 없다(가입 시 희망 부서를 고른다)."""
+    from app.modules.workspaces.models import Workspace
+
+    item = Workspace(slug="metal", name="금속재료팀")
+    db.add(item)
+    db.commit()
+    return item
+
+
+@pytest.fixture
+def admin(db: Session, workspace):  # type: ignore[no-untyped-def]
+    from app.modules.accounts.models import User
+    from app.modules.auth import security
+    from app.modules.workspaces.models import WorkspaceMember
+
+    user = User(
+        email="admin",
+        password_hash=security.hash_password(ADMIN_PASSWORD),
+        display_name="시스템 관리자",
+        status="active",
+        is_system_admin=True,
+        home_workspace_id=workspace.id,
+    )
+    db.add(user)
+    db.flush()
+    db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="manager"))
+    db.commit()
+    return user
+
+
+@pytest.fixture
+def admin_headers(client: TestClient, admin) -> dict[str, str]:  # type: ignore[no-untyped-def]
+    response = client.post(
+        "/api/auth/login", json={"email": "admin", "password": ADMIN_PASSWORD}
+    )
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}

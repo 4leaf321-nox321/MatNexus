@@ -1,6 +1,130 @@
 {
   "components": {
     "schemas": {
+      "AccountOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "home_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Workspace Slug"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_system_admin": {
+            "title": "Is System Admin",
+            "type": "boolean"
+          },
+          "memberships": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memberships",
+            "type": "array"
+          },
+          "must_change_password": {
+            "title": "Must Change Password",
+            "type": "boolean"
+          },
+          "requested_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Workspace Slug"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "status",
+          "is_system_admin",
+          "must_change_password",
+          "home_workspace_slug",
+          "requested_workspace_slug",
+          "memberships",
+          "created_at",
+          "decided_at",
+          "decision_note"
+        ],
+        "title": "AccountOut",
+        "type": "object"
+      },
+      "ApproveRequest": {
+        "properties": {
+          "role": {
+            "default": "member",
+            "title": "Role",
+            "type": "string"
+          },
+          "workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Slug"
+          }
+        },
+        "title": "ApproveRequest",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "properties": {
           "current_password": {
@@ -21,6 +145,46 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest",
+        "type": "object"
+      },
+      "CreateAccountRequest": {
+        "description": "관리자가 직접 계정을 만들 때. 승인 절차 없이 바로 활성이다.",
+        "properties": {
+          "display_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "is_system_admin": {
+            "default": false,
+            "title": "Is System Admin",
+            "type": "boolean"
+          },
+          "role": {
+            "default": "member",
+            "title": "Role",
+            "type": "string"
+          },
+          "workspace_slug": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Workspace Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "display_name",
+          "workspace_slug"
+        ],
+        "title": "CreateAccountRequest",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -194,6 +358,75 @@
         "title": "PatOut",
         "type": "object"
       },
+      "RejectRequest": {
+        "properties": {
+          "note": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "title": "RejectRequest",
+        "type": "object"
+      },
+      "SignupRequest": {
+        "properties": {
+          "display_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 10,
+            "title": "Password",
+            "type": "string"
+          },
+          "workspace_slug": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Workspace Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "display_name",
+          "workspace_slug"
+        ],
+        "title": "SignupRequest",
+        "type": "object"
+      },
+      "TemporaryPasswordResponse": {
+        "description": "임시 비밀번호는 이 응답에서 한 번만 나온다.\n\nSMTP 가 없어 메일로 보낼 수 없으므로, 관리자가 화면에서 읽어 구두·메신저로\n전달한다. 받는 사람은 첫 로그인 때 변경이 강제된다.",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AccountOut"
+          },
+          "temporary_password": {
+            "title": "Temporary Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account",
+          "temporary_password"
+        ],
+        "title": "TemporaryPasswordResponse",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "display_name": {
@@ -234,12 +467,17 @@
           "must_change_password": {
             "title": "Must Change Password",
             "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "email",
           "display_name",
+          "status",
           "is_system_admin",
           "must_change_password",
           "home_workspace_slug",
@@ -325,6 +563,400 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/accounts": {
+      "get": {
+        "operationId": "list_accounts_api_accounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(pending|active|suspended)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccountOut"
+                  },
+                  "title": "Response List Accounts Api Accounts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Accounts",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "operationId": "create_account_api_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemporaryPasswordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/signup": {
+      "post": {
+        "description": "가입 신청. 승인 전까지는 로그인할 수 없다(status=pending).",
+        "operationId": "signup_api_accounts_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Signup",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/activate": {
+      "post": {
+        "operationId": "activate_api_accounts__account_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/approve": {
+      "post": {
+        "operationId": "approve_api_accounts__account_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/reject": {
+      "post": {
+        "operationId": "reject_api_accounts__account_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/reset-password": {
+      "post": {
+        "description": "관리자 중개 재설정. SMTP 가 없으므로 화면에 1회 표시하고 구두로 전달한다.",
+        "operationId": "reset_password_api_accounts__account_id__reset_password_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemporaryPasswordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Password",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/suspend": {
+      "post": {
+        "operationId": "suspend_api_accounts__account_id__suspend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suspend",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/auth/change-password": {
       "post": {
         "operationId": "change_password_api_auth_change_password_post",

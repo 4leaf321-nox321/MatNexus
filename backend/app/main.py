@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
 from app.logging_setup import setup_logging
+from app.modules.accounts import routes as accounts_routes
 from app.modules.auth import routes as auth_routes
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
@@ -35,6 +36,7 @@ def _api_router() -> APIRouter:
     # 모듈 라우터는 여기서만 모은다. 모듈이 서로를 import 하지 않게 하려면
     # 조립 지점이 하나여야 한다 (tests/architecture 가 검사).
     router.include_router(auth_routes.router)
+    router.include_router(accounts_routes.router)
 
     return router
 

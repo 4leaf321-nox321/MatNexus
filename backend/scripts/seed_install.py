@@ -73,6 +73,7 @@ def main() -> None:
             email=email,
             password_hash=security.hash_password(password),
             display_name="시스템 관리자",
+            status="active",  # 초기 관리자는 승인 절차를 거치지 않는다
             is_system_admin=True,
             # 시드 비밀번호가 그대로 남는 사고 방지. 파일럿에서만 --no-force-change 로 끈다.
             must_change_password=not args.no_force_change,

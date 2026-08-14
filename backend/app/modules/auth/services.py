@@ -27,6 +27,22 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def ensure_can_sign_in(user: User) -> None:
+    """로그인을 막아야 하면 사유에 맞는 오류를 던진다.
+
+    "왜 안 되는지"를 구분해 주는 것이 중요하다. 승인 대기 중인 사람에게
+    '비활성 계정' 이라고만 하면 관리자에게 무엇을 요청해야 할지 알 수 없다.
+    """
+    if user.deleted_at is not None:
+        raise Forbidden("MNX-AUTH-0002", "삭제된 계정입니다. 관리자에게 문의하세요.")
+    if user.status == "pending":
+        raise Forbidden(
+            "MNX-AUTH-0008", "가입 승인 대기 중입니다. 관리자가 승인하면 로그인할 수 있습니다."
+        )
+    if user.status != "active":
+        raise Forbidden("MNX-AUTH-0002", "정지된 계정입니다. 관리자에게 문의하세요.")
+
+
 # --- 로그인 -----------------------------------------------------------------
 
 
@@ -42,9 +58,7 @@ def authenticate(db: Session, email: str, password: str) -> User:
     if not security.verify_password(password, user.password_hash):
         raise AppError("MNX-AUTH-0001", _INVALID_LOGIN, status=401)
 
-    if not user.is_active or user.deleted_at is not None:
-        raise Forbidden("MNX-AUTH-0002", "비활성화된 계정입니다. 관리자에게 문의하세요.")
-
+    ensure_can_sign_in(user)
     return user
 
 
@@ -97,8 +111,9 @@ def rotate_refresh(
         )
 
     user = db.get(User, token.user_id)
-    if user is None or not user.is_active or user.deleted_at is not None:
-        raise Forbidden("MNX-AUTH-0002", "비활성화된 계정입니다. 관리자에게 문의하세요.")
+    if user is None:
+        raise Forbidden("MNX-AUTH-0002", "삭제된 계정입니다. 관리자에게 문의하세요.")
+    ensure_can_sign_in(user)
 
     settings = get_settings()
     new_raw = security.new_opaque_token()
@@ -176,6 +191,7 @@ def user_out(db: Session, user: User) -> UserOut:
         id=user.id,
         email=user.email,
         display_name=user.display_name,
+        status=user.status,
         is_system_admin=user.is_system_admin,
         must_change_password=user.must_change_password,
         home_workspace_slug=home_slug,
@@ -242,7 +258,7 @@ def resolve_pat(db: Session, raw: str) -> User | None:
         return None
 
     user = db.get(User, pat.user_id)
-    if user is None or not user.is_active or user.deleted_at is not None:
+    if user is None or not user.can_sign_in:
         return None
 
     pat.last_used_at = _now()

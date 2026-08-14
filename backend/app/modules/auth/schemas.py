@@ -39,6 +39,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     display_name: str
+    status: str
     is_system_admin: bool
     must_change_password: bool
     home_workspace_slug: str | None

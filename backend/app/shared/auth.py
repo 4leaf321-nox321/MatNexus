@@ -52,8 +52,9 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
         raise AppError("MNX-AUTH-0102", "세션이 만료되었습니다.", status=401)
 
     user = db.get(User, payload["sub"])
-    if user is None or not user.is_active or user.deleted_at is not None:
-        raise Forbidden("MNX-AUTH-0002", "비활성화된 계정입니다. 관리자에게 문의하세요.")
+    if user is None:
+        raise Forbidden("MNX-AUTH-0002", "삭제된 계정입니다. 관리자에게 문의하세요.")
+    services.ensure_can_sign_in(user)
     return user
 
 

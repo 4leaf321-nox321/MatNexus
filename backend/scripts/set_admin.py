@@ -74,6 +74,7 @@ def main() -> None:
                 email=email,
                 password_hash=security.hash_password(args.password),
                 display_name=args.display_name,
+                status="active",
                 is_system_admin=True,
                 home_workspace_id=workspace.id,
             )
@@ -86,7 +87,7 @@ def main() -> None:
             print(f"비밀번호 변경: {email}")
 
         user.is_system_admin = True
-        user.is_active = True
+        user.status = "active"
         user.deleted_at = None
         user.must_change_password = not args.no_force_change
 

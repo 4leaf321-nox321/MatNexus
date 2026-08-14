@@ -28,6 +28,7 @@ def make_user(
         email=email,
         password_hash=security.hash_password(PASSWORD),
         display_name="시험자",
+        status="active",
         must_change_password=must_change,
         home_workspace_id=workspace.id,
     )
@@ -72,14 +73,29 @@ def test_login_rejects_wrong_password_without_revealing_account(
     assert wrong["message"] == unknown["message"]
 
 
-def test_inactive_account_cannot_log_in(client: TestClient, db: Session) -> None:
+def test_suspended_account_cannot_log_in(client: TestClient, db: Session) -> None:
     user = make_user(db)
-    user.is_active = False
+    user.status = "suspended"
     db.commit()
 
     response = login(client)
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "MNX-AUTH-0002"
+
+
+def test_pending_account_gets_a_distinct_message(client: TestClient, db: Session) -> None:
+    """승인 대기와 정지를 구분해 알려 준다.
+
+    둘 다 '비활성' 이라고만 하면 신청자가 관리자에게 무엇을 요청해야 할지 모른다.
+    """
+    user = make_user(db)
+    user.status = "pending"
+    db.commit()
+
+    response = login(client)
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "MNX-AUTH-0008"
+    assert "승인" in response.json()["error"]["message"]
 
 
 def test_me_requires_token(client: TestClient, db: Session) -> None:
