@@ -13,6 +13,7 @@ import {
   Bell,
   BookOpen,
   Boxes,
+  Building2,
   Download,
   FlaskConical,
   GitCompare,
@@ -85,6 +86,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '관리',
     items: [
       { label: '계정', icon: UserCog, to: '/admin/accounts' },
+      { label: '부서', icon: Building2, to: '/admin/workspaces' },
       { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members` },
       { label: '시험종류 정의', icon: ListTree, to: '/admin/test-types' },
       { label: '장비 커넥터', icon: Plug, to: '/admin/connectors' },

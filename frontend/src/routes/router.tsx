@@ -10,8 +10,12 @@
 
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 
+import AccountsAdminPage from '@/modules/accounts/AccountsAdminPage'
 import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
+import SignupPage from '@/modules/auth/SignupPage'
+import MembersPage from '@/modules/workspaces/MembersPage'
+import WorkspacesAdminPage from '@/modules/workspaces/WorkspacesAdminPage'
 import { ProtectedRoute } from '@/shared/auth/ProtectedRoute'
 import { Placeholder } from '@/shared/components/Placeholder'
 import { AppShell } from '@/shared/layout/AppShell'
@@ -23,6 +27,7 @@ const stub = (title: string, phase: string, description?: string) => ({
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/signup', element: <SignupPage /> },
   {
     element: <ProtectedRoute />,
     children: [
@@ -60,7 +65,8 @@ export const router = createBrowserRouter([
           },
 
           // 관리
-          { path: 'admin/accounts', ...stub('계정 관리', 'Phase 1') },
+          { path: 'admin/accounts', element: <AccountsAdminPage /> },
+          { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
           {
             path: 'admin/test-types',
             ...stub('시험종류 정의', 'Phase 2', '정의는 데이터(D7).'),
@@ -80,7 +86,7 @@ export const router = createBrowserRouter([
               },
               { path: 'statistics', ...stub('통계', 'Phase 3') },
               { path: 'exports', ...stub('내보내기', 'Phase 4') },
-              { path: 'members', ...stub('부서 멤버', 'Phase 1') },
+              { path: 'members', element: <MembersPage /> },
             ],
           },
 

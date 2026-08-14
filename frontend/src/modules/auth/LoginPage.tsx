@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AlertCircle, LogIn } from 'lucide-react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { ApiError } from '@/shared/api/client'
 import { useAuth } from '@/shared/auth/AuthContext'
@@ -18,6 +18,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/shared/components/ui/card'
@@ -131,6 +132,14 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
+        <CardFooter>
+          <p className="text-muted-foreground w-full text-center text-sm">
+            계정이 없으신가요?{' '}
+            <Link to="/signup" className="text-foreground underline underline-offset-4">
+              가입 신청
+            </Link>
+          </p>
+        </CardFooter>
       </Card>
     </div>
   )
