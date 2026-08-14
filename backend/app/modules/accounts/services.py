@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.accounts.schemas import AccountOut
 from app.modules.auth import security
@@ -84,6 +85,25 @@ def signup(
         requested_workspace_id=workspace.id,
     )
     db.add(user)
+    db.flush()
+
+    # 알림 모듈을 직접 부르지 않고 큐에 던진다 — 모듈끼리 묶이지 않게, 그리고
+    # 수신자가 늘어도 신청자의 응답이 느려지지 않게.
+    queue.enqueue(
+        db,
+        kind=kinds.NOTIFY_DELIVER,
+        payload={
+            "event_kind": "account.signup",
+            "key": str(user.id),
+            "title": "새 가입 신청",
+            "body": (
+                f"{user.display_name}({user.email}) 님이"
+                f" {workspace.name} 소속으로 신청했습니다."
+            ),
+            "link": "/admin/accounts",
+            "to_user_id": None,
+        },
+    )
     db.commit()
     return user
 
@@ -120,6 +140,20 @@ def approve(
     user.decided_at = _now()
     user.decided_by_id = decided_by.id
     user.decision_note = None
+
+    _on_activated(db, user)
+    queue.enqueue(
+        db,
+        kind=kinds.NOTIFY_DELIVER,
+        payload={
+            "event_kind": "account.decided",
+            "key": f"approved:{user.id}",
+            "title": "가입이 승인되었습니다",
+            "body": f"{workspace.name} 소속으로 승인되었습니다. 이제 로그인할 수 있습니다.",
+            "link": "/",
+            "to_user_id": str(user.id),
+        },
+    )
     db.commit()
     return user
 
@@ -137,8 +171,32 @@ def reject(db: Session, *, user_id: uuid.UUID, decided_by: User, note: str) -> U
     user.decided_at = _now()
     user.decided_by_id = decided_by.id
     user.decision_note = note.strip()
+
+    # 거절도 알린다. 메일이 없어 앱 안이 유일한 통보 경로이고, 사유를 함께 담지
+    # 않으면 신청자가 무엇을 고쳐 다시 신청해야 할지 모른다.
+    _on_activated(db, user)  # 규칙이 있어야 이 알림을 받을 수 있다
+    queue.enqueue(
+        db,
+        kind=kinds.NOTIFY_DELIVER,
+        payload={
+            "event_kind": "account.decided",
+            "key": f"rejected:{user.id}",
+            "title": "가입 신청이 거절되었습니다",
+            "body": user.decision_note,
+            "link": None,
+            "to_user_id": str(user.id),
+        },
+    )
     db.commit()
     return user
+
+
+def _on_activated(db: Session, user: User) -> None:
+    """계정이 실제로 쓰이기 시작할 때 기본 알림 규칙을 보장한다.
+
+    알림 모듈을 직접 부르지 않고 큐로 넘긴다(경계 유지).
+    """
+    queue.enqueue(db, kind=kinds.NOTIFY_ENSURE_RULES, payload={"user_id": str(user.id)})
 
 
 # --- 관리자 직접 생성 ----------------------------------------------------------
@@ -176,6 +234,7 @@ def create_account(
     db.add(user)
     db.flush()
     _ensure_membership(db, workspace=workspace, user=user, role=role)
+    _on_activated(db, user)
     db.commit()
     return user, temporary
 

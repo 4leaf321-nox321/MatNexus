@@ -13,6 +13,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AccountsAdminPage from '@/modules/accounts/AccountsAdminPage'
 import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
+import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import SignupPage from '@/modules/auth/SignupPage'
 import MembersPage from '@/modules/workspaces/MembersPage'
 import WorkspacesAdminPage from '@/modules/workspaces/WorkspacesAdminPage'
@@ -48,10 +49,7 @@ export const router = createBrowserRouter([
 
           // 내 활동
           { path: 'personal', ...stub('내 작업함', 'Phase 1') },
-          {
-            path: 'notifications',
-            ...stub('알림', 'Phase 1', '규칙·발화상태·발송 3분할 구조.'),
-          },
+          { path: 'notifications', element: <NotificationsPage /> },
 
           // 공통
           {

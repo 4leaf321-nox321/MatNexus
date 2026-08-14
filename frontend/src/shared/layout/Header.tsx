@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
 import { Separator } from '@/shared/components/ui/separator'
+import { NotificationBell } from '@/shared/layout/NotificationBell'
 import { useTheme } from '@/shared/theme/ThemeProvider'
 
 interface HeaderProps {
@@ -96,6 +97,8 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
       )}
 
       <div className="flex-1" />
+
+      <NotificationBell />
 
       <Button variant="ghost" size="icon" onClick={toggle} aria-label="테마 전환">
         {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}

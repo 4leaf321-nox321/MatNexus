@@ -95,6 +95,7 @@ Write-Host "  wheel $($wheels.Count) 개, 의존성 검사 통과"
 # --- 스크립트와 빌드 정보 ------------------------------------------------------
 Write-Host '실행·배포 스크립트 추가'
 Copy-Item -Force .\scripts\ci\run_server_template.ps1 .\deploy\run_server.ps1
+Copy-Item -Force .\scripts\ci\run_worker_template.ps1 .\deploy\run_worker.ps1
 Copy-Item -Force .\scripts\deploy\venv_sync.ps1 .\deploy\venv_sync.ps1
 Copy-Item -Force .\scripts\deploy\deploy.ps1 .\deploy\deploy.ps1
 Copy-Item -Force .\scripts\deploy\rollback.ps1 .\deploy\rollback.ps1
