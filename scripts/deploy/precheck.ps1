@@ -71,12 +71,31 @@ if (Test-Path $parent) {
 }
 
 # --- 포트 --------------------------------------------------------------------
-$listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-if ($listener) {
-    $owner = (Get-Process -Id $listener[0].OwningProcess -ErrorAction SilentlyContinue).ProcessName
-    Add-Problem "포트 $Port 을 이미 쓰고 있습니다 (프로세스: $owner). 중지하거나 다른 포트를 지정하세요."
-} else {
+# **연결 테이블을 읽지 않고 실제로 바인딩해 본다.**
+#
+# Get-NetTCPConnection 은 이미 종료된 프로세스를 소유자로 가리키는 유령 항목을
+# 그대로 보여 준다(실측: 죽은 PID 두 개가 8010 을 점유한 것처럼 나왔다). 그걸
+# 믿으면 멀쩡한 포트에 설치가 막힌다. 반대로 바인딩이 되면 그 포트는 실제로 쓸
+# 수 있는 것이므로, 하려는 일을 그대로 시험하는 편이 정확하다.
+$bindable = $false
+try {
+    $probe = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Any, $Port)
+    $probe.Start()
+    $probe.Stop()
+    $bindable = $true
+} catch {
+    $bindable = $false
+}
+
+if ($bindable) {
     Add-Note "포트 $Port : 비어 있음"
+} else {
+    $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    $owner = if ($listener) {
+        (Get-Process -Id $listener[0].OwningProcess -ErrorAction SilentlyContinue).ProcessName
+    } else { $null }
+    $who = if ($owner) { " (프로세스: $owner)" } else { '' }
+    Add-Problem "포트 $Port 에 바인딩할 수 없습니다$who. 쓰고 있는 프로세스를 중지하거나 다른 포트를 지정하세요."
 }
 
 # --- PostgreSQL ---------------------------------------------------------------
