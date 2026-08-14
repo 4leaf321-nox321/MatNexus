@@ -1,7 +1,17 @@
-# 태그가 붙으면 배포 패키지를 만들어 릴리스로 발행한다.
+# 배포 패키지를 만들어 릴리스로 발행한다.
 #
 # 서버는 이 자산 하나만 받으면 된다 — 코드·SPA·wheel 번들·배포 스크립트가 모두
 # 안에 있다. 폐쇄망이면 같은 zip 을 손으로 반입하고 deploy.ps1 -ZipPath 를 쓴다.
+#
+# 트리거가 셋인 이유:
+#   push(tags)      손으로 태그를 밀었을 때
+#   workflow_call   auto-tag 가 버전 올림을 감지해 같은 실행 안에서 부를 때
+#   workflow_dispatch  이미 있는 태그로 다시 만들 때
+#
+# **workflow_call 이 필요한 이유**: GitHub 은 GITHUB_TOKEN 이 만든 이벤트로 다른
+# 워크플로를 트리거하지 않는다. auto-tag 가 태그를 밀어도 여기의 push(tags) 는
+# 절대 발동하지 않는다(실측). PAT 를 secret 으로 넣는 방법도 있지만, 같은 실행
+# 안에서 호출하면 비밀 없이 해결된다.
 
 name: Release - Windows package
 
@@ -9,6 +19,18 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: 패키징할 태그
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 패키징할 태그 (예 v0.1.0)
+        required: true
+        type: string
 
 jobs:
   package-and-release:
@@ -17,15 +39,18 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          # push(tags) 로 들어오면 github.ref_name 이 태그다.
+          ref: ${{ inputs.tag || github.ref_name }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           # wheel 의 ABI 태그가 이 버전에 묶인다. 서버 파이썬과 같아야 하며,
           # deploy.ps1 이 BUILD_INFO.txt 로 그것을 검사한다.
           python-version: '3.12'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
 
@@ -47,8 +72,8 @@ jobs:
       - name: 릴리스 발행
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
           body: |
             Windows 배포 패키지.
 

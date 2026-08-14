@@ -1,8 +1,12 @@
-# frontend/package.json 의 version 이 올라가면 태그를 만든다.
+# frontend/package.json 의 version 이 올라가면 태그를 만들고 릴리스까지 이어간다.
 #
 # 버전을 올리는 행위가 곧 "이걸 배포하겠다"는 결정이다. 버전을 올리지 않은 커밋은
 # 릴리스를 만들지 않으므로, main 에 자유롭게 커밋하면서 배포 시점만 따로 정할 수
 # 있다(52에서 검증된 방식).
+#
+# 릴리스를 **같은 실행 안에서** 호출한다. GitHub 은 GITHUB_TOKEN 이 만든 이벤트로
+# 다른 워크플로를 트리거하지 않아서, 태그만 밀어 두면 release 워크플로가 영영 돌지
+# 않는다(실측). PAT 없이 해결하는 방법이 workflow_call 이다.
 
 name: Auto tag on version bump
 
@@ -17,9 +21,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      created: ${{ steps.tag.outputs.created }}
+      value: ${{ steps.version.outputs.value }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -28,14 +35,26 @@ jobs:
         run: echo "value=$(node -p "require('./frontend/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: 태그 생성 (이미 있으면 조용히 넘어간다)
+        id: tag
         env:
           TAG: v${{ steps.version.outputs.value }}
         run: |
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "$TAG 태그가 이미 있습니다 — 넘어갑니다."
+            echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git tag -a "$TAG" -m "$TAG"
           git push origin "$TAG"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-windows.yml
+    with:
+      tag: v${{ needs.tag.outputs.value }}
