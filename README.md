@@ -110,6 +110,23 @@ cd C:\Server\tools\MatNexus
 .\rollback.ps1 -AppPath 'C:\Server\MatNexus'
 ```
 
+### 관리자 계정
+
+로그인 아이디는 **이메일 형식이 아니어도 된다** (`admin` 같은 짧은 아이디 허용).
+비밀번호를 잊었거나 아이디를 바꿔야 하면 서버 콘솔에서 고친다.
+
+```powershell
+cd C:\Server\MatNexus\backend
+$py = 'C:\Server\MatNexus_venvs\backend\Scripts\python.exe'
+
+& $py scripts\set_admin.py --email admin --password '...'                    # 비밀번호 재설정
+& $py scripts\set_admin.py --email admin --password '...' --rename-from old@x # 아이디 변경
+& $py scripts\set_admin.py --email admin --password '...' --no-force-change   # 강제 변경 끄기
+```
+
+`--no-force-change` 는 파일럿·개발 편의용이다. 운영에서는 강제 변경을 켜 둔다 —
+시드 비밀번호가 그대로 남는 것이 폐쇄망 설치에서 가장 흔한 사고다.
+
 **스크립트를 `tools\MatNexus\` 하위에 둔다.** `C:\Server\tools` 바로 아래에 두면
 같은 서버에 사는 다른 앱의 `deploy.ps1`·`rollback.ps1` 과 이름이 겹쳐 서로를
 덮어쓴다(실측: 이 PC의 `C:\Server\tools` 에 이미 다른 프로젝트의 같은 이름

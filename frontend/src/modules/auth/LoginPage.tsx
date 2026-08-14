@@ -84,11 +84,16 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email">이메일</Label>
+              <Label htmlFor="email">아이디</Label>
+              {/* type="email" 을 쓰지 않는다 — 관리자 계정은 `admin` 처럼 이메일
+                  형식이 아닌 아이디를 쓰는 경우가 많은데, 브라우저가 그것을
+                  제출 단계에서 막아 로그인 자체가 불가능해진다. 서버도 같은
+                  이유로 EmailStr 검증을 쓰지 않는다(ADR 0002). */}
               <Input
                 id="email"
-                type="email"
+                type="text"
                 autoComplete="username"
+                placeholder="이메일 또는 아이디"
                 required
                 autoFocus
                 value={email}

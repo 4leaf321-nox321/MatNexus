@@ -41,6 +41,11 @@ def main() -> None:
     parser.add_argument("--password", default=None, help="생략하면 난수로 만든다")
     parser.add_argument("--workspace-slug", default=DEFAULT_WORKSPACE_SLUG)
     parser.add_argument("--workspace-name", default=DEFAULT_WORKSPACE_NAME)
+    parser.add_argument(
+        "--no-force-change",
+        action="store_true",
+        help="첫 로그인 시 비밀번호 변경 강제를 끈다 (파일럿·개발 편의용)",
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
@@ -69,7 +74,8 @@ def main() -> None:
             password_hash=security.hash_password(password),
             display_name="시스템 관리자",
             is_system_admin=True,
-            must_change_password=True,  # 시드 비밀번호가 그대로 남는 사고 방지
+            # 시드 비밀번호가 그대로 남는 사고 방지. 파일럿에서만 --no-force-change 로 끈다.
+            must_change_password=not args.no_force_change,
             home_workspace_id=workspace.id,
         )
         db.add(user)
@@ -78,9 +84,12 @@ def main() -> None:
         db.commit()
 
         print("\n관리자 계정을 만들었습니다. 이 비밀번호는 다시 표시되지 않습니다.")
-        print(f"  이메일   : {email}")
+        print(f"  아이디   : {email}")
         print(f"  비밀번호 : {password}")
-        print("  첫 로그인 시 비밀번호 변경이 강제됩니다.\n")
+        if user.must_change_password:
+            print("  첫 로그인 시 비밀번호 변경이 강제됩니다.\n")
+        else:
+            print("  ! 비밀번호 변경 강제가 꺼져 있습니다 (--no-force-change).\n")
     finally:
         db.close()
 
