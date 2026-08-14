@@ -18,6 +18,7 @@ from app.config import Settings, get_settings
 from app.logging_setup import setup_logging
 from app.modules.accounts import routes as accounts_routes
 from app.modules.auth import routes as auth_routes
+from app.modules.workspaces import routes as workspaces_routes
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
 
@@ -37,6 +38,7 @@ def _api_router() -> APIRouter:
     # 조립 지점이 하나여야 한다 (tests/architecture 가 검사).
     router.include_router(auth_routes.router)
     router.include_router(accounts_routes.router)
+    router.include_router(workspaces_routes.router)
 
     return router
 
