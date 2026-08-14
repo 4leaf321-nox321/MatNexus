@@ -13,8 +13,10 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AccountsAdminPage from '@/modules/accounts/AccountsAdminPage'
 import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
+import NoticesPage from '@/modules/notices/NoticesPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import SignupPage from '@/modules/auth/SignupPage'
+import VocPage from '@/modules/voc/VocPage'
 import MembersPage from '@/modules/workspaces/MembersPage'
 import WorkspacesAdminPage from '@/modules/workspaces/WorkspacesAdminPage'
 import { ProtectedRoute } from '@/shared/auth/ProtectedRoute'
@@ -52,11 +54,8 @@ export const router = createBrowserRouter([
           { path: 'notifications', element: <NotificationsPage /> },
 
           // 공통
-          {
-            path: 'notices',
-            ...stub('공지', 'Phase 1', '배포 없이 안내를 갱신하는 유일한 수단.'),
-          },
-          { path: 'voc', ...stub('VOC', 'Phase 1') },
+          { path: 'notices', element: <NoticesPage /> },
+          { path: 'voc', element: <VocPage /> },
           {
             path: 'guide',
             ...stub('사용자 가이드', 'Phase 1', '런타임으로 제공해 배포 없이 갱신.'),
