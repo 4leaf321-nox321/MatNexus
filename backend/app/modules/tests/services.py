@@ -228,6 +228,252 @@ def _as_number(given: Any, label: str) -> float:
         raise AppError("MNX-TESTS-0008", f"'{label}' 은 숫자여야 합니다.", status=422) from exc
 
 
+# --- 정의 편집 --------------------------------------------------------------
+
+
+def definition_is_locked(db: Session, test_type_id: uuid.UUID) -> tuple[bool, int]:
+    """이 종류로 등록된 시험이 있으면 채널의 key·단위·차원을 잠근다.
+
+    **저장된 데이터의 해석이 바뀌기 때문이다.**
+
+    - `key` 는 Parquet 컬럼 이름이자 `Curve.channels` 의 값이다. 바꾸면 이미 저장된
+      곡선을 못 읽고, 오류가 아니라 조용히 "채널 없음" 이 된다.
+    - `si_unit` 은 더 나쁘다. 저장된 숫자는 그대로인데 뜻이 바뀐다 — force 를
+      N → kN 으로 바꾸면 3466.4 N 이 3466.4 kN 으로 읽힌다. **숫자가 그대로라
+      화면 어디에도 티가 안 난다.** 조건 단위 6만 배 사고와 같은 부류다.
+
+    라벨·정렬·필수여부는 잠그지 않는다 — 그것들은 해석을 바꾸지 않는다.
+
+    소프트 삭제한 시험도 센다. 되살릴 수 있는 데이터의 해석을 바꾸면 안 된다.
+    """
+    count = (
+        db.scalar(
+            select(func.count())
+            .select_from(TestRun)
+            .where(TestRun.test_type_id == test_type_id)
+        )
+        or 0
+    )
+    return count > 0, count
+
+
+def save_definition(
+    db: Session,
+    *,
+    key: str,
+    label: str,
+    abbr: str,
+    description: str | None,
+    parser_key: str | None,
+    is_active: bool,
+    sort_order: int,
+    max_upload_bytes: int | None,
+    channels: list[dict[str, Any]],
+    conditions: list[dict[str, Any]],
+) -> TestType:
+    """정의 한 벌을 저장한다. 없으면 만들고, 있으면 갈아 끼운다."""
+    if not channels:
+        raise AppError("MNX-TESTS-0015", "채널이 하나도 없습니다.", status=422)
+    _ensure_unique_keys(channels, "채널")
+    _ensure_unique_keys(conditions, "조건")
+    _validate_units(channels, conditions)
+    if parser_key:
+        parsers.load_builtin()
+        try:
+            registry.get(parser_key)
+        except KeyError:
+            raise AppError(
+                "MNX-TESTS-0016",
+                f"등록되지 않은 파서입니다: {parser_key}. "
+                f"파서는 코드로 등록합니다 — 정의만으로는 파일을 읽을 수 없습니다.",
+                status=422,
+            ) from None
+
+    test_type = db.scalar(select(TestType).where(TestType.key == key))
+    creating = test_type is None
+    if test_type is None:
+        test_type = TestType(key=key)
+        db.add(test_type)
+
+    if not creating:
+        _guard_locked_changes(db, test_type, channels, conditions)
+
+    test_type.label = label
+    test_type.abbr = abbr
+    test_type.description = description
+    test_type.parser_key = parser_key
+    test_type.is_active = is_active
+    test_type.sort_order = sort_order
+    test_type.max_upload_bytes = max_upload_bytes
+    db.flush()
+
+    _replace_children(db, test_type, channels, conditions)
+    db.commit()
+    db.refresh(test_type)
+    logger.info("시험 종류 %s: %s", "생성" if creating else "수정", key)
+    return test_type
+
+
+def _ensure_unique_keys(items: list[dict[str, Any]], label: str) -> None:
+    keys = [str(item["key"]) for item in items]
+    duplicated = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicated:
+        raise AppError(
+            "MNX-TESTS-0017", f"{label} 키가 겹칩니다: {', '.join(duplicated)}", status=422
+        )
+
+
+def _validate_units(channels: list[dict[str, Any]], conditions: list[dict[str, Any]]) -> None:
+    """단위가 표에 있고 차원과 맞는지. 모르는 단위를 통과시키면 저장은 되는데
+    변환할 때 터진다 — 그때는 이미 데이터가 들어온 뒤다."""
+    for item in [*channels, *conditions]:
+        symbol = item.get("si_unit")
+        if not symbol:
+            continue
+        try:
+            resolved = units.unit_of(str(symbol))
+        except units.UnknownUnit as exc:
+            raise AppError(
+                "MNX-TESTS-0018",
+                f"'{item['label']}' 의 단위를 알 수 없습니다: {exc.symbol}",
+                status=422,
+            ) from exc
+        dimension = item.get("dimension")
+        if dimension and resolved.dimension != dimension:
+            raise AppError(
+                "MNX-TESTS-0018",
+                f"'{item['label']}' 은 {dimension} 인데 {symbol} 은 "
+                f"{resolved.dimension} 입니다.",
+                status=422,
+            )
+
+
+def _guard_locked_changes(
+    db: Session,
+    test_type: TestType,
+    channels: list[dict[str, Any]],
+    conditions: list[dict[str, Any]],
+) -> None:
+    """데이터가 있으면 해석을 바꾸는 수정을 막는다."""
+    locked, count = definition_is_locked(db, test_type.id)
+    if not locked:
+        return
+
+    existing = {
+        c.key: c
+        for c in db.scalars(
+            select(TestChannel).where(TestChannel.test_type_id == test_type.id)
+        )
+    }
+    incoming = {str(item["key"]): item for item in channels}
+
+    removed = sorted(set(existing) - set(incoming))
+    if removed:
+        raise AppError(
+            "MNX-TESTS-0019",
+            f"등록된 시험이 {count}건 있어 채널을 지울 수 없습니다: {', '.join(removed)}. "
+            f"이미 저장된 곡선이 그 이름으로 열을 갖고 있습니다.",
+            status=409,
+        )
+
+    for key, current in existing.items():
+        item = incoming[key]
+        if (
+            str(item["si_unit"]) != current.si_unit
+            or str(item["dimension"]) != current.dimension
+        ):
+            raise AppError(
+                "MNX-TESTS-0019",
+                f"등록된 시험이 {count}건 있어 '{current.label}' 의 단위·차원을 바꿀 수 "
+                f"없습니다. 저장된 숫자는 그대로인데 뜻만 바뀌어, 화면 어디에도 티가 "
+                f"나지 않는 오류가 됩니다.",
+                status=409,
+            )
+
+    existing_fields = {
+        f.key: f
+        for f in db.scalars(
+            select(TestConditionField).where(TestConditionField.test_type_id == test_type.id)
+        )
+    }
+    incoming_fields = {str(item["key"]): item for item in conditions}
+    for key, field in existing_fields.items():
+        replacement = incoming_fields.get(key)
+        if replacement is None:
+            # 조건은 지워도 곡선이 안 깨진다. 값은 `TestRun.conditions` 에 남는다.
+            continue
+        if replacement.get("si_unit") != field.si_unit:
+            raise AppError(
+                "MNX-TESTS-0019",
+                f"등록된 시험이 {count}건 있어 '{field.label}' 의 단위를 바꿀 수 없습니다. "
+                f"이미 저장된 조건 값의 뜻이 달라집니다.",
+                status=409,
+            )
+
+
+def _replace_children(
+    db: Session,
+    test_type: TestType,
+    channels: list[dict[str, Any]],
+    conditions: list[dict[str, Any]],
+) -> None:
+    for channel in db.scalars(
+        select(TestChannel).where(TestChannel.test_type_id == test_type.id)
+    ):
+        db.delete(channel)
+    for field in db.scalars(
+        select(TestConditionField).where(TestConditionField.test_type_id == test_type.id)
+    ):
+        db.delete(field)
+    db.flush()
+
+    for order, item in enumerate(channels):
+        db.add(
+            TestChannel(
+                test_type_id=test_type.id,
+                key=str(item["key"]),
+                label=str(item["label"]),
+                dimension=str(item["dimension"]),
+                si_unit=str(item["si_unit"]),
+                is_required=bool(item.get("is_required", True)),
+                sort_order=int(item.get("sort_order", order * 10)),
+            )
+        )
+    for order, item in enumerate(conditions):
+        db.add(
+            TestConditionField(
+                test_type_id=test_type.id,
+                key=str(item["key"]),
+                label=str(item["label"]),
+                value_type=str(item["value_type"]),
+                dimension=item.get("dimension"),
+                si_unit=item.get("si_unit"),
+                choices=item.get("choices"),
+                is_required=bool(item.get("is_required", False)),
+                sort_order=int(item.get("sort_order", order * 10)),
+            )
+        )
+
+
+def delete_definition(db: Session, key: str) -> None:
+    """시험이 하나라도 있으면 지우지 않는다 — 지우면 그 시험들이 무엇이었는지
+    말할 수 없게 된다. 쓰지 않으려면 `is_active` 를 끈다."""
+    test_type = db.scalar(select(TestType).where(TestType.key == key))
+    if test_type is None:
+        raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
+    _, count = definition_is_locked(db, test_type.id)
+    if count:
+        raise AppError(
+            "MNX-TESTS-0020",
+            f"이 종류로 등록된 시험이 {count}건 있어 지울 수 없습니다. "
+            f"더 쓰지 않으려면 '중단' 으로 바꾸세요.",
+            status=409,
+        )
+    _replace_children(db, test_type, [], [])
+    db.delete(test_type)
+    db.commit()
+
+
 # --- 파싱 -------------------------------------------------------------------
 
 

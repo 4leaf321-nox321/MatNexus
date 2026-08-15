@@ -6,16 +6,25 @@
  * "이 확장자는 어느 종류로 잡히나", "이 조건은 필수인가" 를 답할 곳이 필요하다.
  * 그 답이 코드 안에만 있으면 물어볼 때마다 개발자를 불러야 한다.
  *
- * 지금은 읽기 전용이다. 편집은 정의를 바꿀 실제 필요가 생겼을 때 붙인다 —
- * 잘못 만든 편집 화면이 채널 키를 바꿔 버리면 이미 저장된 곡선과 어긋난다.
+ * **편집도 여기서 한다.** 처음에는 읽기 전용으로 두었는데, 그러면 "정의는 데이터"
+ * 라고 해 놓고 새 종류를 만들려면 코드를 고치고 서버에서 스크립트를 돌려야 한다 —
+ * 말과 실제가 다르다.
+ *
+ * 대신 **저장된 데이터의 해석을 바꾸는 수정은 서버가 거절한다.** 등록된 시험이
+ * 있으면 채널의 키·단위·차원이 잠긴다. 화면은 그 사실을 잠금 표시와 이유로
+ * 보여 준다 — 회색으로만 만들면 사람은 고장인 줄 안다.
  */
 
-import { ListTree, Plug } from 'lucide-react'
+import { useState } from 'react'
+import { ListTree, Lock, Pencil, Plug, Plus, Trash2 } from 'lucide-react'
 
 import { testsApi } from '@/modules/tests/api'
+import type { TestType } from '@/modules/tests/api'
+import { TestTypeEditor } from '@/modules/tests/TestTypeEditor'
 import { display } from '@/modules/tests/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import {
   Table,
@@ -29,16 +38,41 @@ import { useResource } from '@/shared/hooks/useResource'
 
 export default function TestTypesPage() {
   const types = useResource(() => testsApi.types(), [])
+  const [editing, setEditing] = useState<TestType | null>(null)
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
   const rows = types.data ?? []
+
+  async function remove(type: TestType) {
+    setError(null)
+    try {
+      await testsApi.removeType(type.key)
+      types.reload()
+    } catch (caught) {
+      // 서버가 "시험이 N건 있어 지울 수 없습니다 — 중단으로 바꾸세요" 를 준다.
+      setError(caught instanceof Error ? caught : new Error('삭제하지 못했습니다.'))
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="시험종류 정의"
-        description="어떤 시험을 받을 수 있고, 각각 어떤 채널과 조건을 갖는지. 정의는 코드가 아니라 데이터입니다."
+        description="어떤 시험을 받을 수 있고, 각각 어떤 채널과 조건을 갖는지. 정의는 코드가 아니라 데이터입니다 — 배포 없이 추가됩니다."
+        actions={
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setOpen(true)
+            }}
+          >
+            <Plus className="size-4" />
+            종류 만들기
+          </Button>
+        }
       />
 
-      <ErrorNotice error={types.error} className="mb-4" />
+      <ErrorNotice error={types.error ?? error} className="mb-4" />
 
       {!types.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
@@ -60,9 +94,39 @@ export default function TestTypesPage() {
               </Badge>
               <Badge variant="outline">{type.abbr}</Badge>
               {!type.is_active && <Badge variant="destructive">중단</Badge>}
+              {type.run_count > 0 && (
+                <Badge variant="outline" className="gap-1" title="등록된 시험이 있어 채널의 키·단위가 잠깁니다">
+                  <Lock className="size-3" />
+                  시험 {type.run_count}건
+                </Badge>
+              )}
               <span className="text-muted-foreground ml-auto text-xs">
                 최대 {Math.round(type.max_upload_bytes / (1024 * 1024))}MB
               </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditing(type)
+                  setOpen(true)
+                }}
+              >
+                <Pencil className="size-3.5" />
+                편집
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={type.run_count > 0}
+                title={
+                  type.run_count > 0
+                    ? '등록된 시험이 있습니다. 더 쓰지 않으려면 편집에서 중단으로 바꾸세요.'
+                    : '삭제'
+                }
+                onClick={() => remove(type)}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
             </header>
 
             <div className="space-y-4 p-4">
@@ -166,6 +230,16 @@ export default function TestTypesPage() {
           </section>
         ))}
       </div>
+
+      <TestTypeEditor
+        type={editing}
+        open={open}
+        onClose={() => setOpen(false)}
+        onSaved={() => {
+          setOpen(false)
+          types.reload()
+        }}
+      />
     </div>
   )
 }

@@ -79,3 +79,35 @@ export function conditionUnits(fields: { key: string; si_unit?: string | null }[
   }
   return map
 }
+
+/**
+ * 편집 화면이 고르게 할 차원과 단위. **서버의 `matcore/units` 표를 좁혀 옮긴 것**
+ * 이므로 거기에 없는 단위를 넣으면 저장할 때 거절당한다.
+ *
+ * 완전한 복제가 아니라 자주 쓰는 것만 둔다 — 목록이 길면 고르기 어렵고, 서버가
+ * 최종 판정을 하므로 화면이 전부 알 필요는 없다.
+ */
+export const UNITS_BY_DIMENSION: Record<string, string[]> = {
+  length: ['m', 'mm', 'cm', 'um'],
+  force: ['N', 'kN'],
+  stress: ['Pa', 'kPa', 'MPa', 'GPa'],
+  strain: ['1', '%'],
+  strain_rate: ['1/s', '1/min'],
+  velocity: ['m/s', 'mm/s', 'mm/min'],
+  time: ['s', 'ms', 'min', 'h'],
+  temperature: ['K', 'degC'],
+  frequency: ['Hz', 'kHz'],
+  mass: ['kg', 'g', 'tonne'],
+  angle: ['rad', 'deg'],
+  dimensionless: ['1'],
+}
+
+export const DIMENSIONS = Object.keys(UNITS_BY_DIMENSION)
+
+export const VALUE_TYPES = [
+  { value: 'number', label: '숫자' },
+  { value: 'text', label: '문자' },
+  { value: 'choice', label: '선택' },
+  { value: 'date', label: '날짜' },
+  { value: 'boolean', label: '예/아니오' },
+] as const

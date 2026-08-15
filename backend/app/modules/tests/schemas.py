@@ -52,6 +52,11 @@ class TestTypeOut(BaseModel):
     is_active: bool
     max_upload_bytes: int
     """정의에 없으면 전역 기본값이 채워져 나간다 — 화면이 두 곳을 보지 않게."""
+    run_count: int
+    """이 종류로 등록된 시험 수. 0 이 아니면 채널의 key·단위·차원이 잠긴다.
+
+    화면이 **이유와 함께 잠가야** 사람이 납득한다. 눌러 보고 나서 409 를 받으면
+    무엇이 문제인지 알기 어렵다."""
     channels: list[TestChannelOut]
     conditions: list[TestConditionFieldOut]
 
@@ -170,3 +175,81 @@ class CleanupQueuedOut(BaseModel):
     status: str
     message: str
     dry_run: bool
+
+
+# --- 정의 편집 --------------------------------------------------------------
+#
+# **여기가 위험한 자리다.** 채널의 `key` 와 `si_unit` 은 이미 저장된 데이터의
+# 해석을 바꾼다.
+#
+#   key       Parquet 컬럼 이름이자 `Curve.channels` 의 값이다. 바꾸면 저장된
+#             곡선을 못 읽고, 조용히 "채널 없음" 이 된다.
+#   si_unit   저장된 숫자는 그대로인데 뜻이 바뀐다. force 를 N → kN 으로 바꾸면
+#             3466.4 N 이 3466.4 kN 으로 읽힌다. **숫자가 그대로라 티가 안 난다.**
+#
+# 그래서 그 종류로 등록된 시험이 하나라도 있으면 둘을 잠근다. 라벨·정렬·필수
+# 여부는 언제든 바꿀 수 있다 — 그것들은 해석을 바꾸지 않는다.
+
+
+class ParserOut(BaseModel):
+    """`matcore.registry` 에 등록된 파서. 종류를 만들 때 여기서 고른다."""
+
+    id: str
+    label: str
+    version: str
+    extensions: list[str]
+    applies_to: list[str]
+
+
+class ChannelInput(BaseModel):
+    key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    """소문자·숫자·밑줄만. Parquet 컬럼 이름이 되므로 공백과 기호를 막는다."""
+    label: str = Field(min_length=1, max_length=100)
+    dimension: str = Field(min_length=1, max_length=20)
+    si_unit: str = Field(min_length=1, max_length=20)
+    is_required: bool = True
+    sort_order: int = 0
+
+
+class ConditionInput(BaseModel):
+    key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=100)
+    value_type: str = Field(pattern="^(number|text|choice|date|boolean)$")
+    dimension: str | None = Field(default=None, max_length=20)
+    si_unit: str | None = Field(default=None, max_length=20)
+    choices: list[str] | None = None
+    is_required: bool = False
+    sort_order: int = 0
+
+
+class TestTypeSaveRequest(BaseModel):
+    """정의 한 벌을 통째로 저장한다.
+
+    항목별 엔드포인트를 늘어놓지 않는 이유: 화면은 폼 하나를 채워 저장한다.
+    부분 갱신으로 쪼개면 "채널만 바꿨는데 조건이 사라졌다" 같은 어긋남이 생기고,
+    무엇이 지워졌는지 판정하는 곳도 화면과 서버 둘로 갈라진다.
+    """
+
+    label: str = Field(min_length=1, max_length=100)
+    abbr: str = Field(min_length=1, max_length=10, pattern=r"^[A-Za-z0-9]+$")
+    """시험 이름에 들어가는 약어. 이름에 쓰이므로 영숫자만."""
+    description: str | None = None
+    parser_key: str | None = None
+    is_active: bool = True
+    sort_order: int = 0
+    max_upload_bytes: int | None = Field(default=None, gt=0)
+    channels: list[ChannelInput]
+    conditions: list[ConditionInput] = []
+
+
+class TestTypeCreateRequest(TestTypeSaveRequest):
+    key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    """만든 뒤에는 바꿀 수 없다. 시험 종류를 가리키는 안정된 이름이다."""
+
+
+class DefinitionLocksOut(BaseModel):
+    """무엇을 왜 못 바꾸는지. 화면이 이유와 함께 잠가야 사람이 납득한다."""
+
+    run_count: int
+    locked: bool
+    reason: str | None

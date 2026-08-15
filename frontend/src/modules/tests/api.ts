@@ -11,6 +11,9 @@ export type TestRunDetail = components['schemas']['TestRunDetailOut']
 export type TestRunPage = components['schemas']['Page_TestRunOut_']
 export type CurvePoints = components['schemas']['CurvePointsOut']
 export type StorageReport = components['schemas']['StorageReportOut']
+export type Parser = components['schemas']['ParserOut']
+type TestTypeSave = components['schemas']['TestTypeSaveRequest']
+type TestTypeCreate = components['schemas']['TestTypeCreateRequest']
 type CleanupRequest = components['schemas']['CleanupRequest']
 
 export interface RunQuery extends Record<string, unknown> {
@@ -46,6 +49,14 @@ export interface UploadInput {
 
 export const testsApi = {
   types: () => api.get<TestType[]>('/test-types'),
+
+  /** 등록된 파서. **파서는 정의로 만들 수 없다 — 코드다.** */
+  parsers: () => api.get<Parser[]>('/test-types/parsers'),
+  createType: (payload: TestTypeCreate) => api.post<TestType>('/test-types', payload),
+  /** 정의 한 벌을 갈아 끼운다. 데이터가 있으면 서버가 key·단위 변경을 거절한다. */
+  updateType: (key: string, payload: TestTypeSave) =>
+    api.put<TestType>(`/test-types/${key}`, payload),
+  removeType: (key: string) => api.delete<void>(`/test-types/${key}`),
 
   /** 저장소 현황. 폴더를 훑는 정도라 요청 안에서 끝난다. */
   storage: () => api.get<StorageReport>('/maintenance/storage'),

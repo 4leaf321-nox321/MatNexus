@@ -758,8 +758,60 @@ export interface paths {
          */
         get: operations["list_test_types_api_test_types_get"];
         put?: never;
+        /**
+         * Create Test Type
+         * @description 새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다.
+         */
+        post: operations["create_test_type_api_test_types_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-types/parsers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Parsers
+         * @description 등록된 파서. 종류를 만들 때 여기서 고른다.
+         *
+         *     **파서는 정의로 만들 수 없다.** 코드다(`matcore/parsers`). 정의를 데이터로
+         *     둔 것은 "어떤 시험이 있고 무엇을 입력받는가" 까지이고, 파일을 실제로 읽는
+         *     일은 플러그인이 한다 — 그 경계를 화면이 분명히 보여 줘야 한다.
+         */
+        get: operations["list_parsers_api_test_types_parsers_get"];
+        put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-types/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Test Type
+         * @description 정의 한 벌을 갈아 끼운다.
+         *
+         *     등록된 시험이 있으면 채널의 **key·단위·차원은 거절한다** — 저장된 곡선의
+         *     해석이 바뀌기 때문이다. 라벨·정렬·필수여부는 언제든 바꿀 수 있다.
+         */
+        put: operations["update_test_type_api_test_types__key__put"];
+        post?: never;
+        /** Delete Test Type */
+        delete: operations["delete_test_type_api_test_types__key__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -980,6 +1032,27 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** ChannelInput */
+        ChannelInput: {
+            /** Dimension */
+            dimension: string;
+            /**
+             * Is Required
+             * @default true
+             */
+            is_required: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
         /** CleanupQueuedOut */
         CleanupQueuedOut: {
             /** Dry Run */
@@ -998,6 +1071,31 @@ export interface components {
             dry_run: boolean;
             /** Retention Days */
             retention_days?: number | null;
+        };
+        /** ConditionInput */
+        ConditionInput: {
+            /** Choices */
+            choices?: string[] | null;
+            /** Dimension */
+            dimension?: string | null;
+            /**
+             * Is Required
+             * @default false
+             */
+            is_required: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit?: string | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /** Value Type */
+            value_type: string;
         };
         /**
          * CreateAccountRequest
@@ -1347,6 +1445,22 @@ export interface components {
             offset: number;
             /** Total */
             total: number;
+        };
+        /**
+         * ParserOut
+         * @description `matcore.registry` 에 등록된 파서. 종류를 만들 때 여기서 고른다.
+         */
+        ParserOut: {
+            /** Applies To */
+            applies_to: string[];
+            /** Extensions */
+            extensions: string[];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Version */
+            version: string;
         };
         /** PatCreateRequest */
         PatCreateRequest: {
@@ -1848,6 +1962,38 @@ export interface components {
             /** Value */
             value: number | null;
         };
+        /** TestTypeCreateRequest */
+        TestTypeCreateRequest: {
+            /** Abbr */
+            abbr: string;
+            /** Channels */
+            channels: components["schemas"]["ChannelInput"][];
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: components["schemas"]["ConditionInput"][];
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Max Upload Bytes */
+            max_upload_bytes?: number | null;
+            /** Parser Key */
+            parser_key?: string | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
         /** TestTypeOut */
         TestTypeOut: {
             /** Abbr */
@@ -1875,6 +2021,45 @@ export interface components {
             max_upload_bytes: number;
             /** Parser Key */
             parser_key: string | null;
+            /** Run Count */
+            run_count: number;
+        };
+        /**
+         * TestTypeSaveRequest
+         * @description 정의 한 벌을 통째로 저장한다.
+         *
+         *     항목별 엔드포인트를 늘어놓지 않는 이유: 화면은 폼 하나를 채워 저장한다.
+         *     부분 갱신으로 쪼개면 "채널만 바꿨는데 조건이 사라졌다" 같은 어긋남이 생기고,
+         *     무엇이 지워졌는지 판정하는 곳도 화면과 서버 둘로 갈라진다.
+         */
+        TestTypeSaveRequest: {
+            /** Abbr */
+            abbr: string;
+            /** Channels */
+            channels: components["schemas"]["ChannelInput"][];
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: components["schemas"]["ConditionInput"][];
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Label */
+            label: string;
+            /** Max Upload Bytes */
+            max_upload_bytes?: number | null;
+            /** Parser Key */
+            parser_key?: string | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
         };
         /** UnreadCountOut */
         UnreadCountOut: {
@@ -3660,6 +3845,123 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TestTypeOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_test_type_api_test_types_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestTypeCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestTypeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_parsers_api_test_types_parsers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParserOut"][];
+                };
+            };
+        };
+    };
+    update_test_type_api_test_types__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestTypeSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestTypeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_test_type_api_test_types__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

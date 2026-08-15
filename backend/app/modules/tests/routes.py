@@ -36,6 +36,7 @@ from app.modules.tests.schemas import (
     CleanupQueuedOut,
     CleanupRequest,
     CurvePointsOut,
+    ParserOut,
     ReparseOut,
     StorageReportOut,
     TestChannelOut,
@@ -43,11 +44,13 @@ from app.modules.tests.schemas import (
     TestRunDetailOut,
     TestRunOut,
     TestSummaryOut,
+    TestTypeCreateRequest,
     TestTypeOut,
+    TestTypeSaveRequest,
 )
 from app.shared import filestore, permissions
 from app.shared.auth import current_user, require_system_admin
-from app.shared.errors import AppError, NotFound
+from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
 from matcore import naming, parsers, registry
 
@@ -86,6 +89,140 @@ def _extensions(parser_key: str | None) -> list[str]:
     return sorted({str(item).lower() for item in declared})
 
 
+def _run_counts(db: Session, type_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """종류별 시험 수. 소프트 삭제도 센다 — 되살릴 수 있는 데이터의 해석을
+    바꾸면 안 된다."""
+    if not type_ids:
+        return {}
+    rows = db.execute(
+        select(TestRun.test_type_id, func.count())
+        .where(TestRun.test_type_id.in_(type_ids))
+        .group_by(TestRun.test_type_id)
+    )
+    return {type_id: count for type_id, count in rows}
+
+
+def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
+    """정의 하나를 응답 형태로. 목록과 편집 응답이 같은 모양이어야 화면이
+    저장 뒤 다시 불러오지 않아도 된다."""
+    channels = list(
+        db.scalars(
+            select(TestChannel)
+            .where(TestChannel.test_type_id == test_type.id)
+            .order_by(TestChannel.sort_order)
+        )
+    )
+    conditions = list(
+        db.scalars(
+            select(TestConditionField)
+            .where(TestConditionField.test_type_id == test_type.id)
+            .order_by(TestConditionField.sort_order)
+        )
+    )
+    return TestTypeOut(
+        id=test_type.id,
+        run_count=_run_counts(db, [test_type.id]).get(test_type.id, 0),
+        key=test_type.key,
+        label=test_type.label,
+        abbr=test_type.abbr,
+        description=test_type.description,
+        parser_key=test_type.parser_key,
+        extensions=_extensions(test_type.parser_key),
+        is_active=test_type.is_active,
+        max_upload_bytes=test_type.max_upload_bytes or get_settings().max_upload_bytes,
+        channels=[
+            TestChannelOut(
+                key=c.key,
+                label=c.label,
+                dimension=c.dimension,
+                si_unit=c.si_unit,
+                is_required=c.is_required,
+                sort_order=c.sort_order,
+            )
+            for c in channels
+        ],
+        conditions=[
+            TestConditionFieldOut(
+                key=f.key,
+                label=f.label,
+                value_type=f.value_type,
+                dimension=f.dimension,
+                si_unit=f.si_unit,
+                choices=f.choices,
+                is_required=f.is_required,
+                sort_order=f.sort_order,
+            )
+            for f in conditions
+        ],
+    )
+
+
+@router.get("/parsers", response_model=list[ParserOut])
+def list_parsers(user: User = Depends(require_system_admin)) -> list[ParserOut]:
+    """등록된 파서. 종류를 만들 때 여기서 고른다.
+
+    **파서는 정의로 만들 수 없다.** 코드다(`matcore/parsers`). 정의를 데이터로
+    둔 것은 "어떤 시험이 있고 무엇을 입력받는가" 까지이고, 파일을 실제로 읽는
+    일은 플러그인이 한다 — 그 경계를 화면이 분명히 보여 줘야 한다.
+    """
+    parsers.load_builtin()
+    return [
+        ParserOut(
+            id=plugin.id,
+            label=plugin.label,
+            version=plugin.version,
+            extensions=sorted(
+                {str(item).lower() for item in plugin.meta.get("extensions", ())}
+            ),
+            applies_to=list(plugin.applies_to),
+        )
+        for plugin in registry.list_plugins(kind="parser")
+    ]
+
+
+@router.post("", response_model=TestTypeOut, status_code=201)
+def create_test_type(
+    payload: TestTypeCreateRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> TestTypeOut:
+    """새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다."""
+    if db.scalar(select(TestType).where(TestType.key == payload.key)):
+        raise Conflict("MNX-TESTS-0021", f"이미 있는 시험 종류입니다: {payload.key}")
+    data = payload.model_dump()
+    key = data.pop("key")
+    test_type = services.save_definition(db, key=key, **data)
+    return _type_out(db, test_type)
+
+
+@router.put("/{key}", response_model=TestTypeOut)
+def update_test_type(
+    key: str,
+    payload: TestTypeSaveRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> TestTypeOut:
+    """정의 한 벌을 갈아 끼운다.
+
+    등록된 시험이 있으면 채널의 **key·단위·차원은 거절한다** — 저장된 곡선의
+    해석이 바뀌기 때문이다. 라벨·정렬·필수여부는 언제든 바꿀 수 있다.
+    """
+    if db.scalar(select(TestType).where(TestType.key == key)) is None:
+        raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
+    test_type = services.save_definition(db, key=key, **payload.model_dump())
+    return _type_out(db, test_type)
+
+
+@router.delete("/{key}", status_code=204)
+def delete_test_type(
+    key: str,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    services.delete_definition(db, key)
+    return Response(status_code=204)
+
+
 @router.get("", response_model=list[TestTypeOut])
 def list_test_types(
     include_inactive: bool = Query(default=False),
@@ -122,9 +259,11 @@ def list_test_types(
         conditions[field.test_type_id].append(field)
 
     fallback = get_settings().max_upload_bytes
+    counts = _run_counts(db, ids)
     return [
         TestTypeOut(
             id=t.id,
+            run_count=counts.get(t.id, 0),
             key=t.key,
             label=t.label,
             abbr=t.abbr,

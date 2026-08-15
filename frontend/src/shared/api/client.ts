@@ -152,6 +152,9 @@ export const api = {
   /** 파일 업로드. 토큰 갱신·오류 규약을 JSON 요청과 똑같이 탄다. */
   postForm: <T>(path: string, form: FormData) =>
     request<T>(path, { method: 'POST', body: form }),
+  /** 정의처럼 '한 벌을 통째로 갈아 끼우는' 자원에 쓴다. */
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
   // DELETE 에도 본문을 허용한다 — 계정 삭제는 "누구에게 승계할지"를 함께 받는다.
