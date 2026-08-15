@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared.errors import Forbidden, NotFound
 
@@ -55,3 +56,62 @@ def require_manager(db: Session, *, workspace: Workspace, user: User) -> None:
     membership = membership_of(db, workspace_id=workspace.id, user_id=user.id)
     if membership is None or membership.role != "manager":
         raise Forbidden("MNX-WORKSPACES-0003", "부서 관리자만 할 수 있습니다.")
+
+
+# --- 재료 계층의 가시 범위 --------------------------------------------------
+#
+# **여기 있는 이유가 있다.** 재료·시료·시편·시험이 전부 같은 규칙을 따라야 하는데,
+# 각 모듈이 자기 버전을 갖고 있으면 "재료는 보이는데 그 시험은 안 보인다" 같은
+# 어긋남이 생긴다. 모듈끼리 직접 부르는 것은 경계 규칙이 막으므로(CLAUDE.md),
+# 공유해야 하는 판정은 shared 에 둔다.
+
+
+def my_workspace_ids(db: Session, user: User) -> list[uuid.UUID]:
+    return list(
+        db.scalars(
+            select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+        )
+    )
+
+
+def visible_materials(db: Session, user: User) -> Select[tuple[Material]]:
+    """내 부서 재료 + 전역 재료(`owner_workspace_id IS NULL`).
+
+    전역을 처음부터 함께 보게 짜는 것이 ADR 0004 가 지금 요구하는 둘 중 하나다.
+    나중에 붙이면 모든 목록·상세·검색 쿼리를 다시 손봐야 한다.
+    """
+    query = select(Material).where(Material.deleted_at.is_(None))
+    if user.is_system_admin:
+        return query
+    mine = my_workspace_ids(db, user)
+    return query.where(
+        or_(Material.owner_workspace_id.is_(None), Material.owner_workspace_id.in_(mine))
+    )
+
+
+def visible_material_ids(db: Session, user: User) -> Select[tuple[uuid.UUID]]:
+    """하위 계층 쿼리에 끼워 넣을 서브쿼리."""
+    query = select(Material.id).where(Material.deleted_at.is_(None))
+    if user.is_system_admin:
+        return query
+    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+    return query.where(
+        or_(Material.owner_workspace_id.is_(None), Material.owner_workspace_id.in_(mine))
+    )
+
+
+def visible_specimen(db: Session, user: User, specimen_id: uuid.UUID) -> Specimen:
+    """볼 수 있는 시편 하나. 재료의 가시 범위를 그대로 따라간다."""
+    specimen = db.scalar(
+        select(Specimen)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .where(
+            Specimen.id == specimen_id,
+            Specimen.deleted_at.is_(None),
+            Sample.deleted_at.is_(None),
+            Sample.material_id.in_(visible_material_ids(db, user)),
+        )
+    )
+    if specimen is None:
+        raise NotFound("MNX-MATERIALS-0003", "시편을 찾을 수 없습니다.")
+    return specimen

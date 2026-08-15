@@ -47,3 +47,4 @@ def load_all() -> None:
     핸들러가 없다"는 어긋남이 생기지 않게 한다.
     """
     from app.modules.notifications import jobs as _notification_jobs  # noqa: F401
+    from app.modules.tests import jobs as _test_jobs  # noqa: F401

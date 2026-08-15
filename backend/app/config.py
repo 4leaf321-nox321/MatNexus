@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     filestore_dir: Path = BACKEND_DIR / "filestore"
     """곡선 Parquet와 장비 원본이 사는 곳. DB에는 경로와 해시만 둔다(D10)."""
 
+    max_upload_bytes: int = 50 * 1024 * 1024
+    """업로드 한도의 전역 기본값. 시험 종류가 `max_upload_bytes` 로 덮을 수 있다.
+
+    한도를 두는 이유는 디스크가 아니라 **거절 시점**이다. 한도가 없으면 잘못 고른
+    수 GB 파일을 끝까지 다 받은 뒤에야 파싱이 실패하고, 그때는 이미 디스크를 쓴
+    뒤다. `filestore.save_stream` 은 읽는 도중에 멈춘다."""
+
     frontend_dist: Path = REPO_DIR / "frontend" / "dist"
     """존재하면 API와 같은 프로세스가 SPA를 서빙한다. 개발 중에는 없다."""
 

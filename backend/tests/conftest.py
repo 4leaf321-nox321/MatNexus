@@ -50,6 +50,26 @@ def _ensure_database(url_str: str) -> None:
             admin.execute(f"CREATE DATABASE \"{url.database}\" ENCODING 'UTF8'")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_filestore(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """파일스토어를 임시 폴더로 돌린다 — **개발 데이터를 건드리지 않는다.**
+
+    DB 를 `matnexus_test` 로 분리한 것과 같은 이유다. 테스트가 개발용 곡선 파일을
+    지우거나 덮으면 아무도 테스트를 돌리지 않게 되고, 그러면 릴리스 게이트로
+    올릴 수도 없다.
+
+    autouse 인 이유: 새 테스트를 쓰는 사람이 이 픽스처를 붙이는 것을 잊어도
+    개발 폴더가 안전해야 한다.
+    """
+    settings = get_settings()
+    original = settings.filestore_dir
+    settings.filestore_dir = tmp_path_factory.mktemp("filestore")
+    try:
+        yield
+    finally:
+        settings.filestore_dir = original
+
+
 @pytest.fixture(scope="session")
 def engine():  # type: ignore[no-untyped-def]
     url = _test_url()

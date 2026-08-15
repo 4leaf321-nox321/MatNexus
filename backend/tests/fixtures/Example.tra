@@ -1,0 +1,33 @@
+"Strain (plastic) at break",54.2415,"%"
+"Yield strain","Unknown"
+"Strain (plastic) at Fmax",26.856,"%"
+"Work hardening coefficient k{lo  10 - 15}","501.871","MPa"
+"Work hardening exponent n{lo  10 - 15}","0.234727",""
+"Vertical anisotropy r{lo  10 - 15}",0.234727,""
+"Upper yield point","Unknown"
+"Lower yield point","Unknown"
+"Force maximum",282.128,"MPa"
+"Force at proof stress 0.2%",159.979,"MPa"
+"Specimen number",4," "
+"Specimen thickness a0",0.986,"mm"
+"Specimen width b0",12.473,"mm"
+"Standard extensometer ","Standard load cell ","Specimen width"
+"mm","N","mm"
+1.46484e-007,19.4642,12.473
+0.0099015,486.745,12.473
+0.0210001,913.883,12.4725
+0.0402001,1521.71,12.4676
+0.0801001,1875.87,12.4587
+0.12,1942.57,12.4516
+0.2031,2015.82,12.4395
+1.002,2411.27,12.321
+2.0031,2734.58,12.1862
+3.0003,2957.14,12.0553
+4.0035,3111.71,11.9268
+5.0046,3219.09,11.8038
+7.0008,3351,11.5686
+10.0005,3441.23,11.2446
+15.0042,3466.4,10.7618
+18.7017,3435,10.4369
+18.7089,3435.25,0.0
+20.0037,3418.13,0.0

@@ -1,0 +1,392 @@
+"""시험 업로드 → 파싱 → 곡선.
+
+실제 Zwick 파일(`tests/fixtures/Example.tra`)로 끝에서 끝까지 돌린다. 합성 데이터로
+만들면 "우리가 만든 형식을 우리가 읽는" 순환이 되어, 장비가 실제로 뱉는 것과
+어긋나도 초록으로 남는다.
+
+지키려는 것:
+  - 업로드는 파일만 받고 끝난다(202). 파싱은 워커가 한다
+  - 파싱 실패는 재시도하지 않고 이유를 남긴다 — 같은 바이트는 다시 읽어도 같다
+  - 정의(TestChannel)에 없는 필수 채널이 빠지면 조용히 반쪽 곡선을 만들지 않는다
+  - 저장은 SI, 원본은 그대로 보관
+"""
+
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.jobs import kinds
+from app.jobs.models import Job
+from app.modules.tests import services
+from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.models import Curve, TestRun, TestSummary
+
+TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+
+
+@pytest.fixture
+def tensile(db: Session) -> None:
+    ensure_builtin_test_types(db)
+    db.commit()
+
+
+@pytest.fixture
+def specimen(client: TestClient, admin_headers: dict[str, str]) -> dict[str, Any]:
+    material = client.post(
+        "/api/materials",
+        json={
+            "family": "Metal",
+            "category": "Steel",
+            "grade": "SECC",
+            "details": "MDOI",
+            "spec_thickness": 1.0,
+        },
+        headers=admin_headers,
+    ).json()
+    sample = client.post(
+        f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+    ).json()
+    created: dict[str, Any] = client.post(
+        f"/api/samples/{sample['id']}/specimens",
+        json={"orientation": "MD"},
+        headers=admin_headers,
+    ).json()
+    return created
+
+
+def _upload(
+    client: TestClient,
+    headers: dict[str, str],
+    specimen_id: str,
+    *,
+    content: bytes | None = None,
+    filename: str = "Example.tra",
+    conditions: str = "{}",
+) -> Any:
+    return client.post(
+        "/api/test-runs",
+        data={
+            "specimen_id": specimen_id,
+            "test_type": "tensile",
+            "conditions": conditions,
+        },
+        files={"file": (filename, content if content is not None else TRA.read_bytes())},
+        headers=headers,
+    )
+
+
+class TestDefinitions:
+    def test_정의가_채널과_조건을_함께_준다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """화면이 이 응답만으로 업로드 폼을 그릴 수 있어야 한다(수준 2)."""
+        response = client.get("/api/test-types", headers=admin_headers)
+        assert response.status_code == 200, response.text
+        types = response.json()
+        assert [t["key"] for t in types] == ["tensile"]
+
+        tensile_type = types[0]
+        assert tensile_type["parser_key"] == "zwick_tra"
+        assert [c["key"] for c in tensile_type["channels"]] == [
+            "displacement",
+            "force",
+            "specimen_width",
+        ]
+        assert {c["si_unit"] for c in tensile_type["channels"]} == {"m", "N"}
+        assert "temperature" in {c["key"] for c in tensile_type["conditions"]}
+        assert tensile_type["max_upload_bytes"] > 0  # 정의가 비어도 전역값이 채워진다
+
+
+class TestUpload:
+    def test_업로드는_파일만_받고_끝난다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        response = _upload(client, admin_headers, specimen["id"])
+        assert response.status_code == 202, response.text
+        run = response.json()
+
+        assert run["record_name"] == "SECC_MDOI_1.0__01__MD_01__TEN_01"
+        assert run["status"] == "uploaded"  # 아직 파싱 전이다
+        assert run["source_filename"] == "Example.tra"
+        assert run["source_bytes"] == TRA.stat().st_size
+        assert run["row_count"] is None
+
+        job = db.scalar(select(Job).where(Job.kind == kinds.TESTS_PARSE_UPLOAD))
+        assert job is not None
+        assert job.payload["test_run_id"] == run["id"]
+
+    def test_정의에_없는_조건은_거절한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """조용히 버리면 오타로 넣은 조건이 사라진 줄 모르고 저장된다."""
+        response = _upload(
+            client, admin_headers, specimen["id"], conditions='{"temprature": 25}'
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-TESTS-0004"
+
+    def test_조건_숫자는_SI_로_저장된다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        response = _upload(
+            client, admin_headers, specimen["id"], conditions='{"temperature": 25}'
+        )
+        assert response.status_code == 202, response.text
+        run = db.get(TestRun, uuid.UUID(response.json()["id"]))
+        assert run is not None
+        # 정의상 온도의 SI 단위는 K 다. 25 를 그대로 두면 25K(-248℃)가 된다.
+        assert run.conditions["temperature"] == pytest.approx(25.0)
+        assert run.input_units["temperature"] == "K"
+
+    def test_한도를_넘으면_받는_도중에_멈춘다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        from app.modules.tests.models import TestType
+
+        test_type = db.scalar(select(TestType).where(TestType.key == "tensile"))
+        assert test_type is not None
+        test_type.max_upload_bytes = 100
+        db.commit()
+
+        response = _upload(client, admin_headers, specimen["id"], content=b"x" * 5000)
+        assert response.status_code == 413
+        assert response.json()["error"]["code"] == "MNX-FILES-0001"
+
+
+class TestParsing:
+    def _parse(self, db: Session, run_id: str) -> TestRun:
+        assert services.parse_run(db, uuid.UUID(run_id)) == "parsed"
+        run = db.get(TestRun, uuid.UUID(run_id))
+        assert run is not None
+        db.refresh(run)
+        return run
+
+    def test_실제_장비파일을_읽어_곡선과_요약값을_만든다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        run = self._parse(db, created["id"])
+
+        assert run.status == "parsed"
+        assert run.parse_error is None
+        assert run.parser_version == "1"
+        # 장비가 준 시편 치수는 결과가 아니라 입력이라 metadata 로 간다
+        assert run.source_metadata["specimen_thickness_a0"] == "0.986"
+
+        curve = db.scalar(select(Curve).where(Curve.test_run_id == run.id))
+        assert curve is not None
+        assert curve.row_count == 18
+        assert curve.channels == ["displacement", "force", "specimen_width"]
+        assert curve.byte_size > 0
+
+        summary = {
+            s.key: s
+            for s in db.scalars(select(TestSummary).where(TestSummary.test_run_id == run.id))
+        }
+        assert all(s.source == "instrument" for s in summary.values())
+        # 282.128 MPa -> Pa. 파일의 이름은 'Force maximum' 이지만 단위가 MPa 이고
+        # 실제로 Fmax/A0 와 0.1% 안에서 맞는다 — 힘이 아니라 인장강도다.
+        assert summary["tensile_strength"].value_num == pytest.approx(282_128_000.0)
+        # 장비가 못 구한 값은 숫자 칸을 비우고 사실만 남긴다
+        assert summary["yield_strain"].value_num is None
+        assert summary["yield_strain"].value_text == "Unknown"
+
+    def test_센서가_놓친_구간을_경고로_남긴다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """실측: 마지막 두 행의 Specimen width 가 0 이다(파단 후 센서 상실).
+
+        진응력은 폭으로 나눈다. 경고 없이 계산하면 마지막 두 점이 무한대가 된다.
+        """
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        run = self._parse(db, created["id"])
+        assert "specimen_width" in run.source_metadata["_warnings"]
+
+        detail = client.get(f"/api/test-runs/{run.id}", headers=admin_headers).json()
+        assert len(detail["warnings"]) == 1
+        assert "_warnings" not in detail["source_metadata"]  # 경고는 따로 보여 준다
+
+    def test_읽을_수_없는_파일은_이유를_남기고_재시도하지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = _upload(
+            client, admin_headers, specimen["id"], content=b"this is not a tra file\n"
+        ).json()
+
+        # 예외를 던지지 않는다 — 던지면 워커가 같은 바이트로 재시도만 반복한다.
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "failed"
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        assert run.status == "failed"
+        assert "Zwick" in (run.parse_error or "")
+        assert db.scalar(select(Curve).where(Curve.test_run_id == run.id)) is None
+
+    def test_필수_채널이_빠지면_실패한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """정의를 데이터로 둔 값이 여기서 나온다 — 장비 설정이 바뀌어 채널이
+        빠지면 곡선이 조용히 반쪽이 되는 대신 등록이 실패한다."""
+        without_force = b""""Standard extensometer","Specimen width"
+"mm","mm"
+0.1,12.4
+0.2,12.3
+0.3,12.2
+"""
+        created = _upload(client, admin_headers, specimen["id"], content=without_force).json()
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "failed"
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        assert "force" in (run.parse_error or "")
+
+    def test_지워진_시험은_조용히_넘어간다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        client.delete(f"/api/test-runs/{created['id']}", headers=admin_headers)
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "gone"
+
+
+class TestCurve:
+    def test_축약해서_준다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        services.parse_run(db, uuid.UUID(created["id"]))
+
+        response = client.get(
+            f"/api/test-runs/{created['id']}/curve?max_points=10", headers=admin_headers
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["x"] == "displacement" and body["y"] == "force"  # 정의 순서
+        assert body["row_count"] == 18  # 원본 행 수는 축약과 무관하게 그대로 알려 준다
+        # `max_points` 는 상한이지 목표가 아니다. 빈 버킷이 생기면 그만큼 적게
+        # 준다 — 같은 점을 두 번 넣어 개수를 맞추면 실제 점은 하나 적어진다.
+        assert body["returned"] == len(body["points"]) <= 10
+        assert len({tuple(p) for p in body["points"]}) == len(body["points"])
+
+    def test_없는_채널을_달라고_하면_알려_준다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        services.parse_run(db, uuid.UUID(created["id"]))
+        response = client.get(
+            f"/api/test-runs/{created['id']}/curve?x=displacement&y=stress",
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert "stress" in response.json()["error"]["message"]
+
+    def test_원본을_그대로_내려받는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """파서가 못 읽었을 때 사람이 열어 봐야 한다."""
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        response = client.get(f"/api/test-runs/{created['id']}/source", headers=admin_headers)
+        assert response.status_code == 200
+        assert response.content == TRA.read_bytes()
+
+
+class TestOrphans:
+    def test_DB_에_없는_폴더를_찾는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**방향이 중요하다.** DB 를 훑어서는 오펀을 찾을 수 없다 — 오펀은
+        정의상 DB 에 없다.
+
+        기준선을 먼저 재는 이유: 앞선 테스트들이 남긴 파일이 이미 오펀이다.
+        테스트는 테이블을 비우지만 파일은 지우지 않으므로, 실제로 이 잡이 필요한
+        상황이 매 실행마다 재현된다.
+        """
+        from app.shared import filestore
+
+        baseline = set(services.cleanup_orphans(db, dry_run=True)["found"])
+
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        directory = filestore.run_dir(run.id, run.created_at)
+
+        # 행이 살아 있는 동안은 오펀이 아니다
+        assert directory not in set(services.cleanup_orphans(db, dry_run=True)["found"])
+
+        db.delete(run)
+        db.commit()
+
+        found = services.cleanup_orphans(db, dry_run=True)
+        assert set(found["found"]) - baseline == {directory}
+        assert found["removed"] == []  # dry_run 은 지우지 않는다
+
+        removed = services.cleanup_orphans(db, dry_run=False)
+        assert directory in removed["removed"]
+        assert directory not in set(services.cleanup_orphans(db, dry_run=True)["found"])

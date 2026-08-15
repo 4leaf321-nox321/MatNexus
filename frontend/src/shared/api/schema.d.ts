@@ -581,6 +581,137 @@ export interface paths {
         patch: operations["update_specimen_api_specimens__specimen_id__patch"];
         trace?: never;
     };
+    "/api/test-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_test_runs_get"];
+        put?: never;
+        /**
+         * Upload Test Run
+         * @description 원본을 받아 저장하고 파싱을 큐에 넣는다. 202 를 준다 — 아직 안 끝났다.
+         */
+        post: operations["upload_test_run_api_test_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_test_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Run
+         * @description 소프트 삭제. 파일은 남긴다 — 실수로 지운 것을 되돌릴 수 있어야 한다.
+         *
+         *     파일은 오펀 정리 잡이 나중에 치운다. 여기서 바로 지우면 되돌릴 방법이 없고,
+         *     커밋이 실패했을 때 파일만 사라진 상태가 된다.
+         */
+        delete: operations["delete_run_api_test_runs__run_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-runs/{run_id}/curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Curve
+         * @description 차트가 쓸 점들. 축을 고르지 않으면 정의 순서상 첫 두 채널.
+         */
+        get: operations["get_curve_api_test_runs__run_id__curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-runs/{run_id}/reparse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reparse
+         * @description 파서를 고친 뒤 다시 읽는다. 원본을 보관하는 이유가 이것이다.
+         */
+        post: operations["reparse_api_test_runs__run_id__reparse_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-runs/{run_id}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Source
+         * @description 원본 그대로 내려받는다.
+         *
+         *     파서가 못 읽었을 때 사람이 열어 봐야 한다 — 그 경로가 없으면 실패한 업로드는
+         *     서버 파일시스템을 직접 뒤지는 수밖에 없다.
+         */
+        get: operations["download_source_api_test_runs__run_id__source_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Test Types
+         * @description 시험 종류와 그 채널·조건 정의.
+         *
+         *     화면이 이 응답만으로 업로드 폼을 그릴 수 있어야 한다 — 그것이 정의를 DB 에
+         *     둔 이유다.
+         */
+        get: operations["list_test_types_api_test_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/voc": {
         parameters: {
             query?: never;
@@ -754,6 +885,35 @@ export interface components {
             /** Workspace Slug */
             workspace_slug?: string | null;
         };
+        /** Body_upload_test_run_api_test_runs_post */
+        Body_upload_test_run_api_test_runs_post: {
+            /**
+             * Conditions
+             * @description 조건 JSON
+             * @default {}
+             */
+            conditions: string;
+            /** File */
+            file: string;
+            /** Instrument */
+            instrument?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Operator */
+            operator?: string | null;
+            /**
+             * Specimen Id
+             * Format: uuid
+             */
+            specimen_id: string;
+            /**
+             * Test Type
+             * @description 시험 종류 key (예: tensile)
+             */
+            test_type: string;
+            /** Tested At */
+            tested_at?: string | null;
+        };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
             /** Current Password */
@@ -782,6 +942,22 @@ export interface components {
             role: string;
             /** Workspace Slug */
             workspace_slug: string;
+        };
+        /** CurvePointsOut */
+        CurvePointsOut: {
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /** Returned */
+            returned: number;
+            /** Row Count */
+            row_count: number;
+            /** X */
+            x: string;
+            /** Y */
+            y: string;
         };
         /** DeleteAccountRequest */
         DeleteAccountRequest: {
@@ -1055,6 +1231,17 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[TestRunOut] */
+        Page_TestRunOut_: {
+            /** Items */
+            items: components["schemas"]["TestRunOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** PatCreateRequest */
         PatCreateRequest: {
             /** Expires In Days */
@@ -1113,6 +1300,13 @@ export interface components {
         RejectRequest: {
             /** Note */
             note: string;
+        };
+        /** ReparseOut */
+        ReparseOut: {
+            /** Message */
+            message: string;
+            /** Status */
+            status: string;
         };
         /** SampleCreateRequest */
         SampleCreateRequest: {
@@ -1337,6 +1531,207 @@ export interface components {
             account: components["schemas"]["AccountOut"];
             /** Temporary Password */
             temporary_password: string;
+        };
+        /** TestChannelOut */
+        TestChannelOut: {
+            /** Dimension */
+            dimension: string;
+            /** Is Required */
+            is_required: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /** TestConditionFieldOut */
+        TestConditionFieldOut: {
+            /** Choices */
+            choices: string[] | null;
+            /** Dimension */
+            dimension: string | null;
+            /** Is Required */
+            is_required: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Sort Order */
+            sort_order: number;
+            /** Value Type */
+            value_type: string;
+        };
+        /** TestRunDetailOut */
+        TestRunDetailOut: {
+            /** Channels */
+            channels: string[];
+            /** Conditions */
+            conditions: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instrument */
+            instrument: string | null;
+            /** Material Id */
+            material_id: string | null;
+            /** Material Name */
+            material_name: string | null;
+            /** Operator */
+            operator: string | null;
+            /** Orientation */
+            orientation: string | null;
+            /** Parse Error */
+            parse_error: string | null;
+            /** Record Name */
+            record_name: string;
+            /** Row Count */
+            row_count: number | null;
+            /** Seq No */
+            seq_no: number;
+            /** Source Bytes */
+            source_bytes: number | null;
+            /** Source Filename */
+            source_filename: string | null;
+            /** Source Metadata */
+            source_metadata: {
+                [key: string]: string;
+            };
+            /** Source Sha256 */
+            source_sha256: string | null;
+            /**
+             * Specimen Id
+             * Format: uuid
+             */
+            specimen_id: string;
+            /** Specimen Name */
+            specimen_name: string | null;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: components["schemas"]["TestSummaryOut"][];
+            /** Test Type Key */
+            test_type_key: string;
+            /** Test Type Label */
+            test_type_label: string;
+            /** Tested At */
+            tested_at: string | null;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** TestRunOut */
+        TestRunOut: {
+            /** Channels */
+            channels: string[];
+            /** Conditions */
+            conditions: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instrument */
+            instrument: string | null;
+            /** Material Id */
+            material_id: string | null;
+            /** Material Name */
+            material_name: string | null;
+            /** Operator */
+            operator: string | null;
+            /** Orientation */
+            orientation: string | null;
+            /** Parse Error */
+            parse_error: string | null;
+            /** Record Name */
+            record_name: string;
+            /** Row Count */
+            row_count: number | null;
+            /** Seq No */
+            seq_no: number;
+            /** Source Bytes */
+            source_bytes: number | null;
+            /** Source Filename */
+            source_filename: string | null;
+            /** Source Sha256 */
+            source_sha256: string | null;
+            /**
+             * Specimen Id
+             * Format: uuid
+             */
+            specimen_id: string;
+            /** Specimen Name */
+            specimen_name: string | null;
+            /** Status */
+            status: string;
+            /** Test Type Key */
+            test_type_key: string;
+            /** Test Type Label */
+            test_type_label: string;
+            /** Tested At */
+            tested_at: string | null;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** TestSummaryOut */
+        TestSummaryOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string | null;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Source */
+            source: string;
+            /** Text */
+            text: string | null;
+            /** Value */
+            value: number | null;
+        };
+        /** TestTypeOut */
+        TestTypeOut: {
+            /** Abbr */
+            abbr: string;
+            /** Channels */
+            channels: components["schemas"]["TestChannelOut"][];
+            /** Conditions */
+            conditions: components["schemas"]["TestConditionFieldOut"][];
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Max Upload Bytes */
+            max_upload_bytes: number;
+            /** Parser Key */
+            parser_key: string | null;
         };
         /** UnreadCountOut */
         UnreadCountOut: {
@@ -2799,6 +3194,262 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_test_runs_get: {
+        parameters: {
+            query?: {
+                specimen_id?: string | null;
+                material_id?: string | null;
+                status?: string | null;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TestRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_test_run_api_test_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_test_run_api_test_runs_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_test_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRunDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_run_api_test_runs__run_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_curve_api_test_runs__run_id__curve_get: {
+        parameters: {
+            query?: {
+                x?: string | null;
+                y?: string | null;
+                max_points?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurvePointsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reparse_api_test_runs__run_id__reparse_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReparseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_source_api_test_runs__run_id__source_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_test_types_api_test_types_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestTypeOut"][];
                 };
             };
             /** @description Validation Error */

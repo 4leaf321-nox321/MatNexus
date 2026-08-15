@@ -16,3 +16,16 @@ NOTIFY_DELIVER = "notifications.deliver"
 
 #: 기본 알림 규칙 보장 — payload: user_id
 NOTIFY_ENSURE_RULES = "notifications.ensure_rules"
+
+#: 업로드한 시험 원본 파싱 → Parquet 정규화 — payload: test_run_id
+#:
+#: 업로드 요청 안에서 파싱하지 않는 이유: 큰 파일은 수 초가 걸리고, 그동안 요청이
+#: 물려 있으면 브라우저가 먼저 끊는다. 그러면 사용자는 실패한 줄 아는데 서버는
+#: 계속 처리하고 있다. 업로드는 파일만 받고 끝내고, 파싱은 워커가 한다.
+TESTS_PARSE_UPLOAD = "tests.parse_upload"
+
+#: 주인 없는 파일 정리 — payload: dry_run(bool, 기본 true)
+#:
+#: 파일시스템 저장의 필연적 부산물이다. DB 행은 지웠는데 파일이 남는 경우가 반드시
+#: 생긴다(트랜잭션이 파일시스템까지 덮지 못한다).
+TESTS_CLEANUP_ORPHANS = "tests.cleanup_orphans"

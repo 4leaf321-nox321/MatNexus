@@ -1,0 +1,115 @@
+"""시험 API 형태.
+
+시험 종류 정의를 그대로 내려보낸다. 화면이 채널·조건 폼을 **정의에서 그려야**
+새 시험 종류를 배포 없이 추가할 수 있다(수준 2). 화면이 항목을 하드코딩하면
+정의를 데이터로 둔 이유가 사라진다.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel
+
+# --- 정의 -------------------------------------------------------------------
+
+
+class TestChannelOut(BaseModel):
+    key: str
+    label: str
+    dimension: str
+    si_unit: str
+    is_required: bool
+    sort_order: int
+
+
+class TestConditionFieldOut(BaseModel):
+    key: str
+    label: str
+    value_type: str
+    dimension: str | None
+    si_unit: str | None
+    choices: list[str] | None
+    is_required: bool
+    sort_order: int
+
+
+class TestTypeOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    label: str
+    abbr: str
+    description: str | None
+    parser_key: str | None
+    is_active: bool
+    max_upload_bytes: int
+    """정의에 없으면 전역 기본값이 채워져 나간다 — 화면이 두 곳을 보지 않게."""
+    channels: list[TestChannelOut]
+    conditions: list[TestConditionFieldOut]
+
+
+# --- 시험 -------------------------------------------------------------------
+
+
+class TestRunOut(BaseModel):
+    id: uuid.UUID
+    record_name: str
+    seq_no: int
+    status: str
+    parse_error: str | None
+
+    specimen_id: uuid.UUID
+    specimen_name: str | None
+    orientation: str | None
+    material_id: uuid.UUID | None
+    material_name: str | None
+
+    test_type_key: str
+    test_type_label: str
+
+    conditions: dict[str, Any]
+    tested_at: datetime | None
+    operator: str | None
+    instrument: str | None
+
+    source_filename: str | None
+    source_bytes: int | None
+    source_sha256: str | None
+
+    row_count: int | None
+    channels: list[str]
+    warnings: list[str]
+    created_at: datetime
+
+
+class TestSummaryOut(BaseModel):
+    key: str
+    label: str | None
+    source: str
+    """`instrument` = 장비가 계산한 값, `matnexus` = 우리가 계산한 값.
+
+    나란히 두는 것이 목적이다. 우리 계산이 장비 값과 크게 다르면 뭔가 잘못됐다."""
+    value: float | None
+    text: str | None
+    si_unit: str | None
+
+
+class TestRunDetailOut(TestRunOut):
+    summary: list[TestSummaryOut]
+    source_metadata: dict[str, str]
+
+
+class CurvePointsOut(BaseModel):
+    x: str
+    y: str
+    row_count: int
+    """원본 행 수. 축약 전이다."""
+    returned: int
+    points: list[tuple[float, float]]
+
+
+class ReparseOut(BaseModel):
+    status: str
+    message: str

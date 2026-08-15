@@ -31,6 +31,13 @@ def setup_logging(settings: Settings) -> None:
     formatter = logging.Formatter(_FORMAT)
     id_filter = _RequestIdFilter()
 
+    # 콘솔은 UTF-8 로 쓴다. Windows 콘솔 기본 코드페이지(949)로는 `—` 같은 문자를
+    # 인코딩하지 못해 **로그 한 줄마다 예외가 나고**, logging 이 그 예외를 대신
+    # 출력해 정작 찾으려던 줄이 트레이스백에 묻힌다(실측: 워커 기동 메시지).
+    # errors="backslashreplace" 는 여기서도 실패하지 않게 하는 마지막 보루다.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(formatter)
     console.addFilter(id_filter)

@@ -80,6 +80,11 @@ class TestType(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     parser_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
     """`matcore.registry` 에 등록된 파서 이름. 없으면 수동 입력만 받는다."""
+    max_upload_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    """이 종류의 업로드 한도. NULL 이면 전역 기본값(`settings.max_upload_bytes`).
+
+    종류마다 두는 이유: DMA 온도-주파수 스윕은 인장보다 한 자릿수 크다. 하나로
+    맞추면 큰 쪽에 맞춰야 하고, 그러면 인장에 100MB 파일이 올라와도 안 막힌다."""
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -201,6 +206,18 @@ class TestRun(Base):
     source_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     source_sha256: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     source_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    source_metadata: Mapped[dict[str, str]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """파서가 원본에서 읽어낸 부가 정보를 **원문 그대로** 담는다.
+
+    `.tra` 의 `Specimen thickness a0` 처럼 시험 결과가 아니라 **입력**인 값들이
+    여기 온다. 자동으로 시편 실측치를 덮어쓰지 않는다 — 사람이 이미 재어 넣은
+    값을 장비 파일이 조용히 바꾸면, 어느 것이 맞는지 나중에 알 수 없다.
+    화면이 "이 값으로 채울까요?" 를 물어보는 데 쓴다."""
+    parser_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """어느 버전 파서가 읽었는지. 파서를 고쳐 다시 돌릴 대상을 고를 때 쓴다."""
 
     status: Mapped[str] = mapped_column(
         String(20), default="uploaded", server_default="uploaded", index=True

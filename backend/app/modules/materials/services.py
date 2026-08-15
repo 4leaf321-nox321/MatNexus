@@ -11,12 +11,13 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
-from app.modules.workspaces.models import Workspace, WorkspaceMember
+from app.modules.workspaces.models import Workspace
+from app.shared import permissions
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from matcore import naming, units
 
@@ -48,27 +49,11 @@ def from_si(value: float | None, unit: str) -> float | None:
 # --- 가시 범위 --------------------------------------------------------------
 
 
-def my_workspace_ids(db: Session, user: User) -> list[uuid.UUID]:
-    return list(
-        db.scalars(
-            select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
-        )
-    )
-
-
-def visible_materials(db: Session, user: User) -> Select[tuple[Material]]:
-    """내 부서 재료 + 전역 재료.
-
-    전역(NULL)을 처음부터 함께 보게 짜는 것이 ADR 0004 가 지금 요구하는 둘 중
-    하나다. 나중에 붙이면 모든 목록·상세·검색 쿼리를 다시 손봐야 한다.
-    """
-    query = select(Material).where(Material.deleted_at.is_(None))
-    if user.is_system_admin:
-        return query
-    mine = my_workspace_ids(db, user)
-    return query.where(
-        or_(Material.owner_workspace_id.is_(None), Material.owner_workspace_id.in_(mine))
-    )
+#: 가시 범위 판정은 `shared/permissions` 하나뿐이다. 재료·시료·시편·시험이 전부
+#: 같은 규칙을 따라야 하는데, 모듈마다 자기 버전을 두면 "재료는 보이는데 그 시험은
+#: 안 보인다" 같은 어긋남이 생긴다.
+my_workspace_ids = permissions.my_workspace_ids
+visible_materials = permissions.visible_materials
 
 
 def get_material(db: Session, user: User, material_id: uuid.UUID) -> Material:
