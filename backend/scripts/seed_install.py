@@ -28,6 +28,7 @@ from sqlalchemy import select  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
 from app.modules.auth import security  # noqa: E402
+from app.modules.notifications import services as notifications  # noqa: E402
 from app.modules.workspaces.models import Workspace, WorkspaceMember  # noqa: E402
 
 DEFAULT_EMAIL = "admin@matnexus.local"
@@ -82,6 +83,8 @@ def main() -> None:
         db.add(user)
         db.flush()
         db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="manager"))
+        # 알림 규칙을 함께 만든다. 없으면 가입 신청이 들어와도 관리자가 모른다.
+        notifications.ensure_rules(db, user)
         db.commit()
 
         print("\n관리자 계정을 만들었습니다. 이 비밀번호는 다시 표시되지 않습니다.")
