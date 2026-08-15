@@ -71,11 +71,15 @@ async function parseError(response: Response): Promise<ApiError> {
 }
 
 async function send(path: string, init?: RequestInit): Promise<Response> {
+  // FormData 일 때 Content-Type 을 직접 넣으면 **안 된다.** multipart 는 본문에
+  // boundary 문자열이 필요한데, 브라우저가 헤더를 만들 때 그것을 붙여 준다.
+  // 우리가 'multipart/form-data' 만 적으면 boundary 가 빠져 서버가 못 읽는다.
+  const isForm = init?.body instanceof FormData
   return fetch(`${BASE}${path}`, {
     ...init,
     credentials: 'same-origin', // refresh 쿠키
     headers: {
-      'Content-Type': 'application/json',
+      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init?.headers ?? {}),
     },
@@ -117,6 +121,9 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
+  /** 파일 업로드. 토큰 갱신·오류 규약을 JSON 요청과 똑같이 탄다. */
+  postForm: <T>(path: string, form: FormData) =>
+    request<T>(path, { method: 'POST', body: form }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
   // DELETE 에도 본문을 허용한다 — 계정 삭제는 "누구에게 승계할지"를 함께 받는다.

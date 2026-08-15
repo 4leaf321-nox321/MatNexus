@@ -15,6 +15,8 @@ import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
 import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
+import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
+import TestRunsPage from '@/modules/tests/TestRunsPage'
 import NoticesPage from '@/modules/notices/NoticesPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import SignupPage from '@/modules/auth/SignupPage'
@@ -46,6 +48,7 @@ export const router = createBrowserRouter([
           // 카탈로그 (전사)
           { path: 'materials', element: <MaterialsPage /> },
           { path: 'materials/:id', element: <MaterialDetailPage /> },
+          { path: 'test-runs/:id', element: <TestRunDetailPage /> },
           { path: 'compare', ...stub('곡선 비교', 'Phase 3') },
 
           // 내 활동
@@ -75,7 +78,7 @@ export const router = createBrowserRouter([
             path: 'w/:slug',
             children: [
               { index: true, ...stub('부서 홈', 'Phase 1', '최근 등록·처리 대기·내 재료.') },
-              { path: 'tests', ...stub('시험 데이터', 'Phase 2') },
+              { path: 'tests', element: <TestRunsPage /> },
               {
                 path: 'workbench',
                 ...stub('워크벤치', 'Phase 3~4', 'Data → Process → Stats → Fit → Export.'),

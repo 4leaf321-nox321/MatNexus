@@ -12,6 +12,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
+import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -203,15 +204,22 @@ function SampleRow({ sample, onChanged }: { sample: Sample; onChanged: () => voi
           ) : (
             <ul className="divide-y">
               {(specimens.data ?? []).map((specimen) => (
-                <li key={specimen.id} className="flex items-center gap-3 py-2 text-sm">
-                  <Badge variant="secondary">{specimen.orientation}</Badge>
-                  <span className="font-mono text-xs">{specimen.record_name}</span>
-                  <span className="text-muted-foreground ml-auto tabular-nums">
-                    {[specimen.thickness, specimen.width, specimen.gauge_length]
-                      .map((value) => (value == null ? '—' : value))
-                      .join(' × ')}{' '}
-                    {specimen.length_unit}
-                  </span>
+                <li key={specimen.id} className="py-2 text-sm">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="secondary">{specimen.orientation}</Badge>
+                    <span className="font-mono text-xs">{specimen.record_name}</span>
+                    <span className="text-muted-foreground ml-auto tabular-nums">
+                      {[specimen.thickness, specimen.width, specimen.gauge_length]
+                        .map((value) => (value == null ? '—' : value))
+                        .join(' × ')}{' '}
+                      {specimen.length_unit}
+                    </span>
+                  </div>
+                  {/* 시험 UI 는 시험 모듈이 갖는다. 여기는 자리만 내어 준다(R5). */}
+                  <SpecimenTests
+                    specimenId={specimen.id}
+                    specimenName={specimen.record_name}
+                  />
                 </li>
               ))}
             </ul>
