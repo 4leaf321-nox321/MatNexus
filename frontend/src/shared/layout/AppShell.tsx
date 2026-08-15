@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 
+import { NoticePopup } from '@/modules/notices/NoticePopup'
 import { Header } from '@/shared/layout/Header'
 import { Sidebar } from '@/shared/layout/Sidebar'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
@@ -29,6 +30,10 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      {/* 읽지 않은 팝업 공지는 스스로 뜬다 — 공지 화면에 들어가야만 보이면
+          "배포 없이 안내를 전한다" 는 목적이 성립하지 않는다. */}
+      <NoticePopup />
     </div>
   )
 }
