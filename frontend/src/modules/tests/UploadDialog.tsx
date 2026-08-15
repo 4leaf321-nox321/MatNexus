@@ -12,6 +12,8 @@
 import { useEffect, useState } from 'react'
 import { Upload } from 'lucide-react'
 
+import { SpecimenPicker } from '@/modules/materials/SpecimenPicker'
+import type { Specimen } from '@/modules/materials/api'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { display } from '@/modules/tests/units'
@@ -30,7 +32,8 @@ import { Label } from '@/shared/components/ui/label'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
-  specimenId: string
+  /** 정해져 있으면 고르는 단계를 건너뛴다(시편 줄에서 열 때). 없으면 직접 고른다. */
+  specimenId?: string
   specimenName?: string
   open: boolean
   onClose: () => void
@@ -45,6 +48,10 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
   const [operator, setOperator] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
+  const [picked, setPicked] = useState<Specimen | null>(null)
+
+  const targetId = specimenId ?? picked?.id ?? null
+  const targetName = specimenName ?? picked?.record_name
 
   const available = types.data ?? []
   const selected: TestType | undefined =
@@ -56,6 +63,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
       setConditions({})
       setOperator('')
       setError(null)
+      setPicked(null)
     }
   }, [open])
 
@@ -64,7 +72,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
   }, [selected, typeKey])
 
   async function submit() {
-    if (!file || !selected) return
+    if (!file || !selected || !targetId) return
     setSaving(true)
     setError(null)
     try {
@@ -78,7 +86,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
           })
       )
       await testsApi.upload({
-        specimenId,
+        specimenId: targetId,
         testType: selected.key,
         file,
         conditions: filled,
@@ -100,12 +108,22 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
         <DialogHeader>
           <DialogTitle>시험 등록</DialogTitle>
           <DialogDescription>
-            {specimenName ? `${specimenName} 시편에 ` : ''}장비 원본을 올리면 서버가 읽어
+            {targetName ? `${targetName} 시편에 ` : ''}장비 원본을 올리면 서버가 읽어
             곡선으로 만듭니다. 원본은 그대로 보관됩니다.
           </DialogDescription>
         </DialogHeader>
 
         <ErrorNotice error={types.error} />
+
+        {!specimenId && (
+          <div className="space-y-1.5">
+            <Label>시편</Label>
+            <SpecimenPicker onChange={setPicked} />
+            {picked && (
+              <p className="text-muted-foreground font-mono text-xs">{picked.record_name}</p>
+            )}
+          </div>
+        )}
 
         {available.length > 1 && (
           <div className="space-y-1.5">
@@ -182,7 +200,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             취소
           </Button>
-          <Button onClick={submit} disabled={saving || !file || !selected}>
+          <Button onClick={submit} disabled={saving || !file || !selected || !targetId}>
             <Upload className="size-4" />
             {saving ? '올리는 중…' : '올리기'}
           </Button>

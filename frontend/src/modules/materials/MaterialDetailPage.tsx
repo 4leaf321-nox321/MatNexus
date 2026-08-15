@@ -121,8 +121,15 @@ export default function MaterialDetailPage() {
       )}
 
       <ul className="space-y-2">
-        {(samples.data ?? []).map((sample) => (
-          <SampleRow key={sample.id} sample={sample} onChanged={() => samples.reload()} />
+        {(samples.data ?? []).map((sample, index) => (
+          <SampleRow
+            key={sample.id}
+            sample={sample}
+            /* 첫 시료는 펼친 채로 연다. 전부 접어 두면 시편도 '시험 등록'도
+               보이지 않아, 처음 온 사람이 어디서 시작하는지 알 수 없다. */
+            defaultOpen={index === 0}
+            onChanged={() => samples.reload()}
+          />
         ))}
       </ul>
 
@@ -149,8 +156,16 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-function SampleRow({ sample, onChanged }: { sample: Sample; onChanged: () => void }) {
-  const [open, setOpen] = useState(false)
+function SampleRow({
+  sample,
+  onChanged,
+  defaultOpen = false,
+}: {
+  sample: Sample
+  onChanged: () => void
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
   const [adding, setAdding] = useState(false)
   const specimens = useResource(
     () => (open ? materialsApi.specimens(sample.id) : Promise.resolve([])),

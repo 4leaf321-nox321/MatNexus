@@ -212,6 +212,36 @@ Get-CimInstance Win32_Process -Filter "ParentProcessId = $owner" |
 멈추는 것을 관측했다. 화면 코드는 Vite 가 확실히 갱신하지만, 백엔드 라우트가
 안 보이면 먼저 재시작을 의심한다.
 
+**Vite 를 두 번 띄우면 안 된다 — 포트가 아니라 캐시가 문제다.** 실측(2026-08-15):
+이미 돌고 있는 줄 모르고 `npm run dev` 를 한 번 더 했더니, 두 번째 프로세스가
+의존성 재번들링을 시작했다가 포트 충돌로 죽었다. 그런데 죽기 전에
+`node_modules\.vite` 를 새 해시로 갈아엎었고, **살아 있던 첫 번째 vite 가**
+브라우저에게 알려 준 주소와 디스크의 해시가 어긋나 브라우저 콘솔이 이렇게 됐다.
+
+```
+GET .../node_modules/.vite/deps/react.js?v=307b4c2a
+    net::ERR_ABORTED 504 (Outdated Optimize Dep)
+```
+
+포트 충돌은 두 번째 프로세스만 죽이고 끝나지만, **캐시 오염은 멀쩡히 돌던 쪽을
+망가뜨린다.** 그래서 띄우기 전에 5190 이 비었는지 먼저 본다.
+
+```powershell
+# 띄우기 전 확인
+Get-NetTCPConnection -State Listen -LocalPort 5190 -ErrorAction SilentlyContinue
+
+# 504 Outdated Optimize Dep 이 났을 때: 끄고 · 캐시 지우고 · 다시
+$c = Get-NetTCPConnection -State Listen -LocalPort 5190
+Get-CimInstance Win32_Process -Filter "ParentProcessId = $($c.OwningProcess)" |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Stop-Process -Id $c.OwningProcess -Force
+Remove-Item .\frontend\node_modules\.vite -Recurse -Force   # 순수 캐시라 지워도 안전
+cd frontend ; npm run dev                                    # 또는 npm run dev -- --force
+```
+
+지운 뒤에는 브라우저에서 **강제 새로고침(Ctrl+Shift+R)** 을 해야 한다. 옛 해시가
+붙은 주소가 탭에 남아 있으면 같은 504 가 계속 보인다.
+
 **테스트는 개발 DB를 건드리지 않는다.** `matnexus_test` 를 따로 만들어 쓴다
 (`tests/conftest.py`). 개발 데이터가 지워지는 테스트는 아무도 돌리지 않게 되고,
 그러면 릴리스 게이트로 올릴 수도 없다 — RA의 CI화를 막은 원인이 정확히 그것이다.

@@ -5,15 +5,21 @@
  * 시험이 있으면 스스로 갱신한다** — 사용자가 새로고침을 눌러야 상태가 바뀌면,
  * 비동기로 처리하는 이유(요청을 붙잡지 않는 것)의 이득이 사용자에게 안 간다.
  *
- * 등록은 여기서 하지 않는다. 시편이 있어야 시험이 있으므로, 재료 상세의 시편
- * 줄에서 올린다 — 시편 고르는 화면을 따로 만들면 계층이 두 번 표현된다.
+ * **등록 진입점이 두 곳이다.** 시험은 시편에 매달리므로 처음에는 재료 상세의
+ * 시편 줄에만 두었는데, 그러면 재료 → 재료 상세 → 시료 펼치기 → 시편까지
+ * 세 단계를 파고들어야 시작할 수 있다. 실제로 이 화면에 온 사람이 등록 버튼을
+ * 찾지 못했다. 화면 이름이 "시험 데이터" 인데 시험을 만들 수 없으면 안 된다.
+ *
+ * 여기서는 시편을 직접 고르고(`SpecimenPicker`), 시편 줄에서 열 때는 그 단계를
+ * 건너뛴다. 같은 다이얼로그가 둘 다 한다 — 업로드 폼을 두 벌 만들면 갈라진다.
  */
 
-import { useEffect } from 'react'
-import { AlertTriangle, FlaskConical, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, FlaskConical, Plus, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
+import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -37,6 +43,7 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
 }
 
 export default function TestRunsPage() {
+  const [uploading, setUploading] = useState(false)
   const runs = useResource(() => testsApi.runs({ limit: 100 }), [])
   const rows = runs.data?.items ?? []
   const pending = rows.some((run) => isPending(run.status))
@@ -51,12 +58,18 @@ export default function TestRunsPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="시험 데이터"
-        description="장비 원본을 올리면 서버가 읽어 곡선으로 만듭니다. 등록은 재료 상세의 시편에서 합니다."
+        description="장비 원본을 올리면 서버가 읽어 곡선으로 만듭니다."
         actions={
-          <Button variant="outline" size="sm" onClick={() => runs.reload()}>
-            <RefreshCw className={`size-4 ${pending ? 'animate-spin' : ''}`} />
-            새로고침
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => runs.reload()}>
+              <RefreshCw className={`size-4 ${pending ? 'animate-spin' : ''}`} />
+              새로고침
+            </Button>
+            <Button size="sm" onClick={() => setUploading(true)}>
+              <Plus className="size-4" />
+              시험 등록
+            </Button>
+          </>
         }
       />
 
@@ -73,10 +86,11 @@ export default function TestRunsPage() {
           <FlaskConical className="mx-auto mb-2 size-5 opacity-50" />
           등록된 시험이 없습니다.
           <div className="mt-2">
+            위의 <span className="text-foreground font-medium">시험 등록</span> 을 누르거나,{' '}
             <Link to="/materials" className="text-primary hover:underline">
-              재료 → 시료 → 시편
+              재료 상세
             </Link>{' '}
-            을 만든 뒤 시편에서 원본을 올리세요.
+            의 시편에서 올리세요.
           </div>
         </div>
       )}
@@ -131,6 +145,15 @@ export default function TestRunsPage() {
           </TableBody>
         </Table>
       )}
+
+      <UploadDialog
+        open={uploading}
+        onClose={() => setUploading(false)}
+        onDone={() => {
+          setUploading(false)
+          runs.reload()
+        }}
+      />
     </div>
   )
 }
