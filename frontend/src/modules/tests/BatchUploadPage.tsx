@@ -209,6 +209,19 @@ export default function BatchUploadPage() {
     }
   }
 
+  /**
+   * 타이핑이 멎으면 검색한다.
+   *
+   * 전에는 Enter 나 포커스 이동에서만 걸렸다. 그래서 검색어를 치고 **곧바로
+   * 드롭다운을 열면 아직 옛 목록**이었고, 사용자는 검색이 안 되는 줄 알았다.
+   * (클릭으로 포커스가 빠지며 검색이 걸리긴 하지만, 그 응답이 오기 전에 목록이
+   * 이미 열려 있다.)
+   */
+  useEffect(() => {
+    const timer = setTimeout(() => setApplied(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   // 종류 정의가 늦게 도착하면 이미 담긴 파일도 다시 추정해 준다.
   useEffect(() => {
     if (availableTypes.length === 0) return
@@ -424,9 +437,8 @@ export default function BatchUploadPage() {
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     onKeyDown={(event) => event.key === 'Enter' && setApplied(search.trim())}
-                    onBlur={() => setApplied(search.trim())}
-                    placeholder="재료 찾기"
-                    className="h-9 w-32 pl-7"
+                    placeholder="이름·별칭·Grade·Family…"
+                    className="h-9 w-56 pl-7"
                   />
                 </div>
                 <Select
@@ -440,9 +452,26 @@ export default function BatchUploadPage() {
                     <SelectValue placeholder="일괄 지정" />
                   </SelectTrigger>
                   <SelectContent>
+                    {/* **빈 목록을 그냥 비워 두지 않는다.** 아무것도 없는 드롭다운은
+                        고장으로 보인다 — 검색이 걸러 낸 것인지, 재료가 없는 것인지,
+                        아직 불러오는 중인지 구분이 안 된다. */}
+                    {found.length === 0 && (
+                      <div className="text-muted-foreground p-2 text-xs">
+                        {materials.loading
+                          ? '불러오는 중…'
+                          : applied
+                            ? `'${applied}' 에 맞는 재료가 없습니다`
+                            : '등록된 재료가 없습니다'}
+                      </div>
+                    )}
                     {found.map((material) => (
                       <SelectItem key={material.id} value={material.id}>
                         {material.record_name}
+                        {material.alias && (
+                          <span className="text-muted-foreground ml-2 text-xs">
+                            {material.alias}
+                          </span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -632,6 +661,11 @@ export default function BatchUploadPage() {
                           <SelectValue placeholder="고르세요" />
                         </SelectTrigger>
                         <SelectContent>
+                          {optionsFor(row).length === 0 && (
+                            <div className="text-muted-foreground p-2 text-xs">
+                              {applied ? '검색 결과가 없습니다' : '등록된 재료가 없습니다'}
+                            </div>
+                          )}
                           {optionsFor(row).map((material) => (
                             <SelectItem key={material.id} value={material.id}>
                               {material.record_name}

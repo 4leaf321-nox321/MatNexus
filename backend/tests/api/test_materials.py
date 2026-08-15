@@ -250,3 +250,40 @@ class TestListing:
 
         by_alias = client.get("/api/materials?q=도어", headers=admin_headers).json()
         assert by_alias["total"] == 1
+
+    def test_보이는_것으로_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**사람은 화면에 보이는 말로 찾는다.**
+
+        이름·별칭·Grade 만 보면 목록에 떡하니 보이는 Family·Category·Details 로
+        찾을 때 아무것도 안 나온다. "검색해도 안 나온다" 는 실사용 보고가 여기서
+        나왔다 — 검색이 실패했다고 알려 주지도 않으니 재료가 없는 줄 안다.
+        """
+        _create_material(client, admin_headers)  # SECC / Metal / Steel / MDOI
+
+        for term in ("Metal", "steel", "MDOI"):
+            found = client.get(f"/api/materials?q={term}", headers=admin_headers).json()
+            assert found["total"] == 1, f"{term!r} 로 못 찾았습니다"
+
+    def test_띄어쓰기로_나눠_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """이름은 `SECC_MDOI_1.0` 인데 사람은 `SECC 1.0` 이라고 친다.
+
+        구분자가 밑줄이라 통째로 비교하면 안 맞는다. 낱말마다 나눠 **모두 들어
+        있는가**로 본다 — 한 낱말이라도 없으면 다른 재료다.
+        """
+        _create_material(client, admin_headers)
+        _create_material(client, admin_headers, grade="AL5052", spec_thickness=2.0)
+
+        both = client.get("/api/materials?q=SECC 1.0", headers=admin_headers).json()
+        assert both["total"] == 1
+
+        # 순서가 달라도 찾는다 — 사람이 이름 규칙의 순서를 외우고 있지 않다.
+        reversed_order = client.get("/api/materials?q=1.0 SECC", headers=admin_headers).json()
+        assert reversed_order["total"] == 1
+
+        # 낱말 하나가 안 맞으면 안 나온다.
+        none = client.get("/api/materials?q=SECC 2.0", headers=admin_headers).json()
+        assert none["total"] == 0

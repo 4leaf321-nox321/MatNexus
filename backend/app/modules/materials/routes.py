@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, or_, select
@@ -154,9 +155,44 @@ def preview_name(
     )
 
 
+#: 검색이 훑는 칸. **목록에 보이는 것은 전부 들어 있어야 한다.**
+#:
+#: 실사용 보고: "재료를 검색해도 안 나온다." 이름·별칭·Grade 만 보고 있었는데,
+#: 사람은 화면에 떡하니 보이는 Family·Category·Details 로도 찾는다. 검색이
+#: 실패했다고 알려 주지도 않으니 **재료가 없는 줄 안다** — 조용히 틀리는 쪽이다.
+_SEARCH_COLUMNS = (
+    Material.record_name,
+    Material.alias,
+    Material.family,
+    Material.category,
+    Material.grade,
+    Material.details,
+)
+
+
+def _search_terms(q: str | None) -> list[Any]:
+    """검색어를 낱말로 나눠 **낱말마다 조건 하나**로 만든다(AND).
+
+    이름은 `SECC_MDOI_1.0` 인데 사람은 `SECC 1.0` 이라고 친다. 구분자가 밑줄이라
+    통째로 비교하면 안 맞는다. 낱말마다 나누면 순서도 상관없어진다 — 사람이 이름
+    규칙의 순서를 외우고 있지 않다.
+
+    AND 인 이유: OR 로 하면 낱말이 늘수록 결과가 **늘어난다.** 좁히려고 더 쳤는데
+    넓어지면 검색이 아니다.
+    """
+    if not q or not q.strip():
+        return []
+    return [
+        or_(*(column.ilike(f"%{word}%") for column in _SEARCH_COLUMNS)) for word in q.split()
+    ]
+
+
 @router.get("", response_model=Page[MaterialOut])
 def list_materials(
-    q: str | None = Query(default=None, description="이름·별칭·Grade 부분 일치"),
+    q: str | None = Query(
+        default=None,
+        description="이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
+    ),
     family: str | None = None,
     category: str | None = None,
     scope: str = Query(default="all", pattern="^(all|mine|global)$"),
@@ -166,15 +202,8 @@ def list_materials(
     db: Session = Depends(get_db),
 ) -> Page[MaterialOut]:
     query = services.visible_materials(db, user)
-    if q:
-        pattern = f"%{q}%"
-        query = query.where(
-            or_(
-                Material.record_name.ilike(pattern),
-                Material.alias.ilike(pattern),
-                Material.grade.ilike(pattern),
-            )
-        )
+    for condition in _search_terms(q):
+        query = query.where(condition)
     if family:
         query = query.where(Material.family == family)
     if category:

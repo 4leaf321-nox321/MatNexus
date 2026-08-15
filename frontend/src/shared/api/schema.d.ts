@@ -3394,7 +3394,7 @@ export interface operations {
     list_materials_api_materials_get: {
         parameters: {
             query?: {
-                /** @description 이름·별칭·Grade 부분 일치 */
+                /** @description 이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND */
                 q?: string | null;
                 family?: string | null;
                 category?: string | null;

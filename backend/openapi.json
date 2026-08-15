@@ -5655,7 +5655,7 @@
         "operationId": "list_materials_api_materials_get",
         "parameters": [
           {
-            "description": "이름·별칭·Grade 부분 일치",
+            "description": "이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
             "in": "query",
             "name": "q",
             "required": false,
@@ -5668,7 +5668,7 @@
                   "type": "null"
                 }
               ],
-              "description": "이름·별칭·Grade 부분 일치",
+              "description": "이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
               "title": "Q"
             }
           },
