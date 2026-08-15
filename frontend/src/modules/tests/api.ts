@@ -1,6 +1,6 @@
 /** 시험 API — 정의 조회, 업로드, 곡선. */
 
-import { api } from '@/shared/api/client'
+import { api, downloadFile } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type TestType = components['schemas']['TestTypeOut']
@@ -35,6 +35,8 @@ export interface UploadInput {
   testType: string
   file: File
   conditions?: Record<string, unknown>
+  /** 조건 키 → 화면이 받은 단위. 값과 함께 보내야 서버가 올바로 환산한다. */
+  conditionUnits?: Record<string, string>
   operator?: string
   instrument?: string
   note?: string
@@ -58,14 +60,26 @@ export const testsApi = {
       })}`
     ),
 
-  /** 원본 내려받기 주소. 파서가 못 읽었을 때 사람이 열어 봐야 한다. */
-  sourceUrl: (id: string) => `/api/test-runs/${id}/source`,
+  /** 원본 내려받기. 파서가 못 읽었을 때 사람이 열어 봐야 한다.
+   *  평범한 링크로는 토큰이 안 실려 401 이 난다 — `downloadFile` 이 붙여 준다. */
+  downloadSource: (id: string, filename: string) =>
+    downloadFile(`/test-runs/${id}/source`, filename),
 
-  upload: ({ specimenId, testType, file, conditions, operator, instrument, note }: UploadInput) => {
+  upload: ({
+    specimenId,
+    testType,
+    file,
+    conditions,
+    conditionUnits,
+    operator,
+    instrument,
+    note,
+  }: UploadInput) => {
     const form = new FormData()
     form.set('specimen_id', specimenId)
     form.set('test_type', testType)
     form.set('conditions', JSON.stringify(conditions ?? {}))
+    form.set('condition_units', JSON.stringify(conditionUnits ?? {}))
     if (operator) form.set('operator', operator)
     if (instrument) form.set('instrument', instrument)
     if (note) form.set('note', note)

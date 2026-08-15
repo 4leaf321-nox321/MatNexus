@@ -127,6 +127,12 @@
       },
       "Body_upload_test_run_api_test_runs_post": {
         "properties": {
+          "condition_units": {
+            "default": "{}",
+            "description": "조건 키 → 화면이 받은 단위. 없으면 정의의 si_unit 으로 본다",
+            "title": "Condition Units",
+            "type": "string"
+          },
           "conditions": {
             "default": "{}",
             "description": "조건 JSON",
@@ -2352,6 +2358,17 @@
             ],
             "title": "Material Name"
           },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
           "operator": {
             "anyOf": [
               {
@@ -2519,6 +2536,7 @@
           "source_filename",
           "source_bytes",
           "source_sha256",
+          "note",
           "row_count",
           "channels",
           "warnings",
@@ -2586,6 +2604,17 @@
               }
             ],
             "title": "Material Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "operator": {
             "anyOf": [
@@ -2740,6 +2769,7 @@
           "source_filename",
           "source_bytes",
           "source_sha256",
+          "note",
           "row_count",
           "channels",
           "warnings",

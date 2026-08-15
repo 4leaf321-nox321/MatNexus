@@ -86,6 +86,16 @@ export default function TestRunDetailPage() {
     [curve.data, xChannel?.si_unit, yChannel?.si_unit]
   )
 
+  async function download() {
+    setAction(null)
+    try {
+      await testsApi.downloadSource(id, item?.source_filename ?? 'source.dat')
+    } catch (caught) {
+      // 링크였을 때는 이 오류가 새 탭에서 나 화면에 안 보였다.
+      setAction(caught instanceof Error ? caught : new Error('원본을 받지 못했습니다.'))
+    }
+  }
+
   async function reparse() {
     setAction(null)
     try {
@@ -113,11 +123,9 @@ export default function TestRunDetailPage() {
         description={item ? `${item.test_type_label} · ${item.material_name ?? ''}` : undefined}
         actions={
           <>
-            <Button variant="outline" size="sm" asChild>
-              <a href={testsApi.sourceUrl(id)}>
-                <Download className="size-4" />
-                원본
-              </a>
+            <Button variant="outline" size="sm" onClick={download} disabled={!item}>
+              <Download className="size-4" />
+              원본
             </Button>
             <Button variant="outline" size="sm" onClick={reparse}>
               <RefreshCw className="size-4" />
@@ -161,6 +169,14 @@ export default function TestRunDetailPage() {
             원본을 내려받아 형식을 확인하세요. 파서를 고친 뒤 '다시 읽기' 를 누르면 같은
             원본으로 다시 시도합니다.
           </p>
+        </div>
+      )}
+
+      {item?.note && (
+        <div className="bg-muted/40 mb-6 rounded-md border p-3 text-sm">
+          {/* 서버가 sha256 으로 잡은 중복 안내가 여기 온다. 실을 곳이 없으면
+              서버만 알고 사용자는 끝내 모른다. */}
+          <p className="whitespace-pre-wrap">{item.note}</p>
         </div>
       )}
 

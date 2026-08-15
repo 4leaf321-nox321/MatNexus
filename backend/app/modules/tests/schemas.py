@@ -83,6 +83,9 @@ class TestRunOut(BaseModel):
     source_filename: str | None
     source_bytes: int | None
     source_sha256: str | None
+    note: str | None
+    """등록 메모. 서버가 "내용이 같은 파일이 이미 N건 있습니다" 를 여기 적는다 —
+    실을 곳이 없으면 서버만 알고 사용자는 끝내 모른다."""
 
     row_count: int | None
     channels: list[str]

@@ -7,7 +7,15 @@
  */
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, FlaskConical, Globe2, Layers, Plus } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  FlaskConical,
+  Globe2,
+  Layers,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
@@ -167,6 +175,7 @@ function SampleRow({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [adding, setAdding] = useState(false)
+  const [specimenError, setSpecimenError] = useState<Error | null>(null)
   const specimens = useResource(
     () => (open ? materialsApi.specimens(sample.id) : Promise.resolve([])),
     [open, sample.id]
@@ -212,7 +221,7 @@ function SampleRow({
             </Button>
           </div>
 
-          <ErrorNotice error={specimens.error} className="mb-2" />
+          <ErrorNotice error={specimens.error ?? specimenError} className="mb-2" />
 
           {(specimens.data ?? []).length === 0 ? (
             <p className="text-muted-foreground py-4 text-center text-sm">시편이 없습니다.</p>
@@ -229,6 +238,28 @@ function SampleRow({
                         .join(' × ')}{' '}
                       {specimen.length_unit}
                     </span>
+                    {/* 일괄 등록이 만든 뒤 업로드가 실패하면 빈 시편이 남는다.
+                        치울 길이 없으면 목록이 계속 지저분해진다. 서버가 시험이
+                        달린 시편은 거절하므로 실수로 지울 수는 없다. */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="시편 삭제 (시험이 있으면 서버가 막습니다)"
+                      onClick={async () => {
+                        setSpecimenError(null)
+                        try {
+                          await materialsApi.removeSpecimen(specimen.id)
+                          specimens.reload()
+                          onChanged()
+                        } catch (caught) {
+                          setSpecimenError(
+                            caught instanceof Error ? caught : new Error('삭제 실패')
+                          )
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </div>
                   {/* 시험 UI 는 시험 모듈이 갖는다. 여기는 자리만 내어 준다(R5). */}
                   <SpecimenTests

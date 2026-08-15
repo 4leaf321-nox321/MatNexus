@@ -224,6 +224,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         source_filename=run.source_filename,
         source_bytes=run.source_bytes,
         source_sha256=run.source_sha256,
+        note=run.note,
         row_count=curve.row_count if curve else None,
         channels=list(curve.channels) if curve else [],
         warnings=[w for w in warnings.split(" / ") if w],
@@ -234,11 +235,28 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
 # --- 업로드 -----------------------------------------------------------------
 
 
+def _json_object(text: str, label: str) -> dict[str, Any]:
+    """multipart 폼으로 온 JSON 한 덩이. 객체가 아니면 거절한다."""
+    try:
+        parsed = json.loads(text or "{}")
+    except json.JSONDecodeError as exc:
+        raise AppError(
+            "MNX-TESTS-0013", f"{label} JSON 형식이 잘못되었습니다.", status=422
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise AppError("MNX-TESTS-0013", f"{label} 은 객체여야 합니다.", status=422)
+    return parsed
+
+
 @runs_router.post("", response_model=TestRunOut, status_code=202)
 def upload_test_run(
     specimen_id: uuid.UUID = Form(...),
     test_type: str = Form(..., description="시험 종류 key (예: tensile)"),
     conditions: str = Form(default="{}", description="조건 JSON"),
+    condition_units: str = Form(
+        default="{}",
+        description="조건 키 → 화면이 받은 단위. 없으면 정의의 si_unit 으로 본다",
+    ),
     tested_at: datetime | None = Form(default=None),
     operator: str | None = Form(default=None),
     instrument: str | None = Form(default=None),
@@ -250,16 +268,17 @@ def upload_test_run(
     """원본을 받아 저장하고 파싱을 큐에 넣는다. 202 를 준다 — 아직 안 끝났다."""
     specimen = permissions.visible_specimen(db, user, specimen_id)
     definition = services.get_test_type(db, test_type)
-    try:
-        raw_conditions = json.loads(conditions or "{}")
-    except json.JSONDecodeError as exc:
-        raise AppError(
-            "MNX-TESTS-0013", "조건 JSON 형식이 잘못되었습니다.", status=422
-        ) from exc
-    if not isinstance(raw_conditions, dict):
-        raise AppError("MNX-TESTS-0013", "조건은 객체여야 합니다.", status=422)
+    raw_conditions = _json_object(conditions, "조건")
+    # 화면은 사람이 쓰는 단위로 입력을 받는다(예: mm/min). 그 단위를 함께 보내지
+    # 않으면 서버가 정의의 si_unit(m/s)으로 해석해 **6만 배** 어긋난 값을 저장한다.
+    given_units = {
+        str(key): str(value)
+        for key, value in _json_object(condition_units, "조건 단위").items()
+    }
 
-    values, input_units = services.normalize_conditions(db, definition, raw_conditions)
+    values, input_units = services.normalize_conditions(
+        db, definition, raw_conditions, given_units
+    )
 
     seq_no = services.next_run_seq(db, specimen.id, definition.id)
     run = TestRun(

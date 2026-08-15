@@ -60,3 +60,22 @@ export function formatValue(
         : Number(shown.toPrecision(5)).toString()
   return unit ? `${rounded} ${unit}` : rounded
 }
+
+/**
+ * 조건 입력이 **화면에서 어떤 단위로 받아지는지**. 업로드할 때 값과 함께 보낸다.
+ *
+ * 이것을 안 보내던 때 실제로 사고가 났다: 라벨은 `탄성역 속도 (mm/min)` 인데 값은
+ * 그대로 보내서, 서버가 정의의 `si_unit`(m/s)으로 해석해 **6만 배** 어긋난 값을
+ * 저장했다. 숫자가 그럴듯해 보여 화면 어디에도 티가 나지 않는다.
+ *
+ * 변환은 여전히 서버가 한다 — 화면은 "내가 받은 단위는 이것" 이라고 말할 뿐이다.
+ */
+export function conditionUnits(fields: { key: string; si_unit?: string | null }[]) {
+  const map: Record<string, string> = {}
+  for (const field of fields) {
+    if (!field.si_unit) continue
+    const { unit } = display(field.si_unit)
+    if (unit) map[field.key] = unit
+  }
+  return map
+}

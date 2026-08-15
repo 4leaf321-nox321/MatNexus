@@ -899,6 +899,12 @@ export interface components {
         /** Body_upload_test_run_api_test_runs_post */
         Body_upload_test_run_api_test_runs_post: {
             /**
+             * Condition Units
+             * @description 조건 키 → 화면이 받은 단위. 없으면 정의의 si_unit 으로 본다
+             * @default {}
+             */
+            condition_units: string;
+            /**
              * Conditions
              * @description 조건 JSON
              * @default {}
@@ -1601,6 +1607,8 @@ export interface components {
             material_id: string | null;
             /** Material Name */
             material_name: string | null;
+            /** Note */
+            note: string | null;
             /** Operator */
             operator: string | null;
             /** Orientation */
@@ -1667,6 +1675,8 @@ export interface components {
             material_id: string | null;
             /** Material Name */
             material_name: string | null;
+            /** Note */
+            note: string | null;
             /** Operator */
             operator: string | null;
             /** Orientation */

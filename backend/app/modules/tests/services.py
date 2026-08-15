@@ -125,16 +125,29 @@ def condition_fields(db: Session, test_type_id: uuid.UUID) -> list[TestCondition
 
 
 def normalize_conditions(
-    db: Session, test_type: TestType, raw: dict[str, Any]
+    db: Session,
+    test_type: TestType,
+    raw: dict[str, Any],
+    given_units: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """조건 입력을 정의에 맞춰 검증하고 SI 로 바꾼다.
 
     정의에 없는 키는 **거절한다.** 조용히 버리면 오타로 넣은 조건이 사라진 줄
     모르고 저장되고, 받아 두면 정체 모를 키가 쌓인다. 둘 다 나쁘므로 알려 준다.
 
+    `given_units` 는 **화면이 어떤 단위로 받았는지**다. 이것을 안 받던 때 실제
+    사고가 났다: 정의의 `si_unit` 이 `m/s` 인데 화면은 사람이 쓰는 `mm/min` 으로
+    라벨을 붙여 놓고 값은 그대로 보냈다. 서버가 `to_si(10, "m/s")` 를 해서 10 을
+    10 m/s 로 저장했는데 사용자가 뜻한 것은 10 mm/min 이었다 — **6만 배**다.
+    숫자가 그럴듯해 보여서 화면 어디에도 티가 나지 않는다.
+
+    그래서 단위를 값과 함께 받고, **차원이 맞는지 확인한다.** 길이 자리에 시간
+    단위가 오면 거절한다 — 계수만 맞춰 통과시키면 같은 종류의 사고가 다시 난다.
+
     돌려주는 둘째 값은 입력 단위다 — SI 로 바꿔 저장하되 무엇으로 입력했는지
     남긴다(ADR 0004).
     """
+    supplied = given_units or {}
     fields = {field.key: field for field in condition_fields(db, test_type.id)}
     unknown = sorted(set(raw) - set(fields))
     if unknown:
@@ -158,16 +171,9 @@ def normalize_conditions(
         given = raw[key]
         if field.value_type == "number":
             number = _as_number(given, field.label)
-            unit = field.si_unit
+            unit = supplied.get(key) or field.si_unit
             if unit:
-                try:
-                    values[key] = units.to_si(number, unit)
-                except units.UnknownUnit as exc:
-                    raise AppError(
-                        "MNX-TESTS-0006",
-                        f"'{field.label}' 의 단위를 알 수 없습니다: {exc.symbol}",
-                        status=422,
-                    ) from exc
+                values[key] = _to_si_checked(number, unit, field)
                 input_units[key] = unit
             else:
                 values[key] = number
@@ -188,6 +194,31 @@ def normalize_conditions(
             values[key] = str(given)
 
     return values, input_units
+
+
+def _to_si_checked(number: float, unit: str, field: TestConditionField) -> float:
+    """단위를 SI 로 바꾸되 **차원이 맞는지 먼저 본다.**
+
+    계수만 맞으면 통과시키는 변환은 위험하다. `mm` 자리에 `ms` 가 와도 둘 다
+    0.001 이라 조용히 지나간다.
+    """
+    try:
+        resolved = units.unit_of(unit)
+    except units.UnknownUnit as exc:
+        raise AppError(
+            "MNX-TESTS-0006",
+            f"'{field.label}' 의 단위를 알 수 없습니다: {exc.symbol}",
+            status=422,
+        ) from exc
+
+    if field.dimension and resolved.dimension != field.dimension:
+        raise AppError(
+            "MNX-TESTS-0014",
+            f"'{field.label}' 은 {field.dimension} 인데 {unit} 은 "
+            f"{resolved.dimension} 입니다.",
+            status=422,
+        )
+    return units.to_si(number, unit)
 
 
 def _as_number(given: Any, label: str) -> float:

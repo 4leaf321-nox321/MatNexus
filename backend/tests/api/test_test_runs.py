@@ -159,6 +159,91 @@ class TestUpload:
         assert run.conditions["temperature"] == pytest.approx(25.0)
         assert run.input_units["temperature"] == "K"
 
+    def test_화면이_쓴_단위로_환산한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**실제로 6만 배 어긋났던 자리다.**
+
+        `speed_elastic` 의 정의상 SI 단위는 `m/s` 인데, 화면은 사람이 쓰는
+        `mm/min` 으로 라벨을 붙여 놓고 값은 그대로 보냈다. 서버가 그것을 m/s 로
+        해석해 10 을 10 m/s 로 저장했지만 사용자가 뜻한 것은 10 mm/min 이었다.
+        숫자가 그럴듯해서 화면 어디에도 티가 나지 않는다.
+        """
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "tensile",
+                "conditions": '{"speed_elastic": 10}',
+                "condition_units": '{"speed_elastic": "mm/min"}',
+            },
+            files={"file": ("Example.tra", TRA.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+
+        run = db.get(TestRun, uuid.UUID(response.json()["id"]))
+        assert run is not None
+        assert run.conditions["speed_elastic"] == pytest.approx(10 / 60000)
+        assert run.input_units["speed_elastic"] == "mm/min"  # 무엇으로 받았는지 남는다
+
+    def test_차원이_다른_단위는_거절한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """계수만 맞으면 통과시키는 변환은 위험하다 — `mm` 과 `ms` 는 둘 다 0.001 이다."""
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "tensile",
+                "conditions": '{"temperature": 25}',
+                "condition_units": '{"temperature": "mm"}',
+            },
+            files={"file": ("Example.tra", TRA.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-TESTS-0014"
+
+    def test_단위를_안_보내면_정의의_SI_로_본다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        response = _upload(
+            client, admin_headers, specimen["id"], conditions='{"temperature": 298.15}'
+        )
+        assert response.status_code == 202, response.text
+        run = db.get(TestRun, uuid.UUID(response.json()["id"]))
+        assert run is not None
+        assert run.conditions["temperature"] == pytest.approx(298.15)
+
+    def test_중복_파일_안내가_응답에_실린다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """서버는 sha256 으로 알고 있었는데 응답에 실을 곳이 없어 사용자는 몰랐다."""
+        first = _upload(client, admin_headers, specimen["id"])
+        assert first.json()["note"] is None
+
+        second = _upload(client, admin_headers, specimen["id"])
+        assert "이미" in (second.json()["note"] or "")
+
     def test_한도를_넘으면_받는_도중에_멈춘다(
         self,
         client: TestClient,
