@@ -528,7 +528,11 @@ export default function FormatProfileEditorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl pb-16">
+    // 큰 화면에서는 **양쪽이 따로 스크롤한다.** 페이지 전체가 함께 굴러가면
+    // 열 매핑을 고치는 동안 적용 결과가 화면 밖으로 나가고, 결과를 보려고
+    // 내리면 이번엔 고칠 곳이 사라진다. 좁은 화면에서는 그냥 한 줄로 쌓인다 —
+    // 칸을 둘로 나눌 폭이 없는데 높이까지 나누면 양쪽 다 못 읽는다.
+    <div className="mx-auto flex max-w-7xl flex-col lg:h-full">
       <PageHeader
         title={creating ? '형식 프로파일 만들기' : `${form.label || routeKey} 편집`}
         description="장비 파일을 놓으면 구조는 자동으로 읽습니다. 사람이 정하는 것은 '이 열이 무엇인가' 하나뿐입니다 — 코드도 배포도 필요 없습니다."
@@ -546,9 +550,9 @@ export default function FormatProfileEditorPage() {
         <Warning text={`'${routeKey}' 프로파일이 없습니다. 지워졌거나 주소가 틀렸습니다.`} />
       )}
 
-      {/* 왼쪽은 정하는 곳, 오른쪽은 보는 곳. 오른쪽은 sticky 라 따라온다. */}
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 space-y-6">
+      {/* 왼쪽은 정하는 곳, 오른쪽은 보는 곳. 각자 스크롤한다. */}
+      <div className="grid gap-6 pb-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_400px] lg:pb-0">
+        <div className="min-w-0 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-6">
           {/* ① 파일 ───────────────────────────────────────────── */}
           <Section
             step="①"
@@ -1175,8 +1179,8 @@ export default function FormatProfileEditorPage() {
         </div>
 
         {/* 오른쪽 — 보는 곳 ─────────────────────────────────────── */}
-        <aside className="space-y-4 lg:sticky lg:top-4">
-          <section className="rounded-md border p-4">
+        <aside className="flex flex-col gap-4 lg:min-h-0 lg:overflow-hidden">
+          <section className="shrink-0 rounded-md border p-4">
             <Button
               className="w-full"
               onClick={save}
@@ -1211,7 +1215,7 @@ export default function FormatProfileEditorPage() {
           </section>
 
           {preview && (
-            <section className="rounded-md border p-4">
+            <section className="shrink-0 rounded-md border p-4">
               <p className="mb-2 text-sm font-medium">파일에서 읽은 것</p>
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <Badge variant="secondary" className="font-mono">
@@ -1237,24 +1241,36 @@ export default function FormatProfileEditorPage() {
             </section>
           )}
 
-          <section className="rounded-md border p-4">
-            <p className="mb-1 text-sm font-medium">저장하기 전에 적용해 보기</p>
-            <p className="text-muted-foreground mb-3 text-xs">
-              자동 감지는 틀립니다. 인코딩이 깨진 파일도 &lsquo;성공&rsquo;하는데 숫자는
-              멀쩡하고 글자만 깨지므로, <b>값을 눈으로 보지 않으면</b> 알 수 없습니다.
-            </p>
-            <Button
-              className="w-full"
-              variant="secondary"
-              onClick={runTry}
-              disabled={!file || busy !== null}
-            >
-              <PlayCircle className="size-4" />
-              {busy === 'try' ? '적용하는 중…' : '이 파일에 적용해 보기'}
-            </Button>
+          {/* 결과만 따로 굴린다 — 곡선이 6~10벌이면 이 카드가 아무리 길어져도
+              버튼과 왼쪽 칸은 제자리에 있어야 한다. */}
+          <section className="flex flex-col rounded-md border lg:min-h-0 lg:flex-1">
+            <div className="shrink-0 border-b p-4">
+              <p className="mb-1 text-sm font-medium">저장하기 전에 적용해 보기</p>
+              <p className="text-muted-foreground mb-3 text-xs">
+                자동 감지는 틀립니다. 인코딩이 깨진 파일도 &lsquo;성공&rsquo;하는데 숫자는
+                멀쩡하고 글자만 깨지므로, <b>값을 눈으로 보지 않으면</b> 알 수 없습니다.
+              </p>
+              <Button
+                className="w-full"
+                variant="secondary"
+                onClick={runTry}
+                disabled={!file || busy !== null}
+              >
+                <PlayCircle className="size-4" />
+                {busy === 'try' ? '적용하는 중…' : '이 파일에 적용해 보기'}
+              </Button>
+            </div>
+
+            {!tried && (
+              <p className="text-muted-foreground hidden items-center justify-center p-4 text-center text-xs lg:flex lg:min-h-0 lg:flex-1">
+                {file
+                  ? '아직 적용해 보지 않았습니다. 규칙을 고치면 이전 결과는 지워집니다.'
+                  : '파일을 놓으면 여기에 결과가 나옵니다.'}
+              </p>
+            )}
 
             {tried && (
-              <div className="mt-3 space-y-3">
+              <div className="space-y-3 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 {tried.warnings.map((warning) => (
                   <Warning key={warning} text={warning} />
                 ))}
