@@ -14,6 +14,7 @@ export type StorageReport = components['schemas']['StorageReportOut']
 export type Parser = components['schemas']['ParserOut']
 type TestTypeSave = components['schemas']['TestTypeSaveRequest']
 type TestTypeCreate = components['schemas']['TestTypeCreateRequest']
+export type TestChannelSave = TestTypeSave['channels'][number]
 type CleanupRequest = components['schemas']['CleanupRequest']
 
 export type FormatProfile = components['schemas']['FormatProfileOut']

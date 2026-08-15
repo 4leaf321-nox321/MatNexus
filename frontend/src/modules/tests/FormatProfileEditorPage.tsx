@@ -70,7 +70,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { DIMENSIONS, SI_BY_DIMENSION } from '@/modules/tests/units'
 import { useResource } from '@/shared/hooks/useResource'
+
+/** 열 이름 → 채널 키. 서버의 `matcore.readers.profile.slug` 와 같은 규칙이다. */
+function slugify(text: string): string {
+  return text.trim().toLowerCase().replace(/[^0-9a-z]+/g, '_').replace(/^_|_$/g, '')
+}
 
 /** 메타 한 줄을 어떻게 할지. 기계는 못 가르는 판단이다 — `.tra` 의 요약부는
  *  구조적으로 메타와 똑같이 생겼는데, 하나는 **시험 결과**이고 하나는 **입력**이다. */
@@ -95,6 +101,27 @@ const META_ROLE_LABEL: Record<MetaRole, string> = {
   specimen: '시편 치수',
   summary: '요약값(시험 결과)',
   drop: '버림',
+}
+
+/** 채널 드롭다운의 특수 항목. 채널 키와 겹치지 않게 접두어를 붙인다. */
+const NEW_CHANNEL = '__new__'
+const NEW_TYPE = '__new__'
+
+/**
+ * 이 화면에서 함께 만들 채널. **아직 저장되지 않았다.**
+ *
+ * 파일이 열 이름과 단위를 알려 주는데 사람이 다른 화면에서 그것을 손으로 다시
+ * 적게 하는 것은 낭비다. 다만 **제안일 뿐이므로 고칠 수 있어야 한다** — 단위에서
+ * 유추한 차원이 항상 맞지는 않는다(빈 단위 칸은 무차원으로 보이지만 장비가 그냥
+ * 안 적었을 수도 있다).
+ */
+interface DraftChannel {
+  key: string
+  label: string
+  dimension: string
+  is_required: boolean
+  /** 어느 열에서 왔나. 그 열의 매핑을 따라 지우려고 들고 있다. */
+  from: string
 }
 
 export default function FormatProfileEditorPage() {
@@ -127,6 +154,10 @@ export default function FormatProfileEditorPage() {
   const [include, setInclude] = useState('')
   const [columnMap, setColumnMap] = useState<Record<string, string>>({})
   const [metaMap, setMetaMap] = useState<Record<string, MetaRule>>({})
+  const [drafts, setDrafts] = useState<DraftChannel[]>([])
+  const [newType, setNewType] = useState<{ key: string; label: string; abbr: string } | null>(
+    null
+  )
 
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<StructurePreview | null>(null)
@@ -205,19 +236,22 @@ export default function FormatProfileEditorPage() {
   /** 매핑해야 할 열. 고른 표들의 헤더 합집합 — `[step]` 마다 열 구성이 다른
    *  장비가 실재하므로(TA DMA850) 첫 표만 보면 안 된다. */
   const columns = useMemo(() => {
-    const seen = new Map<string, { unit: string; sample: string }>()
+    type Info = { unit: string; sample: string; dimension: string | null }
+    const seen = new Map<string, Info>()
     for (const table of selectedTables) {
       table.header.forEach((name, index) => {
         if (seen.has(name)) return
         seen.set(name, {
           unit: table.units[index] ?? '',
           sample: table.sample_rows[0]?.[index] ?? '',
+          // 차원은 **서버가 알려 준다.** 단위 표를 여기에 복제하면 갈라진다.
+          dimension: table.dimensions[index] ?? null,
         })
       })
     }
     // 저장된 프로파일에만 있고 이 파일에는 없는 열도 지우지 않고 보여 준다.
     for (const name of Object.keys(columnMap)) {
-      if (!seen.has(name)) seen.set(name, { unit: '', sample: '' })
+      if (!seen.has(name)) seen.set(name, { unit: '', sample: '', dimension: null })
     }
     return [...seen.entries()].map(([name, info]) => ({ name, ...info }))
   }, [selectedTables, columnMap])
@@ -238,16 +272,97 @@ export default function FormatProfileEditorPage() {
    * 화면 맨 아래에 뒀는데, 그 문장은 *무엇이* 빠졌는지 말해 주지 않고 스크롤해야만
    * 보였다. 항목마다 어디를 봐야 하는지까지 적고, 오른쪽에 붙여 늘 보이게 한다.
    */
+  const typeReady = newType
+    ? Boolean(newType.key && newType.label && newType.abbr)
+    : Boolean(form.test_type_key)
+
   const checklist: { ok: boolean; label: string; where: string }[] = [
     { ok: Boolean(file) || !creating, label: '장비 파일', where: '①' },
     { ok: hasFingerprint, label: '지문 — 확장자·헤더·메타 중 하나', where: '②' },
-    { ok: Boolean(form.test_type_key), label: '시험 종류', where: '④' },
+    { ok: typeReady, label: newType ? '새 시험 종류 (키·이름·약어)' : '시험 종류', where: '④' },
     { ok: mapped > 0, label: '열 매핑 한 개 이상', where: '④' },
+    {
+      ok: drafts.every((draft) => draft.key && draft.label),
+      label: '새 채널의 키·이름',
+      where: '④',
+    },
     { ok: Boolean(form.key), label: '키', where: '⑥' },
     { ok: Boolean(form.label), label: '이름', where: '⑥' },
     { ok: file === null || tried !== null, label: '적용해 보기', where: '오른쪽' },
   ]
   const remaining = checklist.filter((item) => !item.ok)
+
+  /** 고를 수 있는 채널 = 시험 종류의 것 + 이 화면에서 만들 것. */
+  const channelOptions = [
+    ...(testType?.channels ?? []).map((channel) => ({
+      key: channel.key,
+      label: channel.label,
+      hint: `${channel.key} · ${channel.si_unit}`,
+      draft: false,
+    })),
+    ...drafts.map((draft) => ({
+      key: draft.key,
+      label: draft.label || draft.key,
+      hint: `${draft.key} · 새로 만듦`,
+      draft: true,
+    })),
+  ]
+
+  /** 열 하나에서 새 채널을 제안한다. **파일이 이미 알려 준 것을 다시 묻지 않는다.** */
+  function addDraft(column: { name: string; dimension: string | null }) {
+    const base = slugify(column.name)
+    const taken = new Set([
+      ...(testType?.channels ?? []).map((channel) => channel.key),
+      ...drafts.map((draft) => draft.key),
+    ])
+    let key = base
+    for (let suffix = 2; taken.has(key); suffix += 1) key = `${base}_${suffix}`
+
+    setDrafts((current) => [
+      ...current,
+      {
+        key,
+        label: column.name || key,
+        // 단위에서 유추한다. 모르면 무차원으로 두고 사람이 고른다 — 여기서
+        // 아무거나 찍으면 잘못된 차원이 조용히 들어간다.
+        dimension: column.dimension ?? 'dimensionless',
+        is_required: false, // 필수로 두면 그 열이 없는 파일이 전부 실패한다
+        from: column.name,
+      },
+    ])
+    setColumnMap((current) => ({ ...current, [column.name]: key }))
+  }
+
+  function dropDraft(key: string) {
+    setDrafts((current) => current.filter((draft) => draft.key !== key))
+    setColumnMap((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([name, value]) => [name, value === key ? '' : value])
+      )
+    )
+  }
+
+  function patchDraft(index: number, change: Partial<DraftChannel>) {
+    setDrafts((current) => {
+      const next = current.map((draft, position) =>
+        position === index ? { ...draft, ...change } : draft
+      )
+      // 키를 고치면 그 키를 쓰던 열의 매핑도 따라간다.
+      const before = current[index]
+      const after = next[index]
+      if (before && after && before.key !== after.key) {
+        setColumnMap((mapping) =>
+          Object.fromEntries(
+            Object.entries(mapping).map(([name, value]) => [
+              name,
+              value === before.key ? after.key : value,
+            ])
+          )
+        )
+      }
+      return next
+    })
+  }
 
   function definition(): ProfileDefinition {
     const columnRules: ProfileDefinition['columns'] = {}
@@ -315,14 +430,24 @@ export default function FormatProfileEditorPage() {
     }
   }
 
+  /**
+   * 저장 순서: **시험 종류가 먼저다.** 프로파일이 종류를 가리키므로 없으면 거절당한다.
+   *
+   * 종류를 만들고 프로파일 저장이 실패하면 종류만 남는다. 되돌리지 않는 이유:
+   * 그 종류는 '시험종류 정의' 화면에 그대로 보이고 거기서 고치거나 지울 수 있다.
+   * 반쯤 만들어진 것을 자동으로 지우면 사람이 방금 채운 채널 정의가 사라진다 —
+   * 남겨 두고 알려 주는 편이 낫다.
+   */
   async function save() {
     setBusy('save')
     setError(null)
     try {
+      const typeKey = await ensureTestType()
+
       const payload = {
         label: form.label,
         description: form.description || null,
-        test_type_key: form.test_type_key,
+        test_type_key: typeKey,
         definition: definition() as unknown as Record<string, unknown>,
         priority: form.priority,
         is_active: form.is_active,
@@ -335,6 +460,71 @@ export default function FormatProfileEditorPage() {
     } finally {
       setBusy(null)
     }
+  }
+
+  /** 시험 종류를 만들거나, 새 채널을 기존 종류에 더한다. 종류 키를 돌려준다. */
+  async function ensureTestType(): Promise<string> {
+    const channels = drafts.map((draft, index) => ({
+      key: draft.key,
+      label: draft.label,
+      dimension: draft.dimension,
+      si_unit: SI_BY_DIMENSION[draft.dimension] ?? '1',
+      is_required: draft.is_required,
+      sort_order: ((testType?.channels.length ?? 0) + index) * 10,
+    }))
+
+    if (newType) {
+      await testsApi.createType({
+        key: newType.key,
+        label: newType.label,
+        abbr: newType.abbr,
+        description: null,
+        parser_key: null, // **파서 없이 프로파일로 읽는다** — 이 설계의 요점
+        is_active: true,
+        sort_order: 0,
+        max_upload_bytes: null,
+        channels,
+        conditions: [],
+      })
+      return newType.key
+    }
+
+    if (channels.length && testType) {
+      // 채널을 **더하는** 것은 기존 데이터의 해석을 바꾸지 않으므로 서버가 허용한다.
+      // 기존 정의를 그대로 다시 보내야 한다 — 정의는 한 벌 통째로 갈아 끼운다.
+      await testsApi.updateType(testType.key, {
+        label: testType.label,
+        abbr: testType.abbr,
+        description: testType.description,
+        parser_key: testType.parser_key,
+        is_active: testType.is_active,
+        sort_order: 0,
+        max_upload_bytes: null,
+        channels: [
+          ...testType.channels.map((channel, index) => ({
+            key: channel.key,
+            label: channel.label,
+            dimension: channel.dimension,
+            si_unit: channel.si_unit,
+            is_required: channel.is_required,
+            sort_order: index * 10,
+          })),
+          ...channels,
+        ],
+        conditions: testType.conditions.map((field, index) => ({
+          key: field.key,
+          label: field.label,
+          value_type: field.value_type,
+          dimension: field.dimension,
+          si_unit: field.si_unit,
+          choices: field.choices,
+          is_required: field.is_required,
+          sort_order: index * 10,
+        })),
+      })
+      types.reload()
+    }
+    return form.test_type_key
   }
 
   return (
@@ -538,13 +728,20 @@ export default function FormatProfileEditorPage() {
               <div className="w-56 space-y-1.5">
                 <Label className="text-xs">시험 종류</Label>
                 <Select
-                  value={form.test_type_key}
+                  value={newType ? NEW_TYPE : form.test_type_key}
                   onValueChange={(value) => {
                     // 종류가 바뀌면 이전 채널 키는 그 종류에 없다.
-                    setForm((current) => ({ ...current, test_type_key: value }))
                     setColumnMap((current) =>
                       Object.fromEntries(Object.keys(current).map((name) => [name, '']))
                     )
+                    setDrafts([])
+                    if (value === NEW_TYPE) {
+                      setNewType({ key: '', label: '', abbr: '' })
+                      setForm((current) => ({ ...current, test_type_key: '' }))
+                      return
+                    }
+                    setNewType(null)
+                    setForm((current) => ({ ...current, test_type_key: value }))
                   }}
                 >
                   <SelectTrigger className="h-8">
@@ -556,6 +753,7 @@ export default function FormatProfileEditorPage() {
                         {item.label}
                       </SelectItem>
                     ))}
+                    <SelectItem value={NEW_TYPE}>+ 새 시험 종류 만들기</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -603,7 +801,67 @@ export default function FormatProfileEditorPage() {
                   이름이 비슷한 것끼리 채우기
                 </Button>
               )}
+
+              {/* 새 종류를 만드는 길에서는 채널이 하나도 없다. 열마다 드롭다운을
+                  여는 대신 한 번에 만들 수 있게 한다 — 열이 8~10개인 장비가 흔하다. */}
+              {(testType || newType) && columns.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    for (const column of columns) {
+                      if (columnMap[column.name]) continue
+                      addDraft(column)
+                    }
+                  }}
+                >
+                  안 정한 열을 전부 새 채널로
+                </Button>
+              )}
             </div>
+
+            {newType && (
+              <div className="mb-3 rounded-md border border-dashed p-3">
+                <p className="mb-2 text-xs font-medium">새 시험 종류</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Input
+                    className="h-8 font-mono text-xs"
+                    placeholder="dma_sweep"
+                    value={newType.key}
+                    onChange={(event) =>
+                      setNewType((current) =>
+                        current ? { ...current, key: slugify(event.target.value) } : current
+                      )
+                    }
+                  />
+                  <Input
+                    className="h-8"
+                    placeholder="DMA 스윕"
+                    value={newType.label}
+                    onChange={(event) =>
+                      setNewType((current) =>
+                        current ? { ...current, label: event.target.value } : current
+                      )
+                    }
+                  />
+                  <Input
+                    className="h-8"
+                    placeholder="약어 (DMA)"
+                    value={newType.abbr}
+                    onChange={(event) =>
+                      setNewType((current) =>
+                        current ? { ...current, abbr: event.target.value } : current
+                      )
+                    }
+                  />
+                </div>
+                <p className="text-muted-foreground mt-2 text-xs">
+                  약어는 시험 이름에 들어갑니다. <b>파서는 붙이지 않습니다</b> — 이
+                  프로파일로 읽습니다. 저장할 때 종류가 먼저 만들어지고, 조건 항목은
+                  나중에 <b>시험종류 정의</b>에서 더할 수 있습니다.
+                </p>
+              </div>
+            )}
 
             {testType && (
               <p className="text-muted-foreground mb-2 text-xs">
@@ -642,26 +900,33 @@ export default function FormatProfileEditorPage() {
                       <TableCell>
                         <Select
                           value={columnMap[column.name] || 'none'}
-                          onValueChange={(value) =>
+                          onValueChange={(value) => {
+                            if (value === NEW_CHANNEL) {
+                              addDraft(column)
+                              return
+                            }
                             setColumnMap((current) => ({
                               ...current,
                               [column.name]: value === 'none' ? '' : value,
                             }))
-                          }
+                          }}
                         >
                           <SelectTrigger className="h-8">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">— 안 정함</SelectItem>
-                            {(testType?.channels ?? []).map((channel) => (
+                            {channelOptions.map((channel) => (
                               <SelectItem key={channel.key} value={channel.key}>
                                 {channel.label}
                                 <span className="text-muted-foreground ml-2 font-mono text-xs">
-                                  {channel.key} · {channel.si_unit}
+                                  {channel.hint}
                                 </span>
                               </SelectItem>
                             ))}
+                            {(testType || newType) && (
+                              <SelectItem value={NEW_CHANNEL}>+ 새 채널로 만들기</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -669,6 +934,73 @@ export default function FormatProfileEditorPage() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+
+            {drafts.length > 0 && (
+              <div className="mt-3 rounded-md border border-dashed p-3">
+                <p className="mb-1 text-xs font-medium">
+                  이 화면에서 함께 만들 채널 {drafts.length}개
+                </p>
+                <p className="text-muted-foreground mb-2 text-xs">
+                  저장할 때 <b>{newType?.label || testType?.label}</b> 에 추가됩니다. 차원은
+                  파일의 단위에서 유추한 <b>제안</b>입니다 — 단위 칸이 비어 있으면 무차원으로
+                  두었으니 확인하세요.
+                </p>
+                <div className="space-y-1">
+                  {drafts.map((draft, index) => (
+                    <div key={draft.from} className="flex flex-wrap items-center gap-2">
+                      <Input
+                        className="h-8 w-40 font-mono text-xs"
+                        value={draft.key}
+                        onChange={(event) =>
+                          patchDraft(index, { key: slugify(event.target.value) })
+                        }
+                      />
+                      <Input
+                        className="h-8 w-40"
+                        value={draft.label}
+                        placeholder="이름"
+                        onChange={(event) => patchDraft(index, { label: event.target.value })}
+                      />
+                      <Select
+                        value={draft.dimension}
+                        onValueChange={(value) => patchDraft(index, { dimension: value })}
+                      >
+                        <SelectTrigger className="h-8 w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DIMENSIONS.map((dimension) => (
+                            <SelectItem key={dimension} value={dimension}>
+                              {dimension}
+                              <span className="text-muted-foreground ml-2 font-mono text-xs">
+                                {SI_BY_DIMENSION[dimension]}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <label className="flex items-center gap-1 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={draft.is_required}
+                          onChange={(event) =>
+                            patchDraft(index, { is_required: event.target.checked })
+                          }
+                        />
+                        필수
+                      </label>
+                      <Button size="sm" variant="ghost" onClick={() => dropDraft(draft.key)}>
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-muted-foreground mt-2 text-xs">
+                  <b>필수</b>로 두면 그 열이 없는 파일은 등록이 실패합니다. 기본은 꺼 둡니다 —
+                  같은 장비라도 측정 항목이 매번 같지는 않습니다.
+                </p>
+              </div>
             )}
 
             <div className="text-muted-foreground mt-2 space-y-1 text-xs">

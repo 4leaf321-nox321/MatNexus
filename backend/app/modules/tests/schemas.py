@@ -269,6 +269,15 @@ class TablePreviewOut(BaseModel):
     name: str | None
     header: list[str]
     units: list[str]
+    unit_symbols: list[str | None]
+    """파일에 적힌 단위를 **우리 표의 정본 심볼**로 바꾼 것. 모르면 `None`.
+
+    `°C → degC`, `Mpa → MPa` 처럼 표기가 다른 것을 흡수한 결과다."""
+    dimensions: list[str | None]
+    """그 단위의 차원. 화면이 이것으로 **새 채널을 제안한다.**
+
+    프론트에 단위 표를 복제해 계산하면 언젠가 두 표가 갈라진다 — 변환 규칙은
+    `matcore/units` 한 곳에만 둔다(ADR 0004)."""
     row_count: int
     column_count: int
     first_line: int

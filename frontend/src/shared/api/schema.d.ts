@@ -2015,6 +2015,8 @@ export interface components {
         TablePreviewOut: {
             /** Column Count */
             column_count: number;
+            /** Dimensions */
+            dimensions: (string | null)[];
             /** First Line */
             first_line: number;
             /** Header */
@@ -2027,6 +2029,8 @@ export interface components {
             row_count: number;
             /** Sample Rows */
             sample_rows: string[][];
+            /** Unit Symbols */
+            unit_symbols: (string | null)[];
             /** Units */
             units: string[];
         };

@@ -2862,6 +2862,20 @@
             "title": "Column Count",
             "type": "integer"
           },
+          "dimensions": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
           "first_line": {
             "title": "First Line",
             "type": "integer"
@@ -2902,6 +2916,20 @@
             "title": "Sample Rows",
             "type": "array"
           },
+          "unit_symbols": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Unit Symbols",
+            "type": "array"
+          },
           "units": {
             "items": {
               "type": "string"
@@ -2915,6 +2943,8 @@
           "name",
           "header",
           "units",
+          "unit_symbols",
+          "dimensions",
           "row_count",
           "column_count",
           "first_line",

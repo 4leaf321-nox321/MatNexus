@@ -29,7 +29,7 @@ from app.modules.tests.schemas import (
 )
 from app.shared.auth import require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
-from matcore import readers
+from matcore import readers, units
 from matcore.parsers import ParseError
 from matcore.readers import profile as profiles
 
@@ -54,6 +54,21 @@ def _out(db: Session, item: FormatProfile) -> FormatProfileOut:
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
+
+
+def _symbol(raw: str) -> str | None:
+    """장비 표기 → 정본 심볼. 화면이 새 채널을 제안하는 근거다."""
+    return profiles.unit_symbol(raw)
+
+
+def _dimension(raw: str) -> str | None:
+    symbol = profiles.unit_symbol(raw)
+    if symbol is None:
+        return None
+    try:
+        return units.unit_of(symbol).dimension
+    except units.UnknownUnit:
+        return None
 
 
 def _resolve_type(db: Session, key: str) -> TestType:
@@ -108,6 +123,8 @@ def preview(
                 name=table.name,
                 header=list(table.header),
                 units=list(table.units),
+                unit_symbols=[_symbol(cell) for cell in table.units],
+                dimensions=[_dimension(cell) for cell in table.units],
                 row_count=table.row_count,
                 column_count=table.column_count,
                 first_line=table.first_line,

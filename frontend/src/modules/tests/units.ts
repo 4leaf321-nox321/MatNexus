@@ -136,7 +136,11 @@ export const SI_BY_DIMENSION: Record<string, string> = {
   time: 's',
   temperature: 'K',
   frequency: 'Hz',
+  angular_frequency: 'rad/s',
+  inverse_temperature: '1/K',
+  compliance: '1/Pa',
   mass: 'kg',
+  density: 'kg/m3',
   angle: 'rad',
   dimensionless: '1',
 }
@@ -151,11 +155,18 @@ export const UNITS_BY_DIMENSION: Record<string, string[]> = {
   time: ['s', 'ms', 'min', 'h'],
   temperature: ['K', 'degC'],
   frequency: ['Hz', 'kHz'],
+  // DMA 가 각주파수를 준다. 이것이 빠져 있어서 화면에서 DMA 종류를 만들 수 없었다.
+  angular_frequency: ['rad/s'],
+  inverse_temperature: ['1/K'],
+  compliance: ['1/Pa', '1/MPa'],
   mass: ['kg', 'g', 'tonne'],
+  density: ['kg/m3', 'g/cm3', 'tonne/mm3'],
   angle: ['rad', 'deg'],
   dimensionless: ['1'],
 }
 
+/** 서버 `matcore.units.SI_UNITS` 의 16차원과 같아야 한다. 어긋나면 정의 저장을
+ *  서버가 거절하므로 **조용히 틀리지는 않는다** — 화면에서 바로 드러난다. */
 export const DIMENSIONS = Object.keys(UNITS_BY_DIMENSION)
 
 export const VALUE_TYPES = [
