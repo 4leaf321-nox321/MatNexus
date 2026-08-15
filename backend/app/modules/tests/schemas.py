@@ -43,6 +43,12 @@ class TestTypeOut(BaseModel):
     abbr: str
     description: str | None
     parser_key: str | None
+    extensions: list[str]
+    """이 종류가 읽을 수 있는 파일 확장자(소문자, 점 포함).
+
+    파서 플러그인이 선언한 것을 그대로 내보낸다. 화면이 **파일만 보고 시험 종류를
+    추정**하는 데 쓴다 — 종류가 열 개, 스무 개로 늘면 사람이 파일마다 고르는 것이
+    일이 된다. 목록을 화면에 하드코딩하면 파서를 추가할 때 두 곳을 고쳐야 한다."""
     is_active: bool
     max_upload_bytes: int
     """정의에 없으면 전역 기본값이 채워져 나간다 — 화면이 두 곳을 보지 않게."""

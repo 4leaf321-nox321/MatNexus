@@ -46,7 +46,7 @@ from app.shared import filestore, permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import Page, clamp_limit
-from matcore import naming
+from matcore import naming, parsers, registry
 
 router = APIRouter(prefix="/test-types", tags=["tests"])
 runs_router = APIRouter(prefix="/test-runs", tags=["tests"])
@@ -61,6 +61,25 @@ def _now() -> datetime:
 
 
 # --- 정의 -------------------------------------------------------------------
+
+
+def _extensions(parser_key: str | None) -> list[str]:
+    """파서가 선언한 확장자. 화면이 파일만 보고 종류를 추정하는 데 쓴다.
+
+    **소문자로 내보낸다.** 디스크에 `.tra` 34개와 `.TRA` 10개가 함께 있는 것을
+    실측했다(`002_Material`). 대소문자를 그대로 비교하면 절반이 안 잡힌다.
+    """
+    if not parser_key:
+        return []
+    parsers.load_builtin()
+    try:
+        plugin = registry.get(parser_key)
+    except KeyError:
+        # 정의는 있는데 파서가 등록돼 있지 않다. 목록 전체를 죽일 일은 아니다 —
+        # 업로드할 때 어차피 실패하고 그때 이유가 남는다.
+        return []
+    declared: tuple[str, ...] = plugin.meta.get("extensions", ())
+    return sorted({str(item).lower() for item in declared})
 
 
 @router.get("", response_model=list[TestTypeOut])
@@ -107,6 +126,7 @@ def list_test_types(
             abbr=t.abbr,
             description=t.description,
             parser_key=t.parser_key,
+            extensions=_extensions(t.parser_key),
             is_active=t.is_active,
             max_upload_bytes=t.max_upload_bytes or fallback,
             channels=[

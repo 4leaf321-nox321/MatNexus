@@ -2845,6 +2845,13 @@
             ],
             "title": "Description"
           },
+          "extensions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Extensions",
+            "type": "array"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2885,6 +2892,7 @@
           "abbr",
           "description",
           "parser_key",
+          "extensions",
           "is_active",
           "max_upload_bytes",
           "channels",

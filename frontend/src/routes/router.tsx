@@ -15,6 +15,8 @@ import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
 import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
+import BatchUploadPage from '@/modules/tests/BatchUploadPage'
+import TestTypesPage from '@/modules/tests/TestTypesPage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
 import TestRunsPage from '@/modules/tests/TestRunsPage'
 import NoticesPage from '@/modules/notices/NoticesPage'
@@ -66,10 +68,7 @@ export const router = createBrowserRouter([
           // 관리
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
-          {
-            path: 'admin/test-types',
-            ...stub('시험종류 정의', 'Phase 2', '정의는 데이터(D7).'),
-          },
+          { path: 'admin/test-types', element: <TestTypesPage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },
 
@@ -79,6 +78,7 @@ export const router = createBrowserRouter([
             children: [
               { index: true, ...stub('부서 홈', 'Phase 1', '최근 등록·처리 대기·내 재료.') },
               { path: 'tests', element: <TestRunsPage /> },
+              { path: 'tests/upload', element: <BatchUploadPage /> },
               {
                 path: 'workbench',
                 ...stub('워크벤치', 'Phase 3~4', 'Data → Process → Stats → Fit → Export.'),

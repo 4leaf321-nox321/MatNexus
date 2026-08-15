@@ -1728,6 +1728,8 @@ export interface components {
             conditions: components["schemas"]["TestConditionFieldOut"][];
             /** Description */
             description: string | null;
+            /** Extensions */
+            extensions: string[];
             /**
              * Id
              * Format: uuid

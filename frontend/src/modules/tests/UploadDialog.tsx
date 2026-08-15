@@ -29,6 +29,13 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
@@ -127,20 +134,25 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
 
         {available.length > 1 && (
           <div className="space-y-1.5">
+            {/* 버튼을 나열하지 않는다 — 종류가 스무 개로 늘면 그 줄이 화면을 덮는다. */}
             <Label>시험 종류</Label>
-            <div className="flex flex-wrap gap-2">
-              {available.map((type) => (
-                <Button
-                  key={type.key}
-                  type="button"
-                  size="sm"
-                  variant={selected?.key === type.key ? 'default' : 'outline'}
-                  onClick={() => setTypeKey(type.key)}
-                >
-                  {type.label}
-                </Button>
-              ))}
-            </div>
+            <Select value={selected?.key ?? ''} onValueChange={setTypeKey}>
+              <SelectTrigger>
+                <SelectValue placeholder="고르세요" />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map((type) => (
+                  <SelectItem key={type.key} value={type.key}>
+                    {type.label}
+                    {type.extensions.length > 0 && (
+                      <span className="text-muted-foreground ml-2 font-mono text-xs">
+                        {type.extensions.join(' ')}
+                      </span>
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 

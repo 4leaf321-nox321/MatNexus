@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, FlaskConical, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, FileUp, FlaskConical, Plus, RefreshCw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
@@ -71,6 +71,12 @@ export default function TestRunsPage() {
             <Button variant="outline" size="sm" onClick={() => runs.reload()}>
               <RefreshCw className={`size-4 ${pending ? 'animate-spin' : ''}`} />
               새로고침
+            </Button>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={`/w/${slug ?? 'default'}/tests/upload`}>
+                <FileUp className="size-4" />
+                일괄 등록
+              </Link>
             </Button>
             <Button size="sm" onClick={() => setUploading(true)}>
               <Plus className="size-4" />
