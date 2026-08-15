@@ -191,6 +191,27 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 ```
 
+위 명령은 **자식을 잡지 못한다.** 자식의 `ExecutablePath` 는 venv 가 아니라 기반
+인터프리터(`C:\Python312\python.exe`)다. 부모만 죽으면 자식이 고아로 남아 계속
+서빙한다 — 실측(2026-08-15): 새 라우터를 추가했는데 `405 Method Not Allowed` 가
+났고, 원인은 고아 자식이 옛 코드를 들고 있던 것이었다.
+
+**게다가 그 자식은 pid 로 찾을 수 없다.** 소켓은 부모가 열어 자식에게 물려준
+것이라, `Get-NetTCPConnection` 의 `OwningProcess` 는 **이미 죽은 부모의 pid** 를
+가리킨다. 그 pid 로 `Stop-Process` 하면 "그런 프로세스 없음"이 나오는데 포트는
+계속 잡혀 있다. 자식은 `ParentProcessId` 로 찾는다.
+
+```powershell
+# 8010 을 실제로 들고 있는 프로세스 (죽은 부모의 pid 를 부모로 갖는 자식)
+$owner = (Get-NetTCPConnection -State Listen -LocalPort 8010).OwningProcess
+Get-CimInstance Win32_Process -Filter "ParentProcessId = $owner" |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+**리로드를 믿지 말고 라우터를 추가했으면 재시작한다.** 리로드가 한 번 돌고 나서
+멈추는 것을 관측했다. 화면 코드는 Vite 가 확실히 갱신하지만, 백엔드 라우트가
+안 보이면 먼저 재시작을 의심한다.
+
 **테스트는 개발 DB를 건드리지 않는다.** `matnexus_test` 를 따로 만들어 쓴다
 (`tests/conftest.py`). 개발 데이터가 지워지는 테스트는 아무도 돌리지 않게 되고,
 그러면 릴리스 게이트로 올릴 수도 없다 — RA의 CI화를 막은 원인이 정확히 그것이다.

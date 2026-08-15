@@ -307,6 +307,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Materials */
+        get: operations["list_materials_api_materials_get"];
+        put?: never;
+        /** Create Material */
+        post: operations["create_material_api_materials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/preview-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Name
+         * @description 등록 폼이 입력 중에 부른다.
+         *
+         *     이름을 만드는 곳은 서버 하나다. 화면이 같은 규칙을 다시 구현하면 두 구현이
+         *     갈라지고, 그때 화면이 보여 준 이름과 저장된 이름이 달라진다.
+         */
+        post: operations["preview_name_api_materials_preview_name_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Material */
+        get: operations["get_material_api_materials__material_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Material */
+        delete: operations["delete_material_api_materials__material_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Material */
+        patch: operations["update_material_api_materials__material_id__patch"];
+        trace?: never;
+    };
+    "/api/materials/{material_id}/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Samples */
+        get: operations["list_samples_api_materials__material_id__samples_get"];
+        put?: never;
+        /** Create Sample */
+        post: operations["create_sample_api_materials__material_id__samples_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notices": {
         parameters: {
             query?: never;
@@ -445,6 +523,62 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/samples/{sample_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sample */
+        get: operations["get_sample_api_samples__sample_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Sample */
+        delete: operations["delete_sample_api_samples__sample_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Sample */
+        patch: operations["update_sample_api_samples__sample_id__patch"];
+        trace?: never;
+    };
+    "/api/samples/{sample_id}/specimens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Specimens */
+        get: operations["list_specimens_api_samples__sample_id__specimens_get"];
+        put?: never;
+        /** Create Specimen */
+        post: operations["create_specimen_api_samples__sample_id__specimens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/specimens/{specimen_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Specimen */
+        get: operations["get_specimen_api_specimens__specimen_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Specimen */
+        delete: operations["delete_specimen_api_specimens__specimen_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Specimen */
+        patch: operations["update_specimen_api_specimens__specimen_id__patch"];
         trace?: never;
     };
     "/api/voc": {
@@ -679,6 +813,100 @@ export interface components {
             expires_in: number;
             user: components["schemas"]["UserOut"];
         };
+        /** MaterialCreateRequest */
+        MaterialCreateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Category */
+            category: string;
+            /** Details */
+            details?: string | null;
+            /** Family */
+            family: string;
+            /** Grade */
+            grade: string;
+            /** Legacy Id */
+            legacy_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Spec Thickness */
+            spec_thickness?: number | null;
+            /**
+             * Spec Thickness Unit
+             * @default mm
+             */
+            spec_thickness_unit: string;
+            /** Workspace Slug */
+            workspace_slug?: string | null;
+        };
+        /** MaterialOut */
+        MaterialOut: {
+            /** Alias */
+            alias: string | null;
+            /** Category */
+            category: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Details */
+            details: string | null;
+            /** Family */
+            family: string;
+            /** Grade */
+            grade: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Global */
+            is_global: boolean;
+            /** Legacy Id */
+            legacy_id: string | null;
+            /** Note */
+            note: string | null;
+            /** Owner Workspace Id */
+            owner_workspace_id: string | null;
+            /** Owner Workspace Name */
+            owner_workspace_name: string | null;
+            /** Record Name */
+            record_name: string;
+            /** Sample Count */
+            sample_count: number;
+            /** Spec Thickness */
+            spec_thickness: number | null;
+            /**
+             * Spec Thickness Unit
+             * @default mm
+             */
+            spec_thickness_unit: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MaterialUpdateRequest */
+        MaterialUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Details */
+            details?: string | null;
+            /** Family */
+            family?: string | null;
+            /** Grade */
+            grade?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Spec Thickness */
+            spec_thickness?: number | null;
+            /** Spec Thickness Unit */
+            spec_thickness_unit?: string | null;
+        };
         /** MemberAddRequest */
         MemberAddRequest: {
             /** Email */
@@ -714,6 +942,31 @@ export interface components {
         MemberRoleRequest: {
             /** Role */
             role: string;
+        };
+        /** NamePreviewOut */
+        NamePreviewOut: {
+            /** Record Name */
+            record_name: string;
+            /** Taken */
+            taken: boolean;
+        };
+        /**
+         * NamePreviewRequest
+         * @description 등록 폼이 입력 중에 부르는 것. 서버가 이름을 만드는 유일한 곳이므로,
+         *     화면이 같은 규칙을 다시 구현하지 않게 한다.
+         */
+        NamePreviewRequest: {
+            /** Details */
+            details?: string | null;
+            /** Grade */
+            grade?: string | null;
+            /** Spec Thickness */
+            spec_thickness?: number | null;
+            /**
+             * Spec Thickness Unit
+             * @default mm
+             */
+            spec_thickness_unit: string;
         };
         /** NoticeCreateRequest */
         NoticeCreateRequest: {
@@ -791,6 +1044,17 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** Page[MaterialOut] */
+        Page_MaterialOut_: {
+            /** Items */
+            items: components["schemas"]["MaterialOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** PatCreateRequest */
         PatCreateRequest: {
             /** Expires In Days */
@@ -850,6 +1114,129 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** SampleCreateRequest */
+        SampleCreateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Applied Part */
+            applied_part?: string | null;
+            /** Applied Product */
+            applied_product?: string | null;
+            /** Density */
+            density?: number | null;
+            /**
+             * Density Unit
+             * @default kg/m3
+             */
+            density_unit: string;
+            /** Distributor */
+            distributor?: string | null;
+            /** Lot No */
+            lot_no?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+            /** Primary Vendor */
+            primary_vendor?: string | null;
+            /** Production Date */
+            production_date?: string | null;
+            /** Sales Type */
+            sales_type?: string | null;
+            /** Workspace Slug */
+            workspace_slug?: string | null;
+        };
+        /** SampleOut */
+        SampleOut: {
+            /** Alias */
+            alias: string | null;
+            /** Applied Part */
+            applied_part: string | null;
+            /** Applied Product */
+            applied_product: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Density */
+            density: number | null;
+            /**
+             * Density Unit
+             * @default kg/m3
+             */
+            density_unit: string;
+            /** Distributor */
+            distributor: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lot No */
+            lot_no: string | null;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Note */
+            note: string | null;
+            /** Poisson Ratio */
+            poisson_ratio: number | null;
+            /** Primary Vendor */
+            primary_vendor: string | null;
+            /** Production Date */
+            production_date: string | null;
+            /** Record Name */
+            record_name: string;
+            /** Sales Type */
+            sales_type: string | null;
+            /** Seq No */
+            seq_no: number;
+            /** Specimen Count */
+            specimen_count: number;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Workspace Name */
+            workspace_name: string | null;
+        };
+        /** SampleUpdateRequest */
+        SampleUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Applied Part */
+            applied_part?: string | null;
+            /** Applied Product */
+            applied_product?: string | null;
+            /** Density */
+            density?: number | null;
+            /** Density Unit */
+            density_unit?: string | null;
+            /** Distributor */
+            distributor?: string | null;
+            /** Lot No */
+            lot_no?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+            /** Primary Vendor */
+            primary_vendor?: string | null;
+            /** Production Date */
+            production_date?: string | null;
+            /** Sales Type */
+            sales_type?: string | null;
+        };
         /** SignupRequest */
         SignupRequest: {
             /** Display Name */
@@ -860,6 +1247,84 @@ export interface components {
             password: string;
             /** Workspace Slug */
             workspace_slug: string;
+        };
+        /** SpecimenCreateRequest */
+        SpecimenCreateRequest: {
+            /** Gauge Length */
+            gauge_length?: number | null;
+            /**
+             * Length Unit
+             * @default mm
+             */
+            length_unit: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Orientation
+             * @default NA
+             */
+            orientation: string;
+            /** Seq No */
+            seq_no?: number | null;
+            /** Thickness */
+            thickness?: number | null;
+            /** Width */
+            width?: number | null;
+        };
+        /** SpecimenOut */
+        SpecimenOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Gauge Length */
+            gauge_length: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Length Unit
+             * @default mm
+             */
+            length_unit: string;
+            /** Note */
+            note: string | null;
+            /** Orientation */
+            orientation: string;
+            /** Record Name */
+            record_name: string;
+            /**
+             * Sample Id
+             * Format: uuid
+             */
+            sample_id: string;
+            /** Seq No */
+            seq_no: number;
+            /** Thickness */
+            thickness: number | null;
+            /** Width */
+            width: number | null;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /** SpecimenUpdateRequest */
+        SpecimenUpdateRequest: {
+            /** Gauge Length */
+            gauge_length?: number | null;
+            /** Length Unit */
+            length_unit?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Thickness */
+            thickness?: number | null;
+            /** Width */
+            width?: number | null;
         };
         /**
          * TemporaryPasswordResponse
@@ -1585,6 +2050,272 @@ export interface operations {
             };
         };
     };
+    list_materials_api_materials_get: {
+        parameters: {
+            query?: {
+                /** @description 이름·별칭·Grade 부분 일치 */
+                q?: string | null;
+                family?: string | null;
+                category?: string | null;
+                scope?: string;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_MaterialOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_material_api_materials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_name_api_materials_preview_name_post: {
+        parameters: {
+            query?: {
+                workspace_slug?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NamePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NamePreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_material_api_materials__material_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_material_api_materials__material_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_material_api_materials__material_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_samples_api_materials__material_id__samples_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_sample_api_materials__material_id__samples_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SampleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_notices_api_notices_get: {
         parameters: {
             query?: never;
@@ -1812,6 +2543,262 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sample_api_samples__sample_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_sample_api_samples__sample_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_sample_api_samples__sample_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SampleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_specimens_api_samples__sample_id__specimens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_specimen_api_samples__sample_id__specimens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_specimen_api_specimens__specimen_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specimen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_specimen_api_specimens__specimen_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specimen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_specimen_api_specimens__specimen_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specimen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenOut"];
                 };
             };
             /** @description Validation Error */

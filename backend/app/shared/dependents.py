@@ -31,6 +31,12 @@ TABLE_LABELS: dict[str, str] = {
     "personal_access_tokens": "개인 액세스 토큰",
     "users": "계정",
     "workspaces": "부서",
+    "materials": "재료",
+    "samples": "시료",
+    "specimens": "시편",
+    "test_runs": "시험",
+    "curves": "곡선",
+    "test_summaries": "시험 요약값",
 }
 
 #: FK 로 표현되지 않는 참조를 보탤 자리.

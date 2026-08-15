@@ -13,6 +13,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AccountsAdminPage from '@/modules/accounts/AccountsAdminPage'
 import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
+import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
+import MaterialsPage from '@/modules/materials/MaterialsPage'
 import NoticesPage from '@/modules/notices/NoticesPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import SignupPage from '@/modules/auth/SignupPage'
@@ -42,11 +44,8 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to={`/w/${DEFAULT_WORKSPACE}`} replace /> },
 
           // 카탈로그 (전사)
-          {
-            path: 'materials',
-            ...stub('재료 카탈로그', 'Phase 2', '재료 검색과 상세 5개 영역.'),
-          },
-          { path: 'materials/:id', ...stub('재료 상세', 'Phase 2') },
+          { path: 'materials', element: <MaterialsPage /> },
+          { path: 'materials/:id', element: <MaterialDetailPage /> },
           { path: 'compare', ...stub('곡선 비교', 'Phase 3') },
 
           // 내 활동

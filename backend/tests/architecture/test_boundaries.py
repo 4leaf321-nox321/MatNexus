@@ -100,7 +100,6 @@ FRONTEND_ONLY = {"workbench", "profile"}
 BACKEND_ONLY = {
     "audit": "화면 없는 하부 기능",
     "search": "화면 없는 하부 기능",
-    "materials": "Phase 2 — 모델 먼저. 재료 목록·등록 화면이 서면 지운다",
     "tests": "Phase 2 — 모델 먼저. 시험 목록·업로드 화면이 서면 지운다",
 }
 
