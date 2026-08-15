@@ -18,8 +18,9 @@ import {
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
+import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -141,11 +142,13 @@ export default function MaterialDetailPage() {
         ))}
       </ul>
 
-      <AddSampleDialog
-        materialId={id}
+      {/* 시험 등록 화면과 **같은 폼**을 쓴다. 두 벌로 두면 한쪽에만 필드가 늘거나
+          단위를 한쪽만 명시하는 식으로 갈라진다. */}
+      <NewSampleDialog
+        materialId={id ?? null}
         open={addingSample}
         onClose={() => setAddingSample(false)}
-        onDone={() => {
+        onCreated={() => {
           setAddingSample(false)
           samples.reload()
           material.reload()
@@ -284,122 +287,6 @@ function SampleRow({
         </div>
       )}
     </li>
-  )
-}
-
-function AddSampleDialog({
-  materialId,
-  open,
-  onClose,
-  onDone,
-}: {
-  materialId: string
-  open: boolean
-  onClose: () => void
-  onDone: () => void
-}) {
-  const [form, setForm] = useState({
-    lot_no: '',
-    manufacturer: '',
-    primary_vendor: '',
-    production_date: '',
-    density: '',
-    poisson_ratio: '',
-  })
-  const [error, setError] = useState<Error | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  async function submit() {
-    setSaving(true)
-    setError(null)
-    try {
-      await materialsApi.createSample(materialId, {
-        lot_no: form.lot_no || null,
-        manufacturer: form.manufacturer || null,
-        primary_vendor: form.primary_vendor || null,
-        production_date: form.production_date || null,
-        density: form.density === '' ? null : Number(form.density),
-        density_unit: DENSITY_UNIT,
-        poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
-      })
-      setForm({
-        lot_no: '',
-        manufacturer: '',
-        primary_vendor: '',
-        production_date: '',
-        density: '',
-        poisson_ratio: '',
-      })
-      onDone()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error('등록에 실패했습니다.'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const field = (key: keyof typeof form) => ({
-    value: form[key],
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((current) => ({ ...current, [key]: event.target.value })),
-  })
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>시료 추가</DialogTitle>
-          <DialogDescription>
-            이름은 재료별 일련번호로 자동 부여됩니다. 로트번호는 나중에 채워도 이름이
-            바뀌지 않습니다.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="lot">로트번호 (선택)</Label>
-            <Input id="lot" placeholder="L240612" {...field('lot_no')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="production">생산일 (선택)</Label>
-            <Input id="production" type="date" {...field('production_date')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="manufacturer">제조사</Label>
-            <Input id="manufacturer" {...field('manufacturer')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="vendor">주 벤더</Label>
-            <Input id="vendor" {...field('primary_vendor')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="density">밀도 (kg/m³)</Label>
-            <Input id="density" type="number" step="1" placeholder="7850" {...field('density')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="poisson">포아송비</Label>
-            <Input
-              id="poisson"
-              type="number"
-              step="0.01"
-              placeholder="0.3"
-              {...field('poisson_ratio')}
-            />
-          </div>
-        </div>
-
-        <ErrorNotice error={error} />
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            취소
-          </Button>
-          <Button onClick={submit} disabled={saving}>
-            추가
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
 

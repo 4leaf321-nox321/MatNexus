@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   FileUp,
   Loader2,
+  Plus,
   Search,
   Trash2,
   Upload,
@@ -37,6 +38,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
+import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { conditionUnits, display } from '@/modules/tests/units'
@@ -113,6 +115,7 @@ export default function BatchUploadPage() {
   const [sampleCache, setSampleCache] = useState<Record<string, Sample[]>>({})
   const [specimenCache, setSpecimenCache] = useState<Record<string, Specimen[]>>({})
   const [conditions, setConditions] = useState<Record<string, Record<string, string>>>({})
+  const [newSample, setNewSample] = useState(false)
   const [running, setRunning] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -412,26 +415,44 @@ export default function BatchUploadPage() {
               </Label>
               {/* 재료가 섞인 채로 시료를 지정하면 재료 B 파일이 재료 A 의 시료에
                   붙는다. 화면은 끝까지 B 라고 보여 준다 — 그래서 막는다. */}
-              <Select
-                value=""
-                onValueChange={(sampleId) => {
-                  void loadSpecimens(sampleId)
-                  assignSelected({ sampleId, specimen: null })
-                }}
-                disabled={!commonMaterial}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="일괄 지정" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(sampleCache[commonMaterial ?? ''] ?? []).map((sample) => (
-                    <SelectItem key={sample.id} value={sample.id}>
-                      {String(sample.seq_no).padStart(2, '0')}
-                      {sample.lot_no ? ` · ${sample.lot_no}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-1">
+                <Select
+                  value=""
+                  onValueChange={(sampleId) => {
+                    void loadSpecimens(sampleId)
+                    assignSelected({ sampleId, specimen: null })
+                  }}
+                  disabled={!commonMaterial}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="일괄 지정" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(sampleCache[commonMaterial ?? ''] ?? []).map((sample) => (
+                      <SelectItem key={sample.id} value={sample.id}>
+                        {String(sample.seq_no).padStart(2, '0')}
+                        {sample.lot_no ? ` · ${sample.lot_no}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* **파일이 오는 순간이 시료를 처음 아는 순간이기도 하다.** 새로
+                    받은 판에서 자른 시편들을 올리는데 시료를 등록하러 다른 화면에
+                    다녀오게 하면, 시편에서 없앤 왕복이 시료에 그대로 남는다. */}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!commonMaterial}
+                  title={
+                    commonMaterial
+                      ? '이 재료에 시료를 만들고 선택한 줄에 지정합니다'
+                      : '선택한 줄의 재료가 하나여야 합니다'
+                  }
+                  onClick={() => setNewSample(true)}
+                >
+                  <Plus className="size-3.5" />새 시료
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -670,6 +691,23 @@ export default function BatchUploadPage() {
           </div>
         </>
       )}
+
+      <NewSampleDialog
+        materialId={commonMaterial}
+        open={newSample}
+        onClose={() => setNewSample(false)}
+        onCreated={(sample) => {
+          // 만들자마자 목록에 넣고 선택한 줄에 지정한다. 다시 불러오지 않는 이유:
+          // 방금 만든 것이 목록에 없으면 사용자는 실패한 줄 안다.
+          setSampleCache((current) => ({
+            ...current,
+            [sample.material_id]: [...(current[sample.material_id] ?? []), sample],
+          }))
+          setSpecimenCache((current) => ({ ...current, [sample.id]: [] }))
+          assignSelected({ sampleId: sample.id, specimen: null })
+          setNewSample(false)
+        }}
+      />
     </div>
   )
 }
