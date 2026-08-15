@@ -264,6 +264,23 @@ class DefinitionLocksOut(BaseModel):
 # 갈 필요가 없다.
 
 
+class DetectOut(BaseModel):
+    """파일 하나를 보고 시험 종류를 골라 본 결과.
+
+    **고르는 일을 없애는 것이 목적이다.** 종류가 늘수록 사람이 매번 드롭다운에서
+    찾는 비용이 커지는데, 그 답은 파일이 이미 갖고 있다.
+    """
+
+    filename: str
+    test_type_key: str | None
+    test_type_label: str | None
+    profile_key: str | None
+    source: str
+    """`profile` · `extension` · `none`. **무엇으로 정했는지 화면이 보여 준다** —
+    자동 선택이 틀렸을 때 사람이 의심할 근거가 있어야 한다."""
+    reason: str
+
+
 class TablePreviewOut(BaseModel):
     index: int
     name: str | None

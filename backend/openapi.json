@@ -125,6 +125,20 @@
         "title": "ApproveRequest",
         "type": "object"
       },
+      "Body_detect_test_type_api_test_types_detect_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_detect_test_type_api_test_types_detect_post",
+        "type": "object"
+      },
       "Body_preview_api_formats_preview_post": {
         "properties": {
           "file": {
@@ -559,6 +573,66 @@
           "transferred"
         ],
         "title": "DeleteAccountResponse",
+        "type": "object"
+      },
+      "DetectOut": {
+        "description": "파일 하나를 보고 시험 종류를 골라 본 결과.\n\n**고르는 일을 없애는 것이 목적이다.** 종류가 늘수록 사람이 매번 드롭다운에서\n찾는 비용이 커지는데, 그 답은 파일이 이미 갖고 있다.",
+        "properties": {
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "profile_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Key"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "test_type_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Key"
+          },
+          "test_type_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Label"
+          }
+        },
+        "required": [
+          "filename",
+          "test_type_key",
+          "test_type_label",
+          "profile_key",
+          "source",
+          "reason"
+        ],
+        "title": "DetectOut",
         "type": "object"
       },
       "ExpiredOut": {
@@ -7207,6 +7281,48 @@
           }
         },
         "summary": "Create Test Type",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/test-types/detect": {
+      "post": {
+        "description": "이 파일이 어느 시험 종류인가. **고르는 일을 없애려고 있다.**\n\n확장자만으로는 부족하다. 확장자는 *파서가* 선언한 것에서 나오는데, 프로파일로\n읽는 종류는 파서가 없어서 확장자가 비어 있다 — 그래서 프로파일을 만들어 두고도\n일괄 등록에서 매번 손으로 골라야 했다.\n\n**지문이 확장자보다 정확하다.** `.csv` 는 어느 장비나 쓰지만 헤더의 열 이름은\n그 장비의 것이다. 프로파일을 먼저 보고, 없으면 확장자로 내려간다.\n\n관리자 전용이 아니다 — 파일을 올리는 사람이 쓰는 기능이다.\n\n화면은 **첫 조각만 보낸다.** 지문은 머리에 있고, 20개짜리 배치를 통째로 두 번\n보낼 이유가 없다.",
+        "operationId": "detect_test_type_api_test_types_detect_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_detect_test_type_api_test_types_detect_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detect Test Type",
         "tags": [
           "tests"
         ]

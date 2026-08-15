@@ -862,6 +862,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-types/detect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Detect Test Type
+         * @description 이 파일이 어느 시험 종류인가. **고르는 일을 없애려고 있다.**
+         *
+         *     확장자만으로는 부족하다. 확장자는 *파서가* 선언한 것에서 나오는데, 프로파일로
+         *     읽는 종류는 파서가 없어서 확장자가 비어 있다 — 그래서 프로파일을 만들어 두고도
+         *     일괄 등록에서 매번 손으로 골라야 했다.
+         *
+         *     **지문이 확장자보다 정확하다.** `.csv` 는 어느 장비나 쓰지만 헤더의 열 이름은
+         *     그 장비의 것이다. 프로파일을 먼저 보고, 없으면 확장자로 내려간다.
+         *
+         *     관리자 전용이 아니다 — 파일을 올리는 사람이 쓰는 기능이다.
+         *
+         *     화면은 **첫 조각만 보낸다.** 지문은 머리에 있고, 20개짜리 배치를 통째로 두 번
+         *     보낼 이유가 없다.
+         */
+        post: operations["detect_test_type_api_test_types_detect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-types/parsers": {
         parameters: {
             query?: never;
@@ -1083,6 +1115,11 @@ export interface components {
             /** Workspace Slug */
             workspace_slug?: string | null;
         };
+        /** Body_detect_test_type_api_test_types_detect_post */
+        Body_detect_test_type_api_test_types_detect_post: {
+            /** File */
+            file: string;
+        };
         /** Body_preview_api_formats_preview_post */
         Body_preview_api_formats_preview_post: {
             /** File */
@@ -1257,6 +1294,27 @@ export interface components {
         DeleteAccountResponse: {
             /** Transferred */
             transferred: components["schemas"]["ReferenceOut"][];
+        };
+        /**
+         * DetectOut
+         * @description 파일 하나를 보고 시험 종류를 골라 본 결과.
+         *
+         *     **고르는 일을 없애는 것이 목적이다.** 종류가 늘수록 사람이 매번 드롭다운에서
+         *     찾는 비용이 커지는데, 그 답은 파일이 이미 갖고 있다.
+         */
+        DetectOut: {
+            /** Filename */
+            filename: string;
+            /** Profile Key */
+            profile_key: string | null;
+            /** Reason */
+            reason: string;
+            /** Source */
+            source: string;
+            /** Test Type Key */
+            test_type_key: string | null;
+            /** Test Type Label */
+            test_type_label: string | null;
         };
         /** ExpiredOut */
         ExpiredOut: {
@@ -4373,6 +4431,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestTypeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detect_test_type_api_test_types_detect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_detect_test_type_api_test_types_detect_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetectOut"];
                 };
             };
             /** @description Validation Error */

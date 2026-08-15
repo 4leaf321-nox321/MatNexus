@@ -26,6 +26,7 @@ from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests import services
 from app.modules.tests.models import (
     Curve,
+    FormatProfile,
     TestChannel,
     TestConditionField,
     TestRun,
@@ -36,6 +37,7 @@ from app.modules.tests.schemas import (
     CleanupQueuedOut,
     CleanupRequest,
     CurvePointsOut,
+    DetectOut,
     ParserOut,
     ReparseOut,
     StorageReportOut,
@@ -52,7 +54,8 @@ from app.shared import filestore, permissions
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
-from matcore import naming, parsers, registry
+from matcore import naming, parsers, readers, registry
+from matcore.readers import profile as profiles
 
 router = APIRouter(prefix="/test-types", tags=["tests"])
 runs_router = APIRouter(prefix="/test-runs", tags=["tests"])
@@ -154,6 +157,110 @@ def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
             )
             for f in conditions
         ],
+    )
+
+
+@router.post("/detect", response_model=DetectOut)
+def detect_test_type(
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DetectOut:
+    """이 파일이 어느 시험 종류인가. **고르는 일을 없애려고 있다.**
+
+    확장자만으로는 부족하다. 확장자는 *파서가* 선언한 것에서 나오는데, 프로파일로
+    읽는 종류는 파서가 없어서 확장자가 비어 있다 — 그래서 프로파일을 만들어 두고도
+    일괄 등록에서 매번 손으로 골라야 했다.
+
+    **지문이 확장자보다 정확하다.** `.csv` 는 어느 장비나 쓰지만 헤더의 열 이름은
+    그 장비의 것이다. 프로파일을 먼저 보고, 없으면 확장자로 내려간다.
+
+    관리자 전용이 아니다 — 파일을 올리는 사람이 쓰는 기능이다.
+
+    화면은 **첫 조각만 보낸다.** 지문은 머리에 있고, 20개짜리 배치를 통째로 두 번
+    보낼 이유가 없다.
+    """
+    data = file.file.read()
+    filename = file.filename or "upload.dat"
+    suffix = filename[filename.rfind(".") :].lower() if "." in filename else ""
+
+    # 같은 종류에 프로파일이 여럿일 수 있다(장비 소프트웨어 버전이 달라진 경우).
+    # 종류별로 하나만 남기면, 우선순위는 높지만 **안 맞는** 프로파일이 맞는 것을
+    # 가려 버린다. 전부 보고 우선순위 순으로 맞는 첫 번째를 쓴다.
+    candidates = list(
+        db.scalars(
+            select(FormatProfile)
+            .where(FormatProfile.is_active.is_(True))
+            .order_by(FormatProfile.priority.desc(), FormatProfile.key)
+        )
+    )
+
+    try:
+        structure = readers.sniff(data)
+    except readers.ReadError:
+        structure = None
+
+    if structure is not None:
+        for candidate in candidates:
+            if not profiles.matches(
+                candidate.definition, filename=filename, structure=structure
+            ):
+                continue
+            test_type = db.get(TestType, candidate.test_type_id)
+            if test_type is None or not test_type.is_active:
+                continue
+            return DetectOut(
+                filename=filename,
+                test_type_key=test_type.key,
+                test_type_label=test_type.label,
+                profile_key=candidate.key,
+                source="profile",
+                reason=f"'{candidate.label}' 프로파일의 지문이 맞습니다.",
+            )
+
+    # 프로파일이 없을 때만 확장자로 내려간다. 파서가 있는 종류는 이 길로 잡힌다.
+    if suffix:
+        matched = [
+            test_type
+            for test_type in db.scalars(
+                select(TestType)
+                .where(TestType.is_active.is_(True))
+                .order_by(TestType.sort_order, TestType.label)
+            )
+            if suffix in _extensions(test_type.parser_key)
+        ]
+        if len(matched) == 1:
+            return DetectOut(
+                filename=filename,
+                test_type_key=matched[0].key,
+                test_type_label=matched[0].label,
+                profile_key=None,
+                source="extension",
+                reason=f"{suffix} 를 읽는 종류가 하나입니다.",
+            )
+        if len(matched) > 1:
+            # **여럿이면 고르지 않는다.** 하나를 찍으면 그럴듯해 보이는데 틀린다.
+            return DetectOut(
+                filename=filename,
+                test_type_key=None,
+                test_type_label=None,
+                profile_key=None,
+                source="none",
+                reason=(
+                    f"{suffix} 를 읽는 종류가 {len(matched)}개입니다: "
+                    f"{', '.join(t.label for t in matched)}. 골라 주세요."
+                ),
+            )
+
+    return DetectOut(
+        filename=filename,
+        test_type_key=None,
+        test_type_label=None,
+        profile_key=None,
+        source="none",
+        reason=(
+            "맞는 프로파일도 확장자도 없습니다. 종류를 고르거나 형식 프로파일을 만드세요."
+        ),
     )
 
 

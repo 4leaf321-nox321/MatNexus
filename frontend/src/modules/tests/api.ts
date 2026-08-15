@@ -12,6 +12,7 @@ export type TestRunPage = components['schemas']['Page_TestRunOut_']
 export type CurvePoints = components['schemas']['CurvePointsOut']
 export type StorageReport = components['schemas']['StorageReportOut']
 export type Parser = components['schemas']['ParserOut']
+export type Detected = components['schemas']['DetectOut']
 type TestTypeSave = components['schemas']['TestTypeSaveRequest']
 type TestTypeCreate = components['schemas']['TestTypeCreateRequest']
 export type TestChannelSave = TestTypeSave['channels'][number]
@@ -78,6 +79,19 @@ export const testsApi = {
 
   /** 등록된 파서. **파서는 정의로 만들 수 없다 — 코드다.** */
   parsers: () => api.get<Parser[]>('/test-types/parsers'),
+
+  /**
+   * 이 파일이 어느 시험 종류인가. 프로파일 지문 → 확장자 순으로 본다.
+   *
+   * **머리 조각만 보낸다.** 지문은 파일 앞쪽(메타·헤더)에 있고, 20개짜리 배치를
+   * 통째로 두 번 올릴 이유가 없다. 앞이 잘려 못 알아보면 그냥 '못 정함' 이
+   * 나오고 사람이 고르면 된다 — 틀리게 정하는 것보다 낫다.
+   */
+  detectType: (file: File, headBytes = 64 * 1024) => {
+    const form = new FormData()
+    form.set('file', file.slice(0, headBytes), file.name)
+    return api.postForm<Detected>('/test-types/detect', form)
+  },
   createType: (payload: TestTypeCreate) => api.post<TestType>('/test-types', payload),
   /** 정의 한 벌을 갈아 끼운다. 데이터가 있으면 서버가 key·단위 변경을 거절한다. */
   updateType: (key: string, payload: TestTypeSave) =>

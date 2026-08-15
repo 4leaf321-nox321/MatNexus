@@ -20,7 +20,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.tests import services
-from app.modules.tests.models import Curve, TestRun
+from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.models import Curve, TestRun, TestType
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 STRAIN_SWEEP = FIXTURES / "dma_strain_sweep.csv"
@@ -132,6 +133,13 @@ def dma(client: TestClient, admin_headers: dict[str, str]) -> None:
         headers=admin_headers,
     )
     assert saved.status_code == 201, saved.text
+
+
+@pytest.fixture
+def tensile(db: Session) -> None:
+    """파서가 있는 종류. 확장자 경로를 확인하는 데 쓴다."""
+    ensure_builtin_test_types(db)
+    db.commit()
 
 
 @pytest.fixture
@@ -270,6 +278,83 @@ class TestTryBeforeSave:
         )
         assert response.status_code == 422
         assert "지문" in response.json()["error"]["message"]
+
+
+class TestDetect:
+    """**고르는 일을 없앤다.** 종류가 늘수록 매번 드롭다운에서 찾는 비용이 커지는데,
+    그 답은 파일이 이미 갖고 있다."""
+
+    def test_지문으로_종류를_고른다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """확장자로는 못 한다. **DMA 종류는 파서가 없어 확장자가 비어 있다** —
+        프로파일을 만들어 두고도 매번 손으로 골라야 했던 이유다."""
+        response = client.post(
+            "/api/test-types/detect",
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["test_type_key"] == "dma_sweep"
+        assert body["profile_key"] == "ta_dma850"
+        assert body["source"] == "profile"
+
+    def test_머리_조각만으로도_알아본다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """화면은 파일 앞부분만 보낸다. 20개짜리 배치를 통째로 두 번 올릴 이유가
+        없다 — 지문은 메타·헤더에 있다."""
+        head = STRAIN_SWEEP.read_bytes()[:2048]
+        response = client.post(
+            "/api/test-types/detect",
+            files={"file": ("Example.csv", head)},
+            headers=admin_headers,
+        )
+        assert response.json()["test_type_key"] == "dma_sweep"
+
+    def test_프로파일이_없으면_확장자로_내려간다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        response = client.post(
+            "/api/test-types/detect",
+            files={"file": ("Example.TRA", (FIXTURES / "Example.tra").read_bytes())},
+            headers=admin_headers,
+        )
+        body = response.json()
+        assert body["test_type_key"] == "tensile"
+        assert body["source"] == "extension"
+
+    def test_모르면_고르지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**하나를 찍으면 그럴듯해 보이는데 틀린다.** 못 정했다고 말하고 사람이
+        고르게 한다. 이유도 함께 준다."""
+        response = client.post(
+            "/api/test-types/detect",
+            files={"file": ("메모.txt", b"hello\nworld\n")},
+            headers=admin_headers,
+        )
+        body = response.json()
+        assert body["test_type_key"] is None
+        assert body["source"] == "none"
+        assert body["reason"]
+
+    def test_중단된_종류는_고르지_않는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """더 쓰지 않기로 한 종류에 새 시험이 붙으면 안 된다."""
+        test_type = db.scalar(select(TestType).where(TestType.key == "dma_sweep"))
+        assert test_type is not None
+        test_type.is_active = False
+        db.commit()
+
+        response = client.post(
+            "/api/test-types/detect",
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.json()["test_type_key"] is None
 
 
 class TestEndToEnd:

@@ -71,11 +71,21 @@ const ANISOTROPY_SET = ['MD', 'TD', 'DD'] as const
 
 type RowStatus = 'incomplete' | 'uploading' | 'done' | 'error'
 
+/**
+ * 종류를 무엇으로 정했나. **확정이 아니라 제안이므로 출처가 보여야 한다.**
+ *
+ * `manual` 은 사람이 직접 고른 것이다. 그 뒤에는 자동 추정이 덮어쓰지 않는다 —
+ * 고쳐 놨는데 다음 파일을 담는 순간 원래대로 돌아가면 아무도 못 믿는다.
+ */
+type TypeSource = 'profile' | 'extension' | 'manual' | null
+
 interface Row {
   key: string
   file: File
   selected: boolean
   typeKey: string | null
+  typeSource: TypeSource
+  typeReason?: string
   materialId: string | null
   sampleId: string | null
   /** 기존 시편 id 이거나, `new:<방향>` 이면 올릴 때 새로 만든다. */
@@ -151,20 +161,52 @@ export default function BatchUploadPage() {
 
   function addFiles(files: FileList | null) {
     if (!files?.length) return
-    setRows((current) => [
-      ...current,
-      ...Array.from(files).map((file, index) => ({
-        // 같은 파일을 두 번 담아도 키가 겹치지 않게 담은 시각을 섞는다.
-        key: `${file.name}-${file.size}-${current.length + index}-${performance.now()}`,
-        file,
-        selected: true,
-        typeKey: guessType(file, availableTypes),
-        materialId: null,
-        sampleId: null,
-        specimen: null,
-        status: 'incomplete' as RowStatus,
-      })),
-    ])
+    const added = Array.from(files).map((file, index) => ({
+      // 같은 파일을 두 번 담아도 키가 겹치지 않게 담은 시각을 섞는다.
+      key: `${file.name}-${file.size}-${rows.length + index}-${performance.now()}`,
+      file,
+      selected: true,
+      // 확장자로 먼저 채워 둔다 — 서버 응답을 기다리는 동안 빈칸으로 두면
+      // 사용자는 인식이 안 된 줄 안다.
+      typeKey: guessType(file, availableTypes),
+      typeSource: (guessType(file, availableTypes) ? 'extension' : null) as TypeSource,
+      materialId: null,
+      sampleId: null,
+      specimen: null,
+      status: 'incomplete' as RowStatus,
+    }))
+    setRows((current) => [...current, ...added])
+    for (const row of added) void detect(row.key, row.file)
+  }
+
+  /**
+   * 서버에 물어 종류를 정한다. **프로파일 지문이 확장자보다 정확하다** —
+   * `.csv` 는 어느 장비나 쓰지만 헤더의 열 이름은 그 장비의 것이다.
+   *
+   * 정해도 **잠그지 않는다.** 줄의 드롭다운은 그대로 열려 있고, 사람이 고치면
+   * `manual` 이 되어 다시는 자동으로 안 바뀐다.
+   */
+  async function detect(key: string, file: File) {
+    try {
+      const found = await testsApi.detectType(file)
+      setRows((current) =>
+        current.map((row) => {
+          if (row.key !== key || row.typeSource === 'manual') return row
+          if (!found.test_type_key) {
+            return { ...row, typeReason: found.reason }
+          }
+          return {
+            ...row,
+            typeKey: found.test_type_key,
+            typeSource: found.source === 'profile' ? 'profile' : 'extension',
+            typeReason: found.reason,
+          }
+        })
+      )
+    } catch {
+      // 못 물어봐도 확장자 추정이 남아 있다. 조용히 넘어간다 — 올리기 전에
+      // 사람이 종류 칸을 보게 되고, 비어 있으면 고르면 된다.
+    }
   }
 
   // 종류 정의가 늦게 도착하면 이미 담긴 파일도 다시 추정해 준다.
@@ -172,7 +214,9 @@ export default function BatchUploadPage() {
     if (availableTypes.length === 0) return
     setRows((current) =>
       current.map((row) =>
-        row.typeKey ? row : { ...row, typeKey: guessType(row.file, availableTypes) }
+        row.typeKey || row.typeSource === 'manual'
+          ? row
+          : { ...row, typeKey: guessType(row.file, availableTypes) }
       )
     )
   }, [availableTypes])
@@ -346,7 +390,10 @@ export default function BatchUploadPage() {
 
             <div className="space-y-1">
               <Label className="text-muted-foreground text-xs">시험 종류</Label>
-              <Select value="" onValueChange={(typeKey) => assignSelected({ typeKey })}>
+              <Select
+                value=""
+                onValueChange={(typeKey) => assignSelected({ typeKey, typeSource: 'manual' })}
+              >
                 <SelectTrigger className="w-36">
                   <SelectValue placeholder="일괄 지정" />
                 </SelectTrigger>
@@ -534,9 +581,13 @@ export default function BatchUploadPage() {
                     </TableCell>
 
                     <TableCell>
+                      {/* 자동으로 정해도 **잠그지 않는다.** 드롭다운은 그대로 열려
+                          있고, 고치면 `manual` 이 되어 다시는 자동으로 안 바뀐다. */}
                       <Select
                         value={row.typeKey ?? ''}
-                        onValueChange={(value) => patch(row.key, { typeKey: value })}
+                        onValueChange={(value) =>
+                          patch(row.key, { typeKey: value, typeSource: 'manual' })
+                        }
                       >
                         <SelectTrigger className="h-8">
                           <SelectValue placeholder="고르세요" />
@@ -549,6 +600,24 @@ export default function BatchUploadPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {/* 무엇으로 정했는지 남긴다 — 자동이 틀렸을 때 사람이
+                          의심할 근거가 있어야 한다. */}
+                      {row.typeSource && row.typeSource !== 'manual' && (
+                        <span
+                          className="text-muted-foreground mt-0.5 block text-xs"
+                          title={row.typeReason}
+                        >
+                          {row.typeSource === 'profile' ? '지문으로 추정' : '확장자로 추정'}
+                        </span>
+                      )}
+                      {!row.typeKey && row.typeReason && (
+                        <span
+                          className="mt-0.5 block text-xs text-amber-600 dark:text-amber-500"
+                          title={row.typeReason}
+                        >
+                          자동 인식 안 됨
+                        </span>
+                      )}
                     </TableCell>
 
                     <TableCell>
