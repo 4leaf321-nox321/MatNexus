@@ -33,8 +33,11 @@ from app.modules.tests.models import (
     TestType,
 )
 from app.modules.tests.schemas import (
+    CleanupQueuedOut,
+    CleanupRequest,
     CurvePointsOut,
     ReparseOut,
+    StorageReportOut,
     TestChannelOut,
     TestConditionFieldOut,
     TestRunDetailOut,
@@ -43,13 +46,14 @@ from app.modules.tests.schemas import (
     TestTypeOut,
 )
 from app.shared import filestore, permissions
-from app.shared.auth import current_user
+from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import Page, clamp_limit
 from matcore import naming, parsers, registry
 
 router = APIRouter(prefix="/test-types", tags=["tests"])
 runs_router = APIRouter(prefix="/test-runs", tags=["tests"])
+maintenance_router = APIRouter(prefix="/maintenance", tags=["tests"])
 
 #: 차트가 한 번에 받는 점의 상한. 이보다 많이 보내 봐야 화면 픽셀에 겹친다.
 MAX_CURVE_POINTS = 5000
@@ -490,3 +494,46 @@ def delete_run(
     run.deleted_at = _now()
     db.commit()
     return Response(status_code=204)
+
+
+# --- 저장소 정리 ------------------------------------------------------------
+#
+# **실행 경로가 없으면 만들어 둔 정리 잡은 없는 것과 같다.** 핸들러만 등록해 두고
+# 큐에 넣는 곳을 안 만들어서, 한 번도 돌지 않은 채 파일이 쌓이고 있었다.
+
+
+@maintenance_router.get("/storage", response_model=StorageReportOut)
+def storage(
+    retention_days: int | None = Query(default=None, ge=0),
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> StorageReportOut:
+    """무엇이 얼마나 있고 무엇을 치울 수 있는지. 읽기만 한다.
+
+    폴더를 훑는 정도라 요청 안에서 끝난다 — 지우는 것만 워커로 넘긴다.
+    """
+    return StorageReportOut(**services.storage_report(db, retention_days=retention_days))
+
+
+@maintenance_router.post("/cleanup", response_model=CleanupQueuedOut, status_code=202)
+def cleanup(
+    payload: CleanupRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CleanupQueuedOut:
+    """정리를 큐에 넣는다. 파일이 많으면 오래 걸리므로 요청을 붙잡지 않는다."""
+    queue.enqueue(
+        db,
+        kind=kinds.TESTS_CLEANUP_STORAGE,
+        payload={"dry_run": payload.dry_run, "retention_days": payload.retention_days},
+    )
+    db.commit()
+    return CleanupQueuedOut(
+        status="queued",
+        message=(
+            "미리보기를 큐에 넣었습니다. 로그에 결과가 남습니다."
+            if payload.dry_run
+            else "정리를 큐에 넣었습니다. 파일을 실제로 지웁니다."
+        ),
+        dry_run=payload.dry_run,
+    )

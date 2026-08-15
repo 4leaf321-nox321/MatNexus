@@ -50,6 +50,15 @@ class Settings(BaseSettings):
     filestore_dir: Path = BACKEND_DIR / "filestore"
     """곡선 Parquet와 장비 원본이 사는 곳. DB에는 경로와 해시만 둔다(D10)."""
 
+    filestore_retention_days: int = 30
+    """소프트 삭제한 시험의 **파일**을 며칠 뒤에 지울지.
+
+    행은 남긴다 — 이름과 계보는 조회할 수 있어야 한다. 파일만 지운다.
+
+    이 값이 필요한 이유: 소프트 삭제는 행을 남기므로 그 파일은 오펀 탐색으로
+    **영원히 안 잡힌다**(오펀은 정의상 DB 에 없는 것이다). 실측으로 확인했다 —
+    지운 시험 2건의 파일이 그대로 남아 있었다."""
+
     max_upload_bytes: int = 50 * 1024 * 1024
     """업로드 한도의 전역 기본값. 시험 종류가 `max_upload_bytes` 로 덮을 수 있다.
 

@@ -54,6 +54,7 @@ def _api_router() -> APIRouter:
     router.include_router(materials_routes.specimens_router)
     router.include_router(tests_routes.router)
     router.include_router(tests_routes.runs_router)
+    router.include_router(tests_routes.maintenance_router)
 
     return router
 

@@ -22,6 +22,7 @@ import hashlib
 import os
 import re
 import shutil
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -184,6 +185,53 @@ def delete_dir(relative_dir: str) -> bool:
     if not path.is_dir():
         return False
     shutil.rmtree(path)
+    return True
+
+
+def directory_size(relative: str) -> int:
+    path = resolve(relative)
+    if not path.is_dir():
+        return 0
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+
+
+def total_size() -> int:
+    base = root()
+    if not base.is_dir():
+        return 0
+    return sum(item.stat().st_size for item in base.rglob("*") if item.is_file())
+
+
+def incomplete_files(*, older_than_seconds: int = 3600) -> list[tuple[str, int, float]]:
+    """쓰다 만 `.part` 파일. (상대경로, 크기, 경과 초).
+
+    `save_stream` 은 `.part` 로 쓰다가 다 받으면 이름을 바꾼다. 그 사이에 프로세스가
+    죽으면 `.part` 가 남는데, **완성된 파일이 아니므로 어떤 DB 행도 가리키지 않는다**
+    — 오펀 탐색(폴더 단위)으로도 안 잡힌다.
+
+    나이 제한을 두는 이유: 지금 올라가는 중인 파일도 `.part` 다. 방금 만들어진
+    것을 지우면 진행 중인 업로드를 깨뜨린다.
+    """
+    base = root()
+    if not base.is_dir():
+        return []
+    now = time.time()
+    found: list[tuple[str, int, float]] = []
+    for item in base.rglob("*.part"):
+        if not item.is_file():
+            continue
+        age = now - item.stat().st_mtime
+        if age < older_than_seconds:
+            continue
+        found.append((item.relative_to(base).as_posix(), item.stat().st_size, age))
+    return sorted(found)
+
+
+def delete_file(relative: str) -> bool:
+    path = resolve(relative)
+    if not path.is_file():
+        return False
+    path.unlink()
     return True
 
 

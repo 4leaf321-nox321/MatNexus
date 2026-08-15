@@ -23,17 +23,25 @@ def parse_upload(db: Session, payload: dict[str, Any]) -> None:
     services.parse_run(db, uuid.UUID(str(payload["test_run_id"])))
 
 
-@handler(kinds.TESTS_CLEANUP_ORPHANS)
-def cleanup_orphans(db: Session, payload: dict[str, Any]) -> None:
+@handler(kinds.TESTS_CLEANUP_STORAGE)
+def cleanup_storage(db: Session, payload: dict[str, Any]) -> None:
     """기본은 `dry_run`. 지우려면 payload 에 명시적으로 false 를 넣어야 한다.
 
     실수로 큐에 들어간 작업이 파일을 지우는 일이 없도록, 위험한 쪽을 기본값으로
     두지 않는다.
     """
-    result = services.cleanup_orphans(db, dry_run=bool(payload.get("dry_run", True)))
-    if result["found"] and result["dry_run"]:
+    retention = payload.get("retention_days")
+    result = services.cleanup_storage(
+        db,
+        dry_run=bool(payload.get("dry_run", True)),
+        retention_days=int(retention) if retention is not None else None,
+    )
+    if result["dry_run"] and result["reclaimable_bytes"]:
         logger.warning(
-            "주인 없는 시험 폴더 %d건 — 지우려면 dry_run=false 로 다시 넣으세요: %s",
-            len(result["found"]),
-            ", ".join(result["found"][:10]),
+            "정리할 것이 %.2fMB 있습니다 (오펀 %d · 미완성 %d · 보존만료 %d) — "
+            "지우려면 dry_run=false 로 다시 넣으세요",
+            result["reclaimable_bytes"] / (1024 * 1024),
+            len(result["orphans"]),
+            len(result["incomplete"]),
+            len(result["expired"]),
         )

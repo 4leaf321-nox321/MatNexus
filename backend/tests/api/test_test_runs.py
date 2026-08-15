@@ -470,7 +470,9 @@ class TestCurve:
         assert response.content == TRA.read_bytes()
 
 
-class TestOrphans:
+class TestStorageCleanup:
+    """치울 것이 **세 종류**다. 하나만 다루면 나머지가 영원히 쌓인다."""
+
     def test_DB_에_없는_폴더를_찾는다(
         self,
         client: TestClient,
@@ -483,28 +485,141 @@ class TestOrphans:
         정의상 DB 에 없다.
 
         기준선을 먼저 재는 이유: 앞선 테스트들이 남긴 파일이 이미 오펀이다.
-        테스트는 테이블을 비우지만 파일은 지우지 않으므로, 실제로 이 잡이 필요한
+        테스트는 테이블을 비우지만 파일은 지우지 않으므로, 이 잡이 실제로 필요한
         상황이 매 실행마다 재현된다.
         """
         from app.shared import filestore
 
-        baseline = set(services.cleanup_orphans(db, dry_run=True)["found"])
+        def orphan_paths() -> set[str]:
+            return {str(item["path"]) for item in services.storage_report(db)["orphans"]}
+
+        baseline = orphan_paths()
 
         created = _upload(client, admin_headers, specimen["id"]).json()
         run = db.get(TestRun, uuid.UUID(created["id"]))
         assert run is not None
         directory = filestore.run_dir(run.id, run.created_at)
 
-        # 행이 살아 있는 동안은 오펀이 아니다
-        assert directory not in set(services.cleanup_orphans(db, dry_run=True)["found"])
+        assert directory not in orphan_paths()  # 행이 살아 있으면 오펀이 아니다
 
         db.delete(run)
         db.commit()
+        assert orphan_paths() - baseline == {directory}
 
-        found = services.cleanup_orphans(db, dry_run=True)
-        assert set(found["found"]) - baseline == {directory}
-        assert found["removed"] == []  # dry_run 은 지우지 않는다
-
-        removed = services.cleanup_orphans(db, dry_run=False)
+        removed = services.cleanup_storage(db, dry_run=False)
         assert directory in removed["removed"]
-        assert directory not in set(services.cleanup_orphans(db, dry_run=True)["found"])
+        assert directory not in orphan_paths()
+
+    def test_소프트_삭제는_보존기간이_지나야_지운다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**셋 중 가장 큰 구멍이었다.** 소프트 삭제는 행을 남기므로 그 파일은
+        오펀 탐색으로 영원히 안 잡힌다. 실측(2026-08-15): 지운 시험 2건의 파일이
+        그대로 남아 있었고 치울 경로가 아예 없었다.
+        """
+        from app.shared import filestore
+
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        services.parse_run(db, uuid.UUID(created["id"]))
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        directory = filestore.run_dir(run.id, run.created_at)
+
+        client.delete(f"/api/test-runs/{created['id']}", headers=admin_headers)
+        db.expire_all()
+
+        # 방금 지운 것은 아직 보존기간 안이라 건드리지 않는다
+        report = services.storage_report(db)
+        assert directory not in {str(item["path"]) for item in report["expired"]}
+        assert directory not in {str(item["path"]) for item in report["orphans"]}
+
+        # 보존기간이 0 이면 대상이 된다
+        expired = services.storage_report(db, retention_days=0)
+        assert directory in {str(item["path"]) for item in expired["expired"]}
+
+        result = services.cleanup_storage(db, dry_run=False, retention_days=0)
+        assert directory in result["removed"]
+
+        # **행은 남는다.** 옛 보고서에 적힌 이름이 무엇이었는지 답할 수 있어야 한다.
+        db.expire_all()
+        survivor = db.get(TestRun, uuid.UUID(created["id"]))
+        assert survivor is not None
+        assert survivor.record_name
+        assert survivor.source_path is None  # 가리키던 파일이 없어졌다
+        assert "보존기간" in (survivor.note or "")
+        assert db.scalar(select(Curve).where(Curve.test_run_id == survivor.id)) is None
+
+    def test_미리보기는_아무것도_지우지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """되돌릴 수 없는 작업이라 기본이 안전한 쪽이다."""
+        from app.shared import filestore
+
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        directory = filestore.run_dir(run.id, run.created_at)
+        db.delete(run)
+        db.commit()
+
+        preview = services.cleanup_storage(db, dry_run=True)
+        assert preview["removed"] == []
+        assert preview["reclaimable_bytes"] > 0
+        assert filestore.resolve(directory).is_dir()  # 아직 있다
+
+    def test_정리를_큐에_넣는_경로가_있다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """**실행 경로가 없으면 만들어 둔 잡은 없는 것과 같다.** 핸들러만 등록해
+        두고 큐에 넣는 곳을 안 만들어서, 한 번도 돌지 않은 채 파일이 쌓였다."""
+        report = client.get("/api/maintenance/storage", headers=admin_headers)
+        assert report.status_code == 200, report.text
+        assert report.json()["retention_days"] > 0
+
+        queued = client.post(
+            "/api/maintenance/cleanup", json={"dry_run": True}, headers=admin_headers
+        )
+        assert queued.status_code == 202
+        assert queued.json()["dry_run"] is True
+
+        job = db.scalar(select(Job).where(Job.kind == kinds.TESTS_CLEANUP_STORAGE))
+        assert job is not None
+        assert job.payload["dry_run"] is True
+
+    def test_일반_사용자는_저장소를_볼_수_없다(
+        self, client: TestClient, db: Session, tensile: None
+    ) -> None:
+        """파일 경로는 서버 내부 구조다. 관리자만 본다."""
+        from app.modules.accounts.models import User
+        from app.modules.auth import security
+        from app.modules.workspaces.models import Workspace
+
+        workspace = db.scalar(select(Workspace))
+        member = User(
+            email="member",
+            password_hash=security.hash_password("member-password-1"),
+            display_name="일반 사용자",
+            status="active",
+            is_system_admin=False,
+            home_workspace_id=workspace.id if workspace else None,
+        )
+        db.add(member)
+        db.commit()
+
+        token = client.post(
+            "/api/auth/login", json={"email": "member", "password": "member-password-1"}
+        ).json()["access_token"]
+        response = client.get(
+            "/api/maintenance/storage", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403

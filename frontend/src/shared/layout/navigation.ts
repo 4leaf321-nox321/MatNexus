@@ -23,6 +23,7 @@ import {
   Megaphone,
   MessageSquare,
   Plug,
+  Server,
   SlidersHorizontal,
   User,
   UserCog,
@@ -90,7 +91,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members` },
       { label: '시험종류 정의', icon: ListTree, to: '/admin/test-types' },
       { label: '장비 커넥터', icon: Plug, to: '/admin/connectors' },
-      { label: '서버', icon: HardDrive, to: '/server' },
+      { label: '저장소 정리', icon: HardDrive, to: '/admin/storage' },
+      { label: '서버', icon: Server, to: '/server' },
     ],
   },
 ]

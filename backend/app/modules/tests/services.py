@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Select, func, select
@@ -397,20 +397,33 @@ def _store_summary(db: Session, run: TestRun, parsed: ParsedTest) -> None:
         )
 
 
-# --- 오펀 정리 --------------------------------------------------------------
+# --- 저장소 정리 ------------------------------------------------------------
 
 
-def cleanup_orphans(db: Session, *, dry_run: bool = True) -> dict[str, Any]:
-    """DB 에 없는 시험 폴더를 찾는다(그리고 `dry_run=False` 면 지운다).
+def _retention_days() -> int:
+    return get_settings().filestore_retention_days
 
-    **방향이 중요하다.** DB 를 훑어 파일을 확인하는 방식으로는 오펀을 찾을 수
-    없다 — 오펀은 정의상 DB 에 없다. 파일시스템에서 시작해 DB 를 조회해야 한다.
 
-    기본이 `dry_run` 인 이유: 이 잡의 실수는 되돌릴 수 없다. 먼저 목록을 보고
-    납득한 뒤에 지운다.
+def storage_report(db: Session, *, retention_days: int | None = None) -> dict[str, Any]:
+    """파일스토어에 무엇이 있고 무엇을 치워야 하는지. **읽기만 한다.**
+
+    치울 것이 **세 종류**다. 하나만 다루면 나머지가 영원히 쌓인다.
+
+    1. **오펀** — DB 에 행이 없는 폴더. 트랜잭션이 파일시스템까지 덮지 못해 생긴다.
+       DB 를 훑는 방향으로는 못 찾는다(정의상 DB 에 없다). 파일시스템에서 시작한다.
+    2. **미완성** — 쓰다 만 `.part`. 완성된 파일이 아니라 어떤 행도 안 가리키고,
+       폴더 자체는 살아 있으므로 오펀 탐색에도 안 걸린다.
+    3. **보존기간 지난 소프트 삭제** — 실제로 이것이 가장 크다. 소프트 삭제는 행을
+       남기므로 그 파일은 **오펀 탐색으로 영원히 안 잡힌다.** 실측(2026-08-15):
+       지운 시험 2건의 파일이 그대로 남아 있었고 치울 경로가 아예 없었다.
     """
-    found: list[str] = []
-    removed: list[str] = []
+    keep_days = retention_days if retention_days is not None else _retention_days()
+    cutoff = _now() - timedelta(days=keep_days)
+
+    orphans: list[dict[str, Any]] = []
+    expired: list[dict[str, Any]] = []
+    live_count = 0
+    live_bytes = 0
 
     for relative in filestore.existing_run_dirs():
         raw_id = relative.rsplit("/", 1)[-1]
@@ -420,16 +433,95 @@ def cleanup_orphans(db: Session, *, dry_run: bool = True) -> dict[str, Any]:
             # 우리가 만들지 않은 폴더다. 남의 파일을 지우지 않는다.
             logger.warning("시험 폴더 이름이 UUID 가 아닙니다: %s", relative)
             continue
-        if db.get(TestRun, run_id) is not None:
-            continue
-        found.append(relative)
-        if not dry_run and filestore.delete_dir(relative):
-            removed.append(relative)
+
+        size = filestore.directory_size(relative)
+        run = db.get(TestRun, run_id)
+        if run is None:
+            orphans.append({"path": relative, "bytes": size})
+        elif run.deleted_at is not None and run.deleted_at < cutoff:
+            expired.append(
+                {
+                    "path": relative,
+                    "bytes": size,
+                    "run_id": str(run.id),
+                    "record_name": run.record_name,
+                    "deleted_at": run.deleted_at,
+                }
+            )
+        else:
+            live_count += 1
+            live_bytes += size
+
+    incomplete = [
+        {"path": path, "bytes": size, "age_hours": round(age / 3600, 1)}
+        for path, size, age in filestore.incomplete_files()
+    ]
+
+    return {
+        "root": str(filestore.root()),
+        "total_bytes": filestore.total_size(),
+        "retention_days": keep_days,
+        "live_count": live_count,
+        "live_bytes": live_bytes,
+        "orphans": orphans,
+        "incomplete": incomplete,
+        "expired": expired,
+        "reclaimable_bytes": sum(
+            int(item["bytes"]) for item in [*orphans, *incomplete, *expired]
+        ),
+    }
+
+
+def cleanup_storage(
+    db: Session, *, dry_run: bool = True, retention_days: int | None = None
+) -> dict[str, Any]:
+    """`storage_report` 가 찾은 것을 실제로 지운다.
+
+    기본이 `dry_run` 인 이유: 이 잡의 실수는 되돌릴 수 없다. 목록을 보고 납득한
+    뒤에 지운다.
+
+    보존기간이 지난 소프트 삭제 건은 **행을 남기고 파일만 지운다.** 이름과 계보는
+    조회할 수 있어야 한다 — 옛 보고서에 적힌 이름이 무엇을 가리켰는지 답하지
+    못하면 지운 것보다 나쁘다. 대신 곡선 행은 지운다(가리키는 파일이 없어졌다).
+    """
+    report = storage_report(db, retention_days=retention_days)
+    removed: list[str] = []
+    freed = 0
+
+    if not dry_run:
+        for item in [*report["orphans"], *report["expired"]]:
+            if filestore.delete_dir(str(item["path"])):
+                removed.append(str(item["path"]))
+                freed += int(item["bytes"])
+
+        for item in report["incomplete"]:
+            if filestore.delete_file(str(item["path"])):
+                removed.append(str(item["path"]))
+                freed += int(item["bytes"])
+
+        for item in report["expired"]:
+            run = db.get(TestRun, uuid.UUID(str(item["run_id"])))
+            if run is None:
+                continue
+            # 가리키던 파일이 사라졌으므로 포인터를 지운다. 행 자체는 남긴다.
+            for curve in db.scalars(select(Curve).where(Curve.test_run_id == run.id)):
+                db.delete(curve)
+            run.source_path = None
+            days = report["retention_days"]
+            purged = f"※ 보존기간({days}일)이 지나 파일을 정리했습니다."
+            run.note = f"{run.note}\n{purged}" if run.note else purged
+        db.commit()
 
     logger.info(
-        "오펀 정리: 발견 %d건, 삭제 %d건 (dry_run=%s)", len(found), len(removed), dry_run
+        "저장소 정리: 오펀 %d · 미완성 %d · 보존만료 %d → 삭제 %d건 %.2fMB (dry_run=%s)",
+        len(report["orphans"]),
+        len(report["incomplete"]),
+        len(report["expired"]),
+        len(removed),
+        freed / (1024 * 1024),
+        dry_run,
     )
-    return {"found": found, "removed": removed, "dry_run": dry_run}
+    return {**report, "dry_run": dry_run, "removed": removed, "freed_bytes": freed}
 
 
 # --- 곡선 읽기 --------------------------------------------------------------
@@ -485,7 +577,7 @@ def default_axes(db: Session, test_type_id: uuid.UUID) -> tuple[str, str]:
 
 __all__ = [
     "RAW_CURVE",
-    "cleanup_orphans",
+    "cleanup_storage",
     "condition_fields",
     "curve_points",
     "default_axes",
@@ -495,6 +587,7 @@ __all__ = [
     "normalize_conditions",
     "parse_run",
     "run_counts",
+    "storage_report",
     "upload_limit",
     "visible_runs",
 ]

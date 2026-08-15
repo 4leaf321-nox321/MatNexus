@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # --- 정의 -------------------------------------------------------------------
 
@@ -122,3 +122,51 @@ class CurvePointsOut(BaseModel):
 class ReparseOut(BaseModel):
     status: str
     message: str
+
+
+# --- 저장소 정리 ------------------------------------------------------------
+
+
+class StorageItemOut(BaseModel):
+    path: str
+    bytes: int
+
+
+class IncompleteOut(StorageItemOut):
+    age_hours: float
+
+
+class ExpiredOut(StorageItemOut):
+    run_id: uuid.UUID
+    record_name: str
+    deleted_at: datetime
+
+
+class StorageReportOut(BaseModel):
+    """치울 것이 **세 종류**다. 하나만 다루면 나머지가 영원히 쌓인다."""
+
+    root: str
+    total_bytes: int
+    retention_days: int
+    live_count: int
+    live_bytes: int
+    orphans: list[StorageItemOut]
+    """DB 에 행이 없는 폴더. 트랜잭션이 파일시스템까지 덮지 못해 생긴다."""
+    incomplete: list[IncompleteOut]
+    """쓰다 만 `.part`. 폴더는 살아 있어서 오펀 탐색에 안 걸린다."""
+    expired: list[ExpiredOut]
+    """보존기간 지난 소프트 삭제. **행이 있어서 오펀으로 영원히 안 잡힌다** —
+    실측으로 확인한, 셋 중 가장 큰 구멍이다."""
+    reclaimable_bytes: int
+
+
+class CleanupRequest(BaseModel):
+    dry_run: bool = True
+    """기본이 안전한 쪽이다. 되돌릴 수 없는 작업이라 명시적으로 꺼야 지운다."""
+    retention_days: int | None = Field(default=None, ge=0)
+
+
+class CleanupQueuedOut(BaseModel):
+    status: str
+    message: str
+    dry_run: bool

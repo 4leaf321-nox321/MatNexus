@@ -17,6 +17,7 @@ import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
 import BatchUploadPage from '@/modules/tests/BatchUploadPage'
 import TestTypesPage from '@/modules/tests/TestTypesPage'
+import StoragePage from '@/modules/tests/StoragePage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
 import TestRunsPage from '@/modules/tests/TestRunsPage'
 import NoticesPage from '@/modules/notices/NoticesPage'
@@ -69,6 +70,7 @@ export const router = createBrowserRouter([
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
           { path: 'admin/test-types', element: <TestTypesPage /> },
+          { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },
 

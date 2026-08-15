@@ -230,6 +230,52 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "CleanupQueuedOut": {
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "dry_run"
+        ],
+        "title": "CleanupQueuedOut",
+        "type": "object"
+      },
+      "CleanupRequest": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          }
+        },
+        "title": "CleanupRequest",
+        "type": "object"
+      },
       "CreateAccountRequest": {
         "description": "관리자가 직접 계정을 만들 때. 승인 절차 없이 바로 활성이다.",
         "properties": {
@@ -350,6 +396,41 @@
         "title": "DeleteAccountResponse",
         "type": "object"
       },
+      "ExpiredOut": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "deleted_at": {
+            "format": "date-time",
+            "title": "Deleted At",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "bytes",
+          "run_id",
+          "record_name",
+          "deleted_at"
+        ],
+        "title": "ExpiredOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -361,6 +442,29 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IncompleteOut": {
+        "properties": {
+          "age_hours": {
+            "title": "Age Hours",
+            "type": "number"
+          },
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "bytes",
+          "age_hours"
+        ],
+        "title": "IncompleteOut",
         "type": "object"
       },
       "LoginRequest": {
@@ -2170,6 +2274,87 @@
           }
         },
         "title": "SpecimenUpdateRequest",
+        "type": "object"
+      },
+      "StorageItemOut": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "bytes"
+        ],
+        "title": "StorageItemOut",
+        "type": "object"
+      },
+      "StorageReportOut": {
+        "description": "치울 것이 **세 종류**다. 하나만 다루면 나머지가 영원히 쌓인다.",
+        "properties": {
+          "expired": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiredOut"
+            },
+            "title": "Expired",
+            "type": "array"
+          },
+          "incomplete": {
+            "items": {
+              "$ref": "#/components/schemas/IncompleteOut"
+            },
+            "title": "Incomplete",
+            "type": "array"
+          },
+          "live_bytes": {
+            "title": "Live Bytes",
+            "type": "integer"
+          },
+          "live_count": {
+            "title": "Live Count",
+            "type": "integer"
+          },
+          "orphans": {
+            "items": {
+              "$ref": "#/components/schemas/StorageItemOut"
+            },
+            "title": "Orphans",
+            "type": "array"
+          },
+          "reclaimable_bytes": {
+            "title": "Reclaimable Bytes",
+            "type": "integer"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root",
+          "total_bytes",
+          "retention_days",
+          "live_count",
+          "live_bytes",
+          "orphans",
+          "incomplete",
+          "expired",
+          "reclaimable_bytes"
+        ],
+        "title": "StorageReportOut",
         "type": "object"
       },
       "TemporaryPasswordResponse": {
@@ -4092,6 +4277,99 @@
         "summary": "Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/maintenance/cleanup": {
+      "post": {
+        "description": "정리를 큐에 넣는다. 파일이 많으면 오래 걸리므로 요청을 붙잡지 않는다.",
+        "operationId": "cleanup_api_maintenance_cleanup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupQueuedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cleanup",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/maintenance/storage": {
+      "get": {
+        "description": "무엇이 얼마나 있고 무엇을 치울 수 있는지. 읽기만 한다.\n\n폴더를 훑는 정도라 요청 안에서 끝난다 — 지우는 것만 워커로 넘긴다.",
+        "operationId": "storage_api_maintenance_storage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "retention_days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Retention Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Storage",
+        "tags": [
+          "tests"
         ]
       }
     },

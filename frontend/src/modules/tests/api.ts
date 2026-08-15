@@ -10,6 +10,8 @@ export type TestRun = components['schemas']['TestRunOut']
 export type TestRunDetail = components['schemas']['TestRunDetailOut']
 export type TestRunPage = components['schemas']['Page_TestRunOut_']
 export type CurvePoints = components['schemas']['CurvePointsOut']
+export type StorageReport = components['schemas']['StorageReportOut']
+type CleanupRequest = components['schemas']['CleanupRequest']
 
 export interface RunQuery extends Record<string, unknown> {
   /** 부서 slug. 좁히기만 한다 — 권한을 넓히지 않는다. */
@@ -44,6 +46,15 @@ export interface UploadInput {
 
 export const testsApi = {
   types: () => api.get<TestType[]>('/test-types'),
+
+  /** 저장소 현황. 폴더를 훑는 정도라 요청 안에서 끝난다. */
+  storage: () => api.get<StorageReport>('/maintenance/storage'),
+  /** 정리는 워커가 한다 — 파일이 많으면 오래 걸린다. */
+  cleanup: (payload: CleanupRequest) =>
+    api.post<{ status: string; message: string; dry_run: boolean }>(
+      '/maintenance/cleanup',
+      payload
+    ),
 
   runs: (query: RunQuery = {}) => api.get<TestRunPage>(`/test-runs${search(query)}`),
   run: (id: string) => api.get<TestRunDetail>(`/test-runs/${id}`),

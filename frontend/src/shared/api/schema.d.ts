@@ -307,6 +307,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/maintenance/cleanup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cleanup
+         * @description 정리를 큐에 넣는다. 파일이 많으면 오래 걸리므로 요청을 붙잡지 않는다.
+         */
+        post: operations["cleanup_api_maintenance_cleanup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/maintenance/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Storage
+         * @description 무엇이 얼마나 있고 무엇을 치울 수 있는지. 읽기만 한다.
+         *
+         *     폴더를 훑는 정도라 요청 안에서 끝난다 — 지우는 것만 워커로 넘긴다.
+         */
+        get: operations["storage_api_maintenance_storage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials": {
         parameters: {
             query?: never;
@@ -938,6 +980,25 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** CleanupQueuedOut */
+        CleanupQueuedOut: {
+            /** Dry Run */
+            dry_run: boolean;
+            /** Message */
+            message: string;
+            /** Status */
+            status: string;
+        };
+        /** CleanupRequest */
+        CleanupRequest: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Retention Days */
+            retention_days?: number | null;
+        };
         /**
          * CreateAccountRequest
          * @description 관리자가 직접 계정을 만들 때. 승인 절차 없이 바로 활성이다.
@@ -986,10 +1047,38 @@ export interface components {
             /** Transferred */
             transferred: components["schemas"]["ReferenceOut"][];
         };
+        /** ExpiredOut */
+        ExpiredOut: {
+            /** Bytes */
+            bytes: number;
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
+            /** Path */
+            path: string;
+            /** Record Name */
+            record_name: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IncompleteOut */
+        IncompleteOut: {
+            /** Age Hours */
+            age_hours: number;
+            /** Bytes */
+            bytes: number;
+            /** Path */
+            path: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1536,6 +1625,37 @@ export interface components {
             thickness?: number | null;
             /** Width */
             width?: number | null;
+        };
+        /** StorageItemOut */
+        StorageItemOut: {
+            /** Bytes */
+            bytes: number;
+            /** Path */
+            path: string;
+        };
+        /**
+         * StorageReportOut
+         * @description 치울 것이 **세 종류**다. 하나만 다루면 나머지가 영원히 쌓인다.
+         */
+        StorageReportOut: {
+            /** Expired */
+            expired: components["schemas"]["ExpiredOut"][];
+            /** Incomplete */
+            incomplete: components["schemas"]["IncompleteOut"][];
+            /** Live Bytes */
+            live_bytes: number;
+            /** Live Count */
+            live_count: number;
+            /** Orphans */
+            orphans: components["schemas"]["StorageItemOut"][];
+            /** Reclaimable Bytes */
+            reclaimable_bytes: number;
+            /** Retention Days */
+            retention_days: number;
+            /** Root */
+            root: string;
+            /** Total Bytes */
+            total_bytes: number;
         };
         /**
          * TemporaryPasswordResponse
@@ -2464,6 +2584,70 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    cleanup_api_maintenance_cleanup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CleanupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupQueuedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    storage_api_maintenance_storage_get: {
+        parameters: {
+            query?: {
+                retention_days?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageReportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
