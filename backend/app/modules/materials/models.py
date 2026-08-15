@@ -1,0 +1,243 @@
+"""재료 계층 — 재료 → 시료 → 시편.
+
+**참조는 UUID, 이름은 사람용.** 기존 앱(MaterialAppVer2)은 조합한 문자열이 곧
+키였다. 그래서 Grade 오타 하나를 고치면 그 재료를 가리키던 하위 데이터가 전부
+끊어졌고, 값이 하나 비면 이름 칸이 사라져 다른 재료와 같은 이름이 될 수 있었다.
+여기서는 `record_name` 이 표시와 중복 방지만 맡으므로, 언제든 고쳐도 안전하다.
+
+계층을 나눈 기준:
+
+- **재료**는 규격이다. Grade·Details·스펙두께까지. 0.45t 와 1.0t 는 실무에서
+  별도 자재로 구매·관리되고 압연 이력이 달라, 섞으면 편차 통계가 오염된다.
+- **시료**는 실물 한 덩이다. 로트·벤더·생산일이 여기 붙는다. 시료 편차 분석의
+  단위이기도 하다.
+- **시편**은 시료에서 잘라낸 조각이다. **방향(MD/TD/DD)이 여기 있다** — 방향은
+  자를 때 정해지는 시편의 속성이지 재료의 속성이 아니다. 재료에 두면 한 재료의
+  r값이나 Hill48 파라미터를 구할 때 서로 다른 재료 셋을 묶어야 한다.
+
+수치는 전부 **SI 기본단위**로 저장한다(m·kg·s·Pa·K). 사람이 입력할 때 쓴 단위는
+`input_units` 에 남겨 역추적할 수 있게 한다 — 컬럼마다 단위 컬럼을 두면 스키마가
+두 배가 되므로 한 칸에 모은다.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime
+
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.database import Base
+
+#: 시편 방향. 등방성 재료(수지 등)는 `NA`.
+ORIENTATIONS = ("MD", "TD", "DD", "NA")
+
+
+class Material(Base):
+    """재료 규격.
+
+    `owner_workspace_id` 가 NULL 이면 **전역 재료**다. 승격은 이 컬럼을 NULL 로
+    바꾸는 UPDATE 한 줄이고, 하위(시료·시편·시험)는 항상 워크스페이스 소속이라
+    손댈 것이 없다. 전역 재료 밑에 여러 부서의 시료가 공존해야 하기 때문이다.
+
+    이 컬럼을 처음부터 nullable 로 두는 이유가 전부 여기 있다. 나중에 NOT NULL
+    에서 바꾸려면 마이그레이션에 더해 모든 조회 코드를 고쳐야 한다.
+    """
+
+    __tablename__ = "materials"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_workspace_id",
+            "record_name",
+            name="uq_materials_scope_record_name",
+            # PG15+. 없으면 NULL != NULL 이라 **전역 재료끼리 같은 이름이 허용된다**
+            # — 유니크 제약을 두는 이유가 바로 사라진다. 서버는 17.5.
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True, nullable=True
+    )
+    """NULL = 전역. 삭제는 막는다(NO ACTION) — 부서를 지운다고 시험 데이터가
+    사라지면 안 된다. 어떤 것이 걸려 있는지는 `shared/dependents.py` 가 알려준다."""
+
+    record_name: Mapped[str] = mapped_column(String(200), index=True)
+    """`SECC_MDOI_1.0`. `matcore.naming.material_name` 이 만든다. 사람용이다."""
+    alias: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    """'도어 이너 강판' 처럼 부르기 쉬운 이름. 유니크가 아니고 언제든 바뀐다.
+
+    record_name 에 자유 문자열을 덧붙이지 않고 따로 두는 이유: 덧붙일 수 있으면
+    `SECC_MDOI_1.0` 과 `SECC_MDOI_1.0_재시험용` 이 둘 다 통과해 같은 재료가 두 개
+    생긴다. 유니크 제약이 무력화된다."""
+
+    family: Mapped[str] = mapped_column(String(50))
+    category: Mapped[str] = mapped_column(String(50))
+    grade: Mapped[str] = mapped_column(String(100))
+    details: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    """같은 규격인데 구분해야 할 때 쓴다(개발 A안/B안 등). 이름의 한 칸을
+    차지하므로, 비어 있으면 `-` 가 들어가고 칸 수는 유지된다."""
+    spec_thickness_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """SI(m). 입력은 mm 로 받는다."""
+
+    input_units: Mapped[dict[str, str]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legacy_id: Mapped[str | None] = mapped_column(String(200), index=True, nullable=True)
+    """기존 앱의 `Technical Data ID`. '이 데이터가 예전 앱의 어느 레코드였나'를
+    나중에 답할 수 있게 보관만 한다."""
+
+    registered_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    """소유 컬럼 이름 규약(개발계획 Phase 1-3). 이 이름을 쓰면 계정 삭제 시
+    자료 승계가 자동으로 편입된다."""
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=True
+    )
+
+
+class Sample(Base):
+    """실물 한 덩이. 시료 편차 분석의 단위.
+
+    이름은 **일련번호**로 짓고 로트번호는 속성으로 둔다. 시료를 먼저 등록하고
+    로트를 나중에 확인하는 일이 흔한데, 로트가 이름에 들어가 있으면 그때 이름이
+    바뀐다. 로트를 관리하지 않는 재료도 있어서, 이름을 로트에 맡기면 그쪽은
+    이름을 지을 수 없다.
+    """
+
+    __tablename__ = "samples"
+    __table_args__ = (
+        # 재료 안에서 채번한다. 워크스페이스별로 채번하면 전역 재료 밑에서
+        # 서로 다른 부서의 시료가 같은 이름을 갖는다.
+        UniqueConstraint("material_id", "seq_no", name="uq_samples_material_seq_no"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("materials.id"), index=True
+    )
+
+    seq_no: Mapped[int] = mapped_column(Integer)
+    record_name: Mapped[str] = mapped_column(String(300), index=True)
+    alias: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    lot_no: Mapped[str | None] = mapped_column(String(100), index=True, nullable=True)
+    """관리하는 팀도, 안 하는 팀도 있다. 있으면 표시·검색·통계 축으로 쓴다.
+    한 로트에서 시료를 여러 개 뜨는 것이 정상이므로 유니크가 아니다."""
+
+    manufacturer: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    distributor: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    primary_vendor: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sales_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    applied_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    applied_part: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """SI(kg/m³). 기존 앱은 `tonne/mm³` 로 저장했다 — Abaqus 단위계다. 저장을
+    특정 솔버에 맞추면 다른 솔버를 붙일 때 어디서 변환됐는지 추적이 안 된다."""
+    poisson_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """기존 앱은 이 값을 **시료 식별자에 넣었다**(`SampleType_{Poisson}_...`).
+    측정·가정한 물성값이 정체성이 되면, 0.3 을 0.28 로 정정하는 순간 시료 ID가
+    바뀌어 하위 시험이 고아가 된다. 여기서는 그냥 속성이다."""
+
+    input_units: Mapped[dict[str, str]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legacy_id: Mapped[str | None] = mapped_column(String(200), index=True, nullable=True)
+
+    registered_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=True
+    )
+
+
+class Specimen(Base):
+    """시료에서 잘라낸 조각. 방향이 여기서 정해진다.
+
+    실측 치수(두께·폭·게이지길이)를 시편에 두는 이유: 시험 조건이 아니라 시편의
+    물리적 성질이다. 같은 시편으로 두 번 시험하면 치수는 같다.
+    """
+
+    __tablename__ = "specimens"
+    __table_args__ = (
+        UniqueConstraint(
+            "sample_id", "orientation", "seq_no", name="uq_specimens_sample_dir_seq_no"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True
+    )
+    sample_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("samples.id"), index=True
+    )
+
+    seq_no: Mapped[int] = mapped_column(Integer)
+    orientation: Mapped[str] = mapped_column(String(10), index=True)
+    """MD/TD/DD/NA. 이름의 한 칸이므로 비울 수 없다 — 모르면 `NA`."""
+    record_name: Mapped[str] = mapped_column(String(300), index=True)
+
+    thickness_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    width_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gauge_length_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    input_units: Mapped[dict[str, str]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    registered_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=True
+    )

@@ -29,6 +29,7 @@ from app.database import SessionLocal  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
 from app.modules.auth import security  # noqa: E402
 from app.modules.notifications import services as notifications  # noqa: E402
+from app.modules.tests.definitions import ensure_builtin_test_types  # noqa: E402
 from app.modules.workspaces.models import Workspace, WorkspaceMember  # noqa: E402
 
 DEFAULT_EMAIL = "admin@matnexus.local"
@@ -61,6 +62,12 @@ def main() -> None:
             print(f"부서 생성: {workspace.slug} ({workspace.name})")
         else:
             print(f"부서 이미 있음: {workspace.slug}")
+
+        # 시험 종류는 데이터라서 마이그레이션이 만들어 주지 않는다. 없으면 업로드
+        # 화면에 고를 것이 하나도 없다.
+        created_types = ensure_builtin_test_types(db)
+        if created_types:
+            print(f"시험 종류 생성: {', '.join(created_types)}")
 
         email = args.email.lower()
         user = db.scalar(select(User).where(User.email == email))

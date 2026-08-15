@@ -12,11 +12,20 @@ from app.jobs.models import Job
 from app.modules.accounts.models import User
 from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.notices.models import Notice, NoticeRead
 from app.modules.notifications.models import (
     Notification,
     NotificationRule,
     NotificationRuleState,
+)
+from app.modules.tests.models import (
+    Curve,
+    TestChannel,
+    TestConditionField,
+    TestRun,
+    TestSummary,
+    TestType,
 )
 from app.modules.voc.models import VocItem
 from app.modules.workspaces.models import Workspace, WorkspaceMember
@@ -24,7 +33,9 @@ from app.modules.workspaces.models import Workspace, WorkspaceMember
 __all__ = [
     "AccessLog",
     "Base",
+    "Curve",
     "Job",
+    "Material",
     "Notice",
     "NoticeRead",
     "Notification",
@@ -32,6 +43,13 @@ __all__ = [
     "NotificationRuleState",
     "PersonalAccessToken",
     "RefreshToken",
+    "Sample",
+    "Specimen",
+    "TestChannel",
+    "TestConditionField",
+    "TestRun",
+    "TestSummary",
+    "TestType",
     "User",
     "VocItem",
     "Workspace",
