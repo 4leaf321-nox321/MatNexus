@@ -253,3 +253,108 @@ class DefinitionLocksOut(BaseModel):
     run_count: int
     locked: bool
     reason: str | None
+
+
+# --- 형식 프로파일 ----------------------------------------------------------
+#
+# **장비가 늘 때마다 파서를 짜지 않으려고 만든 길이다.** 구조는 코드가 자동으로
+# 읽고, "이 열이 무엇인가" 만 사람이 한 번 정해 저장한다. 그 저장물이 프로파일이다.
+#
+# 결정적인 점: **운영 서버에서 실제 파일을 보며 만든다.** 현장 파일이 개발자에게
+# 갈 필요가 없다.
+
+
+class TablePreviewOut(BaseModel):
+    index: int
+    name: str | None
+    header: list[str]
+    units: list[str]
+    row_count: int
+    column_count: int
+    first_line: int
+    sample_rows: list[list[str]]
+    """앞 몇 행. **사람이 눈으로 확인하는 근거다.**
+
+    자동 감지는 인코딩이 이중으로 깨진 파일도 '성공' 시킨다(실측). 숫자는 멀쩡하고
+    글자만 깨지므로, 표를 직접 보지 않으면 알 수 없다."""
+
+
+class StructurePreviewOut(BaseModel):
+    """파일을 저장하지 않고 구조만 읽어 본 결과."""
+
+    filename: str
+    encoding: str
+    delimiter: str
+    line_count: int
+    meta: list[tuple[str, str]]
+    tables: list[TablePreviewOut]
+    warnings: list[str]
+    """**추측한 것**을 그대로 드러낸다. 인코딩을 UTF-8 이 아닌 것으로 골랐다면
+    그 사실이 여기 있다."""
+    matched_profile: str | None
+    """이미 있는 프로파일이 이 파일을 잡는가. 있으면 새로 만들 필요가 없다."""
+
+
+class FormatProfileOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    label: str
+    description: str | None
+    test_type_key: str
+    test_type_label: str
+    definition: dict[str, Any]
+    priority: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class FormatProfileSaveRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    description: str | None = None
+    test_type_key: str = Field(min_length=1)
+    definition: dict[str, Any]
+    priority: int = 0
+    is_active: bool = True
+
+
+class FormatProfileCreateRequest(FormatProfileSaveRequest):
+    key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+
+
+class TriedChannelOut(BaseModel):
+    key: str
+    label: str | None
+    source_unit: str | None
+    """파일에 적힌 단위. **환산이 맞았는지 사람이 판단할 유일한 근거다** —
+    `°C → K` 는 값이 크게 바뀌므로, 원 단위가 안 보이면 틀렸는지 알 수 없다."""
+    si_unit: str
+    first: float | None
+    last: float | None
+
+
+class TriedCurveOut(BaseModel):
+    key: str
+    label: str | None
+    row_count: int
+    channels: list[TriedChannelOut]
+
+
+class TriedSummaryOut(BaseModel):
+    key: str
+    label: str | None
+    value: float | None
+    text: str | None
+    si_unit: str | None
+
+
+class ProfileTryOut(BaseModel):
+    """프로파일을 저장하기 전에 그 파일에 적용해 본 결과.
+
+    저장하고 나서 틀린 것을 아는 것과, 저장 전에 아는 것은 다르다.
+    """
+
+    curves: list[TriedCurveOut]
+    summary: list[TriedSummaryOut]
+    metadata: dict[str, str]
+    warnings: list[str]

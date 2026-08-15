@@ -16,6 +16,25 @@ type TestTypeSave = components['schemas']['TestTypeSaveRequest']
 type TestTypeCreate = components['schemas']['TestTypeCreateRequest']
 type CleanupRequest = components['schemas']['CleanupRequest']
 
+export type FormatProfile = components['schemas']['FormatProfileOut']
+export type StructurePreview = components['schemas']['StructurePreviewOut']
+export type TablePreview = components['schemas']['TablePreviewOut']
+export type ProfileTry = components['schemas']['ProfileTryOut']
+type FormatSave = components['schemas']['FormatProfileSaveRequest']
+
+/** 프로파일 규칙(v1). 서버는 `dict` 로 받으므로 생성 타입이 안 나온다 —
+ *  `matcore/readers/profile.py` 의 문서화된 모양과 짝이다. */
+export interface ProfileDefinition {
+  reader?: { encoding?: string | null; delimiter?: string | null }
+  /** 지문. 이게 없으면 서버가 저장을 거절한다 — 모든 파일에 맞아 버린다. */
+  match: { extensions?: string[]; header_any?: string[]; meta_any?: string[] }
+  tables?: { mode?: 'first' | 'all'; include?: string }
+  columns: Record<string, { channel: string; unit?: string }>
+  summary?: Record<string, { key: string; unit?: string }>
+  specimen?: Record<string, string>
+  metadata?: string[]
+}
+
 export interface RunQuery extends Record<string, unknown> {
   /** 부서 slug. 좁히기만 한다 — 권한을 넓히지 않는다. */
   workspace?: string
@@ -57,6 +76,30 @@ export const testsApi = {
   updateType: (key: string, payload: TestTypeSave) =>
     api.put<TestType>(`/test-types/${key}`, payload),
   removeType: (key: string) => api.delete<void>(`/test-types/${key}`),
+
+  /** 형식 프로파일 — **장비마다 파서를 짜지 않으려고 만든 길**(ADR 0005). */
+  formats: (testType?: string) => api.get<FormatProfile[]>(`/formats${search({ test_type: testType })}`),
+
+  /** 파일을 **저장하지 않고** 구조만 읽는다. 아직 어느 시편의 것인지도 모른다. */
+  previewFormat: (file: File) => {
+    const form = new FormData()
+    form.set('file', file)
+    return api.postForm<StructurePreview>('/formats/preview', form)
+  },
+
+  /** 저장하기 **전에** 적용해 본다. 저장하고 나서 틀린 것을 아는 것과는 다르다. */
+  tryFormat: (file: File, definition: ProfileDefinition) => {
+    const form = new FormData()
+    form.set('definition', JSON.stringify(definition))
+    form.set('file', file)
+    return api.postForm<ProfileTry>('/formats/try', form)
+  },
+
+  createFormat: (payload: FormatSave & { key: string }) =>
+    api.post<FormatProfile>('/formats', payload),
+  updateFormat: (key: string, payload: FormatSave) =>
+    api.put<FormatProfile>(`/formats/${key}`, payload),
+  removeFormat: (key: string) => api.delete<void>(`/formats/${key}`),
 
   /** 저장소 현황. 폴더를 훑는 정도라 요청 안에서 끝난다. */
   storage: () => api.get<StorageReport>('/maintenance/storage'),

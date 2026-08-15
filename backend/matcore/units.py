@@ -39,12 +39,15 @@ SI_UNITS = {
     "length": "m",
     "force": "N",
     "stress": "Pa",
-    "strain": "1",
+    "strain": "1",  # 무차원의 별칭. 화면·정의에서 뜻을 드러내려고 남긴다.
     "strain_rate": "1/s",
     "velocity": "m/s",
     "time": "s",
     "temperature": "K",
     "frequency": "Hz",
+    "angular_frequency": "rad/s",
+    "inverse_temperature": "1/K",
+    "compliance": "1/Pa",
     "mass": "kg",
     "density": "kg/m3",
     "angle": "rad",
@@ -66,9 +69,13 @@ UNITS: dict[str, Unit] = {
         _u("kPa", "stress", "1000"),
         _u("MPa", "stress", "1000000"),
         _u("GPa", "stress", "1000000000"),
-        _u("1", "strain", "1"),
-        _u("%", "strain", "0.01"),
-        _u("mm/mm", "strain", "1"),
+        # **변형률은 물리적으로 무차원이다.** `1` 을 strain 차원에 두면 tan δ 나
+        # 비율 같은 다른 무차원 값과 같은 단위를 쓰면서 차원만 달라져, 정의
+        # 검증이 서로를 거절한다. 실제로 DMA 정의를 만들다 걸렸다.
+        # 이름으로 구분하는 것은 의미(semantics)지 차원이 아니다.
+        _u("1", "dimensionless", "1"),
+        _u("%", "dimensionless", "0.01"),
+        _u("mm/mm", "dimensionless", "1"),
         _u("1/s", "strain_rate", "1"),
         _u("1/min", "strain_rate", "0.0166666666666667"),
         _u("m/s", "velocity", "1"),
@@ -82,6 +89,11 @@ UNITS: dict[str, Unit] = {
         _u("degC", "temperature", "1", "273.15"),
         _u("Hz", "frequency", "1"),
         _u("kHz", "frequency", "1000"),
+        # **각주파수는 주파수로 환산하지 않는다.** 실측(TA DMA850): 한 파일에
+        # 각주파수 126.289 rad/s 와 주파수 20.0 Hz 가 함께 있는데 126.289/2π =
+        # 20.1 로 정확히 안 맞는다. 장비가 각각 실측한 별개 값이므로 같은 것의
+        # 다른 표기가 아니다 — 환산하면 없는 관계를 만들어 낸다.
+        _u("rad/s", "angular_frequency", "1"),
         _u("kg", "mass", "1"),
         _u("g", "mass", "0.001"),
         _u("tonne", "mass", "1000"),
@@ -89,6 +101,9 @@ UNITS: dict[str, Unit] = {
         _u("g/cm3", "density", "1000"),
         # 기존 앱이 쓰던 단위. 흡수 경로에서 그대로 들어온다.
         _u("tonne/mm3", "density", "1000000000000"),
+        _u("1/K", "inverse_temperature", "1"),
+        _u("1/Pa", "compliance", "1"),
+        _u("1/MPa", "compliance", "0.000001"),
         _u("rad", "angle", "1"),
         _u("deg", "angle", "0.0174532925199433"),
     )
@@ -122,6 +137,25 @@ def from_si(value: float | Decimal | str, symbol: str) -> float:
     return float((Decimal(str(value)) - unit.offset) / unit.factor)
 
 
+#: 이름은 다르지만 같은 차원. 변형률·무차원은 물리적으로 하나다 —
+#: 구분해 부르는 것은 사람이 뜻을 알아보기 위해서지 단위가 다르기 때문이 아니다.
+DIMENSION_ALIASES = {"strain": "dimensionless"}
+
+
+def normalize_dimension(dimension: str) -> str:
+    return DIMENSION_ALIASES.get(dimension, dimension)
+
+
+def same_dimension(left: str, right: str) -> bool:
+    """두 차원이 실질적으로 같은가. 정의 검증과 조건 환산이 함께 쓴다."""
+    return normalize_dimension(left) == normalize_dimension(right)
+
+
 def units_for(dimension: str) -> list[str]:
     """그 차원에서 고를 수 있는 단위. 화면의 단위 선택기가 쓴다."""
-    return [symbol for symbol, unit in UNITS.items() if unit.dimension == dimension]
+    wanted = normalize_dimension(dimension)
+    return [
+        symbol
+        for symbol, unit in UNITS.items()
+        if normalize_dimension(unit.dimension) == wanted
+    ]

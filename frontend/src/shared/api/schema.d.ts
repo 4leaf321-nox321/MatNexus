@@ -290,6 +290,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/formats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Profiles */
+        get: operations["list_profiles_api_formats_get"];
+        put?: never;
+        /** Create Profile */
+        post: operations["create_profile_api_formats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formats/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description 파일을 **저장하지 않고** 구조만 읽어 본다.
+         *
+         *     새 장비 파일이 왔을 때 가장 먼저 하는 일이다. 저장하지 않는 이유: 아직 이
+         *     파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이
+         *     쌓일 이유가 없다.
+         */
+        post: operations["preview_api_formats_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formats/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try Profile
+         * @description 저장하기 **전에** 이 프로파일로 그 파일을 읽어 본다.
+         *
+         *     저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 프로파일이
+         *     잘못되면 곡선이 조용히 이상해지는데, 그것은 나중에 찾기가 매우 어렵다.
+         */
+        post: operations["try_profile_api_formats_try_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formats/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Profile
+         * @description 프로파일을 고친다. **이미 읽은 데이터는 안 바뀐다.**
+         *
+         *     시험 종류 정의와 달리 여기는 잠그지 않는다 — 프로파일이 틀렸다는 것을 나중에
+         *     알게 되는 것이 정상이고, 그때 고쳐서 **원본으로 다시 읽으면** 되기 때문이다.
+         *     원본을 그대로 보관하는 두 번째 이유가 이것이다.
+         */
+        put: operations["update_profile_api_formats__key__put"];
+        post?: never;
+        /** Delete Profile */
+        delete: operations["delete_profile_api_formats__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -990,6 +1080,21 @@ export interface components {
             /** Workspace Slug */
             workspace_slug?: string | null;
         };
+        /** Body_preview_api_formats_preview_post */
+        Body_preview_api_formats_preview_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_try_profile_api_formats_try_post */
+        Body_try_profile_api_formats_try_post: {
+            /**
+             * Definition
+             * @description 프로파일 JSON
+             */
+            definition: string;
+            /** File */
+            file: string;
+        };
         /** Body_upload_test_run_api_test_runs_post */
         Body_upload_test_run_api_test_runs_post: {
             /**
@@ -1163,6 +1268,90 @@ export interface components {
              * Format: uuid
              */
             run_id: string;
+        };
+        /** FormatProfileCreateRequest */
+        FormatProfileCreateRequest: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /** FormatProfileOut */
+        FormatProfileOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Priority */
+            priority: number;
+            /** Test Type Key */
+            test_type_key: string;
+            /** Test Type Label */
+            test_type_label: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** FormatProfileSaveRequest */
+        FormatProfileSaveRequest: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Label */
+            label: string;
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            /** Test Type Key */
+            test_type_key: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1499,6 +1688,24 @@ export interface components {
             revoked_at: string | null;
         };
         /**
+         * ProfileTryOut
+         * @description 프로파일을 저장하기 전에 그 파일에 적용해 본 결과.
+         *
+         *     저장하고 나서 틀린 것을 아는 것과, 저장 전에 아는 것은 다르다.
+         */
+        ProfileTryOut: {
+            /** Curves */
+            curves: components["schemas"]["TriedCurveOut"][];
+            /** Metadata */
+            metadata: {
+                [key: string]: string;
+            };
+            /** Summary */
+            summary: components["schemas"]["TriedSummaryOut"][];
+            /** Warnings */
+            warnings: string[];
+        };
+        /**
          * ReferenceOut
          * @description 이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다.
          */
@@ -1770,6 +1977,50 @@ export interface components {
             root: string;
             /** Total Bytes */
             total_bytes: number;
+        };
+        /**
+         * StructurePreviewOut
+         * @description 파일을 저장하지 않고 구조만 읽어 본 결과.
+         */
+        StructurePreviewOut: {
+            /** Delimiter */
+            delimiter: string;
+            /** Encoding */
+            encoding: string;
+            /** Filename */
+            filename: string;
+            /** Line Count */
+            line_count: number;
+            /** Matched Profile */
+            matched_profile: string | null;
+            /** Meta */
+            meta: [
+                string,
+                string
+            ][];
+            /** Tables */
+            tables: components["schemas"]["TablePreviewOut"][];
+            /** Warnings */
+            warnings: string[];
+        };
+        /** TablePreviewOut */
+        TablePreviewOut: {
+            /** Column Count */
+            column_count: number;
+            /** First Line */
+            first_line: number;
+            /** Header */
+            header: string[];
+            /** Index */
+            index: number;
+            /** Name */
+            name: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Sample Rows */
+            sample_rows: string[][];
+            /** Units */
+            units: string[];
         };
         /**
          * TemporaryPasswordResponse
@@ -2060,6 +2311,45 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+        };
+        /** TriedChannelOut */
+        TriedChannelOut: {
+            /** First */
+            first: number | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string | null;
+            /** Last */
+            last: number | null;
+            /** Si Unit */
+            si_unit: string;
+            /** Source Unit */
+            source_unit: string | null;
+        };
+        /** TriedCurveOut */
+        TriedCurveOut: {
+            /** Channels */
+            channels: components["schemas"]["TriedChannelOut"][];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string | null;
+            /** Row Count */
+            row_count: number;
+        };
+        /** TriedSummaryOut */
+        TriedSummaryOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string | null;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Text */
+            text: string | null;
+            /** Value */
+            value: number | null;
         };
         /** UnreadCountOut */
         UnreadCountOut: {
@@ -2728,6 +3018,200 @@ export interface operations {
             header?: never;
             path: {
                 pat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_profiles_api_formats_get: {
+        parameters: {
+            query?: {
+                test_type?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormatProfileOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_profile_api_formats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormatProfileCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormatProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_formats_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_api_formats_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StructurePreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    try_profile_api_formats_try_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_try_profile_api_formats_try_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileTryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_profile_api_formats__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormatProfileSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormatProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_profile_api_formats__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
             };
             cookie?: never;
         };

@@ -1,0 +1,31 @@
+rundate,2024-07-17
+Instrument name,DMA850-00913
+Instrument location,SAMSUNG
+Operator,박용진
+Sample name,StrainSweep SECC 1.00t TD AreaB Try1
+Geometry name,3 Point Bending Clamp
+Procedure name,DMA Conditioning Preload
+,DMA Conditioning Temperature
+,DMA Oscillatory Strain Sweep
+proceduresegments,DMA Oscillatory Strain Sweep
+Length,50.0 mm
+Width,4.938 mm
+Thickness,0.989 mm
+Test1,1
+Test2,2
+Test3,3
+
+[step]
+Strain Sweep - 2
+Angular frequency,Step time,Temperature,Oscillation strain,Oscillation stress,Tan(delta),Storage modulus,Loss modulus
+rad/s,s,°C,%,MPa,,MPa,MPa
+6.28319,11.6220,25.00,9.99711e-4,2.01190,,201242,1577.45
+6.28319,24.6220,25.05,2.00024e-3,4.05067,,202502,1651.03
+6.28319,37.6220,25.13,2.99966e-3,6.10290,,203445,1756.78
+6.28319,50.6220,25.04,3.99981e-3,8.16635,,204160,1927.28
+6.28319,63.6220,25.04,4.99968e-3,10.2262,,204527,2064.05
+6.28319,76.6220,24.99,5.99975e-3,12.2832,,204717,2195.06
+6.28319,89.6220,24.99,6.99992e-3,14.3246,,204627,2276.82
+6.28319,102.622,25.07,8.00001e-3,16.3611,,204499,2372.50
+6.28319,115.622,25.01,9.00012e-3,18.3952,,204374,2441.97
+6.28319,128.622,24.99,9.99986e-3,20.4247,,204234,2511.83

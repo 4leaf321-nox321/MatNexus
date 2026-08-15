@@ -313,3 +313,58 @@ class TestSummary(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class FormatProfile(Base):
+    """장비 파일을 **어떻게 읽을지**를 담은 규칙. 코드가 아니라 데이터다.
+
+    이 테이블이 있는 이유가 이 프로젝트의 확장성 전부다. 장비가 늘 때마다 파서를
+    짜면 개발 비용도 문제지만, 더 큰 것은 **현장 파일이 개발자에게 오지 않는다**는
+    점이다. 폐쇄망이면 더 그렇다 — 파일을 받아야 파서를 만들고, 만들면 배포해야
+    하고, 그 왕복 동안 데이터는 안 들어온다.
+
+    구조는 `matcore/readers/tabular` 가 자동으로 읽는다(인코딩·구분자·표·헤더·
+    단위). 자동으로 안 되는 것은 **"이 열이 무엇인가"** 하나뿐이고, 그것을 사람이
+    운영 서버에서 실제 파일을 보며 한 번 정해 여기에 저장한다.
+
+    `definition` 의 모양은 `matcore/readers/profile` 이 정의한다. JSONB 로 두는
+    이유: 규칙의 항목이 장비를 겪으면서 늘어난다. 컬럼으로 쪼개면 새 규칙이
+    필요할 때마다 마이그레이션을 해야 하는데, 그러면 배포 없이 대응한다는 목적이
+    무너진다.
+    """
+
+    __tablename__ = "format_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    key: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    test_type_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("test_types.id"), index=True
+    )
+    """어느 시험 종류로 읽는가. 매핑의 목적지가 그 종류의 채널이다."""
+
+    definition: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """지문·표 선택·열 매핑·요약값·시편 정보. `readers/profile` 참조."""
+
+    priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """여러 프로파일이 한 파일에 맞을 때 높은 것이 이긴다.
+
+    실제로 생긴다 — 같은 장비의 형식이 조금 달라져 프로파일을 하나 더 만들면,
+    둘 다 `.csv` 에 `Angular frequency` 를 지문으로 갖는다."""
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

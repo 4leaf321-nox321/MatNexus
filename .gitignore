@@ -28,4 +28,5 @@ backend/logs/
 # 로컬 도구
 .idea/
 .vscode/
+.claude/
 *.local

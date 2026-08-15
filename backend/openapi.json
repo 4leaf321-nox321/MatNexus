@@ -125,6 +125,40 @@
         "title": "ApproveRequest",
         "type": "object"
       },
+      "Body_preview_api_formats_preview_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_api_formats_preview_post",
+        "type": "object"
+      },
+      "Body_try_profile_api_formats_try_post": {
+        "properties": {
+          "definition": {
+            "description": "프로파일 JSON",
+            "title": "Definition",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition",
+          "file"
+        ],
+        "title": "Body_try_profile_api_formats_try_post",
+        "type": "object"
+      },
       "Body_upload_test_run_api_test_runs_post": {
         "properties": {
           "condition_units": {
@@ -553,6 +587,184 @@
           "deleted_at"
         ],
         "title": "ExpiredOut",
+        "type": "object"
+      },
+      "FormatProfileCreateRequest": {
+        "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "test_type_key": {
+            "minLength": 1,
+            "title": "Test Type Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "test_type_key",
+          "definition",
+          "key"
+        ],
+        "title": "FormatProfileCreateRequest",
+        "type": "object"
+      },
+      "FormatProfileOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "test_type_key": {
+            "title": "Test Type Key",
+            "type": "string"
+          },
+          "test_type_label": {
+            "title": "Test Type Label",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "label",
+          "description",
+          "test_type_key",
+          "test_type_label",
+          "definition",
+          "priority",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FormatProfileOut",
+        "type": "object"
+      },
+      "FormatProfileSaveRequest": {
+        "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "test_type_key": {
+            "minLength": 1,
+            "title": "Test Type Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "test_type_key",
+          "definition"
+        ],
+        "title": "FormatProfileSaveRequest",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1549,6 +1761,47 @@
         "title": "PatOut",
         "type": "object"
       },
+      "ProfileTryOut": {
+        "description": "프로파일을 저장하기 전에 그 파일에 적용해 본 결과.\n\n저장하고 나서 틀린 것을 아는 것과, 저장 전에 아는 것은 다르다.",
+        "properties": {
+          "curves": {
+            "items": {
+              "$ref": "#/components/schemas/TriedCurveOut"
+            },
+            "title": "Curves",
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "summary": {
+            "items": {
+              "$ref": "#/components/schemas/TriedSummaryOut"
+            },
+            "title": "Summary",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "curves",
+          "summary",
+          "metadata",
+          "warnings"
+        ],
+        "title": "ProfileTryOut",
+        "type": "object"
+      },
       "ReferenceOut": {
         "description": "이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다.",
         "properties": {
@@ -2521,6 +2774,148 @@
         "title": "StorageReportOut",
         "type": "object"
       },
+      "StructurePreviewOut": {
+        "description": "파일을 저장하지 않고 구조만 읽어 본 결과.",
+        "properties": {
+          "delimiter": {
+            "title": "Delimiter",
+            "type": "string"
+          },
+          "encoding": {
+            "title": "Encoding",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "line_count": {
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "matched_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Profile"
+          },
+          "meta": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Meta",
+            "type": "array"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/TablePreviewOut"
+            },
+            "title": "Tables",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "filename",
+          "encoding",
+          "delimiter",
+          "line_count",
+          "meta",
+          "tables",
+          "warnings",
+          "matched_profile"
+        ],
+        "title": "StructurePreviewOut",
+        "type": "object"
+      },
+      "TablePreviewOut": {
+        "properties": {
+          "column_count": {
+            "title": "Column Count",
+            "type": "integer"
+          },
+          "first_line": {
+            "title": "First Line",
+            "type": "integer"
+          },
+          "header": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Header",
+            "type": "array"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "sample_rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Sample Rows",
+            "type": "array"
+          },
+          "units": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "index",
+          "name",
+          "header",
+          "units",
+          "row_count",
+          "column_count",
+          "first_line",
+          "sample_rows"
+        ],
+        "title": "TablePreviewOut",
+        "type": "object"
+      },
       "TemporaryPasswordResponse": {
         "description": "임시 비밀번호는 이 응답에서 한 번만 나온다.\n\nSMTP 가 없어 메일로 보낼 수 없으므로, 관리자가 화면에서 읽어 구두·메신저로\n전달한다. 받는 사람은 첫 로그인 때 변경이 강제된다.",
         "properties": {
@@ -3458,6 +3853,171 @@
           "channels"
         ],
         "title": "TestTypeSaveRequest",
+        "type": "object"
+      },
+      "TriedChannelOut": {
+        "properties": {
+          "first": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "source_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Unit"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "source_unit",
+          "si_unit",
+          "first",
+          "last"
+        ],
+        "title": "TriedChannelOut",
+        "type": "object"
+      },
+      "TriedCurveOut": {
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/TriedChannelOut"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "row_count",
+          "channels"
+        ],
+        "title": "TriedCurveOut",
+        "type": "object"
+      },
+      "TriedSummaryOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "text",
+          "si_unit"
+        ],
+        "title": "TriedSummaryOut",
         "type": "object"
       },
       "UnreadCountOut": {
@@ -4596,6 +5156,268 @@
         "summary": "Revoke Token",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/formats": {
+      "get": {
+        "operationId": "list_profiles_api_formats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "test_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Test Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FormatProfileOut"
+                  },
+                  "title": "Response List Profiles Api Formats Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Profiles",
+        "tags": [
+          "tests"
+        ]
+      },
+      "post": {
+        "operationId": "create_profile_api_formats_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormatProfileCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormatProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Profile",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/formats/preview": {
+      "post": {
+        "description": "파일을 **저장하지 않고** 구조만 읽어 본다.\n\n새 장비 파일이 왔을 때 가장 먼저 하는 일이다. 저장하지 않는 이유: 아직 이\n파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이\n쌓일 이유가 없다.",
+        "operationId": "preview_api_formats_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_api_formats_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructurePreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/formats/try": {
+      "post": {
+        "description": "저장하기 **전에** 이 프로파일로 그 파일을 읽어 본다.\n\n저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 프로파일이\n잘못되면 곡선이 조용히 이상해지는데, 그것은 나중에 찾기가 매우 어렵다.",
+        "operationId": "try_profile_api_formats_try_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_try_profile_api_formats_try_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileTryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Try Profile",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/formats/{key}": {
+      "delete": {
+        "operationId": "delete_profile_api_formats__key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Profile",
+        "tags": [
+          "tests"
+        ]
+      },
+      "put": {
+        "description": "프로파일을 고친다. **이미 읽은 데이터는 안 바뀐다.**\n\n시험 종류 정의와 달리 여기는 잠그지 않는다 — 프로파일이 틀렸다는 것을 나중에\n알게 되는 것이 정상이고, 그때 고쳐서 **원본으로 다시 읽으면** 되기 때문이다.\n원본을 그대로 보관하는 두 번째 이유가 이것이다.",
+        "operationId": "update_profile_api_formats__key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormatProfileSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormatProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Profile",
+        "tags": [
+          "tests"
         ]
       }
     },

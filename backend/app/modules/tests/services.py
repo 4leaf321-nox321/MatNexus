@@ -26,6 +26,7 @@ from app.modules.accounts.models import User
 from app.modules.materials.models import Sample, Specimen
 from app.modules.tests.models import (
     Curve,
+    FormatProfile,
     TestChannel,
     TestConditionField,
     TestRun,
@@ -34,8 +35,9 @@ from app.modules.tests.models import (
 )
 from app.shared import filestore, permissions
 from app.shared.errors import AppError, NotFound
-from matcore import curves, parsers, registry, units
+from matcore import curves, parsers, readers, registry, units
 from matcore.parsers import ParsedTest, ParseError
+from matcore.readers import profile as profiles
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +213,7 @@ def _to_si_checked(number: float, unit: str, field: TestConditionField) -> float
             status=422,
         ) from exc
 
-    if field.dimension and resolved.dimension != field.dimension:
+    if field.dimension and not units.same_dimension(resolved.dimension, field.dimension):
         raise AppError(
             "MNX-TESTS-0014",
             f"'{field.label}' 은 {field.dimension} 인데 {unit} 은 "
@@ -339,7 +341,7 @@ def _validate_units(channels: list[dict[str, Any]], conditions: list[dict[str, A
                 status=422,
             ) from exc
         dimension = item.get("dimension")
-        if dimension and resolved.dimension != dimension:
+        if dimension and not units.same_dimension(resolved.dimension, str(dimension)):
             raise AppError(
                 "MNX-TESTS-0018",
                 f"'{item['label']}' 은 {dimension} 인데 {symbol} 은 "
@@ -492,27 +494,32 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     test_type = db.get(TestType, run.test_type_id)
     if test_type is None:
         return _fail(db, run, "시험 종류가 삭제되었습니다.")
-    if not test_type.parser_key:
-        return _fail(db, run, f"'{test_type.label}' 에는 파서가 없습니다.")
     if not run.source_path:
         return _fail(db, run, "원본 파일이 등록되지 않았습니다.")
 
     run.status = "parsing"
     db.commit()
 
-    parsers.load_builtin()
-    try:
-        plugin = registry.get(test_type.parser_key)
-    except KeyError:
-        return _fail(db, run, f"등록되지 않은 파서입니다: {test_type.parser_key}")
-
     data = filestore.read_bytes(run.source_path)  # 인프라 오류는 그대로 올린다
+
+    # **프로파일이 먼저다.** 장비가 늘 때마다 파서를 짜지 않으려고 만든 길이므로,
+    # 맞는 프로파일이 있으면 그것을 쓴다. 없을 때만 코드 플러그인으로 내려간다.
+    reader = _pick_reader(db, test_type, run, data)
+    if reader is None:
+        return _fail(
+            db,
+            run,
+            f"'{test_type.label}' 을 읽을 방법이 없습니다. 형식 프로파일을 만들거나 "
+            f"파서를 등록하세요.",
+        )
+    how, source = reader
+
     try:
-        parsed: ParsedTest = plugin.fn(data)
+        parsed: ParsedTest = source(data)
     except ParseError as exc:
         return _fail(db, run, str(exc))
-    except Exception as exc:  # 파서 버그도 그 파일에서는 계속 난다
-        logger.exception("파서가 예상치 못한 예외를 냈습니다 (run=%s)", run.id)
+    except Exception as exc:  # 파서·프로파일 버그도 그 파일에서는 계속 난다
+        logger.exception("읽는 중 예상치 못한 예외 (run=%s, %s)", run.id, how)
         return _fail(db, run, f"파일을 읽는 중 오류가 났습니다: {exc}")
 
     missing = _missing_required_channels(db, test_type, parsed)
@@ -524,11 +531,11 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
             f"장비 설정이나 시험 종류 정의를 확인하세요.",
         )
 
-    _store_curve(db, run, parsed, parser_version=plugin.version)
+    _store_curves(db, run, parsed, version=how)
     _store_summary(db, run, parsed)
 
     run.source_metadata = dict(parsed.metadata)
-    run.parser_version = plugin.version
+    run.parser_version = how[:20]
     run.status = "parsed"
     run.parse_error = None
     if parsed.warnings:
@@ -539,13 +546,61 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
         }
     db.commit()
     logger.info(
-        "파싱 완료 %s — %d행 %d채널 (경고 %d)",
+        "파싱 완료 %s — 곡선 %d개 (%s, 경고 %d)",
         run.record_name,
-        parsed.row_count,
-        len(parsed.channels),
+        len(parsed.all_curves),
+        how,
         len(parsed.warnings),
     )
     return "parsed"
+
+
+def _pick_reader(
+    db: Session, test_type: TestType, run: TestRun, data: bytes
+) -> tuple[str, Any] | None:
+    """이 파일을 무엇으로 읽을까. (표시용 이름, 읽는 함수).
+
+    프로파일을 먼저 본다 — 그것이 배포 없이 장비를 늘리는 길이기 때문이다.
+    맞는 것이 여럿이면 `priority` 가 높은 것이 이긴다. 실제로 생긴다: 같은 장비의
+    형식이 조금 달라져 프로파일을 하나 더 만들면 지문이 겹친다.
+    """
+    filename = run.source_filename or ""
+    candidates = list(
+        db.scalars(
+            select(FormatProfile)
+            .where(
+                FormatProfile.test_type_id == test_type.id,
+                FormatProfile.is_active.is_(True),
+            )
+            .order_by(FormatProfile.priority.desc(), FormatProfile.key)
+        )
+    )
+    if candidates:
+        try:
+            structure = readers.sniff(data)
+        except readers.ReadError:
+            structure = None
+        if structure is not None:
+            for candidate in candidates:
+                if profiles.matches(
+                    candidate.definition, filename=filename, structure=structure
+                ):
+                    return (
+                        f"profile:{candidate.key}",
+                        # 기본 인자로 묶는다. 그냥 닫으면 루프의 마지막 값을
+                        # 잡아, 맞지도 않는 프로파일로 읽는다.
+                        lambda raw, rule=candidate.definition: profiles.apply(rule, raw),
+                    )
+
+    if test_type.parser_key:
+        parsers.load_builtin()
+        try:
+            plugin = registry.get(test_type.parser_key)
+        except KeyError:
+            return None
+        return f"{plugin.id}:{plugin.version}", plugin.fn
+
+    return None
 
 
 def _fail(db: Session, run: TestRun, reason: str) -> str:
@@ -575,44 +630,45 @@ def _missing_required_channels(
             TestChannel.test_type_id == test_type.id, TestChannel.is_required.is_(True)
         )
     ).all()
-    present = {channel.key for channel in parsed.channels}
+    present = {channel.key for curve in parsed.all_curves for channel in curve.channels}
     return [key for key in required if key not in present]
 
 
-def _store_curve(
-    db: Session, run: TestRun, parsed: ParsedTest, *, parser_version: str
-) -> None:
-    """Parquet 을 쓰고 Curve 행을 만든다. 다시 파싱하면 이전 것을 갈아치운다.
+def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str) -> None:
+    """곡선을 전부 Parquet 으로 쓰고 Curve 행을 만든다.
 
-    Curve 는 불변이지만 **재파싱은 새 사실이 아니라 같은 원본의 다시 읽기**다.
-    파서를 고쳐 다시 돌렸을 때 옛 곡선이 남아 있으면 어느 것이 현재인지 화면이
-    판단해야 한다.
+    **한 파일이 곡선을 여럿 낼 수 있다.** 실측: TA DMA850 주파수-온도 스윕은
+    `[step]` 블록이 8개고 온도 구간마다 별개 측정이다. 하나로 이으면 서로 다른
+    온도의 곡선이 한 줄로 붙어 버린다.
+
+    다시 파싱하면 이전 것을 **전부** 지우고 새로 쓴다. 재파싱은 새 사실이 아니라
+    같은 원본의 다시 읽기다 — 옛 곡선이 남으면 어느 것이 현재인지 화면이 판단해야
+    하고, 프로파일을 고쳐 곡선 수가 줄면 없어진 것이 남는다.
     """
     directory = f"{filestore.run_dir(run.id, run.created_at)}/curves"
-    payload = curves.to_parquet(parsed.channels)
-    stored = filestore.write_bytes(
-        payload, relative_dir=directory, filename=f"{RAW_CURVE}.parquet"
-    )
-
-    existing = db.scalar(
-        select(Curve).where(Curve.test_run_id == run.id, Curve.key == RAW_CURVE)
-    )
-    if existing is not None:
+    for existing in db.scalars(select(Curve).where(Curve.test_run_id == run.id)):
         db.delete(existing)
-        db.flush()
+    db.flush()
 
-    db.add(
-        Curve(
-            test_run_id=run.id,
-            key=RAW_CURVE,
-            label=f"원본 정규화 (parser {parser_version})",
-            storage_path=stored.relative_path,
-            row_count=parsed.row_count,
-            sha256=stored.sha256,
-            byte_size=stored.size,
-            channels=[channel.key for channel in parsed.channels],
+    for curve in parsed.all_curves:
+        if not curve.channels:
+            continue
+        payload = curves.to_parquet(curve.channels)
+        stored = filestore.write_bytes(
+            payload, relative_dir=directory, filename=f"{curve.key}.parquet"
         )
-    )
+        db.add(
+            Curve(
+                test_run_id=run.id,
+                key=curve.key,
+                label=curve.label or f"원본 정규화 ({version})",
+                storage_path=stored.relative_path,
+                row_count=len(curve.channels[0].values),
+                sha256=stored.sha256,
+                byte_size=stored.size,
+                channels=[channel.key for channel in curve.channels],
+            )
+        )
 
 
 def _store_summary(db: Session, run: TestRun, parsed: ParsedTest) -> None:

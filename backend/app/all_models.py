@@ -21,6 +21,7 @@ from app.modules.notifications.models import (
 )
 from app.modules.tests.models import (
     Curve,
+    FormatProfile,
     TestChannel,
     TestConditionField,
     TestRun,
@@ -34,6 +35,7 @@ __all__ = [
     "AccessLog",
     "Base",
     "Curve",
+    "FormatProfile",
     "Job",
     "Material",
     "Notice",

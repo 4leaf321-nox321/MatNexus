@@ -55,6 +55,21 @@ class SummaryValue:
 
 
 @dataclass(frozen=True)
+class CurveData:
+    """곡선 한 벌. **한 파일이 곡선을 여럿 낼 수 있다.**
+
+    실측: TA DMA850 의 주파수-온도 스윕 파일에는 `[step]` 블록이 8개 있고, 측정
+    구간 6개와 처리 결과(TTS 마스터 곡선) 2개가 한 파일에 섞여 있다. 하나로 뭉치면
+    서로 다른 온도의 측정이 한 곡선으로 이어져 버린다.
+    """
+
+    key: str
+    """`Curve.key` 가 된다. 시험 안에서 유일해야 한다."""
+    label: str | None = None
+    channels: tuple[Channel, ...] = ()
+
+
+@dataclass(frozen=True)
 class ParsedTest:
     """파서 하나의 산출물."""
 
@@ -62,8 +77,19 @@ class ParsedTest:
     summary: tuple[SummaryValue, ...] = ()
     metadata: dict[str, str] = field(default_factory=dict)
     """시험자·장비·시험일 등 원문 그대로. 해석은 호출부가 한다."""
+    curves: tuple[CurveData, ...] = ()
+    """곡선이 여럿일 때. 비어 있으면 `channels` 하나를 `raw` 로 본다."""
     warnings: tuple[str, ...] = ()
     """읽기는 했지만 이상한 것. 실패시키기에는 과하고 묻기에는 아까운 것들."""
+
+    @property
+    def all_curves(self) -> tuple[CurveData, ...]:
+        """저장할 곡선들. 단일 곡선 파서와 다중 곡선 파서를 같은 모양으로 본다."""
+        if self.curves:
+            return self.curves
+        if self.channels:
+            return (CurveData(key="raw", label=None, channels=self.channels),)
+        return ()
 
     @property
     def row_count(self) -> int:

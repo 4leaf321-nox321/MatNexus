@@ -16,6 +16,8 @@ import LoginPage from '@/modules/auth/LoginPage'
 import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
 import BatchUploadPage from '@/modules/tests/BatchUploadPage'
+import FormatProfileEditorPage from '@/modules/tests/FormatProfileEditorPage'
+import FormatProfilesPage from '@/modules/tests/FormatProfilesPage'
 import TestTypesPage from '@/modules/tests/TestTypesPage'
 import StoragePage from '@/modules/tests/StoragePage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
@@ -70,6 +72,11 @@ export const router = createBrowserRouter([
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
           { path: 'admin/test-types', element: <TestTypesPage /> },
+          // 라우터가 정적 구간을 동적 구간보다 먼저 고르므로 `new` 는 `:key` 에
+          // 먹히지 않는다. 순서에 기대지 않도록 적어 둔다.
+          { path: 'admin/formats', element: <FormatProfilesPage /> },
+          { path: 'admin/formats/new', element: <FormatProfileEditorPage /> },
+          { path: 'admin/formats/:key', element: <FormatProfileEditorPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },

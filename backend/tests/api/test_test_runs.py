@@ -318,7 +318,9 @@ class TestParsing:
 
         assert run.status == "parsed"
         assert run.parse_error is None
-        assert run.parser_version == "1"
+        # 무엇으로 읽었는지 남는다 — 프로파일과 플러그인 중 어느 쪽인지가
+        # 나중에 "이 곡선을 왜 이렇게 읽었나" 를 답하는 유일한 단서다.
+        assert run.parser_version == "zwick_tra:1"
         # 장비가 준 시편 치수는 결과가 아니라 입력이라 metadata 로 간다
         assert run.source_metadata["specimen_thickness_a0"] == "0.986"
 
