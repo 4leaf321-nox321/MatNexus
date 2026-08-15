@@ -531,6 +531,15 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
             f"장비 설정이나 시험 종류 정의를 확인하세요.",
         )
 
+    conflicts = _channel_unit_conflicts(db, test_type, parsed)
+    if conflicts:
+        return _fail(
+            db,
+            run,
+            f"단위가 정의와 맞지 않습니다 — {' / '.join(conflicts)}. "
+            f"프로파일에서 그 열의 단위를 지정하거나 시험 종류 정의를 확인하세요.",
+        )
+
     _store_curves(db, run, parsed, version=how)
     _store_summary(db, run, parsed)
 
@@ -632,6 +641,60 @@ def _missing_required_channels(
     ).all()
     present = {channel.key for curve in parsed.all_curves for channel in curve.channels}
     return [key for key in required if key not in present]
+
+
+def _channel_unit_conflicts(db: Session, test_type: TestType, parsed: ParsedTest) -> list[str]:
+    """읽어 온 채널의 단위가 정의가 선언한 차원과 맞는가.
+
+    **저장 단계는 단위를 확인하지 않는다.** Parquet 에는 숫자만 들어가고, 읽을
+    때는 정의의 `si_unit` 을 믿는다. 그래서 여기서 안 막으면 MPa 값이 Pa 인 척
+    저장된다 — 10⁶ 배 틀리는데 **숫자는 멀쩡해 보이고 뜻만 바뀌므로** 화면 어디에도
+    티가 나지 않는다.
+
+    `matcore` 쪽에도 같은 성격의 방어가 있지만(매핑한 열의 단위를 모르면 거절),
+    그쪽은 시험 종류를 모른다. 단위 칸이 비어 있어 무차원으로 읽힌 값이 응력
+    채널에 들어가는 경우는 여기서만 잡힌다.
+    """
+    declared = {
+        channel.key: channel
+        for channel in db.scalars(
+            select(TestChannel).where(TestChannel.test_type_id == test_type.id)
+        )
+    }
+    conflicts: list[str] = []
+    seen: set[str] = set()
+    for curve in parsed.all_curves:
+        for channel in curve.channels:
+            spec = declared.get(channel.key)
+            if spec is None or channel.key in seen:
+                continue
+            seen.add(channel.key)
+
+            # **심볼이 아니라 차원으로 본다.** 정의의 저장 단위가 반드시 SI 정본은
+            # 아니다 — 편집 화면은 그 차원의 아무 단위나 고를 수 있게 한다. 심볼로
+            # 비교하면 `MPa` 로 선언한 멀쩡한 채널이 `Pa` 와 다르다며 걸린다.
+            read = _dimension_of(channel.si_unit)
+            wanted = _dimension_of(spec.si_unit)
+            source = f" (파일 단위 {channel.source_unit})" if channel.source_unit else ""
+
+            if read is None:
+                conflicts.append(
+                    f"{channel.label or channel.key}: 단위를 알 수 없습니다"
+                    f"{source or ' (파일에 단위가 없습니다)'}"
+                )
+            elif wanted is not None and not units.same_dimension(read, wanted):
+                conflicts.append(
+                    f"{channel.label or channel.key}: {read}({channel.si_unit}) 로 "
+                    f"읽혔는데 정의는 {wanted}({spec.si_unit}){source}"
+                )
+    return conflicts
+
+
+def _dimension_of(symbol: str) -> str | None:
+    try:
+        return units.unit_of(symbol).dimension
+    except units.UnknownUnit:
+        return None
 
 
 def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str) -> None:

@@ -324,6 +324,9 @@ export interface paths {
          *     새 장비 파일이 왔을 때 가장 먼저 하는 일이다. 저장하지 않는 이유: 아직 이
          *     파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이
          *     쌓일 이유가 없다.
+         *
+         *     `header_rows` 만 사람이 준다. 헤더가 몇 줄인지는 **기계가 알 수 없기 때문이다**
+         *     — 그룹 머리(버려도 되는 줄)와 나뉜 이름(버리면 안 되는 줄)은 생김새가 같다.
          */
         post: operations["preview_api_formats_preview_post"];
         delete?: never;
@@ -1084,6 +1087,11 @@ export interface components {
         Body_preview_api_formats_preview_post: {
             /** File */
             file: string;
+            /**
+             * Header Rows
+             * @default 1
+             */
+            header_rows: number;
         };
         /** Body_try_profile_api_formats_try_post */
         Body_try_profile_api_formats_try_post: {

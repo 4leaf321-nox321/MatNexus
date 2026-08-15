@@ -90,6 +90,23 @@ class ReadOptions:
     delimiter: str | None = None
     has_units_row: bool | None = None
     """`None` 이면 단위 줄인지 스스로 판단한다."""
+    header_rows: int = 1
+    """헤더가 몇 줄인가. **자동으로 추측하지 않는다.**
+
+    실측: 이름이 두 줄에 걸쳐 나뉜 파일에서 아랫줄만 쓰면 `Storage modulus` 와
+    `Loss modulus` 가 **둘 다 `modulus`** 가 된다. 두 열의 이름이 같아지므로
+    이름으로 하는 매핑이 성립하지 않는다.
+
+    그런데 "헤더가 몇 줄인지" 는 기계가 알 수 없다. 아래 둘은 생김새가 같다.
+
+        ,,Tensile,Tensile      ← 그룹 머리. 버려도 되는 경우가 많다
+        Time,Force,Strain      ← 진짜 이름
+
+        Angular,Storage        ← 이름의 앞부분. 버리면 안 된다
+        frequency,modulus      ← 이름의 뒷부분
+
+    그래서 사람이 미리보기에서 보고 정한다. 기본 1줄이면 지금까지와 같다.
+    """
     skip_lines: int = 0
     extra: dict[str, str] = field(default_factory=dict)
 
@@ -321,7 +338,6 @@ def _build_table(
 ) -> Table:
     width = len(rows[start])
     above = rows[start - 1] if start >= 1 else []
-    two_above = rows[start - 2] if start >= 2 else []
 
     if opts.has_units_row is None:
         # 칸 수가 데이터와 같은지는 **묻지 않는다.** 물으면, 칸 수가 어긋난 파일에서
@@ -331,10 +347,14 @@ def _build_table(
     else:
         has_units = opts.has_units_row
 
+    depth = max(1, opts.header_rows)
     if has_units:
-        unit_row, header_row, name_at = above, two_above, start - 3
+        unit_row, header_at = above, start - 2
     else:
-        unit_row, header_row, name_at = [], above, start - 2
+        unit_row, header_at = [], start - 1
+
+    header_row = _join_headers(rows, header_at, depth)
+    name_at = header_at - depth
 
     if len(header_row) != width:
         # **앞에서부터 맞춰 붙이지 않는다.** 실측(`Example.csv` 구버전): 헤더는
@@ -360,6 +380,30 @@ def _build_table(
         rows=tuple(tuple(row) for row in rows[start:end]),
         first_line=start + 1,
     )
+
+
+def _join_headers(rows: list[list[str]], at: int, depth: int) -> list[str]:
+    """헤더 `depth` 줄을 열마다 이어 붙인다. `at` 이 마지막(데이터에 가까운) 줄.
+
+    빈 칸은 건너뛰고 공백으로 잇는다. 그래서 그룹 머리(`,,Tensile,Tensile`)든
+    나뉜 이름(`Angular` + `frequency`)이든 같은 방식으로 하나의 이름이 된다.
+    """
+    if at < 0:
+        return []
+    lines = [rows[position] for position in range(max(0, at - depth + 1), at + 1)]
+    if not lines:
+        return []
+
+    width = max(len(line) for line in lines)
+    joined: list[str] = []
+    for column in range(width):
+        parts = [
+            line[column].strip()
+            for line in lines
+            if column < len(line) and line[column].strip()
+        ]
+        joined.append(" ".join(parts))
+    return joined
 
 
 def _table_name(rows: list[list[str]], at: int) -> str | None:

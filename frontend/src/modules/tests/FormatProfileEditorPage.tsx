@@ -117,6 +117,7 @@ export default function FormatProfileEditorPage() {
   const [extensions, setExtensions] = useState<string[]>([])
   const [headerAny, setHeaderAny] = useState<string[]>([])
   const [metaAny, setMetaAny] = useState<string[]>([])
+  const [headerRows, setHeaderRows] = useState(1)
   const [tableMode, setTableMode] = useState<'first' | 'all'>('first')
   const [include, setInclude] = useState('')
   const [columnMap, setColumnMap] = useState<Record<string, string>>({})
@@ -132,7 +133,7 @@ export default function FormatProfileEditorPage() {
   /** 규칙이 바뀌면 이전 시도 결과는 더 이상 그 규칙의 결과가 아니다. */
   useEffect(() => {
     setTried(null)
-  }, [extensions, headerAny, metaAny, tableMode, include, columnMap, metaMap])
+  }, [extensions, headerAny, metaAny, headerRows, tableMode, include, columnMap, metaMap])
 
   // 저장된 프로파일을 화면 상태로 편다. JSON 을 그대로 보여 주지 않는 이유:
   // 손으로 고치게 하면 결국 "JSON 을 아는 사람만 장비를 붙일 수 있다" 가 된다.
@@ -151,6 +152,7 @@ export default function FormatProfileEditorPage() {
     setExtensions(definition.match?.extensions ?? [])
     setHeaderAny(definition.match?.header_any ?? [])
     setMetaAny(definition.match?.meta_any ?? [])
+    setHeaderRows(definition.reader?.header_rows ?? 1)
     setTableMode(definition.tables?.mode === 'all' ? 'all' : 'first')
     setInclude(definition.tables?.include ?? '')
     setColumnMap(
@@ -238,6 +240,7 @@ export default function FormatProfileEditorPage() {
       else if (rule.role === 'keep') metadata.push(name)
     }
     return {
+      ...(headerRows > 1 ? { reader: { header_rows: headerRows } } : {}),
       match: {
         ...(extensions.length ? { extensions } : {}),
         ...(headerAny.length ? { header_any: headerAny } : {}),
@@ -251,12 +254,12 @@ export default function FormatProfileEditorPage() {
     }
   }
 
-  async function loadPreview(picked: File) {
+  async function loadPreview(picked: File, rows = headerRows) {
     setBusy('preview')
     setError(null)
     setTried(null)
     try {
-      const result = await testsApi.previewFormat(picked)
+      const result = await testsApi.previewFormat(picked, rows)
       setFile(picked)
       setPreview(result)
 
@@ -557,6 +560,33 @@ export default function FormatProfileEditorPage() {
                 </SelectContent>
               </Select>
             </div>
+            {/* 헤더 줄 수는 **자동으로 못 정한다.** 아래 둘이 생김새가 같다.
+                  ,,Tensile,Tensile   ← 그룹 머리. 버려도 되는 경우가 많다
+                  Angular,Storage     ← 이름의 앞부분. 버리면 안 된다
+                열 이름이 잘려 보이면(`modulus`, `frequency`) 늘려 보게 한다. */}
+            <div className="w-40 space-y-1.5">
+              <Label className="text-xs">헤더 줄 수</Label>
+              <Select
+                value={String(headerRows)}
+                onValueChange={(value) => {
+                  const next = Number(value)
+                  setHeaderRows(next)
+                  if (file) void loadPreview(file, next)
+                }}
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5].map((count) => (
+                    <SelectItem key={count} value={String(count)}>
+                      {count}줄
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {testType && columns.length > 0 && (
               <Button
                 size="sm"
@@ -641,11 +671,23 @@ export default function FormatProfileEditorPage() {
             </Table>
           )}
 
-          <p className="text-muted-foreground mt-2 text-xs">
-            안 정한 열도 <b>버려지지 않습니다</b> — 열 이름을 그대로 키로 삼아 곡선에
-            들어갑니다. 다만 정의된 채널이 아니므로 워크벤치나 통계에서는 잡히지
-            않습니다. 단위는 파일에 적힌 것을 읽어 SI 로 환산합니다.
-          </p>
+          <div className="text-muted-foreground mt-2 space-y-1 text-xs">
+            <p>
+              안 정한 열도 <b>버려지지 않습니다</b> — 열 이름을 그대로 키로 삼아 곡선에
+              들어갑니다. 다만 정의된 채널이 아니므로 워크벤치나 통계에서는 잡히지
+              않습니다.
+            </p>
+            <p>
+              <b>채널로 정한 열은 단위를 알아야 합니다.</b> 파일에 단위 줄이 없거나
+              모르는 단위면 등록이 실패합니다 — 원값을 SI 인 척 저장하면 201242 MPa 가
+              201242 Pa 가 되어 10<sup>6</sup>배 틀리는데, 숫자는 멀쩡해 보이고 뜻만
+              바뀌어 아무도 못 잡습니다.
+            </p>
+            <p>
+              열 이름이 <code>modulus</code>·<code>frequency</code>처럼 잘려 보이면 헤더가
+              여러 줄인 파일입니다. 위의 <b>헤더 줄 수</b>를 늘려 보세요.
+            </p>
+          </div>
         </Section>
 
         {/* ⑤ 메타 ─────────────────────────────────────────────── */}

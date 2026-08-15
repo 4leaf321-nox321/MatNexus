@@ -101,6 +101,7 @@ def read_options(profile: dict[str, Any]) -> ReadOptions:
         encoding=reader.get("encoding") or None,
         delimiter=reader.get("delimiter") or None,
         has_units_row=reader.get("has_units_row"),
+        header_rows=int(reader.get("header_rows") or 1),
         skip_lines=int(reader.get("skip_lines") or 0),
     )
 
@@ -115,9 +116,20 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
         raise ParseError("프로파일이 고른 표가 하나도 없습니다. 표 선택 규칙을 확인하세요.")
 
     columns: dict[str, Any] = profile.get("columns") or {}
+    errors: list[str] = []
     curves = [
-        _build_curve(table, columns, warnings, single=len(tables) == 1) for table in tables
+        _build_curve(table, columns, warnings, errors, single=len(tables) == 1)
+        for table in tables
     ]
+    if errors:
+        # **매핑한 열의 단위를 모르면 멈춘다.** 그냥 두면 원값이 SI 인 척 저장된다 —
+        # 201242 MPa 가 201242 Pa 가 되어 10⁶ 배 틀리는데, 숫자는 멀쩡해 보이고
+        # 뜻만 바뀌므로 화면 어디에도 티가 나지 않는다. 시험종류 편집에서 단위를
+        # 잠그는 것과 같은 이유다.
+        raise ParseError(
+            "단위를 알 수 없는 열이 있습니다. 프로파일에서 그 열의 단위를 지정하세요"
+            f" — {' / '.join(dict.fromkeys(errors))}"
+        )
     summary, metadata = _build_meta(profile, structure, warnings)
 
     return ParsedTest(
@@ -153,13 +165,19 @@ def _select_tables(
 
 
 def _build_curve(
-    table: Table, columns: dict[str, Any], warnings: list[str], *, single: bool
+    table: Table,
+    columns: dict[str, Any],
+    warnings: list[str],
+    errors: list[str],
+    *,
+    single: bool,
 ) -> CurveData:
     channels: list[Channel] = []
     used: set[str] = set()
 
     for index, name in enumerate(table.header):
         mapping = columns.get(name) or {}
+        mapped = bool(mapping.get("channel"))
         key = str(mapping.get("channel") or "") or slug(name)
         if key in used:
             key = f"{key}_{index}"
@@ -174,7 +192,20 @@ def _build_curve(
         numbers = [_to_float(value) for value in raw_values]
 
         if symbol is None:
-            if raw_unit:
+            if mapped:
+                # 매핑한 열은 정의된 채널로 저장된다. 단위를 모르는 채로 넣으면
+                # 그 채널의 선언 단위인 척 저장된다.
+                errors.append(
+                    f"'{name}'"
+                    + (
+                        f" (단위 {raw_unit!r} 를 모릅니다)"
+                        if raw_unit
+                        else " (파일에 단위가 없습니다)"
+                    )
+                )
+            elif raw_unit:
+                # 매핑 안 한 열은 정의된 채널이 아니라 계산에 안 쓰인다. 막지 않고
+                # 원값으로 둔다 — 사람이 나중에 매핑할 수도 있다.
                 warnings.append(f"'{name}' 의 단위 {raw_unit!r} 를 몰라 원값 그대로 둡니다.")
             si_unit = str(raw_unit or "?")
             values = tuple(numbers)

@@ -7,9 +7,13 @@
 
 from __future__ import annotations
 
+from typing import Any, ClassVar
+
 import pytest
 
-from matcore.readers import ReadError, sniff
+from matcore.parsers import ParseError
+from matcore.readers import ReadError, ReadOptions, read, sniff
+from matcore.readers import profile as profiles
 
 
 def encode(text: str) -> bytes:
@@ -109,6 +113,121 @@ class Test칸수가어긋날때:
         message = str(caught.value)
         assert "Angular frequency" in message
         assert "Tan(delta)" in message
+
+
+class Test헤더가여러줄:
+    """헤더가 2~3줄인 파일. **자동으로는 못 알아차린다** — 그래서 사람이 정한다.
+
+    아래 둘은 기계 눈에 완전히 같다.
+
+        ,,Tensile,Tensile      ← 그룹 머리. 버려도 되는 경우가 많다
+        Time,Force,Strain      ← 진짜 이름
+
+        Angular,Storage        ← 이름의 앞부분. 버리면 안 된다
+        frequency,modulus      ← 이름의 뒷부분
+    """
+
+    SPLIT = """
+Angular,Storage,Loss
+frequency,modulus,modulus
+rad/s,MPa,MPa
+6.28319,201242,1577.45
+6.29319,201243,1578.02
+"""
+
+    def test_기본은_한_줄_아랫줄만_쓴다(self) -> None:
+        """실측으로 확인한 지금까지의 동작. **두 열의 이름이 같아진다** — 이름으로
+        하는 매핑이 성립하지 않는 상태다."""
+        table = sniff(encode(self.SPLIT)).tables[0]
+        assert table.header == ("frequency", "modulus", "modulus")
+
+    def test_줄_수를_알려_주면_이어_붙인다(self) -> None:
+        table = read(encode(self.SPLIT), ReadOptions(header_rows=2)).tables[0]
+        assert table.header == ("Angular frequency", "Storage modulus", "Loss modulus")
+        assert table.units == ("rad/s", "MPa", "MPa")
+
+    def test_그룹_머리도_같은_방식으로_붙는다(self) -> None:
+        """빈 칸은 건너뛰므로 그룹 머리가 있는 열만 접두어가 붙는다."""
+        table = read(
+            encode(
+                """
+,,Tensile,Tensile
+Time,Force,Strain,Stress
+s,N,%,MPa
+0.0,0.0,0.0,0.0
+0.1,120.5,0.02,241.0
+"""
+            ),
+            ReadOptions(header_rows=2),
+        ).tables[0]
+        assert table.header == ("Time", "Force", "Tensile Strain", "Tensile Stress")
+
+    def test_표_이름은_헤더_위로_밀린다(self) -> None:
+        table = read(
+            encode(
+                """
+[step]
+Sweep - 1
+Angular,Storage
+frequency,modulus
+rad/s,MPa
+6.28319,201242
+6.29319,201243
+"""
+            ),
+            ReadOptions(header_rows=2),
+        ).tables[0]
+        assert table.name == "Sweep - 1"
+        assert table.header == ("Angular frequency", "Storage modulus")
+
+
+class Test단위를모르면멈춘다:
+    """**매핑한 열의 단위를 모르면 원값이 SI 인 척 저장된다.**
+
+    201242 MPa 가 201242 Pa 가 되어 10⁶ 배 틀리는데, 숫자는 멀쩡해 보이고 뜻만
+    바뀌므로 화면 어디에도 티가 나지 않는다. 시험종류 편집에서 단위를 잠그는 것과
+    같은 이유로 여기서 멈춘다.
+    """
+
+    RULE: ClassVar[dict[str, Any]] = {
+        "match": {"extensions": [".csv"]},
+        "columns": {"Storage modulus": {"channel": "e_storage"}},
+    }
+    NO_UNITS = """
+Angular frequency,Storage modulus
+6.28319,201242
+6.29319,201243
+"""
+
+    def test_단위_줄이_없으면_거절한다(self) -> None:
+        with pytest.raises(ParseError, match="단위"):
+            profiles.apply(self.RULE, encode(self.NO_UNITS))
+
+    def test_어느_열인지_말한다(self) -> None:
+        with pytest.raises(ParseError, match="Storage modulus"):
+            profiles.apply(self.RULE, encode(self.NO_UNITS))
+
+    def test_프로파일이_단위를_적으면_통과한다(self) -> None:
+        """빠져나갈 길이 있어야 한다 — 단위를 안 적어 주는 장비가 실재한다."""
+        rule = {
+            **self.RULE,
+            "columns": {"Storage modulus": {"channel": "e_storage", "unit": "MPa"}},
+        }
+        parsed = profiles.apply(rule, encode(self.NO_UNITS))
+        channel = next(c for c in parsed.all_curves[0].channels if c.key == "e_storage")
+        assert channel.si_unit == "Pa"
+        assert channel.values[0] == pytest.approx(2.01242e11)
+
+    def test_매핑하지_않은_열은_막지_않는다(self) -> None:
+        """정의된 채널이 아니라 계산에 안 쓰인다. 원값으로 두고 넘어간다 —
+        사람이 나중에 매핑할 수도 있다."""
+        parsed = profiles.apply(
+            {"match": {"extensions": [".csv"]}, "columns": {}},
+            encode(self.NO_UNITS),
+        )
+        channel = parsed.all_curves[0].channels[0]
+        assert channel.si_unit == "?"
+        assert channel.values[0] == pytest.approx(6.28319)
 
 
 class Test회귀방지:

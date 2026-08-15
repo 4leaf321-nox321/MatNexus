@@ -25,7 +25,13 @@ type FormatSave = components['schemas']['FormatProfileSaveRequest']
 /** 프로파일 규칙(v1). 서버는 `dict` 로 받으므로 생성 타입이 안 나온다 —
  *  `matcore/readers/profile.py` 의 문서화된 모양과 짝이다. */
 export interface ProfileDefinition {
-  reader?: { encoding?: string | null; delimiter?: string | null }
+  reader?: {
+    encoding?: string | null
+    delimiter?: string | null
+    /** 헤더가 몇 줄인가. 기계가 알 수 없어 사람이 정한다 — 그룹 머리와 나뉜
+     *  이름은 생김새가 같다. */
+    header_rows?: number
+  }
   /** 지문. 이게 없으면 서버가 저장을 거절한다 — 모든 파일에 맞아 버린다. */
   match: { extensions?: string[]; header_any?: string[]; meta_any?: string[] }
   tables?: { mode?: 'first' | 'all'; include?: string }
@@ -81,9 +87,10 @@ export const testsApi = {
   formats: (testType?: string) => api.get<FormatProfile[]>(`/formats${search({ test_type: testType })}`),
 
   /** 파일을 **저장하지 않고** 구조만 읽는다. 아직 어느 시편의 것인지도 모른다. */
-  previewFormat: (file: File) => {
+  previewFormat: (file: File, headerRows = 1) => {
     const form = new FormData()
     form.set('file', file)
+    form.set('header_rows', String(headerRows))
     return api.postForm<StructurePreview>('/formats/preview', form)
   },
 

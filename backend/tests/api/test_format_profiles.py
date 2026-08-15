@@ -315,6 +315,49 @@ class TestEndToEnd:
         # 건너뛴 표를 조용히 버리지 않는다
         assert "TTS" in run.source_metadata.get("_warnings", "")
 
+    def test_단위가_정의와_다르면_등록이_실패한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**저장 단계는 단위를 확인하지 않는다.** Parquet 에는 숫자만 들어가고
+        읽을 때는 정의의 `si_unit` 을 믿는다. 여기서 안 막으면 무차원으로 읽힌
+        값이 Pa 인 척 저장된다 — 숫자는 멀쩡해 보이고 뜻만 바뀐다.
+
+        이 파일은 저장탄성률의 단위 칸이 비어 있어 무차원으로 읽힌다. 프로파일
+        쪽(matcore)은 단위가 '해결' 됐으므로 못 잡는다 — 시험 종류를 아는 이쪽만
+        잡을 수 있다.
+        """
+        broken = (
+            "[step]\n"
+            "Strain Sweep - 1\n"
+            "Angular frequency,Temperature,Storage modulus\n"
+            "rad/s,°C,\n"  # ← 저장탄성률 단위 칸이 비어 있다
+            "6.28319,25.00,201242\n"
+            "6.29319,25.05,201243\n"
+        ).encode()
+        created = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": "{}",
+            },
+            files={"file": ("Broken.csv", broken)},
+            headers=admin_headers,
+        ).json()
+
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "failed"
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        assert "단위" in (run.parse_error or "")
+        # 무엇이 어떻게 어긋났는지까지 남는다 — 사람이 고칠 근거다.
+        assert "dimensionless" in (run.parse_error or "")
+        assert "stress" in (run.parse_error or "")
+
     def test_곡선을_화면이_읽을_수_있다(
         self,
         client: TestClient,

@@ -131,6 +131,13 @@
             "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
+          },
+          "header_rows": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Header Rows",
+            "type": "integer"
           }
         },
         "required": [
@@ -5253,7 +5260,7 @@
     },
     "/api/formats/preview": {
       "post": {
-        "description": "파일을 **저장하지 않고** 구조만 읽어 본다.\n\n새 장비 파일이 왔을 때 가장 먼저 하는 일이다. 저장하지 않는 이유: 아직 이\n파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이\n쌓일 이유가 없다.",
+        "description": "파일을 **저장하지 않고** 구조만 읽어 본다.\n\n새 장비 파일이 왔을 때 가장 먼저 하는 일이다. 저장하지 않는 이유: 아직 이\n파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이\n쌓일 이유가 없다.\n\n`header_rows` 만 사람이 준다. 헤더가 몇 줄인지는 **기계가 알 수 없기 때문이다**\n— 그룹 머리(버려도 되는 줄)와 나뉜 이름(버리면 안 되는 줄)은 생김새가 같다.",
         "operationId": "preview_api_formats_preview_post",
         "requestBody": {
           "content": {
