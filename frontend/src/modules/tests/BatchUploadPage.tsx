@@ -29,7 +29,6 @@ import {
   FileUp,
   Loader2,
   Plus,
-  Search,
   Trash2,
   Upload,
   X,
@@ -38,6 +37,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
+import { MaterialPicker } from '@/modules/materials/MaterialPicker'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
@@ -118,9 +118,6 @@ export default function BatchUploadPage() {
   const types = useResource(() => testsApi.types(), [])
 
   const [rows, setRows] = useState<Row[]>([])
-  const [search, setSearch] = useState('')
-  const [applied, setApplied] = useState('')
-  const materials = useResource(() => materialsApi.list({ q: applied, limit: 200 }), [applied])
 
   const [sampleCache, setSampleCache] = useState<Record<string, Sample[]>>({})
   const [specimenCache, setSpecimenCache] = useState<Record<string, Specimen[]>>({})
@@ -132,23 +129,15 @@ export default function BatchUploadPage() {
 
   // `?? []` 를 그대로 두면 매 렌더마다 새 배열이라 아래 훅들이 계속 돈다.
   const availableTypes = useMemo(() => types.data ?? [], [types.data])
-  const found = useMemo(() => materials.data?.items ?? [], [materials.data])
-  const total = materials.data?.total ?? 0
 
   /**
-   * 한 번이라도 본 재료를 모아 둔다. 검색으로 목록이 좁아져도 **이미 고른 재료가
-   * 줄의 Select 에서 사라지면 안 되기 때문**이다 — Radix Select 는 값에 맞는
-   * 항목이 없으면 트리거를 비워 버려서, 상태에는 값이 있는데 화면은 빈칸이 된다.
+   * 한 번이라도 고른 재료를 들고 있는다. 줄에 이름을 보여 주려면 id 만으로는
+   * 안 되고, 목록은 검색에 따라 바뀌므로 거기서 다시 찾을 수도 없다.
    */
   const [known, setKnown] = useState<Record<string, Material>>({})
-  useEffect(() => {
-    if (found.length === 0) return
-    setKnown((current) => {
-      const next = { ...current }
-      for (const material of found) next[material.id] = material
-      return next
-    })
-  }, [found])
+  function remember(material: Material) {
+    setKnown((current) => ({ ...current, [material.id]: material }))
+  }
 
   const selected = rows.filter((row) => row.selected && row.status !== 'done')
   const ready = rows.filter((row) => isReady(row) && row.status !== 'done')
@@ -208,19 +197,6 @@ export default function BatchUploadPage() {
       // 사람이 종류 칸을 보게 되고, 비어 있으면 고르면 된다.
     }
   }
-
-  /**
-   * 타이핑이 멎으면 검색한다.
-   *
-   * 전에는 Enter 나 포커스 이동에서만 걸렸다. 그래서 검색어를 치고 **곧바로
-   * 드롭다운을 열면 아직 옛 목록**이었고, 사용자는 검색이 안 되는 줄 알았다.
-   * (클릭으로 포커스가 빠지며 검색이 걸리긴 하지만, 그 응답이 오기 전에 목록이
-   * 이미 열려 있다.)
-   */
-  useEffect(() => {
-    const timer = setTimeout(() => setApplied(search.trim()), 300)
-    return () => clearTimeout(timer)
-  }, [search])
 
   // 종류 정의가 늦게 도착하면 이미 담긴 파일도 다시 추정해 준다.
   useEffect(() => {
@@ -328,12 +304,6 @@ export default function BatchUploadPage() {
   const failedCount = rows.filter((row) => row.status === 'error').length
 
   /** 줄의 Select 가 쓸 재료 목록 — 검색 결과 + 이 줄이 이미 가리키는 재료. */
-  function optionsFor(row: Row): Material[] {
-    const current = row.materialId ? known[row.materialId] : undefined
-    if (!current || found.some((material) => material.id === current.id)) return found
-    return [current, ...found]
-  }
-
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
@@ -346,7 +316,7 @@ export default function BatchUploadPage() {
         }
       />
 
-      <ErrorNotice error={types.error ?? materials.error} className="mb-4" />
+      <ErrorNotice error={types.error} className="mb-4" />
 
       <div
         onDragOver={(event) => {
@@ -421,62 +391,25 @@ export default function BatchUploadPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-muted-foreground text-xs">
-                재료
-                {total > found.length && (
-                  <span className="text-amber-600 dark:text-amber-500">
-                    {' '}
-                    · {total}개 중 {found.length}개만 — 검색하세요
-                  </span>
-                )}
-              </Label>
-              <div className="flex gap-1">
-                <div className="relative">
-                  <Search className="text-muted-foreground absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    onKeyDown={(event) => event.key === 'Enter' && setApplied(search.trim())}
-                    placeholder="이름·별칭·Grade·Family…"
-                    className="h-9 w-56 pl-7"
-                  />
-                </div>
-                <Select
-                  value=""
-                  onValueChange={(materialId) => {
-                    void loadSamples(materialId)
-                    assignSelected({ materialId, sampleId: null, specimen: null })
-                  }}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="일괄 지정" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* **빈 목록을 그냥 비워 두지 않는다.** 아무것도 없는 드롭다운은
-                        고장으로 보인다 — 검색이 걸러 낸 것인지, 재료가 없는 것인지,
-                        아직 불러오는 중인지 구분이 안 된다. */}
-                    {found.length === 0 && (
-                      <div className="text-muted-foreground p-2 text-xs">
-                        {materials.loading
-                          ? '불러오는 중…'
-                          : applied
-                            ? `'${applied}' 에 맞는 재료가 없습니다`
-                            : '등록된 재료가 없습니다'}
-                      </div>
-                    )}
-                    {found.map((material) => (
-                      <SelectItem key={material.id} value={material.id}>
-                        {material.record_name}
-                        {material.alias && (
-                          <span className="text-muted-foreground ml-2 text-xs">
-                            {material.alias}
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Label className="text-muted-foreground text-xs">재료</Label>
+              {/* 검색과 목록이 **한 컨트롤**이다. 나눠 두었을 때 실사용 보고:
+                  "재료 검색에는 안 나오는데 우측의 일괄지정을 보면 리스트가 있다."
+                  검색은 걸리고 있었지만 입력칸 아래에 아무것도 안 떠서 안 되는 줄
+                  알았다 — 두 위젯이 한 일을 나눠 가지면 어느 쪽이 반응하는지 모른다. */}
+              <MaterialPicker
+                action
+                placeholder="일괄 지정"
+                className="h-9 w-56"
+                onSelect={(material) => {
+                  remember(material)
+                  void loadSamples(material.id)
+                  assignSelected({
+                    materialId: material.id,
+                    sampleId: null,
+                    specimen: null,
+                  })
+                }}
+              />
             </div>
 
             <div className="space-y-1">
@@ -650,29 +583,20 @@ export default function BatchUploadPage() {
                     </TableCell>
 
                     <TableCell>
-                      <Select
-                        value={row.materialId ?? ''}
-                        onValueChange={(value) => {
-                          void loadSamples(value)
-                          patch(row.key, { materialId: value, sampleId: null, specimen: null })
+                      <MaterialPicker
+                        className="h-8 w-full text-xs"
+                        placeholder="고르세요"
+                        value={row.materialId ? (known[row.materialId] ?? null) : null}
+                        onSelect={(material) => {
+                          remember(material)
+                          void loadSamples(material.id)
+                          patch(row.key, {
+                            materialId: material.id,
+                            sampleId: null,
+                            specimen: null,
+                          })
                         }}
-                      >
-                        <SelectTrigger className="h-8">
-                          <SelectValue placeholder="고르세요" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {optionsFor(row).length === 0 && (
-                            <div className="text-muted-foreground p-2 text-xs">
-                              {applied ? '검색 결과가 없습니다' : '등록된 재료가 없습니다'}
-                            </div>
-                          )}
-                          {optionsFor(row).map((material) => (
-                            <SelectItem key={material.id} value={material.id}>
-                              {material.record_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </TableCell>
 
                     <TableCell>

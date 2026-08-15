@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
+import { MaterialPicker } from '@/modules/materials/MaterialPicker'
 import { Label } from '@/shared/components/ui/label'
 import {
   Select,
@@ -27,23 +28,15 @@ interface Props {
 }
 
 export function SpecimenPicker({ onChange }: Props) {
-  const [materials, setMaterials] = useState<Material[]>([])
+  const [picked, setPicked] = useState<Material | null>(null)
   const [samples, setSamples] = useState<Sample[]>([])
   const [specimens, setSpecimens] = useState<Specimen[]>([])
   const [materialId, setMaterialId] = useState('')
   const [sampleId, setSampleId] = useState('')
 
-  useEffect(() => {
-    materialsApi
-      .list({ limit: 200 })
-      .then((page) => setMaterials(page.items))
-      .catch(() => setMaterials([]))
-  }, [])
-
-  // 재료가 하나뿐이면 고를 것이 없다 — 자동으로 고른다. 단계마다 같다.
-  useEffect(() => {
-    if (materials.length === 1 && !materialId) setMaterialId(materials[0].id)
-  }, [materials, materialId])
+  // 재료 목록을 미리 받아 두지 않는다. **재료는 수천 개가 된다** — 앞 200개를
+  // 받아 뿌리던 예전 방식은 그때 무너지고, 뒤엣것은 없는 재료처럼 보였다.
+  // 검색은 `MaterialPicker` 가 서버에 물어서 한다.
 
   useEffect(() => {
     setSampleId('')
@@ -84,18 +77,18 @@ export function SpecimenPicker({ onChange }: Props) {
     <div className="grid grid-cols-3 gap-2">
       <div className="space-y-1">
         <Label className="text-muted-foreground text-xs">재료</Label>
-        <Select value={materialId} onValueChange={setMaterialId}>
-          <SelectTrigger>
-            <SelectValue placeholder="고르세요" />
-          </SelectTrigger>
-          <SelectContent>
-            {materials.map((material) => (
-              <SelectItem key={material.id} value={material.id}>
-                {material.record_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* **검색이 붙은 것으로 바꿨다.** 예전에는 앞 200개를 그냥 목록에 뿌렸는데,
+            재료가 그보다 많아지는 순간 뒤엣것은 *없는 재료처럼* 보였다. 잘렸다는
+            표시도 없어서 사람이 알 방법이 없다. */}
+        <MaterialPicker
+          className="h-9 w-full"
+          value={picked}
+          placeholder="고르세요"
+          onSelect={(material) => {
+            setPicked(material)
+            setMaterialId(material.id)
+          }}
+        />
       </div>
 
       <div className="space-y-1">
