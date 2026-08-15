@@ -151,7 +151,11 @@ class TestEditWithoutData:
         self, client: TestClient, admin_headers: dict[str, str], tensile: None
     ) -> None:
         """아직 아무도 안 쓴 정의는 자유롭게 고칠 수 있어야 한다 — 잠그는 이유는
-        데이터를 지키기 위해서지 규율 자체가 목적이 아니다."""
+        데이터를 지키기 위해서지 규율 자체가 목적이 아니다.
+
+        **차원까지 바꿔 본다.** 저장 단위는 고를 수 없고 차원을 따라오므로,
+        해석이 완전히 달라지는 변경은 이것뿐이다.
+        """
         response = client.put(
             "/api/test-types/tensile",
             json={
@@ -163,9 +167,9 @@ class TestEditWithoutData:
                         "key": "displacement",
                         "label": "변위",
                         "dimension": "length",
-                        "si_unit": "mm",
+                        "si_unit": "m",
                     },
-                    {"key": "force", "label": "하중", "dimension": "force", "si_unit": "kN"},
+                    {"key": "force", "label": "응력", "dimension": "stress", "si_unit": "Pa"},
                 ],
                 "conditions": [],
             },
@@ -174,8 +178,35 @@ class TestEditWithoutData:
         assert response.status_code == 200, response.text
         updated = response.json()
         assert updated["label"] == "인장시험(개정)"
-        assert {c["si_unit"] for c in updated["channels"]} == {"mm", "kN"}
+        assert {c["si_unit"] for c in updated["channels"]} == {"m", "Pa"}
         assert updated["conditions"] == []
+
+    def test_저장_단위를_고를_수_없다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """**값은 언제나 그 차원의 정본 SI 로 저장된다.** 정의에 `kN` 이라고 적으면
+        저장된 숫자는 N 인데 화면·계산은 kN 으로 읽어 1000배 틀린다 — 숫자가
+        멀쩡해 보여 티가 나지 않는 그 계열이다.
+
+        데이터가 없어도 거절한다. 이건 데이터를 지키는 잠금이 아니라 **애초에
+        성립하지 않는 상태**를 막는 것이다.
+        """
+        response = client.put(
+            "/api/test-types/tensile",
+            json={
+                "label": "인장시험",
+                "abbr": "TEN",
+                "parser_key": "zwick_tra",
+                "channels": [
+                    {"key": "force", "label": "하중", "dimension": "force", "si_unit": "kN"},
+                ],
+                "conditions": [],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-TESTS-0018"
+        assert "저장 단위는 N" in response.json()["error"]["message"]
 
 
 class TestEditWithData:
@@ -230,11 +261,14 @@ class TestEditWithData:
     def test_단위를_바꾸면_거절한다(
         self, client: TestClient, admin_headers: dict[str, str], with_run: None
     ) -> None:
-        """**저장된 숫자는 그대로인데 뜻만 바뀐다.** 3466.4 N 이 3466.4 kN 이 되고
-        화면 어디에도 티가 안 난다."""
+        """**저장된 숫자는 그대로인데 뜻만 바뀐다.** 3466.4 N 이 3466.4 Pa 가 되고
+        화면 어디에도 티가 안 난다.
+
+        저장 단위는 고를 수 없으므로 단위가 바뀌는 길은 **차원을 바꾸는 것**뿐이다.
+        """
         changed = [
             {**TENSILE_CHANNELS[0]},
-            {**TENSILE_CHANNELS[1], "si_unit": "kN"},
+            {**TENSILE_CHANNELS[1], "dimension": "stress", "si_unit": "Pa"},
             {**TENSILE_CHANNELS[2]},
         ]
         response = self._put(client, admin_headers, changed)

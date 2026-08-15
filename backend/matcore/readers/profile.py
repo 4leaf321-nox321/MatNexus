@@ -56,14 +56,24 @@ def slug(text: str) -> str:
 
 
 def unit_symbol(raw: str | None) -> str | None:
-    """장비가 적은 단위를 우리 심볼로. 모르면 None — 그러면 변환하지 않는다."""
+    """장비가 적은 단위를 우리 심볼로. 모르면 None — 그러면 변환하지 않는다.
+
+    `MPa` 를 `Mpa`·`mpa` 로 적는 장비가 흔해서 대소문자만 다른 표기도 받는다.
+    다만 **모호하면 받지 않는다** — `units.canonical` 이 그 판단을 한다.
+    """
     if raw is None:
         return None
     text = raw.strip()
     alias = UNIT_ALIASES.get(text.lower())
     if alias:
         return alias
-    return text if text in units.UNITS else None
+    return units.canonical(text)
+
+
+def _case_only(raw: str, symbol: str) -> bool:
+    """대소문자만 달랐나. `°C → degC` 같은 별칭 치환과 구분하려고 따로 본다 —
+    별칭까지 경고하면 DMA 파일마다 경고가 뜨고, 그러면 아무도 안 본다."""
+    return raw.strip() != symbol and raw.strip().lower() == symbol.lower()
 
 
 def matches(profile: dict[str, Any], *, filename: str, structure: TabularFile) -> bool:
@@ -210,6 +220,11 @@ def _build_curve(
             si_unit = str(raw_unit or "?")
             values = tuple(numbers)
         else:
+            if raw_unit and _case_only(str(raw_unit), symbol):
+                # 추측한 것은 남긴다. 대개는 맞지만 항상 맞는다고 할 수 없다.
+                warnings.append(
+                    f"'{name}' 의 단위 표기 {raw_unit!r} 를 {symbol} 로 읽었습니다."
+                )
             si_unit = units.SI_UNITS[units.unit_of(symbol).dimension]
             values = tuple(
                 None if value is None else units.to_si(value, symbol) for value in numbers

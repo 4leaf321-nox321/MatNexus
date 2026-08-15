@@ -27,29 +27,60 @@ const BY_SI: Record<string, Display> = {
   '1': { unit: '', factor: 1 },
 }
 
-export function display(siUnit: string | null | undefined): Display {
+/**
+ * 단위로는 못 가르고 **차원으로만** 갈리는 것.
+ *
+ * 변형률과 tan δ 는 저장 단위가 둘 다 `1` 이다 — 물리적으로 둘 다 무차원이라
+ * 맞다. 그런데 물성에서 변형률은 2% 로 읽지 0.02 로 읽지 않고, tan δ 는 그 반대다.
+ * 단위만 보면 구분할 방법이 없다.
+ *
+ * `strain` 을 `dimensionless` 의 **별칭 차원**으로 남겨 둔 이유가 이것이다
+ * (`matcore/units.DIMENSION_ALIASES`). 차원 검증에서는 같은 것으로 치지만,
+ * 사람에게 보여 줄 때는 뜻이 다르다.
+ */
+const BY_DIMENSION: Record<string, Display> = {
+  strain: { unit: '%', factor: 100 },
+}
+
+export function display(
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): Display {
+  if (dimension) {
+    const byDimension = BY_DIMENSION[dimension]
+    if (byDimension) return byDimension
+  }
   if (!siUnit) return { unit: '', factor: 1 }
   return BY_SI[siUnit] ?? { unit: siUnit, factor: 1 }
 }
 
 /** 축 라벨 — `변위 (mm)`. 단위가 없으면 괄호도 없다. */
-export function axisLabel(label: string, siUnit: string | null | undefined): string {
-  const { unit } = display(siUnit)
+export function axisLabel(
+  label: string,
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): string {
+  const { unit } = display(siUnit, dimension)
   return unit ? `${label} (${unit})` : label
 }
 
-export function toDisplay(value: number, siUnit: string | null | undefined): number {
-  return value * display(siUnit).factor
+export function toDisplay(
+  value: number,
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): number {
+  return value * display(siUnit, dimension).factor
 }
 
 /** 요약값 한 줄을 사람이 읽는 문자열로. */
 export function formatValue(
   value: number | null,
   text: string | null,
-  siUnit: string | null
+  siUnit: string | null,
+  dimension?: string | null
 ): string {
   if (value === null) return text ?? '—'
-  const { unit, factor } = display(siUnit)
+  const { unit, factor } = display(siUnit, dimension)
   const shown = value * factor
   const magnitude = Math.abs(shown)
   const rounded =
@@ -70,11 +101,13 @@ export function formatValue(
  *
  * 변환은 여전히 서버가 한다 — 화면은 "내가 받은 단위는 이것" 이라고 말할 뿐이다.
  */
-export function conditionUnits(fields: { key: string; si_unit?: string | null }[]) {
+export function conditionUnits(
+  fields: { key: string; si_unit?: string | null; dimension?: string | null }[]
+) {
   const map: Record<string, string> = {}
   for (const field of fields) {
     if (!field.si_unit) continue
-    const { unit } = display(field.si_unit)
+    const { unit } = display(field.si_unit, field.dimension)
     if (unit) map[field.key] = unit
   }
   return map
@@ -87,6 +120,27 @@ export function conditionUnits(fields: { key: string; si_unit?: string | null }[
  * 완전한 복제가 아니라 자주 쓰는 것만 둔다 — 목록이 길면 고르기 어렵고, 서버가
  * 최종 판정을 하므로 화면이 전부 알 필요는 없다.
  */
+/**
+ * 차원별 **저장 단위**. 고르는 것이 아니라 정해져 있다.
+ *
+ * 값은 언제나 그 차원의 정본 SI 로 저장된다. 정의에 `MPa` 라고 적으면 저장된
+ * 숫자는 Pa 인데 화면은 MPa 로 읽어 10⁶ 배 틀린다 — 서버도 이것을 거절한다.
+ */
+export const SI_BY_DIMENSION: Record<string, string> = {
+  length: 'm',
+  force: 'N',
+  stress: 'Pa',
+  strain: '1',
+  strain_rate: '1/s',
+  velocity: 'm/s',
+  time: 's',
+  temperature: 'K',
+  frequency: 'Hz',
+  mass: 'kg',
+  angle: 'rad',
+  dimensionless: '1',
+}
+
 export const UNITS_BY_DIMENSION: Record<string, string[]> = {
   length: ['m', 'mm', 'cm', 'um'],
   force: ['N', 'kN'],

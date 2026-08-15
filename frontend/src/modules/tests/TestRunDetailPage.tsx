@@ -80,10 +80,18 @@ export default function TestRunDetailPage() {
   const points = useMemo<[number, number][]>(
     () =>
       (curve.data?.points ?? []).map(([x, y]) => [
-        toDisplay(x, xChannel?.si_unit),
-        toDisplay(y, yChannel?.si_unit),
+        // 차원까지 넘긴다. 변형률과 tan δ 는 저장 단위가 둘 다 `1` 이라
+        // 단위만으로는 못 가른다 — 변형률만 %로 보여야 한다.
+        toDisplay(x, xChannel?.si_unit, xChannel?.dimension),
+        toDisplay(y, yChannel?.si_unit, yChannel?.dimension),
       ]),
-    [curve.data, xChannel?.si_unit, yChannel?.si_unit]
+    [
+      curve.data,
+      xChannel?.si_unit,
+      xChannel?.dimension,
+      yChannel?.si_unit,
+      yChannel?.dimension,
+    ]
   )
 
   async function download() {
@@ -218,8 +226,8 @@ export default function TestRunDetailPage() {
 
           <CurveChart
             points={points}
-            xLabel={axisLabel(xChannel?.label ?? '', xChannel?.si_unit)}
-            yLabel={axisLabel(yChannel?.label ?? '', yChannel?.si_unit)}
+            xLabel={axisLabel(xChannel?.label ?? '', xChannel?.si_unit, xChannel?.dimension)}
+            yLabel={axisLabel(yChannel?.label ?? '', yChannel?.si_unit, yChannel?.dimension)}
           />
           {curve.data && (
             <p className="text-muted-foreground mt-2 text-xs">

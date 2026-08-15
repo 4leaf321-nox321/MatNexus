@@ -620,7 +620,7 @@ export default function BatchUploadPage() {
                     <div key={field.key} className="space-y-1">
                       <Label className="text-muted-foreground text-xs">
                         {field.label}
-                        {field.si_unit && ` (${display(field.si_unit).unit})`}
+                        {field.si_unit && ` (${display(field.si_unit, field.dimension).unit})`}
                         {field.is_required && <span className="text-destructive"> *</span>}
                       </Label>
                       <Input

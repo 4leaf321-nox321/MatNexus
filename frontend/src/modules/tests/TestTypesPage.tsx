@@ -184,7 +184,7 @@ export default function TestTypesPage() {
                         </TableCell>
                         <TableCell className="font-mono text-xs">{channel.si_unit}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {display(channel.si_unit).unit || '—'}
+                          {display(channel.si_unit, channel.dimension).unit || '—'}
                         </TableCell>
                         <TableCell>
                           {channel.is_required ? (
@@ -217,7 +217,7 @@ export default function TestTypesPage() {
                         {field.si_unit && (
                           <span className="text-muted-foreground">
                             {' '}
-                            ({display(field.si_unit).unit})
+                            ({display(field.si_unit, field.dimension).unit})
                           </span>
                         )}
                         {field.is_required && <span className="text-destructive"> *</span>}

@@ -19,7 +19,7 @@ import { Lock, Plus, Trash2 } from 'lucide-react'
 
 import { testsApi } from '@/modules/tests/api'
 import type { Parser, TestType } from '@/modules/tests/api'
-import { DIMENSIONS, UNITS_BY_DIMENSION, VALUE_TYPES } from '@/modules/tests/units'
+import { DIMENSIONS, SI_BY_DIMENSION, VALUE_TYPES, display } from '@/modules/tests/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -445,9 +445,10 @@ function RowEditor({
                 value={row.dimension ?? 'length'}
                 disabled={frozen}
                 onValueChange={(value) =>
+                  // 차원이 정해지면 저장 단위도 정해진다 — 따로 고를 것이 없다.
                   onChange(index, {
                     dimension: value,
-                    si_unit: UNITS_BY_DIMENSION[value]?.[0] ?? '1',
+                    si_unit: SI_BY_DIMENSION[value] ?? '1',
                   })
                 }
               >
@@ -464,26 +465,23 @@ function RowEditor({
               </Select>
             </div>
 
+            {/* 저장 단위는 **고르는 것이 아니다.** 값은 언제나 그 차원의 정본 SI 로
+                저장된다. 고를 수 있게 두면 정의에 `MPa` 라고 적었는데 저장된 숫자는
+                Pa 인 상태가 만들어지고, 화면·계산이 10⁶ 배 틀린다 — 숫자가 멀쩡해
+                보여 티가 나지 않는다. 서버도 이것을 거절한다.
+                사람이 보는 단위는 아래 '표시' 열이 따로 정한다. */}
             <div className="w-24 space-y-1">
-              <Label className="text-muted-foreground text-xs">
-                저장 단위 {frozen && <Lock className="inline size-3" />}
-              </Label>
-              <Select
-                value={row.si_unit ?? '1'}
-                disabled={frozen}
-                onValueChange={(value) => onChange(index, { si_unit: value })}
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(UNITS_BY_DIMENSION[row.dimension ?? ''] ?? ['1']).map((unit) => (
-                    <SelectItem key={unit} value={unit}>
-                      {unit}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-muted-foreground text-xs">저장 단위</Label>
+              <div className="bg-muted flex h-8 items-center rounded-md px-2 font-mono text-xs">
+                {SI_BY_DIMENSION[row.dimension ?? ''] ?? '1'}
+              </div>
+            </div>
+
+            <div className="w-20 space-y-1">
+              <Label className="text-muted-foreground text-xs">표시</Label>
+              <div className="flex h-8 items-center px-2 font-mono text-xs">
+                {display(row.si_unit, row.dimension).unit || '—'}
+              </div>
             </div>
 
             <label className="flex h-8 items-center gap-1 text-xs">

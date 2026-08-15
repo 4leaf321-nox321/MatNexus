@@ -177,7 +177,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
                 <div key={field.key} className="space-y-1">
                   <Label htmlFor={field.key} className="text-muted-foreground text-xs">
                     {field.label}
-                    {field.si_unit && ` (${display(field.si_unit).unit})`}
+                    {field.si_unit && ` (${display(field.si_unit, field.dimension).unit})`}
                     {field.is_required && <span className="text-destructive"> *</span>}
                   </Label>
                   <Input

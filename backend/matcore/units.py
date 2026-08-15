@@ -118,6 +118,40 @@ class UnknownUnit(ValueError):
         self.symbol = symbol
 
 
+def _case_index() -> dict[str, str]:
+    """소문자 → 정본 심볼. **충돌하면 둘 다 뺀다.**
+
+    장비가 `MPa` 를 `Mpa`·`mpa`·`MPA` 로 적는 일이 흔하다. 단위 표기의 대소문자는
+    물리적으로 뜻이 있으므로(`m` 미터 / `M` 메가) 통째로 무시할 수는 없지만,
+    **지금 표 안에서 소문자로 겹치는 심볼이 하나도 없다면** 대소문자만 다른 표기를
+    정본으로 되돌리는 것은 모호하지 않다.
+
+    문제는 나중이다. 언젠가 `mPa`(밀리파스칼)를 표에 넣으면 `MPa` 와 소문자가
+    같아지는데, 그때 조용히 하나를 고르면 **10⁹ 배** 틀린다. 그래서 충돌하는 키는
+    아예 빼 버린다 — 그 표기는 정확히 적어야만 통과한다. `tests/unit/test_units`
+    가 충돌이 생기는 순간 실패하므로 소리 없이 넘어가지 않는다.
+    """
+    index: dict[str, str] = {}
+    for symbol in UNITS:
+        key = symbol.lower()
+        index[key] = "" if key in index else symbol
+    return {key: symbol for key, symbol in index.items() if symbol}
+
+
+CASE_INDEX = _case_index()
+
+
+def canonical(symbol: str) -> str | None:
+    """표기가 조금 다른 단위를 정본 심볼로. 모르면 `None`.
+
+    정확히 맞는 것이 먼저다 — 대소문자 되돌리기는 그다음에만 한다.
+    """
+    text = symbol.strip()
+    if text in UNITS:
+        return text
+    return CASE_INDEX.get(text.lower())
+
+
 def unit_of(symbol: str) -> Unit:
     try:
         return UNITS[symbol]

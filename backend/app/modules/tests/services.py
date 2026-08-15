@@ -349,6 +349,20 @@ def _validate_units(channels: list[dict[str, Any]], conditions: list[dict[str, A
                 status=422,
             )
 
+        # **저장 단위는 고를 수 있는 것이 아니다.** 값은 언제나 그 차원의 정본 SI 로
+        # 저장된다(`to_si` 가 그렇게 만든다). 정의에 `MPa` 라고 적으면 저장된
+        # 숫자는 Pa 인데 화면·계산은 MPa 로 읽어 **10⁶ 배** 틀린다. 숫자가 멀쩡해
+        # 보여 티가 나지 않는 그 계열이다.
+        expected = units.SI_UNITS.get(units.normalize_dimension(resolved.dimension))
+        if expected and str(symbol) != expected:
+            raise AppError(
+                "MNX-TESTS-0018",
+                f"'{item['label']}' 의 저장 단위는 {expected} 여야 합니다 "
+                f"({symbol} 로 적었습니다). 저장은 언제나 정본 SI 이고, 사람이 보는 "
+                f"단위는 화면이 따로 정합니다.",
+                status=422,
+            )
+
 
 def _guard_locked_changes(
     db: Session,
