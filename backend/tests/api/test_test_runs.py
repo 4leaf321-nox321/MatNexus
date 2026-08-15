@@ -179,6 +179,39 @@ class TestUpload:
         assert response.json()["error"]["code"] == "MNX-FILES-0001"
 
 
+class TestWorkspaceScope:
+    def test_부서로_좁힌다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """사이드바가 `/w/:slug/tests` 라고 말하는 화면이므로 그 부서 것만
+        보여야 한다. 가시 범위(볼 권한)와 기본 필터(무엇을 먼저 보여줄까)는
+        다른 축이다 — 둘을 섞으면 '부서' 라는 말이 거짓이 된다."""
+        _upload(client, admin_headers, specimen["id"])
+
+        from app.modules.workspaces.models import Workspace
+
+        other = Workspace(slug="polymer", name="고분자팀")
+        db.add(other)
+        db.commit()
+
+        assert client.get("/api/test-runs", headers=admin_headers).json()["total"] == 1
+        mine = client.get("/api/test-runs?workspace=metal", headers=admin_headers)
+        assert mine.json()["total"] == 1
+        theirs = client.get("/api/test-runs?workspace=polymer", headers=admin_headers)
+        assert theirs.json()["total"] == 0
+
+    def test_없는_부서는_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        response = client.get("/api/test-runs?workspace=nowhere", headers=admin_headers)
+        assert response.status_code == 404
+
+
 class TestParsing:
     def _parse(self, db: Session, run_id: str) -> TestRun:
         assert services.parse_run(db, uuid.UUID(run_id)) == "parsed"

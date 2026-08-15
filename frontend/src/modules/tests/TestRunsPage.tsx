@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react'
 import { AlertTriangle, FlaskConical, Plus, RefreshCw } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
@@ -43,8 +43,13 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
 }
 
 export default function TestRunsPage() {
+  const { slug } = useParams<{ slug?: string }>()
   const [uploading, setUploading] = useState(false)
-  const runs = useResource(() => testsApi.runs({ limit: 100 }), [])
+  // 사이드바가 '부서' 라고 말하는 화면이므로 그 부서 것만 보여 준다.
+  const runs = useResource(
+    () => testsApi.runs({ workspace: slug, limit: 100 }),
+    [slug]
+  )
   const rows = runs.data?.items ?? []
   const pending = rows.some((run) => isPending(run.status))
 
@@ -58,7 +63,9 @@ export default function TestRunsPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="시험 데이터"
-        description="장비 원본을 올리면 서버가 읽어 곡선으로 만듭니다."
+        description={`장비 원본을 올리면 서버가 읽어 곡선으로 만듭니다.${
+          slug ? ` 이 부서(${slug})가 등록한 시험만 보입니다.` : ''
+        }`}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => runs.reload()}>

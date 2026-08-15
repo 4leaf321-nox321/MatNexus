@@ -12,6 +12,8 @@ export type TestRunPage = components['schemas']['Page_TestRunOut_']
 export type CurvePoints = components['schemas']['CurvePointsOut']
 
 export interface RunQuery extends Record<string, unknown> {
+  /** 부서 slug. 좁히기만 한다 — 권한을 넓히지 않는다. */
+  workspace?: string
   specimen_id?: string
   material_id?: string
   status?: 'uploaded' | 'parsing' | 'parsed' | 'failed'

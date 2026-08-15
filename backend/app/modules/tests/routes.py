@@ -301,6 +301,9 @@ def upload_test_run(
 
 @runs_router.get("", response_model=Page[TestRunOut])
 def list_runs(
+    workspace: str | None = Query(
+        default=None, description="부서 slug — 그 부서가 등록한 것만"
+    ),
     specimen_id: uuid.UUID | None = None,
     material_id: uuid.UUID | None = None,
     status: str | None = Query(default=None, pattern="^(uploaded|parsing|parsed|failed)$"),
@@ -309,7 +312,20 @@ def list_runs(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Page[TestRunOut]:
+    """**가시 범위와 기본 필터는 다른 것이다.**
+
+    가시 범위(`visible_runs`)는 "볼 권한이 있는가"이고 재료를 따라간다. 그런데
+    화면이 `/w/:slug/tests` 라고 말해 놓고 전사를 보여 주면, 사이드바의 '부서'
+    라는 말이 거짓이 된다. 부서가 하나뿐인 동안은 드러나지 않지만 두 번째 부서가
+    쓰기 시작하면 바로 이상해진다.
+
+    `workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를
+    넣어도 원래 볼 수 있던 것 안에서만 걸러진다.
+    """
     query = services.visible_runs(db, user)
+    if workspace:
+        scope = permissions.workspace_by_slug(db, workspace)
+        query = query.where(TestRun.workspace_id == scope.id)
     if specimen_id:
         query = query.where(TestRun.specimen_id == specimen_id)
     if material_id:
