@@ -679,6 +679,15 @@ export default function BatchUploadPage() {
               완료 {doneCount} · 실패 {failedCount} · 준비 안 됨{' '}
               {rows.filter((row) => !isReady(row) && row.status !== 'done').length}
             </p>
+            {/* **미정으로는 저장되지 않는다.** 시험 이름이 시편 이름에서 나오고
+                회차도 (시편, 종류) 로 매겨진다 — 시편이 없으면 이름도 회차도
+                정할 수 없다. 그래서 안 올리고 남긴다. 조용히 빠지면 "올렸는데
+                왜 없지" 가 된다. */}
+            {rows.some((row) => !isReady(row) && row.status !== 'done') && (
+              <span className="text-muted-foreground text-xs">
+                — 재료·시료·시편이 다 정해진 줄만 올라갑니다. 나머지는 표에 남습니다.
+              </span>
+            )}
             {doneCount > 0 && !running && (
               <Button
                 variant="outline"
