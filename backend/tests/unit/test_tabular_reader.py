@@ -230,6 +230,93 @@ Angular frequency,Storage modulus
         assert channel.values[0] == pytest.approx(6.28319)
 
 
+class Test메타와표가섞여있을때:
+    """**표가 삼키지 않은 줄이 전부 메타다.**
+
+    처음에는 '첫 표 앞' 까지만 메타로 봤다. 그래서 둘을 놓쳤다.
+
+      - 표 **뒤**의 요약부. 실측한 `.tra` 는 요약이 앞에 있지만 뒤에 붙이는 장비도
+        있다. 그러면 `Force maximum,3466.4` 가 통째로 사라진다
+      - 표 **사이**의 키-값
+
+    그리고 '앞까지' 로 자르면 헤더 줄과 단위 줄이 메타에 섞여 들어왔다 — 이건
+    특수한 파일이 아니라 **모든 파일에서 나던 일**이다.
+    """
+
+    def test_헤더와_단위_줄은_메타가_아니다(self) -> None:
+        structure = sniff(
+            encode(
+                """
+Operator,박용진
+Instrument,DMA850
+Angular frequency,Storage modulus
+rad/s,MPa
+6.28,201242
+6.29,201243
+"""
+            )
+        )
+        assert list(structure.meta) == [("Operator", "박용진"), ("Instrument", "DMA850")]
+
+    def test_표_뒤의_키_값도_읽는다(self) -> None:
+        structure = sniff(
+            encode(
+                """
+Operator,박용진
+Angular frequency,Storage modulus
+rad/s,MPa
+6.28,201242
+6.29,201243
+Force maximum,3466.4
+Specimen thickness,0.986
+"""
+            )
+        )
+        meta = dict(structure.meta)
+        assert meta["Force maximum"] == "3466.4"
+        assert meta["Specimen thickness"] == "0.986"
+
+    def test_표_사이의_키_값도_읽는다(self) -> None:
+        structure = sniff(
+            encode(
+                """
+Operator,박용진
+Angular frequency,Storage modulus
+rad/s,MPa
+6.28,201242
+6.29,201243
+Test note,두 번째 구간
+Temperature,Loss modulus
+degC,MPa
+25.0,1577
+25.1,1578
+"""
+            )
+        )
+        assert len(structure.tables) == 2
+        assert dict(structure.meta)["Test note"] == "두 번째 구간"
+
+    def test_표_이름과_마커는_메타가_아니다(self) -> None:
+        """`[step]` 과 표 이름은 표의 것이다. 메타로 들어가면 '보관될 메타' 에
+        `step = ` 같은 것이 쌓인다."""
+        structure = sniff(
+            encode(
+                """
+Operator,박용진
+
+[step]
+Sweep - 1
+Angular frequency,Storage modulus
+rad/s,MPa
+6.28,201242
+6.29,201243
+"""
+            )
+        )
+        assert structure.tables[0].name == "Sweep - 1"
+        assert list(structure.meta) == [("Operator", "박용진")]
+
+
 class Test회귀방지:
     def test_단위_줄에_빈_칸이_있어도_단위_줄이다(self) -> None:
         """DMA 변형률 스윕은 `Tan(delta)` 열의 단위가 비어 있다. 빈 칸을 분모에서

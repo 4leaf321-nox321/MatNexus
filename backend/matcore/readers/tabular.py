@@ -275,8 +275,11 @@ def read(data: bytes, options: ReadOptions | None = None) -> TabularFile:
         )
 
     tables: list[Table] = []
+    tops: list[int] = []
     for index, (start, end) in enumerate(blocks):
-        tables.append(_build_table(index, rows, start, end, opts, warnings))
+        table, top = _build_table(index, rows, start, end, opts, warnings)
+        tables.append(table)
+        tops.append(top)
 
     # **이름 있는 열이 하나도 없으면 표를 찾은 게 아니다.**
     #
@@ -295,7 +298,22 @@ def read(data: bytes, options: ReadOptions | None = None) -> TabularFile:
             + "표 형식 파일이 맞습니까? (JSON·로그 파일일 수 있습니다.)"
         )
 
-    meta = _meta_pairs(rows[: blocks[0][0]])
+    # **표가 삼키지 않은 줄이 전부 메타다.** 첫 표 앞만 보면 두 가지를 놓친다.
+    #
+    #   1. 표 뒤의 요약부. 실측한 `.tra` 는 요약이 앞에 있지만 뒤에 붙이는 장비도
+    #      있다. 그러면 `Force maximum,3466.4` 가 통째로 사라진다.
+    #   2. 표 사이의 키-값. "메타 → 표 → 메타 → 표" 인 파일에서 둘째 메타가 없다.
+    #
+    # 그리고 첫 표 앞'까지'로 자르면 **헤더 줄과 단위 줄이 메타에 섞여 들어온다** —
+    # 이건 모든 파일에서 이미 나던 일이다. `('rad/s', 'MPa')` 가 메타 한 쌍으로
+    # 보관됐다. 표가 어디서부터 시작하는지(`top`)를 알아야 정확히 자를 수 있다.
+    meta: list[tuple[str, str]] = []
+    cursor = 0
+    for (_, end), top in zip(blocks, tops, strict=True):
+        meta.extend(_meta_pairs(rows[cursor:top]))
+        cursor = end
+    meta.extend(_meta_pairs(rows[cursor:]))
+
     return TabularFile(
         encoding=encoding,
         delimiter=delimiter,
@@ -335,7 +353,12 @@ def _build_table(
     end: int,
     opts: ReadOptions,
     warnings: list[str],
-) -> Table:
+) -> tuple[Table, int]:
+    """표 하나와, **그 표가 위로 삼킨 첫 줄 번호**.
+
+    둘째 값이 필요한 이유: 어디까지가 표의 머리(이름·헤더·단위)이고 어디부터가
+    메타인지를 부르는 쪽이 알아야 한다. 모르면 헤더와 단위 줄이 메타에 섞인다.
+    """
     width = len(rows[start])
     above = rows[start - 1] if start >= 1 else []
 
@@ -372,13 +395,19 @@ def _build_table(
         )
         header_row = [""] * width
 
-    return Table(
-        index=index,
-        name=_table_name(rows, name_at),
-        header=tuple(header_row),
-        units=tuple(unit_row),
-        rows=tuple(tuple(row) for row in rows[start:end]),
-        first_line=start + 1,
+    name, name_line = _table_name(rows, name_at)
+    top = name_line if name_line >= 0 else max(0, header_at - depth + 1)
+
+    return (
+        Table(
+            index=index,
+            name=name,
+            header=tuple(header_row),
+            units=tuple(unit_row),
+            rows=tuple(tuple(row) for row in rows[start:end]),
+            first_line=start + 1,
+        ),
+        top,
     )
 
 
@@ -406,22 +435,25 @@ def _join_headers(rows: list[list[str]], at: int, depth: int) -> list[str]:
     return joined
 
 
-def _table_name(rows: list[list[str]], at: int) -> str | None:
-    """헤더 위의 한 칸짜리 줄을 표 이름으로 본다.
+def _table_name(rows: list[list[str]], at: int) -> tuple[str | None, int]:
+    """헤더 위의 한 칸짜리 줄을 표 이름으로 본다. (이름, 그 줄 번호).
 
     실측: DMA 는 `[step]` 다음 줄에 `Temperature Sweep (Multifrequency) - 2` 가
     온다. 마커 자체는 이름이 아니므로 그 위로 한 번 더 올라간다.
+
+    줄 번호를 함께 돌려주는 이유: 그 줄부터가 표의 것이고 그 위가 메타다.
+    이름이 없으면 `-1`.
     """
     while at >= 0:
         row = rows[at]
         cells = [cell for cell in row if cell]
         if len(cells) == 1 and not _MARKER.match(cells[0]) and not _is_number(cells[0]):
-            return cells[0]
+            return cells[0], at
         if len(cells) == 1 and _MARKER.match(cells[0]):
             at -= 1
             continue
-        return None
-    return None
+        return None, -1
+    return None, -1
 
 
 def _meta_pairs(rows: list[list[str]]) -> list[tuple[str, str]]:
