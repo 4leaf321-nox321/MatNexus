@@ -16,6 +16,10 @@ class WorkspaceOption(BaseModel):
 
     slug: str
     name: str
+    path: str
+    """`개발본부 / 금속재료팀`. **같은 이름의 팀이 본부마다 있을 수 있다** —
+    이름만 보여 주면 신청자가 어느 쪽인지 고를 수 없다."""
+    depth: int
 
 
 class WorkspaceOut(BaseModel):
@@ -25,6 +29,10 @@ class WorkspaceOut(BaseModel):
     slug: str
     name: str
     kind: str
+    parent_slug: str | None
+    depth: int
+    path: str
+    sort_order: int
     is_active: bool
     created_at: datetime
     member_count: int
@@ -35,6 +43,21 @@ class WorkspaceOut(BaseModel):
 class WorkspaceCreateRequest(BaseModel):
     slug: str = Field(pattern=SLUG_PATTERN)
     name: str = Field(min_length=1, max_length=100)
+    parent_slug: str | None = None
+
+
+class WorkspaceMoveRequest(BaseModel):
+    """상위 부서 바꾸기. `null` 이면 뿌리로 올린다.
+
+    이름 변경(PATCH)과 분리한 이유: PATCH 로 받으면 "안 바꿈"과 "뿌리로 올림"이
+    둘 다 `null` 이라 구분할 수 없다.
+    """
+
+    parent_slug: str | None = None
+
+
+class WorkspaceReorderRequest(BaseModel):
+    direction: str = Field(pattern=r"^(up|down)$")
 
 
 class WorkspaceUpdateRequest(BaseModel):

@@ -13,10 +13,22 @@ export const workspacesApi = {
 
   list: (all = false) => api.get<Workspace[]>(all ? '/workspaces?all=true' : '/workspaces'),
 
-  create: (slug: string, name: string) => api.post<Workspace>('/workspaces', { slug, name }),
+  create: (slug: string, name: string, parentSlug?: string | null) =>
+    api.post<Workspace>('/workspaces', { slug, name, parent_slug: parentSlug ?? null }),
 
   update: (slug: string, payload: { name?: string; is_active?: boolean }) =>
     api.patch<Workspace>(`/workspaces/${slug}`, payload),
+
+  /** 상위 부서 바꾸기(조직 개편). `null` 이면 뿌리로 올린다.
+   *
+   *  이름 변경(PATCH)과 나눈 이유: 한 요청으로 받으면 "안 바꿈" 과 "뿌리로 올림"
+   *  이 둘 다 `null` 이라 구분할 수 없다. */
+  move: (slug: string, parentSlug: string | null) =>
+    api.post<Workspace>(`/workspaces/${slug}/move`, { parent_slug: parentSlug }),
+
+  /** 형제 사이 순서. 조직도 순서는 이름순도 생성순도 아니다 — 사람이 정한다. */
+  reorder: (slug: string, direction: 'up' | 'down') =>
+    api.post<Workspace>(`/workspaces/${slug}/reorder`, { direction }),
 
   members: (slug: string) => api.get<Member[]>(`/workspaces/${slug}/members`),
 

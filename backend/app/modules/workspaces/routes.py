@@ -19,8 +19,10 @@ from app.modules.workspaces.schemas import (
     MemberOut,
     MemberRoleRequest,
     WorkspaceCreateRequest,
+    WorkspaceMoveRequest,
     WorkspaceOption,
     WorkspaceOut,
+    WorkspaceReorderRequest,
     WorkspaceUpdateRequest,
 )
 from app.shared.auth import current_user, require_system_admin
@@ -55,7 +57,13 @@ def create_workspace(
     admin: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ) -> WorkspaceOut:
-    workspace = services.create(db, slug=payload.slug, name=payload.name, creator=admin)
+    workspace = services.create(
+        db,
+        slug=payload.slug,
+        name=payload.name,
+        creator=admin,
+        parent_slug=payload.parent_slug,
+    )
     return services.workspace_out(db, workspace, admin)
 
 
@@ -67,6 +75,35 @@ def update_workspace(
     db: Session = Depends(get_db),
 ) -> WorkspaceOut:
     workspace = services.update(db, slug=slug, name=payload.name, is_active=payload.is_active)
+    return services.workspace_out(db, workspace, admin)
+
+
+@router.post("/{slug}/move", response_model=WorkspaceOut)
+def move_workspace(
+    slug: str,
+    payload: WorkspaceMoveRequest,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> WorkspaceOut:
+    """상위 부서 바꾸기 — 조직 개편.
+
+    **자료는 하나도 안 움직인다.** 시험·재료는 부서 `id` 를 가리키고, 트리를 옮겨도
+    그 id 는 그대로다. 65가 조직 식별자를 데이터에 직접 박아 개편에 대응할 수단이
+    없었던 것과 반대다.
+    """
+    workspace = services.move(db, slug=slug, parent_slug=payload.parent_slug)
+    return services.workspace_out(db, workspace, admin)
+
+
+@router.post("/{slug}/reorder", response_model=WorkspaceOut)
+def reorder_workspace(
+    slug: str,
+    payload: WorkspaceReorderRequest,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> WorkspaceOut:
+    """형제 사이 순서. 조직도 순서는 이름순도 생성순도 아니다 — 사람이 정한다."""
+    workspace = services.reorder(db, slug=slug, direction=payload.direction)
     return services.workspace_out(db, workspace, admin)
 
 

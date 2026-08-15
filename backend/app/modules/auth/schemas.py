@@ -30,6 +30,10 @@ class WorkspaceMembershipOut(BaseModel):
     workspace_id: uuid.UUID
     slug: str
     name: str
+    path: str
+    """`개발본부 / 금속재료팀`. 부서 선택기가 이름만 보여 주면 같은 이름의 팀이
+    본부마다 있을 때 어느 쪽인지 알 수 없다."""
+    depth: int
     role: str
 
 

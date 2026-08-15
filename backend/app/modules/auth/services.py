@@ -17,6 +17,7 @@ from app.modules.accounts.models import User
 from app.modules.auth import security
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.auth.schemas import PatOut, UserOut, WorkspaceMembershipOut
+from app.modules.workspaces import services as workspaces
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared.errors import AppError, Forbidden, NotFound
 
@@ -179,8 +180,13 @@ def user_out(db: Session, user: User) -> UserOut:
         select(WorkspaceMember, Workspace)
         .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
         .where(WorkspaceMember.user_id == user.id)
-        .order_by(Workspace.name)
     ).all()
+
+    # 순서와 경로는 **조직도가 정한다.** 이름순으로 두면 부서 선택기의 순서가
+    # 부서 관리 화면과 달라진다 — 같은 목록이 화면마다 다르게 보인다.
+    tree = {node.id: (depth, path) for node, depth, path in workspaces.ordered_tree(db)}
+    order = {node_id: index for index, node_id in enumerate(tree)}
+    rows = sorted(rows, key=lambda pair: order.get(pair[1].id, 10**6))
 
     home_slug: str | None = None
     if user.home_workspace_id is not None:
@@ -200,6 +206,8 @@ def user_out(db: Session, user: User) -> UserOut:
                 workspace_id=workspace.id,
                 slug=workspace.slug,
                 name=workspace.name,
+                path=tree.get(workspace.id, (0, workspace.name))[1],
+                depth=tree.get(workspace.id, (0, workspace.name))[0],
                 role=member.role,
             )
             for member, workspace in rows

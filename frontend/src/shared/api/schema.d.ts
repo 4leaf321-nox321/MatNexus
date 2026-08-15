@@ -1068,6 +1068,50 @@ export interface paths {
         patch: operations["set_member_role_api_workspaces__slug__members__user_id__patch"];
         trace?: never;
     };
+    "/api/workspaces/{slug}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Workspace
+         * @description 상위 부서 바꾸기 — 조직 개편.
+         *
+         *     **자료는 하나도 안 움직인다.** 시험·재료는 부서 `id` 를 가리키고, 트리를 옮겨도
+         *     그 id 는 그대로다. 65가 조직 식별자를 데이터에 직접 박아 개편에 대응할 수단이
+         *     없었던 것과 반대다.
+         */
+        post: operations["move_workspace_api_workspaces__slug__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{slug}/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder Workspace
+         * @description 형제 사이 순서. 조직도 순서는 이름순도 생성순도 아니다 — 사람이 정한다.
+         */
+        post: operations["reorder_workspace_api_workspaces__slug__reorder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2511,13 +2555,19 @@ export interface components {
         WorkspaceCreateRequest: {
             /** Name */
             name: string;
+            /** Parent Slug */
+            parent_slug?: string | null;
             /** Slug */
             slug: string;
         };
         /** WorkspaceMembershipOut */
         WorkspaceMembershipOut: {
+            /** Depth */
+            depth: number;
             /** Name */
             name: string;
+            /** Path */
+            path: string;
             /** Role */
             role: string;
             /** Slug */
@@ -2529,12 +2579,27 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * WorkspaceMoveRequest
+         * @description 상위 부서 바꾸기. `null` 이면 뿌리로 올린다.
+         *
+         *     이름 변경(PATCH)과 분리한 이유: PATCH 로 받으면 "안 바꿈"과 "뿌리로 올림"이
+         *     둘 다 `null` 이라 구분할 수 없다.
+         */
+        WorkspaceMoveRequest: {
+            /** Parent Slug */
+            parent_slug?: string | null;
+        };
+        /**
          * WorkspaceOption
          * @description 가입 화면에서 희망 부서를 고르기 위한 최소 정보. 인증 없이 노출된다.
          */
         WorkspaceOption: {
+            /** Depth */
+            depth: number;
             /** Name */
             name: string;
+            /** Path */
+            path: string;
             /** Slug */
             slug: string;
         };
@@ -2545,6 +2610,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Depth */
+            depth: number;
             /**
              * Id
              * Format: uuid
@@ -2560,8 +2627,19 @@ export interface components {
             my_role: string | null;
             /** Name */
             name: string;
+            /** Parent Slug */
+            parent_slug: string | null;
+            /** Path */
+            path: string;
             /** Slug */
             slug: string;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /** WorkspaceReorderRequest */
+        WorkspaceReorderRequest: {
+            /** Direction */
+            direction: string;
         };
         /** WorkspaceUpdateRequest */
         WorkspaceUpdateRequest: {
@@ -4898,6 +4976,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_workspace_api_workspaces__slug__move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_workspace_api_workspaces__slug__reorder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceOut"];
                 };
             };
             /** @description Validation Error */

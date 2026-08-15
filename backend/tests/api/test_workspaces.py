@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -39,7 +40,11 @@ def test_options_are_public_for_signup(client: TestClient, workspace: Workspace)
     """가입 화면은 로그인 전이라 인증 없이 부서 목록이 필요하다."""
     response = client.get("/api/workspaces/options")
     assert response.status_code == 200
-    assert response.json() == [{"slug": "metal", "name": "금속재료팀"}]
+    # 경로도 함께 준다 — 같은 이름의 팀이 본부마다 있을 수 있어서, 이름만으로는
+    # 신청자가 어느 쪽인지 고를 수 없다.
+    assert response.json() == [
+        {"slug": "metal", "name": "금속재료팀", "path": "금속재료팀", "depth": 0}
+    ]
 
 
 def test_create_workspace_makes_creator_a_manager(
@@ -208,3 +213,148 @@ def test_archived_workspace_disappears_from_signup_options(
         f"/api/workspaces/{workspace.slug}", json={"is_active": False}, headers=admin_headers
     )
     assert client.get("/api/workspaces/options").json() == []
+
+
+class Test부서계층:
+    """조직은 평면이 아니다 — 본부 아래 팀이 있다(RA 의 부서 트리를 참조).
+
+    같은 이름의 팀이 본부마다 있을 수 있다("품질팀"이 둘). 평면 목록으로 두면
+    화면에서 그 둘을 구분할 방법이 없다.
+    """
+
+    def _make(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        slug: str,
+        name: str,
+        parent: str | None = None,
+    ) -> dict[str, object]:
+        response = client.post(
+            "/api/workspaces",
+            json={"slug": slug, "name": name, "parent_slug": parent},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        body: dict[str, object] = response.json()
+        return body
+
+    def test_경로와_깊이를_서버가_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """화면이 평면 목록으로 트리를 세우면 선택기·관리·가입 화면이 각자 다른
+        정렬을 갖게 된다. 조직도 순서는 한 곳에서만 정한다."""
+        self._make(client, admin_headers, "dev", "개발본부")
+        team = self._make(client, admin_headers, "metal2", "금속재료팀", "dev")
+
+        assert team["path"] == "개발본부 / 금속재료팀"
+        assert team["depth"] == 1
+        assert team["parent_slug"] == "dev"
+
+    def test_트리_순서로_내려온다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        self._make(client, admin_headers, "dev", "개발본부")
+        self._make(client, admin_headers, "b-team", "나팀", "dev")
+        self._make(client, admin_headers, "a-team", "가팀", "dev")
+
+        rows = client.get("/api/workspaces?all=true", headers=admin_headers).json()
+        order = [row["slug"] for row in rows if row["slug"] in {"dev", "a-team", "b-team"}]
+        # 자식은 부모 바로 아래에. 형제는 만든 순서(sort_order)대로 — 이름순이 아니다.
+        assert order == ["dev", "b-team", "a-team"]
+
+    def test_하위_부서_아래로는_못_옮긴다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**막지 않으면 트리에서 떨어져 나간 고리가 생긴다.** 화면에서 사라지고
+        순회는 무한히 돈다."""
+        self._make(client, admin_headers, "dev", "개발본부")
+        self._make(client, admin_headers, "metal2", "금속재료팀", "dev")
+
+        response = client.post(
+            "/api/workspaces/dev/move",
+            json={"parent_slug": "metal2"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 409
+        assert "순환" in response.json()["error"]["message"]
+
+    def test_자기_자신은_상위가_될_수_없다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        self._make(client, admin_headers, "dev", "개발본부")
+        response = client.post(
+            "/api/workspaces/dev/move", json={"parent_slug": "dev"}, headers=admin_headers
+        )
+        assert response.status_code == 409
+
+    def test_활성_하위가_있으면_보관하지_못한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """부모만 보관하고 자식을 남기면 조직도에 구멍이 난다 — 그 팀은 보관된
+        본부에 매달린 채로 계속 돌아간다(RA 의 O1 과 같은 규칙)."""
+        self._make(client, admin_headers, "dev", "개발본부")
+        self._make(client, admin_headers, "metal2", "금속재료팀", "dev")
+
+        blocked = client.patch(
+            "/api/workspaces/dev", json={"is_active": False}, headers=admin_headers
+        )
+        assert blocked.status_code == 409
+        assert "금속재료팀" in blocked.json()["error"]["message"]
+
+        # 자식부터 보관하면 부모도 보관된다.
+        assert (
+            client.patch(
+                "/api/workspaces/metal2", json={"is_active": False}, headers=admin_headers
+            ).status_code
+            == 200
+        )
+        assert (
+            client.patch(
+                "/api/workspaces/dev", json={"is_active": False}, headers=admin_headers
+            ).status_code
+            == 200
+        )
+
+    def test_옮겨도_자료는_그대로다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**참조가 id 라서 트리를 옮겨도 데이터는 하나도 안 움직인다.**
+
+        65는 조직 식별자를 데이터에 직접 박아 개편에 대응할 수단이 없었다.
+        """
+        self._make(client, admin_headers, "dev", "개발본부")
+        team = self._make(client, admin_headers, "metal2", "금속재료팀")
+        before = db.scalar(select(Workspace).where(Workspace.slug == "metal2"))
+        assert before is not None
+        before_id = before.id
+
+        moved = client.post(
+            "/api/workspaces/metal2/move", json={"parent_slug": "dev"}, headers=admin_headers
+        )
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["id"] == str(before_id) == str(team["id"])
+        assert moved.json()["path"] == "개발본부 / 금속재료팀"
+
+    def test_형제_순서를_사람이_정한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """조직도 순서는 이름순도 생성순도 아니다."""
+        self._make(client, admin_headers, "one", "1팀")
+        self._make(client, admin_headers, "two", "2팀")
+
+        client.post(
+            "/api/workspaces/two/reorder", json={"direction": "up"}, headers=admin_headers
+        )
+        rows = client.get("/api/workspaces?all=true", headers=admin_headers).json()
+        order = [row["slug"] for row in rows if row["slug"] in {"one", "two"}]
+        assert order == ["two", "one"]
+
+    def test_끝에서_더_밀어도_망가지지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        self._make(client, admin_headers, "one", "1팀")
+        response = client.post(
+            "/api/workspaces/one/reorder", json={"direction": "up"}, headers=admin_headers
+        )
+        assert response.status_code == 200

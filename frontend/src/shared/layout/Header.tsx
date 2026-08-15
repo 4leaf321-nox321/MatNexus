@@ -6,9 +6,10 @@
  * 섞으면 "내 부서"라는 개념이 흐려진다.
  */
 
-import { Building2, Check, ChevronDown, LogOut, Moon, PanelLeft, Sun, User } from 'lucide-react'
+import { LogOut, Moon, PanelLeft, Sun, User } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -64,33 +65,17 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
 
       <Separator orientation="vertical" className="mx-1 h-6" />
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1.5">
-            <Building2 className="size-4" />
-            {current?.name ?? workspaceSlug}
-            {memberships.length > 1 && <ChevronDown className="size-3 opacity-60" />}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
-            내 부서
-          </DropdownMenuLabel>
-          {memberships.map((membership) => (
-            <DropdownMenuItem
-              key={membership.slug}
-              onClick={() => switchTo(membership.slug)}
-              className="justify-between"
-            >
-              <span className="truncate">{membership.name}</span>
-              {membership.slug === workspaceSlug && <Check className="size-4" />}
-            </DropdownMenuItem>
-          ))}
-          {memberships.length === 0 && (
-            <DropdownMenuItem disabled>소속된 부서가 없습니다</DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* **경로가 보이는 선택기.** 소속이 여러 곳이면 `품질팀` 이 둘일 수 있고,
+          이름만 보여 주면 지금 어느 부서에 있는지 알 수 없다. 부서가 많아지면
+          검색으로 좁힌다 — 목록이 길어질수록 드롭다운은 못 쓰게 된다. */}
+      <WorkspacePicker
+        workspaces={memberships}
+        value={workspaceSlug}
+        onChange={switchTo}
+        className="h-8 max-w-64 border-0 shadow-none"
+        placeholder={workspaceSlug}
+        emptyLabel="소속된 부서가 없습니다"
+      />
 
       {current?.role === 'manager' && (
         <span className="text-muted-foreground text-xs">부서 관리자</span>

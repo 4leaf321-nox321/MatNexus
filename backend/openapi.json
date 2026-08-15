@@ -4387,6 +4387,17 @@
             "title": "Name",
             "type": "string"
           },
+          "parent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Slug"
+          },
           "slug": {
             "pattern": "^[a-z0-9][a-z0-9-]{1,49}$",
             "title": "Slug",
@@ -4402,8 +4413,16 @@
       },
       "WorkspaceMembershipOut": {
         "properties": {
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
             "type": "string"
           },
           "role": {
@@ -4424,16 +4443,44 @@
           "workspace_id",
           "slug",
           "name",
+          "path",
+          "depth",
           "role"
         ],
         "title": "WorkspaceMembershipOut",
         "type": "object"
       },
+      "WorkspaceMoveRequest": {
+        "description": "상위 부서 바꾸기. `null` 이면 뿌리로 올린다.\n\n이름 변경(PATCH)과 분리한 이유: PATCH 로 받으면 \"안 바꿈\"과 \"뿌리로 올림\"이\n둘 다 `null` 이라 구분할 수 없다.",
+        "properties": {
+          "parent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Slug"
+          }
+        },
+        "title": "WorkspaceMoveRequest",
+        "type": "object"
+      },
       "WorkspaceOption": {
         "description": "가입 화면에서 희망 부서를 고르기 위한 최소 정보. 인증 없이 노출된다.",
         "properties": {
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
             "type": "string"
           },
           "slug": {
@@ -4443,7 +4490,9 @@
         },
         "required": [
           "slug",
-          "name"
+          "name",
+          "path",
+          "depth"
         ],
         "title": "WorkspaceOption",
         "type": "object"
@@ -4454,6 +4503,10 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
           },
           "id": {
             "format": "uuid",
@@ -4487,9 +4540,28 @@
             "title": "Name",
             "type": "string"
           },
+          "parent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Slug"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
           }
         },
         "required": [
@@ -4497,12 +4569,30 @@
           "slug",
           "name",
           "kind",
+          "parent_slug",
+          "depth",
+          "path",
+          "sort_order",
           "is_active",
           "created_at",
           "member_count",
           "my_role"
         ],
         "title": "WorkspaceOut",
+        "type": "object"
+      },
+      "WorkspaceReorderRequest": {
+        "properties": {
+          "direction": {
+            "pattern": "^(up|down)$",
+            "title": "Direction",
+            "type": "string"
+          }
+        },
+        "required": [
+          "direction"
+        ],
+        "title": "WorkspaceReorderRequest",
         "type": "object"
       },
       "WorkspaceUpdateRequest": {
@@ -7945,6 +8035,112 @@
           }
         },
         "summary": "Set Member Role",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/{slug}/move": {
+      "post": {
+        "description": "상위 부서 바꾸기 — 조직 개편.\n\n**자료는 하나도 안 움직인다.** 시험·재료는 부서 `id` 를 가리키고, 트리를 옮겨도\n그 id 는 그대로다. 65가 조직 식별자를 데이터에 직접 박아 개편에 대응할 수단이\n없었던 것과 반대다.",
+        "operationId": "move_workspace_api_workspaces__slug__move_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move Workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/{slug}/reorder": {
+      "post": {
+        "description": "형제 사이 순서. 조직도 순서는 이름순도 생성순도 아니다 — 사람이 정한다.",
+        "operationId": "reorder_workspace_api_workspaces__slug__reorder_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Workspace",
         "tags": [
           "workspaces"
         ]

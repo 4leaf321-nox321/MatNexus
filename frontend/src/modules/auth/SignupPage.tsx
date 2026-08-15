@@ -13,6 +13,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
 import { accountsApi } from '@/modules/accounts/api'
 import { workspacesApi } from '@/modules/workspaces/api'
+import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -25,13 +26,6 @@ import {
 } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select'
 import { useResource } from '@/shared/hooks/useResource'
 
 const MIN_PASSWORD = 10
@@ -141,19 +135,18 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="workspace">소속 부서</Label>
-              <Select value={workspaceSlug} onValueChange={setWorkspaceSlug}>
-                <SelectTrigger id="workspace" className="w-full">
-                  <SelectValue placeholder="부서를 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(workspaces.data ?? []).map((item) => (
-                    <SelectItem key={item.slug} value={item.slug}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>소속 부서</Label>
+              {/* 경로를 보여 주는 선택기. **가입 화면이 이게 가장 절실하다** —
+                  신청자는 조직도를 모르는 채로 고르는데, `품질팀` 이 둘이면
+                  이름만으로는 어느 본부 소속인지 알 수 없다. */}
+              <WorkspacePicker
+                workspaces={workspaces.data ?? []}
+                value={workspaceSlug}
+                onChange={setWorkspaceSlug}
+                placeholder="부서를 선택하세요"
+                className="w-full"
+                emptyLabel="선택할 수 있는 부서가 없습니다"
+              />
             </div>
 
             <div className="space-y-1.5">
