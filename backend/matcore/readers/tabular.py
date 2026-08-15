@@ -190,21 +190,28 @@ def _numeric_row(row: list[str]) -> bool:
 def _unit_likeness(row: list[str]) -> float:
     """이 줄이 단위 줄로 보이는 정도(0~1).
 
-    아는 단위이거나 빈 칸이면 단위답다. 실측: Zwick 3/3, DMA 8/8·9/9·12/12 로
-    전부 1.0 이 나왔다.
+    **빈 칸은 세지 않는다 — 분모에서도 뺀다.** 처음에는 빈 칸을 "단위다움"에
+    포함시켰는데, 그러면 엑셀이 내보낸 CSV 가 통째로 어긋난다. 실측:
+
+        ,,,,,,,,,,, ...                    ← 엑셀 패딩
+        ,strain,stress,fine strain, ...    ← 진짜 헤더, 67칸 중 4칸만 채움
+        ,2.93E-09,1.58266399,0,0,, ...     ← 데이터
+
+    빈 칸을 세면 헤더 줄의 단위다움이 63/67 = 0.94 가 되어 **헤더가 단위 줄로
+    오인되고, 그 위의 빈 줄이 헤더가 된다.** 열 이름이 통째로 사라진다.
+
+    빈 칸을 빼도 회귀는 없다. 실측: Zwick 3/3, DMA 8/8(빈 칸 하나 제외 7/7) 로
+    여전히 1.0 이다.
     """
-    if not row:
+    filled = [cell for cell in row if cell]
+    if not filled:
         return 0.0
-    hits = 0
-    for cell in row:
-        if (
-            not cell
-            or cell in {"-", "1"}
-            or cell in units.UNITS
-            or cell.lower() in _UNIT_ALIASES
-        ):
-            hits += 1
-    return hits / len(row)
+    hits = sum(
+        1
+        for cell in filled
+        if cell in {"-", "1"} or cell in units.UNITS or cell.lower() in _UNIT_ALIASES
+    )
+    return hits / len(filled)
 
 
 #: 장비가 흔히 쓰는 표기. 단위 판정에만 쓴다 — 실제 변환은 프로파일이 정한다.
@@ -254,6 +261,23 @@ def read(data: bytes, options: ReadOptions | None = None) -> TabularFile:
     for index, (start, end) in enumerate(blocks):
         tables.append(_build_table(index, rows, start, end, opts, warnings))
 
+    # **이름 있는 열이 하나도 없으면 표를 찾은 게 아니다.**
+    #
+    # 실측: 기존 앱의 `.mtet`·`.mdss`·`.mdft` 는 JSON 인데, 배열 안의 숫자 줄이
+    # 연달아 나와 "표 93개" 로 잡혔다. 고유 파일 131개 중 **59개**가 이렇게
+    # '성공' 했다. 열 이름이 없으니 매핑할 것도 없는데 성공으로 돌려주면, 화면은
+    # 빈 표를 보여 주고 사람은 무엇이 잘못됐는지 알 수 없다.
+    if not any(any(cell.strip() for cell in table.header) for table in tables):
+        # 어긋난 내역이 있으면 **그것을 먼저** 보여 준다 — 사람이 고칠 근거다.
+        # 그래도 마지막 힌트는 늘 붙인다. 원인이 파일 종류인 경우가 더 흔하고,
+        # "실패" 만 보면 사람은 파일이 깨진 줄 안다.
+        detail = " / ".join(warning for warning in warnings if "헤더" in warning)
+        raise ReadError(
+            "숫자 줄은 찾았지만 열 이름이 하나도 없습니다. "
+            + (f"{detail}. " if detail else "")
+            + "표 형식 파일이 맞습니까? (JSON·로그 파일일 수 있습니다.)"
+        )
+
     meta = _meta_pairs(rows[: blocks[0][0]])
     return TabularFile(
         encoding=encoding,
@@ -300,7 +324,10 @@ def _build_table(
     two_above = rows[start - 2] if start >= 2 else []
 
     if opts.has_units_row is None:
-        has_units = len(above) == width and _unit_likeness(above) >= UNIT_ROW_THRESHOLD
+        # 칸 수가 데이터와 같은지는 **묻지 않는다.** 물으면, 칸 수가 어긋난 파일에서
+        # 단위 줄을 헤더로 착각해 오류 메시지에 `rad/s, s, °C…` 를 "읽은 헤더" 라고
+        # 적게 된다(실측). 사람이 고칠 근거가 되려면 진짜 헤더가 보여야 한다.
+        has_units = bool(above) and _unit_likeness(above) >= UNIT_ROW_THRESHOLD
     else:
         has_units = opts.has_units_row
 
@@ -310,9 +337,18 @@ def _build_table(
         unit_row, header_row, name_at = [], above, start - 2
 
     if len(header_row) != width:
+        # **앞에서부터 맞춰 붙이지 않는다.** 실측(`Example.csv` 구버전): 헤더는
+        # 8칸인데 데이터는 7칸이고, 빠진 것이 마지막이 아니라 6번째(`Tan(delta)`)
+        # 였다. 앞에서부터 붙이면 손실탄성률 데이터에 `Storage modulus` 라는
+        # 이름이 붙는다 — **틀린 이름은 이름이 없는 것보다 나쁘다.** 그럴듯해
+        # 보여서 아무도 못 잡는다.
+        #
+        # 대신 못 쓴 줄을 경고에 그대로 실어 사람이 판단하게 한다.
+        sample = ", ".join(cell for cell in header_row if cell)[:120]
         warnings.append(
             f"{index + 1}번째 표: 헤더 {len(header_row)}칸이 데이터 {width}칸과 "
-            f"맞지 않아 열 이름을 비워 둡니다."
+            f"맞지 않아 열 이름을 비웠습니다. 어느 열이 빠졌는지 알 수 없어 "
+            f"앞에서부터 붙이지 않습니다" + (f" — 읽은 헤더: {sample}" if sample else "")
         )
         header_row = [""] * width
 
