@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -19,6 +20,56 @@ from fastapi.responses import JSONResponse
 from app.shared.request_context import get_request_id
 
 logger = logging.getLogger(__name__)
+
+
+#: 스키마 검증 실패 종류 → 사람이 읽는 말.
+#: pydantic 의 영어 메시지를 그대로 내보내면 화면에서 아무도 안 읽는다.
+_VALIDATION_MESSAGES = {
+    "missing": "값이 빠졌습니다",
+    "string_too_short": "값이 필요합니다",
+    "string_too_long": "너무 깁니다",
+    "string_pattern_mismatch": "쓸 수 없는 문자가 있습니다",
+    "int_parsing": "정수여야 합니다",
+    "float_parsing": "숫자여야 합니다",
+    "bool_parsing": "예/아니오 값이어야 합니다",
+    "value_error": "값이 올바르지 않습니다",
+    "greater_than_equal": "너무 작습니다",
+    "less_than_equal": "너무 큽니다",
+}
+
+#: 한 번에 보여 줄 항목 수. 다 늘어놓으면 첫 줄부터 안 읽는다.
+_MAX_VALIDATION_ITEMS = 3
+
+
+def describe_validation(errors: Sequence[Any]) -> str:
+    """**어느 칸이 왜 틀렸는지 말한다.**
+
+    "요청 형식이 올바르지 않습니다" 만 내보내던 때 실제로 막혔다: 시험 종류
+    키에 `DMA` 를 넣어 대소문자 규칙에 걸렸는데, 화면은 그 사실을 말해 주지
+    않아 사용자가 무엇을 고쳐야 할지 알 수 없었다. 자세한 내용은 `details` 에도
+    있지만 **화면이 보여 주는 것은 `message` 하나**다.
+    """
+    if not errors:
+        return "요청 형식이 올바르지 않습니다."
+
+    parts: list[str] = []
+    for error in errors[:_MAX_VALIDATION_ITEMS]:
+        location = [
+            str(item) for item in error.get("loc", ()) if item not in ("body", "query")
+        ]
+        where = ""
+        for index, item in enumerate(location):
+            where += f"[{item}]" if item.isdigit() else (f".{item}" if index else item)
+
+        reason = _VALIDATION_MESSAGES.get(str(error.get("type")), str(error.get("msg", "")))
+        pattern = (error.get("ctx") or {}).get("pattern")
+        if pattern:
+            reason = f"{reason} (허용: {pattern})"
+        parts.append(f"{where or '요청'} — {reason}")
+
+    more = len(errors) - len(parts)
+    summary = " / ".join(parts)
+    return f"{summary} 외 {more}건" if more > 0 else summary
 
 
 class AppError(Exception):
@@ -91,7 +142,9 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=422,
             content=_body(
-                "MNX-COMMON-0422", "요청 형식이 올바르지 않습니다.", {"errors": exc.errors()}
+                "MNX-COMMON-0422",
+                describe_validation(exc.errors()),
+                {"errors": exc.errors()},
             ),
         )
 

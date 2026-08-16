@@ -372,3 +372,66 @@ class TestPermissions:
         assert client.delete("/api/test-types/tensile", headers=headers).status_code == 403
         # 읽기는 된다 — 업로드 폼을 그리려면 정의가 필요하다
         assert client.get("/api/test-types", headers=headers).status_code == 200
+
+
+class Test검증오류메시지:
+    """**어느 칸이 왜 틀렸는지 말한다.**
+
+    실사용 보고: 시험 종류 키에 `DMA` 를 넣었더니 "요청 형식이 올바르지 않습니다"
+    만 떴다. 대소문자 규칙에 걸린 것인데 화면은 그 사실을 말해 주지 않아 무엇을
+    고쳐야 할지 알 수 없었다.
+    """
+
+    def test_어느_칸이_틀렸는지_말한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        response = client.post(
+            "/api/test-types",
+            json={
+                "key": "DMA",
+                "label": "DMA 스윕",
+                "abbr": "DMA",
+                "channels": [],
+                "conditions": [],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        message = response.json()["error"]["message"]
+        assert "key" in message
+        assert "쓸 수 없는 문자" in message
+        # 무엇이 허용되는지도 함께 준다 — 규칙을 모르면 고칠 수 없다.
+        assert "a-z" in message
+
+    def test_중첩된_칸도_짚어_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """채널이 여러 줄일 때 '어느 줄' 인지가 없으면 찾을 수 없다."""
+        response = client.post(
+            "/api/test-types",
+            json={
+                "key": "bend",
+                "label": "굽힘",
+                "abbr": "BND",
+                "channels": [
+                    {"key": "force", "label": "하중", "dimension": "force", "si_unit": "N"},
+                    {"key": "x", "label": "", "dimension": "length", "si_unit": "m"},
+                ],
+                "conditions": [],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        message = response.json()["error"]["message"]
+        assert "channels[1].label" in message
+
+    def test_자세한_내용은_details_에_그대로_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """사람이 읽는 요약과 별개로, 원본은 진단용으로 남겨 둔다."""
+        response = client.post(
+            "/api/test-types",
+            json={"key": "DMA", "label": "x", "abbr": "DMA", "channels": [], "conditions": []},
+            headers=admin_headers,
+        )
+        assert response.json()["error"]["details"]["errors"]

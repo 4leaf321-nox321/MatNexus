@@ -42,6 +42,15 @@ import {
 } from '@/shared/components/ui/select'
 import { useResource } from '@/shared/hooks/useResource'
 
+/** 서버의 키 규칙(`^[a-z][a-z0-9_]*$`)을 칸에서 지킨다. 숫자로 시작하면 그
+ *  숫자를 떨어뜨린다 — 조용히 놔두면 저장할 때 거절당한다. */
+function toKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/^[^a-z]+/, '')
+}
+
 interface ChannelRow {
   key: string
   label: string
@@ -195,13 +204,16 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="key">키</Label>
+            {/* **적어 둔 규칙을 칸이 스스로 지킨다.** 안내만 두었을 때 실제로
+                막혔다 — `DMA` 를 넣으면 서버가 422 로 거절하는데, 사용자는 왜
+                거절됐는지 알 수 없었다. 고를 수 없는 값은 애초에 못 넣게 한다. */}
             <Input
               id="key"
               value={form.key}
               disabled={!creating}
               placeholder="compression"
               onChange={(event) =>
-                setForm((current) => ({ ...current, key: event.target.value }))
+                setForm((current) => ({ ...current, key: toKey(event.target.value) }))
               }
             />
             <p className="text-muted-foreground text-xs">
@@ -226,7 +238,11 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
               value={form.abbr}
               placeholder="COM"
               onChange={(event) =>
-                setForm((current) => ({ ...current, abbr: event.target.value }))
+                // 약어는 이름에 들어가므로 영문·숫자만. 서버도 같은 규칙이다.
+                setForm((current) => ({
+                  ...current,
+                  abbr: event.target.value.replace(/[^A-Za-z0-9]/g, ''),
+                }))
               }
             />
             <p className="text-muted-foreground text-xs">시험 이름에 들어갑니다</p>
@@ -403,7 +419,7 @@ function RowEditor({
                 value={row.key}
                 disabled={frozen}
                 placeholder="force"
-                onChange={(event) => onChange(index, { key: event.target.value })}
+                onChange={(event) => onChange(index, { key: toKey(event.target.value) })}
               />
             </div>
             <div className="flex-1 space-y-1">
