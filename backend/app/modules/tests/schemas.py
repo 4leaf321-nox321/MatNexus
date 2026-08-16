@@ -39,6 +39,13 @@ class TestConditionFieldOut(BaseModel):
 class TestTypeOut(BaseModel):
     id: uuid.UUID
     key: str
+    owner_workspace_slug: str | None
+    owner_workspace_name: str | None
+    is_global: bool
+    """누가 만들었나. **안 보이면 왜 못 고치는지 알 수 없다.**
+
+    전역은 여러 부서가 함께 쓰므로 시스템 관리자만 고친다. 화면이 그 사실을
+    보여 주지 않으면 편집 버튼을 눌러 보고 403 을 받고서야 알게 된다."""
     label: str
     abbr: str
     description: str | None
@@ -268,7 +275,12 @@ class TestTypeSaveRequest(BaseModel):
 
 class TestTypeCreateRequest(TestTypeSaveRequest):
     key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
-    """만든 뒤에는 바꿀 수 없다. 시험 종류를 가리키는 안정된 이름이다."""
+    """만든 뒤에는 바꿀 수 없다. 시험 종류를 가리키는 안정된 이름이다.
+
+    **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이
+    아니라 하나를 같이 써야 한다(ADR 0006)."""
+    owner_workspace_slug: str | None = None
+    """누구 것으로 만들지. 비우면 전역 — **시스템 관리자만** 할 수 있다."""
 
 
 class DefinitionLocksOut(BaseModel):

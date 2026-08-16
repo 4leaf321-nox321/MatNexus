@@ -17,7 +17,9 @@
 import { useEffect, useState } from 'react'
 import { Lock, Plus, Trash2 } from 'lucide-react'
 
+import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { testsApi } from '@/modules/tests/api'
+import { useAuth } from '@/shared/auth/AuthContext'
 import type { Parser, TestType } from '@/modules/tests/api'
 import { toChannelKey } from '@/modules/tests/keys'
 import { DIMENSIONS, SI_BY_DIMENSION, VALUE_TYPES, display } from '@/modules/tests/units'
@@ -72,10 +74,21 @@ interface Props {
 }
 
 export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
+  const { user } = useAuth()
   const parsers = useResource(
     () => (open ? testsApi.parsers() : Promise.resolve([])),
     [open]
   )
+  /** 내가 관리자인 부서만. 아닌 부서 것으로 만들면 서버가 거절한다. */
+  const managed = (user?.memberships ?? [])
+    .filter((membership) => membership.role === 'manager')
+    .map((membership) => ({
+      slug: membership.slug,
+      name: membership.name,
+      path: membership.path,
+      depth: membership.depth,
+    }))
+  const [owner, setOwner] = useState<string | null>(null)
   const [form, setForm] = useState({
     key: '',
     label: '',
@@ -95,6 +108,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
   useEffect(() => {
     if (!open) return
     setError(null)
+    setOwner(type?.owner_workspace_slug ?? null)
     setForm({
       key: type?.key ?? '',
       label: type?.label ?? '',
@@ -157,8 +171,13 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
           sort_order: index * 10,
         })),
       }
-      if (creating) await testsApi.createType({ ...payload, key: form.key })
-      else await testsApi.updateType(form.key, payload)
+      if (creating) {
+        await testsApi.createType({
+          ...payload,
+          key: form.key,
+          owner_workspace_slug: owner,
+        })
+      } else await testsApi.updateType(form.key, payload)
       onSaved()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
@@ -192,6 +211,45 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
         )}
 
         <ErrorNotice error={parsers.error ?? error} />
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">누구 것인가</Label>
+          {creating ? (
+            <>
+              <WorkspacePicker
+                workspaces={managed}
+                value={owner}
+                onChange={setOwner}
+                placeholder={
+                  user?.is_system_admin ? '전역 — 모든 부서가 씁니다' : '부서를 고르세요'
+                }
+                className="w-full"
+                emptyLabel="관리하는 부서가 없습니다"
+              />
+              <p className="text-muted-foreground text-xs">
+                {user?.is_system_admin
+                  ? '비워 두면 전역입니다 — 모든 부서가 쓰고, 시스템 관리자만 고칠 수 있습니다.'
+                  : '부서 관리자인 부서만 고를 수 있습니다. 전역은 시스템 관리자가 만듭니다.'}
+                {' '}
+                <b>채널 이름은 전사에서 뜻이 같아야 합니다</b> — 이미 다른 종류가 쓰는
+                이름을 다른 차원·단위로 정의하면 서버가 거절합니다. 곡선을 겹쳐 그릴 때
+                축이 어긋나기 때문입니다.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm">
+              {type?.is_global ? (
+                <>
+                  <b>전역</b> — 모든 부서가 씁니다. 시스템 관리자만 고칠 수 있습니다.
+                </>
+              ) : (
+                <>
+                  <b>{type?.owner_workspace_name}</b> 소유
+                </>
+              )}
+            </p>
+          )}
+        </div>
 
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1.5">

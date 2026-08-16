@@ -38,10 +38,15 @@ describe('사이드바 메뉴', () => {
     }
   })
 
-  it('부서 관리자는 파일 형식을 본다', () => {
+  it('부서 관리자는 장비를 붙이는 데 필요한 것을 다 본다', () => {
     // **장비를 붙이는 것은 사업부의 일이다.** 관리자 전용으로 두었더니 실무가
     // 막혔고, 그래서 프로파일을 부서 소유로 바꿨다(ADR 0004 의 재료와 같은 모델).
+    //
+    // **시험 종류가 여기 없으면 반쪽이다.** 프로파일은 시험 종류를 가리키는데,
+    // 새 장비란 대개 없는 종류를 재는 장비다. 종류를 못 만들면 매핑을 다 끝낸
+    // 뒤 저장 순간 403 이 난다(ADR 0006).
     const seen = labels(MANAGER)
+    expect(seen).toContain('시험 종류')
     expect(seen).toContain('파일 형식')
     expect(seen).toContain('부서 멤버')
   })
@@ -49,7 +54,7 @@ describe('사이드바 메뉴', () => {
   it('부서 관리자에게 전사 관리 메뉴는 안 보인다', () => {
     const seen = labels(MANAGER)
     expect(seen).not.toContain('계정')
-    expect(seen).not.toContain('시험 종류')
+    expect(seen).not.toContain('부서')
     expect(seen).not.toContain('서버')
   })
 

@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -50,10 +50,16 @@ from app.modules.tests.schemas import (
     TestTypeOut,
     TestTypeSaveRequest,
 )
+from app.modules.workspaces.models import Workspace
 from app.shared import filestore, permissions
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
+from app.shared.permissions import (
+    require_owner_edit,
+    resolve_owner_workspace,
+    visible_owner_clause,
+)
 from matcore import naming, parsers, readers, registry
 from matcore.readers import profile as profiles
 
@@ -105,6 +111,11 @@ def _run_counts(db: Session, type_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     return {type_id: count for type_id, count in rows}
 
 
+def _visible_types(db: Session, user: User) -> Select[tuple[TestType]]:
+    """내 부서 것 + 전역. 재료·형식 프로파일과 **같은 규칙, 같은 코드**다."""
+    return select(TestType).where(visible_owner_clause(db, user, TestType.owner_workspace_id))
+
+
 def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
     """정의 하나를 응답 형태로. 목록과 편집 응답이 같은 모양이어야 화면이
     저장 뒤 다시 불러오지 않아도 된다."""
@@ -122,10 +133,18 @@ def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
             .order_by(TestConditionField.sort_order)
         )
     )
+    owner = (
+        db.get(Workspace, test_type.owner_workspace_id)
+        if test_type.owner_workspace_id
+        else None
+    )
     return TestTypeOut(
         id=test_type.id,
         run_count=_run_counts(db, [test_type.id]).get(test_type.id, 0),
         key=test_type.key,
+        owner_workspace_slug=owner.slug if owner else None,
+        owner_workspace_name=owner.name if owner else None,
+        is_global=test_type.owner_workspace_id is None,
         label=test_type.label,
         abbr=test_type.abbr,
         description=test_type.description,
@@ -271,7 +290,7 @@ def detect_test_type(
 
 
 @router.get("/parsers", response_model=list[ParserOut])
-def list_parsers(user: User = Depends(require_system_admin)) -> list[ParserOut]:
+def list_parsers(user: User = Depends(current_user)) -> list[ParserOut]:
     """등록된 파서. 종류를 만들 때 여기서 고른다.
 
     **파서는 정의로 만들 수 없다.** 코드다(`matcore/parsers`). 정의를 데이터로
@@ -296,15 +315,39 @@ def list_parsers(user: User = Depends(require_system_admin)) -> list[ParserOut]:
 @router.post("", response_model=TestTypeOut, status_code=201)
 def create_test_type(
     payload: TestTypeCreateRequest,
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> TestTypeOut:
-    """새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다."""
-    if db.scalar(select(TestType).where(TestType.key == payload.key)):
-        raise Conflict("MNX-TESTS-0021", f"이미 있는 시험 종류입니다: {payload.key}")
+    """새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다.
+
+    **부서 관리자도 만든다**(ADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고,
+    새 장비란 대개 없는 종류를 재는 장비다. 시스템 관리자만 만들 수 있게 두었을
+    때는 형식 프로파일 화면에서 매핑을 다 끝낸 뒤 저장 순간 403 이 났다.
+
+    키는 **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이
+    아니라 하나를 같이 써야 하고, 여기서 부딪히면 그 사실을 알게 된다.
+    """
+    existing = db.scalar(select(TestType).where(TestType.key == payload.key))
+    if existing:
+        owner = (
+            db.get(Workspace, existing.owner_workspace_id)
+            if existing.owner_workspace_id
+            else None
+        )
+        whose = f"{owner.name} 부서가" if owner else "전사에"
+        raise Conflict(
+            "MNX-TESTS-0021",
+            f"이미 있는 시험 종류입니다: {payload.key} ({whose} 만들어 둔 "
+            f"'{existing.label}'). 같은 시험이면 그것을 쓰고, 다른 시험이면 "
+            f"키를 다르게 지으세요.",
+        )
     data = payload.model_dump()
     key = data.pop("key")
-    test_type = services.save_definition(db, key=key, **data)
+    owner_slug = data.pop("owner_workspace_slug", None)
+    owner_id = resolve_owner_workspace(
+        db, user, owner_slug, what="시험 종류", code="MNX-TESTS-0029"
+    )
+    test_type = services.save_definition(db, key=key, owner_workspace_id=owner_id, **data)
     return _type_out(db, test_type)
 
 
@@ -312,7 +355,7 @@ def create_test_type(
 def update_test_type(
     key: str,
     payload: TestTypeSaveRequest,
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> TestTypeOut:
     """정의 한 벌을 갈아 끼운다.
@@ -320,8 +363,12 @@ def update_test_type(
     등록된 시험이 있으면 채널의 **key·단위·차원은 거절한다** — 저장된 곡선의
     해석이 바뀌기 때문이다. 라벨·정렬·필수여부는 언제든 바꿀 수 있다.
     """
-    if db.scalar(select(TestType).where(TestType.key == key)) is None:
+    existing = db.scalar(_visible_types(db, user).where(TestType.key == key))
+    if existing is None:
         raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
+    require_owner_edit(
+        db, user, existing.owner_workspace_id, what="시험 종류", code="MNX-TESTS-0029"
+    )
     test_type = services.save_definition(db, key=key, **payload.model_dump())
     return _type_out(db, test_type)
 
@@ -329,9 +376,15 @@ def update_test_type(
 @router.delete("/{key}", status_code=204)
 def delete_test_type(
     key: str,
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    existing = db.scalar(_visible_types(db, user).where(TestType.key == key))
+    if existing is None:
+        raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
+    require_owner_edit(
+        db, user, existing.owner_workspace_id, what="시험 종류", code="MNX-TESTS-0029"
+    )
     services.delete_definition(db, key)
     return Response(status_code=204)
 
@@ -347,7 +400,7 @@ def list_test_types(
     화면이 이 응답만으로 업로드 폼을 그릴 수 있어야 한다 — 그것이 정의를 DB 에
     둔 이유다.
     """
-    query = select(TestType).order_by(TestType.sort_order, TestType.label)
+    query = _visible_types(db, user).order_by(TestType.sort_order, TestType.label)
     if not include_inactive:
         query = query.where(TestType.is_active.is_(True))
     types = list(db.scalars(query))
@@ -373,11 +426,26 @@ def list_test_types(
 
     fallback = get_settings().max_upload_bytes
     counts = _run_counts(db, ids)
+    # 소유 부서를 한 번에 긁는다. 종류마다 `db.get` 하면 목록 하나에 쿼리가
+    # 종류 수만큼 붙는다(CLAUDE.md: N+1 은 명시적 join 으로 막는다).
+    owner_ids = {t.owner_workspace_id for t in types if t.owner_workspace_id}
+    owners = {
+        w.id: w
+        for w in db.scalars(select(Workspace).where(Workspace.id.in_(owner_ids)))
+        if owner_ids
+    }
     return [
         TestTypeOut(
             id=t.id,
             run_count=counts.get(t.id, 0),
             key=t.key,
+            owner_workspace_slug=(
+                owners[t.owner_workspace_id].slug if t.owner_workspace_id in owners else None
+            ),
+            owner_workspace_name=(
+                owners[t.owner_workspace_id].name if t.owner_workspace_id in owners else None
+            ),
+            is_global=t.owner_workspace_id is None,
             label=t.label,
             abbr=t.abbr,
             description=t.description,

@@ -272,8 +272,13 @@ def save_definition(
     max_upload_bytes: int | None,
     channels: list[dict[str, Any]],
     conditions: list[dict[str, Any]],
+    owner_workspace_id: uuid.UUID | None = None,
 ) -> TestType:
-    """정의 한 벌을 저장한다. 없으면 만들고, 있으면 갈아 끼운다."""
+    """정의 한 벌을 저장한다. 없으면 만들고, 있으면 갈아 끼운다.
+
+    `owner_workspace_id` 는 **만들 때만** 쓴다. 소유를 옮기는 것(전역 승격)은
+    성격이 다른 결정이라 이 경로로 조용히 일어나면 안 된다.
+    """
     if not channels:
         raise AppError("MNX-TESTS-0015", "채널이 하나도 없습니다.", status=422)
     _ensure_unique_keys(channels, "채널")
@@ -293,11 +298,21 @@ def save_definition(
 
     test_type = db.scalar(select(TestType).where(TestType.key == key))
     creating = test_type is None
-    if test_type is None:
-        test_type = TestType(key=key)
-        db.add(test_type)
 
-    if not creating:
+    # **사전을 읽기 전에 flush 한다.** 세션이 `autoflush=False` 다
+    # (`app/database.py`). 아직 안 나간 채널이 있으면 사전이 비어 보이고, 빈
+    # 사전은 **아무것도 안 막는다** — 검사가 조용히 통과하는 것은 검사가 없는
+    # 것보다 나쁘다. 실제로 이 함수를 처음 붙였을 때 그렇게 통과했다.
+    #
+    # 그리고 이 검사는 **아무것도 만들기 전에** 한다. 반쯤 만든 TestType 이
+    # 세션에 얹힌 뒤 flush 하면 NOT NULL 에 걸린다.
+    db.flush()
+    _guard_channel_dictionary(db, test_type.id if test_type else None, channels)
+
+    if test_type is None:
+        test_type = TestType(key=key, owner_workspace_id=owner_workspace_id)
+        db.add(test_type)
+    else:
         _guard_locked_changes(db, test_type, channels, conditions)
 
     test_type.label = label
@@ -362,6 +377,51 @@ def _validate_units(channels: list[dict[str, Any]], conditions: list[dict[str, A
                 f"단위는 화면이 따로 정합니다.",
                 status=422,
             )
+
+
+def _guard_channel_dictionary(
+    db: Session, test_type_id: uuid.UUID | None, channels: list[dict[str, Any]]
+) -> None:
+    """이미 다른 종류가 쓰는 채널 키면 **차원·저장 단위가 같아야 한다.**
+
+    시험 종류를 부서 관리자에게 열면서 생긴 유일한 진짜 위험이 이것이다. 채널
+    키는 표시용 라벨이 아니라 **Parquet 의 컬럼 이름**이고, 곡선 비교·통계·
+    내보내기가 전부 그 이름으로 열을 찾는다. A부서가 `stress` 를 Pa 로, B부서가
+    같은 이름을 MPa 로 정의하면 두 부서 곡선을 겹쳐 그린 순간 **10⁶ 배 어긋난
+    그림**이 나오는데, 축 이름이 같아서 아무도 이상하다고 느끼지 못한다.
+
+    새 테이블(채널 사전)을 두지 않는 이유: 사전은 이미 있다 — **등록된 종류들의
+    채널 전체**가 그것이다. 따로 두면 둘이 어긋나는 세 번째 문제가 생긴다.
+
+    **새 키를 만드는 것은 막지 않는다.** 새 물성을 재는 것이 새 장비를 붙이는
+    일이고, 그것을 막으면 문을 연 의미가 없다. 막는 것은 *같은 이름으로 다른
+    것을 뜻하는* 경우뿐이다.
+    """
+    query = select(TestChannel.key, TestChannel.si_unit, TestChannel.dimension, TestType.label)
+    query = query.join(TestType, TestType.id == TestChannel.test_type_id)
+    if test_type_id is not None:
+        query = query.where(TestChannel.test_type_id != test_type_id)
+
+    known: dict[str, tuple[str, str, str]] = {}
+    for key, si_unit, dimension, owner_label in db.execute(query):
+        known.setdefault(key, (si_unit, dimension, owner_label))
+
+    for item in channels:
+        key = str(item["key"])
+        existing = known.get(key)
+        if existing is None:
+            continue
+        si_unit, dimension, owner_label = existing
+        if str(item.get("si_unit")) == si_unit and str(item.get("dimension")) == dimension:
+            continue
+        raise AppError(
+            "MNX-TESTS-0028",
+            f"채널 '{key}' 는 이미 '{owner_label}' 에서 {dimension}({si_unit}) 로 "
+            f"쓰고 있습니다. 여기서는 {item.get('dimension')}({item.get('si_unit')}) 입니다. "
+            f"같은 이름은 같은 것을 뜻해야 합니다 — 곡선을 겹쳐 그릴 때 축이 어긋납니다. "
+            f"다른 뜻이면 이름을 다르게 지으세요.",
+            status=422,
+        )
 
 
 def _guard_locked_changes(

@@ -866,6 +866,13 @@ export interface paths {
         /**
          * Create Test Type
          * @description 새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다.
+         *
+         *     **부서 관리자도 만든다**(ADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고,
+         *     새 장비란 대개 없는 종류를 재는 장비다. 시스템 관리자만 만들 수 있게 두었을
+         *     때는 형식 프로파일 화면에서 매핑을 다 끝낸 뒤 저장 순간 403 이 났다.
+         *
+         *     키는 **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이
+         *     아니라 하나를 같이 써야 하고, 여기서 부딪히면 그 사실을 알게 된다.
          */
         post: operations["create_test_type_api_test_types_post"];
         delete?: never;
@@ -2425,6 +2432,8 @@ export interface components {
             label: string;
             /** Max Upload Bytes */
             max_upload_bytes?: number | null;
+            /** Owner Workspace Slug */
+            owner_workspace_slug?: string | null;
             /** Parser Key */
             parser_key?: string | null;
             /**
@@ -2452,12 +2461,18 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
+            /** Is Global */
+            is_global: boolean;
             /** Key */
             key: string;
             /** Label */
             label: string;
             /** Max Upload Bytes */
             max_upload_bytes: number;
+            /** Owner Workspace Name */
+            owner_workspace_name: string | null;
+            /** Owner Workspace Slug */
+            owner_workspace_slug: string | null;
             /** Parser Key */
             parser_key: string | null;
             /** Run Count */

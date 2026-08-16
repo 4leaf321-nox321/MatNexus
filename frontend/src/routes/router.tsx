@@ -74,6 +74,7 @@ export const router = createBrowserRouter([
           //
           // 라우터가 정적 구간을 동적 구간보다 먼저 고르므로 `new` 는 `:key` 에
           // 먹히지 않는다. 순서에 기대지 않도록 적어 둔다.
+          { path: 'settings/test-types', element: <TestTypesPage /> },
           { path: 'settings/formats', element: <FormatProfilesPage /> },
           { path: 'settings/formats/new', element: <FormatProfileEditorPage /> },
           { path: 'settings/formats/:key', element: <FormatProfileEditorPage /> },
@@ -81,7 +82,6 @@ export const router = createBrowserRouter([
           // 관리 (전사)
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
-          { path: 'admin/test-types', element: <TestTypesPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },

@@ -533,6 +533,11 @@ export default function FormatProfileEditorPage() {
         abbr: newType.abbr,
         description: null,
         parser_key: null, // **파서 없이 프로파일로 읽는다** — 이 설계의 요점
+        // 종류도 프로파일과 **같은 부서 것**으로 만든다. 여기가 막다른 길이었다:
+        // 종류는 시스템 관리자만 만들 수 있어서, 부서 관리자가 열 20개를 다
+        // 매핑하고 저장을 누르는 순간 403 이 났다(ADR 0006). 새 장비란 대개
+        // 없는 종류를 재는 장비라 이 경로가 오히려 정상이다.
+        owner_workspace_slug: owner,
         is_active: true,
         sort_order: 0,
         max_upload_bytes: null,

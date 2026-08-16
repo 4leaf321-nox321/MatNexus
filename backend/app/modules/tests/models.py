@@ -62,18 +62,32 @@ SUMMARY_SOURCES = ("instrument", "matnexus")
 
 
 class TestType(Base):
-    """시험 종류 정의. 관리 화면에서 추가·수정한다."""
+    """시험 종류 정의. 부서 관리자와 시스템 관리자가 추가·수정한다."""
 
     __tablename__ = "test_types"
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    owner_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True, index=True
+    )
+    """누구 것인가. `NULL` 이면 전역(재료·프로파일과 같은 모델, ADR 0004·0006).
+
+    **처음에는 시스템 관리자 전용이었다.** 그런데 형식 프로파일을 부서 소유로
+    연 순간 막다른 길이 생겼다 — 부서 관리자가 새 장비를 붙이려면 시험 종류가
+    먼저 있어야 하는데, 그것을 만들 권한이 없었다. 새 장비란 대개 **없는 종류**를
+    재는 장비다. 문을 반쪽만 연 셈이었다(ADR 0006)."""
     key: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     """`tensile`, `dma_strain_sweep`. 코드가 참조하는 안정된 이름이다.
 
     기존 앱은 **라벨 문자열**로 필드를 찾았다(`label:contains(...)`). 라벨 문구를
-    바꾸면 ID 생성이 조용히 깨졌다. 표시용 라벨과 참조용 키를 분리한다."""
+    바꾸면 ID 생성이 조용히 깨졌다. 표시용 라벨과 참조용 키를 분리한다.
+
+    **소유가 부서로 갈려도 키는 전사에서 유일하다.** 프로파일과 다른 점이다.
+    두 부서가 같은 DMA 를 하면 종류를 둘로 만들 것이 아니라 하나를 같이 써야
+    하고, 키 유일성이 그것을 강제한다 — 중복을 만들려는 순간 이름이 부딪혀
+    "이미 ○○부서가 만들어 뒀다" 를 보게 된다."""
     label: Mapped[str] = mapped_column(String(100))
     abbr: Mapped[str] = mapped_column(String(10))
     """시험 이름에 들어가는 약어(`TEN`). `matcore.naming.test_run_name` 이 쓴다."""

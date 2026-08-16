@@ -21,7 +21,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -38,10 +38,14 @@ from app.modules.tests.schemas import (
     TriedCurveOut,
     TriedSummaryOut,
 )
-from app.modules.workspaces.models import Workspace, WorkspaceMember
+from app.modules.workspaces.models import Workspace
 from app.shared.auth import current_user
-from app.shared.errors import AppError, Conflict, Forbidden, NotFound
-from app.shared.permissions import require_manager, workspace_by_slug
+from app.shared.errors import AppError, Conflict, NotFound
+from app.shared.permissions import (
+    require_owner_edit,
+    resolve_owner_workspace,
+    visible_owner_clause,
+)
 from matcore import readers, units
 from matcore.parsers import ParseError
 from matcore.readers import profile as profiles
@@ -53,55 +57,20 @@ PREVIEW_ROWS = 8
 
 
 def visible_profiles(db: Session, user: User) -> Select[tuple[FormatProfile]]:
-    """내 부서 것 + 전역. 재료의 가시 범위와 같은 규칙이다.
-
-    한 곳에 두는 이유: 목록·자동 추정·파싱이 각자 판단하면 "화면에는 보이는데
-    파싱은 그 프로파일을 안 쓴다" 같은 어긋남이 생긴다.
-    """
-    query = select(FormatProfile)
-    if user.is_system_admin:
-        return query
-    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
-    return query.where(
-        or_(
-            FormatProfile.owner_workspace_id.is_(None),
-            FormatProfile.owner_workspace_id.in_(mine),
-        )
+    """내 부서 것 + 전역. 재료·시험 종류와 **같은 규칙, 같은 코드**다."""
+    return select(FormatProfile).where(
+        visible_owner_clause(db, user, FormatProfile.owner_workspace_id)
     )
 
 
 def _require_edit(db: Session, user: User, profile: FormatProfile) -> None:
-    """고칠 수 있는가.
-
-    전역 프로파일은 **여러 부서가 함께 쓴다.** 한 부서가 고치면 다른 부서의
-    파일이 다르게 읽힌다 — 그래서 전역은 시스템 관리자만 손댄다.
-    """
-    if user.is_system_admin:
-        return
-    if profile.owner_workspace_id is None:
-        raise Forbidden(
-            "MNX-TESTS-0027",
-            "전역 프로파일은 시스템 관리자만 고칠 수 있습니다. "
-            "여러 부서가 함께 쓰기 때문입니다.",
-        )
-    workspace = db.get(Workspace, profile.owner_workspace_id)
-    if workspace is None:
-        raise NotFound("MNX-TESTS-0025", "프로파일의 소속 부서를 찾을 수 없습니다.")
-    require_manager(db, workspace=workspace, user=user)
+    require_owner_edit(
+        db, user, profile.owner_workspace_id, what="프로파일", code="MNX-TESTS-0027"
+    )
 
 
 def _resolve_owner(db: Session, user: User, slug: str | None) -> uuid.UUID | None:
-    """만들 때 누구 것으로 할지. `None` 이면 전역(시스템 관리자만)."""
-    if slug is None:
-        if not user.is_system_admin:
-            raise Forbidden(
-                "MNX-TESTS-0027",
-                "전역 프로파일은 시스템 관리자만 만들 수 있습니다. 부서를 고르세요.",
-            )
-        return None
-    workspace = workspace_by_slug(db, slug)
-    require_manager(db, workspace=workspace, user=user)
-    return workspace.id
+    return resolve_owner_workspace(db, user, slug, what="프로파일", code="MNX-TESTS-0027")
 
 
 def _out(db: Session, item: FormatProfile) -> FormatProfileOut:

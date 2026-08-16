@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Select, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, Select, or_, select, true
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
@@ -56,6 +56,79 @@ def require_manager(db: Session, *, workspace: Workspace, user: User) -> None:
     membership = membership_of(db, workspace_id=workspace.id, user_id=user.id)
     if membership is None or membership.role != "manager":
         raise Forbidden("MNX-WORKSPACES-0003", "부서 관리자만 할 수 있습니다.")
+
+
+# --- 부서 소유 자산 ---------------------------------------------------------
+#
+# 재료·형식 프로파일·시험 종류가 **같은 소유 모델**을 쓴다(ADR 0004·0006):
+# `owner_workspace_id IS NULL` 이면 전역, 아니면 그 부서 것. 판정을 각 모듈이
+# 따로 적으면 "프로파일은 되는데 종류는 안 되는" 식으로 어긋나고, 실제로 그
+# 어긋남이 부서 관리자를 막다른 길로 보냈다.
+
+
+def visible_owner_clause(
+    db: Session, user: User, column: InstrumentedAttribute[uuid.UUID | None]
+) -> ColumnElement[bool]:
+    """`전역 + 내 부서` 필터. 목록·조회·자동 추정이 **같은 것**을 봐야 한다.
+
+    각자 판단하면 "화면에는 보이는데 파싱은 그 프로파일을 안 쓴다" 같은 어긋남이
+    생긴다. 실제로 그 종류의 버그를 여러 번 만들었다.
+    """
+    if user.is_system_admin:
+        return true()
+    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+    return or_(column.is_(None), column.in_(mine))
+
+
+def resolve_owner_workspace(
+    db: Session, user: User, slug: str | None, *, what: str, code: str
+) -> uuid.UUID | None:
+    """만들 때 누구 것으로 할지. `None` 이면 전역 — 시스템 관리자만."""
+    if slug is None:
+        if not user.is_system_admin:
+            raise Forbidden(
+                code, f"전역 {what}은 시스템 관리자만 만들 수 있습니다. 부서를 고르세요."
+            )
+        return None
+    workspace = workspace_by_slug(db, slug)
+    require_manager(db, workspace=workspace, user=user)
+    return workspace.id
+
+
+def require_owner_edit(
+    db: Session, user: User, owner_workspace_id: uuid.UUID | None, *, what: str, code: str
+) -> None:
+    """고칠 수 있는가.
+
+    전역은 **여러 부서가 함께 쓴다.** 한 부서가 고치면 다른 부서의 데이터가
+    다르게 읽히거나 다르게 해석된다 — 그래서 전역은 시스템 관리자만 손댄다.
+    """
+    if user.is_system_admin:
+        return
+    if owner_workspace_id is None:
+        raise Forbidden(
+            code,
+            f"전역 {what}은 시스템 관리자만 고칠 수 있습니다. "
+            f"여러 부서가 함께 쓰기 때문입니다.",
+        )
+    workspace = db.get(Workspace, owner_workspace_id)
+    if workspace is None:
+        raise NotFound(code, f"{what}의 소속 부서를 찾을 수 없습니다.")
+    require_manager(db, workspace=workspace, user=user)
+
+
+def is_any_manager(db: Session, user: User) -> bool:
+    """어느 부서든 관리자인가. 화면이 만들기 버튼을 보일지 판단하는 근거다."""
+    if user.is_system_admin:
+        return True
+    return (
+        db.scalar(
+            select(WorkspaceMember.id).where(
+                WorkspaceMember.user_id == user.id, WorkspaceMember.role == "manager"
+            )
+        )
+        is not None
+    )
 
 
 # --- 재료 계층의 가시 범위 --------------------------------------------------

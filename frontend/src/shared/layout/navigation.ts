@@ -107,6 +107,18 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '부서 설정',
     audience: 'manager',
     items: [
+      {
+        // **시험 종류도 여기다.** '관리' 에 두었더니 부서 관리자가 새 장비를
+        // 붙일 때 막혔다 — 프로파일은 만들 수 있는데 그 프로파일이 가리킬
+        // 종류를 못 만들었다. 새 장비란 대개 없는 종류를 재는 장비다(ADR 0006).
+        //
+        // 채널 키가 전사 자산인 것은 그대로다. 그것은 메뉴가 아니라 **서버의
+        // 검사**가 지킨다 — 같은 이름은 같은 차원·단위여야 한다.
+        label: '시험 종류',
+        icon: ListTree,
+        to: '/settings/test-types',
+        audience: 'manager',
+      },
       { label: '파일 형식', icon: FileCode2, to: '/settings/formats', audience: 'manager' },
       { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members`, audience: 'manager' },
     ],
@@ -117,14 +129,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: '계정', icon: UserCog, to: '/admin/accounts', audience: 'system_admin' },
       { label: '부서', icon: Building2, to: '/admin/workspaces', audience: 'system_admin' },
-      {
-        // 채널 키는 Parquet 컬럼이자 곡선 해석의 기준이다. 부서마다 다르면
-        // 비교·통계가 성립하지 않아 아직 전사 자산으로 둔다.
-        label: '시험 종류',
-        icon: ListTree,
-        to: '/admin/test-types',
-        audience: 'system_admin',
-      },
       { label: '장비 커넥터', icon: Plug, to: '/admin/connectors', audience: 'system_admin' },
       { label: '저장소 정리', icon: HardDrive, to: '/admin/storage', audience: 'system_admin' },
       { label: '서버', icon: Server, to: '/server', audience: 'system_admin' },

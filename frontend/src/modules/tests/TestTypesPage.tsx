@@ -16,7 +16,7 @@
  */
 
 import { useState } from 'react'
-import { ListTree, Lock, Pencil, Plug, Plus, Trash2 } from 'lucide-react'
+import { Globe2, ListTree, Lock, Pencil, Plug, Plus, Trash2 } from 'lucide-react'
 
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
@@ -93,6 +93,17 @@ export default function TestTypesPage() {
                 {type.key}
               </Badge>
               <Badge variant="outline">{type.abbr}</Badge>
+              {/* **누구 것인지 안 보이면 왜 못 고치는지 알 수 없다.** 전역은 여러
+                  부서가 함께 써서 시스템 관리자만 손댄다 — 그 사실이 화면에
+                  없으면 편집을 눌러 보고 403 을 받고서야 알게 된다. */}
+              {type.is_global ? (
+                <Badge variant="outline" className="gap-1" title="모든 부서가 씁니다. 시스템 관리자만 고칠 수 있습니다.">
+                  <Globe2 className="size-3" />
+                  전역
+                </Badge>
+              ) : (
+                <Badge variant="secondary">{type.owner_workspace_name}</Badge>
+              )}
               {!type.is_active && <Badge variant="destructive">중단</Badge>}
               {type.run_count > 0 && (
                 <Badge variant="outline" className="gap-1" title="등록된 시험이 있어 채널의 키·단위가 잠깁니다">
