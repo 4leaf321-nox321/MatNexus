@@ -71,8 +71,38 @@ export default function TestRunDetailPage() {
    * 상세·차트가 전부 `raw` 키만 찾았고, 표가 여럿인 파일에는 그 키가 없다.
    */
   const curves = useMemo(() => item?.curves ?? [], [item])
+
+  /**
+   * 곡선을 **종류로 묶는다.** 한 파일에서 나오는 것이 이렇다.
+   *
+   *   Temperature Sweep (Multifrequency) - 2 … - 7   같은 종류, 6벌
+   *   TTS - master curve (20.0 °C)                   다른 종류, 1벌
+   *   TTS - shift factors                            또 다른 종류, 1벌
+   *
+   * 한 줄에 8개를 늘어놓으면 무엇이 같은 종류의 반복이고 무엇이 성격이 다른
+   * 곡선인지 구분이 안 된다. **종류 → 벌 → 축** 순서로 좁혀 들어간다.
+   *
+   * 묶는 규칙은 이름 끝의 일련번호를 떼는 것뿐이다. 채널 구성으로 묶으면 안 된다 —
+   * 실측에서 같은 종류인데도 첫 구간만 채널이 9개고 나머지는 8개였다.
+   */
+  const families = useMemo(() => {
+    const groups = new Map<string, { name: string; kind: string; items: typeof curves }>()
+    for (const curve of curves) {
+      const label = curve.label ?? curve.key
+      const name = label.replace(/\s*[-–#]\s*\d+\s*$/, '').trim() || label
+      const found = groups.get(name)
+      if (found) found.items.push(curve)
+      else groups.set(name, { name, kind: curve.kind, items: [curve] })
+    }
+    return [...groups.values()]
+  }, [curves])
+
+  const [familyName, setFamilyName] = useState<string | null>(null)
+  const activeFamily = families.find((f) => f.name === familyName) ?? families[0] ?? null
+
   const [curveKey, setCurveKey] = useState<string | null>(null)
-  const activeCurve = curves.find((c) => c.key === curveKey) ?? curves[0] ?? null
+  const activeCurve =
+    activeFamily?.items.find((c) => c.key === curveKey) ?? activeFamily?.items[0] ?? null
 
   /**
    * 고를 수 있는 축 = **그 곡선이 실제로 가진 채널.**
@@ -250,14 +280,66 @@ export default function TestRunDetailPage() {
 
       {item?.status === 'parsed' && (
         <section className="mb-8">
-          <div className="mb-2 space-y-1">
-            <h2 className="font-medium">곡선</h2>
+          <h2 className="mb-2 font-medium">곡선</h2>
+
+          {/* **종류 → 벌 → 축** 으로 좁혀 들어간다. 한 줄에 8개를 늘어놓으면
+              무엇이 같은 종류의 반복이고 무엇이 성격이 다른 곡선인지 구분이 안 된다. */}
+          <div className="mb-3 space-y-1">
+            {families.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                <span className="text-muted-foreground w-12 shrink-0">종류</span>
+                {families.map((family) => (
+                  <Button
+                    key={family.name}
+                    size="sm"
+                    variant={activeFamily?.name === family.name ? 'default' : 'outline'}
+                    onClick={() => {
+                      setFamilyName(family.name)
+                      // 종류를 바꾸면 벌 선택은 처음으로. 안 그러면 다른 종류의
+                      // 키가 남아 첫 벌로 조용히 되돌아간 것처럼 보인다.
+                      setCurveKey(null)
+                    }}
+                  >
+                    {family.name}
+                    <span className="ml-1 opacity-70">
+                      {family.kind === 'derived' ? '처리결과' : '측정'}
+                      {family.items.length > 1 && ` ${family.items.length}벌`}
+                    </span>
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {/* 그 종류가 여러 벌일 때만. 한 벌뿐이면 고를 것이 없다. */}
+            {(activeFamily?.items.length ?? 0) > 1 && (
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                <span className="text-muted-foreground w-12 shrink-0">구간</span>
+                {activeFamily?.items.map((curveItem) => (
+                  <Button
+                    key={curveItem.key}
+                    size="sm"
+                    variant={activeCurve?.key === curveItem.key ? 'default' : 'outline'}
+                    onClick={() => setCurveKey(curveItem.key)}
+                    title={`${curveItem.row_count}행 · ${curveItem.channels.join(', ')}`}
+                  >
+                    {/* 종류 이름을 뗀 나머지 — `- 3` 처럼 구간만 보인다. */}
+                    {(curveItem.label ?? curveItem.key)
+                      .replace(activeFamily.name, '')
+                      .replace(/^\s*[-–#]\s*/, '')
+                      .trim() || curveItem.key}
+                  </Button>
+                ))}
+              </div>
+            )}
+
             {/* **X 도 고를 수 있어야 한다.** 처리결과 곡선은 열이 12개다 —
                 주파수-저장탄성률로 볼지, 온도-이동인자로 볼지는 그때그때 다르다.
                 X 가 첫 채널로 고정돼 있던 때는 볼 수 없는 조합이 대부분이었다. */}
             {(['x', 'y'] as const).map((axis) => (
               <div key={axis} className="flex flex-wrap items-center gap-1 text-xs">
-                <span className="text-muted-foreground w-8">{axis === 'x' ? 'X축' : 'Y축'}</span>
+                <span className="text-muted-foreground w-12 shrink-0">
+                  {axis === 'x' ? 'X축' : 'Y축'}
+                </span>
                 {axisOptions.map((channel) => (
                   <Button
                     key={channel.key}
@@ -276,43 +358,6 @@ export default function TestRunDetailPage() {
               </div>
             ))}
           </div>
-
-          {/* **한 시험이 곡선을 여럿 가진다.** DMA 주파수-온도 스윕은 `[step]`
-              마다 별개 측정이라 6벌이 나온다. 고를 수 없던 때는 저장은 다 돼
-              있는데 화면에서 하나도 안 보였다. 하나뿐이면 굳이 보여 주지 않는다. */}
-          {curves.length > 1 && (
-            <div className="mb-3 space-y-2">
-              {/* **측정과 처리결과를 나눠 보여 준다.** 섞어 두면 사람은 마스터
-                  곡선을 원본으로 본다 — 요약값에서 `장비 / MatNexus` 를 나란히
-                  두는 것과 같은 이유다. */}
-              {(['measured', 'derived'] as const).map((kind) => {
-                const group = curves.filter((item) => item.kind === kind)
-                if (group.length === 0) return null
-                return (
-                  <div key={kind}>
-                    <p className="text-muted-foreground mb-1 text-xs">
-                      {kind === 'measured'
-                        ? `측정 ${group.length}벌 — 구간마다 별개 측정입니다`
-                        : `처리결과 ${group.length}벌 — 장비가 계산해 준 것입니다`}
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {group.map((item) => (
-                        <Button
-                          key={item.key}
-                          size="sm"
-                          variant={activeCurve?.key === item.key ? 'default' : 'outline'}
-                          onClick={() => setCurveKey(item.key)}
-                          title={`${item.row_count}행 · ${item.channels.join(', ')}`}
-                        >
-                          {item.label ?? item.key}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
 
           <ErrorNotice error={curve.error} className="mb-2" />
 
