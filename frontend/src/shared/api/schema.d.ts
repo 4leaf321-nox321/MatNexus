@@ -1025,7 +1025,14 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Workspace
+         * @description 부서를 지운다. 막는 참조가 하나라도 있으면 거절한다.
+         *
+         *     **보관이 여전히 기본 수단이다.** 삭제는 잘못 만든 부서처럼 자료가 아예 없는
+         *     경우를 위한 것이다 — 자료가 있는 부서는 지우는 게 아니라 보관한다.
+         */
+        delete: operations["delete_workspace_api_workspaces__slug__delete"];
         options?: never;
         head?: never;
         /** Update Workspace */
@@ -1086,6 +1093,29 @@ export interface paths {
          *     없었던 것과 반대다.
          */
         post: operations["move_workspace_api_workspaces__slug__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{slug}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Workspace References
+         * @description 무엇이 이 부서를 가리키는가. 삭제 확인 화면이 부른다.
+         *
+         *     목록을 손으로 관리하지 않는다 — FK 를 훑어 모은다. RA 의 부서 삭제 500 버그가
+         *     "참조 테이블 목록이 하드코딩돼 새 테이블을 못 따라감" 이었다.
+         */
+        get: operations["workspace_references_api_workspaces__slug__references_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2586,6 +2616,8 @@ export interface components {
          *     둘 다 `null` 이라 구분할 수 없다.
          */
         WorkspaceMoveRequest: {
+            /** Before Slug */
+            before_slug?: string | null;
             /** Parent Slug */
             parent_slug?: string | null;
         };
@@ -2635,6 +2667,28 @@ export interface components {
             slug: string;
             /** Sort Order */
             sort_order: number;
+        };
+        /**
+         * WorkspaceReferenceOut
+         * @description 이 부서를 가리키는 참조 하나. **삭제 버튼을 누르기 전에 보여 준다.**
+         *
+         *     이름에 `Workspace` 를 붙인 이유: 계정 모듈에 이미 `ReferenceOut` 이 있다.
+         *     같은 이름을 쓰면 FastAPI 가 **둘 다** `app__modules__…__ReferenceOut` 으로
+         *     바꿔 버려서, 아무 관계도 없는 계정 화면의 프론트 타입이 깨진다(실제로 깨졌다).
+         */
+        WorkspaceReferenceOut: {
+            /** Blocks Delete */
+            blocks_delete: boolean;
+            /** Column */
+            column: string;
+            /** Count */
+            count: number;
+            /** Label */
+            label: string;
+            /** On Delete */
+            on_delete: string | null;
+            /** Table */
+            table: string;
         };
         /** WorkspaceReorderRequest */
         WorkspaceReorderRequest: {
@@ -4822,6 +4876,35 @@ export interface operations {
             };
         };
     };
+    delete_workspace_api_workspaces__slug__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_workspace_api_workspaces__slug__patch: {
         parameters: {
             query?: never;
@@ -5011,6 +5094,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_references_api_workspaces__slug__references_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceReferenceOut"][];
                 };
             };
             /** @description Validation Error */

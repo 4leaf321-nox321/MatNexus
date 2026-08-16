@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -22,6 +22,7 @@ from app.modules.workspaces.schemas import (
     WorkspaceMoveRequest,
     WorkspaceOption,
     WorkspaceOut,
+    WorkspaceReferenceOut,
     WorkspaceReorderRequest,
     WorkspaceUpdateRequest,
 )
@@ -91,8 +92,42 @@ def move_workspace(
     그 id 는 그대로다. 65가 조직 식별자를 데이터에 직접 박아 개편에 대응할 수단이
     없었던 것과 반대다.
     """
-    workspace = services.move(db, slug=slug, parent_slug=payload.parent_slug)
+    workspace = services.move(
+        db,
+        slug=slug,
+        parent_slug=payload.parent_slug,
+        before_slug=payload.before_slug,
+    )
     return services.workspace_out(db, workspace, admin)
+
+
+@router.get("/{slug}/references", response_model=list[WorkspaceReferenceOut])
+def workspace_references(
+    slug: str,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[WorkspaceReferenceOut]:
+    """무엇이 이 부서를 가리키는가. 삭제 확인 화면이 부른다.
+
+    목록을 손으로 관리하지 않는다 — FK 를 훑어 모은다. RA 의 부서 삭제 500 버그가
+    "참조 테이블 목록이 하드코딩돼 새 테이블을 못 따라감" 이었다.
+    """
+    return services.references(db, slug=slug)
+
+
+@router.delete("/{slug}", status_code=204)
+def delete_workspace(
+    slug: str,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """부서를 지운다. 막는 참조가 하나라도 있으면 거절한다.
+
+    **보관이 여전히 기본 수단이다.** 삭제는 잘못 만든 부서처럼 자료가 아예 없는
+    경우를 위한 것이다 — 자료가 있는 부서는 지우는 게 아니라 보관한다.
+    """
+    services.delete(db, slug=slug)
+    return Response(status_code=204)
 
 
 @router.post("/{slug}/reorder", response_model=WorkspaceOut)

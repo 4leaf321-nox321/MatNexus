@@ -358,3 +358,87 @@ class Test부서계층:
             "/api/workspaces/one/reorder", json={"direction": "up"}, headers=admin_headers
         )
         assert response.status_code == 200
+
+
+class Test부서삭제:
+    """**보관이 기본 수단이다.** 삭제는 잘못 만든 부서처럼 자료가 아예 없는
+    경우를 위한 것이다.
+
+    참조 목록을 손으로 관리하지 않는 것이 핵심이다 — RA 의 부서 삭제 500 버그가
+    "참조 테이블 목록이 검사 함수에 하드코딩돼 새 테이블을 못 따라감" 이었고,
+    시험 테이블이 늘어난 지금 그 위험이 현실이다.
+    """
+
+    def test_빈_부서는_지운다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        client.post(
+            "/api/workspaces", json={"slug": "temp", "name": "임시팀"}, headers=admin_headers
+        )
+        # 만든 사람이 멤버로 들어가 있지만 멤버십은 CASCADE 라 막지 않는다.
+        response = client.delete("/api/workspaces/temp", headers=admin_headers)
+        assert response.status_code == 204
+        assert (
+            client.get("/api/workspaces/temp/references", headers=admin_headers).status_code
+            == 404
+        )
+
+    def test_하위_부서가_있으면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """FK 가 `RESTRICT` 다. **'DB 가 알아서 한다' 로 세면 화면은 삭제 가능이라
+        해 놓고 누르는 순간 500 이 난다.**"""
+        client.post(
+            "/api/workspaces", json={"slug": "dev", "name": "개발본부"}, headers=admin_headers
+        )
+        client.post(
+            "/api/workspaces",
+            json={"slug": "team", "name": "팀", "parent_slug": "dev"},
+            headers=admin_headers,
+        )
+
+        blockers = client.get("/api/workspaces/dev/references", headers=admin_headers).json()
+        by_table = {row["table"]: row for row in blockers}
+        assert by_table["workspaces"]["blocks_delete"] is True
+
+        response = client.delete("/api/workspaces/dev", headers=admin_headers)
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "MNX-WORKSPACES-0016"
+
+    def test_자료가_있으면_거절하고_무엇인지_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str], workspace: Workspace
+    ) -> None:
+        created = client.post(
+            "/api/materials",
+            json={"family": "Metal", "category": "Steel", "grade": "SECC"},
+            headers=admin_headers,
+        )
+        assert created.status_code == 201, created.text
+
+        references = client.get(
+            f"/api/workspaces/{workspace.slug}/references", headers=admin_headers
+        ).json()
+        assert any(row["table"] == "materials" and row["blocks_delete"] for row in references)
+
+        response = client.delete(f"/api/workspaces/{workspace.slug}", headers=admin_headers)
+        assert response.status_code == 409
+        assert "재료" in response.json()["error"]["message"]
+
+    def test_끌어_놓은_자리에_들어간다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """끌어 놓기는 '어디에' 뿐 아니라 '몇 번째에' 를 함께 말한다. 못 받으면
+        옮길 때마다 맨 끝으로 가서 다시 위/아래를 눌러야 한다."""
+        for slug, name in (("aa", "가"), ("bb", "나"), ("cc", "다")):
+            client.post(
+                "/api/workspaces", json={"slug": slug, "name": name}, headers=admin_headers
+            )
+
+        moved = client.post(
+            "/api/workspaces/cc/move",
+            json={"parent_slug": None, "before_slug": "aa"},
+            headers=admin_headers,
+        )
+        assert moved.status_code == 200, moved.text
+
+        rows = client.get("/api/workspaces?all=true", headers=admin_headers).json()
+        order = [row["slug"] for row in rows if row["slug"] in {"aa", "bb", "cc"}]
+        assert order == ["cc", "aa", "bb"]

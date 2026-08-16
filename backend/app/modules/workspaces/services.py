@@ -15,7 +15,13 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.workspaces.models import Workspace, WorkspaceMember
-from app.modules.workspaces.schemas import MemberOut, WorkspaceOption, WorkspaceOut
+from app.modules.workspaces.schemas import (
+    MemberOut,
+    WorkspaceOption,
+    WorkspaceOut,
+    WorkspaceReferenceOut,
+)
+from app.shared import dependents
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import membership_of, workspace_by_slug
 
@@ -253,7 +259,54 @@ def _ensure_no_active_children(db: Session, workspace: Workspace) -> None:
         )
 
 
-def move(db: Session, *, slug: str, parent_slug: str | None) -> Workspace:
+def references(db: Session, *, slug: str) -> list[WorkspaceReferenceOut]:
+    """이 부서를 가리키는 것들. **삭제 버튼을 누르기 전에 보여 준다.**
+
+    목록을 손으로 관리하지 않는다 — `shared/dependents` 가 FK 를 훑어 모은다.
+    RA 의 부서 삭제 500 버그가 "참조 테이블 목록이 검사 함수에 하드코딩돼 새
+    테이블을 못 따라감" 이었고, Phase 2에서 시험 테이블이 늘어난 지금 그 위험이
+    현실이다.
+    """
+    workspace = workspace_by_slug(db, slug)
+    return [
+        WorkspaceReferenceOut(
+            table=item.table,
+            column=item.column,
+            label=item.label,
+            count=item.count,
+            on_delete=item.on_delete,
+            blocks_delete=item.blocks_delete,
+        )
+        for item in dependents.references_to(db, table="workspaces", pk=workspace.id)
+    ]
+
+
+def delete(db: Session, *, slug: str) -> None:
+    """부서를 지운다. **막는 참조가 하나라도 있으면 거절한다.**
+
+    보관(`is_active=false`)이 기본 수단인 것은 그대로다. 삭제는 "잘못 만든 부서"
+    처럼 자료가 아예 없는 경우를 위한 것이다.
+
+    멤버십은 CASCADE 라 함께 사라지고, 사람들의 소속(`home_workspace_id`)은
+    SET NULL 로 끊긴다. 조용히 일어나면 안 되는 일이라 **화면이 미리 보여 준다**
+    (`references`).
+    """
+    workspace = workspace_by_slug(db, slug)
+    blocking = [item for item in references(db, slug=slug) if item.blocks_delete]
+    if blocking:
+        raise Conflict(
+            "MNX-WORKSPACES-0016",
+            "이 부서를 가리키는 자료가 남아 있어 지울 수 없습니다: "
+            + ", ".join(f"{item.label} {item.count}건" for item in blocking)
+            + ". 자료를 옮기거나, 지우는 대신 보관하세요.",
+        )
+    db.delete(workspace)
+    db.commit()
+
+
+def move(
+    db: Session, *, slug: str, parent_slug: str | None, before_slug: str | None = None
+) -> Workspace:
     """상위 부서를 바꾼다(조직 개편).
 
     참조가 `id` 라서 트리를 옮겨도 **데이터는 하나도 안 움직인다.** 시험·재료는
@@ -279,9 +332,35 @@ def move(db: Session, *, slug: str, parent_slug: str | None) -> Workspace:
             )
 
     workspace.parent_id = parent.id if parent else None
-    workspace.sort_order = _next_sort_order(db, workspace.parent_id)
+
+    if before_slug:
+        # 끌어 놓기는 "어디에" 뿐 아니라 "몇 번째에" 를 함께 말한다. 그것을 못 받으면
+        # 옮길 때마다 맨 끝으로 가서, 사람은 옮긴 뒤 다시 위/아래를 눌러야 한다.
+        _place_before(db, workspace, before_slug)
+    else:
+        workspace.sort_order = _next_sort_order(db, workspace.parent_id)
+
     db.commit()
     return workspace
+
+
+def _place_before(db: Session, workspace: Workspace, before_slug: str) -> None:
+    target = workspace_by_slug(db, before_slug)
+    if target.parent_id != workspace.parent_id or target.id == workspace.id:
+        # 형제가 아니면 순서를 말할 수 없다. 맨 끝으로 둔다 — 거절하면 끌어 놓기가
+        # 아무 일도 안 한 것처럼 보인다.
+        workspace.sort_order = _next_sort_order(db, workspace.parent_id)
+        return
+
+    siblings = [
+        node
+        for node, _, _ in ordered_tree(db)
+        if node.parent_id == workspace.parent_id and node.id != workspace.id
+    ]
+    index = next((i for i, node in enumerate(siblings) if node.id == target.id), len(siblings))
+    siblings.insert(index, workspace)
+    for order, node in enumerate(siblings):
+        node.sort_order = (order + 1) * 10
 
 
 def reorder(db: Session, *, slug: str, direction: str) -> Workspace:

@@ -46,6 +46,23 @@ class WorkspaceCreateRequest(BaseModel):
     parent_slug: str | None = None
 
 
+class WorkspaceReferenceOut(BaseModel):
+    """이 부서를 가리키는 참조 하나. **삭제 버튼을 누르기 전에 보여 준다.**
+
+    이름에 `Workspace` 를 붙인 이유: 계정 모듈에 이미 `ReferenceOut` 이 있다.
+    같은 이름을 쓰면 FastAPI 가 **둘 다** `app__modules__…__ReferenceOut` 으로
+    바꿔 버려서, 아무 관계도 없는 계정 화면의 프론트 타입이 깨진다(실제로 깨졌다).
+    """
+
+    table: str
+    column: str
+    label: str
+    count: int
+    on_delete: str | None
+    blocks_delete: bool
+    """지우려면 먼저 정리해야 하는가. `RESTRICT` 도 여기 들어간다 — DB 가 거부한다."""
+
+
 class WorkspaceMoveRequest(BaseModel):
     """상위 부서 바꾸기. `null` 이면 뿌리로 올린다.
 
@@ -54,6 +71,9 @@ class WorkspaceMoveRequest(BaseModel):
     """
 
     parent_slug: str | None = None
+    before_slug: str | None = None
+    """이 부서 **앞에** 놓는다. 끌어 놓기는 '어디에' 뿐 아니라 '몇 번째에' 를 함께
+    말한다 — 못 받으면 옮길 때마다 맨 끝으로 가서 다시 위/아래를 눌러야 한다."""
 
 
 class WorkspaceReorderRequest(BaseModel):

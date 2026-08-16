@@ -63,8 +63,15 @@ class Reference:
 
     @property
     def blocks_delete(self) -> bool:
-        """DB 규칙이 없으면 삭제가 실패하므로, 미리 막고 이유를 보여 준다."""
-        return self.on_delete is None
+        """지우려면 먼저 정리해야 하는 참조인가.
+
+        규칙이 **없을 때**(None)만이 아니다. `RESTRICT`·`NO ACTION` 은 DB 가
+        적극적으로 **거부**하는 규칙이라 마찬가지로 막힌다. 이 둘을 "DB 가 알아서
+        한다" 쪽으로 세면 화면은 '삭제 가능' 이라고 해 놓고 누르는 순간 500 이
+        난다 — 부서에 `parent_id` 를 RESTRICT 로 넣으면서 실제로 그럴 뻔했다.
+        """
+        rule = (self.on_delete or "").upper().replace(" ", "")
+        return rule in ("", "RESTRICT", "NOACTION")
 
 
 def references_to(db: Session, *, table: str, pk: Any) -> list[Reference]:

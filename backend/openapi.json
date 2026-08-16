@@ -4453,6 +4453,17 @@
       "WorkspaceMoveRequest": {
         "description": "상위 부서 바꾸기. `null` 이면 뿌리로 올린다.\n\n이름 변경(PATCH)과 분리한 이유: PATCH 로 받으면 \"안 바꿈\"과 \"뿌리로 올림\"이\n둘 다 `null` 이라 구분할 수 없다.",
         "properties": {
+          "before_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Slug"
+          },
           "parent_slug": {
             "anyOf": [
               {
@@ -4579,6 +4590,52 @@
           "my_role"
         ],
         "title": "WorkspaceOut",
+        "type": "object"
+      },
+      "WorkspaceReferenceOut": {
+        "description": "이 부서를 가리키는 참조 하나. **삭제 버튼을 누르기 전에 보여 준다.**\n\n이름에 `Workspace` 를 붙인 이유: 계정 모듈에 이미 `ReferenceOut` 이 있다.\n같은 이름을 쓰면 FastAPI 가 **둘 다** `app__modules__…__ReferenceOut` 으로\n바꿔 버려서, 아무 관계도 없는 계정 화면의 프론트 타입이 깨진다(실제로 깨졌다).",
+        "properties": {
+          "blocks_delete": {
+            "title": "Blocks Delete",
+            "type": "boolean"
+          },
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "on_delete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Delete"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "column",
+          "label",
+          "count",
+          "on_delete",
+          "blocks_delete"
+        ],
+        "title": "WorkspaceReferenceOut",
         "type": "object"
       },
       "WorkspaceReorderRequest": {
@@ -7788,6 +7845,40 @@
       }
     },
     "/api/workspaces/{slug}": {
+      "delete": {
+        "description": "부서를 지운다. 막는 참조가 하나라도 있으면 거절한다.\n\n**보관이 여전히 기본 수단이다.** 삭제는 잘못 만든 부서처럼 자료가 아예 없는\n경우를 위한 것이다 — 자료가 있는 부서는 지우는 게 아니라 보관한다.",
+        "operationId": "delete_workspace_api_workspaces__slug__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Workspace",
+        "tags": [
+          "workspaces"
+        ]
+      },
       "patch": {
         "operationId": "update_workspace_api_workspaces__slug__patch",
         "parameters": [
@@ -8088,6 +8179,53 @@
           }
         },
         "summary": "Move Workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/{slug}/references": {
+      "get": {
+        "description": "무엇이 이 부서를 가리키는가. 삭제 확인 화면이 부른다.\n\n목록을 손으로 관리하지 않는다 — FK 를 훑어 모은다. RA 의 부서 삭제 500 버그가\n\"참조 테이블 목록이 하드코딩돼 새 테이블을 못 따라감\" 이었다.",
+        "operationId": "workspace_references_api_workspaces__slug__references_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceReferenceOut"
+                  },
+                  "title": "Response Workspace References Api Workspaces  Slug  References Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workspace References",
         "tags": [
           "workspaces"
         ]
