@@ -356,11 +356,21 @@ class FormatProfile(Base):
     """
 
     __tablename__ = "format_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_workspace_id",
+            "key",
+            name="uq_format_profiles_scope_key",
+            # PG15+. 없으면 NULL != NULL 이라 **전역 프로파일끼리 같은 키가 허용된다.**
+            # 재료가 같은 문제를 겪어 같은 방식으로 막았다(ADR 0004).
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    key: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    key: Mapped[str] = mapped_column(String(50), index=True)
     label: Mapped[str] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -368,6 +378,20 @@ class FormatProfile(Base):
         PgUUID(as_uuid=True), ForeignKey("test_types.id"), index=True
     )
     """어느 시험 종류로 읽는가. 매핑의 목적지가 그 종류의 채널이다."""
+
+    owner_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True, nullable=True
+    )
+    """만든 부서. **`NULL` 이면 전역이다** — 재료와 같은 모델(ADR 0004).
+
+    관리자 전용으로 두었더니 실무가 막혔다: **장비는 부서마다 다른데, 남의 부서
+    파일을 어떻게 읽을지를 시스템 관리자가 알 리 없다.** 그 지식은 사업부에 있다.
+
+    그래서 부서 관리자가 자기 부서 프로파일을 만든다. 여러 부서가 같은 장비를
+    쓰게 되면 관리자가 전역으로 올린다(이 컬럼을 NULL 로 — 승격은 UPDATE 한 줄).
+
+    읽을 때는 **내 부서 것이 전역보다 먼저다.** 같은 장비라도 부서마다 소프트웨어
+    설정이 달라 열 이름이 조금씩 다른 일이 실제로 있다."""
 
     definition: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"

@@ -297,10 +297,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Profiles */
+        /**
+         * List Profiles
+         * @description 내 부서 것 + 전역. 시스템 관리자는 전부.
+         */
         get: operations["list_profiles_api_formats_get"];
         put?: never;
-        /** Create Profile */
+        /**
+         * Create Profile
+         * @description 부서 관리자가 자기 부서 프로파일을 만든다.
+         *
+         *     **장비는 부서마다 다르다.** 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가
+         *     알 리 없다 — 그 지식은 사업부에 있다.
+         */
         post: operations["create_profile_api_formats_post"];
         delete?: never;
         options?: never;
@@ -1449,6 +1458,8 @@ export interface components {
             key: string;
             /** Label */
             label: string;
+            /** Owner Workspace Slug */
+            owner_workspace_slug?: string | null;
             /**
              * Priority
              * @default 0
@@ -1477,10 +1488,16 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
+            /** Is Global */
+            is_global: boolean;
             /** Key */
             key: string;
             /** Label */
             label: string;
+            /** Owner Workspace Name */
+            owner_workspace_name: string | null;
+            /** Owner Workspace Slug */
+            owner_workspace_slug: string | null;
             /** Priority */
             priority: number;
             /** Test Type Key */

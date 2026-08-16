@@ -23,7 +23,7 @@ from app.database import get_db
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
-from app.modules.tests import services
+from app.modules.tests import formats, services
 from app.modules.tests.models import (
     FormatProfile,
     TestChannel,
@@ -187,11 +187,17 @@ def detect_test_type(
     # 같은 종류에 프로파일이 여럿일 수 있다(장비 소프트웨어 버전이 달라진 경우).
     # 종류별로 하나만 남기면, 우선순위는 높지만 **안 맞는** 프로파일이 맞는 것을
     # 가려 버린다. 전부 보고 우선순위 순으로 맞는 첫 번째를 쓴다.
+    # 자동 추정도 **가시 범위**를 따른다. 화면에 안 보이는 프로파일이 종류를
+    # 정해 버리면, 사람은 왜 그 종류가 골라졌는지 알 방법이 없다.
     candidates = list(
         db.scalars(
-            select(FormatProfile)
+            formats.visible_profiles(db, user)
             .where(FormatProfile.is_active.is_(True))
-            .order_by(FormatProfile.priority.desc(), FormatProfile.key)
+            .order_by(
+                FormatProfile.owner_workspace_id.is_(None),
+                FormatProfile.priority.desc(),
+                FormatProfile.key,
+            )
         )
     )
 

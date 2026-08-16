@@ -123,7 +123,7 @@ export const testsApi = {
     return api.postForm<ProfileTry>('/formats/try', form)
   },
 
-  createFormat: (payload: FormatSave & { key: string }) =>
+  createFormat: (payload: FormatSave & { key: string; owner_workspace_slug: string | null }) =>
     api.post<FormatProfile>('/formats', payload),
   updateFormat: (key: string, payload: FormatSave) =>
     api.put<FormatProfile>(`/formats/${key}`, payload),

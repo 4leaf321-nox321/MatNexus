@@ -2,15 +2,26 @@
 
 **장비가 늘 때마다 파서를 짜지 않으려고 만든 길이다.** 라우트를 `routes.py` 에
 더 밀어 넣지 않고 파일을 나눈 이유는, 이 기능이 시험 등록과 성격이 다르기
-때문이다 — 이쪽은 "무엇을 어떻게 읽을지 정하는" 관리 작업이다.
+때문이다 — 이쪽은 "무엇을 어떻게 읽을지 정하는" 설정 작업이다.
+
+**시스템 관리자 전용이 아니다.** 처음에는 그렇게 만들었는데 실무가 막혔다 —
+장비는 부서마다 다른데 **남의 부서 파일을 어떻게 읽을지를 시스템 관리자가 알 리
+없다.** 그 지식은 사업부에 있다. 그래서 재료와 같은 모델을 쓴다(ADR 0004).
+
+    부서 관리자   자기 부서 프로파일을 만들고 고친다
+    시스템 관리자  전역 프로파일을 만들고, 부서 것을 전역으로 올린다
+
+읽을 때는 **내 부서 것이 전역보다 먼저다.** 같은 장비라도 부서마다 소프트웨어
+설정이 달라 열 이름이 조금씩 다른 일이 실제로 있다.
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
-from sqlalchemy import select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -27,8 +38,10 @@ from app.modules.tests.schemas import (
     TriedCurveOut,
     TriedSummaryOut,
 )
-from app.shared.auth import require_system_admin
-from app.shared.errors import AppError, Conflict, NotFound
+from app.modules.workspaces.models import Workspace, WorkspaceMember
+from app.shared.auth import current_user
+from app.shared.errors import AppError, Conflict, Forbidden, NotFound
+from app.shared.permissions import require_manager, workspace_by_slug
 from matcore import readers, units
 from matcore.parsers import ParseError
 from matcore.readers import profile as profiles
@@ -39,11 +52,67 @@ router = APIRouter(prefix="/formats", tags=["tests"])
 PREVIEW_ROWS = 8
 
 
+def visible_profiles(db: Session, user: User) -> Select[tuple[FormatProfile]]:
+    """내 부서 것 + 전역. 재료의 가시 범위와 같은 규칙이다.
+
+    한 곳에 두는 이유: 목록·자동 추정·파싱이 각자 판단하면 "화면에는 보이는데
+    파싱은 그 프로파일을 안 쓴다" 같은 어긋남이 생긴다.
+    """
+    query = select(FormatProfile)
+    if user.is_system_admin:
+        return query
+    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+    return query.where(
+        or_(
+            FormatProfile.owner_workspace_id.is_(None),
+            FormatProfile.owner_workspace_id.in_(mine),
+        )
+    )
+
+
+def _require_edit(db: Session, user: User, profile: FormatProfile) -> None:
+    """고칠 수 있는가.
+
+    전역 프로파일은 **여러 부서가 함께 쓴다.** 한 부서가 고치면 다른 부서의
+    파일이 다르게 읽힌다 — 그래서 전역은 시스템 관리자만 손댄다.
+    """
+    if user.is_system_admin:
+        return
+    if profile.owner_workspace_id is None:
+        raise Forbidden(
+            "MNX-TESTS-0027",
+            "전역 프로파일은 시스템 관리자만 고칠 수 있습니다. "
+            "여러 부서가 함께 쓰기 때문입니다.",
+        )
+    workspace = db.get(Workspace, profile.owner_workspace_id)
+    if workspace is None:
+        raise NotFound("MNX-TESTS-0025", "프로파일의 소속 부서를 찾을 수 없습니다.")
+    require_manager(db, workspace=workspace, user=user)
+
+
+def _resolve_owner(db: Session, user: User, slug: str | None) -> uuid.UUID | None:
+    """만들 때 누구 것으로 할지. `None` 이면 전역(시스템 관리자만)."""
+    if slug is None:
+        if not user.is_system_admin:
+            raise Forbidden(
+                "MNX-TESTS-0027",
+                "전역 프로파일은 시스템 관리자만 만들 수 있습니다. 부서를 고르세요.",
+            )
+        return None
+    workspace = workspace_by_slug(db, slug)
+    require_manager(db, workspace=workspace, user=user)
+    return workspace.id
+
+
 def _out(db: Session, item: FormatProfile) -> FormatProfileOut:
     test_type = db.get(TestType, item.test_type_id)
+    owner = db.get(Workspace, item.owner_workspace_id) if item.owner_workspace_id else None
     return FormatProfileOut(
         id=item.id,
         key=item.key,
+        owner_workspace_slug=owner.slug if owner else None,
+        owner_workspace_name=owner.name if owner else None,
+        is_global=item.owner_workspace_id is None,
         label=item.label,
         description=item.description,
         test_type_key=test_type.key if test_type else "?",
@@ -82,7 +151,7 @@ def _resolve_type(db: Session, key: str) -> TestType:
 def preview(
     file: UploadFile = File(...),
     header_rows: int = Form(default=1, ge=1, le=5),
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> StructurePreviewOut:
     """파일을 **저장하지 않고** 구조만 읽어 본다.
@@ -103,7 +172,7 @@ def preview(
 
     matched = None
     for candidate in db.scalars(
-        select(FormatProfile)
+        visible_profiles(db, user)
         .where(FormatProfile.is_active.is_(True))
         .order_by(FormatProfile.priority.desc(), FormatProfile.key)
     ):
@@ -141,7 +210,7 @@ def preview(
 def try_profile(
     definition: str = Form(..., description="프로파일 JSON"),
     file: UploadFile = File(...),
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> ProfileTryOut:
     """저장하기 **전에** 이 프로파일로 그 파일을 읽어 본다.
@@ -203,10 +272,13 @@ def try_profile(
 @router.get("", response_model=list[FormatProfileOut])
 def list_profiles(
     test_type: str | None = Query(default=None),
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[FormatProfileOut]:
-    query = select(FormatProfile).order_by(FormatProfile.priority.desc(), FormatProfile.key)
+    """내 부서 것 + 전역. 시스템 관리자는 전부."""
+    query = visible_profiles(db, user).order_by(
+        FormatProfile.priority.desc(), FormatProfile.key
+    )
     if test_type:
         query = query.where(FormatProfile.test_type_id == _resolve_type(db, test_type).id)
     return [_out(db, item) for item in db.scalars(query)]
@@ -215,10 +287,24 @@ def list_profiles(
 @router.post("", response_model=FormatProfileOut, status_code=201)
 def create_profile(
     payload: FormatProfileCreateRequest,
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> FormatProfileOut:
-    if db.scalar(select(FormatProfile).where(FormatProfile.key == payload.key)):
+    """부서 관리자가 자기 부서 프로파일을 만든다.
+
+    **장비는 부서마다 다르다.** 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가
+    알 리 없다 — 그 지식은 사업부에 있다.
+    """
+    owner_id = _resolve_owner(db, user, payload.owner_workspace_slug)
+    duplicate = db.scalar(
+        select(FormatProfile).where(
+            FormatProfile.key == payload.key,
+            FormatProfile.owner_workspace_id.is_(None)
+            if owner_id is None
+            else FormatProfile.owner_workspace_id == owner_id,
+        )
+    )
+    if duplicate:
         raise Conflict("MNX-TESTS-0024", f"이미 있는 프로파일입니다: {payload.key}")
     _validate(payload.definition)
     item = FormatProfile(
@@ -226,6 +312,7 @@ def create_profile(
         label=payload.label,
         description=payload.description,
         test_type_id=_resolve_type(db, payload.test_type_key).id,
+        owner_workspace_id=owner_id,
         definition=payload.definition,
         priority=payload.priority,
         is_active=payload.is_active,
@@ -241,7 +328,7 @@ def create_profile(
 def update_profile(
     key: str,
     payload: FormatProfileSaveRequest,
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> FormatProfileOut:
     """프로파일을 고친다. **이미 읽은 데이터는 안 바뀐다.**
@@ -250,13 +337,15 @@ def update_profile(
     알게 되는 것이 정상이고, 그때 고쳐서 **원본으로 다시 읽으면** 되기 때문이다.
     원본을 그대로 보관하는 두 번째 이유가 이것이다.
     """
-    item = db.scalar(select(FormatProfile).where(FormatProfile.key == key))
+    item = db.scalar(visible_profiles(db, user).where(FormatProfile.key == key))
     if item is None:
         raise NotFound("MNX-TESTS-0025", f"프로파일을 찾을 수 없습니다: {key}")
+    _require_edit(db, user, item)
     _validate(payload.definition)
     item.label = payload.label
     item.description = payload.description
     item.test_type_id = _resolve_type(db, payload.test_type_key).id
+    # 소유는 여기서 안 바꾼다. 전역 승격은 성격이 다른 결정이라 별도 경로다.
     item.definition = payload.definition
     item.priority = payload.priority
     item.is_active = payload.is_active
@@ -268,12 +357,13 @@ def update_profile(
 @router.delete("/{key}", status_code=204)
 def delete_profile(
     key: str,
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    item = db.scalar(select(FormatProfile).where(FormatProfile.key == key))
+    item = db.scalar(visible_profiles(db, user).where(FormatProfile.key == key))
     if item is None:
         raise NotFound("MNX-TESTS-0025", f"프로파일을 찾을 수 없습니다: {key}")
+    _require_edit(db, user, item)
     db.delete(item)
     db.commit()
     return Response(status_code=204)

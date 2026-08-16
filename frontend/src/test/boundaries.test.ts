@@ -33,6 +33,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       to: 'materials',
       why: '시험은 시편에 매달린다. 재료 계층을 고르는 컴포넌트는 재료 모듈이 제공하고 시험 화면은 조립만 한다(SpecimenPicker·MaterialPicker·NewSampleDialog).',
     },
+    {
+      to: 'workspaces',
+      why: '형식 프로파일이 부서 소유다 — 장비는 부서마다 다르고, 남의 부서 파일을 어떻게 읽을지는 그 부서가 안다. 만들 때 소유 부서를 골라야 하므로 부서 선택기를 쓴다.',
+    },
   ],
   materials: [
     {

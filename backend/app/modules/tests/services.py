@@ -18,7 +18,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -594,8 +594,19 @@ def _pick_reader(
             .where(
                 FormatProfile.test_type_id == test_type.id,
                 FormatProfile.is_active.is_(True),
+                or_(
+                    FormatProfile.owner_workspace_id.is_(None),
+                    FormatProfile.owner_workspace_id == run.workspace_id,
+                ),
             )
-            .order_by(FormatProfile.priority.desc(), FormatProfile.key)
+            # **내 부서 것이 전역보다 먼저다.** 같은 장비라도 부서마다 소프트웨어
+            # 설정이 달라 열 이름이 조금씩 다른 일이 있다. 부서가 자기 것을
+            # 만들어 뒀는데 전역이 이기면 그걸 만든 뜻이 없다.
+            .order_by(
+                FormatProfile.owner_workspace_id.is_(None),
+                FormatProfile.priority.desc(),
+                FormatProfile.key,
+            )
         )
     )
     if candidates:

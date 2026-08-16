@@ -348,6 +348,10 @@ class StructurePreviewOut(BaseModel):
 class FormatProfileOut(BaseModel):
     id: uuid.UUID
     key: str
+    owner_workspace_slug: str | None
+    owner_workspace_name: str | None
+    is_global: bool
+    """`NULL` 소유 = 전역. 여러 부서가 함께 쓰므로 시스템 관리자만 고친다."""
     label: str
     description: str | None
     test_type_key: str
@@ -370,6 +374,11 @@ class FormatProfileSaveRequest(BaseModel):
 
 class FormatProfileCreateRequest(FormatProfileSaveRequest):
     key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    owner_workspace_slug: str | None = None
+    """누구 것으로 만들지. `None` 이면 전역이고 **시스템 관리자만** 할 수 있다.
+
+    장비는 부서마다 다르다 — 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가
+    알 리 없어서, 부서 관리자가 자기 부서 것을 만든다."""
 
 
 class TriedChannelOut(BaseModel):

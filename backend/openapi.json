@@ -750,6 +750,17 @@
             "title": "Label",
             "type": "string"
           },
+          "owner_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Slug"
+          },
           "priority": {
             "default": 0,
             "title": "Priority",
@@ -802,6 +813,10 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "is_global": {
+            "title": "Is Global",
+            "type": "boolean"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -809,6 +824,28 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "owner_workspace_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Name"
+          },
+          "owner_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Slug"
           },
           "priority": {
             "title": "Priority",
@@ -831,6 +868,9 @@
         "required": [
           "id",
           "key",
+          "owner_workspace_slug",
+          "owner_workspace_name",
+          "is_global",
           "label",
           "description",
           "test_type_key",
@@ -5483,6 +5523,7 @@
     },
     "/api/formats": {
       "get": {
+        "description": "내 부서 것 + 전역. 시스템 관리자는 전부.",
         "operationId": "list_profiles_api_formats_get",
         "parameters": [
           {
@@ -5534,6 +5575,7 @@
         ]
       },
       "post": {
+        "description": "부서 관리자가 자기 부서 프로파일을 만든다.\n\n**장비는 부서마다 다르다.** 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가\n알 리 없다 — 그 지식은 사업부에 있다.",
         "operationId": "create_profile_api_formats_post",
         "requestBody": {
           "content": {

@@ -49,6 +49,8 @@ import type {
   TablePreview,
   TestType,
 } from '@/modules/tests/api'
+import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
+import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -124,6 +126,7 @@ export default function FormatProfileEditorPage() {
   const { key: routeKey } = useParams<{ key: string }>()
   const navigate = useNavigate()
   const creating = routeKey === undefined
+  const { user } = useAuth()
 
   const types = useResource(() => testsApi.types(), [])
   const existing = useResource<FormatProfile | null>(
@@ -142,6 +145,13 @@ export default function FormatProfileEditorPage() {
     priority: 10,
     is_active: true,
   })
+  /**
+   * 누구 것으로 만들지. **`null` 이면 전역이고 시스템 관리자만 할 수 있다.**
+   *
+   * 관리자 전용으로 두었더니 실무가 막혔다 — 장비는 부서마다 다른데 남의 부서
+   * 파일을 어떻게 읽을지를 시스템 관리자가 알 리 없다. 그 지식은 사업부에 있다.
+   */
+  const [owner, setOwner] = useState<string | null>(null)
   const [extensions, setExtensions] = useState<string[]>([])
   const [headerAny, setHeaderAny] = useState<string[]>([])
   const [metaAny, setMetaAny] = useState<string[]>([])
@@ -182,6 +192,7 @@ export default function FormatProfileEditorPage() {
       priority: item.priority,
       is_active: item.is_active,
     })
+    setOwner(item.owner_workspace_slug)
     setExtensions(definition.match?.extensions ?? [])
     setHeaderAny(definition.match?.header_any ?? [])
     setMetaAny(definition.match?.meta_any ?? [])
@@ -214,6 +225,16 @@ export default function FormatProfileEditorPage() {
   }, [existing.data])
 
   const testType = (types.data ?? []).find((item) => item.key === form.test_type_key) ?? null
+
+  /** 내가 관리자인 부서만. 아닌 부서 것으로 만들면 서버가 거절한다. */
+  const managed = (user?.memberships ?? [])
+    .filter((membership) => membership.role === 'manager')
+    .map((membership) => ({
+      slug: membership.slug,
+      name: membership.name,
+      path: membership.path,
+      depth: membership.depth,
+    }))
 
   /** 규칙에 걸리는 표. 정규식을 치는 동안 어느 표가 남는지 바로 보여 준다 —
    *  안 그러면 저장하고 파싱해 봐야 안다. */
@@ -306,6 +327,11 @@ export default function FormatProfileEditorPage() {
       ok: drafts.every((draft) => draft.key && draft.label),
       label: '새 채널의 키·이름',
       where: '④',
+    },
+    {
+      ok: owner !== null || Boolean(user?.is_system_admin),
+      label: '누구 것인지',
+      where: '⑥',
     },
     { ok: Boolean(form.key), label: '키', where: '⑥' },
     { ok: Boolean(form.label), label: '이름', where: '⑥' },
@@ -477,7 +503,9 @@ export default function FormatProfileEditorPage() {
         priority: form.priority,
         is_active: form.is_active,
       }
-      if (creating) await testsApi.createFormat({ ...payload, key: form.key })
+      if (creating) {
+        await testsApi.createFormat({ ...payload, key: form.key, owner_workspace_slug: owner })
+      }
       else await testsApi.updateFormat(form.key, payload)
       navigate('/admin/formats')
     } catch (caught) {
@@ -1178,6 +1206,41 @@ export default function FormatProfileEditorPage() {
                   }
                 />
               </div>
+            </div>
+
+            <div className="mt-3 space-y-1.5">
+              <Label className="text-xs">누구 것인가</Label>
+              {creating ? (
+                <>
+                  <WorkspacePicker
+                    workspaces={managed}
+                    value={owner}
+                    onChange={setOwner}
+                    placeholder={
+                      user?.is_system_admin ? '전역 — 모든 부서가 씁니다' : '부서를 고르세요'
+                    }
+                    className="w-full"
+                    emptyLabel="관리하는 부서가 없습니다"
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    {user?.is_system_admin
+                      ? '비워 두면 전역입니다 — 모든 부서가 쓰고, 시스템 관리자만 고칠 수 있습니다.'
+                      : '부서 관리자인 부서만 고를 수 있습니다. 전역은 시스템 관리자가 만듭니다.'}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm">
+                  {existing.data?.is_global ? (
+                    <>
+                      <b>전역</b> — 모든 부서가 씁니다. 시스템 관리자만 고칠 수 있습니다.
+                    </>
+                  ) : (
+                    <>
+                      <b>{existing.data?.owner_workspace_name}</b> 소유
+                    </>
+                  )}
+                </p>
+              )}
             </div>
 
             <div className="mt-3 space-y-1.5">

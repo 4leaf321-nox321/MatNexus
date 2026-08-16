@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react'
-import { FileCode2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FileCode2, Globe2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { testsApi } from '@/modules/tests/api'
@@ -75,6 +75,7 @@ export default function FormatProfilesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>이름</TableHead>
+              <TableHead>누구 것</TableHead>
               <TableHead>시험 종류</TableHead>
               <TableHead>지문</TableHead>
               <TableHead>열</TableHead>
@@ -97,6 +98,20 @@ export default function FormatProfilesPage() {
                     <span className="text-muted-foreground font-mono text-xs">{item.key}</span>
                     {item.description && (
                       <p className="text-muted-foreground mt-0.5 text-xs">{item.description}</p>
+                    )}
+                  </TableCell>
+                  {/* **장비는 부서마다 다르다.** 누구 것인지 안 보이면 왜 내
+                      파일이 저 규칙으로 읽혔는지 알 수 없다. */}
+                  <TableCell className="text-sm">
+                    {item.is_global ? (
+                      <Badge variant="outline" className="gap-1">
+                        <Globe2 className="size-3" />
+                        전역
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">
+                        {item.owner_workspace_name}
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-sm">{item.test_type_label}</TableCell>
@@ -150,6 +165,12 @@ export default function FormatProfilesPage() {
       )}
 
       <p className="text-muted-foreground mt-4 text-xs">
+        <b>부서 관리자가 자기 부서 프로파일을 만듭니다.</b> 장비는 부서마다 다르고, 남의
+        부서 파일을 어떻게 읽을지는 그 부서가 가장 잘 압니다. 여러 부서가 같은 장비를
+        쓰게 되면 시스템 관리자가 전역으로 올립니다. 파일을 읽을 때는 <b>내 부서 것이
+        전역보다 먼저</b>입니다.
+      </p>
+      <p className="text-muted-foreground mt-2 text-xs">
         프로파일을 고쳐도 <b>이미 읽은 데이터는 바뀌지 않습니다.</b> 원본을 그대로
         보관하므로, 규칙이 틀렸다는 것을 나중에 알면 고친 뒤 시험 상세에서 다시 읽으면
         됩니다.

@@ -19,9 +19,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.accounts.models import User
+from app.modules.auth import security
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.models import Curve, TestRun, TestType
+from app.modules.workspaces.models import Workspace, WorkspaceMember
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 STRAIN_SWEEP = FIXTURES / "dma_strain_sweep.csv"
@@ -649,3 +652,184 @@ class Test성격이다른곡선:
         assert channels["complex_compliance"]["si_unit"] == "1/Pa"
         assert channels["phase_angle"]["si_unit"] == "rad"
         assert channels["1_temperature"]["si_unit"] == "1/K"
+
+
+class Test부서가장비를붙인다:
+    """**관리자 전용으로 두었더니 실무가 막혔다.**
+
+    장비는 부서마다 다른데, 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가 알
+    리 없다 — 그 지식은 사업부에 있다. 그래서 재료와 같은 모델을 쓴다: 부서가
+    만들고, 전역 승격은 관리자(ADR 0004).
+    """
+
+    @pytest.fixture
+    def manager(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> dict[str, str]:
+        """다른 부서의 관리자. 시스템 관리자가 아니다."""
+        user = User(
+            email="lead",
+            password_hash=security.hash_password("member-password-1"),
+            display_name="사업부 관리자",
+            status="active",
+        )
+        db.add(user)
+        db.flush()
+        db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="manager"))
+        db.commit()
+        response = client.post(
+            "/api/auth/login", json={"email": "lead", "password": "member-password-1"}
+        )
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    @pytest.fixture
+    def plain_member(
+        self, client: TestClient, db: Session, workspace: Workspace
+    ) -> dict[str, str]:
+        user = User(
+            email="worker",
+            password_hash=security.hash_password("member-password-1"),
+            display_name="시험 담당자",
+            status="active",
+        )
+        db.add(user)
+        db.flush()
+        db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+        db.commit()
+        response = client.post(
+            "/api/auth/login", json={"email": "worker", "password": "member-password-1"}
+        )
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    def _payload(self, **overrides: Any) -> dict[str, Any]:
+        return {
+            "key": "dept_dma",
+            "label": "우리 부서 DMA",
+            "test_type_key": "dma_sweep",
+            "definition": DMA_PROFILE,
+            "priority": 10,
+            **overrides,
+        }
+
+    def test_부서_관리자가_만든다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        manager: dict[str, str],
+        workspace: Workspace,
+        dma: None,
+    ) -> None:
+        response = client.post(
+            "/api/formats",
+            json=self._payload(owner_workspace_slug=workspace.slug),
+            headers=manager,
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["owner_workspace_slug"] == workspace.slug
+        assert response.json()["is_global"] is False
+
+    def test_평범한_멤버는_못_만든다(
+        self,
+        client: TestClient,
+        plain_member: dict[str, str],
+        workspace: Workspace,
+        dma: None,
+    ) -> None:
+        """만드는 것은 부서의 판단이다. 아무나 만들면 같은 장비 프로파일이
+        여럿 생겨 어느 것이 이기는지 모르게 된다."""
+        response = client.post(
+            "/api/formats",
+            json=self._payload(owner_workspace_slug=workspace.slug),
+            headers=plain_member,
+        )
+        assert response.status_code == 403
+
+    def test_전역은_시스템_관리자만(
+        self,
+        client: TestClient,
+        manager: dict[str, str],
+        dma: None,
+    ) -> None:
+        """전역은 **여러 부서가 함께 쓴다.** 한 부서가 만들거나 고치면 다른 부서의
+        파일이 다르게 읽힌다."""
+        blocked = client.post("/api/formats", json=self._payload(), headers=manager)
+        assert blocked.status_code == 403
+        assert "부서를 고르세요" in blocked.json()["error"]["message"]
+
+    def test_전역_프로파일은_부서_관리자가_못_고친다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        manager: dict[str, str],
+        dma: None,
+    ) -> None:
+        # `dma` 픽스처가 만든 ta_dma850 은 전역이다.
+        response = client.put(
+            "/api/formats/ta_dma850",
+            json={
+                "label": "몰래 고치기",
+                "test_type_key": "dma_sweep",
+                "definition": DMA_PROFILE,
+            },
+            headers=manager,
+        )
+        assert response.status_code == 403
+        assert "여러 부서가 함께" in response.json()["error"]["message"]
+
+    def test_남의_부서_프로파일은_보이지도_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        manager: dict[str, str],
+        dma: None,
+    ) -> None:
+        other = Workspace(slug="other", name="다른 부서")
+        db.add(other)
+        db.commit()
+
+        client.post(
+            "/api/formats",
+            json=self._payload(key="other_dma", owner_workspace_slug="other"),
+            headers=admin_headers,
+        )
+
+        keys = {row["key"] for row in client.get("/api/formats", headers=manager).json()}
+        assert "other_dma" not in keys
+        assert "ta_dma850" in keys  # 전역은 보인다
+
+    def test_내_부서_것이_전역보다_먼저_읽는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        workspace: Workspace,
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """같은 장비라도 부서마다 소프트웨어 설정이 달라 열 이름이 조금씩 다른
+        일이 있다. 부서가 자기 것을 만들어 뒀는데 전역이 이기면 만든 뜻이 없다."""
+        client.post(
+            "/api/formats",
+            json=self._payload(
+                key="dept_dma", owner_workspace_slug=workspace.slug, priority=1
+            ),
+            headers=admin_headers,
+        )
+
+        created = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        # 전역(ta_dma850, priority 10)보다 부서 것(priority 1)이 이긴다.
+        assert run.parser_version == "profile:dept_dma"
