@@ -7,8 +7,9 @@
 
 import { NavLink } from 'react-router-dom'
 
+import { useAuth } from '@/shared/auth/AuthContext'
 import { cn } from '@/shared/lib/utils'
-import { NAV_GROUPS, itemHref } from '@/shared/layout/navigation'
+import { itemHref, visibleGroups } from '@/shared/layout/navigation'
 
 interface SidebarProps {
   collapsed: boolean
@@ -17,6 +18,14 @@ interface SidebarProps {
 }
 
 function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapsed'>) {
+  const { user } = useAuth()
+  // **볼 수 있는 것만 보여 준다.** 눌러야 403 을 아는 메뉴는 "할 수 있는 일" 을
+  // 알려 주지 못한다. 권한은 서버가 판정한다 — 여기는 표시일 뿐이다.
+  const groups = visibleGroups({
+    isSystemAdmin: Boolean(user?.is_system_admin),
+    isAnyManager: (user?.memberships ?? []).some((m) => m.role === 'manager'),
+  })
+
   return (
     <div className="flex h-full w-60 flex-col">
       <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -25,7 +34,7 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
-        {NAV_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.title}>
             <p className="text-muted-foreground px-2 pb-1 text-xs font-medium">{group.title}</p>
             <ul className="space-y-0.5">

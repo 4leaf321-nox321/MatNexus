@@ -35,6 +35,18 @@ import type { LucideIcon } from 'lucide-react'
 /** 부서 모델이 없는 동안 쓰는 임시 slug. Phase 1에서 실제 소속 부서로 대체된다. */
 export const DEFAULT_WORKSPACE = 'default'
 
+/**
+ * 누구에게 보이는가.
+ *
+ * **없으면 누르고 나서 403 을 본다.** 지금까지 사이드바가 역할을 안 봐서, 평범한
+ * 멤버에게도 계정·부서·저장소 정리가 보였다. 눌러야 권한이 없다는 것을 아는
+ * 화면은 "할 수 있는 일" 을 알려 주지 못한다.
+ *
+ * 이것은 **표시**일 뿐 권한이 아니다. 권한은 서버가 판정한다 — 사이드바를 고쳐
+ * 우회할 수 있으면 그건 애초에 보안이 아니다.
+ */
+export type NavAudience = 'everyone' | 'manager' | 'system_admin'
+
 export interface NavItem {
   label: string
   icon: LucideIcon
@@ -44,11 +56,15 @@ export interface NavItem {
   resolve?: (slug: string) => string
   /** NavLink 의 end 옵션 (부모 경로가 자식에도 활성화되지 않게) */
   end?: boolean
+  /** 기본은 `everyone`. */
+  audience?: NavAudience
 }
 
 export interface NavGroup {
   title: string
   items: NavItem[]
+  /** 그룹 전체가 안 보이는 조건. 항목이 하나도 안 보이면 제목도 지운다. */
+  audience?: NavAudience
 }
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -85,20 +101,59 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: '관리',
+    // **부서 관리자가 하는 일.** 형식 프로파일이 부서 소유가 되면서 이 그룹이
+    // 필요해졌다 — 장비를 붙이는 것은 사업부의 일이지 시스템 관리자의 일이
+    // 아니다. '관리' 에 두면 부서 사람은 자기 일이 아니라고 읽는다.
+    title: '부서 설정',
+    audience: 'manager',
     items: [
-      { label: '계정', icon: UserCog, to: '/admin/accounts' },
-      { label: '부서', icon: Building2, to: '/admin/workspaces' },
-      { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members` },
-      { label: '시험종류 정의', icon: ListTree, to: '/admin/test-types' },
-      { label: '형식 프로파일', icon: FileCode2, to: '/admin/formats' },
-      { label: '장비 커넥터', icon: Plug, to: '/admin/connectors' },
-      { label: '저장소 정리', icon: HardDrive, to: '/admin/storage' },
-      { label: '서버', icon: Server, to: '/server' },
+      { label: '파일 형식', icon: FileCode2, to: '/admin/formats', audience: 'manager' },
+      { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members`, audience: 'manager' },
+    ],
+  },
+  {
+    title: '관리',
+    audience: 'system_admin',
+    items: [
+      { label: '계정', icon: UserCog, to: '/admin/accounts', audience: 'system_admin' },
+      { label: '부서', icon: Building2, to: '/admin/workspaces', audience: 'system_admin' },
+      {
+        // 채널 키는 Parquet 컬럼이자 곡선 해석의 기준이다. 부서마다 다르면
+        // 비교·통계가 성립하지 않아 아직 전사 자산으로 둔다.
+        label: '시험 종류',
+        icon: ListTree,
+        to: '/admin/test-types',
+        audience: 'system_admin',
+      },
+      { label: '장비 커넥터', icon: Plug, to: '/admin/connectors', audience: 'system_admin' },
+      { label: '저장소 정리', icon: HardDrive, to: '/admin/storage', audience: 'system_admin' },
+      { label: '서버', icon: Server, to: '/server', audience: 'system_admin' },
     ],
   },
 ]
 
 export function itemHref(item: NavItem, slug: string): string {
   return item.to ?? item.resolve?.(slug) ?? '/'
+}
+
+
+/** 이 사람에게 보이는가. 서버가 최종 판정을 한다 — 여기는 표시일 뿐이다. */
+export function canSee(
+  audience: NavAudience | undefined,
+  viewer: { isSystemAdmin: boolean; isAnyManager: boolean }
+): boolean {
+  if (audience === 'system_admin') return viewer.isSystemAdmin
+  if (audience === 'manager') return viewer.isSystemAdmin || viewer.isAnyManager
+  return true
+}
+
+/** 볼 수 있는 것만 남긴 메뉴. 빈 그룹은 제목까지 지운다. */
+export function visibleGroups(viewer: {
+  isSystemAdmin: boolean
+  isAnyManager: boolean
+}): NavGroup[] {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => canSee(item.audience, viewer)),
+  })).filter((group) => canSee(group.audience, viewer) && group.items.length > 0)
 }
