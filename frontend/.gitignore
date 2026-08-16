@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright 스모크 산출물 — 실패했을 때만 생긴다(스크린샷·트레이스)
+test-results
+playwright-report

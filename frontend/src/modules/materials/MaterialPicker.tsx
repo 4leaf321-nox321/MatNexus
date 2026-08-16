@@ -34,6 +34,8 @@ interface Props {
   className?: string
   /** 고른 뒤에도 값을 표시하지 않는다 — '일괄 지정' 처럼 동작만 하는 자리. */
   action?: boolean
+  /** 화면에 같은 문구의 선택기가 여럿일 때 구분한다(낭독기·테스트). */
+  ariaLabel?: string
 }
 
 export function MaterialPicker({
@@ -43,6 +45,7 @@ export function MaterialPicker({
   disabled,
   className,
   action = false,
+  ariaLabel,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -91,6 +94,7 @@ export function MaterialPicker({
         <Button
           variant="outline"
           disabled={disabled}
+          aria-label={ariaLabel ?? placeholder}
           className={`justify-between font-normal ${className ?? ''}`}
         >
           <span className="truncate">

@@ -377,7 +377,8 @@ export default function BatchUploadPage() {
                 value=""
                 onValueChange={(typeKey) => assignSelected({ typeKey, typeSource: 'manual' })}
               >
-                <SelectTrigger className="w-36">
+                {/* 셋 다 라벨이 '일괄 지정' 이라 낭독기로는 구분할 수 없었다. */}
+                <SelectTrigger className="w-36" aria-label="시험 종류 일괄 지정">
                   <SelectValue placeholder="일괄 지정" />
                 </SelectTrigger>
                 <SelectContent>
@@ -399,6 +400,7 @@ export default function BatchUploadPage() {
               <MaterialPicker
                 action
                 placeholder="일괄 지정"
+                ariaLabel="재료 일괄 지정"
                 className="h-9 w-56"
                 onSelect={(material) => {
                   remember(material)
@@ -433,7 +435,7 @@ export default function BatchUploadPage() {
                   }}
                   disabled={!commonMaterial}
                 >
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-40" aria-label="시료 일괄 지정">
                     <SelectValue placeholder="일괄 지정" />
                   </SelectTrigger>
                   <SelectContent>

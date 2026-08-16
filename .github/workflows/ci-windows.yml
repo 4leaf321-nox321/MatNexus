@@ -18,6 +18,9 @@ jobs:
       # conftest 가 여기서 <이름>_test 를 파생해 만든다. 개발 DB를 건드리지 않는
       # 구조가 CI에서도 그대로 성립한다.
       DATABASE_URL: postgresql+psycopg://postgres:root@localhost:5432/matnexus
+      # 스모크가 쓰는 계정. CI 전용이라 값이 노출돼도 문제가 없다 —
+      # 운영 비밀번호는 `seed_install.py` 가 자동 생성한다.
+      SMOKE_PASSWORD: smoke-only-password-1
 
     steps:
       - uses: actions/checkout@v5
@@ -79,6 +82,60 @@ jobs:
       - name: 프론트엔드 린트 (oxlint)
         working-directory: frontend
         run: npm run lint
+
+      # 스모크는 **진짜 서버·워커·DB** 를 거친다. jsdom 은 레이아웃 엔진이 없고
+      # 서버가 전부 가짜라, "곡선이 저장됐는데 화면에 안 보인다" 같은 것을
+      # 원리상 못 잡는다(실제로 놓쳤다).
+      #
+      # 배포와 같은 모양으로 돌린다 — 백엔드 한 프로세스가 SPA 까지 서빙하므로
+      # 프록시가 끼지 않고 확인 대상이 하나 줄어든다.
+      - name: 스모크 준비 (DB·계정)
+        working-directory: backend
+        shell: pwsh
+        run: |
+          python -m alembic upgrade head
+          python scripts/seed_install.py --password '${{ env.SMOKE_PASSWORD }}'
+          python scripts/ensure_test_types.py
+
+      - name: 서버·워커 기동
+        working-directory: backend
+        shell: pwsh
+        run: |
+          Start-Process -FilePath python -ArgumentList 'run.py' -WindowStyle Hidden
+          Start-Process -FilePath python -ArgumentList 'run_worker.py' -WindowStyle Hidden
+          # 준비될 때까지 기다린다. 고정 sleep 은 느리거나 모자라거나 둘 중 하나다.
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Get-Date) -lt $deadline) {
+            try {
+              if ((Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8010/api/health).StatusCode -eq 200) {
+                Write-Host '백엔드 준비됨'; exit 0
+              }
+            } catch { Start-Sleep -Milliseconds 500 }
+          }
+          Write-Error '백엔드가 60초 안에 뜨지 않았습니다.'; exit 1
+
+      - name: 브라우저 (playwright)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: 스모크 (playwright)
+        working-directory: frontend
+        env:
+          MNX_BASE_URL: http://127.0.0.1:8010
+          MNX_ADMIN_EMAIL: admin@matnexus.local
+          MNX_ADMIN_PASSWORD: ${{ env.SMOKE_PASSWORD }}
+        run: npm run test:e2e
+
+      # 실패했을 때 무슨 화면이었는지 남긴다. 스크린샷 픽셀 비교(시각 회귀)는
+      # 일부러 안 한다 — 거짓 실패가 잦고, 그것이 반복되면 baseline 을 습관적으로
+      # 갱신하게 되어 검사가 죽는다.
+      - name: 실패 흔적 올리기
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-흔적
+          path: frontend/test-results
+          retention-days: 7
 
       # 생성 타입이 커밋된 것과 다르면 누군가 재생성을 빠뜨린 것이다(D13).
       - name: 생성 타입 최신성
