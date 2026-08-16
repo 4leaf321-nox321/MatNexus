@@ -18,12 +18,10 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.modules.accounts.models import User
-from app.modules.materials.models import Sample, Specimen
 from app.modules.tests.models import (
     Curve,
     FormatProfile,
@@ -52,30 +50,11 @@ def _now() -> datetime:
 # --- 조회 범위 --------------------------------------------------------------
 
 
-def visible_runs(db: Session, user: User) -> Select[tuple[TestRun]]:
-    """시험의 가시 범위는 **재료를 따라간다.**
-
-    시험에 별도의 공개 규칙을 두지 않는 이유: 규칙이 둘이 되면 "재료는 보이는데
-    그 시험은 안 보인다" 또는 그 반대가 생기고, 어느 쪽이 맞는지 그때그때
-    판단해야 한다.
-    """
-    query = select(TestRun).where(TestRun.deleted_at.is_(None))
-    if user.is_system_admin:
-        return query
-    return query.where(
-        TestRun.specimen_id.in_(
-            select(Specimen.id)
-            .join(Sample, Sample.id == Specimen.sample_id)
-            .where(Sample.material_id.in_(permissions.visible_material_ids(db, user)))
-        )
-    )
-
-
-def get_run(db: Session, user: User, run_id: uuid.UUID) -> TestRun:
-    run = db.scalar(visible_runs(db, user).where(TestRun.id == run_id))
-    if run is None:
-        raise NotFound("MNX-TESTS-0001", "시험을 찾을 수 없습니다.")
-    return run
+#: 시험 가시 범위는 `shared/permissions` 가 판정한다 — 처리·통계·적합도 같은
+#: 것을 쓰기 때문이다. 여기서 다시 부르는 것은 기존 호출부(`services.get_run`)를
+#: 그대로 두기 위한 재수출이고, 구현은 한 곳뿐이다.
+visible_runs = permissions.visible_runs
+get_run = permissions.get_run
 
 
 def get_test_type(db: Session, key: str) -> TestType:

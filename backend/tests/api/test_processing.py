@@ -25,9 +25,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
-from app.modules.tests.models import ProcessingResult
+from app.modules.tests.models import TestRun
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 
@@ -199,7 +200,7 @@ class Test미리보기:
         run_id: str,
         db: Session,
     ) -> None:
-        run = db.get(services.TestRun, uuid.UUID(run_id))
+        run = db.get(TestRun, uuid.UUID(run_id))
         assert run is not None
         specimen = db.get(Specimen, run.specimen_id)
         assert specimen is not None
@@ -383,3 +384,115 @@ class Test레시피:
         )
         assert allowed.status_code == 201, allowed.text
         assert allowed.json()["is_global"] is False
+
+
+class Test채택:
+    """**"이 시험의 항복강도는?" 에 답이 하나여야 한다**(ADR 0007).
+
+    저장된 결과가 전부 동등하면 통계·비교·내보내기가 무엇을 써야 할지 모른다.
+    그렇다고 저장을 곧 확정으로 하면 시행착오를 남길 수 없어 방법 간 비교가
+    불가능해진다. 그래서 시도는 자유롭게 쌓이고 대표는 사람이 한 번 정한다.
+    """
+
+    def _save(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
+        response = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def test_채택하면_요약값_표에_장비_값과_나란히_선다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**이 투영이 없어서 값이 두 곳에 따로 있었다.**
+
+        `TestSummary.source` 를 장비/MatNexus 로 나눈 이유가 이 비교인데, 처리가
+        자기 JSONB 에만 값을 두고 있었다. 화면 아래 요약값 표에는 장비가 계산한
+        항복강도가, 처리 패널에는 우리가 계산한 항복강도가 있고 둘이 서로를
+        몰랐다. 나란히 두면 검증도 된다 — 크게 다르면 뭔가 잘못된 것이다.
+        """
+        detail = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert {s["source"] for s in detail["summary"]} == {"instrument"}
+
+        saved = self._save(client, admin_headers, run_id)
+        adopted = client.post(
+            f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers
+        )
+        assert adopted.status_code == 200, adopted.text
+        assert adopted.json()["is_adopted"] is True
+
+        detail = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        ours = [s for s in detail["summary"] if s["source"] == "matnexus"]
+        assert ours, "채택했는데 요약값 표에 우리 값이 없습니다"
+        assert {s["key"] for s in ours} >= {"tensile_strength"}
+        # 장비 값은 그대로 남는다 — 지우면 비교가 성립하지 않는다.
+        assert [s for s in detail["summary"] if s["source"] == "instrument"]
+
+    def test_다른_것을_채택하면_앞의_값이_남지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        # 갱신이 아니라 삭제 후 삽입인 이유: 예전 채택에만 있던 키가 남으면
+        # 두 계산이 섞인 표가 된다 — 그 표는 그럴듯해 보인다.
+        first = self._save(client, admin_headers, run_id)
+        client.post(f"/api/processing/results/{first['id']}/adopt", headers=admin_headers)
+
+        second = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": run_id,
+                "steps": [*STEPS, {"plugin": "tensile.necking_candidate", "options": {}}],
+            },
+            headers=admin_headers,
+        ).json()
+        client.post(f"/api/processing/results/{second['id']}/adopt", headers=admin_headers)
+
+        detail = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        keys = [s["key"] for s in detail["summary"] if s["source"] == "matnexus"]
+        assert len(keys) == len(set(keys)), f"같은 키가 두 번 있습니다: {keys}"
+        assert "necking_candidate_index" in keys
+
+        # **앞의 결과는 지워지지 않는다.** 시도 목록에 그대로 남는다.
+        results = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert len(results) == 2
+        assert [r["is_adopted"] for r in results].count(True) == 1
+
+    def test_채택을_거둬도_결과는_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        saved = self._save(client, admin_headers, run_id)
+        client.post(f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers)
+        removed = client.delete(
+            f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers
+        )
+        assert removed.status_code == 204, removed.text
+
+        detail = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert not [s for s in detail["summary"] if s["source"] == "matnexus"]
+        results = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert len(results) == 1, "채택을 거뒀는데 결과가 지워졌습니다"
+        assert results[0]["is_adopted"] is False
+
+    def test_목록에서_진행이_보인다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        # 시편 20개짜리 배치에서 무엇이 아직 안 됐는지를 하나씩 열어 봐야 아는
+        # 것은 일이 아니다.
+        def row() -> Any:
+            page = client.get("/api/test-runs", headers=admin_headers).json()
+            return next(r for r in page["items"] if r["id"] == run_id)
+
+        assert row()["result_count"] == 0
+        assert row()["adopted_result_id"] is None
+
+        saved = self._save(client, admin_headers, run_id)
+        assert row()["result_count"] == 1
+        assert row()["adopted_result_id"] is None  # 돌려는 봤지만 아직 안 정함
+
+        client.post(f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers)
+        assert row()["adopted_result_id"] == saved["id"]

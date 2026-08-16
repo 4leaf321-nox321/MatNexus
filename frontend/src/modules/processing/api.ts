@@ -78,6 +78,13 @@ export const processingApi = {
   results: (testRunId: string) =>
     api.get<ProcessingResult[]>(`/processing/results?test_run_id=${testRunId}`),
 
+  /** **이 시험의 물성은 이것.** 시험당 하나뿐이다(ADR 0007). */
+  adopt: (resultId: string) =>
+    api.post<ProcessingResult>(`/processing/results/${resultId}/adopt`, {}),
+
+  /** 채택만 거둔다 — 결과는 지워지지 않는다. */
+  unadopt: (resultId: string) => api.delete<void>(`/processing/results/${resultId}/adopt`),
+
   recipes: (testType?: string) =>
     api.get<Recipe[]>(`/processing/recipes${search({ test_type: testType })}`),
 

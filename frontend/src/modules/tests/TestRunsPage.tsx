@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, FileUp, FlaskConical, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, FileUp, FlaskConical, Plus, RefreshCw, Star } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
@@ -117,6 +117,7 @@ export default function TestRunsPage() {
               <TableHead>방향</TableHead>
               <TableHead>종류</TableHead>
               <TableHead>상태</TableHead>
+              <TableHead>처리</TableHead>
               <TableHead className="text-right">행</TableHead>
               <TableHead>등록</TableHead>
             </TableRow>
@@ -145,6 +146,23 @@ export default function TestRunsPage() {
                   </Badge>
                   {run.parse_error && (
                     <p className="text-destructive mt-1 max-w-xs text-xs">{run.parse_error}</p>
+                  )}
+                </TableCell>
+                {/* **시편 20개짜리 배치에서 무엇이 남았는지가 여기 보여야 한다.**
+                    하나씩 열어 봐야 아는 것은 일이 아니다. 세 상태를 나눈다 —
+                    안 했다 / 해 봤는데 안 정했다 / 정했다(ADR 0007). */}
+                <TableCell>
+                  {run.adopted_result_id ? (
+                    <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
+                      <Star className="size-3" />
+                      채택됨
+                    </Badge>
+                  ) : run.result_count > 0 ? (
+                    <Badge variant="outline" title="돌려는 봤지만 아직 무엇을 쓸지 안 정했습니다">
+                      시도 {run.result_count}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">

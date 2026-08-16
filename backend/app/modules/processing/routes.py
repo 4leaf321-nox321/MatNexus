@@ -19,21 +19,13 @@ from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import Select, select, update
+from sqlalchemy import Select, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.materials.models import Specimen
-from app.modules.tests import services
-from app.modules.tests.models import (
-    Curve,
-    ProcessingRecipe,
-    ProcessingResult,
-    TestRun,
-    TestType,
-)
-from app.modules.tests.schemas import (
+from app.modules.processing.models import ProcessingRecipe, ProcessingResult
+from app.modules.processing.schemas import (
     ProcessingPreviewOut,
     ProcessingResultOut,
     ProcessingRunRequest,
@@ -45,11 +37,13 @@ from app.modules.tests.schemas import (
     RecipeSaveRequest,
     StepParamOut,
 )
+from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
 from app.modules.workspaces.models import Workspace
-from app.shared import filestore
+from app.shared import curvedata, filestore
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import (
+    get_run,
     require_owner_edit,
     resolve_owner_workspace,
     visible_owner_clause,
@@ -104,72 +98,6 @@ def list_steps(
 # --- 곡선을 Frame 으로 ---------------------------------------------------------
 
 
-def _frame_of(
-    db: Session, run: TestRun, curve_key: str | None
-) -> tuple[processing.Frame, Curve]:
-    available = services.curves_of(db, [run.id]).get(run.id, [])
-    if not available:
-        raise NotFound(
-            "MNX-PROCESSING-0001",
-            "정규화된 곡선이 아직 없습니다. 파일이 읽히기를 기다리거나 다시 읽으세요.",
-        )
-    curve = (
-        next((item for item in available if item.key == curve_key), None)
-        if curve_key
-        else available[0]
-    )
-    if curve is None:
-        keys = ", ".join(item.key for item in available)
-        raise NotFound(
-            "MNX-PROCESSING-0002", f"'{curve_key}' 곡선이 없습니다. 있는 곡선: {keys}"
-        )
-
-    raw = curves.read_columns(filestore.read_bytes(curve.storage_path))
-    units = services.channel_units(db, run.test_type_id)
-    columns = {
-        name: np.asarray(
-            [np.nan if value is None else float(value) for value in values], dtype=np.float64
-        )
-        for name, values in raw.items()
-    }
-    return processing.Frame(columns, {name: units.get(name, "1") for name in columns}), curve
-
-
-def _given(db: Session, run: TestRun) -> list[processing.Scalar]:
-    """시편 치수를 파이프라인이 참조할 수 있게 넘긴다.
-
-    **없는 값은 넘기지 않는다.** 0 이나 기본값으로 채우면 응력이 조용히 틀린다 —
-    단면적이 잘못되면 자릿수가 통째로 어긋나는데 숫자는 그럴듯해 보인다. 없으면
-    `@specimen_area` 참조가 "그 값이 없습니다" 로 실패하고, 그게 맞다.
-    """
-    specimen = db.get(Specimen, run.specimen_id)
-    if specimen is None:
-        return []
-    given: list[processing.Scalar] = []
-    if specimen.gauge_length_m:
-        given.append(
-            processing.Scalar(
-                "specimen_gauge_length", "시편 게이지 길이", specimen.gauge_length_m, "m"
-            )
-        )
-    if specimen.width_m:
-        given.append(processing.Scalar("specimen_width", "시편 폭", specimen.width_m, "m"))
-    if specimen.thickness_m:
-        given.append(
-            processing.Scalar("specimen_thickness", "시편 두께", specimen.thickness_m, "m")
-        )
-    if specimen.width_m and specimen.thickness_m:
-        given.append(
-            processing.Scalar(
-                "specimen_area",
-                "시편 초기 단면적",
-                specimen.width_m * specimen.thickness_m,
-                "m2",
-            )
-        )
-    return given
-
-
 def _steps(raw: list[dict[str, Any]]) -> list[processing.Step]:
     if not raw:
         raise AppError("MNX-PROCESSING-0003", "단계가 하나도 없습니다.", status=422)
@@ -183,9 +111,11 @@ def _run_pipeline(
     db: Session, run: TestRun, curve_key: str | None, steps: list[dict[str, Any]]
 ) -> tuple[processing.PipelineResult, Curve]:
     processing.load_builtin()
-    frame, curve = _frame_of(db, run, curve_key)
+    frame, curve = curvedata.load_frame(db, run, curve_key)
     try:
-        result = processing.apply(_steps(steps), frame, given=_given(db, run))
+        result = processing.apply(
+            _steps(steps), frame, given=curvedata.specimen_scalars(db, run)
+        )
     except processing.ProcessingError as exc:
         # **처리 실패는 사용자 오류다.** 500 으로 내면 로그를 뒤져야 알 수 있고,
         # 메시지에는 이미 어느 단계에서 무엇이 어긋났는지 적혀 있다.
@@ -236,7 +166,7 @@ def preview(
     저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 처리가 잘못되면
     곡선이 조용히 이상해지고, 그 곡선으로 적합한 물성이 그대로 해석에 들어간다.
     """
-    run = services.get_run(db, user, payload.test_run_id)
+    run = get_run(db, user, payload.test_run_id)
     result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
     frame = result.frame
     columns = sorted(frame.columns)
@@ -265,7 +195,7 @@ def create_result(
     바뀌면 이 결과가 무엇으로 나왔는지 알 수 없게 되는데, 그 값은 이미 보고서에
     들어가 있다.
     """
-    run = services.get_run(db, user, payload.test_run_id)
+    run = get_run(db, user, payload.test_run_id)
     result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
 
     recipe = None
@@ -339,9 +269,10 @@ def _jsonable(options: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _result_out(item: ProcessingResult) -> ProcessingResultOut:
+def _result_out(item: ProcessingResult, *, adopted: bool = False) -> ProcessingResultOut:
     return ProcessingResultOut(
         id=item.id,
+        is_adopted=adopted,
         test_run_id=item.test_run_id,
         source_curve_key=item.source_curve_key,
         recipe_key=None,
@@ -382,13 +313,13 @@ def list_results(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[ProcessingResultOut]:
-    run = services.get_run(db, user, test_run_id)
+    run = get_run(db, user, test_run_id)
     items = db.scalars(
         select(ProcessingResult)
         .where(ProcessingResult.test_run_id == run.id)
         .order_by(ProcessingResult.created_at.desc())
     )
-    return [_result_out(item) for item in items]
+    return [_result_out(item, adopted=item.id == run.adopted_result_id) for item in items]
 
 
 # --- 레시피 ------------------------------------------------------------------
@@ -555,5 +486,85 @@ def delete_recipe(
         .values(recipe_id=None)
     )
     db.delete(item)
+    db.commit()
+    return Response(status_code=204)
+
+
+# --- 채택 --------------------------------------------------------------------
+#
+# **저장된 결과가 전부 동등하면 "이 시험의 항복강도" 에 답할 수 없다.**
+# 시도는 자유롭게 쌓이고, 대표는 사람이 한 번 정한다(ADR 0007).
+
+
+def _project_summaries(db: Session, run: TestRun, result: ProcessingResult | None) -> None:
+    """채택된 결과의 값을 요약값 표에 **투영**한다.
+
+    왜 복사하는가: 목록·통계·비교·내보내기가 값을 찾을 곳이 하나여야 한다.
+    `TestSummary` 는 이미 그 자리이고, `source` 로 장비 값과 우리 값을 나란히
+    두게 설계돼 있었다 — 그런데 지금까지 `matnexus` 쪽이 비어 있었다. 처리가
+    자기 JSONB 에만 값을 두고 있었기 때문이다. 같은 성격의 값이 두 곳에 있고
+    둘이 서로를 모르는 상태였다.
+
+    **정본은 여전히 결과다.** 여기 있는 것은 파생이고, 채택을 바꾸면 통째로
+    다시 만들어진다. 그래서 갱신이 아니라 삭제 후 삽입이다 — 갱신으로 하면
+    예전 채택에만 있던 키가 남아 두 계산이 섞인 표가 된다.
+    """
+    db.execute(
+        delete(TestSummary).where(
+            TestSummary.test_run_id == run.id, TestSummary.source == "matnexus"
+        )
+    )
+    if result is None:
+        return
+    for item in result.scalars:
+        db.add(
+            TestSummary(
+                test_run_id=run.id,
+                key=str(item.get("key", "")),
+                label=str(item.get("label") or item.get("key", "")),
+                source="matnexus",
+                value_num=float(item.get("value", 0.0)),
+                si_unit=str(item.get("si_unit") or "1"),
+            )
+        )
+
+
+@router.post("/results/{result_id}/adopt", response_model=ProcessingResultOut)
+def adopt(
+    result_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ProcessingResultOut:
+    """이 결과를 **이 시험의 물성**으로 삼는다.
+
+    시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면
+    앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).
+    """
+    item = db.get(ProcessingResult, result_id)
+    if item is None:
+        raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
+    run = get_run(db, user, item.test_run_id)
+    run.adopted_result_id = item.id
+    _project_summaries(db, run, item)
+    db.commit()
+    db.refresh(item)
+    return _result_out(item, adopted=True)
+
+
+@router.delete("/results/{result_id}/adopt", status_code=204)
+def unadopt(
+    result_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """채택을 거둔다. **결과는 지워지지 않는다** — 대표만 없어진다."""
+    item = db.get(ProcessingResult, result_id)
+    if item is None:
+        raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
+    run = get_run(db, user, item.test_run_id)
+    if run.adopted_result_id != item.id:
+        raise AppError("MNX-PROCESSING-0011", "채택된 결과가 아닙니다.", status=409)
+    run.adopted_result_id = None
+    _project_summaries(db, run, None)
     db.commit()
     return Response(status_code=204)

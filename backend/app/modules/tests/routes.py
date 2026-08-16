@@ -23,6 +23,7 @@ from app.database import get_db
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests import formats, services
 from app.modules.tests.models import (
     FormatProfile,
@@ -488,7 +489,14 @@ def list_test_types(
 def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]]:
     """목록에 필요한 주변 정보를 한 번에 모은다 (N+1 방지)."""
     if not runs:
-        return {"specimens": {}, "samples": {}, "materials": {}, "types": {}, "curves": {}}
+        return {
+            "specimens": {},
+            "samples": {},
+            "materials": {},
+            "types": {},
+            "curves": {},
+            "results": {},
+        }
 
     specimen_ids = [r.specimen_id for r in runs]
     specimens = {
@@ -510,12 +518,24 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
     # 아예 없다 — 그때 목록의 행수·채널이 비어 보였다.
     by_run = services.curves_of(db, [r.id for r in runs])
     curve_rows = [items[0] for items in by_run.values() if items]
+    # **처리 진행이 목록에서 보여야 한다.** 시편 20개짜리 배치에서 무엇이 아직
+    # 처리 안 됐는지를 하나씩 열어 봐야 아는 것은 일이 아니다. 시험마다 세는
+    # 대신 한 번에 집계한다(CLAUDE.md: N+1 은 명시적 join 으로 막는다).
+    counts = {
+        run_id: count
+        for run_id, count in db.execute(
+            select(ProcessingResult.test_run_id, func.count())
+            .where(ProcessingResult.test_run_id.in_([r.id for r in runs]))
+            .group_by(ProcessingResult.test_run_id)
+        )
+    }
     return {
         "specimens": specimens,
         "samples": samples,
         "materials": materials,
         "types": types,
         "curves": {c.test_run_id: c for c in curve_rows},
+        "results": counts,
     }
 
 
@@ -551,6 +571,8 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         row_count=curve.row_count if curve else None,
         channels=list(curve.channels) if curve else [],
         warnings=[w for w in warnings.split(" / ") if w],
+        result_count=int(ctx["results"].get(run.id, 0)),
+        adopted_result_id=run.adopted_result_id,
         created_at=run.created_at,
     )
 

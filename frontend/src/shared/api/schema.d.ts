@@ -765,6 +765,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/results/{result_id}/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adopt
+         * @description 이 결과를 **이 시험의 물성**으로 삼는다.
+         *
+         *     시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면
+         *     앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).
+         */
+        post: operations["adopt_api_processing_results__result_id__adopt_post"];
+        /**
+         * Unadopt
+         * @description 채택을 거둔다. **결과는 지워지지 않는다** — 대표만 없어진다.
+         */
+        delete: operations["unadopt_api_processing_results__result_id__adopt_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/steps": {
         parameters: {
             query?: never;
@@ -2034,6 +2061,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Adopted
+             * @default false
+             */
+            is_adopted: boolean;
             /** Recipe Key */
             recipe_key: string | null;
             /** Recipe Label */
@@ -2618,6 +2650,8 @@ export interface components {
         };
         /** TestRunDetailOut */
         TestRunDetailOut: {
+            /** Adopted Result Id */
+            adopted_result_id?: string | null;
             /** Channels */
             channels: string[];
             /** Conditions */
@@ -2654,6 +2688,11 @@ export interface components {
             parser_version: string | null;
             /** Record Name */
             record_name: string;
+            /**
+             * Result Count
+             * @default 0
+             */
+            result_count: number;
             /** Row Count */
             row_count: number | null;
             /** Seq No */
@@ -2690,6 +2729,8 @@ export interface components {
         };
         /** TestRunOut */
         TestRunOut: {
+            /** Adopted Result Id */
+            adopted_result_id?: string | null;
             /** Channels */
             channels: string[];
             /** Conditions */
@@ -2722,6 +2763,11 @@ export interface components {
             parse_error: string | null;
             /** Record Name */
             record_name: string;
+            /**
+             * Result Count
+             * @default 0
+             */
+            result_count: number;
             /** Row Count */
             row_count: number | null;
             /** Seq No */
@@ -4661,6 +4707,66 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProcessingResultOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    adopt_api_processing_results__result_id__adopt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unadopt_api_processing_results__result_id__adopt_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

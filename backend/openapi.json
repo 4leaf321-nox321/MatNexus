@@ -2026,6 +2026,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_adopted": {
+            "default": false,
+            "title": "Is Adopted",
+            "type": "boolean"
+          },
           "recipe_key": {
             "anyOf": [
               {
@@ -3858,6 +3863,18 @@
       },
       "TestRunDetailOut": {
         "properties": {
+          "adopted_result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted Result Id"
+          },
           "channels": {
             "items": {
               "type": "string"
@@ -3979,6 +3996,11 @@
           "record_name": {
             "title": "Record Name",
             "type": "string"
+          },
+          "result_count": {
+            "default": 0,
+            "title": "Result Count",
+            "type": "integer"
           },
           "row_count": {
             "anyOf": [
@@ -4125,6 +4147,18 @@
       },
       "TestRunOut": {
         "properties": {
+          "adopted_result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted Result Id"
+          },
           "channels": {
             "items": {
               "type": "string"
@@ -4228,6 +4262,11 @@
           "record_name": {
             "title": "Record Name",
             "type": "string"
+          },
+          "result_count": {
+            "default": 0,
+            "title": "Result Count",
+            "type": "integer"
           },
           "row_count": {
             "anyOf": [
@@ -7668,6 +7707,85 @@
           }
         },
         "summary": "Create Result",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/api/processing/results/{result_id}/adopt": {
+      "delete": {
+        "description": "채택을 거둔다. **결과는 지워지지 않는다** — 대표만 없어진다.",
+        "operationId": "unadopt_api_processing_results__result_id__adopt_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unadopt",
+        "tags": [
+          "processing"
+        ]
+      },
+      "post": {
+        "description": "이 결과를 **이 시험의 물성**으로 삼는다.\n\n시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면\n앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).",
+        "operationId": "adopt_api_processing_results__result_id__adopt_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessingResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adopt",
         "tags": [
           "processing"
         ]

@@ -19,6 +19,7 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.tests.models import TestRun
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared.errors import Forbidden, NotFound
 
@@ -188,3 +189,32 @@ def visible_specimen(db: Session, user: User, specimen_id: uuid.UUID) -> Specime
     if specimen is None:
         raise NotFound("MNX-MATERIALS-0003", "시편을 찾을 수 없습니다.")
     return specimen
+
+
+def visible_runs(db: Session, user: User) -> Select[tuple[TestRun]]:
+    """시험의 가시 범위는 **재료를 따라간다.**
+
+    시험에 별도의 공개 규칙을 두지 않는 이유: 규칙이 둘이 되면 "재료는 보이는데
+    그 시험은 안 보인다" 또는 그 반대가 생기고, 어느 쪽이 맞는지 그때그때
+    판단해야 한다.
+
+    **여기 있는 이유:** 시험 모듈만 쓰던 것인데 처리가 같은 것을 필요로 하고,
+    통계·적합·내보내기도 곧 그렇다. 모듈마다 자기 버전을 갖게 두면 판정이 갈린다.
+    """
+    query = select(TestRun).where(TestRun.deleted_at.is_(None))
+    if user.is_system_admin:
+        return query
+    return query.where(
+        TestRun.specimen_id.in_(
+            select(Specimen.id)
+            .join(Sample, Sample.id == Specimen.sample_id)
+            .where(Sample.material_id.in_(visible_material_ids(db, user)))
+        )
+    )
+
+
+def get_run(db: Session, user: User, run_id: uuid.UUID) -> TestRun:
+    run = db.scalar(visible_runs(db, user).where(TestRun.id == run_id))
+    if run is None:
+        raise NotFound("MNX-TESTS-0001", "시험을 찾을 수 없습니다.")
+    return run

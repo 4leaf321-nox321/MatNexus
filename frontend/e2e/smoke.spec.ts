@@ -98,6 +98,15 @@ test('로그인부터 곡선까지', async ({ page }) => {
     await expect(page.locator('svg polyline, svg path').first()).toBeVisible()
     await expect(page.getByText(/점을 표시합니다/)).toBeVisible()
   })
+
+  await test.step('원본·처리·결과가 탭으로 나뉜다', async () => {
+    // 세로로 이어 붙이면 처리하는 동안 원본 곡선이 위로 사라진다(ADR 0007).
+    for (const name of ['원본', '처리', '결과']) {
+      await expect(page.getByRole('tab', { name: new RegExp(name) })).toBeVisible()
+    }
+    await page.getByRole('tab', { name: '처리' }).click()
+    await expect(page.getByRole('button', { name: '돌려 보기' })).toBeVisible()
+  })
 })
 
 test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) => {

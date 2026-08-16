@@ -19,11 +19,10 @@ from app.modules.notifications.models import (
     NotificationRule,
     NotificationRuleState,
 )
+from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.tests.models import (
     Curve,
     FormatProfile,
-    ProcessingRecipe,
-    ProcessingResult,
     TestChannel,
     TestConditionField,
     TestRun,
