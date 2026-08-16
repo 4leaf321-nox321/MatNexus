@@ -25,6 +25,7 @@ from app.modules.notifications import routes as notifications_routes
 from app.modules.processing import routes as processing_routes
 from app.modules.tests import formats as tests_formats
 from app.modules.tests import routes as tests_routes
+from app.modules.units import routes as units_routes
 from app.modules.voc import routes as voc_routes
 from app.modules.workspaces import routes as workspaces_routes
 from app.shared.access_log import AccessLogMiddleware
@@ -59,6 +60,7 @@ def _api_router() -> APIRouter:
     router.include_router(tests_routes.maintenance_router)
     router.include_router(tests_formats.router)
     router.include_router(processing_routes.router)
+    router.include_router(units_routes.router)
 
     return router
 

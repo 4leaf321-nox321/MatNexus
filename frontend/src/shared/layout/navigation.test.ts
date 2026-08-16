@@ -69,7 +69,15 @@ describe('사이드바 메뉴', () => {
 
   it('시스템 관리자는 전부 본다', () => {
     const seen = labels(ADMIN)
-    for (const shown of ['계정', '부서', '시험 종류', '파일 형식', '저장소 정리', '서버']) {
+    for (const shown of [
+      '계정',
+      '부서',
+      '시험 종류',
+      '파일 형식',
+      '단위',
+      '저장소 정리',
+      '서버',
+    ]) {
       expect(seen, shown).toContain(shown)
     }
   })

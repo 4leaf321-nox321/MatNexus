@@ -18,6 +18,7 @@ import MaterialsPage from '@/modules/materials/MaterialsPage'
 import BatchUploadPage from '@/modules/tests/BatchUploadPage'
 import FormatProfileEditorPage from '@/modules/tests/FormatProfileEditorPage'
 import RecipesPage from '@/modules/processing/RecipesPage'
+import UnitsPage from '@/modules/units/UnitsPage'
 import FormatProfilesPage from '@/modules/tests/FormatProfilesPage'
 import TestTypesPage from '@/modules/tests/TestTypesPage'
 import StoragePage from '@/modules/tests/StoragePage'
@@ -84,6 +85,7 @@ export const router = createBrowserRouter([
           // 관리 (전사)
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
+          { path: 'admin/units', element: <UnitsPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },

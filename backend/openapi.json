@@ -847,6 +847,44 @@
         "title": "DetectOut",
         "type": "object"
       },
+      "DimensionOut": {
+        "properties": {
+          "alias_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias Of"
+          },
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/UnitOut"
+            },
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dimension",
+          "si_unit",
+          "alias_of",
+          "units"
+        ],
+        "title": "DimensionOut",
+        "type": "object"
+      },
       "ExpiredOut": {
         "properties": {
           "bytes": {
@@ -5216,6 +5254,55 @@
         "title": "TriedSummaryOut",
         "type": "object"
       },
+      "UnitOut": {
+        "properties": {
+          "factor": {
+            "title": "Factor",
+            "type": "string"
+          },
+          "is_si": {
+            "title": "Is Si",
+            "type": "boolean"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "factor",
+          "offset",
+          "is_si"
+        ],
+        "title": "UnitOut",
+        "type": "object"
+      },
+      "UnitsOut": {
+        "properties": {
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/DimensionOut"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "total_units": {
+            "title": "Total Units",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dimensions",
+          "total_units"
+        ],
+        "title": "UnitsOut",
+        "type": "object"
+      },
       "UnreadCountOut": {
         "properties": {
           "unread": {
@@ -9304,6 +9391,28 @@
         "summary": "Update Test Type",
         "tags": [
           "tests"
+        ]
+      }
+    },
+    "/api/units": {
+      "get": {
+        "description": "차원별로 묶은 단위 전부.",
+        "operationId": "list_units_api_units_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Units",
+        "tags": [
+          "units"
         ]
       }
     },

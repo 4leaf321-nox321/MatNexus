@@ -1,0 +1,195 @@
+/**
+ * 단위 현황 — **무엇을 받아 무엇으로 저장하고 무엇으로 보여 주는가.**
+ *
+ * 40개 단위와 15개 차원이 코드 안에만 있어서, "우리 시스템이 kgf 를 받나",
+ * "온도를 뭘로 저장하나" 를 답하려면 소스를 열어야 했다.
+ *
+ * ## 왜 고칠 수 없게 두는가
+ *
+ * 이 화면은 **읽기 전용이다.** 관리 화면이 있으면 대개 고칠 수 있어야 할 것
+ * 같지만, 여기는 반대다.
+ *
+ * **환산 계수는 이미 저장된 숫자의 뜻이다.** `mm` 을 0.001 에서 0.01 로 고치면
+ * 어제 저장한 3.5(=3.5mm) 와 오늘 저장한 3.5(=35mm) 가 DB 에서 구분되지 않는다.
+ * 되돌릴 방법이 없고, 틀렸다는 것을 알아챌 방법도 없다 — 숫자는 여전히
+ * 그럴듯하다. 이 프로젝트가 가장 비싸게 겪는 결함이 정확히 그 계열이다.
+ *
+ * **저장 단위(SI)도 마찬가지다.** 응력의 저장 단위를 Pa 에서 MPa 로 바꾸면 그
+ * 순간 기존 곡선 전부가 10⁶ 배 틀린 값이 된다.
+ *
+ * 그래서 이 둘은 코드에 두고 테스트가 지킨다. 바꾸려면 배포가 필요하고,
+ * **그게 맞다** — 이 표를 바꾸는 것은 기능 추가가 아니라 데이터 해석의 변경이다.
+ *
+ * ## 그럼 무엇이 설정 대상인가
+ *
+ * **화면 표시 단위**뿐이다. 저장은 Pa 로 두고 화면에만 kgf/mm² 를 쓰는 것은
+ * 안전하다 — 잘못 잡아도 보이는 숫자만 이상하고 저장된 값은 그대로다. 부서마다
+ * 따르는 규격이 다르므로 언젠가 필요해진다. 지금은 코드에 있고(`units.ts`),
+ * 요구가 생기면 부서 설정으로 옮긴다.
+ */
+
+import { Lock } from 'lucide-react'
+
+import { display } from '@/modules/tests/units'
+import { unitsApi } from '@/modules/units/api'
+import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { PageHeader } from '@/shared/components/PageHeader'
+import { Badge } from '@/shared/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table'
+import { useResource } from '@/shared/hooks/useResource'
+
+/** 사람이 읽는 차원 이름. 없으면 원문을 그대로 보여 준다. */
+const DIMENSION_LABEL: Record<string, string> = {
+  angle: '각도',
+  angular_frequency: '각주파수',
+  compliance: '컴플라이언스',
+  density: '밀도',
+  dimensionless: '무차원',
+  force: '하중',
+  frequency: '주파수',
+  inverse_temperature: '역온도',
+  length: '길이',
+  mass: '질량',
+  strain: '변형률',
+  strain_rate: '변형률속도',
+  stress: '응력',
+  temperature: '온도',
+  time: '시간',
+  velocity: '속도',
+}
+
+export default function UnitsPage() {
+  const units = useResource(() => unitsApi.list(), [])
+  const rows = units.data?.dimensions ?? []
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <PageHeader
+        title="단위"
+        description="장비 파일과 입력 폼이 어떤 표기를 받고, 무엇으로 저장하고, 화면에 무엇으로 보여 주는지."
+      />
+
+      <ErrorNotice error={units.error} className="mb-4" />
+
+      {/* **고칠 수 없다는 것을 먼저 말한다.** 관리 화면인데 버튼이 없으면 사람은
+          자기 권한을 의심한다. 못 고치는 것이 의도이고 이유가 있다. */}
+      <div className="mb-4 flex gap-2 rounded-md border p-3 text-xs">
+        <Lock className="mt-0.5 size-4 shrink-0" />
+        <div>
+          <p>
+            <b>이 표는 화면에서 고칠 수 없습니다.</b> 환산 계수는 이미 저장된 숫자의
+            뜻입니다 — <code>mm</code> 을 0.001 에서 0.01 로 바꾸면 어제 저장한
+            3.5(=3.5mm)와 오늘 저장한 3.5(=35mm)가 DB 에서 구분되지 않습니다.
+            되돌릴 수도, 틀렸다는 것을 알아챌 수도 없습니다.
+          </p>
+          <p className="text-muted-foreground mt-1">
+            바꾸려면 코드를 고치고 배포해야 하며, 그게 맞습니다 — 이 표를 바꾸는
+            것은 기능 추가가 아니라 <b>데이터 해석의 변경</b>입니다.{' '}
+            <b>화면 표시 단위</b>(저장은 Pa, 화면은 MPa)는 성격이 달라 나중에 부서
+            설정으로 열 수 있습니다.
+          </p>
+        </div>
+      </div>
+
+      {units.data && (
+        <p className="text-muted-foreground mb-2 text-xs">
+          {rows.length}개 차원 · {units.data.total_units}개 표기
+        </p>
+      )}
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>차원</TableHead>
+            <TableHead>저장</TableHead>
+            <TableHead>화면</TableHead>
+            <TableHead>받는 표기</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => {
+            const shown = display(row.si_unit, row.dimension)
+            return (
+              <TableRow key={row.dimension}>
+                <TableCell>
+                  <div className="text-sm">
+                    {DIMENSION_LABEL[row.dimension] ?? row.dimension}
+                  </div>
+                  <span className="text-muted-foreground font-mono text-xs">
+                    {row.dimension}
+                  </span>
+                  {row.alias_of && (
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      {/* 단위로는 못 가르고 차원으로만 갈리는 것이 있다 —
+                          변형률과 tan δ 는 저장 단위가 둘 다 `1` 이다. */}
+                      <b>{row.alias_of}</b> 이 이 차원의 별칭입니다 — 검증에서는 같게
+                      치고, 화면에서만 다르게 보여 줍니다.
+                    </p>
+                  )}
+                </TableCell>
+
+                <TableCell>
+                  <Badge variant="secondary" className="font-mono">
+                    {row.si_unit}
+                  </Badge>
+                </TableCell>
+
+                <TableCell>
+                  <span className="font-mono text-sm">{shown.unit || '(그대로)'}</span>
+                  {(shown.factor !== 1 || shown.offset !== 0) && (
+                    <p className="text-muted-foreground font-mono text-xs">
+                      ×{shown.factor}
+                      {shown.offset !== 0 &&
+                        ` ${shown.offset > 0 ? '+' : '−'} ${Math.abs(shown.offset)}`}
+                    </p>
+                  )}
+                </TableCell>
+
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {row.units.map((unit) => (
+                      <Badge
+                        key={unit.symbol}
+                        variant={unit.is_si ? 'default' : 'outline'}
+                        className="font-mono text-xs"
+                        title={
+                          unit.offset === '0'
+                            ? `SI = 값 × ${unit.factor}`
+                            : `SI = 값 × ${unit.factor} + ${unit.offset}`
+                        }
+                      >
+                        {unit.symbol}
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+
+      <div className="text-muted-foreground mt-4 space-y-2 text-xs">
+        <p>
+          <b>받는 표기</b>는 장비 파일의 헤더와 입력 폼이 쓸 수 있는 기호입니다. 진한
+          것이 저장 단위입니다. 대소문자는 가리지 않지만,{' '}
+          <b>대소문자만 다른 두 단위가 있으면 정확히 써야 합니다</b> — 예를 들어{' '}
+          <code>mm</code> 과 <code>Mm</code> 처럼 뜻이 갈리는 쌍은 추측하지 않고
+          거절합니다.
+        </p>
+        <p>
+          여기 없는 표기가 파일에 오면 <b>조용히 넘어가지 않고 실패합니다.</b> 모르는
+          단위를 1 로 치면 그 곡선은 오류 없이 엉뚱한 크기가 되고, 나중에 찾을 방법이
+          없습니다.
+        </p>
+      </div>
+    </div>
+  )
+}

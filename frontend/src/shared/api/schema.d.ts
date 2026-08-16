@@ -1186,6 +1186,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Units
+         * @description 차원별로 묶은 단위 전부.
+         */
+        get: operations["list_units_api_units_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/voc": {
         parameters: {
             query?: never;
@@ -1722,6 +1742,17 @@ export interface components {
             test_type_key: string | null;
             /** Test Type Label */
             test_type_label: string | null;
+        };
+        /** DimensionOut */
+        DimensionOut: {
+            /** Alias Of */
+            alias_of: string | null;
+            /** Dimension */
+            dimension: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Units */
+            units: components["schemas"]["UnitOut"][];
         };
         /** ExpiredOut */
         ExpiredOut: {
@@ -3147,6 +3178,24 @@ export interface components {
             text: string | null;
             /** Value */
             value: number | null;
+        };
+        /** UnitOut */
+        UnitOut: {
+            /** Factor */
+            factor: string;
+            /** Is Si */
+            is_si: boolean;
+            /** Offset */
+            offset: string;
+            /** Symbol */
+            symbol: string;
+        };
+        /** UnitsOut */
+        UnitsOut: {
+            /** Dimensions */
+            dimensions: components["schemas"]["DimensionOut"][];
+            /** Total Units */
+            total_units: number;
         };
         /** UnreadCountOut */
         UnreadCountOut: {
@@ -5760,6 +5809,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_units_api_units_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitsOut"];
                 };
             };
         };

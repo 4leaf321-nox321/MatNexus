@@ -24,6 +24,7 @@ import {
   Megaphone,
   MessageSquare,
   Plug,
+  Ruler,
   Server,
   SlidersHorizontal,
   User,
@@ -137,6 +138,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: '계정', icon: UserCog, to: '/admin/accounts', audience: 'system_admin' },
       { label: '부서', icon: Building2, to: '/admin/workspaces', audience: 'system_admin' },
+      {
+        // **읽기 전용이다.** 환산 계수는 이미 저장된 숫자의 뜻이라 화면에서
+        // 못 고친다. 그래도 목록에 두는 이유는, 무엇을 받아 무엇으로 저장하는지가
+        // 코드 안에만 있으면 "kgf 를 받나" 를 답할 방법이 없기 때문이다.
+        label: '단위',
+        icon: Ruler,
+        to: '/admin/units',
+        audience: 'system_admin',
+      },
       { label: '장비 커넥터', icon: Plug, to: '/admin/connectors', audience: 'system_admin' },
       { label: '저장소 정리', icon: HardDrive, to: '/admin/storage', audience: 'system_admin' },
       { label: '서버', icon: Server, to: '/server', audience: 'system_admin' },
