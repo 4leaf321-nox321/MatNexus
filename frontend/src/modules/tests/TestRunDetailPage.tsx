@@ -16,6 +16,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
+import {
+  axisOptionsFor,
+  groupCurveFamilies,
+  memberLabel,
+  resolveAxes,
+} from '@/modules/tests/curves'
 import { axisLabel, formatValue, toDisplay } from '@/modules/tests/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -72,30 +78,9 @@ export default function TestRunDetailPage() {
    */
   const curves = useMemo(() => item?.curves ?? [], [item])
 
-  /**
-   * 곡선을 **종류로 묶는다.** 한 파일에서 나오는 것이 이렇다.
-   *
-   *   Temperature Sweep (Multifrequency) - 2 … - 7   같은 종류, 6벌
-   *   TTS - master curve (20.0 °C)                   다른 종류, 1벌
-   *   TTS - shift factors                            또 다른 종류, 1벌
-   *
-   * 한 줄에 8개를 늘어놓으면 무엇이 같은 종류의 반복이고 무엇이 성격이 다른
-   * 곡선인지 구분이 안 된다. **종류 → 벌 → 축** 순서로 좁혀 들어간다.
-   *
-   * 묶는 규칙은 이름 끝의 일련번호를 떼는 것뿐이다. 채널 구성으로 묶으면 안 된다 —
-   * 실측에서 같은 종류인데도 첫 구간만 채널이 9개고 나머지는 8개였다.
-   */
-  const families = useMemo(() => {
-    const groups = new Map<string, { name: string; kind: string; items: typeof curves }>()
-    for (const curve of curves) {
-      const label = curve.label ?? curve.key
-      const name = label.replace(/\s*[-–#]\s*\d+\s*$/, '').trim() || label
-      const found = groups.get(name)
-      if (found) found.items.push(curve)
-      else groups.set(name, { name, kind: curve.kind, items: [curve] })
-    }
-    return [...groups.values()]
-  }, [curves])
+  // 묶고 고르는 규칙은 `curves.ts` 에 있다 — 화면 안에 있으면 시험할 수 없고,
+  // 시험할 수 없으면 같은 결함이 반복된다(실제로 두 번 났다).
+  const families = useMemo(() => groupCurveFamilies(curves), [curves])
 
   const [familyName, setFamilyName] = useState<string | null>(null)
   const activeFamily = families.find((f) => f.name === familyName) ?? families[0] ?? null
@@ -104,38 +89,13 @@ export default function TestRunDetailPage() {
   const activeCurve =
     activeFamily?.items.find((c) => c.key === curveKey) ?? activeFamily?.items[0] ?? null
 
-  /**
-   * 고를 수 있는 축 = **그 곡선이 실제로 가진 채널.**
-   *
-   * 정의(시험 종류)에서만 뽑으면 두 방향으로 틀린다.
-   *
-   *   - 정의에 있는데 그 곡선엔 없는 채널(DMA 는 구간마다 열 구성이 다르다)
-   *   - 그 곡선엔 있는데 정의엔 없는 채널 — 처리결과 곡선이 그렇다.
-   *     마스터 곡선의 `complex_compliance`·`phase_angle` 은 시험 종류에 없다.
-   *     정의 기준으로 버튼을 만들면 **그 곡선을 그릴 방법이 아예 없다.**
-   *
-   * 곡선이 무엇을 가졌는지는 곡선이 안다. 정의는 이름과 단위를 보태 줄 뿐이다.
-   */
-  const axisOptions = useMemo(() => {
-    const present = activeCurve?.channels ?? channels.map((channel) => channel.key)
-    return present.map((key) => {
-      const declared = channels.find((channel) => channel.key === key)
-      return {
-        key,
-        label: declared?.label ?? key,
-        si_unit: declared?.si_unit ?? null,
-        dimension: declared?.dimension ?? null,
-      }
-    })
-  }, [activeCurve, channels])
+  const axisOptions = useMemo(() => axisOptionsFor(activeCurve, channels), [activeCurve, channels])
 
   // 곡선을 바꾸면 축이 그 곡선에 없을 수 있다. **바꿀 때마다 확인한다** —
   // 안 하면 "이 시험에 없는 채널입니다: step_time" 이 뜬다(실제로 떴다).
   useEffect(() => {
-    if (axisOptions.length < 2) return
-    const keys = axisOptions.map((option) => option.key)
-    if (axes && keys.includes(axes.x) && keys.includes(axes.y)) return
-    setAxes({ x: keys[0], y: keys[1] })
+    const next = resolveAxes(axes, axisOptions)
+    if (next !== axes) setAxes(next)
   }, [axes, axisOptions])
 
   const curve = useResource(
@@ -323,10 +283,7 @@ export default function TestRunDetailPage() {
                     title={`${curveItem.row_count}행 · ${curveItem.channels.join(', ')}`}
                   >
                     {/* 종류 이름을 뗀 나머지 — `- 3` 처럼 구간만 보인다. */}
-                    {(curveItem.label ?? curveItem.key)
-                      .replace(activeFamily.name, '')
-                      .replace(/^\s*[-–#]\s*/, '')
-                      .trim() || curveItem.key}
+                    {memberLabel(curveItem, activeFamily.name)}
                   </Button>
                 ))}
               </div>

@@ -69,6 +69,17 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # 65의 재작업 44건이 이 축에서 나왔다(§8.5). 이 저장소도 같은 길을 가고
+      # 있었다 — 최근 결함이 거의 전부 프론트였고 전부 사용자가 발견했다.
+      # 모듈 경계 검사도 여기서 돈다(백엔드만 막고 있었다).
+      - name: 프론트엔드 테스트 (vitest)
+        working-directory: frontend
+        run: npm test
+
+      - name: 프론트엔드 린트 (oxlint)
+        working-directory: frontend
+        run: npm run lint
+
       # 생성 타입이 커밋된 것과 다르면 누군가 재생성을 빠뜨린 것이다(D13).
       - name: 생성 타입 최신성
         working-directory: frontend

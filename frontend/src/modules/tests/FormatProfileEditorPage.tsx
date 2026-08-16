@@ -70,13 +70,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { toChannelKey } from '@/modules/tests/keys'
 import { DIMENSIONS, SI_BY_DIMENSION } from '@/modules/tests/units'
 import { useResource } from '@/shared/hooks/useResource'
-
-/** 열 이름 → 채널 키. 서버의 `matcore.readers.profile.slug` 와 같은 규칙이다. */
-function slugify(text: string): string {
-  return text.trim().toLowerCase().replace(/[^0-9a-z]+/g, '_').replace(/^_|_$/g, '')
-}
 
 /** 메타 한 줄을 어떻게 할지. 기계는 못 가르는 판단이다 — `.tra` 의 요약부는
  *  구조적으로 메타와 똑같이 생겼는데, 하나는 **시험 결과**이고 하나는 **입력**이다. */
@@ -335,7 +331,7 @@ export default function FormatProfileEditorPage() {
 
   /** 열 하나에서 새 채널을 제안한다. **파일이 이미 알려 준 것을 다시 묻지 않는다.** */
   function addDraft(column: { name: string; dimension: string | null }) {
-    const base = slugify(column.name)
+    const base = toChannelKey(column.name)
     const taken = new Set([
       ...(testType?.channels ?? []).map((channel) => channel.key),
       ...drafts.map((draft) => draft.key),
@@ -868,7 +864,7 @@ export default function FormatProfileEditorPage() {
                     value={newType.key}
                     onChange={(event) =>
                       setNewType((current) =>
-                        current ? { ...current, key: slugify(event.target.value) } : current
+                        current ? { ...current, key: toChannelKey(event.target.value) } : current
                       )
                     }
                   />
@@ -991,7 +987,7 @@ export default function FormatProfileEditorPage() {
                         className="h-8 w-40 font-mono text-xs"
                         value={draft.key}
                         onChange={(event) =>
-                          patchDraft(index, { key: slugify(event.target.value) })
+                          patchDraft(index, { key: toChannelKey(event.target.value) })
                         }
                       />
                       <Input

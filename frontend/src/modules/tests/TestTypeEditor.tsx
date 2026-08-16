@@ -19,6 +19,7 @@ import { Lock, Plus, Trash2 } from 'lucide-react'
 
 import { testsApi } from '@/modules/tests/api'
 import type { Parser, TestType } from '@/modules/tests/api'
+import { toChannelKey } from '@/modules/tests/keys'
 import { DIMENSIONS, SI_BY_DIMENSION, VALUE_TYPES, display } from '@/modules/tests/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
@@ -41,15 +42,6 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { useResource } from '@/shared/hooks/useResource'
-
-/** 서버의 키 규칙(`^[a-z][a-z0-9_]*$`)을 칸에서 지킨다. 숫자로 시작하면 그
- *  숫자를 떨어뜨린다 — 조용히 놔두면 저장할 때 거절당한다. */
-function toKey(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '_')
-    .replace(/^[^a-z]+/, '')
-}
 
 interface ChannelRow {
   key: string
@@ -213,7 +205,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
               disabled={!creating}
               placeholder="compression"
               onChange={(event) =>
-                setForm((current) => ({ ...current, key: toKey(event.target.value) }))
+                setForm((current) => ({ ...current, key: toChannelKey(event.target.value) }))
               }
             />
             <p className="text-muted-foreground text-xs">
@@ -419,7 +411,7 @@ function RowEditor({
                 value={row.key}
                 disabled={frozen}
                 placeholder="force"
-                onChange={(event) => onChange(index, { key: toKey(event.target.value) })}
+                onChange={(event) => onChange(index, { key: toChannelKey(event.target.value) })}
               />
             </div>
             <div className="flex-1 space-y-1">
