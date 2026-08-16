@@ -62,17 +62,39 @@ export default function TestRunDetailPage() {
   const channels = useMemo(() => definition?.channels ?? [], [definition])
 
   useEffect(() => {
-    if (!axes && channels.length >= 2) {
-      setAxes({ x: channels[0].key, y: channels[1].key })
-    }
-  }, [axes, channels])
+    if (axes || channels.length < 2) return
+    // 정의에 있는 채널이라도 **그 곡선에 없을 수 있다.** DMA 는 구간마다 열
+    // 구성이 다르다 — 없는 채널을 축으로 잡으면 첫 화면부터 오류가 뜬다.
+    const present = item?.curves?.[0]?.channels
+    const usable = present
+      ? channels.filter((channel) => present.includes(channel.key))
+      : channels
+    const pick = usable.length >= 2 ? usable : channels
+    setAxes({ x: pick[0].key, y: pick[1].key })
+  }, [axes, channels, item?.curves])
+
+  /**
+   * 어느 곡선을 볼 것인가. **한 시험이 곡선을 여럿 가진다.**
+   *
+   * TA DMA850 주파수-온도 스윕은 `[step]` 마다 별개 측정이라 곡선이 6벌 나온다.
+   * 고를 수 없던 때는 저장은 다 돼 있는데 **화면에서 하나도 안 보였다** — 목록·
+   * 상세·차트가 전부 `raw` 키만 찾았고, 표가 여럿인 파일에는 그 키가 없다.
+   */
+  const curves = useMemo(() => item?.curves ?? [], [item])
+  const [curveKey, setCurveKey] = useState<string | null>(null)
+  const activeCurve = curves.find((c) => c.key === curveKey) ?? curves[0] ?? null
 
   const curve = useResource(
     () =>
       item?.status === 'parsed' && axes
-        ? testsApi.curve(id, { x: axes.x, y: axes.y, maxPoints: 1200 })
+        ? testsApi.curve(id, {
+            x: axes.x,
+            y: axes.y,
+            curve: activeCurve?.key,
+            maxPoints: 1200,
+          })
         : Promise.resolve(null),
-    [id, item?.status, axes?.x, axes?.y]
+    [id, item?.status, axes?.x, axes?.y, activeCurve?.key]
   )
 
   const xChannel = channels.find((c) => c.key === axes?.x)
@@ -221,6 +243,30 @@ export default function TestRunDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* **한 시험이 곡선을 여럿 가진다.** DMA 주파수-온도 스윕은 `[step]`
+              마다 별개 측정이라 6벌이 나온다. 고를 수 없던 때는 저장은 다 돼
+              있는데 화면에서 하나도 안 보였다. 하나뿐이면 굳이 보여 주지 않는다. */}
+          {curves.length > 1 && (
+            <div className="mb-3">
+              <p className="text-muted-foreground mb-1 text-xs">
+                곡선 {curves.length}벌 — 구간마다 별개 측정입니다
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {curves.map((item) => (
+                  <Button
+                    key={item.key}
+                    size="sm"
+                    variant={activeCurve?.key === item.key ? 'default' : 'outline'}
+                    onClick={() => setCurveKey(item.key)}
+                    title={`${item.row_count}행 · ${item.channels.join(', ')}`}
+                  >
+                    {item.label ?? item.key}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <ErrorNotice error={curve.error} className="mb-2" />
 

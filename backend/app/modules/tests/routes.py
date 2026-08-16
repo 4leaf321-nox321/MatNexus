@@ -25,7 +25,6 @@ from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests import services
 from app.modules.tests.models import (
-    Curve,
     FormatProfile,
     TestChannel,
     TestConditionField,
@@ -36,6 +35,7 @@ from app.modules.tests.models import (
 from app.modules.tests.schemas import (
     CleanupQueuedOut,
     CleanupRequest,
+    CurveOut,
     CurvePointsOut,
     DetectOut,
     ParserOut,
@@ -432,11 +432,10 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
             select(TestType).where(TestType.id.in_([r.test_type_id for r in runs]))
         )
     }
-    curve_rows = db.scalars(
-        select(Curve).where(
-            Curve.test_run_id.in_([r.id for r in runs]), Curve.key == services.RAW_CURVE
-        )
-    )
+    # **`raw` 만 보면 안 된다.** 표가 여럿인 파일은 표 이름이 키가 되고 `raw` 가
+    # 아예 없다 — 그때 목록의 행수·채널이 비어 보였다.
+    by_run = services.curves_of(db, [r.id for r in runs])
+    curve_rows = [items[0] for items in by_run.values() if items]
     return {
         "specimens": specimens,
         "samples": samples,
@@ -667,6 +666,16 @@ def get_run(
             for s in summary
         ],
         source_metadata={k: v for k, v in run.source_metadata.items() if k != "_warnings"},
+        parser_version=run.parser_version,
+        curves=[
+            CurveOut(
+                key=curve.key,
+                label=curve.label,
+                row_count=curve.row_count,
+                channels=list(curve.channels),
+            )
+            for curve in services.curves_of(db, [run.id]).get(run.id, [])
+        ],
     )
 
 
@@ -675,16 +684,23 @@ def get_curve(
     run_id: uuid.UUID,
     x: str | None = None,
     y: str | None = None,
+    curve: str | None = Query(default=None, description="곡선 키. 없으면 첫 곡선"),
     max_points: int = Query(default=DEFAULT_CURVE_POINTS, ge=10, le=MAX_CURVE_POINTS),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> CurvePointsOut:
-    """차트가 쓸 점들. 축을 고르지 않으면 정의 순서상 첫 두 채널."""
+    """차트가 쓸 점들. 축을 고르지 않으면 정의 순서상 첫 두 채널.
+
+    `curve` 를 받는 이유: 한 시험이 곡선을 여럿 가질 수 있다(DMA 의 `[step]`).
+    안 주면 첫 곡선 — 표가 하나뿐인 파일에서는 예전과 같다.
+    """
     run = services.get_run(db, user, run_id)
     if x is None or y is None:
         default_x, default_y = services.default_axes(db, run.test_type_id)
         x, y = x or default_x, y or default_y
-    return CurvePointsOut(**services.curve_points(db, run, x=x, y=y, max_points=max_points))
+    return CurvePointsOut(
+        **services.curve_points(db, run, x=x, y=y, max_points=max_points, curve_key=curve)
+    )
 
 
 @runs_router.get("/{run_id}/source")

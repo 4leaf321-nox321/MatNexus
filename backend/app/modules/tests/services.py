@@ -558,7 +558,7 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     _store_summary(db, run, parsed)
 
     run.source_metadata = dict(parsed.metadata)
-    run.parser_version = how[:20]
+    run.parser_version = how[:80]
     run.status = "parsed"
     run.parse_error = None
     if parsed.warnings:
@@ -906,25 +906,58 @@ def cleanup_storage(
 # --- 곡선 읽기 --------------------------------------------------------------
 
 
+def curves_of(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Curve]]:
+    """시험별 곡선 전부. **`raw` 만 보면 안 된다.**
+
+    한 파일이 곡선을 여럿 낸다(TA DMA850 주파수-온도 스윕은 `[step]` 8개). 그때
+    키는 표 이름의 slug 이고 `raw` 는 아예 없다 — `raw` 만 찾던 목록·상세·차트는
+    **저장된 곡선 6벌을 하나도 못 봤다.** 실측으로 걸렸다:
+
+        상세: row_count=None, channels=[]
+        차트: 404 "정규화된 곡선이 아직 없습니다"
+
+    `raw` 를 맨 앞에 둔다. 표가 하나뿐인 파일(대부분)에서 예전과 같은 것이 기본이
+    되도록.
+    """
+    if not run_ids:
+        return {}
+    found: dict[uuid.UUID, list[Curve]] = {}
+    for curve in db.scalars(select(Curve).where(Curve.test_run_id.in_(run_ids))):
+        found.setdefault(curve.test_run_id, []).append(curve)
+    for items in found.values():
+        items.sort(key=lambda item: (item.key != RAW_CURVE, item.key))
+    return found
+
+
 def curve_points(
-    db: Session, run: TestRun, *, x: str, y: str, max_points: int
+    db: Session, run: TestRun, *, x: str, y: str, max_points: int, curve_key: str | None = None
 ) -> dict[str, Any]:
     """차트가 쓸 점들. 필요한 두 열만 읽고 축약한다.
 
     전부 보내지 않는 이유는 크기다. 3만 점이면 JSON 이 수 MB 가 되고, 그 대부분은
     화면 픽셀 하나에 겹쳐 그려진다.
     """
-    curve = db.scalar(select(Curve).where(Curve.test_run_id == run.id, Curve.key == RAW_CURVE))
+    available = curves_of(db, [run.id]).get(run.id, [])
+    if curve_key:
+        curve = next((item for item in available if item.key == curve_key), None)
+        if curve is None:
+            raise NotFound(
+                "MNX-TESTS-0009",
+                f"그런 곡선이 없습니다: {curve_key} "
+                f"(있는 것: {', '.join(item.key for item in available) or '없음'})",
+            )
+    else:
+        curve = available[0] if available else None
     if curve is None:
         raise NotFound("MNX-TESTS-0009", "정규화된 곡선이 아직 없습니다.")
 
-    available = set(curve.channels)
-    missing = [key for key in (x, y) if key not in available]
+    channels = set(curve.channels)
+    missing = [key for key in (x, y) if key not in channels]
     if missing:
         raise AppError(
             "MNX-TESTS-0010",
             f"이 시험에 없는 채널입니다: {', '.join(missing)} "
-            f"(있는 것: {', '.join(sorted(available))})",
+            f"(있는 것: {', '.join(sorted(channels))})",
             status=422,
         )
 

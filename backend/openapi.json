@@ -495,6 +495,45 @@
         "title": "CreateAccountRequest",
         "type": "object"
       },
+      "CurveOut": {
+        "description": "저장된 곡선 하나.\n\n**여럿일 수 있다.** TA DMA850 주파수-온도 스윕은 `[step]` 마다 별개 측정이라\n곡선이 6벌 나온다. 하나만 보여 주면 나머지는 저장돼 있는데 화면에서 영원히\n안 보인다 — 실제로 그랬다.",
+        "properties": {
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "row_count",
+          "channels"
+        ],
+        "title": "CurveOut",
+        "type": "object"
+      },
       "CurvePointsOut": {
         "properties": {
           "points": {
@@ -3174,6 +3213,13 @@
             "title": "Created At",
             "type": "string"
           },
+          "curves": {
+            "items": {
+              "$ref": "#/components/schemas/CurveOut"
+            },
+            "title": "Curves",
+            "type": "array"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3256,6 +3302,17 @@
               }
             ],
             "title": "Parse Error"
+          },
+          "parser_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parser Version"
           },
           "record_name": {
             "title": "Record Name",
@@ -3397,7 +3454,9 @@
           "warnings",
           "created_at",
           "summary",
-          "source_metadata"
+          "source_metadata",
+          "curves",
+          "parser_version"
         ],
         "title": "TestRunDetailOut",
         "type": "object"
@@ -7173,7 +7232,7 @@
     },
     "/api/test-runs/{run_id}/curve": {
       "get": {
-        "description": "차트가 쓸 점들. 축을 고르지 않으면 정의 순서상 첫 두 채널.",
+        "description": "차트가 쓸 점들. 축을 고르지 않으면 정의 순서상 첫 두 채널.\n\n`curve` 를 받는 이유: 한 시험이 곡선을 여럿 가질 수 있다(DMA 의 `[step]`).\n안 주면 첫 곡선 — 표가 하나뿐인 파일에서는 예전과 같다.",
         "operationId": "get_curve_api_test_runs__run_id__curve_get",
         "parameters": [
           {
@@ -7216,6 +7275,24 @@
                 }
               ],
               "title": "Y"
+            }
+          },
+          {
+            "description": "곡선 키. 없으면 첫 곡선",
+            "in": "query",
+            "name": "curve",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "곡선 키. 없으면 첫 곡선",
+              "title": "Curve"
             }
           },
           {

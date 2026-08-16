@@ -110,9 +110,28 @@ class TestSummaryOut(BaseModel):
     si_unit: str | None
 
 
+class CurveOut(BaseModel):
+    """저장된 곡선 하나.
+
+    **여럿일 수 있다.** TA DMA850 주파수-온도 스윕은 `[step]` 마다 별개 측정이라
+    곡선이 6벌 나온다. 하나만 보여 주면 나머지는 저장돼 있는데 화면에서 영원히
+    안 보인다 — 실제로 그랬다.
+    """
+
+    key: str
+    label: str | None
+    """표 이름(`Temperature Sweep (Multifrequency) - 2`). 없을 수 있다."""
+    row_count: int
+    channels: list[str]
+
+
 class TestRunDetailOut(TestRunOut):
     summary: list[TestSummaryOut]
     source_metadata: dict[str, str]
+    curves: list[CurveOut]
+    parser_version: str | None
+    """무엇으로 읽었는가(`profile:ta_dma850` · `zwick_tra:1`). 곡선이 이상할 때
+    가장 먼저 봐야 하는 값이다."""
 
 
 class CurvePointsOut(BaseModel):

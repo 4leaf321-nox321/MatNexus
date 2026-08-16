@@ -470,3 +470,92 @@ class TestEndToEnd:
         assert curve.status_code == 200, curve.text
         assert curve.json()["row_count"] == 10
         assert len(curve.json()["points"]) == 10
+
+
+class Test곡선이여럿일때:
+    """**저장은 되는데 화면에서 안 보이던 자리.**
+
+    실측으로 걸렸다. 개발 서버에 DMA 주파수-온도 스윕을 올렸더니 곡선 6벌이
+    저장됐는데 상세는 `row_count=None, channels=[]` 이었고 차트는 404 였다 —
+    목록·상세·차트가 전부 `raw` 키만 찾았고, 표가 여럿인 파일에는 그 키가 없다.
+    """
+
+    def test_상세가_곡선을_전부_보여_준다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+
+        detail = client.get(f"/api/test-runs/{created['id']}", headers=admin_headers).json()
+        assert len(detail["curves"]) == 6
+        assert detail["curves"][0]["label"].startswith("Temperature Sweep")
+        assert detail["curves"][0]["row_count"] == 8
+        # 무엇으로 읽었는지도 준다 — 곡선이 이상할 때 가장 먼저 보는 값이다.
+        assert detail["parser_version"] == "profile:ta_dma850"
+
+    def test_곡선을_골라_그린다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        services.parse_run(db, uuid.UUID(created["id"]))
+
+        detail = client.get(f"/api/test-runs/{created['id']}", headers=admin_headers).json()
+        key = detail["curves"][2]["key"]
+
+        chosen = client.get(
+            f"/api/test-runs/{created['id']}/curve"
+            f"?x=temperature&y=storage_modulus&curve={key}",
+            headers=admin_headers,
+        )
+        assert chosen.status_code == 200, chosen.text
+        assert chosen.json()["returned"] == 8
+
+        # 안 고르면 첫 곡선. 표가 하나뿐인 파일에서는 예전과 같다.
+        default = client.get(
+            f"/api/test-runs/{created['id']}/curve?x=temperature&y=storage_modulus",
+            headers=admin_headers,
+        )
+        assert default.status_code == 200
+
+    def test_없는_곡선을_고르면_있는_것을_알려_준다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        services.parse_run(db, uuid.UUID(created["id"]))
+
+        response = client.get(
+            f"/api/test-runs/{created['id']}/curve?x=strain&y=storage_modulus&curve=nope",
+            headers=admin_headers,
+        )
+        assert response.status_code == 404
+        assert "raw" in response.json()["error"]["message"]

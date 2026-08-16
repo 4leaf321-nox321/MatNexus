@@ -782,6 +782,9 @@ export interface paths {
         /**
          * Get Curve
          * @description 차트가 쓸 점들. 축을 고르지 않으면 정의 순서상 첫 두 채널.
+         *
+         *     `curve` 를 받는 이유: 한 시험이 곡선을 여럿 가질 수 있다(DMA 의 `[step]`).
+         *     안 주면 첫 곡선 — 표가 하나뿐인 파일에서는 예전과 같다.
          */
         get: operations["get_curve_api_test_runs__run_id__curve_get"];
         put?: never;
@@ -1342,6 +1345,24 @@ export interface components {
             role: string;
             /** Workspace Slug */
             workspace_slug: string;
+        };
+        /**
+         * CurveOut
+         * @description 저장된 곡선 하나.
+         *
+         *     **여럿일 수 있다.** TA DMA850 주파수-온도 스윕은 `[step]` 마다 별개 측정이라
+         *     곡선이 6벌 나온다. 하나만 보여 주면 나머지는 저장돼 있는데 화면에서 영원히
+         *     안 보인다 — 실제로 그랬다.
+         */
+        CurveOut: {
+            /** Channels */
+            channels: string[];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string | null;
+            /** Row Count */
+            row_count: number;
         };
         /** CurvePointsOut */
         CurvePointsOut: {
@@ -2225,6 +2246,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Curves */
+            curves: components["schemas"]["CurveOut"][];
             /**
              * Id
              * Format: uuid
@@ -2244,6 +2267,8 @@ export interface components {
             orientation: string | null;
             /** Parse Error */
             parse_error: string | null;
+            /** Parser Version */
+            parser_version: string | null;
             /** Record Name */
             record_name: string;
             /** Row Count */
@@ -4420,6 +4445,8 @@ export interface operations {
             query?: {
                 x?: string | null;
                 y?: string | null;
+                /** @description 곡선 키. 없으면 첫 곡선 */
+                curve?: string | null;
                 max_points?: number;
             };
             header?: never;

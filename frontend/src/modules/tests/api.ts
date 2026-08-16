@@ -138,11 +138,16 @@ export const testsApi = {
   reparse: (id: string) => api.post<{ status: string; message: string }>(`/test-runs/${id}/reparse`),
 
   /** 축약된 점들. 서버가 LTTB 로 줄여 주므로 전부 받지 않는다. */
-  curve: (id: string, options: { x?: string; y?: string; maxPoints?: number } = {}) =>
+  curve: (
+    id: string,
+    options: { x?: string; y?: string; curve?: string; maxPoints?: number } = {}
+  ) =>
     api.get<CurvePoints>(
       `/test-runs/${id}/curve${search({
         x: options.x,
         y: options.y,
+        // 한 시험이 곡선을 여럿 가질 수 있다(DMA 의 `[step]`). 안 주면 첫 곡선.
+        curve: options.curve,
         max_points: options.maxPoints,
       })}`
     ),

@@ -216,7 +216,12 @@ class TestRun(Base):
     여기 온다. 자동으로 시편 실측치를 덮어쓰지 않는다 — 사람이 이미 재어 넣은
     값을 장비 파일이 조용히 바꾸면, 어느 것이 맞는지 나중에 알 수 없다.
     화면이 "이 값으로 채울까요?" 를 물어보는 데 쓴다."""
-    parser_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    """무엇으로 읽었는가(`profile:ta_dma850` · `zwick_tra:1`).
+
+    20자였는데 `profile:dma_e2e_profile` 이 `profile:dma_e2e_prof` 로 잘렸다.
+    **어느 프로파일이 읽었는지 알 수 없으면 이 값을 남기는 뜻이 없다** — 곡선이
+    이상할 때 가장 먼저 보는 값이다."""
     """어느 버전 파서가 읽었는지. 파서를 고쳐 다시 돌릴 대상을 고를 때 쓴다."""
 
     status: Mapped[str] = mapped_column(
