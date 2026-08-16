@@ -12,7 +12,12 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { REFERENCE_FOR, isReference, referenceLabel } from '@/modules/processing/api'
+import {
+  REFERENCE_FOR,
+  isReference,
+  isUsed,
+  referenceLabel,
+} from '@/modules/processing/api'
 
 describe('참조', () => {
   it('칸 하나에 후보가 하나뿐이다', () => {
@@ -51,5 +56,27 @@ describe('참조', () => {
     expect(isReference(0.05)).toBe(false)
     expect(isReference('0.05')).toBe(false)
     expect(isReference('@specimen_area')).toBe(true)
+  })
+})
+
+describe('안 쓰는 칸', () => {
+  const MANUAL_ONLY = { when: { method: ['manual'] } }
+  const RANGE_ONLY = { when: { method: ['linear_regression', 'chord', 'secant'] } }
+
+  it('방법을 구간으로 두면 직접 입력이 잠긴다', () => {
+    // 잠기지 않으면 거기 넣은 숫자가 **무시된다는 것을 알 방법이 없다.**
+    // 값을 넣었는데 아무 일도 안 일어나는 것이 가장 나쁘다.
+    expect(isUsed(MANUAL_ONLY, { method: 'linear_regression' })).toBe(false)
+    expect(isUsed(RANGE_ONLY, { method: 'linear_regression' })).toBe(true)
+  })
+
+  it('방법을 직접 입력으로 두면 구간이 잠긴다', () => {
+    expect(isUsed(MANUAL_ONLY, { method: 'manual' })).toBe(true)
+    expect(isUsed(RANGE_ONLY, { method: 'manual' })).toBe(false)
+  })
+
+  it('조건이 없는 칸은 늘 쓰인다', () => {
+    expect(isUsed({}, {})).toBe(true)
+    expect(isUsed({ when: null }, { method: 'manual' })).toBe(true)
   })
 })

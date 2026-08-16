@@ -25,7 +25,27 @@ class ParamSpec:
     default: Any = None
     choices: tuple[str, ...] = ()
     unit: str | None = None
+    """**저장 단위(SI)** 다. 화면은 실무 단위로 보여 주고 받는다 — CAE 는 길이를
+    mm 로 쓰고, `0.05` 를 치라고 하면 사람이 `50` 을 친다. 환산은 화면이 한다."""
+    dimension: str | None = None
+    """물리 차원. **단위만으로는 못 가르는 것이 있다.**
+
+    변형률과 tan δ 는 저장 단위가 둘 다 `1` 이다(둘 다 무차원이라 맞다). 그런데
+    사람은 변형률을 `0.2%` 로 읽지 `0.002` 로 읽지 않고, tan δ 는 그 반대다.
+    0.2% 오프셋은 규격에도 그렇게 적혀 있다. 화면이 어느 쪽인지 알려면 차원이
+    필요하다(`matcore/units.DIMENSION_ALIASES` 와 같은 이유)."""
     help: str | None = None
+    when: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """이 칸이 **쓰이는 조건**. `{"method": ("manual",)}` 이면 방법이 `manual`
+    일 때만 쓰인다.
+
+    없으면 화면이 안 쓰는 칸까지 늘 보여 준다 — 탄성계수를 구간으로 재는데
+    '직접 입력' 칸이 옆에 살아 있으면, 거기 넣은 숫자가 무시된다는 것을 알
+    방법이 없다. 값을 넣었는데 아무 일도 안 일어나는 것이 가장 나쁘다.
+
+    기존 앱(MaterialAppVer2)도 같은 것을 갖고 있었다 — `option.json` 의
+    `enabled`/`disabled` 목록이 그것이다. 방법마다 쓰는 칸이 다른 것은 이
+    도메인의 성질이지 화면의 사정이 아니다."""
 
 
 @dataclass(frozen=True)

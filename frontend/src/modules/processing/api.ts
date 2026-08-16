@@ -124,3 +124,19 @@ export const processingApi = {
 
   removeRecipe: (key: string) => api.delete<void>(`/processing/recipes/${key}`),
 }
+
+/**
+ * 지금 설정에서 이 칸이 쓰이는가.
+ *
+ * 조건은 서버가 `ParamSpec.when` 으로 준다 — 어느 방법이 어느 칸을 쓰는지는
+ * **계산의 성질**이지 화면의 사정이 아니다. 화면에 적으면 계산을 고칠 때 두
+ * 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+ */
+export function isUsed(
+  param: { when?: Record<string, string[]> | null },
+  options: Record<string, unknown>
+): boolean {
+  return Object.entries(param.when ?? {}).every(([key, allowed]) =>
+    allowed.includes(String(options[key]))
+  )
+}

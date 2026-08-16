@@ -24,7 +24,11 @@ class StepParamOut(BaseModel):
     default: Any = None
     choices: list[str] = []
     unit: str | None = None
+    dimension: str | None = None
+    """단위만으로 못 가르는 것을 가른다 — 변형률은 %, tan δ 는 그대로."""
     help: str | None = None
+    when: dict[str, list[str]] = {}
+    """이 칸이 쓰이는 조건. 비어 있으면 늘 쓰인다."""
 
 
 class ProcessingStepOut(BaseModel):

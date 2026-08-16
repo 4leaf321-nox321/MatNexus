@@ -16,6 +16,8 @@ export interface Display {
 
 const BY_SI: Record<string, Display> = {
   m: { unit: 'mm', factor: 1000 },
+  // 단면적. CAE 입력은 mm² 다 — 1e-5 를 치라고 하면 사람이 자릿수를 센다.
+  m2: { unit: 'mm²', factor: 1e6 },
   N: { unit: 'N', factor: 1 },
   Pa: { unit: 'MPa', factor: 1e-6 },
   K: { unit: 'K', factor: 1 },

@@ -2595,6 +2595,8 @@ export interface components {
             choices: string[];
             /** Default */
             default?: unknown;
+            /** Dimension */
+            dimension?: string | null;
             /** Help */
             help?: string | null;
             /** Label */
@@ -2605,6 +2607,13 @@ export interface components {
             type: string;
             /** Unit */
             unit?: string | null;
+            /**
+             * When
+             * @default {}
+             */
+            when: {
+                [key: string]: string[];
+            };
         };
         /** StorageItemOut */
         StorageItemOut: {

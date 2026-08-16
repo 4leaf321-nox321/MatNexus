@@ -94,3 +94,26 @@ describe('차원 표', () => {
     }
   })
 })
+
+describe('처리 입력 칸의 단위', () => {
+  it('길이는 mm, 면적은 mm² 로 받는다', () => {
+    // CAE 는 길이를 mm 로 쓴다. `0.05` 를 치라고 하면 사람이 `50` 을 치고,
+    // 그러면 **1000배** 틀린 곡선이 조용히 나온다.
+    expect(display('m')).toEqual({ unit: 'mm', factor: 1000 })
+    expect(display('m2')).toEqual({ unit: 'mm²', factor: 1e6 })
+  })
+
+  it('탄성 구간과 오프셋은 % 로 받는다', () => {
+    // 규격이 "0.2% 오프셋" 이라고 적는다. 저장 단위는 둘 다 `1` 이라 단위만으로는
+    // 가를 수 없고, 차원이 있어야 한다.
+    expect(display('1', 'strain')).toEqual({ unit: '%', factor: 100 })
+    expect(display('1')).toEqual({ unit: '', factor: 1 })
+  })
+
+  it('50 mm 는 0.05 m 로, 0.2 % 는 0.002 로 되돌아간다', () => {
+    const length = display('m')
+    expect(50 / length.factor).toBeCloseTo(0.05, 12)
+    const strain = display('1', 'strain')
+    expect(0.2 / strain.factor).toBeCloseTo(0.002, 12)
+  })
+})

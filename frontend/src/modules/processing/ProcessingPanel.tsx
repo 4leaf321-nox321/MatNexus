@@ -34,7 +34,13 @@ import {
 } from 'lucide-react'
 
 import { CurveChart } from '@/modules/tests/CurveChart'
-import { REFERENCE_FOR, isReference, processingApi, referenceLabel } from '@/modules/processing/api'
+import {
+  REFERENCE_FOR,
+  isReference,
+  isUsed,
+  processingApi,
+  referenceLabel,
+} from '@/modules/processing/api'
 import type {
   ProcessingPreview,
   ProcessingStep,
@@ -61,6 +67,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
+import { display } from '@/modules/tests/units'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
@@ -372,6 +379,12 @@ export function ProcessingPanel({
                       param={param}
                       value={step.options[param.name]}
                       columns={columns}
+                      /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
+                         '직접 입력' 이 살아 있으면, 거기 넣은 숫자가 무시된다는
+                         것을 알 방법이 없다 — 값을 넣었는데 아무 일도 안
+                         일어나는 것이 가장 나쁘다. 지우지 않고 잠그는 이유는
+                         그 칸이 있다는 것 자체가 정보이기 때문이다. */
+                      disabled={!isUsed(param, step.options)}
                       onChange={(value) =>
                         update(index, { ...step.options, [param.name]: value })
                       }
@@ -539,20 +552,49 @@ function ParamField({
   param,
   value,
   columns,
+  disabled = false,
   onChange,
 }: {
   param: StepParam
   value: unknown
   columns: string[]
+  disabled?: boolean
   onChange: (value: unknown) => void
 }) {
   const referenced = isReference(value)
 
+  /**
+   * **저장은 SI, 화면은 실무 단위.** CAE 는 길이를 mm 로 쓴다 — `0.05` 를 치라고
+   * 하면 사람이 `50` 을 치고, 그러면 1000배 틀린 곡선이 조용히 나온다. 재료
+   * 화면의 시편 폼은 이미 mm 로 받고 있어서 앱 안에서 단위가 갈려 있기도 했다.
+   *
+   * 환산표는 `modules/tests/units` 하나뿐이다 — 곡선 축도 같은 것을 쓴다.
+   */
+  const shown = display(param.unit, param.dimension)
+  const numeric = param.type === 'float' || param.type === 'int'
+  /** 잠금은 **세 갈래 모두**에 붙는다. 숫자 칸에만 붙이면, 조건이 걸린 칸이
+   *  나중에 choice 로 바뀌었을 때 조용히 안 잠긴다. */
+  const rowClass = `grid grid-cols-[9rem_1fr] gap-2 ${
+    disabled ? 'pointer-events-none opacity-40' : ''
+  }`
+  const toSi = (value: number) => value / shown.factor
+  const fromSi = (value: number) => value * shown.factor
+
+  /** 타이핑 중인 글자. 확정된 값과 나눠 두지 않으면 소수점이 지워진다. */
+  const [draft, setDraft] = useState<string | null>(null)
+  const text =
+    draft ??
+    (value === null || value === undefined
+      ? ''
+      : numeric
+        ? String(Number((fromSi(Number(value))).toPrecision(12)))
+        : String(value))
+
   if (param.type === 'choice') {
     return (
-      <div className="grid grid-cols-[9rem_1fr] items-center gap-2">
+      <div className={`${rowClass} items-center`} aria-disabled={disabled || undefined}>
         <Label className="text-xs">{param.label}</Label>
-        <Select value={String(value ?? '')} onValueChange={onChange}>
+        <Select value={String(value ?? '')} onValueChange={onChange} disabled={disabled}>
           <SelectTrigger className="h-8" aria-label={param.label}>
             <SelectValue />
           </SelectTrigger>
@@ -575,9 +617,9 @@ function ParamField({
   )
   if (isColumn && columns.length) {
     return (
-      <div className="grid grid-cols-[9rem_1fr] items-center gap-2">
+      <div className={`${rowClass} items-center`} aria-disabled={disabled || undefined}>
         <Label className="text-xs">{param.label}</Label>
-        <Select value={String(value ?? '')} onValueChange={onChange}>
+        <Select value={String(value ?? '')} onValueChange={onChange} disabled={disabled}>
           <SelectTrigger className="h-8" aria-label={param.label}>
             <SelectValue placeholder="열을 고르세요" />
           </SelectTrigger>
@@ -597,12 +639,10 @@ function ParamField({
   const reference = REFERENCE_FOR[param.name]
 
   return (
-    <div className="grid grid-cols-[9rem_1fr] items-start gap-2">
+    <div className={`${rowClass} items-start`} aria-disabled={disabled || undefined}>
       <Label className="pt-1.5 text-xs">
         {param.label}
-        {param.unit && param.unit !== '1' && (
-          <span className="text-muted-foreground ml-1">({param.unit})</span>
-        )}
+        {shown.unit && <span className="text-muted-foreground ml-1">({shown.unit})</span>}
       </Label>
       <div className="space-y-1">
         {referenced ? (
@@ -624,18 +664,24 @@ function ParamField({
           </div>
         ) : (
           <div className="flex items-center gap-2">
+            {/* **`type="number"` 를 쓰지 않는다.** 값이 상태에 매여 있는데
+                `Number("0.")` 이 `0` 이라, 소수점을 찍는 순간 되돌아가 지워졌다 —
+                12.12 를 칠 수가 없었다. 글자는 그대로 두고 숫자로 읽히는
+                동안에만 위로 올린다. */}
             <Input
               className="h-8"
-              type={param.type === 'float' || param.type === 'int' ? 'number' : 'text'}
-              step="any"
-              value={value === null || value === undefined ? '' : String(value)}
+              inputMode={numeric ? 'decimal' : 'text'}
+              value={text}
               onChange={(event) => {
                 const raw = event.target.value
-                if (raw === '') return onChange(null)
-                onChange(
-                  param.type === 'float' || param.type === 'int' ? Number(raw) : raw
-                )
+                setDraft(raw)
+                if (raw === '' || raw === '-') return onChange(null)
+                if (!numeric) return onChange(raw)
+                const parsed = Number(raw)
+                // '0.' · '1e' 처럼 아직 숫자가 아닌 중간 상태는 올리지 않는다.
+                if (Number.isFinite(parsed)) onChange(toSi(parsed))
               }}
+              onBlur={() => setDraft(null)}
               aria-label={param.label}
             />
             {reference && (

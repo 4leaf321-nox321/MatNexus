@@ -3582,6 +3582,17 @@
           "default": {
             "title": "Default"
           },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
           "help": {
             "anyOf": [
               {
@@ -3615,6 +3626,17 @@
               }
             ],
             "title": "Unit"
+          },
+          "when": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "When",
+            "type": "object"
           }
         },
         "required": [

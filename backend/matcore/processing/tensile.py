@@ -153,12 +153,30 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
             help="회귀 = 최소제곱, 현 = 양 끝 두 점, 할선 = 원점과 끝점",
         ),
         ParamSpec(
-            name="minimum_strain", label="구간 시작", type="float", default=0.0005, unit="1"
+            name="minimum_strain",
+            dimension="strain",
+            label="구간 시작",
+            type="float",
+            default=0.0005,
+            unit="1",
+            when={"method": ("linear_regression", "chord", "secant")},
         ),
         ParamSpec(
-            name="maximum_strain", label="구간 끝", type="float", default=0.0025, unit="1"
+            name="maximum_strain",
+            dimension="strain",
+            label="구간 끝",
+            type="float",
+            default=0.0025,
+            unit="1",
+            when={"method": ("linear_regression", "chord", "secant")},
         ),
-        ParamSpec(name="manual_modulus", label="직접 입력", type="float", unit="Pa"),
+        ParamSpec(
+            name="manual_modulus",
+            label="직접 입력",
+            type="float",
+            unit="Pa",
+            when={"method": ("manual",)},
+        ),
         ParamSpec(name="strain", label="변형률 열", type="str"),
         ParamSpec(name="stress", label="응력 열", type="str"),
     ),
@@ -271,6 +289,7 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
     params=(
         ParamSpec(
             name="offset_strain",
+            dimension="strain",
             label="오프셋",
             type="float",
             default=0.002,
@@ -284,8 +303,12 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
             unit="Pa",
             help="'@youngs_modulus' 로 적으면 앞 단계에서 잰 값을 씁니다.",
         ),
-        ParamSpec(name="search_start", label="탐색 시작", type="float", unit="1"),
-        ParamSpec(name="search_end", label="탐색 끝", type="float", unit="1"),
+        ParamSpec(
+            name="search_start", dimension="strain", label="탐색 시작", type="float", unit="1"
+        ),
+        ParamSpec(
+            name="search_end", dimension="strain", label="탐색 끝", type="float", unit="1"
+        ),
         ParamSpec(name="strain", label="변형률 열", type="str"),
         ParamSpec(name="stress", label="응력 열", type="str"),
     ),
@@ -455,7 +478,12 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             choices=("observed_full_domain", "manual_index"),
             help="관측 전체 = 자르지 않음(네킹 뒤가 섞일 수 있음)",
         ),
-        ParamSpec(name="manual_index", label="자를 위치", type="int"),
+        ParamSpec(
+            name="manual_index",
+            label="자를 위치",
+            type="int",
+            when={"necking_policy": ("manual_index",)},
+        ),
         ParamSpec(
             name="negative_policy",
             label="음의 소성변형률",

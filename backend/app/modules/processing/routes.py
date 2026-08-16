@@ -89,7 +89,9 @@ def list_steps(
                     default=spec.default,
                     choices=list(spec.choices),
                     unit=spec.unit,
+                    dimension=spec.dimension,
                     help=spec.help,
+                    when={key: list(values) for key, values in spec.when.items()},
                 )
                 for spec in plugin.params
             ],
