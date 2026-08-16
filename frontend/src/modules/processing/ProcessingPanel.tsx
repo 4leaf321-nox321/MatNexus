@@ -33,6 +33,7 @@ import {
   Trash2,
 } from 'lucide-react'
 
+import { RecipePicker } from '@/modules/processing/RecipePicker'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import {
   REFERENCE_FOR,
@@ -284,34 +285,21 @@ export function ProcessingPanel({
         </span>
         <div className="ml-auto flex gap-2">
           {(recipes.data?.length ?? 0) > 0 && (
-            <Select
-              value=""
-              onValueChange={(key) => {
-                const recipe = recipes.data?.find((item) => item.key === key)
-                if (!recipe) return
+            /* **드롭다운으로는 못 버틴다.** 레시피는 부서마다·규격마다 쌓이고,
+               스무 개만 넘어가도 이름만 늘어놓은 목록에서는 못 찾는다. */
+            <RecipePicker
+              recipes={recipes.data ?? []}
+              action
+              className="h-8 w-44 text-sm"
+              placeholder="레시피 불러오기"
+              ariaLabel="레시피 불러오기"
+              onSelect={(recipe) => {
                 setSteps((recipe.steps as unknown as RecipeStep[]).map((s) => ({ ...s })))
                 setResult(null)
                 setSaved(null)
                 setNotice(`'${recipe.label}' 을 불러왔습니다. 돌려 보고 저장하세요.`)
               }}
-            >
-              <SelectTrigger className="h-8 w-44" aria-label="레시피 불러오기">
-                <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-                  <BookMarked className="size-3.5" />
-                  레시피 불러오기
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {recipes.data?.map((item) => (
-                  <SelectItem key={item.key} value={item.key}>
-                    {item.label}
-                    <span className="text-muted-foreground ml-2 text-xs">
-                      {item.steps.length}단계
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           )}
           <Button size="sm" variant="outline" onClick={run} disabled={busy || !steps.length}>
             <Play className="size-3.5" />

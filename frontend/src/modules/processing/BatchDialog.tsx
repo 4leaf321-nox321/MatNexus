@@ -22,6 +22,7 @@ import { useState } from 'react'
 import { AlertTriangle, Check, Layers } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
+import { RecipePicker } from '@/modules/processing/RecipePicker'
 import type { BatchOut, RecipeStep } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
@@ -35,13 +36,6 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Label } from '@/shared/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
@@ -165,23 +159,15 @@ export function BatchDialog({ testRunIds, testTypeKey, onClose, onDone }: Props)
         ) : (
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="batch-recipe">레시피</Label>
-              <Select value={recipeKey} onValueChange={setRecipeKey}>
-                <SelectTrigger id="batch-recipe">
-                  <SelectValue placeholder="레시피를 고르세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  {rows.map((item) => (
-                    <SelectItem key={item.key} value={item.key}>
-                      {item.label}
-                      <span className="text-muted-foreground ml-2 text-xs">
-                        {item.steps.length}단계
-                        {item.is_global ? ' · 전역' : ` · ${item.owner_workspace_name}`}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>레시피</Label>
+              <RecipePicker
+                recipes={rows}
+                value={recipe}
+                className="w-full"
+                placeholder="레시피를 고르세요"
+                ariaLabel="레시피"
+                onSelect={(item) => setRecipeKey(item.key)}
+              />
               {!recipes.loading && rows.length === 0 && (
                 <p className="text-muted-foreground text-xs">
                   이 시험 종류의 레시피가 없습니다. 시험 하나를 열어 <b>처리</b> 탭에서 단계를
