@@ -735,17 +735,20 @@ function ParamField({
       </Label>
       <div className="space-y-1">
         {referenced ? (
+          /* **상태와 동작이 비슷하게 생기면 안 된다.** 뱃지와 버튼을 나란히
+             두었더니 "어느 걸 눌러야 하나" 가 됐다. 지금 무엇을 쓰는지는
+             문장으로 말하고, 누를 것은 버튼 하나만 남긴다.
+             원문(`@specimen_gauge_length`)을 그대로 보이면 이게 무엇인지
+             코드를 읽어야 안다. */
           <div className="flex items-center gap-2">
-            {/* 원문(`@specimen_gauge_length`)을 그대로 보이면 사람은 이게
-                무엇인지 코드를 읽어야 안다. */}
-            <Badge variant="secondary" className="gap-1 text-xs">
+            <span className="text-muted-foreground flex items-center gap-1 text-xs">
               <Link2 className="size-3" />
-              {referenceLabel(String(value))}
-            </Badge>
+              <b className="text-foreground">{referenceLabel(String(value))}</b>를 씁니다
+            </span>
             <Button
               size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
+              variant="outline"
+              className="ml-auto h-7 shrink-0 text-xs"
               onClick={() => onChange(param.default ?? null)}
             >
               직접 넣기
@@ -781,8 +784,9 @@ function ParamField({
                 title={`${reference.label} 을 그때그때 가져다 씁니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`}
                 onClick={() => onChange(`@${reference.key}`)}
               >
+                {/* 이름만 적으면 라벨처럼 보인다. **누르는 것**임을 동사로 말한다. */}
                 <Link2 className="size-3" />
-                {reference.label}
+                {reference.label} 쓰기
               </Button>
             )}
           </div>

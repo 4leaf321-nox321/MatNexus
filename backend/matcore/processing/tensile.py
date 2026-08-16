@@ -300,14 +300,14 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
             type="float",
             default=0.002,
             unit="1",
-            help="0.002 = 0.2%",
+            help="규격이 정합니다. 금속은 보통 0.2%.",
         ),
         ParamSpec(
             name="youngs_modulus",
             label="탄성계수",
             type="float",
             unit="Pa",
-            help="'@youngs_modulus' 로 적으면 앞 단계에서 잰 값을 씁니다.",
+            help="앞 단계에서 잰 값을 그대로 쓰거나, 직접 넣습니다.",
         ),
         ParamSpec(
             name="search_start", dimension="strain", label="탐색 시작", type="float", unit="1"
@@ -474,7 +474,7 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="탄성계수",
             type="float",
             unit="Pa",
-            help="'@youngs_modulus' 로 적으면 앞 단계에서 잰 값을 씁니다.",
+            help="앞 단계에서 잰 값을 그대로 쓰거나, 직접 넣습니다.",
         ),
         ParamSpec(
             name="necking_policy",
