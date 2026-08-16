@@ -39,13 +39,31 @@ export const REFERENCE_PREFIX = '@'
 export const isReference = (value: unknown): value is string =>
   typeof value === 'string' && value.startsWith(REFERENCE_PREFIX)
 
-/** 화면이 제안하는 참조. 시편 치수는 서버가 시편 기록에서 실어 보낸다. */
-export const SPECIMEN_REFERENCES = [
-  { key: 'specimen_gauge_length', label: '시편 게이지 길이', unit: 'm' },
-  { key: 'specimen_area', label: '시편 초기 단면적 (폭×두께)', unit: 'm2' },
-  { key: 'specimen_width', label: '시편 폭', unit: 'm' },
-  { key: 'specimen_thickness', label: '시편 두께', unit: 'm' },
-] as const
+/**
+ * 어느 입력 칸이 무엇을 참조할 수 있는가. **칸마다 최대 하나다.**
+ *
+ * 처음에는 단위로 골랐다 — `param.unit === 'm'` 인 것을 전부 후보로 냈다.
+ * 그랬더니 '게이지 길이' 칸에 게이지 길이·폭·두께 **셋이 붙었고**, 버튼 이름은
+ * 전부 '참조' 라 무엇을 누르는지 알 수 없었다. 셋이 똑같아 보이는데 결과는
+ * 다르다 — 잘못 누르면 게이지 길이 자리에 두께가 들어가고, 변형률이 조용히
+ * 50배 틀린다.
+ *
+ * 단위가 같다고 뜻이 같은 것이 아니다. **이름으로 고른다.**
+ */
+export const REFERENCE_FOR: Record<string, { key: string; label: string }> = {
+  gauge_length: { key: 'specimen_gauge_length', label: '시편의 게이지 길이' },
+  area: { key: 'specimen_area', label: '시편의 단면적 (폭 곱하기 두께)' },
+  youngs_modulus: { key: 'youngs_modulus', label: '앞 단계에서 잰 탄성계수' },
+}
+
+/** `@specimen_gauge_length` 같은 원문을 사람이 읽는 이름으로. */
+export function referenceLabel(raw: string): string {
+  const name = raw.startsWith(REFERENCE_PREFIX) ? raw.slice(1) : raw
+  for (const item of Object.values(REFERENCE_FOR)) {
+    if (item.key === name) return item.label
+  }
+  return name
+}
 
 const search = (params: Record<string, string | undefined>) => {
   const query = new URLSearchParams()

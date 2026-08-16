@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
   FlaskConical,
+  Link2,
   Play,
   Plus,
   Save,
@@ -33,11 +34,7 @@ import {
 } from 'lucide-react'
 
 import { CurveChart } from '@/modules/tests/CurveChart'
-import {
-  SPECIMEN_REFERENCES,
-  isReference,
-  processingApi,
-} from '@/modules/processing/api'
+import { REFERENCE_FOR, isReference, processingApi, referenceLabel } from '@/modules/processing/api'
 import type {
   ProcessingPreview,
   ProcessingStep,
@@ -596,12 +593,8 @@ function ParamField({
     )
   }
 
-  const references = [
-    ...SPECIMEN_REFERENCES.filter((item) => item.unit === param.unit),
-    ...(param.name === 'youngs_modulus'
-      ? [{ key: 'youngs_modulus', label: '앞 단계에서 잰 탄성계수', unit: 'Pa' }]
-      : []),
-  ]
+  // **칸마다 최대 하나다.** 단위로 고르면 '게이지 길이' 에 폭·두께까지 붙는다.
+  const reference = REFERENCE_FOR[param.name]
 
   return (
     <div className="grid grid-cols-[9rem_1fr] items-start gap-2">
@@ -614,16 +607,19 @@ function ParamField({
       <div className="space-y-1">
         {referenced ? (
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="font-mono text-xs">
-              {String(value)}
+            {/* 원문(`@specimen_gauge_length`)을 그대로 보이면 사람은 이게
+                무엇인지 코드를 읽어야 안다. */}
+            <Badge variant="secondary" className="gap-1 text-xs">
+              <Link2 className="size-3" />
+              {referenceLabel(String(value))}
             </Badge>
             <Button
               size="sm"
               variant="ghost"
               className="h-7 text-xs"
-              onClick={() => onChange(param.default ?? '')}
+              onClick={() => onChange(param.default ?? null)}
             >
-              직접 입력
+              직접 넣기
             </Button>
           </div>
         ) : (
@@ -642,18 +638,18 @@ function ParamField({
               }}
               aria-label={param.label}
             />
-            {references.map((reference) => (
+            {reference && (
               <Button
-                key={reference.key}
                 size="sm"
                 variant="ghost"
                 className="h-7 shrink-0 text-xs"
-                title={`${reference.label} 을 참조합니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`}
+                title={`${reference.label} 을 그때그때 가져다 씁니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`}
                 onClick={() => onChange(`@${reference.key}`)}
               >
-                참조
+                <Link2 className="size-3" />
+                {reference.label}
               </Button>
-            ))}
+            )}
           </div>
         )}
         {param.help && <p className="text-muted-foreground text-xs">{param.help}</p>}
