@@ -669,6 +669,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description **저장하지 않고** 돌려 본다.
+         *
+         *     저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 처리가 잘못되면
+         *     곡선이 조용히 이상해지고, 그 곡선으로 적합한 물성이 그대로 해석에 들어간다.
+         */
+        post: operations["preview_api_processing_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/processing/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Recipes */
+        get: operations["list_recipes_api_processing_recipes_get"];
+        put?: never;
+        /**
+         * Create Recipe
+         * @description 부서 관리자가 자기 부서 레시피를 만든다.
+         *
+         *     **부서마다 규격이 다르다.** 탄성 구간을 어디로 잡을지는 따르는 규격이 정하고,
+         *     그 판단은 그 부서가 한다 — 형식 프로파일과 같은 이유다(ADR 0005·0006).
+         */
+        post: operations["create_recipe_api_processing_recipes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/processing/recipes/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Recipe
+         * @description 레시피를 고친다. **저장된 결과는 안 바뀐다.**
+         *
+         *     결과가 단계를 통째로 스냅샷해 두기 때문이다. 레시피를 고치는 것이 과거의
+         *     숫자를 소급해 바꾸면, 어제 보고서에 적은 항복강도가 오늘 다른 값이 된다.
+         */
+        put: operations["update_recipe_api_processing_recipes__key__put"];
+        post?: never;
+        /** Delete Recipe */
+        delete: operations["delete_recipe_api_processing_recipes__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/processing/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Results */
+        get: operations["list_results_api_processing_results_get"];
+        put?: never;
+        /**
+         * Create Result
+         * @description 결과를 저장한다. **불변이다** — 다시 돌리면 새 행이 생긴다.
+         *
+         *     레시피 id 만 남기지 않고 **단계를 통째로 스냅샷**한다. 레시피가 나중에
+         *     바뀌면 이 결과가 무엇으로 나왔는지 알 수 없게 되는데, 그 값은 이미 보고서에
+         *     들어가 있다.
+         */
+        post: operations["create_result_api_processing_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/processing/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Steps
+         * @description 등록된 처리 단계와 그 입력 칸.
+         *
+         *     **화면이 이 응답만으로 폼을 그린다.** `ParamSpec` 이 곧 입력 칸이고, 새 계산을
+         *     등록하면 화면이 따라온다 — 목록을 프론트에 하드코딩하면 계산을 추가할 때
+         *     두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+         */
+        get: operations["list_steps_api_processing_steps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/samples/{sample_id}": {
         parameters: {
             query?: never;
@@ -1874,6 +1994,137 @@ export interface components {
             /** Revoked At */
             revoked_at: string | null;
         };
+        /** ProcessingPreviewOut */
+        ProcessingPreviewOut: {
+            /** Columns */
+            columns: string[];
+            /** Notes */
+            notes: string[];
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /** Row Count */
+            row_count: number;
+            /** Scalars */
+            scalars: components["schemas"]["ProcessingScalarOut"][];
+            /** Source Curve Key */
+            source_curve_key: string;
+            /** Source Row Count */
+            source_row_count: number;
+            /** Stages */
+            stages: components["schemas"]["ProcessingStageOut"][];
+            /** Units */
+            units: {
+                [key: string]: string;
+            };
+        };
+        /** ProcessingResultOut */
+        ProcessingResultOut: {
+            /** Columns */
+            columns: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Recipe Key */
+            recipe_key: string | null;
+            /** Recipe Label */
+            recipe_label: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Scalars */
+            scalars: components["schemas"]["ProcessingScalarOut"][];
+            /** Source Curve Key */
+            source_curve_key: string;
+            /** Stages */
+            stages: components["schemas"]["ProcessingStageOut"][];
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /** ProcessingRunRequest */
+        ProcessingRunRequest: {
+            /** Recipe Key */
+            recipe_key?: string | null;
+            /** Source Curve Key */
+            source_curve_key?: string | null;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /** ProcessingScalarOut */
+        ProcessingScalarOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Value */
+            value: number;
+        };
+        /**
+         * ProcessingStageOut
+         * @description 단계 하나가 끝난 시점. **근거가 여기 산다.**
+         *
+         *     화면이 단계별로 접어 보여 준다 — "정렬에서 몇 점이 합쳐졌나", "탄성계수를
+         *     어느 구간의 몇 점으로 쟀나" 가 값 옆에 없으면, 반년 뒤 그 값을 설명할 수 없다.
+         */
+        ProcessingStageOut: {
+            /** Columns */
+            columns: string[];
+            /** Index */
+            index: number;
+            /** Label */
+            label: string;
+            /** Notes */
+            notes: string[];
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Plugin */
+            plugin: string;
+            /** Row Count */
+            row_count: number;
+            /** Scalars */
+            scalars: components["schemas"]["ProcessingScalarOut"][];
+            /** Version */
+            version: string;
+        };
+        /** ProcessingStepOut */
+        ProcessingStepOut: {
+            /** Applies To */
+            applies_to: string[];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Params */
+            params: components["schemas"]["StepParamOut"][];
+            /** Version */
+            version: string;
+        };
         /**
          * ProfileTryOut
          * @description 프로파일을 저장하기 전에 그 파일에 적용해 본 결과.
@@ -1891,6 +2142,86 @@ export interface components {
             summary: components["schemas"]["TriedSummaryOut"][];
             /** Warnings */
             warnings: string[];
+        };
+        /** RecipeCreateRequest */
+        RecipeCreateRequest: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Owner Workspace Slug */
+            owner_workspace_slug?: string | null;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /** RecipeOut */
+        RecipeOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Global */
+            is_global: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Owner Workspace Name */
+            owner_workspace_name: string | null;
+            /** Owner Workspace Slug */
+            owner_workspace_slug: string | null;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Test Type Key */
+            test_type_key: string;
+            /** Test Type Label */
+            test_type_label: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RecipeSaveRequest */
+        RecipeSaveRequest: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Label */
+            label: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Test Type Key */
+            test_type_key: string;
         };
         /**
          * ReferenceOut
@@ -2133,6 +2464,32 @@ export interface components {
             thickness?: number | null;
             /** Width */
             width?: number | null;
+        };
+        /**
+         * StepParamOut
+         * @description 단계 하나의 입력 칸. **화면의 폼 필드가 여기서 생성된다.**
+         *
+         *     프론트에 목록을 하드코딩하지 않는 이유: 계산을 추가할 때 두 곳을 고쳐야 하고,
+         *     그러면 한 곳을 빠뜨린다. `matcore.ParamSpec` 을 그대로 내보낸다.
+         */
+        StepParamOut: {
+            /**
+             * Choices
+             * @default []
+             */
+            choices: string[];
+            /** Default */
+            default?: unknown;
+            /** Help */
+            help?: string | null;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Unit */
+            unit?: string | null;
         };
         /** StorageItemOut */
         StorageItemOut: {
@@ -4075,6 +4432,265 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_processing_preview_post: {
+        parameters: {
+            query?: {
+                x?: string | null;
+                y?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcessingRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_recipes_api_processing_recipes_get: {
+        parameters: {
+            query?: {
+                test_type?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_recipe_api_processing_recipes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_recipe_api_processing_recipes__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_recipe_api_processing_recipes__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_results_api_processing_results_get: {
+        parameters: {
+            query: {
+                test_run_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingResultOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_result_api_processing_results_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcessingRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_steps_api_processing_steps_get: {
+        parameters: {
+            query?: {
+                test_type?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingStepOut"][];
                 };
             };
             /** @description Validation Error */

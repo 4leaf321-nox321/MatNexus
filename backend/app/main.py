@@ -23,6 +23,7 @@ from app.modules.materials import routes as materials_routes
 from app.modules.notices import routes as notices_routes
 from app.modules.notifications import routes as notifications_routes
 from app.modules.tests import formats as tests_formats
+from app.modules.tests import processing as tests_processing
 from app.modules.tests import routes as tests_routes
 from app.modules.voc import routes as voc_routes
 from app.modules.workspaces import routes as workspaces_routes
@@ -57,6 +58,7 @@ def _api_router() -> APIRouter:
     router.include_router(tests_routes.runs_router)
     router.include_router(tests_routes.maintenance_router)
     router.include_router(tests_formats.router)
+    router.include_router(tests_processing.router)
 
     return router
 

@@ -22,6 +22,8 @@ from app.modules.notifications.models import (
 from app.modules.tests.models import (
     Curve,
     FormatProfile,
+    ProcessingRecipe,
+    ProcessingResult,
     TestChannel,
     TestConditionField,
     TestRun,
@@ -44,6 +46,8 @@ __all__ = [
     "NotificationRule",
     "NotificationRuleState",
     "PersonalAccessToken",
+    "ProcessingRecipe",
+    "ProcessingResult",
     "RefreshToken",
     "Sample",
     "Specimen",

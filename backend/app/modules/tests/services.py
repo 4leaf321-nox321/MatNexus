@@ -978,6 +978,21 @@ def cleanup_storage(
 # --- 곡선 읽기 --------------------------------------------------------------
 
 
+def channel_units(db: Session, test_type_id: uuid.UUID) -> dict[str, str]:
+    """채널 키 → 저장 단위.
+
+    처리는 **단위를 믿고 계산한다.** 변형률이 % 로 들어오면 100배 어긋나는데,
+    그 사실은 곡선을 봐서는 알 수 없다. 그래서 곡선을 Frame 으로 읽을 때 정의에
+    적힌 단위를 함께 실어 보낸다.
+    """
+    rows = db.execute(
+        select(TestChannel.key, TestChannel.si_unit).where(
+            TestChannel.test_type_id == test_type_id
+        )
+    )
+    return {key: si_unit for key, si_unit in rows}
+
+
 def curves_of(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Curve]]:
     """시험별 곡선 전부. **`raw` 만 보면 안 된다.**
 

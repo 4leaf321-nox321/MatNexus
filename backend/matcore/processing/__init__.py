@@ -32,6 +32,7 @@ DB 도 HTTP 도 모른다. `tests/architecture` 가 검사한다.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -160,7 +161,7 @@ class PipelineResult:
         return tuple(note for stage in self.stages for note in stage.notes)
 
 
-def apply(steps: list[Step], frame: Frame) -> PipelineResult:
+def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> PipelineResult:
     """레시피를 순서대로 적용한다.
 
     **실패하면 거기서 멈춘다.** 남은 단계를 건너뛰고 계속하지 않는다 — 뒤 단계는
@@ -168,10 +169,16 @@ def apply(steps: list[Step], frame: Frame) -> PipelineResult:
     틀린 티가 안 난다.
 
     어느 단계에서 왜 멈췄는지는 예외 메시지에 단계 번호와 함께 남는다.
+
+    `given` 은 **바깥에서 들어오는 값**이다. 시편 치수(게이지 길이·단면적)가
+    대표적이다 — 곡선에 없고 시편 기록에 있다. `matcore` 는 DB 를 모르므로
+    호출부가 읽어서 넘긴다. 단계가 낸 값과 **같은 `@` 표기로** 참조하게 두는
+    이유: 개념을 하나 더 만들면 레시피 JSON 에 규칙이 둘이 되고, 사람이 어느
+    것이 어느 쪽인지 외워야 한다.
     """
     stages: list[Stage] = []
     current = frame
-    carried: dict[str, Scalar] = {}
+    carried: dict[str, Scalar] = {item.key: item for item in given}
     for index, step in enumerate(steps):
         plugin = _plugin(step.plugin)
         options = _resolve_references(step.options, carried, index)
@@ -226,7 +233,8 @@ def _resolve_references(
             available = ", ".join(sorted(carried)) or "(아직 없음)"
             raise ProcessingError(
                 f"{index + 1}단계: '{value}' 가 가리키는 값을 앞 단계가 내지 않았습니다. "
-                f"지금까지 나온 값: {available}. 그 값을 내는 단계를 앞에 두세요."
+                f"지금 쓸 수 있는 값: {available}. 그 값을 내는 단계를 앞에 두거나, "
+                f"시편 치수라면 시편 기록에 그 값이 있는지 확인하세요."
             )
         resolved[key] = scalar.value
     return resolved

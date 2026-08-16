@@ -1,0 +1,385 @@
+"""처리 API — **저장 전에 볼 수 있는가, 저장한 것이 안 바뀌는가.**
+
+두 가지가 이 파일의 전부다.
+
+1. `/preview` 는 아무것도 저장하지 않는다. 처리가 잘못되면 곡선이 조용히
+   이상해지는데, 저장한 뒤에는 찾기가 매우 어렵다(ADR 0005 의 `/try` 와 같은 판단).
+
+2. 저장된 결과는 **불변**이다. 레시피를 고쳐도, 레시피를 지워도, 어제 뽑은
+   항복강도가 무엇으로 나온 값인지 여전히 알 수 있어야 한다 — 그 값은 이미
+   보고서에 들어가 있다.
+
+계산 자체의 정확성은 `tests/unit/test_processing.py` 가 답을 아는 곡선으로 본다.
+여기서는 **HTTP 를 지나면서 깨지는 것**을 본다.
+"""
+
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.modules.materials.models import Specimen
+from app.modules.tests import services
+from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.models import ProcessingResult
+
+TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+
+#: 시편 치수를 숫자로 직접 주는 단계. 참조(`@`)는 따로 시험한다.
+STEPS: list[dict[str, Any]] = [
+    {"plugin": "tensile.engineering", "options": {"gauge_length": 0.05, "area": 12.12e-6}},
+    {
+        "plugin": "curve.sort_unique",
+        "options": {"x": "strain_engineering", "duplicate_policy": "mean"},
+    },
+    {"plugin": "tensile.strength", "options": {}},
+]
+
+
+@pytest.fixture
+def run_id(client: TestClient, admin_headers: dict[str, str], db: Session) -> str:
+    """파싱까지 끝난 인장 시험 하나."""
+    ensure_builtin_test_types(db)
+    db.commit()
+    material = client.post(
+        "/api/materials",
+        json={
+            "family": "Metal",
+            "category": "Steel",
+            "grade": "PROC",
+            "details": "MDOI",
+            "spec_thickness": 1.0,
+        },
+        headers=admin_headers,
+    ).json()
+    sample = client.post(
+        f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+    ).json()
+    specimen = client.post(
+        f"/api/samples/{sample['id']}/specimens",
+        json={"orientation": "MD"},
+        headers=admin_headers,
+    ).json()
+    created = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+        files={"file": ("Example.tra", TRA.read_bytes())},
+        headers=admin_headers,
+    ).json()
+    assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    return str(created["id"])
+
+
+class Test단계목록:
+    def test_화면이_이_응답만으로_폼을_그린다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        response = client.get("/api/processing/steps", headers=admin_headers)
+        assert response.status_code == 200, response.text
+        steps = {item["id"]: item for item in response.json()}
+        assert "tensile.elastic_modulus" in steps
+
+        # **ParamSpec 이 곧 입력 칸이다.** 프론트에 목록을 하드코딩하면 계산을
+        # 추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+        params = {p["name"]: p for p in steps["tensile.elastic_modulus"]["params"]}
+        assert params["method"]["type"] == "choice"
+        assert "linear_regression" in params["method"]["choices"]
+        assert params["minimum_strain"]["unit"] == "1"
+
+    def test_시험_종류로_거를_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        # 인장 레시피가 DMA 곡선에 걸리면 '변형률 열이 없습니다' 로 실패하는데,
+        # 그 전에 목록에서 안 보이는 편이 낫다.
+        response = client.get("/api/processing/steps?test_type=tensile", headers=admin_headers)
+        ids = {item["id"] for item in response.json()}
+        assert "tensile.elastic_modulus" in ids
+        # 시험을 가리지 않는 단계는 언제나 보인다.
+        assert "curve.sort_unique" in ids
+
+
+class Test미리보기:
+    def test_아무것도_저장하지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        before = db.scalar(
+            select(ProcessingResult).where(ProcessingResult.test_run_id == run_id)
+        )
+        assert before is None
+
+        response = client.post(
+            "/api/processing/preview?x=strain_engineering&y=stress_engineering",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["row_count"] > 0
+        assert body["points"], "차트가 그릴 점이 없습니다"
+        assert {"strain_engineering", "stress_engineering"} <= set(body["columns"])
+
+        db.expire_all()
+        after = db.scalar(
+            select(ProcessingResult).where(ProcessingResult.test_run_id == run_id)
+        )
+        assert after is None, "미리보기가 결과를 저장했습니다"
+
+    def test_근거가_값과_함께_온다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        # "무슨 방법으로 어느 구간에서 몇 점을 써서 구했는가" 가 없으면, 반년 뒤
+        # 그 값을 설명할 수 없다.
+        body = client.post(
+            "/api/processing/preview",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+        assert body["notes"], "근거가 비어 있습니다"
+        assert any("게이지 길이" in note for note in body["notes"])
+        assert all(stage["version"] for stage in body["stages"])
+
+    def test_실패는_422_이고_어느_단계인지_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        # 500 으로 내면 로그를 뒤져야 안다. 메시지에는 이미 이유가 적혀 있다.
+        response = client.post(
+            "/api/processing/preview",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    *STEPS,
+                    {
+                        "plugin": "tensile.elastic_modulus",
+                        "options": {"minimum_strain": 9.0, "maximum_strain": 10.0},
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
+        assert "4단계" in response.json()["error"]["message"]
+
+    def test_시편_치수가_없으면_추측하지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**0 이나 기본값으로 채우면 응력이 조용히 틀린다.**
+
+        단면적이 잘못되면 자릿수가 통째로 어긋나는데 숫자는 그럴듯해 보인다.
+        일괄 등록으로 만든 시편은 치수가 비어 있는 것이 정상이라 실제로 자주 걸린다.
+        """
+        response = client.post(
+            "/api/processing/preview",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    {
+                        "plugin": "tensile.engineering",
+                        "options": {
+                            "gauge_length": "@specimen_gauge_length",
+                            "area": "@specimen_area",
+                        },
+                    }
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
+        assert "시편 기록에 그 값이 있는지" in response.json()["error"]["message"]
+
+    def test_시편_치수가_있으면_참조로_돈다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+        db: Session,
+    ) -> None:
+        run = db.get(services.TestRun, uuid.UUID(run_id))
+        assert run is not None
+        specimen = db.get(Specimen, run.specimen_id)
+        assert specimen is not None
+        specimen.gauge_length_m = 0.05
+        specimen.width_m = 12.12e-3
+        specimen.thickness_m = 1.0e-3
+        db.commit()
+
+        body = client.post(
+            "/api/processing/preview",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    {
+                        "plugin": "tensile.engineering",
+                        "options": {
+                            "gauge_length": "@specimen_gauge_length",
+                            "area": "@specimen_area",
+                        },
+                    }
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        # **실제로 쓴 숫자가 근거에 남아야 한다** — "이 응력이 왜 이렇지" 는
+        # 대개 면적 문제다.
+        assert "12.12 mm²" in body.json()["notes"][0]
+
+
+class Test결과는불변:
+    def _save(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
+        response = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS, "recipe_key": "proc_check"},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    @pytest.fixture
+    def recipe(self, client: TestClient, admin_headers: dict[str, str], run_id: str) -> Any:
+        response = client.post(
+            "/api/processing/recipes",
+            json={
+                "key": "proc_check",
+                "label": "확인용",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": STEPS,
+                "is_active": True,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def test_레시피를_고쳐도_저장된_결과는_안_바뀐다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, recipe: Any
+    ) -> None:
+        """**이것이 스냅샷을 두는 이유 전부다.**
+
+        `recipe_id` 만 남기면, 탄성 구간을 옮기고 저장한 순간 어제 뽑은 값이
+        어느 구간에서 나온 것인지 추적이 끊긴다. 그 값은 이미 보고서에 있다.
+        """
+        saved = self._save(client, admin_headers, run_id)
+        assert len(saved["steps"]) == len(STEPS)
+
+        changed = [*STEPS, {"plugin": "tensile.necking_candidate", "options": {}}]
+        updated = client.put(
+            "/api/processing/recipes/proc_check",
+            json={
+                "label": "확인용(수정)",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": changed,
+                "is_active": True,
+            },
+            headers=admin_headers,
+        )
+        assert updated.status_code == 200, updated.text
+        assert len(updated.json()["steps"]) == len(changed)
+
+        again = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert len(again) == 1
+        assert len(again[0]["steps"]) == len(STEPS), "저장된 결과가 레시피를 따라 바뀌었습니다"
+
+    def test_레시피를_지워도_결과는_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, recipe: Any
+    ) -> None:
+        saved = self._save(client, admin_headers, run_id)
+        assert saved["recipe_label"] == "확인용"
+
+        removed = client.delete("/api/processing/recipes/proc_check", headers=admin_headers)
+        assert removed.status_code == 204, removed.text
+
+        remaining = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert len(remaining) == 1
+        # 이름과 단계는 결과가 자기 안에 갖고 있다.
+        assert remaining[0]["recipe_label"] == "확인용"
+        assert remaining[0]["steps"]
+
+    def test_다시_돌리면_새_행이_생긴다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, recipe: Any
+    ) -> None:
+        # 덮어쓰기가 없으면 "예전 결과를 열었더니 값이 달라졌다" 가 구조적으로
+        # 불가능하다.
+        first = self._save(client, admin_headers, run_id)
+        second = self._save(client, admin_headers, run_id)
+        assert first["id"] != second["id"]
+        listed = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert len(listed) == 2
+
+
+class Test레시피:
+    def test_등록되지_않은_단계는_저장_시점에_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        # 저장하게 두면 그 레시피는 **쓸 때마다** 실패한다. 저장 시점에 아는
+        # 것을 저장 시점에 말한다.
+        response = client.post(
+            "/api/processing/recipes",
+            json={
+                "key": "bogus",
+                "label": "없는 단계",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": [{"plugin": "tensile.made_up", "options": {}}],
+                "is_active": True,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
+        assert "등록되지 않은 처리" in response.json()["error"]["message"]
+
+    def test_전역_레시피는_시스템_관리자만(
+        self, client: TestClient, db: Session, run_id: str
+    ) -> None:
+        from app.modules.accounts.models import User
+        from app.modules.auth import security
+        from app.modules.workspaces.models import Workspace, WorkspaceMember
+
+        workspace = db.scalar(select(Workspace))
+        assert workspace is not None
+        user = User(
+            email="recipe-lead",
+            password_hash=security.hash_password("member-password-1"),
+            display_name="사업부 관리자",
+            status="active",
+        )
+        db.add(user)
+        db.flush()
+        db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="manager"))
+        db.commit()
+        token = client.post(
+            "/api/auth/login", json={"email": "recipe-lead", "password": "member-password-1"}
+        ).json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        payload = {
+            "key": "dept_recipe",
+            "label": "부서 레시피",
+            "description": None,
+            "test_type_key": "tensile",
+            "steps": STEPS,
+            "is_active": True,
+        }
+        blocked = client.post("/api/processing/recipes", json=payload, headers=headers)
+        assert blocked.status_code == 403, blocked.text
+
+        allowed = client.post(
+            "/api/processing/recipes",
+            json={**payload, "owner_workspace_slug": workspace.slug},
+            headers=headers,
+        )
+        assert allowed.status_code == 201, allowed.text
+        assert allowed.json()["is_global"] is False
