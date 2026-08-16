@@ -107,7 +107,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '부서 설정',
     audience: 'manager',
     items: [
-      { label: '파일 형식', icon: FileCode2, to: '/admin/formats', audience: 'manager' },
+      { label: '파일 형식', icon: FileCode2, to: '/settings/formats', audience: 'manager' },
       { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members`, audience: 'manager' },
     ],
   },

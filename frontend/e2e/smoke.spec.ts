@@ -100,6 +100,27 @@ test('로그인부터 곡선까지', async ({ page }) => {
   })
 })
 
+test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) => {
+  // **없어진 줄 알았다.** 프로파일 화면을 '관리' 에서 '부서 설정' 으로 옮기고
+  // 이름을 '파일 형식' 으로 바꿨더니, 쓰던 사람이 못 찾고 "만드는 게 없어졌다"
+  // 고 했다. 화면은 멀쩡했고 메뉴가 옮겨갔을 뿐이었다.
+  //
+  // 그래서 여기서는 **화면이 아니라 가는 길**을 본다. 주소로 바로 열면 이 종류의
+  // 사고를 못 잡는다 — 사이드바를 눌러서 도착해야 한다.
+  await page.goto('/')
+  await page.getByLabel('아이디').fill(EMAIL)
+  await page.getByLabel('비밀번호').fill(PASSWORD)
+  await page.getByRole('button', { name: '로그인' }).click()
+  await expect(page.getByRole('banner')).toBeVisible()
+
+  await page.getByRole('link', { name: '파일 형식' }).click()
+  await expect(page).toHaveURL(/\/settings\/formats$/)
+  await expect(page.getByRole('link', { name: '프로파일 만들기' })).toBeVisible()
+
+  // 목록이 실제로 채워지는지까지 — 빈 표는 "왜 없지" 로 읽힌다.
+  await expect(page.locator('tbody tr').first()).toBeVisible()
+})
+
 test('읽지 못한 파일은 이유를 보여 준다', async ({ page }) => {
   // 실패도 **조용하지 않아야** 한다. 파서가 못 읽었을 때 화면이 아무 말도 안 하면
   // 사용자는 서버 파일시스템을 뒤지는 수밖에 없다.

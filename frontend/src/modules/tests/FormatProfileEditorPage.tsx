@@ -507,7 +507,7 @@ export default function FormatProfileEditorPage() {
         await testsApi.createFormat({ ...payload, key: form.key, owner_workspace_slug: owner })
       }
       else await testsApi.updateFormat(form.key, payload)
-      navigate('/admin/formats')
+      navigate('/settings/formats')
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
     } finally {
@@ -590,7 +590,7 @@ export default function FormatProfileEditorPage() {
         title={creating ? '형식 프로파일 만들기' : `${form.label || routeKey} 편집`}
         description="장비 파일을 놓으면 구조는 자동으로 읽습니다. 사람이 정하는 것은 '이 열이 무엇인가' 하나뿐입니다 — 코드도 배포도 필요 없습니다."
         actions={
-          <Button variant="ghost" onClick={() => navigate('/admin/formats')}>
+          <Button variant="ghost" onClick={() => navigate('/settings/formats')}>
             <ArrowLeft className="size-4" />
             목록
           </Button>

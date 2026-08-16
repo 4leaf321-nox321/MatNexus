@@ -68,15 +68,20 @@ export const router = createBrowserRouter([
             ...stub('사용자 가이드', 'Phase 1', '런타임으로 제공해 배포 없이 갱신.'),
           },
 
-          // 관리
+          // 부서 설정 — **`admin/` 아래가 아니다.** 형식 프로파일은 부서 관리자가
+          // 만든다. 주소가 `admin/` 이면 메뉴 이름('부서 설정')과 어긋나고, 사람은
+          // 주소줄을 보고도 "이건 내 일이 아니구나" 로 읽는다.
+          //
+          // 라우터가 정적 구간을 동적 구간보다 먼저 고르므로 `new` 는 `:key` 에
+          // 먹히지 않는다. 순서에 기대지 않도록 적어 둔다.
+          { path: 'settings/formats', element: <FormatProfilesPage /> },
+          { path: 'settings/formats/new', element: <FormatProfileEditorPage /> },
+          { path: 'settings/formats/:key', element: <FormatProfileEditorPage /> },
+
+          // 관리 (전사)
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
           { path: 'admin/test-types', element: <TestTypesPage /> },
-          // 라우터가 정적 구간을 동적 구간보다 먼저 고르므로 `new` 는 `:key` 에
-          // 먹히지 않는다. 순서에 기대지 않도록 적어 둔다.
-          { path: 'admin/formats', element: <FormatProfilesPage /> },
-          { path: 'admin/formats/new', element: <FormatProfileEditorPage /> },
-          { path: 'admin/formats/:key', element: <FormatProfileEditorPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },

@@ -52,7 +52,7 @@ export default function FormatProfilesPage() {
         description="장비 파일을 어떻게 읽을지. 구조는 코드가 자동으로 읽고, '이 열이 무엇인가'만 여기에 저장합니다 — 새 장비를 붙이는 데 배포가 필요 없습니다."
         actions={
           <Button asChild>
-            <Link to="/admin/formats/new">
+            <Link to="/settings/formats/new">
               <Plus className="size-4" />
               프로파일 만들기
             </Link>
@@ -143,7 +143,7 @@ export default function FormatProfilesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="outline" asChild>
-                      <Link to={`/admin/formats/${item.key}`}>
+                      <Link to={`/settings/formats/${item.key}`}>
                         <Pencil className="size-3.5" />
                         편집
                       </Link>
