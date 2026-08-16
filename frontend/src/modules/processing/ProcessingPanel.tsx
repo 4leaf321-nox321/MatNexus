@@ -68,7 +68,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { testsApi } from '@/modules/tests/api'
-import { display } from '@/modules/tests/units'
+import { display, fromDisplay, toDisplay } from '@/modules/tests/units'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
@@ -151,6 +151,15 @@ export function ProcessingPanel({
   })
   const [open, setOpen] = useState<number | null>(null)
   const [savingRecipe, setSavingRecipe] = useState(false)
+
+  /**
+   * 저장한 레시피를 다시 불러온다.
+   *
+   * **저장만 되고 불러올 수가 없었다.** 배치에는 걸 수 있었지만, 한 건을 열어
+   * "지난번 그 순서로 다시" 를 할 방법이 없어서 매번 단계를 처음부터 쌓아야
+   * 했다. 저장하는 이유의 절반이 그것인데 빠져 있었다.
+   */
+  const recipes = useResource(() => processingApi.recipes(testTypeKey), [testTypeKey])
 
   /**
    * 장비 파일이 준 시편 치수.
@@ -274,6 +283,36 @@ export function ProcessingPanel({
           장비가 준 것은 변위·하중입니다. 물성이 되려면 변환이 필요합니다.
         </span>
         <div className="ml-auto flex gap-2">
+          {(recipes.data?.length ?? 0) > 0 && (
+            <Select
+              value=""
+              onValueChange={(key) => {
+                const recipe = recipes.data?.find((item) => item.key === key)
+                if (!recipe) return
+                setSteps((recipe.steps as unknown as RecipeStep[]).map((s) => ({ ...s })))
+                setResult(null)
+                setSaved(null)
+                setNotice(`'${recipe.label}' 을 불러왔습니다. 돌려 보고 저장하세요.`)
+              }}
+            >
+              <SelectTrigger className="h-8 w-44" aria-label="레시피 불러오기">
+                <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                  <BookMarked className="size-3.5" />
+                  레시피 불러오기
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {recipes.data?.map((item) => (
+                  <SelectItem key={item.key} value={item.key}>
+                    {item.label}
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      {item.steps.length}단계
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button size="sm" variant="outline" onClick={run} disabled={busy || !steps.length}>
             <Play className="size-3.5" />
             돌려 보기
@@ -350,7 +389,11 @@ export function ProcessingPanel({
           onClose={() => setSavingRecipe(false)}
           onSaved={(label) => {
             setSavingRecipe(false)
-            setNotice(`레시피 '${label}' 로 저장했습니다 — 시험 목록에서 여러 건에 걸 수 있습니다.`)
+            recipes.reload()
+            setNotice(
+              `레시피 '${label}' 로 저장했습니다 — 시험 목록에서 여러 건에 걸 수 있고, ` +
+                `여기서 '레시피 불러오기' 로 다시 꺼낼 수 있습니다.`
+            )
           }}
         />
       )}
@@ -630,8 +673,10 @@ function ParamField({
   const rowClass = `grid grid-cols-[9rem_1fr] gap-2 ${
     disabled ? 'pointer-events-none opacity-40' : ''
   }`
-  const toSi = (value: number) => value / shown.factor
-  const fromSi = (value: number) => value * shown.factor
+  // **나누기만 하면 안 된다.** 섭씨는 원점이 달라서 25 °C 를 25 K 로 보내면
+  // -248 °C 가 된다. 환산은 `units` 의 짝 함수를 쓴다.
+  const toSi = (value: number) => fromDisplay(value, param.unit, param.dimension)
+  const fromSi = (value: number) => toDisplay(value, param.unit, param.dimension)
 
   /** 타이핑 중인 글자. 확정된 값과 나눠 두지 않으면 소수점이 지워진다. */
   const [draft, setDraft] = useState<string | null>(null)

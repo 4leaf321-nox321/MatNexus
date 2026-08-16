@@ -12,21 +12,31 @@ export interface Display {
   unit: string
   /** SI 값에 곱해 표시 값으로 만든다. */
   factor: number
+  /**
+   * 곱한 뒤 더한다 — `표시 = SI × factor + offset`.
+   *
+   * **온도 때문에 필요하다.** 다른 단위는 전부 비례라 배수 하나면 되는데,
+   * 섭씨만 원점이 다르다. 오프셋이 없던 동안 DMA 곡선의 온도축이 `298 K` 로
+   * 나왔고, 실무에서 그렇게 읽는 사람은 없다.
+   */
+  offset: number
 }
 
 const BY_SI: Record<string, Display> = {
-  m: { unit: 'mm', factor: 1000 },
+  m: { unit: 'mm', factor: 1000, offset: 0 },
   // 단면적. CAE 입력은 mm² 다 — 1e-5 를 치라고 하면 사람이 자릿수를 센다.
-  m2: { unit: 'mm²', factor: 1e6 },
-  N: { unit: 'N', factor: 1 },
-  Pa: { unit: 'MPa', factor: 1e-6 },
-  K: { unit: 'K', factor: 1 },
-  Hz: { unit: 'Hz', factor: 1 },
-  s: { unit: 's', factor: 1 },
-  'm/s': { unit: 'mm/min', factor: 60000 },
-  '1/s': { unit: '1/s', factor: 1 },
-  'kg/m3': { unit: 'kg/m³', factor: 1 },
-  '1': { unit: '', factor: 1 },
+  m2: { unit: 'mm²', factor: 1e6, offset: 0 },
+  N: { unit: 'N', factor: 1, offset: 0 },
+  Pa: { unit: 'MPa', factor: 1e-6, offset: 0 },
+  // 섭씨만 원점이 다르다. 백엔드는 진작 오프셋을 갖고 있었고
+  // (`matcore/units.py` 의 `degC`), 화면에만 없었다.
+  K: { unit: '°C', factor: 1, offset: -273.15 },
+  Hz: { unit: 'Hz', factor: 1, offset: 0 },
+  s: { unit: 's', factor: 1, offset: 0 },
+  'm/s': { unit: 'mm/min', factor: 60000, offset: 0 },
+  '1/s': { unit: '1/s', factor: 1, offset: 0 },
+  'kg/m3': { unit: 'kg/m³', factor: 1, offset: 0 },
+  '1': { unit: '', factor: 1, offset: 0 },
 }
 
 /**
@@ -41,7 +51,7 @@ const BY_SI: Record<string, Display> = {
  * 사람에게 보여 줄 때는 뜻이 다르다.
  */
 const BY_DIMENSION: Record<string, Display> = {
-  strain: { unit: '%', factor: 100 },
+  strain: { unit: '%', factor: 100, offset: 0 },
 }
 
 export function display(
@@ -52,8 +62,8 @@ export function display(
     const byDimension = BY_DIMENSION[dimension]
     if (byDimension) return byDimension
   }
-  if (!siUnit) return { unit: '', factor: 1 }
-  return BY_SI[siUnit] ?? { unit: siUnit, factor: 1 }
+  if (!siUnit) return { unit: '', factor: 1, offset: 0 }
+  return BY_SI[siUnit] ?? { unit: siUnit, factor: 1, offset: 0 }
 }
 
 /** 축 라벨 — `변위 (mm)`. 단위가 없으면 괄호도 없다. */
@@ -71,6 +81,38 @@ export function toDisplay(
   siUnit: string | null | undefined,
   dimension?: string | null
 ): number {
+  const { factor, offset } = display(siUnit, dimension)
+  return value * factor + offset
+}
+
+/**
+ * 표시 값 → SI. `toDisplay` 의 역이다.
+ *
+ * 오프셋이 생긴 뒤로는 **나누기만 해서는 안 된다.** 25 °C 를 25 K 로 보내면
+ * -248 °C 다. 두 함수를 짝으로 두는 이유가 이것이다.
+ */
+export function fromDisplay(
+  value: number,
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): number {
+  const { factor, offset } = display(siUnit, dimension)
+  return (value - offset) / factor
+}
+
+/**
+ * **차이(Δ)는 오프셋을 빼지 않는다.**
+ *
+ * 온도 차 10 K 는 10 °C 이지 -263 °C 가 아니다. 65도 같은 것을 갖고 있었다
+ * (`quantity_semantics == "temperature.difference"` 면 오프셋을 건너뛴다).
+ * 지금은 차이를 표시하는 자리가 없지만, 생기는 순간 이 함수를 써야 한다 —
+ * 안 쓰면 273.15 만큼 어긋난 값이 그럴듯하게 나온다.
+ */
+export function spanToDisplay(
+  value: number,
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): number {
   return value * display(siUnit, dimension).factor
 }
 
@@ -82,8 +124,8 @@ export function formatValue(
   dimension?: string | null
 ): string {
   if (value === null) return text ?? '—'
-  const { unit, factor } = display(siUnit, dimension)
-  const shown = value * factor
+  const { unit, factor, offset } = display(siUnit, dimension)
+  const shown = value * factor + offset
   const magnitude = Math.abs(shown)
   const rounded =
     magnitude === 0

@@ -7,40 +7,31 @@
 
 import { describe, expect, it } from 'vitest'
 
-import {
-  DIMENSIONS,
-  SI_BY_DIMENSION,
-  UNITS_BY_DIMENSION,
-  axisLabel,
-  conditionUnits,
-  display,
-  formatValue,
-  toDisplay,
-} from '@/modules/tests/units'
+import { DIMENSIONS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatValue, fromDisplay, spanToDisplay, toDisplay } from '@/modules/tests/units'
 
 describe('저장 단위와 표시 단위', () => {
   it('저장은 SI, 표시는 실무 단위', () => {
-    expect(display('m')).toEqual({ unit: 'mm', factor: 1000 })
-    expect(display('Pa')).toEqual({ unit: 'MPa', factor: 1e-6 })
+    expect(display('m')).toEqual({ unit: 'mm', factor: 1000, offset: 0 })
+    expect(display('Pa')).toEqual({ unit: 'MPa', factor: 1e-6, offset: 0 })
     expect(toDisplay(0.05, 'm')).toBeCloseTo(50)
   })
 
   it('모르는 단위는 그대로 둔다', () => {
     // 지어내면 값이 틀린다. 바꾸지 않는 편이 낫다.
-    expect(display('rad/s')).toEqual({ unit: 'rad/s', factor: 1 })
+    expect(display('rad/s')).toEqual({ unit: 'rad/s', factor: 1, offset: 0 })
   })
 })
 
 describe('변형률과 tan δ', () => {
   it('변형률은 %로 보여 준다', () => {
-    expect(display('1', 'strain')).toEqual({ unit: '%', factor: 100 })
+    expect(display('1', 'strain')).toEqual({ unit: '%', factor: 100, offset: 0 })
     expect(toDisplay(0.02, '1', 'strain')).toBeCloseTo(2)
   })
 
   it('tan δ 는 비율 그대로 둔다', () => {
     // **단위만 보면 못 가른다.** 둘 다 저장 단위가 `1` 이다. 차원이 유일한 단서고,
     // `strain` 을 `dimensionless` 의 별칭으로 남겨 둔 이유가 이것이다.
-    expect(display('1', 'dimensionless')).toEqual({ unit: '', factor: 1 })
+    expect(display('1', 'dimensionless')).toEqual({ unit: '', factor: 1, offset: 0 })
     expect(toDisplay(0.02, '1', 'dimensionless')).toBeCloseTo(0.02)
   })
 
@@ -70,7 +61,7 @@ describe('조건 단위', () => {
       { key: 'speed', si_unit: 'm/s', dimension: 'velocity' },
       { key: 'temperature', si_unit: 'K', dimension: 'temperature' },
     ]
-    expect(conditionUnits(fields)).toEqual({ speed: 'mm/min', temperature: 'K' })
+    expect(conditionUnits(fields)).toEqual({ speed: 'mm/min', temperature: '°C' })
   })
 
   it('단위 없는 항목은 안 보낸다', () => {
@@ -99,15 +90,15 @@ describe('처리 입력 칸의 단위', () => {
   it('길이는 mm, 면적은 mm² 로 받는다', () => {
     // CAE 는 길이를 mm 로 쓴다. `0.05` 를 치라고 하면 사람이 `50` 을 치고,
     // 그러면 **1000배** 틀린 곡선이 조용히 나온다.
-    expect(display('m')).toEqual({ unit: 'mm', factor: 1000 })
-    expect(display('m2')).toEqual({ unit: 'mm²', factor: 1e6 })
+    expect(display('m')).toEqual({ unit: 'mm', factor: 1000, offset: 0 })
+    expect(display('m2')).toEqual({ unit: 'mm²', factor: 1e6, offset: 0 })
   })
 
   it('탄성 구간과 오프셋은 % 로 받는다', () => {
     // 규격이 "0.2% 오프셋" 이라고 적는다. 저장 단위는 둘 다 `1` 이라 단위만으로는
     // 가를 수 없고, 차원이 있어야 한다.
-    expect(display('1', 'strain')).toEqual({ unit: '%', factor: 100 })
-    expect(display('1')).toEqual({ unit: '', factor: 1 })
+    expect(display('1', 'strain')).toEqual({ unit: '%', factor: 100, offset: 0 })
+    expect(display('1')).toEqual({ unit: '', factor: 1, offset: 0 })
   })
 
   it('50 mm 는 0.05 m 로, 0.2 % 는 0.002 로 되돌아간다', () => {
@@ -115,5 +106,40 @@ describe('처리 입력 칸의 단위', () => {
     expect(50 / length.factor).toBeCloseTo(0.05, 12)
     const strain = display('1', 'strain')
     expect(0.2 / strain.factor).toBeCloseTo(0.002, 12)
+  })
+})
+
+describe('온도 — 원점이 다른 유일한 단위', () => {
+  it('저장은 K, 화면은 °C', () => {
+    // 오프셋이 없던 동안 DMA 곡선의 온도축이 `298 K` 로 나왔다. 실무에서
+    // 그렇게 읽는 사람은 없다.
+    expect(display('K')).toEqual({ unit: '°C', factor: 1, offset: -273.15 })
+    expect(toDisplay(298.15, 'K')).toBeCloseTo(25, 10)
+    expect(formatValue(298.15, null, 'K')).toBe('25 °C')
+  })
+
+  it('되돌리면 제자리다', () => {
+    // 나누기만 하면 25 °C 가 25 K(-248 °C)로 간다. 짝을 맞춰 둔 이유다.
+    expect(fromDisplay(25, 'K')).toBeCloseTo(298.15, 10)
+    expect(fromDisplay(toDisplay(310.5, 'K'), 'K')).toBeCloseTo(310.5, 10)
+  })
+
+  it('차이(Δ)에는 오프셋을 쓰지 않는다', () => {
+    // 온도 차 10 K 는 10 °C 이지 -263 °C 가 아니다. 65도 같은 구분을 갖고
+    // 있었다 — `temperature.difference` 면 오프셋을 건너뛴다.
+    expect(spanToDisplay(10, 'K')).toBe(10)
+    expect(toDisplay(10, 'K')).toBeCloseTo(-263.15, 10)
+  })
+
+  it('곡선 축도 °C 로 적힌다', () => {
+    // 축 라벨은 `display` 를 그대로 쓴다 — 여기가 맞으면 차트도 맞다.
+    expect(axisLabel('온도', 'K', 'temperature')).toBe('온도 (°C)')
+    expect(axisLabel('변위', 'm')).toBe('변위 (mm)')
+  })
+
+  it('오프셋이 없는 단위는 예전과 같다', () => {
+    expect(toDisplay(0.05, 'm')).toBeCloseTo(50, 10)
+    expect(fromDisplay(50, 'm')).toBeCloseTo(0.05, 10)
+    expect(spanToDisplay(0.05, 'm')).toBeCloseTo(50, 10)
   })
 })
