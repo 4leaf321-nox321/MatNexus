@@ -376,8 +376,8 @@ def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
         scalars=(
             Scalar("proof_stress", "항복강도", value, "Pa"),
-            Scalar("proof_strain", "항복 변형률", proof_strain, "1"),
-            Scalar("proof_offset", "오프셋", offset, "1"),
+            Scalar("proof_strain", "항복 변형률", proof_strain, "1", "strain"),
+            Scalar("proof_offset", "오프셋", offset, "1", "strain"),
         ),
     )
 
@@ -414,8 +414,12 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
         scalars=(
             Scalar("tensile_strength", "인장강도", float(stress[peak]), "Pa"),
-            Scalar("strain_at_strength", "최대하중 변형률", float(strain[peak]), "1"),
-            Scalar("elongation_observed", "관측 최대 변형률", float(strain[-1]), "1"),
+            Scalar(
+                "strain_at_strength", "최대하중 변형률", float(strain[peak]), "1", "strain"
+            ),
+            Scalar(
+                "elongation_observed", "관측 최대 변형률", float(strain[-1]), "1", "strain"
+            ),
         ),
     )
 
@@ -458,7 +462,13 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
         scalars=(
             Scalar("necking_candidate_index", "네킹 후보 위치", float(index), "1"),
-            Scalar("necking_candidate_strain", "네킹 후보 변형률", float(strain[index]), "1"),
+            Scalar(
+                "necking_candidate_strain",
+                "네킹 후보 변형률",
+                float(strain[index]),
+                "1",
+                "strain",
+            ),
             Scalar("necking_candidate_stress", "네킹 후보 응력", float(stress[index]), "Pa"),
         ),
     )

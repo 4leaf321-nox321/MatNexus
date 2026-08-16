@@ -377,6 +377,15 @@ class TestSummary(Base):
     넣지 않고, 값 없음은 NULL 로 둔다 — 집계에서 `"Unknown"` 이 하나의 값으로
     잡히면 통계가 오염된다."""
     si_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dimension: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """**단위만으로는 못 가르는 것이 있다.**
+
+    항복 변형률 0.0686 과 네킹 후보 위치 14 는 저장 단위가 둘 다 `1` 이다. 앞은
+    6.86% 로 읽어야 하고 뒤는 14 그대로다 — 차원이 없으면 화면이 둘을 같게
+    다루고 변형률이 소수로 나온다. 채널에서 이미 겪은 문제다.
+
+    장비가 준 값(`instrument`)은 비어 있다 — 파서가 차원을 알려 주지 않는다.
+    그건 그대로 두고 우리가 계산한 값부터 채운다."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

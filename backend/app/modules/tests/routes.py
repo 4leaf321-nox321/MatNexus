@@ -761,6 +761,7 @@ def get_run(
                 value=s.value_num,
                 text=s.value_text,
                 si_unit=s.si_unit,
+                dimension=s.dimension,
             )
             for s in summary
         ],

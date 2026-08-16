@@ -191,7 +191,13 @@ def _store(
             for stage in result.stages
         ],
         scalars=[
-            {"key": s.key, "label": s.label, "value": s.value, "si_unit": s.si_unit}
+            {
+                "key": s.key,
+                "label": s.label,
+                "value": s.value,
+                "si_unit": s.si_unit,
+                "dimension": s.dimension,
+            }
             for s in result.scalars
         ],
         storage_path=stored.relative_path,
@@ -222,7 +228,11 @@ def _stage_out(stage: processing.Stage) -> ProcessingStageOut:
 
 def _scalar_out(scalar: processing.Scalar) -> ProcessingScalarOut:
     return ProcessingScalarOut(
-        key=scalar.key, label=scalar.label, value=scalar.value, si_unit=scalar.si_unit
+        key=scalar.key,
+        label=scalar.label,
+        value=scalar.value,
+        si_unit=scalar.si_unit,
+        dimension=scalar.dimension,
     )
 
 
@@ -329,6 +339,7 @@ def _result_out(item: ProcessingResult, *, adopted: bool = False) -> ProcessingR
                 label=str(s.get("label", "")),
                 value=float(s.get("value", 0.0)),
                 si_unit=str(s.get("si_unit", "1")),
+                dimension=(str(s["dimension"]) if s.get("dimension") else None),
             )
             for s in item.scalars
         ],
@@ -556,6 +567,7 @@ def _project_summaries(db: Session, run: TestRun, result: ProcessingResult | Non
                 source="matnexus",
                 value_num=float(item.get("value", 0.0)),
                 si_unit=str(item.get("si_unit") or "1"),
+                dimension=(str(item["dimension"]) if item.get("dimension") else None),
             )
         )
 
@@ -700,6 +712,7 @@ def run_batch(
                         label=str(s.get("label", "")),
                         value=float(s.get("value", 0.0)),
                         si_unit=str(s.get("si_unit") or "1"),
+                        dimension=(str(s["dimension"]) if s.get("dimension") else None),
                     )
                     for s in stored.scalars
                 ],

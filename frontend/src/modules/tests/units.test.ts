@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { DIMENSIONS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatValue, fromDisplay, spanToDisplay, toDisplay } from '@/modules/tests/units'
+import { DIMENSIONS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatScalar, formatValue, fromDisplay, spanToDisplay, toDisplay } from '@/modules/tests/units'
 
 describe('저장 단위와 표시 단위', () => {
   it('저장은 SI, 표시는 실무 단위', () => {
@@ -141,5 +141,28 @@ describe('온도 — 원점이 다른 유일한 단위', () => {
     expect(toDisplay(0.05, 'm')).toBeCloseTo(50, 10)
     expect(fromDisplay(50, 'm')).toBeCloseTo(0.05, 10)
     expect(spanToDisplay(0.05, 'm')).toBeCloseTo(50, 10)
+  })
+})
+
+describe('스칼라 표시 — 환산이 한 곳에만 있어야 한다', () => {
+  it('응력은 크기에 따라 MPa·GPa 를 오간다', () => {
+    // 205000 MPa 로 적힌 탄성계수는 아무도 안 읽는다.
+    expect(formatScalar(205e9, 'Pa')).toBe('205 GPa')
+    expect(formatScalar(252e6, 'Pa')).toBe('252 MPa')
+  })
+
+  it('Pa 말고도 안다', () => {
+    // 복제돼 있던 세 벌은 전부 Pa 만 알아서, 스칼라가 m·K 로 오면 SI 그대로
+    // 나왔다 — 0.05 m, 298.15 K.
+    expect(formatScalar(0.05, 'm')).toBe('50 mm')
+    expect(formatScalar(298.15, 'K')).toBe('25 °C')
+    expect(formatScalar(1.212e-5, 'm2')).toBe('12.12 mm²')
+  })
+
+  it('변형률은 %, 개수는 그대로', () => {
+    // 항복 변형률 0.0686 과 네킹 후보 위치 14 는 저장 단위가 둘 다 `1` 이다.
+    // 차원이 없으면 화면이 둘을 같게 다룬다.
+    expect(formatScalar(0.0686479, '1', 'strain')).toBe('6.8648 %')
+    expect(formatScalar(14, '1')).toBe('14')
   })
 })

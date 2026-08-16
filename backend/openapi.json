@@ -2385,6 +2385,17 @@
       },
       "ProcessingScalarOut": {
         "properties": {
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -4658,6 +4669,17 @@
       },
       "TestSummaryOut": {
         "properties": {
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
           "key": {
             "title": "Key",
             "type": "string"

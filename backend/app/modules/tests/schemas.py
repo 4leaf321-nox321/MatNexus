@@ -120,6 +120,8 @@ class TestSummaryOut(BaseModel):
     value: float | None
     text: str | None
     si_unit: str | None
+    dimension: str | None = None
+    """단위만으로 못 가르는 것을 가른다 — 변형률은 %, 개수는 그대로."""
 
 
 class CurveOut(BaseModel):

@@ -22,6 +22,7 @@ import { useState } from 'react'
 import { AlertTriangle, Check, Layers } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
+import { formatScalar } from '@/modules/tests/units'
 import { RecipePicker } from '@/modules/processing/RecipePicker'
 import type { BatchOut, RecipeStep } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -132,11 +133,7 @@ export function BatchDialog({ testRunIds, testTypeKey, onClose, onDone }: Props)
                         .map((s) => (
                           <span key={s.key} className="font-mono">
                             {s.key === 'youngs_modulus' ? 'E' : 'YS'}{' '}
-                            {s.si_unit === 'Pa'
-                              ? Math.abs(s.value) >= 1e9
-                                ? `${(s.value / 1e9).toPrecision(4)} GPa`
-                                : `${(s.value / 1e6).toPrecision(4)} MPa`
-                              : Number(s.value.toPrecision(5))}
+                            {formatScalar(s.value, s.si_unit, s.dimension)}
                           </span>
                         ))}
                     </span>

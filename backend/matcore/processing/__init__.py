@@ -102,6 +102,12 @@ class Scalar:
     label: str
     value: float
     si_unit: str
+    dimension: str | None = None
+    """**단위만으로는 못 가르는 것이 있다.**
+
+    항복 변형률 0.0686 과 네킹 후보 위치 14 는 저장 단위가 둘 다 `1` 이다. 그런데
+    앞은 6.86% 로 읽어야 하고 뒤는 14 그대로다. 차원이 없으면 화면이 둘을 같게
+    다루고, 변형률이 소수로 나온다 — 이 프로젝트가 채널에서 이미 겪은 문제다."""
 
 
 @dataclass(frozen=True)

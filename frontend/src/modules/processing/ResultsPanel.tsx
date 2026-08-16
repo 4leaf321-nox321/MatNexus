@@ -23,21 +23,12 @@ import { useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Star } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
+import { formatScalar } from '@/modules/tests/units'
 import type { ProcessingResult } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { useResource } from '@/shared/hooks/useResource'
-
-function formatScalar(value: number, unit: string): string {
-  if (unit === 'Pa') {
-    return Math.abs(value) >= 1e9
-      ? `${(value / 1e9).toPrecision(4)} GPa`
-      : `${(value / 1e6).toPrecision(4)} MPa`
-  }
-  if (unit === '1') return Number(value.toPrecision(5)).toString()
-  return `${Number(value.toPrecision(5))} ${unit}`
-}
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('ko-KR', {
@@ -136,7 +127,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                       .map((scalar) => (
                         <span key={scalar.key} className="font-mono text-xs">
                           {scalar.key === 'youngs_modulus' ? 'E' : 'YS'}{' '}
-                          {formatScalar(scalar.value, scalar.si_unit)}
+                          {formatScalar(scalar.value, scalar.si_unit, scalar.dimension)}
                         </span>
                       ))}
                     <Button
@@ -158,7 +149,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                           <div key={scalar.key} className="rounded-md border px-2 py-1.5">
                             <div className="text-muted-foreground text-xs">{scalar.label}</div>
                             <div className="font-mono text-xs">
-                              {formatScalar(scalar.value, scalar.si_unit)}
+                              {formatScalar(scalar.value, scalar.si_unit, scalar.dimension)}
                             </div>
                           </div>
                         ))}

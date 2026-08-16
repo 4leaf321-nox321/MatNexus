@@ -220,3 +220,37 @@ export const VALUE_TYPES = [
   { value: 'date', label: '날짜' },
   { value: 'boolean', label: '예/아니오' },
 ] as const
+
+
+/**
+ * 값 하나를 사람이 읽는 문자열로 — **자릿수까지 골라 준다.**
+ *
+ * `formatValue` 와 다른 점: 응력은 크기에 따라 MPa/GPa 를 오간다. 205000 MPa 로
+ * 적힌 탄성계수는 아무도 안 읽는다.
+ *
+ * **이 함수가 없어서 같은 코드가 세 번 복제돼 있었다**(처리 패널·결과 목록·배치
+ * 다이얼로그). 셋 다 `value / 1e6` 을 손으로 적었고, 셋 다 **Pa 만 알았다** —
+ * 스칼라가 m 나 K 로 오면 SI 그대로 나왔다. 환산 규칙이 여러 곳에 있으면
+ * 언젠가 갈라진다는 것이 이 파일의 첫 줄에 적혀 있다.
+ */
+export function formatScalar(
+  value: number,
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): string {
+  // 응력만 예외다. GPa 까지 올라가는 것은 탄성계수뿐이고, 그 값을 MPa 로 적으면
+  // 205000 이 된다.
+  if (siUnit === 'Pa' && Math.abs(value) >= 1e9) {
+    return `${Number((value / 1e9).toPrecision(4))} GPa`
+  }
+  const { unit, factor, offset } = display(siUnit, dimension)
+  const shown = value * factor + offset
+  const magnitude = Math.abs(shown)
+  const text =
+    magnitude === 0
+      ? '0'
+      : magnitude >= 100000 || magnitude < 0.001
+        ? shown.toExponential(3)
+        : String(Number(shown.toPrecision(5)))
+  return unit ? `${text} ${unit}` : text
+}

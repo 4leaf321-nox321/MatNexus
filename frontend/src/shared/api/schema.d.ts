@@ -2277,6 +2277,8 @@ export interface components {
         };
         /** ProcessingScalarOut */
         ProcessingScalarOut: {
+            /** Dimension */
+            dimension?: string | null;
             /** Key */
             key: string;
             /** Label */
@@ -2985,6 +2987,8 @@ export interface components {
         };
         /** TestSummaryOut */
         TestSummaryOut: {
+            /** Dimension */
+            dimension?: string | null;
             /** Key */
             key: string;
             /** Label */

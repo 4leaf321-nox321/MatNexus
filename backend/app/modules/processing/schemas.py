@@ -47,6 +47,8 @@ class ProcessingScalarOut(BaseModel):
     label: str
     value: float
     si_unit: str
+    dimension: str | None = None
+    """단위만으로 못 가르는 것을 가른다 — 변형률은 %, 개수는 그대로."""
 
 
 class ProcessingStageOut(BaseModel):

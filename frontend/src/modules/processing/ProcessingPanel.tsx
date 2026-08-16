@@ -69,7 +69,13 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { testsApi } from '@/modules/tests/api'
-import { display, fromDisplay, toDisplay } from '@/modules/tests/units'
+import {
+  axisLabel,
+  display,
+  formatScalar,
+  fromDisplay,
+  toDisplay,
+} from '@/modules/tests/units'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
@@ -120,16 +126,6 @@ function defaults(plugin: ProcessingStep | undefined): Record<string, unknown> {
     if (param.default !== null && param.default !== undefined) options[param.name] = param.default
   }
   return options
-}
-
-function formatScalar(value: number, unit: string): string {
-  if (unit === 'Pa') {
-    return Math.abs(value) >= 1e9
-      ? `${(value / 1e9).toPrecision(4)} GPa`
-      : `${(value / 1e6).toPrecision(4)} MPa`
-  }
-  if (unit === '1') return Number(value.toPrecision(5)).toString()
-  return `${Number(value.toPrecision(5))} ${unit}`
 }
 
 export function ProcessingPanel({
@@ -276,6 +272,16 @@ export function ProcessingPanel({
 
   const columns = result ? result.columns : sourceColumns
 
+  /** 축과 점을 **같은 단위로** 맞춘다. 하나만 바꾸면 1000배 어긋난 그림이 된다. */
+  const shownPoints = useMemo<[number, number][]>(
+    () =>
+      (result?.points ?? []).map(([x, y]) => [
+        toDisplay(x, result?.units[axes.x]),
+        toDisplay(y, result?.units[axes.y]),
+      ]),
+    [result, axes.x, axes.y]
+  )
+
   return (
     <section className="mb-8">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -346,7 +352,7 @@ export function ProcessingPanel({
               <span>이 파일이 준 값:</span>
               {fillable.map((item) => (
                 <Badge key={item.field} variant="outline" className="font-mono text-xs">
-                  {item.label} {((item.value_m ?? 0) * 1000).toFixed(3)} mm
+                  {item.label} {formatScalar(item.value_m ?? 0, 'm')}
                 </Badge>
               ))}
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={fill}>
@@ -555,18 +561,14 @@ export function ProcessingPanel({
                 </span>
               </div>
 
+              {/* **원본 탭과 같은 단위로 그린다.** 여기만 SI 그대로였다 —
+                  같은 곡선이 '원본' 에서는 MPa, '처리' 에서는 Pa 로 보였다.
+                  틀린 그림은 아니지만, 두 탭을 오가며 보는 사람은 축이 왜
+                  1e8 이 됐는지 먼저 의심하게 된다. */}
               <CurveChart
-                points={result.points}
-                xLabel={`${axes.x}${
-                  result.units[axes.x] && result.units[axes.x] !== '1'
-                    ? ` (${result.units[axes.x]})`
-                    : ''
-                }`}
-                yLabel={`${axes.y}${
-                  result.units[axes.y] && result.units[axes.y] !== '1'
-                    ? ` (${result.units[axes.y]})`
-                    : ''
-                }`}
+                points={shownPoints}
+                xLabel={axisLabel(axes.x, result.units[axes.x])}
+                yLabel={axisLabel(axes.y, result.units[axes.y])}
                 height={300}
               />
 
@@ -576,7 +578,7 @@ export function ProcessingPanel({
                     <div key={scalar.key} className="rounded-md border px-3 py-2">
                       <div className="text-muted-foreground text-xs">{scalar.label}</div>
                       <div className="font-mono text-sm">
-                        {formatScalar(scalar.value, scalar.si_unit)}
+                        {formatScalar(scalar.value, scalar.si_unit, scalar.dimension)}
                       </div>
                     </div>
                   ))}
