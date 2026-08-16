@@ -61,17 +61,7 @@ export default function TestRunDetailPage() {
   // `?? []` 를 그대로 두면 매 렌더마다 새 배열이라 아래 useEffect 가 계속 돈다.
   const channels = useMemo(() => definition?.channels ?? [], [definition])
 
-  useEffect(() => {
-    if (axes || channels.length < 2) return
-    // 정의에 있는 채널이라도 **그 곡선에 없을 수 있다.** DMA 는 구간마다 열
-    // 구성이 다르다 — 없는 채널을 축으로 잡으면 첫 화면부터 오류가 뜬다.
-    const present = item?.curves?.[0]?.channels
-    const usable = present
-      ? channels.filter((channel) => present.includes(channel.key))
-      : channels
-    const pick = usable.length >= 2 ? usable : channels
-    setAxes({ x: pick[0].key, y: pick[1].key })
-  }, [axes, channels, item?.curves])
+
 
   /**
    * 어느 곡선을 볼 것인가. **한 시험이 곡선을 여럿 가진다.**
@@ -83,6 +73,40 @@ export default function TestRunDetailPage() {
   const curves = useMemo(() => item?.curves ?? [], [item])
   const [curveKey, setCurveKey] = useState<string | null>(null)
   const activeCurve = curves.find((c) => c.key === curveKey) ?? curves[0] ?? null
+
+  /**
+   * 고를 수 있는 축 = **그 곡선이 실제로 가진 채널.**
+   *
+   * 정의(시험 종류)에서만 뽑으면 두 방향으로 틀린다.
+   *
+   *   - 정의에 있는데 그 곡선엔 없는 채널(DMA 는 구간마다 열 구성이 다르다)
+   *   - 그 곡선엔 있는데 정의엔 없는 채널 — 처리결과 곡선이 그렇다.
+   *     마스터 곡선의 `complex_compliance`·`phase_angle` 은 시험 종류에 없다.
+   *     정의 기준으로 버튼을 만들면 **그 곡선을 그릴 방법이 아예 없다.**
+   *
+   * 곡선이 무엇을 가졌는지는 곡선이 안다. 정의는 이름과 단위를 보태 줄 뿐이다.
+   */
+  const axisOptions = useMemo(() => {
+    const present = activeCurve?.channels ?? channels.map((channel) => channel.key)
+    return present.map((key) => {
+      const declared = channels.find((channel) => channel.key === key)
+      return {
+        key,
+        label: declared?.label ?? key,
+        si_unit: declared?.si_unit ?? null,
+        dimension: declared?.dimension ?? null,
+      }
+    })
+  }, [activeCurve, channels])
+
+  // 곡선을 바꾸면 축이 그 곡선에 없을 수 있다. **바꿀 때마다 확인한다** —
+  // 안 하면 "이 시험에 없는 채널입니다: step_time" 이 뜬다(실제로 떴다).
+  useEffect(() => {
+    if (axisOptions.length < 2) return
+    const keys = axisOptions.map((option) => option.key)
+    if (axes && keys.includes(axes.x) && keys.includes(axes.y)) return
+    setAxes({ x: keys[0], y: keys[1] })
+  }, [axes, axisOptions])
 
   const curve = useResource(
     () =>
@@ -97,8 +121,8 @@ export default function TestRunDetailPage() {
     [id, item?.status, axes?.x, axes?.y, activeCurve?.key]
   )
 
-  const xChannel = channels.find((c) => c.key === axes?.x)
-  const yChannel = channels.find((c) => c.key === axes?.y)
+  const xChannel = axisOptions.find((c) => c.key === axes?.x)
+  const yChannel = axisOptions.find((c) => c.key === axes?.y)
   const points = useMemo<[number, number][]>(
     () =>
       (curve.data?.points ?? []).map(([x, y]) => [
@@ -226,22 +250,31 @@ export default function TestRunDetailPage() {
 
       {item?.status === 'parsed' && (
         <section className="mb-8">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div className="mb-2 space-y-1">
             <h2 className="font-medium">곡선</h2>
-            <div className="ml-auto flex items-center gap-1 text-xs">
-              <span className="text-muted-foreground">Y축</span>
-              {channels.map((channel) => (
-                <Button
-                  key={channel.key}
-                  size="sm"
-                  variant={axes?.y === channel.key ? 'default' : 'outline'}
-                  onClick={() => setAxes((a) => (a ? { ...a, y: channel.key } : a))}
-                  disabled={axes?.x === channel.key}
-                >
-                  {channel.label}
-                </Button>
-              ))}
-            </div>
+            {/* **X 도 고를 수 있어야 한다.** 처리결과 곡선은 열이 12개다 —
+                주파수-저장탄성률로 볼지, 온도-이동인자로 볼지는 그때그때 다르다.
+                X 가 첫 채널로 고정돼 있던 때는 볼 수 없는 조합이 대부분이었다. */}
+            {(['x', 'y'] as const).map((axis) => (
+              <div key={axis} className="flex flex-wrap items-center gap-1 text-xs">
+                <span className="text-muted-foreground w-8">{axis === 'x' ? 'X축' : 'Y축'}</span>
+                {axisOptions.map((channel) => (
+                  <Button
+                    key={channel.key}
+                    size="sm"
+                    variant={axes?.[axis] === channel.key ? 'default' : 'outline'}
+                    onClick={() =>
+                      setAxes((current) =>
+                        current ? { ...current, [axis]: channel.key } : current
+                      )
+                    }
+                    disabled={axes?.[axis === 'x' ? 'y' : 'x'] === channel.key}
+                  >
+                    {channel.label}
+                  </Button>
+                ))}
+              </div>
+            ))}
           </div>
 
           {/* **한 시험이 곡선을 여럿 가진다.** DMA 주파수-온도 스윕은 `[step]`
