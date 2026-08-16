@@ -125,6 +125,151 @@
         "title": "ApproveRequest",
         "type": "object"
       },
+      "BatchItemOut": {
+        "properties": {
+          "adopted": {
+            "default": false,
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Id"
+          },
+          "scalars": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProcessingScalarOut"
+            },
+            "title": "Scalars",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_run_id",
+          "record_name",
+          "status"
+        ],
+        "title": "BatchItemOut",
+        "type": "object"
+      },
+      "BatchOut": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "integer"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requested",
+          "succeeded",
+          "failed",
+          "items"
+        ],
+        "title": "BatchOut",
+        "type": "object"
+      },
+      "BatchRequest": {
+        "properties": {
+          "adopt": {
+            "default": true,
+            "title": "Adopt",
+            "type": "boolean"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "source_curve_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Curve Key"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "test_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Test Run Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "test_run_ids",
+          "steps"
+        ],
+        "title": "BatchRequest",
+        "type": "object"
+      },
       "Body_detect_test_type_api_test_types_detect_post": {
         "properties": {
           "file": {
@@ -7367,6 +7512,48 @@
         "summary": "Mark Read",
         "tags": [
           "notifications"
+        ]
+      }
+    },
+    "/api/processing/batch": {
+      "post": {
+        "description": "여러 시험에 같은 단계를 건다.\n\n**부분 실패는 실패가 아니다.** 20건 중 하나가 시편 치수 때문에 막혔다고\n전체를 되돌리면 19건을 다시 해야 하고, 조용히 건너뛰면 사람은 다 된 줄 안다.\n그래서 건별 결과를 그대로 돌려주고, 성공한 것은 그 자리에서 커밋한다.\n\n실패 이유는 건마다 다르다 — 시편 치수가 없는 것, 탄성 구간에 점이 없는 것,\n채널 이름이 다른 것이 한 배치에 섞여 온다. 하나로 뭉뚱그리면 무엇을 고쳐야\n하는지 알 수 없다.",
+        "operationId": "run_batch_api_processing_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Batch",
+        "tags": [
+          "processing"
         ]
       }
     },

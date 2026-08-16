@@ -496,3 +496,164 @@ class Test채택:
 
         client.post(f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers)
         assert row()["adopted_result_id"] == saved["id"]
+
+
+class Test배치:
+    """**시편 20개를 하나씩 처리하는 것은 일이 아니다.**
+
+    한 건으로 단계를 맞춘 뒤 나머지에 같은 것을 거는 것이 실제 작업 흐름이고,
+    그것이 안 되면 실데이터를 넣어 볼 수가 없다.
+
+    여기서 지키는 것은 **부분 실패**다. 20건 중 하나가 시편 치수 때문에 막혔다고
+    전체를 되돌리면 19건을 다시 해야 하고, 조용히 건너뛰면 사람은 다 된 줄 안다.
+    """
+
+    @pytest.fixture
+    def three_runs(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> list[str]:
+        """시편 3개, 각각 시험 1건씩. 셋 다 같은 재료다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "BATCH",
+                "details": "MDOI",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        ids: list[str] = []
+        for _ in range(3):
+            specimen = client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD"},
+                headers=admin_headers,
+            ).json()
+            created = client.post(
+                "/api/test-runs",
+                data={
+                    "specimen_id": specimen["id"],
+                    "test_type": "tensile",
+                    "conditions": "{}",
+                },
+                files={"file": ("Example.tra", TRA.read_bytes())},
+                headers=admin_headers,
+            ).json()
+            assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+            ids.append(str(created["id"]))
+        return ids
+
+    def test_한_번에_돌리고_채택까지_한다(
+        self, client: TestClient, admin_headers: dict[str, str], three_runs: list[str]
+    ) -> None:
+        response = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": three_runs, "steps": STEPS, "adopt": True},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert (body["requested"], body["succeeded"], body["failed"]) == (3, 3, 0)
+        assert all(item["adopted"] for item in body["items"])
+
+        # 채택이 실제로 걸렸는지는 목록이 안다.
+        page = client.get("/api/test-runs", headers=admin_headers).json()
+        rows = {r["id"]: r for r in page["items"]}
+        for run_id in three_runs:
+            assert rows[run_id]["adopted_result_id"] is not None
+            assert rows[run_id]["result_count"] == 1
+
+    def test_하나가_막혀도_나머지는_저장된다(
+        self, client: TestClient, admin_headers: dict[str, str], three_runs: list[str]
+    ) -> None:
+        """**이것이 이 기능의 핵심이다.**
+
+        실패 이유는 건마다 다르다 — 시편 치수가 없는 것, 탄성 구간에 점이 없는
+        것이 한 배치에 섞여 온다. 여기서는 없는 시험 id 를 하나 섞어 같은 것을
+        본다.
+        """
+        bogus = str(uuid.uuid4())
+        response = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": [three_runs[0], bogus, three_runs[1]], "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert (body["succeeded"], body["failed"]) == (2, 1)
+
+        failed = [item for item in body["items"] if item["status"] == "failed"]
+        assert len(failed) == 1
+        assert failed[0]["test_run_id"] == bogus
+        # **왜 막혔는지가 건별로 있어야** 무엇을 고칠지 안다.
+        assert failed[0]["error"]
+
+        # 앞의 성공이 살아 있어야 한다 — 롤백되면 19건을 다시 해야 한다.
+        listed = client.get(
+            f"/api/processing/results?test_run_id={three_runs[0]}", headers=admin_headers
+        ).json()
+        assert len(listed) == 1
+
+    def test_처리_실패도_건별로_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], three_runs: list[str]
+    ) -> None:
+        # 시편 치수가 없는 시험이 섞이는 것이 실제로 가장 흔하다.
+        response = client.post(
+            "/api/processing/batch",
+            json={
+                "test_run_ids": three_runs,
+                "steps": [
+                    {
+                        "plugin": "tensile.engineering",
+                        "options": {
+                            "gauge_length": "@specimen_gauge_length",
+                            "area": "@specimen_area",
+                        },
+                    }
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["failed"] == 3
+        assert all("시편 기록에" in item["error"] for item in body["items"])
+        # 이름이 있어야 어느 시험인지 안다.
+        assert all(item["record_name"] != "?" for item in body["items"])
+
+    def test_상한을_서버가_강제한다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        response = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": [run_id] * 101, "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
+        assert "나눠서" in response.json()["error"]["message"]
+
+    def test_한_건_저장과_배치가_같은_값을_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], three_runs: list[str]
+    ) -> None:
+        """경로가 갈리면 "화면에서는 되는데 배치에서는 다른 값" 이 가능해진다."""
+        single = client.post(
+            "/api/processing/results",
+            json={"test_run_id": three_runs[0], "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+        batch = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": [three_runs[1]], "steps": STEPS, "adopt": False},
+            headers=admin_headers,
+        ).json()
+
+        one = {s["key"]: s["value"] for s in single["scalars"]}
+        many = {s["key"]: s["value"] for s in batch["items"][0]["scalars"]}
+        assert one == many

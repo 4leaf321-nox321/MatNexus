@@ -21,7 +21,16 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronUp, FlaskConical, Play, Plus, Save, Trash2 } from 'lucide-react'
+import {
+  BookMarked,
+  ChevronDown,
+  ChevronUp,
+  FlaskConical,
+  Play,
+  Plus,
+  Save,
+  Trash2,
+} from 'lucide-react'
 
 import { CurveChart } from '@/modules/tests/CurveChart'
 import {
@@ -36,6 +45,14 @@ import type {
   StepParam,
 } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -55,6 +72,8 @@ interface Props {
   curveKey: string | null
   /** 원본 곡선의 채널 키. 기준 열을 고를 때 쓴다. */
   sourceColumns: string[]
+  /** 관리자인 부서. 비어 있으면 '레시피로 저장' 을 감춘다 — 서버가 거절한다. */
+  managedWorkspaces?: { slug: string; name: string }[]
 }
 
 /**
@@ -107,18 +126,26 @@ function formatScalar(value: number, unit: string): string {
   return `${Number(value.toPrecision(5))} ${unit}`
 }
 
-export function ProcessingPanel({ testRunId, testTypeKey, curveKey, sourceColumns }: Props) {
+export function ProcessingPanel({
+  testRunId,
+  testTypeKey,
+  curveKey,
+  sourceColumns,
+  managedWorkspaces = [],
+}: Props) {
   const catalog = useResource(() => processingApi.steps(testTypeKey), [testTypeKey])
   const [steps, setSteps] = useState<RecipeStep[]>([])
   const [result, setResult] = useState<ProcessingPreview | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [axes, setAxes] = useState<{ x: string; y: string }>({
     x: 'strain_engineering',
     y: 'stress_engineering',
   })
   const [open, setOpen] = useState<number | null>(null)
+  const [savingRecipe, setSavingRecipe] = useState(false)
 
   const available = catalog.data ?? []
   const byId = useMemo(
@@ -151,6 +178,7 @@ export function ProcessingPanel({ testRunId, testTypeKey, curveKey, sourceColumn
     setBusy(true)
     setError(null)
     setSaved(null)
+    setNotice(null)
     try {
       const preview = await processingApi.preview(
         { test_run_id: testRunId, source_curve_key: curveKey, steps },
@@ -223,6 +251,21 @@ export function ProcessingPanel({ testRunId, testTypeKey, curveKey, sourceColumn
             <Save className="size-3.5" />
             결과 저장
           </Button>
+          {/* **레시피가 없으면 배치를 걸 수 없다.** 한 건으로 단계를 맞춘 뒤
+              나머지 20건에 같은 것을 거는 것이 실제 작업 흐름인데, 그 '같은 것'
+              에 이름을 붙일 자리가 여기 말고 없었다 — 레시피 테이블은 있는데
+              화면에서 만들 길이 없었다. */}
+          {managedWorkspaces.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSavingRecipe(true)}
+              disabled={busy || !steps.length}
+            >
+              <BookMarked className="size-3.5" />
+              레시피로 저장
+            </Button>
+          )}
         </div>
       </div>
 
@@ -242,10 +285,28 @@ export function ProcessingPanel({ testRunId, testTypeKey, curveKey, sourceColumn
         </div>
       )}
 
-      {saved && (
+      {savingRecipe && (
+        <SaveRecipeDialog
+          steps={steps}
+          testTypeKey={testTypeKey}
+          workspaces={managedWorkspaces}
+          onClose={() => setSavingRecipe(false)}
+          onSaved={(label) => {
+            setSavingRecipe(false)
+            setNotice(`레시피 '${label}' 로 저장했습니다 — 시험 목록에서 여러 건에 걸 수 있습니다.`)
+          }}
+        />
+      )}
+
+      {(saved || notice) && (
         <div className="mb-3 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
-          결과를 저장했습니다. <b>저장된 결과는 바뀌지 않습니다</b> — 단계를 고쳐 다시
-          저장하면 새 결과가 생기고, 예전 결과는 그때의 단계를 그대로 갖고 있습니다.
+          {notice ?? (
+            <>
+              결과를 저장했습니다. <b>저장된 결과는 바뀌지 않습니다</b> — 단계를 고쳐
+              다시 저장하면 새 결과가 생기고, 예전 결과는 그때의 단계를 그대로 갖고
+              있습니다. <b>결과</b> 탭에서 채택하면 이 시험의 물성이 됩니다.
+            </>
+          )}
         </div>
       )}
 
@@ -598,5 +659,120 @@ function ParamField({
         {param.help && <p className="text-muted-foreground text-xs">{param.help}</p>}
       </div>
     </div>
+  )
+}
+
+/**
+ * 지금 단계를 레시피로 저장한다.
+ *
+ * **레시피 없이는 배치를 걸 수 없다.** 한 건으로 단계를 맞춘 뒤 나머지 20건에
+ * 같은 것을 거는 것이 실제 작업 흐름인데, 그 '같은 것' 에 이름을 붙이는 자리가
+ * 여기 말고 없었다 — 레시피 테이블은 진작 있었는데 화면에서 만들 길이 없었다.
+ */
+function SaveRecipeDialog({
+  steps,
+  testTypeKey,
+  workspaces,
+  onClose,
+  onSaved,
+}: {
+  steps: RecipeStep[]
+  testTypeKey: string
+  workspaces: { slug: string; name: string }[]
+  onClose: () => void
+  onSaved: (label: string) => void
+}) {
+  const [key, setKey] = useState('')
+  const [label, setLabel] = useState('')
+  const [owner, setOwner] = useState(workspaces[0]?.slug ?? '')
+  const [error, setError] = useState<Error | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    setBusy(true)
+    setError(null)
+    try {
+      await processingApi.createRecipe({
+        key,
+        label,
+        description: null,
+        test_type_key: testTypeKey,
+        steps: steps as unknown as Record<string, never>[],
+        is_active: true,
+        owner_workspace_slug: owner || null,
+      })
+      onSaved(label)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>레시피로 저장</DialogTitle>
+          <DialogDescription>
+            지금 {steps.length}단계를 이름 붙여 저장합니다. 저장하면 시험 목록에서 여러
+            건을 골라 한 번에 걸 수 있습니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <ErrorNotice error={error} />
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="recipe-key">키</Label>
+            <Input
+              id="recipe-key"
+              value={key}
+              placeholder="tensile_standard"
+              onChange={(event) =>
+                setKey(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))
+              }
+            />
+            <p className="text-muted-foreground text-xs">
+              소문자·숫자·밑줄. <b>부서 안에서만 유일하면 됩니다</b> — 같은 인장이라도
+              부서마다 따르는 규격이 다르므로, 다른 부서가 같은 이름을 써도 됩니다.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="recipe-label">이름</Label>
+            <Input
+              id="recipe-label"
+              value={label}
+              placeholder="인장 표준 (사내규격)"
+              onChange={(event) => setLabel(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="recipe-owner">누구 것</Label>
+            <Select value={owner} onValueChange={setOwner}>
+              <SelectTrigger id="recipe-owner">
+                <SelectValue placeholder="부서를 고르세요" />
+              </SelectTrigger>
+              <SelectContent>
+                {workspaces.map((workspace) => (
+                  <SelectItem key={workspace.slug} value={workspace.slug}>
+                    {workspace.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button onClick={save} disabled={busy || !key || !label || !owner}>
+            저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

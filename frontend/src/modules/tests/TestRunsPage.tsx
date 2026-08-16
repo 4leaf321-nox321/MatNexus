@@ -15,9 +15,18 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, FileUp, FlaskConical, Plus, RefreshCw, Star } from 'lucide-react'
+import {
+  AlertTriangle,
+  FileUp,
+  FlaskConical,
+  Layers,
+  Plus,
+  RefreshCw,
+  Star,
+} from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
+import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -52,6 +61,15 @@ export default function TestRunsPage() {
   )
   const rows = runs.data?.items ?? []
   const pending = rows.some((run) => isPending(run.status))
+
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [batching, setBatching] = useState(false)
+  /** 읽히지 않은 시험은 처리할 곡선이 없다. 고를 수 있게 두면 전부 실패한다. */
+  const processable = rows.filter((run) => run.status === 'parsed')
+  /** 한 배치는 **한 종류**여야 한다 — 인장 레시피가 DMA 곡선에 걸리면 실패한다. */
+  const pickedTypes = new Set(
+    rows.filter((run) => picked.has(run.id)).map((run) => run.test_type_key)
+  )
 
   useEffect(() => {
     if (!pending) return
@@ -88,6 +106,50 @@ export default function TestRunsPage() {
 
       <ErrorNotice error={runs.error} className="mb-4" />
 
+      {/* **고른 게 있을 때만 나타난다.** 늘 떠 있으면 목록의 기본 상태가
+          "무언가 골라야 하는 화면" 으로 읽힌다. */}
+      {picked.size > 0 && (
+        <div className="bg-muted/40 mb-4 flex flex-wrap items-center gap-3 rounded-md border p-3">
+          <span className="text-sm">
+            <b>{picked.size}건</b> 선택
+          </span>
+          {pickedTypes.size > 1 && (
+            <span className="text-xs text-amber-700 dark:text-amber-500">
+              시험 종류가 {pickedTypes.size}가지 섞여 있습니다 — 레시피는 한 종류에 맞춰
+              만들어집니다. 종류별로 나눠 거세요.
+            </span>
+          )}
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+              선택 해제
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setBatching(true)}
+              disabled={pickedTypes.size !== 1}
+            >
+              <Layers className="size-4" />
+              레시피 적용
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {batching && (
+        <BatchDialog
+          testRunIds={[...picked]}
+          testTypeKey={[...pickedTypes][0] ?? null}
+          onClose={() => {
+            setBatching(false)
+            setPicked(new Set())
+          }}
+          // **선택은 닫을 때 푼다.** 돌자마자 풀었더니 다이얼로그가 자기가 방금
+          // 무엇을 돌렸는지 잊고 "0건에 레시피 적용" 을 띄웠다 — 결과를 보고
+          // 있는 동안 제목이 거짓말을 한다.
+          onDone={() => runs.reload()}
+        />
+      )}
+
       {pending && (
         <p className="text-muted-foreground mb-3 text-sm">
           읽는 중인 시험이 있어 {POLL_MS / 1000}초마다 상태를 확인합니다.
@@ -112,6 +174,24 @@ export default function TestRunsPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              {/* **20건을 하나씩 여는 것은 일이 아니다.** 골라서 한 번에 건다. */}
+              <TableHead className="w-8">
+                <input
+                  type="checkbox"
+                  aria-label="전부 선택"
+                  checked={picked.size > 0 && picked.size === processable.length}
+                  ref={(node) => {
+                    if (node) {
+                      node.indeterminate = picked.size > 0 && picked.size < processable.length
+                    }
+                  }}
+                  onChange={(event) =>
+                    setPicked(
+                      event.target.checked ? new Set(processable.map((r) => r.id)) : new Set()
+                    )
+                  }
+                />
+              </TableHead>
               <TableHead>이름</TableHead>
               <TableHead>재료</TableHead>
               <TableHead>방향</TableHead>
@@ -125,6 +205,22 @@ export default function TestRunsPage() {
           <TableBody>
             {rows.map((run) => (
               <TableRow key={run.id}>
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    aria-label={`${run.record_name} 선택`}
+                    disabled={run.status !== 'parsed'}
+                    checked={picked.has(run.id)}
+                    onChange={(event) =>
+                      setPicked((current) => {
+                        const next = new Set(current)
+                        if (event.target.checked) next.add(run.id)
+                        else next.delete(run.id)
+                        return next
+                      })
+                    }
+                  />
+                </TableCell>
                 <TableCell className="font-mono text-xs">
                   <Link to={`/test-runs/${run.id}`} className="hover:text-primary hover:underline">
                     {run.record_name}

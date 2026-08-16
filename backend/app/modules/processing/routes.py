@@ -26,6 +26,9 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.processing.schemas import (
+    BatchItemOut,
+    BatchOut,
+    BatchRequest,
     ProcessingPreviewOut,
     ProcessingResultOut,
     ProcessingRunRequest,
@@ -123,6 +126,83 @@ def _run_pipeline(
     return result, curve
 
 
+def _recipe_or_none(db: Session, user: User, key: str | None) -> ProcessingRecipe | None:
+    if not key:
+        return None
+    recipe = db.scalar(_visible_recipes(db, user).where(ProcessingRecipe.key == key))
+    if recipe is None:
+        raise NotFound("MNX-PROCESSING-0005", f"레시피를 찾을 수 없습니다: {key}")
+    return recipe
+
+
+def _store(
+    db: Session,
+    run: TestRun,
+    curve_key: str | None,
+    steps: list[dict[str, Any]],
+    recipe: ProcessingRecipe | None,
+    user: User,
+) -> ProcessingResult:
+    """돌리고 저장한다. **한 건 저장과 배치가 같은 경로를 쓴다.**
+
+    나누면 "화면에서는 되는데 배치에서는 다른 값이 나온다" 가 가능해지고, 그
+    어긋남은 숫자로만 드러나서 아무도 못 본다.
+
+    `db.commit()` 은 호출부가 한다 — 배치는 **건별로** 커밋해야 부분 성공이
+    지켜진다.
+    """
+    result, curve = _run_pipeline(db, run, curve_key, steps)
+    frame = result.frame
+    data = curves.to_parquet(
+        [
+            Channel(
+                key=name,
+                label=name,
+                si_unit=frame.units.get(name, "1"),
+                values=tuple(
+                    None if np.isnan(value) else float(value) for value in frame.columns[name]
+                ),
+            )
+            for name in sorted(frame.columns)
+        ]
+    )
+    # **결과마다 새 파일이다.** 불변이므로 덮어쓸 일이 없고, 덮어쓰기가 없으면
+    # "예전 결과를 열었더니 값이 달라졌다" 가 구조적으로 불가능하다.
+    stored = filestore.write_bytes(
+        data, relative_dir=f"processing/{run.id}", filename=f"{uuid.uuid4().hex}.parquet"
+    )
+    item = ProcessingResult(
+        test_run_id=run.id,
+        source_curve_key=curve.key,
+        recipe_id=recipe.id if recipe else None,
+        recipe_label=recipe.label if recipe else None,
+        steps_snapshot=steps,
+        stages=[
+            {
+                "plugin": stage.plugin,
+                "label": stage.label,
+                "version": stage.version,
+                "options": _jsonable(stage.options),
+                "notes": list(stage.notes),
+            }
+            for stage in result.stages
+        ],
+        scalars=[
+            {"key": s.key, "label": s.label, "value": s.value, "si_unit": s.si_unit}
+            for s in result.scalars
+        ],
+        storage_path=stored.relative_path,
+        row_count=frame.length(),
+        sha256=stored.sha256,
+        byte_size=stored.size,
+        columns=sorted(frame.columns),
+        created_by_id=user.id,
+    )
+    db.add(item)
+    db.flush()
+    return item
+
+
 def _stage_out(stage: processing.Stage) -> ProcessingStageOut:
     return ProcessingStageOut(
         index=stage.index,
@@ -196,66 +276,14 @@ def create_result(
     들어가 있다.
     """
     run = get_run(db, user, payload.test_run_id)
-    result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
-
-    recipe = None
-    if payload.recipe_key:
-        recipe = db.scalar(
-            _visible_recipes(db, user).where(ProcessingRecipe.key == payload.recipe_key)
-        )
-        if recipe is None:
-            raise NotFound(
-                "MNX-PROCESSING-0005", f"레시피를 찾을 수 없습니다: {payload.recipe_key}"
-            )
-
-    frame = result.frame
-    data = curves.to_parquet(
-        [
-            Channel(
-                key=name,
-                label=name,
-                si_unit=frame.units.get(name, "1"),
-                values=tuple(
-                    None if np.isnan(value) else float(value) for value in frame.columns[name]
-                ),
-            )
-            for name in sorted(frame.columns)
-        ]
+    item = _store(
+        db,
+        run,
+        payload.source_curve_key,
+        payload.steps,
+        _recipe_or_none(db, user, payload.recipe_key),
+        user,
     )
-    # **결과마다 새 파일이다.** 불변이므로 덮어쓸 일이 없고, 덮어쓰기가 없으면
-    # "예전 결과를 열었더니 값이 달라졌다" 가 구조적으로 불가능하다.
-    stored = filestore.write_bytes(
-        data, relative_dir=f"processing/{run.id}", filename=f"{uuid.uuid4().hex}.parquet"
-    )
-
-    item = ProcessingResult(
-        test_run_id=run.id,
-        source_curve_key=curve.key,
-        recipe_id=recipe.id if recipe else None,
-        recipe_label=recipe.label if recipe else None,
-        steps_snapshot=payload.steps,
-        stages=[
-            {
-                "plugin": stage.plugin,
-                "label": stage.label,
-                "version": stage.version,
-                "options": _jsonable(stage.options),
-                "notes": list(stage.notes),
-            }
-            for stage in result.stages
-        ],
-        scalars=[
-            {"key": s.key, "label": s.label, "value": s.value, "si_unit": s.si_unit}
-            for s in result.scalars
-        ],
-        storage_path=stored.relative_path,
-        row_count=frame.length(),
-        sha256=stored.sha256,
-        byte_size=stored.size,
-        columns=sorted(frame.columns),
-        created_by_id=user.id,
-    )
-    db.add(item)
     db.commit()
     db.refresh(item)
     return _result_out(item)
@@ -568,3 +596,114 @@ def unadopt(
     _project_summaries(db, run, None)
     db.commit()
     return Response(status_code=204)
+
+
+# --- 배치 --------------------------------------------------------------------
+#
+# **시편 20개를 하나씩 처리하는 것은 일이 아니다.** 한 건으로 단계를 맞춘 뒤
+# 나머지에 같은 것을 거는 것이 실제 작업 흐름이고, 그것이 안 되면 실데이터를
+# 넣어 볼 수가 없다.
+
+#: 한 번에 처리할 수 있는 시험 수. 서버가 상한을 강제한다(CLAUDE.md).
+#:
+#: **동기로 둔다. 실측이 그렇게 하라고 했다.**
+#:
+#:     34건 배치 (실서버, HTTP)        1,026ms  → 건당 30ms
+#:     matcore 계산만  30,000행            4ms
+#:                    100,000행           10ms
+#:
+#: 건당 30ms 는 **거의 전부 Parquet 읽기·쓰기와 DB** 다. 행 수는 사실상 공짜다.
+#: 그래서 30건에 각 30,000행이라도 1초 안쪽이고, 워커로 옮길 이유가 지금은 없다.
+#:
+#: 처음에는 행 수로 외삽해 "25분" 이라는 숫자를 냈는데 **틀렸다.** 고정비가
+#: 지배하는 것을 재 보지 않고 비례한다고 가정했기 때문이다. 재고 나서 판단이
+#: 뒤집혔다.
+#:
+#: 계획서의 'DB 큐 워커로 장시간 처리 이관' 은 남아 있다 — 이 상한을 넘겨야 할
+#: 만큼 커지거나, 처리 단계 자체가 무거워지면(적합·최적화) 그때 옮긴다.
+MAX_BATCH = 100
+
+
+@router.post("/batch", response_model=BatchOut)
+def run_batch(
+    payload: BatchRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BatchOut:
+    """여러 시험에 같은 단계를 건다.
+
+    **부분 실패는 실패가 아니다.** 20건 중 하나가 시편 치수 때문에 막혔다고
+    전체를 되돌리면 19건을 다시 해야 하고, 조용히 건너뛰면 사람은 다 된 줄 안다.
+    그래서 건별 결과를 그대로 돌려주고, 성공한 것은 그 자리에서 커밋한다.
+
+    실패 이유는 건마다 다르다 — 시편 치수가 없는 것, 탄성 구간에 점이 없는 것,
+    채널 이름이 다른 것이 한 배치에 섞여 온다. 하나로 뭉뚱그리면 무엇을 고쳐야
+    하는지 알 수 없다.
+    """
+    if len(payload.test_run_ids) > MAX_BATCH:
+        raise AppError(
+            "MNX-PROCESSING-0012",
+            f"한 번에 {MAX_BATCH}건까지입니다 ({len(payload.test_run_ids)}건 요청). "
+            f"나눠서 돌리세요.",
+            status=422,
+        )
+    recipe = _recipe_or_none(db, user, payload.recipe_key)
+
+    items: list[BatchItemOut] = []
+    for run_id in payload.test_run_ids:
+        # 못 보는 시험도 **건별 실패**로 남긴다. 여기서 404 를 던지면 앞의 성공까지
+        # 없던 일이 되고, 사람은 무엇이 문제인지 모른 채 처음부터 다시 한다.
+        try:
+            run = get_run(db, user, run_id)
+        except AppError as exc:
+            items.append(
+                BatchItemOut(
+                    test_run_id=run_id, record_name="?", status="failed", error=exc.message
+                )
+            )
+            continue
+
+        try:
+            stored = _store(db, run, payload.source_curve_key, payload.steps, recipe, user)
+        except AppError as exc:
+            db.rollback()
+            items.append(
+                BatchItemOut(
+                    test_run_id=run_id,
+                    record_name=run.record_name,
+                    status="failed",
+                    error=exc.message,
+                )
+            )
+            continue
+
+        adopted = False
+        if payload.adopt:
+            run.adopted_result_id = stored.id
+            _project_summaries(db, run, stored)
+            adopted = True
+        db.commit()
+        db.refresh(stored)
+        items.append(
+            BatchItemOut(
+                test_run_id=run.id,
+                record_name=run.record_name,
+                status="ok",
+                result_id=stored.id,
+                adopted=adopted,
+                scalars=[
+                    ProcessingScalarOut(
+                        key=str(s.get("key", "")),
+                        label=str(s.get("label", "")),
+                        value=float(s.get("value", 0.0)),
+                        si_unit=str(s.get("si_unit") or "1"),
+                    )
+                    for s in stored.scalars
+                ],
+            )
+        )
+
+    succeeded = sum(1 for item in items if item.status == "ok")
+    return BatchOut(
+        requested=len(items), succeeded=succeeded, failed=len(items) - succeeded, items=items
+    )

@@ -10,25 +10,26 @@
  * 업로드는 서버 파일시스템을 직접 뒤지는 수밖에 없다.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, RefreshCw, Trash2 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, Download, RefreshCw, Trash2 } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 
-import { ProcessingPanel } from "@/modules/processing/ProcessingPanel";
-import { ResultsPanel } from "@/modules/processing/ResultsPanel";
-import { CurveChart } from "@/modules/tests/CurveChart";
-import { RUN_STATUS_LABEL, isPending, testsApi } from "@/modules/tests/api";
+import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
+import { ResultsPanel } from '@/modules/processing/ResultsPanel'
+import { CurveChart } from '@/modules/tests/CurveChart'
+import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import {
   axisOptionsFor,
   groupCurveFamilies,
   memberLabel,
   resolveAxes,
-} from "@/modules/tests/curves";
-import { axisLabel, formatValue, toDisplay } from "@/modules/tests/units";
-import { ErrorNotice } from "@/shared/components/ErrorNotice";
-import { PageHeader } from "@/shared/components/PageHeader";
-import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
+} from '@/modules/tests/curves'
+import { axisLabel, formatValue, toDisplay } from '@/modules/tests/units'
+import { useAuth } from '@/shared/auth/AuthContext'
+import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { PageHeader } from '@/shared/components/PageHeader'
+import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 import {
   Table,
   TableBody,
@@ -36,44 +37,45 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/shared/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
-import { useResource } from "@/shared/hooks/useResource";
+} from '@/shared/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
+import { useResource } from '@/shared/hooks/useResource'
 
 const SOURCE_LABEL: Record<string, string> = {
-  instrument: "장비",
-  matnexus: "MatNexus",
-};
+  instrument: '장비',
+  matnexus: 'MatNexus',
+}
 
 export default function TestRunDetailPage() {
-  const { id = "" } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const run = useResource(() => testsApi.run(id), [id]);
-  const types = useResource(() => testsApi.types(), []);
-  const [axes, setAxes] = useState<{ x: string; y: string } | null>(null);
-  const [action, setAction] = useState<Error | null>(null);
+  const { id = '' } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const run = useResource(() => testsApi.run(id), [id])
+  const types = useResource(() => testsApi.types(), [])
+  const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
+  const [action, setAction] = useState<Error | null>(null)
 
-  const item = run.data;
-  const pending = item ? isPending(item.status) : false;
+  const { user } = useAuth()
+  /** 관리자인 부서만. 아닌 부서 것으로 레시피를 만들면 서버가 거절한다. */
+  const managed = (user?.memberships ?? [])
+    .filter((membership) => membership.role === 'manager')
+    .map((membership) => ({ slug: membership.slug, name: membership.name }))
+
+  const item = run.data
+  const pending = item ? isPending(item.status) : false
 
   // 읽는 중이면 스스로 따라간다 — 올린 직후 이 화면으로 오는 경우가 흔하다.
   useEffect(() => {
-    if (!pending) return;
-    const timer = setInterval(() => run.reload(), 3000);
-    return () => clearInterval(timer);
-  }, [pending, run]);
+    if (!pending) return
+    const timer = setInterval(() => run.reload(), 3000)
+    return () => clearInterval(timer)
+  }, [pending, run])
 
   const definition = useMemo(
     () => (types.data ?? []).find((t) => t.key === item?.test_type_key),
     [types.data, item?.test_type_key],
-  );
+  )
   // `?? []` 를 그대로 두면 매 렌더마다 새 배열이라 아래 useEffect 가 계속 돈다.
-  const channels = useMemo(() => definition?.channels ?? [], [definition]);
+  const channels = useMemo(() => definition?.channels ?? [], [definition])
 
   /**
    * 어느 곡선을 볼 것인가. **한 시험이 곡선을 여럿 가진다.**
@@ -82,37 +84,34 @@ export default function TestRunDetailPage() {
    * 고를 수 없던 때는 저장은 다 돼 있는데 **화면에서 하나도 안 보였다** — 목록·
    * 상세·차트가 전부 `raw` 키만 찾았고, 표가 여럿인 파일에는 그 키가 없다.
    */
-  const curves = useMemo(() => item?.curves ?? [], [item]);
+  const curves = useMemo(() => item?.curves ?? [], [item])
 
   // 묶고 고르는 규칙은 `curves.ts` 에 있다 — 화면 안에 있으면 시험할 수 없고,
   // 시험할 수 없으면 같은 결함이 반복된다(실제로 두 번 났다).
-  const families = useMemo(() => groupCurveFamilies(curves), [curves]);
+  const families = useMemo(() => groupCurveFamilies(curves), [curves])
 
-  const [familyName, setFamilyName] = useState<string | null>(null);
-  const activeFamily =
-    families.find((f) => f.name === familyName) ?? families[0] ?? null;
+  const [familyName, setFamilyName] = useState<string | null>(null)
+  const activeFamily = families.find((f) => f.name === familyName) ?? families[0] ?? null
 
-  const [curveKey, setCurveKey] = useState<string | null>(null);
+  const [curveKey, setCurveKey] = useState<string | null>(null)
   const activeCurve =
-    activeFamily?.items.find((c) => c.key === curveKey) ??
-    activeFamily?.items[0] ??
-    null;
+    activeFamily?.items.find((c) => c.key === curveKey) ?? activeFamily?.items[0] ?? null
 
   const axisOptions = useMemo(
     () => axisOptionsFor(activeCurve, channels),
     [activeCurve, channels],
-  );
+  )
 
   // 곡선을 바꾸면 축이 그 곡선에 없을 수 있다. **바꿀 때마다 확인한다** —
   // 안 하면 "이 시험에 없는 채널입니다: step_time" 이 뜬다(실제로 떴다).
   useEffect(() => {
-    const next = resolveAxes(axes, axisOptions);
-    if (next !== axes) setAxes(next);
-  }, [axes, axisOptions]);
+    const next = resolveAxes(axes, axisOptions)
+    if (next !== axes) setAxes(next)
+  }, [axes, axisOptions])
 
   const curve = useResource(
     () =>
-      item?.status === "parsed" && axes
+      item?.status === 'parsed' && axes
         ? testsApi.curve(id, {
             x: axes.x,
             y: axes.y,
@@ -121,10 +120,10 @@ export default function TestRunDetailPage() {
           })
         : Promise.resolve(null),
     [id, item?.status, axes?.x, axes?.y, activeCurve?.key],
-  );
+  )
 
-  const xChannel = axisOptions.find((c) => c.key === axes?.x);
-  const yChannel = axisOptions.find((c) => c.key === axes?.y);
+  const xChannel = axisOptions.find((c) => c.key === axes?.x)
+  const yChannel = axisOptions.find((c) => c.key === axes?.y)
   const points = useMemo<[number, number][]>(
     () =>
       (curve.data?.points ?? []).map(([x, y]) => [
@@ -140,63 +139,48 @@ export default function TestRunDetailPage() {
       yChannel?.si_unit,
       yChannel?.dimension,
     ],
-  );
+  )
 
   async function download() {
-    setAction(null);
+    setAction(null)
     try {
-      await testsApi.downloadSource(id, item?.source_filename ?? "source.dat");
+      await testsApi.downloadSource(id, item?.source_filename ?? 'source.dat')
     } catch (caught) {
       // 링크였을 때는 이 오류가 새 탭에서 나 화면에 안 보였다.
-      setAction(
-        caught instanceof Error ? caught : new Error("원본을 받지 못했습니다."),
-      );
+      setAction(caught instanceof Error ? caught : new Error('원본을 받지 못했습니다.'))
     }
   }
 
   async function reparse() {
-    setAction(null);
+    setAction(null)
     try {
-      await testsApi.reparse(id);
-      run.reload();
+      await testsApi.reparse(id)
+      run.reload()
     } catch (caught) {
-      setAction(
-        caught instanceof Error
-          ? caught
-          : new Error("다시 읽기에 실패했습니다."),
-      );
+      setAction(caught instanceof Error ? caught : new Error('다시 읽기에 실패했습니다.'))
     }
   }
 
   async function remove() {
-    setAction(null);
+    setAction(null)
     try {
-      await testsApi.remove(id);
-      navigate("/materials");
+      await testsApi.remove(id)
+      navigate('/materials')
     } catch (caught) {
-      setAction(
-        caught instanceof Error ? caught : new Error("삭제에 실패했습니다."),
-      );
+      setAction(caught instanceof Error ? caught : new Error('삭제에 실패했습니다.'))
     }
   }
 
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        title={item?.record_name ?? "시험"}
+        title={item?.record_name ?? '시험'}
         description={
-          item
-            ? `${item.test_type_label} · ${item.material_name ?? ""}`
-            : undefined
+          item ? `${item.test_type_label} · ${item.material_name ?? ''}` : undefined
         }
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={download}
-              disabled={!item}
-            >
+            <Button variant="outline" size="sm" onClick={download} disabled={!item}>
               <Download className="size-4" />
               원본
             </Button>
@@ -215,9 +199,7 @@ export default function TestRunDetailPage() {
 
       {item && (
         <div className="mb-6 flex flex-wrap items-center gap-2">
-          <Badge
-            variant={item.status === "failed" ? "destructive" : "secondary"}
-          >
+          <Badge variant={item.status === 'failed' ? 'destructive' : 'secondary'}>
             {RUN_STATUS_LABEL[item.status] ?? item.status}
           </Badge>
           {item.specimen_name && (
@@ -227,13 +209,12 @@ export default function TestRunDetailPage() {
           )}
           {item.source_filename && (
             <span className="text-muted-foreground text-xs">
-              {item.source_filename} ·{" "}
-              {((item.source_bytes ?? 0) / 1024).toFixed(1)}KB
+              {item.source_filename} · {((item.source_bytes ?? 0) / 1024).toFixed(1)}KB
             </span>
           )}
           {item.row_count != null && (
             <span className="text-muted-foreground text-xs">
-              {item.row_count.toLocaleString("ko-KR")}행
+              {item.row_count.toLocaleString('ko-KR')}행
             </span>
           )}
         </div>
@@ -244,8 +225,8 @@ export default function TestRunDetailPage() {
           <p className="font-medium">읽지 못했습니다</p>
           <p className="mt-1">{item.parse_error}</p>
           <p className="mt-2 text-xs opacity-80">
-            원본을 내려받아 형식을 확인하세요. 파서를 고친 뒤 '다시 읽기' 를
-            누르면 같은 원본으로 다시 시도합니다.
+            원본을 내려받아 형식을 확인하세요. 파서를 고친 뒤 '다시 읽기' 를 누르면 같은
+            원본으로 다시 시도합니다.
           </p>
         </div>
       )}
@@ -280,10 +261,10 @@ export default function TestRunDetailPage() {
         <Tabs defaultValue="source">
           <TabsList>
             <TabsTrigger value="source">원본</TabsTrigger>
-            <TabsTrigger value="process" disabled={item.status !== "parsed"}>
+            <TabsTrigger value="process" disabled={item.status !== 'parsed'}>
               처리
             </TabsTrigger>
-            <TabsTrigger value="results" disabled={item.status !== "parsed"}>
+            <TabsTrigger value="results" disabled={item.status !== 'parsed'}>
               결과
               {item.result_count > 0 && (
                 <Badge variant="secondary" className="ml-1.5 text-xs">
@@ -294,7 +275,7 @@ export default function TestRunDetailPage() {
           </TabsList>
 
           <TabsContent value="source">
-            {item?.status === "parsed" && (
+            {item?.status === 'parsed' && (
               <section className="mb-8">
                 <h2 className="mb-2 font-medium">곡선</h2>
 
@@ -303,30 +284,23 @@ export default function TestRunDetailPage() {
                 <div className="mb-3 space-y-1">
                   {families.length > 1 && (
                     <div className="flex flex-wrap items-center gap-1 text-xs">
-                      <span className="text-muted-foreground w-12 shrink-0">
-                        종류
-                      </span>
+                      <span className="text-muted-foreground w-12 shrink-0">종류</span>
                       {families.map((family) => (
                         <Button
                           key={family.name}
                           size="sm"
-                          variant={
-                            activeFamily?.name === family.name
-                              ? "default"
-                              : "outline"
-                          }
+                          variant={activeFamily?.name === family.name ? 'default' : 'outline'}
                           onClick={() => {
-                            setFamilyName(family.name);
+                            setFamilyName(family.name)
                             // 종류를 바꾸면 벌 선택은 처음으로. 안 그러면 다른 종류의
                             // 키가 남아 첫 벌로 조용히 되돌아간 것처럼 보인다.
-                            setCurveKey(null);
+                            setCurveKey(null)
                           }}
                         >
                           {family.name}
                           <span className="ml-1 opacity-70">
-                            {family.kind === "derived" ? "처리결과" : "측정"}
-                            {family.items.length > 1 &&
-                              ` ${family.items.length}벌`}
+                            {family.kind === 'derived' ? '처리결과' : '측정'}
+                            {family.items.length > 1 && ` ${family.items.length}벌`}
                           </span>
                         </Button>
                       ))}
@@ -336,20 +310,14 @@ export default function TestRunDetailPage() {
                   {/* 그 종류가 여러 벌일 때만. 한 벌뿐이면 고를 것이 없다. */}
                   {(activeFamily?.items.length ?? 0) > 1 && (
                     <div className="flex flex-wrap items-center gap-1 text-xs">
-                      <span className="text-muted-foreground w-12 shrink-0">
-                        구간
-                      </span>
+                      <span className="text-muted-foreground w-12 shrink-0">구간</span>
                       {activeFamily?.items.map((curveItem) => (
                         <Button
                           key={curveItem.key}
                           size="sm"
-                          variant={
-                            activeCurve?.key === curveItem.key
-                              ? "default"
-                              : "outline"
-                          }
+                          variant={activeCurve?.key === curveItem.key ? 'default' : 'outline'}
                           onClick={() => setCurveKey(curveItem.key)}
-                          title={`${curveItem.row_count}행 · ${curveItem.channels.join(", ")}`}
+                          title={`${curveItem.row_count}행 · ${curveItem.channels.join(', ')}`}
                         >
                           {/* 종류 이름을 뗀 나머지 — `- 3` 처럼 구간만 보인다. */}
                           {memberLabel(curveItem, activeFamily.name)}
@@ -361,31 +329,22 @@ export default function TestRunDetailPage() {
                   {/* **X 도 고를 수 있어야 한다.** 처리결과 곡선은 열이 12개다 —
                       주파수-저장탄성률로 볼지, 온도-이동인자로 볼지는 그때그때 다르다.
                       X 가 첫 채널로 고정돼 있던 때는 볼 수 없는 조합이 대부분이었다. */}
-                  {(["x", "y"] as const).map((axis) => (
-                    <div
-                      key={axis}
-                      className="flex flex-wrap items-center gap-1 text-xs"
-                    >
+                  {(['x', 'y'] as const).map((axis) => (
+                    <div key={axis} className="flex flex-wrap items-center gap-1 text-xs">
                       <span className="text-muted-foreground w-12 shrink-0">
-                        {axis === "x" ? "X축" : "Y축"}
+                        {axis === 'x' ? 'X축' : 'Y축'}
                       </span>
                       {axisOptions.map((channel) => (
                         <Button
                           key={channel.key}
                           size="sm"
-                          variant={
-                            axes?.[axis] === channel.key ? "default" : "outline"
-                          }
+                          variant={axes?.[axis] === channel.key ? 'default' : 'outline'}
                           onClick={() =>
                             setAxes((current) =>
-                              current
-                                ? { ...current, [axis]: channel.key }
-                                : current,
+                              current ? { ...current, [axis]: channel.key } : current,
                             )
                           }
-                          disabled={
-                            axes?.[axis === "x" ? "y" : "x"] === channel.key
-                          }
+                          disabled={axes?.[axis === 'x' ? 'y' : 'x'] === channel.key}
                         >
                           {channel.label}
                         </Button>
@@ -399,21 +358,20 @@ export default function TestRunDetailPage() {
                 <CurveChart
                   points={points}
                   xLabel={axisLabel(
-                    xChannel?.label ?? "",
+                    xChannel?.label ?? '',
                     xChannel?.si_unit,
                     xChannel?.dimension,
                   )}
                   yLabel={axisLabel(
-                    yChannel?.label ?? "",
+                    yChannel?.label ?? '',
                     yChannel?.si_unit,
                     yChannel?.dimension,
                   )}
                 />
                 {curve.data && (
                   <p className="text-muted-foreground mt-2 text-xs">
-                    원본 {curve.data.row_count.toLocaleString("ko-KR")}행 중{" "}
-                    {curve.data.returned}점을 표시합니다 — 모양을 지키면서
-                    줄였습니다(LTTB).
+                    원본 {curve.data.row_count.toLocaleString('ko-KR')}행 중{' '}
+                    {curve.data.returned}점을 표시합니다 — 모양을 지키면서 줄였습니다(LTTB).
                   </p>
                 )}
               </section>
@@ -435,9 +393,7 @@ export default function TestRunDetailPage() {
                         <TableCell>
                           <span className="font-mono text-xs">{row.key}</span>
                           {row.label && (
-                            <p className="text-muted-foreground text-xs">
-                              {row.label}
-                            </p>
+                            <p className="text-muted-foreground text-xs">{row.label}</p>
                           )}
                         </TableCell>
                         <TableCell className="tabular-nums">
@@ -459,9 +415,9 @@ export default function TestRunDetailPage() {
               <section>
                 <h2 className="mb-2 font-medium">장비가 준 시편 정보</h2>
                 <p className="text-muted-foreground mb-2 text-xs">
-                  시험 결과가 아니라 입력값입니다. 시편 실측치를 자동으로
-                  덮어쓰지 않습니다 — 사람이 이미 재어 넣은 값을 파일이 조용히
-                  바꾸면 어느 것이 맞는지 알 수 없습니다.
+                  시험 결과가 아니라 입력값입니다. 시편 실측치를 자동으로 덮어쓰지 않습니다 —
+                  사람이 이미 재어 넣은 값을 파일이 조용히 바꾸면 어느 것이 맞는지 알 수
+                  없습니다.
                 </p>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border p-3 text-sm sm:grid-cols-3">
                   {Object.entries(item.source_metadata).map(([key, value]) => (
@@ -482,6 +438,7 @@ export default function TestRunDetailPage() {
                 testTypeKey={item.test_type_key}
                 curveKey={activeCurve.key}
                 sourceColumns={activeCurve.channels}
+                managedWorkspaces={managed}
               />
             ) : (
               <p className="text-muted-foreground py-12 text-center text-sm">
@@ -496,5 +453,5 @@ export default function TestRunDetailPage() {
         </Tabs>
       )}
     </div>
-  );
+  )
 }

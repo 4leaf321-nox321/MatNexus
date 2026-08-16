@@ -128,3 +128,37 @@ class RecipeOut(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+# --- 배치 --------------------------------------------------------------------
+
+
+class BatchRequest(BaseModel):
+    test_run_ids: list[uuid.UUID] = Field(min_length=1)
+    source_curve_key: str | None = None
+    steps: list[dict[str, Any]]
+    recipe_key: str | None = None
+    adopt: bool = True
+    """성공한 것을 바로 채택할지. **기본이 참인 이유:** 배치를 돌리는 사람은
+    이미 한 건으로 단계를 맞춰 본 뒤다. 여기서 또 하나씩 채택하게 하면 배치를
+    쓴 의미가 절반이 된다."""
+
+
+class BatchItemOut(BaseModel):
+    test_run_id: uuid.UUID
+    record_name: str
+    status: str
+    """`ok` | `failed`."""
+    result_id: uuid.UUID | None = None
+    adopted: bool = False
+    error: str | None = None
+    """어디서 왜 막혔는지. **건별로 다르다** — 시편 치수가 없는 것, 탄성 구간에
+    점이 없는 것, 채널 이름이 다른 것이 한 배치에 섞여 온다."""
+    scalars: list[ProcessingScalarOut] = []
+
+
+class BatchOut(BaseModel):
+    requested: int
+    succeeded: int
+    failed: int
+    items: list[BatchItemOut]

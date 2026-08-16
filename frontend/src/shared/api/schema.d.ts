@@ -669,6 +669,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Batch
+         * @description 여러 시험에 같은 단계를 건다.
+         *
+         *     **부분 실패는 실패가 아니다.** 20건 중 하나가 시편 치수 때문에 막혔다고
+         *     전체를 되돌리면 19건을 다시 해야 하고, 조용히 건너뛰면 사람은 다 된 줄 안다.
+         *     그래서 건별 결과를 그대로 돌려주고, 성공한 것은 그 자리에서 커밋한다.
+         *
+         *     실패 이유는 건마다 다르다 — 시편 치수가 없는 것, 탄성 구간에 점이 없는 것,
+         *     채널 이름이 다른 것이 한 배치에 섞여 온다. 하나로 뭉뚱그리면 무엇을 고쳐야
+         *     하는지 알 수 없다.
+         */
+        post: operations["run_batch_api_processing_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/preview": {
         parameters: {
             query?: never;
@@ -1354,6 +1382,61 @@ export interface components {
             role: string;
             /** Workspace Slug */
             workspace_slug?: string | null;
+        };
+        /** BatchItemOut */
+        BatchItemOut: {
+            /**
+             * Adopted
+             * @default false
+             */
+            adopted: boolean;
+            /** Error */
+            error?: string | null;
+            /** Record Name */
+            record_name: string;
+            /** Result Id */
+            result_id?: string | null;
+            /**
+             * Scalars
+             * @default []
+             */
+            scalars: components["schemas"]["ProcessingScalarOut"][];
+            /** Status */
+            status: string;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /** BatchOut */
+        BatchOut: {
+            /** Failed */
+            failed: number;
+            /** Items */
+            items: components["schemas"]["BatchItemOut"][];
+            /** Requested */
+            requested: number;
+            /** Succeeded */
+            succeeded: number;
+        };
+        /** BatchRequest */
+        BatchRequest: {
+            /**
+             * Adopt
+             * @default true
+             */
+            adopt: boolean;
+            /** Recipe Key */
+            recipe_key?: string | null;
+            /** Source Curve Key */
+            source_curve_key?: string | null;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Test Run Ids */
+            test_run_ids: string[];
         };
         /** Body_detect_test_type_api_test_types_detect_post */
         Body_detect_test_type_api_test_types_detect_post: {
@@ -4478,6 +4561,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_batch_api_processing_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchOut"];
                 };
             };
             /** @description Validation Error */

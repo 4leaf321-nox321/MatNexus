@@ -17,6 +17,8 @@ export type ProcessingResult = components['schemas']['ProcessingResultOut']
 export type ProcessingStage = components['schemas']['ProcessingStageOut']
 export type ProcessingScalar = components['schemas']['ProcessingScalarOut']
 export type Recipe = components['schemas']['RecipeOut']
+export type BatchOut = components['schemas']['BatchOut']
+export type BatchItem = components['schemas']['BatchItemOut']
 type RecipeSave = components['schemas']['RecipeSaveRequest']
 type RecipeCreate = components['schemas']['RecipeCreateRequest']
 
@@ -84,6 +86,15 @@ export const processingApi = {
 
   /** 채택만 거둔다 — 결과는 지워지지 않는다. */
   unadopt: (resultId: string) => api.delete<void>(`/processing/results/${resultId}/adopt`),
+
+  /** 여러 시험에 같은 단계를. **부분 실패를 건별로 돌려준다.** */
+  batch: (body: {
+    test_run_ids: string[]
+    source_curve_key?: string | null
+    steps: RecipeStep[]
+    recipe_key?: string | null
+    adopt: boolean
+  }) => api.post<BatchOut>('/processing/batch', body),
 
   recipes: (testType?: string) =>
     api.get<Recipe[]>(`/processing/recipes${search({ test_type: testType })}`),
