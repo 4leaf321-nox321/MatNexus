@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Download, RefreshCw, Trash2 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import {
@@ -330,6 +331,18 @@ export default function TestRunDetailPage() {
             </p>
           )}
         </section>
+      )}
+
+      {/* **처리는 곡선 바로 아래다.** 원본을 보고 나서 "그래서 이게 물성으로
+          어떻게 되는데" 가 이어지는 자리다. 다른 화면으로 보내면 원본과
+          결과를 나란히 못 본다. */}
+      {item && item.status === 'parsed' && activeCurve && (
+        <ProcessingPanel
+          testRunId={item.id}
+          testTypeKey={item.test_type_key}
+          curveKey={activeCurve.key}
+          sourceColumns={activeCurve.channels}
+        />
       )}
 
       {item && item.summary.length > 0 && (

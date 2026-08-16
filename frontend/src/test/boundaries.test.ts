@@ -37,6 +37,16 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       to: 'workspaces',
       why: '형식 프로파일이 부서 소유다 — 장비는 부서마다 다르고, 남의 부서 파일을 어떻게 읽을지는 그 부서가 안다. 만들 때 소유 부서를 골라야 하므로 부서 선택기를 쓴다.',
     },
+    {
+      to: 'processing',
+      why: '시험 상세가 그 시험의 처리 패널을 끼워 넣는다. 원본 곡선을 보고 나서 "이게 물성으로 어떻게 되는데" 가 이어지는 자리라, 다른 화면으로 보내면 원본과 결과를 나란히 못 본다. 아래 processing → tests 의 반대 방향이고 둘은 한 화면을 나눠 그린다.',
+    },
+  ],
+  processing: [
+    {
+      to: 'tests',
+      why: '처리 결과도 곡선이라 같은 CurveChart 로 그린다. 차트를 shared 로 올리지 않은 이유: 축 라벨·단위 표기·LTTB 안내 문구가 전부 시험 도메인의 것이라, shared 로 올리면 공통이 도메인을 알게 된다.',
+    },
   ],
   materials: [
     {
