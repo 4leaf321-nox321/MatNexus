@@ -36,7 +36,13 @@ export interface ProfileDefinition {
   }
   /** 지문. 이게 없으면 서버가 저장을 거절한다 — 모든 파일에 맞아 버린다. */
   match: { extensions?: string[]; header_any?: string[]; meta_any?: string[] }
-  tables?: { mode?: 'first' | 'all'; include?: string }
+  tables?: {
+    mode?: 'first' | 'all'
+    /** 측정으로 읽을 표. 비우면 전부 측정. */
+    include?: string
+    /** **장비가 계산해 준 표**(TTS 마스터 곡선 등). 버리지도 섞지도 않는다. */
+    derived?: string
+  }
   columns: Record<string, { channel: string; unit?: string }>
   summary?: Record<string, { key: string; unit?: string }>
   specimen?: Record<string, string>

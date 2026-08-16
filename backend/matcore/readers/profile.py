@@ -14,7 +14,9 @@
     {
       "reader":  {"encoding": null, "delimiter": null},   # null = 자동
       "match":   {"extensions": [".csv"], "header_any": ["Angular frequency"]},
-      "tables":  {"mode": "all", "include": "^Temperature Sweep"},
+      "tables":  {"mode": "all",
+                  "include": "^Temperature Sweep",   # 측정
+                  "derived": "^TTS"},                # 장비가 계산해 준 것
       "columns": {"Angular frequency": {"channel": "angular_frequency"}},
       "summary": {"Force maximum": {"key": "tensile_strength"}},
       "specimen":{"Thickness": "specimen_thickness"},
@@ -128,8 +130,8 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
     columns: dict[str, Any] = profile.get("columns") or {}
     errors: list[str] = []
     curves = [
-        _build_curve(table, columns, warnings, errors, single=len(tables) == 1)
-        for table in tables
+        _build_curve(table, columns, warnings, errors, single=len(tables) == 1, kind=kind)
+        for table, kind in tables
     ]
     if errors:
         # **매핑한 열의 단위를 모르면 멈춘다.** 그냥 두면 원값이 SI 인 척 저장된다 —
@@ -153,25 +155,51 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
 
 def _select_tables(
     profile: dict[str, Any], structure: TabularFile, warnings: list[str]
-) -> list[Table]:
+) -> list[tuple[Table, str]]:
+    """읽을 표와 **그 표가 무엇인지**(측정 / 처리결과).
+
+    한 파일에 성격이 다른 곡선이 섞여 온다. 실측(TA DMA850 주파수-온도 스윕):
+
+        Temperature Sweep - 2..7      측정 구간 6벌
+        TTS - shift factors           장비가 맞춘 이동인자
+        TTS - master curve (20.0 °C)  겹쳐 만든 마스터 곡선
+
+    처음에는 `include` 에 안 맞는 표를 **버렸다.** 그러면 장비가 계산해 준 결과를
+    잃는다. 그렇다고 다 같이 읽으면 Phase 3 의 처리가 마스터 곡선을 원본으로
+    착각한다. **버리지도 섞지도 않고 무엇인지 적어 둔다.**
+
+        "tables": {"mode": "all",
+                   "include": "^Temperature Sweep",   ← 측정
+                   "derived": "^TTS"}                 ← 장비가 계산한 것
+    """
     rule = profile.get("tables") or {}
     mode = str(rule.get("mode") or "first")
     include = rule.get("include")
+    derived = rule.get("derived")
 
-    tables = list(structure.tables)
-    if include:
-        pattern = re.compile(str(include))
-        kept = [t for t in tables if t.name and pattern.search(t.name)]
-        skipped = [t.name for t in tables if t not in kept]
-        if skipped:
-            # 버렸다는 사실을 남긴다. 조용히 빠지면 "왜 곡선이 6개뿐이지" 가 된다.
-            warnings.append(
-                f"표 {len(skipped)}개를 규칙에 안 맞아 건너뛰었습니다: "
-                f"{', '.join(str(name) for name in skipped[:5])}"
-            )
-        tables = kept
+    measured_pattern = re.compile(str(include)) if include else None
+    derived_pattern = re.compile(str(derived)) if derived else None
 
-    return tables[:1] if mode == "first" else tables
+    picked: list[tuple[Table, str]] = []
+    skipped: list[str] = []
+    for table in structure.tables:
+        name = table.name or ""
+        if derived_pattern and name and derived_pattern.search(name):
+            picked.append((table, "derived"))
+        elif measured_pattern is None or (name and measured_pattern.search(name)):
+            picked.append((table, "measured"))
+        else:
+            skipped.append(name or f"표 {table.index + 1}")
+
+    if skipped:
+        # 버렸다는 사실을 남긴다. 조용히 빠지면 "왜 곡선이 6개뿐이지" 가 된다.
+        warnings.append(
+            f"표 {len(skipped)}개를 규칙에 안 맞아 건너뛰었습니다: "
+            f"{', '.join(skipped[:5])}. 버리지 않으려면 프로파일의 표 규칙에 "
+            f"측정 또는 처리결과로 넣으세요."
+        )
+
+    return picked[:1] if mode == "first" else picked
 
 
 def _build_curve(
@@ -181,6 +209,7 @@ def _build_curve(
     errors: list[str],
     *,
     single: bool,
+    kind: str = "measured",
 ) -> CurveData:
     channels: list[Channel] = []
     used: set[str] = set()
@@ -241,7 +270,7 @@ def _build_curve(
         )
 
     key = "raw" if single else (slug(table.name) if table.name else f"table_{table.index + 1}")
-    return CurveData(key=key, label=table.name, channels=tuple(channels))
+    return CurveData(key=key, label=table.name, channels=tuple(channels), kind=kind)
 
 
 def _build_meta(

@@ -671,6 +671,7 @@ def get_run(
             CurveOut(
                 key=curve.key,
                 label=curve.label,
+                kind=curve.kind,
                 row_count=curve.row_count,
                 channels=list(curve.channels),
             )

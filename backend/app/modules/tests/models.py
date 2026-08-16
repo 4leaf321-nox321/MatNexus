@@ -272,6 +272,23 @@ class Curve(Base):
     """`raw` 또는 구간 이름."""
     label: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    kind: Mapped[str] = mapped_column(
+        String(20), default="measured", server_default="measured"
+    )
+    """`measured`(측정) | `derived`(장비가 계산한 것).
+
+    **한 파일에 성격이 다른 곡선이 섞여 온다.** 실측(TA DMA850 주파수-온도 스윕):
+
+        Temperature Sweep - 2..7      측정 구간 6벌
+        TTS - shift factors           장비가 맞춘 이동인자 aT·bT
+        TTS - master curve (20.0 °C)  겹쳐 만든 마스터 곡선
+
+    처음에는 뒤의 둘을 규칙에 안 맞다고 **버렸다.** 그러면 장비가 계산해 준 결과를
+    잃는다. 그렇다고 섞어 두면 Phase 3 의 처리가 마스터 곡선을 원본으로 착각한다.
+
+    요약값에서 `장비 / MatNexus` 를 나란히 두는 것과 같은 판단이다 — 버리지도
+    섞지도 않고, **무엇인지 적어 둔다.**"""
+
     storage_path: Mapped[str] = mapped_column(String(500))
     row_count: Mapped[int] = mapped_column(Integer)
     sha256: Mapped[str] = mapped_column(String(64), index=True)

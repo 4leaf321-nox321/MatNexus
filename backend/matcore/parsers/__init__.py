@@ -67,6 +67,11 @@ class CurveData:
     """`Curve.key` 가 된다. 시험 안에서 유일해야 한다."""
     label: str | None = None
     channels: tuple[Channel, ...] = ()
+    kind: str = "measured"
+    """`measured`(측정) | `derived`(장비가 계산해 준 것).
+
+    버리지도 섞지도 않는다. 버리면 장비가 계산해 준 결과를 잃고, 섞으면 Phase 3
+    의 처리가 마스터 곡선을 원본으로 착각한다."""
 
 
 @dataclass(frozen=True)

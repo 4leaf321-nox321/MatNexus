@@ -739,6 +739,7 @@ def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str
                 test_run_id=run.id,
                 key=curve.key,
                 label=curve.label or f"원본 정규화 ({version})",
+                kind=curve.kind,
                 storage_path=stored.relative_path,
                 row_count=len(curve.channels[0].values),
                 sha256=stored.sha256,
@@ -925,7 +926,9 @@ def curves_of(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Cur
     for curve in db.scalars(select(Curve).where(Curve.test_run_id.in_(run_ids))):
         found.setdefault(curve.test_run_id, []).append(curve)
     for items in found.values():
-        items.sort(key=lambda item: (item.key != RAW_CURVE, item.key))
+        # 측정을 먼저. **기본으로 그려지는 곡선이 마스터 곡선이면 안 된다** —
+        # 사람은 그것이 원본인 줄 안다.
+        items.sort(key=lambda item: (item.kind != "measured", item.key != RAW_CURVE, item.key))
     return found
 
 

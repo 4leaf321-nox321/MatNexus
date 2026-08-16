@@ -509,6 +509,10 @@
             "title": "Key",
             "type": "string"
           },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
           "label": {
             "anyOf": [
               {
@@ -528,6 +532,7 @@
         "required": [
           "key",
           "label",
+          "kind",
           "row_count",
           "channels"
         ],

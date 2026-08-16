@@ -1359,6 +1359,8 @@ export interface components {
             channels: string[];
             /** Key */
             key: string;
+            /** Kind */
+            kind: string;
             /** Label */
             label: string | null;
             /** Row Count */

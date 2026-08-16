@@ -248,23 +248,36 @@ export default function TestRunDetailPage() {
               마다 별개 측정이라 6벌이 나온다. 고를 수 없던 때는 저장은 다 돼
               있는데 화면에서 하나도 안 보였다. 하나뿐이면 굳이 보여 주지 않는다. */}
           {curves.length > 1 && (
-            <div className="mb-3">
-              <p className="text-muted-foreground mb-1 text-xs">
-                곡선 {curves.length}벌 — 구간마다 별개 측정입니다
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {curves.map((item) => (
-                  <Button
-                    key={item.key}
-                    size="sm"
-                    variant={activeCurve?.key === item.key ? 'default' : 'outline'}
-                    onClick={() => setCurveKey(item.key)}
-                    title={`${item.row_count}행 · ${item.channels.join(', ')}`}
-                  >
-                    {item.label ?? item.key}
-                  </Button>
-                ))}
-              </div>
+            <div className="mb-3 space-y-2">
+              {/* **측정과 처리결과를 나눠 보여 준다.** 섞어 두면 사람은 마스터
+                  곡선을 원본으로 본다 — 요약값에서 `장비 / MatNexus` 를 나란히
+                  두는 것과 같은 이유다. */}
+              {(['measured', 'derived'] as const).map((kind) => {
+                const group = curves.filter((item) => item.kind === kind)
+                if (group.length === 0) return null
+                return (
+                  <div key={kind}>
+                    <p className="text-muted-foreground mb-1 text-xs">
+                      {kind === 'measured'
+                        ? `측정 ${group.length}벌 — 구간마다 별개 측정입니다`
+                        : `처리결과 ${group.length}벌 — 장비가 계산해 준 것입니다`}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {group.map((item) => (
+                        <Button
+                          key={item.key}
+                          size="sm"
+                          variant={activeCurve?.key === item.key ? 'default' : 'outline'}
+                          onClick={() => setCurveKey(item.key)}
+                          title={`${item.row_count}행 · ${item.channels.join(', ')}`}
+                        >
+                          {item.label ?? item.key}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 

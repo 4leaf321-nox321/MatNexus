@@ -30,7 +30,11 @@ FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
 #: 사람이 화면에서 만들 내용. **코드가 아니라 데이터다.**
 DMA_PROFILE: dict[str, Any] = {
     "match": {"extensions": [".csv"], "header_any": ["Angular frequency"]},
-    "tables": {"mode": "all", "include": "^Temperature Sweep|^Strain Sweep"},
+    "tables": {
+        "mode": "all",
+        "include": "^Temperature Sweep|^Strain Sweep",
+        "derived": "^TTS",
+    },
     "columns": {
         "Angular frequency": {"channel": "angular_frequency"},
         "Step time": {"channel": "step_time"},
@@ -390,15 +394,16 @@ class TestEndToEnd:
         assert run.parser_version == "profile:ta_dma850"  # 무엇으로 읽었는지 남는다
 
         curve_rows = list(db.scalars(select(Curve).where(Curve.test_run_id == run_id)))
-        # 측정 구간 6개. TTS 표 2개는 규칙에 안 맞아 빠진다.
-        assert len(curve_rows) == 6
-        assert all(curve.row_count == 8 for curve in curve_rows)
+        # **버리지도 섞지도 않는다.** 측정 6벌 + 장비가 계산해 준 TTS 2벌.
+        assert len(curve_rows) == 8
+        kinds = {curve.kind for curve in curve_rows}
+        assert kinds == {"measured", "derived"}
+        assert sum(1 for curve in curve_rows if curve.kind == "derived") == 2
+        assert all(curve.row_count == 8 for curve in curve_rows if curve.kind == "measured")
         assert "temperature_sweep_multifrequency_2" in {curve.key for curve in curve_rows}
 
         # 시편 치수가 `50.0 mm` 에서 값+단위로 갈려 나온다
         assert run.source_metadata["specimen_thickness"] == "0.989 mm"
-        # 건너뛴 표를 조용히 버리지 않는다
-        assert "TTS" in run.source_metadata.get("_warnings", "")
 
     def test_단위가_정의와_다르면_등록이_실패한다(
         self,
@@ -497,7 +502,7 @@ class Test곡선이여럿일때:
         assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
 
         detail = client.get(f"/api/test-runs/{created['id']}", headers=admin_headers).json()
-        assert len(detail["curves"]) == 6
+        assert len(detail["curves"]) == 8
         assert detail["curves"][0]["label"].startswith("Temperature Sweep")
         assert detail["curves"][0]["row_count"] == 8
         # 무엇으로 읽었는지도 준다 — 곡선이 이상할 때 가장 먼저 보는 값이다.
@@ -559,3 +564,88 @@ class Test곡선이여럿일때:
         )
         assert response.status_code == 404
         assert "raw" in response.json()["error"]["message"]
+
+
+class Test성격이다른곡선:
+    """**한 파일에 성격이 다른 곡선이 섞여 온다.**
+
+    실사용 보고에서 나왔다: "곡선이 여러 스타일이 있는 경우가 있어" — 경고가
+    `TTS - shift factors`, `TTS - master curve` 를 건너뛰었다고 알려 준 것.
+
+    버리면 장비가 계산해 준 결과를 잃고, 섞으면 Phase 3 의 처리가 마스터 곡선을
+    원본으로 착각한다. 그래서 **무엇인지 적어 둔다.**
+    """
+
+    def test_처리결과를_버리지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        created = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        services.parse_run(db, uuid.UUID(created["id"]))
+
+        detail = client.get(f"/api/test-runs/{created['id']}", headers=admin_headers).json()
+        by_kind: dict[str, list[dict[str, Any]]] = {}
+        for curve in detail["curves"]:
+            by_kind.setdefault(curve["kind"], []).append(curve)
+
+        assert len(by_kind["measured"]) == 6
+        assert len(by_kind["derived"]) == 2
+        assert {curve["label"] for curve in by_kind["derived"]} == {
+            "TTS - shift factors",
+            "TTS - master curve (20.0 °C)",
+        }
+
+    def test_측정이_먼저_온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**기본으로 그려지는 곡선이 마스터 곡선이면 안 된다** — 사람은 그것이
+        원본인 줄 안다."""
+        created = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        services.parse_run(db, uuid.UUID(created["id"]))
+
+        detail = client.get(f"/api/test-runs/{created['id']}", headers=admin_headers).json()
+        assert detail["curves"][0]["kind"] == "measured"
+
+    def test_처리결과의_열도_읽는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+    ) -> None:
+        """마스터 곡선에는 측정에 없는 열이 있다 — 복소 컴플라이언스(1/MPa),
+        위상각(°), 역온도(1/K). 단위표가 그것들을 알아야 읽힌다."""
+        rule = {**DMA_PROFILE, "tables": {"mode": "all", "derived": "^TTS"}}
+        response = client.post(
+            "/api/formats/try",
+            data={"definition": json.dumps(rule)},
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        master = next(
+            curve
+            for curve in response.json()["curves"]
+            if curve["label"] and "master" in curve["label"]
+        )
+        channels = {c["key"]: c for c in master["channels"]}
+        assert channels["complex_compliance"]["si_unit"] == "1/Pa"
+        assert channels["phase_angle"]["si_unit"] == "rad"
+        assert channels["1_temperature"]["si_unit"] == "1/K"

@@ -121,6 +121,11 @@ class CurveOut(BaseModel):
     key: str
     label: str | None
     """표 이름(`Temperature Sweep (Multifrequency) - 2`). 없을 수 있다."""
+    kind: str
+    """`measured`(측정) | `derived`(장비가 계산해 준 것).
+
+    **버리지도 섞지도 않는다.** 버리면 장비가 계산한 결과를 잃고, 섞으면 Phase 3
+    의 처리가 마스터 곡선을 원본으로 착각한다."""
     row_count: int
     channels: list[str]
 

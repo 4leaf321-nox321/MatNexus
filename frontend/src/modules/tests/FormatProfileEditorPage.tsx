@@ -152,6 +152,7 @@ export default function FormatProfileEditorPage() {
   const [headerRows, setHeaderRows] = useState(1)
   const [tableMode, setTableMode] = useState<'first' | 'all'>('first')
   const [include, setInclude] = useState('')
+  const [derived, setDerived] = useState('')
   const [columnMap, setColumnMap] = useState<Record<string, string>>({})
   const [metaMap, setMetaMap] = useState<Record<string, MetaRule>>({})
   const [drafts, setDrafts] = useState<DraftChannel[]>([])
@@ -169,7 +170,7 @@ export default function FormatProfileEditorPage() {
   /** 규칙이 바뀌면 이전 시도 결과는 더 이상 그 규칙의 결과가 아니다. */
   useEffect(() => {
     setTried(null)
-  }, [extensions, headerAny, metaAny, headerRows, tableMode, include, columnMap, metaMap])
+  }, [extensions, headerAny, metaAny, headerRows, tableMode, include, derived, columnMap, metaMap])
 
   // 저장된 프로파일을 화면 상태로 편다. JSON 을 그대로 보여 주지 않는 이유:
   // 손으로 고치게 하면 결국 "JSON 을 아는 사람만 장비를 붙일 수 있다" 가 된다.
@@ -191,6 +192,7 @@ export default function FormatProfileEditorPage() {
     setHeaderRows(definition.reader?.header_rows ?? 1)
     setTableMode(definition.tables?.mode === 'all' ? 'all' : 'first')
     setInclude(definition.tables?.include ?? '')
+    setDerived(definition.tables?.derived ?? '')
     setColumnMap(
       Object.fromEntries(
         Object.entries(definition.columns ?? {}).map(([name, rule]) => [name, rule.channel])
@@ -219,19 +221,42 @@ export default function FormatProfileEditorPage() {
 
   /** 규칙에 걸리는 표. 정규식을 치는 동안 어느 표가 남는지 바로 보여 준다 —
    *  안 그러면 저장하고 파싱해 봐야 안다. */
-  const selectedTables = useMemo<TablePreview[]>(() => {
-    const tables = preview?.tables ?? []
-    let kept = tables
-    if (include) {
+  const classified = useMemo<{ table: TablePreview; kind: 'measured' | 'derived' | null }[]>(
+    () => {
+      const tables = preview?.tables ?? []
+      let measured: RegExp | null = null
+      let derivedPattern: RegExp | null = null
       try {
-        const pattern = new RegExp(include)
-        kept = tables.filter((table) => table.name !== null && pattern.test(table.name))
+        measured = include ? new RegExp(include) : null
+        derivedPattern = derived ? new RegExp(derived) : null
       } catch {
-        return [] // 아직 다 안 친 정규식
+        return tables.map((table) => ({ table, kind: null })) // 아직 다 안 친 정규식
       }
-    }
-    return tableMode === 'first' ? kept.slice(0, 1) : kept
-  }, [preview, include, tableMode])
+      const rows = tables.map((table) => {
+        const name = table.name ?? ''
+        if (derivedPattern && name && derivedPattern.test(name)) {
+          return { table, kind: 'derived' as const }
+        }
+        if (!measured || (name && measured.test(name))) {
+          return { table, kind: 'measured' as const }
+        }
+        return { table, kind: null }
+      })
+      if (tableMode === 'first') {
+        const first = rows.findIndex((row) => row.kind !== null)
+        return rows.map((row, index) => (index === first ? row : { ...row, kind: null }))
+      }
+      return rows
+    },
+    [preview, include, derived, tableMode]
+  )
+
+  /** 열 매핑에 쓸 표 — **측정만.** 처리결과의 열(복소 컴플라이언스 등)까지 섞으면
+   *  매핑 표가 두 배로 길어지는데, 그 열들은 대개 매핑할 채널이 없다. */
+  const selectedTables = useMemo<TablePreview[]>(
+    () => classified.filter((row) => row.kind === 'measured').map((row) => row.table),
+    [classified]
+  )
 
   /** 매핑해야 할 열. 고른 표들의 헤더 합집합 — `[step]` 마다 열 구성이 다른
    *  장비가 실재하므로(TA DMA850) 첫 표만 보면 안 된다. */
@@ -384,7 +409,11 @@ export default function FormatProfileEditorPage() {
         ...(headerAny.length ? { header_any: headerAny } : {}),
         ...(metaAny.length ? { meta_any: metaAny } : {}),
       },
-      tables: { mode: tableMode, ...(include ? { include } : {}) },
+      tables: {
+        mode: tableMode,
+        ...(include ? { include } : {}),
+        ...(derived ? { derived } : {}),
+      },
       columns: columnRules,
       ...(Object.keys(specimen).length ? { specimen } : {}),
       ...(Object.keys(summary).length ? { summary } : {}),
@@ -676,10 +705,8 @@ export default function FormatProfileEditorPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="min-w-56 flex-1 space-y-1.5">
-                <Label className="text-xs">
-                  표 이름이 이것과 맞을 때만 (정규식, 비우면 전부)
-                </Label>
+              <div className="min-w-48 flex-1 space-y-1.5">
+                <Label className="text-xs">측정 (정규식, 비우면 전부)</Label>
                 <Input
                   className="h-8 font-mono text-xs"
                   value={include}
@@ -687,35 +714,42 @@ export default function FormatProfileEditorPage() {
                   onChange={(event) => setInclude(event.target.value)}
                 />
               </div>
+              {/* **버리지도 섞지도 않는다.** 장비가 계산해 준 표(TTS 마스터 곡선)를
+                  버리면 결과를 잃고, 측정과 섞으면 처리가 원본으로 착각한다. */}
+              <div className="min-w-48 flex-1 space-y-1.5">
+                <Label className="text-xs">처리결과 (장비가 계산해 준 것)</Label>
+                <Input
+                  className="h-8 font-mono text-xs"
+                  value={derived}
+                  placeholder="^TTS"
+                  onChange={(event) => setDerived(event.target.value)}
+                />
+              </div>
             </div>
 
             {preview && (
               <div className="mt-3 space-y-1">
-                {preview.tables.map((table) => {
-                  const kept = selectedTables.includes(table)
-                  return (
-                    <div
-                      key={table.index}
-                      className={`flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${
-                        kept ? '' : 'opacity-40'
-                      }`}
-                    >
-                      <Badge variant={kept ? 'secondary' : 'outline'}>
-                        {kept ? '읽음' : '건너뜀'}
-                      </Badge>
-                      <span className="font-medium">
-                        {table.name ?? `표 ${table.index + 1}`}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {table.row_count}행 × {table.column_count}열 · {table.first_line}줄부터
-                      </span>
-                    </div>
-                  )
-                })}
-                {preview.tables.length > selectedTables.length && (
+                {classified.map(({ table, kind }) => (
+                  <div
+                    key={table.index}
+                    className={`flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${
+                      kind ? '' : 'opacity-40'
+                    }`}
+                  >
+                    <Badge variant={kind === 'measured' ? 'secondary' : 'outline'}>
+                      {kind === 'measured' ? '측정' : kind === 'derived' ? '처리결과' : '건너뜀'}
+                    </Badge>
+                    <span className="font-medium">{table.name ?? `표 ${table.index + 1}`}</span>
+                    <span className="text-muted-foreground">
+                      {table.row_count}행 × {table.column_count}열 · {table.first_line}줄부터
+                    </span>
+                  </div>
+                ))}
+                {classified.some((row) => row.kind === null) && (
                   <p className="text-muted-foreground text-xs">
                     건너뛴 표는 등록할 때 <b>경고로 남습니다</b> — 조용히 빠지면 &ldquo;왜
-                    곡선이 이것뿐이지&rdquo; 가 됩니다.
+                    곡선이 이것뿐이지&rdquo; 가 됩니다. <b>장비가 계산해 준 표</b>라면
+                    버리지 말고 위의 <b>처리결과</b>에 넣으세요.
                   </p>
                 )}
               </div>
