@@ -956,6 +956,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-runs/{run_id}/apply-instrument-dimensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Instrument Dimensions
+         * @description 장비가 준 치수를 시편에 채운다.
+         *
+         *     **기본은 빈 칸만 채운다.** 사람이 이미 재어 넣은 값을 파일이 조용히 바꾸면
+         *     어느 것이 맞는지 알 수 없다 — 그래서 자동으로는 아무것도 안 했다. 그런데
+         *     그 판단이 "채우는 길이 아예 없다" 로 굳어 있었다. 시편 41개 중 치수가 있는
+         *     것이 3개뿐이었고, 그래서 처리가 첫 단계에서 막혔다.
+         *
+         *     덮어쓰기는 **명시적으로 요청해야** 한다(`overwrite=true`).
+         */
+        post: operations["apply_instrument_dimensions_api_test_runs__run_id__apply_instrument_dimensions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs/{run_id}/curve": {
         parameters: {
             query?: never;
@@ -971,6 +998,29 @@ export interface paths {
          *     안 주면 첫 곡선 — 표가 하나뿐인 파일에서는 예전과 같다.
          */
         get: operations["get_curve_api_test_runs__run_id__curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-runs/{run_id}/instrument-dimensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instrument Dimensions
+         * @description 장비 파일이 준 시편 치수와, 시편에 지금 들어 있는 값.
+         *
+         *     **둘을 나란히 준다.** 파일 값만 주면 화면이 "덮어쓰는 것인지" 를 판단할 수
+         *     없다. 채우기와 덮어쓰기는 사람에게 다른 결정이다.
+         */
+        get: operations["instrument_dimensions_api_test_runs__run_id__instrument_dimensions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1372,6 +1422,20 @@ export interface components {
             requested_workspace_slug: string | null;
             /** Status */
             status: string;
+        };
+        /**
+         * AppliedDimensionsOut
+         * @description 무엇을 채웠는지. **시편 전체를 돌려주지 않는다** — 이 응답이 답해야 하는
+         *     질문은 "지금 무슨 일이 일어났나" 이고, 시편은 화면이 다시 읽으면 된다.
+         */
+        AppliedDimensionsOut: {
+            /** Filled */
+            filled: string[];
+            /**
+             * Specimen Id
+             * Format: uuid
+             */
+            specimen_id: string;
         };
         /** ApproveRequest */
         ApproveRequest: {
@@ -1783,6 +1847,30 @@ export interface components {
             bytes: number;
             /** Path */
             path: string;
+        };
+        /**
+         * InstrumentDimensionOut
+         * @description 장비 파일이 준 시편 치수 하나.
+         */
+        InstrumentDimensionOut: {
+            /** Current M */
+            current_m: number | null;
+            /** Field */
+            field: string;
+            /** Label */
+            label: string;
+            /** Value M */
+            value_m: number | null;
+        };
+        /** InstrumentDimensionsOut */
+        InstrumentDimensionsOut: {
+            /** Items */
+            items: components["schemas"]["InstrumentDimensionOut"][];
+            /**
+             * Specimen Id
+             * Format: uuid
+             */
+            specimen_id: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -2588,6 +2676,13 @@ export interface components {
          *     그러면 한 곳을 빠뜨린다. `matcore.ParamSpec` 을 그대로 내보낸다.
          */
         StepParamOut: {
+            /**
+             * Choice Labels
+             * @default {}
+             */
+            choice_labels: {
+                [key: string]: string;
+            };
             /**
              * Choices
              * @default []
@@ -5321,6 +5416,39 @@ export interface operations {
             };
         };
     };
+    apply_instrument_dimensions_api_test_runs__run_id__apply_instrument_dimensions_post: {
+        parameters: {
+            query?: {
+                overwrite?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppliedDimensionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_curve_api_test_runs__run_id__curve_get: {
         parameters: {
             query?: {
@@ -5345,6 +5473,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CurvePointsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    instrument_dimensions_api_test_runs__run_id__instrument_dimensions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstrumentDimensionsOut"];
                 };
             };
             /** @description Validation Error */

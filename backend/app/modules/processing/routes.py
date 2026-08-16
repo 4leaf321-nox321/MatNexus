@@ -88,6 +88,7 @@ def list_steps(
                     type=spec.type,
                     default=spec.default,
                     choices=list(spec.choices),
+                    choice_labels=dict(spec.choice_labels),
                     unit=spec.unit,
                     dimension=spec.dimension,
                     help=spec.help,

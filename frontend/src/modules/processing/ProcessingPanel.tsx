@@ -67,6 +67,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
+import { testsApi } from '@/modules/tests/api'
 import { display } from '@/modules/tests/units'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -150,6 +151,32 @@ export function ProcessingPanel({
   })
   const [open, setOpen] = useState<number | null>(null)
   const [savingRecipe, setSavingRecipe] = useState(false)
+
+  /**
+   * 장비 파일이 준 시편 치수.
+   *
+   * **파일이 이미 갖고 있다.** Zwick 은 `a0`(두께)·`b0`(폭)을, TA DMA 는
+   * `specimen_width`·`specimen_thickness` 를 적어 보낸다. 그런데 자동으로
+   * 시편에 넣지 않는 규칙 때문에("사람이 잰 값을 파일이 조용히 바꾸면 안 된다")
+   * **채우는 길 자체가 없었다** — 시편 41개 중 치수가 있는 것이 3개뿐이었고,
+   * 그래서 처리가 첫 단계에서 막혔다. 덮어쓰기는 여전히 안 한다. 빈 칸만 채운다.
+   */
+  const dimensions = useResource(() => testsApi.instrumentDimensions(testRunId), [testRunId])
+  /** 시편에 아직 없는 것 중 — 파일이 줄 수 있는 것과, 사람이 넣어야 하는 것. */
+  const missing = (dimensions.data?.items ?? []).filter((item) => item.current_m === null)
+  const fillable = missing.filter((item) => item.value_m !== null)
+  const byHand = missing.filter((item) => item.value_m === null)
+
+  async function fill() {
+    setError(null)
+    try {
+      await testsApi.applyInstrumentDimensions(testRunId)
+      dimensions.reload()
+      await run()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('채우지 못했습니다.'))
+    }
+  }
 
   const available = catalog.data ?? []
   const byId = useMemo(
@@ -280,12 +307,38 @@ export function ProcessingPanel({
           확인하세요" 인데, 이 화면에서 갈 곳이 없으면 사람은 멈춘다. */}
       {error && /specimen_/.test(error.message) && (
         <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
-          <b>시편에 치수가 없습니다.</b> 두 가지 중 하나를 하세요 — 시편 기록에
-          게이지 길이·폭·두께를 채우거나, 아래 칸의 <b>직접 입력</b>을 눌러 이번만
-          숫자를 넣으세요. <span className="text-muted-foreground">
-            치수를 0 이나 기본값으로 채우지 않는 이유: 단면적이 틀리면 응력 자릿수가
-            통째로 어긋나는데 숫자는 그럴듯해 보입니다.
-          </span>
+          <p>
+            <b>시편 치수가 모자랍니다.</b> 0 이나 기본값으로 채우지 않는 이유는,
+            단면적이 틀리면 응력 자릿수가 통째로 어긋나는데 숫자는 그럴듯해
+            보이기 때문입니다.
+          </p>
+          {/* **장비가 이미 준 값이 있으면 그걸 쓴다.** 파일에 폭·두께가 들어
+              있는데 사람이 다시 재어 넣게 하는 것은 일이다. */}
+          {fillable.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span>이 파일이 준 값:</span>
+              {fillable.map((item) => (
+                <Badge key={item.field} variant="outline" className="font-mono text-xs">
+                  {item.label} {((item.value_m ?? 0) * 1000).toFixed(3)} mm
+                </Badge>
+              ))}
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={fill}>
+                시편에 채우기
+              </Button>
+            </div>
+          )}
+          {/* **파일에 없는 것은 없다고 말한다.** 게이지 길이는 시험기 설정값이라
+              적히지 않는 것이 보통인데, 그 말을 안 하면 사람은 '채우기' 를 누르고
+              아무 일도 안 일어나는 것을 보게 된다. */}
+          {/* 이름 뒤에 조사를 붙이지 않는다 — '게이지 길이 은' 이 된다. 한국어
+              조사는 앞말의 받침을 봐야 해서, 이름이 바뀔 때마다 틀린다. */}
+          {byHand.length > 0 && (
+            <p className="mt-2">
+              이 파일에 없는 것: <b>{byHand.map((item) => item.label).join(', ')}</b>{' '}
+              — 시험기 설정값이라 사람이 넣어야 합니다. 재료 상세의 시편 기록에
+              넣거나, 아래 칸의 <b>직접 넣기</b>로 이번만 쓰세요.
+            </p>
+          )}
         </div>
       )}
 
@@ -601,7 +654,10 @@ function ParamField({
           <SelectContent>
             {param.choices.map((choice) => (
               <SelectItem key={choice} value={choice}>
-                {choice}
+                {/* **값은 안 바꾼다.** `linear_regression` 은 레시피 JSON 과
+                    결과 스냅샷에 저장되는 계약이라, 한국어로 바꾸면 저장된
+                    레시피가 전부 깨진다. 보여 줄 이름만 서버가 따로 준다. */}
+                {param.choice_labels?.[choice] ?? choice}
               </SelectItem>
             ))}
           </SelectContent>

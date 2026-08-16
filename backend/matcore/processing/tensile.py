@@ -150,7 +150,13 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
             type="choice",
             default="linear_regression",
             choices=("linear_regression", "chord", "secant", "manual"),
-            help="회귀 = 최소제곱, 현 = 양 끝 두 점, 할선 = 원점과 끝점",
+            choice_labels={
+                "linear_regression": "최소제곱 회귀",
+                "chord": "현 (구간 양 끝 두 점)",
+                "secant": "할선 (원점에서 구간 끝)",
+                "manual": "직접 입력",
+            },
+            help="같은 곡선에서도 방법마다 몇 % 다릅니다. 어느 쪽이 옳은지는 규격이 정합니다.",
         ),
         ParamSpec(
             name="minimum_strain",
@@ -476,7 +482,11 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             type="choice",
             default="observed_full_domain",
             choices=("observed_full_domain", "manual_index"),
-            help="관측 전체 = 자르지 않음(네킹 뒤가 섞일 수 있음)",
+            choice_labels={
+                "observed_full_domain": "관측 전체 (자르지 않음)",
+                "manual_index": "지정한 위치에서 자름",
+            },
+            help="자르지 않으면 네킹 뒤가 섞입니다 — 변환식은 균일 변형을 전제합니다.",
         ),
         ParamSpec(
             name="manual_index",
@@ -490,6 +500,12 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             type="choice",
             default="clip_zero",
             choices=("clip_zero", "drop", "retain"),
+            choice_labels={
+                "clip_zero": "0 으로 자름",
+                "drop": "버림",
+                "retain": "그대로 둠",
+            },
+            help="탄성 되돌림 때문에 초기 구간이 음수로 나옵니다.",
         ),
         ParamSpec(name="strain", label="변형률 열", type="str"),
         ParamSpec(name="stress", label="응력 열", type="str"),

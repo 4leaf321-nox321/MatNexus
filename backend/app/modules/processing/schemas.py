@@ -23,6 +23,8 @@ class StepParamOut(BaseModel):
     type: str
     default: Any = None
     choices: list[str] = []
+    choice_labels: dict[str, str] = {}
+    """값 → 사람이 읽는 이름. 값 자체는 레시피에 저장되는 계약이라 안 바꾼다."""
     unit: str | None = None
     dimension: str | None = None
     """단위만으로 못 가르는 것을 가른다 — 변형률은 %, tan δ 는 그대로."""

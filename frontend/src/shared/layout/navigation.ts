@@ -120,6 +120,14 @@ export const NAV_GROUPS: NavGroup[] = [
         audience: 'manager',
       },
       { label: '파일 형식', icon: FileCode2, to: '/settings/formats', audience: 'manager' },
+      {
+        // **만들 수만 있고 볼 수 없으면 자산이 아니다.** 레시피는 처리 탭에서
+        // 만들고 목록에서 거는데, 무엇이 저장돼 있는지 보는 자리가 없었다.
+        label: '처리 레시피',
+        icon: FlaskConical,
+        to: '/settings/recipes',
+        audience: 'manager',
+      },
       { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members`, audience: 'manager' },
     ],
   },

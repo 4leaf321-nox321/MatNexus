@@ -24,6 +24,12 @@ class ParamSpec:
     type: Literal["float", "int", "bool", "str", "choice"]
     default: Any = None
     choices: tuple[str, ...] = ()
+    choice_labels: dict[str, str] = field(default_factory=dict)
+    """고를 값 → 사람이 읽는 이름. **값 자체는 안 바꾼다.**
+
+    `linear_regression` 은 레시피 JSON 에 저장되고 결과 스냅샷에도 남는 계약이다.
+    그것을 한국어로 바꾸면 저장된 레시피가 전부 깨진다. 그래서 값은 그대로 두고
+    화면에 보여 줄 이름만 따로 둔다 — `TestType.key`/`label` 을 나눈 것과 같다."""
     unit: str | None = None
     """**저장 단위(SI)** 다. 화면은 실무 단위로 보여 주고 받는다 — CAE 는 길이를
     mm 로 쓰고, `0.05` 를 치라고 하면 사람이 `50` 을 친다. 환산은 화면이 한다."""

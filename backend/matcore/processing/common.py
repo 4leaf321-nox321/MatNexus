@@ -40,7 +40,12 @@ from matcore.processing import (
             type="choice",
             default="mean",
             choices=("mean", "first", "reject"),
-            help="mean = 평균, first = 첫 점만, reject = 거절",
+            choice_labels={
+                "mean": "평균으로 합침",
+                "first": "첫 점만 남김",
+                "reject": "거절 (직접 정리)",
+            },
+            help="장비는 같은 값을 두 번 적기도 하고(샘플링) 되돌아오기도 합니다(제하).",
         ),
     ),
     version="1",

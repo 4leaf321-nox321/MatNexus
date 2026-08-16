@@ -103,6 +103,29 @@
         "title": "AccountOut",
         "type": "object"
       },
+      "AppliedDimensionsOut": {
+        "description": "무엇을 채웠는지. **시편 전체를 돌려주지 않는다** — 이 응답이 답해야 하는\n질문은 \"지금 무슨 일이 일어났나\" 이고, 시편은 화면이 다시 읽으면 된다.",
+        "properties": {
+          "filled": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Filled",
+            "type": "array"
+          },
+          "specimen_id": {
+            "format": "uuid",
+            "title": "Specimen Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "specimen_id",
+          "filled"
+        ],
+        "title": "AppliedDimensionsOut",
+        "type": "object"
+      },
       "ApproveRequest": {
         "properties": {
           "role": {
@@ -1111,6 +1134,71 @@
           "age_hours"
         ],
         "title": "IncompleteOut",
+        "type": "object"
+      },
+      "InstrumentDimensionOut": {
+        "description": "장비 파일이 준 시편 치수 하나.",
+        "properties": {
+          "current_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current M"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value M"
+          }
+        },
+        "required": [
+          "field",
+          "label",
+          "value_m",
+          "current_m"
+        ],
+        "title": "InstrumentDimensionOut",
+        "type": "object"
+      },
+      "InstrumentDimensionsOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InstrumentDimensionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "specimen_id": {
+            "format": "uuid",
+            "title": "Specimen Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "specimen_id"
+        ],
+        "title": "InstrumentDimensionsOut",
         "type": "object"
       },
       "LoginRequest": {
@@ -3571,6 +3659,14 @@
       "StepParamOut": {
         "description": "단계 하나의 입력 칸. **화면의 폼 필드가 여기서 생성된다.**\n\n프론트에 목록을 하드코딩하지 않는 이유: 계산을 추가할 때 두 곳을 고쳐야 하고,\n그러면 한 곳을 빠뜨린다. `matcore.ParamSpec` 을 그대로 내보낸다.",
         "properties": {
+          "choice_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Choice Labels",
+            "type": "object"
+          },
           "choices": {
             "default": [],
             "items": {
@@ -8657,6 +8753,60 @@
         ]
       }
     },
+    "/api/test-runs/{run_id}/apply-instrument-dimensions": {
+      "post": {
+        "description": "장비가 준 치수를 시편에 채운다.\n\n**기본은 빈 칸만 채운다.** 사람이 이미 재어 넣은 값을 파일이 조용히 바꾸면\n어느 것이 맞는지 알 수 없다 — 그래서 자동으로는 아무것도 안 했다. 그런데\n그 판단이 \"채우는 길이 아예 없다\" 로 굳어 있었다. 시편 41개 중 치수가 있는\n것이 3개뿐이었고, 그래서 처리가 첫 단계에서 막혔다.\n\n덮어쓰기는 **명시적으로 요청해야** 한다(`overwrite=true`).",
+        "operationId": "apply_instrument_dimensions_api_test_runs__run_id__apply_instrument_dimensions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "overwrite",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Overwrite",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppliedDimensionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Instrument Dimensions",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
     "/api/test-runs/{run_id}/curve": {
       "get": {
         "description": "차트가 쓸 점들. 축을 고르지 않으면 정의 순서상 첫 두 채널.\n\n`curve` 를 받는 이유: 한 시험이 곡선을 여럿 가질 수 있다(DMA 의 `[step]`).\n안 주면 첫 곡선 — 표가 하나뿐인 파일에서는 예전과 같다.",
@@ -8758,6 +8908,50 @@
           }
         },
         "summary": "Get Curve",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/test-runs/{run_id}/instrument-dimensions": {
+      "get": {
+        "description": "장비 파일이 준 시편 치수와, 시편에 지금 들어 있는 값.\n\n**둘을 나란히 준다.** 파일 값만 주면 화면이 \"덮어쓰는 것인지\" 를 판단할 수\n없다. 채우기와 덮어쓰기는 사람에게 다른 결정이다.",
+        "operationId": "instrument_dimensions_api_test_runs__run_id__instrument_dimensions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstrumentDimensionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Instrument Dimensions",
         "tags": [
           "tests"
         ]

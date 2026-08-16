@@ -15,6 +15,8 @@ Parquet 파일에 있고, 단위는 시험종류 정의에 있고, 시편 치수
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,7 +25,7 @@ from app.modules.materials.models import Specimen
 from app.modules.tests.models import Curve, TestChannel, TestRun
 from app.shared import filestore
 from app.shared.errors import NotFound
-from matcore import curves, processing
+from matcore import curves, processing, units
 
 #: 정규화 곡선의 기본 키. 표가 하나뿐인 파일(대부분)에서 쓰인다.
 RAW_CURVE = "raw"
@@ -122,3 +124,71 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
             )
         )
     return given
+
+
+# --- 장비가 준 시편 치수 ------------------------------------------------------
+
+#: 파일 메타데이터에서 시편 치수를 찾는 이름들.
+#:
+#: **파서마다 이름이 다르다.** Zwick 은 규격 기호를 그대로 쓰고(`a0`=두께,
+#: `b0`=폭), 프로파일로 읽는 파일은 프로파일에 적힌 이름을 쓴다. 실측:
+#:
+#:     Zwick .tra   specimen_thickness_a0 = "0.986",  specimen_width_b0 = "12.473"
+#:     TA DMA .csv  specimen_thickness    = "0.989 mm", specimen_width = "4.938 mm"
+#:
+#: 값의 모양도 다르다 — 한쪽은 숫자만 오고 단위가 별도 키에 있고, 다른 쪽은
+#: `"0.989 mm"` 한 문자열이다. 여기서 둘 다 받는다.
+#:
+#: 파서 출력 키를 통일하지 않는 이유: 이미 저장된 `source_metadata` 가 있고,
+#: 그것을 바꾸려면 마이그레이션이 필요하다. 읽는 쪽에서 별칭을 아는 편이 싸다.
+DIMENSION_ALIASES: dict[str, tuple[str, ...]] = {
+    "thickness_m": ("specimen_thickness", "specimen_thickness_a0", "thickness"),
+    "width_m": ("specimen_width", "specimen_width_b0", "width"),
+    "gauge_length_m": ("gauge_length", "specimen_gauge_length", "l0", "specimen_length"),
+}
+
+
+def _as_metres(raw: object, unit_hint: str | None) -> float | None:
+    """`"0.989 mm"` · `"0.986"`(+단위 힌트) 을 m 로.
+
+    **단위를 못 찾으면 포기한다.** 숫자만 있고 단위를 모를 때 mm 라고 가정하면,
+    m 로 적힌 파일에서 1000배 틀린 시편이 만들어진다 — 그 뒤 응력이 통째로
+    어긋나는데 숫자는 그럴듯하다.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    parts = text.split()
+    number_text, symbol = (parts[0], parts[1]) if len(parts) >= 2 else (text, unit_hint)
+    if not symbol:
+        return None
+    try:
+        value = float(number_text)
+    except ValueError:
+        return None
+    try:
+        metres = units.to_si(value, symbol)
+    except units.UnknownUnit:
+        return None
+    if not (0 < metres < 10):
+        # 시편이 10m 일 리 없다. 단위를 잘못 읽었다는 신호다.
+        return None
+    return metres
+
+
+def instrument_dimensions(metadata: Mapping[str, object]) -> dict[str, float]:
+    """장비 파일이 준 시편 치수. 못 찾은 것은 빠진 채로 온다."""
+    found: dict[str, float] = {}
+    for field, aliases in DIMENSION_ALIASES.items():
+        for alias in aliases:
+            if alias not in metadata:
+                continue
+            metres = _as_metres(
+                metadata[alias], str(metadata.get(f"{alias}_unit") or "") or None
+            )
+            if metres is not None:
+                found[field] = metres
+                break
+    return found

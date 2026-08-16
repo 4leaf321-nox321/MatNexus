@@ -434,3 +434,30 @@ class ProfileTryOut(BaseModel):
     summary: list[TriedSummaryOut]
     metadata: dict[str, str]
     warnings: list[str]
+
+
+class InstrumentDimensionOut(BaseModel):
+    """장비 파일이 준 시편 치수 하나."""
+
+    field: str
+    """`thickness_m` · `width_m` · `gauge_length_m`."""
+    label: str
+    value_m: float | None
+    """파일이 준 값. **없을 수 있다** — 게이지 길이는 시험기 설정값이라 파일에
+    안 적히는 것이 보통이다. 그 경우 사람이 직접 넣는 수밖에 없고, 화면이 그
+    사실을 말해야 한다."""
+    current_m: float | None
+    """시편에 이미 있는 값. 있으면 덮어쓰기가 된다 — 화면이 그 사실을 보여야 한다."""
+
+
+class InstrumentDimensionsOut(BaseModel):
+    items: list[InstrumentDimensionOut]
+    specimen_id: uuid.UUID
+
+
+class AppliedDimensionsOut(BaseModel):
+    """무엇을 채웠는지. **시편 전체를 돌려주지 않는다** — 이 응답이 답해야 하는
+    질문은 "지금 무슨 일이 일어났나" 이고, 시편은 화면이 다시 읽으면 된다."""
+
+    specimen_id: uuid.UUID
+    filled: list[str]

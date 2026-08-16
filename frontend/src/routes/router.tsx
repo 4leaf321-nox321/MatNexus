@@ -17,6 +17,7 @@ import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
 import BatchUploadPage from '@/modules/tests/BatchUploadPage'
 import FormatProfileEditorPage from '@/modules/tests/FormatProfileEditorPage'
+import RecipesPage from '@/modules/processing/RecipesPage'
 import FormatProfilesPage from '@/modules/tests/FormatProfilesPage'
 import TestTypesPage from '@/modules/tests/TestTypesPage'
 import StoragePage from '@/modules/tests/StoragePage'
@@ -75,6 +76,7 @@ export const router = createBrowserRouter([
           // 라우터가 정적 구간을 동적 구간보다 먼저 고르므로 `new` 는 `:key` 에
           // 먹히지 않는다. 순서에 기대지 않도록 적어 둔다.
           { path: 'settings/test-types', element: <TestTypesPage /> },
+          { path: 'settings/recipes', element: <RecipesPage /> },
           { path: 'settings/formats', element: <FormatProfilesPage /> },
           { path: 'settings/formats/new', element: <FormatProfileEditorPage /> },
           { path: 'settings/formats/:key', element: <FormatProfileEditorPage /> },

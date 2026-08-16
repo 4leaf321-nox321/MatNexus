@@ -13,6 +13,8 @@ export type CurvePoints = components['schemas']['CurvePointsOut']
 export type StorageReport = components['schemas']['StorageReportOut']
 export type Parser = components['schemas']['ParserOut']
 export type Detected = components['schemas']['DetectOut']
+export type InstrumentDimensions = components['schemas']['InstrumentDimensionsOut']
+export type AppliedDimensions = components['schemas']['AppliedDimensionsOut']
 type TestTypeSave = components['schemas']['TestTypeSaveRequest']
 type TestTypeCreate = components['schemas']['TestTypeCreateRequest']
 export type TestChannelSave = TestTypeSave['channels'][number]
@@ -141,6 +143,17 @@ export const testsApi = {
   runs: (query: RunQuery = {}) => api.get<TestRunPage>(`/test-runs${search(query)}`),
   run: (id: string) => api.get<TestRunDetail>(`/test-runs/${id}`),
   remove: (id: string) => api.delete<void>(`/test-runs/${id}`),
+  /** 장비 파일이 준 시편 치수와, 시편에 지금 들어 있는 값. */
+  instrumentDimensions: (id: string) =>
+    api.get<InstrumentDimensions>(`/test-runs/${id}/instrument-dimensions`),
+
+  /** 빈 칸만 채운다. 덮어쓰려면 `overwrite`. */
+  applyInstrumentDimensions: (id: string, overwrite = false) =>
+    api.post<AppliedDimensions>(
+      `/test-runs/${id}/apply-instrument-dimensions?overwrite=${overwrite}`,
+      {}
+    ),
+
   reparse: (id: string) => api.post<{ status: string; message: string }>(`/test-runs/${id}/reparse`),
 
   /** 축약된 점들. 서버가 LTTB 로 줄여 주므로 전부 받지 않는다. */

@@ -34,11 +34,14 @@ from app.modules.tests.models import (
     TestType,
 )
 from app.modules.tests.schemas import (
+    AppliedDimensionsOut,
     CleanupQueuedOut,
     CleanupRequest,
     CurveOut,
     CurvePointsOut,
     DetectOut,
+    InstrumentDimensionOut,
+    InstrumentDimensionsOut,
     ParserOut,
     ReparseOut,
     StorageReportOut,
@@ -52,7 +55,7 @@ from app.modules.tests.schemas import (
     TestTypeSaveRequest,
 )
 from app.modules.workspaces.models import Workspace
-from app.shared import filestore, permissions
+from app.shared import curvedata, filestore, permissions
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -896,3 +899,84 @@ def cleanup(
         ),
         dry_run=payload.dry_run,
     )
+
+
+# --- 장비가 준 시편 치수 ------------------------------------------------------
+
+_DIMENSION_LABELS = {
+    "thickness_m": "두께",
+    "width_m": "폭",
+    "gauge_length_m": "게이지 길이",
+}
+
+
+@runs_router.get("/{run_id}/instrument-dimensions", response_model=InstrumentDimensionsOut)
+def instrument_dimensions(
+    run_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> InstrumentDimensionsOut:
+    """장비 파일이 준 시편 치수와, 시편에 지금 들어 있는 값.
+
+    **둘을 나란히 준다.** 파일 값만 주면 화면이 "덮어쓰는 것인지" 를 판단할 수
+    없다. 채우기와 덮어쓰기는 사람에게 다른 결정이다.
+    """
+    run = permissions.get_run(db, user, run_id)
+    specimen = db.get(Specimen, run.specimen_id)
+    found = curvedata.instrument_dimensions(run.source_metadata)
+    # **찾은 것만 주지 않는다.** 화면이 "이건 파일에 없어서 직접 넣어야 한다" 를
+    # 말하려면 없는 것도 알아야 한다. 찾은 것만 주면 화면은 빈 목록을 보고
+    # "파일에 치수가 아예 없다" 로 잘못 읽는다.
+    return InstrumentDimensionsOut(
+        specimen_id=run.specimen_id,
+        items=[
+            InstrumentDimensionOut(
+                field=field,
+                label=label,
+                value_m=found.get(field),
+                current_m=getattr(specimen, field, None) if specimen else None,
+            )
+            for field, label in _DIMENSION_LABELS.items()
+        ],
+    )
+
+
+@runs_router.post("/{run_id}/apply-instrument-dimensions", response_model=AppliedDimensionsOut)
+def apply_instrument_dimensions(
+    run_id: uuid.UUID,
+    overwrite: bool = Query(default=False),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> AppliedDimensionsOut:
+    """장비가 준 치수를 시편에 채운다.
+
+    **기본은 빈 칸만 채운다.** 사람이 이미 재어 넣은 값을 파일이 조용히 바꾸면
+    어느 것이 맞는지 알 수 없다 — 그래서 자동으로는 아무것도 안 했다. 그런데
+    그 판단이 "채우는 길이 아예 없다" 로 굳어 있었다. 시편 41개 중 치수가 있는
+    것이 3개뿐이었고, 그래서 처리가 첫 단계에서 막혔다.
+
+    덮어쓰기는 **명시적으로 요청해야** 한다(`overwrite=true`).
+    """
+    run = permissions.get_run(db, user, run_id)
+    specimen = permissions.visible_specimen(db, user, run.specimen_id)
+    found = curvedata.instrument_dimensions(run.source_metadata)
+    if not found:
+        raise AppError(
+            "MNX-TESTS-0030",
+            "이 파일에는 시편 치수가 없습니다. 시편 기록에 직접 넣으세요.",
+            status=422,
+        )
+    filled: list[str] = []
+    for field, value in found.items():
+        if getattr(specimen, field, None) is not None and not overwrite:
+            continue
+        setattr(specimen, field, value)
+        filled.append(_DIMENSION_LABELS.get(field, field))
+    if not filled:
+        raise AppError(
+            "MNX-TESTS-0031",
+            "시편에 이미 치수가 들어 있습니다. 덮어쓰려면 다시 확인해 주세요.",
+            status=409,
+        )
+    db.commit()
+    return AppliedDimensionsOut(specimen_id=specimen.id, filled=filled)

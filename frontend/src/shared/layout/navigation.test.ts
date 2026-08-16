@@ -25,7 +25,15 @@ function labels(viewer: typeof MEMBER): string[] {
 describe('사이드바 메뉴', () => {
   it('평범한 멤버에게 관리 메뉴를 보이지 않는다', () => {
     const seen = labels(MEMBER)
-    for (const hidden of ['계정', '부서', '시험 종류', '저장소 정리', '서버', '파일 형식']) {
+    for (const hidden of [
+      '계정',
+      '부서',
+      '시험 종류',
+      '저장소 정리',
+      '서버',
+      '파일 형식',
+      '처리 레시피',
+    ]) {
       expect(seen, hidden).not.toContain(hidden)
     }
   })
@@ -48,6 +56,7 @@ describe('사이드바 메뉴', () => {
     const seen = labels(MANAGER)
     expect(seen).toContain('시험 종류')
     expect(seen).toContain('파일 형식')
+    expect(seen).toContain('처리 레시피')
     expect(seen).toContain('부서 멤버')
   })
 
