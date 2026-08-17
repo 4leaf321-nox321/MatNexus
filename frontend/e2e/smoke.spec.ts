@@ -54,16 +54,20 @@ test('로그인부터 곡선까지', async ({ page }) => {
     await page.getByRole('button', { name: '등록', exact: true }).click()
     await expect(page.getByRole('dialog')).toBeHidden()
 
-    // **목록을 훑지 않고 찾는다.** 재료는 이름순으로 정렬되고 한 페이지가
-    // 50개다. 스모크가 실행마다 재료를 하나씩 남기므로, 훑는 방식은 언젠가
-    // "만들었는데 목록에 없다" 로 깨진다 — 그때 원인이 페이지 넘김이라는 것을
-    // 알아내기가 어렵다.
+    // **목록을 훑지 않고 찾는다.** 재료는 이름순으로 정렬되고 한 쪽이 50개다.
+    // 스모크가 실행마다 재료를 하나씩 남기므로, 훑는 방식은 언젠가 "만들었는데
+    // 목록에 없다" 로 깨진다 — 그때 원인이 쪽 넘김이라는 것을 알아내기 어렵다.
+    //
+    // **채우기만 해서는 검색되지 않는다.** 예전에 채우고 끝냈는데, 그때는 새
+    // 재료가 우연히 첫 쪽 50건 안에 있어서 통과했다. 재료가 52건이 되자
+    // 깨졌다 — 위 주석이 예고한 바로 그 실패다. 눌러야 좁혀진다.
     await page.getByPlaceholder('이름 · 별칭 · Grade 로 찾기').fill(RUN_ID)
-    await expect(page.getByText(RUN_ID).first()).toBeVisible()
+    await page.getByRole('button', { name: '찾기' }).click()
+    await expect(page.getByRole('link', { name: new RegExp(RUN_ID) })).toBeVisible()
   })
 
   await test.step('시료 추가', async () => {
-    await page.getByText(RUN_ID).first().click()
+    await page.getByRole('link', { name: new RegExp(RUN_ID) }).click()
     await page.getByRole('button', { name: '시료 추가' }).click()
     await page.getByRole('button', { name: '추가', exact: true }).click()
     await expect(page.getByRole('dialog')).toBeHidden()

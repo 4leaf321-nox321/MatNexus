@@ -17,6 +17,8 @@
 import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
   FileUp,
   FlaskConical,
   Layers,
@@ -51,15 +53,27 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
   return 'outline'
 }
 
+/**
+ * 한 쪽에 몇 건. **서버가 200 에서 자른다**(`shared/pagination.py`).
+ *
+ * 전에는 `limit: 100` 을 박아 두고 총 건수도 안 보여 줬다 — 101번째 시험은
+ * **있는데 화면 어디에도 없었고, 없다는 사실조차 안 보였다.** 목록이 조용히
+ * 잘리는 것이 가장 나쁘다.
+ */
+const PAGE_SIZES = [50, 100, 200] as const
+
 export default function TestRunsPage() {
   const { slug } = useParams<{ slug?: string }>()
   const [uploading, setUploading] = useState(false)
   // 사이드바가 '부서' 라고 말하는 화면이므로 그 부서 것만 보여 준다.
+  const [size, setSize] = useState<number>(PAGE_SIZES[0])
+  const [offset, setOffset] = useState(0)
   const runs = useResource(
-    () => testsApi.runs({ workspace: slug, limit: 100 }),
-    [slug]
+    () => testsApi.runs({ workspace: slug, limit: size, offset }),
+    [slug, size, offset]
   )
   const rows = runs.data?.items ?? []
+  const total = runs.data?.total ?? 0
   const pending = rows.some((run) => isPending(run.status))
 
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -271,6 +285,61 @@ export default function TestRunsPage() {
             ))}
           </TableBody>
         </Table>
+      )}
+
+      {rows.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+          <span className="text-muted-foreground tabular-nums">
+            {offset + 1}–{offset + rows.length} / {total}건
+          </span>
+          <div className="text-muted-foreground flex items-center gap-1">
+            <span>한 쪽에</span>
+            {PAGE_SIZES.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setSize(value)
+                  setOffset(0)
+                  // 쪽을 넘기면 고른 것이 화면에서 사라진다. 남겨 두면 안 보이는
+                  // 시험에 레시피가 걸린다.
+                  setPicked(new Set())
+                }}
+                className={`rounded px-1.5 py-0.5 tabular-nums ${
+                  size === value ? 'bg-muted text-foreground font-medium' : 'hover:bg-muted/60'
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto flex gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={offset === 0}
+              onClick={() => {
+                setOffset(Math.max(0, offset - size))
+                setPicked(new Set())
+              }}
+            >
+              <ChevronLeft className="size-3.5" />
+              이전
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={offset + rows.length >= total}
+              onClick={() => {
+                setOffset(offset + size)
+                setPicked(new Set())
+              }}
+            >
+              다음
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+        </div>
       )}
 
       <UploadDialog

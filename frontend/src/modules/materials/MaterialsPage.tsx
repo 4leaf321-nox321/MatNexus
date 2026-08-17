@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Boxes, Globe2, Plus, Search } from 'lucide-react'
+import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
@@ -38,14 +38,29 @@ import {
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 
+/**
+ * 한 번에 가져올 수 있는 수. **서버가 200 에서 자른다**(`shared/pagination.py`).
+ *
+ * 화면이 '전부'를 요구할 수 있으면 언젠가 `?limit=1000000` 이 나가고, 악의가
+ * 없어도 그렇게 된다. 대신 **넘길 수 있게** 한다 — 137건 중 50건이라고 적어
+ * 놓고 나머지를 볼 길이 없던 것이 문제였다.
+ */
+const PAGE_SIZES = [50, 100, 200] as const
+
 export default function MaterialsPage() {
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [registering, setRegistering] = useState(false)
-  const materials = useResource(() => materialsApi.list({ q: applied }), [applied])
+  const [size, setSize] = useState<number>(PAGE_SIZES[0])
+  const [offset, setOffset] = useState(0)
+  const materials = useResource(
+    () => materialsApi.list({ q: applied, limit: size, offset }),
+    [applied, size, offset]
+  )
 
   const page = materials.data
   const rows = page?.items ?? []
+  const total = page?.total ?? 0
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -65,6 +80,8 @@ export default function MaterialsPage() {
         onSubmit={(event) => {
           event.preventDefault()
           setApplied(query.trim())
+          // 검색은 결과 집합을 바꾼다. 3페이지에 머문 채로 좁히면 빈 화면이 뜬다.
+          setOffset(0)
         }}
       >
         <div className="relative flex-1">
@@ -144,9 +161,51 @@ export default function MaterialsPage() {
               ))}
             </TableBody>
           </Table>
-          <p className="text-muted-foreground mt-3 text-xs">
-            {page?.total}건 중 {rows.length}건
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+            <span className="text-muted-foreground tabular-nums">
+              {offset + 1}–{offset + rows.length} / {total}건
+            </span>
+
+            <div className="text-muted-foreground flex items-center gap-1">
+              <span>한 쪽에</span>
+              {PAGE_SIZES.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setSize(value)
+                    setOffset(0)
+                  }}
+                  className={`rounded px-1.5 py-0.5 tabular-nums ${
+                    size === value ? 'bg-muted text-foreground font-medium' : 'hover:bg-muted/60'
+                  }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+
+            <div className="ml-auto flex gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={offset === 0}
+                onClick={() => setOffset(Math.max(0, offset - size))}
+              >
+                <ChevronLeft className="size-3.5" />
+                이전
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={offset + rows.length >= total}
+                onClick={() => setOffset(offset + size)}
+              >
+                다음
+                <ChevronRight className="size-3.5" />
+              </Button>
+            </div>
+          </div>
         </>
       )}
 

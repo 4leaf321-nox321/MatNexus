@@ -17,6 +17,7 @@ import {
   FlaskConical,
   Globe2,
   Layers,
+  Pencil,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -25,6 +26,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample, Specimen } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
+import { EditMaterialDialog } from '@/modules/materials/EditMaterialDialog'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
@@ -66,6 +68,7 @@ export default function MaterialDetailPage() {
   const material = useResource(() => materialsApi.get(id), [id])
   const samples = useResource(() => materialsApi.samples(id), [id])
   const [addingSample, setAddingSample] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [deleteError, setDeleteError] = useState<Error | null>(null)
   const [expand, setExpand] = useState<ExpandCommand | null>(null)
 
@@ -88,9 +91,15 @@ export default function MaterialDetailPage() {
         title={item?.record_name ?? '재료'}
         description={item?.alias ?? undefined}
         actions={
-          <Button variant="outline" onClick={removeMaterial}>
-            삭제
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditing(true)} disabled={!item}>
+              <Pencil className="size-4" />
+              수정
+            </Button>
+            <Button variant="outline" onClick={removeMaterial}>
+              삭제
+            </Button>
+          </div>
         }
       />
 
@@ -223,6 +232,21 @@ export default function MaterialDetailPage() {
 
         </TabsContent>
       </Tabs>
+
+      {item && (
+        <EditMaterialDialog
+          material={item}
+          open={editing}
+          onClose={() => setEditing(false)}
+          onDone={() => {
+            setEditing(false)
+            material.reload()
+            // 이름이 바뀌었으면 시료·시편 이름도 따라 바뀌었다. 다시 읽지 않으면
+            // 화면에 옛 이름이 남아, 저장이 안 된 것처럼 보인다.
+            samples.reload()
+          }}
+        />
+      )}
 
       {/* 시험 등록 화면과 **같은 폼**을 쓴다. 두 벌로 두면 한쪽에만 필드가 늘거나
           단위를 한쪽만 명시하는 식으로 갈라진다. */}
