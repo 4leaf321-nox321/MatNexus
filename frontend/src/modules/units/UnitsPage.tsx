@@ -45,6 +45,25 @@ import {
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 
+/**
+ * 긴 배수를 짧게. `6894.757293168` 은 아무도 안 읽는다.
+ *
+ * **자릿수를 버리지는 않는다** — 정확한 값은 마우스를 올리면 나온다. 여기서는
+ * 자릿수 감각만 준다.
+ */
+function compact(text: string): string {
+  const value = Number(text)
+  if (!Number.isFinite(value) || value === 0) return text
+  const magnitude = Math.abs(value)
+  if (magnitude >= 1000 || magnitude < 0.01) {
+    const exponent = Math.floor(Math.log10(magnitude))
+    const mantissa = value / 10 ** exponent
+    const head = Number(mantissa.toPrecision(3))
+    return head === 1 ? `10^${exponent}` : `${head}×10^${exponent}`
+  }
+  return String(Number(value.toPrecision(4)))
+}
+
 /** 사람이 읽는 차원 이름. 없으면 원문을 그대로 보여 준다. */
 const DIMENSION_LABEL: Record<string, string> = {
   angle: '각도',
@@ -110,7 +129,15 @@ export default function UnitsPage() {
             <TableHead>차원</TableHead>
             <TableHead>저장</TableHead>
             <TableHead>화면</TableHead>
-            <TableHead>파일에서 알아듣는 기호</TableHead>
+            <TableHead>
+              파일에서 알아듣는 기호
+              {/* **색만으로 뜻을 나르지 않는다.** 범례를 표 아래 문단에 두었더니
+                  "검은 것과 아닌 것의 차이가 뭐냐" 는 질문이 나왔다. 뜻은
+                  그것을 쓰는 자리 옆에 있어야 한다. */}
+              <span className="text-muted-foreground block text-xs font-normal">
+                진한 것이 저장 단위 · 나머지는 저장할 때 환산
+              </span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -143,9 +170,11 @@ export default function UnitsPage() {
 
                 <TableCell>
                   <span className="font-mono text-sm">{shown.unit || '(그대로)'}</span>
+                  {/* **방향을 적는다.** 옆 열의 배수는 반대 방향(기호→저장)이라,
+                      `×` 만 있으면 두 숫자가 왜 서로 역수인지 알 수 없다. */}
                   {(shown.factor !== 1 || shown.offset !== 0) && (
                     <p className="text-muted-foreground font-mono text-xs">
-                      ×{shown.factor}
+                      저장×{compact(String(shown.factor))}
                       {shown.offset !== 0 &&
                         ` ${shown.offset > 0 ? '+' : '−'} ${Math.abs(shown.offset)}`}
                     </p>
@@ -160,12 +189,22 @@ export default function UnitsPage() {
                         variant={unit.is_si ? 'default' : 'outline'}
                         className="font-mono text-xs"
                         title={
-                          unit.offset === '0'
-                            ? `SI = 값 × ${unit.factor}`
-                            : `SI = 값 × ${unit.factor} + ${unit.offset}`
+                          unit.is_si
+                            ? '저장 단위 — 이 차원의 값은 언제나 이것으로 저장됩니다.'
+                            : unit.offset === '0'
+                              ? `1 ${unit.symbol} = ${unit.factor} ${row.si_unit}`
+                              : `${row.si_unit} = 값 × ${unit.factor} + ${unit.offset}`
                         }
                       >
                         {unit.symbol}
+                        {/* 마우스를 올려야 아는 것은 없는 것과 비슷하다. **관계식으로
+                            적는다** — `×10^6` 만 있으면 어느 쪽으로 곱하는지 모른다. */}
+                        {!unit.is_si && unit.factor !== '1' && (
+                          <span className="opacity-60">
+                            ={compact(unit.factor)}
+                            {row.si_unit}
+                          </span>
+                        )}
                       </Badge>
                     ))}
                   </div>
@@ -190,8 +229,8 @@ export default function UnitsPage() {
           <b>알아듣는 기호</b>는 장비가 값 옆에 적어 보내는 단위 글자입니다 — Zwick
           은 <code>"Specimen thickness a0", 0.986, "mm"</code> 처럼 적습니다. 그
           글자를 알아들어야 SI 로 바꿔 저장할 수 있습니다. 입력 폼도 같은 것을
-          씁니다. 진한 것이 저장 단위이고, <code>→</code> 는 다른 표기를 무엇으로
-          읽는지입니다. 대소문자는 가리지 않지만,{' '}
+          씁니다. <code>→</code> 는 다른 표기를 무엇으로 읽는지입니다. 대소문자는
+          가리지 않지만,{' '}
           <b>대소문자만 다른 두 단위가 있으면 정확히 써야 합니다</b> — 예를 들어{' '}
           <code>mm</code> 과 <code>Mm</code> 처럼 뜻이 갈리는 쌍은 추측하지 않고
           거절합니다.
