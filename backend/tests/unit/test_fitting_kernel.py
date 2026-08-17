@@ -117,6 +117,45 @@ class Test태도:
             fitting.fit("made_up", strain, stress)
 
 
+class Test소성구간:
+    """**경화식은 탄성 구간을 설명하지 않는다.**
+
+    개발 데이터에서 실제로 걸린 결함이다 — 대표 곡선 50점 중 34점이 소성변형률
+    0 이었고(`clip_zero` 가 남긴 자국), 그 34점의 응력이 133~341 MPa 로 흩어져
+    있었다. 어떤 단조 함수도 그것을 맞출 수 없어 **식이 맞는데도 R² 가 0.42** 로
+    나왔다.
+    """
+
+    def test_잘린_탄성_구간을_한_점으로_모은다(self) -> None:
+        strain = np.array([0.0, 0.0, 0.0, 0.01, 0.02])
+        stress = np.array([130e6, 200e6, 341e6, 350e6, 360e6])
+        trimmed_strain, trimmed_stress, notes = fitting.plastic_branch(strain, stress)
+        assert list(trimmed_strain) == [0.0, 0.01, 0.02]
+        # **마지막 0 점이 항복점이다.** 첫 점을 남기면 130 MPa 를 항복강도로 쓴다.
+        assert trimmed_stress[0] == pytest.approx(341e6)
+        assert any("항복점" in note for note in notes)
+
+    def test_모을_것이_없으면_그대로_둔다(self) -> None:
+        strain, stress = voce_curve()
+        trimmed_strain, _, notes = fitting.plastic_branch(strain, stress)
+        assert len(trimmed_strain) == len(strain)
+        assert notes == []
+
+    def test_걷어내면_적합이_실제로_좋아진다(self) -> None:
+        """이 시험이 위 결함의 재현이자 회귀 방지다."""
+        strain, stress = voce_curve(20)
+        # 탄성 구간이 0 으로 잘린 모양을 앞에 붙인다.
+        clipped_strain = np.concatenate([np.zeros(30), strain])
+        clipped_stress = np.concatenate([np.linspace(130e6, stress[0], 30), stress])
+
+        dirty = fitting.fit("voce", clipped_strain, clipped_stress)
+        clean = fitting.fit(
+            "voce", *fitting.plastic_branch(clipped_strain, clipped_stress)[:2]
+        )
+        assert dirty.relative_rmse > 0.05
+        assert clean.relative_rmse < 0.01
+
+
 class Test견주기:
     def test_하나가_안_되도_나머지를_버리지_않는다(self) -> None:
         strain, stress = voce_curve()

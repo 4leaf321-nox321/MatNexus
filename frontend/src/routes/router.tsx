@@ -101,8 +101,9 @@ export const router = createBrowserRouter([
                 path: 'workbench',
                 ...stub('워크벤치', 'Phase 3~4', 'Data → Process → Stats → Fit → Export.'),
               },
-              { path: 'statistics', ...stub('통계', 'Phase 3') },
-              { path: 'exports', ...stub('내보내기', 'Phase 4') },
+              // 부서 스코프 `statistics`·`exports` 는 뺐다. 워크벤치의 3번·5번
+              // 탭과 같은 것이고, 결과 열람은 재료 상세의 '물성'·'CAE 카드' 다
+              // — 같은 이름의 빈 화면이 남아 있으면 어느 쪽이 진짜인지 알 수 없다.
               { path: 'members', element: <MembersPage /> },
             ],
           },

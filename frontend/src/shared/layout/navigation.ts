@@ -9,12 +9,10 @@
  */
 
 import {
-  BarChart3,
   Bell,
   BookOpen,
   Boxes,
   Building2,
-  Download,
   FileCode2,
   FlaskConical,
   GitCompare,
@@ -70,16 +68,25 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   {
+    // **작업하는 곳.** 여러 시험을 한 줄기로 미는 자리다.
     title: '부서',
     items: [
       { label: '홈', icon: Home, resolve: (s) => `/w/${s}`, end: true },
       { label: '시험 데이터', icon: FlaskConical, resolve: (s) => `/w/${s}/tests` },
+      // 워크벤치 5탭이 `시험 선택 → 레시피 적용 → 앙상블 → 피팅 → 솔버 카드` 다.
+      //
+      // **'통계'와 '내보내기'를 여기서 뺐다.** 계획서 §5 에는 셋이 나란히 있었는데,
+      // 그 둘은 워크벤치의 3번·5번 탭과 같은 것이다. 빈 stub 으로 남겨 두었더니
+      // 재료 상세의 '물성'·'CAE 카드' 와 이름이 겹쳐, 어느 쪽이 진짜인지 알 수
+      // 없었다 — 실제로 "구조가 꼬인 것 같다" 는 말이 나왔다.
+      //
+      // 자리를 나누는 기준은 **작업이냐 열람이냐** 다. 여러 시험을 골라 미는
+      // 것은 워크벤치, "이 재료의 물성이 얼마인가" 는 재료 상세다.
       { label: '워크벤치', icon: SlidersHorizontal, resolve: (s) => `/w/${s}/workbench` },
-      { label: '통계', icon: BarChart3, resolve: (s) => `/w/${s}/statistics` },
-      { label: '내보내기', icon: Download, resolve: (s) => `/w/${s}/exports` },
     ],
   },
   {
+    // **결과를 보는 곳.** 재료 상세가 개요·물성·CAE 카드를 탭으로 갖는다.
     title: '카탈로그',
     items: [
       { label: '재료', icon: Boxes, to: '/materials' },

@@ -194,6 +194,40 @@ FAMILIES: dict[str, Family] = {
 }
 
 
+def plastic_branch(
+    plastic_strain: np.ndarray, true_stress: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """소성 구간만 남긴다. **경화식은 탄성 구간을 설명하지 않는다.**
+
+    `tensile.true_plastic` 의 `clip_zero` 는 탄성 되돌림 때문에 음수로 나온
+    소성변형률을 0 으로 자른다. 그래서 곡선 앞쪽에 **x 가 전부 0 인 점이 여럿**
+    남는다 — 실측으로 50점 중 34점이 그랬고, 그 34점의 응력은 133~341 MPa 로
+    흩어져 있었다.
+
+    그대로 적합하면 어떤 단조 함수도 그 34점을 맞출 수 없어 잔차가 거기서 다
+    나온다. 실제로 R²가 0.42 로 나왔는데, **식이 안 맞아서가 아니라 소성식에
+    탄성 구간을 먹인 탓이었다.**
+
+    마지막 0 점(항복점)만 남긴다. 첫 점을 남기면 응력이 낮은 곳을 항복강도로
+    쓰게 된다.
+    """
+    strain = np.asarray(plastic_strain, dtype=np.float64)
+    stress = np.asarray(true_stress, dtype=np.float64)
+    zeros = int(np.sum(strain <= 0.0))
+    if zeros <= 1:
+        return strain, stress, []
+    return (
+        strain[zeros - 1 :],
+        stress[zeros - 1 :],
+        [
+            f"소성변형률이 0 인 점이 {zeros}개였습니다 — 탄성 구간을 0 으로 자른 "
+            f"자국입니다. 그중 마지막(항복점, {stress[zeros - 1] / 1e6:.4g} MPa)만 "
+            f"남기고 {zeros - 1}점을 빼고 적합했습니다. 경화식은 탄성 구간을 "
+            f"설명하지 않습니다."
+        ],
+    )
+
+
 def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) -> FitResult:
     """경화식 하나를 적합한다.
 

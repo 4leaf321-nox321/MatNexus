@@ -106,7 +106,10 @@ def _representative(
             status=422,
         )
     mean = np.asarray(curve["mean"], dtype=np.float64)
-    return group, mean[:, 0], mean[:, 1], notes
+    # **탄성 구간의 자국을 걷어내고 넘긴다.** 안 걷어내면 x 가 전부 0 인 점
+    # 수십 개가 적합을 지배해서, 식이 맞는데도 R² 가 0.4 로 나온다.
+    strain, stress, trimmed = fitting.plastic_branch(mean[:, 0], mean[:, 1])
+    return group, strain, stress, [*notes, *trimmed]
 
 
 def _fit_out(result: fitting.FitResult) -> FitOut:

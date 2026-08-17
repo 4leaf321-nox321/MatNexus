@@ -166,7 +166,9 @@ export function FittingPanel({ materialId }: Props) {
             disabled={!group || busy}
             onClick={() => group && run(group)}
           >
-            {busy ? '적합 중…' : '적합해 보기'}
+            {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. 이 버튼이
+                하는 일은 여러 식을 같은 곡선에 맞춰 **나란히 놓는 것**이다. */}
+            {busy ? '맞춰 보는 중…' : '경화식 견주기'}
           </Button>
         </div>
       )}
@@ -223,7 +225,7 @@ function FitComparison({
   return (
     <div className="mb-6 rounded-md border">
       <header className="flex flex-wrap items-center gap-2 border-b p-3">
-        <h3 className="font-medium">경화식 견주기</h3>
+        <h3 className="font-medium">경화식 후보</h3>
         <span className="text-muted-foreground text-sm">
           시편 {preview.sample_count}개의 대표 곡선 {preview.source_points.length}점
         </span>
