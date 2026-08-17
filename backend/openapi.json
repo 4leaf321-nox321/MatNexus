@@ -4519,6 +4519,11 @@
             "title": "Seq No",
             "type": "integer"
           },
+          "test_run_count": {
+            "default": 0,
+            "title": "Test Run Count",
+            "type": "integer"
+          },
           "thickness": {
             "anyOf": [
               {

@@ -19,7 +19,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
-import type { Sample } from '@/modules/materials/api'
+import type { Sample, Specimen } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { MaterialTests } from '@/modules/tests/MaterialTests'
@@ -271,46 +271,27 @@ function SampleRow({
             <p className="text-muted-foreground py-4 text-center text-sm">시편이 없습니다.</p>
           ) : (
             <ul className="divide-y">
-              {(specimens.data ?? []).map((specimen) => (
-                <li key={specimen.id} className="py-2 text-sm">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="secondary">{specimen.orientation}</Badge>
-                    <span className="font-mono text-xs">{specimen.record_name}</span>
-                    <span className="text-muted-foreground ml-auto tabular-nums">
-                      {[specimen.thickness, specimen.width, specimen.gauge_length]
-                        .map((value) => (value == null ? '—' : value))
-                        .join(' × ')}{' '}
-                      {specimen.length_unit}
-                    </span>
-                    {/* 일괄 등록이 만든 뒤 업로드가 실패하면 빈 시편이 남는다.
-                        치울 길이 없으면 목록이 계속 지저분해진다. 서버가 시험이
-                        달린 시편은 거절하므로 실수로 지울 수는 없다. */}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      title="시편 삭제 (시험이 있으면 서버가 막습니다)"
-                      onClick={async () => {
-                        setSpecimenError(null)
-                        try {
-                          await materialsApi.removeSpecimen(specimen.id)
-                          specimens.reload()
-                          onChanged()
-                        } catch (caught) {
-                          setSpecimenError(
-                            caught instanceof Error ? caught : new Error('삭제 실패')
-                          )
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                  {/* 시험 UI 는 시험 모듈이 갖는다. 여기는 자리만 내어 준다(R5). */}
-                  <SpecimenTests
-                    specimenId={specimen.id}
-                    specimenName={specimen.record_name}
-                  />
-                </li>
+              {(specimens.data ?? []).map((specimen, index) => (
+                <SpecimenRow
+                  key={specimen.id}
+                  specimen={specimen}
+                  /* 시료와 같은 규칙 — 첫 줄만 펼쳐 둔다. 전부 접으면 '시험
+                     등록' 이 어디 있는지 알 수 없고, 전부 펼치면 시편 11개짜리
+                     시료에서 화면이 끝없이 늘어난다. */
+                  defaultOpen={index === 0}
+                  onRemove={async () => {
+                    setSpecimenError(null)
+                    try {
+                      await materialsApi.removeSpecimen(specimen.id)
+                      specimens.reload()
+                      onChanged()
+                    } catch (caught) {
+                      setSpecimenError(
+                        caught instanceof Error ? caught : new Error('삭제 실패')
+                      )
+                    }
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -325,6 +306,82 @@ function SampleRow({
               onChanged()
             }}
           />
+        </div>
+      )}
+    </li>
+  )
+}
+
+/**
+ * 시편 한 줄 — **접힌다.**
+ *
+ * 시편 11개를 전부 펼쳐 두면 화면이 끝없이 늘어나고, 시험 목록을 시편마다
+ * 한 번씩 불러 요청이 11번 나간다. 접힌 줄이 아무것도 말하지 않으면 접는 뜻이
+ * 없으므로, **시험 수는 접힌 채로도 보인다**(목록이 한 번에 세어 준다).
+ */
+function SpecimenRow({
+  specimen,
+  defaultOpen,
+  onRemove,
+}: {
+  specimen: Specimen
+  defaultOpen: boolean
+  onRemove: () => void
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const dimensions = [specimen.thickness, specimen.width, specimen.gauge_length]
+    .map((value) => (value == null ? '—' : value))
+    .join(' × ')
+
+  return (
+    <li className="text-sm">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="hover:bg-muted/40 -mx-1 flex flex-1 items-center gap-3 rounded px-1 py-2 text-left"
+        >
+          {open ? (
+            <ChevronDown className="size-3.5 shrink-0" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0" />
+          )}
+          <Badge variant="secondary">{specimen.orientation}</Badge>
+          <span className="font-mono text-xs">{specimen.record_name}</span>
+          <span className="text-muted-foreground ml-auto tabular-nums">
+            {dimensions} {specimen.length_unit}
+          </span>
+          {/* 접힌 줄에서 시험이 있는지 보여야 한다. 없으면 하나씩 펼쳐 봐야
+              "어느 시편에 시험이 붙었나" 를 알게 된다. */}
+          <span
+            className={
+              specimen.test_run_count > 0
+                ? 'text-xs'
+                : 'text-muted-foreground text-xs'
+            }
+          >
+            시험 {specimen.test_run_count}
+          </span>
+        </button>
+
+        {/* 일괄 등록이 만든 뒤 업로드가 실패하면 빈 시편이 남는다. 치울 길이
+            없으면 목록이 계속 지저분해진다. 서버가 시험이 달린 시편은 거절하므로
+            실수로 지울 수는 없다. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          title="시편 삭제 (시험이 있으면 서버가 막습니다)"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      </div>
+
+      {/* 시험 UI 는 시험 모듈이 갖는다. 여기는 자리만 내어 준다(R5).
+          접혀 있으면 아예 부르지 않는다 — 요청도 같이 줄어든다. */}
+      {open && (
+        <div className="pb-2 pl-7">
+          <SpecimenTests specimenId={specimen.id} specimenName={specimen.record_name} />
         </div>
       )}
     </li>

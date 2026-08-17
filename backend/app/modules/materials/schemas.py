@@ -166,6 +166,13 @@ class SpecimenOut(BaseModel):
     note: str | None
     created_at: datetime
 
+    test_run_count: int = 0
+    """이 시편에 걸린 시험 수.
+
+    **접힌 줄이 아무것도 말하지 않으면 접는 뜻이 없다.** 하나씩 펼쳐 봐야
+    "시험이 있는 시편이 어느 것인지" 를 알게 되기 때문이다. 목록에서 한 번에
+    세어 넣는다 — 시편마다 물으면 N+1 이다."""
+
 
 class SpecimenCreateRequest(BaseModel):
     orientation: str = Field(default="NA", max_length=10)

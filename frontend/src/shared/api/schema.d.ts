@@ -3249,6 +3249,11 @@ export interface components {
             sample_id: string;
             /** Seq No */
             seq_no: number;
+            /**
+             * Test Run Count
+             * @default 0
+             */
+            test_run_count: number;
             /** Thickness */
             thickness: number | null;
             /** Width */

@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -164,6 +165,56 @@ class TestHierarchy:
             "SECC_MDOI_1.0__01__MD_02",
             "SECC_MDOI_1.0__01__TD_01",
         ]
+
+    def test_시편_목록이_시험_수를_함께_준다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        """**접힌 줄이 아무것도 말하지 않으면 접는 뜻이 없다.**
+
+        화면이 시편을 접어 두는데, 시험 수가 안 보이면 "어느 시편에 시험이
+        붙었나" 를 알려고 하나씩 펼쳐야 한다. 시편마다 물으면 N+1 이므로
+        목록이 한 번에 세어 준다.
+        """
+        from app.modules.tests.definitions import ensure_builtin_test_types
+
+        ensure_builtin_test_types(db)
+        db.commit()
+
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        specimens = [
+            client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD"},
+                headers=admin_headers,
+            ).json()
+            for _ in range(2)
+        ]
+
+        tra = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+        for _ in range(2):
+            client.post(
+                "/api/test-runs",
+                data={
+                    "specimen_id": specimens[0]["id"],
+                    "test_type": "tensile",
+                    "conditions": "{}",
+                },
+                files={"file": ("Example.tra", tra.read_bytes())},
+                headers=admin_headers,
+            )
+
+        listed = client.get(
+            f"/api/samples/{sample['id']}/specimens", headers=admin_headers
+        ).json()
+        counts = {item["record_name"]: item["test_run_count"] for item in listed}
+        assert counts[specimens[0]["record_name"]] == 2
+        assert counts[specimens[1]["record_name"]] == 0
 
 
 class TestRename:

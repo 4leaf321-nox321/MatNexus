@@ -107,9 +107,10 @@ def _sample_out(
     )
 
 
-def _specimen_out(specimen: Specimen) -> SpecimenOut:
+def _specimen_out(specimen: Specimen, *, test_run_count: int = 0) -> SpecimenOut:
     unit = specimen.input_units.get("length", LENGTH_UNIT)
     return SpecimenOut(
+        test_run_count=test_run_count,
         id=specimen.id,
         sample_id=specimen.sample_id,
         workspace_id=specimen.workspace_id,
@@ -522,12 +523,27 @@ def list_specimens(
     db: Session = Depends(get_db),
 ) -> list[SpecimenOut]:
     sample = _get_sample(db, user, sample_id)
-    rows = db.scalars(
-        select(Specimen)
-        .where(Specimen.sample_id == sample.id, Specimen.deleted_at.is_(None))
-        .order_by(Specimen.orientation, Specimen.seq_no)
+    rows = list(
+        db.scalars(
+            select(Specimen)
+            .where(Specimen.sample_id == sample.id, Specimen.deleted_at.is_(None))
+            .order_by(Specimen.orientation, Specimen.seq_no)
+        )
     )
-    return [_specimen_out(specimen) for specimen in rows]
+    # **한 번에 센다.** 시편마다 물으면 시편 11개짜리 시료에서 쿼리가 12번 나간다
+    # (CLAUDE.md — N+1 은 명시적 join 으로 막는다).
+    counts: dict[uuid.UUID, int] = {
+        specimen_id: count
+        for specimen_id, count in db.execute(
+            select(TestRun.specimen_id, func.count())
+            .where(
+                TestRun.specimen_id.in_([item.id for item in rows]),
+                TestRun.deleted_at.is_(None),
+            )
+            .group_by(TestRun.specimen_id)
+        ).all()
+    }
+    return [_specimen_out(item, test_run_count=counts.get(item.id, 0)) for item in rows]
 
 
 @samples_router.post("/{sample_id}/specimens", response_model=SpecimenOut, status_code=201)
