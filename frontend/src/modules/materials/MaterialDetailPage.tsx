@@ -139,6 +139,15 @@ export default function MaterialDetailPage() {
         <TabsContent value="cards">{id && <FittingPanel materialId={id} />}</TabsContent>
 
         <TabsContent value="samples">
+      {/* **층 이름만으로는 무엇인지 알 수 없다.** 실제로 "시료와 시편과 시험이
+          각각 뭐냐" 는 질문이 나왔다. 나눠 둔 이유가 층마다 거기에만 붙는 것이
+          있기 때문이므로, 그 붙는 것을 한 줄에 적는다(ADR 0004). */}
+      <p className="text-muted-foreground mb-3 rounded-md border border-dashed p-2.5 text-xs">
+        <b>시료</b>는 입고된 실물 한 덩이(코일·판 하나)입니다 — 제조사·생산일·로트가
+        여기 붙습니다. <b>시편</b>은 거기서 잘라낸 조각이고, <b>방향과 실측 치수</b>가
+        여기 있습니다 — 하중을 응력으로 바꾸는 단면적이 그 값입니다.
+      </p>
+
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-medium">
           <Layers className="size-4" />

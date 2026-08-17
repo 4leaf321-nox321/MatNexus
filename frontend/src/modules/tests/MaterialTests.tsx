@@ -74,6 +74,15 @@ export function MaterialTests({ materialId }: Props) {
     <section>
       <ErrorNotice error={runs.error} className="mb-4" />
 
+      {/* 옆 탭과 무엇이 다른지 한 줄로 말한다. 인장에서는 시편과 시험이 1:1 이라
+          둘이 같은 것처럼 보이는데, DMA·피로처럼 시편 하나를 여러 번 거는 시험도
+          있어서 층을 합칠 수 없다. */}
+      <p className="text-muted-foreground mb-3 rounded-md border border-dashed p-2.5 text-xs">
+        <b>시험</b>은 시편 하나를 장비에 건 기록입니다 — 장비 파일 하나가 시험 한
+        건입니다. 인장은 시편이 파단되어 한 번뿐이라 시편과 1:1 이지만, DMA·피로는
+        시편 하나에 여러 건이 붙습니다.
+      </p>
+
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {FILTERS.map((item) => (
           <Button
