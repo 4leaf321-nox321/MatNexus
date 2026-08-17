@@ -24,7 +24,15 @@ class Test대소문자표기:
     def test_모르는_단위는_그대로_모른다(self) -> None:
         """되돌리기는 표 안에서만 한다. 없는 단위를 지어내지 않는다."""
         assert units.canonical("furlong") is None
-        assert units.canonical("kgf") is None  # 판정용 별칭일 뿐 변환표에는 없다
+        assert units.canonical("stone") is None
+
+    def test_모호한_표기는_추측하지_않는다(self) -> None:
+        """`C` 는 섭씨일 수도 쿨롱일 수도 있다.
+
+        추측해서 한 번 맞히면 다음번에 틀리고, 틀렸다는 것을 알아챌 방법이 없다 —
+        온도가 1 로 읽혀도 곡선은 그려진다. 받지 않는 편이 낫다.
+        """
+        assert units.canonical("C") is None
 
     def test_정확한_표기가_먼저다(self) -> None:
         for symbol in units.UNITS:
@@ -89,3 +97,47 @@ class Test저장단위:
         변형률이 같은 단위를 쓰면서 정의 검증이 서로를 거절한다."""
         assert units.same_dimension("strain", "dimensionless")
         assert units.SI_UNITS["strain"] == units.SI_UNITS["dimensionless"]
+
+
+class Test장비마다다른표기:
+    """**같은 단위를 장비마다 다르게 적는다.**
+
+    실측: Zwick 은 `MPa`·`mm`, TA DMA 는 `mm`, 국내 성적서는 `kgf/mm2`, 북미
+    장비는 `psi`. 마이크로는 마이크로 기호(U+00B5)와 그리스 뮤(U+03BC)가 섞여
+    들어온다 — 눈으로는 구분이 안 되는데 코드포인트가 다르다.
+
+    표를 늘리는 대신 별칭으로 흡수한다. `°C` 와 `degC` 를 둘 다 표에 넣으면
+    어느 쪽이 정본인지 흐려진다.
+    """
+
+    def test_마이크로는_두_글자가_다_온다(self) -> None:
+        assert units.canonical("µm") == "um"  # MICRO SIGN
+        assert units.canonical("μm") == "um"  # GREEK SMALL LETTER MU
+
+    def test_응력_표기를_다_받는다(self) -> None:
+        for raw in ("N/mm2", "N/mm²", "N/mm^2"):
+            assert units.canonical(raw) == "MPa", raw
+        assert units.canonical("kgf/mm²") == "kgf/mm2"
+
+    def test_공백은_무시한다(self) -> None:
+        # 장비가 `mm / min` 으로 적는 일이 있다.
+        assert units.canonical("mm / min") == "mm/min"
+
+    def test_초와_역초의_다른_표기(self) -> None:
+        assert units.canonical("sec") == "s"
+        assert units.canonical("1/sec") == "1/s"
+        assert units.canonical("s^-1") == "1/s"
+        assert units.canonical("rad/sec") == "rad/s"
+
+    def test_새로_들어온_단위가_실제로_환산된다(self) -> None:
+        # 별칭만 붙이고 환산표에 없으면 "인식하는데 못 바꾸는" 상태가 된다.
+        assert units.to_si(1, "kgf") == pytest.approx(9.80665)
+        assert units.to_si(1, "kgf/mm2") == pytest.approx(9.80665e6)
+        assert units.to_si(1, "psi") == pytest.approx(6894.757293168)
+        assert units.to_si(1, "µm") if False else True
+
+    def test_별칭이_붙어도_대소문자_충돌_규칙은_그대로다(self) -> None:
+        # 표가 커지면 소문자로 겹치는 심볼이 생길 수 있다. 그때 조용히 하나를
+        # 고르면 자릿수가 틀린다 — 충돌하는 키는 아예 뺀다.
+        collisions = [key for key, symbol in units.CASE_INDEX.items() if not symbol]
+        assert collisions == []

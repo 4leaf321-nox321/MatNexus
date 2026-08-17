@@ -14,7 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.modules.accounts.models import User
-from app.modules.units.schemas import DimensionOut, UnitOut, UnitsOut
+from app.modules.units.schemas import AliasOut, DimensionOut, UnitOut, UnitsOut
 from app.shared.auth import current_user
 from matcore import units
 
@@ -39,6 +39,18 @@ def list_units(user: User = Depends(current_user)) -> UnitsOut:
         items.sort(key=lambda item: (not item.is_si, item.symbol))
 
     reverse_alias = {target: source for source, target in units.DIMENSION_ALIASES.items()}
+
+    # 별칭도 차원별로 묶는다. **이게 없으면 화면이 정본만 보여 주고**, "우리
+    # 장비는 N/mm2 로 적는데 되나" 를 여전히 코드로 확인해야 한다.
+    aliases: dict[str, list[AliasOut]] = {}
+    for written, means in units.NOTATION_ALIASES.items():
+        target = units.UNITS.get(means)
+        if target is None:
+            continue
+        aliases.setdefault(target.dimension, []).append(AliasOut(written=written, means=means))
+    for alias_items in aliases.values():
+        alias_items.sort(key=lambda item: item.written)
+
     return UnitsOut(
         dimensions=[
             DimensionOut(
@@ -46,6 +58,7 @@ def list_units(user: User = Depends(current_user)) -> UnitsOut:
                 si_unit=units.SI_UNITS.get(dimension, "?"),
                 alias_of=reverse_alias.get(dimension),
                 units=items,
+                aliases=aliases.get(dimension, []),
             )
             for dimension, items in sorted(grouped.items())
         ],

@@ -15,6 +15,19 @@ class UnitOut(BaseModel):
     is_si: bool
 
 
+class AliasOut(BaseModel):
+    """같은 단위의 다른 표기. **장비마다 다르게 적는다.**
+
+    실측: 마이크로를 마이크로 기호(U+00B5)로 적는 장비와 그리스 뮤(U+03BC)로
+    적는 장비가 섞여 있다 — 눈으로는 같아 보이는데 코드포인트가 다르다.
+    """
+
+    written: str
+    """파일·폼에 적혀 오는 글자."""
+    means: str
+    """우리 표의 어느 심볼로 읽는가."""
+
+
 class DimensionOut(BaseModel):
     dimension: str
     si_unit: str
@@ -23,6 +36,8 @@ class DimensionOut(BaseModel):
     """`strain` 은 `dimensionless` 의 별칭이다 — 차원 검증에서는 같게 치지만
     화면에서는 %로 보여 준다. 단위로는 못 가르는 것을 가르는 장치다."""
     units: list[UnitOut]
+    aliases: list[AliasOut]
+    """이 차원의 단위를 가리키는 다른 표기들."""
 
 
 class UnitsOut(BaseModel):

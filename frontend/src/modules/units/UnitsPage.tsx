@@ -110,7 +110,7 @@ export default function UnitsPage() {
             <TableHead>차원</TableHead>
             <TableHead>저장</TableHead>
             <TableHead>화면</TableHead>
-            <TableHead>받는 표기</TableHead>
+            <TableHead>파일에서 알아듣는 기호</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -169,6 +169,15 @@ export default function UnitsPage() {
                       </Badge>
                     ))}
                   </div>
+                  {/* **장비마다 같은 단위를 다르게 적는다.** 정본만 보여 주면
+                      "우리 장비는 N/mm2 로 적는데 되나" 를 여전히 코드로 확인해야
+                      한다. 마이크로 기호(U+00B5)와 그리스 뮤(U+03BC)처럼 눈으로는
+                      구분이 안 되는 것도 있다. */}
+                  {row.aliases.length > 0 && (
+                    <p className="text-muted-foreground mt-1 font-mono text-xs">
+                      {row.aliases.map((alias) => `${alias.written}→${alias.means}`).join('  ')}
+                    </p>
+                  )}
                 </TableCell>
               </TableRow>
             )
@@ -178,8 +187,11 @@ export default function UnitsPage() {
 
       <div className="text-muted-foreground mt-4 space-y-2 text-xs">
         <p>
-          <b>받는 표기</b>는 장비 파일의 헤더와 입력 폼이 쓸 수 있는 기호입니다. 진한
-          것이 저장 단위입니다. 대소문자는 가리지 않지만,{' '}
+          <b>알아듣는 기호</b>는 장비가 값 옆에 적어 보내는 단위 글자입니다 — Zwick
+          은 <code>"Specimen thickness a0", 0.986, "mm"</code> 처럼 적습니다. 그
+          글자를 알아들어야 SI 로 바꿔 저장할 수 있습니다. 입력 폼도 같은 것을
+          씁니다. 진한 것이 저장 단위이고, <code>→</code> 는 다른 표기를 무엇으로
+          읽는지입니다. 대소문자는 가리지 않지만,{' '}
           <b>대소문자만 다른 두 단위가 있으면 정확히 써야 합니다</b> — 예를 들어{' '}
           <code>mm</code> 과 <code>Mm</code> 처럼 뜻이 갈리는 쌍은 추측하지 않고
           거절합니다.

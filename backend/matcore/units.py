@@ -65,10 +65,15 @@ UNITS: dict[str, Unit] = {
         _u("um", "length", "0.000001"),
         _u("N", "force", "1"),
         _u("kN", "force", "1000"),
+        # 국내 현장 표기. 시험기 설정이 kgf 인 곳이 아직 있다.
+        _u("kgf", "force", "9.80665"),
         _u("Pa", "stress", "1"),
         _u("kPa", "stress", "1000"),
         _u("MPa", "stress", "1000000"),
         _u("GPa", "stress", "1000000000"),
+        # kgf/mm2 는 국내 성적서에, psi 는 북미 장비에 나온다.
+        _u("kgf/mm2", "stress", "9806650"),
+        _u("psi", "stress", "6894.757293168"),
         # **변형률은 물리적으로 무차원이다.** `1` 을 strain 차원에 두면 tan δ 나
         # 비율 같은 다른 무차원 값과 같은 단위를 쓰면서 차원만 달라져, 정의
         # 검증이 서로를 거절한다. 실제로 DMA 정의를 만들다 걸렸다.
@@ -124,6 +129,47 @@ class UnknownUnit(ValueError):
         self.symbol = symbol
 
 
+#: 같은 단위의 다른 표기. **표를 늘리지 않고 여기서 흡수한다** — `°C` 와 `degC`
+#: 를 둘 다 표에 넣으면 어느 쪽이 정본인지 흐려진다.
+#:
+#: **`units` 에 두는 이유:** 예전에는 `readers/profile.py` 에만 있어서 장비 파일을
+#: 읽을 때만 통했다. 사람이 입력 폼에 `sec` 이라고 치면 "모르는 단위" 였다 —
+#: 같은 기호가 경로에 따라 되기도 하고 안 되기도 하는 상태였다.
+#:
+#: 키는 **소문자·공백 제거** 뒤에 맞춘다.
+NOTATION_ALIASES = {
+    # 마이크로: 마이크로 기호(U+00B5)와 그리스 뮤(U+03BC)가 둘 다 쓰인다.
+    "µm": "um",
+    "μm": "um",
+    # 섭씨
+    "°c": "degC",
+    "℃": "degC",
+    "degc": "degC",
+    "°": "deg",
+    # 응력
+    "n/mm2": "MPa",
+    "n/mm²": "MPa",
+    "n/mm^2": "MPa",
+    "kgf/mm²": "kgf/mm2",
+    "kg/mm2": "kgf/mm2",
+    # 시간·속도
+    "sec": "s",
+    "1/sec": "1/s",
+    "s^-1": "1/s",
+    "s-1": "1/s",
+    "rad/sec": "rad/s",
+    # 밀도
+    "g/cc": "g/cm3",
+    "g/cm³": "g/cm3",
+    "kg/m³": "kg/m3",
+}
+
+
+def _normalize(symbol: str) -> str:
+    """공백을 없애고 소문자로. `mm / min` 과 `mm/min` 은 같은 것이다."""
+    return "".join(symbol.split()).lower()
+
+
 def _case_index() -> dict[str, str]:
     """소문자 → 정본 심볼. **충돌하면 둘 다 뺀다.**
 
@@ -139,7 +185,7 @@ def _case_index() -> dict[str, str]:
     """
     index: dict[str, str] = {}
     for symbol in UNITS:
-        key = symbol.lower()
+        key = _normalize(symbol)
         index[key] = "" if key in index else symbol
     return {key: symbol for key, symbol in index.items() if symbol}
 
@@ -150,12 +196,24 @@ CASE_INDEX = _case_index()
 def canonical(symbol: str) -> str | None:
     """표기가 조금 다른 단위를 정본 심볼로. 모르면 `None`.
 
-    정확히 맞는 것이 먼저다 — 대소문자 되돌리기는 그다음에만 한다.
+    순서가 있다. **정확히 맞는 것이 먼저다** — 아래로 갈수록 추측이 섞이므로,
+    위에서 걸리면 아래를 보지 않는다.
+
+    1. 표에 그대로 있는가
+    2. 알려진 다른 표기인가 (`N/mm2`, `sec`, `µm`)
+    3. 대소문자만 다른가 (`mpa` → `MPa`, 충돌하면 안 함)
+
+    **모르면 `None` 이다. 비슷한 것을 고르지 않는다.** `C` 는 섭씨일 수도
+    쿨롱일 수도 있어서 받지 않는다 — 추측해서 맞히면 다음번에 틀린다.
     """
     text = symbol.strip()
     if text in UNITS:
         return text
-    return CASE_INDEX.get(text.lower())
+    key = _normalize(text)
+    alias = NOTATION_ALIASES.get(key)
+    if alias:
+        return alias
+    return CASE_INDEX.get(key)
 
 
 def unit_of(symbol: str) -> Unit:

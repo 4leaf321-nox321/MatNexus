@@ -1444,6 +1444,19 @@ export interface components {
             status: string;
         };
         /**
+         * AliasOut
+         * @description 같은 단위의 다른 표기. **장비마다 다르게 적는다.**
+         *
+         *     실측: 마이크로를 마이크로 기호(U+00B5)로 적는 장비와 그리스 뮤(U+03BC)로
+         *     적는 장비가 섞여 있다 — 눈으로는 같아 보이는데 코드포인트가 다르다.
+         */
+        AliasOut: {
+            /** Means */
+            means: string;
+            /** Written */
+            written: string;
+        };
+        /**
          * AppliedDimensionsOut
          * @description 무엇을 채웠는지. **시편 전체를 돌려주지 않는다** — 이 응답이 답해야 하는
          *     질문은 "지금 무슨 일이 일어났나" 이고, 시편은 화면이 다시 읽으면 된다.
@@ -1747,6 +1760,8 @@ export interface components {
         DimensionOut: {
             /** Alias Of */
             alias_of: string | null;
+            /** Aliases */
+            aliases: components["schemas"]["AliasOut"][];
             /** Dimension */
             dimension: string;
             /** Si Unit */

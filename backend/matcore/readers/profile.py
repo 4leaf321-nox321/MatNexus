@@ -33,16 +33,15 @@ from matcore import units
 from matcore.parsers import Channel, CurveData, ParsedTest, ParseError, SummaryValue
 from matcore.readers.tabular import ReadOptions, Table, TabularFile, read
 
-#: 장비 표기 → `matcore.units` 심볼. 단위표를 늘리는 대신 여기서 흡수한다 —
-#: `°C` 와 `degC` 는 같은 것이고, 표에 둘 다 넣으면 어느 쪽이 정본인지 흐려진다.
+#: **파일을 읽을 때만** 뜻이 있는 표기.
+#:
+#: 단위 표기 별칭 자체는 `matcore.units.NOTATION_ALIASES` 로 올렸다 — 파일 읽기와
+#: 입력 폼이 같은 것을 알아들어야 하는데, 여기에만 두었더니 사람이 폼에 `sec` 을
+#: 치면 "모르는 단위" 였다.
+#:
+#: 여기 남은 둘은 **파일에만 있는 사정**이다. 빈 칸과 `-` 는 파일에서 "단위 없음"
+#: 을 뜻하지만, 입력 폼에서 빈 칸은 "안 적었다" 이지 무차원이 아니다.
 UNIT_ALIASES = {
-    "°c": "degC",
-    "℃": "degC",
-    "degc": "degC",
-    "°": "deg",
-    "n/mm2": "MPa",
-    "n/mm²": "MPa",
-    "mm/mm": "1",
     "": "1",
     "-": "1",
 }
