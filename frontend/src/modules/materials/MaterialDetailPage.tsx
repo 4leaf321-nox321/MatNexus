@@ -6,12 +6,14 @@
  * 같은 시료의 MD/TD/DD 를 묶어 r값·이방성 파라미터를 구할 수 있다(ADR 0004).
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   FlaskConical,
   Globe2,
   Layers,
@@ -45,6 +47,19 @@ import { useResource } from '@/shared/hooks/useResource'
 
 const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
 
+/**
+ * '모두 펼치기·접기' 명령.
+ *
+ * 여닫힘을 부모가 통째로 들고 있으면 줄 하나를 열 때마다 목록 전체가 다시
+ * 그려진다. 그래서 상태는 줄에 두고 **명령만 내려보낸다.** `at` 은 같은 방향을
+ * 두 번 눌러도 다시 반영되게 하는 값이다 — 사람이 하나를 손으로 닫은 뒤
+ * '모두 펼치기' 를 다시 누르는 일이 실제로 있다.
+ */
+interface ExpandCommand {
+  open: boolean
+  at: number
+}
+
 export default function MaterialDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -52,6 +67,7 @@ export default function MaterialDetailPage() {
   const samples = useResource(() => materialsApi.samples(id), [id])
   const [addingSample, setAddingSample] = useState(false)
   const [deleteError, setDeleteError] = useState<Error | null>(null)
+  const [expand, setExpand] = useState<ExpandCommand | null>(null)
 
   const item = material.data
 
@@ -153,10 +169,34 @@ export default function MaterialDetailPage() {
           <Layers className="size-4" />
           시료
         </h2>
-        <Button size="sm" variant="secondary" onClick={() => setAddingSample(true)}>
-          <Plus className="size-4" />
-          시료 추가
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* **두 층을 한 번에 여닫는다.** 시료 3개 × 시편 6개를 손으로 여는
+              것은 클릭 20번이다. 펼치면 시편마다 시험 목록을 부르므로 요청이
+              늘지만, 그것은 누른 사람이 요청한 일이다 — 기본이 접힘인 이유는
+              누르지 않았을 때 그 비용을 치르지 않게 하는 것이다. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            title="시료와 시편을 모두 펼칩니다"
+            onClick={() => setExpand({ open: true, at: Date.now() })}
+          >
+            <ChevronsUpDown className="size-4" />
+            모두 펼치기
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            title="시료와 시편을 모두 접습니다"
+            onClick={() => setExpand({ open: false, at: Date.now() })}
+          >
+            <ChevronsDownUp className="size-4" />
+            모두 접기
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setAddingSample(true)}>
+            <Plus className="size-4" />
+            시료 추가
+          </Button>
+        </div>
       </div>
 
       <ErrorNotice error={samples.error} className="mb-4" />
@@ -175,6 +215,7 @@ export default function MaterialDetailPage() {
             /* 첫 시료는 펼친 채로 연다. 전부 접어 두면 시편도 '시험 등록'도
                보이지 않아, 처음 온 사람이 어디서 시작하는지 알 수 없다. */
             defaultOpen={index === 0}
+            expand={expand}
             onChanged={() => samples.reload()}
           />
         ))}
@@ -212,10 +253,12 @@ function SampleRow({
   sample,
   onChanged,
   defaultOpen = false,
+  expand,
 }: {
   sample: Sample
   onChanged: () => void
   defaultOpen?: boolean
+  expand: ExpandCommand | null
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [adding, setAdding] = useState(false)
@@ -224,6 +267,12 @@ function SampleRow({
     () => (open ? materialsApi.specimens(sample.id) : Promise.resolve([])),
     [open, sample.id]
   )
+
+  // '모두 펼치기·접기'. 명령이 올 때만 따라가고, 그 뒤에는 다시 이 줄이 자기
+  // 상태를 갖는다 — 하나만 손으로 닫는 것이 계속 가능해야 한다.
+  useEffect(() => {
+    if (expand) setOpen(expand.open)
+  }, [expand])
 
   return (
     <li className="rounded-md border">
@@ -284,8 +333,11 @@ function SampleRow({
                   specimen={specimen}
                   /* 시료와 같은 규칙 — 첫 줄만 펼쳐 둔다. 전부 접으면 '시험
                      등록' 이 어디 있는지 알 수 없고, 전부 펼치면 시편 11개짜리
-                     시료에서 화면이 끝없이 늘어난다. */
-                  defaultOpen={index === 0}
+                     시료에서 화면이 끝없이 늘어난다.
+                     '모두 펼치기' 뒤에 시료를 열면 시편도 펼쳐진 채로 붙는다 —
+                     그러지 않으면 명령이 절반만 먹은 것처럼 보인다. */
+                  defaultOpen={expand?.open === true || index === 0}
+                  expand={expand}
                   onRemove={async () => {
                     setSpecimenError(null)
                     try {
@@ -365,13 +417,19 @@ function RunTally({
 function SpecimenRow({
   specimen,
   defaultOpen,
+  expand,
   onRemove,
 }: {
   specimen: Specimen
   defaultOpen: boolean
+  expand: ExpandCommand | null
   onRemove: () => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
+
+  useEffect(() => {
+    if (expand) setOpen(expand.open)
+  }, [expand])
   const dimensions = [specimen.thickness, specimen.width, specimen.gauge_length]
     .map((value) => (value == null ? '—' : value))
     .join(' × ')
