@@ -78,11 +78,52 @@ def _material_out(
     )
 
 
+#: 시험 상태 집계 한 벌 — (전체, 채택, 실패).
+RunTally = tuple[int, int, int]
+
+
+def _run_tallies(
+    db: Session, *, group_by: Any, ids: list[uuid.UUID], join_specimen: bool
+) -> dict[uuid.UUID, RunTally]:
+    """시험을 **한 번에** 센다.
+
+    줄마다 물으면 시편 11개짜리 시료에서 쿼리가 12번 나간다(CLAUDE.md — N+1 은
+    명시적 join 으로 막는다).
+
+    `count(adopted_result_id)` 가 곧 채택 수다 — NULL 은 세지 않는다.
+    """
+    if not ids:
+        return {}
+    query = select(
+        group_by,
+        func.count(TestRun.id),
+        func.count(TestRun.adopted_result_id),
+        func.count().filter(TestRun.status == "failed"),
+    ).where(TestRun.deleted_at.is_(None))
+    if join_specimen:
+        query = query.join(Specimen, Specimen.id == TestRun.specimen_id).where(
+            Specimen.deleted_at.is_(None)
+        )
+    return {
+        key: (total, adopted, failed)
+        for key, total, adopted, failed in db.execute(
+            query.where(group_by.in_(ids)).group_by(group_by)
+        ).all()
+    }
+
+
 def _sample_out(
-    sample: Sample, *, specimen_count: int, workspace_name: str | None
+    sample: Sample,
+    *,
+    specimen_count: int,
+    workspace_name: str | None,
+    runs: RunTally = (0, 0, 0),
 ) -> SampleOut:
     unit = sample.input_units.get("density", DENSITY_UNIT)
     return SampleOut(
+        test_run_count=runs[0],
+        adopted_count=runs[1],
+        failed_count=runs[2],
         id=sample.id,
         material_id=sample.material_id,
         workspace_id=sample.workspace_id,
@@ -107,10 +148,12 @@ def _sample_out(
     )
 
 
-def _specimen_out(specimen: Specimen, *, test_run_count: int = 0) -> SpecimenOut:
+def _specimen_out(specimen: Specimen, *, runs: RunTally = (0, 0, 0)) -> SpecimenOut:
     unit = specimen.input_units.get("length", LENGTH_UNIT)
     return SpecimenOut(
-        test_run_count=test_run_count,
+        test_run_count=runs[0],
+        adopted_count=runs[1],
+        failed_count=runs[2],
         id=specimen.id,
         sample_id=specimen.sample_id,
         workspace_id=specimen.workspace_id,
@@ -381,11 +424,15 @@ def list_samples(
     )
     counts = services.specimen_counts(db, [s.id for s in rows])
     names = services.workspace_names(db, [s.workspace_id for s in rows])
+    tallies = _run_tallies(
+        db, group_by=Specimen.sample_id, ids=[s.id for s in rows], join_specimen=True
+    )
     return [
         _sample_out(
             s,
             specimen_count=counts.get(s.id, 0),
             workspace_name=names.get(s.workspace_id),
+            runs=tallies.get(s.id, (0, 0, 0)),
         )
         for s in rows
     ]
@@ -530,20 +577,13 @@ def list_specimens(
             .order_by(Specimen.orientation, Specimen.seq_no)
         )
     )
-    # **한 번에 센다.** 시편마다 물으면 시편 11개짜리 시료에서 쿼리가 12번 나간다
-    # (CLAUDE.md — N+1 은 명시적 join 으로 막는다).
-    counts: dict[uuid.UUID, int] = {
-        specimen_id: count
-        for specimen_id, count in db.execute(
-            select(TestRun.specimen_id, func.count())
-            .where(
-                TestRun.specimen_id.in_([item.id for item in rows]),
-                TestRun.deleted_at.is_(None),
-            )
-            .group_by(TestRun.specimen_id)
-        ).all()
-    }
-    return [_specimen_out(item, test_run_count=counts.get(item.id, 0)) for item in rows]
+    tallies = _run_tallies(
+        db,
+        group_by=TestRun.specimen_id,
+        ids=[item.id for item in rows],
+        join_specimen=False,
+    )
+    return [_specimen_out(item, runs=tallies.get(item.id, (0, 0, 0))) for item in rows]
 
 
 @samples_router.post("/{sample_id}/specimens", response_model=SpecimenOut, status_code=201)

@@ -113,6 +113,16 @@ class SampleOut(BaseModel):
     specimen_count: int
     created_at: datetime
 
+    test_run_count: int = 0
+    adopted_count: int = 0
+    failed_count: int = 0
+    """이 시료의 시편들에 걸린 시험 상태.
+
+    **접힌 줄이 상태를 말해야 한다.** 접기만 하고 개수를 안 주면 "실패한 게
+    있나" 를 알려고 시료·시편을 전부 펼쳐야 한다. 특히 `adopted_count` 는
+    물성 탭의 n 이 왜 그 수인지를 설명한다 — 통계와 적합에 들어가는 것은
+    채택된 것뿐이다(ADR 0007)."""
+
 
 class SampleCreateRequest(BaseModel):
     lot_no: str | None = Field(default=None, max_length=100)
@@ -167,11 +177,13 @@ class SpecimenOut(BaseModel):
     created_at: datetime
 
     test_run_count: int = 0
-    """이 시편에 걸린 시험 수.
+    adopted_count: int = 0
+    failed_count: int = 0
+    """이 시편에 걸린 시험과 그 상태.
 
     **접힌 줄이 아무것도 말하지 않으면 접는 뜻이 없다.** 하나씩 펼쳐 봐야
-    "시험이 있는 시편이 어느 것인지" 를 알게 되기 때문이다. 목록에서 한 번에
-    세어 넣는다 — 시편마다 물으면 N+1 이다."""
+    "시험이 있는지, 실패했는지, 채택됐는지" 를 알게 되기 때문이다. 목록에서
+    한 번에 세어 넣는다 — 시편마다 물으면 N+1 이다."""
 
 
 class SpecimenCreateRequest(BaseModel):

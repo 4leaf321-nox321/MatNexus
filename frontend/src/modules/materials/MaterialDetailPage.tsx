@@ -8,6 +8,8 @@
 
 import { useState } from 'react'
 import {
+  AlertTriangle,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   FlaskConical,
@@ -22,7 +24,6 @@ import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample, Specimen } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
-import { MaterialTests } from '@/modules/tests/MaterialTests'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -118,16 +119,15 @@ export default function MaterialDetailPage() {
           "이 재료의 물성은 얼마인가". 세로로 이어 붙이면 시료가 늘수록 물성이
           아래로 밀려나는데, 물성이 이 화면의 결론이다. */}
       <Tabs defaultValue="samples">
+        {/* **탭 셋이 서로 다른 질문에 답한다** — 무엇이 있나 / 물성이 얼마인가 /
+            해석에 뭘 넣나. 한때 '시험' 탭을 따로 뒀는데, 시편 줄이 접히고 그
+            줄에 시험 수·채택·실패가 붙으면서 답하던 것이 겹쳤다. 같은 것을 두
+            자리에 두면 어느 쪽이 진짜인지 알 수 없게 된다. */}
         <TabsList>
           <TabsTrigger value="samples">시료·시편</TabsTrigger>
-          <TabsTrigger value="runs">시험</TabsTrigger>
           <TabsTrigger value="properties">물성</TabsTrigger>
           <TabsTrigger value="cards">CAE 카드</TabsTrigger>
         </TabsList>
-
-        {/* 옆 탭이 "무엇이 어디에 매달려 있나" 라면 여기는 **"이 재료에 시험이
-            몇 건 들어왔나"** 다. 계층으로는 시편을 전부 펼쳐야 셀 수 있다. */}
-        <TabsContent value="runs">{id && <MaterialTests materialId={id} />}</TabsContent>
 
         <TabsContent value="properties">
           {id && <PropertiesPanel materialId={id} />}
@@ -235,8 +235,15 @@ function SampleRow({
         {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
         <span className="font-mono text-xs">{sample.record_name}</span>
         {sample.lot_no && <Badge variant="outline">로트 {sample.lot_no}</Badge>}
-        <span className="text-muted-foreground ml-auto text-sm">
-          시편 {sample.specimen_count}
+        {/* **접힌 줄이 상태를 말한다.** 펼치지 않고도 "시험이 몇 건이고 몇 건이
+            채택됐나" 가 보여야, 물성 탭의 n 이 왜 그 수인지 여기서 설명된다. */}
+        <span className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
+          <span>시편 {sample.specimen_count}</span>
+          <RunTally
+            total={sample.test_run_count}
+            adopted={sample.adopted_count}
+            failed={sample.failed_count}
+          />
         </span>
       </button>
 
@@ -313,6 +320,42 @@ function SampleRow({
 }
 
 /**
+ * 시험 상태 한 조각 — 시료 줄과 시편 줄이 같은 것을 쓴다.
+ *
+ * **채택을 눈에 띄게 두는 이유:** 통계와 적합에 들어가는 것은 채택된 결과뿐이다
+ * (ADR 0007). 물성 탭의 n 이 왜 그 수인지가 이 숫자에 있다 — 안 보이면 "시험은
+ * 15건인데 왜 8개로 평균을 냈지" 를 답할 수 없다.
+ */
+function RunTally({
+  total,
+  adopted,
+  failed,
+}: {
+  total: number
+  adopted: number
+  failed: number
+}) {
+  if (total === 0) return <span className="text-muted-foreground text-xs">시험 0</span>
+  return (
+    <span className="flex items-center gap-1.5 text-xs">
+      <span>시험 {total}</span>
+      {adopted > 0 && (
+        <span className="inline-flex items-center gap-0.5 text-emerald-700 dark:text-emerald-500">
+          <CheckCircle2 className="size-3" />
+          채택 {adopted}
+        </span>
+      )}
+      {failed > 0 && (
+        <span className="inline-flex items-center gap-0.5 text-destructive">
+          <AlertTriangle className="size-3" />
+          실패 {failed}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
  * 시편 한 줄 — **접힌다.**
  *
  * 시편 11개를 전부 펼쳐 두면 화면이 끝없이 늘어나고, 시험 목록을 시편마다
@@ -351,17 +394,13 @@ function SpecimenRow({
           <span className="text-muted-foreground ml-auto tabular-nums">
             {dimensions} {specimen.length_unit}
           </span>
-          {/* 접힌 줄에서 시험이 있는지 보여야 한다. 없으면 하나씩 펼쳐 봐야
-              "어느 시편에 시험이 붙었나" 를 알게 된다. */}
-          <span
-            className={
-              specimen.test_run_count > 0
-                ? 'text-xs'
-                : 'text-muted-foreground text-xs'
-            }
-          >
-            시험 {specimen.test_run_count}
-          </span>
+          {/* 접힌 줄에서 시험 상태가 보여야 한다. 없으면 하나씩 펼쳐 봐야
+              "어느 시편이 실패했나 · 채택됐나" 를 알게 된다. */}
+          <RunTally
+            total={specimen.test_run_count}
+            adopted={specimen.adopted_count}
+            failed={specimen.failed_count}
+          />
         </button>
 
         {/* 일괄 등록이 만든 뒤 업로드가 실패하면 빈 시편이 남는다. 치울 길이

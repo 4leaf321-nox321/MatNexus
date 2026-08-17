@@ -3864,6 +3864,11 @@
       },
       "SampleOut": {
         "properties": {
+          "adopted_count": {
+            "default": 0,
+            "title": "Adopted Count",
+            "type": "integer"
+          },
           "alias": {
             "anyOf": [
               {
@@ -3928,6 +3933,11 @@
               }
             ],
             "title": "Distributor"
+          },
+          "failed_count": {
+            "default": 0,
+            "title": "Failed Count",
+            "type": "integer"
           },
           "id": {
             "format": "uuid",
@@ -4027,6 +4037,11 @@
           },
           "specimen_count": {
             "title": "Specimen Count",
+            "type": "integer"
+          },
+          "test_run_count": {
+            "default": 0,
+            "title": "Test Run Count",
             "type": "integer"
           },
           "workspace_id": {
@@ -4465,10 +4480,20 @@
       },
       "SpecimenOut": {
         "properties": {
+          "adopted_count": {
+            "default": 0,
+            "title": "Adopted Count",
+            "type": "integer"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "failed_count": {
+            "default": 0,
+            "title": "Failed Count",
+            "type": "integer"
           },
           "gauge_length": {
             "anyOf": [

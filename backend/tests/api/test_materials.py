@@ -166,7 +166,7 @@ class TestHierarchy:
             "SECC_MDOI_1.0__01__TD_01",
         ]
 
-    def test_시편_목록이_시험_수를_함께_준다(
+    def test_접힌_줄이_시험_상태를_말한다(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
@@ -174,11 +174,17 @@ class TestHierarchy:
     ) -> None:
         """**접힌 줄이 아무것도 말하지 않으면 접는 뜻이 없다.**
 
-        화면이 시편을 접어 두는데, 시험 수가 안 보이면 "어느 시편에 시험이
-        붙었나" 를 알려고 하나씩 펼쳐야 한다. 시편마다 물으면 N+1 이므로
-        목록이 한 번에 세어 준다.
+        화면이 시료와 시편을 접어 두는데, 상태가 안 보이면 "실패한 게 있나 ·
+        채택된 게 몇 건인가" 를 알려고 전부 펼쳐야 한다. 특히 채택 수는 물성
+        탭의 n 이 왜 그 수인지를 설명한다(ADR 0007).
+
+        줄마다 물으면 N+1 이므로 목록이 한 번에 세어 준다.
         """
+        import uuid as uuid_module
+
+        from app.modules.tests import services as test_services
         from app.modules.tests.definitions import ensure_builtin_test_types
+        from app.modules.tests.models import TestRun
 
         ensure_builtin_test_types(db)
         db.commit()
@@ -197,7 +203,7 @@ class TestHierarchy:
         ]
 
         tra = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
-        for _ in range(2):
+        runs = [
             client.post(
                 "/api/test-runs",
                 data={
@@ -207,14 +213,52 @@ class TestHierarchy:
                 },
                 files={"file": ("Example.tra", tra.read_bytes())},
                 headers=admin_headers,
-            )
+            ).json()
+            for _ in range(2)
+        ]
+        # 하나는 읽히고 채택까지, 하나는 읽다 실패한 상태로 둔다.
+        assert test_services.parse_run(db, uuid_module.UUID(runs[0]["id"])) == "parsed"
+        stored = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": runs[0]["id"],
+                "steps": [
+                    {
+                        "plugin": "tensile.engineering",
+                        "options": {"gauge_length": 0.05, "area": 12.12e-6},
+                    }
+                ],
+            },
+            headers=admin_headers,
+        ).json()
+        client.post(f"/api/processing/results/{stored['id']}/adopt", headers=admin_headers)
+        failed = db.get(TestRun, uuid_module.UUID(runs[1]["id"]))
+        assert failed is not None
+        failed.status = "failed"
+        db.commit()
 
         listed = client.get(
             f"/api/samples/{sample['id']}/specimens", headers=admin_headers
         ).json()
-        counts = {item["record_name"]: item["test_run_count"] for item in listed}
-        assert counts[specimens[0]["record_name"]] == 2
-        assert counts[specimens[1]["record_name"]] == 0
+        by_name = {item["record_name"]: item for item in listed}
+        first = by_name[specimens[0]["record_name"]]
+        assert (first["test_run_count"], first["adopted_count"], first["failed_count"]) == (
+            2,
+            1,
+            1,
+        )
+        second = by_name[specimens[1]["record_name"]]
+        assert second["test_run_count"] == 0
+
+        # 시료 줄은 그 시편들을 합쳐서 말한다 — 펼치지 않고도 보여야 한다.
+        samples = client.get(
+            f"/api/materials/{material['id']}/samples", headers=admin_headers
+        ).json()
+        assert (
+            samples[0]["test_run_count"],
+            samples[0]["adopted_count"],
+            samples[0]["failed_count"],
+        ) == (2, 1, 1)
 
 
 class TestRename:

@@ -3061,6 +3061,11 @@ export interface components {
         };
         /** SampleOut */
         SampleOut: {
+            /**
+             * Adopted Count
+             * @default 0
+             */
+            adopted_count: number;
             /** Alias */
             alias: string | null;
             /** Applied Part */
@@ -3081,6 +3086,11 @@ export interface components {
             density_unit: string;
             /** Distributor */
             distributor: string | null;
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
             /**
              * Id
              * Format: uuid
@@ -3111,6 +3121,11 @@ export interface components {
             seq_no: number;
             /** Specimen Count */
             specimen_count: number;
+            /**
+             * Test Run Count
+             * @default 0
+             */
+            test_run_count: number;
             /**
              * Workspace Id
              * Format: uuid
@@ -3220,10 +3235,20 @@ export interface components {
         /** SpecimenOut */
         SpecimenOut: {
             /**
+             * Adopted Count
+             * @default 0
+             */
+            adopted_count: number;
+            /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
             /** Gauge Length */
             gauge_length: number | null;
             /**
