@@ -48,6 +48,12 @@ ignore_missing_imports = true
 module = ["pyarrow.*"]
 ignore_missing_imports = true
 
+# scipy 도 스텁을 배포하지 않는다. 비선형 최소제곱 한 곳에서만 쓴다 —
+# 경계 있는 적합을 직접 짜면 조용히 틀린 답에 수렴하는 쪽이 훨씬 위험하다.
+[[tool.mypy.overrides]]
+module = ["scipy.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

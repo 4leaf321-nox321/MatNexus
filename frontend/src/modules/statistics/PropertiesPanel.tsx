@@ -212,6 +212,9 @@ function ScalarRow({ row }: { row: ScalarStats }) {
 }
 
 function EnsembleCurve({ group }: { group: StatisticsGroup }) {
+  // **훅이 조건 뒤에 오면 안 된다.** 곡선이 없는 렌더에서만 훅 하나가 빠져
+  // 호출 순서가 달라지고, React 는 그 상태를 다른 훅의 것으로 읽는다.
+  const [mode, setMode] = useState<'mean' | 'median'>('mean')
   const curve = group.curve
   if (!curve) return null
 
@@ -224,7 +227,6 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
       toDisplay(y, unitOf(curve.y), dimensionOf(curve.y)),
     ])
 
-  const [mode, setMode] = useState<'mean' | 'median'>('mean')
   const points = shown((mode === 'mean' ? curve.mean : curve.median) as [number, number][])
 
   return (

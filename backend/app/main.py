@@ -19,6 +19,7 @@ from app.database import SessionLocal
 from app.logging_setup import setup_logging
 from app.modules.accounts import routes as accounts_routes
 from app.modules.auth import routes as auth_routes
+from app.modules.fitting import routes as fitting_routes
 from app.modules.materials import routes as materials_routes
 from app.modules.notices import routes as notices_routes
 from app.modules.notifications import routes as notifications_routes
@@ -62,6 +63,7 @@ def _api_router() -> APIRouter:
     router.include_router(tests_formats.router)
     router.include_router(processing_routes.router)
     router.include_router(statistics_routes.router)
+    router.include_router(fitting_routes.router)
     router.include_router(units_routes.router)
 
     return router

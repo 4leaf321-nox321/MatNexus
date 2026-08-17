@@ -54,6 +54,16 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       why: '처리 결과도 곡선이라 같은 CurveChart 로 그린다. 차트를 shared 로 올리지 않은 이유: 축 라벨·단위 표기·LTTB 안내 문구가 전부 시험 도메인의 것이라, shared 로 올리면 공통이 도메인을 알게 된다.',
     },
   ],
+  fitting: [
+    {
+      to: 'statistics',
+      why: '적합의 입력이 통계의 대표 곡선이다. 어느 묶음을 적합할지 고르려면 묶음 목록(재료+시험종류+방향, 표본 수)이 필요한데, 그것을 아는 것은 통계 모듈이다. 시편 하나로 적합하지 않기 위한 구조라 우회할 수 없다.',
+    },
+    {
+      to: 'tests',
+      why: '적합 결과를 대표 곡선과 겹쳐 그린다. 겹쳐 보지 않으면 RMSE 가 작아도 항복 근처만 크게 어긋난 것을 못 본다 — 그것은 숫자가 아니라 모양으로 보인다. 통계·처리가 같은 이유로 CurveChart 를 쓴다.',
+    },
+  ],
   materials: [
     {
       to: 'statistics',
@@ -62,6 +72,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
     {
       to: 'tests',
       why: '재료 상세가 시편별 시험 목록을 끼워 넣는다(SpecimenTests). 위의 반대 방향이고, 둘은 한 화면을 나눠 그린다.',
+    },
+    {
+      to: 'fitting',
+      why: '재료 상세의 CAE 카드 탭. 카드는 재료 하나의 물성 한 벌이고, 그 입력이 바로 옆 물성 탭의 대표 곡선이다 — 다른 화면으로 보내면 근거와 결론이 떨어진다.',
     },
   ],
   auth: [

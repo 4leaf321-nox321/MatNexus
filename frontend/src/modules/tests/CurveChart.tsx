@@ -25,6 +25,14 @@ export interface CurveChartProps {
   xLabel: string
   yLabel: string
   height?: number
+  overlay?: { points: [number, number][]; label: string }
+  /**
+   * 겹쳐 그릴 두 번째 선. **적합 결과는 겹쳐 보지 않으면 판단할 수 없다** —
+   * RMSE 가 작아도 항복 근처만 크게 어긋나 있을 수 있고, 그것은 숫자가 아니라
+   * 모양으로 보인다. 위 주석이 "Phase 3 에서 다시 판단한다" 고 한 그 지점이다.
+   * 선 두 개까지는 라이브러리 없이 충분하다.
+   */
+  pointsLabel?: string
 }
 
 const PAD = { top: 16, right: 20, bottom: 44, left: 68 }
@@ -55,13 +63,23 @@ function format(value: number): string {
   return Number(value.toPrecision(4)).toString()
 }
 
-export function CurveChart({ points, xLabel, yLabel, height = 380 }: CurveChartProps) {
+export function CurveChart({
+  points,
+  xLabel,
+  yLabel,
+  height = 380,
+  overlay,
+  pointsLabel,
+}: CurveChartProps) {
   const [hover, setHover] = useState<number | null>(null)
 
   const scale = useMemo(() => {
     if (points.length === 0) return null
-    const xs = points.map((p) => p[0])
-    const ys = points.map((p) => p[1])
+    // 겹쳐 그리는 선도 축 범위에 넣는다. 안 넣으면 적합 곡선이 판을 벗어나
+    // 잘려 보이고, 잘린 그림으로는 잘 맞는지 알 수 없다.
+    const all = overlay ? [...points, ...overlay.points] : points
+    const xs = all.map((p) => p[0])
+    const ys = all.map((p) => p[1])
     const xMin = Math.min(...xs)
     const xMax = Math.max(...xs)
     const yMin = Math.min(0, ...ys) // 하중·응력은 0 부터 보는 것이 실무 감각이다
@@ -80,7 +98,7 @@ export function CurveChart({ points, xLabel, yLabel, height = 380 }: CurveChartP
       plotWidth,
       plotHeight,
     }
-  }, [points, height])
+  }, [points, overlay, height])
 
   if (!scale) {
     return (
@@ -165,6 +183,20 @@ export function CurveChart({ points, xLabel, yLabel, height = 380 }: CurveChartP
 
         <path d={path} fill="none" className="stroke-primary" strokeWidth={1.75} />
 
+        {overlay && overlay.points.length > 0 && (
+          <path
+            d={overlay.points
+              .map(
+                (p, i) => `${i === 0 ? 'M' : 'L'}${scale.toX(p[0])},${scale.toY(p[1])}`
+              )
+              .join(' ')}
+            fill="none"
+            className="stroke-amber-600 dark:stroke-amber-500"
+            strokeWidth={1.75}
+            strokeDasharray="5 3"
+          />
+        )}
+
         {active && (
           <g>
             <line
@@ -209,6 +241,19 @@ export function CurveChart({ points, xLabel, yLabel, height = 380 }: CurveChartP
           {yLabel}
         </text>
       </svg>
+
+      {overlay && (
+        <div className="flex items-center justify-center gap-4 pb-1 text-xs">
+          <span className="flex items-center gap-1.5">
+            <span className="bg-primary inline-block h-0.5 w-5" />
+            {pointsLabel ?? '데이터'}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-5 border-t-2 border-dashed border-amber-600 dark:border-amber-500" />
+            {overlay.label}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

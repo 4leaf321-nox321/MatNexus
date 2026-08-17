@@ -20,6 +20,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
+import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
@@ -119,11 +120,17 @@ export default function MaterialDetailPage() {
         <TabsList>
           <TabsTrigger value="samples">시료·시편</TabsTrigger>
           <TabsTrigger value="properties">물성</TabsTrigger>
+          <TabsTrigger value="cards">CAE 카드</TabsTrigger>
         </TabsList>
 
         <TabsContent value="properties">
           {id && <PropertiesPanel materialId={id} />}
         </TabsContent>
+
+        {/* 물성 탭이 "이 재료가 이렇게 거동한다" 를 데이터로 보인다면, 여기는
+            그 거동을 솔버가 읽는 모양으로 굳힌다. 옆 탭인 이유는 입력이 옆
+            탭의 대표 곡선이기 때문이다. */}
+        <TabsContent value="cards">{id && <FittingPanel materialId={id} />}</TabsContent>
 
         <TabsContent value="samples">
       <div className="mb-3 flex items-center justify-between">

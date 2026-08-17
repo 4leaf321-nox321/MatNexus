@@ -290,6 +290,184 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Cards */
+        get: operations["list_cards_api_fitting_cards_get"];
+        put?: never;
+        /**
+         * Create Card
+         * @description 물성 카드를 만든다. **초안으로 시작한다**(D8).
+         *
+         *     **표는 언제나 저장한다.** 많은 솔버가 식보다 표를 그대로 받고, 식이 안 맞는
+         *     재료에서는 표가 더 정확하다. 식은 골랐을 때만 함께 넣는다.
+         */
+        post: operations["create_card_api_fitting_cards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Card */
+        get: operations["get_card_api_fitting_cards__card_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove Card
+         * @description **초안만 지울 수 있다.** 확정된 적이 있는 카드는 내리기만 한다.
+         */
+        delete: operations["remove_card_api_fitting_cards__card_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}/deprecate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deprecate
+         * @description 카드를 내린다. **지우지 않는다** — 이 값으로 해석이 돌았을 수 있다.
+         */
+        post: operations["deprecate_api_fitting_cards__card_id__deprecate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Card
+         * @description 솔버 카드를 텍스트로 만든다.
+         *
+         *     **초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의
+         *     실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면
+         *     카드 안에 그렇게 적어 둔다.
+         */
+        get: operations["export_card_api_fitting_cards__card_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish
+         * @description 초안을 확정한다. **부서 관리자만**(D12).
+         *
+         *     올린 뒤에는 값을 바꿀 수 없다 — 그 값으로 해석이 돌았을 수 있다. 고치려면
+         *     내리고(`deprecated`) 새 카드를 만든다.
+         *
+         *     **리뷰 큐는 없다**(D8). 상태만 두고, 절차는 운영 규칙이 보인 뒤에 만든다 —
+         *     절차를 먼저 만들면 그 절차가 일을 정의해 버린다.
+         */
+        post: operations["publish_api_fitting_cards__card_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Families
+         * @description 등록된 경화식. **화면이 이 응답만으로 목록을 그린다.**
+         */
+        get: operations["list_families_api_fitting_families_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/formats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Formats
+         * @description 내보낼 수 있는 솔버. **화면이 이 응답만으로 목록을 그린다.**
+         */
+        get: operations["list_formats_api_fitting_formats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description **저장하지 않고** 여러 식을 견줘 본다.
+         *
+         *     상대 RMSE 순으로 주되 **어느 것이 맞는지는 고르지 않는다.** 적합 구간에서
+         *     비슷한 두 식이 그 밖에서 갈리고, 어디까지 쓸 것인지는 해석하는 사람이 안다.
+         */
+        post: operations["preview_api_fitting_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/formats": {
         parameters: {
             query?: never;
@@ -1901,6 +2079,108 @@ export interface components {
              */
             run_id: string;
         };
+        /** ExportFormatOut */
+        ExportFormatOut: {
+            /** Describe */
+            describe: string;
+            /** Extension */
+            extension: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Requires */
+            requires: string[];
+        };
+        /** FamilyOut */
+        FamilyOut: {
+            /** Describe */
+            describe: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Parameter Names */
+            parameter_names: string[];
+            /** Parameter Units */
+            parameter_units: string[];
+        };
+        /** FitOut */
+        FitOut: {
+            /** Curve */
+            curve: [
+                number,
+                number
+            ][];
+            /** Family */
+            family: string;
+            /** Label */
+            label: string;
+            /** Max Residual */
+            max_residual: number;
+            /** Notes */
+            notes: string[];
+            /** Parameters */
+            parameters: components["schemas"]["FittedParameterOut"][];
+            /** Point Count */
+            point_count: number;
+            /** R Squared */
+            r_squared: number;
+            /** Relative Rmse */
+            relative_rmse: number;
+            /** Rmse */
+            rmse: number;
+            /** Strain Max */
+            strain_max: number;
+            /** Strain Min */
+            strain_min: number;
+        };
+        /** FitPreviewOut */
+        FitPreviewOut: {
+            /** Fits */
+            fits: components["schemas"]["FitOut"][];
+            /** Notes */
+            notes: string[];
+            /** Sample Count */
+            sample_count: number;
+            /** Source Points */
+            source_points: [
+                number,
+                number
+            ][];
+        };
+        /** FitPreviewRequest */
+        FitPreviewRequest: {
+            /**
+             * Families
+             * @default []
+             */
+            families: string[];
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Orientation */
+            orientation: string;
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /** FittedParameterOut */
+        FittedParameterOut: {
+            /** Initial */
+            initial: number;
+            /** Lower */
+            lower: number;
+            /** Name */
+            name: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Upper */
+            upper: number;
+            /** Value */
+            value: number;
+        };
         /** FormatProfileCreateRequest */
         FormatProfileCreateRequest: {
             /** Definition */
@@ -2562,6 +2842,78 @@ export interface components {
             summary: components["schemas"]["TriedSummaryOut"][];
             /** Warnings */
             warnings: string[];
+        };
+        /** PropertyCardOut */
+        PropertyCardOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Elastic */
+            elastic: {
+                [key: string]: unknown;
+            };
+            /** Hardening */
+            hardening: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Note */
+            note: string | null;
+            /** Orientation */
+            orientation: string;
+            /** Point Count */
+            point_count: number;
+            /** Published At */
+            published_at: string | null;
+            /** Source */
+            source: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Table */
+            table: {
+                [key: string]: unknown;
+            }[];
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /** PropertyCardSaveRequest */
+        PropertyCardSaveRequest: {
+            /** Density */
+            density?: number | null;
+            /** Family */
+            family?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Note */
+            note?: string | null;
+            /** Orientation */
+            orientation: string;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+            /** Test Type Key */
+            test_type_key: string;
         };
         /** RecipeCreateRequest */
         RecipeCreateRequest: {
@@ -4152,6 +4504,298 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_cards_api_fitting_cards_get: {
+        parameters: {
+            query?: {
+                material_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_card_api_fitting_cards_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyCardSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_card_api_fitting_cards__card_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_card_api_fitting_cards__card_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deprecate_api_fitting_cards__card_id__deprecate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_card_api_fitting_cards__card_id__export_get: {
+        parameters: {
+            query?: {
+                format?: string;
+            };
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_api_fitting_cards__card_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_families_api_fitting_families_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyOut"][];
+                };
+            };
+        };
+    };
+    list_formats_api_fitting_formats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportFormatOut"][];
+                };
+            };
+        };
+    };
+    preview_api_fitting_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FitPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FitPreviewOut"];
+                };
             };
             /** @description Validation Error */
             422: {
