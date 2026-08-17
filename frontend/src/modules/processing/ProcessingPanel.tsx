@@ -75,7 +75,7 @@ import {
   formatScalar,
   fromDisplay,
   toDisplay,
-} from '@/modules/tests/units'
+} from '@/shared/units'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {

@@ -16,7 +16,7 @@ import { SpecimenPicker } from '@/modules/materials/SpecimenPicker'
 import type { Specimen } from '@/modules/materials/api'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
-import { conditionUnits, display } from '@/modules/tests/units'
+import { conditionUnits, display } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {

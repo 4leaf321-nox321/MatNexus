@@ -21,7 +21,7 @@ import { Globe2, ListTree, Lock, Pencil, Plug, Plus, Trash2 } from 'lucide-react
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { TestTypeEditor } from '@/modules/tests/TestTypeEditor'
-import { display } from '@/modules/tests/units'
+import { display } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Button } from '@/shared/components/ui/button'

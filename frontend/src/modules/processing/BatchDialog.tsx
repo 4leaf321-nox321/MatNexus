@@ -22,7 +22,7 @@ import { useState } from 'react'
 import { AlertTriangle, Check, Layers } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
-import { formatScalar } from '@/modules/tests/units'
+import { formatScalar } from '@/shared/units'
 import { RecipePicker } from '@/modules/processing/RecipePicker'
 import type { BatchOut, RecipeStep } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'

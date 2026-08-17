@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { DIMENSIONS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatScalar, formatValue, fromDisplay, spanToDisplay, toDisplay } from '@/modules/tests/units'
+import { DIMENSIONS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatScalar, formatValue, fromDisplay, spanToDisplay, toDisplay } from '@/shared/units'
 
 describe('저장 단위와 표시 단위', () => {
   it('저장은 SI, 표시는 실무 단위', () => {

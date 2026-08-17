@@ -73,7 +73,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { toChannelKey } from '@/modules/tests/keys'
-import { DIMENSIONS, SI_BY_DIMENSION } from '@/modules/tests/units'
+import { DIMENSIONS, SI_BY_DIMENSION } from '@/shared/units'
 import { useResource } from '@/shared/hooks/useResource'
 
 /** 메타 한 줄을 어떻게 할지. 기계는 못 가르는 판단이다 — `.tra` 의 요약부는

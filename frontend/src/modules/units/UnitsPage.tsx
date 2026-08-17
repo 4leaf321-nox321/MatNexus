@@ -30,7 +30,7 @@
 
 import { Lock } from 'lucide-react'
 
-import { display } from '@/modules/tests/units'
+import { display } from '@/shared/units'
 import { unitsApi } from '@/modules/units/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'

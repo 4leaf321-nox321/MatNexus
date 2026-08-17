@@ -23,7 +23,7 @@ import { useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Star } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
-import { formatScalar } from '@/modules/tests/units'
+import { formatScalar } from '@/shared/units'
 import type { ProcessingResult } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'

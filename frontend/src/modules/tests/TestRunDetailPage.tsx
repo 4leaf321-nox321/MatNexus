@@ -24,7 +24,8 @@ import {
   memberLabel,
   resolveAxes,
 } from '@/modules/tests/curves'
-import { axisLabel, formatValue, toDisplay } from '@/modules/tests/units'
+import { NOTABLE_DIFFERENCE, pairSummaries } from '@/modules/tests/summaries'
+import { axisLabel, formatValue, toDisplay } from '@/shared/units'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -41,11 +42,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
 
-const SOURCE_LABEL: Record<string, string> = {
-  instrument: '장비',
-  matnexus: 'MatNexus',
-}
-
 export default function TestRunDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -61,6 +57,8 @@ export default function TestRunDetailPage() {
     .map((membership) => ({ slug: membership.slug, name: membership.name }))
 
   const item = run.data
+  /** 장비 값과 우리 값을 같은 줄에. 짝이 있는 것이 위로 온다. */
+  const pairs = useMemo(() => pairSummaries(item?.summary ?? []), [item?.summary])
   const pending = item ? isPending(item.status) : false
 
   // 읽는 중이면 스스로 따라간다 — 올린 직후 이 화면으로 오는 경우가 흔하다.
@@ -378,34 +376,74 @@ export default function TestRunDetailPage() {
             )}
             {item && item.summary.length > 0 && (
               <section className="mb-8">
-                <h2 className="mb-2 font-medium">요약값</h2>
+                <h2 className="mb-1 font-medium">요약값</h2>
+                {/* **나란히 두는 것이 목적이다.** 한 줄씩 평평하게 그리면 같은
+                    항복강도가 표의 다른 자리에 떨어져, source 를 나눈 의미가
+                    사라진다. 실측: 장비 160.0 MPa vs 우리 249.5 MPa. */}
+                <p className="text-muted-foreground mb-2 text-xs">
+                  장비가 계산한 값과 우리가 계산한 값을 같은 줄에 둡니다. 크게 다르면
+                  둘 중 하나가 틀린 것인데, <b>어느 쪽인지는 곡선을 봐야 압니다</b> —
+                  대개 탄성 구간을 어디로 잡았는지에서 갈립니다.
+                </p>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>항목</TableHead>
-                      <TableHead>값</TableHead>
-                      <TableHead>출처</TableHead>
+                      <TableHead className="text-right">장비</TableHead>
+                      <TableHead className="text-right">MatNexus</TableHead>
+                      <TableHead className="text-right">차이</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {item.summary.map((row) => (
-                      <TableRow key={`${row.source}-${row.key}`}>
-                        <TableCell>
-                          <span className="font-mono text-xs">{row.key}</span>
-                          {row.label && (
-                            <p className="text-muted-foreground text-xs">{row.label}</p>
-                          )}
-                        </TableCell>
-                        <TableCell className="tabular-nums">
-                          {formatValue(row.value, row.text, row.si_unit)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {SOURCE_LABEL[row.source] ?? row.source}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {pairs.map((pair) => {
+                      const notable =
+                        pair.differencePercent !== null &&
+                        Math.abs(pair.differencePercent) >= NOTABLE_DIFFERENCE
+                      return (
+                        <TableRow key={pair.key}>
+                          <TableCell>
+                            <span className="text-sm">{pair.label}</span>
+                            <p className="text-muted-foreground font-mono text-xs">
+                              {pair.key}
+                            </p>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {pair.instrument
+                              ? formatValue(
+                                  pair.instrument.value,
+                                  pair.instrument.text,
+                                  pair.instrument.si_unit,
+                                  pair.dimension
+                                )
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {pair.ours
+                              ? formatValue(
+                                  pair.ours.value,
+                                  pair.ours.text,
+                                  pair.ours.si_unit,
+                                  pair.dimension
+                                )
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {pair.differencePercent === null ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <span
+                                className={
+                                  notable ? 'font-medium text-amber-700 dark:text-amber-500' : ''
+                                }
+                              >
+                                {pair.differencePercent > 0 ? '+' : ''}
+                                {pair.differencePercent.toPrecision(3)}%
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </section>
