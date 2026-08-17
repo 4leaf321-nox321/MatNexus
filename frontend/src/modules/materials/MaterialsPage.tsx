@@ -16,6 +16,7 @@ import type { NamePreview } from '@/modules/materials/api'
 import { ApiError } from '@/shared/api/client'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { OptionPicker } from '@/shared/components/OptionPicker'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -49,42 +50,16 @@ const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 
 /**
- * 분류 하나짜리 필터 줄.
+ * 같은 이름끼리 개수를 합친다.
  *
- * 드롭다운이 아니라 **줄로 펼쳐 둔다.** 값이 몇 개뿐이고(Metal·Polymer·Rubber…)
- * 지금 무엇으로 걸러져 있는지가 한눈에 보여야 한다 — 드롭다운은 열어 봐야 안다.
- * 가짓수가 많아지면 그때 바꾼다.
+ * 서버는 (Family, Category) 쌍으로 세어 주므로 Family 하나가 여러 줄에 걸쳐
+ * 있다 — Metal/Steel 58, Metal/Aluminum 3. Family 목록에는 61 로 합쳐 보여야
+ * "Metal 을 고르면 몇 건인가" 가 맞는다.
  */
-function Filter({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string
-  options: string[]
-  onChange: (next: string) => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <span className="text-muted-foreground mr-1 text-xs">{label}</span>
-      {['', ...options].map((option) => (
-        <button
-          key={option || '__all'}
-          type="button"
-          onClick={() => onChange(option)}
-          className={`rounded-md px-2 py-0.5 text-xs ${
-            value === option
-              ? 'bg-primary text-primary-foreground font-medium'
-              : 'hover:bg-muted text-muted-foreground'
-          }`}
-        >
-          {option || '전체'}
-        </button>
-      ))}
-    </div>
-  )
+function tally(pairs: [string, number][]): { value: string; count: number }[] {
+  const sums = new Map<string, number>()
+  for (const [name, count] of pairs) sums.set(name, (sums.get(name) ?? 0) + count)
+  return [...sums].map(([value, count]) => ({ value, count }))
 }
 
 export default function MaterialsPage() {
@@ -100,12 +75,14 @@ export default function MaterialsPage() {
   // 무엇으로 거를 수 있는지는 **데이터가 정한다.** 목록에 실제로 있는 조합만 준다.
   const classes = useResource(() => materialsApi.classifications(), [])
   const rowsOf = classes.data ?? []
-  const families = [...new Set(rowsOf.map((item) => item.family))]
-  // Family 를 고르면 그 안의 Category 만 남긴다. 안 그러면 Metal + Rubber 처럼
+  const families = tally(rowsOf.map((item) => [item.family, item.count]))
+  // Family 를 고르면 그 안의 Category 만 남긴다. 안 그러면 Metal + PP 처럼
   // **결과가 늘 0건인 조합**을 고를 수 있다.
-  const categories = [
-    ...new Set(rowsOf.filter((item) => !family || item.family === family).map((i) => i.category)),
-  ]
+  const categories = tally(
+    rowsOf
+      .filter((item) => !family || item.family === family)
+      .map((item) => [item.category, item.count])
+  )
 
   const materials = useResource(
     () =>
@@ -162,9 +139,9 @@ export default function MaterialsPage() {
       {/* **분류는 눌러서 거른다.** 검색어에 'Metal' 을 치면 Grade·Details 에
           그 글자가 든 재료까지 걸린다 — 부분 일치라서 그렇다. 분류는 정확히
           일치로 좁혀야 "Metal 인 것만" 이 성립한다. */}
-      {families.length > 1 && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <Filter
+      {families.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <OptionPicker
             label="Family"
             value={family}
             options={families}
@@ -176,7 +153,7 @@ export default function MaterialsPage() {
               setOffset(0)
             }}
           />
-          <Filter
+          <OptionPicker
             label="Category"
             value={category}
             options={categories}
@@ -189,7 +166,7 @@ export default function MaterialsPage() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-7"
+              className="h-7 text-xs"
               onClick={() => {
                 setFamily('')
                 setCategory('')
