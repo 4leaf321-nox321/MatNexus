@@ -41,10 +41,20 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
     notes = services.setting_warnings(group)
     curve = None
     if len(group.members) >= statistics.MIN_SAMPLES:
-        x, y = services.default_axes(db, group)
-        if x and y:
+        # **격자가 맞는 축을 고른다.** 레시피가 어느 축에서 재샘플했는지에 따라
+        # 공칭이 맞을 수도 진소성이 맞을 수도 있다. 하나만 보고 포기하면
+        # "적합은 되는데 곡선은 안 보인다" 가 된다 — 실제로 그렇게 나왔다.
+        #
+        # 정렬을 대신 하는 것이 아니라 **볼 축을 고르는 것**이다(ADR 0008).
+        # 어느 축으로 그렸는지는 응답에 그대로 실린다.
+        attempted: list[str] = []
+        for x, y in services.axis_candidates(db, group):
             curve, curve_notes = services.curve_table(db, group, x=x, y=y)
-            notes.extend(curve_notes)
+            if curve is not None:
+                break
+            attempted.extend(curve_notes)
+        if curve is None:
+            notes.extend(attempted)
     if group.skipped_unadopted:
         notes.append(
             f"채택되지 않은 시험 {group.skipped_unadopted}건은 빠졌습니다. "

@@ -39,13 +39,18 @@ from matcore.processing import (
             label="같은 x 가 여럿일 때",
             type="choice",
             default="mean",
-            choices=("mean", "first", "reject"),
+            choices=("mean", "first", "last", "reject"),
             choice_labels={
                 "mean": "평균으로 합침",
                 "first": "첫 점만 남김",
+                "last": "마지막 점만 남김",
                 "reject": "거절 (직접 정리)",
             },
-            help="장비는 같은 값을 두 번 적기도 하고(샘플링) 되돌아오기도 합니다(제하).",
+            help=(
+                "장비는 같은 값을 두 번 적기도 하고(샘플링) 되돌아오기도 합니다(제하). "
+                "진소성변형률을 0 으로 자른 뒤라면 '마지막 점만 남김'을 쓰세요 — "
+                "그 마지막이 항복점입니다."
+            ),
         ),
     ),
     version="1",
@@ -60,11 +65,17 @@ def sort_unique(frame: Frame, options: dict[str, Any]) -> StepResult:
     중복을 어떻게 다룰지는 **사람이 정한다.** 조용히 평균 내면 제하 구간이
     있는 곡선이 이상한 모양으로 뭉개지고, 조용히 첫 점만 남기면 잡음이 그대로
     남는다. 어느 쪽도 기본으로 옳지 않아서 물어본다.
+
+    `last` 는 **진소성변형률 축에서 필요해졌다.** `tensile.true_plastic` 의
+    `clip_zero` 가 탄성 구간을 전부 x=0 에 쌓아 두는데(실측 120점 중 34점),
+    그 상태로는 이 축에서 재샘플을 못 해 앙상블이 안 나온다. 쌓인 것 중
+    **마지막이 항복점**이다 — 평균을 내면 탄성 구간 응력이 섞여 항복강도가
+    낮아지고, 첫 점을 남기면 0 에 가까운 응력을 항복강도로 쓰게 된다.
     """
     x_key = str(options.get("x") or "")
     if not x_key:
         raise ProcessingError("기준 열('x')을 골라야 합니다.")
-    policy = option_text(options, "duplicate_policy", ("mean", "first", "reject"))
+    policy = option_text(options, "duplicate_policy", ("mean", "first", "last", "reject"))
     x = frame.require(x_key, what="기준 열")
 
     order = np.argsort(x, kind="stable")
@@ -85,6 +96,11 @@ def sort_unique(frame: Frame, options: dict[str, Any]) -> StepResult:
         return StepResult(
             ordered.select(starts),
             notes=(f"'{x_key}' 정렬 후 중복 {duplicates}점을 첫 값으로 정리했습니다.",),
+        )
+    if policy == "last":
+        return StepResult(
+            ordered.select(starts + counts - 1),
+            notes=(f"'{x_key}' 정렬 후 중복 {duplicates}점을 마지막 값으로 정리했습니다.",),
         )
 
     averaged = {

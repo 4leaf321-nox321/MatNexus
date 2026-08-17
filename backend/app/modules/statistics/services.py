@@ -251,17 +251,35 @@ def curve_table(
     )
 
 
-def default_axes(db: Session, group: Group) -> tuple[str, str]:
-    """무엇을 x·y 로 볼지. 인장이면 공칭 응력-변형률이 기본이다."""
+#: 볼 만한 축 짝. 앞이 우선이다 — 인장이면 공칭 응력-변형률이 먼저다.
+AXIS_PAIRS = (
+    ("strain_engineering", "stress_engineering"),
+    ("strain_true_plastic", "stress_true"),
+)
+
+
+def axis_candidates(db: Session, group: Group) -> list[tuple[str, str]]:
+    """그려 볼 축들. **하나가 아니라 목록인 이유:**
+
+    격자가 맞는 축은 레시피가 정한다. 진소성변형률 축에서 재샘플한 결과는 그
+    축에서만 격자가 맞고 공칭 축에서는 안 맞는다 — 실측으로 그 상태가 나왔고,
+    앞의 축 하나만 보고 포기해서 "적합은 되는데 곡선은 안 보인다" 가 됐다.
+
+    **정렬을 대신 하는 것이 아니다**(ADR 0008). 있는 그대로 그릴 수 있는 축을
+    고를 뿐이고, 어느 축으로 그렸는지는 응답에 실린다.
+    """
     if not group.members:
-        return ("", "")
+        return []
     columns = set(group.members[0].result.columns)
-    for x, y in (
-        ("strain_engineering", "stress_engineering"),
-        ("strain_true_plastic", "stress_true"),
-    ):
-        if x in columns and y in columns:
-            return (x, y)
+    found = [(x, y) for x, y in AXIS_PAIRS if x in columns and y in columns]
+    if found:
+        return found
     units = curvedata.channel_units(db, group.test_type.id)
     ordered = sorted(columns)
-    return (ordered[0], ordered[1]) if len(ordered) >= 2 and units else ("", "")
+    return [(ordered[0], ordered[1])] if len(ordered) >= 2 and units else []
+
+
+def default_axes(db: Session, group: Group) -> tuple[str, str]:
+    """무엇을 x·y 로 볼지. 후보 중 첫 번째다."""
+    found = axis_candidates(db, group)
+    return found[0] if found else ("", "")

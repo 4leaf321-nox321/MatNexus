@@ -132,8 +132,19 @@ class Test표정리:
         assert any("항복점" in note for note in notes)
 
     def test_첫_점이_0_이_아니면_거부한다(self) -> None:
+        # 0.2% 소성변형이면 이미 소성 구간이다. 항복점이 진짜로 빠진 것이다.
         with pytest.raises(export.ExportError, match="0 이어야"):
             export.prepare(((0.002, 250e6), (0.01, 300e6)))
+
+    def test_거의_0_이면_자리만_맞춘다(self) -> None:
+        """진소성변형률 축에서 재샘플하면 공통 시작이 2e-6 처럼 나온다.
+
+        **값을 지어내는 것이 아니라 자리를 맞추는 것이다** — 격자 간격보다 네
+        자릿수 작아 응력은 항복점 그대로다. 옮겼다는 사실은 근거에 남는다.
+        """
+        points, notes = export.prepare(((2.2e-6, 341e6), (0.01, 380e6), (0.05, 400e6)))
+        assert points[0] == (0.0, 341e6)
+        assert any("0 으로 맞췄습니다" in note for note in notes)
 
     def test_변형률이_순증가가_아니면_거부한다(self) -> None:
         with pytest.raises(export.ExportError, match="순증가"):

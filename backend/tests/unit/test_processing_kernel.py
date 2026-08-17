@@ -266,6 +266,32 @@ class Test정렬:
         assert result.frame.columns["y"] == pytest.approx([11.0, 20.0, 30.0])
         assert "중복 1점" in result.notes[0]
 
+    def test_마지막_점만_남기기가_항복점을_지킨다(self) -> None:
+        """**진소성변형률 축에서 필요해진 정책이다.**
+
+        `clip_zero` 가 탄성 구간을 전부 x=0 에 쌓아 두는데(실측 120점 중 34점),
+        평균을 내면 탄성 구간 응력이 섞여 항복강도가 낮아지고, 첫 점을 남기면
+        0 에 가까운 응력을 항복강도로 쓰게 된다. **쌓인 것 중 마지막이 항복점**이다.
+        """
+        frame = Frame(
+            {
+                "strain_true_plastic": np.array([0.0, 0.0, 0.0, 0.01]),
+                "stress_true": np.array([50e6, 200e6, 341e6, 360e6]),
+            },
+            {"strain_true_plastic": "1", "stress_true": "Pa"},
+        )
+        result = processing.apply(
+            [
+                Step(
+                    "curve.sort_unique",
+                    {"x": "strain_true_plastic", "duplicate_policy": "last"},
+                )
+            ],
+            frame,
+        )
+        assert result.frame.columns["strain_true_plastic"] == pytest.approx([0.0, 0.01])
+        assert result.frame.columns["stress_true"] == pytest.approx([341e6, 360e6])
+
     def test_거절_정책은_거절한다(self) -> None:
         frame = Frame({"x": np.array([1.0, 1.0])}, {"x": "1"})
         with pytest.raises(ProcessingError, match="같은 값이 1개"):
