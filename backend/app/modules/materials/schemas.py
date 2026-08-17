@@ -57,6 +57,19 @@ class MaterialCreateRequest(BaseModel):
     승격은 이미 있는 재료를 올리는 일이지 처음부터 전역으로 만드는 일이 아니다."""
 
 
+class ClassificationOut(BaseModel):
+    """실제로 쓰이고 있는 분류 한 쌍.
+
+    **목록에 있는 것에서 만든다.** 고정 목록을 코드에 박아 두면 부서가 새 분류를
+    쓰기 시작한 순간 화면에서 고를 수 없게 되고, 그때 사람은 "필터가 고장났다"
+    가 아니라 "그 재료가 없다" 로 읽는다.
+    """
+
+    family: str
+    category: str
+    count: int
+
+
 class MaterialUpdateRequest(BaseModel):
     family: str | None = Field(default=None, min_length=1, max_length=50)
     category: str | None = Field(default=None, min_length=1, max_length=50)

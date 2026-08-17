@@ -8,6 +8,7 @@ export type MaterialPage = components['schemas']['Page_MaterialOut_']
 export type Sample = components['schemas']['SampleOut']
 export type Specimen = components['schemas']['SpecimenOut']
 export type NamePreview = components['schemas']['NamePreviewOut']
+export type Classification = components['schemas']['ClassificationOut']
 
 type MaterialCreate = components['schemas']['MaterialCreateRequest']
 type MaterialUpdate = components['schemas']['MaterialUpdateRequest']
@@ -25,6 +26,9 @@ export const DENSITY_UNIT = 'kg/m3'
 
 export interface MaterialQuery {
   q?: string
+  /** 분류로 좁힌다. 서버가 정확히 일치로 거른다. */
+  family?: string
+  category?: string
   scope?: 'all' | 'mine' | 'global'
   limit?: number
   offset?: number
@@ -41,6 +45,12 @@ function search(query: MaterialQuery): string {
 
 export const materialsApi = {
   list: (query: MaterialQuery = {}) => api.get<MaterialPage>(`/materials${search(query)}`),
+
+  /**
+   * 실제로 쓰이고 있는 분류 조합. **고정 목록을 화면에 박지 않는다** — 부서가
+   * 새 분류를 쓰기 시작하면 고를 수 없게 되고, 그때 사람은 "재료가 없다" 로 읽는다.
+   */
+  classifications: () => api.get<Classification[]>('/materials/classifications'),
   get: (id: string) => api.get<Material>(`/materials/${id}`),
   create: (payload: MaterialCreate) => api.post<Material>('/materials', payload),
   update: (id: string, payload: MaterialUpdate) =>

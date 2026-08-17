@@ -23,6 +23,7 @@ from app.modules.materials.models import ORIENTATIONS, Material, Sample, Specime
 from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
+    ClassificationOut,
     MaterialCreateRequest,
     MaterialOut,
     MaterialUpdateRequest,
@@ -228,6 +229,31 @@ def _search_terms(q: str | None) -> list[Any]:
         return []
     return [
         or_(*(column.ilike(f"%{word}%") for column in _SEARCH_COLUMNS)) for word in q.split()
+    ]
+
+
+@router.get("/classifications", response_model=list[ClassificationOut])
+def list_classifications(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ClassificationOut]:
+    """쓰이고 있는 Family·Category 조합.
+
+    **`/{material_id}` 보다 먼저 선언해야 한다.** FastAPI 는 선언 순서대로 맞춰
+    보므로, 뒤에 두면 `classifications` 가 UUID 자리에 들어가 422 가 난다.
+
+    보이는 범위 안에서만 센다 — 남의 부서 분류가 목록에 뜨면 고를 수는 있는데
+    결과가 늘 0건이다.
+    """
+    visible = services.visible_materials(db, user).subquery()
+    rows = db.execute(
+        select(visible.c.family, visible.c.category, func.count())
+        .group_by(visible.c.family, visible.c.category)
+        .order_by(visible.c.family, visible.c.category)
+    ).all()
+    return [
+        ClassificationOut(family=family, category=category, count=count)
+        for family, category, count in rows
     ]
 
 

@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search } from 'lucide-react'
+import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
@@ -48,19 +48,73 @@ import { useResource } from '@/shared/hooks/useResource'
 const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 
+/**
+ * 분류 하나짜리 필터 줄.
+ *
+ * 드롭다운이 아니라 **줄로 펼쳐 둔다.** 값이 몇 개뿐이고(Metal·Polymer·Rubber…)
+ * 지금 무엇으로 걸러져 있는지가 한눈에 보여야 한다 — 드롭다운은 열어 봐야 안다.
+ * 가짓수가 많아지면 그때 바꾼다.
+ */
+function Filter({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: string[]
+  onChange: (next: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className="text-muted-foreground mr-1 text-xs">{label}</span>
+      {['', ...options].map((option) => (
+        <button
+          key={option || '__all'}
+          type="button"
+          onClick={() => onChange(option)}
+          className={`rounded-md px-2 py-0.5 text-xs ${
+            value === option
+              ? 'bg-primary text-primary-foreground font-medium'
+              : 'hover:bg-muted text-muted-foreground'
+          }`}
+        >
+          {option || '전체'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function MaterialsPage() {
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [registering, setRegistering] = useState(false)
   const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
+  const [family, setFamily] = useState('')
+  const [category, setCategory] = useState('')
   const all = size === 'all'
+
+  // 무엇으로 거를 수 있는지는 **데이터가 정한다.** 목록에 실제로 있는 조합만 준다.
+  const classes = useResource(() => materialsApi.classifications(), [])
+  const rowsOf = classes.data ?? []
+  const families = [...new Set(rowsOf.map((item) => item.family))]
+  // Family 를 고르면 그 안의 Category 만 남긴다. 안 그러면 Metal + Rubber 처럼
+  // **결과가 늘 0건인 조합**을 고를 수 있다.
+  const categories = [
+    ...new Set(rowsOf.filter((item) => !family || item.family === family).map((i) => i.category)),
+  ]
+
   const materials = useResource(
     () =>
       all
-        ? fetchAll((limit, from) => materialsApi.list({ q: applied, limit, offset: from }))
-        : materialsApi.list({ q: applied, limit: size, offset }),
-    [applied, size, offset, all]
+        ? fetchAll((limit, from) =>
+            materialsApi.list({ q: applied, family, category, limit, offset: from })
+          )
+        : materialsApi.list({ q: applied, family, category, limit: size, offset }),
+    [applied, family, category, size, offset, all]
   )
 
   const page = materials.data
@@ -105,12 +159,58 @@ export default function MaterialsPage() {
         </Button>
       </form>
 
+      {/* **분류는 눌러서 거른다.** 검색어에 'Metal' 을 치면 Grade·Details 에
+          그 글자가 든 재료까지 걸린다 — 부분 일치라서 그렇다. 분류는 정확히
+          일치로 좁혀야 "Metal 인 것만" 이 성립한다. */}
+      {families.length > 1 && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <Filter
+            label="Family"
+            value={family}
+            options={families}
+            onChange={(next) => {
+              setFamily(next)
+              // Family 를 바꾸면 이전 Category 가 그 안에 없을 수 있다. 남겨 두면
+              // 조용히 0건이 되고, 사람은 재료가 없는 줄 안다.
+              setCategory('')
+              setOffset(0)
+            }}
+          />
+          <Filter
+            label="Category"
+            value={category}
+            options={categories}
+            onChange={(next) => {
+              setCategory(next)
+              setOffset(0)
+            }}
+          />
+          {(family || category) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7"
+              onClick={() => {
+                setFamily('')
+                setCategory('')
+                setOffset(0)
+              }}
+            >
+              <X className="size-3.5" />
+              필터 해제
+            </Button>
+          )}
+        </div>
+      )}
+
       <ErrorNotice error={materials.error} className="mb-4" />
 
       {!materials.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           <Boxes className="mx-auto mb-2 size-5 opacity-50" />
-          {applied ? `'${applied}' 에 맞는 재료가 없습니다.` : '등록된 재료가 없습니다.'}
+          {applied || family || category
+            ? '조건에 맞는 재료가 없습니다. 검색어나 분류를 넓혀 보세요.'
+            : '등록된 재료가 없습니다.'}
         </div>
       )}
 

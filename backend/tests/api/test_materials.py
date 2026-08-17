@@ -382,3 +382,47 @@ class TestListing:
         # 낱말 하나가 안 맞으면 안 나온다.
         none = client.get("/api/materials?q=SECC 2.0", headers=admin_headers).json()
         assert none["total"] == 0
+
+
+class TestClassifications:
+    """무엇으로 거를 수 있는지는 **데이터가 정한다.**
+
+    고정 목록을 화면에 박아 두면 부서가 새 분류를 쓰기 시작한 순간 고를 수
+    없게 되고, 그때 사람은 "필터가 고장났다" 가 아니라 "그 재료가 없다" 로 읽는다.
+    """
+
+    def test_쓰이고_있는_조합만_센다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        _create_material(client, admin_headers, grade="A")
+        _create_material(client, admin_headers, grade="B")
+        _create_material(client, admin_headers, grade="C", category="Aluminum")
+        _create_material(client, admin_headers, grade="D", family="Polymer", category="PP")
+
+        body = client.get("/api/materials/classifications", headers=admin_headers).json()
+        found = {(row["family"], row["category"]): row["count"] for row in body}
+        assert found[("Metal", "Steel")] == 2
+        assert found[("Metal", "Aluminum")] == 1
+        assert found[("Polymer", "PP")] == 1
+
+    def test_분류로_거른다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        """**검색어와 다르다.** 검색은 부분 일치라 'Metal' 을 치면 Grade 에 그
+        글자가 든 재료까지 걸린다. 분류는 정확히 일치여야 "Metal 인 것만" 이 된다.
+        """
+        _create_material(client, admin_headers, grade="A")
+        _create_material(client, admin_headers, grade="B", family="Polymer", category="PP")
+
+        metal = client.get("/api/materials?family=Metal", headers=admin_headers).json()
+        assert metal["total"] == 1
+        assert metal["items"][0]["family"] == "Metal"
+
+        polymer = client.get(
+            "/api/materials?family=Polymer&category=PP", headers=admin_headers
+        ).json()
+        assert polymer["total"] == 1
+
+        # 있지도 않은 조합은 0건이다 — 화면이 그런 조합을 못 만들게 하는 이유다.
+        crossed = client.get(
+            "/api/materials?family=Metal&category=PP", headers=admin_headers
+        ).json()
+        assert crossed["total"] == 0

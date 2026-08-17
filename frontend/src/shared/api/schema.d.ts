@@ -647,6 +647,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/classifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Classifications
+         * @description 쓰이고 있는 Family·Category 조합.
+         *
+         *     **`/{material_id}` 보다 먼저 선언해야 한다.** FastAPI 는 선언 순서대로 맞춰
+         *     보므로, 뒤에 두면 `classifications` 가 UUID 자리에 들어가 422 가 난다.
+         *
+         *     보이는 범위 안에서만 센다 — 남의 부서 분류가 목록에 뜨면 고를 수는 있는데
+         *     결과가 늘 0건이다.
+         */
+        get: operations["list_classifications_api_materials_classifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/preview-name": {
         parameters: {
             query?: never;
@@ -1848,6 +1874,22 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+        };
+        /**
+         * ClassificationOut
+         * @description 실제로 쓰이고 있는 분류 한 쌍.
+         *
+         *     **목록에 있는 것에서 만든다.** 고정 목록을 코드에 박아 두면 부서가 새 분류를
+         *     쓰기 시작한 순간 화면에서 고를 수 없게 되고, 그때 사람은 "필터가 고장났다"
+         *     가 아니라 "그 재료가 없다" 로 읽는다.
+         */
+        ClassificationOut: {
+            /** Category */
+            category: string;
+            /** Count */
+            count: number;
+            /** Family */
+            family: string;
         };
         /** CleanupQueuedOut */
         CleanupQueuedOut: {
@@ -5184,6 +5226,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_classifications_api_materials_classifications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassificationOut"][];
                 };
             };
         };
