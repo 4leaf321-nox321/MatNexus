@@ -8,32 +8,52 @@
  * ProtectedRoute 아래에 둔다 — 새 화면을 추가할 때 가드를 깜빡할 자리가 없도록.
  */
 
+import { lazy } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 
-import AccountsAdminPage from '@/modules/accounts/AccountsAdminPage'
 import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
 import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
-import BatchUploadPage from '@/modules/tests/BatchUploadPage'
-import FormatProfileEditorPage from '@/modules/tests/FormatProfileEditorPage'
-import RecipesPage from '@/modules/processing/RecipesPage'
-import UnitsPage from '@/modules/units/UnitsPage'
-import FormatProfilesPage from '@/modules/tests/FormatProfilesPage'
-import TestTypesPage from '@/modules/tests/TestTypesPage'
-import StoragePage from '@/modules/tests/StoragePage'
+import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
 import TestRunsPage from '@/modules/tests/TestRunsPage'
-import NoticesPage from '@/modules/notices/NoticesPage'
-import NotificationsPage from '@/modules/notifications/NotificationsPage'
-import SignupPage from '@/modules/auth/SignupPage'
-import VocPage from '@/modules/voc/VocPage'
-import MembersPage from '@/modules/workspaces/MembersPage'
-import WorkspacesAdminPage from '@/modules/workspaces/WorkspacesAdminPage'
 import { ProtectedRoute } from '@/shared/auth/ProtectedRoute'
 import { Placeholder } from '@/shared/components/Placeholder'
 import { AppShell } from '@/shared/layout/AppShell'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
+
+/**
+ * **화면 대부분을 나눠 싣는다.**
+ *
+ * 한 덩이로 묶으니 702 kB 가 되어 번들 예산(§8.5, `chunkSizeWarningLimit` 700)을
+ * 넘겼다. 처리·통계·적합 패널이 재료 상세와 시험 상세에 붙으면서 커진 것인데,
+ * 그 화면들은 **로그인해서 목록을 볼 때는 필요 없다.**
+ *
+ * 매일 밟는 길(로그인·목록·재료 상세·시험 상세·알림)은 처음에 싣고, 가끔 들어가는
+ * 화면만 그때 받는다.
+ *
+ * **상세 두 개를 나누지 않은 이유:** 나눠 보니 목록에서 상세로 넘어갈 때 청크를
+ * 받는 동안 **이전 화면이 그대로 남아 있었다**(React 전환의 정상 동작 — 깜빡임을
+ * 막으려고 예전 UI 를 유지한다). 주소는 바뀌었는데 화면은 목록이라, 누른 사람은
+ * 아무 일도 안 일어난 것처럼 본다. 실제로 스모크가 목록을 상세로 착각해 깨졌다.
+ * 늘 밟는 길에서 그 대가를 치를 이유가 없다 — 둘을 합쳐도 예산의 절반이다.
+ */
+const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
+const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
+const FormatProfileEditorPage = lazy(
+  () => import('@/modules/tests/FormatProfileEditorPage')
+)
+const FormatProfilesPage = lazy(() => import('@/modules/tests/FormatProfilesPage'))
+const MembersPage = lazy(() => import('@/modules/workspaces/MembersPage'))
+const NoticesPage = lazy(() => import('@/modules/notices/NoticesPage'))
+const RecipesPage = lazy(() => import('@/modules/processing/RecipesPage'))
+const SignupPage = lazy(() => import('@/modules/auth/SignupPage'))
+const StoragePage = lazy(() => import('@/modules/tests/StoragePage'))
+const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
+const UnitsPage = lazy(() => import('@/modules/units/UnitsPage'))
+const VocPage = lazy(() => import('@/modules/voc/VocPage'))
+const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
 
 const stub = (title: string, phase: string, description?: string) => ({
   element: <Placeholder title={title} phase={phase} description={description} />,

@@ -5,13 +5,25 @@
  * 화면에서 탭 위치를 잃는다.
  */
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 
 import { NoticePopup } from '@/modules/notices/NoticePopup'
+import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Header } from '@/shared/layout/Header'
 import { Sidebar } from '@/shared/layout/Sidebar'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
+
+/** 화면 조각을 받아 오는 동안. **빈 화면을 보이지 않는다.** */
+function PageSkeleton() {
+  return (
+    <div className="mx-auto max-w-4xl space-y-3">
+      <Skeleton className="h-8 w-56" />
+      <Skeleton className="h-4 w-80" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
+}
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
@@ -27,7 +39,11 @@ export function AppShell() {
           workspaceSlug={workspaceSlug}
         />
         <main className="flex-1 overflow-auto p-6">
-          <Outlet />
+          {/* 화면 대부분을 나눠 싣는다(router.tsx). 껍데기는 이미 떠 있으므로
+              여기서 기다리는 동안에도 사이드바와 상단 바는 그대로 있다. */}
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

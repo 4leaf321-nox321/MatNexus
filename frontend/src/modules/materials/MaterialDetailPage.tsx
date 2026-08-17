@@ -22,6 +22,7 @@ import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
+import { MaterialTests } from '@/modules/tests/MaterialTests'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -119,9 +120,14 @@ export default function MaterialDetailPage() {
       <Tabs defaultValue="samples">
         <TabsList>
           <TabsTrigger value="samples">시료·시편</TabsTrigger>
+          <TabsTrigger value="runs">시험</TabsTrigger>
           <TabsTrigger value="properties">물성</TabsTrigger>
           <TabsTrigger value="cards">CAE 카드</TabsTrigger>
         </TabsList>
+
+        {/* 옆 탭이 "무엇이 어디에 매달려 있나" 라면 여기는 **"이 재료에 시험이
+            몇 건 들어왔나"** 다. 계층으로는 시편을 전부 펼쳐야 셀 수 있다. */}
+        <TabsContent value="runs">{id && <MaterialTests materialId={id} />}</TabsContent>
 
         <TabsContent value="properties">
           {id && <PropertiesPanel materialId={id} />}

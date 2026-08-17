@@ -96,7 +96,18 @@ test('로그인부터 곡선까지', async ({ page }) => {
 
   await test.step('워커가 읽고 곡선이 그려진다', async () => {
     await page.getByRole('button', { name: '목록에서 확인' }).click()
-    await page.getByText(RUN_ID).first().click()
+
+    // **화면이 바뀐 뒤에 누른다.** 업로드 화면에도 방금 올린 시험 이름이 떠
+    // 있어서, 목록이 그려지기 전에 `getByText(RUN_ID)` 를 누르면 링크가 아닌
+    // 그쪽을 누르고 아무 데도 가지 않는다. 그 상태로 다음 단언을 하면 목록의
+    // '완료' 배지 수십 개에 걸려 엉뚱한 실패 메시지가 나온다.
+    //
+    // 텍스트가 아니라 **링크**를 고르는 것도 같은 이유다.
+    // 주소가 바뀌었다고 화면이 바뀐 것은 아니다. 상세 화면에만 있는 것을
+    // 기다린다 — 라우트를 나눠 실으면 청크를 받는 동안 이전 화면이 남는다.
+    await page.waitForURL('**/tests')
+    await page.getByRole('link', { name: new RegExp(RUN_ID) }).first().click()
+    await expect(page.getByRole('tab', { name: /원본/ })).toBeVisible({ timeout: 60_000 })
 
     // **여기가 이 테스트의 핵심이다.** 워커가 돌고, 곡선이 저장되고, 화면이 그것을
     // 읽어 그리기까지 전부 통해야 통과한다.
