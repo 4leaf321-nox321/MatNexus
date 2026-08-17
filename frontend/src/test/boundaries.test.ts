@@ -42,6 +42,12 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       why: '시험 상세가 그 시험의 처리 패널을 끼워 넣는다. 원본 곡선을 보고 나서 "이게 물성으로 어떻게 되는데" 가 이어지는 자리라, 다른 화면으로 보내면 원본과 결과를 나란히 못 본다. 아래 processing → tests 의 반대 방향이고 둘은 한 화면을 나눠 그린다.',
     },
   ],
+  statistics: [
+    {
+      to: 'tests',
+      why: '앙상블 곡선도 곡선이라 같은 CurveChart 로 그린다. 처리 모듈이 같은 이유로 tests 를 부르는 것과 같다 — 차트를 shared 로 올리면 공통이 도메인을 알게 된다.',
+    },
+  ],
   processing: [
     {
       to: 'tests',
@@ -49,6 +55,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
     },
   ],
   materials: [
+    {
+      to: 'statistics',
+      why: '재료 화면이 답해야 하는 질문의 절반이 "이 재료의 물성은 얼마인가" 다. 통계는 재료 단위로 묶이므로(재료+시험종류+방향) 그 자리가 재료 상세다.',
+    },
     {
       to: 'tests',
       why: '재료 상세가 시편별 시험 목록을 끼워 넣는다(SpecimenTests). 위의 반대 방향이고, 둘은 한 화면을 나눠 그린다.',

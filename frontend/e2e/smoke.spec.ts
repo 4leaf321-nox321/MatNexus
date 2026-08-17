@@ -115,6 +115,27 @@ test('로그인부터 곡선까지', async ({ page }) => {
   })
 })
 
+test('재료 화면이 물성을 보여 준다', async ({ page }) => {
+  // 재료 화면이 답해야 하는 질문의 절반이 "이 재료의 물성은 얼마인가" 다.
+  // 시료 목록만 있으면 시험을 하나씩 열어 봐야 알 수 있다.
+  await page.goto('/')
+  await page.getByLabel('아이디').fill(EMAIL)
+  await page.getByLabel('비밀번호').fill(PASSWORD)
+  await page.getByRole('button', { name: '로그인' }).click()
+  await expect(page.getByRole('banner')).toBeVisible()
+
+  await page.goto('/materials')
+  await expect(page.locator('tbody tr').first()).toBeVisible()
+  await page.locator('tbody tr').first().getByRole('link').first().click()
+  await expect(page.getByRole('tab', { name: '물성' })).toBeVisible()
+  await page.getByRole('tab', { name: '물성' }).click()
+  // 표본이 없어도 화면은 뜨고 이유를 말해야 한다.
+  await expect(page.getByRole('tab', { name: '물성' })).toHaveAttribute(
+    'data-state',
+    'active'
+  )
+})
+
 test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) => {
   // **없어진 줄 알았다.** 프로파일 화면을 '관리' 에서 '부서 설정' 으로 옮기고
   // 이름을 '파일 형식' 으로 바꿨더니, 쓰던 사람이 못 찾고 "만드는 게 없어졌다"

@@ -20,6 +20,7 @@ from app.modules.notifications.models import (
     NotificationRuleState,
 )
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult
+from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import (
     Curve,
     FormatProfile,
@@ -36,6 +37,7 @@ __all__ = [
     "AccessLog",
     "Base",
     "Curve",
+    "EnsembleResult",
     "FormatProfile",
     "Job",
     "Material",

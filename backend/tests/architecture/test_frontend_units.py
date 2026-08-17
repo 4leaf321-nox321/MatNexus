@@ -20,9 +20,7 @@ from pathlib import Path
 
 from matcore import units
 
-UNITS_TS = (
-    Path(__file__).resolve().parents[3] / "frontend" / "src" / "shared" / "units.ts"
-)
+UNITS_TS = Path(__file__).resolve().parents[3] / "frontend" / "src" / "shared" / "units.ts"
 
 _BLOCK = re.compile(
     r"export const SI_BY_DIMENSION: Record<string, string> = \{(.*?)\}", re.DOTALL

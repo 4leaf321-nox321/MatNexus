@@ -22,6 +22,7 @@ import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
+import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -36,6 +37,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
 
 const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
@@ -110,6 +112,20 @@ export default function MaterialDetailPage() {
         </dl>
       )}
 
+      {/* **재료 화면이 답해야 하는 질문이 둘이다** — "무엇이 있나(시료·시편)" 와
+          "이 재료의 물성은 얼마인가". 세로로 이어 붙이면 시료가 늘수록 물성이
+          아래로 밀려나는데, 물성이 이 화면의 결론이다. */}
+      <Tabs defaultValue="samples">
+        <TabsList>
+          <TabsTrigger value="samples">시료·시편</TabsTrigger>
+          <TabsTrigger value="properties">물성</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="properties">
+          {id && <PropertiesPanel materialId={id} />}
+        </TabsContent>
+
+        <TabsContent value="samples">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-medium">
           <Layers className="size-4" />
@@ -141,6 +157,9 @@ export default function MaterialDetailPage() {
           />
         ))}
       </ul>
+
+        </TabsContent>
+      </Tabs>
 
       {/* 시험 등록 화면과 **같은 폼**을 쓴다. 두 벌로 두면 한쪽에만 필드가 늘거나
           단위를 한쪽만 명시하는 식으로 갈라진다. */}

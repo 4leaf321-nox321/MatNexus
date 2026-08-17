@@ -772,6 +772,96 @@
         "title": "CurvePointsOut",
         "type": "object"
       },
+      "CurveStatsOut": {
+        "properties": {
+          "count": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Count",
+            "type": "array"
+          },
+          "mean": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Mean",
+            "type": "array"
+          },
+          "median": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Median",
+            "type": "array"
+          },
+          "sd": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Sd",
+            "type": "array"
+          },
+          "x": {
+            "title": "X",
+            "type": "string"
+          },
+          "y": {
+            "title": "Y",
+            "type": "string"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "mean",
+          "median",
+          "sd",
+          "count"
+        ],
+        "title": "CurveStatsOut",
+        "type": "object"
+      },
       "DeleteAccountRequest": {
         "properties": {
           "transfer_to_id": {
@@ -910,6 +1000,80 @@
           "aliases"
         ],
         "title": "DimensionOut",
+        "type": "object"
+      },
+      "EnsembleResultOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "orientation": {
+            "title": "Orientation",
+            "type": "string"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "test_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Test Run Ids",
+            "type": "array"
+          },
+          "test_type_key": {
+            "title": "Test Type Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "material_id",
+          "test_type_key",
+          "orientation",
+          "sample_count",
+          "test_run_ids",
+          "created_at"
+        ],
+        "title": "EnsembleResultOut",
+        "type": "object"
+      },
+      "EnsembleSaveRequest": {
+        "properties": {
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "orientation": {
+            "title": "Orientation",
+            "type": "string"
+          },
+          "test_type_key": {
+            "title": "Test Type Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_id",
+          "test_type_key",
+          "orientation"
+        ],
+        "title": "EnsembleSaveRequest",
         "type": "object"
       },
       "ExpiredOut": {
@@ -1163,6 +1327,84 @@
           "definition"
         ],
         "title": "FormatProfileSaveRequest",
+        "type": "object"
+      },
+      "GroupOut": {
+        "description": "묶음 하나 — **재료 + 시험종류 + 방향.**",
+        "properties": {
+          "curve": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurveStatsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "orientation": {
+            "title": "Orientation",
+            "type": "string"
+          },
+          "record_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Record Names",
+            "type": "array"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "scalars": {
+            "items": {
+              "$ref": "#/components/schemas/ScalarStatsOut"
+            },
+            "title": "Scalars",
+            "type": "array"
+          },
+          "skipped_unadopted": {
+            "title": "Skipped Unadopted",
+            "type": "integer"
+          },
+          "test_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Test Run Ids",
+            "type": "array"
+          },
+          "test_type_key": {
+            "title": "Test Type Key",
+            "type": "string"
+          },
+          "test_type_label": {
+            "title": "Test Type Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_type_key",
+          "test_type_label",
+          "orientation",
+          "sample_count",
+          "skipped_unadopted",
+          "test_run_ids",
+          "record_names",
+          "scalars",
+          "curve",
+          "notes"
+        ],
+        "title": "GroupOut",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1558,6 +1800,33 @@
           "updated_at"
         ],
         "title": "MaterialOut",
+        "type": "object"
+      },
+      "MaterialStatisticsOut": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_id",
+          "material_name",
+          "groups"
+        ],
+        "title": "MaterialStatisticsOut",
         "type": "object"
       },
       "MaterialUpdateRequest": {
@@ -2006,6 +2275,48 @@
           "created_at"
         ],
         "title": "NotificationOut",
+        "type": "object"
+      },
+      "OutlierOut": {
+        "description": "이상치 **후보**. 버려지지 않았다.",
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "test_run_id",
+          "record_name",
+          "value",
+          "score",
+          "reason"
+        ],
+        "title": "OutlierOut",
         "type": "object"
       },
       "Page_MaterialOut_": {
@@ -3454,6 +3765,125 @@
           }
         },
         "title": "SampleUpdateRequest",
+        "type": "object"
+      },
+      "ScalarStatsOut": {
+        "properties": {
+          "ci95_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci95 High"
+          },
+          "ci95_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci95 Low"
+          },
+          "coefficient_of_variation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coefficient Of Variation"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "iqr": {
+            "title": "Iqr",
+            "type": "number"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mad": {
+            "title": "Mad",
+            "type": "number"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": "number"
+          },
+          "mean": {
+            "title": "Mean",
+            "type": "number"
+          },
+          "median": {
+            "title": "Median",
+            "type": "number"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "outliers": {
+            "items": {
+              "$ref": "#/components/schemas/OutlierOut"
+            },
+            "title": "Outliers",
+            "type": "array"
+          },
+          "sample_sd": {
+            "title": "Sample Sd",
+            "type": "number"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "si_unit",
+          "dimension",
+          "count",
+          "mean",
+          "sample_sd",
+          "median",
+          "mad",
+          "iqr",
+          "minimum",
+          "maximum",
+          "coefficient_of_variation",
+          "ci95_low",
+          "ci95_high",
+          "outliers"
+        ],
+        "title": "ScalarStatsOut",
         "type": "object"
       },
       "SignupRequest": {
@@ -8637,6 +9067,163 @@
         "summary": "Update Specimen",
         "tags": [
           "materials"
+        ]
+      }
+    },
+    "/api/statistics/ensembles": {
+      "get": {
+        "operationId": "list_ensembles_api_statistics_ensembles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EnsembleResultOut"
+                  },
+                  "title": "Response List Ensembles Api Statistics Ensembles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ensembles",
+        "tags": [
+          "statistics"
+        ]
+      },
+      "post": {
+        "description": "이 묶음의 통계를 남긴다. **불변이다** — 다시 저장하면 새 행이 생긴다.\n\n쓴 시험과 그때 채택돼 있던 결과를 함께 박아 둔다. 나중에 시험이 늘거나 채택이\n바뀌어도 이 값은 그대로다 — 그러지 않으면 \"이 평균이 어디서 나왔나\" 를 답할 수\n없고, 그 숫자는 근거가 없다.",
+        "operationId": "save_ensemble_api_statistics_ensembles_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "threshold",
+            "required": false,
+            "schema": {
+              "default": 3.5,
+              "exclusiveMinimum": 0,
+              "maximum": 20,
+              "title": "Threshold",
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnsembleSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnsembleResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Ensemble",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/materials/{material_id}": {
+      "get": {
+        "description": "이 재료의 물성. **묶음은 시험종류 + 방향이다.**\n\n인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가\n크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다.",
+        "operationId": "material_statistics_api_statistics_materials__material_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "threshold",
+            "required": false,
+            "schema": {
+              "default": 3.5,
+              "exclusiveMinimum": 0,
+              "maximum": 20,
+              "title": "Threshold",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialStatisticsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Material Statistics",
+        "tags": [
+          "statistics"
         ]
       }
     },

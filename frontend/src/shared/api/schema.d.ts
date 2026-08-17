@@ -900,6 +900,54 @@ export interface paths {
         patch: operations["update_specimen_api_specimens__specimen_id__patch"];
         trace?: never;
     };
+    "/api/statistics/ensembles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Ensembles */
+        get: operations["list_ensembles_api_statistics_ensembles_get"];
+        put?: never;
+        /**
+         * Save Ensemble
+         * @description 이 묶음의 통계를 남긴다. **불변이다** — 다시 저장하면 새 행이 생긴다.
+         *
+         *     쓴 시험과 그때 채택돼 있던 결과를 함께 박아 둔다. 나중에 시험이 늘거나 채택이
+         *     바뀌어도 이 값은 그대로다 — 그러지 않으면 "이 평균이 어디서 나왔나" 를 답할 수
+         *     없고, 그 숫자는 근거가 없다.
+         */
+        post: operations["save_ensemble_api_statistics_ensembles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/materials/{material_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Material Statistics
+         * @description 이 재료의 물성. **묶음은 시험종류 + 방향이다.**
+         *
+         *     인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가
+         *     크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다.
+         */
+        get: operations["material_statistics_api_statistics_materials__material_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs": {
         parameters: {
             query?: never;
@@ -1725,6 +1773,33 @@ export interface components {
             /** Y */
             y: string;
         };
+        /** CurveStatsOut */
+        CurveStatsOut: {
+            /** Count */
+            count: [
+                number,
+                number
+            ][];
+            /** Mean */
+            mean: [
+                number,
+                number
+            ][];
+            /** Median */
+            median: [
+                number,
+                number
+            ][];
+            /** Sd */
+            sd: [
+                number,
+                number
+            ][];
+            /** X */
+            x: string;
+            /** Y */
+            y: string;
+        };
         /** DeleteAccountRequest */
         DeleteAccountRequest: {
             /** Transfer To Id */
@@ -1768,6 +1843,44 @@ export interface components {
             si_unit: string;
             /** Units */
             units: components["schemas"]["UnitOut"][];
+        };
+        /** EnsembleResultOut */
+        EnsembleResultOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Orientation */
+            orientation: string;
+            /** Sample Count */
+            sample_count: number;
+            /** Test Run Ids */
+            test_run_ids: string[];
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /** EnsembleSaveRequest */
+        EnsembleSaveRequest: {
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Orientation */
+            orientation: string;
+            /** Test Type Key */
+            test_type_key: string;
         };
         /** ExpiredOut */
         ExpiredOut: {
@@ -1879,6 +1992,31 @@ export interface components {
             priority: number;
             /** Test Type Key */
             test_type_key: string;
+        };
+        /**
+         * GroupOut
+         * @description 묶음 하나 — **재료 + 시험종류 + 방향.**
+         */
+        GroupOut: {
+            curve: components["schemas"]["CurveStatsOut"] | null;
+            /** Notes */
+            notes: string[];
+            /** Orientation */
+            orientation: string;
+            /** Record Names */
+            record_names: string[];
+            /** Sample Count */
+            sample_count: number;
+            /** Scalars */
+            scalars: components["schemas"]["ScalarStatsOut"][];
+            /** Skipped Unadopted */
+            skipped_unadopted: number;
+            /** Test Run Ids */
+            test_run_ids: string[];
+            /** Test Type Key */
+            test_type_key: string;
+            /** Test Type Label */
+            test_type_label: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2007,6 +2145,18 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** MaterialStatisticsOut */
+        MaterialStatisticsOut: {
+            /** Groups */
+            groups: components["schemas"]["GroupOut"][];
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
         };
         /** MaterialUpdateRequest */
         MaterialUpdateRequest: {
@@ -2163,6 +2313,25 @@ export interface components {
             read_at: string | null;
             /** Title */
             title: string;
+        };
+        /**
+         * OutlierOut
+         * @description 이상치 **후보**. 버려지지 않았다.
+         */
+        OutlierOut: {
+            /** Reason */
+            reason: string;
+            /** Record Name */
+            record_name: string;
+            /** Score */
+            score: number | null;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+            /** Value */
+            value: number;
         };
         /** Page[MaterialOut] */
         Page_MaterialOut_: {
@@ -2626,6 +2795,41 @@ export interface components {
             production_date?: string | null;
             /** Sales Type */
             sales_type?: string | null;
+        };
+        /** ScalarStatsOut */
+        ScalarStatsOut: {
+            /** Ci95 High */
+            ci95_high: number | null;
+            /** Ci95 Low */
+            ci95_low: number | null;
+            /** Coefficient Of Variation */
+            coefficient_of_variation: number | null;
+            /** Count */
+            count: number;
+            /** Dimension */
+            dimension: string | null;
+            /** Iqr */
+            iqr: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Mad */
+            mad: number;
+            /** Maximum */
+            maximum: number;
+            /** Mean */
+            mean: number;
+            /** Median */
+            median: number;
+            /** Minimum */
+            minimum: number;
+            /** Outliers */
+            outliers: components["schemas"]["OutlierOut"][];
+            /** Sample Sd */
+            sample_sd: number;
+            /** Si Unit */
+            si_unit: string;
         };
         /** SignupRequest */
         SignupRequest: {
@@ -5341,6 +5545,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ensembles_api_statistics_ensembles_get: {
+        parameters: {
+            query: {
+                material_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsembleResultOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_ensemble_api_statistics_ensembles_post: {
+        parameters: {
+            query?: {
+                threshold?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnsembleSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsembleResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    material_statistics_api_statistics_materials__material_id__get: {
+        parameters: {
+            query?: {
+                threshold?: number;
+            };
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialStatisticsOut"];
                 };
             };
             /** @description Validation Error */
