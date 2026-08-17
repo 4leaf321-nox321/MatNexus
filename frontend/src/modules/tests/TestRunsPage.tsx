@@ -31,6 +31,7 @@ import { Link, useParams } from 'react-router-dom'
 import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
+import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -60,20 +61,26 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
  * **있는데 화면 어디에도 없었고, 없다는 사실조차 안 보였다.** 목록이 조용히
  * 잘리는 것이 가장 나쁘다.
  */
-const PAGE_SIZES = [50, 100, 200] as const
+const PAGE_SIZES = [50, 100, 200, 'all'] as const
+type PageSize = (typeof PAGE_SIZES)[number]
 
 export default function TestRunsPage() {
   const { slug } = useParams<{ slug?: string }>()
   const [uploading, setUploading] = useState(false)
   // 사이드바가 '부서' 라고 말하는 화면이므로 그 부서 것만 보여 준다.
-  const [size, setSize] = useState<number>(PAGE_SIZES[0])
+  const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
+  const all = size === 'all'
   const runs = useResource(
-    () => testsApi.runs({ workspace: slug, limit: size, offset }),
-    [slug, size, offset]
+    () =>
+      all
+        ? fetchAll((limit, from) => testsApi.runs({ workspace: slug, limit, offset: from }))
+        : testsApi.runs({ workspace: slug, limit: size, offset }),
+    [slug, size, offset, all]
   )
   const rows = runs.data?.items ?? []
   const total = runs.data?.total ?? 0
+  const truncated = all && rows.length < total
   const pending = rows.some((run) => isPending(run.status))
 
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -290,7 +297,8 @@ export default function TestRunsPage() {
       {rows.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
           <span className="text-muted-foreground tabular-nums">
-            {offset + 1}–{offset + rows.length} / {total}건
+            {all ? `전체 ${rows.length}` : `${offset + 1}–${offset + rows.length}`} /{' '}
+            {total}건
           </span>
           <div className="text-muted-foreground flex items-center gap-1">
             <span>한 쪽에</span>
@@ -309,10 +317,11 @@ export default function TestRunsPage() {
                   size === value ? 'bg-muted text-foreground font-medium' : 'hover:bg-muted/60'
                 }`}
               >
-                {value}
+                {value === 'all' ? '전체' : value}
               </button>
             ))}
           </div>
+          {!all && (
           <div className="ml-auto flex gap-1">
             <Button
               size="sm"
@@ -339,7 +348,16 @@ export default function TestRunsPage() {
               <ChevronRight className="size-3.5" />
             </Button>
           </div>
+          )}
         </div>
+      )}
+
+      {/* **조용히 자르지 않는다.** 천장에 걸렸으면 그 사실을 적는다. */}
+      {truncated && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+          {total}건 중 {rows.length}건까지만 한 번에 보여 줍니다 — 표가 그보다 길면
+          브라우저가 버겁습니다. 부서나 상태로 좁히세요.
+        </p>
       )}
 
       <UploadDialog

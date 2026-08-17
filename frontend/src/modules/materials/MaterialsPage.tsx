@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom'
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { NamePreview } from '@/modules/materials/api'
 import { ApiError } from '@/shared/api/client'
+import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -39,28 +40,34 @@ import {
 import { useResource } from '@/shared/hooks/useResource'
 
 /**
- * 한 번에 가져올 수 있는 수. **서버가 200 에서 자른다**(`shared/pagination.py`).
+ * 한 쪽에 몇 건. `'all'` 은 200건씩 이어 받아 모은다(`shared/api/paging.ts`).
  *
- * 화면이 '전부'를 요구할 수 있으면 언젠가 `?limit=1000000` 이 나가고, 악의가
- * 없어도 그렇게 된다. 대신 **넘길 수 있게** 한다 — 137건 중 50건이라고 적어
- * 놓고 나머지를 볼 길이 없던 것이 문제였다.
+ * **서버 상한을 올리지 않는다.** 올리면 언젠가 `?limit=1000000` 이 나가고,
+ * 악의가 없어도 그렇게 된다 — 화면이 '전부' 를 구현하면서 큰 수를 넣기 때문이다.
  */
-const PAGE_SIZES = [50, 100, 200] as const
+const PAGE_SIZES = [50, 100, 200, 'all'] as const
+type PageSize = (typeof PAGE_SIZES)[number]
 
 export default function MaterialsPage() {
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [registering, setRegistering] = useState(false)
-  const [size, setSize] = useState<number>(PAGE_SIZES[0])
+  const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
+  const all = size === 'all'
   const materials = useResource(
-    () => materialsApi.list({ q: applied, limit: size, offset }),
-    [applied, size, offset]
+    () =>
+      all
+        ? fetchAll((limit, from) => materialsApi.list({ q: applied, limit, offset: from }))
+        : materialsApi.list({ q: applied, limit: size, offset }),
+    [applied, size, offset, all]
   )
 
   const page = materials.data
   const rows = page?.items ?? []
   const total = page?.total ?? 0
+  // 천장(2,000)에 걸렸는지. 걸렸으면 몇 건에서 멈췄는지 말한다.
+  const truncated = all && rows.length < total
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -163,7 +170,8 @@ export default function MaterialsPage() {
           </Table>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
             <span className="text-muted-foreground tabular-nums">
-              {offset + 1}–{offset + rows.length} / {total}건
+              {all ? `전체 ${rows.length}` : `${offset + 1}–${offset + rows.length}`} /{' '}
+              {total}건
             </span>
 
             <div className="text-muted-foreground flex items-center gap-1">
@@ -180,32 +188,43 @@ export default function MaterialsPage() {
                     size === value ? 'bg-muted text-foreground font-medium' : 'hover:bg-muted/60'
                   }`}
                 >
-                  {value}
+                  {value === 'all' ? '전체' : value}
                 </button>
               ))}
             </div>
 
-            <div className="ml-auto flex gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - size))}
-              >
-                <ChevronLeft className="size-3.5" />
-                이전
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={offset + rows.length >= total}
-                onClick={() => setOffset(offset + size)}
-              >
-                다음
-                <ChevronRight className="size-3.5" />
-              </Button>
-            </div>
+            {!all && (
+              <div className="ml-auto flex gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - size))}
+                >
+                  <ChevronLeft className="size-3.5" />
+                  이전
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={offset + rows.length >= total}
+                  onClick={() => setOffset(offset + size)}
+                >
+                  다음
+                  <ChevronRight className="size-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
+
+          {/* **조용히 자르지 않는다.** 천장에 걸렸으면 그 사실과 무엇을 하면
+              되는지를 적는다. */}
+          {truncated && (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+              {total}건 중 {rows.length}건까지만 한 번에 보여 줍니다 — 표가 그보다 길면
+              브라우저가 버겁습니다. 검색으로 좁히세요.
+            </p>
+          )}
         </>
       )}
 
