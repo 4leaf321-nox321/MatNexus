@@ -17,6 +17,11 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from sqlalchemy import select  # noqa: E402
 
+# **모델을 전부 등록시킨다.** 스크립트가 손대는 모델만 import 하면, 그 모델의
+# 외래키가 가리키는 테이블이 메타데이터에 없어 SQLAlchemy 가 매핑을 못 푼다
+# (실측: `test_types.owner_workspace_id` 가 'workspaces' 를 못 찾음). 앱은
+# main 이 전부 부르므로 안 드러나고, **배포용 스크립트에서만 터진다.**
+import app.all_models  # noqa: E402,F401
 from app.database import SessionLocal  # noqa: E402
 from app.modules.tests.definitions import ensure_builtin_test_types  # noqa: E402
 from app.modules.tests.models import TestChannel, TestConditionField, TestType  # noqa: E402

@@ -18,6 +18,9 @@ jobs:
       # conftest 가 여기서 <이름>_test 를 파생해 만든다. 개발 DB를 건드리지 않는
       # 구조가 CI에서도 그대로 성립한다.
       DATABASE_URL: postgresql+psycopg://postgres:root@localhost:5432/matnexus
+      # 러너 콘솔이 cp1252 라 스크립트가 한글을 찍는 순간 UnicodeEncodeError 로
+      # 죽는다. 한국어 서버(CP949)에서는 안 나므로 여기서만 드러난다.
+      PYTHONIOENCODING: utf-8
       # 스모크가 쓰는 계정. CI 전용이라 값이 노출돼도 문제가 없다 —
       # 운영 비밀번호는 `seed_install.py` 가 자동 생성한다.
       SMOKE_PASSWORD: smoke-only-password-1
