@@ -99,7 +99,9 @@ class TestUnits:
         stored = db.scalar(select(Material).where(Material.id == material["id"]))
         assert stored is not None
         assert stored.spec_thickness_m == 0.00045  # 저장은 SI
-        assert stored.input_units == {"spec_thickness": "mm"}
+        # 밀도도 입력 단위를 함께 적는다 — 값만 저장하면 나중에 kg/m³ 인지
+        # tonne/mm³ 인지 알 수 없다(기존 앱이 후자로 저장해 겪은 일이다).
+        assert stored.input_units == {"spec_thickness": "mm", "density": "kg/m3"}
 
     def test_모르는_단위는_거절한다(
         self, client: TestClient, admin_headers: dict[str, str]

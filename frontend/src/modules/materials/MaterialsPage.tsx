@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react'
 import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { NamePreview } from '@/modules/materials/api'
 import { ApiError } from '@/shared/api/client'
 import { fetchAll } from '@/shared/api/paging'
@@ -323,6 +323,8 @@ const EMPTY = {
   grade: '',
   details: '',
   spec_thickness: '',
+  density: '',
+  poisson_ratio: '',
   alias: '',
 }
 
@@ -379,6 +381,9 @@ function RegisterDialog({
         details: form.details || null,
         spec_thickness: thickness,
         spec_thickness_unit: LENGTH_UNIT,
+        density: form.density === '' ? null : Number(form.density),
+        density_unit: DENSITY_UNIT,
+        poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
         alias: form.alias || null,
       })
       onDone()
@@ -429,6 +434,16 @@ function RegisterDialog({
           <div className="space-y-1.5">
             <Label htmlFor="alias">별칭 (선택)</Label>
             <Input id="alias" placeholder="도어 이너 강판" {...field('alias')} />
+          </div>
+          {/* CAE 물성. **여기 없으면 카드를 만들 때 막힌다** — 그때 되돌아와
+              채우는 것보다 아는 값이면 지금 넣는 편이 싸다. 비워도 등록된다. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="density">밀도 (kg/m³, 선택)</Label>
+            <Input id="density" type="number" step="1" placeholder="7850" {...field('density')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="poisson">푸아송비 (선택)</Label>
+            <Input id="poisson" type="number" step="0.01" placeholder="0.3" {...field('poisson_ratio')} />
           </div>
         </div>
 

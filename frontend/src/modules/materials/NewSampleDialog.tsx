@@ -35,7 +35,6 @@ const EMPTY = {
   primary_vendor: '',
   production_date: '',
   density: '',
-  poisson_ratio: '',
 }
 
 interface Props {
@@ -72,7 +71,6 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
         // **단위를 항상 명시해 보낸다.** 생략 가능하게 두면 "이 값이 kg/m³ 였나
         // tonne/mm³ 였나" 를 나중에 아무도 답할 수 없다.
         density_unit: DENSITY_UNIT,
-        poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
       })
       setForm(EMPTY)
       onCreated(created)
@@ -112,7 +110,7 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
             <Input id="sample-vendor" {...field('primary_vendor')} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="sample-density">밀도 (kg/m³)</Label>
+            <Label htmlFor="sample-density">밀도 (kg/m³, 이 로트 실측)</Label>
             <Input
               id="sample-density"
               type="number"
@@ -121,22 +119,13 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
               {...field('density')}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sample-poisson">포아송비</Label>
-            <Input
-              id="sample-poisson"
-              type="number"
-              step="0.01"
-              placeholder="0.3"
-              {...field('poisson_ratio')}
-            />
-          </div>
         </div>
 
         <p className="text-muted-foreground text-xs">
           전부 선택 사항입니다. 로트를 관리하지 않는 경우가 있어 비워 두어도 시료는
-          만들어집니다 — 밀도·포아송비는 솔버로 내보낼 때 쓰이므로 아는 값이면 지금
-          넣는 편이 낫습니다.
+          만들어집니다. <b>밀도는 이 로트에서 잰 값</b>일 때만 넣으세요 — 카드가
+          재료의 공칭값보다 이쪽을 먼저 씁니다. 푸아송비는 로트마다 달라지는 값이
+          아니라 <b>재료</b>에 있습니다.
         </p>
 
         <ErrorNotice error={error} />

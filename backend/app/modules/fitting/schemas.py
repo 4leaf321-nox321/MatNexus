@@ -52,11 +52,32 @@ class FitPreviewRequest(BaseModel):
     """비우면 등록된 식 전부를 견준다."""
 
 
+class InheritedValueOut(BaseModel):
+    """카드가 **물려받을** 값 하나.
+
+    화면이 이것을 미리 보여 주지 않으면 사람은 재료·시료에 이미 있는 값을 모달에
+    또 적는다. 두 곳이 갈리면 그때 어느 쪽이 맞는지 판정할 근거가 없다.
+
+    적합 응답에 싣는 이유: **카드를 만들 때 실제로 쓰는 계산과 같은 코드**가
+    내야 한다. 화면이 재료 API 를 따로 불러 나름대로 판정하면 규칙이 두 벌이
+    되고, 둘이 어긋나는 순간 화면이 거짓말을 한다.
+    """
+
+    key: str
+    label: str
+    value: float | None
+    source: str
+    """`sample` | `material` | `manual` | `conflict` | `missing`."""
+    detail: str | None
+
+
 class FitPreviewOut(BaseModel):
     source_points: list[tuple[float, float]]
     """적합에 쓴 점(소성변형률, 진응력). 대표 곡선에서 왔다."""
     sample_count: int
     fits: list[FitOut]
+    elastic: list[InheritedValueOut] = []
+    """비워 두면 카드에 들어갈 값들. 사람이 모달에서 덮어쓸 수 있다."""
     notes: list[str]
 
 

@@ -1299,6 +1299,14 @@
       },
       "FitPreviewOut": {
         "properties": {
+          "elastic": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/InheritedValueOut"
+            },
+            "title": "Elastic",
+            "type": "array"
+          },
           "fits": {
             "items": {
               "$ref": "#/components/schemas/FitOut"
@@ -1746,6 +1754,54 @@
         "title": "IncompleteOut",
         "type": "object"
       },
+      "InheritedValueOut": {
+        "description": "카드가 **물려받을** 값 하나.\n\n화면이 이것을 미리 보여 주지 않으면 사람은 재료·시료에 이미 있는 값을 모달에\n또 적는다. 두 곳이 갈리면 그때 어느 쪽이 맞는지 판정할 근거가 없다.\n\n적합 응답에 싣는 이유: **카드를 만들 때 실제로 쓰는 계산과 같은 코드**가\n내야 한다. 화면이 재료 API 를 따로 불러 나름대로 판정하면 규칙이 두 벌이\n되고, 둘이 어긋나는 순간 화면이 거짓말을 한다.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "source",
+          "detail"
+        ],
+        "title": "InheritedValueOut",
+        "type": "object"
+      },
       "InstrumentDimensionOut": {
         "description": "장비 파일이 준 시편 치수 하나.",
         "properties": {
@@ -1875,6 +1931,23 @@
             "title": "Category",
             "type": "string"
           },
+          "density": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density"
+          },
+          "density_unit": {
+            "default": "kg/m3",
+            "title": "Density Unit",
+            "type": "string"
+          },
           "details": {
             "anyOf": [
               {
@@ -1921,6 +1994,19 @@
               }
             ],
             "title": "Note"
+          },
+          "poisson_ratio": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 0.5,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio"
           },
           "spec_thickness": {
             "anyOf": [
@@ -1979,6 +2065,22 @@
           "created_at": {
             "format": "date-time",
             "title": "Created At",
+            "type": "string"
+          },
+          "density": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density"
+          },
+          "density_unit": {
+            "default": "kg/m3",
+            "title": "Density Unit",
             "type": "string"
           },
           "details": {
@@ -2054,6 +2156,17 @@
             ],
             "title": "Owner Workspace Name"
           },
+          "poisson_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio"
+          },
           "record_name": {
             "title": "Record Name",
             "type": "string"
@@ -2096,6 +2209,8 @@
           "grade",
           "details",
           "spec_thickness",
+          "density",
+          "poisson_ratio",
           "note",
           "legacy_id",
           "sample_count",
@@ -2159,6 +2274,29 @@
             ],
             "title": "Category"
           },
+          "density": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density"
+          },
+          "density_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density Unit"
+          },
           "details": {
             "anyOf": [
               {
@@ -2207,6 +2345,19 @@
               }
             ],
             "title": "Note"
+          },
+          "poisson_ratio": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 0.5,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio"
           },
           "spec_thickness": {
             "anyOf": [
@@ -3447,6 +3598,33 @@
         "title": "PropertyCardSaveRequest",
         "type": "object"
       },
+      "PropertySourcesOut": {
+        "properties": {
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ValueSourceOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "material_id",
+          "material_name",
+          "rows"
+        ],
+        "title": "PropertySourcesOut",
+        "type": "object"
+      },
       "RecipeCreateRequest": {
         "properties": {
           "description": {
@@ -3902,19 +4080,6 @@
             ],
             "title": "Note"
           },
-          "poisson_ratio": {
-            "anyOf": [
-              {
-                "exclusiveMaximum": 0.5,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poisson Ratio"
-          },
           "primary_vendor": {
             "anyOf": [
               {
@@ -4086,17 +4251,6 @@
             ],
             "title": "Note"
           },
-          "poisson_ratio": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poisson Ratio"
-          },
           "primary_vendor": {
             "anyOf": [
               {
@@ -4182,7 +4336,6 @@
           "applied_part",
           "production_date",
           "density",
-          "poisson_ratio",
           "note",
           "specimen_count",
           "created_at"
@@ -4297,19 +4450,6 @@
               }
             ],
             "title": "Note"
-          },
-          "poisson_ratio": {
-            "anyOf": [
-              {
-                "exclusiveMaximum": 0.5,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poisson Ratio"
           },
           "primary_vendor": {
             "anyOf": [
@@ -6490,6 +6630,80 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValueSourceOut": {
+        "description": "값 하나가 **어디서 와서 어디에 쓰이는가.**\n\n이 정보가 없으면 사람은 화면을 옮겨 다니며 재료·시료·시편을 하나씩 열어\n봐야 한다. 그러고도 \"이게 계산에 쓰이는 값인지\" 는 알 수 없다 — 규격 두께와\n실측 두께가 나란히 있는데 계산에 들어가는 것은 하나뿐이다.",
+        "properties": {
+          "display_unit": {
+            "title": "Display Unit",
+            "type": "string"
+          },
+          "edit_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Hint"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "used_for": {
+            "title": "Used For",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "display_unit",
+          "level",
+          "origin",
+          "status",
+          "used_for"
+        ],
+        "title": "ValueSourceOut",
         "type": "object"
       },
       "VocCreateRequest": {
@@ -8864,6 +9078,50 @@
           }
         },
         "summary": "Update Material",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/property-sources": {
+      "get": {
+        "description": "이 재료의 값들이 **어디서 와서 어디에 쓰이는가.**\n\n같은 이름의 값이 여러 층에 산다. 규격 두께는 재료에 있고 이름의 한 칸이지만\n계산에 들어가는 것은 시편의 실측 두께다. 밀도는 재료(공칭)와 시료(실측)에\n둘 다 있고 카드는 실측을 먼저 본다. 푸아송비는 재료에만 있다.\n\n**이 배치를 사람이 외우게 하면 안 된다.** 외우게 하면 \"밀도를 넣었는데\n내보내기가 안 된다\"(시료에 넣어야 했는데 재료에 넣었거나 그 반대) 가 난다.\n한 화면에서 값·출처·쓰임을 함께 보여 준다.",
+        "operationId": "property_sources_api_materials__material_id__property_sources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertySourcesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Property Sources",
         "tags": [
           "materials"
         ]

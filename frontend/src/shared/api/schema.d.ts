@@ -722,6 +722,34 @@ export interface paths {
         patch: operations["update_material_api_materials__material_id__patch"];
         trace?: never;
     };
+    "/api/materials/{material_id}/property-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Property Sources
+         * @description 이 재료의 값들이 **어디서 와서 어디에 쓰이는가.**
+         *
+         *     같은 이름의 값이 여러 층에 산다. 규격 두께는 재료에 있고 이름의 한 칸이지만
+         *     계산에 들어가는 것은 시편의 실측 두께다. 밀도는 재료(공칭)와 시료(실측)에
+         *     둘 다 있고 카드는 실측을 먼저 본다. 푸아송비는 재료에만 있다.
+         *
+         *     **이 배치를 사람이 외우게 하면 안 된다.** 외우게 하면 "밀도를 넣었는데
+         *     내보내기가 안 된다"(시료에 넣어야 했는데 재료에 넣었거나 그 반대) 가 난다.
+         *     한 화면에서 값·출처·쓰임을 함께 보여 준다.
+         */
+        get: operations["property_sources_api_materials__material_id__property_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{material_id}/samples": {
         parameters: {
             query?: never;
@@ -2210,6 +2238,11 @@ export interface components {
         };
         /** FitPreviewOut */
         FitPreviewOut: {
+            /**
+             * Elastic
+             * @default []
+             */
+            elastic: components["schemas"]["InheritedValueOut"][];
             /** Fits */
             fits: components["schemas"]["FitOut"][];
             /** Notes */
@@ -2386,6 +2419,29 @@ export interface components {
             path: string;
         };
         /**
+         * InheritedValueOut
+         * @description 카드가 **물려받을** 값 하나.
+         *
+         *     화면이 이것을 미리 보여 주지 않으면 사람은 재료·시료에 이미 있는 값을 모달에
+         *     또 적는다. 두 곳이 갈리면 그때 어느 쪽이 맞는지 판정할 근거가 없다.
+         *
+         *     적합 응답에 싣는 이유: **카드를 만들 때 실제로 쓰는 계산과 같은 코드**가
+         *     내야 한다. 화면이 재료 API 를 따로 불러 나름대로 판정하면 규칙이 두 벌이
+         *     되고, 둘이 어긋나는 순간 화면이 거짓말을 한다.
+         */
+        InheritedValueOut: {
+            /** Detail */
+            detail: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: number | null;
+        };
+        /**
          * InstrumentDimensionOut
          * @description 장비 파일이 준 시편 치수 하나.
          */
@@ -2430,6 +2486,13 @@ export interface components {
             alias?: string | null;
             /** Category */
             category: string;
+            /** Density */
+            density?: number | null;
+            /**
+             * Density Unit
+             * @default kg/m3
+             */
+            density_unit: string;
             /** Details */
             details?: string | null;
             /** Family */
@@ -2440,6 +2503,8 @@ export interface components {
             legacy_id?: string | null;
             /** Note */
             note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
             /** Spec Thickness */
             spec_thickness?: number | null;
             /**
@@ -2461,6 +2526,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Density */
+            density: number | null;
+            /**
+             * Density Unit
+             * @default kg/m3
+             */
+            density_unit: string;
             /** Details */
             details: string | null;
             /** Family */
@@ -2482,6 +2554,8 @@ export interface components {
             owner_workspace_id: string | null;
             /** Owner Workspace Name */
             owner_workspace_name: string | null;
+            /** Poisson Ratio */
+            poisson_ratio: number | null;
             /** Record Name */
             record_name: string;
             /** Sample Count */
@@ -2517,6 +2591,10 @@ export interface components {
             alias?: string | null;
             /** Category */
             category?: string | null;
+            /** Density */
+            density?: number | null;
+            /** Density Unit */
+            density_unit?: string | null;
             /** Details */
             details?: string | null;
             /** Family */
@@ -2525,6 +2603,8 @@ export interface components {
             grade?: string | null;
             /** Note */
             note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
             /** Spec Thickness */
             spec_thickness?: number | null;
             /** Spec Thickness Unit */
@@ -3002,6 +3082,18 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /** PropertySourcesOut */
+        PropertySourcesOut: {
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Rows */
+            rows: components["schemas"]["ValueSourceOut"][];
+        };
         /** RecipeCreateRequest */
         RecipeCreateRequest: {
             /** Description */
@@ -3167,8 +3259,6 @@ export interface components {
             manufacturer?: string | null;
             /** Note */
             note?: string | null;
-            /** Poisson Ratio */
-            poisson_ratio?: number | null;
             /** Primary Vendor */
             primary_vendor?: string | null;
             /** Production Date */
@@ -3226,8 +3316,6 @@ export interface components {
             material_id: string;
             /** Note */
             note: string | null;
-            /** Poisson Ratio */
-            poisson_ratio: number | null;
             /** Primary Vendor */
             primary_vendor: string | null;
             /** Production Date */
@@ -3273,8 +3361,6 @@ export interface components {
             manufacturer?: string | null;
             /** Note */
             note?: string | null;
-            /** Poisson Ratio */
-            poisson_ratio?: number | null;
             /** Primary Vendor */
             primary_vendor?: string | null;
             /** Production Date */
@@ -3956,6 +4042,34 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * ValueSourceOut
+         * @description 값 하나가 **어디서 와서 어디에 쓰이는가.**
+         *
+         *     이 정보가 없으면 사람은 화면을 옮겨 다니며 재료·시료·시편을 하나씩 열어
+         *     봐야 한다. 그러고도 "이게 계산에 쓰이는 값인지" 는 알 수 없다 — 규격 두께와
+         *     실측 두께가 나란히 있는데 계산에 들어가는 것은 하나뿐이다.
+         */
+        ValueSourceOut: {
+            /** Display Unit */
+            display_unit: string;
+            /** Edit Hint */
+            edit_hint?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Level */
+            level: string;
+            /** Origin */
+            origin: string | null;
+            /** Status */
+            status: string;
+            /** Used For */
+            used_for: string;
+            /** Value */
+            value: number | null;
         };
         /** VocCreateRequest */
         VocCreateRequest: {
@@ -5477,6 +5591,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    property_sources_api_materials__material_id__property_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertySourcesOut"];
                 };
             };
             /** @description Validation Error */

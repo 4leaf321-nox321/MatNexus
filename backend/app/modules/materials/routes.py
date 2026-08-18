@@ -29,12 +29,14 @@ from app.modules.materials.schemas import (
     MaterialUpdateRequest,
     NamePreviewOut,
     NamePreviewRequest,
+    PropertySourcesOut,
     SampleCreateRequest,
     SampleOut,
     SampleUpdateRequest,
     SpecimenCreateRequest,
     SpecimenOut,
     SpecimenUpdateRequest,
+    ValueSourceOut,
 )
 from app.modules.tests.models import TestRun
 from app.shared.auth import current_user
@@ -58,6 +60,7 @@ def _material_out(
     material: Material, *, sample_count: int, workspace_name: str | None
 ) -> MaterialOut:
     unit = material.input_units.get("spec_thickness", LENGTH_UNIT)
+    density_unit = material.input_units.get("density", DENSITY_UNIT)
     return MaterialOut(
         id=material.id,
         record_name=material.record_name,
@@ -71,6 +74,9 @@ def _material_out(
         details=material.details,
         spec_thickness=services.from_si(material.spec_thickness_m, unit),
         spec_thickness_unit=unit,
+        density=services.from_si(material.density_si, density_unit),
+        density_unit=density_unit,
+        poisson_ratio=material.poisson_ratio,
         note=material.note,
         legacy_id=material.legacy_id,
         sample_count=sample_count,
@@ -142,7 +148,6 @@ def _sample_out(
         production_date=sample.production_date,
         density=services.from_si(sample.density_si, unit),
         density_unit=unit,
-        poisson_ratio=sample.poisson_ratio,
         note=sample.note,
         specimen_count=specimen_count,
         created_at=sample.created_at,
@@ -330,7 +335,12 @@ def create_material(
         grade=payload.grade,
         details=payload.details,
         spec_thickness_m=thickness_m,
-        input_units={"spec_thickness": payload.spec_thickness_unit},
+        density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
+        poisson_ratio=payload.poisson_ratio,
+        input_units={
+            "spec_thickness": payload.spec_thickness_unit,
+            "density": payload.density_unit,
+        },
         note=payload.note,
         legacy_id=payload.legacy_id,
         registered_by_id=user.id,
@@ -357,6 +367,164 @@ def get_material(
     )
 
 
+def _thickness_origin(measured: list[float], total: int) -> str:
+    """실측 두께가 몇 개나 채워졌는가. **평균이 아니라 채움 정도가 요점이다** —
+    하나라도 비면 그 시편의 응력은 못 낸다."""
+    if not total:
+        return "시편이 없습니다."
+    if not measured:
+        return f"시편 {total}개 모두 두께가 비어 있습니다."
+    mean_mm = services.from_si(sum(measured) / len(measured), LENGTH_UNIT) or 0.0
+    return f"시편 {len(measured)}/{total}개에 있습니다 (평균 {mean_mm:.4g} {LENGTH_UNIT})."
+
+
+@router.get("/{material_id}/property-sources", response_model=PropertySourcesOut)
+def property_sources(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertySourcesOut:
+    """이 재료의 값들이 **어디서 와서 어디에 쓰이는가.**
+
+    같은 이름의 값이 여러 층에 산다. 규격 두께는 재료에 있고 이름의 한 칸이지만
+    계산에 들어가는 것은 시편의 실측 두께다. 밀도는 재료(공칭)와 시료(실측)에
+    둘 다 있고 카드는 실측을 먼저 본다. 푸아송비는 재료에만 있다.
+
+    **이 배치를 사람이 외우게 하면 안 된다.** 외우게 하면 "밀도를 넣었는데
+    내보내기가 안 된다"(시료에 넣어야 했는데 재료에 넣었거나 그 반대) 가 난다.
+    한 화면에서 값·출처·쓰임을 함께 보여 준다.
+    """
+    material = services.get_material(db, user, material_id)
+    samples = list(db.scalars(select(Sample).where(Sample.material_id == material.id)))
+    specimens = list(
+        db.scalars(
+            select(Specimen)
+            .join(Sample, Sample.id == Specimen.sample_id)
+            .where(Sample.material_id == material.id, Specimen.deleted_at.is_(None))
+        )
+    )
+
+    length_unit = material.input_units.get("spec_thickness", LENGTH_UNIT)
+    rows: list[ValueSourceOut] = [
+        ValueSourceOut(
+            key="spec_thickness",
+            label="규격 두께",
+            value=services.from_si(material.spec_thickness_m, length_unit),
+            display_unit=length_unit,
+            level="material",
+            origin="재료 이름의 한 칸입니다 — 고치면 이름이 바뀝니다.",
+            status="ok" if material.spec_thickness_m is not None else "missing",
+            used_for="재료 이름과 검색. 계산에는 쓰지 않습니다.",
+            edit_hint=None if material.spec_thickness_m is not None else "재료 수정",
+        )
+    ]
+
+    measured = [s.thickness_m for s in specimens if s.thickness_m is not None]
+    rows.append(
+        ValueSourceOut(
+            key="specimen_thickness",
+            label="실측 두께",
+            value=(
+                services.from_si(sum(measured) / len(measured), LENGTH_UNIT)
+                if measured
+                else None
+            ),
+            display_unit=LENGTH_UNIT,
+            level="specimen",
+            origin=_thickness_origin(measured, len(specimens)),
+            status=(
+                "ok"
+                if measured and len(measured) == len(specimens)
+                else "conflict"
+                if measured
+                else "missing"
+            ),
+            used_for="단면적(폭 곱하기 두께) — 공칭 응력을 만드는 데 씁니다.",
+            edit_hint=(
+                None
+                if measured and len(measured) == len(specimens)
+                else "시편 수정 또는 일괄 등록"
+            ),
+        )
+    )
+
+    density_unit = material.input_units.get("density", DENSITY_UNIT)
+    lot = {s.density_si for s in samples if s.density_si is not None}
+    if len(lot) == 1:
+        value, level, origin, status = (
+            next(iter(lot)),
+            "sample",
+            "시료에서 잰 값입니다. 재료 공칭값보다 먼저 씁니다.",
+            "ok",
+        )
+    elif len(lot) > 1:
+        joined = ", ".join(f"{v:.4g}" for v in sorted(lot))
+        value, level, origin, status = (
+            None,
+            "sample",
+            f"시료마다 다릅니다({joined} kg/m³) — 카드에서 쓸 값을 직접 넣어야 합니다.",
+            "conflict",
+        )
+    elif material.density_si is not None:
+        value, level, origin, status = (
+            material.density_si,
+            "material",
+            "재료의 공칭값입니다. 로트에서 잰 값이 있으면 그쪽이 우선합니다.",
+            "ok",
+        )
+    else:
+        value, level, origin, status = (None, "material", None, "missing")
+    rows.append(
+        ValueSourceOut(
+            key="density",
+            label="밀도",
+            value=services.from_si(value, density_unit),
+            display_unit=density_unit,
+            level=level,
+            origin=origin,
+            status=status,
+            used_for="CAE 카드. OpenRadioss 는 이 값 없이 내보낼 수 없습니다.",
+            edit_hint=None if status == "ok" else "재료 수정(공칭) 또는 시료 수정(실측)",
+        )
+    )
+
+    rows.append(
+        ValueSourceOut(
+            key="poisson_ratio",
+            label="푸아송비",
+            value=material.poisson_ratio,
+            display_unit="",
+            level="material",
+            origin=(
+                "재료에 적힌 값입니다."
+                if material.poisson_ratio is not None
+                else "인장시험은 이 값을 주지 않습니다 — 문헌값을 넣습니다."
+            ),
+            status="ok" if material.poisson_ratio is not None else "missing",
+            used_for="CAE 카드. Abaqus·OpenRadioss 모두 이 값이 있어야 합니다.",
+            edit_hint=None if material.poisson_ratio is not None else "재료 수정",
+        )
+    )
+
+    rows.append(
+        ValueSourceOut(
+            key="youngs_modulus",
+            label="탄성계수",
+            value=None,
+            display_unit="GPa",
+            level="result",
+            origin="처리에서 잽니다 — 적어 넣는 값이 아닙니다.",
+            status="ok",
+            used_for="CAE 카드의 탄성. 물성 탭에서 채택된 결과들의 평균을 씁니다.",
+            edit_hint=None,
+        )
+    )
+
+    return PropertySourcesOut(
+        material_id=material.id, material_name=material.record_name, rows=rows
+    )
+
+
 @router.patch("/{material_id}", response_model=MaterialOut)
 def update_material(
     material_id: uuid.UUID,
@@ -368,9 +536,19 @@ def update_material(
     services.require_writable(db, user, material)
 
     data = payload.model_dump(exclude_unset=True)
-    for field in ("family", "category", "grade", "details", "alias", "note"):
+    for field in ("family", "category", "grade", "details", "alias", "note", "poisson_ratio"):
         if field in data:
             setattr(material, field, data[field])
+
+    if "density" in data or "density_unit" in data:
+        unit = data.get("density_unit") or material.input_units.get("density", DENSITY_UNIT)
+        value = (
+            data["density"]
+            if "density" in data
+            else services.from_si(material.density_si, unit)
+        )
+        material.density_si = services.to_si(value, unit, field="밀도")
+        material.input_units = {**material.input_units, "density": unit}
 
     if "spec_thickness" in data or "spec_thickness_unit" in data:
         unit = data.get("spec_thickness_unit") or material.input_units.get(
@@ -490,7 +668,6 @@ def create_sample(
         applied_part=payload.applied_part,
         production_date=payload.production_date,
         density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
-        poisson_ratio=payload.poisson_ratio,
         input_units={"density": payload.density_unit},
         note=payload.note,
         registered_by_id=user.id,
@@ -545,7 +722,6 @@ def update_sample(
         "applied_product",
         "applied_part",
         "production_date",
-        "poisson_ratio",
         "note",
     ):
         if field in data:

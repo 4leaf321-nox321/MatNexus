@@ -17,6 +17,7 @@ import {
   FlaskConical,
   Globe2,
   Layers,
+  ListTree,
   Pencil,
   Plus,
   Trash2,
@@ -32,6 +33,7 @@ import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -69,6 +71,7 @@ export default function MaterialDetailPage() {
   const material = useResource(() => materialsApi.get(id), [id])
   const samples = useResource(() => materialsApi.samples(id), [id])
   const [addingSample, setAddingSample] = useState(false)
+  const [sources, setSources] = useState(false)
   const [editing, setEditing] = useState(false)
   const [deleteError, setDeleteError] = useState<Error | null>(null)
   const [expand, setExpand] = useState<ExpandCommand | null>(null)
@@ -93,6 +96,12 @@ export default function MaterialDetailPage() {
         description={item?.alias ?? undefined}
         actions={
           <div className="flex gap-2">
+            {/* **어느 탭에서든 같은 버튼이다.** 카드를 만들다 말고 화면을 옮기지
+                않아도 값이 어디 있는지 볼 수 있어야 한다. */}
+            <Button variant="outline" onClick={() => setSources(true)} disabled={!item}>
+              <ListTree className="size-4" />
+              값 출처
+            </Button>
             <Button variant="outline" onClick={() => setEditing(true)} disabled={!item}>
               <Pencil className="size-4" />
               수정
@@ -103,6 +112,14 @@ export default function MaterialDetailPage() {
           </div>
         }
       />
+
+      {item && (
+        <PropertySourcesSheet
+          materialId={item.id}
+          open={sources}
+          onClose={() => setSources(false)}
+        />
+      )}
 
       <ErrorNotice error={material.error ?? deleteError} className="mb-4" />
 

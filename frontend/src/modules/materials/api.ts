@@ -22,6 +22,9 @@ type NamePreviewRequest = components['schemas']['NamePreviewRequest']
  * 무엇으로 입력받았는지 기록한다. 생략 가능하게 두면 "이 값이 mm 였나 m 였나"를
  * 나중에 아무도 답할 수 없다.
  */
+export type PropertySources = components['schemas']['PropertySourcesOut']
+export type ValueSource = components['schemas']['ValueSourceOut']
+
 export const LENGTH_UNIT = 'mm'
 export const DENSITY_UNIT = 'kg/m3'
 
@@ -57,6 +60,10 @@ export const materialsApi = {
   update: (id: string, payload: MaterialUpdate) =>
     api.patch<Material>(`/materials/${id}`, payload),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),
+
+  /** 어떤 값이 어디에 적혀 있고 무엇에 쓰이는지. 화면이 이 배치를 외우지 않는다. */
+  propertySources: (id: string) =>
+    api.get<PropertySources>(`/materials/${id}/property-sources`),
 
   /** 이름을 만드는 곳은 서버 하나다 — 화면은 규칙을 다시 구현하지 않고 물어본다. */
   previewName: (payload: NamePreviewRequest) =>

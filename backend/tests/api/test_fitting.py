@@ -544,3 +544,126 @@ class Test상태:
             client.get(f"/api/fitting/cards/{card['id']}", headers=admin_headers).status_code
             == 404
         )
+
+
+class Test물려받기:
+    """**같은 값을 두 곳에 적게 하지 않는다.**
+
+    전에는 재료·시료에 밀도와 푸아송비가 있는데도 카드 모달에서 다시 받았고,
+    카드는 모달 값만 썼다. 두 곳이 갈리면 어느 쪽이 맞는지 판정할 근거가 없다.
+    """
+
+    def test_재료에_적힌_값을_카드가_물려받는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        client.patch(
+            f"/api/materials/{ready['id']}",
+            json={"poisson_ratio": 0.29, "density": 7830, "density_unit": "kg/m3"},
+            headers=admin_headers,
+        )
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "물려받기",
+            },
+            headers=admin_headers,
+        ).json()
+
+        assert card["elastic"]["poisson_ratio"] == 0.29
+        assert card["elastic"]["density"] == 7830
+        # **출처를 함께 박는다.** 재료를 나중에 고쳐도 이 카드가 무엇을 썼는지는
+        # 그대로 남아야 한다 — 카드는 불변이다.
+        assert card["elastic"]["poisson_ratio_source"] == "material"
+        assert card["elastic"]["density_source"] == "material"
+
+    def test_시료에서_잰_밀도가_재료_공칭값을_이긴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        ready: dict[str, Any],
+    ) -> None:
+        """복합재·발포재·소결재는 로트마다 밀도가 실제로 다르다."""
+        client.patch(
+            f"/api/materials/{ready['id']}",
+            json={"density": 7830, "density_unit": "kg/m3"},
+            headers=admin_headers,
+        )
+        samples = client.get(
+            f"/api/materials/{ready['id']}/samples", headers=admin_headers
+        ).json()
+        for sample in samples:
+            client.patch(
+                f"/api/samples/{sample['id']}",
+                json={"density": 7812, "density_unit": "kg/m3"},
+                headers=admin_headers,
+            )
+
+        body = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+            },
+            headers=admin_headers,
+        ).json()
+        density = next(row for row in body["elastic"] if row["key"] == "density")
+        assert density["value"] == 7812
+        assert density["source"] == "sample"
+
+    def test_시료마다_밀도가_다르면_말없이_고르지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        ready: dict[str, Any],
+    ) -> None:
+        """어느 로트의 값을 썼는지 모르는 카드는 근거가 없는 것과 같다."""
+        samples = client.get(
+            f"/api/materials/{ready['id']}/samples", headers=admin_headers
+        ).json()
+        assert len(samples) >= 2
+        for index, sample in enumerate(samples):
+            client.patch(
+                f"/api/samples/{sample['id']}",
+                json={"density": 7800 + index * 10, "density_unit": "kg/m3"},
+                headers=admin_headers,
+            )
+
+        body = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+            },
+            headers=admin_headers,
+        ).json()
+        density = next(row for row in body["elastic"] if row["key"] == "density")
+        assert density["value"] is None
+        assert density["source"] == "conflict"
+        assert "다릅니다" in (density["detail"] or "")
+
+    def test_직접_넣은_값이_물려받은_값을_이긴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        client.patch(
+            f"/api/materials/{ready['id']}",
+            json={"poisson_ratio": 0.29},
+            headers=admin_headers,
+        )
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "직접",
+                "poisson_ratio": 0.33,
+            },
+            headers=admin_headers,
+        ).json()
+        assert card["elastic"]["poisson_ratio"] == 0.33
+        assert card["elastic"]["poisson_ratio_source"] == "manual"

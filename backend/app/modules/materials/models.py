@@ -94,7 +94,26 @@ class Material(Base):
     """같은 규격인데 구분해야 할 때 쓴다(개발 A안/B안 등). 이름의 한 칸을
     차지하므로, 비어 있으면 `-` 가 들어가고 칸 수는 유지된다."""
     spec_thickness_m: Mapped[float | None] = mapped_column(Float, nullable=True)
-    """SI(m). 입력은 mm 로 받는다."""
+    """SI(m). 입력은 mm 로 받는다. **규격 두께이고 이름의 한 칸이다** — 계산에
+    쓰는 것은 시편의 실측 두께(`Specimen.thickness_m`)다. 1.0t 판재를 재면
+    0.98 이 나오는데, 둘을 합치면 규격이 흔들리거나 계산이 틀린다."""
+
+    density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """공칭 밀도 SI(kg/m³). 문헌값·등급값이다.
+
+    **로트마다 재는 값은 시료에 있다**(`Sample.density_si`). 강판은 로트가
+    달라도 7850 이지만 복합재·발포재·소결재는 실제로 다르다 — 그래서 두 층을
+    둔다. 카드는 시료 실측을 먼저 보고 없으면 이 값을 쓴다."""
+
+    poisson_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """**재료의 성질이다. 시료가 아니다.**
+
+    같은 강종의 다른 로트가 푸아송비가 다르지 않다. 게다가 인장시험은 이 값을
+    주지 않는다 — 횡변형을 따로 재야 한다. 들어오는 값은 대개 문헌값이고,
+    그것은 재료 등급에 붙는다.
+
+    전에는 시료에 있었다. 로트 5개에 0.3 을 다섯 번 적어야 했고, 그중 하나를
+    0.28 로 고치면 같은 재료가 두 값을 갖게 됐다."""
 
     input_units: Mapped[dict[str, str]] = mapped_column(
         JSONB, default=dict, server_default="{}"
@@ -164,12 +183,13 @@ class Sample(Base):
     production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
-    """SI(kg/m³). 기존 앱은 `tonne/mm³` 로 저장했다 — Abaqus 단위계다. 저장을
-    특정 솔버에 맞추면 다른 솔버를 붙일 때 어디서 변환됐는지 추적이 안 된다."""
-    poisson_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
-    """기존 앱은 이 값을 **시료 식별자에 넣었다**(`SampleType_{Poisson}_...`).
-    측정·가정한 물성값이 정체성이 되면, 0.3 을 0.28 로 정정하는 순간 시료 ID가
-    바뀌어 하위 시험이 고아가 된다. 여기서는 그냥 속성이다."""
+    """**이 로트에서 실제로 잰 밀도** SI(kg/m³). 공칭은 재료에 있다.
+
+    기존 앱은 `tonne/mm³` 로 저장했다 — Abaqus 단위계다. 저장을 특정 솔버에
+    맞추면 다른 솔버를 붙일 때 어디서 변환됐는지 추적이 안 된다.
+
+    푸아송비는 여기 없다. 재료로 올렸다 — 로트마다 달라지는 값이 아니고,
+    같은 값을 로트 수만큼 적게 하면 그중 하나만 고쳐지는 일이 생긴다."""
 
     input_units: Mapped[dict[str, str]] = mapped_column(
         JSONB, default=dict, server_default="{}"

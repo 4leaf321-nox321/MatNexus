@@ -12,6 +12,7 @@ import type { components } from '@/shared/api/schema'
 export type Family = components['schemas']['FamilyOut']
 export type Fit = components['schemas']['FitOut']
 export type FitPreview = components['schemas']['FitPreviewOut']
+export type InheritedValue = components['schemas']['InheritedValueOut']
 export type FittedParameter = components['schemas']['FittedParameterOut']
 export type PropertyCard = components['schemas']['PropertyCardOut']
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']

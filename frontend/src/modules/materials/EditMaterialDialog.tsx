@@ -16,7 +16,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 
-import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Material, NamePreview } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -47,6 +47,8 @@ function initial(material: Material) {
     // **문자열로 들고 있는다.** 숫자 입력을 제어 컴포넌트로 두면 `Number('0.')`
     // 이 0 이 되어 소수점을 찍는 순간 지워진다 — 처리 옵션에서 겪은 것과 같다.
     spec_thickness: material.spec_thickness == null ? '' : String(material.spec_thickness),
+    density: material.density == null ? '' : String(material.density),
+    poisson_ratio: material.poisson_ratio == null ? '' : String(material.poisson_ratio),
     alias: material.alias ?? '',
     note: material.note ?? '',
   }
@@ -107,6 +109,9 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
         details: form.details || null,
         spec_thickness: thickness,
         spec_thickness_unit: LENGTH_UNIT,
+        density: form.density === '' ? null : Number(form.density),
+        density_unit: DENSITY_UNIT,
+        poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
         alias: form.alias || null,
         note: form.note || null,
       })
@@ -153,6 +158,43 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
           <div className="space-y-1.5">
             <Label htmlFor="edit-alias">별칭 (선택)</Label>
             <Input id="edit-alias" {...field('alias')} />
+          </div>
+        </div>
+
+        {/* **여기가 이 값들의 자리다.**
+            푸아송비는 로트마다 달라지는 값이 아니고, 인장시험이 주지도 않는다 —
+            문헌값이 재료 등급에 붙는다. 시료에 두었더니 로트 5개에 0.3 을 다섯
+            번 적어야 했고, 그중 하나만 0.28 로 고쳐지는 일이 생겼다.
+
+            밀도는 여기가 '공칭' 이다. 로트에서 잰 값이 있으면 시료에 넣고,
+            카드는 그쪽을 먼저 쓴다. */}
+        <div className="rounded-md border p-3">
+          <p className="mb-2 text-sm font-medium">CAE 물성</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-density">밀도 (kg/m³, 공칭)</Label>
+              <Input
+                id="edit-density"
+                inputMode="decimal"
+                placeholder="7850"
+                {...field('density')}
+              />
+              <p className="text-muted-foreground text-xs">
+                로트에서 잰 값은 시료에 넣습니다 — 카드는 그쪽을 먼저 씁니다.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-poisson">푸아송비</Label>
+              <Input
+                id="edit-poisson"
+                inputMode="decimal"
+                placeholder="0.3"
+                {...field('poisson_ratio')}
+              />
+              <p className="text-muted-foreground text-xs">
+                인장시험은 이 값을 주지 않습니다. 대개 문헌값입니다.
+              </p>
+            </div>
           </div>
         </div>
 

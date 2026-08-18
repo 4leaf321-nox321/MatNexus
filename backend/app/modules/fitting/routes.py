@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -30,10 +31,11 @@ from app.modules.fitting.schemas import (
     FitPreviewOut,
     FitPreviewRequest,
     FittedParameterOut,
+    InheritedValueOut,
     PropertyCardOut,
     PropertyCardSaveRequest,
 )
-from app.modules.materials.models import Material
+from app.modules.materials.models import Material, Sample
 from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestType
 from app.modules.workspaces.models import Workspace
@@ -66,6 +68,85 @@ def list_families(user: User = Depends(current_user)) -> list[FamilyOut]:
         )
         for family in fitting.FAMILIES.values()
     ]
+
+
+#: 출처 코드 → 덱에 적을 말. **7850 이 실측인지 관례값인지 덱만 봐서는 모른다.**
+#: 솔버 결과를 놓고 "이 물성 어디서 났나" 를 묻는 자리에서, 값만 있고 출처가
+#: 없으면 되짚을 데가 없다.
+SOURCE_NOTES = {
+    "measured": "이 시험들에서 잰 값",
+    "sample": "시료에서 잰 값",
+    "material": "재료에 적힌 공칭값",
+    "manual": "사람이 직접 넣은 값",
+}
+
+
+@dataclass(frozen=True)
+class Inherited:
+    """물려받은 값 하나와 **어디서 왔는지.**
+
+    카드는 불변이라 값을 참조로 두면 안 된다 — 재료의 밀도를 고치는 순간 이미
+    확정한 카드가 조용히 달라진다. 그래서 값은 복사한다. 대신 출처를 함께
+    복사한다: 덱만 받은 사람이 7850 을 보고 그것이 실측인지 관례값인지 물을 때,
+    답할 데가 있어야 한다.
+    """
+
+    value: float | None
+    source: str
+    """`sample` | `material` | `manual` | `measured` | `conflict` | `missing`."""
+    detail: str | None = None
+    """사람이 읽는 한 줄. 갈렸으면 무엇과 무엇이 갈렸는지 여기 적는다."""
+
+
+def _samples_of(db: Session, group: statistics_services.Group) -> list[Sample]:
+    ids = {member.specimen.sample_id for member in group.members}
+    return list(db.scalars(select(Sample).where(Sample.id.in_(ids)))) if ids else []
+
+
+def _inherit_density(
+    material: Material, samples: list[Sample], override: float | None
+) -> Inherited:
+    """시료 실측 → 재료 공칭 순. **로트마다 다를 수 있는 값이다.**
+
+    강판은 로트가 달라도 7850 이지만 복합재·발포재·소결재는 실제로 다르다.
+    그래서 실측이 있으면 그것을 먼저 쓴다.
+    """
+    if override is not None:
+        return Inherited(override, "manual", "직접 입력한 값입니다.")
+
+    measured = {s.density_si for s in samples if s.density_si is not None}
+    if len(measured) == 1:
+        value = next(iter(measured))
+        return Inherited(value, "sample", f"시료에서 잰 값입니다 ({value:.4g} kg/m³).")
+    if len(measured) > 1:
+        # **말없이 하나 고르지 않는다.** 어느 로트의 값을 썼는지 모르는 카드는
+        # 근거가 없는 것과 같다.
+        joined = ", ".join(f"{v:.4g}" for v in sorted(measured))
+        return Inherited(
+            None,
+            "conflict",
+            f"시료마다 밀도가 다릅니다({joined} kg/m³) — 쓸 값을 직접 넣으세요.",
+        )
+    if material.density_si is not None:
+        return Inherited(
+            material.density_si,
+            "material",
+            f"재료의 공칭값입니다 ({material.density_si:.4g} kg/m³).",
+        )
+    return Inherited(None, "missing", "재료에도 시료에도 밀도가 없습니다.")
+
+
+def _inherit_poisson(material: Material, override: float | None) -> Inherited:
+    """**재료에서만 온다.** 로트마다 달라지는 값이 아니다."""
+    if override is not None:
+        return Inherited(override, "manual", "직접 입력한 값입니다.")
+    if material.poisson_ratio is not None:
+        return Inherited(material.poisson_ratio, "material", "재료에 적힌 값입니다.")
+    return Inherited(
+        None,
+        "missing",
+        "재료에 푸아송비가 없습니다 — 인장시험은 이 값을 주지 않습니다.",
+    )
 
 
 def _representative(
@@ -179,10 +260,23 @@ def preview(
             f"레시피의 재샘플 점 수를 늘려 보세요.",
             status=422,
         )
+    # **카드가 쓸 값을 미리 보여 준다.** 만들 때와 같은 계산이다 — 화면이 재료
+    # API 를 따로 불러 나름대로 판정하면 규칙이 두 벌이 되고, 어긋나는 순간
+    # 화면이 거짓말을 한다.
+    samples = _samples_of(db, group)
     return FitPreviewOut(
         source_points=[(float(x), float(y)) for x, y in zip(strain, stress, strict=True)],
         sample_count=len(group.members),
         fits=[_fit_out(item) for item in results],
+        elastic=[
+            InheritedValueOut(
+                key=key, label=label, value=got.value, source=got.source, detail=got.detail
+            )
+            for key, label, got in (
+                ("poisson_ratio", "푸아송비", _inherit_poisson(group.material, None)),
+                ("density", "밀도", _inherit_density(group.material, samples, None)),
+            )
+        ],
         notes=notes,
     )
 
@@ -265,6 +359,14 @@ def create_card(
         ),
         None,
     )
+    samples = _samples_of(db, group)
+    poisson = _inherit_poisson(group.material, payload.poisson_ratio)
+    density = _inherit_density(group.material, samples, payload.density)
+    inherited_notes = [
+        f"푸아송비: {poisson.detail}" if poisson.detail else "",
+        f"밀도: {density.detail}" if density.detail else "",
+    ]
+
     item = PropertyCard(
         material_id=group.material.id,
         test_type_id=group.test_type.id,
@@ -277,14 +379,29 @@ def create_card(
             "record_names": [member.run.record_name for member in group.members],
             "strain_min": float(strain[0]),
             "strain_max": float(strain[-1]),
-            "notes": notes,
+            "notes": [*notes, *[line for line in inherited_notes if line]],
         },
         elastic={
             # **없는 값은 넣지 않는다.** 0 이나 0.3 으로 채우면 그것이 측정값인지
             # 기본값인지 나중에 알 수 없다.
-            **({"youngs_modulus": modulus} if modulus is not None else {}),
-            **({"poisson_ratio": payload.poisson_ratio} if payload.poisson_ratio else {}),
-            **({"density": payload.density} if payload.density else {}),
+            #
+            # 값과 함께 **출처**를 박는다. 재료·시료를 나중에 고쳐도 이 카드가
+            # 무엇을 썼는지는 그대로 남는다.
+            **(
+                {"youngs_modulus": modulus, "youngs_modulus_source": "measured"}
+                if modulus is not None
+                else {}
+            ),
+            **(
+                {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
+                if poisson.value is not None
+                else {}
+            ),
+            **(
+                {"density": density.value, "density_source": density.source}
+                if density.value is not None
+                else {}
+            ),
         },
         hardening=hardening,
         table=[
@@ -387,6 +504,16 @@ def export_card(
         ),
         f"카드 {item.id} ({STATUS_NOTES.get(item.status, item.status)})",
     ]
+    # 값마다 어디서 왔는지 한 줄씩. 없는 값은 애초에 카드에 없다.
+    for key, label in (
+        ("youngs_modulus", "탄성계수"),
+        ("poisson_ratio", "푸아송비"),
+        ("density", "밀도"),
+    ):
+        origin = SOURCE_NOTES.get(str(item.elastic.get(f"{key}_source", "")))
+        if item.elastic.get(key) is not None and origin:
+            provenance.append(f"{label}: {origin}")
+
     if hardening.get("label"):
         # **경화식은 덱에 안 들어간다.** 표로 나간다. 그래도 어떤 식으로 봤는지는
         # 적어 둔다 — 이 표가 어디까지 검증된 것인지가 거기에 있다.

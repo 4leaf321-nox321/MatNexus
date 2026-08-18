@@ -34,6 +34,13 @@ class MaterialOut(BaseModel):
     details: str | None
     spec_thickness: float | None
     spec_thickness_unit: str = LENGTH_UNIT
+    """**규격 두께다.** 계산에 쓰는 것은 시편의 실측 두께다."""
+
+    density: float | None
+    density_unit: str = DENSITY_UNIT
+    """공칭 밀도. 로트 실측은 시료에 있고, 카드는 실측을 먼저 본다."""
+    poisson_ratio: float | None
+    """인장시험이 주지 않는 값이다 — 대개 문헌값이고 재료 등급에 붙는다."""
 
     note: str | None
     legacy_id: str | None
@@ -49,6 +56,9 @@ class MaterialCreateRequest(BaseModel):
     details: str | None = Field(default=None, max_length=100)
     spec_thickness: float | None = Field(default=None, gt=0)
     spec_thickness_unit: str = LENGTH_UNIT
+    density: float | None = Field(default=None, gt=0)
+    density_unit: str = DENSITY_UNIT
+    poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
     alias: str | None = Field(default=None, max_length=200)
     note: str | None = None
     legacy_id: str | None = Field(default=None, max_length=200)
@@ -77,6 +87,9 @@ class MaterialUpdateRequest(BaseModel):
     details: str | None = Field(default=None, max_length=100)
     spec_thickness: float | None = Field(default=None, gt=0)
     spec_thickness_unit: str | None = None
+    density: float | None = Field(default=None, gt=0)
+    density_unit: str | None = None
+    poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
     alias: str | None = Field(default=None, max_length=200)
     note: str | None = None
 
@@ -120,7 +133,7 @@ class SampleOut(BaseModel):
 
     density: float | None
     density_unit: str = DENSITY_UNIT
-    poisson_ratio: float | None
+    """**이 로트에서 잰 값이다.** 공칭은 재료에 있다."""
 
     note: str | None
     specimen_count: int
@@ -149,7 +162,6 @@ class SampleCreateRequest(BaseModel):
     production_date: date | None = None
     density: float | None = Field(default=None, gt=0)
     density_unit: str = DENSITY_UNIT
-    poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
     note: str | None = None
     workspace_slug: str | None = None
 
@@ -166,7 +178,6 @@ class SampleUpdateRequest(BaseModel):
     production_date: date | None = None
     density: float | None = Field(default=None, gt=0)
     density_unit: str | None = None
-    poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
     note: str | None = None
 
 
@@ -216,3 +227,34 @@ class SpecimenUpdateRequest(BaseModel):
     gauge_length: float | None = Field(default=None, gt=0)
     length_unit: str | None = None
     note: str | None = None
+
+
+class ValueSourceOut(BaseModel):
+    """값 하나가 **어디서 와서 어디에 쓰이는가.**
+
+    이 정보가 없으면 사람은 화면을 옮겨 다니며 재료·시료·시편을 하나씩 열어
+    봐야 한다. 그러고도 "이게 계산에 쓰이는 값인지" 는 알 수 없다 — 규격 두께와
+    실측 두께가 나란히 있는데 계산에 들어가는 것은 하나뿐이다.
+    """
+
+    key: str
+    label: str
+    value: float | None
+    display_unit: str
+    """표시 단위. 값은 이 단위로 이미 환산돼 있다."""
+    level: str
+    """`material` | `sample` | `specimen` | `result`. **어디에 적는 값인가.**"""
+    origin: str | None
+    """사람이 읽는 출처 한 줄. 갈렸으면 무엇과 무엇이 갈렸는지."""
+    status: str
+    """`ok` | `missing` | `conflict`."""
+    used_for: str
+    """이 값이 무엇에 쓰이는가. 없을 때 무엇이 막히는지가 여기서 나온다."""
+    edit_hint: str | None = None
+    """비었을 때 어디서 채우는지."""
+
+
+class PropertySourcesOut(BaseModel):
+    material_id: uuid.UUID
+    material_name: str
+    rows: list[ValueSourceOut]

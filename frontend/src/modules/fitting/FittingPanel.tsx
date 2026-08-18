@@ -20,7 +20,13 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Check, FileDown, Plus, Trash2 } from 'lucide-react'
 
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
-import type { ExportFormat, Fit, FitPreview, PropertyCard } from '@/modules/fitting/api'
+import type {
+  ExportFormat,
+  Fit,
+  FitPreview,
+  InheritedValue,
+  PropertyCard,
+} from '@/modules/fitting/api'
 import { statisticsApi } from '@/modules/statistics/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -200,6 +206,7 @@ export function FittingPanel({ materialId }: Props) {
           materialId={materialId}
           group={group}
           family={chosen}
+          elastic={preview?.elastic ?? []}
           onClose={() => setSaving(false)}
           onSaved={() => {
             setSaving(false)
@@ -595,6 +602,7 @@ function SaveDialog({
   materialId,
   group,
   family,
+  elastic,
   onClose,
   onSaved,
 }: {
@@ -602,12 +610,27 @@ function SaveDialog({
   materialId: string
   group: GroupKey
   family: string | null
+  /** 비워 두면 카드에 들어갈 값들. **적합 응답이 준 그대로다.** */
+  elastic: InheritedValue[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [label, setLabel] = useState('')
   const [poisson, setPoisson] = useState('')
   const [density, setDensity] = useState('')
+  // **빈칸으로 두면 사람이 또 적는다.** 재료·시료에 이미 있는 값을 모달이
+  // 모르면 같은 값을 두 번 적게 되고, 두 곳이 갈리면 어느 쪽이 맞는지 알 수
+  // 없다. 여기서는 보여 주기만 한다 — 빈칸으로 보내면 서버가 물려받는다.
+  //
+  // 값은 **적합 응답이 준다.** 재료 API 를 따로 부르면 상속 규칙이 두 벌이 되고,
+  // 어긋나는 순간 모달이 거짓말을 한다.
+  const inherited = (key: string) => elastic.find((row) => row.key === key)
+  const inheritedPlaceholder = (key: string) => {
+    const row = inherited(key)
+    return row?.value == null
+      ? '비워 두면 넣지 않음'
+      : `${Number(row.value.toPrecision(6))} (물려받음)`
+  }
   const [note, setNote] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
@@ -662,33 +685,38 @@ function SaveDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
+            {/* **빈칸이 곧 '물려받는다' 는 뜻이다.**
+                재료·시료에 이미 있는 값을 여기서 또 적게 하면 두 곳이 갈리고,
+                그때 어느 쪽이 맞는지 판정할 근거가 없다. 그래서 모달은 값을
+                복사해 채우지 않고, **어디서 무엇이 올지**를 보여 준다. */}
             <div className="space-y-1.5">
               <Label htmlFor="poisson">푸아송비</Label>
               <Input
                 id="poisson"
                 inputMode="decimal"
-                placeholder="비워 두면 넣지 않음"
+                placeholder={inheritedPlaceholder('poisson_ratio')}
                 value={poisson}
                 onChange={(event) => setPoisson(event.target.value)}
               />
+              <InheritNote row={inherited('poisson_ratio')} overridden={poisson !== ''} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="density">밀도 (kg/m³)</Label>
               <Input
                 id="density"
                 inputMode="decimal"
-                placeholder="비워 두면 넣지 않음"
+                placeholder={inheritedPlaceholder('density')}
                 value={density}
                 onChange={(event) => setDensity(event.target.value)}
               />
+              <InheritNote row={inherited('density')} overridden={density !== ''} />
             </div>
           </div>
 
-          {/* **인장시험이 주지 않는 값이다.** 왜 비어 있는지 화면이 말해야, 다음
-              사람이 0.3 을 습관처럼 적어 넣지 않는다. */}
           <p className="text-muted-foreground text-xs">
-            푸아송비와 밀도는 인장시험이 주지 않습니다. 아는 값이 있으면 넣고, 없으면
-            비워 두세요 — 기본값으로 채우면 그것이 측정값인지 나중에 알 수 없습니다.
+            값은 <b>재료·시료에서 물려받습니다</b> — 비워 두면 그 값이 들어갑니다.
+            여기 적으면 그 값이 이기고, 카드에 '직접 입력' 으로 남습니다. 어느 쪽이든
+            카드는 <b>값과 출처를 함께</b> 박아 둡니다.
           </p>
 
           <div className="space-y-1.5">
@@ -718,5 +746,31 @@ function SaveDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * 이 칸이 비었을 때 무엇이 들어가는가.
+ *
+ * **없다는 사실만 알려 주고 길을 안 주면 결국 다시 헤맨다.** 그래서 어디에
+ * 채우면 되는지까지 적는다.
+ */
+function InheritNote({ row, overridden }: { row?: InheritedValue; overridden: boolean }) {
+  if (overridden) {
+    return <p className="text-muted-foreground text-xs">직접 입력한 값을 씁니다.</p>
+  }
+  if (!row) return null
+  if (row.value !== null) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        {row.source === 'sample' ? '시료에서 잰 값' : '재료의 공칭값'}을 씁니다.
+      </p>
+    )
+  }
+  // 못 물려받는 이유는 서버가 안다 — 화면이 다시 판정하지 않는다.
+  return (
+    <p className="text-xs text-amber-700 dark:text-amber-500">
+      {row.detail ?? '물려받을 값이 없습니다.'}
+    </p>
   )
 }
