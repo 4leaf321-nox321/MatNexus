@@ -170,3 +170,21 @@ class BatchOut(BaseModel):
     succeeded: int
     failed: int
     items: list[BatchItemOut]
+
+
+class ResultCurveOut(BaseModel):
+    """저장된 결과의 곡선. **결과 화면이 그림을 그리려면 이것이 필요하다.**
+
+    미리보기(`/preview`)는 돌리면서 점을 함께 주지만, 저장된 결과는 값과 근거만
+    있고 곡선은 파일에 있었다 — 그래서 '결과' 탭이 숫자만 보여 줬다. 처리한
+    사람이 정작 저장한 곡선을 볼 수 없었다.
+    """
+
+    result_id: uuid.UUID
+    x: str
+    y: str
+    columns: list[str]
+    """고를 수 있는 축들. 무엇이 있고 무엇이 없는지가 곧 레시피가 한 일이다."""
+    units: dict[str, str]
+    row_count: int
+    points: list[tuple[float, float]]

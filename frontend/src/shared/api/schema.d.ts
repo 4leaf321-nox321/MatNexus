@@ -1031,6 +1031,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/results/{result_id}/curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Result Curve
+         * @description 저장된 결과의 곡선. **다시 계산하지 않는다.**
+         *
+         *     저장할 때 쓴 파일을 그대로 읽는다. 재계산하면 그 사이 플러그인이 바뀌었을 때
+         *     화면의 그림과 표의 값이 서로 다른 것에서 나올 수 있고, 그 어긋남은 아무도
+         *     못 본다 — 결과가 불변인 이유와 같다(ADR 0007).
+         */
+        get: operations["result_curve_api_processing_results__result_id__curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/steps": {
         parameters: {
             query?: never;
@@ -3087,6 +3111,38 @@ export interface components {
             message: string;
             /** Status */
             status: string;
+        };
+        /**
+         * ResultCurveOut
+         * @description 저장된 결과의 곡선. **결과 화면이 그림을 그리려면 이것이 필요하다.**
+         *
+         *     미리보기(`/preview`)는 돌리면서 점을 함께 주지만, 저장된 결과는 값과 근거만
+         *     있고 곡선은 파일에 있었다 — 그래서 '결과' 탭이 숫자만 보여 줬다. 처리한
+         *     사람이 정작 저장한 곡선을 볼 수 없었다.
+         */
+        ResultCurveOut: {
+            /** Columns */
+            columns: string[];
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /** Row Count */
+            row_count: number;
+            /** Units */
+            units: {
+                [key: string]: string;
+            };
+            /** X */
+            x: string;
+            /** Y */
+            y: string;
         };
         /** SampleCreateRequest */
         SampleCreateRequest: {
@@ -6049,6 +6105,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    result_curve_api_processing_results__result_id__curve_get: {
+        parameters: {
+            query?: {
+                x?: string | null;
+                y?: string | null;
+            };
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultCurveOut"];
+                };
             };
             /** @description Validation Error */
             422: {

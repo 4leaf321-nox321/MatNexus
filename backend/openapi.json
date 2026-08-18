@@ -3736,6 +3736,70 @@
         "title": "ReparseOut",
         "type": "object"
       },
+      "ResultCurveOut": {
+        "description": "저장된 결과의 곡선. **결과 화면이 그림을 그리려면 이것이 필요하다.**\n\n미리보기(`/preview`)는 돌리면서 점을 함께 주지만, 저장된 결과는 값과 근거만\n있고 곡선은 파일에 있었다 — 그래서 '결과' 탭이 숫자만 보여 줬다. 처리한\n사람이 정작 저장한 곡선을 볼 수 없었다.",
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "points": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Units",
+            "type": "object"
+          },
+          "x": {
+            "title": "X",
+            "type": "string"
+          },
+          "y": {
+            "title": "Y",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "x",
+          "y",
+          "columns",
+          "units",
+          "row_count",
+          "points"
+        ],
+        "title": "ResultCurveOut",
+        "type": "object"
+      },
       "SampleCreateRequest": {
         "properties": {
           "alias": {
@@ -9685,6 +9749,82 @@
           }
         },
         "summary": "Adopt",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/api/processing/results/{result_id}/curve": {
+      "get": {
+        "description": "저장된 결과의 곡선. **다시 계산하지 않는다.**\n\n저장할 때 쓴 파일을 그대로 읽는다. 재계산하면 그 사이 플러그인이 바뀌었을 때\n화면의 그림과 표의 값이 서로 다른 것에서 나올 수 있고, 그 어긋남은 아무도\n못 본다 — 결과가 불변인 이유와 같다(ADR 0007).",
+        "operationId": "result_curve_api_processing_results__result_id__curve_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "x",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X"
+            }
+          },
+          {
+            "in": "query",
+            "name": "y",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Y"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultCurveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Result Curve",
         "tags": [
           "processing"
         ]

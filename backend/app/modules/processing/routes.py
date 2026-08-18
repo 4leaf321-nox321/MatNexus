@@ -38,6 +38,7 @@ from app.modules.processing.schemas import (
     RecipeCreateRequest,
     RecipeOut,
     RecipeSaveRequest,
+    ResultCurveOut,
     StepParamOut,
 )
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
@@ -592,6 +593,66 @@ def adopt(
     db.commit()
     db.refresh(item)
     return _result_out(item, adopted=True)
+
+
+#: 저장된 결과를 열었을 때 먼저 보여 줄 축. 앞이 우선이다.
+#:
+#: 공칭이 먼저인 것은 그것이 사람이 시험기에서 보던 곡선이기 때문이다. 진응력은
+#: **레시피에 '진응력·진소성변형률' 단계를 넣었을 때만** 존재한다 — 없으면 여기
+#: 목록에서 그냥 안 걸리고, 화면의 축 목록에도 안 뜬다. 그 없음이 곧 답이다.
+RESULT_AXIS_PAIRS = (
+    ("strain_engineering", "stress_engineering"),
+    ("strain_true_plastic", "stress_true"),
+    ("strain_true", "stress_true"),
+)
+
+
+def _result_axes(columns: list[str], x: str | None, y: str | None) -> tuple[str, str]:
+    if x and y:
+        return x, y
+    present = set(columns)
+    for left, right in RESULT_AXIS_PAIRS:
+        if left in present and right in present:
+            return left, right
+    return (columns[0], columns[1]) if len(columns) >= 2 else ("", "")
+
+
+@router.get("/results/{result_id}/curve", response_model=ResultCurveOut)
+def result_curve(
+    result_id: uuid.UUID,
+    x: str | None = Query(default=None),
+    y: str | None = Query(default=None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ResultCurveOut:
+    """저장된 결과의 곡선. **다시 계산하지 않는다.**
+
+    저장할 때 쓴 파일을 그대로 읽는다. 재계산하면 그 사이 플러그인이 바뀌었을 때
+    화면의 그림과 표의 값이 서로 다른 것에서 나올 수 있고, 그 어긋남은 아무도
+    못 본다 — 결과가 불변인 이유와 같다(ADR 0007).
+    """
+    item = db.get(ProcessingResult, result_id)
+    if item is None:
+        raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
+    get_run(db, user, item.test_run_id)  # 가시성 판정
+
+    data = filestore.read_bytes(item.storage_path)
+    columns = sorted(curves.column_names(data))
+    axis_x, axis_y = _result_axes(columns, x, y)
+    units = curves.read_units(data)
+    points: list[tuple[float, float]] = []
+    if axis_x in columns and axis_y in columns:
+        raw = curves.read_columns(data, [axis_x, axis_y])
+        points = curves.downsample(raw[axis_x], raw[axis_y], max_points=PREVIEW_POINTS)
+    return ResultCurveOut(
+        result_id=item.id,
+        x=axis_x,
+        y=axis_y,
+        columns=columns,
+        units={name: units.get(name, "1") for name in columns},
+        row_count=item.row_count,
+        points=points,
+    )
 
 
 @router.delete("/results/{result_id}/adopt", status_code=204)

@@ -68,6 +68,22 @@ def read_columns(
     return {name: table.column(name).to_pylist() for name in table.column_names}
 
 
+def read_units(data: bytes) -> dict[str, str]:
+    """열 이름 → SI 단위. **파일이 이미 알고 있다.**
+
+    `to_parquet` 이 스키마 메타데이터에 심어 둔 값을 그대로 읽는다. 저장할 때는
+    넣어 놓고 읽는 함수가 없어서, 저장된 결과를 그리려면 축 이름만 있고 단위는
+    없는 상태였다 — 응력이 Pa 인지 MPa 인지 모르는 축은 읽을 수 없다.
+    """
+    schema = pq.read_schema(io.BytesIO(data))
+    metadata = schema.metadata or {}
+    return {
+        key[len(_UNIT_PREFIX) :].decode(): value.decode()
+        for key, value in metadata.items()
+        if key.startswith(_UNIT_PREFIX)
+    }
+
+
 def column_names(data: bytes) -> list[str]:
     return list(pq.read_schema(io.BytesIO(data)).names)
 

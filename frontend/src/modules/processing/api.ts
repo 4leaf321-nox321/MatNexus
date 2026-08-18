@@ -14,6 +14,7 @@ export type ProcessingStep = components['schemas']['ProcessingStepOut']
 export type StepParam = components['schemas']['StepParamOut']
 export type ProcessingPreview = components['schemas']['ProcessingPreviewOut']
 export type ProcessingResult = components['schemas']['ProcessingResultOut']
+export type ResultCurve = components['schemas']['ResultCurveOut']
 export type ProcessingStage = components['schemas']['ProcessingStageOut']
 export type ProcessingScalar = components['schemas']['ProcessingScalarOut']
 export type Recipe = components['schemas']['RecipeOut']
@@ -97,6 +98,18 @@ export const processingApi = {
 
   results: (testRunId: string) =>
     api.get<ProcessingResult[]>(`/processing/results?test_run_id=${testRunId}`),
+
+  /**
+   * 저장된 결과의 곡선. **다시 계산하지 않는다** — 저장할 때 쓴 파일을 읽는다.
+   *
+   * 축을 주지 않으면 서버가 고른다(공칭 먼저, 없으면 진응력). 어떤 축을 고를 수
+   * 있는지가 곧 레시피가 만든 열이다 — 진응력 단계를 안 넣었으면 그 축이 목록에
+   * 아예 없고, 그 없음이 "왜 진응력 곡선이 안 보이나" 의 답이다.
+   */
+  curve: (resultId: string, axes?: { x?: string; y?: string }) =>
+    api.get<ResultCurve>(
+      `/processing/results/${resultId}/curve${search({ x: axes?.x, y: axes?.y })}`
+    ),
 
   /** **이 시험의 물성은 이것.** 시험당 하나뿐이다(ADR 0007). */
   adopt: (resultId: string) =>

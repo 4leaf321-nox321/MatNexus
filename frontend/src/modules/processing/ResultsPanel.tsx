@@ -19,15 +19,23 @@
  * 나중에 바뀌어도 여기 적힌 것은 그대로다.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Star } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
-import { formatScalar } from '@/shared/units'
+import { CurveChart } from '@/modules/tests/CurveChart'
+import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 import type { ProcessingResult } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select'
 import { useResource } from '@/shared/hooks/useResource'
 
 const when = (iso: string) =>
@@ -143,6 +151,10 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
 
                 {expanded && (
                   <div className="space-y-3 border-t px-3 py-3">
+                    {/* **채택은 이 곡선을 물성으로 삼는 결정이다.** 그 곡선을
+                        안 보고 누르게 두지 않는다. */}
+                    <ResultCurve resultId={item.id} />
+
                     {item.scalars.length > 0 && (
                       <div className="grid gap-2 sm:grid-cols-3">
                         {item.scalars.map((scalar) => (
@@ -191,5 +203,91 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
         갑니다.
       </p>
     </section>
+  )
+}
+
+/**
+ * 저장된 결과의 곡선.
+ *
+ * **처리 탭에서는 보이던 그림이 결과 탭에서는 없었다.** 값과 근거만 있고 곡선은
+ * 파일에 있었다 — 처리한 사람이 정작 자기가 저장한 곡선을 볼 수 없었다. 채택은
+ * "이 곡선을 이 시험의 물성으로 삼는다" 는 결정인데, 그 곡선을 안 보고 눌러야
+ * 했다.
+ *
+ * **축 목록이 곧 레시피가 한 일이다.** 진응력 축이 목록에 없다면 레시피에
+ * '진응력·진소성변형률' 단계가 없는 것이다. 그래서 없을 때는 그 사실을 적는다 —
+ * 빈 선택지를 보고 스스로 알아내야 하면 그건 알려 준 것이 아니다.
+ */
+function ResultCurve({ resultId }: { resultId: string }) {
+  const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
+  const curve = useResource(
+    () => processingApi.curve(resultId, axes ?? undefined),
+    [resultId, axes?.x, axes?.y]
+  )
+  const data = curve.data
+
+  // 축과 점을 **같은 단위로** 맞춘다. 하나만 바꾸면 1000배 어긋난 그림이 된다.
+  const points = useMemo<[number, number][]>(
+    () =>
+      (data?.points ?? []).map(([x, y]) => [
+        toDisplay(x, data?.units[data.x]),
+        toDisplay(y, data?.units[data.y]),
+      ]),
+    [data]
+  )
+
+  if (curve.error) return <ErrorNotice error={curve.error} />
+  if (!data) return <p className="text-muted-foreground text-xs">곡선을 읽는 중…</p>
+
+  const hasTrue = data.columns.includes('stress_true')
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {(['x', 'y'] as const).map((axis) => (
+          <div key={axis} className="flex items-center gap-1">
+            <span className="text-muted-foreground text-xs">{axis}</span>
+            <Select
+              value={data[axis]}
+              onValueChange={(value) => setAxes({ ...{ x: data.x, y: data.y }, [axis]: value })}
+            >
+              <SelectTrigger className="h-8 w-52" aria-label={`${axis}축`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {data.columns.map((column) => (
+                  <SelectItem key={column} value={column}>
+                    {column}
+                    {data.units[column] && data.units[column] !== '1'
+                      ? ` (${data.units[column]})`
+                      : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+        <span className="text-muted-foreground ml-auto text-xs">
+          {data.row_count.toLocaleString('ko-KR')}행
+        </span>
+      </div>
+
+      <CurveChart
+        points={points}
+        xLabel={axisLabel(data.x, data.units[data.x])}
+        yLabel={axisLabel(data.y, data.units[data.y])}
+        height={280}
+      />
+
+      {!hasTrue && (
+        // **없는 것을 없다고 말한다.** 축 목록에 진응력이 안 보이는 이유를
+        // 사람이 추론해야 하면 알려 준 것이 아니다.
+        <p className="text-muted-foreground mt-2 text-xs">
+          진응력·진소성변형률 축이 없습니다 — 이 결과를 만든 레시피에{' '}
+          <b>진응력·진소성변형률</b> 단계가 없기 때문입니다. 그 단계를 넣고 다시
+          처리하면 축 목록에 나타나고, CAE 카드도 그 열에서 만듭니다.
+        </p>
+      )}
+    </div>
   )
 }

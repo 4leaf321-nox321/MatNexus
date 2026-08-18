@@ -68,6 +68,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
+import { missingSteps } from '@/modules/processing/gaps'
 import { testsApi } from '@/modules/tests/api'
 import {
   axisLabel,
@@ -272,6 +273,12 @@ export function ProcessingPanel({
 
   const columns = result ? result.columns : sourceColumns
 
+  /** 지금 구성으로 못 하게 되는 일. 인장에만 뜻이 있다. */
+  const gaps = useMemo(
+    () => (testTypeKey === 'tensile' ? missingSteps(steps.map((step) => step.plugin)) : []),
+    [testTypeKey, steps]
+  )
+
   /** 축과 점을 **같은 단위로** 맞춘다. 하나만 바꾸면 1000배 어긋난 그림이 된다. */
   const shownPoints = useMemo<[number, number][]>(
     () =>
@@ -411,6 +418,22 @@ export function ProcessingPanel({
               <FlaskConical className="mx-auto mb-2 size-5 opacity-50" />
               단계를 더해 주세요.
             </p>
+          )}
+
+          {/* **막지 않는다. 미리 말할 뿐이다.** 공칭까지만 필요한 작업도 정상이다.
+              다만 그 사실을 CAE 카드 탭에서 알게 되면 20건을 다시 처리해야 한다 —
+              결과는 불변이라 열을 나중에 덧붙일 수 없다. */}
+          {steps.length > 0 && gaps.length > 0 && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
+              <p className="mb-1 font-medium">이 단계 구성으로는 나중에 할 수 없는 것</p>
+              <ul className="space-y-1">
+                {gaps.map((gap) => (
+                  <li key={gap.plugin} className="text-muted-foreground">
+                    <b>{gap.label}</b> 단계가 없습니다 — {gap.lost}.
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {steps.map((step, index) => {

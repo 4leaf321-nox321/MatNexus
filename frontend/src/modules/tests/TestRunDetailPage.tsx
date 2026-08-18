@@ -176,6 +176,15 @@ export default function TestRunDetailPage() {
         description={
           item ? `${item.test_type_label} · ${item.material_name ?? ''}` : undefined
         }
+        back={
+          // 재료가 시편·시험 목록을 갖고 있는 화면이다 — 여기 들어온 사람은
+          // 대개 거기서 왔고, 아니어도 거기로 가는 것이 맞다.
+          item?.material_id
+            ? { to: `/materials/${item.material_id}`, label: item.material_name ?? '재료' }
+            : // 시험 목록은 부서 스코프(`/w/:slug/tests`)라 여기서는 주소를 만들 수
+              // 없다. 재료 카탈로그는 전사 화면이라 언제나 갈 수 있다.
+              { to: '/materials', label: '재료 목록' }
+        }
         actions={
           <>
             <Button variant="outline" size="sm" onClick={download} disabled={!item}>

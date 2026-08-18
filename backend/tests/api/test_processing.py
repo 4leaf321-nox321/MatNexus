@@ -657,3 +657,87 @@ class Test배치:
         one = {s["key"]: s["value"] for s in single["scalars"]}
         many = {s["key"]: s["value"] for s in batch["items"][0]["scalars"]}
         assert one == many
+
+
+class Test저장된_결과의_곡선:
+    """**결과 탭이 그림을 못 그렸다.**
+
+    값과 근거는 있는데 곡선은 파일에만 있었다. 채택은 "이 곡선을 이 시험의 물성으로
+    삼는다" 는 결정인데, 정작 그 곡선을 안 보고 눌러야 했다.
+    """
+
+    def test_저장된_결과의_곡선을_읽는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+    ) -> None:
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+
+        body = client.get(
+            f"/api/processing/results/{stored['id']}/curve", headers=admin_headers
+        ).json()
+
+        # 공칭이 먼저다 — 사람이 시험기에서 보던 곡선이다.
+        assert (body["x"], body["y"]) == ("strain_engineering", "stress_engineering")
+        assert body["points"], "저장된 결과에 곡선이 있어야 한다"
+        # **단위를 함께 준다.** Pa 인지 MPa 인지 모르는 축은 읽을 수 없다.
+        assert body["units"]["stress_engineering"] == "Pa"
+        assert body["units"]["strain_engineering"] == "1"
+
+    def test_진응력_단계가_없으면_그_축이_아예_없다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+    ) -> None:
+        """**없는 것이 답이다.**
+
+        "왜 진응력 곡선이 안 보이나" 의 답은 언제나 같다 — 레시피에 그 단계가
+        없으면 그 열은 만들어진 적이 없다. 결과는 불변이라 나중에 덧붙지도 않는다.
+        """
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+
+        body = client.get(
+            f"/api/processing/results/{stored['id']}/curve",
+            params={"x": "strain_true_plastic", "y": "stress_true"},
+            headers=admin_headers,
+        ).json()
+        assert "stress_true" not in body["columns"]
+        assert body["points"] == []
+
+    def test_진응력_단계를_넣으면_그_축으로_그릴_수_있다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+    ) -> None:
+        steps = [
+            *STEPS,
+            {"plugin": "tensile.elastic_modulus", "options": {"maximum_strain": 0.05}},
+            {
+                "plugin": "tensile.true_plastic",
+                "options": {"youngs_modulus": "@youngs_modulus"},
+            },
+        ]
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": steps},
+            headers=admin_headers,
+        ).json()
+
+        body = client.get(
+            f"/api/processing/results/{stored['id']}/curve",
+            params={"x": "strain_true_plastic", "y": "stress_true"},
+            headers=admin_headers,
+        ).json()
+        assert body["points"], "진응력 단계를 넣었으면 그 축으로 그려져야 한다"
+        assert body["units"]["stress_true"] == "Pa"
