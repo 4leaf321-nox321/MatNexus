@@ -43,3 +43,18 @@ def test_배포_스크립트가_전부_패키지에_들어간다() -> None:
         f"zip 에 안 들어가면 폐쇄망 서버는 그 스크립트를 손에 넣을 방법이 없습니다 — "
         f"실제로 backup.ps1 이 빠져 백업 절차가 막힌 적이 있습니다."
     )
+
+
+def test_배포_문서가_패키지에_들어간다() -> None:
+    """폐쇄망 서버는 zip 하나만 받는다.
+
+    문서가 저장소에만 있으면 **정작 설치하는 자리에서 볼 수 없다.** 절차를
+    외우고 가거나 따로 챙겨야 하는데, 따로 챙기는 것은 잊는다.
+    """
+    packager = PACKAGER.read_text(encoding="utf-8-sig")
+    guide = ROOT / "배포.md"
+    assert guide.exists(), "배포.md 가 저장소에 없습니다."
+    assert guide.name in packager, (
+        "배포.md 가 package_deploy.ps1 에 없습니다. zip 에 안 들어가면 서버에서 "
+        "절차를 볼 방법이 없습니다."
+    )
