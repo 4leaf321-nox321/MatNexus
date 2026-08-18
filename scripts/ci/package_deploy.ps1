@@ -1,4 +1,7 @@
-﻿Param()
+﻿Param(
+    # 릴리스 태그(v0.1.16). 없으면 frontend/package.json 의 version 을 쓴다.
+    [string]$Tag
+)
 <#
 배포 패키지(deploy_package.zip)를 만든다.
 
@@ -113,7 +116,18 @@ Copy-Item -Force .\배포.md .\deploy\배포.md
 $buildPython = & python -c "import sys; print('{}.{}'.format(sys.version_info[0], sys.version_info[1]))"
 if ($LASTEXITCODE -ne 0) { Write-Error '빌드 파이썬 버전을 확인하지 못했습니다'; exit 1 }
 Write-Host "빌드 파이썬 기록: $buildPython"
-Set-Content -Encoding utf8 -Path .\deploy\BUILD_INFO.txt -Value "python=$buildPython"
+# **패키지가 자기 버전을 들고 있어야 한다.** 배포한 뒤 "서버에 뭐가 깔렸나" 를
+# 물으면 답할 데가 있어야 하는데, 전에는 어디에도 없었다 — deploy 로그도, health
+# 응답도, 파일도 버전을 안 남겼다. 태그 없이 배포하면 되짚을 방법이 아예 없다.
+if (-not $Tag) {
+    $Tag = 'v' + (node -p "require('./frontend/package.json').version")
+    if ($LASTEXITCODE -ne 0) { Write-Error '버전을 읽지 못했습니다'; exit 1 }
+}
+Write-Host "패키지 버전: $Tag"
+Set-Content -Encoding utf8 -Path .\deploy\BUILD_INFO.txt -Value @(
+    "python=$buildPython"
+    "version=$Tag"
+)
 
 # --- zip ---------------------------------------------------------------------
 Write-Host 'zip 생성'

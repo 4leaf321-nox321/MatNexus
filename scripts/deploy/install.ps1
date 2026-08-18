@@ -189,6 +189,12 @@ if ($existing) {
 }
 
 Write-Host ''
+# **무엇이 깔렸는지 남긴다.** 태그를 지정하지 않고 배포하면 나중에 되짚을 방법이
+# 없었다. 패키지가 자기 버전을 들고 오므로 여기서 읽어 적기만 하면 된다.
+$installed = Get-Content (Join-Path $AppPath 'BUILD_INFO.txt') -ErrorAction SilentlyContinue |
+    Where-Object { $_ -match '^version=' }
+if ($installed) { Write-Log ("배포한 버전: " + ($installed -replace '^version=', '')) }
+
 Write-Host '설치 완료.'
 Write-Host ''
 Write-Host "  시작        : cd '$AppPath' ; .\run_server.ps1"

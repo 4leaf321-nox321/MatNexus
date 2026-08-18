@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import version
 from app.config import Settings, get_settings
 from app.database import SessionLocal
 from app.logging_setup import setup_logging
@@ -44,7 +45,9 @@ def _api_router() -> APIRouter:
 
     @router.get("/health", tags=["system"])
     def health() -> dict[str, str]:
-        return {"status": "ok"}
+        # **버전을 함께 준다.** 원격에서 "지금 서버에 뭐가 깔렸나" 를 물을 수 있는
+        # 유일한 자리다. 배포 뒤 확인도, 나중의 점검 스크립트도 여기를 본다.
+        return {"status": "ok", "version": version.current()}
 
     # 모듈 라우터는 여기서만 모은다. 모듈이 서로를 import 하지 않게 하려면
     # 조립 지점이 하나여야 한다 (tests/architecture 가 검사).
@@ -122,7 +125,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="MatNexus API",
-        version="0.1.0",
+        version=version.current(),
         docs_url=f"{API_PREFIX}/docs",
         openapi_url=f"{API_PREFIX}/openapi.json",
     )

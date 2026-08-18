@@ -6850,7 +6850,7 @@
   },
   "info": {
     "title": "MatNexus API",
-    "version": "0.1.0"
+    "version": "v0.1.15"
   },
   "openapi": "3.1.0",
   "paths": {

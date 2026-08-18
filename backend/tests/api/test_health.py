@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app import version
 from app.main import create_app
 
 client = TestClient(create_app(), raise_server_exceptions=False)
@@ -12,7 +13,9 @@ client = TestClient(create_app(), raise_server_exceptions=False)
 def test_health() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    # **버전을 함께 준다.** 원격에서 "지금 서버에 뭐가 깔렸나" 를 물을 수 있는
+    # 유일한 자리다 — 값 자체는 tests/api/test_version.py 가 본다.
+    assert response.json() == {"status": "ok", "version": version.current()}
 
 
 def test_request_id_is_returned() -> None:

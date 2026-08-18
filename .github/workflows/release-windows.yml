@@ -56,7 +56,7 @@ jobs:
 
       - name: 패키지 생성
         shell: pwsh
-        run: pwsh -File .\scripts\ci\package_deploy.ps1
+        run: pwsh -File .\scripts\ci\package_deploy.ps1 -Tag '${{ inputs.tag || github.ref_name }}'
 
       # 패키징이 실패한 채 빈 릴리스가 남지 않도록 발행 전에 자산을 확인한다.
       - name: 산출물 확인
