@@ -1,7 +1,7 @@
 [project]
 name = "matnexus-backend"
 version = "0.1.0"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.13,<3.14"
 
 # 의존성 정본은 requirements.txt 다. 배포 파이프라인이 `pip wheel -r
 # requirements.txt` 로 wheel 번들을 만들고 서버는 --no-index 로 설치하기 때문에,
@@ -33,7 +33,7 @@ extend-immutable-calls = [
 "migrations/versions/*" = ["E501", "I001", "UP035", "UP007"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 strict = true
 files = ["app", "matcore", "tests"]
 plugins = []

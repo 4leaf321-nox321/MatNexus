@@ -14,7 +14,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$AppPath,
     [string]$DatabaseUrl,
-    [string]$PythonVersion = '3.12',
+    [string]$PythonVersion = '3.13',
     [int]$Port = 8010,
     [int]$RequiredFreeGb = 5
 )

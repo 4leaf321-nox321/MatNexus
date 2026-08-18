@@ -27,7 +27,7 @@
 
 ## 개발 환경
 
-- Python **3.12** (`py -3.12`) — wheel ABI가 배포 서버와 일치해야 한다
+- Python **3.13** (`py -3.13`) — wheel ABI가 배포 서버와 일치해야 한다
 - Node 20+
 - PostgreSQL 17
 
@@ -43,7 +43,7 @@
 ```powershell
 # 백엔드 (최초 1회)
 cd backend
-py -3.12 -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 copy .env.example .env      # DATABASE_URL 수정
 .\.venv\Scripts\alembic.exe upgrade head

@@ -48,7 +48,7 @@ jobs:
         with:
           # wheel 의 ABI 태그가 이 버전에 묶인다. 서버 파이썬과 같아야 하며,
           # deploy.ps1 이 BUILD_INFO.txt 로 그것을 검사한다.
-          python-version: '3.12'
+          python-version: '3.13'
 
       - uses: actions/setup-node@v5
         with:
