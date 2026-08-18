@@ -12,6 +12,7 @@ export type Classification = components['schemas']['ClassificationOut']
 
 type MaterialCreate = components['schemas']['MaterialCreateRequest']
 type MaterialUpdate = components['schemas']['MaterialUpdateRequest']
+type SpecimenUpdate = components['schemas']['SpecimenUpdateRequest']
 type SampleCreate = components['schemas']['SampleCreateRequest']
 type SpecimenCreate = components['schemas']['SpecimenCreateRequest']
 type NamePreviewRequest = components['schemas']['NamePreviewRequest']
@@ -69,5 +70,9 @@ export const materialsApi = {
   specimens: (sampleId: string) => api.get<Specimen[]>(`/samples/${sampleId}/specimens`),
   createSpecimen: (sampleId: string, payload: SpecimenCreate) =>
     api.post<Specimen>(`/samples/${sampleId}/specimens`, payload),
+  /** 시편 속성 수정 — 치수·메모. 방향과 번호는 이름을 만드는 값이라 안 바꾼다. */
+  updateSpecimen: (id: string, payload: SpecimenUpdate) =>
+    api.patch<Specimen>(`/specimens/${id}`, payload),
+
   removeSpecimen: (id: string) => api.delete<void>(`/specimens/${id}`),
 }

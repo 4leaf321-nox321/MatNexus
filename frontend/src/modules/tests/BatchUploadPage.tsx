@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   FileUp,
   Loader2,
+  Ruler,
   Plus,
   Trash2,
   Upload,
@@ -88,6 +89,8 @@ interface Row {
   typeReason?: string
   materialId: string | null
   sampleId: string | null
+  /** 올리고 나면 만들어진 시험 id. **치수 채우기가 이 값을 쓴다.** */
+  runId?: string
   /** 기존 시편 id 이거나, `new:<방향>` 이면 올릴 때 새로 만든다. */
   specimen: string | null
   status: RowStatus
@@ -277,14 +280,14 @@ export default function BatchUploadPage() {
           }))
         }
         const definition = availableTypes.find((type) => type.key === row.typeKey)
-        await testsApi.upload({
+        const created = await testsApi.upload({
           specimenId,
           testType: row.typeKey as string,
           file: row.file,
           conditions: numericConditions(row.typeKey as string, conditions, availableTypes),
           conditionUnits: conditionUnits(definition?.conditions ?? []),
         })
-        patch(row.key, { status: 'done', selected: false })
+        patch(row.key, { status: 'done', selected: false, runId: created.id })
       } catch (caught) {
         patch(row.key, {
           status: 'error',
@@ -293,6 +296,45 @@ export default function BatchUploadPage() {
       }
     }
     setRunning(false)
+  }
+
+  const [filling, setFilling] = useState(false)
+  const [fillResult, setFillResult] = useState<string | null>(null)
+
+  /**
+   * 올린 시험들의 시편 치수를 **장비 파일 값으로 채운다.**
+   *
+   * 워커가 파일을 읽어야 치수를 알 수 있으므로, 아직 `대기` 인 건은 채울 것이
+   * 없다고 나온다. 그때는 잠시 뒤 다시 누르면 된다 — 그 사실을 결과에 적는다.
+   */
+  async function fillDimensions() {
+    const ids = rows.map((row) => row.runId).filter(Boolean) as string[]
+    if (ids.length === 0) return
+    setFilling(true)
+    setFillResult(null)
+    let filled = 0
+    let failed = 0
+    for (const id of ids) {
+      try {
+        const applied = await testsApi.applyInstrumentDimensions(id)
+        if (applied.filled.length > 0) filled += 1
+      } catch {
+        // 한 건이 막혀도 나머지를 계속한다 — 아직 안 읽힌 건이 섞여 있는 것이
+        // 정상이다.
+        failed += 1
+      }
+    }
+    setFilling(false)
+    setFillResult(
+      filled === 0
+        ? '채운 것이 없습니다. 아직 읽는 중이거나(잠시 뒤 다시), 파일에 치수가 없거나, 이미 값이 있습니다.'
+        : `시편 ${filled}개의 빈 치수를 파일 값으로 채웠습니다` +
+          (failed > 0 ? ` (${failed}건은 아직 읽는 중)` : '') +
+          // **게이지 길이는 파일에 없다.** Zwick 은 a0(두께)·b0(폭)만 적어 보낸다.
+          // 그것을 안 적으면 "채웠다" 를 보고 다 됐다고 여기다가, 처리 단계에서
+          // 게이지 길이가 없다고 막힌 뒤에야 알게 된다.
+          '. 게이지 길이는 장비 파일에 없으므로 재료 화면의 시편 수정에서 넣으세요.'
+    )
   }
 
   const typesInBatch = useMemo(() => {
@@ -716,6 +758,28 @@ export default function BatchUploadPage() {
               <span className="text-muted-foreground text-xs">
                 — 재료·시료·시편이 다 정해진 줄만 올라갑니다. 나머지는 표에 남습니다.
               </span>
+            )}
+            {doneCount > 0 && !running && (
+              <>
+                {/* **장비 파일이 시편 치수를 갖고 있다.** Zwick 은 a0·b0 을 적어
+                    보낸다. 일괄 등록은 방향만 주고 시편을 만들므로 치수가 빈 채로
+                    쌓이는데, 그 상태로는 처리가 첫 단계(하중÷단면적)에서 막힌다.
+                    시험을 하나씩 열어 채우는 길밖에 없어서 20개면 20번이었다.
+
+                    **덮어쓰지 않는다.** 빈 칸만 채운다 — 사람이 잰 값을 파일이
+                    조용히 바꾸면 안 된다. */}
+                <Button variant="secondary" onClick={fillDimensions} disabled={filling}>
+                  {filling ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Ruler className="size-4" />
+                  )}
+                  파일 값으로 시편 치수 채우기
+                </Button>
+                {fillResult && (
+                  <span className="text-muted-foreground text-xs">{fillResult}</span>
+                )}
+              </>
             )}
             {doneCount > 0 && !running && (
               <Button

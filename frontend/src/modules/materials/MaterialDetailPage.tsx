@@ -27,6 +27,7 @@ import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample, Specimen } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { EditMaterialDialog } from '@/modules/materials/EditMaterialDialog'
+import { EditSpecimenDialog } from '@/modules/materials/EditSpecimenDialog'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
@@ -362,6 +363,10 @@ function SampleRow({
                      그러지 않으면 명령이 절반만 먹은 것처럼 보인다. */
                   defaultOpen={expand?.open === true || index === 0}
                   expand={expand}
+                  onChanged={() => {
+                    specimens.reload()
+                    onChanged()
+                  }}
                   onRemove={async () => {
                     setSpecimenError(null)
                     try {
@@ -443,13 +448,16 @@ function SpecimenRow({
   defaultOpen,
   expand,
   onRemove,
+  onChanged,
 }: {
   specimen: Specimen
   defaultOpen: boolean
   expand: ExpandCommand | null
   onRemove: () => void
+  onChanged: () => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     if (expand) setOpen(expand.open)
@@ -485,6 +493,17 @@ function SpecimenRow({
           />
         </button>
 
+        {/* **치수를 고칠 자리.** 일괄 등록은 방향만 주고 시편을 만들어서
+            치수가 빈 채로 쌓인다 — 그 상태로는 처리가 첫 단계에서 막힌다. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          title="시편 수정 (치수·메모)"
+          onClick={() => setEditing(true)}
+        >
+          <Pencil className="size-3.5" />
+        </Button>
+
         {/* 일괄 등록이 만든 뒤 업로드가 실패하면 빈 시편이 남는다. 치울 길이
             없으면 목록이 계속 지저분해진다. 서버가 시험이 달린 시편은 거절하므로
             실수로 지울 수는 없다. */}
@@ -505,6 +524,16 @@ function SpecimenRow({
           <SpecimenTests specimenId={specimen.id} specimenName={specimen.record_name} />
         </div>
       )}
+
+      <EditSpecimenDialog
+        specimen={specimen}
+        open={editing}
+        onClose={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false)
+          onChanged()
+        }}
+      />
     </li>
   )
 }
