@@ -144,10 +144,13 @@ except Exception as exc:
     print(f"FAIL {type(exc).__name__}: {exc}")
     sys.exit(1)
 '@
-        $tempProbe = Join-Path $env:TEMP ('mnx_pgprobe_' + [guid]::NewGuid().ToString('N') + '.py')
-        Set-Content -Path $tempProbe -Value $probeScript -Encoding utf8
-        $result = & $pythonExe $tempProbe $DatabaseUrl 2>&1
-        Remove-Item -Force $tempProbe -ErrorAction SilentlyContinue
+        # **임시 파일을 쓰지 않는다.** 스크립트를 표준입력으로 넘긴다.
+        #
+        # 전에는 $env:TEMP 에 .py 를 썼다 지웠는데, 도메인 프로필 서버에서 TEMP 가
+        # 8.3 줄임 경로(C:\Users\계정명.PAR~1\...)로 잡혀 있고 그 이름이 해석되지
+        # 않아 Remove-Item 이 "지정된 경로에 개체가 없습니다"로 죽었다. 설치 전
+        # 점검이 서버 환경 때문에 막히는 것이 가장 나쁘다 — 쓸 자리 자체를 없앴다.
+        $result = $probeScript | & $pythonExe - $DatabaseUrl 2>&1
         if ($result -match '^OK') { Add-Note ($result -replace '^OK ', 'PostgreSQL 인증 : ') }
         elseif ($result -match '^SKIP') { Add-Note ($result -replace '^SKIP ', 'PostgreSQL 인증 : ') }
         else { Add-Problem "PostgreSQL 인증에 실패했습니다 — $result" }

@@ -144,14 +144,10 @@ with psycopg.connect(host=host, port=int(port), user=user, password=password,
         conn.execute(f'CREATE DATABASE "{name}" ENCODING \'UTF8\'')
         print(f"생성: {name}")
 '@
-$tempScript = Join-Path $AppPath ('.mnx_createdb_' + [guid]::NewGuid().ToString('N') + '.py')
-Set-Content -Path $tempScript -Value $createDb -Encoding utf8
-try {
-    Invoke-Native '데이터베이스 생성 실패' {
-        & $backendPython $tempScript $DbHost $DbPort $DbUser $DbPassword $DbName
-    }
-} finally {
-    Remove-Item -Force $tempScript -ErrorAction SilentlyContinue
+# **임시 파일을 쓰지 않는다.** 스크립트를 표준입력으로 넘긴다 — 쓰고 지우는
+# 자리가 없으면 그 경로 때문에 막힐 일도 없다(precheck 에서 실제로 겪었다).
+Invoke-Native '데이터베이스 생성 실패' {
+    $createDb | & $backendPython - $DbHost $DbPort $DbUser $DbPassword $DbName
 }
 
 # --- 6. 마이그레이션 ----------------------------------------------------------
