@@ -96,22 +96,21 @@ type LoginResponse = components['schemas']['LoginResponse']
 
 ## 배포
 
-상세는 [ADR 0003](docs/adr/0003-윈도우-배포-방식.md). 릴리스 자산
-`deploy_package.zip` 하나에 코드·SPA·wheel 번들·배포 스크립트가 모두 들어 있다.
+절차는 [배포.md](배포.md) — **초기 배포(Day 0)와 업데이트 배포가 다르다.**
+판단 근거는 [ADR 0003](docs/adr/0003-윈도우-배포-방식.md).
+
+릴리스 자산 `deploy_package.zip` 하나에 코드·SPA·wheel 번들·배포 스크립트가 모두
+들어 있다. 폐쇄망이면 이 파일만 반입하면 된다.
 
 ```powershell
-# 최초 1회 — 릴리스에서 배포 스크립트를 꺼낸다
-gh release download --repo 4leaf321-nox321/MatNexus --pattern deploy_package.zip
-Expand-Archive .\deploy_package.zip .\unpacked
-New-Item -ItemType Directory -Force -Path 'C:\Server\tools\MatNexus'
-Copy-Item .\unpacked\install.ps1, .\unpacked\precheck.ps1, .\unpacked\deploy.ps1,
-          .\unpacked\rollback.ps1 'C:\Server\tools\MatNexus\'
-
 cd C:\Server\tools\MatNexus
-.\precheck.ps1 -AppPath 'C:\Server\MatNexus' -DatabaseUrl 'postgresql+psycopg://postgres:<암호>@localhost:5432/matnexus'
-.\install.ps1  -AppPath 'C:\Server\MatNexus' -DbPassword '<암호>'
 
-# 갱신 — 앱을 먼저 중지할 것
+# 처음 올릴 때 — DB도 없는 서버
+.\precheck.ps1 -AppPath 'C:\Server\MatNexus' -DatabaseUrl '...'
+.\install.ps1  -AppPath 'C:\Server\MatNexus' -DbPassword '...'
+
+# 갱신할 때 — 앱을 먼저 중지하고, 백업부터
+.\backup.ps1   -AppPath 'C:\Server\MatNexus' -BackupRoot 'D:\backup\matnexus'
 .\deploy.ps1   -AppPath 'C:\Server\MatNexus'
 .\rollback.ps1 -AppPath 'C:\Server\MatNexus'
 ```
@@ -120,18 +119,10 @@ cd C:\Server\tools\MatNexus
 
 **DB와 파일스토어를 같은 시각에 함께 받는다.** DB에는 곡선의 경로와 해시가,
 파일스토어에는 그 내용이 있어서 한쪽만 되돌리면 "DB에는 있는데 파일이 없는" 행이
-생긴다.
+생긴다. 받은 폴더의 `MANIFEST.txt` 에 복구 절차가 함께 적혀 있다.
 
-```powershell
-cd C:\Server\tools\MatNexus
-.\backup.ps1 -AppPath 'C:\Server\MatNexus' -BackupRoot 'D:\backup\matnexus' -KeepDays 30
-```
-
-받은 폴더의 `MANIFEST.txt` 에 복구 절차가 함께 적혀 있다. **한 번은 실제로 복구해
-보라** — 받아만 두고 복구해 본 적 없는 백업은 백업이 아니다. 65도 RA도 이 절차
-자체가 없었다.
-
-정기 실행은 작업 스케줄러에 등록한다(반입물 없음).
+**한 번은 실제로 복구해 보라** — 받아만 두고 복구해 본 적 없는 백업은 백업이 아니다.
+65도 RA도 이 절차 자체가 없었다. 정기 실행은 작업 스케줄러에 등록한다.
 
 ### 관리자 계정
 
@@ -149,21 +140,6 @@ $py = 'C:\Server\MatNexus_venvs\backend\Scripts\python.exe'
 
 `--no-force-change` 는 파일럿·개발 편의용이다. 운영에서는 강제 변경을 켜 둔다 —
 시드 비밀번호가 그대로 남는 것이 폐쇄망 설치에서 가장 흔한 사고다.
-
-**스크립트를 `tools\MatNexus\` 하위에 둔다.** `C:\Server\tools` 바로 아래에 두면
-같은 서버에 사는 다른 앱의 `deploy.ps1`·`rollback.ps1` 과 이름이 겹쳐 서로를
-덮어쓴다(실측: 이 PC의 `C:\Server\tools` 에 이미 다른 프로젝트의 같은 이름
-스크립트가 있었다).
-
-폴더 배치:
-
-```
-C:\Server\MatNexus          코드 (배포마다 교체)
-C:\Server\MatNexus_prev     직전 버전 (롤백용)
-C:\Server\MatNexus_venvs    가상환경 (requirements 가 바뀔 때만 재생성)
-C:\Server\MatNexus_data     filestore · logs ← 배포가 건드리지 않는다. 백업 대상
-C:\Server\tools\MatNexus    배포 스크립트 (앱 폴더 바깥, 프로젝트별로 분리)
-```
 
 **`.ps1` 파일은 UTF-8 BOM 으로 저장해야 한다.** Windows PowerShell 5.1 이 BOM 없는
 스크립트를 CP949 로 읽어 한글이 깨지고 구문 오류가 난다.
