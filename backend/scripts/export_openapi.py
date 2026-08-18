@@ -20,13 +20,16 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))  # `python scripts/export_openapi.py` 로도 돌게
 
+from app import version  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 OUTPUT = BACKEND_DIR / "openapi.json"
 
 
 def main() -> None:
-    schema = create_app().openapi()
+    # 버전 도장은 빼고 남긴다 — 그러지 않으면 버전을 올릴 때마다 이 파일이
+    # 어긋나 계약 검사가 빨개진다. 자세한 이유는 `app.version.as_baseline`.
+    schema = version.as_baseline(create_app().openapi())
     OUTPUT.write_text(
         json.dumps(schema, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

@@ -6871,7 +6871,7 @@
   },
   "info": {
     "title": "MatNexus API",
-    "version": "v0.1.16"
+    "version": "baseline"
   },
   "openapi": "3.1.0",
   "paths": {

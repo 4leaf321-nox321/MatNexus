@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 #: 어디서도 못 찾았을 때. 개발 중이거나 패키지가 아닌 경로에서 돈다는 뜻이다.
 UNKNOWN = "unknown"
@@ -48,3 +49,19 @@ def _from_package_json() -> str | None:
 def current() -> str:
     """이 설치의 버전. 배포본이면 태그, 개발이면 package.json, 아니면 `unknown`."""
     return _from_build_info() or _from_package_json() or UNKNOWN
+
+
+#: 계약 baseline 파일에 박는 값. **실제 버전을 넣지 않는다.**
+#:
+#: `openapi.json` 은 프론트 타입의 입력이자 "API 가 바뀌었나" 를 보는 기준이다.
+#: 여기에 배포 버전을 실었더니 **버전을 올릴 때마다 기준 파일이 어긋나** CI 가
+#: 빨개졌다(v0.1.16 에서 실제로 났다). 버전은 API 모양이 아니므로, 기준 파일에서는
+#: 고정값으로 지운다. 서버가 실제로 서빙하는 `/api/openapi.json` 은 그대로
+#: 실버전을 보여 준다 — 지우는 것은 저장소에 남기는 사본뿐이다.
+BASELINE = "baseline"
+
+
+def as_baseline(schema: dict[str, Any]) -> dict[str, Any]:
+    """계약 비교용으로 버전 도장을 지운 사본."""
+    info = {**schema.get("info", {}), "version": BASELINE}
+    return {**schema, "info": info}
