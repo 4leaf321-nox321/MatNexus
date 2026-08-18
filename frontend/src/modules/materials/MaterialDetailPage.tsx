@@ -33,6 +33,7 @@ import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -304,6 +305,7 @@ function SampleRow({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [specimenError, setSpecimenError] = useState<Error | null>(null)
   const specimens = useResource(
     () => (open ? materialsApi.specimens(sample.id) : Promise.resolve([])),
@@ -318,25 +320,48 @@ function SampleRow({
 
   return (
     <li className="rounded-md border">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="hover:bg-muted/40 flex w-full items-center gap-3 p-3 text-left"
-      >
-        {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        <span className="font-mono text-xs">{sample.record_name}</span>
-        {sample.lot_no && <Badge variant="outline">로트 {sample.lot_no}</Badge>}
-        {/* **접힌 줄이 상태를 말한다.** 펼치지 않고도 "시험이 몇 건이고 몇 건이
-            채택됐나" 가 보여야, 물성 탭의 n 이 왜 그 수인지 여기서 설명된다. */}
-        <span className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
-          <span>시편 {sample.specimen_count}</span>
-          <RunTally
-            total={sample.test_run_count}
-            adopted={sample.adopted_count}
-            failed={sample.failed_count}
-          />
-        </span>
-      </button>
+      {/* 수정 버튼은 펼치기 버튼 **바깥**에 둔다. 버튼 안의 버튼은 중첩이
+          허용되지 않고, 눌렀을 때 줄이 함께 접혔다 펴진다. */}
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="hover:bg-muted/40 flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
+        >
+          {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          <span className="font-mono text-xs">{sample.record_name}</span>
+          {sample.lot_no && <Badge variant="outline">로트 {sample.lot_no}</Badge>}
+          {/* **접힌 줄이 상태를 말한다.** 펼치지 않고도 "시험이 몇 건이고 몇 건이
+              채택됐나" 가 보여야, 물성 탭의 n 이 왜 그 수인지 여기서 설명된다. */}
+          <span className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
+            <span>시편 {sample.specimen_count}</span>
+            <RunTally
+              total={sample.test_run_count}
+              adopted={sample.adopted_count}
+              failed={sample.failed_count}
+            />
+          </span>
+        </button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mr-2 shrink-0"
+          onClick={() => setEditing(true)}
+          aria-label="시료 수정"
+        >
+          <Pencil className="size-3.5" />
+        </Button>
+      </div>
+
+      <EditSampleDialog
+        sample={sample}
+        open={editing}
+        onClose={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false)
+          onChanged()
+        }}
+      />
 
       {open && (
         <div className="border-t p-3">

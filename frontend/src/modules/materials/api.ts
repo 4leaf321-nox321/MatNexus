@@ -14,6 +14,7 @@ type MaterialCreate = components['schemas']['MaterialCreateRequest']
 type MaterialUpdate = components['schemas']['MaterialUpdateRequest']
 type SpecimenUpdate = components['schemas']['SpecimenUpdateRequest']
 type SampleCreate = components['schemas']['SampleCreateRequest']
+type SampleUpdate = components['schemas']['SampleUpdateRequest']
 type SpecimenCreate = components['schemas']['SpecimenCreateRequest']
 type NamePreviewRequest = components['schemas']['NamePreviewRequest']
 
@@ -72,6 +73,14 @@ export const materialsApi = {
   samples: (materialId: string) => api.get<Sample[]>(`/materials/${materialId}/samples`),
   createSample: (materialId: string, payload: SampleCreate) =>
     api.post<Sample>(`/materials/${materialId}/samples`, payload),
+  /**
+   * 시료 속성 수정 — 로트·벤더·밀도·메모. 번호는 이름을 만드는 값이라 안 바꾼다.
+   *
+   * 없어서 막다른 길이 됐다: 로트를 잘못 적으면 고칠 수 없고, 지우려 해도
+   * 시편이 달려 있으면 서버가 막는다.
+   */
+  updateSample: (id: string, payload: SampleUpdate) =>
+    api.patch<Sample>(`/samples/${id}`, payload),
   removeSample: (id: string) => api.delete<void>(`/samples/${id}`),
 
   specimens: (sampleId: string) => api.get<Specimen[]>(`/samples/${sampleId}/specimens`),
