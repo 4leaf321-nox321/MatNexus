@@ -57,6 +57,19 @@ class LoginResponse(BaseModel):
     user: UserOut
 
 
+class ProfileUpdateRequest(BaseModel):
+    """자기 정보 수정.
+
+    **표시 이름만 바꾼다.** 아이디(`email`)는 로그인 식별자라 본인이 바꾸면
+    감사 로그·알림·이관 기록이 가리키는 대상이 흔들린다 — 그것은 관리자의 일로
+    남긴다(`set_admin.py --rename-from`).
+
+    이름 오타 하나를 고치려고 DB 를 직접 만지는 일이 실제로 생겨서 넣었다.
+    """
+
+    display_name: str = Field(min_length=1, max_length=100)
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=200)
     new_password: str = Field(min_length=1, max_length=200)

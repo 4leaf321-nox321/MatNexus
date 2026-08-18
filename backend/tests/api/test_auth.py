@@ -217,3 +217,50 @@ def test_바꾸고_나면_다시_묻지_않는다(client: TestClient, db: Sessio
 
     # 한 번 더 들어와도 마찬가지다 — 상태가 남는다.
     assert login(client, password="새비번1").json()["user"]["must_change_password"] is False
+
+
+def test_표시_이름을_스스로_바꾼다(client: TestClient, db: Session) -> None:
+    """이름 오타 하나를 고치려고 DB 를 직접 만지는 일이 실제로 생겼다."""
+    user = make_user(db)
+    token = login(client).json()["access_token"]
+
+    response = client.patch(
+        "/api/auth/me",
+        json={"display_name": "박용진"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["display_name"] == "박용진"
+
+    db.refresh(user)
+    assert user.display_name == "박용진"
+    # 다시 로그인해도 남아 있다.
+    assert login(client).json()["user"]["display_name"] == "박용진"
+
+
+def test_아이디는_스스로_못_바꾼다(client: TestClient, db: Session) -> None:
+    """**로그인 식별자다.** 본인이 바꾸면 감사 기록·알림·이관이 가리키는 대상이
+    흔들린다. 관리자의 일로 남긴다(`set_admin.py --rename-from`).
+    """
+    user = make_user(db)
+    token = login(client).json()["access_token"]
+    before = user.email
+
+    client.patch(
+        "/api/auth/me",
+        json={"display_name": "새 이름", "email": "다른아이디"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    db.refresh(user)
+    assert user.email == before  # 조용히 무시된다 — 스키마에 없는 칸이다
+
+
+def test_빈_이름은_거절한다(client: TestClient, db: Session) -> None:
+    make_user(db)
+    token = login(client).json()["access_token"]
+    response = client.patch(
+        "/api/auth/me",
+        json={"display_name": ""},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422

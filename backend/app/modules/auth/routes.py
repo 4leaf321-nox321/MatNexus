@@ -27,6 +27,7 @@ from app.modules.auth.schemas import (
     PatCreateRequest,
     PatCreateResponse,
     PatOut,
+    ProfileUpdateRequest,
     UserOut,
 )
 from app.shared.auth import current_user
@@ -98,6 +99,23 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(current_user), db: Session = Depends(get_db)) -> UserOut:
+    return services.user_out(db, user)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    payload: ProfileUpdateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    """자기 표시 이름을 바꾼다.
+
+    아이디는 여기서 못 바꾼다 — 로그인 식별자라 본인이 바꾸면 기록이 가리키는
+    대상이 흔들린다. 그것은 관리자의 일이다.
+    """
+    user.display_name = payload.display_name.strip()
+    db.commit()
+    db.refresh(user)
     return services.user_out(db, user)
 
 

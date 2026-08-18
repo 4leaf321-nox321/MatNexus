@@ -3245,6 +3245,22 @@
         "title": "ProfileTryOut",
         "type": "object"
       },
+      "ProfileUpdateRequest": {
+        "description": "자기 정보 수정.\n\n**표시 이름만 바꾼다.** 아이디(`email`)는 로그인 식별자라 본인이 바꾸면\n감사 로그·알림·이관 기록이 가리키는 대상이 흔들린다 — 그것은 관리자의 일로\n남긴다(`set_admin.py --rename-from`).\n\n이름 오타 하나를 고치려고 DB 를 직접 만지는 일이 실제로 생겨서 넣었다.",
+        "properties": {
+          "display_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "ProfileUpdateRequest",
+        "type": "object"
+      },
       "PropertyCardOut": {
         "properties": {
           "created_at": {
@@ -7439,6 +7455,46 @@
           }
         },
         "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "description": "자기 표시 이름을 바꾼다.\n\n아이디는 여기서 못 바꾼다 — 로그인 식별자라 본인이 바꾸면 기록이 가리키는\n대상이 흔들린다. 그것은 관리자의 일이다.",
+        "operationId": "update_me_api_auth_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Me",
         "tags": [
           "auth"
         ]

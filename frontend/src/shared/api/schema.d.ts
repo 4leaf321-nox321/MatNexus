@@ -235,7 +235,14 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Me
+         * @description 자기 표시 이름을 바꾼다.
+         *
+         *     아이디는 여기서 못 바꾼다 — 로그인 식별자라 본인이 바꾸면 기록이 가리키는
+         *     대상이 흔들린다. 그것은 관리자의 일이다.
+         */
+        patch: operations["update_me_api_auth_me_patch"];
         trace?: never;
     };
     "/api/auth/refresh": {
@@ -2885,6 +2892,20 @@ export interface components {
             /** Warnings */
             warnings: string[];
         };
+        /**
+         * ProfileUpdateRequest
+         * @description 자기 정보 수정.
+         *
+         *     **표시 이름만 바꾼다.** 아이디(`email`)는 로그인 식별자라 본인이 바꾸면
+         *     감사 로그·알림·이관 기록이 가리키는 대상이 흔들린다 — 그것은 관리자의 일로
+         *     남긴다(`set_admin.py --rename-from`).
+         *
+         *     이름 오타 하나를 고치려고 DB 를 직접 만지는 일이 실제로 생겨서 넣었다.
+         */
+        ProfileUpdateRequest: {
+            /** Display Name */
+            display_name: string;
+        };
         /** PropertyCardOut */
         PropertyCardOut: {
             /**
@@ -4482,6 +4503,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
+    update_me_api_auth_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

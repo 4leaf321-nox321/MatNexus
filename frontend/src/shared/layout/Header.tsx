@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react'
-import { KeyRound, LogOut, Moon, PanelLeft, Sun, User } from 'lucide-react'
+import { KeyRound, LogOut, Moon, PanelLeft, Sun, User, UserCog } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
@@ -23,6 +23,7 @@ import {
 } from '@/shared/components/ui/dropdown-menu'
 import { Separator } from '@/shared/components/ui/separator'
 import { ChangePasswordDialog } from '@/shared/layout/ChangePasswordDialog'
+import { ProfileDialog } from '@/shared/layout/ProfileDialog'
 import { NotificationBell } from '@/shared/layout/NotificationBell'
 import { useTheme } from '@/shared/theme/ThemeProvider'
 
@@ -33,8 +34,9 @@ interface HeaderProps {
 
 export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
   const { theme, toggle } = useTheme()
-  const { user, logout } = useAuth()
+  const { user, logout, reload } = useAuth()
   const [changingPassword, setChangingPassword] = useState(false)
+  const [editingProfile, setEditingProfile] = useState(false)
   const navigate = useNavigate()
   const params = useParams<{ slug?: string }>()
 
@@ -110,6 +112,10 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
           <DropdownMenuSeparator />
           {/* **스스로 바꿀 자리가 없었다.** 관리자에게 재설정을 부탁해 임시
               비밀번호를 받는 길밖에 없었고, 관리자 자신은 그 길조차 없었다. */}
+          <DropdownMenuItem onClick={() => setEditingProfile(true)}>
+            <UserCog className="size-4" />
+            내 정보
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setChangingPassword(true)}>
             <KeyRound className="size-4" />
             비밀번호 변경
@@ -122,6 +128,18 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
       </DropdownMenu>
 
       {/* 바꾸고 나면 서버가 세션을 전부 끊는다 — 클라이언트 상태도 맞춘다. */}
+      <ProfileDialog
+        open={editingProfile}
+        email={user?.email ?? ''}
+        displayName={user?.display_name ?? ''}
+        onClose={() => setEditingProfile(false)}
+        onSaved={async () => {
+          setEditingProfile(false)
+          // 상단 바가 바로 새 이름을 보여야 한다 — 저장했는데 안 바뀌면 실패로 읽힌다.
+          await reload()
+        }}
+      />
+
       <ChangePasswordDialog
         open={changingPassword}
         onClose={() => setChangingPassword(false)}
