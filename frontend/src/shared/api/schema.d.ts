@@ -3239,13 +3239,13 @@ export interface components {
             /** Dimension */
             dimension: string | null;
             /** Iqr */
-            iqr: number;
+            iqr: number | null;
             /** Key */
             key: string;
             /** Label */
             label: string;
             /** Mad */
-            mad: number;
+            mad: number | null;
             /** Maximum */
             maximum: number;
             /** Mean */
@@ -3257,7 +3257,7 @@ export interface components {
             /** Outliers */
             outliers: components["schemas"]["OutlierOut"][];
             /** Sample Sd */
-            sample_sd: number;
+            sample_sd: number | null;
             /** Si Unit */
             si_unit: string;
         };

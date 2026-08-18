@@ -26,12 +26,17 @@ class ScalarStatsOut(BaseModel):
     dimension: str | None
     count: int
     mean: float
-    sample_sd: float
     median: float
-    mad: float
-    iqr: float
     minimum: float
     maximum: float
+    sample_sd: float | None
+    """흩어짐. **1건이면 없다** — 0 이 아니라 없는 것이다.
+
+    0 을 넣으면 "완벽히 일정하다" 로 읽힌다. 한 번밖에 안 재서 모르는 것과
+    여러 번 재서 같았던 것은 전혀 다른 말이다.
+    """
+    mad: float | None
+    iqr: float | None
     coefficient_of_variation: float | None
     ci95_low: float | None
     ci95_high: float | None

@@ -236,3 +236,83 @@ class Test저장:
         )
         assert response.status_code == 422, response.text
         assert "2건 이상" in response.json()["error"]["message"]
+
+
+class Test적은_표본:
+    """**1건이라고 빈 화면을 주지 않는다.**
+
+    설치 현장에서 나온 보고: 처리하고 채택까지 했는데 물성 탭이 텅 비었다. 값이
+    분명히 있는데 아무것도 안 뜨니 고장으로 읽힌다. 원인은 커널이 1건을 거부하고
+    (통계가 아니니 맞다) 그 거부를 표 전체를 버리는 것으로 처리한 것이었다.
+
+    답은 **값과 흩어짐을 나누는 것**이다. 값은 준다 — 그 시편의 값이다.
+    흩어짐은 안 준다 — 한 번 재서는 알 수 없다. 그리고 그 차이를 글로 적는다.
+    """
+
+    def test_채택_1건이면_값은_주고_흩어짐은_주지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        _adopt(client, admin_headers, _run(client, admin_headers, db, material["id"], "MD"))
+
+        group = client.get(
+            f"/api/statistics/materials/{material['id']}", headers=admin_headers
+        ).json()["groups"][0]
+
+        assert group["sample_count"] == 1
+        assert group["scalars"], "1건이어도 그 시편의 값은 나와야 한다"
+        row = next(item for item in group["scalars"] if item["key"] == "tensile_strength")
+        assert row["count"] == 1
+        assert row["mean"] == row["median"] == row["minimum"] == row["maximum"]
+
+        # **0 이 아니라 없는 것이다.** 0 은 "여러 번 재서 같았다" 로 읽힌다.
+        for key in ("sample_sd", "mad", "iqr", "coefficient_of_variation", "ci95_low"):
+            assert row[key] is None, key
+        assert row["outliers"] == []
+
+        assert any("1건" in note for note in group["notes"])
+
+    def test_채택이_없으면_무엇을_해야_하는지_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        # 채택하지 않고 시험만 올린다 — 사용자가 가장 자주 서는 자리다.
+        _run(client, admin_headers, db, material["id"], "MD")
+
+        group = client.get(
+            f"/api/statistics/materials/{material['id']}", headers=admin_headers
+        ).json()["groups"][0]
+        assert group["sample_count"] == 0
+        assert group["scalars"] == []
+        assert any("채택" in note for note in group["notes"])
+
+    def test_2건_안내가_화면에_뜨는_것과_어긋나지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """안내가 "변동계수를 내지 않았습니다" 인데 CV 열에는 값이 떠 있었다.
+
+        커널은 2건부터 CV 를 내고 막는 것은 이상치뿐이다. 안내와 화면이 어긋나면
+        둘 중 어느 쪽을 믿어야 하는지 알 수 없다.
+        """
+        for _ in range(2):
+            _adopt(
+                client, admin_headers, _run(client, admin_headers, db, material["id"], "MD")
+            )
+
+        group = client.get(
+            f"/api/statistics/materials/{material['id']}", headers=admin_headers
+        ).json()["groups"][0]
+        row = next(item for item in group["scalars"] if item["key"] == "tensile_strength")
+        assert row["coefficient_of_variation"] is not None
+        assert not any("변동계수와 이상치는 내지 않" in note for note in group["notes"])
+        assert any("이상치는 가려내지 않" in note for note in group["notes"])

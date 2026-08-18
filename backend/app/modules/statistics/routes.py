@@ -60,17 +60,33 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
             f"채택되지 않은 시험 {group.skipped_unadopted}건은 빠졌습니다. "
             f"처리한 뒤 결과 탭에서 채택하면 여기에 들어옵니다."
         )
-    if len(group.members) < statistics.MIN_FOR_SPREAD:
+    if len(group.members) == 0:
+        # **왜 비었는지 말한다.** 채택이 무엇인지 모르는 사람에게는 빈 화면이
+        # 고장으로 보인다.
         notes.append(
-            f"시험이 {len(group.members)}건이라 변동계수와 이상치는 내지 않았습니다 "
-            f"— {statistics.MIN_FOR_SPREAD}건부터 뜻이 생깁니다."
+            "채택된 시험이 없습니다. 시험 상세의 '처리' 탭에서 돌려 보고 저장한 뒤 "
+            "'채택' 을 누르면 그 값이 이 재료의 물성이 됩니다."
+        )
+    elif len(group.members) == 1:
+        # 값은 위에 나온다(시편 1개의 값). 여기서는 **무엇이 아직 없는지**를 적는다.
+        notes.append(
+            "시험 1건이라 아래는 그 시편의 값이고 흩어짐이 없습니다 — "
+            "재료의 물성이라고 하려면 여러 번 재야 합니다. "
+            "2건부터 평균과 대표 곡선이, 3건부터 변동계수와 이상치가 나옵니다."
+        )
+    elif len(group.members) < statistics.MIN_FOR_SPREAD:
+        # **화면에 뜨는 것과 안내가 어긋나면 안 된다.** 전에는 "변동계수를 내지
+        # 않았습니다" 라고 적어 놓고 CV 열에는 값이 떠 있었다 — 커널은 2건부터
+        # CV 를 내고, 막는 것은 이상치뿐이다.
+        notes.append(
+            f"시험이 {len(group.members)}건이라 이상치는 가려내지 않았습니다 "
+            f"— {statistics.MIN_FOR_SPREAD}건부터 뜻이 생깁니다. "
+            f"변동계수도 두 점 사이의 차이일 뿐이라 크게 흔들립니다."
         )
 
-    scalars = (
-        services.scalar_table(group, threshold=threshold)
-        if len(group.members) >= statistics.MIN_SAMPLES
-        else []
-    )
+    # **1건이어도 값은 낸다.** 전에는 2건 미만이면 표를 통째로 비웠는데, 그러면
+    # 처리하고 채택까지 한 사람이 빈 카드를 본다.
+    scalars = services.scalar_table(group, threshold=threshold) if group.members else []
     return GroupOut(
         test_type_key=group.test_type.key,
         test_type_label=group.test_type.label,

@@ -156,6 +156,36 @@ def scalar_table(group: Group, *, threshold: float) -> list[dict[str, Any]]:
     for entry in by_key.values():
         values = entry.pop("_values")
         runs = entry.pop("_runs")
+
+        if len(values) == 1:
+            # **시험이 1건이어도 값은 보여 준다.**
+            #
+            # 전에는 `scalar_stats` 가 1건을 거부하고 그 항목이 통째로 빠져,
+            # 물성 탭에 **빈 카드만 남았다.** 처리하고 채택까지 한 사람이
+            # "아무것도 안 뜬다" 를 보게 된다 — 값은 분명히 있는데.
+            #
+            # 흩어짐은 여전히 내지 않는다(SD·CV·신뢰구간·이상치는 없음). 그것이
+            # ADR 0008 이 지키려는 것이고, 여기서 주는 것은 **통계가 아니라 그
+            # 시편의 값**이다. `count=1` 이 그 사실을 말한다.
+            table.append(
+                {
+                    **entry,
+                    "count": 1,
+                    "mean": values[0],
+                    "median": values[0],
+                    "minimum": values[0],
+                    "maximum": values[0],
+                    "sample_sd": None,
+                    "mad": None,
+                    "iqr": None,
+                    "coefficient_of_variation": None,
+                    "ci95_low": None,
+                    "ci95_high": None,
+                    "outliers": [],
+                }
+            )
+            continue
+
         try:
             stats = statistics.scalar_stats(values)
         except statistics.StatisticsError:

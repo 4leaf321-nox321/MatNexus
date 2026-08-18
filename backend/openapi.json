@@ -4338,8 +4338,15 @@
             "title": "Dimension"
           },
           "iqr": {
-            "title": "Iqr",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iqr"
           },
           "key": {
             "title": "Key",
@@ -4350,8 +4357,15 @@
             "type": "string"
           },
           "mad": {
-            "title": "Mad",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mad"
           },
           "maximum": {
             "title": "Maximum",
@@ -4377,8 +4391,15 @@
             "type": "array"
           },
           "sample_sd": {
-            "title": "Sample Sd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Sd"
           },
           "si_unit": {
             "title": "Si Unit",
@@ -4392,12 +4413,12 @@
           "dimension",
           "count",
           "mean",
-          "sample_sd",
           "median",
-          "mad",
-          "iqr",
           "minimum",
           "maximum",
+          "sample_sd",
+          "mad",
+          "iqr",
           "coefficient_of_variation",
           "ci95_low",
           "ci95_high",
@@ -6850,7 +6871,7 @@
   },
   "info": {
     "title": "MatNexus API",
-    "version": "v0.1.15"
+    "version": "v0.1.16"
   },
   "openapi": "3.1.0",
   "paths": {
