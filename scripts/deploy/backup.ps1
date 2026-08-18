@@ -27,6 +27,33 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+<#
+매개변수를 값으로 받아 버리는 것을 막는다 — **대시는 하나다.**
+
+`--AppPath 'C:\Server\MatNexus'` 로 쓰면 PowerShell 은 오류를 내지 않는다.
+'--AppPath' 라는 문자열이 첫 위치 매개변수에 들어가고, 뒤따르는 진짜 경로는
+그 다음 위치 매개변수로 **밀려 들어간다.** deploy.ps1 에서는 그것이 -Repo 라서
+`gh release download --repo C:\Server\MatNexus` 가 실행됐고, 사람은 "gh 가
+안 된다" 를 보게 됐다(실측). 값이 잘못 들어갔다는 신호가 어디에도 없었다.
+
+값이 대시로 시작하면 그건 경로도 저장소도 아니다. 그 자리에서 멈춘다.
+#>
+function Assert-NotFlag([string]$value, [string]$name) {
+    if ($value -and $value.StartsWith('-')) {
+        throw @"
+-$name 값이 '$value' 입니다 — 대시를 두 번 쓰신 것 같습니다.
+
+PowerShell 매개변수는 대시가 하나입니다:  -$name '<값>'
+'--$name' 처럼 쓰면 그 글자 자체가 값이 되고, 뒤에 적은 진짜 값은 다른
+매개변수로 밀려 들어갑니다. 아무것도 실행하지 않았습니다.
+"@
+    }
+}
+
+Assert-NotFlag $AppPath 'AppPath'
+Assert-NotFlag $BackupRoot 'BackupRoot'
+Assert-NotFlag $PgDumpExe 'PgDumpExe'
 function Write-Log([string]$m) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $m" }
 
 $envFile = Join-Path $AppPath 'backend\.env'

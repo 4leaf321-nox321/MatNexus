@@ -28,6 +28,39 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+<#
+매개변수를 값으로 받아 버리는 것을 막는다 — **대시는 하나다.**
+
+`--AppPath 'C:\Server\MatNexus'` 로 쓰면 PowerShell 은 오류를 내지 않는다.
+'--AppPath' 라는 문자열이 첫 위치 매개변수에 들어가고, 뒤따르는 진짜 경로는
+그 다음 위치 매개변수로 **밀려 들어간다.** deploy.ps1 에서는 그것이 -Repo 라서
+`gh release download --repo C:\Server\MatNexus` 가 실행됐고, 사람은 "gh 가
+안 된다" 를 보게 됐다(실측). 값이 잘못 들어갔다는 신호가 어디에도 없었다.
+
+값이 대시로 시작하면 그건 경로도 저장소도 아니다. 그 자리에서 멈춘다.
+#>
+function Assert-NotFlag([string]$value, [string]$name) {
+    if ($value -and $value.StartsWith('-')) {
+        throw @"
+-$name 값이 '$value' 입니다 — 대시를 두 번 쓰신 것 같습니다.
+
+PowerShell 매개변수는 대시가 하나입니다:  -$name '<값>'
+'--$name' 처럼 쓰면 그 글자 자체가 값이 되고, 뒤에 적은 진짜 값은 다른
+매개변수로 밀려 들어갑니다. 아무것도 실행하지 않았습니다.
+"@
+    }
+}
+
+Assert-NotFlag $AppPath 'AppPath'
+Assert-NotFlag $ZipPath 'ZipPath'
+Assert-NotFlag $Tag 'Tag'
+Assert-NotFlag $PythonExe 'PythonExe'
+
+# -Repo 는 'owner/name' 이다. 경로가 여기 들어와 있으면 위의 밀림이 일어난 것이다.
+if ($Repo -and $Repo -notmatch '^[^/\:]+/[^/\:]+$') {
+    throw "-Repo 는 'owner/name' 형식입니다. 지금 값: '$Repo' — -AppPath 에 쓰려던 경로가 여기로 밀려 들어오지 않았는지 확인하세요."
+}
 function Write-Log([string]$m) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $m" }
 
 <#
@@ -105,17 +138,84 @@ function Test-FolderMovable([string]$path) {
     }
 }
 
+# 무엇이 잡고 있는지 **이름을 대 준다.**
+#
+# 실측(운영 서버): "열려 있는 창을 다 닫았는데도" 이동이 안 됐다. 사람이 눈으로
+# 찾을 수 있는 것 — 탐색기, 터미널 — 은 이미 닫은 뒤다. 남는 것은 보이지 않는
+# 것들이다: 배포를 돌리는 셸 자신, 창 없이 살아남은 python.exe, 서비스로 등록된
+# 실행 파일. 목록을 못 주면 사람에게 남는 선택지는 재부팅뿐이다.
+#
+# 경로 비교에 -like 를 쓰지 않는다. 경로에 '[' 가 들어 있으면 와일드카드로 읽혀
+# 아무것도 안 걸린다. StartsWith 로 문자 그대로 본다.
+function Get-FolderHolders([string]$path) {
+    $found = New-Object System.Collections.ArrayList
+    $cmp = [System.StringComparison]::OrdinalIgnoreCase
+
+    $here = (Get-Location).Path
+    if ($here.StartsWith($path, $cmp)) {
+        [void]$found.Add("이 창의 현재 위치가 그 폴더 안입니다: $here")
+    }
+
+    # (1) 그 폴더 안의 실행 파일로 도는 프로세스. venv 의 python.exe 가 여기 걸린다.
+    $seen = @{}
+    foreach ($proc in Get-Process -ErrorAction SilentlyContinue) {
+        $exe = $null
+        try { $exe = $proc.Path } catch { }   # 권한 없는 프로세스는 조용히 넘긴다
+        if ($exe -and $exe.StartsWith($path, $cmp)) {
+            $seen[$proc.Id] = $true
+            [void]$found.Add("프로세스 $($proc.Id) $($proc.ProcessName) — $exe")
+        }
+    }
+
+    # (2) 명령줄에 그 경로가 있는 프로세스. 시스템 python 으로 띄웠으면 (1) 에
+    #     안 걸리고 여기 걸린다.
+    try {
+        foreach ($proc in Get-CimInstance Win32_Process -ErrorAction Stop) {
+            if ($seen[[int]$proc.ProcessId]) { continue }
+            $line = $proc.CommandLine
+            if ($line -and $line.IndexOf($path, $cmp) -ge 0) {
+                # 명령줄은 길다. 어느 프로세스인지 알아볼 만큼만 남긴다.
+                if ($line.Length -gt 120) { $line = $line.Substring(0, 120) + '…' }
+                [void]$found.Add("프로세스 $($proc.ProcessId) $($proc.Name) — $line")
+            }
+        }
+    } catch { }
+
+    # (3) 서비스로 등록돼 있으면 죽여도 되살아난다. 먼저 멈춰야 한다.
+    try {
+        foreach ($svc in Get-CimInstance Win32_Service -ErrorAction Stop) {
+            if ($svc.PathName -and $svc.PathName.IndexOf($path, $cmp) -ge 0) {
+                [void]$found.Add("서비스 '$($svc.Name)' ($($svc.State)) — Stop-Service '$($svc.Name)' 로 먼저 멈추세요")
+            }
+        }
+    } catch { }
+
+    return $found
+}
+
 if (-not $isFirstRun) {
     if (-not (Test-FolderMovable $AppPath)) {
+        $holders = Get-FolderHolders $AppPath
+        $detail = if ($holders.Count -gt 0) {
+            "잡고 있는 것으로 보이는 것:`n" + (($holders | ForEach-Object { "  · $_" }) -join "`n")
+        } else {
+            @"
+프로세스 목록에서는 찾지 못했습니다. 남은 후보:
+  · 탐색기 창(미리 보기 창 포함) — 다른 폴더로 옮기거나 닫으세요.
+  · 백신 검사나 인덱싱이 그 폴더를 훑는 중.
+  · 열려 있는 파일 핸들 — 리소스 모니터 > CPU > 연결된 핸들 에서
+    '$(Split-Path -Leaf $AppPath)' 로 검색하면 보입니다.
+확실한 방법은 서버 재시작입니다. 배포 중에는 어차피 앱이 멈춥니다.
+"@
+        }
         throw @"
 $AppPath 를 옮길 수 없습니다 — 무언가 이 폴더를 잡고 있습니다.
+
+$detail
 
   · 실행 중인 앱(run_server.ps1)을 중지하세요.
   · 그 폴더나 하위 폴더에 들어가 있는 탐색기·터미널 창을 닫으세요.
     (특히 <AppPath>\backend 에 머문 셸이 흔한 원인입니다)
-
-잡고 있는 프로세스 찾기:
-  Get-CimInstance Win32_Process | Where-Object { `$_.CommandLine -like '*$(Split-Path -Leaf $AppPath)*' }
 
 이 서버는 아무것도 바뀌지 않았습니다.
 "@
@@ -143,7 +243,26 @@ if (-not $ZipPath) {
     $ghArgs += @('--repo', $Repo, '--pattern', 'deploy_package.zip', '--dir', $tempZipDir)
     Write-Log '릴리스 자산 다운로드'
     & gh @ghArgs
-    if ($LASTEXITCODE -ne 0) { throw "gh release download 실패 (exit $LASTEXITCODE)" }
+    if ($LASTEXITCODE -ne 0) {
+        # **비공개 저장소다.** 이 서버의 gh 가 로그인돼 있지 않으면 여기서 막힌다.
+        # 위에 gh 자신의 오류가 찍혀 있으니 그것이 1차 근거다. 실측: 운영 서버는
+        # 개발 PC 와 다른 계정으로 돌아서 gh 인증이 따라오지 않는다.
+        throw @"
+gh release download 실패 (exit $LASTEXITCODE). 위에 찍힌 gh 오류가 이유입니다.
+
+  · 인증 확인:  gh auth status
+    비공개 저장소라 로그인이 없으면 받을 수 없습니다 — 'gh auth login' 하세요.
+  · 태그 확인:  gh release list --repo $Repo
+  · 폐쇄망이거나 인증을 서버에 두고 싶지 않다면, 다른 PC 에서 zip 을 받아
+    옮기고 -ZipPath 로 지정하세요. 그쪽이 원래 의도한 길입니다:
+
+      gh release download $(if ($Tag) { $Tag } else { '<태그>' }) --repo $Repo ``
+        --pattern deploy_package.zip --dir .
+      .\deploy.ps1 -AppPath '$AppPath' -ZipPath '<옮긴 경로>\deploy_package.zip'
+
+이 서버는 아무것도 바뀌지 않았습니다.
+"@
+    }
     $ZipPath = Join-Path $tempZipDir 'deploy_package.zip'
 }
 if (-not (Test-Path $ZipPath)) { throw "zip 을 찾을 수 없습니다: $ZipPath" }
