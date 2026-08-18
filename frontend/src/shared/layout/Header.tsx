@@ -6,7 +6,8 @@
  * 섞으면 "내 부서"라는 개념이 흐려진다.
  */
 
-import { LogOut, Moon, PanelLeft, Sun, User } from 'lucide-react'
+import { useState } from 'react'
+import { KeyRound, LogOut, Moon, PanelLeft, Sun, User } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
@@ -21,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
 import { Separator } from '@/shared/components/ui/separator'
+import { ChangePasswordDialog } from '@/shared/layout/ChangePasswordDialog'
 import { NotificationBell } from '@/shared/layout/NotificationBell'
 import { useTheme } from '@/shared/theme/ThemeProvider'
 
@@ -32,6 +34,7 @@ interface HeaderProps {
 export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
   const { theme, toggle } = useTheme()
   const { user, logout } = useAuth()
+  const [changingPassword, setChangingPassword] = useState(false)
   const navigate = useNavigate()
   const params = useParams<{ slug?: string }>()
 
@@ -105,12 +108,28 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
             )}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {/* **스스로 바꿀 자리가 없었다.** 관리자에게 재설정을 부탁해 임시
+              비밀번호를 받는 길밖에 없었고, 관리자 자신은 그 길조차 없었다. */}
+          <DropdownMenuItem onClick={() => setChangingPassword(true)}>
+            <KeyRound className="size-4" />
+            비밀번호 변경
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={signOut}>
             <LogOut className="size-4" />
             로그아웃
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* 바꾸고 나면 서버가 세션을 전부 끊는다 — 클라이언트 상태도 맞춘다. */}
+      <ChangePasswordDialog
+        open={changingPassword}
+        onClose={() => setChangingPassword(false)}
+        onChanged={async () => {
+          setChangingPassword(false)
+          await logout()
+        }}
+      />
     </header>
   )
 }
