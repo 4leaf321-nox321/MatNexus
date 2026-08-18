@@ -53,9 +53,14 @@ def main() -> None:
     )
     parser.add_argument("--display-name", default="시스템 관리자")
     parser.add_argument(
+        "--force-change",
+        action="store_true",
+        help="첫 로그인 시 비밀번호 변경을 강제한다 (임시 비밀번호를 넘겨줄 때)",
+    )
+    parser.add_argument(
         "--no-force-change",
         action="store_true",
-        help="첫 로그인 시 비밀번호 변경 강제를 끈다 (운영에서는 쓰지 말 것)",
+        help="(기본 동작) 남겨 둔 옛 옵션 — 아무 효과가 없다",
     )
     args = parser.parse_args()
 
@@ -94,7 +99,13 @@ def main() -> None:
         user.is_system_admin = True
         user.status = "active"
         user.deleted_at = None
-        user.must_change_password = not args.no_force_change
+        # **기본은 강제하지 않는다.** 관리자가 아는 비밀번호를 직접 넣는 자리라,
+        # 강제를 켜면 로그인하자마자 또 바꾸라고 한다. 실제로 그렇게 갇혔다 —
+        # 화면에서 바꿔도 다음 실행이 이 값을 다시 True 로 돌려 놓으니, 사람은
+        # "바꿨는데 또 뜬다" 를 반복하게 된다.
+        #
+        # 임시 비밀번호를 사람에게 넘겨주는 경우에만 `--force-change` 를 준다.
+        user.must_change_password = args.force_change
 
         # 비밀번호가 바뀌었으므로 기존 세션을 전부 끊는다.
         revoked = 0

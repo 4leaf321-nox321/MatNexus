@@ -26,8 +26,6 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 
-const MIN_LENGTH = 10
-
 export default function ForcePasswordChangePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -44,8 +42,8 @@ export default function ForcePasswordChangePage() {
       setFailure('새 비밀번호가 서로 다릅니다.')
       return
     }
-    if (next.length < MIN_LENGTH) {
-      setFailure(`새 비밀번호는 ${MIN_LENGTH}자 이상이어야 합니다.`)
+    if (next.length === 0) {
+      setFailure('새 비밀번호를 입력하세요.')
       return
     }
 
@@ -100,7 +98,7 @@ export default function ForcePasswordChangePage() {
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
               />
-              <p className="text-muted-foreground text-xs">{MIN_LENGTH}자 이상</p>
+              <p className="text-muted-foreground text-xs">이전과 다른 값이어야 합니다</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm">새 비밀번호 확인</Label>

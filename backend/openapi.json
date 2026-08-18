@@ -460,7 +460,7 @@
           },
           "new_password": {
             "maxLength": 200,
-            "minLength": 10,
+            "minLength": 1,
             "title": "New Password",
             "type": "string"
           }

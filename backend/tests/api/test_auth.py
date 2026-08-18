@@ -174,3 +174,46 @@ def test_pat_authenticates_and_can_be_revoked(client: TestClient, db: Session) -
     pat_id = created.json()["pat"]["id"]
     assert client.delete(f"/api/auth/tokens/{pat_id}", headers=auth).status_code == 204
     assert client.get("/api/auth/me", headers=pat_auth).status_code == 401
+
+
+def test_짧은_비밀번호도_받는다(client: TestClient, db: Session) -> None:
+    """길이 하한을 두지 않는다.
+
+    10자를 요구했더니 **설치 현장에서 그것이 막혔다.** 폐쇄망 서버의 비밀번호는
+    기관 규칙이나 기존 계정 체계를 따르는 경우가 많고, 우리가 정한 숫자가 그것과
+    어긋나면 사람은 규칙을 지키는 대신 **우회할 길을 찾는다** — 스크립트로 직접
+    바꾸는 쪽이고, 그 경로가 오히려 강제 변경을 건너뛴다.
+    """
+    make_user(db, must_change=True)
+    token = login(client).json()["access_token"]
+
+    response = client.post(
+        "/api/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": "짧다"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 204, response.text
+    assert login(client, password="짧다").status_code == 200
+
+
+def test_바꾸고_나면_다시_묻지_않는다(client: TestClient, db: Session) -> None:
+    """**실제로 갇혔던 자리다.**
+
+    바꾸고 다시 로그인했는데 또 "처음 로그인했습니다" 가 떴다. 원인은 API 가
+    아니라 `set_admin.py` 였지만(비밀번호를 넣을 때마다 강제를 되켰다), 사용자가
+    보는 증상은 여기였다 — 로그인 응답의 `must_change_password` 다.
+    """
+    make_user(db, must_change=True)
+    token = login(client).json()["access_token"]
+    client.post(
+        "/api/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": "새비번1"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    again = login(client, password="새비번1")
+    assert again.status_code == 200
+    assert again.json()["user"]["must_change_password"] is False
+
+    # 한 번 더 들어와도 마찬가지다 — 상태가 남는다.
+    assert login(client, password="새비번1").json()["user"]["must_change_password"] is False

@@ -59,8 +59,17 @@ class LoginResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=200)
-    new_password: str = Field(min_length=10, max_length=200)
-    """최소 10자. 폐쇄망이라도 초기 비밀번호가 그대로 남는 것이 가장 흔한 사고다."""
+    new_password: str = Field(min_length=1, max_length=200)
+    """길이 하한을 두지 않는다.
+
+    10자를 요구했더니 **설치 현장에서 그것이 막혔다.** 폐쇄망 서버의 비밀번호는
+    기관 규칙이나 기존 계정 체계를 따르는 경우가 많고, 우리가 정한 숫자가 그것과
+    어긋나면 사람은 규칙을 지키는 대신 **우회할 길을 찾는다**(스크립트로 직접
+    바꾸기 등) — 그 경로가 오히려 강제 변경을 건너뛴다.
+
+    지키려던 것("시드 비밀번호가 그대로 남지 않게")은 길이가 아니라 `이전과 다른
+    비밀번호` 검사와 `must_change_password` 가 한다.
+    """
 
 
 class PatCreateRequest(BaseModel):
