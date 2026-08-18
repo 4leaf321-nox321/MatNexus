@@ -104,7 +104,10 @@ jobs:
           $exists = & "$env:PGBIN\psql" -U postgres -h localhost -tAc "SELECT 1 FROM pg_database WHERE datname='matnexus'"
           if ($exists -ne '1') { & "$env:PGBIN\createdb" -U postgres -h localhost matnexus }
           python -m alembic upgrade head
-          python scripts/seed_install.py --password '${{ env.SMOKE_PASSWORD }}'
+          # **강제 변경을 끈다.** 켜 두면 로그인 직후 비밀번호 변경 화면으로
+          # 가서 스모크가 껍데기를 못 본다. 운영에서는 켜 둔 채로 둔다 — 시드
+          # 비밀번호가 그대로 남는 것이 폐쇄망 설치의 가장 흔한 사고다.
+          python scripts/seed_install.py --password '${{ env.SMOKE_PASSWORD }}' --no-force-change
           python scripts/ensure_test_types.py
 
       - name: 서버·워커 기동
