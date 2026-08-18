@@ -168,8 +168,15 @@ test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) =
   await expect(page).toHaveURL(/\/settings\/formats$/)
   await expect(page.getByRole('link', { name: '프로파일 만들기' })).toBeVisible()
 
-  // 목록이 실제로 채워지는지까지 — 빈 표는 "왜 없지" 로 읽힌다.
-  await expect(page.locator('tbody tr').first()).toBeVisible()
+  // **목록이든 "없습니다" 든, 화면이 무엇이라도 말해야 한다.**
+  //
+  // 전에는 표에 줄이 있는지만 봤다. 개발 DB 에는 만들어 둔 프로파일이 있어서
+  // 늘 통과했는데, **새로 설치한 곳에는 프로파일이 0개인 것이 정상이다**
+  // (프로파일은 코드가 아니라 사람이 만든다 — ADR 0005). CI 의 빈 DB 에서
+  // 처음 돌리자 그 가정이 드러났다. 갓 설치한 서버가 곧 이 상태다.
+  await expect(
+    page.locator('tbody tr').first().or(page.getByText('프로파일이 없습니다.'))
+  ).toBeVisible()
 })
 
 test('읽지 못한 파일은 이유를 보여 준다', async ({ page }) => {
