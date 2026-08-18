@@ -261,7 +261,10 @@ def curve_table(
         raw = curves.read_columns(filestore.read_bytes(member.result.storage_path))
         if x not in raw or y not in raw:
             return None, [
-                f"'{member.run.record_name}' 의 처리 결과에 '{x}' 또는 '{y}' 열이 없습니다."
+                f"'{member.run.record_name}' 에서 채택된 처리 결과에 '{x}' 또는 "
+                f"'{y}' 열이 없습니다. 그 시험의 '결과' 탭에서 진응력을 포함한 결과를 "
+                f"채택했는지 보세요 — 다시 처리만 하고 채택을 안 옮기면 예전 결과가 "
+                f"그대로 쓰입니다."
             ]
         points = [
             (0.0 if px is None else float(px), 0.0 if py is None else float(py))
@@ -288,8 +291,10 @@ def curve_table(
         raw = curves.read_columns(filestore.read_bytes(member.result.storage_path))
         if x not in raw or y not in raw:
             return None, [
-                f"'{member.run.record_name}' 의 처리 결과에 '{x}' 또는 '{y}' 열이 없습니다. "
-                f"같은 레시피로 처리했는지 확인하세요."
+                f"'{member.run.record_name}' 에서 채택된 처리 결과에 '{x}' 또는 "
+                f"'{y}' 열이 없습니다. 같은 레시피로 처리했는지, 그리고 다시 처리한 뒤 "
+                f"'결과' 탭에서 채택을 옮겼는지 보세요 — 채택이 예전 결과에 남아 "
+                f"있으면 새로 만든 열은 쓰이지 않습니다."
             ]
         grids.append(np.asarray([0.0 if v is None else v for v in raw[x]], dtype=np.float64))
         values.append(np.asarray([0.0 if v is None else v for v in raw[y]], dtype=np.float64))

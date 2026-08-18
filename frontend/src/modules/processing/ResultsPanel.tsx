@@ -60,6 +60,20 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
 
   const rows = results.data ?? []
 
+  /**
+   * **채택이 진응력 없는 결과에 걸려 있는가.**
+   *
+   * 실측: 단계를 고쳐 다시 처리해 놓고 채택을 안 옮겨서, CAE 카드 탭에서
+   * "strain_true_plastic 열이 없습니다" 를 봤다. 목록에는 '4단계 · 18행' 과
+   * '5단계 · 18행' 이 나란히 있어 어느 쪽이 그 열을 가졌는지 알 수가 없었다.
+   * 고르는 자리에서 안 보이면 세 화면 뒤에서 오류로 만난다.
+   */
+  const adopted = rows.find((item) => item.is_adopted)
+  const trueStressElsewhere =
+    adopted !== undefined &&
+    !adopted.columns.includes('stress_true') &&
+    rows.some((item) => !item.is_adopted && item.columns.includes('stress_true'))
+
   async function toggle(item: ProcessingResult) {
     setBusy(true)
     setError(null)
@@ -78,6 +92,14 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
   return (
     <section>
       <ErrorNotice error={results.error ?? error} className="mb-3" />
+
+      {trueStressElsewhere && (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+          <b>채택된 결과에 진응력 열이 없습니다.</b> 아래에 진응력을 포함한 결과가
+          따로 있습니다 — 그것을 채택해야 CAE 카드를 만들 수 있습니다. 다시 처리만
+          하고 채택을 옮기지 않으면 예전 결과가 그대로 쓰입니다.
+        </div>
+      )}
 
       {!results.loading && rows.length === 0 ? (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
@@ -122,6 +144,13 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                   <span className="text-muted-foreground text-xs">
                     {item.steps.length}단계 · {item.row_count.toLocaleString('ko-KR')}행
                   </span>
+                  {/* **고르는 자리에서 보여야 한다.** '4단계' 와 '5단계' 만으로는
+                      어느 쪽이 CAE 카드를 만들 수 있는지 알 수 없다. */}
+                  {item.columns.includes('stress_true') && (
+                    <Badge variant="outline" className="text-xs">
+                      진응력 포함
+                    </Badge>
+                  )}
                   {item.recipe_label && (
                     <Badge variant="outline" className="text-xs">
                       {item.recipe_label}
