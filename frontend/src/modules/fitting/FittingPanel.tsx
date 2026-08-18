@@ -80,9 +80,14 @@ export function FittingPanel({ materialId }: Props) {
   const [saving, setSaving] = useState(false)
 
   const groups: GroupKey[] = (stats.data?.groups ?? [])
-    // 표본 2개 미만은 대표 곡선이 없다. 하나로 적합하면 그 시편의 물성을 재료의
-    // 물성이라고 부르는 셈이다.
-    .filter((item) => item.sample_count >= 2)
+    // **채택된 것이 있으면 적합할 수 있다.** 1건이면 그 곡선이 곧 입력이다 —
+    // 평균 낼 상대가 없다는 것과 그릴 곡선이 없다는 것은 다르다.
+    //
+    // 여기 2건 문턱이 남아 있어서, 물성 탭에는 곡선이 뜨는데 이 탭에서는
+    // "적합할 대표 곡선이 없습니다" 가 떴다. 서버는 이미 1건을 받는다.
+    // 여러 개가 낫다는 것은 막을 이유가 아니라 **적을 이유**다 — 1건으로 만든
+    // 카드에는 그 사실이 근거와 솔버 덱 머리글에 남는다.
+    .filter((item) => item.sample_count >= 1)
     .map((item) => ({
       test_type_key: item.test_type_key,
       test_type_label: item.test_type_label,
@@ -130,8 +135,8 @@ export function FittingPanel({ materialId }: Props) {
 
       {!stats.loading && groups.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
-          적합할 대표 곡선이 없습니다. 시편 2개 이상을 처리하고 채택하면 물성 탭에
-          대표 곡선이 생기고, 그것이 여기의 입력이 됩니다.
+          적합할 곡선이 없습니다. 시험 상세의 <b>처리</b> 탭에서 돌려 보고 저장한 뒤{' '}
+          <b>채택</b>하면, 그 곡선이 여기의 입력이 됩니다.
         </div>
       )}
 
@@ -227,7 +232,10 @@ function FitComparison({
       <header className="flex flex-wrap items-center gap-2 border-b p-3">
         <h3 className="font-medium">경화식 후보</h3>
         <span className="text-muted-foreground text-sm">
-          시편 {preview.sample_count}개의 대표 곡선 {preview.source_points.length}점
+          {/* 1개짜리를 '대표 곡선' 이라 쓰면 여러 시편의 평균으로 읽힌다. */}
+          {preview.sample_count === 1
+            ? `시편 1개의 곡선 ${preview.source_points.length}점`
+            : `시편 ${preview.sample_count}개의 대표 곡선 ${preview.source_points.length}점`}
         </span>
         <Button size="sm" className="ml-auto" onClick={onSave}>
           <Plus className="size-3.5" />
