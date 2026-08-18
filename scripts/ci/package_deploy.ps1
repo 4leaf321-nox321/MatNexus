@@ -7,7 +7,7 @@
     backend\packages\    wheel 번들 — 서버는 --no-index 로 여기서만 설치한다
     frontend\dist\       빌드된 SPA. 백엔드가 같은 프로세스에서 서빙한다
     run_server.ps1       기동
-    deploy.ps1 / rollback.ps1 / venv_sync.ps1 / install.ps1 / precheck.ps1
+    deploy.ps1 / rollback.ps1 / venv_sync.ps1 / install.ps1 / precheck.ps1 / backup.ps1
     BUILD_INFO.txt       wheel 을 만든 파이썬 마이너 버전
 
 배포 스크립트를 패키지에 함께 넣는 이유: 서버가 릴리스만 받는 환경이어도
@@ -101,6 +101,7 @@ Copy-Item -Force .\scripts\deploy\deploy.ps1 .\deploy\deploy.ps1
 Copy-Item -Force .\scripts\deploy\rollback.ps1 .\deploy\rollback.ps1
 Copy-Item -Force .\scripts\deploy\install.ps1 .\deploy\install.ps1
 Copy-Item -Force .\scripts\deploy\precheck.ps1 .\deploy\precheck.ps1
+Copy-Item -Force .\scripts\deploy\backup.ps1 .\deploy\backup.ps1
 
 # 바이너리 wheel 은 ABI 태그(cp312 등)를 달고 있어 다른 마이너 버전에는 설치되지
 # 않는다. deploy.ps1 이 이 값을 서버 파이썬과 비교한다.
