@@ -228,24 +228,28 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
     ])
 
   const points = shown((mode === 'mean' ? curve.mean : curve.median) as [number, number][])
+  // **1개면 평균도 중앙값도 그 곡선이다.** 고를 것이 없는데 버튼을 두면 눌러
+  // 보고 아무것도 안 변하는 것을 확인하게 된다 — 그건 고장으로 읽힌다.
+  const single = group.sample_count === 1
 
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">대표 곡선</span>
+        <span className="text-sm font-medium">{single ? '곡선' : '대표 곡선'}</span>
         {/* **둘 다 낸다.** 이상치가 있을 때 중앙값이 낫고, 어느 것을 쓸지는
             피팅할 때 고르면 된다. */}
-        {(['mean', 'median'] as const).map((option) => (
-          <Button
-            key={option}
-            size="sm"
-            variant={mode === option ? 'default' : 'outline'}
-            className="h-7 text-xs"
-            onClick={() => setMode(option)}
-          >
-            {option === 'mean' ? '평균' : '중앙값'}
-          </Button>
-        ))}
+        {!single &&
+          (['mean', 'median'] as const).map((option) => (
+            <Button
+              key={option}
+              size="sm"
+              variant={mode === option ? 'default' : 'outline'}
+              className="h-7 text-xs"
+              onClick={() => setMode(option)}
+            >
+              {option === 'mean' ? '평균' : '중앙값'}
+            </Button>
+          ))}
         <span className="text-muted-foreground ml-auto text-xs">
           {curve.mean.length}점 · 시편 {group.sample_count}개
         </span>
@@ -257,8 +261,17 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
         height={280}
       />
       <p className="text-muted-foreground mt-2 text-xs">
-        점마다 시편 {group.sample_count}개의 {mode === 'mean' ? '평균' : '중앙값'}입니다.
-        이 곡선이 <b>피팅의 입력</b>이 됩니다.
+        {single ? (
+          <>
+            시편 1개의 곡선입니다 — <b>평균이 아니라 그 시편의 값</b>입니다. 이
+            곡선이 <b>피팅의 입력</b>이 되고, 카드에도 시편 1개라고 적힙니다.
+          </>
+        ) : (
+          <>
+            점마다 시편 {group.sample_count}개의 {mode === 'mean' ? '평균' : '중앙값'}
+            입니다. 이 곡선이 <b>피팅의 입력</b>이 됩니다.
+          </>
+        )}
       </p>
     </div>
   )

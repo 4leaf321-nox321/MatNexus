@@ -73,8 +73,13 @@ def _representative(
 ) -> tuple[statistics_services.Group, np.ndarray, np.ndarray, list[str]]:
     """대표 곡선에서 (소성변형률, 진응력) 을 꺼낸다.
 
-    **시편 하나가 아니라 여러 개의 평균이다.** 하나로 적합하면 그 시편의 물성을
-    재료의 물성이라고 부르는 셈이다.
+    **여러 개의 평균이 낫다.** 하나로 적합하면 그 시편의 물성을 재료의 물성이라고
+    부르는 셈이고, 그 시편이 하필 이상치였는지 알 방법이 없다.
+
+    그렇다고 **막지는 않는다.** 한 번 재고 해석부터 돌려 보는 것은 정상 작업이고,
+    막으면 사람은 시스템 밖에서 계산해 카드 없이 덱을 만든다 — 그러면 근거가
+    아무 데도 안 남는다. 대신 표본 수를 카드에 박고(`source.sample_count`),
+    1건이면 그 사실을 근거에 문장으로 남긴다.
     """
     _, groups = statistics_services.groups_for_material(db, user, material_id)
     group = next(
@@ -87,12 +92,11 @@ def _representative(
     )
     if group is None:
         raise NotFound("MNX-FITTING-0001", "그 묶음을 찾을 수 없습니다.")
-    if len(group.members) < statistics.MIN_SAMPLES:
+    if not group.members:
         raise AppError(
             "MNX-FITTING-0002",
-            f"채택된 시험이 {len(group.members)}건입니다. "
-            f"{statistics.MIN_SAMPLES}건 이상이어야 대표 곡선이 나옵니다 — "
-            f"처리한 뒤 결과 탭에서 채택하세요.",
+            "채택된 시험이 없습니다. 시험 상세의 '처리' 탭에서 돌려 보고 저장한 뒤 "
+            "'채택' 을 누르면 그 곡선이 여기로 들어옵니다.",
             status=422,
         )
 
@@ -109,7 +113,16 @@ def _representative(
     # **탄성 구간의 자국을 걷어내고 넘긴다.** 안 걷어내면 x 가 전부 0 인 점
     # 수십 개가 적합을 지배해서, 식이 맞는데도 R² 가 0.4 로 나온다.
     strain, stress, trimmed = fitting.plastic_branch(mean[:, 0], mean[:, 1])
-    return group, strain, stress, [*notes, *trimmed]
+    single = (
+        [
+            "시편 1개의 곡선으로 적합했습니다 — 재료의 대푯값이 아니라 그 시편의 "
+            "값입니다. 흩어짐을 모르므로 이 파라미터가 얼마나 재현되는지도 알 수 "
+            "없습니다."
+        ]
+        if len(group.members) == 1
+        else []
+    )
+    return group, strain, stress, [*notes, *single, *trimmed]
 
 
 def _fit_out(result: fitting.FitResult) -> FitOut:
@@ -364,7 +377,14 @@ def export_card(
     provenance = [
         f"재료 {material.record_name if material else '?'} · "
         f"{test_type.key if test_type else '?'} · {item.orientation}",
-        f"시편 {item.source.get('sample_count', '?')}개의 대표 곡선에서 만들었습니다.",
+        # **덱을 나중에 읽는 사람에게는 이 줄이 근거의 전부다.** 1개짜리를
+        # '대표 곡선' 이라고 쓰면 여러 시편의 평균으로 읽힌다 — 솔버 결과를
+        # 놓고 "이 물성 어디서 났나" 를 물을 때 그 오해가 제일 비싸다.
+        (
+            "시편 1개의 곡선에서 만들었습니다 — 재료의 대푯값이 아니라 그 시편의 값입니다."
+            if item.source.get("sample_count") == 1
+            else f"시편 {item.source.get('sample_count', '?')}개의 대표 곡선에서 만들었습니다."
+        ),
         f"카드 {item.id} ({STATUS_NOTES.get(item.status, item.status)})",
     ]
     if hardening.get("label"):

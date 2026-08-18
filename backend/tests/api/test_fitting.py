@@ -153,14 +153,31 @@ class Test미리보기:
         assert any("적합 구간 밖에서 검증되지 않았습니다" in note for note in fit["notes"])
         assert len(fit["curve"]) > 1
 
-    def test_표본이_모자라면_무엇을_하면_되는지_말한다(
+    def test_채택이_하나도_없으면_무엇을_하면_되는지_말한다(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
         db: Session,
         material: dict[str, Any],
     ) -> None:
-        _adopted(client, admin_headers, db, material["id"], 1)
+        # 시험은 있는데 채택만 안 한 상태 — 사용자가 가장 자주 서는 자리다.
+        # (묶음 자체가 없으면 404 다. 그건 다른 이야기다.)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        run = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example.tra", TRA.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+
         response = client.post(
             "/api/fitting/preview",
             json={
@@ -172,6 +189,34 @@ class Test미리보기:
         )
         assert response.status_code == 422, response.text
         assert "채택" in response.json()["error"]["message"]
+
+    def test_1건이면_적합하되_그_사실을_근거에_남긴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """**막지 않는다. 대신 말한다.**
+
+        한 번 재고 해석부터 돌려 보는 것은 정상 작업이다. 막으면 사람은 시스템
+        밖에서 계산해 카드 없이 덱을 만들고, 그러면 근거가 아무 데도 안 남는다 —
+        막아서 얻는 것보다 잃는 것이 크다.
+        """
+        _adopted(client, admin_headers, db, material["id"], 1)
+        body = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": material["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+            },
+            headers=admin_headers,
+        ).json()
+
+        assert body["sample_count"] == 1
+        assert body["fits"], "1건이어도 적합은 된다"
+        assert any("시편 1개" in note for note in body["notes"])
 
 
 class Test물성카드:

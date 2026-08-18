@@ -275,6 +275,32 @@ class Test적은_표본:
 
         assert any("1건" in note for note in group["notes"])
 
+    def test_채택_1건이면_그_곡선이_대표다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """**평균 낼 상대가 없는 것과 그릴 곡선이 없는 것은 다르다.**
+
+        1건이면 격자를 맞출 이유도 없다 — 맞출 상대가 없으니 재샘플 없이도
+        그릴 수 있다. 전에는 문턱값(2건) 때문에 있는 곡선을 안 보여 줬다.
+        """
+        _adopt(client, admin_headers, _run(client, admin_headers, db, material["id"], "MD"))
+
+        group = client.get(
+            f"/api/statistics/materials/{material['id']}", headers=admin_headers
+        ).json()["groups"][0]
+
+        curve = group["curve"]
+        assert curve is not None, "1건이어도 곡선은 나와야 한다"
+        assert curve["mean"] == curve["median"], "한 점의 평균도 중앙값도 그 점이다"
+        # **흩어짐은 내지 않는다.** 0 을 넣으면 "여러 번 재서 같았다" 로 읽힌다.
+        assert curve["sd"] == []
+        assert all(count == 1.0 for _, count in curve["count"])
+        assert any("시편 1개" in note for note in group["notes"])
+
     def test_채택이_없으면_무엇을_해야_하는지_말한다(
         self,
         client: TestClient,

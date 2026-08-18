@@ -246,6 +246,42 @@ def curve_table(
     db: Session, group: Group, *, x: str, y: str
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """점별 곡선 통계. 격자가 다르면 계산하지 않고 이유를 돌려준다."""
+    if len(group.members) == 1:
+        # **1건이면 그 곡선이 곧 대표다.**
+        #
+        # 평균을 낼 상대가 없다는 것은 계산이 불가능하다는 뜻이 아니다. 격자를
+        # 맞출 이유도 없다 — 맞출 상대가 없으니 재샘플 없이도 그릴 수 있다.
+        # 전에는 문턱값(2건) 때문에 곡선을 아예 안 냈고, 화면에는 "대표 곡선을
+        # 만들 수 없습니다" 만 떴다. 있는 곡선을 못 본 것이다.
+        #
+        # 평균과 중앙값을 같은 값으로 둔다 — 한 점의 평균도 중앙값도 그 점이다.
+        # **흩어짐은 내지 않는다**(`sd` 가 빈다). 0 을 넣으면 "여러 번 재서
+        # 같았다" 로 읽힌다.
+        member = group.members[0]
+        raw = curves.read_columns(filestore.read_bytes(member.result.storage_path))
+        if x not in raw or y not in raw:
+            return None, [
+                f"'{member.run.record_name}' 의 처리 결과에 '{x}' 또는 '{y}' 열이 없습니다."
+            ]
+        points = [
+            (0.0 if px is None else float(px), 0.0 if py is None else float(py))
+            for px, py in zip(raw[x], raw[y], strict=True)
+        ]
+        return (
+            {
+                "x": x,
+                "y": y,
+                "mean": points,
+                "median": points,
+                "sd": [],
+                "count": [(px, 1.0) for px, _ in points],
+            },
+            [
+                f"시편 1개('{member.run.record_name}')의 곡선입니다 — "
+                f"평균이 아니라 그 시편의 값입니다."
+            ],
+        )
+
     grids: list[np.ndarray] = []
     values: list[np.ndarray] = []
     for member in group.members:

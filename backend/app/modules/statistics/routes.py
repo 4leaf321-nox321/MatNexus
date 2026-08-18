@@ -40,7 +40,10 @@ router = APIRouter(prefix="/statistics", tags=["statistics"])
 def _group_out(db: Session, group: services.Group, *, threshold: float) -> GroupOut:
     notes = services.setting_warnings(group)
     curve = None
-    if len(group.members) >= statistics.MIN_SAMPLES:
+    # **1건이어도 곡선은 낸다.** 그 한 곡선이 곧 대표다 — 평균을 낼 상대가
+    # 없다는 것과 그릴 곡선이 없다는 것은 다르다. `curve_table` 이 1건을
+    # 따로 다루고, 응답의 `sample_count` 와 안내가 그 사실을 말한다.
+    if group.members:
         # **격자가 맞는 축을 고른다.** 레시피가 어느 축에서 재샘플했는지에 따라
         # 공칭이 맞을 수도 진소성이 맞을 수도 있다. 하나만 보고 포기하면
         # "적합은 되는데 곡선은 안 보인다" 가 된다 — 실제로 그렇게 나왔다.
@@ -51,6 +54,10 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
         for x, y in services.axis_candidates(db, group):
             curve, curve_notes = services.curve_table(db, group, x=x, y=y)
             if curve is not None:
+                # **성공한 곡선의 근거도 남긴다.** 전에는 실패했을 때만 이유를
+                # 실었는데, 그러면 "이 곡선이 무엇인가"(시편 1개의 것인지,
+                # 공통 구간이 어디까지인지)가 통째로 사라진다.
+                notes.extend(curve_notes)
                 break
             attempted.extend(curve_notes)
         if curve is None:
@@ -72,7 +79,8 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
         notes.append(
             "시험 1건이라 아래는 그 시편의 값이고 흩어짐이 없습니다 — "
             "재료의 물성이라고 하려면 여러 번 재야 합니다. "
-            "2건부터 평균과 대표 곡선이, 3건부터 변동계수와 이상치가 나옵니다."
+            "곡선은 그 시편의 곡선을 그대로 씁니다. "
+            "2건부터 평균이, 3건부터 변동계수와 이상치가 나옵니다."
         )
     elif len(group.members) < statistics.MIN_FOR_SPREAD:
         # **화면에 뜨는 것과 안내가 어긋나면 안 된다.** 전에는 "변동계수를 내지
