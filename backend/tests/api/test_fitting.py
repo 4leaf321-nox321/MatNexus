@@ -220,6 +220,40 @@ class Test미리보기:
 
 
 class Test물성카드:
+    def test_식을_안_골라도_표로_카드가_된다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**많은 솔버가 식보다 표를 그대로 받는다.**
+
+        게다가 덱의 소성 블록에 들어가는 것은 어느 쪽을 고르든 표다 — 식은
+        파라미터와 적합도로 카드에 남고 덱에는 참고 주석으로 들어간다. 식이 안
+        맞는 재료(항복 근처가 꺾이는 것, 이중 항복)에서는 억지로 맞춘 식보다
+        표가 정확하다.
+        """
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "표만",
+                "poisson_ratio": 0.3,
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        body = card.json()
+        assert not body["hardening"], "식을 안 골랐으면 비어 있어야 한다"
+        assert body["point_count"] > 1, "표는 언제나 저장한다"
+
+        deck = client.get(
+            f"/api/fitting/cards/{body['id']}/export?format=abaqus", headers=admin_headers
+        )
+        assert deck.status_code == 200, deck.text
+        text = deck.content.decode("utf-8")
+        assert "*PLASTIC" in text
+        assert "경화식" not in text, "안 고른 식을 덱에 적지 않는다"
+
     def test_카드가_자기_근거를_들고_있다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
     ) -> None:

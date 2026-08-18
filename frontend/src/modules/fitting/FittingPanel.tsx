@@ -219,10 +219,13 @@ function FitComparison({
 }: {
   preview: FitPreview
   chosen: string | null
-  onChoose: (family: string) => void
+  onChoose: (family: string | null) => void
   onSave: () => void
 }) {
-  const fit = preview.fits.find((item) => item.family === chosen) ?? preview.fits[0]
+  // **`chosen === null` 은 '아직 안 골랐다' 가 아니라 '식을 안 쓴다' 다.**
+  // 전에는 여기서 `?? preview.fits[0]` 로 되돌려서, 표만 쓰겠다는 선택이
+  // 화면에서 사라졌다 — 서버는 받는데 갈 길이 없었다.
+  const fit = chosen === null ? null : preview.fits.find((item) => item.family === chosen)
   // 표시 단위로 맞춘다. 축만 바꾸고 점을 안 바꾸면 1000배 어긋난다.
   const shown = (points: [number, number][]): [number, number][] =>
     points.map(([x, y]) => [toDisplay(x, '1', 'strain'), toDisplay(y, 'Pa')])
@@ -265,7 +268,42 @@ function FitComparison({
               onClick={() => onChoose(item.family)}
             />
           ))}
+          {/* **식을 안 쓰는 것도 선택이다.**
+              솔버 덱의 소성 블록에 들어가는 것은 어느 쪽을 고르든 **표**다
+              (`*PLASTIC` · `/FUNCT`). 식은 카드에 파라미터와 적합도로 남고
+              덱에는 참고 주석으로 들어간다. 식이 안 맞는 재료 — 항복 근처가
+              꺾이거나 이중 항복이 있는 것 — 에서는 억지로 맞춘 식보다 표가
+              정확하다. */}
+          <button
+            type="button"
+            onClick={() => onChoose(null)}
+            className={`rounded-md border p-2 text-left ${
+              chosen === null ? 'border-primary ring-primary/30 ring-2' : ''
+            }`}
+          >
+            <p className="text-sm font-medium">식 없이 표만</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              측정한 곡선을 그대로 씁니다. 식이 안 맞는 재료에서는 이쪽이 정확합니다.
+            </p>
+          </button>
         </div>
+
+        {chosen === null && (
+          <>
+            <CurveChart
+              points={shown(preview.source_points as [number, number][])}
+              pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
+              xLabel="진소성변형률 (%)"
+              yLabel="진응력 (MPa)"
+              height={300}
+            />
+            <p className="text-muted-foreground text-xs">
+              이 {preview.source_points.length}점이 그대로 카드의 표가 되고, 솔버
+              덱에도 이 값이 들어갑니다. 식을 고르면 파라미터와 적합도가 카드에
+              함께 남지만, <b>덱의 소성 블록은 어느 쪽이든 이 표입니다.</b>
+            </p>
+          </>
+        )}
 
         {fit && (
           <>
@@ -275,7 +313,7 @@ function FitComparison({
                 points: shown(fit.curve as [number, number][]),
                 label: `${fit.label} 적합`,
               }}
-              pointsLabel="대표 곡선"
+              pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
               xLabel="진소성변형률 (%)"
               yLabel="진응력 (MPa)"
               height={300}
