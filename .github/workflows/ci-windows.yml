@@ -93,6 +93,13 @@ jobs:
         working-directory: backend
         shell: pwsh
         run: |
+          # **DB 를 여기서 만든다.** pytest 는 `matnexus_test` 를 스스로 만들지만
+          # 스모크는 개발과 같은 `matnexus` 를 쓴다. 개발 PC 에는 그 DB 가 이미
+          # 있어서 이 단계가 빠진 것이 로컬에서는 보이지 않았다 — 스모크를 CI 에
+          # 붙인 뒤 처음 돌린 여기서 드러났다.
+          $env:PGPASSWORD = 'root'
+          $exists = & "$env:PGBIN\psql" -U postgres -h localhost -tAc "SELECT 1 FROM pg_database WHERE datname='matnexus'"
+          if ($exists -ne '1') { & "$env:PGBIN\createdb" -U postgres -h localhost matnexus }
           python -m alembic upgrade head
           python scripts/seed_install.py --password '${{ env.SMOKE_PASSWORD }}'
           python scripts/ensure_test_types.py
