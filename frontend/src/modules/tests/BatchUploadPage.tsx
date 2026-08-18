@@ -91,6 +91,16 @@ interface Row {
   sampleId: string | null
   /** 올리고 나면 만들어진 시험 id. **치수 채우기가 이 값을 쓴다.** */
   runId?: string
+  /**
+   * 시편 치수(mm). 문자열로 들고 있는다 — `Number('0.')` 이 0 이 되어 소수점을
+   * 찍는 순간 지워진다.
+   *
+   * **파일에서 채우는 것과 손으로 넣는 것이 둘 다 필요하다.** 게이지 길이는
+   * 장비 파일에 아예 없고, 두께·폭도 장비가 잘못 적어 오는 경우가 있다.
+   */
+  thickness: string
+  width: string
+  gauge: string
   /** 기존 시편 id 이거나, `new:<방향>` 이면 올릴 때 새로 만든다. */
   specimen: string | null
   status: RowStatus
@@ -165,6 +175,9 @@ export default function BatchUploadPage() {
       materialId: null,
       sampleId: null,
       specimen: null,
+      thickness: '',
+      width: '',
+      gauge: '',
       status: 'incomplete' as RowStatus,
     }))
     setRows((current) => [...current, ...added])
@@ -267,6 +280,11 @@ export default function BatchUploadPage() {
         if (specimenId.startsWith('new:')) {
           const created = await materialsApi.createSpecimen(row.sampleId as string, {
             orientation: specimenId.slice(4),
+            // 손으로 넣은 값이 있으면 만들 때 함께 넣는다. 빈 칸은 안 보낸다 —
+            // 0 을 보내면 "쟀는데 0" 이 되고, 그것은 없는 것과 다르다.
+            ...(row.thickness === '' ? {} : { thickness: Number(row.thickness) }),
+            ...(row.width === '' ? {} : { width: Number(row.width) }),
+            ...(row.gauge === '' ? {} : { gauge_length: Number(row.gauge) }),
             length_unit: 'mm',
           })
           specimenId = created.id
@@ -278,7 +296,18 @@ export default function BatchUploadPage() {
             ...current,
             [sampleId]: [...(current[sampleId] ?? []), created],
           }))
+        } else if (row.thickness || row.width || row.gauge) {
+          // **기존 시편을 고른 줄에도 손입력을 반영한다.** 장비가 잘못 적어 온
+          // 값을 여기서 고치려는 것이 이 칸의 목적이라, 새 시편에만 넣으면
+          // 절반만 되는 기능이 된다. 적은 칸만 보낸다 — 안 적은 칸은 그대로 둔다.
+          await materialsApi.updateSpecimen(specimenId, {
+            ...(row.thickness === '' ? {} : { thickness: Number(row.thickness) }),
+            ...(row.width === '' ? {} : { width: Number(row.width) }),
+            ...(row.gauge === '' ? {} : { gauge_length: Number(row.gauge) }),
+            length_unit: 'mm',
+          })
         }
+
         const definition = availableTypes.find((type) => type.key === row.typeKey)
         const created = await testsApi.upload({
           specimenId,
@@ -508,6 +537,34 @@ export default function BatchUploadPage() {
               </div>
             </div>
 
+            {/* **치수도 여기서 넣는다.** 파일에서 채우는 길이 있지만 그것만으로는
+                모자란다 — 게이지 길이는 장비 파일에 아예 없고, 두께·폭도 장비가
+                잘못 적어 오는 경우가 있다. 대개 한 배치가 같은 규격이라 일괄로
+                넣고, 다른 줄만 표에서 고친다. */}
+            <div className="space-y-1">
+              <Label className="text-muted-foreground text-xs">
+                시편 치수 일괄 지정 (mm)
+              </Label>
+              <div className="flex gap-1">
+                {(
+                  [
+                    ['thickness', '두께'],
+                    ['width', '폭'],
+                    ['gauge', '게이지'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Input
+                    key={key}
+                    className="h-8 w-20 text-xs"
+                    inputMode="decimal"
+                    placeholder={label}
+                    aria-label={`${label} 일괄 지정`}
+                    onChange={(event) => assignSelected({ [key]: event.target.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-1">
               <Label className="text-muted-foreground text-xs">새 시편 (번호 자동)</Label>
               <div className="flex gap-1">
@@ -566,6 +623,7 @@ export default function BatchUploadPage() {
                   <TableHead className="w-52">재료</TableHead>
                   <TableHead className="w-32">시료</TableHead>
                   <TableHead className="w-36">시편</TableHead>
+                  <TableHead className="w-56">치수 (두께·폭·게이지, mm)</TableHead>
                   <TableHead className="w-44">상태</TableHead>
                 </TableRow>
               </TableHeader>
@@ -687,6 +745,26 @@ export default function BatchUploadPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                    </TableCell>
+
+                    {/* **줄마다 고칠 수 있어야 한다.** 두께·폭은 시편마다 실측이
+                        달라서 일괄 지정만으로는 모자란다. 비워 두면 안 보낸다 —
+                        그때는 파일 값으로 채우거나 나중에 시편 수정에서 넣는다. */}
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {(['thickness', 'width', 'gauge'] as const).map((key) => (
+                          <Input
+                            key={key}
+                            className="h-8 w-16 text-xs"
+                            inputMode="decimal"
+                            value={row[key]}
+                            aria-label={`${row.file.name} ${key}`}
+                            onChange={(event) =>
+                              patch(row.key, { [key]: event.target.value })
+                            }
+                          />
+                        ))}
+                      </div>
                     </TableCell>
 
                     <TableCell>
