@@ -18,6 +18,8 @@ import type { FormEvent } from 'react'
 
 import { DENSITY_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
+import { SampleFields, samplePayload } from '@/modules/materials/SampleFields'
+import type { SampleForm } from '@/modules/materials/SampleFields'
 import { ApiError } from '@/shared/api/client'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -28,8 +30,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { Input } from '@/shared/components/ui/input'
-import { Label } from '@/shared/components/ui/label'
 
 interface Props {
   sample: Sample
@@ -39,7 +39,7 @@ interface Props {
 }
 
 /** 숫자는 문자열로 들고 있는다 — `Number('0.')` 이 0 이 되어 소수점이 지워진다. */
-function initial(sample: Sample) {
+function initial(sample: Sample): SampleForm {
   return {
     lot_no: sample.lot_no ?? '',
     alias: sample.alias ?? '',
@@ -67,33 +67,14 @@ export function EditSampleDialog({ sample, open, onClose, onSaved }: Props) {
     }
   }, [open, sample])
 
-  const field = (key: keyof ReturnType<typeof initial>) => ({
-    value: form[key],
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((current) => ({ ...current, [key]: event.target.value })),
-  })
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setBusy(true)
     setFailure(null)
     try {
-      await materialsApi.updateSample(sample.id, {
-        // 빈 칸은 `null` 로 보낸다 — 지운 것과 안 건드린 것을 구분해야 한다.
-        // 다만 밀도는 다르다: 0 을 보내면 "쟀는데 0" 이 되므로 아예 안 보낸다.
-        lot_no: form.lot_no || null,
-        alias: form.alias || null,
-        manufacturer: form.manufacturer || null,
-        distributor: form.distributor || null,
-        primary_vendor: form.primary_vendor || null,
-        sales_type: form.sales_type || null,
-        applied_product: form.applied_product || null,
-        applied_part: form.applied_part || null,
-        production_date: form.production_date || null,
-        density: form.density === '' ? null : Number(form.density),
-        density_unit: DENSITY_UNIT,
-        note: form.note || null,
-      })
+      // 빈 칸은 `null` 로 간다 — 지운 것과 안 건드린 것을 구분해야 한다.
+      // 변환은 추가 창과 **같은 함수**를 쓴다.
+      await materialsApi.updateSample(sample.id, samplePayload(form, DENSITY_UNIT))
       onSaved()
     } catch (error) {
       setFailure(error instanceof ApiError ? error.message : '저장하지 못했습니다.')
@@ -113,61 +94,11 @@ export function EditSampleDialog({ sample, open, onClose, onSaved }: Props) {
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="es-lot">로트 번호</Label>
-              <Input id="es-lot" {...field('lot_no')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-alias">별칭</Label>
-              <Input id="es-alias" {...field('alias')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-maker">제조사</Label>
-              <Input id="es-maker" {...field('manufacturer')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-dist">유통사</Label>
-              <Input id="es-dist" {...field('distributor')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-vendor">주 벤더</Label>
-              <Input id="es-vendor" {...field('primary_vendor')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-sales">판매 유형</Label>
-              <Input id="es-sales" {...field('sales_type')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-product">적용 제품</Label>
-              <Input id="es-product" {...field('applied_product')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-part">적용 부위</Label>
-              <Input id="es-part" {...field('applied_part')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-date">생산일</Label>
-              <Input id="es-date" type="date" {...field('production_date')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="es-density">밀도 (kg/m³)</Label>
-              <Input id="es-density" inputMode="decimal" placeholder="이 로트 실측" {...field('density')} />
-            </div>
-          </div>
-
-          {/* **어느 자리에 무엇을 적는지가 결과를 바꾼다.** 여기 적은 값은
-              재료의 공칭값을 이기고 카드로 들어간다. */}
-          <p className="text-muted-foreground text-xs">
-            밀도는 <b>이 로트에서 잰 값</b>일 때만 넣으세요 — 카드가 재료의 공칭값보다
-            이쪽을 먼저 씁니다. 푸아송비는 로트마다 달라지는 값이 아니라 <b>재료</b>에
-            있습니다.
-          </p>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="es-note">메모</Label>
-            <Input id="es-note" {...field('note')} />
-          </div>
+          <SampleFields
+            idPrefix="edit-sample"
+            form={form}
+            onChange={(key, value) => setForm((current) => ({ ...current, [key]: value }))}
+          />
 
           {failure && <p className="text-destructive text-sm">{failure}</p>}
 

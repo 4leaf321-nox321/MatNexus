@@ -10,12 +10,18 @@
  * 시료를 처음 아는 순간이기도 하다.** "새로 받은 판에서 자른 시편들" 을 올리는데
  * 시료를 먼저 등록하러 다른 화면에 다녀오게 하면, 시편에서 없앤 왕복이 시료에
  * 그대로 남는다.
+ *
+ * 위 주석이 '재료 화면 vs 시험 화면' 의 갈라짐을 막았는데, **'추가 vs 수정' 은
+ * 못 봤다** — 추가는 5개, 수정은 11개였다. 필드는 이제 `SampleFields` 에 한 벌만
+ * 있다.
  */
 
 import { useState } from 'react'
 
 import { DENSITY_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
+import { EMPTY_SAMPLE, SampleFields, samplePayload } from '@/modules/materials/SampleFields'
+import type { SampleForm } from '@/modules/materials/SampleFields'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -26,16 +32,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { Input } from '@/shared/components/ui/input'
-import { Label } from '@/shared/components/ui/label'
-
-const EMPTY = {
-  lot_no: '',
-  manufacturer: '',
-  primary_vendor: '',
-  production_date: '',
-  density: '',
-}
 
 interface Props {
   materialId: string | null
@@ -45,34 +41,20 @@ interface Props {
 }
 
 export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props) {
-  const [form, setForm] = useState(EMPTY)
+  const [form, setForm] = useState<SampleForm>(EMPTY_SAMPLE)
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
-
-  function field(key: keyof typeof EMPTY) {
-    return {
-      value: form[key],
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
-        setForm((current) => ({ ...current, [key]: event.target.value })),
-    }
-  }
 
   async function submit() {
     if (!materialId) return
     setSaving(true)
     setError(null)
     try {
-      const created = await materialsApi.createSample(materialId, {
-        lot_no: form.lot_no || null,
-        manufacturer: form.manufacturer || null,
-        primary_vendor: form.primary_vendor || null,
-        production_date: form.production_date || null,
-        density: form.density === '' ? null : Number(form.density),
-        // **단위를 항상 명시해 보낸다.** 생략 가능하게 두면 "이 값이 kg/m³ 였나
-        // tonne/mm³ 였나" 를 나중에 아무도 답할 수 없다.
-        density_unit: DENSITY_UNIT,
-      })
-      setForm(EMPTY)
+      const created = await materialsApi.createSample(
+        materialId,
+        samplePayload(form, DENSITY_UNIT)
+      )
+      setForm(EMPTY_SAMPLE)
       onCreated(created)
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('시료를 만들지 못했습니다.'))
@@ -92,41 +74,11 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="sample-lot">로트번호 (선택)</Label>
-            <Input id="sample-lot" placeholder="L240612" {...field('lot_no')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sample-production">생산일 (선택)</Label>
-            <Input id="sample-production" type="date" {...field('production_date')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sample-manufacturer">제조사</Label>
-            <Input id="sample-manufacturer" {...field('manufacturer')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sample-vendor">주 벤더</Label>
-            <Input id="sample-vendor" {...field('primary_vendor')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sample-density">밀도 (kg/m³, 이 로트 실측)</Label>
-            <Input
-              id="sample-density"
-              type="number"
-              step="1"
-              placeholder="7850"
-              {...field('density')}
-            />
-          </div>
-        </div>
-
-        <p className="text-muted-foreground text-xs">
-          전부 선택 사항입니다. 로트를 관리하지 않는 경우가 있어 비워 두어도 시료는
-          만들어집니다. <b>밀도는 이 로트에서 잰 값</b>일 때만 넣으세요 — 카드가
-          재료의 공칭값보다 이쪽을 먼저 씁니다. 푸아송비는 로트마다 달라지는 값이
-          아니라 <b>재료</b>에 있습니다.
-        </p>
+        <SampleFields
+          idPrefix="new-sample"
+          form={form}
+          onChange={(key, value) => setForm((current) => ({ ...current, [key]: value }))}
+        />
 
         <ErrorNotice error={error} />
 
