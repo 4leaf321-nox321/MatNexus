@@ -18,6 +18,7 @@ import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
 import { ResultsPanel } from '@/modules/processing/ResultsPanel'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
+import type { TestConditionField, TestRunDetail } from '@/modules/tests/api'
 import {
   axisOptionsFor,
   groupCurveFamilies,
@@ -226,6 +227,8 @@ export default function TestRunDetailPage() {
           )}
         </div>
       )}
+
+      {item && definition && <ConditionBlock item={item} fields={definition.conditions} />}
 
       {item?.parse_error && (
         <div className="border-destructive/40 bg-destructive/5 text-destructive mb-6 rounded-md border p-3 text-sm">
@@ -500,5 +503,68 @@ export default function TestRunDetailPage() {
         </Tabs>
       )}
     </div>
+  )
+}
+
+/**
+ * 시험 조건과 시험 메타.
+ *
+ * **넣기는 하는데 볼 데가 없었다.** 업로드 창이 시험 온도·속도·예하중·센서 종류·
+ * 시편 규격·시험 그룹을 받아 저장하고, `conditions` 는 API 응답에도 실려 있는데,
+ * 상세 화면이 그리지 않아 입력한 사람도 다시 못 봤다. 조건을 모르는 곡선은
+ * 비교할 수 없다 — 200℃에서 잰 것과 상온 것이 같은 표에 서면 그 차이는 산포로
+ * 읽힌다.
+ *
+ * 비어 있으면 통째로 감춘다. 값이 하나도 없는 표는 화면만 차지하고, "이 시험은
+ * 조건을 안 적었다" 는 사실은 빈 표보다 없는 것이 더 분명하다.
+ */
+function ConditionBlock({
+  item,
+  fields,
+}: {
+  item: TestRunDetail
+  fields: TestConditionField[]
+}) {
+  const filled = fields.filter((field) => item.conditions[field.key] != null)
+  const meta: [string, string][] = [
+    ['시험일시', item.tested_at ? new Date(item.tested_at).toLocaleString('ko-KR') : ''],
+    ['시험자', item.operator ?? ''],
+    ['장비', item.instrument ?? ''],
+  ]
+  const filledMeta = meta.filter(([, value]) => value !== '')
+  if (filled.length === 0 && filledMeta.length === 0) return null
+
+  return (
+    <section className="mb-6 rounded-md border p-4">
+      <h2 className="mb-3 text-sm font-medium">시험 조건</h2>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+        {filled.map((field) => (
+          <div key={field.key}>
+            <dt className="text-muted-foreground text-xs">{field.label}</dt>
+            <dd className="tabular-nums">
+              {/* **저장은 SI, 화면은 실무 단위.** 온도를 298.15 K 로 보여 주면
+                  아무도 25℃ 인 줄 모른다. */}
+              {/* `formatValue(value, text, siUnit, dimension)` — 인자가 넷이다.
+                  셋으로 부르면 단위 자리에 dimension 이 들어가는데, 타입이 전부
+                  `string | null` 이라 컴파일러가 안 잡는다(실제로 그렇게 썼다). */}
+              {field.si_unit
+                ? formatValue(
+                    Number(item.conditions[field.key]),
+                    null,
+                    field.si_unit,
+                    field.dimension
+                  )
+                : String(item.conditions[field.key])}
+            </dd>
+          </div>
+        ))}
+        {filledMeta.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-muted-foreground text-xs">{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
