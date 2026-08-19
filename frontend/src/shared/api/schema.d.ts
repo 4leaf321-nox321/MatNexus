@@ -3432,6 +3432,8 @@ export interface components {
             orientation: string;
             /** Seq No */
             seq_no?: number | null;
+            /** Standard */
+            standard?: string | null;
             /** Thickness */
             thickness?: number | null;
             /** Width */
@@ -3479,6 +3481,8 @@ export interface components {
             sample_id: string;
             /** Seq No */
             seq_no: number;
+            /** Standard */
+            standard: string | null;
             /**
              * Test Run Count
              * @default 0
@@ -3502,6 +3506,8 @@ export interface components {
             length_unit?: string | null;
             /** Note */
             note?: string | null;
+            /** Standard */
+            standard?: string | null;
             /** Thickness */
             thickness?: number | null;
             /** Width */
@@ -3740,6 +3746,8 @@ export interface components {
             specimen_id: string;
             /** Specimen Name */
             specimen_name: string | null;
+            /** Specimen Standard */
+            specimen_standard?: string | null;
             /** Status */
             status: string;
             /** Summary */
@@ -3811,6 +3819,8 @@ export interface components {
             specimen_id: string;
             /** Specimen Name */
             specimen_name: string | null;
+            /** Specimen Standard */
+            specimen_standard?: string | null;
             /** Status */
             status: string;
             /** Test Type Key */

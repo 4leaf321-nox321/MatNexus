@@ -46,8 +46,10 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("speed_elastic", "탄성역 속도", "number", "velocity", "m/s", None, False),
             ("speed_plastic", "소성역 속도", "number", "velocity", "m/s", None, False),
             ("preload", "예하중", "number", "force", "N", None, False),
+            # **시편 규격은 여기 없다.** 시편으로 옮겼다(`Specimen.standard`) —
+            # 규격은 자를 때 정해지고 게이지 길이·폭을 정하는 쪽이다. 여기 남은
+            # 것들은 전부 **시험할 때 정해지는 것**이다.
             ("sensor_type", "센서 종류", "text", None, None, None, False),
-            ("specimen_standard", "시편 규격", "text", None, None, None, False),
             ("testing_group", "시험 그룹", "text", None, None, None, False),
         ],
     },

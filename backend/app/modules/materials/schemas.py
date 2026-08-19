@@ -192,6 +192,11 @@ class SpecimenOut(BaseModel):
     orientation: str
     record_name: str
 
+    standard: str | None
+    """시편 규격. **자를 때 정해지고 아래 치수를 정하는 쪽이다.**
+
+    전에는 시험 조건에 있었다 — 정해지는 값이 시편에, 정하는 값이 시험에 있어
+    인과가 반대였다. 장비 파일에도 없다(사람이 아는 값이다)."""
     thickness: float | None
     width: float | None
     gauge_length: float | None
@@ -214,6 +219,7 @@ class SpecimenCreateRequest(BaseModel):
     orientation: str = Field(default="NA", max_length=10)
     seq_no: int | None = Field(default=None, ge=1)
     """생략하면 방향별로 이어서 채번한다."""
+    standard: str | None = Field(default=None, max_length=100)
     thickness: float | None = Field(default=None, gt=0)
     width: float | None = Field(default=None, gt=0)
     gauge_length: float | None = Field(default=None, gt=0)
@@ -222,6 +228,7 @@ class SpecimenCreateRequest(BaseModel):
 
 
 class SpecimenUpdateRequest(BaseModel):
+    standard: str | None = Field(default=None, max_length=100)
     thickness: float | None = Field(default=None, gt=0)
     width: float | None = Field(default=None, gt=0)
     gauge_length: float | None = Field(default=None, gt=0)

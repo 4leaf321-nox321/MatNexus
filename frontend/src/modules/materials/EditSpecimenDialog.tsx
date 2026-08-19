@@ -43,6 +43,7 @@ interface Props {
 /** 숫자를 문자열로 들고 있는다 — `Number('0.')` 이 0 이 되어 소수점이 지워진다. */
 function initial(specimen: Specimen) {
   return {
+    standard: specimen.standard ?? '',
     thickness: specimen.thickness == null ? '' : String(specimen.thickness),
     width: specimen.width == null ? '' : String(specimen.width),
     gauge_length: specimen.gauge_length == null ? '' : String(specimen.gauge_length),
@@ -74,6 +75,7 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
     setFailure(null)
     try {
       await materialsApi.updateSpecimen(specimen.id, {
+        standard: form.standard === '' ? null : form.standard,
         // 빈 칸은 보내지 않는다 — 서버가 `exclude_unset` 으로 안 건드린다.
         // 0 을 보내면 "쟀는데 0" 이 되고, 그것은 없는 것과 다르다.
         ...(form.thickness === '' ? {} : { thickness: Number(form.thickness) }),
@@ -104,6 +106,15 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="sp-standard">시편 규격</Label>
+            <Input
+              id="sp-standard"
+              placeholder="ASTM E8 subsize / JIS 5호 …"
+              {...field('standard')}
+            />
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="sp-thickness">두께 (mm)</Label>

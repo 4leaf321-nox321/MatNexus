@@ -98,6 +98,8 @@ interface Row {
    * **파일에서 채우는 것과 손으로 넣는 것이 둘 다 필요하다.** 게이지 길이는
    * 장비 파일에 아예 없고, 두께·폭도 장비가 잘못 적어 오는 경우가 있다.
    */
+  /** 시편 규격. 장비 파일에 없어 사람이 넣어야 하고, 대개 한 배치가 같다. */
+  standard: string
   thickness: string
   width: string
   gauge: string
@@ -175,6 +177,7 @@ export default function BatchUploadPage() {
       materialId: null,
       sampleId: null,
       specimen: null,
+      standard: '',
       thickness: '',
       width: '',
       gauge: '',
@@ -282,6 +285,7 @@ export default function BatchUploadPage() {
             orientation: specimenId.slice(4),
             // 손으로 넣은 값이 있으면 만들 때 함께 넣는다. 빈 칸은 안 보낸다 —
             // 0 을 보내면 "쟀는데 0" 이 되고, 그것은 없는 것과 다르다.
+            ...(row.standard === '' ? {} : { standard: row.standard }),
             ...(row.thickness === '' ? {} : { thickness: Number(row.thickness) }),
             ...(row.width === '' ? {} : { width: Number(row.width) }),
             ...(row.gauge === '' ? {} : { gauge_length: Number(row.gauge) }),
@@ -541,6 +545,19 @@ export default function BatchUploadPage() {
                 모자란다 — 게이지 길이는 장비 파일에 아예 없고, 두께·폭도 장비가
                 잘못 적어 오는 경우가 있다. 대개 한 배치가 같은 규격이라 일괄로
                 넣고, 다른 줄만 표에서 고친다. */}
+            {/* **규격이 치수를 정한다.** 그래서 치수 바로 위다. 장비 파일에는
+                없는 값이라(번호·두께 a0·폭 b0 뿐) 사람이 넣지 않으면 아무 데서도
+                안 온다. 대개 한 배치가 같은 규격이다. */}
+            <div className="space-y-1">
+              <Label className="text-muted-foreground text-xs">시편 규격 일괄 지정</Label>
+              <Input
+                className="h-8 w-64 text-xs"
+                placeholder="ASTM E8 subsize / JIS 5호 …"
+                aria-label="시편 규격 일괄 지정"
+                onChange={(event) => assignSelected({ standard: event.target.value })}
+              />
+            </div>
+
             <div className="space-y-1">
               <Label className="text-muted-foreground text-xs">
                 시편 치수 일괄 지정 (mm)

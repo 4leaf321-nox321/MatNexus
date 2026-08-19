@@ -240,6 +240,21 @@ class Specimen(Base):
     """MD/TD/DD/NA. 이름의 한 칸이므로 비울 수 없다 — 모르면 `NA`."""
     record_name: Mapped[str] = mapped_column(String(300), index=True)
 
+    standard: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    """시편 규격(ASTM E8 subsize, JIS 5호 …). **시편을 어떻게 잘랐는가다.**
+
+    전에는 시험 조건에 있었다. 그런데 규격은 시험할 때 정하는 것이 아니라 자를
+    때 정해지고, **아래 게이지 길이·폭을 정하는 쪽**이다 — 정해지는 값은 시편에,
+    정하는 값은 시험에 있어 인과가 반대로 놓여 있었다.
+
+    장비 파일에도 없다. Zwick `.tra` 가 주는 시편 정보는 번호·두께 a0·폭 b0
+    셋뿐이고(실측 112건 전수 확인), 규격은 사람이 아는 값이다 — 게이지 길이가
+    원본에 없는 것과 같은 이유다.
+
+    시험마다 넣게 하면 같은 시편의 시험 두 건에 다른 규격이 적히는 것을 막을
+    방법이 없었다.
+    """
+
     thickness_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     width_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     gauge_length_m: Mapped[float | None] = mapped_column(Float, nullable=True)

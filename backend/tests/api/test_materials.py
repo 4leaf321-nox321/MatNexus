@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Material
+from app.modules.tests.definitions import ensure_builtin_test_types
 
 SECC = {
     "family": "Metal",
@@ -428,3 +429,53 @@ class TestClassifications:
             "/api/materials?family=Metal&category=PP", headers=admin_headers
         ).json()
         assert crossed["total"] == 0
+
+
+class Test시편규격:
+    """**규격은 자를 때 정해진다. 시험할 때가 아니다.**
+
+    전에는 시험 조건에 있었다. 그런데 규격은 게이지 길이·폭을 **정하는 쪽**이고,
+    정해지는 값(치수)은 시편에 있었다 — 인과가 반대로 놓여 있었다. 게다가 장비
+    파일에 없는 값이라 사람이 넣어야 하는데, 시험마다 넣게 하면 같은 시편의
+    시험 두 건에 다른 규격이 적히는 것을 막을 수 없었다.
+    """
+
+    def test_시편에_규격을_적고_고친다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        created = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "standard": "ASTM E8 subsize"},
+            headers=admin_headers,
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["standard"] == "ASTM E8 subsize"
+
+        changed = client.patch(
+            f"/api/specimens/{created.json()['id']}",
+            json={"standard": "JIS 5호"},
+            headers=admin_headers,
+        )
+        assert changed.json()["standard"] == "JIS 5호"
+
+    def test_시험_조건에는_더_이상_없다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """두 자리에 있으면 어느 쪽이 맞는지 물어야 한다.
+
+        정의를 남겨 두면 업로드 창에 칸이 계속 뜨고, 같은 값을 두 번 넣게 된다.
+        """
+        ensure_builtin_test_types(db)
+        db.commit()
+        types = {
+            item["key"]: item
+            for item in client.get("/api/test-types", headers=admin_headers).json()
+        }
+        keys = {field["key"] for field in types["tensile"]["conditions"]}
+        assert "specimen_standard" not in keys
+        # 시험할 때 정해지는 것들은 그대로 남는다.
+        assert {"temperature", "speed_elastic", "sensor_type"} <= keys

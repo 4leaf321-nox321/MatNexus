@@ -559,6 +559,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         specimen_id=run.specimen_id,
         specimen_name=specimen.record_name if specimen else None,
         orientation=specimen.orientation if specimen else None,
+        specimen_standard=specimen.standard if specimen else None,
         material_id=material.id if material else None,
         material_name=material.record_name if material else None,
         test_type_key=test_type.key if test_type else "?",

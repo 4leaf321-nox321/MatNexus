@@ -166,6 +166,7 @@ def _specimen_out(specimen: Specimen, *, runs: RunTally = (0, 0, 0)) -> Specimen
         seq_no=specimen.seq_no,
         orientation=specimen.orientation,
         record_name=specimen.record_name,
+        standard=specimen.standard,
         thickness=services.from_si(specimen.thickness_m, unit),
         width=services.from_si(specimen.width_m, unit),
         gauge_length=services.from_si(specimen.gauge_length_m, unit),
@@ -418,6 +419,35 @@ def property_sources(
             edit_hint=None if material.spec_thickness_m is not None else "재료 수정",
         )
     ]
+
+    # **규격이 치수를 정한다.** 두 줄을 나란히 둬야 그 관계가 보인다 — 규격을
+    # 알면서 치수를 비워 두는 것은 대개 아직 안 적은 것이지 없는 것이 아니다.
+    standards = {s.standard for s in specimens if s.standard}
+    rows.append(
+        ValueSourceOut(
+            key="specimen_standard",
+            label="시편 규격",
+            value=None,
+            display_unit="",
+            level="specimen",
+            origin=(
+                ", ".join(sorted(standards)) + f" (시편 {len(specimens)}개 중 "
+                f"{sum(1 for s in specimens if s.standard)}개에 적힘)"
+                if standards
+                else "적혀 있지 않습니다. 장비 파일에는 없는 값이라 사람이 넣어야 합니다."
+            ),
+            status="ok"
+            if standards and len(standards) == 1
+            else "conflict"
+            if standards
+            else "missing",
+            used_for=(
+                "게이지 길이·폭이 여기서 나옵니다. "
+                "다른 규격끼리는 연신율을 비교할 수 없습니다."
+            ),
+            edit_hint=None if len(standards) == 1 else "시편 수정",
+        )
+    )
 
     measured = [s.thickness_m for s in specimens if s.thickness_m is not None]
     rows.append(
@@ -814,6 +844,7 @@ def create_specimen(
         record_name=naming.specimen_name(
             sample=sample.record_name, orientation=orientation, seq_no=seq_no
         ),
+        standard=payload.standard,
         thickness_m=services.to_si(payload.thickness, payload.length_unit, field="두께"),
         width_m=services.to_si(payload.width, payload.length_unit, field="폭"),
         gauge_length_m=services.to_si(
@@ -872,8 +903,9 @@ def update_specimen(
     ):
         if field in data:
             setattr(specimen, column, services.to_si(data[field], unit, field=field))
-    if "note" in data:
-        specimen.note = data["note"]
+    for field in ("standard", "note"):
+        if field in data:
+            setattr(specimen, field, data[field])
     specimen.input_units = {**specimen.input_units, "length": unit}
 
     db.commit()

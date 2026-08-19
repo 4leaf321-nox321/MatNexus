@@ -4715,6 +4715,18 @@
             ],
             "title": "Seq No"
           },
+          "standard": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          },
           "thickness": {
             "anyOf": [
               {
@@ -4809,6 +4821,17 @@
             "title": "Seq No",
             "type": "integer"
           },
+          "standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          },
           "test_run_count": {
             "default": 0,
             "title": "Test Run Count",
@@ -4849,6 +4872,7 @@
           "seq_no",
           "orientation",
           "record_name",
+          "standard",
           "thickness",
           "width",
           "gauge_length",
@@ -4893,6 +4917,18 @@
               }
             ],
             "title": "Note"
+          },
+          "standard": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
           },
           "thickness": {
             "anyOf": [
@@ -5602,6 +5638,17 @@
             ],
             "title": "Specimen Name"
           },
+          "specimen_standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Standard"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -5860,6 +5907,17 @@
               }
             ],
             "title": "Specimen Name"
+          },
+          "specimen_standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Standard"
           },
           "status": {
             "title": "Status",

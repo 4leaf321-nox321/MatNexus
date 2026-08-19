@@ -86,6 +86,11 @@ class TestRunOut(BaseModel):
     specimen_id: uuid.UUID
     specimen_name: str | None
     orientation: str | None
+    specimen_standard: str | None = None
+    """시편 규격. **시편의 값이고 시험의 값이 아니다** — 그래도 여기 실어 준다.
+
+    곡선을 보는 자리에서 "이게 어떤 시편이었나" 를 알아야 한다. 다른 규격끼리
+    연신율을 견주면 그 차이는 재료 차이가 아니라 시편 차이다."""
     material_id: uuid.UUID | None
     material_name: str | None
 

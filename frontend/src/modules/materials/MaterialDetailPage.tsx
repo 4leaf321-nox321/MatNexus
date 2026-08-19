@@ -523,6 +523,13 @@ function SpecimenRow({
           )}
           <Badge variant="secondary">{specimen.orientation}</Badge>
           <span className="font-mono text-xs">{specimen.record_name}</span>
+          {/* **규격이 치수를 정한다.** 치수 옆에 붙여야 그 관계가 보이고, 다른
+              규격끼리 연신율을 견주고 있는지도 여기서 걸린다. */}
+          {specimen.standard && (
+            <Badge variant="outline" className="text-xs">
+              {specimen.standard}
+            </Badge>
+          )}
           <span className="text-muted-foreground ml-auto tabular-nums">
             {dimensions} {specimen.length_unit}
           </span>
@@ -540,7 +547,7 @@ function SpecimenRow({
         <Button
           size="sm"
           variant="ghost"
-          title="시편 수정 (치수·메모)"
+          title="시편 수정 (규격·치수·메모)"
           onClick={() => setEditing(true)}
         >
           <Pencil className="size-3.5" />
@@ -592,7 +599,7 @@ function AddSpecimenDialog({
   onDone: () => void
 }) {
   const [orientation, setOrientation] = useState<string>('MD')
-  const [form, setForm] = useState({ thickness: '', width: '', gauge_length: '' })
+  const [form, setForm] = useState({ standard: '', thickness: '', width: '', gauge_length: '' })
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -602,12 +609,13 @@ function AddSpecimenDialog({
     try {
       await materialsApi.createSpecimen(sampleId, {
         orientation,
+        standard: form.standard || null,
         thickness: form.thickness === '' ? null : Number(form.thickness),
         width: form.width === '' ? null : Number(form.width),
         gauge_length: form.gauge_length === '' ? null : Number(form.gauge_length),
         length_unit: LENGTH_UNIT,
       })
-      setForm({ thickness: '', width: '', gauge_length: '' })
+      setForm({ standard: '', thickness: '', width: '', gauge_length: '' })
       onDone()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('등록에 실패했습니다.'))
@@ -647,6 +655,18 @@ function AddSpecimenDialog({
               </Button>
             ))}
           </div>
+        </div>
+
+        {/* **규격이 치수를 정한다.** 그래서 치수 위에 둔다 — 아래 세 칸이
+            어디서 나온 값인지가 이 한 줄이다. 장비 파일에는 없어서 사람이
+            넣어야 하는 값이기도 하다. */}
+        <div className="space-y-1.5">
+          <Label htmlFor="sp-standard">시편 규격</Label>
+          <Input
+            id="sp-standard"
+            placeholder="ASTM E8 subsize / JIS 5호 …"
+            {...field('standard')}
+          />
         </div>
 
         <div className="grid grid-cols-3 gap-3">
