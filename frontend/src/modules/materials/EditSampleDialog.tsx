@@ -8,6 +8,8 @@
  * 번호(`seq_no`)는 여기서 안 바꾼다. 그것이 시료 이름을 만들고 이름은 시편과
  * 시험까지 따라 내려간다(ADR 0004).
  *
+ * 적용 제품·부위는 여기 없다. 재료의 용도이지 로트의 행선지가 아니다.
+ *
  * 밀도는 **이 로트에서 잰 값**일 때만 넣는다. 재료의 공칭값과 다른 자리이고,
  * 카드는 이쪽을 먼저 쓴다 — 관례값을 여기 적으면 그것이 실측인 척하게 된다.
  * 푸아송비는 여기 없다. 로트마다 달라지는 값이 아니라 재료에 있다.
@@ -47,8 +49,6 @@ function initial(sample: Sample): SampleForm {
     distributor: sample.distributor ?? '',
     primary_vendor: sample.primary_vendor ?? '',
     sales_type: sample.sales_type ?? '',
-    applied_product: sample.applied_product ?? '',
-    applied_part: sample.applied_part ?? '',
     production_date: sample.production_date ?? '',
     density: sample.density == null ? '' : String(sample.density),
     note: sample.note ?? '',

@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, FileDown, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, FileDown, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type {
@@ -29,6 +29,7 @@ import type {
 } from '@/modules/fitting/api'
 import { statisticsApi } from '@/modules/statistics/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
+import { ApiError } from '@/shared/api/client'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -412,6 +413,7 @@ function CardList({
 }) {
   // 카드마다 부르지 않는다 — 목록에 20장이 있으면 같은 요청이 20번 나간다.
   const formats = useResource(() => fittingApi.formats(), [])
+  const [renaming, setRenaming] = useState<string | null>(null)
 
   async function act(action: () => Promise<unknown>) {
     try {
@@ -436,6 +438,15 @@ function CardList({
       <h3 className="font-medium">물성 카드</h3>
       {cards.map((card) => (
         <div key={card.id} className="rounded-md border p-3">
+          <RenameCardDialog
+            card={card}
+            open={renaming === card.id}
+            onClose={() => setRenaming(null)}
+            onSaved={() => {
+              setRenaming(null)
+              onChanged()
+            }}
+          />
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{card.label}</span>
             <Badge
@@ -458,6 +469,15 @@ function CardList({
               <ExportMenu card={card} formats={formats.data ?? []} onError={onError} />
               {card.status === 'draft' && (
                 <>
+                  {/* **오타를 고치려고 적합을 다시 돌리게 하지 않는다.** */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title="이름·메모 고치기 (값은 안 바뀝니다)"
+                    onClick={() => setRenaming(card.id)}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
                   <Button
                     size="sm"
                     onClick={() => act(() => fittingApi.publish(card.id))}
@@ -772,5 +792,96 @@ function InheritNote({ row, overridden }: { row?: InheritedValue; overridden: bo
     <p className="text-xs text-amber-700 dark:text-amber-500">
       {row.detail ?? '물려받을 값이 없습니다.'}
     </p>
+  )
+}
+
+/**
+ * 초안 카드의 이름·메모 고치기.
+ *
+ * **불변이 오타까지 지키고 있었다.** 값(`elastic`·`hardening`·`table`)은 못
+ * 바꾸는 것이 맞다 — 그래야 "이 카드가 무엇으로 나왔나" 에 항상 답할 수 있다.
+ * 그런데 이름을 고칠 길도 없어서, 오타 하나에 카드를 지우고 적합을 다시 돌려야
+ * 했다. 그건 불변이 지키려던 것과 아무 상관이 없다.
+ *
+ * 확정된 카드는 이름도 못 바꾼다. 그 이름으로 덱이 이미 나갔을 수 있다.
+ */
+function RenameCardDialog({
+  card,
+  open,
+  onClose,
+  onSaved,
+}: {
+  card: PropertyCard
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [label, setLabel] = useState(card.label)
+  const [note, setNote] = useState(card.note ?? '')
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      setLabel(card.label)
+      setNote(card.note ?? '')
+      setFailure(null)
+    }
+  }, [open, card])
+
+  async function submit() {
+    setBusy(true)
+    setFailure(null)
+    try {
+      await fittingApi.update(card.id, { label, note: note === '' ? null : note })
+      onSaved()
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.message : '저장하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>카드 이름 고치기</DialogTitle>
+          <DialogDescription>
+            이름과 메모만 바뀝니다. <b>값은 못 바꿉니다</b> — 다시 적합하려면 새 카드를
+            만드세요.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="rename-label">이름</Label>
+            <Input
+              id="rename-label"
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rename-note">메모</Label>
+            <Input
+              id="rename-note"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </div>
+          {failure && <p className="text-destructive text-sm">{failure}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            취소
+          </Button>
+          <Button onClick={submit} disabled={busy || label.trim() === ''}>
+            저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

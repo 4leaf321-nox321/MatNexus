@@ -323,6 +323,8 @@ const EMPTY = {
   grade: '',
   details: '',
   spec_thickness: '',
+  applied_product: '',
+  applied_part: '',
   density: '',
   poisson_ratio: '',
   alias: '',
@@ -381,6 +383,8 @@ function RegisterDialog({
         details: form.details || null,
         spec_thickness: thickness,
         spec_thickness_unit: LENGTH_UNIT,
+        applied_product: form.applied_product || null,
+        applied_part: form.applied_part || null,
         density: form.density === '' ? null : Number(form.density),
         density_unit: DENSITY_UNIT,
         poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
@@ -437,6 +441,14 @@ function RegisterDialog({
           </div>
           {/* CAE 물성. **여기 없으면 카드를 만들 때 막힌다** — 그때 되돌아와
               채우는 것보다 아는 값이면 지금 넣는 편이 싸다. 비워도 등록된다. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="product">적용 제품 (선택)</Label>
+            <Input id="product" placeholder="도어" {...field('applied_product')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="part">적용 부위 (선택)</Label>
+            <Input id="part" placeholder="이너 패널" {...field('applied_part')} />
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="density">밀도 (kg/m³, 선택)</Label>
             <Input id="density" type="number" step="1" placeholder="7850" {...field('density')} />

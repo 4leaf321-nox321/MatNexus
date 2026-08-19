@@ -34,8 +34,6 @@ describe('시료 폼', () => {
     expect(Object.keys(EMPTY_SAMPLE).sort()).toEqual(
       [
         'alias',
-        'applied_part',
-        'applied_product',
         'density',
         'distributor',
         'lot_no',

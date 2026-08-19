@@ -1925,6 +1925,30 @@
             ],
             "title": "Alias"
           },
+          "applied_part": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Part"
+          },
+          "applied_product": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Product"
+          },
           "category": {
             "maxLength": 50,
             "minLength": 1,
@@ -2057,6 +2081,28 @@
               }
             ],
             "title": "Alias"
+          },
+          "applied_part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Part"
+          },
+          "applied_product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Product"
           },
           "category": {
             "title": "Category",
@@ -2209,6 +2255,8 @@
           "grade",
           "details",
           "spec_thickness",
+          "applied_product",
+          "applied_part",
           "density",
           "poisson_ratio",
           "note",
@@ -2260,6 +2308,30 @@
               }
             ],
             "title": "Alias"
+          },
+          "applied_part": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Part"
+          },
+          "applied_product": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Product"
           },
           "category": {
             "anyOf": [
@@ -3598,6 +3670,37 @@
         "title": "PropertyCardSaveRequest",
         "type": "object"
       },
+      "PropertyCardUpdateRequest": {
+        "description": "**이름과 메모만.** 값은 못 바꾼다.\n\n카드는 불변이다 — `elastic`·`hardening`·`table` 을 고치는 길은 없고, 고치려면\n새로 만든다(ADR 0007 과 같은 모델). 그런데 그 원칙이 **이름 오타까지 못 고치게**\n만들고 있었다. 지우고 다시 만드는 수밖에 없었고, 그러면 적합을 다시 돌린다.\n\n확정된 카드는 이름도 못 바꾼다. 그 이름으로 덱이 이미 나갔을 수 있다.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "PropertyCardUpdateRequest",
+        "type": "object"
+      },
       "PropertySourcesOut": {
         "properties": {
           "material_id": {
@@ -3992,30 +4095,6 @@
             ],
             "title": "Alias"
           },
-          "applied_part": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Part"
-          },
-          "applied_product": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Product"
-          },
           "density": {
             "anyOf": [
               {
@@ -4148,28 +4227,6 @@
               }
             ],
             "title": "Alias"
-          },
-          "applied_part": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Part"
-          },
-          "applied_product": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Product"
           },
           "created_at": {
             "format": "date-time",
@@ -4332,8 +4389,6 @@
           "distributor",
           "primary_vendor",
           "sales_type",
-          "applied_product",
-          "applied_part",
           "production_date",
           "density",
           "note",
@@ -4356,30 +4411,6 @@
               }
             ],
             "title": "Alias"
-          },
-          "applied_part": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Part"
-          },
-          "applied_product": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Product"
           },
           "density": {
             "anyOf": [
@@ -8145,6 +8176,58 @@
           }
         },
         "summary": "Get Card",
+        "tags": [
+          "fitting"
+        ]
+      },
+      "patch": {
+        "description": "이름과 메모를 고친다. **초안일 때만.**\n\n값은 여기서도 못 바꾼다 — 바꾸는 길이 아예 없어야 \"이 카드가 무엇으로\n나왔나\" 에 항상 답할 수 있다. 다만 이름 오타 하나 때문에 카드를 지우고\n적합을 다시 돌리게 하는 것은 그 원칙이 지키려던 것과 무관하다.",
+        "operationId": "update_card_api_fitting_cards__card_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyCardUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyCardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Card",
         "tags": [
           "fitting"
         ]

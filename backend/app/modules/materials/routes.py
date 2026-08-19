@@ -74,6 +74,8 @@ def _material_out(
         details=material.details,
         spec_thickness=services.from_si(material.spec_thickness_m, unit),
         spec_thickness_unit=unit,
+        applied_product=material.applied_product,
+        applied_part=material.applied_part,
         density=services.from_si(material.density_si, density_unit),
         density_unit=density_unit,
         poisson_ratio=material.poisson_ratio,
@@ -143,8 +145,6 @@ def _sample_out(
         distributor=sample.distributor,
         primary_vendor=sample.primary_vendor,
         sales_type=sample.sales_type,
-        applied_product=sample.applied_product,
-        applied_part=sample.applied_part,
         production_date=sample.production_date,
         density=services.from_si(sample.density_si, unit),
         density_unit=unit,
@@ -336,6 +336,8 @@ def create_material(
         grade=payload.grade,
         details=payload.details,
         spec_thickness_m=thickness_m,
+        applied_product=payload.applied_product,
+        applied_part=payload.applied_part,
         density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
         poisson_ratio=payload.poisson_ratio,
         input_units={
@@ -566,7 +568,17 @@ def update_material(
     services.require_writable(db, user, material)
 
     data = payload.model_dump(exclude_unset=True)
-    for field in ("family", "category", "grade", "details", "alias", "note", "poisson_ratio"):
+    for field in (
+        "family",
+        "category",
+        "grade",
+        "details",
+        "alias",
+        "note",
+        "poisson_ratio",
+        "applied_product",
+        "applied_part",
+    ):
         if field in data:
             setattr(material, field, data[field])
 
@@ -694,8 +706,6 @@ def create_sample(
         distributor=payload.distributor,
         primary_vendor=payload.primary_vendor,
         sales_type=payload.sales_type,
-        applied_product=payload.applied_product,
-        applied_part=payload.applied_part,
         production_date=payload.production_date,
         density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
         input_units={"density": payload.density_unit},
@@ -749,8 +759,6 @@ def update_sample(
         "distributor",
         "primary_vendor",
         "sales_type",
-        "applied_product",
-        "applied_part",
         "production_date",
         "note",
     ):

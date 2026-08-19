@@ -34,6 +34,7 @@ from app.modules.fitting.schemas import (
     InheritedValueOut,
     PropertyCardOut,
     PropertyCardSaveRequest,
+    PropertyCardUpdateRequest,
 )
 from app.modules.materials.models import Material, Sample
 from app.modules.statistics import services as statistics_services
@@ -556,6 +557,37 @@ STATUS_NOTES = {
     "published": "확정",
     "deprecated": "내려진 카드 — 쓰지 마세요",
 }
+
+
+@router.patch("/cards/{card_id}", response_model=PropertyCardOut)
+def update_card(
+    card_id: uuid.UUID,
+    payload: PropertyCardUpdateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """이름과 메모를 고친다. **초안일 때만.**
+
+    값은 여기서도 못 바꾼다 — 바꾸는 길이 아예 없어야 "이 카드가 무엇으로
+    나왔나" 에 항상 답할 수 있다. 다만 이름 오타 하나 때문에 카드를 지우고
+    적합을 다시 돌리게 하는 것은 그 원칙이 지키려던 것과 무관하다.
+    """
+    item = _visible_card(db, user, card_id)
+    if item.status != "draft":
+        raise AppError(
+            "MNX-FITTING-0009",
+            "확정된 카드는 이름을 바꿀 수 없습니다. 그 이름으로 덱이 이미 "
+            "나갔을 수 있습니다 — 새 카드를 만드세요.",
+            status=409,
+        )
+
+    data = payload.model_dump(exclude_unset=True)
+    for field in ("label", "note"):
+        if field in data:
+            setattr(item, field, data[field])
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item)
 
 
 @router.post("/cards/{card_id}/publish", response_model=PropertyCardOut)

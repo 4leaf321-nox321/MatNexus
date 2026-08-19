@@ -47,6 +47,8 @@ function initial(material: Material) {
     // **문자열로 들고 있는다.** 숫자 입력을 제어 컴포넌트로 두면 `Number('0.')`
     // 이 0 이 되어 소수점을 찍는 순간 지워진다 — 처리 옵션에서 겪은 것과 같다.
     spec_thickness: material.spec_thickness == null ? '' : String(material.spec_thickness),
+    applied_product: material.applied_product ?? '',
+    applied_part: material.applied_part ?? '',
     density: material.density == null ? '' : String(material.density),
     poisson_ratio: material.poisson_ratio == null ? '' : String(material.poisson_ratio),
     alias: material.alias ?? '',
@@ -109,6 +111,8 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
         details: form.details || null,
         spec_thickness: thickness,
         spec_thickness_unit: LENGTH_UNIT,
+        applied_product: form.applied_product || null,
+        applied_part: form.applied_part || null,
         density: form.density === '' ? null : Number(form.density),
         density_unit: DENSITY_UNIT,
         poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
@@ -168,6 +172,20 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
 
             밀도는 여기가 '공칭' 이다. 로트에서 잰 값이 있으면 시료에 넣고,
             카드는 그쪽을 먼저 쓴다. */}
+        {/* **용도는 재료의 성질이다.** 시료에 있었을 때는 "도어 이너용 재료가
+            뭐가 있나" 를 물으려면 로트를 전부 뒤져야 했고, 같은 재료의 로트
+            다섯 개에 같은 용도를 다섯 번 적어야 했다. */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-product">적용 제품</Label>
+            <Input id="edit-product" placeholder="도어" {...field('applied_product')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-part">적용 부위</Label>
+            <Input id="edit-part" placeholder="이너 패널" {...field('applied_part')} />
+          </div>
+        </div>
+
         <div className="rounded-md border p-3">
           <p className="mb-2 text-sm font-medium">CAE 물성</p>
           <div className="grid gap-3 sm:grid-cols-2">

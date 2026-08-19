@@ -36,6 +36,10 @@ class MaterialOut(BaseModel):
     spec_thickness_unit: str = LENGTH_UNIT
     """**규격 두께다.** 계산에 쓰는 것은 시편의 실측 두께다."""
 
+    applied_product: str | None
+    applied_part: str | None
+    """이 재료를 어디에 쓰는가. **재료의 용도이지 로트의 행선지가 아니다.**"""
+
     density: float | None
     density_unit: str = DENSITY_UNIT
     """공칭 밀도. 로트 실측은 시료에 있고, 카드는 실측을 먼저 본다."""
@@ -56,6 +60,8 @@ class MaterialCreateRequest(BaseModel):
     details: str | None = Field(default=None, max_length=100)
     spec_thickness: float | None = Field(default=None, gt=0)
     spec_thickness_unit: str = LENGTH_UNIT
+    applied_product: str | None = Field(default=None, max_length=100)
+    applied_part: str | None = Field(default=None, max_length=100)
     density: float | None = Field(default=None, gt=0)
     density_unit: str = DENSITY_UNIT
     poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
@@ -87,6 +93,8 @@ class MaterialUpdateRequest(BaseModel):
     details: str | None = Field(default=None, max_length=100)
     spec_thickness: float | None = Field(default=None, gt=0)
     spec_thickness_unit: str | None = None
+    applied_product: str | None = Field(default=None, max_length=100)
+    applied_part: str | None = Field(default=None, max_length=100)
     density: float | None = Field(default=None, gt=0)
     density_unit: str | None = None
     poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
@@ -127,8 +135,6 @@ class SampleOut(BaseModel):
     distributor: str | None
     primary_vendor: str | None
     sales_type: str | None
-    applied_product: str | None
-    applied_part: str | None
     production_date: date | None
 
     density: float | None
@@ -157,8 +163,6 @@ class SampleCreateRequest(BaseModel):
     distributor: str | None = Field(default=None, max_length=100)
     primary_vendor: str | None = Field(default=None, max_length=100)
     sales_type: str | None = Field(default=None, max_length=50)
-    applied_product: str | None = Field(default=None, max_length=100)
-    applied_part: str | None = Field(default=None, max_length=100)
     production_date: date | None = None
     density: float | None = Field(default=None, gt=0)
     density_unit: str = DENSITY_UNIT
@@ -173,8 +177,6 @@ class SampleUpdateRequest(BaseModel):
     distributor: str | None = Field(default=None, max_length=100)
     primary_vendor: str | None = Field(default=None, max_length=100)
     sales_type: str | None = Field(default=None, max_length=50)
-    applied_product: str | None = Field(default=None, max_length=100)
-    applied_part: str | None = Field(default=None, max_length=100)
     production_date: date | None = None
     density: float | None = Field(default=None, gt=0)
     density_unit: str | None = None

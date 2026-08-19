@@ -220,6 +220,59 @@ class Test미리보기:
 
 
 class Test물성카드:
+    def test_초안_카드는_이름을_고칠_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**불변이 오타까지 지키고 있었다.**
+
+        값을 못 바꾸는 것은 맞다. 그런데 이름을 고칠 길도 없어서 오타 하나에
+        카드를 지우고 적합을 다시 돌려야 했다 — 불변이 지키려던 것과 무관하다.
+        """
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "오타난이름",
+            },
+            headers=admin_headers,
+        ).json()
+
+        fixed = client.patch(
+            f"/api/fitting/cards/{card['id']}",
+            json={"label": "인장 MD (상온)", "note": "메모"},
+            headers=admin_headers,
+        )
+        assert fixed.status_code == 200, fixed.text
+        assert fixed.json()["label"] == "인장 MD (상온)"
+        # **값은 그대로다.** 여기가 흔들리면 카드를 믿을 근거가 사라진다.
+        assert fixed.json()["elastic"] == card["elastic"]
+        assert fixed.json()["point_count"] == card["point_count"]
+
+    def test_확정된_카드는_이름도_못_바꾼다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """그 이름으로 덱이 이미 나갔을 수 있다."""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "확정할 카드",
+            },
+            headers=admin_headers,
+        ).json()
+        client.post(f"/api/fitting/cards/{card['id']}/publish", headers=admin_headers)
+
+        denied = client.patch(
+            f"/api/fitting/cards/{card['id']}",
+            json={"label": "바꾸기"},
+            headers=admin_headers,
+        )
+        assert denied.status_code == 409, denied.text
+
     def test_식을_안_골라도_표로_카드가_된다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
     ) -> None:

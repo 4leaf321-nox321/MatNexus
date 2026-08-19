@@ -38,7 +38,7 @@ router = APIRouter(prefix="/statistics", tags=["statistics"])
 
 
 def _group_out(db: Session, group: services.Group, *, threshold: float) -> GroupOut:
-    notes = services.setting_warnings(group)
+    notes = [*services.setting_warnings(group), *services.sample_warnings(db, group)]
     curve = None
     # **1건이어도 곡선은 낸다.** 그 한 곡선이 곧 대표다 — 평균을 낼 상대가
     # 없다는 것과 그릴 곡선이 없다는 것은 다르다. `curve_table` 이 1건을

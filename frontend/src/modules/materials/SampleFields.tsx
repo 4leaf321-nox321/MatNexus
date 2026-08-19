@@ -25,8 +25,6 @@ export interface SampleForm {
   distributor: string
   primary_vendor: string
   sales_type: string
-  applied_product: string
-  applied_part: string
   production_date: string
   density: string
   note: string
@@ -39,8 +37,6 @@ export const EMPTY_SAMPLE: SampleForm = {
   distributor: '',
   primary_vendor: '',
   sales_type: '',
-  applied_product: '',
-  applied_part: '',
   production_date: '',
   density: '',
   note: '',
@@ -55,8 +51,6 @@ export function samplePayload(form: SampleForm, densityUnit: string) {
     distributor: form.distributor || null,
     primary_vendor: form.primary_vendor || null,
     sales_type: form.sales_type || null,
-    applied_product: form.applied_product || null,
-    applied_part: form.applied_part || null,
     production_date: form.production_date || null,
     density: form.density === '' ? null : Number(form.density),
     // **단위를 항상 명시해 보낸다.** 생략 가능하게 두면 "이 값이 kg/m³ 였나
@@ -73,8 +67,6 @@ const FIELDS: { key: keyof SampleForm; label: string; type?: string; placeholder
   { key: 'distributor', label: '유통사' },
   { key: 'primary_vendor', label: '주 벤더' },
   { key: 'sales_type', label: '판매 유형' },
-  { key: 'applied_product', label: '적용 제품' },
-  { key: 'applied_part', label: '적용 부위' },
   { key: 'production_date', label: '생산일', type: 'date' },
   { key: 'density', label: '밀도 (kg/m³, 이 로트 실측)', placeholder: '7850' },
 ]
@@ -118,7 +110,8 @@ export function SampleFields({ idPrefix, form, onChange }: Props) {
       <p className="text-muted-foreground text-xs">
         전부 선택 사항입니다. 밀도는 <b>이 로트에서 잰 값</b>일 때만 넣으세요 — 카드가
         재료의 공칭값보다 이쪽을 먼저 씁니다. 푸아송비는 로트마다 달라지는 값이 아니라{' '}
-        <b>재료</b>에 있습니다.
+        <b>재료</b>에 있습니다. 적용 제품·부위도 같은 이유로 재료에 있습니다 —
+        로트마다 달라지는 값이 아닙니다.
       </p>
     </>
   )

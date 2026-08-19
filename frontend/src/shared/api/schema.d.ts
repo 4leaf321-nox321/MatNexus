@@ -339,7 +339,15 @@ export interface paths {
         delete: operations["remove_card_api_fitting_cards__card_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Card
+         * @description 이름과 메모를 고친다. **초안일 때만.**
+         *
+         *     값은 여기서도 못 바꾼다 — 바꾸는 길이 아예 없어야 "이 카드가 무엇으로
+         *     나왔나" 에 항상 답할 수 있다. 다만 이름 오타 하나 때문에 카드를 지우고
+         *     적합을 다시 돌리게 하는 것은 그 원칙이 지키려던 것과 무관하다.
+         */
+        patch: operations["update_card_api_fitting_cards__card_id__patch"];
         trace?: never;
     };
     "/api/fitting/cards/{card_id}/deprecate": {
@@ -2484,6 +2492,10 @@ export interface components {
         MaterialCreateRequest: {
             /** Alias */
             alias?: string | null;
+            /** Applied Part */
+            applied_part?: string | null;
+            /** Applied Product */
+            applied_product?: string | null;
             /** Category */
             category: string;
             /** Density */
@@ -2519,6 +2531,10 @@ export interface components {
         MaterialOut: {
             /** Alias */
             alias: string | null;
+            /** Applied Part */
+            applied_part: string | null;
+            /** Applied Product */
+            applied_product: string | null;
             /** Category */
             category: string;
             /**
@@ -2589,6 +2605,10 @@ export interface components {
         MaterialUpdateRequest: {
             /** Alias */
             alias?: string | null;
+            /** Applied Part */
+            applied_part?: string | null;
+            /** Applied Product */
+            applied_product?: string | null;
             /** Category */
             category?: string | null;
             /** Density */
@@ -3082,6 +3102,22 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /**
+         * PropertyCardUpdateRequest
+         * @description **이름과 메모만.** 값은 못 바꾼다.
+         *
+         *     카드는 불변이다 — `elastic`·`hardening`·`table` 을 고치는 길은 없고, 고치려면
+         *     새로 만든다(ADR 0007 과 같은 모델). 그런데 그 원칙이 **이름 오타까지 못 고치게**
+         *     만들고 있었다. 지우고 다시 만드는 수밖에 없었고, 그러면 적합을 다시 돌린다.
+         *
+         *     확정된 카드는 이름도 못 바꾼다. 그 이름으로 덱이 이미 나갔을 수 있다.
+         */
+        PropertyCardUpdateRequest: {
+            /** Label */
+            label?: string | null;
+            /** Note */
+            note?: string | null;
+        };
         /** PropertySourcesOut */
         PropertySourcesOut: {
             /**
@@ -3240,10 +3276,6 @@ export interface components {
         SampleCreateRequest: {
             /** Alias */
             alias?: string | null;
-            /** Applied Part */
-            applied_part?: string | null;
-            /** Applied Product */
-            applied_product?: string | null;
             /** Density */
             density?: number | null;
             /**
@@ -3277,10 +3309,6 @@ export interface components {
             adopted_count: number;
             /** Alias */
             alias: string | null;
-            /** Applied Part */
-            applied_part: string | null;
-            /** Applied Product */
-            applied_product: string | null;
             /**
              * Created At
              * Format: date-time
@@ -3345,10 +3373,6 @@ export interface components {
         SampleUpdateRequest: {
             /** Alias */
             alias?: string | null;
-            /** Applied Part */
-            applied_part?: string | null;
-            /** Applied Product */
-            applied_product?: string | null;
             /** Density */
             density?: number | null;
             /** Density Unit */
@@ -4934,6 +4958,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_card_api_fitting_cards__card_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyCardUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
             };
             /** @description Validation Error */
             422: {

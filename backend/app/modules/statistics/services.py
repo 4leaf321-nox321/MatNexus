@@ -242,6 +242,41 @@ def setting_warnings(group: Group) -> list[str]:
     ]
 
 
+def sample_warnings(db: Session, group: Group) -> list[str]:
+    """묶음 안에서 **시료 속성이 갈리는가.**
+
+    통계 묶음은 재료 + 시험종류 + 방향이라 **시료를 안 본다.** 그래서 포스코
+    로트와 현대제철 로트를 같은 재료 아래 두면 한 평균에 들어가고, 그때 나오는
+    CV 는 산포가 아니라 **다른 것을 섞은 값**이다 — MD 와 TD 를 안 섞는 것과
+    같은 이유다.
+
+    **갈라 주지는 않는다.** 축을 하나 더 늘리면 묶음이 잘게 부서져 n=1 이 되고,
+    그건 방금 고친 문제로 되돌아간다. 게다가 어느 쪽이 맞는지는 사람이 안다 —
+    정말 다른 재료면 Details 로 나누는 것이 맞고, 같은 규격을 두 곳에서 조달한
+    것이면 섞는 편이 실제 산포에 가깝다.
+
+    생산일과 로트는 보지 않는다. **로트가 다른 것이 정상이고**, 그것을 경고하면
+    경고가 늘 켜져 있어 아무도 안 읽는다. 밀도도 여기서 말하지 않는다 — 카드가
+    물려받을 때 `conflict` 로 이미 잡는다.
+    """
+    ids = {member.specimen.sample_id for member in group.members}
+    if not ids:
+        return []
+    samples = db.scalars(select(Sample).where(Sample.id.in_(ids))).all()
+
+    notes: list[str] = []
+    for attribute, label in (("manufacturer", "제조사"),):
+        values = {getattr(item, attribute) for item in samples if getattr(item, attribute)}
+        if len(values) > 1:
+            joined = ", ".join(sorted(values))
+            notes.append(
+                f"{label}가 시료마다 다릅니다({joined}) — 서로 다른 곳에서 만든 것을 "
+                f"한 통계로 보고 있습니다. 흩어짐이 커 보이면 산포가 아니라 그 차이일 "
+                f"수 있습니다."
+            )
+    return notes
+
+
 def curve_table(
     db: Session, group: Group, *, x: str, y: str
 ) -> tuple[dict[str, Any] | None, list[str]]:

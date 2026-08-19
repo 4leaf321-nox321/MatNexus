@@ -16,6 +16,7 @@ export type InheritedValue = components['schemas']['InheritedValueOut']
 export type FittedParameter = components['schemas']['FittedParameterOut']
 export type PropertyCard = components['schemas']['PropertyCardOut']
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']
+type PropertyCardUpdate = components['schemas']['PropertyCardUpdateRequest']
 export type ExportFormat = components['schemas']['ExportFormatOut']
 
 export const fittingApi = {
@@ -40,6 +41,15 @@ export const fittingApi = {
     api.post<PropertyCard>('/fitting/cards', body),
 
   /** 확정 — 부서 관리자만. 올린 뒤에는 값을 바꿀 수 없다. */
+  /**
+   * 이름·메모만 고친다. **초안일 때만.**
+   *
+   * 값은 못 바꾼다 — 그래야 "이 카드가 무엇으로 나왔나" 에 항상 답할 수 있다.
+   * 다만 오타 하나에 카드를 지우고 적합을 다시 돌리게 할 이유는 없다.
+   */
+  update: (id: string, body: PropertyCardUpdate) =>
+    api.patch<PropertyCard>(`/fitting/cards/${id}`, body),
+
   publish: (id: string) => api.post<PropertyCard>(`/fitting/cards/${id}/publish`, {}),
 
   /** 내리기 — **지우지 않는다.** 이 값으로 해석이 돌았을 수 있다. */

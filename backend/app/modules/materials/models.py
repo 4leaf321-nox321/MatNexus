@@ -98,6 +98,17 @@ class Material(Base):
     쓰는 것은 시편의 실측 두께(`Specimen.thickness_m`)다. 1.0t 판재를 재면
     0.98 이 나오는데, 둘을 합치면 규격이 흔들리거나 계산이 틀린다."""
 
+    applied_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    applied_part: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    """이 재료를 어디에 쓰는가. **재료의 용도이지 로트의 행선지가 아니다.**
+
+    전에는 시료에 있었다. 그러면 "도어 이너용 재료가 뭐가 있나" 를 물을 때 로트를
+    전부 뒤져야 하고, 같은 재료의 로트 다섯 개에 같은 용도를 다섯 번 적게 된다 —
+    푸아송비를 시료에서 올린 것과 같은 이유다.
+
+    로트가 실제로 어디로 갔는지는 생산관리의 일이고 이 시스템의 질문이 아니다.
+    """
+
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
     """공칭 밀도 SI(kg/m³). 문헌값·등급값이다.
 
@@ -178,9 +189,9 @@ class Sample(Base):
     distributor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     primary_vendor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sales_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    applied_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    applied_part: Mapped[str | None] = mapped_column(String(100), nullable=True)
     production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    """용도(적용 제품·부위)는 여기 없다. 재료로 올렸다 — 로트마다 달라지는 값이
+    아니고, 시료에 두면 재료 단위로 물어볼 수가 없다."""
 
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
     """**이 로트에서 실제로 잰 밀도** SI(kg/m³). 공칭은 재료에 있다.

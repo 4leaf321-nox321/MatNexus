@@ -80,6 +80,29 @@ def _run(
     return str(created["id"])
 
 
+def _run_in(
+    client: TestClient,
+    headers: dict[str, str],
+    db: Session,
+    sample_id: str,
+    orientation: str,
+) -> str:
+    """이미 만든 시료에 시편·시험을 붙인다. `_run` 은 시료도 새로 만든다."""
+    specimen = client.post(
+        f"/api/samples/{sample_id}/specimens",
+        json={"orientation": orientation},
+        headers=headers,
+    ).json()
+    created = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+        files={"file": ("Example.tra", TRA.read_bytes())},
+        headers=headers,
+    ).json()
+    assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    return str(created["id"])
+
+
 def _adopt(client: TestClient, headers: dict[str, str], run_id: str) -> None:
     stored = client.post(
         "/api/processing/results",
@@ -342,3 +365,62 @@ class Test적은_표본:
         assert row["coefficient_of_variation"] is not None
         assert not any("변동계수와 이상치는 내지 않" in note for note in group["notes"])
         assert any("이상치는 가려내지 않" in note for note in group["notes"])
+
+
+class Test제조사섞임:
+    """**묶음이 시료를 안 본다.**
+
+    통계 묶음은 재료 + 시험종류 + 방향이라, 포스코 로트와 현대제철 로트가 한
+    평균에 들어간다. 그때 CV 는 산포가 아니라 다른 것을 섞은 값이다 — MD 와 TD 를
+    안 섞는 것과 같은 이유다. 갈라 주지는 않는다. 사람이 판단할 근거만 준다.
+    """
+
+    def test_제조사가_갈리면_말해_준다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        for maker in ("포스코", "현대제철"):
+            sample = client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"manufacturer": maker},
+                headers=admin_headers,
+            ).json()
+            _adopt(
+                client,
+                admin_headers,
+                _run_in(client, admin_headers, db, sample["id"], "MD"),
+            )
+
+        group = client.get(
+            f"/api/statistics/materials/{material['id']}", headers=admin_headers
+        ).json()["groups"][0]
+        assert group["sample_count"] == 2
+        assert any("제조사가 시료마다 다릅니다" in note for note in group["notes"])
+
+    def test_같은_제조사면_조용하다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """**늘 켜져 있는 경고는 아무도 안 읽는다.**"""
+        for _ in range(2):
+            sample = client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"manufacturer": "포스코"},
+                headers=admin_headers,
+            ).json()
+            _adopt(
+                client,
+                admin_headers,
+                _run_in(client, admin_headers, db, sample["id"], "MD"),
+            )
+
+        group = client.get(
+            f"/api/statistics/materials/{material['id']}", headers=admin_headers
+        ).json()["groups"][0]
+        assert not any("제조사" in note for note in group["notes"])

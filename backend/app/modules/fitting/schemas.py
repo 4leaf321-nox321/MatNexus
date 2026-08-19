@@ -122,3 +122,17 @@ class PropertyCardOut(BaseModel):
     note: str | None
     published_at: datetime | None
     created_at: datetime
+
+
+class PropertyCardUpdateRequest(BaseModel):
+    """**이름과 메모만.** 값은 못 바꾼다.
+
+    카드는 불변이다 — `elastic`·`hardening`·`table` 을 고치는 길은 없고, 고치려면
+    새로 만든다(ADR 0007 과 같은 모델). 그런데 그 원칙이 **이름 오타까지 못 고치게**
+    만들고 있었다. 지우고 다시 만드는 수밖에 없었고, 그러면 적합을 다시 돌린다.
+
+    확정된 카드는 이름도 못 바꾼다. 그 이름으로 덱이 이미 나갔을 수 있다.
+    """
+
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+    note: str | None = None

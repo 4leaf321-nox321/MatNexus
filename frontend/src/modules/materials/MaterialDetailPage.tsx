@@ -138,6 +138,12 @@ export default function MaterialDetailPage() {
                 : `${item.spec_thickness} ${item.spec_thickness_unit}`
             }
           />
+          {/* **용도는 재료의 성질이다.** 시료에 있을 때는 로트를 전부 뒤져야
+              "이 재료 어디에 쓰나" 를 알 수 있었다. */}
+          <Field label="적용 제품" value={item.applied_product ?? '—'} />
+          <Field label="적용 부위" value={item.applied_part ?? '—'} />
+          <Field label="밀도" value={item.density == null ? '—' : `${item.density} ${item.density_unit}`} />
+          <Field label="푸아송비" value={item.poisson_ratio == null ? '—' : String(item.poisson_ratio)} />
           <Field
             label="소속"
             value={
