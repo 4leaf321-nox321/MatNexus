@@ -891,3 +891,78 @@ class Test별칭과_병합:
             "/api/vocabularies/grade/terms", params={"q": "ORPHAN"}, headers=admin_headers
         ).json()[0]
         assert restored["parent_value"] == "Steel"
+
+
+class Test값_미리_추가:
+    """**관리자가 목록을 미리 갖춰 놓는 자리.**
+
+    지금까지 값은 누가 폼에서 써야만 생겼다. 그러면 제조사 목록을 먼저 정리해
+    두고 싶어도 방법이 없고, 첫 사람이 무엇을 칠지에 목록이 끌려간다.
+    """
+
+    def test_부모와_함께_미리_등록한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "SEEDONE",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        added = client.post(
+            "/api/vocabularies/grade/terms",
+            json={"value": "DP1180", "parent_value": "Steel"},
+            headers=admin_headers,
+        ).json()
+        assert added["parent_value"] == "Steel"
+        # 아직 아무도 안 쓴다 — 그래도 피커에는 뜬다.
+        assert added["usage_count"] == 0
+
+        listed = {
+            item["value"]
+            for item in client.get(
+                "/api/vocabularies/grade/terms",
+                params={"parent_value": "Steel", "limit": 100},
+                headers=admin_headers,
+            ).json()
+        }
+        assert "DP1180" in listed
+
+    def test_별칭으로_치면_정규_값이_돌아온다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**화면이 이 차이를 말해야 한다.** 안 말하면 사람은 자기가 친 값이
+        추가된 줄 알고, 목록에 없으니 다시 친다."""
+        term = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "미리제철"},
+            headers=admin_headers,
+        ).json()
+        client.post(
+            f"/api/vocabularies/manufacturer/terms/{term['id']}/aliases",
+            json={"alias": "MIRI STEEL"},
+            headers=admin_headers,
+        )
+
+        got = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "miri steel"},
+            headers=admin_headers,
+        ).json()
+        assert got["value"] == "미리제철"
+        assert got["id"] == term["id"]
+
+    def test_부모가_없는_축은_부모를_무시한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        added = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "무부모제철", "parent_value": "Steel"},
+            headers=admin_headers,
+        ).json()
+        assert added["parent_value"] is None

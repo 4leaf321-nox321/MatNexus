@@ -19,7 +19,7 @@
  */
 
 import { useState } from 'react'
-import { Eye, EyeOff, GitMerge, Pencil, RefreshCw, Tag, X } from 'lucide-react'
+import { Eye, EyeOff, GitMerge, Pencil, Plus, RefreshCw, Tag, X } from 'lucide-react'
 
 import { vocabularyApi } from '@/modules/vocabulary/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
@@ -90,6 +90,7 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   const [editing, setEditing] = useState<Term | null>(null)
   const [detail, setDetail] = useState<Term | null>(null)
   const [showCandidates, setShowCandidates] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   // 검색은 서버가 한다 — 어휘가 수만 개가 되면 전체를 받을 수 없다.
   const terms = useResource(
@@ -140,7 +141,7 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         <Button
           size="sm"
           variant={leastUsed ? 'default' : 'outline'}
-          className="ml-auto h-8 text-xs"
+          className="h-8 text-xs"
           title="새로 생긴 오타를 찾을 때"
           onClick={() => setLeastUsed((value) => !value)}
         >
@@ -154,6 +155,12 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
           onClick={() => setShowHidden((value) => !value)}
         >
           감춘 값도 보기
+        </Button>
+        {/* **미리 갖춰 놓을 수 있어야 한다.** 지금까지 값은 누가 폼에서 써야만
+            생겼고, 그러면 첫 사람이 무엇을 칠지에 목록이 끌려간다. */}
+        <Button size="sm" className="ml-auto h-8 text-xs" onClick={() => setAdding(true)}>
+          <Plus className="size-3.5" />
+          값 추가
         </Button>
         <Button
           size="sm"
@@ -179,6 +186,14 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
       </div>
 
       <ErrorNotice error={terms.error ?? error} className="mb-3" />
+
+      {adding && (
+        <AddTermDialog
+          vocabulary={vocabulary}
+          onClose={() => setAdding(false)}
+          onAdded={() => terms.reload()}
+        />
+      )}
 
       {detail && (
         <TermDetailDialog
@@ -597,5 +612,113 @@ function MergeCandidates({
         )
       })}
     </div>
+  )
+}
+
+/**
+ * 값 추가 — **관리자가 목록을 미리 갖춰 놓는 자리.**
+ *
+ * 지금까지 값은 누군가 폼에서 써야만 생겼다. 그러면 제조사 목록을 먼저 정리해
+ * 두고 싶어도 방법이 없고, 첫 사람이 무엇을 칠지에 목록이 끌려간다.
+ *
+ * ## 이미 있는 값을 쳤을 때
+ *
+ * 서버는 **정규 값을 돌려준다**(409 가 아니다). 그래서 '포스코(주)' 를 더하려
+ * 했는데 그것이 '포스코' 의 별칭이면 '포스코' 가 온다. 화면이 그 사실을 말하지
+ * 않으면 사람은 자기가 친 값이 추가된 줄 안다 — 목록에 없으니 다시 치게 된다.
+ */
+function AddTermDialog({
+  vocabulary,
+  onClose,
+  onAdded,
+}: {
+  vocabulary: Vocabulary
+  onClose: () => void
+  onAdded: () => void
+}) {
+  const [value, setValue] = useState('')
+  const [parent, setParent] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [resolved, setResolved] = useState<{ typed: string; got: string } | null>(null)
+
+  async function submit() {
+    setBusy(true)
+    setFailure(null)
+    setResolved(null)
+    try {
+      const typed = value.trim()
+      const added = await vocabularyApi.create(
+        vocabulary.slug,
+        typed,
+        parent || undefined
+      )
+      onAdded()
+      if (added.value !== typed) {
+        // 별칭이나 표기 차이로 기존 값에 붙었다 — 말해 주지 않으면 다시 친다.
+        setResolved({ typed, got: added.value })
+        setValue('')
+        return
+      }
+      setValue('')
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.message : '더하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{vocabulary.label} 값 추가</DialogTitle>
+          <DialogDescription>
+            미리 등록해 두면 사람들이 <b>고르기만</b> 하면 됩니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="add-value">값</Label>
+            <Input
+              id="add-value"
+              value={value}
+              autoFocus
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </div>
+
+          {vocabulary.parent_slug && (
+            // 부모가 있는 축이면 여기서 정해 둔다 — 나중에 따로 잇게 하면
+            // 대부분 안 잇는다.
+            <VocabularyField
+              slug={vocabulary.parent_slug}
+              label="상위 분류 (선택)"
+              value={parent}
+              allowCreate={false}
+              onChange={setParent}
+            />
+          )}
+
+          {resolved && (
+            <p className="text-sm text-amber-700 dark:text-amber-500">
+              '{resolved.typed}' 는 이미 <b>{resolved.got}</b> 를 가리킵니다 — 새로
+              만들지 않았습니다.
+            </p>
+          )}
+          {failure && <p className="text-destructive text-sm">{failure}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            닫기
+          </Button>
+          <Button onClick={submit} disabled={busy || value.trim() === ''}>
+            추가
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
