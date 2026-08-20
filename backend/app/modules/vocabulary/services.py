@@ -165,16 +165,23 @@ def search(
 
     key = compare_key(q)
     if key:
+        # **`OR` 로 묶으면 인덱스를 못 탄다.**
+        #
+        # 별칭 가지는 `t` 의 인덱스로 좁힐 수 없어서, `OR` 하나 때문에 값 표
+        # 전체를 훑는다(실측 3만 개: Seq Scan 21ms — 빠른 건 아직 작아서다).
+        # 0단계에서 재료 검색이 같은 이유로 208ms 였다.
+        #
+        # `UNION` 으로 나누면 **가지마다 자기 trigram 인덱스를 탄다.**
+        pattern = f"%{key}%"
+        by_value = select(VocabularyTerm.id).where(
+            VocabularyTerm.vocabulary_id == vocabulary.id,
+            VocabularyTerm.normalized.ilike(pattern),
+        )
         by_alias = select(VocabularyAlias.term_id).where(
             VocabularyAlias.vocabulary_id == vocabulary.id,
-            VocabularyAlias.normalized.ilike(f"%{key}%"),
+            VocabularyAlias.normalized.ilike(pattern),
         )
-        query = query.where(
-            or_(
-                VocabularyTerm.normalized.ilike(f"%{key}%"),
-                VocabularyTerm.id.in_(by_alias),
-            )
-        )
+        query = query.where(VocabularyTerm.id.in_(by_value.union(by_alias)))
     if least_used:
         # **검토할 것을 위로.** 오타는 늘 `쓰는 곳 1` 로 생기는데, 기본 정렬
         # (많이 쓰는 순)에서는 목록 끝에 묻힌다.
