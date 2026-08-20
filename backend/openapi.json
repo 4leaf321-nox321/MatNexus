@@ -450,6 +450,86 @@
         "title": "Body_upload_test_run_api_test_runs_post",
         "type": "object"
       },
+      "BulkDeleteItemOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "value",
+          "deleted"
+        ],
+        "title": "BulkDeleteItemOut",
+        "type": "object"
+      },
+      "BulkDeleteOut": {
+        "properties": {
+          "blocked": {
+            "title": "Blocked",
+            "type": "integer"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BulkDeleteItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deleted",
+          "blocked",
+          "items"
+        ],
+        "title": "BulkDeleteOut",
+        "type": "object"
+      },
+      "BulkDeleteRequest": {
+        "properties": {
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "BulkDeleteRequest",
+        "type": "object"
+      },
       "BulkTermCreateRequest": {
         "description": "여러 값을 한 번에. **줄 단위로 붙여 넣는 것이 자연스럽다.**\n\n상한을 서버가 건다 — 화면이 정하게 두면 언젠가 \"엑셀 통째로\" 가 온다.",
         "properties": {
@@ -3028,6 +3108,37 @@
           "offset"
         ],
         "title": "Page[MaterialOut]",
+        "type": "object"
+      },
+      "Page_TermOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TermOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[TermOut]",
         "type": "object"
       },
       "Page_TestRunOut_": {
@@ -12286,10 +12397,26 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 100,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
+              "anyOf": [
+                {
+                  "maximum": 200,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
               "type": "integer"
             }
           },
@@ -12341,11 +12468,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/TermOut"
-                  },
-                  "title": "Response Search Terms Api Vocabularies  Slug  Terms Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_TermOut_"
                 }
               }
             },
@@ -12467,6 +12590,59 @@
           }
         },
         "summary": "Create Terms Bulk",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/terms/delete": {
+      "post": {
+        "description": "고른 값들을 지운다. **못 지운 것은 이유를 돌려준다.**\n\n## 왜 다 못 지우나\n\n참조가 있으면 안 지운다. 지우면서 참조를 끊으면 그 시료가 어느 제조사였는지\n영영 알 수 없게 되는데, 그건 값을 정리하는 것과 전혀 다른 일이다. 쓰이고 있는\n값을 목록에서 치우고 싶으면 **감추기**를, 다른 값으로 흡수하려면 **병합**을\n쓴다.\n\n하위 값이 있어도 안 지운다 — 지우면 그것들이 고아가 된다.\n\n## 요청 전체를 실패시키지 않는다\n\n50개를 골랐는데 3개가 막힌다고 나머지 47개를 못 지울 이유가 없다. 대신\n**막힌 것마다 무엇이 막았는지** 말한다.",
+        "operationId": "delete_terms_api_vocabularies__slug__terms_delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkDeleteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Terms",
         "tags": [
           "vocabulary"
         ]

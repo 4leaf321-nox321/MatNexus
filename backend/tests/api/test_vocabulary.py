@@ -175,7 +175,7 @@ class Test게이트:
             "/api/vocabularies/manufacturer/terms",
             params={"q": "searchsteel"},
             headers=admin_headers,
-        ).json()
+        ).json()["items"]
         assert [item["value"] for item in found] == ["검색제철"]
 
     def test_closed_축은_사용자가_못_늘린다(
@@ -293,7 +293,7 @@ class Test관리:
             "/api/vocabularies/manufacturer/terms",
             params={"q": "고칠제철"},
             headers=admin_headers,
-        ).json()[0]
+        ).json()["items"][0]
 
         changed = client.patch(
             f"/api/vocabularies/manufacturer/terms/{term['id']}",
@@ -348,7 +348,7 @@ class Test관리:
             "/api/vocabularies/manufacturer/terms",
             params={"q": "감출제철"},
             headers=admin_headers,
-        ).json()[0]
+        ).json()["items"][0]
 
         client.patch(
             f"/api/vocabularies/manufacturer/terms/{term['id']}",
@@ -360,7 +360,7 @@ class Test관리:
             "/api/vocabularies/manufacturer/terms",
             params={"q": "감출제철"},
             headers=admin_headers,
-        ).json()
+        ).json()["items"]
         assert visible == []
 
         # **되돌릴 길이 있어야 한다.** 없으면 감추기도 막다른 길이다.
@@ -368,7 +368,7 @@ class Test관리:
             "/api/vocabularies/manufacturer/terms",
             params={"q": "감출제철", "include_hidden": "true"},
             headers=admin_headers,
-        ).json()
+        ).json()["items"]
         assert [item["value"] for item in hidden] == ["감출제철"]
 
         # 시료는 그대로다.
@@ -431,7 +431,7 @@ class Test여러_축:
             "/api/vocabularies/vendor/terms",
             params={"q": "한국유통"},
             headers=admin_headers,
-        ).json()
+        ).json()["items"]
         assert len(found) == 1, f"한 축에 두 값이 생겼다: {found}"
         # 한 값이 **두 컬럼**에서 쓰인다.
         assert found[0]["usage_count"] == 2
@@ -469,7 +469,7 @@ class Test여러_축:
             "/api/vocabularies/sales_type/terms",
             params={"q": "지울유형"},
             headers=admin_headers,
-        ).json()[0]
+        ).json()["items"][0]
         assert before["usage_count"] == 1
 
         client.delete(f"/api/samples/{sample['id']}", headers=admin_headers)
@@ -478,7 +478,7 @@ class Test여러_축:
             "/api/vocabularies/sales_type/terms",
             params={"q": "지울유형", "include_hidden": "true"},
             headers=admin_headers,
-        ).json()[0]
+        ).json()["items"][0]
         assert after["usage_count"] == 0
 
     def test_적게_쓰이는_것부터_볼_수_있다(
@@ -509,7 +509,7 @@ class Test여러_축:
             "/api/vocabularies/manufacturer/terms",
             params={"least_used": "true"},
             headers=admin_headers,
-        ).json()
+        ).json()["items"]
         assert least[0]["value"] == "오타제쳘"
 
 
@@ -548,7 +548,7 @@ class Test강종:
 
         term = client.get(
             "/api/vocabularies/grade/terms", params={"q": "GRADEA"}, headers=admin_headers
-        ).json()[0]
+        ).json()["items"][0]
         client.patch(
             f"/api/vocabularies/grade/terms/{term['id']}",
             json={"value": "GRADEB"},
@@ -589,7 +589,7 @@ class Test강종:
             )
         found = client.get(
             "/api/vocabularies/grade/terms", params={"q": "secc"}, headers=admin_headers
-        ).json()
+        ).json()["items"]
         assert len(found) == 1, f"강종이 갈렸다: {found}"
         assert found[0]["usage_count"] == 2
 
@@ -619,12 +619,12 @@ class Test분류_계층:
         )
         grade = client.get(
             "/api/vocabularies/grade/terms", params={"q": "CHAINA"}, headers=admin_headers
-        ).json()[0]
+        ).json()["items"][0]
         assert grade["parent_value"] == "Steel"
 
         category = client.get(
             "/api/vocabularies/category/terms", params={"q": "Steel"}, headers=admin_headers
-        ).json()[0]
+        ).json()["items"][0]
         assert category["parent_value"] == "Metal"
 
     def test_부모로_좁힌다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
@@ -650,7 +650,7 @@ class Test분류_계층:
                 "/api/vocabularies/grade/terms",
                 params={"parent_value": "Steel", "limit": 100},
                 headers=admin_headers,
-            ).json()
+            ).json()["items"]
         }
         assert "STEELG" in under_steel
         assert "POLYG" not in under_steel
@@ -684,7 +684,7 @@ class Test분류_계층:
                 "/api/vocabularies/grade/terms",
                 params={"parent_value": "Steel", "limit": 100},
                 headers=admin_headers,
-            ).json()
+            ).json()["items"]
         }
         assert {"HASPARENT", "NOPARENT"} <= under_steel
 
@@ -771,7 +771,7 @@ class Test별칭과_병합:
             "/api/vocabularies/manufacturer/terms",
             params={"q": "합칠제철"},
             headers=admin_headers,
-        ).json()
+        ).json()["items"]
         source = next(item for item in terms if "(" in item["value"])
         target = next(item for item in terms if "(" not in item["value"])
 
@@ -871,7 +871,7 @@ class Test별칭과_병합:
         )
         term = client.get(
             "/api/vocabularies/grade/terms", params={"q": "ORPHAN"}, headers=admin_headers
-        ).json()[0]
+        ).json()["items"][0]
 
         client.patch(
             f"/api/vocabularies/grade/terms/{term['id']}",
@@ -880,7 +880,7 @@ class Test별칭과_병합:
         )
         cleared = client.get(
             "/api/vocabularies/grade/terms", params={"q": "ORPHAN"}, headers=admin_headers
-        ).json()[0]
+        ).json()["items"][0]
         assert cleared["parent_value"] is None
 
         client.patch(
@@ -890,7 +890,7 @@ class Test별칭과_병합:
         )
         restored = client.get(
             "/api/vocabularies/grade/terms", params={"q": "ORPHAN"}, headers=admin_headers
-        ).json()[0]
+        ).json()["items"][0]
         assert restored["parent_value"] == "Steel"
 
 
@@ -930,7 +930,7 @@ class Test값_미리_추가:
                 "/api/vocabularies/grade/terms",
                 params={"parent_value": "Steel", "limit": 100},
                 headers=admin_headers,
-            ).json()
+            ).json()["items"]
         }
         assert "DP1180" in listed
 
@@ -1039,7 +1039,7 @@ class Test여러_값_한번에:
                 "/api/vocabularies/grade/terms",
                 params={"parent_value": "Steel", "limit": 100},
                 headers=admin_headers,
-            ).json()
+            ).json()["items"]
         }
         assert {"DP590", "DP780", "DP980"} <= under_steel
 
@@ -1094,7 +1094,7 @@ class Test여러_값_한번에:
                 "/api/vocabularies/grade/terms",
                 params={"parent_value": "PP", "limit": 100},
                 headers=admin_headers,
-            ).json()
+            ).json()["items"]
         }
         assert "ANGLED" in under_pp
         assert "TABBED" not in under_pp
@@ -1122,3 +1122,127 @@ class Test여러_값_한번에:
             headers=admin_headers,
         )
         assert denied.status_code == 422, denied.text
+
+
+class Test여러_값_지우기:
+    """**지우기는 되돌릴 수 없다.** 그래서 무엇이 막는지 말한다.
+
+    쓰이고 있는 값을 지우면서 참조를 끊으면 그 시료가 어느 제조사였는지 영영
+    알 수 없게 된다 — 그건 값을 정리하는 것과 전혀 다른 일이다.
+    """
+
+    def test_안_쓰는_것만_지우고_나머지는_이유를_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+    ) -> None:
+        client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"manufacturer": "쓰는제철"},
+            headers=admin_headers,
+        )
+        used = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"q": "쓰는제철"},
+            headers=admin_headers,
+        ).json()["items"][0]
+        free = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "안쓰는제철"},
+            headers=admin_headers,
+        ).json()
+
+        result = client.post(
+            "/api/vocabularies/manufacturer/terms/delete",
+            json={"ids": [free["id"], used["id"]]},
+            headers=admin_headers,
+        ).json()
+
+        # **요청 전체를 실패시키지 않는다** — 하나가 막힌다고 나머지를 못 지울
+        # 이유가 없다.
+        assert (result["deleted"], result["blocked"]) == (1, 1)
+        by_value = {item["value"]: item for item in result["items"]}
+        assert by_value["안쓰는제철"]["deleted"] is True
+        assert by_value["쓰는제철"]["deleted"] is False
+        assert "1곳에서 쓰고 있습니다" in (by_value["쓰는제철"]["reason"] or "")
+
+    def test_하위가_있으면_안_지운다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """지우면 하위 값들이 고아가 된다."""
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "CHILDA",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        parent = client.get(
+            "/api/vocabularies/category/terms",
+            params={"q": "Steel"},
+            headers=admin_headers,
+        ).json()["items"][0]
+
+        result = client.post(
+            "/api/vocabularies/category/terms/delete",
+            json={"ids": [parent["id"]]},
+            headers=admin_headers,
+        ).json()
+        assert result["blocked"] == 1
+        assert result["items"][0]["reason"]
+
+    def test_캐시가_어긋나도_실제_참조를_센다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """`usage_count` 는 캐시고 어긋날 수 있다(실제로 3 대 5 로 벌어진 적이
+        있다). 캐시가 0 이라고 지웠는데 참조가 남아 있으면 외래키가 막고 요청이
+        500 으로 죽는다."""
+        client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"manufacturer": "캐시틀린제철"},
+            headers=admin_headers,
+        )
+        term = db.scalar(select(VocabularyTerm).where(VocabularyTerm.value == "캐시틀린제철"))
+        assert term is not None
+        term.usage_count = 0  # 어긋뜨린다
+        db.commit()
+
+        result = client.post(
+            "/api/vocabularies/manufacturer/terms/delete",
+            json={"ids": [str(term.id)]},
+            headers=admin_headers,
+        ).json()
+        assert result["blocked"] == 1
+
+    def test_목록이_쪽으로_온다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        for index in range(5):
+            client.post(
+                "/api/vocabularies/manufacturer/terms",
+                json={"value": f"쪽제철{index}"},
+                headers=admin_headers,
+            )
+        first = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"limit": 2},
+            headers=admin_headers,
+        ).json()
+        assert first["total"] >= 5
+        assert len(first["items"]) == 2
+
+        second = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"limit": 2, "offset": 2},
+            headers=admin_headers,
+        ).json()
+        assert first["items"][0]["id"] != second["items"][0]["id"]

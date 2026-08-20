@@ -18,13 +18,24 @@
  * 몇 건이 따라오는지 옆에 적어 둔다.
  */
 
-import { useState } from 'react'
-import { Eye, EyeOff, GitMerge, Pencil, Plus, RefreshCw, Tag, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  Eye,
+  EyeOff,
+  GitMerge,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Tag,
+  Trash2,
+  X,
+} from 'lucide-react'
 
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
-import type { BulkResult, Term, Vocabulary } from '@/modules/vocabulary/api'
+import type { BulkResult, DeleteResult, Term, Vocabulary } from '@/modules/vocabulary/api'
 import { ApiError } from '@/shared/api/client'
+import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -84,6 +95,11 @@ export default function VocabularyAdminPage() {
   )
 }
 
+//: 한 쪽에 몇 개. `ALL` 은 상한(2,000)까지 긁어 온다 — 20만 개를 브라우저로
+//: 보낼 수는 없으므로 걸리면 화면이 말한다.
+const ALL = -1
+const PAGE_SIZES = [50, 100, ALL] as const
+
 function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   const [term, setTerm] = useState('')
   const [showHidden, setShowHidden] = useState(false)
@@ -93,14 +109,61 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   const [showCandidates, setShowCandidates] = useState(false)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [size, setSize] = useState<number>(PAGE_SIZES[0])
+  const [offset, setOffset] = useState(0)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [removed, setRemoved] = useState<DeleteResult | null>(null)
+
   // 검색은 서버가 한다 — 어휘가 수만 개가 되면 전체를 받을 수 없다.
   const terms = useResource(
-    () => vocabularyApi.search(vocabulary.slug, term, {
-        includeHidden: showHidden,
-        leastUsed,
-      }),
-    [vocabulary.slug, term, showHidden, leastUsed]
+    () =>
+      size === ALL
+        ? // **'전체' 는 상한이 있다.** 20만 개를 브라우저로 보낼 수는 없다 —
+          // 걸리면 아래에서 몇 건에서 멈췄는지 말한다.
+          fetchAll((limit, from) =>
+            vocabularyApi.search(vocabulary.slug, term, {
+              includeHidden: showHidden,
+              leastUsed,
+              limit,
+              offset: from,
+            })
+          )
+        : vocabularyApi.search(vocabulary.slug, term, {
+            includeHidden: showHidden,
+            leastUsed,
+            limit: size,
+            offset,
+          }),
+    [vocabulary.slug, term, showHidden, leastUsed, size, offset]
   )
+
+  // 검색·필터가 바뀌면 첫 쪽으로. 안 그러면 3쪽에서 검색해 0건이 뜬다.
+  useEffect(() => {
+    setOffset(0)
+    setPicked(new Set())
+  }, [vocabulary.slug, term, showHidden, leastUsed, size])
+
+  async function removeSelected() {
+    setError(null)
+    setRemoved(null)
+    try {
+      const result = await vocabularyApi.removeMany(vocabulary.slug, [...picked])
+      setRemoved(result)
+      setPicked(new Set())
+      terms.reload()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    }
+  }
+
+  function togglePick(id: string) {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function recount() {
     setError(null)
@@ -122,7 +185,11 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
     }
   }
 
-  const rows = terms.data ?? []
+  const page = terms.data
+  const rows = page?.items ?? []
+  const total = page?.total ?? 0
+  // 천장에 걸렸는지. 걸렸으면 몇 건에서 멈췄는지 말한다.
+  const truncated = size === ALL && rows.length < total
 
   return (
     <section>
@@ -218,12 +285,80 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         />
       )}
 
+      {/* **고른 것이 몇 개인지 늘 보여야 한다.** 여러 쪽을 오가며 고르면 지금
+          몇 개를 들고 있는지 잊는다. */}
+      {picked.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border p-2.5">
+          <span className="text-sm">
+            <b>{picked.size}개</b> 골랐습니다
+          </span>
+          <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+            선택 해제
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="ml-auto"
+            onClick={() => void removeSelected()}
+          >
+            <Trash2 className="size-3.5" />
+            지우기
+          </Button>
+        </div>
+      )}
+
+      {removed && (
+        <div className="mb-3 rounded-md border p-2.5 text-sm">
+          <p>
+            지움 <b>{removed.deleted}</b>
+            {removed.blocked > 0 && (
+              <span className="text-amber-700 dark:text-amber-500">
+                {' '}
+                · 못 지움 {removed.blocked}
+              </span>
+            )}
+          </p>
+          {/* **무엇이 막는지 말한다.** "지울 수 없습니다" 만 주면 사람은 왜인지
+              알아내려고 목록을 뒤진다. */}
+          {removed.items.some((item) => !item.deleted) && (
+            <ul className="text-muted-foreground mt-1 space-y-0.5 text-xs">
+              {removed.items
+                .filter((item) => !item.deleted)
+                .map((item) => (
+                  <li key={item.id}>
+                    <b>{item.value}</b> — {item.reason}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {showCandidates ? (
         <MergeCandidates slug={vocabulary.slug} onChanged={() => terms.reload()} />
       ) : (
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8">
+              {/* **한 번에 고르기.** 이 쪽에 보이는 것만 고른다 — 안 보이는
+                  것까지 고르면 무엇을 지우는지 모르는 채로 누르게 된다. */}
+              <input
+                type="checkbox"
+                aria-label="이 쪽 전체 선택"
+                checked={rows.length > 0 && rows.every((item) => picked.has(item.id))}
+                onChange={(event) =>
+                  setPicked((current) => {
+                    const next = new Set(current)
+                    for (const item of rows) {
+                      if (event.target.checked) next.add(item.id)
+                      else next.delete(item.id)
+                    }
+                    return next
+                  })
+                }
+              />
+            </TableHead>
             <TableHead>값</TableHead>
             <TableHead>상위</TableHead>
             <TableHead className="text-right">쓰는 곳</TableHead>
@@ -233,6 +368,14 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         <TableBody>
           {rows.map((item) => (
             <TableRow key={item.id} className={item.status === 'deprecated' ? 'opacity-50' : ''}>
+              <TableCell>
+                <input
+                  type="checkbox"
+                  aria-label={`${item.value} 선택`}
+                  checked={picked.has(item.id)}
+                  onChange={() => togglePick(item.id)}
+                />
+              </TableCell>
               <TableCell>
                 {item.value}
                 {item.status === 'deprecated' && (
@@ -291,6 +434,59 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         </TableBody>
       </Table>
 
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">
+          {size === ALL
+            ? `${rows.length.toLocaleString('ko-KR')}건`
+            : `${total.toLocaleString('ko-KR')}건 중 ${offset + 1}–${Math.min(offset + size, total)}`}
+        </span>
+
+        <div className="flex gap-1">
+          {PAGE_SIZES.map((option) => (
+            <Button
+              key={option}
+              size="sm"
+              variant={size === option ? 'default' : 'outline'}
+              className="h-7 text-xs"
+              onClick={() => setSize(option)}
+            >
+              {option === ALL ? '전체' : option}
+            </Button>
+          ))}
+        </div>
+
+        {size !== ALL && (
+          <div className="ml-auto flex gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={offset === 0}
+              onClick={() => setOffset(Math.max(0, offset - size))}
+            >
+              이전
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={offset + size >= total}
+              onClick={() => setOffset(offset + size)}
+            >
+              다음
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* **조용히 자르지 않는다.** 천장에 걸렸으면 몇 건에서 멈췄는지 말한다. */}
+      {truncated && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+          {rows.length.toLocaleString('ko-KR')}건까지만 불러왔습니다 (전체{' '}
+          {total.toLocaleString('ko-KR')}건). 검색으로 좁히세요.
+        </p>
       )}
 
       {!showCandidates && !terms.loading && rows.length === 0 && (

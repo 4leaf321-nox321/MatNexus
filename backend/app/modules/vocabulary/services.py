@@ -128,21 +128,16 @@ def resolve_or_create(
     return term
 
 
-def search(
+def _filtered(
     db: Session,
     vocabulary: Vocabulary,
     *,
     q: str | None,
-    limit: int,
-    include_hidden: bool = False,
-    least_used: bool = False,
-    parent: VocabularyTerm | None = None,
-) -> list[VocabularyTerm]:
-    """피커가 부르는 검색. **별칭으로도 찾힌다.**
-
-    `'포스코(주)'` 를 쳤는데 `'포스코'` 가 나오는 것이 정상이다 — 화면이 그
-    결과를 다시 거르면 안 되는 이유가 이것이다.
-    """
+    include_hidden: bool,
+    parent: VocabularyTerm | None,
+) -> Select[tuple[VocabularyTerm]]:
+    """거르는 조건만. **목록과 개수가 같은 필터를 써야 한다** — 갈리면 "3건 중
+    5건" 같은 것이 나온다."""
     query: Select[tuple[VocabularyTerm]] = select(VocabularyTerm).where(
         VocabularyTerm.vocabulary_id == vocabulary.id
     )
@@ -168,8 +163,8 @@ def search(
         # **`OR` 로 묶으면 인덱스를 못 탄다.**
         #
         # 별칭 가지는 `t` 의 인덱스로 좁힐 수 없어서, `OR` 하나 때문에 값 표
-        # 전체를 훑는다(실측 3만 개: Seq Scan 21ms — 빠른 건 아직 작아서다).
-        # 0단계에서 재료 검색이 같은 이유로 208ms 였다.
+        # 전체를 훑는다(실측 23만 개: 97ms vs 0.4ms). 0단계에서 재료 검색이
+        # 같은 이유로 208ms 였다 — 같은 함정을 두 번 밟았다.
         #
         # `UNION` 으로 나누면 **가지마다 자기 trigram 인덱스를 탄다.**
         pattern = f"%{key}%"
@@ -182,6 +177,26 @@ def search(
             VocabularyAlias.normalized.ilike(pattern),
         )
         query = query.where(VocabularyTerm.id.in_(by_value.union(by_alias)))
+    return query
+
+
+def search(
+    db: Session,
+    vocabulary: Vocabulary,
+    *,
+    q: str | None,
+    limit: int,
+    include_hidden: bool = False,
+    least_used: bool = False,
+    parent: VocabularyTerm | None = None,
+    offset: int = 0,
+) -> list[VocabularyTerm]:
+    """피커가 부르는 검색. **별칭으로도 찾힌다.**
+
+    `'포스코(주)'` 를 쳤는데 `'포스코'` 가 나오는 것이 정상이다 — 화면이 그
+    결과를 다시 거르면 안 되는 이유가 이것이다.
+    """
+    query = _filtered(db, vocabulary, q=q, include_hidden=include_hidden, parent=parent)
     if least_used:
         # **검토할 것을 위로.** 오타는 늘 `쓰는 곳 1` 로 생기는데, 기본 정렬
         # (많이 쓰는 순)에서는 목록 끝에 묻힌다.
@@ -192,7 +207,20 @@ def search(
     else:
         # 많이 쓰이는 것이 위로. 검색이 붙어 있으므로 가나다순보다 낫다.
         query = query.order_by(VocabularyTerm.usage_count.desc(), VocabularyTerm.value)
-    return list(db.scalars(query.limit(limit)))
+    return list(db.scalars(query.limit(limit).offset(offset)))
+
+
+def count(
+    db: Session,
+    vocabulary: Vocabulary,
+    *,
+    q: str | None,
+    include_hidden: bool = False,
+    parent: VocabularyTerm | None = None,
+) -> int:
+    """같은 조건의 전체 수. **화면이 "몇 건 중 몇 건" 을 말하려면 필요하다.**"""
+    query = _filtered(db, vocabulary, q=q, include_hidden=include_hidden, parent=parent)
+    return int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
 
 
 def bump_usage(db: Session, term_id: uuid.UUID | None, delta: int) -> None:
@@ -653,3 +681,59 @@ def dismiss(
                 low_term_id=low, high_term_id=high, dismissed_by_id=dismissed_by_id
             )
         )
+
+
+def references_to(db: Session, term: VocabularyTerm) -> int:
+    """이 값을 실제로 가리키는 행 수. **캐시를 안 믿는다.**
+
+    `usage_count` 는 캐시고 어긋날 수 있다(실제로 3 대 5 로 벌어진 적이 있다).
+    지우기는 되돌릴 수 없으므로 여기서는 세어 본다 — 캐시가 0 이라고 해서 지웠는데
+    참조가 남아 있으면 외래키가 막고 요청 전체가 500 으로 죽는다.
+    """
+    slug = _slug_of(db, term)
+    total = 0
+    for table, bindings, deleted in _COUNT_SOURCES:
+        for binding in bindings:
+            if binding.slug != slug:
+                continue
+            found = db.execute(
+                text(
+                    f"SELECT count(*) FROM {table} WHERE {binding.column} = :term_id{deleted}"
+                ),
+                {"term_id": term.id},
+            ).scalar()
+            total += int(found or 0)
+    return total
+
+
+def child_count(db: Session, term: VocabularyTerm) -> int:
+    """이 값을 상위로 삼는 값 수. 지우면 그것들이 고아가 된다."""
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(VocabularyTerm)
+            .where(VocabularyTerm.parent_term_id == term.id)
+        )
+        or 0
+    )
+
+
+def delete_term(db: Session, term: VocabularyTerm) -> str | None:
+    """지운다. 못 지우면 **이유를 돌려준다**(지웠으면 `None`).
+
+    **무엇이 막는지 말하는 것이 요점이다.** "지울 수 없습니다" 만 주면 사람은
+    왜인지 알아내려고 목록을 뒤진다 — 시편 삭제가 "시험 N건이 남아 있어" 라고
+    말하는 것과 같은 이유다.
+
+    참조가 있으면 안 지운다. 지우고 참조를 끊으면 그 시료가 어느 제조사였는지
+    영영 알 수 없게 되는데, 그건 값을 정리하는 것과 전혀 다른 일이다. 그럴
+    때는 **감추기**나 **병합**을 쓴다.
+    """
+    used = references_to(db, term)
+    if used:
+        return f"{used}곳에서 쓰고 있습니다. 감추기나 병합을 쓰세요."
+    children = child_count(db, term)
+    if children:
+        return f"하위 값 {children}개가 이 값을 상위로 삼고 있습니다."
+    db.delete(term)
+    return None

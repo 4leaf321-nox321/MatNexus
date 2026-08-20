@@ -15,6 +15,8 @@ export type Vocabulary = components['schemas']['VocabularyOut']
 export type Term = components['schemas']['TermOut']
 export type Alias = components['schemas']['TermAliasOut']
 export type BulkResult = components['schemas']['BulkTermOut']
+export type DeleteResult = components['schemas']['BulkDeleteOut']
+type TermPage = components['schemas']['Page_TermOut_']
 
 /** 한 번에 보낼 수 있는 최대 줄 수. **서버가 같은 수를 강제한다.** */
 export const BULK_MAX = 500
@@ -31,7 +33,13 @@ export const vocabularyApi = {
   search: (
     slug: string,
     q: string,
-    options: { includeHidden?: boolean; leastUsed?: boolean; parentValue?: string } = {}
+    options: {
+      includeHidden?: boolean
+      leastUsed?: boolean
+      parentValue?: string
+      limit?: number
+      offset?: number
+    } = {}
   ) => {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
@@ -41,9 +49,20 @@ export const vocabularyApi = {
     // **상위 축으로 좁힌다.** Steel 을 골랐으면 강종 후보가 그 아래로 줄어야
     // 한다 — 강종이 수만 개일 때 이것이 규모에서 가장 큰 이득이다.
     if (options.parentValue) params.set('parent_value', options.parentValue)
+    if (options.limit !== undefined) params.set('limit', String(options.limit))
+    if (options.offset) params.set('offset', String(options.offset))
     const query = params.toString()
-    return api.get<Term[]>(`/vocabularies/${slug}/terms${query ? `?${query}` : ''}`)
+    return api.get<TermPage>(`/vocabularies/${slug}/terms${query ? `?${query}` : ''}`)
   },
+
+  /**
+   * 고른 값들을 지운다. **못 지운 것은 이유가 온다.**
+   *
+   * 쓰이고 있는 값은 안 지운다 — 지우면서 참조를 끊으면 그 시료가 어느
+   * 제조사였는지 영영 알 수 없게 된다. 그럴 때는 감추기나 병합을 쓴다.
+   */
+  removeMany: (slug: string, ids: string[]) =>
+    api.post<DeleteResult>(`/vocabularies/${slug}/terms/delete`, { ids }),
 
   /**
    * 표기를 고치거나 감춘다. **관리자만.**

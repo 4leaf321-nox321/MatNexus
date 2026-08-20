@@ -121,3 +121,22 @@ class BulkTermOut(BaseModel):
     skipped: int
     rejected: int = 0
     items: list[BulkTermItemOut]
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=BULK_MAX)
+
+
+class BulkDeleteItemOut(BaseModel):
+    id: uuid.UUID
+    value: str
+    deleted: bool
+    reason: str | None = None
+    """못 지운 이유. **무엇이 막는지 말하는 것이 요점이다** — "지울 수 없습니다"
+    만 주면 사람은 왜인지 알아내려고 목록을 뒤진다."""
+
+
+class BulkDeleteOut(BaseModel):
+    deleted: int
+    blocked: int
+    items: list[BulkDeleteItemOut]

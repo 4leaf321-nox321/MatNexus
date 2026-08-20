@@ -18,6 +18,9 @@ from app.modules.vocabulary import services
 from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
 from app.modules.vocabulary.normalize import clean, split_parent
 from app.modules.vocabulary.schemas import (
+    BulkDeleteItemOut,
+    BulkDeleteOut,
+    BulkDeleteRequest,
     BulkTermCreateRequest,
     BulkTermItemOut,
     BulkTermOut,
@@ -32,6 +35,7 @@ from app.modules.vocabulary.schemas import (
 )
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
+from app.shared.pagination import MAX_LIMIT, Page, clamp_limit
 
 router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 
@@ -83,11 +87,12 @@ def list_vocabularies(
     ]
 
 
-@router.get("/{slug}/terms", response_model=list[TermOut])
+@router.get("/{slug}/terms", response_model=Page[TermOut])
 def search_terms(
     slug: str,
     q: str | None = Query(default=None, description="부분 일치. 별칭으로도 찾는다"),
-    limit: int = Query(default=SEARCH_LIMIT, ge=1, le=SEARCH_LIMIT),
+    limit: int | None = Query(default=None, le=MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
     include_hidden: bool = Query(
         default=False, description="감춘 값도 포함. 관리 화면이 쓴다"
     ),
@@ -100,20 +105,30 @@ def search_terms(
     ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> list[TermOut]:
+) -> Page[TermOut]:
     vocabulary = services.get_vocabulary(db, slug)
+    # 값이 아니라 **표기**를 받는다 — 화면은 id 를 모르고 사람이 고른 글자만
+    # 안다. 상위 축에서 그 표기를 찾는 것은 서버의 일이다.
+    parent = services.parent_of(db, vocabulary, parent_value)
+    size = clamp_limit(limit)
     found = services.search(
         db,
         vocabulary,
         q=q,
-        limit=limit,
+        limit=size,
+        offset=offset,
         include_hidden=include_hidden,
         least_used=least_used,
-        # 값이 아니라 **표기**를 받는다 — 화면은 id 를 모르고 사람이 고른 글자만
-        # 안다. 상위 축에서 그 표기를 찾는 것은 서버의 일이다.
-        parent=services.parent_of(db, vocabulary, parent_value),
+        parent=parent,
     )
-    return [_term_out(db, item) for item in found]
+    return Page(
+        items=[_term_out(db, item) for item in found],
+        total=services.count(
+            db, vocabulary, q=q, include_hidden=include_hidden, parent=parent
+        ),
+        limit=size,
+        offset=offset,
+    )
 
 
 @router.post("/{slug}/terms", response_model=TermOut, status_code=201)
@@ -212,7 +227,7 @@ def recount_terms(
     vocabulary = services.get_vocabulary(db, slug)
     services.recount(db, vocabulary)
     db.commit()
-    found = services.search(db, vocabulary, q=None, limit=SEARCH_LIMIT, include_hidden=True)
+    found = services.search(db, vocabulary, q=None, limit=MAX_LIMIT, include_hidden=True)
     return [_term_out(db, item) for item in found]
 
 
@@ -425,5 +440,53 @@ def create_terms_bulk(
         existing=sum(1 for item in items if item.status == "existing"),
         skipped=sum(1 for item in items if item.status == "skipped"),
         rejected=sum(1 for item in items if item.status == "rejected"),
+        items=items,
+    )
+
+
+@router.post("/{slug}/terms/delete", response_model=BulkDeleteOut)
+def delete_terms(
+    slug: str,
+    payload: BulkDeleteRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> BulkDeleteOut:
+    """고른 값들을 지운다. **못 지운 것은 이유를 돌려준다.**
+
+    ## 왜 다 못 지우나
+
+    참조가 있으면 안 지운다. 지우면서 참조를 끊으면 그 시료가 어느 제조사였는지
+    영영 알 수 없게 되는데, 그건 값을 정리하는 것과 전혀 다른 일이다. 쓰이고 있는
+    값을 목록에서 치우고 싶으면 **감추기**를, 다른 값으로 흡수하려면 **병합**을
+    쓴다.
+
+    하위 값이 있어도 안 지운다 — 지우면 그것들이 고아가 된다.
+
+    ## 요청 전체를 실패시키지 않는다
+
+    50개를 골랐는데 3개가 막힌다고 나머지 47개를 못 지울 이유가 없다. 대신
+    **막힌 것마다 무엇이 막았는지** 말한다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    items: list[BulkDeleteItemOut] = []
+    for term_id in payload.ids:
+        term = db.get(VocabularyTerm, term_id)
+        if term is None or term.vocabulary_id != vocabulary.id:
+            items.append(
+                BulkDeleteItemOut(
+                    id=term_id, value="?", deleted=False, reason="값을 찾을 수 없습니다."
+                )
+            )
+            continue
+        value = term.value
+        reason = services.delete_term(db, term)
+        items.append(
+            BulkDeleteItemOut(id=term_id, value=value, deleted=reason is None, reason=reason)
+        )
+
+    db.commit()
+    return BulkDeleteOut(
+        deleted=sum(1 for item in items if item.deleted),
+        blocked=sum(1 for item in items if not item.deleted),
         items=items,
     )

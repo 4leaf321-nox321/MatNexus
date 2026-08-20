@@ -49,7 +49,7 @@ export function VocabularyField({
         options={[]}
         search={async (term) => {
           const found = await vocabularyApi.search(slug, term, { parentValue })
-          return found.map((item) => ({ value: item.value, count: item.usage_count }))
+          return found.items.map((item) => ({ value: item.value, count: item.usage_count }))
         }}
         onCreate={
           allowCreate

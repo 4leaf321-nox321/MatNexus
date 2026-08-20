@@ -1709,6 +1709,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/{slug}/terms/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Terms
+         * @description 고른 값들을 지운다. **못 지운 것은 이유를 돌려준다.**
+         *
+         *     ## 왜 다 못 지우나
+         *
+         *     참조가 있으면 안 지운다. 지우면서 참조를 끊으면 그 시료가 어느 제조사였는지
+         *     영영 알 수 없게 되는데, 그건 값을 정리하는 것과 전혀 다른 일이다. 쓰이고 있는
+         *     값을 목록에서 치우고 싶으면 **감추기**를, 다른 값으로 흡수하려면 **병합**을
+         *     쓴다.
+         *
+         *     하위 값이 있어도 안 지운다 — 지우면 그것들이 고아가 된다.
+         *
+         *     ## 요청 전체를 실패시키지 않는다
+         *
+         *     50개를 골랐는데 3개가 막힌다고 나머지 47개를 못 지울 이유가 없다. 대신
+         *     **막힌 것마다 무엇이 막았는지** 말한다.
+         */
+        post: operations["delete_terms_api_vocabularies__slug__terms_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/terms/{term_id}": {
         parameters: {
             query?: never;
@@ -2159,6 +2193,34 @@ export interface components {
             test_type: string;
             /** Tested At */
             tested_at?: string | null;
+        };
+        /** BulkDeleteItemOut */
+        BulkDeleteItemOut: {
+            /** Deleted */
+            deleted: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason?: string | null;
+            /** Value */
+            value: string;
+        };
+        /** BulkDeleteOut */
+        BulkDeleteOut: {
+            /** Blocked */
+            blocked: number;
+            /** Deleted */
+            deleted: number;
+            /** Items */
+            items: components["schemas"]["BulkDeleteItemOut"][];
+        };
+        /** BulkDeleteRequest */
+        BulkDeleteRequest: {
+            /** Ids */
+            ids: string[];
         };
         /**
          * BulkTermCreateRequest
@@ -3107,6 +3169,17 @@ export interface components {
         Page_MaterialOut_: {
             /** Items */
             items: components["schemas"]["MaterialOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[TermOut] */
+        Page_TermOut_: {
+            /** Items */
+            items: components["schemas"]["TermOut"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -7857,7 +7930,8 @@ export interface operations {
             query?: {
                 /** @description 부분 일치. 별칭으로도 찾는다 */
                 q?: string | null;
-                limit?: number;
+                limit?: number | null;
+                offset?: number;
                 /** @description 감춘 값도 포함. 관리 화면이 쓴다 */
                 include_hidden?: boolean;
                 /** @description 적게 쓰이는 것부터. 오타를 찾을 때 쓴다 */
@@ -7879,7 +7953,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TermOut"][];
+                    "application/json": components["schemas"]["Page_TermOut_"];
                 };
             };
             /** @description Validation Error */
@@ -7950,6 +8024,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkTermOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_terms_api_vocabularies__slug__terms_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkDeleteOut"];
                 };
             };
             /** @description Validation Error */
