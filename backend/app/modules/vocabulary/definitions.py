@@ -35,9 +35,7 @@ def ensure_builtin_vocabularies(db: Session) -> list[str]:
     for slug, label, policy, order in BUILTIN_VOCABULARIES:
         if slug in existing:
             continue
-        db.add(
-            Vocabulary(slug=slug, label=label, entry_policy=policy, sort_order=order)
-        )
+        db.add(Vocabulary(slug=slug, label=label, entry_policy=policy, sort_order=order))
         created.append(slug)
     if created:
         db.flush()

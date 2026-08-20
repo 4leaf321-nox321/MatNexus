@@ -13,6 +13,7 @@ import type { components } from '@/shared/api/schema'
 
 export type Vocabulary = components['schemas']['VocabularyOut']
 export type Term = components['schemas']['TermOut']
+type TermUpdate = components['schemas']['TermUpdateRequest']
 
 export const vocabularyApi = {
   /** 축 목록. 화면이 '새로 추가' 를 보여 줄지 정하는 데 쓴다. */
@@ -22,8 +23,30 @@ export const vocabularyApi = {
    * 값 검색. **별칭으로도 찾힌다** — `'포스코(주)'` 를 치면 `'포스코'` 가 온다.
    * 그래서 받은 결과를 화면이 다시 거르면 안 된다.
    */
-  search: (slug: string, q: string) =>
-    api.get<Term[]>(`/vocabularies/${slug}/terms${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  search: (slug: string, q: string, includeHidden = false) => {
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (includeHidden) params.set('include_hidden', 'true')
+    const query = params.toString()
+    return api.get<Term[]>(`/vocabularies/${slug}/terms${query ? `?${query}` : ''}`)
+  },
+
+  /**
+   * 표기를 고치거나 감춘다. **관리자만.**
+   *
+   * 이름을 고치면 그 값을 가리키던 것이 전부 따라온다 — 외래키라서 그렇다.
+   * 지우는 길은 없다. 지우면 그것을 쓰던 시료가 무엇이었는지 알 수 없게 된다.
+   */
+  update: (slug: string, id: string, body: TermUpdate) =>
+    api.patch<Term>(`/vocabularies/${slug}/terms/${id}`, body),
+
+  /**
+   * `쓰는 곳` 다시 세기. **캐시가 어긋났을 때.**
+   *
+   * 평소에는 참조가 바뀌는 지점에서 증감한다 — 화면을 열 때마다 전체를 세지
+   * 않으려고. 그 지점을 하나 빠뜨리면 조용히 벌어지므로 고칠 길을 둔다.
+   */
+  recount: (slug: string) => api.post<Term[]>(`/vocabularies/${slug}/recount`, {}),
 
   /**
    * 값 추가. **이미 있으면 그것이 돌아온다** — 409 가 아니다.

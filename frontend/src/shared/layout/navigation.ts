@@ -25,6 +25,7 @@ import {
   Ruler,
   Server,
   SlidersHorizontal,
+  Tags,
   User,
   UserCog,
   Users,
@@ -152,6 +153,14 @@ export const NAV_GROUPS: NavGroup[] = [
         label: '단위',
         icon: Ruler,
         to: '/admin/units',
+        audience: 'system_admin',
+      },
+      {
+        // **어휘를 켜 두고 고칠 데가 없으면 절반만 한 것이다.** 오타가 값이
+        // 되면 그것을 고르는 다음 사람이 생기고, 오염이 자기 강화된다.
+        label: '어휘',
+        icon: Tags,
+        to: '/admin/vocabulary',
         audience: 'system_admin',
       },
       { label: '장비 커넥터', icon: Plug, to: '/admin/connectors', audience: 'system_admin' },

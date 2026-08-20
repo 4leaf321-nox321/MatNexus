@@ -1580,6 +1580,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/{slug}/recount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recount Terms
+         * @description `쓰는 곳` 을 다시 센다. **캐시가 어긋났을 때 고치는 자리.**
+         *
+         *     평소에는 참조가 바뀌는 지점에서 증감한다(그래야 화면을 열 때마다 전체를
+         *     세지 않는다). 그 지점을 하나 빠뜨리면 조용히 벌어지므로, 바로잡는 길을
+         *     함께 둔다.
+         */
+        post: operations["recount_terms_api_vocabularies__slug__recount_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/terms": {
         parameters: {
             query?: never;
@@ -1602,6 +1626,40 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/terms/{term_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Term
+         * @description 값의 표기를 고치거나 감춘다. **관리자만.**
+         *
+         *     ## 이름을 고치면 가리키던 것이 전부 따라온다
+         *
+         *     외래키라서 그렇다(ADR 0010). `'포스코'` 를 `'포스코(주)'` 로 고치면 그 값을
+         *     가리키는 시료 수천 건이 한 행 수정으로 함께 바뀐다 — 문자열이었으면 전 행을
+         *     훑어야 했다.
+         *
+         *     다만 **아직 Expand 단계**라 문자열 컬럼도 함께 들고 있다. 그쪽도 맞춰
+         *     준다 — 안 하면 화면(문자열을 읽는다)과 어휘가 어긋난다.
+         *
+         *     ## 지우지 않고 감춘다
+         *
+         *     `deprecated` 는 피커에서만 사라진다. 지우면 그 시료가 어느 제조사였는지 알
+         *     수 없게 되는데, 그건 오타를 고치는 것과 전혀 다른 일이다.
+         */
+        patch: operations["update_term_api_vocabularies__slug__terms__term_id__patch"];
         trace?: never;
     };
     "/api/workspaces": {
@@ -3726,10 +3784,28 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
             /** Usage Count */
             usage_count: number;
             /** Value */
             value: string;
+        };
+        /**
+         * TermUpdateRequest
+         * @description 표기 고치기와 감추기. **관리자만.**
+         *
+         *     값을 지우는 길은 없다 — 지우면 그것을 가리키던 시료가 무엇이었는지 알 수
+         *     없게 된다. `deprecated` 로 감추면 피커에서만 사라진다.
+         */
+        TermUpdateRequest: {
+            /** Status */
+            status?: string | null;
+            /** Value */
+            value?: string | null;
         };
         /** TestChannelOut */
         TestChannelOut: {
@@ -7436,12 +7512,45 @@ export interface operations {
             };
         };
     };
+    recount_terms_api_vocabularies__slug__recount_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_terms_api_vocabularies__slug__terms_get: {
         parameters: {
             query?: {
                 /** @description 부분 일치. 별칭으로도 찾는다 */
                 q?: string | null;
                 limit?: number;
+                /** @description 감춘 값도 포함. 관리 화면이 쓴다 */
+                include_hidden?: boolean;
             };
             header?: never;
             path: {
@@ -7488,6 +7597,42 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_term_api_vocabularies__slug__terms__term_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TermUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

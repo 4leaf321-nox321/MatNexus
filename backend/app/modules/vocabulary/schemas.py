@@ -20,8 +20,23 @@ class TermOut(BaseModel):
     id: uuid.UUID
     value: str
     usage_count: int
-    """피커가 많이 쓰는 것을 위로 올린다. 개수가 보이면 고르기 전에 안다."""
+    """피커가 많이 쓰는 것을 위로 올린다. 개수가 보이면 고르기 전에 안다.
+
+    **이름을 고칠 때 몇 건이 따라오는지**이기도 하다. 외래키라 한 행을 고치면
+    이 수만큼이 함께 바뀐다."""
+    status: str = "active"
 
 
 class TermCreateRequest(BaseModel):
     value: str = Field(min_length=1, max_length=200)
+
+
+class TermUpdateRequest(BaseModel):
+    """표기 고치기와 감추기. **관리자만.**
+
+    값을 지우는 길은 없다 — 지우면 그것을 가리키던 시료가 무엇이었는지 알 수
+    없게 된다. `deprecated` 로 감추면 피커에서만 사라진다.
+    """
+
+    value: str | None = Field(default=None, min_length=1, max_length=200)
+    status: str | None = Field(default=None, pattern="^(active|deprecated)$")

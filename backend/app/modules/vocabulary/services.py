@@ -11,6 +11,7 @@ import uuid
 from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from app.modules.materials.models import Sample
 from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
 from app.modules.vocabulary.normalize import clean, compare_key
 from app.shared.errors import AppError, NotFound
@@ -96,7 +97,12 @@ def resolve_or_create(
 
 
 def search(
-    db: Session, vocabulary: Vocabulary, *, q: str | None, limit: int
+    db: Session,
+    vocabulary: Vocabulary,
+    *,
+    q: str | None,
+    limit: int,
+    include_hidden: bool = False,
 ) -> list[VocabularyTerm]:
     """피커가 부르는 검색. **별칭으로도 찾힌다.**
 
@@ -104,9 +110,12 @@ def search(
     결과를 다시 거르면 안 되는 이유가 이것이다.
     """
     query: Select[tuple[VocabularyTerm]] = select(VocabularyTerm).where(
-        VocabularyTerm.vocabulary_id == vocabulary.id,
-        VocabularyTerm.status == "active",
+        VocabularyTerm.vocabulary_id == vocabulary.id
     )
+    # 피커는 활성만 본다. 관리 화면은 감춘 것도 봐야 한다 — **되돌릴 길이 없으면
+    # 감추기도 막다른 길이다.**
+    if not include_hidden:
+        query = query.where(VocabularyTerm.status == "active")
     key = compare_key(q)
     if key:
         by_alias = select(VocabularyAlias.term_id).where(
@@ -137,4 +146,95 @@ def bump_usage(db: Session, term_id: uuid.UUID | None, delta: int) -> None:
         update(VocabularyTerm)
         .where(VocabularyTerm.id == term_id)
         .values(usage_count=func.greatest(VocabularyTerm.usage_count + delta, 0))
+    )
+
+
+def rename(db: Session, term: VocabularyTerm, value: str) -> None:
+    """값의 표기를 바꾼다. **가리키는 쪽도 함께 맞춘다.**
+
+    외래키라서 참조는 저절로 따라온다. 그런데 지금은 Expand 단계라 쓰는 쪽이
+    문자열 컬럼도 들고 있고(`samples.manufacturer`), 화면은 그쪽을 읽는다 —
+    안 맞추면 어휘와 화면이 어긋난다.
+
+    Contract 단계에서 문자열을 지우면 이 함수의 절반이 사라진다.
+    """
+    cleaned = clean(value)
+    if cleaned is None:
+        raise AppError("MNX-VOCABULARY-0003", "값이 비어 있습니다.", status=422)
+
+    key = compare_key(cleaned)
+    if key != term.normalized:
+        clash = db.scalar(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == term.vocabulary_id,
+                VocabularyTerm.normalized == key,
+                VocabularyTerm.id != term.id,
+            )
+        )
+        if clash is not None:
+            # **말없이 합치지 않는다.** 두 값을 하나로 만드는 것은 병합이고,
+            # 그건 어느 쪽이 살아남는지·참조를 어떻게 옮길지를 정해야 하는 일이다.
+            raise AppError(
+                "MNX-VOCABULARY-0005",
+                f"'{clash.value}' 가 이미 있습니다. 합치려면 병합을 쓰세요.",
+                status=409,
+            )
+
+    old_value = term.value
+    term.value = cleaned
+    term.normalized = key
+
+    # Expand 단계의 문자열 컬럼 맞추기. 축이 늘어나면 여기도 늘어난다 —
+    # Contract 에서 통째로 사라질 코드다.
+    slug = db.scalar(select(Vocabulary.slug).where(Vocabulary.id == term.vocabulary_id))
+    if slug == "manufacturer" and old_value != cleaned:
+        db.execute(
+            update(Sample)
+            .where(Sample.manufacturer_term_id == term.id)
+            .values(manufacturer=cleaned)
+        )
+
+
+def recount(db: Session, vocabulary: Vocabulary) -> int:
+    """`usage_count` 를 다시 센다. 고친 값 수를 돌려준다.
+
+    **캐시는 어긋난다.** 참조가 생기고 사라지는 자리를 하나라도 빠뜨리면 그때부터
+    조용히 벌어지고, 벌어진 캐시는 피커 정렬과 "쓰는 곳 N건" 을 거짓말로 만든다.
+    실제로 개발 중에 생성 경로의 증가를 늦게 붙여 3 대 5 로 벌어졌다.
+
+    그래서 **고칠 길을 함께 둔다.** 매번 세지 않는 이유는 성능이고(ADR 0010),
+    성능 때문에 둔 캐시라면 틀렸을 때 바로잡는 버튼이 있어야 한다.
+
+    지운 시료는 안 센다 — 피커의 "쓰는 곳" 은 지금 쓰이는 수다.
+    """
+    slug = vocabulary.slug
+    if slug != "manufacturer":
+        # 축이 늘어나면 여기도 늘어난다. 참조하는 컬럼이 축마다 다르므로
+        # 자동으로 못 한다 — Contract 뒤에는 한 줄씩 이 표에 적힌다.
+        return 0
+
+    db.execute(
+        update(VocabularyTerm)
+        .where(VocabularyTerm.vocabulary_id == vocabulary.id)
+        .values(
+            usage_count=(
+                select(func.count())
+                .select_from(Sample)
+                .where(
+                    Sample.manufacturer_term_id == VocabularyTerm.id,
+                    Sample.deleted_at.is_(None),
+                )
+                .scalar_subquery()
+            )
+        )
+    )
+    return int(
+        db.scalar(
+            select(func.count()).select_from(
+                select(VocabularyTerm)
+                .where(VocabularyTerm.vocabulary_id == vocabulary.id)
+                .subquery()
+            )
+        )
+        or 0
     )

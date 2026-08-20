@@ -5369,6 +5369,11 @@
             "title": "Id",
             "type": "string"
           },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
           "usage_count": {
             "title": "Usage Count",
             "type": "integer"
@@ -5384,6 +5389,38 @@
           "usage_count"
         ],
         "title": "TermOut",
+        "type": "object"
+      },
+      "TermUpdateRequest": {
+        "description": "표기 고치기와 감추기. **관리자만.**\n\n값을 지우는 길은 없다 — 지우면 그것을 가리키던 시료가 무엇이었는지 알 수\n없게 된다. `deprecated` 로 감추면 피커에서만 사라진다.",
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "pattern": "^(active|deprecated)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "title": "TermUpdateRequest",
         "type": "object"
       },
       "TestChannelOut": {
@@ -11835,6 +11872,53 @@
         ]
       }
     },
+    "/api/vocabularies/{slug}/recount": {
+      "post": {
+        "description": "`쓰는 곳` 을 다시 센다. **캐시가 어긋났을 때 고치는 자리.**\n\n평소에는 참조가 바뀌는 지점에서 증감한다(그래야 화면을 열 때마다 전체를\n세지 않는다). 그 지점을 하나 빠뜨리면 조용히 벌어지므로, 바로잡는 길을\n함께 둔다.",
+        "operationId": "recount_terms_api_vocabularies__slug__recount_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TermOut"
+                  },
+                  "title": "Response Recount Terms Api Vocabularies  Slug  Recount Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recount Terms",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
     "/api/vocabularies/{slug}/terms": {
       "get": {
         "operationId": "search_terms_api_vocabularies__slug__terms_get",
@@ -11876,6 +11960,18 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "description": "감춘 값도 포함. 관리 화면이 쓴다",
+            "in": "query",
+            "name": "include_hidden",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "감춘 값도 포함. 관리 화면이 쓴다",
+              "title": "Include Hidden",
+              "type": "boolean"
             }
           }
         ],
@@ -11957,6 +12053,69 @@
           }
         },
         "summary": "Create Term",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/terms/{term_id}": {
+      "patch": {
+        "description": "값의 표기를 고치거나 감춘다. **관리자만.**\n\n## 이름을 고치면 가리키던 것이 전부 따라온다\n\n외래키라서 그렇다(ADR 0010). `'포스코'` 를 `'포스코(주)'` 로 고치면 그 값을\n가리키는 시료 수천 건이 한 행 수정으로 함께 바뀐다 — 문자열이었으면 전 행을\n훑어야 했다.\n\n다만 **아직 Expand 단계**라 문자열 컬럼도 함께 들고 있다. 그쪽도 맞춰\n준다 — 안 하면 화면(문자열을 읽는다)과 어휘가 어긋난다.\n\n## 지우지 않고 감춘다\n\n`deprecated` 는 피커에서만 사라진다. 지우면 그 시료가 어느 제조사였는지 알\n수 없게 되는데, 그건 오타를 고치는 것과 전혀 다른 일이다.",
+        "operationId": "update_term_api_vocabularies__slug__terms__term_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "term_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Term Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TermUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Term",
         "tags": [
           "vocabulary"
         ]

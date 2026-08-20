@@ -16,9 +16,14 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
-from app.modules.vocabulary.schemas import TermCreateRequest, TermOut, VocabularyOut
-from app.shared.auth import current_user
-from app.shared.errors import AppError
+from app.modules.vocabulary.schemas import (
+    TermCreateRequest,
+    TermOut,
+    TermUpdateRequest,
+    VocabularyOut,
+)
+from app.shared.auth import current_user, require_system_admin
+from app.shared.errors import AppError, NotFound
 
 router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 
@@ -58,13 +63,22 @@ def search_terms(
     slug: str,
     q: str | None = Query(default=None, description="부분 일치. 별칭으로도 찾는다"),
     limit: int = Query(default=SEARCH_LIMIT, ge=1, le=SEARCH_LIMIT),
+    include_hidden: bool = Query(
+        default=False, description="감춘 값도 포함. 관리 화면이 쓴다"
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[TermOut]:
     vocabulary = services.get_vocabulary(db, slug)
-    found = services.search(db, vocabulary, q=q, limit=limit)
+    found = services.search(db, vocabulary, q=q, limit=limit, include_hidden=include_hidden)
     return [
-        TermOut(id=item.id, value=item.value, usage_count=item.usage_count) for item in found
+        TermOut(
+            id=item.id,
+            value=item.value,
+            usage_count=item.usage_count,
+            status=item.status,
+        )
+        for item in found
     ]
 
 
@@ -87,4 +101,70 @@ def create_term(
         raise AppError("MNX-VOCABULARY-0003", "값이 비어 있습니다.", status=422)
     db.commit()
     db.refresh(term)
-    return TermOut(id=term.id, value=term.value, usage_count=term.usage_count)
+    return TermOut(
+        id=term.id, value=term.value, usage_count=term.usage_count, status=term.status
+    )
+
+
+@router.patch("/{slug}/terms/{term_id}", response_model=TermOut)
+def update_term(
+    slug: str,
+    term_id: uuid.UUID,
+    payload: TermUpdateRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> TermOut:
+    """값의 표기를 고치거나 감춘다. **관리자만.**
+
+    ## 이름을 고치면 가리키던 것이 전부 따라온다
+
+    외래키라서 그렇다(ADR 0010). `'포스코'` 를 `'포스코(주)'` 로 고치면 그 값을
+    가리키는 시료 수천 건이 한 행 수정으로 함께 바뀐다 — 문자열이었으면 전 행을
+    훑어야 했다.
+
+    다만 **아직 Expand 단계**라 문자열 컬럼도 함께 들고 있다. 그쪽도 맞춰
+    준다 — 안 하면 화면(문자열을 읽는다)과 어휘가 어긋난다.
+
+    ## 지우지 않고 감춘다
+
+    `deprecated` 는 피커에서만 사라진다. 지우면 그 시료가 어느 제조사였는지 알
+    수 없게 되는데, 그건 오타를 고치는 것과 전혀 다른 일이다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    term = db.get(VocabularyTerm, term_id)
+    if term is None or term.vocabulary_id != vocabulary.id:
+        raise NotFound("MNX-VOCABULARY-0004", "값을 찾을 수 없습니다.")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "value" in data:
+        services.rename(db, term, data["value"])
+    if "status" in data:
+        term.status = data["status"]
+
+    db.commit()
+    db.refresh(term)
+    return TermOut(
+        id=term.id, value=term.value, usage_count=term.usage_count, status=term.status
+    )
+
+
+@router.post("/{slug}/recount", response_model=list[TermOut])
+def recount_terms(
+    slug: str,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[TermOut]:
+    """`쓰는 곳` 을 다시 센다. **캐시가 어긋났을 때 고치는 자리.**
+
+    평소에는 참조가 바뀌는 지점에서 증감한다(그래야 화면을 열 때마다 전체를
+    세지 않는다). 그 지점을 하나 빠뜨리면 조용히 벌어지므로, 바로잡는 길을
+    함께 둔다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    services.recount(db, vocabulary)
+    db.commit()
+    found = services.search(db, vocabulary, q=None, limit=SEARCH_LIMIT, include_hidden=True)
+    return [
+        TermOut(id=item.id, value=item.value, usage_count=item.usage_count, status=item.status)
+        for item in found
+    ]

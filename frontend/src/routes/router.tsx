@@ -52,6 +52,9 @@ const SignupPage = lazy(() => import('@/modules/auth/SignupPage'))
 const StoragePage = lazy(() => import('@/modules/tests/StoragePage'))
 const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
 const UnitsPage = lazy(() => import('@/modules/units/UnitsPage'))
+const VocabularyAdminPage = lazy(
+  () => import('@/modules/vocabulary/VocabularyAdminPage')
+)
 const VocPage = lazy(() => import('@/modules/voc/VocPage'))
 const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
 
@@ -106,6 +109,7 @@ export const router = createBrowserRouter([
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
           { path: 'admin/units', element: <UnitsPage /> },
+          { path: 'admin/vocabulary', element: <VocabularyAdminPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },

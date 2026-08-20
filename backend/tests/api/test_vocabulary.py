@@ -233,3 +233,141 @@ class Test시료와의_연결:
 
         vocabulary = services.get_vocabulary(db, "manufacturer")
         assert services.resolve(db, vocabulary, "거쳐제철") is not None
+
+
+class Test관리:
+    """**어휘를 켜 두고 고칠 데가 없으면 절반만 한 것이다.**
+
+    오타가 값이 되면 그것을 고르는 다음 사람이 생기고, 오염이 자기 강화된다.
+    개발 DB 에 실제로 `'???'` 가 들어가 있었다.
+    """
+
+    def test_이름을_고치면_가리키던_것이_따라온다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """**외래키로 간 이유가 이 줄이다.** 문자열이었으면 전 행을 훑어야 했다."""
+        for _ in range(3):
+            client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"manufacturer": "고칠제철"},
+                headers=admin_headers,
+            )
+        term = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"q": "고칠제철"},
+            headers=admin_headers,
+        ).json()[0]
+
+        changed = client.patch(
+            f"/api/vocabularies/manufacturer/terms/{term['id']}",
+            json={"value": "고칠제철(주)"},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+
+        samples = client.get(
+            f"/api/materials/{material['id']}/samples", headers=admin_headers
+        ).json()
+        assert {item["manufacturer"] for item in samples} == {"고칠제철(주)"}
+
+    def test_같은_이름으로_고치면_막고_병합을_가리킨다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**말없이 합치지 않는다.** 두 값을 하나로 만드는 것은 병합이고, 어느
+        쪽이 살아남는지·참조를 어떻게 옮길지를 정해야 하는 일이다."""
+        first = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "가제철"},
+            headers=admin_headers,
+        ).json()
+        client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "나제철"},
+            headers=admin_headers,
+        )
+
+        denied = client.patch(
+            f"/api/vocabularies/manufacturer/terms/{first['id']}",
+            json={"value": "나제철"},
+            headers=admin_headers,
+        )
+        assert denied.status_code == 409, denied.text
+        assert "병합" in denied.json()["error"]["message"]
+
+    def test_감추면_피커에서만_사라진다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+    ) -> None:
+        """지우면 그 시료가 어느 제조사였는지 알 수 없게 된다 — 오타를 고치는
+        것과 전혀 다른 일이다."""
+        client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"manufacturer": "감출제철"},
+            headers=admin_headers,
+        )
+        term = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"q": "감출제철"},
+            headers=admin_headers,
+        ).json()[0]
+
+        client.patch(
+            f"/api/vocabularies/manufacturer/terms/{term['id']}",
+            json={"status": "deprecated"},
+            headers=admin_headers,
+        )
+
+        visible = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"q": "감출제철"},
+            headers=admin_headers,
+        ).json()
+        assert visible == []
+
+        # **되돌릴 길이 있어야 한다.** 없으면 감추기도 막다른 길이다.
+        hidden = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"q": "감출제철", "include_hidden": "true"},
+            headers=admin_headers,
+        ).json()
+        assert [item["value"] for item in hidden] == ["감출제철"]
+
+        # 시료는 그대로다.
+        samples = client.get(
+            f"/api/materials/{material['id']}/samples", headers=admin_headers
+        ).json()
+        assert samples[0]["manufacturer"] == "감출제철"
+
+    def test_어긋난_개수를_다시_셀_수_있다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """**성능 때문에 둔 캐시라면 틀렸을 때 고치는 길이 있어야 한다.**
+
+        실제로 개발 중에 생성 경로의 증가를 늦게 붙여 3 대 5 로 벌어졌다.
+        """
+        for _ in range(2):
+            client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"manufacturer": "셀제철"},
+                headers=admin_headers,
+            )
+        term = db.scalar(select(VocabularyTerm).where(VocabularyTerm.value == "셀제철"))
+        assert term is not None
+        term.usage_count = 99  # 어긋뜨린다
+        db.commit()
+
+        after = client.post(
+            "/api/vocabularies/manufacturer/recount", headers=admin_headers
+        ).json()
+        counted = {item["value"]: item["usage_count"] for item in after}
+        assert counted["셀제철"] == 2
