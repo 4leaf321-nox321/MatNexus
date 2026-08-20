@@ -13,8 +13,10 @@
  * 그래서 필드를 값으로 만든다. 여기 한 줄을 더하면 두 창에 동시에 생긴다.
  */
 
+import { vocabularyApi } from '@/modules/vocabulary/api'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { OptionPicker } from '@/shared/components/OptionPicker'
 
 /** 시료 폼의 상태. **문자열로 들고 있는다** — `Number('0.')` 이 0 이 되어
  *  소수점을 찍는 순간 지워진다. */
@@ -63,7 +65,7 @@ export function samplePayload(form: SampleForm, densityUnit: string) {
 const FIELDS: { key: keyof SampleForm; label: string; type?: string; placeholder?: string }[] = [
   { key: 'lot_no', label: '로트번호', placeholder: 'L240612' },
   { key: 'alias', label: '별칭' },
-  { key: 'manufacturer', label: '제조사' },
+  // 제조사는 여기 없다 — 어휘 피커로 따로 그린다(ADR 0010).
   { key: 'distributor', label: '유통사' },
   { key: 'primary_vendor', label: '주 벤더' },
   { key: 'sales_type', label: '판매 유형' },
@@ -80,6 +82,30 @@ interface Props {
 export function SampleFields({ idPrefix, form, onChange }: Props) {
   return (
     <>
+      {/* **제조사만 어휘 피커다.**
+          자유 텍스트로 두면 '포스코'·'포스코 '·맥에서 붙여넣은 자모 분해가 서로
+          다른 제조사가 되고, 물성 탭의 "제조사가 섞였습니다" 경고가 헛돈다.
+          나머지 칸은 아직 텍스트다 — 축을 하나씩 옮긴다(1단계). */}
+      <div className="space-y-1.5">
+        <Label>제조사</Label>
+        <OptionPicker
+          label="제조사"
+          value={form.manufacturer}
+          options={[]}
+          search={async (term) => {
+            const found = await vocabularyApi.search('manufacturer', term)
+            return found.map((item) => ({ value: item.value, count: item.usage_count }))
+          }}
+          onCreate={async (value) => {
+            // 서버가 정규 값을 돌려준다 — 별칭에 걸리면 친 글자와 다르다.
+            const added = await vocabularyApi.create('manufacturer', value)
+            return { value: added.value, count: added.usage_count }
+          }}
+          anyLabel="고르지 않음"
+          onChange={(next) => onChange('manufacturer', next)}
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         {FIELDS.map(({ key, label, type, placeholder }) => (
           <div key={key} className="space-y-1.5">

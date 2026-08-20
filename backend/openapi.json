@@ -5347,6 +5347,45 @@
         "title": "TemporaryPasswordResponse",
         "type": "object"
       },
+      "TermCreateRequest": {
+        "properties": {
+          "value": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "TermCreateRequest",
+        "type": "object"
+      },
+      "TermOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "usage_count": {
+            "title": "Usage Count",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "value",
+          "usage_count"
+        ],
+        "title": "TermOut",
+        "type": "object"
+      },
       "TestChannelOut": {
         "properties": {
           "dimension": {
@@ -6929,6 +6968,34 @@
           "reply"
         ],
         "title": "VocReplyRequest",
+        "type": "object"
+      },
+      "VocabularyOut": {
+        "properties": {
+          "entry_policy": {
+            "title": "Entry Policy",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "term_count": {
+            "title": "Term Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "slug",
+          "label",
+          "entry_policy",
+          "term_count"
+        ],
+        "title": "VocabularyOut",
         "type": "object"
       },
       "WorkspaceCreateRequest": {
@@ -11739,6 +11806,159 @@
         "summary": "Reply",
         "tags": [
           "voc"
+        ]
+      }
+    },
+    "/api/vocabularies": {
+      "get": {
+        "description": "축 목록. 화면이 '새로 추가' 를 보여 줄지 정하는 데 쓴다.",
+        "operationId": "list_vocabularies_api_vocabularies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VocabularyOut"
+                  },
+                  "title": "Response List Vocabularies Api Vocabularies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Vocabularies",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/terms": {
+      "get": {
+        "operationId": "search_terms_api_vocabularies__slug__terms_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "description": "부분 일치. 별칭으로도 찾는다",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "부분 일치. 별칭으로도 찾는다",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TermOut"
+                  },
+                  "title": "Response Search Terms Api Vocabularies  Slug  Terms Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Terms",
+        "tags": [
+          "vocabulary"
+        ]
+      },
+      "post": {
+        "description": "값을 더한다. **이미 있으면 그것을 돌려준다** — 409 가 아니다.\n\n피커는 사람이 엔터를 치는 순간 낙관적으로 보낸다. 그때 409 를 주면 화면이\n오류를 그려야 하는데, 실제로 일어난 일은 \"이미 있는 값을 골랐다\" 뿐이다.",
+        "operationId": "create_term_api_vocabularies__slug__terms_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TermCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Term",
+        "tags": [
+          "vocabulary"
         ]
       }
     },

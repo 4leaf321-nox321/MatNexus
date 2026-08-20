@@ -39,6 +39,7 @@ from app.modules.materials.schemas import (
     ValueSourceOut,
 )
 from app.modules.tests.models import TestRun
+from app.modules.vocabulary import services as vocabulary_services
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -700,6 +701,12 @@ def create_sample(
     workspace = services.resolve_workspace(db, user, payload.workspace_slug)
 
     seq_no = services.next_sample_seq(db, material.id)
+    maker = vocabulary_services.resolve_or_create(
+        db,
+        vocabulary_services.get_vocabulary(db, "manufacturer"),
+        payload.manufacturer,
+        created_by_id=user.id,
+    )
     sample = Sample(
         workspace_id=workspace.id,
         material_id=material.id,
@@ -707,7 +714,10 @@ def create_sample(
         record_name=naming.sample_name(material=material.record_name, seq_no=seq_no),
         alias=payload.alias,
         lot_no=payload.lot_no,
-        manufacturer=payload.manufacturer,
+        # **어휘를 거쳐 들어간다**(ADR 0010). 문자열도 함께 채운다 — 아직
+        # 옮기는 중이라 읽는 쪽이 문자열을 본다(Expand 단계).
+        manufacturer=maker.value if maker else None,
+        manufacturer_term_id=maker.id if maker else None,
         distributor=payload.distributor,
         primary_vendor=payload.primary_vendor,
         sales_type=payload.sales_type,
@@ -718,6 +728,9 @@ def create_sample(
         registered_by_id=user.id,
     )
     db.add(sample)
+    # **참조가 생기는 자리에서 센다.** 매번 `count(join)` 하면 어휘가 커질수록
+    # 느려지고 그 비용이 화면을 열 때마다 든다.
+    vocabulary_services.bump_usage(db, sample.manufacturer_term_id, 1)
     db.commit()
     return _sample_out(sample, specimen_count=0, workspace_name=workspace.name)
 
@@ -760,7 +773,6 @@ def update_sample(
     for field in (
         "lot_no",
         "alias",
-        "manufacturer",
         "distributor",
         "primary_vendor",
         "sales_type",
@@ -769,6 +781,20 @@ def update_sample(
     ):
         if field in data:
             setattr(sample, field, data[field])
+
+    if "manufacturer" in data:
+        # 옛 값의 usage 를 빼고 새 값에 더한다. 캐시가 어긋나면 피커에 "쓰이지
+        # 않는 값" 이 남는다.
+        vocabulary_services.bump_usage(db, sample.manufacturer_term_id, -1)
+        maker = vocabulary_services.resolve_or_create(
+            db,
+            vocabulary_services.get_vocabulary(db, "manufacturer"),
+            data["manufacturer"],
+            created_by_id=user.id,
+        )
+        sample.manufacturer = maker.value if maker else None
+        sample.manufacturer_term_id = maker.id if maker else None
+        vocabulary_services.bump_usage(db, sample.manufacturer_term_id, 1)
 
     if "density" in data or "density_unit" in data:
         unit = data.get("density_unit") or sample.input_units.get("density", DENSITY_UNIT)
@@ -801,6 +827,8 @@ def delete_sample(
             f"시편 {remaining}건이 남아 있어 지울 수 없습니다.",
         )
     sample.deleted_at = _now()
+    # 지운 시료는 어휘를 안 쓴다 — 안 빼면 피커에 "쓰이지 않는 값" 이 남는다.
+    vocabulary_services.bump_usage(db, sample.manufacturer_term_id, -1)
     db.commit()
     return Response(status_code=204)
 

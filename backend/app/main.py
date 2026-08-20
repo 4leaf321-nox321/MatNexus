@@ -30,6 +30,7 @@ from app.modules.tests import formats as tests_formats
 from app.modules.tests import routes as tests_routes
 from app.modules.units import routes as units_routes
 from app.modules.voc import routes as voc_routes
+from app.modules.vocabulary import routes as vocabulary_routes
 from app.modules.workspaces import routes as workspaces_routes
 from app.shared.access_log import AccessLogMiddleware
 from app.shared.errors import NotFound, register_error_handlers
@@ -68,6 +69,7 @@ def _api_router() -> APIRouter:
     router.include_router(statistics_routes.router)
     router.include_router(fitting_routes.router)
     router.include_router(units_routes.router)
+    router.include_router(vocabulary_routes.router)
 
     return router
 

@@ -31,6 +31,9 @@ extend-immutable-calls = [
 # Alembic이 생성한 파일은 손으로 고치지 않는 한 그대로 둔다. 여기를 린트에
 # 맞추려고 생성 결과를 매번 손보면, 정작 사람이 쓴 부분의 변경이 묻힌다.
 "migrations/versions/*" = ["E501", "I001", "UP035", "UP007"]
+# 어휘 정규화는 **전각·자모분해 같은 헷갈리는 문자 자체가 소재**다. 그것을
+# "오타 아니냐" 고 묻는 검사와는 맞지 않는다 — 여기서는 그 문자가 정답이다.
+"tests/api/test_vocabulary.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.13"

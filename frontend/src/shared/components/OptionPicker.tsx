@@ -33,7 +33,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronsUpDown, Search } from 'lucide-react'
+import { Check, ChevronsUpDown, Plus, Search } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -67,6 +67,14 @@ interface Props {
    * 'SECC' 보다 늦게 오는 일이 실제로 생긴다.
    */
   search?: (term: string) => Promise<Option[]>
+  /**
+   * 주면 **목록에 없는 값을 더할 수 있다**. `open` 축에서만 쓴다.
+   *
+   * 서버가 돌려준 값을 그대로 고른다 — 친 글자와 다를 수 있다. `'포스코(주)'`
+   * 가 `'포스코'` 의 별칭이면 서버는 `'포스코'` 를 준다. 그때 화면이 친 글자를
+   * 고르면 **어휘를 거친 의미가 사라진다.**
+   */
+  onCreate?: (term: string) => Promise<Option>
   /** 아무것도 안 고른 상태의 이름. 기본은 '전체'. */
   anyLabel?: string
   onChange: (next: string) => void
@@ -77,6 +85,7 @@ export function OptionPicker({
   value,
   options,
   search,
+  onCreate,
   anyLabel = '전체',
   onChange,
 }: Props) {
@@ -124,6 +133,18 @@ export function OptionPicker({
     onChange(next)
     setOpen(false)
     setTerm('')
+  }
+
+  const typed = term.trim()
+  // 이미 있는 값이면 '새로 추가' 를 안 보여 준다 — 눌러 봐야 같은 것이 나온다.
+  const exists = matched.some((item) => item.value.toLowerCase() === typed.toLowerCase())
+  const canCreate = Boolean(onCreate) && typed !== '' && !exists && !busy
+
+  async function create() {
+    if (!onCreate) return
+    const added = await onCreate(typed)
+    // **서버가 준 값을 고른다.** 친 글자가 아니다.
+    pick(added.value)
   }
 
   return (
@@ -177,6 +198,19 @@ export function OptionPicker({
                   '{term}' 에 맞는 {label} 이(가) 없습니다.
                 </p>
               ))}
+
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => void create()}
+                className="hover:bg-muted/60 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+              >
+                <Plus className="size-3.5 opacity-60" />
+                <span>
+                  '<b>{typed}</b>' 새로 추가
+                </span>
+              </button>
+            )}
           </div>
 
           {/* 서버 검색 모드에서는 서버가 이미 상한을 걸어 보낸다. "몇 개 더" 를

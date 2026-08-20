@@ -217,6 +217,21 @@ class Sample(Base):
     한 로트에서 시료를 여러 개 뜨는 것이 정상이므로 유니크가 아니다."""
 
     manufacturer: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    manufacturer_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("vocabulary_terms.id"),
+        index=True,
+        nullable=True,
+    )
+    """제조사 어휘(ADR 0010). **문자열과 나란히 둔다 — 아직 옮기는 중이다.**
+
+    한 번에 바꾸면 롤백할 데가 없고, 백필 도중에 반쯤 옮겨진 상태로 서비스가
+    돈다. 그래서 세 번에 나눈다:
+
+        Expand   지금. FK 를 더하고 쓰기는 양쪽에. 읽기는 아직 문자열
+        Backfill 문자열에서 값을 만들고 FK 를 채운다
+        Contract 읽기를 FK 로 옮기고, 한 릴리스 검증한 뒤 문자열을 지운다
+    """
     distributor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     primary_vendor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sales_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

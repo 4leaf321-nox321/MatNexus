@@ -1560,6 +1560,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Vocabularies
+         * @description 축 목록. 화면이 '새로 추가' 를 보여 줄지 정하는 데 쓴다.
+         */
+        get: operations["list_vocabularies_api_vocabularies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Terms */
+        get: operations["search_terms_api_vocabularies__slug__terms_get"];
+        put?: never;
+        /**
+         * Create Term
+         * @description 값을 더한다. **이미 있으면 그것을 돌려준다** — 409 가 아니다.
+         *
+         *     피커는 사람이 엔터를 치는 순간 낙관적으로 보낸다. 그때 409 를 주면 화면이
+         *     오류를 그려야 하는데, 실제로 일어난 일은 "이미 있는 값을 골랐다" 뿐이다.
+         */
+        post: operations["create_term_api_vocabularies__slug__terms_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -3670,6 +3714,23 @@ export interface components {
             /** Temporary Password */
             temporary_password: string;
         };
+        /** TermCreateRequest */
+        TermCreateRequest: {
+            /** Value */
+            value: string;
+        };
+        /** TermOut */
+        TermOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Usage Count */
+            usage_count: number;
+            /** Value */
+            value: string;
+        };
         /** TestChannelOut */
         TestChannelOut: {
             /** Dimension */
@@ -4150,6 +4211,17 @@ export interface components {
              * @default resolved
              */
             status: string;
+        };
+        /** VocabularyOut */
+        VocabularyOut: {
+            /** Entry Policy */
+            entry_policy: string;
+            /** Label */
+            label: string;
+            /** Slug */
+            slug: string;
+            /** Term Count */
+            term_count: number;
         };
         /** WorkspaceCreateRequest */
         WorkspaceCreateRequest: {
@@ -7331,6 +7403,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VocOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_vocabularies_api_vocabularies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocabularyOut"][];
+                };
+            };
+        };
+    };
+    search_terms_api_vocabularies__slug__terms_get: {
+        parameters: {
+            query?: {
+                /** @description 부분 일치. 별칭으로도 찾는다 */
+                q?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_term_api_vocabularies__slug__terms_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TermCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermOut"];
                 };
             };
             /** @description Validation Error */

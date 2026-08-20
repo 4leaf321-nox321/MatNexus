@@ -7,6 +7,7 @@ Alembic autogenerate는 Base.metadata에 등록된 것만 본다. 모듈이 늘�
 
 from __future__ import annotations
 
+import app.modules.vocabulary.models  # noqa: F401
 from app.database import Base
 from app.jobs.models import Job
 from app.modules.accounts.models import User

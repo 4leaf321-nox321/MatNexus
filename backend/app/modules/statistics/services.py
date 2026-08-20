@@ -265,9 +265,19 @@ def sample_warnings(db: Session, group: Group) -> list[str]:
     samples = db.scalars(select(Sample).where(Sample.id.in_(ids))).all()
 
     notes: list[str] = []
-    for attribute, label in (("manufacturer", "제조사"),):
-        values = {getattr(item, attribute) for item in samples if getattr(item, attribute)}
-        if len(values) > 1:
+    # **어휘 id 로 센다. 문자열이 아니다**(ADR 0010).
+    #
+    # 문자열로 세면 '포스코' 와 '포스코 ' 가 다른 제조사가 되어 헛경고를 낸다.
+    # 경고를 만들어 놓고 그 입력을 자유 텍스트로 두는 것이 앞뒤가 안 맞아서
+    # 어휘를 도입했고, 여기가 그 첫 수혜 지점이다.
+    for attribute, label in (("manufacturer_term_id", "제조사"),):
+        ids = {getattr(item, attribute) for item in samples if getattr(item, attribute)}
+        if len(ids) > 1:
+            values = {
+                item.manufacturer
+                for item in samples
+                if getattr(item, attribute) and item.manufacturer
+            }
             joined = ", ".join(sorted(values))
             notes.append(
                 f"{label}가 시료마다 다릅니다({joined}) — 서로 다른 곳에서 만든 것을 "
