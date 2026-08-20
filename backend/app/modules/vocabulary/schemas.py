@@ -19,6 +19,8 @@ class VocabularyOut(BaseModel):
 class TermOut(BaseModel):
     id: uuid.UUID
     value: str
+    parent_value: str | None = None
+    """상위 축의 값. 화면이 "이 강종은 Metal/Steel 아래 있습니다" 를 말하는 데 쓴다."""
     usage_count: int
     """피커가 많이 쓰는 것을 위로 올린다. 개수가 보이면 고르기 전에 안다.
 
@@ -29,6 +31,8 @@ class TermOut(BaseModel):
 
 class TermCreateRequest(BaseModel):
     value: str = Field(min_length=1, max_length=200)
+    parent_value: str | None = Field(default=None, max_length=200)
+    """상위 축의 값. 주면 새 값이 그 아래로 들어간다."""
 
 
 class TermUpdateRequest(BaseModel):

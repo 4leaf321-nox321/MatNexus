@@ -337,8 +337,6 @@ def create_material(
         owner_workspace_id=workspace.id,
         record_name=record_name,
         alias=payload.alias,
-        family=payload.family,
-        category=payload.category,
         details=payload.details,
         spec_thickness_m=thickness_m,
         applied_product=payload.applied_product,
@@ -583,8 +581,6 @@ def update_material(
 
     data = payload.model_dump(exclude_unset=True)
     for field in (
-        "family",
-        "category",
         "details",
         "alias",
         "note",

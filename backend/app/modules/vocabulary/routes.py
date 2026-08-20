@@ -32,6 +32,22 @@ router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 SEARCH_LIMIT = 100
 
 
+def _term_out(db: Session, item: VocabularyTerm) -> TermOut:
+    """값 하나를 응답 모양으로. **한 곳에서만 만든다.**
+
+    네 군데서 손으로 만들고 있었는데, 필드를 하나 더하니 그중 하나를 빠뜨렸다.
+    부모 조회도 여기 모아 둔다.
+    """
+    parent = db.get(VocabularyTerm, item.parent_term_id) if item.parent_term_id else None
+    return TermOut(
+        id=item.id,
+        value=item.value,
+        parent_value=parent.value if parent else None,
+        usage_count=item.usage_count,
+        status=item.status,
+    )
+
+
 @router.get("", response_model=list[VocabularyOut])
 def list_vocabularies(
     user: User = Depends(current_user),
@@ -69,6 +85,10 @@ def search_terms(
     least_used: bool = Query(
         default=False, description="적게 쓰이는 것부터. 오타를 찾을 때 쓴다"
     ),
+    parent_value: str | None = Query(
+        default=None,
+        description="상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만",
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[TermOut]:
@@ -80,16 +100,11 @@ def search_terms(
         limit=limit,
         include_hidden=include_hidden,
         least_used=least_used,
+        # 값이 아니라 **표기**를 받는다 — 화면은 id 를 모르고 사람이 고른 글자만
+        # 안다. 상위 축에서 그 표기를 찾는 것은 서버의 일이다.
+        parent=services.parent_of(db, vocabulary, parent_value),
     )
-    return [
-        TermOut(
-            id=item.id,
-            value=item.value,
-            usage_count=item.usage_count,
-            status=item.status,
-        )
-        for item in found
-    ]
+    return [_term_out(db, item) for item in found]
 
 
 @router.post("/{slug}/terms", response_model=TermOut, status_code=201)
@@ -105,15 +120,21 @@ def create_term(
     오류를 그려야 하는데, 실제로 일어난 일은 "이미 있는 값을 골랐다" 뿐이다.
     """
     vocabulary = services.get_vocabulary(db, slug)
-    term = services.resolve_or_create(db, vocabulary, payload.value, created_by_id=user.id)
+    term = services.resolve_or_create(
+        db,
+        vocabulary,
+        payload.value,
+        created_by_id=user.id,
+        # **새 값이 부모를 물려받는다.** Steel 을 고른 상태에서 강종을 추가하면
+        # 그 아래로 들어간다 — 계층이 쓰면서 저절로 만들어진다.
+        parent=services.parent_of(db, vocabulary, payload.parent_value),
+    )
     if term is None:
         # `clean` 이 빈 값으로 만든 경우 — 공백만 친 것이다.
         raise AppError("MNX-VOCABULARY-0003", "값이 비어 있습니다.", status=422)
     db.commit()
     db.refresh(term)
-    return TermOut(
-        id=term.id, value=term.value, usage_count=term.usage_count, status=term.status
-    )
+    return _term_out(db, term)
 
 
 @router.patch("/{slug}/terms/{term_id}", response_model=TermOut)
@@ -153,9 +174,7 @@ def update_term(
 
     db.commit()
     db.refresh(term)
-    return TermOut(
-        id=term.id, value=term.value, usage_count=term.usage_count, status=term.status
-    )
+    return _term_out(db, term)
 
 
 @router.post("/{slug}/recount", response_model=list[TermOut])
@@ -174,7 +193,4 @@ def recount_terms(
     services.recount(db, vocabulary)
     db.commit()
     found = services.search(db, vocabulary, q=None, limit=SEARCH_LIMIT, include_hidden=True)
-    return [
-        TermOut(id=item.id, value=item.value, usage_count=item.usage_count, status=item.status)
-        for item in found
-    ]
+    return [_term_out(db, item) for item in found]

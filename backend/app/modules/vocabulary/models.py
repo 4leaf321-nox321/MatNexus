@@ -10,9 +10,9 @@
 
 ## 왜 세 표인가
 
-**축과 값을 나누는 이유**: 축마다 입력 정책이 다르다. 강종은 계속 새로 생기니
-사용자가 즉석에서 추가할 수 있어야 하고(`open`), Family 는 관리자가 정하는
-분류라 아무나 늘리면 안 된다(`closed`). 하나로 합치면 그 차이를 둘 데가 없다.
+**축과 값을 나누는 이유**: 축마다 성질이 다르다. 입력 정책(`open`/`closed`)도,
+부모 축이 무엇인지도 축에 붙는다 — `category` 의 부모는 `family` 다. 값마다
+그것을 물으면 같은 답을 수만 번 저장하는 셈이다.
 
 **별칭을 나누는 이유**: 별칭은 **예방**이다. `'POSCO'` 를 `'포스코'` 의 별칭으로
 등록해 두면 값을 만들 때 그것까지 뒤져서 애초에 중복이 안 생긴다 — 사후에
@@ -41,8 +41,13 @@ from app.database import Base
 #:   open   — 누구나 피커에서 새 값을 추가할 수 있다. 강종·제조사처럼 계속
 #:            늘어나는 축. 승인 대기를 두지 않는다 — 기다리게 하면 피커가 멈추고,
 #:            그러면 사람은 시스템 밖에서 일한다. 드리프트는 사후 병합으로 푼다.
-#:   closed — 관리자가 등록한 값만 고른다. Family·Category 처럼 **미리 정해야
-#:            하는 분류**. 실제로 `'Family'` 라는 값이 입력된 적이 있다.
+#:   closed — 관리자가 등록한 값만 고른다. **지금은 아무 축도 안 쓴다.**
+#:            막았을 때 사람이 어디로 가는지가 문제다 — 목록에 없으면 관리자를
+#:            찾아가거나, 더 흔하게는 비슷한 것을 대충 고르고 넘어간다. 그러면
+#:            분류가 지켜진 것이 아니라 조용히 틀린 것이다.
+#:
+#:            값을 하는 자리는 **외부 시스템이 정본을 주는 축**이다(ReportArchive
+#:            는 모델·BOM 코드에 쓴다). Phase 6 에서 장비 커넥터가 붙으면 켠다.
 ENTRY_POLICIES = ("open", "closed")
 
 #: 값의 상태.
@@ -66,6 +71,11 @@ class Vocabulary(Base):
     """코드가 거는 이름. `manufacturer` 처럼 안 바뀌는 것."""
     label: Mapped[str] = mapped_column(String(100))
     entry_policy: Mapped[str] = mapped_column(String(10), default="open")
+    parent_slug: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    """이 축의 값이 어느 축 아래 사는가. `category` 의 부모는 `family` 다.
+
+    **계약을 축 수준에 한 번만 적는다.** 값마다 "이건 어느 축의 부모냐" 를 물으면
+    같은 답을 수만 번 저장하는 셈이고, 잘못된 축을 가리키는 값이 생긴다."""
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -103,6 +113,20 @@ class VocabularyTerm(Base):
 
     구두점은 안 지운다 — `'포스코(주)'` 가 계열사 구분일 수 있다. 그런 것을
     묶는 것은 병합 후보 탐지의 몫이고, 거기서는 **사람에게 묻는다.**"""
+    parent_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("vocabulary_terms.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """상위 축의 값. `SECC` 의 부모는 `Steel`, `Steel` 의 부모는 `Metal`.
+
+    **비워 둘 수 있다.** 부모를 모르는 값이 있어도 시스템이 멈추면 안 된다 —
+    `closed` 를 안 켠 것과 같은 판단이다. 부모가 없으면 좁히기가 안 될 뿐이다.
+
+    부모가 지워지면 `NULL` 이 된다. 값 자체는 살아 있어야 한다 — 가리키던 재료가
+    무엇이었는지는 그대로여야 하기 때문이다."""
+
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     usage_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     """이 값을 가리키는 행 수. **분류 목록이 재료 수와 무관해지는 지점이다** —

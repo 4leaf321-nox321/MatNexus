@@ -58,12 +58,27 @@ def resolve(db: Session, vocabulary: Vocabulary, value: str) -> VocabularyTerm |
     return db.get(VocabularyTerm, alias.term_id) if alias else None
 
 
+def parent_of(db: Session, vocabulary: Vocabulary, value: str | None) -> VocabularyTerm | None:
+    """상위 축에서 이 표기를 찾는다. 축에 부모가 없거나 못 찾으면 `None`.
+
+    **부모를 못 찾아도 실패하지 않는다.** 좁히기가 안 될 뿐이고, 값은 그대로
+    만들어진다 — 부모를 모르는 값이 있어도 시스템이 멈추면 안 된다.
+    """
+    if not vocabulary.parent_slug or not value:
+        return None
+    parent_vocabulary = db.scalar(
+        select(Vocabulary).where(Vocabulary.slug == vocabulary.parent_slug)
+    )
+    return resolve(db, parent_vocabulary, value) if parent_vocabulary else None
+
+
 def resolve_or_create(
     db: Session,
     vocabulary: Vocabulary,
     value: str | None,
     *,
     created_by_id: uuid.UUID | None = None,
+    parent: VocabularyTerm | None = None,
 ) -> VocabularyTerm | None:
     """값 하나를 어휘로 바꾼다. **순서가 중요하다.**
 
@@ -90,10 +105,14 @@ def resolve_or_create(
             status=422,
         )
 
+    # **새 값이 부모를 물려받는다.** Metal/Steel 을 고른 상태에서 `DP980` 을
+    # 추가하면 부모가 `Steel` 로 붙는다 — 계층이 쓰면서 저절로 만들어진다.
+    # 관리자가 수만 개를 미리 이어 놓을 필요가 없다.
     term = VocabularyTerm(
         vocabulary_id=vocabulary.id,
         value=cleaned,
         normalized=compare_key(cleaned),
+        parent_term_id=parent.id if parent else None,
         created_by_id=created_by_id,
     )
     db.add(term)
@@ -109,6 +128,7 @@ def search(
     limit: int,
     include_hidden: bool = False,
     least_used: bool = False,
+    parent: VocabularyTerm | None = None,
 ) -> list[VocabularyTerm]:
     """피커가 부르는 검색. **별칭으로도 찾힌다.**
 
@@ -122,6 +142,19 @@ def search(
     # 감추기도 막다른 길이다.**
     if not include_hidden:
         query = query.where(VocabularyTerm.status == "active")
+    if parent is not None:
+        # **부모로 좁힌다.** 강종이 수만 개일 때 Steel 을 골랐으면 후보가 수천으로
+        # 줄어야 한다 — 규모에서 가장 큰 이득이다.
+        #
+        # 부모가 안 붙은 값도 함께 보여 준다. 계층은 쓰면서 채워지므로 초기에는
+        # 대부분 비어 있고, 그것들을 감추면 아무것도 안 보인다.
+        query = query.where(
+            or_(
+                VocabularyTerm.parent_term_id == parent.id,
+                VocabularyTerm.parent_term_id.is_(None),
+            )
+        )
+
     key = compare_key(q)
     if key:
         by_alias = select(VocabularyAlias.term_id).where(
@@ -277,10 +310,21 @@ class Binding:
     """요청·모델의 문자열 필드 이름(`manufacturer`)."""
     column: str
     """FK 컬럼 이름(`manufacturer_term_id`)."""
+    parent_field: str | None = None
+    """부모가 될 값이 어느 필드에 있는가. `grade` 의 부모는 `category` 다.
+
+    **순서가 중요하다** — 부모가 먼저 해석돼야 자식이 그것을 물려받는다. 그래서
+    바인딩 표는 부모부터 적는다."""
 
 
 #: 표별 바인딩. **여기 한 줄을 더하면 저장·수정·집계가 함께 따라온다.**
-MATERIAL_BINDINGS = (Binding("grade", "grade", "grade_term_id"),)
+#: **부모부터 적는다.** family → category → grade 순으로 해석돼야 자식이 부모를
+#: 물려받는다.
+MATERIAL_BINDINGS = (
+    Binding("family", "family", "family_term_id"),
+    Binding("category", "category", "category_term_id", parent_field="family"),
+    Binding("grade", "grade", "grade_term_id", parent_field="category"),
+)
 SAMPLE_BINDINGS = (
     Binding("manufacturer", "manufacturer", "manufacturer_term_id"),
     # 유통사와 주 벤더가 **한 축**을 공유한다 — 같은 회사가 로트에 따라 둘 중
@@ -309,19 +353,48 @@ def apply_bindings(
     문자열 컬럼도 함께 채운다. 아직 Expand 단계라 읽는 쪽이 문자열을 본다;
     Contract 에서 그 줄만 지우면 된다.
     """
+    resolved: dict[str, VocabularyTerm | None] = {}
     for binding in bindings:
         if binding.field not in values:
+            # 이 요청이 안 건드린 필드다. 다만 **자식의 부모로는 쓰인다** —
+            # 강종만 고치는 수정에서도 부모(Category)는 행에 있는 값을 봐야 한다.
+            if binding.parent_field is None:
+                resolved[binding.field] = _term_on(db, row, binding)
             continue
+
         bump_usage(db, getattr(row, binding.column), -1)
+        parent = (resolved.get(binding.parent_field) if binding.parent_field else None) or (
+            _parent_on(db, row, bindings, binding)
+        )
         term = resolve_or_create(
             db,
             get_vocabulary(db, binding.slug),
             values[binding.field],
             created_by_id=created_by_id,
+            parent=parent,
         )
+        resolved[binding.field] = term
         setattr(row, binding.field, term.value if term else None)
         setattr(row, binding.column, term.id if term else None)
         bump_usage(db, term.id if term else None, 1)
+
+
+def _term_on(db: Session, row: object, binding: Binding) -> VocabularyTerm | None:
+    """행이 이미 가리키고 있는 값."""
+    term_id = getattr(row, binding.column, None)
+    return db.get(VocabularyTerm, term_id) if term_id else None
+
+
+def _parent_on(
+    db: Session, row: object, bindings: Iterable[Binding], binding: Binding
+) -> VocabularyTerm | None:
+    """이 바인딩의 부모를 행에서 찾는다. 이번 요청이 부모를 안 보냈을 때 쓴다."""
+    if binding.parent_field is None:
+        return None
+    for other in bindings:
+        if other.field == binding.parent_field:
+            return _term_on(db, row, other)
+    return None
 
 
 def release_bindings(db: Session, row: object, bindings: Iterable[Binding]) -> None:

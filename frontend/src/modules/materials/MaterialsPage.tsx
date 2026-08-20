@@ -416,18 +416,24 @@ function RegisterDialog({
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="family">Family</Label>
-            <Input id="family" placeholder="Metal" {...field('family')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="category">Category</Label>
-            <Input id="category" placeholder="Steel" {...field('category')} />
-          </div>
+          <VocabularyField
+            slug="family"
+            label="Family"
+            value={form.family}
+            onChange={(next) => setForm((current) => ({ ...current, family: next }))}
+          />
+          <VocabularyField
+            slug="category"
+            label="Category"
+            value={form.category}
+            parentValue={form.family}
+            onChange={(next) => setForm((current) => ({ ...current, category: next }))}
+          />
           <VocabularyField
             slug="grade"
             label="Grade"
             value={form.grade}
+            parentValue={form.category}
             onChange={(next) => setForm((current) => ({ ...current, grade: next }))}
           />
           <div className="space-y-1.5">

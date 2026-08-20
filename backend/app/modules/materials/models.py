@@ -124,6 +124,12 @@ class Material(Base):
     details: Mapped[str | None] = mapped_column(String(100), nullable=True)
     """같은 규격인데 구분해야 할 때 쓴다(개발 A안/B안 등). 이름의 한 칸을
     차지하므로, 비어 있으면 `-` 가 들어가고 칸 수는 유지된다."""
+    family_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    category_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
     grade_term_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
     )

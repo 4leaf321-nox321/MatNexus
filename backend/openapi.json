@@ -5349,6 +5349,18 @@
       },
       "TermCreateRequest": {
         "properties": {
+          "parent_value": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Value"
+          },
           "value": {
             "maxLength": 200,
             "minLength": 1,
@@ -5368,6 +5380,17 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "parent_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Value"
           },
           "status": {
             "default": "active",
@@ -11984,6 +12007,24 @@
               "description": "적게 쓰이는 것부터. 오타를 찾을 때 쓴다",
               "title": "Least Used",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만",
+            "in": "query",
+            "name": "parent_value",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만",
+              "title": "Parent Value"
             }
           }
         ],

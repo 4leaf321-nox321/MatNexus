@@ -591,3 +591,119 @@ class Test강종:
         ).json()
         assert len(found) == 1, f"강종이 갈렸다: {found}"
         assert found[0]["usage_count"] == 2
+
+
+class Test분류_계층:
+    """2-3 — **분류는 사슬이다.** Metal → Steel → SECC.
+
+    평평하게 두면 `Polymer + PP + SECC` 조합을 아무도 안 막고, 강종이 수만 개일
+    때 피커가 전체를 보여 준다.
+    """
+
+    def test_재료를_만들면_사슬이_따라_붙는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**계층이 쓰면서 저절로 만들어진다.** 관리자가 미리 이어 놓을 필요가
+        없다 — 수만 개를 손으로 잇는 일은 아무도 안 한다."""
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "CHAINA",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        grade = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "CHAINA"}, headers=admin_headers
+        ).json()[0]
+        assert grade["parent_value"] == "Steel"
+
+        category = client.get(
+            "/api/vocabularies/category/terms", params={"q": "Steel"}, headers=admin_headers
+        ).json()[0]
+        assert category["parent_value"] == "Metal"
+
+    def test_부모로_좁힌다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        for family, category, grade in (
+            ("Metal", "Steel", "STEELG"),
+            ("Polymer", "PP", "POLYG"),
+        ):
+            client.post(
+                "/api/materials",
+                json={
+                    "family": family,
+                    "category": category,
+                    "grade": grade,
+                    "details": "T",
+                    "spec_thickness": 1.0,
+                },
+                headers=admin_headers,
+            )
+
+        under_steel = {
+            item["value"]
+            for item in client.get(
+                "/api/vocabularies/grade/terms",
+                params={"parent_value": "Steel", "limit": 100},
+                headers=admin_headers,
+            ).json()
+        }
+        assert "STEELG" in under_steel
+        assert "POLYG" not in under_steel
+
+    def test_부모가_없는_값은_함께_보인다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**계층은 쓰면서 채워진다.** 초기에는 대부분 부모가 비어 있고, 그것을
+        감추면 좁히기를 켠 순간 아무것도 안 보인다."""
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "HASPARENT",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        # 부모 없이 만든 값
+        client.post(
+            "/api/vocabularies/grade/terms",
+            json={"value": "NOPARENT"},
+            headers=admin_headers,
+        )
+
+        under_steel = {
+            item["value"]
+            for item in client.get(
+                "/api/vocabularies/grade/terms",
+                params={"parent_value": "Steel", "limit": 100},
+                headers=admin_headers,
+            ).json()
+        }
+        assert {"HASPARENT", "NOPARENT"} <= under_steel
+
+    def test_새_값이_고른_부모_아래로_들어간다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "SEEDG",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        added = client.post(
+            "/api/vocabularies/grade/terms",
+            json={"value": "DP980", "parent_value": "Steel"},
+            headers=admin_headers,
+        ).json()
+        assert added["parent_value"] == "Steel"

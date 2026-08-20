@@ -23,12 +23,19 @@ export const vocabularyApi = {
    * 값 검색. **별칭으로도 찾힌다** — `'포스코(주)'` 를 치면 `'포스코'` 가 온다.
    * 그래서 받은 결과를 화면이 다시 거르면 안 된다.
    */
-  search: (slug: string, q: string, includeHidden = false, leastUsed = false) => {
+  search: (
+    slug: string,
+    q: string,
+    options: { includeHidden?: boolean; leastUsed?: boolean; parentValue?: string } = {}
+  ) => {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
-    if (includeHidden) params.set('include_hidden', 'true')
+    if (options.includeHidden) params.set('include_hidden', 'true')
     // 오타는 늘 `쓰는 곳 1` 로 생긴다 — 기본 정렬에서는 목록 끝에 묻힌다.
-    if (leastUsed) params.set('least_used', 'true')
+    if (options.leastUsed) params.set('least_used', 'true')
+    // **상위 축으로 좁힌다.** Steel 을 골랐으면 강종 후보가 그 아래로 줄어야
+    // 한다 — 강종이 수만 개일 때 이것이 규모에서 가장 큰 이득이다.
+    if (options.parentValue) params.set('parent_value', options.parentValue)
     const query = params.toString()
     return api.get<Term[]>(`/vocabularies/${slug}/terms${query ? `?${query}` : ''}`)
   },
@@ -56,6 +63,10 @@ export const vocabularyApi = {
    * 피커는 사람이 엔터를 치는 순간 낙관적으로 보낸다. 그때 오류를 그리게 하면,
    * 실제로 일어난 일이 "이미 있는 값을 골랐다" 뿐인데도 화면이 멈춘다.
    */
-  create: (slug: string, value: string) =>
-    api.post<Term>(`/vocabularies/${slug}/terms`, { value }),
+  create: (slug: string, value: string, parentValue?: string) =>
+    api.post<Term>(`/vocabularies/${slug}/terms`, {
+      value,
+      // 새 값이 부모를 물려받는다 — 계층이 쓰면서 저절로 만들어진다.
+      parent_value: parentValue ?? null,
+    }),
 }

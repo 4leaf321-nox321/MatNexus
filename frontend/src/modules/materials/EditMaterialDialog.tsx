@@ -140,18 +140,26 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-family">Family</Label>
-            <Input id="edit-family" {...field('family')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-category">Category</Label>
-            <Input id="edit-category" {...field('category')} />
-          </div>
+          {/* **분류는 사슬이다.** Family 를 고르면 Category 가, Category 를
+              고르면 Grade 가 그 아래로 좁혀진다(ADR 0010). */}
+          <VocabularyField
+            slug="family"
+            label="Family"
+            value={form.family}
+            onChange={(next) => setForm((current) => ({ ...current, family: next }))}
+          />
+          <VocabularyField
+            slug="category"
+            label="Category"
+            value={form.category}
+            parentValue={form.family}
+            onChange={(next) => setForm((current) => ({ ...current, category: next }))}
+          />
           <VocabularyField
             slug="grade"
             label="Grade"
             value={form.grade}
+            parentValue={form.category}
             onChange={(next) => setForm((current) => ({ ...current, grade: next }))}
           />
           <div className="space-y-1.5">

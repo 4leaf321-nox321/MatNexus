@@ -3774,6 +3774,8 @@ export interface components {
         };
         /** TermCreateRequest */
         TermCreateRequest: {
+            /** Parent Value */
+            parent_value?: string | null;
             /** Value */
             value: string;
         };
@@ -3784,6 +3786,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Parent Value */
+            parent_value?: string | null;
             /**
              * Status
              * @default active
@@ -7553,6 +7557,8 @@ export interface operations {
                 include_hidden?: boolean;
                 /** @description 적게 쓰이는 것부터. 오타를 찾을 때 쓴다 */
                 least_used?: boolean;
+                /** @description 상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만 */
+                parent_value?: string | null;
             };
             header?: never;
             path: {

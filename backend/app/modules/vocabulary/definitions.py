@@ -19,19 +19,25 @@ from app.modules.vocabulary.models import Vocabulary
 #:
 #: `open` 은 사용자가 피커에서 즉석 추가할 수 있다. `closed` 는 관리자가 등록한
 #: 값만 고른다 — 미리 정해야 하는 분류다.
-BUILTIN_VOCABULARIES: list[tuple[str, str, str, int]] = [
-    ("manufacturer", "제조사", "open", 10),
+#: (slug, label, entry_policy, sort_order, parent_slug)
+#:
+#: **분류는 사슬이다.** Metal → Steel → SECC. 평평하게 두면 Polymer + PP + SECC
+#: 같은 조합을 아무도 안 막고, 강종이 수만 개일 때 피커가 전체를 보여 준다.
+BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None]] = [
+    ("manufacturer", "제조사", "open", 10, None),
     # **유통사와 주 벤더가 한 축을 공유한다.** 같은 회사가 어떤 로트에서는
     # 유통사고 다른 로트에서는 주 벤더다. 축을 나누면 같은 회사가 두 목록에
     # 따로 쌓이고, 그 둘을 합칠 방법도 없다.
-    ("vendor", "거래처", "open", 20),
-    ("sales_type", "판매 유형", "open", 30),
-    ("specimen_standard", "시편 규격", "open", 40),
-    ("instrument", "장비", "open", 50),
+    ("vendor", "거래처", "open", 20, None),
+    ("sales_type", "판매 유형", "open", 30, None),
+    ("specimen_standard", "시편 규격", "open", 40, None),
+    ("instrument", "장비", "open", 50, None),
     # **가장 큰 축이고 이득도 가장 크다.** 지금은 SECC/secc/S.E.C.C 가 서로
     # 다른 재료 셋을 만든다. 다만 강종은 재료 이름을 만드는 값이라(ADR 0004)
     # 값 이름을 고치면 재료·시료·시편·시험 이름이 전부 따라 바뀐다.
-    ("grade", "강종", "open", 5),
+    ("family", "Family", "open", 1, None),
+    ("category", "Category", "open", 2, "family"),
+    ("grade", "강종", "open", 5, "category"),
 ]
 
 #: **전부 `open` 이다.** `closed` 는 만들어 두고 안 켠다.
@@ -54,10 +60,18 @@ def ensure_builtin_vocabularies(db: Session) -> list[str]:
     """
     existing = set(db.scalars(select(Vocabulary.slug)))
     created: list[str] = []
-    for slug, label, policy, order in BUILTIN_VOCABULARIES:
+    for slug, label, policy, order, parent in BUILTIN_VOCABULARIES:
         if slug in existing:
             continue
-        db.add(Vocabulary(slug=slug, label=label, entry_policy=policy, sort_order=order))
+        db.add(
+            Vocabulary(
+                slug=slug,
+                label=label,
+                entry_policy=policy,
+                sort_order=order,
+                parent_slug=parent,
+            )
+        )
         created.append(slug)
     if created:
         db.flush()

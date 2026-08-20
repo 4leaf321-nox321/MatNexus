@@ -90,7 +90,10 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   const [error, setError] = useState<Error | null>(null)
   // 검색은 서버가 한다 — 어휘가 수만 개가 되면 전체를 받을 수 없다.
   const terms = useResource(
-    () => vocabularyApi.search(vocabulary.slug, term, showHidden, leastUsed),
+    () => vocabularyApi.search(vocabulary.slug, term, {
+        includeHidden: showHidden,
+        leastUsed,
+      }),
     [vocabulary.slug, term, showHidden, leastUsed]
   )
 
