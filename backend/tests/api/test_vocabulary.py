@@ -28,6 +28,7 @@ from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
 from app.modules.vocabulary.normalize import clean, compare_key
+from app.modules.vocabulary.schemas import BULK_MAX
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 
@@ -966,3 +967,90 @@ class Test값_미리_추가:
             headers=admin_headers,
         ).json()
         assert added["parent_value"] is None
+
+
+class Test여러_값_한번에:
+    """붙여 넣기는 지저분하다 — **빈 줄·중복·별칭이 섞여 온다.**
+
+    개수만 돌려주면 "50개 중 12개가 새로 생겼습니다" 로 끝나는데, 사람이 알고
+    싶은 것은 어느 것이 안 생겼고 왜인지다.
+    """
+
+    def test_빈_줄과_중복과_별칭이_섞인_목록을_정직하게_가른다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        seed = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "있던제철"},
+            headers=admin_headers,
+        ).json()
+        client.post(
+            f"/api/vocabularies/manufacturer/terms/{seed['id']}/aliases",
+            json={"alias": "OLD STEEL"},
+            headers=admin_headers,
+        )
+
+        result = client.post(
+            "/api/vocabularies/manufacturer/terms/bulk",
+            json={
+                "values": [
+                    "새제철",  # 새로
+                    "",  # 건너뜀
+                    " 새제철 ",  # 방금 만든 것과 같다
+                    "있던제철",  # 이미 있음
+                    "old steel",  # 별칭 → 정규 값
+                    "   ",  # 건너뜀
+                ]
+            },
+            headers=admin_headers,
+        ).json()
+
+        assert (result["created"], result["existing"], result["skipped"]) == (1, 3, 2)
+        by_input = {item["input"]: item for item in result["items"]}
+        assert by_input["새제철"]["status"] == "created"
+        # **같은 요청 안의 중복도 정직하게** — 방금 만든 것을 가리킨다.
+        assert by_input[" 새제철 "]["status"] == "existing"
+        assert by_input[" 새제철 "]["value"] == "새제철"
+        # 별칭으로 붙은 것은 **친 것과 다른 값**이 온다 — 화면이 이걸 말해야 한다.
+        assert by_input["old steel"]["value"] == "있던제철"
+
+    def test_부모가_한_번에_붙는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "BULKSEED",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        client.post(
+            "/api/vocabularies/grade/terms/bulk",
+            json={"values": ["DP590", "DP780", "DP980"], "parent_value": "Steel"},
+            headers=admin_headers,
+        )
+        under_steel = {
+            item["value"]
+            for item in client.get(
+                "/api/vocabularies/grade/terms",
+                params={"parent_value": "Steel", "limit": 100},
+                headers=admin_headers,
+            ).json()
+        }
+        assert {"DP590", "DP780", "DP980"} <= under_steel
+
+    def test_상한을_넘기면_서버가_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**화면이 미리 자르면 몇 줄이 빠졌는지 아무도 모른다.** 그대로 보내고
+        서버가 말하게 둔다."""
+        denied = client.post(
+            "/api/vocabularies/manufacturer/terms/bulk",
+            json={"values": [f"값{index}" for index in range(BULK_MAX + 1)]},
+            headers=admin_headers,
+        )
+        assert denied.status_code == 422, denied.text

@@ -14,6 +14,10 @@ import type { components } from '@/shared/api/schema'
 export type Vocabulary = components['schemas']['VocabularyOut']
 export type Term = components['schemas']['TermOut']
 export type Alias = components['schemas']['TermAliasOut']
+export type BulkResult = components['schemas']['BulkTermOut']
+
+/** 한 번에 보낼 수 있는 최대 줄 수. **서버가 같은 수를 강제한다.** */
+export const BULK_MAX = 500
 type TermUpdate = components['schemas']['TermUpdateRequest']
 
 export const vocabularyApi = {
@@ -57,6 +61,18 @@ export const vocabularyApi = {
    * 않으려고. 그 지점을 하나 빠뜨리면 조용히 벌어지므로 고칠 길을 둔다.
    */
   recount: (slug: string) => api.post<Term[]>(`/vocabularies/${slug}/recount`, {}),
+
+  /**
+   * 여러 값을 한 번에. **건별로 결과가 온다.**
+   *
+   * 개수만 보면 "50개 중 12개가 새로 생겼습니다" 로 끝나는데, 알고 싶은 것은
+   * 어느 것이 안 생겼고 왜인지다 — 특히 친 것과 다른 값에 붙은 경우.
+   */
+  createBulk: (slug: string, values: string[], parentValue?: string) =>
+    api.post<BulkResult>(`/vocabularies/${slug}/terms/bulk`, {
+      values,
+      parent_value: parentValue ?? null,
+    }),
 
   /** 이 값의 다른 표기들. */
   aliases: (slug: string, termId: string) =>

@@ -1672,6 +1672,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/{slug}/terms/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Terms Bulk
+         * @description 여러 값을 한 번에 더한다. **건별로 결과를 돌려준다.**
+         *
+         *     개수만 주면 "50개 중 12개가 새로 생겼습니다" 로 끝나는데, 사람이 알고 싶은
+         *     것은 어느 것이 안 생겼고 왜인지다 — 특히 **친 것과 다른 값에 붙은 경우**.
+         *     `'PRE-8382'` 가 `'PRE8382'` 의 별칭이면 그리로 붙는데, 말 안 하면 목록에서
+         *     못 찾고 다시 친다.
+         *
+         *     같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께
+         *     보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.
+         */
+        post: operations["create_terms_bulk_api_vocabularies__slug__terms_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/terms/{term_id}": {
         parameters: {
             query?: never;
@@ -2122,6 +2150,44 @@ export interface components {
             test_type: string;
             /** Tested At */
             tested_at?: string | null;
+        };
+        /**
+         * BulkTermCreateRequest
+         * @description 여러 값을 한 번에. **줄 단위로 붙여 넣는 것이 자연스럽다.**
+         *
+         *     상한을 서버가 건다 — 화면이 정하게 두면 언젠가 "엑셀 통째로" 가 온다.
+         */
+        BulkTermCreateRequest: {
+            /** Parent Value */
+            parent_value?: string | null;
+            /** Values */
+            values: string[];
+        };
+        /**
+         * BulkTermItemOut
+         * @description 한 줄의 결과. **무엇이 새로 생겼는지 건별로 말한다.**
+         *
+         *     개수만 주면 "50개 중 12개가 새로 생겼습니다" 로 끝나는데, 사람이 알고 싶은
+         *     것은 **어느 것이** 안 생겼고 왜인지다.
+         */
+        BulkTermItemOut: {
+            /** Input */
+            input: string;
+            /** Status */
+            status: string;
+            /** Value */
+            value?: string | null;
+        };
+        /** BulkTermOut */
+        BulkTermOut: {
+            /** Created */
+            created: number;
+            /** Existing */
+            existing: number;
+            /** Items */
+            items: components["schemas"]["BulkTermItemOut"][];
+            /** Skipped */
+            skipped: number;
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
@@ -7831,6 +7897,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TermOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_terms_bulk_api_vocabularies__slug__terms_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTermCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkTermOut"];
                 };
             };
             /** @description Validation Error */

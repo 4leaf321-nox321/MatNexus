@@ -6,6 +6,10 @@ import uuid
 
 from pydantic import BaseModel, Field
 
+#: 한 번에 받는 최대 줄 수. **상한을 서버가 건다** — 화면이 정하게 두면
+#: 언젠가 "엑셀 통째로" 가 온다.
+BULK_MAX = 500
+
 
 class VocabularyOut(BaseModel):
     slug: str
@@ -80,3 +84,34 @@ class DismissRequest(BaseModel):
 
     first_id: uuid.UUID
     second_id: uuid.UUID
+
+
+class BulkTermCreateRequest(BaseModel):
+    """여러 값을 한 번에. **줄 단위로 붙여 넣는 것이 자연스럽다.**
+
+    상한을 서버가 건다 — 화면이 정하게 두면 언젠가 "엑셀 통째로" 가 온다.
+    """
+
+    values: list[str] = Field(min_length=1, max_length=BULK_MAX)
+    parent_value: str | None = Field(default=None, max_length=200)
+
+
+class BulkTermItemOut(BaseModel):
+    """한 줄의 결과. **무엇이 새로 생겼는지 건별로 말한다.**
+
+    개수만 주면 "50개 중 12개가 새로 생겼습니다" 로 끝나는데, 사람이 알고 싶은
+    것은 **어느 것이** 안 생겼고 왜인지다.
+    """
+
+    input: str
+    status: str
+    """`created` | `existing` | `skipped`."""
+    value: str | None = None
+    """정규 값. 별칭이나 표기 차이로 기존 값에 붙으면 친 것과 다르다."""
+
+
+class BulkTermOut(BaseModel):
+    created: int
+    existing: int
+    skipped: int
+    items: list[BulkTermItemOut]

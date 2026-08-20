@@ -21,9 +21,9 @@
 import { useState } from 'react'
 import { Eye, EyeOff, GitMerge, Pencil, Plus, RefreshCw, Tag, X } from 'lucide-react'
 
-import { vocabularyApi } from '@/modules/vocabulary/api'
+import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
-import type { Term, Vocabulary } from '@/modules/vocabulary/api'
+import type { BulkResult, Term, Vocabulary } from '@/modules/vocabulary/api'
 import { ApiError } from '@/shared/api/client'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
+import { Textarea } from '@/shared/components/ui/textarea'
 import { Label } from '@/shared/components/ui/label'
 import {
   Table,
@@ -636,13 +637,40 @@ function AddTermDialog({
   onClose: () => void
   onAdded: () => void
 }) {
+  const [mode, setMode] = useState<'one' | 'many'>('one')
   const [value, setValue] = useState('')
+  const [lines, setLines] = useState('')
   const [parent, setParent] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [resolved, setResolved] = useState<{ typed: string; got: string } | null>(null)
+  const [bulk, setBulk] = useState<BulkResult | null>(null)
+
+  async function submitMany() {
+    // 상한을 넘으면 서버가 422 를 준다 — 여기서 미리 자르면 **몇 줄이 빠졌는지
+    // 아무도 모른다.** 그대로 보내고 서버가 말하게 둔다.
+    const values = lines.split(/\r?\n/)
+    setBusy(true)
+    setFailure(null)
+    setBulk(null)
+    try {
+      const result = await vocabularyApi.createBulk(
+        vocabulary.slug,
+        values,
+        parent || undefined
+      )
+      setBulk(result)
+      setLines('')
+      onAdded()
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.message : '더하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function submit() {
+    if (mode === 'many') return submitMany()
     setBusy(true)
     setFailure(null)
     setResolved(null)
@@ -679,15 +707,53 @@ function AddTermDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="add-value">값</Label>
-            <Input
-              id="add-value"
-              value={value}
-              autoFocus
-              onChange={(event) => setValue(event.target.value)}
-            />
+          <div className="flex gap-1">
+            {(['one', 'many'] as const).map((option) => (
+              <Button
+                key={option}
+                size="sm"
+                variant={mode === option ? 'default' : 'outline'}
+                className="h-7 text-xs"
+                onClick={() => {
+                  setMode(option)
+                  setResolved(null)
+                  setBulk(null)
+                }}
+              >
+                {option === 'one' ? '하나씩' : '여러 개'}
+              </Button>
+            ))}
           </div>
+
+          {mode === 'one' ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="add-value">값</Label>
+              <Input
+                id="add-value"
+                value={value}
+                autoFocus
+                onChange={(event) => setValue(event.target.value)}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="add-values">값 목록</Label>
+              {/* **줄 단위가 자연스럽다.** 엑셀에서 열을 복사하면 그대로 붙는다.
+                  빈 줄은 건너뛴다 — 붙여 넣기에는 늘 섞여 있고, 그걸 오류로
+                  만들면 사람이 손으로 지우게 된다. */}
+              <Textarea
+                id="add-values"
+                value={lines}
+                autoFocus
+                rows={8}
+                placeholder={'한 줄에 하나씩\nSECC\nSPCC\nDP590'}
+                onChange={(event) => setLines(event.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                한 줄에 하나. 최대 {BULK_MAX}줄. 빈 줄은 건너뜁니다.
+              </p>
+            </div>
+          )}
 
           {vocabulary.parent_slug && (
             // 부모가 있는 축이면 여기서 정해 둔다 — 나중에 따로 잇게 하면
@@ -699,6 +765,37 @@ function AddTermDialog({
               allowCreate={false}
               onChange={setParent}
             />
+          )}
+
+          {bulk && (
+            <div className="space-y-1.5 rounded-md border p-2.5">
+              <p className="text-sm">
+                새로 <b>{bulk.created}</b> · 이미 있던 것 {bulk.existing}
+                {bulk.skipped > 0 && ` · 건너뜀 ${bulk.skipped}`}
+              </p>
+              {/* **어느 것이 안 생겼는지가 알고 싶은 것이다.** 개수만 주면
+                  "12개가 새로 생겼습니다" 로 끝나고, 나머지 38개를 찾으러 목록을
+                  뒤지게 된다. */}
+              {bulk.items.some(
+                (item) => item.status === 'existing' && item.value !== item.input.trim()
+              ) && (
+                <div className="text-xs">
+                  <p className="text-muted-foreground">다른 값에 붙은 것:</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {bulk.items
+                      .filter(
+                        (item) =>
+                          item.status === 'existing' && item.value !== item.input.trim()
+                      )
+                      .map((item, index) => (
+                        <li key={`${item.input}-${index}`}>
+                          '{item.input.trim()}' → <b>{item.value}</b>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
 
           {resolved && (
@@ -714,7 +811,10 @@ function AddTermDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             닫기
           </Button>
-          <Button onClick={submit} disabled={busy || value.trim() === ''}>
+          <Button
+            onClick={submit}
+            disabled={busy || (mode === 'one' ? value.trim() === '' : lines.trim() === '')}
+          >
             추가
           </Button>
         </DialogFooter>

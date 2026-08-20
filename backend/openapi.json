@@ -450,6 +450,98 @@
         "title": "Body_upload_test_run_api_test_runs_post",
         "type": "object"
       },
+      "BulkTermCreateRequest": {
+        "description": "여러 값을 한 번에. **줄 단위로 붙여 넣는 것이 자연스럽다.**\n\n상한을 서버가 건다 — 화면이 정하게 두면 언젠가 \"엑셀 통째로\" 가 온다.",
+        "properties": {
+          "parent_value": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Value"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "title": "BulkTermCreateRequest",
+        "type": "object"
+      },
+      "BulkTermItemOut": {
+        "description": "한 줄의 결과. **무엇이 새로 생겼는지 건별로 말한다.**\n\n개수만 주면 \"50개 중 12개가 새로 생겼습니다\" 로 끝나는데, 사람이 알고 싶은\n것은 **어느 것이** 안 생겼고 왜인지다.",
+        "properties": {
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "input",
+          "status"
+        ],
+        "title": "BulkTermItemOut",
+        "type": "object"
+      },
+      "BulkTermOut": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "existing": {
+            "title": "Existing",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BulkTermItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created",
+          "existing",
+          "skipped",
+          "items"
+        ],
+        "title": "BulkTermOut",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "properties": {
           "current_password": {
@@ -12295,6 +12387,59 @@
           }
         },
         "summary": "Create Term",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/terms/bulk": {
+      "post": {
+        "description": "여러 값을 한 번에 더한다. **건별로 결과를 돌려준다.**\n\n개수만 주면 \"50개 중 12개가 새로 생겼습니다\" 로 끝나는데, 사람이 알고 싶은\n것은 어느 것이 안 생겼고 왜인지다 — 특히 **친 것과 다른 값에 붙은 경우**.\n`'PRE-8382'` 가 `'PRE8382'` 의 별칭이면 그리로 붙는데, 말 안 하면 목록에서\n못 찾고 다시 친다.\n\n같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께\n보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.",
+        "operationId": "create_terms_bulk_api_vocabularies__slug__terms_bulk_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkTermCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkTermOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Terms Bulk",
         "tags": [
           "vocabulary"
         ]

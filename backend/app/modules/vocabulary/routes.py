@@ -16,7 +16,11 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
+from app.modules.vocabulary.normalize import clean
 from app.modules.vocabulary.schemas import (
+    BulkTermCreateRequest,
+    BulkTermItemOut,
+    BulkTermOut,
     DismissRequest,
     MergeRequest,
     TermAliasCreateRequest,
@@ -330,3 +334,52 @@ def dismiss_pair(
     services.dismiss(db, first, second, dismissed_by_id=user.id)
     db.commit()
     return Response(status_code=204)
+
+
+@router.post("/{slug}/terms/bulk", response_model=BulkTermOut)
+def create_terms_bulk(
+    slug: str,
+    payload: BulkTermCreateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BulkTermOut:
+    """여러 값을 한 번에 더한다. **건별로 결과를 돌려준다.**
+
+    개수만 주면 "50개 중 12개가 새로 생겼습니다" 로 끝나는데, 사람이 알고 싶은
+    것은 어느 것이 안 생겼고 왜인지다 — 특히 **친 것과 다른 값에 붙은 경우**.
+    `'PRE-8382'` 가 `'PRE8382'` 의 별칭이면 그리로 붙는데, 말 안 하면 목록에서
+    못 찾고 다시 친다.
+
+    같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께
+    보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    parent = services.parent_of(db, vocabulary, payload.parent_value)
+
+    items: list[BulkTermItemOut] = []
+    for raw in payload.values:
+        cleaned = clean(raw)
+        if cleaned is None:
+            # 빈 줄. 붙여 넣기에는 늘 섞여 있다 — 오류로 만들지 않는다.
+            items.append(BulkTermItemOut(input=raw, status="skipped"))
+            continue
+        found = services.resolve(db, vocabulary, cleaned)
+        if found is not None:
+            items.append(BulkTermItemOut(input=raw, status="existing", value=found.value))
+            continue
+        created = services.resolve_or_create(
+            db, vocabulary, cleaned, created_by_id=user.id, parent=parent
+        )
+        items.append(
+            BulkTermItemOut(
+                input=raw, status="created", value=created.value if created else None
+            )
+        )
+
+    db.commit()
+    return BulkTermOut(
+        created=sum(1 for item in items if item.status == "created"),
+        existing=sum(1 for item in items if item.status == "existing"),
+        skipped=sum(1 for item in items if item.status == "skipped"),
+        items=items,
+    )
