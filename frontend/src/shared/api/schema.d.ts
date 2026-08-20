@@ -1692,6 +1692,15 @@ export interface paths {
          *
          *     같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께
          *     보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.
+         *
+         *     ## 줄마다 상위가 다를 수 있다
+         *
+         *     창에서 고른 상위 하나를 전 줄에 붙이면 **분류가 섞인 목록을 못 넣는다.**
+         *     줄에 `Steel<TAB>SECC` 나 `Steel > SECC` 로 적으면 그 줄만 그 상위 아래로
+         *     간다 — 엑셀에서 두 열을 복사하면 탭으로 붙는다.
+         *
+         *     상위를 못 찾으면 그 줄만 `rejected` 다. 그냥 만들면 그 값이 어디 속하는지
+         *     아무도 모르는 채로 목록에 남는다.
          */
         post: operations["create_terms_bulk_api_vocabularies__slug__terms_bulk_post"];
         delete?: never;
@@ -2173,6 +2182,10 @@ export interface components {
         BulkTermItemOut: {
             /** Input */
             input: string;
+            /** Parent Value */
+            parent_value?: string | null;
+            /** Reason */
+            reason?: string | null;
             /** Status */
             status: string;
             /** Value */
@@ -2186,6 +2199,11 @@ export interface components {
             existing: number;
             /** Items */
             items: components["schemas"]["BulkTermItemOut"][];
+            /**
+             * Rejected
+             * @default 0
+             */
+            rejected: number;
             /** Skipped */
             skipped: number;
         };

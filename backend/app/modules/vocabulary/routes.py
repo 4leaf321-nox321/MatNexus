@@ -16,7 +16,7 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
-from app.modules.vocabulary.normalize import clean
+from app.modules.vocabulary.normalize import clean, split_parent
 from app.modules.vocabulary.schemas import (
     BulkTermCreateRequest,
     BulkTermItemOut,
@@ -352,27 +352,70 @@ def create_terms_bulk(
 
     같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께
     보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.
+
+    ## 줄마다 상위가 다를 수 있다
+
+    창에서 고른 상위 하나를 전 줄에 붙이면 **분류가 섞인 목록을 못 넣는다.**
+    줄에 `Steel<TAB>SECC` 나 `Steel > SECC` 로 적으면 그 줄만 그 상위 아래로
+    간다 — 엑셀에서 두 열을 복사하면 탭으로 붙는다.
+
+    상위를 못 찾으면 그 줄만 `rejected` 다. 그냥 만들면 그 값이 어디 속하는지
+    아무도 모르는 채로 목록에 남는다.
     """
     vocabulary = services.get_vocabulary(db, slug)
-    parent = services.parent_of(db, vocabulary, payload.parent_value)
+    fallback = services.parent_of(db, vocabulary, payload.parent_value)
+    # 같은 상위를 줄마다 다시 조회하지 않는다 — 500줄이면 그만큼 왕복한다.
+    resolved_parents: dict[str, VocabularyTerm | None] = {}
 
     items: list[BulkTermItemOut] = []
     for raw in payload.values:
-        cleaned = clean(raw)
+        # **부모가 있는 축에서만 가른다.** 제조사 값에 `>` 가 들어 있을 수 있는데
+        # 부모 없는 축에서 갈라 버리면 멀쩡한 값이 반토막 난다.
+        line_parent, body = split_parent(raw) if vocabulary.parent_slug else (None, raw)
+        cleaned = clean(body)
         if cleaned is None:
             # 빈 줄. 붙여 넣기에는 늘 섞여 있다 — 오류로 만들지 않는다.
             items.append(BulkTermItemOut(input=raw, status="skipped"))
             continue
+
+        parent = fallback
+        if line_parent:
+            if line_parent not in resolved_parents:
+                resolved_parents[line_parent] = services.parent_of(db, vocabulary, line_parent)
+            parent = resolved_parents[line_parent]
+            if parent is None:
+                # **말없이 버리지 않는다.** 상위를 못 찾았는데 그냥 만들면 그
+                # 값이 어디 속하는지 아무도 모르는 채로 목록에 남는다.
+                items.append(
+                    BulkTermItemOut(
+                        input=raw,
+                        status="rejected",
+                        parent_value=line_parent,
+                        reason=f"상위 '{line_parent}' 를 찾을 수 없습니다.",
+                    )
+                )
+                continue
+
         found = services.resolve(db, vocabulary, cleaned)
         if found is not None:
-            items.append(BulkTermItemOut(input=raw, status="existing", value=found.value))
+            items.append(
+                BulkTermItemOut(
+                    input=raw,
+                    status="existing",
+                    value=found.value,
+                    parent_value=parent.value if parent else None,
+                )
+            )
             continue
         created = services.resolve_or_create(
             db, vocabulary, cleaned, created_by_id=user.id, parent=parent
         )
         items.append(
             BulkTermItemOut(
-                input=raw, status="created", value=created.value if created else None
+                input=raw,
+                status="created",
+                value=created.value if created else None,
+                parent_value=parent.value if parent else None,
             )
         )
 
@@ -381,5 +424,6 @@ def create_terms_bulk(
         created=sum(1 for item in items if item.status == "created"),
         existing=sum(1 for item in items if item.status == "existing"),
         skipped=sum(1 for item in items if item.status == "skipped"),
+        rejected=sum(1 for item in items if item.status == "rejected"),
         items=items,
     )

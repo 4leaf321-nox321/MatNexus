@@ -1043,6 +1043,74 @@ class Test여러_값_한번에:
         }
         assert {"DP590", "DP780", "DP980"} <= under_steel
 
+    def test_줄마다_상위를_달리_적을_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**창에서 고른 상위 하나를 전 줄에 붙이면 분류가 섞인 목록을 못 넣는다.**
+
+        엑셀에서 두 열을 복사하면 탭으로 붙는다 — 그 형태를 그대로 받는다.
+        """
+        for family, category in (("Metal", "Steel"), ("Polymer", "PP")):
+            client.post(
+                "/api/materials",
+                json={
+                    "family": family,
+                    "category": category,
+                    "grade": f"SEED{category}",
+                    "details": "T",
+                    "spec_thickness": 1.0,
+                },
+                headers=admin_headers,
+            )
+
+        result = client.post(
+            "/api/vocabularies/grade/terms/bulk",
+            json={
+                "values": [
+                    "Steel\tTABBED",  # 탭 — 엑셀 두 열
+                    "PP > ANGLED",  # 꺾쇠 — 손으로 칠 때
+                    "FALLBACK",  # 안 적음 → 요청의 기본값
+                    "없는분류 > ORPHAN",  # 상위를 못 찾음
+                ],
+                "parent_value": "Steel",
+            },
+            headers=admin_headers,
+        ).json()
+
+        assert result["rejected"] == 1
+        by_input = {item["input"]: item for item in result["items"]}
+        assert by_input["Steel\tTABBED"]["parent_value"] == "Steel"
+        assert by_input["PP > ANGLED"]["parent_value"] == "PP"
+        assert by_input["FALLBACK"]["parent_value"] == "Steel"
+
+        # **말없이 버리지 않는다.** 그냥 만들면 그 값이 어디 속하는지 모른다.
+        orphan = by_input["없는분류 > ORPHAN"]
+        assert orphan["status"] == "rejected"
+        assert "없는분류" in (orphan["reason"] or "")
+
+        under_pp = {
+            item["value"]
+            for item in client.get(
+                "/api/vocabularies/grade/terms",
+                params={"parent_value": "PP", "limit": 100},
+                headers=admin_headers,
+            ).json()
+        }
+        assert "ANGLED" in under_pp
+        assert "TABBED" not in under_pp
+
+    def test_부모가_없는_축은_꺾쇠를_안_가른다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """제조사 값에 `>` 가 들어 있을 수 있다 — 부모 없는 축에서 갈라 버리면
+        멀쩡한 값이 반토막 난다."""
+        result = client.post(
+            "/api/vocabularies/manufacturer/terms/bulk",
+            json={"values": ["A > B 상사"]},
+            headers=admin_headers,
+        ).json()
+        assert result["items"][0]["value"] == "A > B 상사"
+
     def test_상한을_넘기면_서버가_거절한다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

@@ -488,6 +488,28 @@
             "title": "Input",
             "type": "string"
           },
+          "parent_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Value"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -527,6 +549,11 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "rejected": {
+            "default": 0,
+            "title": "Rejected",
+            "type": "integer"
           },
           "skipped": {
             "title": "Skipped",
@@ -12394,7 +12421,7 @@
     },
     "/api/vocabularies/{slug}/terms/bulk": {
       "post": {
-        "description": "여러 값을 한 번에 더한다. **건별로 결과를 돌려준다.**\n\n개수만 주면 \"50개 중 12개가 새로 생겼습니다\" 로 끝나는데, 사람이 알고 싶은\n것은 어느 것이 안 생겼고 왜인지다 — 특히 **친 것과 다른 값에 붙은 경우**.\n`'PRE-8382'` 가 `'PRE8382'` 의 별칭이면 그리로 붙는데, 말 안 하면 목록에서\n못 찾고 다시 친다.\n\n같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께\n보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.",
+        "description": "여러 값을 한 번에 더한다. **건별로 결과를 돌려준다.**\n\n개수만 주면 \"50개 중 12개가 새로 생겼습니다\" 로 끝나는데, 사람이 알고 싶은\n것은 어느 것이 안 생겼고 왜인지다 — 특히 **친 것과 다른 값에 붙은 경우**.\n`'PRE-8382'` 가 `'PRE8382'` 의 별칭이면 그리로 붙는데, 말 안 하면 목록에서\n못 찾고 다시 친다.\n\n같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께\n보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.\n\n## 줄마다 상위가 다를 수 있다\n\n창에서 고른 상위 하나를 전 줄에 붙이면 **분류가 섞인 목록을 못 넣는다.**\n줄에 `Steel<TAB>SECC` 나 `Steel > SECC` 로 적으면 그 줄만 그 상위 아래로\n간다 — 엑셀에서 두 열을 복사하면 탭으로 붙는다.\n\n상위를 못 찾으면 그 줄만 `rejected` 다. 그냥 만들면 그 값이 어디 속하는지\n아무도 모르는 채로 목록에 남는다.",
         "operationId": "create_terms_bulk_api_vocabularies__slug__terms_bulk_post",
         "parameters": [
           {

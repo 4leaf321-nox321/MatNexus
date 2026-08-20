@@ -628,6 +628,13 @@ function MergeCandidates({
  * 했는데 그것이 '포스코' 의 별칭이면 '포스코' 가 온다. 화면이 그 사실을 말하지
  * 않으면 사람은 자기가 친 값이 추가된 줄 안다 — 목록에 없으니 다시 치게 된다.
  */
+//: 붙여 넣기 예시. 부모가 있는 축이면 **줄마다 상위를 적을 수 있다**는 것을
+//: 보여 주는 것이 요점이다 — 도움말만으로는 아무도 안 읽는다.
+const PLACEHOLDER = {
+  plain: '한 줄에 하나씩\n포스코\n현대제철',
+  child: '한 줄에 하나씩\nSECC\n\n상위가 다르면\nSteel > DP590\nPP > PP-GF30',
+} as const
+
 function AddTermDialog({
   vocabulary,
   onClose,
@@ -746,11 +753,18 @@ function AddTermDialog({
                 value={lines}
                 autoFocus
                 rows={8}
-                placeholder={'한 줄에 하나씩\nSECC\nSPCC\nDP590'}
+                placeholder={PLACEHOLDER[vocabulary.parent_slug ? 'child' : 'plain']}
                 onChange={(event) => setLines(event.target.value)}
               />
               <p className="text-muted-foreground text-xs">
                 한 줄에 하나. 최대 {BULK_MAX}줄. 빈 줄은 건너뜁니다.
+                {vocabulary.parent_slug && (
+                  <>
+                    {' '}
+                    줄마다 상위를 달리하려면 <b>상위 &gt; 값</b> 으로 적으세요 (엑셀에서
+                    두 열을 복사해도 됩니다). 안 적은 줄은 아래에서 고른 상위로 갑니다.
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -760,7 +774,7 @@ function AddTermDialog({
             // 대부분 안 잇는다.
             <VocabularyField
               slug={vocabulary.parent_slug}
-              label="상위 분류 (선택)"
+              label="상위 분류 (줄에 없을 때)"
               value={parent}
               allowCreate={false}
               onChange={setParent}
@@ -772,7 +786,33 @@ function AddTermDialog({
               <p className="text-sm">
                 새로 <b>{bulk.created}</b> · 이미 있던 것 {bulk.existing}
                 {bulk.skipped > 0 && ` · 건너뜀 ${bulk.skipped}`}
+                {bulk.rejected > 0 && (
+                  <span className="text-amber-700 dark:text-amber-500">
+                    {' '}
+                    · 못 넣음 {bulk.rejected}
+                  </span>
+                )}
               </p>
+
+              {/* **말없이 버리지 않는다.** 상위를 못 찾은 줄은 그 이유와 함께
+                  보여 준다 — 안 보여 주면 목록에 없는 이유를 알 수 없다. */}
+              {bulk.items.some((item) => item.status === 'rejected') && (
+                <div className="text-xs">
+                  <p className="text-amber-700 dark:text-amber-500">못 넣은 줄:</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {bulk.items
+                      .filter((item) => item.status === 'rejected')
+                      .map((item, index) => (
+                        <li
+                          key={`${item.input}-${index}`}
+                          className="text-muted-foreground"
+                        >
+                          '{item.input.trim()}' — {item.reason}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
               {/* **어느 것이 안 생겼는지가 알고 싶은 것이다.** 개수만 주면
                   "12개가 새로 생겼습니다" 로 끝나고, 나머지 38개를 찾으러 목록을
                   뒤지게 된다. */}

@@ -50,3 +50,21 @@ def compare_key(value: str | None) -> str:
     """비교키. **저장하지 않는다** — 어휘 값의 `normalized` 컬럼에만 들어간다."""
     cleaned = clean(value)
     return cleaned.casefold() if cleaned else ""
+
+
+#: 줄에서 상위와 값을 가르는 문자. **탭이 첫째다** — 엑셀에서 두 열을 복사하면
+#: 그대로 붙는다. `>` 는 손으로 칠 때 읽기 좋다(`Steel > SECC`).
+PARENT_SEPARATORS = ("\t", ">")
+
+
+def split_parent(line: str) -> tuple[str | None, str]:
+    """`Steel<TAB>SECC` → `("Steel", "SECC")`. 구분자가 없으면 상위는 `None`.
+
+    **부모가 있는 축에서만 부른다.** 제조사 값에 `>` 가 들어 있을 수 있는데,
+    부모가 없는 축에서 갈라 버리면 멀쩡한 값이 반토막 난다.
+    """
+    for separator in PARENT_SEPARATORS:
+        if separator in line:
+            head, _, tail = line.partition(separator)
+            return head.strip() or None, tail.strip()
+    return None, line

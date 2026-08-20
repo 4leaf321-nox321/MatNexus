@@ -94,6 +94,7 @@ class BulkTermCreateRequest(BaseModel):
 
     values: list[str] = Field(min_length=1, max_length=BULK_MAX)
     parent_value: str | None = Field(default=None, max_length=200)
+    """줄에 상위가 없을 때 쓸 기본값. 줄이 적은 것이 이긴다."""
 
 
 class BulkTermItemOut(BaseModel):
@@ -105,13 +106,18 @@ class BulkTermItemOut(BaseModel):
 
     input: str
     status: str
-    """`created` | `existing` | `skipped`."""
+    """`created` | `existing` | `skipped` | `rejected`."""
     value: str | None = None
     """정규 값. 별칭이나 표기 차이로 기존 값에 붙으면 친 것과 다르다."""
+    parent_value: str | None = None
+    """이 줄에 붙은 상위. 줄마다 다를 수 있다."""
+    reason: str | None = None
+    """`rejected` 인 이유. **말없이 버리지 않는다.**"""
 
 
 class BulkTermOut(BaseModel):
     created: int
     existing: int
     skipped: int
+    rejected: int = 0
     items: list[BulkTermItemOut]
