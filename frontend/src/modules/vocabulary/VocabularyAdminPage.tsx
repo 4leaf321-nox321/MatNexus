@@ -248,6 +248,17 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   )
 }
 
+/**
+ * 축마다 이름 변경의 파급이 다르다.
+ *
+ * 대부분은 그 값을 가리키던 행의 표시가 바뀔 뿐이다. **강종은 다르다** — 강종은
+ * 재료 이름을 만들므로(ADR 0004) 재료·시료·시편·시험 이름이 전부 다시 만들어진다.
+ * "쓰는 곳 N곳" 으로는 그 파급을 말할 수 없다.
+ */
+const RENAME_IMPACT: Record<string, string> = {
+  grade: '이 강종을 쓰는 재료 이름이 바뀌고, 그 아래 시료·시편·시험 이름도 전부 따라 바뀝니다.',
+}
+
 function RenameDialog({
   slug,
   term,
@@ -285,6 +296,11 @@ function RenameDialog({
           <DialogTitle>이름 고치기</DialogTitle>
           <DialogDescription>
             이 값을 쓰는 <b>{term.usage_count}곳</b>이 함께 바뀝니다.
+            {RENAME_IMPACT[slug] && (
+              <span className="mt-1 block text-amber-700 dark:text-amber-500">
+                {RENAME_IMPACT[slug]}
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 

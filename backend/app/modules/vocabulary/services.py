@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -15,7 +16,10 @@ from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
 from app.modules.vocabulary.normalize import clean, compare_key
+from app.shared import vocabulary_hooks
 from app.shared.errors import AppError, NotFound
+
+logger = logging.getLogger(__name__)
 
 
 def get_vocabulary(db: Session, slug: str) -> Vocabulary:
@@ -218,6 +222,10 @@ def rename(db: Session, term: VocabularyTerm, value: str) -> None:
             )
     db.expire_all()
 
+    # **쓰는 쪽이 자기 뒤처리를 한다.** 강종이 바뀌면 재료 이름을 다시
+    # 만들어야 하는데(ADR 0004), 그것을 여기서 하면 어휘가 재료를 알게 된다.
+    vocabulary_hooks.fire_rename(db, slug or "", term.id)
+
 
 def recount(db: Session, vocabulary: Vocabulary) -> None:
     """`usage_count` 를 다시 센다.
@@ -272,6 +280,7 @@ class Binding:
 
 
 #: 표별 바인딩. **여기 한 줄을 더하면 저장·수정·집계가 함께 따라온다.**
+MATERIAL_BINDINGS = (Binding("grade", "grade", "grade_term_id"),)
 SAMPLE_BINDINGS = (
     Binding("manufacturer", "manufacturer", "manufacturer_term_id"),
     # 유통사와 주 벤더가 **한 축**을 공유한다 — 같은 회사가 로트에 따라 둘 중
@@ -328,6 +337,7 @@ def release_bindings(db: Session, row: object, bindings: Iterable[Binding]) -> N
 #: 어느 표의 어느 바인딩을 세는가. **소프트 삭제된 행은 빼야 한다** — 지운 시료가
 #: 어휘를 붙들고 있으면 "쓰는 곳" 이 실제보다 커진다.
 _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
+    ("materials", MATERIAL_BINDINGS, " AND deleted_at IS NULL"),
     ("samples", SAMPLE_BINDINGS, " AND deleted_at IS NULL"),
     ("specimens", SPECIMEN_BINDINGS, " AND deleted_at IS NULL"),
     ("test_runs", TEST_RUN_BINDINGS, " AND deleted_at IS NULL"),

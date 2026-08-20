@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 
 import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { Material, NamePreview } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -147,10 +148,12 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
             <Label htmlFor="edit-category">Category</Label>
             <Input id="edit-category" {...field('category')} />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-grade">Grade</Label>
-            <Input id="edit-grade" {...field('grade')} />
-          </div>
+          <VocabularyField
+            slug="grade"
+            label="Grade"
+            value={form.grade}
+            onChange={(next) => setForm((current) => ({ ...current, grade: next }))}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="edit-details">Details</Label>
             <Input id="edit-details" placeholder="같은 규격 구분용" {...field('details')} />

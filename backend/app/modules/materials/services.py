@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Sequence
 
@@ -16,10 +17,13 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.tests.models import TestRun, TestType
 from app.modules.workspaces.models import Workspace
-from app.shared import permissions
+from app.shared import permissions, vocabulary_hooks
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from matcore import naming, units
+
+logger = logging.getLogger(__name__)
 
 # --- 단위 -------------------------------------------------------------------
 
@@ -172,12 +176,39 @@ def rename_descendants(db: Session, material: Material) -> None:
             material=material.record_name, seq_no=sample.seq_no
         )
     by_sample = {sample.id: sample for sample in samples}
-    specimens = db.scalars(select(Specimen).where(Specimen.sample_id.in_(list(by_sample))))
+    specimens = list(
+        db.scalars(select(Specimen).where(Specimen.sample_id.in_(list(by_sample))))
+    )
     for specimen in specimens:
         specimen.record_name = naming.specimen_name(
             sample=by_sample[specimen.sample_id].record_name,
             orientation=specimen.orientation,
             seq_no=specimen.seq_no,
+        )
+
+    # **시험까지 내려간다.**
+    #
+    # 여기서 멈춰 있었다 — 재료 이름을 바꾸면 시험만 옛 이름을 달고 있었고,
+    # 재료 수정 창은 "시편·시험 이름이 전부 따라 바뀝니다" 라고 **약속하고
+    # 있었다.** 강종 어휘를 붙이면서 실측으로 드러났다.
+    by_specimen = {specimen.id: specimen for specimen in specimens}
+    if not by_specimen:
+        return
+    runs = list(db.scalars(select(TestRun).where(TestRun.specimen_id.in_(list(by_specimen)))))
+    if not runs:
+        return
+    # 시험 종류를 건별로 읽지 않는다 — 시험이 수백 건이면 그만큼 왕복한다.
+    abbrs = {
+        row.id: row.abbr
+        for row in db.scalars(
+            select(TestType).where(TestType.id.in_({run.test_type_id for run in runs}))
+        )
+    }
+    for run in runs:
+        run.record_name = naming.test_run_name(
+            specimen=by_specimen[run.specimen_id].record_name,
+            type_abbr=abbrs.get(run.test_type_id, "?"),
+            seq_no=run.seq_no,
         )
 
 
@@ -236,3 +267,49 @@ def workspace_names(db: Session, ids: Sequence[uuid.UUID | None]) -> dict[uuid.U
         return {}
     rows = db.execute(select(Workspace.id, Workspace.name).where(Workspace.id.in_(wanted)))
     return {workspace_id: name for workspace_id, name in rows}
+
+
+def rename_materials_of_grade(db: Session, term_id: uuid.UUID) -> None:
+    """강종 값 이름이 바뀌면 그 강종을 쓰는 재료 이름을 다시 만든다.
+
+    강종은 재료 이름을 만든다(ADR 0004). 문자열만 맞추면 이름이 옛 강종을 그대로
+    달고 있게 된다 — `SECC_-_1.0` 인데 강종은 `SPCC` 인 상태.
+
+    **이름이 겹치면 그 재료만 건너뛴다.** `SECC_-_1.0` 과 `SPCC_-_1.0` 이 있는데
+    `SPCC` 를 `SECC` 로 고치면 둘이 같은 이름이 된다 — 유니크 제약에 걸려 요청
+    전체가 실패하는 것보다, 옮길 수 있는 것을 옮기고 못 옮긴 것을 로그로 말하는
+    편이 낫다. 그런 상황이면 애초에 값을 병합해야 한다.
+    """
+    materials = list(
+        db.scalars(
+            select(Material).where(
+                Material.grade_term_id == term_id, Material.deleted_at.is_(None)
+            )
+        )
+    )
+    for material in materials:
+        renamed = material_record_name(
+            grade=material.grade,
+            details=material.details,
+            spec_thickness_m=material.spec_thickness_m,
+        )
+        if renamed == material.record_name:
+            continue
+        if name_taken(
+            db,
+            owner_workspace_id=material.owner_workspace_id,
+            record_name=renamed,
+            exclude_id=material.id,
+        ):
+            logger.warning(
+                "재료 %r 의 이름을 %r 로 못 바꿨습니다 — 같은 이름이 이미 있습니다. "
+                "합치려면 어휘 병합을 쓰세요.",
+                material.record_name,
+                renamed,
+            )
+            continue
+        material.record_name = renamed
+        rename_descendants(db, material)
+
+
+vocabulary_hooks.on_rename("grade", rename_materials_of_grade)

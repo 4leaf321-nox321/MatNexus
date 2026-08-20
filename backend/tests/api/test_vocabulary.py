@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import unicodedata
 import uuid
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -23,13 +24,44 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
 from app.modules.vocabulary.normalize import clean, compare_key
 
+TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+
+
+def _run_in(
+    client: TestClient,
+    headers: dict[str, str],
+    db: Session,
+    sample_id: str,
+    orientation: str,
+) -> str:
+    """시료에 시편·시험을 붙인다. 이름 연쇄 변경을 시험하려면 끝까지 필요하다."""
+    from app.modules.tests import services as test_services
+
+    specimen = client.post(
+        f"/api/samples/{sample_id}/specimens",
+        json={"orientation": orientation},
+        headers=headers,
+    ).json()
+    created = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+        files={"file": ("Example.tra", TRA.read_bytes())},
+        headers=headers,
+    ).json()
+    assert test_services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    return str(created["id"])
+
 
 @pytest.fixture
-def material(client: TestClient, admin_headers: dict[str, str]) -> dict[str, Any]:
+def material(client: TestClient, admin_headers: dict[str, str], db: Session) -> dict[str, Any]:
+    # 시험까지 붙이는 검사가 있다 — 시험 종류가 없으면 업로드가 404 다.
+    ensure_builtin_test_types(db)
+    db.commit()
     created: dict[str, Any] = client.post(
         "/api/materials",
         json={
@@ -478,3 +510,84 @@ class Test여러_축:
             headers=admin_headers,
         ).json()
         assert least[0]["value"] == "오타제쳘"
+
+
+class Test강종:
+    """2-2 — **강종은 재료 이름을 만든다.**
+
+    다른 축은 값 이름을 고쳐도 표시가 바뀔 뿐이다. 강종은 재료 이름이 다시
+    만들어지고 그 아래 시료·시편·시험 이름까지 내려간다(ADR 0004).
+    """
+
+    def test_강종_이름을_고치면_네_단계_이름이_전부_따라온다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        ensure_builtin_test_types(db)
+        db.commit()
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "GRADEA",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        run_id = _run_in(client, admin_headers, db, sample["id"], "TD")
+
+        term = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "GRADEA"}, headers=admin_headers
+        ).json()[0]
+        client.patch(
+            f"/api/vocabularies/grade/terms/{term['id']}",
+            json={"value": "GRADEB"},
+            headers=admin_headers,
+        )
+
+        names = [
+            client.get(f"/api/materials/{material['id']}", headers=admin_headers).json()[
+                "record_name"
+            ],
+            client.get(
+                f"/api/materials/{material['id']}/samples", headers=admin_headers
+            ).json()[0]["record_name"],
+            client.get(f"/api/specimens/{specimen['id']}", headers=admin_headers).json()[
+                "record_name"
+            ],
+            client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()[
+                "record_name"
+            ],
+        ]
+        assert all(name.startswith("GRADEB") for name in names), names
+
+    def test_같은_표기는_한_강종으로_모인다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**이 축의 이득이 가장 크다.** 지금까지는 서로 다른 재료가 됐다."""
+        for grade, details in (("SECC", "A"), ("secc ", "B")):
+            client.post(
+                "/api/materials",
+                json={
+                    "family": "Metal",
+                    "category": "Steel",
+                    "grade": grade,
+                    "details": details,
+                    "spec_thickness": 1.0,
+                },
+                headers=admin_headers,
+            )
+        found = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "secc"}, headers=admin_headers
+        ).json()
+        assert len(found) == 1, f"강종이 갈렸다: {found}"
+        assert found[0]["usage_count"] == 2

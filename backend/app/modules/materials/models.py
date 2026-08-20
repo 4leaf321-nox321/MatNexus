@@ -124,6 +124,13 @@ class Material(Base):
     details: Mapped[str | None] = mapped_column(String(100), nullable=True)
     """같은 규격인데 구분해야 할 때 쓴다(개발 A안/B안 등). 이름의 한 칸을
     차지하므로, 비어 있으면 `-` 가 들어가고 칸 수는 유지된다."""
+    grade_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    """강종 어휘(ADR 0010). **이 값이 재료 이름을 만든다**(ADR 0004) —
+    어휘 값 이름을 고치면 재료 이름과 그 아래 시료·시편·시험 이름이 전부
+    따라 바뀐다."""
+
     spec_thickness_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     """SI(m). 입력은 mm 로 받는다. **규격 두께이고 이름의 한 칸이다** — 계산에
     쓰는 것은 시편의 실측 두께(`Specimen.thickness_m`)다. 1.0t 판재를 재면

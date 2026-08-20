@@ -12,6 +12,7 @@ import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search, X } from 'lucid
 import { Link } from 'react-router-dom'
 
 import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { NamePreview } from '@/modules/materials/api'
 import { ApiError } from '@/shared/api/client'
 import { fetchAll } from '@/shared/api/paging'
@@ -423,10 +424,12 @@ function RegisterDialog({
             <Label htmlFor="category">Category</Label>
             <Input id="category" placeholder="Steel" {...field('category')} />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="grade">Grade</Label>
-            <Input id="grade" placeholder="SECC" {...field('grade')} />
-          </div>
+          <VocabularyField
+            slug="grade"
+            label="Grade"
+            value={form.grade}
+            onChange={(next) => setForm((current) => ({ ...current, grade: next }))}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="details">Details</Label>
             <Input id="details" placeholder="MDOI (같은 규격 구분용)" {...field('details')} />

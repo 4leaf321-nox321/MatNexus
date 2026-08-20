@@ -339,7 +339,6 @@ def create_material(
         alias=payload.alias,
         family=payload.family,
         category=payload.category,
-        grade=payload.grade,
         details=payload.details,
         spec_thickness_m=thickness_m,
         applied_product=payload.applied_product,
@@ -353,6 +352,15 @@ def create_material(
         note=payload.note,
         legacy_id=payload.legacy_id,
         registered_by_id=user.id,
+    )
+    # 강종은 어휘를 거친다(ADR 0010). `SECC`/`secc` 가 서로 다른 재료를 만드는
+    # 것을 막는다 — 이 축의 이득이 가장 크다.
+    vocabulary_services.apply_bindings(
+        db,
+        material,
+        vocabulary_services.MATERIAL_BINDINGS,
+        payload.model_dump(),
+        created_by_id=user.id,
     )
     db.add(material)
     db.commit()
@@ -577,7 +585,6 @@ def update_material(
     for field in (
         "family",
         "category",
-        "grade",
         "details",
         "alias",
         "note",
@@ -609,6 +616,10 @@ def update_material(
         )
         material.spec_thickness_m = services.to_si(value, unit, field="두께")
         material.input_units = {**material.input_units, "spec_thickness": unit}
+
+    vocabulary_services.apply_bindings(
+        db, material, vocabulary_services.MATERIAL_BINDINGS, data, created_by_id=user.id
+    )
 
     renamed = services.material_record_name(
         grade=material.grade,
@@ -653,6 +664,7 @@ def delete_material(
             f"시료 {remaining}건이 남아 있어 지울 수 없습니다. 먼저 시료를 정리하세요.",
         )
     material.deleted_at = _now()
+    vocabulary_services.release_bindings(db, material, vocabulary_services.MATERIAL_BINDINGS)
     db.commit()
     return Response(status_code=204)
 

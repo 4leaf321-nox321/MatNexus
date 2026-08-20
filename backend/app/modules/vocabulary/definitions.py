@@ -28,6 +28,10 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int]] = [
     ("sales_type", "판매 유형", "open", 30),
     ("specimen_standard", "시편 규격", "open", 40),
     ("instrument", "장비", "open", 50),
+    # **가장 큰 축이고 이득도 가장 크다.** 지금은 SECC/secc/S.E.C.C 가 서로
+    # 다른 재료 셋을 만든다. 다만 강종은 재료 이름을 만드는 값이라(ADR 0004)
+    # 값 이름을 고치면 재료·시료·시편·시험 이름이 전부 따라 바뀐다.
+    ("grade", "강종", "open", 5),
 ]
 
 #: **전부 `open` 이다.** `closed` 는 만들어 두고 안 켠다.
