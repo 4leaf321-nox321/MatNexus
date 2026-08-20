@@ -21,7 +21,25 @@ from app.modules.vocabulary.models import Vocabulary
 #: 값만 고른다 — 미리 정해야 하는 분류다.
 BUILTIN_VOCABULARIES: list[tuple[str, str, str, int]] = [
     ("manufacturer", "제조사", "open", 10),
+    # **유통사와 주 벤더가 한 축을 공유한다.** 같은 회사가 어떤 로트에서는
+    # 유통사고 다른 로트에서는 주 벤더다. 축을 나누면 같은 회사가 두 목록에
+    # 따로 쌓이고, 그 둘을 합칠 방법도 없다.
+    ("vendor", "거래처", "open", 20),
+    ("sales_type", "판매 유형", "open", 30),
+    ("specimen_standard", "시편 규격", "open", 40),
+    ("instrument", "장비", "open", 50),
 ]
+
+#: **전부 `open` 이다.** `closed` 는 만들어 두고 안 켠다.
+#:
+#: 막았을 때 사람이 어디로 가는지가 문제다. 첫 발포재를 등록하려는데 `Foam` 이
+#: 목록에 없으면 관리자를 찾아가거나 — 더 흔하게는 **`Metal` 로 대충 고르고
+#: 넘어간다.** 그러면 분류가 지켜진 것이 아니라 조용히 틀린 것이다.
+#:
+#: `closed` 가 값을 하는 자리는 **외부 시스템이 정본을 주는 축**이다(ReportArchive
+#: 는 모델·BOM 코드에 쓴다). 거기서는 정본에 없는 값을 만드는 것 자체가 오류다.
+#: MatNexus 에는 아직 그런 축이 없다 — 모든 값을 사람이 친다. Phase 6 에서 장비
+#: 커넥터가 붙으면 그때 켠다.
 
 
 def ensure_builtin_vocabularies(db: Session) -> list[str]:

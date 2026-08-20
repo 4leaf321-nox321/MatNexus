@@ -701,12 +701,6 @@ def create_sample(
     workspace = services.resolve_workspace(db, user, payload.workspace_slug)
 
     seq_no = services.next_sample_seq(db, material.id)
-    maker = vocabulary_services.resolve_or_create(
-        db,
-        vocabulary_services.get_vocabulary(db, "manufacturer"),
-        payload.manufacturer,
-        created_by_id=user.id,
-    )
     sample = Sample(
         workspace_id=workspace.id,
         material_id=material.id,
@@ -714,23 +708,23 @@ def create_sample(
         record_name=naming.sample_name(material=material.record_name, seq_no=seq_no),
         alias=payload.alias,
         lot_no=payload.lot_no,
-        # **어휘를 거쳐 들어간다**(ADR 0010). 문자열도 함께 채운다 — 아직
-        # 옮기는 중이라 읽는 쪽이 문자열을 본다(Expand 단계).
-        manufacturer=maker.value if maker else None,
-        manufacturer_term_id=maker.id if maker else None,
-        distributor=payload.distributor,
-        primary_vendor=payload.primary_vendor,
-        sales_type=payload.sales_type,
+        # 어휘를 거치는 값들은 아래 `apply_bindings` 가 넣는다.
         production_date=payload.production_date,
         density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
         input_units={"density": payload.density_unit},
         note=payload.note,
         registered_by_id=user.id,
     )
+    # **어휘를 거쳐 들어간다**(ADR 0010). 문자열도 함께 채운다 — 아직 옮기는
+    # 중이라 읽는 쪽이 문자열을 본다(Expand 단계).
+    vocabulary_services.apply_bindings(
+        db,
+        sample,
+        vocabulary_services.SAMPLE_BINDINGS,
+        payload.model_dump(),
+        created_by_id=user.id,
+    )
     db.add(sample)
-    # **참조가 생기는 자리에서 센다.** 매번 `count(join)` 하면 어휘가 커질수록
-    # 느려지고 그 비용이 화면을 열 때마다 든다.
-    vocabulary_services.bump_usage(db, sample.manufacturer_term_id, 1)
     db.commit()
     return _sample_out(sample, specimen_count=0, workspace_name=workspace.name)
 
@@ -773,28 +767,15 @@ def update_sample(
     for field in (
         "lot_no",
         "alias",
-        "distributor",
-        "primary_vendor",
-        "sales_type",
         "production_date",
         "note",
     ):
         if field in data:
             setattr(sample, field, data[field])
 
-    if "manufacturer" in data:
-        # 옛 값의 usage 를 빼고 새 값에 더한다. 캐시가 어긋나면 피커에 "쓰이지
-        # 않는 값" 이 남는다.
-        vocabulary_services.bump_usage(db, sample.manufacturer_term_id, -1)
-        maker = vocabulary_services.resolve_or_create(
-            db,
-            vocabulary_services.get_vocabulary(db, "manufacturer"),
-            data["manufacturer"],
-            created_by_id=user.id,
-        )
-        sample.manufacturer = maker.value if maker else None
-        sample.manufacturer_term_id = maker.id if maker else None
-        vocabulary_services.bump_usage(db, sample.manufacturer_term_id, 1)
+    vocabulary_services.apply_bindings(
+        db, sample, vocabulary_services.SAMPLE_BINDINGS, data, created_by_id=user.id
+    )
 
     if "density" in data or "density_unit" in data:
         unit = data.get("density_unit") or sample.input_units.get("density", DENSITY_UNIT)
@@ -827,8 +808,7 @@ def delete_sample(
             f"시편 {remaining}건이 남아 있어 지울 수 없습니다.",
         )
     sample.deleted_at = _now()
-    # 지운 시료는 어휘를 안 쓴다 — 안 빼면 피커에 "쓰이지 않는 값" 이 남는다.
-    vocabulary_services.bump_usage(db, sample.manufacturer_term_id, -1)
+    vocabulary_services.release_bindings(db, sample, vocabulary_services.SAMPLE_BINDINGS)
     db.commit()
     return Response(status_code=204)
 
@@ -885,7 +865,6 @@ def create_specimen(
         record_name=naming.specimen_name(
             sample=sample.record_name, orientation=orientation, seq_no=seq_no
         ),
-        standard=payload.standard,
         thickness_m=services.to_si(payload.thickness, payload.length_unit, field="두께"),
         width_m=services.to_si(payload.width, payload.length_unit, field="폭"),
         gauge_length_m=services.to_si(
@@ -894,6 +873,13 @@ def create_specimen(
         input_units={"length": payload.length_unit},
         note=payload.note,
         registered_by_id=user.id,
+    )
+    vocabulary_services.apply_bindings(
+        db,
+        specimen,
+        vocabulary_services.SPECIMEN_BINDINGS,
+        payload.model_dump(),
+        created_by_id=user.id,
     )
     db.add(specimen)
     try:
@@ -944,9 +930,11 @@ def update_specimen(
     ):
         if field in data:
             setattr(specimen, column, services.to_si(data[field], unit, field=field))
-    for field in ("standard", "note"):
-        if field in data:
-            setattr(specimen, field, data[field])
+    if "note" in data:
+        specimen.note = data["note"]
+    vocabulary_services.apply_bindings(
+        db, specimen, vocabulary_services.SPECIMEN_BINDINGS, data, created_by_id=user.id
+    )
     specimen.input_units = {**specimen.input_units, "length": unit}
 
     db.commit()
@@ -971,5 +959,6 @@ def delete_specimen(
     if runs:
         raise Conflict("MNX-MATERIALS-0006", f"시험 {runs}건이 남아 있어 지울 수 없습니다.")
     specimen.deleted_at = _now()
+    vocabulary_services.release_bindings(db, specimen, vocabulary_services.SPECIMEN_BINDINGS)
     db.commit()
     return Response(status_code=204)

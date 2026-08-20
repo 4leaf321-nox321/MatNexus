@@ -235,6 +235,18 @@ class Sample(Base):
     distributor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     primary_vendor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sales_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # 어휘(ADR 0010). 유통사와 주 벤더는 **같은 축**을 가리킨다 — 같은 회사가
+    # 로트에 따라 둘 중 어느 쪽도 될 수 있다.
+    distributor_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    primary_vendor_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    sales_type_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
     production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     """용도(적용 제품·부위)는 여기 없다. 재료로 올렸다 — 로트마다 달라지는 값이
     아니고, 시료에 두면 재료 단위로 물어볼 수가 없다."""
@@ -298,6 +310,9 @@ class Specimen(Base):
     record_name: Mapped[str] = mapped_column(String(300), index=True)
 
     standard: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    standard_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
     """시편 규격(ASTM E8 subsize, JIS 5호 …). **시편을 어떻게 잘랐는가다.**
 
     전에는 시험 조건에 있었다. 그런데 규격은 시험할 때 정하는 것이 아니라 자를

@@ -244,6 +244,11 @@ class TestRun(Base):
     )
     operator: Mapped[str | None] = mapped_column(String(100), nullable=True)
     instrument: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    instrument_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    """장비 어휘(ADR 0010). 같은 장비를 'Zwick Z100'·'zwick z100' 으로 적으면
+    장비별 비교가 갈린다."""
 
     # --- 원본 파일 ---------------------------------------------------------
     # 원본은 항상 그대로 보관한다. 파서를 고쳐 다시 돌릴 수 있어야 하고, 장비가

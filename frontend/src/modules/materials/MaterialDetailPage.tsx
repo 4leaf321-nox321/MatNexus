@@ -34,6 +34,7 @@ import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
+import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -666,14 +667,12 @@ function AddSpecimenDialog({
         {/* **규격이 치수를 정한다.** 그래서 치수 위에 둔다 — 아래 세 칸이
             어디서 나온 값인지가 이 한 줄이다. 장비 파일에는 없어서 사람이
             넣어야 하는 값이기도 하다. */}
-        <div className="space-y-1.5">
-          <Label htmlFor="sp-standard">시편 규격</Label>
-          <Input
-            id="sp-standard"
-            placeholder="ASTM E8 subsize / JIS 5호 …"
-            {...field('standard')}
-          />
-        </div>
+        <VocabularyField
+          slug="specimen_standard"
+          label="시편 규격"
+          value={form.standard}
+          onChange={(next) => setForm((current) => ({ ...current, standard: next }))}
+        />
 
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1.5">

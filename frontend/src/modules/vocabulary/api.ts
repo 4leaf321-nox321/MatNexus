@@ -23,10 +23,12 @@ export const vocabularyApi = {
    * 값 검색. **별칭으로도 찾힌다** — `'포스코(주)'` 를 치면 `'포스코'` 가 온다.
    * 그래서 받은 결과를 화면이 다시 거르면 안 된다.
    */
-  search: (slug: string, q: string, includeHidden = false) => {
+  search: (slug: string, q: string, includeHidden = false, leastUsed = false) => {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (includeHidden) params.set('include_hidden', 'true')
+    // 오타는 늘 `쓰는 곳 1` 로 생긴다 — 기본 정렬에서는 목록 끝에 묻힌다.
+    if (leastUsed) params.set('least_used', 'true')
     const query = params.toString()
     return api.get<Term[]>(`/vocabularies/${slug}/terms${query ? `?${query}` : ''}`)
   },

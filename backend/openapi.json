@@ -11973,6 +11973,18 @@
               "title": "Include Hidden",
               "type": "boolean"
             }
+          },
+          {
+            "description": "적게 쓰이는 것부터. 오타를 찾을 때 쓴다",
+            "in": "query",
+            "name": "least_used",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "적게 쓰이는 것부터. 오타를 찾을 때 쓴다",
+              "title": "Least Used",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {

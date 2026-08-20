@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { Specimen } from '@/modules/materials/api'
 import { ApiError } from '@/shared/api/client'
 import { Badge } from '@/shared/components/ui/badge'
@@ -106,14 +107,12 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="sp-standard">시편 규격</Label>
-            <Input
-              id="sp-standard"
-              placeholder="ASTM E8 subsize / JIS 5호 …"
-              {...field('standard')}
-            />
-          </div>
+          <VocabularyField
+            slug="specimen_standard"
+            label="시편 규격"
+            value={form.standard}
+            onChange={(next) => setForm((current) => ({ ...current, standard: next }))}
+          />
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">

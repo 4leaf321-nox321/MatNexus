@@ -54,6 +54,7 @@ from app.modules.tests.schemas import (
     TestTypeOut,
     TestTypeSaveRequest,
 )
+from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
 from app.shared import curvedata, filestore, permissions
 from app.shared.auth import current_user, require_system_admin
@@ -642,10 +643,18 @@ def upload_test_run(
         input_units=input_units,
         tested_at=tested_at,
         operator=operator,
-        instrument=instrument,
         note=note,
         status="uploaded",
         registered_by_id=user.id,
+    )
+    # 장비 어휘(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면 장비별
+    # 비교가 무의미해진다.
+    vocabulary_services.apply_bindings(
+        db,
+        run,
+        vocabulary_services.TEST_RUN_BINDINGS,
+        {"instrument": instrument},
+        created_by_id=user.id,
     )
     db.add(run)
     db.flush()  # id 와 created_at 이 있어야 저장 경로가 정해진다
@@ -856,6 +865,7 @@ def delete_run(
     """
     run = services.get_run(db, user, run_id)
     run.deleted_at = _now()
+    vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
     db.commit()
     return Response(status_code=204)
 

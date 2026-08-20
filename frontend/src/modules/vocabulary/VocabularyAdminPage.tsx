@@ -85,12 +85,13 @@ export default function VocabularyAdminPage() {
 function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   const [term, setTerm] = useState('')
   const [showHidden, setShowHidden] = useState(false)
+  const [leastUsed, setLeastUsed] = useState(false)
   const [editing, setEditing] = useState<Term | null>(null)
   const [error, setError] = useState<Error | null>(null)
   // 검색은 서버가 한다 — 어휘가 수만 개가 되면 전체를 받을 수 없다.
   const terms = useResource(
-    () => vocabularyApi.search(vocabulary.slug, term, showHidden),
-    [vocabulary.slug, term, showHidden]
+    () => vocabularyApi.search(vocabulary.slug, term, showHidden, leastUsed),
+    [vocabulary.slug, term, showHidden, leastUsed]
   )
 
   async function recount() {
@@ -127,11 +128,23 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         <Badge variant="outline" className="text-xs">
           {vocabulary.entry_policy === 'open' ? '사용자가 추가할 수 있음' : '관리자만 추가'}
         </Badge>
+        {/* **오타는 늘 `쓰는 곳 1` 로 생긴다.** 기본 정렬(많이 쓰는 순)에서는
+            목록 끝에 묻히므로, 뒤집으면 검토할 것이 맨 위로 온다. 입력을 앞에서
+            막는 대신 뒤에서 보이게 하는 장치다. */}
+        <Button
+          size="sm"
+          variant={leastUsed ? 'default' : 'outline'}
+          className="ml-auto h-8 text-xs"
+          title="새로 생긴 오타를 찾을 때"
+          onClick={() => setLeastUsed((value) => !value)}
+        >
+          적게 쓰이는 것부터
+        </Button>
         {/* **되돌릴 길이 없으면 감추기도 막다른 길이다.** */}
         <Button
           size="sm"
           variant={showHidden ? 'default' : 'outline'}
-          className="ml-auto h-8 text-xs"
+          className="h-8 text-xs"
           onClick={() => setShowHidden((value) => !value)}
         >
           감춘 값도 보기

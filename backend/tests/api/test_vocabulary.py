@@ -371,3 +371,110 @@ class Test관리:
         ).json()
         counted = {item["value"]: item["usage_count"] for item in after}
         assert counted["셀제철"] == 2
+
+
+class Test여러_축:
+    """2단계 — 축이 늘어나도 코드가 안 늘어나는가.
+
+    바인딩 표(`SAMPLE_BINDINGS` 등)를 두고 라우트가 그것을 훑는다. 축마다
+    "resolve 하고 문자열 채우고 FK 채우고 usage 증감" 을 베껴 쓰면 그중 하나만
+    고쳐지는 날이 온다 — 시료 폼이 갈렸던 것과 같은 실패다.
+    """
+
+    def test_유통사와_주_벤더가_한_축을_쓴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+    ) -> None:
+        """같은 회사가 로트에 따라 둘 중 어느 쪽도 된다. 축을 나누면 같은 회사가
+        두 목록에 따로 쌓이고, 합칠 방법도 없다."""
+        client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"distributor": "한국유통 ", "primary_vendor": "한국유통"},
+            headers=admin_headers,
+        )
+        found = client.get(
+            "/api/vocabularies/vendor/terms",
+            params={"q": "한국유통"},
+            headers=admin_headers,
+        ).json()
+        assert len(found) == 1, f"한 축에 두 값이 생겼다: {found}"
+        # 한 값이 **두 컬럼**에서 쓰인다.
+        assert found[0]["usage_count"] == 2
+
+    def test_시편_규격도_어휘를_거친다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+    ) -> None:
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        created = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "standard": "ASTM E8  subsize"},
+            headers=admin_headers,
+        ).json()
+        # 가운데 두 칸이 정리된다.
+        assert created["standard"] == "ASTM E8 subsize"
+
+    def test_지우면_쓰는_곳이_줄어든다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+    ) -> None:
+        """안 빼면 피커에 "쓰이지 않는 값" 이 남고 '쓰는 곳' 이 거짓말을 한다."""
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"sales_type": "지울유형"},
+            headers=admin_headers,
+        ).json()
+        before = client.get(
+            "/api/vocabularies/sales_type/terms",
+            params={"q": "지울유형"},
+            headers=admin_headers,
+        ).json()[0]
+        assert before["usage_count"] == 1
+
+        client.delete(f"/api/samples/{sample['id']}", headers=admin_headers)
+
+        after = client.get(
+            "/api/vocabularies/sales_type/terms",
+            params={"q": "지울유형", "include_hidden": "true"},
+            headers=admin_headers,
+        ).json()[0]
+        assert after["usage_count"] == 0
+
+    def test_적게_쓰이는_것부터_볼_수_있다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+    ) -> None:
+        """**`closed` 정책 대신 두는 장치다.**
+
+        오타는 늘 `쓰는 곳 1` 로 생기는데 기본 정렬(많이 쓰는 순)에서는 목록
+        끝에 묻힌다. 앞에서 막으면 사람이 대충 고르고 넘어가지만, 뒤에서 보이게
+        하면 관리자가 실제 오염만 골라 낸다.
+        """
+        for _ in range(3):
+            client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"manufacturer": "많이쓰는제철"},
+                headers=admin_headers,
+            )
+        client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"manufacturer": "오타제쳘"},
+            headers=admin_headers,
+        )
+
+        least = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"least_used": "true"},
+            headers=admin_headers,
+        ).json()
+        assert least[0]["value"] == "오타제쳘"

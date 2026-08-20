@@ -66,11 +66,21 @@ def search_terms(
     include_hidden: bool = Query(
         default=False, description="감춘 값도 포함. 관리 화면이 쓴다"
     ),
+    least_used: bool = Query(
+        default=False, description="적게 쓰이는 것부터. 오타를 찾을 때 쓴다"
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[TermOut]:
     vocabulary = services.get_vocabulary(db, slug)
-    found = services.search(db, vocabulary, q=q, limit=limit, include_hidden=include_hidden)
+    found = services.search(
+        db,
+        vocabulary,
+        q=q,
+        limit=limit,
+        include_hidden=include_hidden,
+        least_used=least_used,
+    )
     return [
         TermOut(
             id=item.id,

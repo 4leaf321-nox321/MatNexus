@@ -7551,6 +7551,8 @@ export interface operations {
                 limit?: number;
                 /** @description 감춘 값도 포함. 관리 화면이 쓴다 */
                 include_hidden?: boolean;
+                /** @description 적게 쓰이는 것부터. 오타를 찾을 때 쓴다 */
+                least_used?: boolean;
             };
             header?: never;
             path: {
