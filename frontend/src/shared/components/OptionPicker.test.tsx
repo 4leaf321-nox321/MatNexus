@@ -113,4 +113,65 @@ describe('OptionPicker', () => {
     await user.click(await screen.findByText('Polymer'))
     expect(onChange).toHaveBeenCalledWith('Polymer')
   })
+
+  describe('서버 검색 모드', () => {
+    it('타이핑이 멎으면 서버에 묻고, 서버가 준 것을 그대로 보여 준다', async () => {
+      const user = userEvent.setup()
+      // **서버가 별칭으로 찾아 준 것을 브라우저가 또 거르면 안 된다.**
+      // '포스코주' 로 쳤는데 서버가 '포스코' 를 돌려주면 그걸 보여야 한다.
+      const search = vi.fn().mockResolvedValue([{ value: '포스코', count: 12 }])
+      render(
+        <OptionPicker
+          label="제조사"
+          value=""
+          options={[]}
+          search={search}
+          onChange={vi.fn()}
+        />
+      )
+      await user.click(screen.getByRole('button', { name: /전체/ }))
+      await user.type(screen.getByPlaceholderText('제조사 찾기'), '포스코주')
+
+      await waitFor(() => expect(screen.getByText('포스코')).toBeInTheDocument())
+      expect(search).toHaveBeenCalledWith('포스코주')
+    })
+
+    it('늦게 온 응답이 최신 결과를 덮지 않는다', async () => {
+      const user = userEvent.setup()
+      // 'S' 의 응답이 'SECC' 보다 늦게 오는 상황. 실제로 생긴다 — 짧은 검색어가
+      // 더 많은 행을 훑어서 오히려 느릴 수 있다.
+      // 담아 두는 그릇을 쓴다 — `let x = null` 은 콜백 안의 대입을 타입 검사가
+      // 못 보고 계속 null 로 좁힌다.
+      const slow: { resolve?: (value: { value: string }[]) => void } = {}
+      const search = vi
+        .fn()
+        .mockImplementationOnce(
+          () => new Promise<{ value: string }[]>((r) => (slow.resolve = r))
+        )
+        .mockResolvedValue([{ value: 'SECC180' }])
+
+      render(
+        <OptionPicker label="강종" value="" options={[]} search={search} onChange={vi.fn()} />
+      )
+      await user.click(screen.getByRole('button', { name: /전체/ }))
+      const box = screen.getByPlaceholderText('강종 찾기')
+      await user.type(box, 'S')
+      await waitFor(() => expect(search).toHaveBeenCalledTimes(1))
+      await user.type(box, 'ECC')
+      await waitFor(() => expect(screen.getByText('SECC180')).toBeInTheDocument())
+
+      // 이제 뒤늦게 'S' 의 응답이 온다.
+      slow.resolve?.([{ value: '늦게 온 것' }])
+      await waitFor(() => expect(screen.getByText('SECC180')).toBeInTheDocument())
+      expect(screen.queryByText('늦게 온 것')).not.toBeInTheDocument()
+    })
+
+    it('열기 전에는 서버를 안 부른다', () => {
+      const search = vi.fn().mockResolvedValue([])
+      render(
+        <OptionPicker label="강종" value="" options={[]} search={search} onChange={vi.fn()} />
+      )
+      expect(search).not.toHaveBeenCalled()
+    })
+  })
 })

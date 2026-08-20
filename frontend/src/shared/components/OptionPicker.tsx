@@ -18,9 +18,21 @@
  * 개수가 붙어 있으면 고르기 전에 안다.
  *
  * 도메인을 모른다 — 값과 개수만 받는다.
+ *
+ * ## 두 가지 모드
+ *
+ * **정적** — `options` 를 통째로 받아 브라우저에서 거른다. 분류처럼 목록이
+ * 수백을 안 넘는 자리에 쓴다. 왕복이 없어 즉각적이다.
+ *
+ * **서버 검색** — `search` 를 주면 타이핑할 때마다 서버에 묻는다. 어휘가 수만
+ * 개가 되면(ADR 0010) 전체를 브라우저로 보낼 수 없다 — 페이로드도 문제지만,
+ * 2만 개를 받아 놓고 60개만 그리는 것은 그냥 낭비다.
+ *
+ * 두 모드를 한 컴포넌트에 두는 이유: 쓰는 쪽 화면이 같아야 한다. 나누면 같은
+ * 팝오버를 두 벌 그리게 되고, 그때부터 둘이 갈라진다(시료 폼에서 겪었다).
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronsUpDown, Search } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
@@ -30,6 +42,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/
 /** 한 번에 그리는 수. 넘으면 **몇 개가 더 있는지 말한다** — 조용히 자르지 않는다. */
 const VISIBLE = 60
 
+/**
+ * 서버 검색을 미루는 시간(ms).
+ *
+ * 글자마다 보내면 'SECC' 넉 자에 요청이 넷 나가고, 앞의 셋은 버려진다. 사람이
+ * 타이핑을 멈추는 간격이 대략 이 정도다 — 더 길면 반응이 굼떠 보인다.
+ */
+const DEBOUNCE_MS = 200
+
 export interface Option {
   value: string
   count?: number
@@ -38,24 +58,67 @@ export interface Option {
 interface Props {
   label: string
   value: string
+  /** 정적 모드의 전체 목록. `search` 를 주면 첫 화면(빈 검색어)에만 쓰인다. */
   options: Option[]
+  /**
+   * 주면 **서버 검색 모드**가 된다. 타이핑이 멎으면 호출된다.
+   *
+   * 늦게 온 응답이 최신 결과를 덮지 않게 호출 순서를 지킨다 — 'S' 의 응답이
+   * 'SECC' 보다 늦게 오는 일이 실제로 생긴다.
+   */
+  search?: (term: string) => Promise<Option[]>
   /** 아무것도 안 고른 상태의 이름. 기본은 '전체'. */
   anyLabel?: string
   onChange: (next: string) => void
 }
 
-export function OptionPicker({ label, value, options, anyLabel = '전체', onChange }: Props) {
+export function OptionPicker({
+  label,
+  value,
+  options,
+  search,
+  anyLabel = '전체',
+  onChange,
+}: Props) {
   const [open, setOpen] = useState(false)
   const [term, setTerm] = useState('')
+  const [remote, setRemote] = useState<Option[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  /** 몇 번째 요청인가. 늦게 온 응답을 버리는 데 쓴다. */
+  const issued = useRef(0)
+
+  useEffect(() => {
+    if (!search || !open) return
+    const seq = ++issued.current
+    setBusy(true)
+    const timer = setTimeout(() => {
+      search(term.trim())
+        .then((found) => {
+          // **늦게 온 응답은 버린다.** 'S' 가 'SECC' 보다 늦게 도착하면 목록이
+          // 방금 친 글자와 어긋난 채로 남는다.
+          if (seq === issued.current) setRemote(found)
+        })
+        .catch(() => {
+          if (seq === issued.current) setRemote([])
+        })
+        .finally(() => {
+          if (seq === issued.current) setBusy(false)
+        })
+    }, DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [search, open, term])
 
   const matched = useMemo(() => {
+    // 서버 검색 모드면 거르지 않는다 — 서버가 이미 걸렀다. 여기서 또 거르면
+    // 서버가 별칭으로 찾아 준 것이 화면에서 사라진다('포스코(주)' → 포스코).
+    if (search) return remote ?? options
     const needle = term.trim().toLowerCase()
     const found = needle
       ? options.filter((item) => item.value.toLowerCase().includes(needle))
       : options
     // 많이 쓰이는 것이 위로. 검색이 붙어 있으므로 가나다순보다 이쪽이 쓸모 있다.
     return [...found].sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
-  }, [options, term])
+  }, [search, remote, options, term])
 
   function pick(next: string) {
     onChange(next)
@@ -104,16 +167,25 @@ export function OptionPicker({ label, value, options, anyLabel = '전체', onCha
               />
             ))}
 
-            {matched.length === 0 && (
-              <p className="text-muted-foreground px-2 py-6 text-center text-xs">
-                '{term}' 에 맞는 {label} 이(가) 없습니다.
-              </p>
-            )}
+            {matched.length === 0 &&
+              (busy ? (
+                <p className="text-muted-foreground px-2 py-6 text-center text-xs">
+                  찾는 중…
+                </p>
+              ) : (
+                <p className="text-muted-foreground px-2 py-6 text-center text-xs">
+                  '{term}' 에 맞는 {label} 이(가) 없습니다.
+                </p>
+              ))}
           </div>
 
+          {/* 서버 검색 모드에서는 서버가 이미 상한을 걸어 보낸다. "몇 개 더" 를
+              말할 수 없으므로(전체 수를 모른다) 좁히라고만 한다. */}
           {matched.length > VISIBLE && (
             <p className="text-muted-foreground border-t px-2 py-1.5 text-center text-xs">
-              {matched.length - VISIBLE}개 더 있습니다 — 검색으로 좁히세요.
+              {search
+                ? '검색으로 좁히세요.'
+                : `${matched.length - VISIBLE}개 더 있습니다 — 검색으로 좁히세요.`}
             </p>
           )}
         </PopoverContent>

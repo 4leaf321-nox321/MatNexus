@@ -211,13 +211,18 @@ def preview_name(
 #: 실사용 보고: "재료를 검색해도 안 나온다." 이름·별칭·Grade 만 보고 있었는데,
 #: 사람은 화면에 떡하니 보이는 Family·Category·Details 로도 찾는다. 검색이
 #: 실패했다고 알려 주지도 않으니 **재료가 없는 줄 안다** — 조용히 틀리는 쪽이다.
+#: **`OR` 가지는 전부 인덱스가 있어야 한다.** 하나라도 색인이 없으면 그것 때문에
+#: 전 행을 훑게 되어 나머지 인덱스가 무의미해진다(실측: 6개 OR 118ms vs 4개 OR
+#: 4.6ms, 합성 5만 건). 그래서 이 목록은 trgm 인덱스가 있는 컬럼과 **정확히 같이**
+#: 유지한다 — 여기 하나를 더하면 마이그레이션도 따라와야 한다.
+#:
+#: `grade`·`details` 를 뺀 이유: `record_name` 이 `{grade}_{details}_{두께}` 라서
+#: (ADR 0004) 이름 검색이 그 둘을 이미 덮는다. 빼도 잃는 것이 없다.
 _SEARCH_COLUMNS = (
     Material.record_name,
     Material.alias,
     Material.family,
     Material.category,
-    Material.grade,
-    Material.details,
 )
 
 

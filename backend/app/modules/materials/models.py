@@ -30,6 +30,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -66,6 +67,36 @@ class Material(Base):
             # PG15+. 없으면 NULL != NULL 이라 **전역 재료끼리 같은 이름이 허용된다**
             # — 유니크 제약을 두는 이유가 바로 사라진다. 서버는 17.5.
             postgresql_nulls_not_distinct=True,
+        ),
+        # **검색용 trigram 인덱스.** `ILIKE '%낱말%'` 은 B-tree 를 못 탄다 —
+        # 앞의 와일드카드 때문에 어느 접두사부터 볼지 정할 수가 없다.
+        #
+        # 여기 있는 컬럼과 `routes._SEARCH_COLUMNS` 는 **정확히 같아야 한다.**
+        # `OR` 가지 하나가 색인이 없으면 그것 때문에 전 행을 훑게 되어 나머지
+        # 인덱스가 통째로 무의미해진다(실측: 6개 OR 118ms vs 4개 OR 4.6ms).
+        Index(
+            "ix_materials_record_name_trgm",
+            "record_name",
+            postgresql_using="gin",
+            postgresql_ops={"record_name": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_materials_alias_trgm",
+            "alias",
+            postgresql_using="gin",
+            postgresql_ops={"alias": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_materials_family_trgm",
+            "family",
+            postgresql_using="gin",
+            postgresql_ops={"family": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_materials_category_trgm",
+            "category",
+            postgresql_using="gin",
+            postgresql_ops={"category": "gin_trgm_ops"},
         ),
     )
 

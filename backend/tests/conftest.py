@@ -75,6 +75,11 @@ def engine():  # type: ignore[no-untyped-def]
     url = _test_url()
     _ensure_database(url)
     eng = create_engine(url, future=True)
+    # **확장이 먼저다.** 재료 검색 인덱스가 `gin_trgm_ops` 를 쓰므로 이게 없으면
+    # `create_all` 이 통째로 실패한다. 마이그레이션 경로는 자기 안에서 만들지만
+    # 여기는 `create_all` 이라 따로 해 줘야 한다.
+    with eng.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
     Base.metadata.drop_all(eng)
     Base.metadata.create_all(eng)
     yield eng
