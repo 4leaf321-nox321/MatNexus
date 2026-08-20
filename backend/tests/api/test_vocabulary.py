@@ -707,3 +707,187 @@ class Test분류_계층:
             headers=admin_headers,
         ).json()
         assert added["parent_value"] == "Steel"
+
+
+class Test별칭과_병합:
+    """3단계 — **표기가 갈렸을 때 되돌릴 길.**
+
+    2단계까지는 어휘를 만들기만 했다. 잘못 갈린 것을 합치거나, 애초에 안 갈리게
+    막을 방법이 없었다.
+    """
+
+    def _term(self, client: TestClient, headers: dict[str, str], value: str) -> dict[str, Any]:
+        created: dict[str, Any] = client.post(
+            "/api/vocabularies/manufacturer/terms", json={"value": value}, headers=headers
+        ).json()
+        return created
+
+    def test_별칭을_등록하면_새_값이_안_생긴다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**예방이다.** 사후에 합치는 것보다 싸다."""
+        term = self._term(client, admin_headers, "예방제철")
+        client.post(
+            f"/api/vocabularies/manufacturer/terms/{term['id']}/aliases",
+            json={"alias": "YEBANG STEEL"},
+            headers=admin_headers,
+        )
+
+        resolved = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "yebang steel"},
+            headers=admin_headers,
+        ).json()
+        assert resolved["id"] == term["id"]
+        assert resolved["value"] == "예방제철"
+
+    def test_이미_쓰이는_표기는_별칭으로_못_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        first = self._term(client, admin_headers, "가제철A")
+        self._term(client, admin_headers, "나제철A")
+        denied = client.post(
+            f"/api/vocabularies/manufacturer/terms/{first['id']}/aliases",
+            json={"alias": "나제철A"},
+            headers=admin_headers,
+        )
+        assert denied.status_code == 409, denied.text
+
+    def test_합치면_참조가_옮겨지고_옛_표기가_별칭으로_남는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+    ) -> None:
+        """**병합이 일회성 청소가 아니라 규칙이 되는 지점이다.**"""
+        for value in ("합칠제철", "합칠제철(주)"):
+            client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"manufacturer": value},
+                headers=admin_headers,
+            )
+        terms = client.get(
+            "/api/vocabularies/manufacturer/terms",
+            params={"q": "합칠제철"},
+            headers=admin_headers,
+        ).json()
+        source = next(item for item in terms if "(" in item["value"])
+        target = next(item for item in terms if "(" not in item["value"])
+
+        merged = client.post(
+            f"/api/vocabularies/manufacturer/terms/{source['id']}/merge",
+            json={"into_id": target["id"]},
+            headers=admin_headers,
+        ).json()
+        assert merged["usage_count"] == 2
+
+        # 시료의 문자열도 옮겨진다(Expand 단계라 양쪽을 든다).
+        samples = client.get(
+            f"/api/materials/{material['id']}/samples", headers=admin_headers
+        ).json()
+        assert {item["manufacturer"] for item in samples} == {"합칠제철"}
+
+        # **없어진 표기가 별칭으로 남는다** — 다음에 또 쳐도 새 값이 안 생긴다.
+        again = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "합칠제철(주)"},
+            headers=admin_headers,
+        ).json()
+        assert again["id"] == target["id"]
+
+    def test_다른_축끼리는_못_합친다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """축을 넘는 병합은 값을 합치는 것이 아니라 **뜻을 바꾸는 것**이다."""
+        maker = self._term(client, admin_headers, "축넘기제철")
+        vendor = client.post(
+            "/api/vocabularies/vendor/terms",
+            json={"value": "축넘기상사"},
+            headers=admin_headers,
+        ).json()
+        denied = client.post(
+            f"/api/vocabularies/manufacturer/terms/{maker['id']}/merge",
+            json={"into_id": vendor["id"]},
+            headers=admin_headers,
+        )
+        assert denied.status_code in (404, 422), denied.text
+
+    def test_후보는_구두점까지_지운_키로_묶는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        for value in ("ASTM E8", "astm-e8"):
+            client.post(
+                "/api/vocabularies/specimen_standard/terms",
+                json={"value": value},
+                headers=admin_headers,
+            )
+        groups = client.get(
+            "/api/vocabularies/specimen_standard/merge-candidates", headers=admin_headers
+        ).json()
+        values = [{item["value"] for item in group} for group in groups]
+        assert {"ASTM E8", "astm-e8"} in values
+
+    def test_기각한_쌍은_다시_안_뜬다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """안 기억하면 같은 것을 매번 다시 묻게 되고, 그러면 목록을 아무도 안 본다."""
+        first = self._term(client, admin_headers, "기각제철")
+        second = self._term(client, admin_headers, "기각-제철")
+        assert any(
+            {item["value"] for item in group} == {"기각제철", "기각-제철"}
+            for group in client.get(
+                "/api/vocabularies/manufacturer/merge-candidates", headers=admin_headers
+            ).json()
+        )
+
+        client.post(
+            "/api/vocabularies/manufacturer/dismissals",
+            json={"first_id": first["id"], "second_id": second["id"]},
+            headers=admin_headers,
+        )
+        assert not any(
+            {item["value"] for item in group} == {"기각제철", "기각-제철"}
+            for group in client.get(
+                "/api/vocabularies/manufacturer/merge-candidates", headers=admin_headers
+            ).json()
+        )
+
+    def test_부모를_화면에서_정할_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """백필이 못 이은 값(부모가 갈렸던 것)을 사람이 정하는 자리다. 그 길이
+        없으면 로그만 남기고 아무도 못 고친다."""
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "ORPHAN",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        term = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "ORPHAN"}, headers=admin_headers
+        ).json()[0]
+
+        client.patch(
+            f"/api/vocabularies/grade/terms/{term['id']}",
+            json={"parent_value": ""},
+            headers=admin_headers,
+        )
+        cleared = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "ORPHAN"}, headers=admin_headers
+        ).json()[0]
+        assert cleared["parent_value"] is None
+
+        client.patch(
+            f"/api/vocabularies/grade/terms/{term['id']}",
+            json={"parent_value": "Steel"},
+            headers=admin_headers,
+        )
+        restored = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "ORPHAN"}, headers=admin_headers
+        ).json()[0]
+        assert restored["parent_value"] == "Steel"

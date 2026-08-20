@@ -7,14 +7,22 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from typing import Any, cast
 
 from sqlalchemy import Select, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
-from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
+from app.modules.vocabulary.models import (
+    Vocabulary,
+    VocabularyAlias,
+    VocabularyDismissal,
+    VocabularyMerge,
+    VocabularyTerm,
+)
 from app.modules.vocabulary.normalize import clean, compare_key
 from app.shared import vocabulary_hooks
 from app.shared.errors import AppError, NotFound
@@ -415,3 +423,226 @@ _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
     ("specimens", SPECIMEN_BINDINGS, " AND deleted_at IS NULL"),
     ("test_runs", TEST_RUN_BINDINGS, " AND deleted_at IS NULL"),
 )
+
+
+def add_alias(db: Session, term: VocabularyTerm, alias: str) -> VocabularyAlias | None:
+    """다른 표기를 정규 값에 잇는다. **예방이다.**
+
+    `'POSCO'` 를 `'포스코'` 의 별칭으로 등록해 두면 값을 만들 때 게이트가 그것까지
+    뒤져서 애초에 중복이 안 생긴다 — 사후에 합치는 것보다 싸다.
+
+    이미 그 표기가 쓰이고 있으면(정규 값이거나 다른 별칭) 만들지 않는다.
+    """
+    key = compare_key(alias)
+    cleaned = clean(alias)
+    if not key or cleaned is None:
+        raise AppError("MNX-VOCABULARY-0003", "값이 비어 있습니다.", status=422)
+
+    taken = resolve(db, _vocabulary_of(db, term), cleaned)
+    if taken is not None:
+        if taken.id == term.id:
+            return None  # 이미 이 값이다 — 조용히 넘어간다
+        raise AppError(
+            "MNX-VOCABULARY-0007",
+            f"'{cleaned}' 는 이미 '{taken.value}' 를 가리킵니다.",
+            status=409,
+        )
+
+    row = VocabularyAlias(
+        vocabulary_id=term.vocabulary_id,
+        term_id=term.id,
+        alias=cleaned,
+        normalized=key,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def merge(
+    db: Session,
+    source: VocabularyTerm,
+    target: VocabularyTerm,
+    *,
+    merged_by_id: uuid.UUID | None = None,
+) -> int:
+    """`source` 를 `target` 으로 합친다. 옮긴 참조 수를 돌려준다.
+
+    ## 참조 옮기기가 한 문장이다
+
+    외래키로 간 이유가 이것이다(ADR 0010). 문자열이었으면 전 행을 훑어 글자를
+    고쳐야 했고, 그건 병합이 아니라 일괄 치환이다.
+
+    ## 없어진 표기가 별칭으로 남는다
+
+    **병합이 일회성 청소가 아니라 규칙이 되는 지점이다.** `'포스코(주)'` 를
+    `'포스코'` 로 합치면 그 표기가 별칭으로 남아서, 다음에 누가 또 치면 새 값이
+    안 생기고 `'포스코'` 로 해석된다. ReportArchive 가 같은 판단을 했다 —
+    *"이후 옛 표기 입력이 자동으로 into 로 빨려 들어간다."*
+
+    ## 같은 축 안에서만
+
+    축을 넘는 병합은 값을 합치는 것이 아니라 **뜻을 바꾸는 것**이다. 제조사를
+    거래처로 옮기는 일은 병합이 아니라 이관이고, 그건 다른 기능이다.
+    """
+    if source.id == target.id:
+        return 0
+    if source.vocabulary_id != target.vocabulary_id:
+        raise AppError(
+            "MNX-VOCABULARY-0008",
+            "같은 축의 값끼리만 합칠 수 있습니다.",
+            status=422,
+        )
+
+    moved = 0
+    for table, bindings, _deleted in _COUNT_SOURCES:
+        for binding in bindings:
+            if binding.slug != _slug_of(db, source):
+                continue
+            result = db.execute(
+                text(
+                    f"UPDATE {table} SET {binding.column} = :target,"
+                    f" {binding.field} = :value WHERE {binding.column} = :source"
+                ),
+                {"target": target.id, "value": target.value, "source": source.id},
+            )
+            # `Result` 의 선언 타입에는 `rowcount` 가 없다 — UPDATE 를 돌린
+            # 결과에는 실제로 있다.
+            moved += max(cast("Any", result).rowcount or 0, 0)
+
+    # 자식들의 부모를 옮긴다 — 부모가 사라지면 계층이 끊긴다.
+    db.execute(
+        update(VocabularyTerm)
+        .where(VocabularyTerm.parent_term_id == source.id)
+        .values(parent_term_id=target.id)
+    )
+
+    # `source` 의 별칭을 흡수하고, `source` 의 표기 자체도 별칭으로 남긴다.
+    db.execute(
+        update(VocabularyAlias)
+        .where(VocabularyAlias.term_id == source.id)
+        .values(term_id=target.id)
+    )
+    if source.normalized != target.normalized:
+        db.add(
+            VocabularyAlias(
+                vocabulary_id=target.vocabulary_id,
+                term_id=target.id,
+                alias=source.value,
+                normalized=source.normalized,
+            )
+        )
+
+    db.add(
+        VocabularyMerge(
+            vocabulary_id=source.vocabulary_id,
+            source_value=source.value,
+            target_term_id=target.id,
+            target_value=target.value,
+            moved_count=moved,
+            merged_by_id=merged_by_id,
+        )
+    )
+    target.usage_count += source.usage_count
+    db.delete(source)
+    db.flush()
+    db.expire_all()
+    return moved
+
+
+def _vocabulary_of(db: Session, term: VocabularyTerm) -> Vocabulary:
+    found = db.get(Vocabulary, term.vocabulary_id)
+    if found is None:  # pragma: no cover — FK 가 막는다
+        raise NotFound("MNX-VOCABULARY-0001", "어휘를 찾을 수 없습니다.")
+    return found
+
+
+def _slug_of(db: Session, term: VocabularyTerm) -> str:
+    return _vocabulary_of(db, term).slug
+
+
+#: 후보 그룹핑용 **강한 정규화**.
+#:
+#: 저장값의 비교키(`compare_key`)보다 공격적이다 — 공백·하이픈·괄호·점을 다
+#: 떼서 `'ASTM E8'`·`'astm-e8'`·`'ASTM(E8)'` 을 한 키로 만든다.
+#:
+#: 이것을 **저장에 쓰지 않는 이유**: `'포스코(주)'` 가 계열사 구분일 수 있다.
+#: 여기서는 후보로 올려 **사람에게 묻고**, 합치는 것은 사람이 정한다.
+_LOOSE = re.compile(r"[^0-9a-z가-힣]+")
+
+
+def loose_key(value: str) -> str:
+    return _LOOSE.sub("", compare_key(value))
+
+
+def merge_candidates(db: Session, vocabulary: Vocabulary) -> list[list[VocabularyTerm]]:
+    """합칠 만한 값 묶음. **탐지만 한다** — 합치는 것은 사람이 누른다.
+
+    ReportArchive 는 여기에 임베딩 유사도(L1)를 한 층 더 얹어 한글↔라틴 교차까지
+    건진다. 여기서는 **L0(결정적 정규화 그룹핑)만** 쓴다 — 임베딩 인프라가 없고,
+    그거 하나 때문에 들일 값은 아니다.
+
+    기각한 쌍은 뺀다. 안 빼면 같은 것을 매번 다시 묻게 되고, 그러면 목록을
+    아무도 안 본다.
+    """
+    terms = list(
+        db.scalars(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == vocabulary.id,
+                VocabularyTerm.status == "active",
+            )
+        )
+    )
+    groups: dict[str, list[VocabularyTerm]] = {}
+    for term in terms:
+        groups.setdefault(loose_key(term.value), []).append(term)
+
+    dismissed = {
+        (row.low_term_id, row.high_term_id)
+        for row in db.scalars(
+            select(VocabularyDismissal).where(
+                VocabularyDismissal.low_term_id.in_([t.id for t in terms])
+            )
+        )
+    }
+
+    found: list[list[VocabularyTerm]] = []
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        # 묶음 안의 **모든 쌍**이 기각됐으면 뺀다. 셋 중 둘만 기각했으면 남는
+        # 쌍이 있으므로 계속 보여 준다.
+        pairs = [(a, b) for index, a in enumerate(members) for b in members[index + 1 :]]
+        if all(_pair_key(a.id, b.id) in dismissed for a, b in pairs):
+            continue
+        # 많이 쓰이는 것이 앞으로 — 화면이 생존값으로 추천한다.
+        found.append(sorted(members, key=lambda item: -item.usage_count))
+    return found
+
+
+def _pair_key(a: uuid.UUID, b: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
+    """쌍을 정렬한다 — (a,b) 와 (b,a) 가 다른 행이 되면 유니크가 무의미하다."""
+    return (a, b) if str(a) < str(b) else (b, a)
+
+
+def dismiss(
+    db: Session,
+    first: VocabularyTerm,
+    second: VocabularyTerm,
+    *,
+    dismissed_by_id: uuid.UUID | None = None,
+) -> None:
+    """ "이 둘은 다른 값이다" 를 기억한다."""
+    low, high = _pair_key(first.id, second.id)
+    exists = db.scalar(
+        select(VocabularyDismissal).where(
+            VocabularyDismissal.low_term_id == low,
+            VocabularyDismissal.high_term_id == high,
+        )
+    )
+    if exists is None:
+        db.add(
+            VocabularyDismissal(
+                low_term_id=low, high_term_id=high, dismissed_by_id=dismissed_by_id
+            )
+        )

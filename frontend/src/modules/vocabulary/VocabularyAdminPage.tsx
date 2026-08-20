@@ -19,7 +19,7 @@
  */
 
 import { useState } from 'react'
-import { Eye, EyeOff, Pencil, RefreshCw } from 'lucide-react'
+import { Eye, EyeOff, GitMerge, Pencil, RefreshCw, Tag, X } from 'lucide-react'
 
 import { vocabularyApi } from '@/modules/vocabulary/api'
 import type { Term, Vocabulary } from '@/modules/vocabulary/api'
@@ -87,6 +87,8 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   const [showHidden, setShowHidden] = useState(false)
   const [leastUsed, setLeastUsed] = useState(false)
   const [editing, setEditing] = useState<Term | null>(null)
+  const [detail, setDetail] = useState<Term | null>(null)
+  const [showCandidates, setShowCandidates] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   // 검색은 서버가 한다 — 어휘가 수만 개가 되면 전체를 받을 수 없다.
   const terms = useResource(
@@ -152,6 +154,16 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         >
           감춘 값도 보기
         </Button>
+        <Button
+          size="sm"
+          variant={showCandidates ? 'default' : 'outline'}
+          className="h-8 text-xs"
+          title="구두점·공백까지 지운 키로 묶어 봅니다"
+          onClick={() => setShowCandidates((value) => !value)}
+        >
+          <GitMerge className="size-3.5" />
+          합칠 만한 값
+        </Button>
         {/* **성능 때문에 둔 캐시라면 틀렸을 때 고치는 버튼이 있어야 한다.** */}
         <Button
           size="sm"
@@ -167,6 +179,16 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
 
       <ErrorNotice error={terms.error ?? error} className="mb-3" />
 
+      {detail && (
+        <TermDetailDialog
+          slug={vocabulary.slug}
+          parentSlug={vocabulary.parent_slug ?? null}
+          term={detail}
+          onClose={() => setDetail(null)}
+          onChanged={() => terms.reload()}
+        />
+      )}
+
       {editing && (
         <RenameDialog
           slug={vocabulary.slug}
@@ -179,12 +201,16 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         />
       )}
 
+      {showCandidates ? (
+        <MergeCandidates slug={vocabulary.slug} onChanged={() => terms.reload()} />
+      ) : (
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>값</TableHead>
+            <TableHead>상위</TableHead>
             <TableHead className="text-right">쓰는 곳</TableHead>
-            <TableHead className="w-32" />
+            <TableHead className="w-40" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -198,10 +224,21 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
                   </Badge>
                 )}
               </TableCell>
+              <TableCell className="text-muted-foreground text-sm">
+                {item.parent_value ?? '—'}
+              </TableCell>
               {/* **몇 건이 따라오는지 보여 준다.** 이름 고치기가 가벼운 조작처럼
                   보이지만 외래키라 이 수만큼이 함께 바뀐다. */}
               <TableCell className="text-right tabular-nums">{item.usage_count}</TableCell>
               <TableCell className="text-right">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="표기·상위 분류"
+                  onClick={() => setDetail(item)}
+                >
+                  <Tag className="size-3.5" />
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -237,7 +274,9 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         </TableBody>
       </Table>
 
-      {!terms.loading && rows.length === 0 && (
+      )}
+
+      {!showCandidates && !terms.loading && rows.length === 0 && (
         <p className="text-muted-foreground py-10 text-center text-sm">
           {term ? `'${term}' 에 맞는 값이 없습니다.` : '아직 값이 없습니다.'}
         </p>
@@ -328,5 +367,229 @@ function RenameDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * 값 하나를 들여다보는 창 — **표기·부모·합치기.**
+ *
+ * 셋을 한 창에 두는 이유: 다 같은 질문의 다른 답이다. `'포스코(주)'` 를 만났을 때
+ * 할 수 있는 일은 셋뿐이다 — 별칭으로 잇거나, 부모를 정하거나, 다른 값에 합치거나.
+ * 화면을 나누면 무엇을 골라야 하는지가 흐려진다.
+ */
+function TermDetailDialog({
+  slug,
+  parentSlug,
+  term,
+  onClose,
+  onChanged,
+}: {
+  slug: string
+  parentSlug: string | null
+  term: Term
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [alias, setAlias] = useState('')
+  const [parent, setParent] = useState(term.parent_value ?? '')
+  const [failure, setFailure] = useState<string | null>(null)
+  const aliases = useResource(() => vocabularyApi.aliases(slug, term.id), [slug, term.id])
+
+  async function guarded(action: () => Promise<unknown>) {
+    setFailure(null)
+    try {
+      await action()
+      aliases.reload()
+      onChanged()
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.message : '실패했습니다.')
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{term.value}</DialogTitle>
+          <DialogDescription>쓰는 곳 {term.usage_count}곳</DialogDescription>
+        </DialogHeader>
+
+        {parentSlug && (
+          <div className="space-y-1.5">
+            <Label htmlFor="term-parent">상위 분류</Label>
+            <div className="flex gap-2">
+              <Input
+                id="term-parent"
+                value={parent}
+                placeholder="비우면 뗍니다"
+                onChange={(event) => setParent(event.target.value)}
+              />
+              <Button
+                variant="outline"
+                onClick={() =>
+                  void guarded(() =>
+                    vocabularyApi.update(slug, term.id, { parent_value: parent })
+                  )
+                }
+              >
+                저장
+              </Button>
+            </div>
+            {/* 백필이 못 이은 값(부모가 갈렸던 것)을 사람이 정하는 자리다. */}
+            <p className="text-muted-foreground text-xs">
+              위 축의 값을 적으면 그 아래로 들어갑니다. 비워 두면 좁히기가 안 될 뿐,
+              값은 그대로 씁니다.
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="term-alias">다른 표기</Label>
+          <div className="flex gap-2">
+            <Input
+              id="term-alias"
+              value={alias}
+              placeholder="POSCO / 포스코(주) …"
+              onChange={(event) => setAlias(event.target.value)}
+            />
+            <Button
+              variant="outline"
+              disabled={alias.trim() === ''}
+              onClick={() =>
+                void guarded(async () => {
+                  await vocabularyApi.addAlias(slug, term.id, alias)
+                  setAlias('')
+                })
+              }
+            >
+              잇기
+            </Button>
+          </div>
+          {/* **예방이다.** 등록해 두면 값을 만들 때 게이트가 여기까지 뒤져서
+              애초에 중복이 안 생긴다 — 사후에 합치는 것보다 싸다. */}
+          <p className="text-muted-foreground text-xs">
+            이 표기로 입력하면 <b>새 값이 안 생기고</b> 이 값이 선택됩니다.
+          </p>
+          <ul className="space-y-1">
+            {(aliases.data ?? []).map((item) => (
+              <li key={item.id} className="flex items-center gap-2 text-sm">
+                <span>{item.alias}</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() =>
+                    void guarded(() =>
+                      vocabularyApi.removeAlias(slug, term.id, item.id)
+                    )
+                  }
+                >
+                  <X className="size-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {failure && <p className="text-destructive text-sm">{failure}</p>}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            닫기
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * 합칠 만한 값 묶음.
+ *
+ * 구두점·공백까지 지운 키로 묶으므로 오탐이 뜬다 — `'포스코'` 와 `'포스코특수강'`
+ * 은 다른 회사다. 그래서 **합치는 것은 사람이 누르고**, 아니라고 판정한 쌍은
+ * 기억한다. 안 기억하면 같은 것을 매번 다시 묻게 되고 목록을 아무도 안 본다.
+ */
+function MergeCandidates({
+  slug,
+  onChanged,
+}: {
+  slug: string
+  onChanged: () => void
+}) {
+  const groups = useResource(() => vocabularyApi.mergeCandidates(slug), [slug])
+  const [error, setError] = useState<Error | null>(null)
+  const found = groups.data ?? []
+
+  async function guarded(action: () => Promise<unknown>) {
+    setError(null)
+    try {
+      await action()
+      groups.reload()
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('실패했습니다.'))
+    }
+  }
+
+  if (!groups.loading && found.length === 0) {
+    return (
+      <p className="text-muted-foreground py-6 text-center text-sm">
+        합칠 만한 값이 없습니다.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <ErrorNotice error={groups.error ?? error} />
+      {found.map((group) => {
+        // 많이 쓰이는 것이 앞이다 — 그것을 생존값으로 추천한다.
+        const [survivor, ...rest] = group
+        return (
+          <div key={survivor.id} className="rounded-md border p-3">
+            <p className="text-sm">
+              <b>{survivor.value}</b>
+              <span className="text-muted-foreground"> ({survivor.usage_count})</span>
+              {rest.map((item) => (
+                <span key={item.id} className="text-muted-foreground">
+                  {' · '}
+                  {item.value} ({item.usage_count})
+                </span>
+              ))}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {rest.map((item) => (
+                <Button
+                  key={item.id}
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    void guarded(() =>
+                      vocabularyApi.merge(slug, item.id, survivor.id)
+                    )
+                  }
+                >
+                  '{item.value}' 를 '{survivor.value}' 로 합치기
+                </Button>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                title="다시 묻지 않습니다"
+                onClick={() =>
+                  void guarded(async () => {
+                    for (const item of rest) {
+                      await vocabularyApi.dismiss(slug, survivor.id, item.id)
+                    }
+                  })
+                }
+              >
+                다른 값입니다
+              </Button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }

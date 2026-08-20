@@ -1026,6 +1026,27 @@
         "title": "DimensionOut",
         "type": "object"
       },
+      "DismissRequest": {
+        "description": "\"이 둘은 다른 값이다\" 를 기억한다.",
+        "properties": {
+          "first_id": {
+            "format": "uuid",
+            "title": "First Id",
+            "type": "string"
+          },
+          "second_id": {
+            "format": "uuid",
+            "title": "Second Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_id",
+          "second_id"
+        ],
+        "title": "DismissRequest",
+        "type": "object"
+      },
       "EnsembleResultOut": {
         "properties": {
           "created_at": {
@@ -2529,6 +2550,20 @@
           "role"
         ],
         "title": "MemberRoleRequest",
+        "type": "object"
+      },
+      "MergeRequest": {
+        "properties": {
+          "into_id": {
+            "format": "uuid",
+            "title": "Into Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "into_id"
+        ],
+        "title": "MergeRequest",
         "type": "object"
       },
       "NamePreviewOut": {
@@ -5347,6 +5382,41 @@
         "title": "TemporaryPasswordResponse",
         "type": "object"
       },
+      "TermAliasCreateRequest": {
+        "properties": {
+          "alias": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Alias",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias"
+        ],
+        "title": "TermAliasCreateRequest",
+        "type": "object"
+      },
+      "TermAliasOut": {
+        "description": "값의 다른 표기.\n\n이름에 `Term` 을 붙인 이유: 단위 모듈에도 `AliasOut` 이 있어서 FastAPI 가\n생성 스키마 이름을 `app__modules__vocabulary__schemas__AliasOut` 으로 늘렸다.\n프론트 타입이 그 이름을 달면 읽을 수 없다.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "alias"
+        ],
+        "title": "TermAliasOut",
+        "type": "object"
+      },
       "TermCreateRequest": {
         "properties": {
           "parent_value": {
@@ -5417,6 +5487,18 @@
       "TermUpdateRequest": {
         "description": "표기 고치기와 감추기. **관리자만.**\n\n값을 지우는 길은 없다 — 지우면 그것을 가리키던 시료가 무엇이었는지 알 수\n없게 된다. `deprecated` 로 감추면 피커에서만 사라진다.",
         "properties": {
+          "parent_value": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Value"
+          },
           "status": {
             "anyOf": [
               {
@@ -7039,6 +7121,17 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "parent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Slug"
           },
           "slug": {
             "title": "Slug",
@@ -11895,6 +11988,102 @@
         ]
       }
     },
+    "/api/vocabularies/{slug}/dismissals": {
+      "post": {
+        "description": "\"이 둘은 다른 값이다\" 를 기억한다 — 안 기억하면 매번 다시 묻는다.",
+        "operationId": "dismiss_pair_api_vocabularies__slug__dismissals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dismiss Pair",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/merge-candidates": {
+      "get": {
+        "description": "합칠 만한 값 묶음. **탐지만 한다.**\n\n구두점·공백까지 지운 키로 묶으므로 `'ASTM E8'` 과 `'astm-e8'` 이 함께 뜬다.\n오탐도 뜬다 — `'포스코'` 와 `'포스코특수강'` 은 다른 회사다. 그래서 합치는\n것은 사람이 누르고, 아니라고 판정한 쌍은 기억한다.",
+        "operationId": "merge_candidates_api_vocabularies__slug__merge_candidates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "items": {
+                      "$ref": "#/components/schemas/TermOut"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Merge Candidates Api Vocabularies  Slug  Merge Candidates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Candidates",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
     "/api/vocabularies/{slug}/recount": {
       "post": {
         "description": "`쓰는 곳` 을 다시 센다. **캐시가 어긋났을 때 고치는 자리.**\n\n평소에는 참조가 바뀌는 지점에서 증감한다(그래야 화면을 열 때마다 전체를\n세지 않는다). 그 지점을 하나 빠뜨리면 조용히 벌어지므로, 바로잡는 길을\n함께 둔다.",
@@ -12169,6 +12358,241 @@
           }
         },
         "summary": "Update Term",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/terms/{term_id}/aliases": {
+      "get": {
+        "operationId": "list_aliases_api_vocabularies__slug__terms__term_id__aliases_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "term_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Term Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TermAliasOut"
+                  },
+                  "title": "Response List Aliases Api Vocabularies  Slug  Terms  Term Id  Aliases Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Aliases",
+        "tags": [
+          "vocabulary"
+        ]
+      },
+      "post": {
+        "description": "다른 표기를 이 값에 잇는다. **사후 병합보다 싸다.**\n\n등록해 두면 값을 만들 때 게이트가 별칭까지 뒤져서 애초에 중복이 안 생긴다.",
+        "operationId": "create_alias_api_vocabularies__slug__terms__term_id__aliases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "term_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Term Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TermAliasCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermAliasOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Alias",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/terms/{term_id}/aliases/{alias_id}": {
+      "delete": {
+        "operationId": "delete_alias_api_vocabularies__slug__terms__term_id__aliases__alias_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "term_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Term Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "alias_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Alias Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Alias",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/terms/{term_id}/merge": {
+      "post": {
+        "description": "이 값을 다른 값으로 합친다. **없어진 표기는 별칭으로 남는다.**\n\n그래야 다음에 누가 옛 표기를 쳐도 자동으로 흡수된다 — 병합이 일회성 청소가\n아니라 규칙이 되는 지점이다.",
+        "operationId": "merge_term_api_vocabularies__slug__terms__term_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "term_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Term Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Term",
         "tags": [
           "vocabulary"
         ]

@@ -174,3 +174,70 @@ class VocabularyAlias(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class VocabularyMerge(Base):
+    """병합 기록. **없어진 값의 스냅샷.**
+
+    병합하면 `src` 가 사라진다. 되돌리기는 안 하지만 — 되돌리려면 참조를 다시
+    갈라야 하는데 어느 행이 어느 쪽이었는지 알 수 없다 — **무엇을 무엇으로
+    합쳤는지는 답할 수 있어야 한다.** 반년 뒤 "포스코(주) 는 어디 갔나" 를
+    묻는 사람에게 줄 답이 이것뿐이다.
+    """
+
+    __tablename__ = "vocabulary_merges"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    vocabulary_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabularies.id", ondelete="CASCADE"), index=True
+    )
+    source_value: Mapped[str] = mapped_column(String(200))
+    """사라진 값의 표기."""
+    target_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("vocabulary_terms.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    target_value: Mapped[str] = mapped_column(String(200))
+    moved_count: Mapped[int] = mapped_column(Integer, default=0)
+    """옮긴 참조 수. 병합이 실제로 무엇을 건드렸는지."""
+    merged_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class VocabularyDismissal(Base):
+    """ "이 둘은 다른 값이다" 라고 사람이 판정한 쌍.
+
+    병합 후보 탐지는 넓게 건진다 — `'포스코'` 와 `'포스코특수강'` 이 후보로 뜬다.
+    **기각한 쌍을 기억하지 않으면 같은 것을 매번 다시 묻는다.** 그러면 목록을
+    아무도 안 본다.
+    """
+
+    __tablename__ = "vocabulary_dismissals"
+    __table_args__ = (
+        UniqueConstraint("low_term_id", "high_term_id", name="uq_vocabulary_dismissals"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    #: 쌍을 **정렬해 저장한다** — (a,b) 와 (b,a) 가 다른 행이 되면 유니크가 무의미하다.
+    low_term_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id", ondelete="CASCADE")
+    )
+    high_term_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id", ondelete="CASCADE")
+    )
+    dismissed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -13,6 +13,7 @@ import type { components } from '@/shared/api/schema'
 
 export type Vocabulary = components['schemas']['VocabularyOut']
 export type Term = components['schemas']['TermOut']
+export type Alias = components['schemas']['TermAliasOut']
 type TermUpdate = components['schemas']['TermUpdateRequest']
 
 export const vocabularyApi = {
@@ -56,6 +57,38 @@ export const vocabularyApi = {
    * 않으려고. 그 지점을 하나 빠뜨리면 조용히 벌어지므로 고칠 길을 둔다.
    */
   recount: (slug: string) => api.post<Term[]>(`/vocabularies/${slug}/recount`, {}),
+
+  /** 이 값의 다른 표기들. */
+  aliases: (slug: string, termId: string) =>
+    api.get<Alias[]>(`/vocabularies/${slug}/terms/${termId}/aliases`),
+
+  /**
+   * 다른 표기를 잇는다. **사후 병합보다 싸다** — 등록해 두면 값을 만들 때
+   * 게이트가 별칭까지 뒤져서 애초에 중복이 안 생긴다.
+   */
+  addAlias: (slug: string, termId: string, alias: string) =>
+    api.post<Alias>(`/vocabularies/${slug}/terms/${termId}/aliases`, { alias }),
+
+  removeAlias: (slug: string, termId: string, aliasId: string) =>
+    api.delete<void>(`/vocabularies/${slug}/terms/${termId}/aliases/${aliasId}`),
+
+  /** 합칠 만한 값 묶음. **탐지만 한다** — 합치는 것은 사람이 누른다. */
+  mergeCandidates: (slug: string) =>
+    api.get<Term[][]>(`/vocabularies/${slug}/merge-candidates`),
+
+  /**
+   * 이 값을 다른 값으로 합친다. **없어진 표기는 별칭으로 남는다** — 다음에 누가
+   * 옛 표기를 쳐도 자동으로 흡수된다.
+   */
+  merge: (slug: string, termId: string, intoId: string) =>
+    api.post<Term>(`/vocabularies/${slug}/terms/${termId}/merge`, { into_id: intoId }),
+
+  /** "이 둘은 다른 값이다" 를 기억한다 — 안 기억하면 매번 다시 묻는다. */
+  dismiss: (slug: string, firstId: string, secondId: string) =>
+    api.post<void>(`/vocabularies/${slug}/dismissals`, {
+      first_id: firstId,
+      second_id: secondId,
+    }),
 
   /**
    * 값 추가. **이미 있으면 그것이 돌아온다** — 409 가 아니다.

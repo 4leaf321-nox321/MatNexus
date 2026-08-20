@@ -8,15 +8,19 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.vocabulary import services
-from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
+from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
 from app.modules.vocabulary.schemas import (
+    DismissRequest,
+    MergeRequest,
+    TermAliasCreateRequest,
+    TermAliasOut,
     TermCreateRequest,
     TermOut,
     TermUpdateRequest,
@@ -67,6 +71,7 @@ def list_vocabularies(
         VocabularyOut(
             slug=item.slug,
             label=item.label,
+            parent_slug=item.parent_slug,
             entry_policy=item.entry_policy,
             term_count=counts.get(item.id, 0),
         )
@@ -171,6 +176,17 @@ def update_term(
         services.rename(db, term, data["value"])
     if "status" in data:
         term.status = data["status"]
+    if "parent_value" in data:
+        # 빈 문자열이면 뗀다. `exclude_unset` 이 "안 보냄" 을 이미 걸러 냈으므로
+        # 여기 온 것은 사람이 명시한 것이다.
+        parent = services.parent_of(db, vocabulary, data["parent_value"])
+        if data["parent_value"] and parent is None:
+            raise AppError(
+                "MNX-VOCABULARY-0006",
+                f"상위 축에서 '{data['parent_value']}' 를 찾을 수 없습니다.",
+                status=422,
+            )
+        term.parent_term_id = parent.id if parent else None
 
     db.commit()
     db.refresh(term)
@@ -194,3 +210,123 @@ def recount_terms(
     db.commit()
     found = services.search(db, vocabulary, q=None, limit=SEARCH_LIMIT, include_hidden=True)
     return [_term_out(db, item) for item in found]
+
+
+def _term_or_404(db: Session, vocabulary: Vocabulary, term_id: uuid.UUID) -> VocabularyTerm:
+    term = db.get(VocabularyTerm, term_id)
+    if term is None or term.vocabulary_id != vocabulary.id:
+        raise NotFound("MNX-VOCABULARY-0004", "값을 찾을 수 없습니다.")
+    return term
+
+
+@router.get("/{slug}/terms/{term_id}/aliases", response_model=list[TermAliasOut])
+def list_aliases(
+    slug: str,
+    term_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[TermAliasOut]:
+    vocabulary = services.get_vocabulary(db, slug)
+    term = _term_or_404(db, vocabulary, term_id)
+    rows = db.scalars(
+        select(VocabularyAlias)
+        .where(VocabularyAlias.term_id == term.id)
+        .order_by(VocabularyAlias.alias)
+    )
+    return [TermAliasOut(id=row.id, alias=row.alias) for row in rows]
+
+
+@router.post("/{slug}/terms/{term_id}/aliases", response_model=TermAliasOut, status_code=201)
+def create_alias(
+    slug: str,
+    term_id: uuid.UUID,
+    payload: TermAliasCreateRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> TermAliasOut:
+    """다른 표기를 이 값에 잇는다. **사후 병합보다 싸다.**
+
+    등록해 두면 값을 만들 때 게이트가 별칭까지 뒤져서 애초에 중복이 안 생긴다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    term = _term_or_404(db, vocabulary, term_id)
+    created = services.add_alias(db, term, payload.alias)
+    db.commit()
+    if created is None:
+        # 이미 이 값의 표기다 — 만들지 않았지만 실패도 아니다.
+        raise AppError("MNX-VOCABULARY-0009", "이미 이 값의 표기입니다.", status=409)
+    return TermAliasOut(id=created.id, alias=created.alias)
+
+
+@router.delete("/{slug}/terms/{term_id}/aliases/{alias_id}", status_code=204)
+def delete_alias(
+    slug: str,
+    term_id: uuid.UUID,
+    alias_id: uuid.UUID,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    vocabulary = services.get_vocabulary(db, slug)
+    term = _term_or_404(db, vocabulary, term_id)
+    row = db.get(VocabularyAlias, alias_id)
+    if row is None or row.term_id != term.id:
+        raise NotFound("MNX-VOCABULARY-0010", "표기를 찾을 수 없습니다.")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get("/{slug}/merge-candidates", response_model=list[list[TermOut]])
+def merge_candidates(
+    slug: str,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[list[TermOut]]:
+    """합칠 만한 값 묶음. **탐지만 한다.**
+
+    구두점·공백까지 지운 키로 묶으므로 `'ASTM E8'` 과 `'astm-e8'` 이 함께 뜬다.
+    오탐도 뜬다 — `'포스코'` 와 `'포스코특수강'` 은 다른 회사다. 그래서 합치는
+    것은 사람이 누르고, 아니라고 판정한 쌍은 기억한다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    return [
+        [_term_out(db, term) for term in group]
+        for group in services.merge_candidates(db, vocabulary)
+    ]
+
+
+@router.post("/{slug}/terms/{term_id}/merge", response_model=TermOut)
+def merge_term(
+    slug: str,
+    term_id: uuid.UUID,
+    payload: MergeRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> TermOut:
+    """이 값을 다른 값으로 합친다. **없어진 표기는 별칭으로 남는다.**
+
+    그래야 다음에 누가 옛 표기를 쳐도 자동으로 흡수된다 — 병합이 일회성 청소가
+    아니라 규칙이 되는 지점이다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    source = _term_or_404(db, vocabulary, term_id)
+    target = _term_or_404(db, vocabulary, payload.into_id)
+    services.merge(db, source, target, merged_by_id=user.id)
+    db.commit()
+    return _term_out(db, target)
+
+
+@router.post("/{slug}/dismissals", status_code=204)
+def dismiss_pair(
+    slug: str,
+    payload: DismissRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """ "이 둘은 다른 값이다" 를 기억한다 — 안 기억하면 매번 다시 묻는다."""
+    vocabulary = services.get_vocabulary(db, slug)
+    first = _term_or_404(db, vocabulary, payload.first_id)
+    second = _term_or_404(db, vocabulary, payload.second_id)
+    services.dismiss(db, first, second, dismissed_by_id=user.id)
+    db.commit()
+    return Response(status_code=204)

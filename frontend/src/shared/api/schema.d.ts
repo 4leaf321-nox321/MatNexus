@@ -1580,6 +1580,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/{slug}/dismissals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Pair
+         * @description "이 둘은 다른 값이다" 를 기억한다 — 안 기억하면 매번 다시 묻는다.
+         */
+        post: operations["dismiss_pair_api_vocabularies__slug__dismissals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/merge-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Merge Candidates
+         * @description 합칠 만한 값 묶음. **탐지만 한다.**
+         *
+         *     구두점·공백까지 지운 키로 묶으므로 `'ASTM E8'` 과 `'astm-e8'` 이 함께 뜬다.
+         *     오탐도 뜬다 — `'포스코'` 와 `'포스코특수강'` 은 다른 회사다. 그래서 합치는
+         *     것은 사람이 누르고, 아니라고 판정한 쌍은 기억한다.
+         */
+        get: operations["merge_candidates_api_vocabularies__slug__merge_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/recount": {
         parameters: {
             query?: never;
@@ -1660,6 +1704,69 @@ export interface paths {
          *     수 없게 되는데, 그건 오타를 고치는 것과 전혀 다른 일이다.
          */
         patch: operations["update_term_api_vocabularies__slug__terms__term_id__patch"];
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/terms/{term_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Aliases */
+        get: operations["list_aliases_api_vocabularies__slug__terms__term_id__aliases_get"];
+        put?: never;
+        /**
+         * Create Alias
+         * @description 다른 표기를 이 값에 잇는다. **사후 병합보다 싸다.**
+         *
+         *     등록해 두면 값을 만들 때 게이트가 별칭까지 뒤져서 애초에 중복이 안 생긴다.
+         */
+        post: operations["create_alias_api_vocabularies__slug__terms__term_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/terms/{term_id}/aliases/{alias_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Alias */
+        delete: operations["delete_alias_api_vocabularies__slug__terms__term_id__aliases__alias_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/terms/{term_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Term
+         * @description 이 값을 다른 값으로 합친다. **없어진 표기는 별칭으로 남는다.**
+         *
+         *     그래야 다음에 누가 옛 표기를 쳐도 자동으로 흡수된다 — 병합이 일회성 청소가
+         *     아니라 규칙이 되는 지점이다.
+         */
+        post: operations["merge_term_api_vocabularies__slug__terms__term_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/workspaces": {
@@ -2233,6 +2340,22 @@ export interface components {
             /** Units */
             units: components["schemas"]["UnitOut"][];
         };
+        /**
+         * DismissRequest
+         * @description "이 둘은 다른 값이다" 를 기억한다.
+         */
+        DismissRequest: {
+            /**
+             * First Id
+             * Format: uuid
+             */
+            first_id: string;
+            /**
+             * Second Id
+             * Format: uuid
+             */
+            second_id: string;
+        };
         /** EnsembleResultOut */
         EnsembleResultOut: {
             /**
@@ -2767,6 +2890,14 @@ export interface components {
         MemberRoleRequest: {
             /** Role */
             role: string;
+        };
+        /** MergeRequest */
+        MergeRequest: {
+            /**
+             * Into Id
+             * Format: uuid
+             */
+            into_id: string;
         };
         /** NamePreviewOut */
         NamePreviewOut: {
@@ -3772,6 +3903,28 @@ export interface components {
             /** Temporary Password */
             temporary_password: string;
         };
+        /** TermAliasCreateRequest */
+        TermAliasCreateRequest: {
+            /** Alias */
+            alias: string;
+        };
+        /**
+         * TermAliasOut
+         * @description 값의 다른 표기.
+         *
+         *     이름에 `Term` 을 붙인 이유: 단위 모듈에도 `AliasOut` 이 있어서 FastAPI 가
+         *     생성 스키마 이름을 `app__modules__vocabulary__schemas__AliasOut` 으로 늘렸다.
+         *     프론트 타입이 그 이름을 달면 읽을 수 없다.
+         */
+        TermAliasOut: {
+            /** Alias */
+            alias: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
         /** TermCreateRequest */
         TermCreateRequest: {
             /** Parent Value */
@@ -3806,6 +3959,8 @@ export interface components {
          *     없게 된다. `deprecated` 로 감추면 피커에서만 사라진다.
          */
         TermUpdateRequest: {
+            /** Parent Value */
+            parent_value?: string | null;
             /** Status */
             status?: string | null;
             /** Value */
@@ -4298,6 +4453,8 @@ export interface components {
             entry_policy: string;
             /** Label */
             label: string;
+            /** Parent Slug */
+            parent_slug?: string | null;
             /** Slug */
             slug: string;
             /** Term Count */
@@ -7516,6 +7673,70 @@ export interface operations {
             };
         };
     };
+    dismiss_pair_api_vocabularies__slug__dismissals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_candidates_api_vocabularies__slug__merge_candidates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermOut"][][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     recount_terms_api_vocabularies__slug__recount_post: {
         parameters: {
             query?: never;
@@ -7636,6 +7857,141 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TermUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_aliases_api_vocabularies__slug__terms__term_id__aliases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermAliasOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_alias_api_vocabularies__slug__terms__term_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TermAliasCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermAliasOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_alias_api_vocabularies__slug__terms__term_id__aliases__alias_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                term_id: string;
+                alias_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_term_api_vocabularies__slug__terms__term_id__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeRequest"];
             };
         };
         responses: {
