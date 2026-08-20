@@ -40,6 +40,7 @@ import { materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
 import { MaterialPicker } from '@/modules/materials/MaterialPicker'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
+import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { conditionUnits, display } from '@/shared/units'
@@ -549,12 +550,13 @@ export default function BatchUploadPage() {
                 없는 값이라(번호·두께 a0·폭 b0 뿐) 사람이 넣지 않으면 아무 데서도
                 안 온다. 대개 한 배치가 같은 규격이다. */}
             <div className="space-y-1">
-              <Label className="text-muted-foreground text-xs">시편 규격 일괄 지정</Label>
-              <Input
-                className="h-8 w-64 text-xs"
-                placeholder="ASTM E8 subsize / JIS 5호 …"
-                aria-label="시편 규격 일괄 지정"
-                onChange={(event) => assignSelected({ standard: event.target.value })}
+              {/* **일괄 지정이라 오타의 파급이 크다.** 자유 입력이면 여기서 한
+                  글자 틀릴 때 시편 20개가 한꺼번에 새 값을 가리킨다. */}
+              <VocabularyField
+                slug="specimen_standard"
+                label="시편 규격 일괄 지정"
+                value=""
+                onChange={(next) => assignSelected({ standard: next })}
               />
             </div>
 

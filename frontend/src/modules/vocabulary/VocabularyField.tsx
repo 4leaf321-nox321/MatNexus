@@ -21,10 +21,25 @@ interface Props {
    * 대부분 비어 있고, 감추면 아무것도 안 보인다.
    */
   parentValue?: string
+  /**
+   * 목록에 없는 값을 새로 만들 수 있는가. 기본은 만들 수 있다.
+   *
+   * **끄는 자리가 하나 있다** — 어휘 관리에서 상위 분류를 고를 때다. 부모는 이미
+   * 있는 값이어야 하고, 강종의 부모를 손보다가 Family 를 새로 만드는 것은 아무도
+   * 의도하지 않는다. 그 화면은 정리하는 자리지 늘리는 자리가 아니다.
+   */
+  allowCreate?: boolean
   onChange: (next: string) => void
 }
 
-export function VocabularyField({ slug, label, value, parentValue, onChange }: Props) {
+export function VocabularyField({
+  slug,
+  label,
+  value,
+  parentValue,
+  allowCreate = true,
+  onChange,
+}: Props) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
@@ -36,11 +51,15 @@ export function VocabularyField({ slug, label, value, parentValue, onChange }: P
           const found = await vocabularyApi.search(slug, term, { parentValue })
           return found.map((item) => ({ value: item.value, count: item.usage_count }))
         }}
-        onCreate={async (term) => {
-          // **서버가 준 값을 고른다.** 별칭에 걸리면 친 글자와 다르다.
-          const added = await vocabularyApi.create(slug, term, parentValue)
-          return { value: added.value, count: added.usage_count }
-        }}
+        onCreate={
+          allowCreate
+            ? async (term) => {
+                // **서버가 준 값을 고른다.** 별칭에 걸리면 친 글자와 다르다.
+                const added = await vocabularyApi.create(slug, term, parentValue)
+                return { value: added.value, count: added.usage_count }
+              }
+            : undefined
+        }
         anyLabel="고르지 않음"
         onChange={onChange}
       />

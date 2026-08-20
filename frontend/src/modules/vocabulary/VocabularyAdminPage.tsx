@@ -22,6 +22,7 @@ import { useState } from 'react'
 import { Eye, EyeOff, GitMerge, Pencil, RefreshCw, Tag, X } from 'lucide-react'
 
 import { vocabularyApi } from '@/modules/vocabulary/api'
+import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { Term, Vocabulary } from '@/modules/vocabulary/api'
 import { ApiError } from '@/shared/api/client'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -416,14 +417,19 @@ function TermDetailDialog({
 
         {parentSlug && (
           <div className="space-y-1.5">
-            <Label htmlFor="term-parent">상위 분류</Label>
-            <div className="flex gap-2">
-              <Input
-                id="term-parent"
-                value={parent}
-                placeholder="비우면 뗍니다"
-                onChange={(event) => setParent(event.target.value)}
-              />
+            <div className="flex items-end gap-2">
+              {/* **있는 것 중에서 고른다.** 자유 입력이면 오타를 서버가 422 로
+                  거절할 뿐이고, 어떤 값이 있는지 보이지도 않는다.
+                  새로 만들지는 못하게 둔다 — 여기는 정리하는 자리다. */}
+              <div className="flex-1">
+                <VocabularyField
+                  slug={parentSlug}
+                  label="상위 분류"
+                  value={parent}
+                  allowCreate={false}
+                  onChange={setParent}
+                />
+              </div>
               <Button
                 variant="outline"
                 onClick={() =>
@@ -437,8 +443,8 @@ function TermDetailDialog({
             </div>
             {/* 백필이 못 이은 값(부모가 갈렸던 것)을 사람이 정하는 자리다. */}
             <p className="text-muted-foreground text-xs">
-              위 축의 값을 적으면 그 아래로 들어갑니다. 비워 두면 좁히기가 안 될 뿐,
-              값은 그대로 씁니다.
+              고른 값 아래로 들어갑니다. <b>'고르지 않음'</b> 을 고르면 부모를 뗍니다 —
+              좁히기가 안 될 뿐, 값은 그대로 씁니다.
             </p>
           </div>
         )}
