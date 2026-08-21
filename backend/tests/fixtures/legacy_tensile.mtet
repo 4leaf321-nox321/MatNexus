@@ -11,6 +11,8 @@
       "Force maximum (MPa)": "282.128",
       "Force at proof stress 0.2% (MPa)": "159.979",
       "Yield strain": "Unknown",
+      "Specimen thickness a0 (mm)": "0.986",
+      "Specimen width b0 (mm)": "12.473",
       "Tensile Test Raw Data": {
         "#": ["1", "2", "3", "4", "5"],
         "Standard extensometer (mm)": ["0.0000", "0.0099", "0.0210", "0.0299", "0.0402"],

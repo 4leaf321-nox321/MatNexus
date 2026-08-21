@@ -35,6 +35,9 @@ from app.modules.accounts.models import User  # noqa: E402
 from app.modules.auth import security  # noqa: E402
 from app.modules.notifications import services as notifications  # noqa: E402
 from app.modules.tests.definitions import ensure_builtin_test_types  # noqa: E402
+from app.modules.tests.legacy_profiles import (  # noqa: E402
+    ensure_builtin_format_profiles,
+)
 from app.modules.workspaces.models import Workspace, WorkspaceMember  # noqa: E402
 
 DEFAULT_EMAIL = "admin@matnexus.local"
@@ -73,6 +76,11 @@ def main() -> None:
         created_types = ensure_builtin_test_types(db)
         if created_types:
             print(f"시험 종류 생성: {', '.join(created_types)}")
+
+        # 옛 앱 파일을 읽는 기본 프로파일. 시험 종류가 먼저 있어야 매달 수 있다.
+        created_profiles = ensure_builtin_format_profiles(db)
+        if created_profiles:
+            print(f"형식 프로파일 생성: {', '.join(created_profiles)}")
 
         email = args.email.lower()
         user = db.scalar(select(User).where(User.email == email))

@@ -23,12 +23,14 @@ from app.modules.accounts.models import User
 from app.modules.auth import security
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
 from app.modules.tests.models import Curve, TestRun, TestType
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 STRAIN_SWEEP = FIXTURES / "dma_strain_sweep.csv"
 FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
+LEGACY_MTET = FIXTURES / "legacy_tensile.mtet"
 
 #: 사람이 화면에서 만들 내용. **코드가 아니라 데이터다.**
 DMA_PROFILE: dict[str, Any] = {
@@ -407,6 +409,51 @@ class TestEndToEnd:
 
         # 시편 치수가 `50.0 mm` 에서 값+단위로 갈려 나온다
         assert run.source_metadata["specimen_thickness"] == "0.989 mm"
+
+    def test_옛_앱_JSON_을_기본_프로파일로_읽는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**설치하면 바로 읽힌다.** 사람이 정의를 손으로 적지 않는다.
+
+        MatNexus 를 쓰기 시작한다는 것은 옛 앱에 쌓인 것을 옮긴다는 뜻이고, 그
+        파일 형식은 하나다. 설치마다 40줄짜리 정의를 다시 적게 두면 그 손이
+        틀리는 날이 온다.
+        """
+        created = ensure_builtin_format_profiles(db)
+        assert "legacy_mtet" in created
+        db.commit()
+
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "tensile",
+                "conditions": "{}",
+            },
+            files={"file": ("Test1.mtet", LEGACY_MTET.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run_id = uuid.UUID(response.json()["id"])
+
+        assert services.parse_run(db, run_id) == "parsed"
+        run = db.get(TestRun, run_id)
+        assert run is not None
+        # **확장자가 아니라 프로파일로 읽혔다.** `.mtet` 은 zwick 파서가 모른다.
+        assert run.parser_version == "profile:legacy_mtet"
+
+        curve_rows = list(db.scalars(select(Curve).where(Curve.test_run_id == run_id)))
+        assert len(curve_rows) == 1
+        assert curve_rows[0].row_count == 5
+
+        # 옛 앱이 계산한 값이 함께 들어온다 — 같은 곡선에 대한 우리 결과와
+        # 나란히 놓고 볼 수 있다.
+        assert run.source_metadata["specimen_thickness"] == "0.986"
 
     def test_단위가_정의와_다르면_등록이_실패한다(
         self,

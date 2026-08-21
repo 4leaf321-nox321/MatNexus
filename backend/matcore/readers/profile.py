@@ -215,6 +215,12 @@ def _build_curve(
 
     for index, name in enumerate(table.header):
         mapping = columns.get(name) or {}
+        if mapping.get("skip"):
+            # **버릴 열을 적을 수 있어야 한다.** 옛 앱의 파일은 첫 열이 행 번호
+            # (`#`)다 — 매핑을 안 하면 단위 모르는 채널로 저장되어, 곡선 고르는
+            # 자리에 뜻 없는 계열이 하나 끼고 "이건 뭐냐" 를 매번 묻게 된다.
+            # 실측 282개 전부에 이 열이 있다.
+            continue
         mapped = bool(mapping.get("channel"))
         key = str(mapping.get("channel") or "") or slug(name)
         if key in used:

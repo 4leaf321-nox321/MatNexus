@@ -24,6 +24,9 @@ from sqlalchemy import select  # noqa: E402
 import app.all_models  # noqa: E402,F401
 from app.database import SessionLocal  # noqa: E402
 from app.modules.tests.definitions import ensure_builtin_test_types  # noqa: E402
+from app.modules.tests.legacy_profiles import (  # noqa: E402
+    ensure_builtin_format_profiles,
+)
 from app.modules.tests.models import TestChannel, TestConditionField, TestType  # noqa: E402
 
 
@@ -31,7 +34,10 @@ def main() -> None:
     db = SessionLocal()
     try:
         created = ensure_builtin_test_types(db)
+        profiles = ensure_builtin_format_profiles(db)
         db.commit()
+        if profiles:
+            print(f"형식 프로파일 {len(profiles)}건: {', '.join(profiles)}")
 
         if created:
             print(f"시험 종류 {len(created)}건을 새로 만들었습니다: {', '.join(created)}")
