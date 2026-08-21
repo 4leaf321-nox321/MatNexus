@@ -2219,6 +2219,136 @@
         "title": "LoginResponse",
         "type": "object"
       },
+      "MasterCurveOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "maximum_frequency_hz": {
+            "title": "Maximum Frequency Hz",
+            "type": "number"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "minimum_frequency_hz": {
+            "title": "Minimum Frequency Hz",
+            "type": "number"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "parameters": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Parameters",
+            "type": "object"
+          },
+          "point_count": {
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "reference_temperature_k": {
+            "title": "Reference Temperature K",
+            "type": "number"
+          },
+          "shifts": {
+            "items": {
+              "$ref": "#/components/schemas/ShiftOut"
+            },
+            "title": "Shifts",
+            "type": "array"
+          },
+          "source_curve_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Curve Keys",
+            "type": "array"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "test_run_id",
+          "source_curve_keys",
+          "reference_temperature_k",
+          "method",
+          "parameters",
+          "shifts",
+          "notes",
+          "point_count",
+          "minimum_frequency_hz",
+          "maximum_frequency_hz",
+          "created_at"
+        ],
+        "title": "MasterCurveOut",
+        "type": "object"
+      },
+      "MasterCurveRequest": {
+        "properties": {
+          "curve_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Keys"
+          },
+          "manual_shifts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Shifts"
+          },
+          "method": {
+            "default": "wlf",
+            "pattern": "^(wlf|arrhenius|manual)$",
+            "title": "Method",
+            "type": "string"
+          },
+          "reference_temperature_k": {
+            "title": "Reference Temperature K",
+            "type": "number"
+          }
+        },
+        "required": [
+          "reference_temperature_k"
+        ],
+        "title": "MasterCurveRequest",
+        "type": "object"
+      },
       "MaterialCreateRequest": {
         "properties": {
           "alias": {
@@ -3837,6 +3967,162 @@
         "title": "ProfileUpdateRequest",
         "type": "object"
       },
+      "PronyCandidateOut": {
+        "properties": {
+          "at_bound": {
+            "items": {
+              "type": "number"
+            },
+            "title": "At Bound",
+            "type": "array"
+          },
+          "bic": {
+            "title": "Bic",
+            "type": "number"
+          },
+          "equilibrium_pa": {
+            "title": "Equilibrium Pa",
+            "type": "number"
+          },
+          "instantaneous_pa": {
+            "title": "Instantaneous Pa",
+            "type": "number"
+          },
+          "normalized_rmse": {
+            "title": "Normalized Rmse",
+            "type": "number"
+          },
+          "term_count": {
+            "title": "Term Count",
+            "type": "integer"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/PronyTermOut"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "term_count",
+          "equilibrium_pa",
+          "instantaneous_pa",
+          "normalized_rmse",
+          "bic",
+          "terms",
+          "at_bound"
+        ],
+        "title": "PronyCandidateOut",
+        "type": "object"
+      },
+      "PronyFitOut": {
+        "properties": {
+          "at_bound": {
+            "items": {
+              "type": "number"
+            },
+            "title": "At Bound",
+            "type": "array"
+          },
+          "bic": {
+            "title": "Bic",
+            "type": "number"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PronyCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "equilibrium_pa": {
+            "title": "Equilibrium Pa",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instantaneous_pa": {
+            "title": "Instantaneous Pa",
+            "type": "number"
+          },
+          "master_curve_id": {
+            "format": "uuid",
+            "title": "Master Curve Id",
+            "type": "string"
+          },
+          "normalized_rmse": {
+            "title": "Normalized Rmse",
+            "type": "number"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/PronyTermOut"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "master_curve_id",
+          "equilibrium_pa",
+          "instantaneous_pa",
+          "terms",
+          "normalized_rmse",
+          "bic",
+          "at_bound",
+          "candidates",
+          "created_at"
+        ],
+        "title": "PronyFitOut",
+        "type": "object"
+      },
+      "PronyRequest": {
+        "properties": {
+          "terms": {
+            "anyOf": [
+              {
+                "maximum": 12.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          }
+        },
+        "title": "PronyRequest",
+        "type": "object"
+      },
+      "PronyTermOut": {
+        "properties": {
+          "modulus_pa": {
+            "title": "Modulus Pa",
+            "type": "number"
+          },
+          "relaxation_time_s": {
+            "title": "Relaxation Time S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "modulus_pa",
+          "relaxation_time_s"
+        ],
+        "title": "PronyTermOut",
+        "type": "object"
+      },
       "PropertyCardOut": {
         "properties": {
           "created_at": {
@@ -5015,6 +5301,62 @@
         "title": "ScalarStatsOut",
         "type": "object"
       },
+      "ShiftOut": {
+        "properties": {
+          "log10_a_t": {
+            "title": "Log10 A T",
+            "type": "number"
+          },
+          "observed_log10_a_t": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Log10 A T"
+          },
+          "overlap_rmse": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overlap Rmse"
+          },
+          "residual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "temperature_k": {
+            "title": "Temperature K",
+            "type": "number"
+          }
+        },
+        "required": [
+          "temperature_k",
+          "log10_a_t",
+          "source"
+        ],
+        "title": "ShiftOut",
+        "type": "object"
+      },
       "SignupRequest": {
         "properties": {
           "display_name": {
@@ -5583,6 +5925,75 @@
           "matched_profile"
         ],
         "title": "StructurePreviewOut",
+        "type": "object"
+      },
+      "SweepListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SweepOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SweepListOut",
+        "type": "object"
+      },
+      "SweepOut": {
+        "description": "겹칠 후보. 화면이 온도를 보고 기준을 고른다.",
+        "properties": {
+          "curve_key": {
+            "title": "Curve Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "maximum_frequency_hz": {
+            "title": "Maximum Frequency Hz",
+            "type": "number"
+          },
+          "minimum_frequency_hz": {
+            "title": "Minimum Frequency Hz",
+            "type": "number"
+          },
+          "point_count": {
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "temperature_k": {
+            "title": "Temperature K",
+            "type": "number"
+          }
+        },
+        "required": [
+          "curve_key",
+          "temperature_k",
+          "point_count",
+          "minimum_frequency_hz",
+          "maximum_frequency_hz"
+        ],
+        "title": "SweepOut",
         "type": "object"
       },
       "TablePreviewOut": {
@@ -12132,6 +12543,306 @@
         "summary": "List Units",
         "tags": [
           "units"
+        ]
+      }
+    },
+    "/api/viscoelastic/master-curves/{master_curve_id}/points": {
+      "get": {
+        "description": "겹친 곡선의 점. 화면이 그린다.",
+        "operationId": "master_curve_points_api_viscoelastic_master_curves__master_curve_id__points_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "master_curve_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Master Curve Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Master Curve Points Api Viscoelastic Master Curves  Master Curve Id  Points Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Master Curve Points",
+        "tags": [
+          "viscoelastic"
+        ]
+      }
+    },
+    "/api/viscoelastic/master-curves/{master_curve_id}/prony": {
+      "get": {
+        "operationId": "list_prony_fits_api_viscoelastic_master_curves__master_curve_id__prony_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "master_curve_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Master Curve Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PronyFitOut"
+                  },
+                  "title": "Response List Prony Fits Api Viscoelastic Master Curves  Master Curve Id  Prony Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Prony Fits",
+        "tags": [
+          "viscoelastic"
+        ]
+      },
+      "post": {
+        "description": "일반화 Maxwell 계수를 맞춘다.\n\n항 수를 안 주면 후보를 재고 BIC 로 고른다. **재 본 것을 전부 남긴다** —\n\"3항이면 충분한데 왜 6항이지\" 를 사람이 볼 수 있어야 한다.",
+        "operationId": "create_prony_fit_api_viscoelastic_master_curves__master_curve_id__prony_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "master_curve_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Master Curve Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PronyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PronyFitOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Prony Fit",
+        "tags": [
+          "viscoelastic"
+        ]
+      }
+    },
+    "/api/viscoelastic/runs/{test_run_id}/master-curves": {
+      "get": {
+        "operationId": "list_master_curves_api_viscoelastic_runs__test_run_id__master_curves_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Test Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MasterCurveOut"
+                  },
+                  "title": "Response List Master Curves Api Viscoelastic Runs  Test Run Id  Master Curves Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Master Curves",
+        "tags": [
+          "viscoelastic"
+        ]
+      },
+      "post": {
+        "description": "온도 스윕들을 기준 온도로 겹친다.\n\n`manual` 은 사람(또는 장비)이 준 이동인자를 그대로 쓴다. `wlf`·`arrhenius`\n는 **실제로 겹쳐 본 값을 목표로** 모델을 맞추고, 관측값도 함께 남긴다 —\n둘이 벌어지면 그 모델이 이 재료에 안 맞는다는 뜻이다.",
+        "operationId": "create_master_curve_api_viscoelastic_runs__test_run_id__master_curves_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Test Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MasterCurveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterCurveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Master Curve",
+        "tags": [
+          "viscoelastic"
+        ]
+      }
+    },
+    "/api/viscoelastic/runs/{test_run_id}/sweeps": {
+      "get": {
+        "description": "겹칠 후보. **화면이 온도를 보고 기준을 고른다.**\n\n기준 온도는 잰 온도 중에 있어야 하므로, 무엇이 있는지 먼저 보여 준다 —\n입력칸에 숫자를 치게 두면 없는 온도를 적고 나서 오류를 본다.",
+        "operationId": "list_sweeps_api_viscoelastic_runs__test_run_id__sweeps_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Test Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sweeps",
+        "tags": [
+          "viscoelastic"
         ]
       }
     },

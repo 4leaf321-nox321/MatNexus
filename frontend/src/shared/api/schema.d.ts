@@ -1525,6 +1525,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/viscoelastic/master-curves/{master_curve_id}/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Master Curve Points
+         * @description 겹친 곡선의 점. 화면이 그린다.
+         */
+        get: operations["master_curve_points_api_viscoelastic_master_curves__master_curve_id__points_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/master-curves/{master_curve_id}/prony": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Prony Fits */
+        get: operations["list_prony_fits_api_viscoelastic_master_curves__master_curve_id__prony_get"];
+        put?: never;
+        /**
+         * Create Prony Fit
+         * @description 일반화 Maxwell 계수를 맞춘다.
+         *
+         *     항 수를 안 주면 후보를 재고 BIC 로 고른다. **재 본 것을 전부 남긴다** —
+         *     "3항이면 충분한데 왜 6항이지" 를 사람이 볼 수 있어야 한다.
+         */
+        post: operations["create_prony_fit_api_viscoelastic_master_curves__master_curve_id__prony_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/runs/{test_run_id}/master-curves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Master Curves */
+        get: operations["list_master_curves_api_viscoelastic_runs__test_run_id__master_curves_get"];
+        put?: never;
+        /**
+         * Create Master Curve
+         * @description 온도 스윕들을 기준 온도로 겹친다.
+         *
+         *     `manual` 은 사람(또는 장비)이 준 이동인자를 그대로 쓴다. `wlf`·`arrhenius`
+         *     는 **실제로 겹쳐 본 값을 목표로** 모델을 맞추고, 관측값도 함께 남긴다 —
+         *     둘이 벌어지면 그 모델이 이 재료에 안 맞는다는 뜻이다.
+         */
+        post: operations["create_master_curve_api_viscoelastic_runs__test_run_id__master_curves_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/runs/{test_run_id}/sweeps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sweeps
+         * @description 겹칠 후보. **화면이 온도를 보고 기준을 고른다.**
+         *
+         *     기준 온도는 잰 온도 중에 있어야 하므로, 무엇이 있는지 먼저 보여 준다 —
+         *     입력칸에 숫자를 치게 두면 없는 온도를 적고 나서 오류를 본다.
+         */
+        get: operations["list_sweeps_api_viscoelastic_runs__test_run_id__sweeps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/voc": {
         parameters: {
             query?: never;
@@ -2968,6 +3060,60 @@ export interface components {
             expires_in: number;
             user: components["schemas"]["UserOut"];
         };
+        /** MasterCurveOut */
+        MasterCurveOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Maximum Frequency Hz */
+            maximum_frequency_hz: number;
+            /** Method */
+            method: string;
+            /** Minimum Frequency Hz */
+            minimum_frequency_hz: number;
+            /** Notes */
+            notes: string[];
+            /** Parameters */
+            parameters: {
+                [key: string]: number;
+            };
+            /** Point Count */
+            point_count: number;
+            /** Reference Temperature K */
+            reference_temperature_k: number;
+            /** Shifts */
+            shifts: components["schemas"]["ShiftOut"][];
+            /** Source Curve Keys */
+            source_curve_keys: string[];
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /** MasterCurveRequest */
+        MasterCurveRequest: {
+            /** Curve Keys */
+            curve_keys?: string[] | null;
+            /** Manual Shifts */
+            manual_shifts?: {
+                [key: string]: number;
+            } | null;
+            /**
+             * Method
+             * @default wlf
+             */
+            method: string;
+            /** Reference Temperature K */
+            reference_temperature_k: number;
+        };
         /** MaterialCreateRequest */
         MaterialCreateRequest: {
             /** Alias */
@@ -3529,6 +3675,67 @@ export interface components {
             /** Display Name */
             display_name: string;
         };
+        /** PronyCandidateOut */
+        PronyCandidateOut: {
+            /** At Bound */
+            at_bound: number[];
+            /** Bic */
+            bic: number;
+            /** Equilibrium Pa */
+            equilibrium_pa: number;
+            /** Instantaneous Pa */
+            instantaneous_pa: number;
+            /** Normalized Rmse */
+            normalized_rmse: number;
+            /** Term Count */
+            term_count: number;
+            /** Terms */
+            terms: components["schemas"]["PronyTermOut"][];
+        };
+        /** PronyFitOut */
+        PronyFitOut: {
+            /** At Bound */
+            at_bound: number[];
+            /** Bic */
+            bic: number;
+            /** Candidates */
+            candidates: components["schemas"]["PronyCandidateOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Equilibrium Pa */
+            equilibrium_pa: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instantaneous Pa */
+            instantaneous_pa: number;
+            /**
+             * Master Curve Id
+             * Format: uuid
+             */
+            master_curve_id: string;
+            /** Normalized Rmse */
+            normalized_rmse: number;
+            /** Terms */
+            terms: components["schemas"]["PronyTermOut"][];
+        };
+        /** PronyRequest */
+        PronyRequest: {
+            /** Terms */
+            terms?: number | null;
+        };
+        /** PronyTermOut */
+        PronyTermOut: {
+            /** Modulus Pa */
+            modulus_pa: number;
+            /** Relaxation Time S */
+            relaxation_time_s: number;
+        };
         /** PropertyCardOut */
         PropertyCardOut: {
             /**
@@ -3926,6 +4133,21 @@ export interface components {
             /** Si Unit */
             si_unit: string;
         };
+        /** ShiftOut */
+        ShiftOut: {
+            /** Log10 A T */
+            log10_a_t: number;
+            /** Observed Log10 A T */
+            observed_log10_a_t?: number | null;
+            /** Overlap Rmse */
+            overlap_rmse?: number | null;
+            /** Residual */
+            residual?: number | null;
+            /** Source */
+            source: string;
+            /** Temperature K */
+            temperature_k: number;
+        };
         /** SignupRequest */
         SignupRequest: {
             /** Display Name */
@@ -4133,6 +4355,34 @@ export interface components {
             tables: components["schemas"]["TablePreviewOut"][];
             /** Warnings */
             warnings: string[];
+        };
+        /** SweepListOut */
+        SweepListOut: {
+            /** Items */
+            items: components["schemas"]["SweepOut"][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * SweepOut
+         * @description 겹칠 후보. 화면이 온도를 보고 기준을 고른다.
+         */
+        SweepOut: {
+            /** Curve Key */
+            curve_key: string;
+            /** Label */
+            label?: string | null;
+            /** Maximum Frequency Hz */
+            maximum_frequency_hz: number;
+            /** Minimum Frequency Hz */
+            minimum_frequency_hz: number;
+            /** Point Count */
+            point_count: number;
+            /** Temperature K */
+            temperature_k: number;
         };
         /** TablePreviewOut */
         TablePreviewOut: {
@@ -7816,6 +8066,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnitsOut"];
+                };
+            };
+        };
+    };
+    master_curve_points_api_viscoelastic_master_curves__master_curve_id__points_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                master_curve_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: (number | null)[];
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_prony_fits_api_viscoelastic_master_curves__master_curve_id__prony_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                master_curve_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PronyFitOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_prony_fit_api_viscoelastic_master_curves__master_curve_id__prony_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                master_curve_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PronyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PronyFitOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_master_curves_api_viscoelastic_runs__test_run_id__master_curves_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterCurveOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_master_curve_api_viscoelastic_runs__test_run_id__master_curves_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MasterCurveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterCurveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sweeps_api_viscoelastic_runs__test_run_id__sweeps_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

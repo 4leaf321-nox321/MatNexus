@@ -29,6 +29,7 @@ from app.modules.statistics import routes as statistics_routes
 from app.modules.tests import formats as tests_formats
 from app.modules.tests import routes as tests_routes
 from app.modules.units import routes as units_routes
+from app.modules.viscoelastic import routes as viscoelastic_routes
 from app.modules.voc import routes as voc_routes
 from app.modules.vocabulary import routes as vocabulary_routes
 from app.modules.workspaces import routes as workspaces_routes
@@ -66,6 +67,7 @@ def _api_router() -> APIRouter:
     router.include_router(tests_routes.maintenance_router)
     router.include_router(tests_formats.router)
     router.include_router(processing_routes.router)
+    router.include_router(viscoelastic_routes.router)
     router.include_router(statistics_routes.router)
     router.include_router(fitting_routes.router)
     router.include_router(units_routes.router)
