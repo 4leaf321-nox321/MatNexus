@@ -203,6 +203,180 @@ class Test항복강도:
             )
 
 
+#: 합성 토우가 원점을 미는 양.
+TOE_OFFSET = 0.0015
+
+
+def synthetic_with_toe() -> Frame:
+    """앞에 토우가 붙은 곡선. **정답은 `synthetic()` 과 같다.**
+
+    시편이 그립에 물려 자리를 잡는 동안 변위는 늘어나는데 하중은 안 오른다. 그
+    구간을 응력 0 으로 둔다 — 실제 토우도 이 이상화에 가깝고, 무엇보다 **정답을
+    알 수 있다**: 보정량은 정확히 `TOE_OFFSET` 이어야 한다.
+    """
+    base = synthetic()
+    strain = base.columns["strain_engineering"] + TOE_OFFSET
+    stress = base.columns["stress_engineering"]
+    # 이음점을 두 번 넣지 않는다 — 변형률이 같은 점이 둘이면 단조 증가가 깨진다.
+    toe_strain = np.linspace(0.0, TOE_OFFSET, 30)[:-1]
+    return Frame(
+        {
+            "strain_engineering": np.concatenate([toe_strain, strain]),
+            "stress_engineering": np.concatenate([np.zeros_like(toe_strain), stress]),
+        },
+        {"strain_engineering": "1", "stress_engineering": "Pa"},
+    )
+
+
+#: 탄성 구간을 재는 창. **두 시험이 같은 창을 써야** 비교가 성립한다.
+#: 보정 뒤에는 [0, 0.002] 가 탄성이므로 이 창이 그 안에 든다.
+ELASTIC_WINDOW = {"minimum_strain": 0.001, "maximum_strain": 0.002}
+
+
+class Test토우보정:
+    """**토우가 망치는 것은 탄성계수다.**
+
+    이 클래스가 보이려는 것은 보정이 "돌아간다" 가 아니라 **안 하면 무슨 값이
+    나오는가** 다.
+
+    처음에는 항복강도가 크게 틀릴 것으로 보고 그렇게 단언했는데, 재 보니
+    0.3% 였다 — 경화가 거의 평탄해서(2 GPa) 교점의 응력이 항복 근처에 붙박인다.
+    **주장을 실측에 맞췄다.** 대신 탄성계수는 두 배 틀린다.
+    """
+
+    def test_보정_안_하면_탄성계수가_반토막_난다(self) -> None:
+        """먼저 피해를 보인다. 탄성을 재는 창이 토우 안에 걸린다."""
+        result = processing.apply(
+            [Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW))],
+            synthetic_with_toe(),
+        )
+        modulus = scalar(result, "youngs_modulus")
+        assert modulus < E_TRUE * 0.75, (
+            f"토우가 섞였는데 탄성계수가 {modulus / 1e9:.4g} GPa 로 멀쩡하다 — "
+            f"이 시험이 재는 피해가 재현되지 않았다."
+        )
+        # **그럴듯해 보이는 것이 문제다.** 100 GPa 는 알루미늄이라고 하면 넘어간다.
+        assert modulus > 50e9
+
+    def test_보정하면_아는_답이_돌아온다(self) -> None:
+        result = processing.apply(
+            [
+                # 토우가 끝난 뒤의 직선 구간을 사람이 잡는다.
+                Step(
+                    "tensile.toe_compensation",
+                    {"minimum_strain": 0.002, "maximum_strain": 0.003},
+                ),
+                Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW)),
+                Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
+            ],
+            synthetic_with_toe(),
+        )
+        assert scalar(result, "toe_strain_offset") == pytest.approx(TOE_OFFSET, rel=1e-6)
+        assert scalar(result, "youngs_modulus") == pytest.approx(E_TRUE, rel=1e-6)
+        expected = E_TRUE * (YIELD_TRUE / (E_TRUE - HARDENING))
+        assert scalar(result, "proof_stress") == pytest.approx(expected, rel=2e-3)
+
+    def test_항복강도는_경화가_평탄하면_덜_틀린다(self) -> None:
+        """**재 보고 적는다.** 이 곡선에서 얼마나 틀리는지를 숫자로 박아 둔다.
+
+        경화가 가파른 재료에서는 이 값이 커진다. 그때 이 시험이 깨지면 그건 결함이
+        아니라 **다른 곡선을 넣었다**는 뜻이다.
+        """
+        result = processing.apply(
+            [
+                Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW)),
+                Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
+            ],
+            synthetic_with_toe(),
+        )
+        exact = E_TRUE * (YIELD_TRUE / (E_TRUE - HARDENING))
+        wrong = scalar(result, "proof_stress")
+        assert abs(wrong - exact) / exact < 0.02, (
+            f"항복강도가 {wrong / 1e6:.4g} MPa, 정답 {exact / 1e6:.4g} MPa"
+        )
+
+    def test_응력은_안_건드린다(self) -> None:
+        """장비 컴플라이언스를 추정하지 않는다는 뜻이다."""
+        before = synthetic_with_toe()
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.toe_compensation",
+                    {"minimum_strain": 0.002, "maximum_strain": 0.003},
+                )
+            ],
+            before,
+        )
+        assert np.array_equal(
+            result.frame.columns["stress_engineering"],
+            before.columns["stress_engineering"],
+        )
+
+    def test_자르지_않는다(self) -> None:
+        """보정 뒤 앞쪽은 음의 변형률이 된다 — 시편이 물리기 전이라 맞다.
+
+        한 단계가 옮기고 자르기까지 하면 무엇 때문에 값이 바뀌었는지 못 가린다.
+        지우려면 `curve.crop` 을 뒤에 둔다.
+        """
+        before = synthetic_with_toe()
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.toe_compensation",
+                    {"minimum_strain": 0.002, "maximum_strain": 0.003},
+                )
+            ],
+            before,
+        )
+        assert result.frame.length() == before.length()
+        assert float(result.frame.columns["strain_engineering"].min()) < 0
+
+    def test_점이_모자라면_추측하지_않고_실패한다(self) -> None:
+        with pytest.raises(ProcessingError, match="최소 5점"):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.toe_compensation",
+                        {"minimum_strain": 0.00201, "maximum_strain": 0.00204},
+                    )
+                ],
+                synthetic_with_toe(),
+            )
+
+    def test_구간이_직선이_아니면_경고한다(self) -> None:
+        """**실패가 아니라 경고다.** 재료에 따라 진짜로 직선이 아닐 수 있다."""
+        result = processing.apply(
+            [
+                # 토우와 탄성 구간에 걸치게 잡으면 꺾인 선이다.
+                Step(
+                    "tensile.toe_compensation",
+                    {"minimum_strain": 0.0005, "maximum_strain": 0.0035},
+                )
+            ],
+            synthetic_with_toe(),
+        )
+        notes = " ".join(result.stages[0].notes)
+        assert "직선이 아닙니다" in notes, notes
+
+    def test_기울기가_양수가_아니면_실패한다(self) -> None:
+        """항복 뒤 평탄부에 구간을 잡으면 보정량이 뜻을 잃는다."""
+        strain = np.linspace(0.0, 0.05, 100)
+        flat = Frame(
+            {"strain_engineering": strain, "stress_engineering": np.full_like(strain, 400e6)},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="유한한 양수가 아닙니다"):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.toe_compensation",
+                        {"minimum_strain": 0.01, "maximum_strain": 0.04},
+                    )
+                ],
+                flat,
+            )
+
+
 class Test진응력:
     def test_변환식이_맞다(self) -> None:
         result = processing.apply(

@@ -139,6 +139,152 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
 
 
+#: 토우 보정에 필요한 최소 점 수. 직선을 얹는 일이라 적으면 아무 말도 못 한다.
+TOE_MIN_POINTS = 5
+
+#: 이보다 낮으면 그 구간은 직선이 아니다. **경고이지 실패가 아니다** — 재료에
+#: 따라 진짜로 직선이 아닐 수 있고, 그 판단은 사람이 한다.
+TOE_MIN_R_SQUARED = 0.995
+
+
+@register(
+    id="tensile.toe_compensation",
+    kind="processing",
+    label="토우 보정",
+    params=(
+        ParamSpec(
+            name="minimum_strain",
+            dimension="strain",
+            label="구간 시작",
+            type="float",
+            default=0.001,
+            unit="1",
+            help="토우가 끝난 뒤의 직선 구간을 잡습니다. 곡선을 보고 정하세요.",
+        ),
+        ParamSpec(
+            name="maximum_strain",
+            dimension="strain",
+            label="구간 끝",
+            type="float",
+            default=0.004,
+            unit="1",
+        ),
+        ParamSpec(name="strain", label="변형률 열", type="str"),
+        ParamSpec(name="stress", label="응력 열", type="str"),
+    ),
+    applies_to=("tensile",),
+    version="1",
+)
+def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
+    """초기 토우 구간만큼 변형률 원점을 옮긴다. **응력은 안 건드린다.**
+
+    시험 처음에 시편이 그립에 물려 자리를 잡는 동안 하중은 거의 안 오르는데 변위는
+    늘어난다. 곡선 앞머리가 눕는 그 구간을 토우라고 한다. 장비가 준 변형률의 0 은
+    **시편이 실제로 늘어나기 시작한 지점이 아니다.**
+
+    ## 안 고치면 탄성계수가 반토막 난다
+
+    `tensile.elastic_modulus` 는 명시한 변형률 창에서 기울기를 잰다. 토우가 원점을
+    밀어 놓으면 **그 창이 토우 안에 걸린다** — 하중이 안 오르는 구간이 섞여 들어가
+    기울기가 낮게 나온다. 합성 곡선으로 재 보니 200 GPa 가 100 GPa 로 나왔다
+    (`tests/unit/test_processing_kernel.py`). 두 배 틀렸는데 100 GPa 는 그럴듯해
+    보인다 — 알루미늄이라고 하면 넘어갈 숫자다.
+
+    그 탄성계수는 물성 카드에 그대로 들어가고, 경화식 적합의 탄성 분리에도 쓰인다.
+
+    오프셋 항복강도도 틀린 원점에서 출발한 직선으로 구해진다. **다만 그 영향은
+    경화 기울기에 달렸다** — 위 합성 곡선(선형 경화 2 GPa)에서는 0.3% 였다. 경화가
+    가파른 재료일수록 커진다. 재 보지 않고 "항복강도가 크게 틀린다" 고 말하지
+    않는다.
+
+    ## 무엇을 하고 무엇을 안 하나
+
+    명시한 구간에 최소제곱 직선을 얹고, 그 직선이 응력 0 을 만나는 변형률만큼
+    전체를 왼쪽으로 민다. 그게 전부다.
+
+    * **구간을 자동으로 찾지 않는다.** 어디까지가 토우인지는 곡선을 본 사람이
+      정한다. 자동 탐지는 그럴듯한 답을 내는데, 틀렸다는 것을 알 방법이 없다
+    * **응력을 안 건드린다.** 장비 컴플라이언스(장비 자체가 늘어난 몫)를 빼려면
+      장비 강성을 알아야 하는데 그 값은 시험 파일에 없다. 추정하지 않는다 —
+      그래서 그 칸을 아예 두지 않았다. 고를 것이 하나뿐인 칸은 아무 일도 안 하면서
+      뭔가 하는 것처럼 보인다
+    * **자르지 않는다.** 보정 뒤 앞쪽 몇 점은 음의 변형률이 된다(시편이 물리기
+      전이다). 지우려면 `curve.crop` 을 뒤에 둔다. 한 단계가 두 가지 일을 하면
+      무엇 때문에 값이 바뀌었는지 못 가린다
+    * **보정량을 결과에 남긴다.** 눌러 넘기는 확인 칸 대신 숫자를 남긴다. 반년 뒤
+      "이 항복강도가 왜 이렇지" 에 답하는 것은 체크박스가 아니라 값이다
+
+    ## 열을 덮어쓴다 — `curve.smooth` 와 다른 점
+
+    평활은 `_smoothed` 열을 새로 만들지만 여기서는 원래 열을 덮어쓴다. 새 열로
+    만들면 뒤 단계들이 기본값(`strain_engineering`)을 그대로 집어서 **보정 안 된
+    변형률로 계산한다.** 사람이 단계마다 열 이름을 다시 지정해야 하고, 한 번
+    빠뜨리면 보정을 넣었는데 아무 일도 안 일어난다 — 이 도메인에서 가장 나쁜
+    실패다. 전/후 비교는 파이프라인이 단계마다의 `Frame` 을 들고 있어서 그대로 된다.
+    """
+    strain, stress, strain_key, _stress_key = _pair(frame, options)
+    require_increasing(strain, what=f"'{strain_key}'")
+
+    low = option_float(options, "minimum_strain", 0.001)
+    high = option_float(options, "maximum_strain", 0.004)
+    if low >= high:
+        raise ProcessingError(f"구간 시작({low})이 끝({high}) 이상입니다.")
+
+    mask = (strain >= low) & (strain <= high)
+    count = int(np.sum(mask))
+    if count < TOE_MIN_POINTS:
+        raise ProcessingError(
+            f"변형률 [{low:.6g}, {high:.6g}] 안에 {count}점만 있습니다 — 토우 보정은 "
+            f"최소 {TOE_MIN_POINTS}점이 필요합니다. 관측 범위는 "
+            f"[{float(strain.min()):.6g}, {float(strain.max()):.6g}] 입니다."
+        )
+
+    selected_x, selected_y = strain[mask], stress[mask]
+    slope, intercept = (float(value) for value in np.polyfit(selected_x, selected_y, 1))
+    if not math.isfinite(slope) or slope <= 0:
+        raise ProcessingError(
+            f"구간의 기울기가 유한한 양수가 아닙니다: {slope:.6g}. "
+            f"구간이 항복 뒤에 걸쳐 있거나 응력 부호가 뒤집혔을 수 있습니다."
+        )
+
+    # 직선이 응력 0 을 만나는 변형률. 토우가 있으면 양수이고, 그만큼 왼쪽으로 민다.
+    offset = -intercept / slope
+    if not math.isfinite(offset):
+        raise ProcessingError("보정량이 유한하지 않습니다. 구간을 다시 잡으세요.")
+    r_squared = _r_squared(selected_x, selected_y, slope, intercept)
+
+    scalars = [
+        Scalar("toe_strain_offset", "토우 보정량", float(offset), "1", dimension="strain"),
+        Scalar("toe_r_squared", "토우 구간 R²", float(r_squared), "1"),
+    ]
+    notes = [
+        f"변형률 [{low:.6g}, {high:.6g}] 구간의 {count}점에 얹은 직선이 응력 0 을 "
+        f"만나는 지점({offset:.6g})만큼 '{strain_key}' 를 옮겼습니다 "
+        f"(기울기 {slope / 1e9:.4g} GPa, R²={r_squared:.5f}). 응력은 그대로입니다."
+    ]
+    if r_squared < TOE_MIN_R_SQUARED:
+        notes.append(
+            f"R² 가 {r_squared:.4f} 로 낮습니다 — 잡은 구간이 직선이 아닙니다. "
+            f"토우가 아직 안 끝났거나 항복 뒤까지 걸쳐 있는지 확인하세요."
+        )
+    if abs(offset) > (high - low):
+        # 보정량이 그것을 잰 구간보다 크면 외삽 거리가 근거보다 길다는 뜻이다.
+        notes.append(
+            f"보정량({offset:.6g})이 구간 폭({high - low:.6g})보다 큽니다 — "
+            f"직선을 근거보다 멀리 늘여 원점을 잡았습니다. 구간을 다시 보세요."
+        )
+    if offset < 0:
+        notes.append(
+            f"보정량이 음수({offset:.6g})입니다 — 원점을 오른쪽으로 옮깁니다. "
+            f"토우 보정이 기대하는 방향이 아니니 구간이 맞는지 확인하세요."
+        )
+    return StepResult(
+        frame.with_columns({strain_key: strain - offset}, {strain_key: "1"}),
+        notes=tuple(notes),
+        scalars=tuple(scalars),
+    )
+
+
 @register(
     id="tensile.elastic_modulus",
     kind="processing",
