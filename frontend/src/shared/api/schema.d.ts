@@ -1580,6 +1580,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Drift
+         * @description 문자열 컬럼과 어휘 값이 어긋난 행. **0 이어야 한다.**
+         *
+         *     **`/{slug}/...` 보다 먼저 선언한다.** FastAPI 는 선언 순서대로 맞춰 보므로,
+         *     뒤에 두면 `drift` 가 축 이름 자리에 들어간다(`/classifications` 에서 겪었다).
+         *
+         *     ## 왜 이게 있어야 하나
+         *
+         *     지금은 같은 사실을 두 벌로 들고 있다(ADR 0010 Expand) — `materials.family`
+         *     문자열과 `family_term_id`. Contract 에서 문자열을 지우려면 **두 벌이 같다는
+         *     것을 한 릴리스 동안 봐야 한다.** 볼 도구가 없으면 "지켜봤다" 가 말이 안 된다.
+         *
+         *     만들자마자 개발 DB 에서 2건을 찾았고, 그것이 결함 하나를 드러냈다 — 어휘 값
+         *     이름을 고치면 재료·시료·시편·시험 이름 넷은 전부 따라 바뀌는데 정작 그 값
+         *     자신은 옛 표기 그대로였다. API 는 200 을 냈다.
+         */
+        get: operations["check_drift_api_vocabularies_drift_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Repair Drift
+         * @description 어긋난 칸을 바로잡는다. **어휘가 정본이다.**
+         *
+         *     고치기 전의 목록을 돌려준다 — 무엇을 건드렸는지 사람이 봐야 한다.
+         *
+         *     자동으로 안 돈다. 방향을 정해야 하는 일이라(문자열을 고칠 것인가, 어휘를
+         *     고칠 것인가) 사람이 점검을 보고 누른다.
+         */
+        post: operations["repair_drift_api_vocabularies_repair_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/dismissals": {
         parameters: {
             query?: never;
@@ -2501,6 +2559,35 @@ export interface components {
              * Format: uuid
              */
             second_id: string;
+        };
+        /**
+         * DriftOut
+         * @description 문자열과 어휘가 벌어진 한 칸.
+         */
+        DriftOut: {
+            /** Count */
+            count: number;
+            /** Examples */
+            examples: string[];
+            /** Field */
+            field: string;
+            /** Label */
+            label: string;
+            /** Table */
+            table: string;
+        };
+        /**
+         * DriftReportOut
+         * @description 어긋남 점검 결과. **0 이어야 한다.**
+         *
+         *     문자열 컬럼을 지우기(Contract) 전에 한 릴리스 동안 0 이어야 한다. 0 이 아닌
+         *     채로 지우면 어느 쪽이 맞았는지 영영 알 수 없다.
+         */
+        DriftReportOut: {
+            /** Items */
+            items: components["schemas"]["DriftOut"][];
+            /** Total */
+            total: number;
         };
         /** EnsembleResultOut */
         EnsembleResultOut: {
@@ -7826,6 +7913,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VocabularyOut"][];
+                };
+            };
+        };
+    };
+    check_drift_api_vocabularies_drift_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftReportOut"];
+                };
+            };
+        };
+    };
+    repair_drift_api_vocabularies_repair_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftReportOut"];
                 };
             };
         };

@@ -26,6 +26,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  ShieldCheck,
   Tag,
   Trash2,
   X,
@@ -33,7 +34,13 @@ import {
 
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
-import type { BulkResult, DeleteResult, Term, Vocabulary } from '@/modules/vocabulary/api'
+import type {
+  BulkResult,
+  DeleteResult,
+  DriftReport,
+  Term,
+  Vocabulary,
+} from '@/modules/vocabulary/api'
 import { ApiError } from '@/shared/api/client'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -91,7 +98,123 @@ export default function VocabularyAdminPage() {
       </div>
 
       {active && <TermTable vocabulary={active} />}
+
+      <DriftPanel onRepaired={() => vocabularies.reload()} />
     </div>
+  )
+}
+
+/**
+ * 어긋남 점검 — **문자열과 어휘가 같은 말을 하는가.**
+ *
+ * 지금은 같은 사실을 두 벌로 들고 있다(ADR 0010 Expand). `materials.family`
+ * 문자열과 `family_term_id` 다. 쓰는 경로는 하나지만 그 밖으로 새는 길이 있으면
+ * 조용히 벌어진다 — **조용한 것이 문제다.** 개발 DB 에서 2건이 벌어진 채로
+ * 있었고, 이 점검을 만들고 나서야 알았다. 그 2건이 결함 하나를 드러냈다: 어휘
+ * 이름을 고치면 재료·시료·시편·시험 이름 넷은 따라 바뀌는데 **정작 그 값 자신은
+ * 옛 표기 그대로**였고 API 는 200 을 냈다.
+ *
+ * 접어 둔다. 평소에는 0 이고, 0 인 것을 매번 크게 보여 줄 이유가 없다.
+ */
+function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [report, setReport] = useState<DriftReport | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  async function run(fix: boolean) {
+    setBusy(true)
+    setError(null)
+    try {
+      const result = fix ? await vocabularyApi.repair() : await vocabularyApi.drift()
+      // 고친 뒤에는 **다시 재서** 보여 준다 — 고치기는 고치기 전 목록을 준다.
+      setReport(fix ? await vocabularyApi.drift() : result)
+      if (fix) onRepaired()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('점검하지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground mt-6 text-xs underline"
+        onClick={() => {
+          setOpen(true)
+          void run(false)
+        }}
+      >
+        어긋남 점검
+      </button>
+    )
+  }
+
+  return (
+    <section className="mt-6 rounded-md border p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <ShieldCheck className="size-4" />
+        <p className="text-sm font-medium">어긋남 점검</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-auto h-7 text-xs"
+          disabled={busy}
+          onClick={() => void run(false)}
+        >
+          다시 재기
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs"
+          onClick={() => setOpen(false)}
+        >
+          접기
+        </Button>
+      </div>
+
+      <ErrorNotice error={error} className="mb-2" />
+
+      <p className="text-muted-foreground mb-2 text-xs">
+        값을 두 벌로 들고 있는 동안(문자열과 어휘) 둘이 벌어질 수 있습니다. 문자열
+        쪽을 지우기 전에 이 수가 0 이어야 합니다.
+      </p>
+
+      {report && report.total === 0 && (
+        <p className="text-xs">
+          어긋난 곳이 없습니다. <span className="text-muted-foreground">두 벌이 같습니다.</span>
+        </p>
+      )}
+
+      {report && report.total > 0 && (
+        <div className="space-y-2">
+          <p className="text-destructive text-xs font-medium">{report.total}건이 벌어졌습니다.</p>
+          {report.items.map((item) => (
+            <div key={`${item.table}.${item.field}`} className="text-xs">
+              <p className="font-mono">
+                {item.table}.{item.field}{' '}
+                <span className="text-muted-foreground">({item.label})</span> {item.count}건
+              </p>
+              {item.examples.map((example) => (
+                <p key={example} className="text-muted-foreground ml-3 font-mono">
+                  {example}
+                </p>
+              ))}
+            </div>
+          ))}
+          {/* **어휘가 정본이다.** 문자열은 Contract 전까지의 캐시이고, 캐시가
+              틀렸으면 원본에서 다시 만드는 것이 유일한 방향이다. 다만 안 이어진
+              행은 반대로 문자열을 어휘로 올린다 — 지우면 그 재료가 무엇이었는지
+              사라진다. */}
+          <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => void run(true)}>
+            어휘에 맞춰 고치기
+          </Button>
+        </div>
+      )}
+    </section>
   )
 }
 

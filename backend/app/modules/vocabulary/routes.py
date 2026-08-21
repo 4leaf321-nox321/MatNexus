@@ -25,6 +25,8 @@ from app.modules.vocabulary.schemas import (
     BulkTermItemOut,
     BulkTermOut,
     DismissRequest,
+    DriftOut,
+    DriftReportOut,
     MergeRequest,
     TermAliasCreateRequest,
     TermAliasOut,
@@ -85,6 +87,62 @@ def list_vocabularies(
         )
         for item in rows
     ]
+
+
+def _report(found: list[services.Drift]) -> DriftReportOut:
+    return DriftReportOut(
+        total=sum(item.count for item in found),
+        items=[
+            DriftOut(
+                table=item.table,
+                field=item.field,
+                label=item.label,
+                count=item.count,
+                examples=item.examples,
+            )
+            for item in found
+        ],
+    )
+
+
+@router.get("/drift", response_model=DriftReportOut)
+def check_drift(
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> DriftReportOut:
+    """문자열 컬럼과 어휘 값이 어긋난 행. **0 이어야 한다.**
+
+    **`/{slug}/...` 보다 먼저 선언한다.** FastAPI 는 선언 순서대로 맞춰 보므로,
+    뒤에 두면 `drift` 가 축 이름 자리에 들어간다(`/classifications` 에서 겪었다).
+
+    ## 왜 이게 있어야 하나
+
+    지금은 같은 사실을 두 벌로 들고 있다(ADR 0010 Expand) — `materials.family`
+    문자열과 `family_term_id`. Contract 에서 문자열을 지우려면 **두 벌이 같다는
+    것을 한 릴리스 동안 봐야 한다.** 볼 도구가 없으면 "지켜봤다" 가 말이 안 된다.
+
+    만들자마자 개발 DB 에서 2건을 찾았고, 그것이 결함 하나를 드러냈다 — 어휘 값
+    이름을 고치면 재료·시료·시편·시험 이름 넷은 전부 따라 바뀌는데 정작 그 값
+    자신은 옛 표기 그대로였다. API 는 200 을 냈다.
+    """
+    return _report(services.drift(db))
+
+
+@router.post("/repair", response_model=DriftReportOut)
+def repair_drift(
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> DriftReportOut:
+    """어긋난 칸을 바로잡는다. **어휘가 정본이다.**
+
+    고치기 전의 목록을 돌려준다 — 무엇을 건드렸는지 사람이 봐야 한다.
+
+    자동으로 안 돈다. 방향을 정해야 하는 일이라(문자열을 고칠 것인가, 어휘를
+    고칠 것인가) 사람이 점검을 보고 누른다.
+    """
+    found = services.repair(db, created_by_id=user.id)
+    db.commit()
+    return _report(found)
 
 
 @router.get("/{slug}/terms", response_model=Page[TermOut])

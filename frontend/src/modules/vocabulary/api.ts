@@ -16,6 +16,7 @@ export type Term = components['schemas']['TermOut']
 export type Alias = components['schemas']['TermAliasOut']
 export type BulkResult = components['schemas']['BulkTermOut']
 export type DeleteResult = components['schemas']['BulkDeleteOut']
+export type DriftReport = components['schemas']['DriftReportOut']
 type TermPage = components['schemas']['Page_TermOut_']
 
 /** 한 번에 보낼 수 있는 최대 줄 수. **서버가 같은 수를 강제한다.** */
@@ -25,6 +26,23 @@ type TermUpdate = components['schemas']['TermUpdateRequest']
 export const vocabularyApi = {
   /** 축 목록. 화면이 '새로 추가' 를 보여 줄지 정하는 데 쓴다. */
   list: () => api.get<Vocabulary[]>('/vocabularies'),
+
+  /**
+   * 문자열 컬럼과 어휘가 어긋난 행. **0 이어야 한다.**
+   *
+   * 지금은 같은 사실을 두 벌로 들고 있다(ADR 0010 Expand) — `materials.family`
+   * 문자열과 `family_term_id`. 문자열을 지우기 전에 두 벌이 같다는 것을 한
+   * 릴리스 동안 봐야 하고, 볼 도구가 없으면 "지켜봤다" 가 말이 안 된다.
+   */
+  drift: () => api.get<DriftReport>('/vocabularies/drift'),
+
+  /**
+   * 어긋난 칸을 바로잡는다. **어휘가 정본이다.**
+   *
+   * 자동으로 안 돈다 — 방향을 정해야 하는 일이라 사람이 점검을 보고 누른다.
+   * 고치기 전의 목록이 돌아온다.
+   */
+  repair: () => api.post<DriftReport>('/vocabularies/repair', {}),
 
   /**
    * 값 검색. **별칭으로도 찾힌다** — `'포스코(주)'` 를 치면 `'포스코'` 가 온다.

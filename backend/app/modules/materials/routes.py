@@ -13,8 +13,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import false, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.database import get_db
 from app.modules.accounts.models import User
@@ -40,6 +40,7 @@ from app.modules.materials.schemas import (
 )
 from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
+from app.modules.vocabulary.models import VocabularyTerm
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -219,15 +220,22 @@ def preview_name(
 #:
 #: `grade`·`details` 를 뺀 이유: `record_name` 이 `{grade}_{details}_{두께}` 라서
 #: (ADR 0004) 이름 검색이 그 둘을 이미 덮는다. 빼도 잃는 것이 없다.
-_SEARCH_COLUMNS = (
+_SEARCH_TEXT = (
     Material.record_name,
     Material.alias,
-    Material.family,
-    Material.category,
+)
+
+#: 어휘를 거치는 검색 축과 그 FK 컬럼. **축으로 좁히는 것이 요점이다**(ADR 0010) —
+#: `materials.family` 는 5만 행인데 값은 5가지고, 어휘 쪽 `family` 축은 5행이다.
+#: 축을 안 좁히고 어휘 전체(23만)를 훑으면 정규화의 이득을 도로 잃는다
+#: (실측: 2글자 검색어에서 79ms 대 0.02ms).
+_SEARCH_AXES = (
+    ("family", Material.family_term_id),
+    ("category", Material.category_term_id),
 )
 
 
-def _search_terms(q: str | None) -> list[Any]:
+def _search_terms(db: Session, q: str | None) -> list[Any]:
     """검색어를 낱말로 나눠 **낱말마다 조건 하나**로 만든다(AND).
 
     이름은 `SECC_MDOI_1.0` 인데 사람은 `SECC 1.0` 이라고 친다. 구분자가 밑줄이라
@@ -239,9 +247,20 @@ def _search_terms(q: str | None) -> list[Any]:
     """
     if not q or not q.strip():
         return []
-    return [
-        or_(*(column.ilike(f"%{word}%") for column in _SEARCH_COLUMNS)) for word in q.split()
-    ]
+    conditions: list[Any] = []
+    for word in q.split():
+        branches: list[Any] = [column.ilike(f"%{word}%") for column in _SEARCH_TEXT]
+        # **어휘를 먼저 찾고 그 id 로 재료를 찾는다.** 상관 서브쿼리
+        # (`IN (SELECT ...)`) 로 쓰면 안 된다 — 그건 인덱스 조건이 아니라 필터로
+        # 강등돼서 BitmapOr 에 못 낀다. 값이 박힌 `IN (id, ...)` 만 낀다.
+        # 실측: 좁은 검색(4건)이 0.08ms → 90ms 로 1000배 느려졌다.
+        ids = vocabulary_services.term_ids_matching(
+            db, [slug for slug, _ in _SEARCH_AXES], word
+        )
+        if ids:
+            branches += [column.in_(ids) for _, column in _SEARCH_AXES]
+        conditions.append(or_(*branches))
+    return conditions
 
 
 @router.get("/classifications", response_model=list[ClassificationOut])
@@ -258,10 +277,17 @@ def list_classifications(
     결과가 늘 0건이다.
     """
     visible = services.visible_materials(db, user).subquery()
+    # 어휘를 거쳐 읽는다(ADR 0010 Contract). 문자열 컬럼은 아직 있지만 여기서는
+    # 안 본다 — 지우기 전에 FK 경로가 같은 답을 내는지 한 릴리스 지켜본다.
+    family_term = aliased(VocabularyTerm)
+    category_term = aliased(VocabularyTerm)
     rows = db.execute(
-        select(visible.c.family, visible.c.category, func.count())
-        .group_by(visible.c.family, visible.c.category)
-        .order_by(visible.c.family, visible.c.category)
+        select(family_term.value, category_term.value, func.count())
+        .select_from(visible)
+        .join(family_term, family_term.id == visible.c.family_term_id, isouter=True)
+        .join(category_term, category_term.id == visible.c.category_term_id, isouter=True)
+        .group_by(family_term.value, category_term.value)
+        .order_by(family_term.value, category_term.value)
     ).all()
     return [
         ClassificationOut(family=family, category=category, count=count)
@@ -284,12 +310,20 @@ def list_materials(
     db: Session = Depends(get_db),
 ) -> Page[MaterialOut]:
     query = services.visible_materials(db, user)
-    for condition in _search_terms(q):
+    for condition in _search_terms(db, q):
         query = query.where(condition)
-    if family:
-        query = query.where(Material.family == family)
-    if category:
-        query = query.where(Material.category == category)
+    # **없는 값으로 거르면 0건이어야 한다.** `== None` 으로 두면 그 축이 비어 있는
+    # 재료가 전부 걸린다 — 조용히 틀리는 쪽이다.
+    for value, slug, column in (
+        (family, "family", Material.family_term_id),
+        (category, "category", Material.category_term_id),
+    ):
+        if not value:
+            continue
+        term = vocabulary_services.resolve(
+            db, vocabulary_services.get_vocabulary(db, slug), value
+        )
+        query = query.where(column == term.id if term else false())
     if scope == "global":
         query = query.where(Material.owner_workspace_id.is_(None))
     elif scope == "mine":

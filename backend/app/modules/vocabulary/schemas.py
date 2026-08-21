@@ -140,3 +140,26 @@ class BulkDeleteOut(BaseModel):
     deleted: int
     blocked: int
     items: list[BulkDeleteItemOut]
+
+
+class DriftOut(BaseModel):
+    """문자열과 어휘가 벌어진 한 칸."""
+
+    table: str
+    field: str
+    label: str
+    """어느 축인가."""
+    count: int
+    examples: list[str]
+    """`문자열 ↔ 어휘 값` 몇 개. **수만 주면 무엇이 벌어졌는지 알 수 없다.**"""
+
+
+class DriftReportOut(BaseModel):
+    """어긋남 점검 결과. **0 이어야 한다.**
+
+    문자열 컬럼을 지우기(Contract) 전에 한 릴리스 동안 0 이어야 한다. 0 이 아닌
+    채로 지우면 어느 쪽이 맞았는지 영영 알 수 없다.
+    """
+
+    total: int
+    items: list[DriftOut]

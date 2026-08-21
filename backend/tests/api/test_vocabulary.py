@@ -717,6 +717,186 @@ class Test강종:
         assert found[0]["usage_count"] == 2
 
 
+class Test어긋남:
+    """문자열과 어휘가 벌어졌는가. **Contract 의 검증 도구다.**
+
+    같은 사실을 두 벌로 들고 있는 동안(Expand) 둘은 벌어질 수 있다. 벌어져도
+    아무도 모르는 것이 문제다 — 개발 DB 에서 2건이 벌어진 채로 있었고, 점검을
+    만들고 나서야 알았다.
+    """
+
+    def test_이름을_고치면_값_자신도_바뀐다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """**실제로 안 바뀐 적이 있다.** 재료 이름 넷은 따라왔는데 정작 어휘 값은
+        옛 표기 그대로였다 — 이름 연쇄만 보던 시험이 못 잡았다."""
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "DRIFTA",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        term = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "DRIFTA"}, headers=admin_headers
+        ).json()["items"][0]
+
+        renamed = client.patch(
+            f"/api/vocabularies/grade/terms/{term['id']}",
+            json={"value": "DRIFTB"},
+            headers=admin_headers,
+        )
+        assert renamed.status_code == 200, renamed.text
+        # 응답이 새 표기여야 한다.
+        assert renamed.json()["value"] == "DRIFTB"
+        # 저장된 것도 새 표기여야 한다.
+        again = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "DRIFT"}, headers=admin_headers
+        ).json()["items"]
+        assert [item["value"] for item in again] == ["DRIFTB"], f"옛 표기가 남았다: {again}"
+
+    def test_점검이_벌어진_칸을_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """점검 자신을 시험한다 — 안 그러면 "0건" 이 맞는 건지 못 세는 건지 모른다."""
+        from app.modules.materials.models import Material
+
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "DRIFTC",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        assert services.drift(db) == []
+
+        # 문자열만 뒤틀어 놓는다 — 어휘를 안 거치고 값을 바꾸는 경로가 하면
+        # 이렇게 된다.
+        material = db.scalar(select(Material).where(Material.grade == "DRIFTC"))
+        assert material is not None
+        material.grade = "DRIFTX"
+        db.commit()
+
+        found = services.drift(db)
+        assert len(found) == 1, f"못 잡았다: {found}"
+        assert found[0].table == "materials"
+        assert found[0].field == "grade"
+        assert found[0].count == 1
+        assert "DRIFTX" in found[0].examples[0]
+
+    def test_점검과_고치기가_API_로_돈다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """**점검만 있고 고칠 데가 없으면 막다른 길이다.**"""
+        from app.modules.materials.models import Material
+
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "DRIFTE",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        clean_report = client.get("/api/vocabularies/drift", headers=admin_headers)
+        assert clean_report.status_code == 200, clean_report.text
+        assert clean_report.json()["total"] == 0
+
+        material = db.scalar(select(Material).where(Material.grade == "DRIFTE"))
+        assert material is not None
+        material.grade = "DRIFTY"
+        db.commit()
+
+        assert (
+            client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 1
+        )
+
+        fixed = client.post("/api/vocabularies/repair", headers=admin_headers)
+        assert fixed.status_code == 200, fixed.text
+        # 고치기 전 목록이 온다 — 무엇을 건드렸는지 사람이 봐야 한다.
+        assert fixed.json()["total"] == 1
+
+        assert (
+            client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 0
+        )
+        db.expire_all()
+        again = db.get(Material, material.id)
+        assert again is not None
+        assert again.grade == "DRIFTE", "어휘 값으로 안 돌아왔다"
+        # **이름도 따라와야 한다.** 강종은 재료 이름을 만든다(ADR 0004) — 고쳤는데
+        # 이름이 옛 강종을 그대로 달고 있으면 고친 것이 아니다.
+        assert again.record_name.startswith("DRIFTE"), (
+            f"이름이 안 따라왔다: {again.record_name}"
+        )
+
+    def test_안_이어진_행은_어휘로_올린다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """방향이 반대다. **문자열을 지우면 그 재료가 무엇이었는지 사라진다** —
+        백필이 못 이은 행(눈에 안 보이는 문자가 든 값)이 실제로 이 상태였다."""
+        from app.modules.materials.models import Material
+
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "DRIFTF",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        material = db.scalar(select(Material).where(Material.grade == "DRIFTF"))
+        assert material is not None
+        material.grade_term_id = None  # 백필이 못 이은 상태
+        db.commit()
+
+        assert (
+            client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 1
+        )
+        client.post("/api/vocabularies/repair", headers=admin_headers)
+
+        db.expire_all()
+        again = db.get(Material, material.id)
+        assert again is not None
+        assert again.grade == "DRIFTF", "문자열이 사라졌다"
+        assert again.grade_term_id is not None, "어휘로 안 올라갔다"
+        assert (
+            client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 0
+        )
+
+    def test_빈_값은_어긋남이_아니다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """`''` 와 `NULL` 이 둘로 갈리면 "없음" 이 두 종류가 된다 — 그건 표기
+        문제이지 어긋남이 아니다. 여기서 걸리면 점검이 늘 시끄러워서 아무도 안 본다."""
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "DRIFTD",
+                "details": "T",
+                "spec_thickness": 1.0,
+                "applied_product": None,
+            },
+            headers=admin_headers,
+        )
+        assert services.drift(db) == []
+
+
 class Test분류_계층:
     """2-3 — **분류는 사슬이다.** Metal → Steel → SECC.
 

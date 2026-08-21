@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -239,6 +239,26 @@ def bump_usage(db: Session, term_id: uuid.UUID | None, delta: int) -> None:
     )
 
 
+def _resync(db: Session) -> None:
+    """원시 SQL 뒤에 세션을 맞춘다. **버리기 전에 먼저 쓴다.**
+
+    두 가지가 겹쳐 있어서 순서가 있다.
+
+    1. 원시 SQL 은 ORM 을 우회한다 — 세션이 들고 있던 객체는 옛 값을 그대로
+       갖고 있어서 바로 뒤에 읽으면 고치기 전 숫자가 나온다.
+    2. 이 세션은 `autoflush=False` 다(`app/database.py`). **아직 안 쓴 변경이
+       세션에 남아 있고, `expire_all()` 은 그것을 버린다.**
+
+    그래서 `flush()` 없이 `expire_all()` 만 하면 조용히 지워진다. 실제로 그랬다 —
+    어휘 값 이름을 고치면 재료·시료·시편·시험 이름 넷은 전부 따라 바뀌는데
+    **정작 그 값 자신은 옛 표기 그대로**였다. API 는 200 을 냈다. 이름 연쇄만
+    보던 시험이 못 잡았고, 어긋남 점검(`drift`)이 개발 DB 에서 2건을 찾아내
+    드러났다.
+    """
+    db.flush()
+    db.expire_all()
+
+
 def rename(db: Session, term: VocabularyTerm, value: str) -> None:
     """값의 표기를 바꾼다. **가리키는 쪽도 함께 맞춘다.**
 
@@ -296,7 +316,7 @@ def rename(db: Session, term: VocabularyTerm, value: str) -> None:
                 ),
                 {"value": cleaned, "term_id": term.id},
             )
-    db.expire_all()
+    _resync(db)
 
     # **쓰는 쪽이 자기 뒤처리를 한다.** 강종이 바뀌면 재료 이름을 다시
     # 만들어야 하는데(ADR 0004), 그것을 여기서 하면 어휘가 재료를 알게 된다.
@@ -333,9 +353,7 @@ def recount(db: Session, vocabulary: Vocabulary) -> None:
         ),
         {"vid": vocabulary.id},
     )
-    # **원시 SQL 은 ORM 을 우회한다.** 세션이 들고 있던 객체는 옛 값을 그대로
-    # 갖고 있어서, 바로 뒤에 읽으면 고치기 전 숫자가 나온다(테스트가 잡았다).
-    db.expire_all()
+    _resync(db)
 
 
 @dataclass(frozen=True)
@@ -463,6 +481,158 @@ _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
 )
 
 
+@dataclass(frozen=True)
+class Drift:
+    """문자열과 어휘가 벌어진 한 칸."""
+
+    table: str
+    field: str
+    label: str
+    count: int
+    examples: list[str]
+
+
+def drift(db: Session) -> list[Drift]:
+    """문자열 컬럼과 어휘 값이 어긋난 행을 센다. **Contract 의 검증 도구다.**
+
+    지금은 같은 사실을 두 벌로 들고 있다 — `materials.family` 문자열과
+    `family_term_id`. 쓰는 경로는 `apply_bindings` 하나지만 그 밖으로 새는 길이
+    있으면(일괄 등록·이관·마이그레이션·DB 직접 수정) 조용히 벌어진다. **조용한
+    것이 문제다** — 오늘 0 인 것을 스크립트를 따로 써서야 알았다.
+
+    문자열 컬럼을 지우기 전에 이 수가 한 릴리스 동안 0 이어야 한다. 0 이 아닌
+    채로 지우면 어느 쪽이 맞았는지 영영 알 수 없다.
+
+    빈 문자열은 NULL 과 같게 본다 — `''` 와 `NULL` 이 둘로 갈리면 "없음" 이 두
+    종류가 되는데, 그건 어긋남이 아니라 표기 문제다(`clean()` 이 이미 막는다).
+    """
+    found: list[Drift] = []
+    for table, bindings, deleted in _COUNT_SOURCES:
+        for binding in bindings:
+            where = (
+                f" FROM {table} AS x"
+                f" LEFT JOIN vocabulary_terms AS t ON t.id = x.{binding.column}"
+                f" WHERE NULLIF(x.{binding.field}, '') IS DISTINCT FROM t.value"
+                f"{deleted.replace('deleted_at', 'x.deleted_at')}"
+            )
+            count = db.scalar(text("SELECT count(*)" + where)) or 0
+            if not count:
+                continue
+            rows = db.execute(
+                text(
+                    f"SELECT coalesce(NULLIF(x.{binding.field}, ''), '(빈 값)'),"
+                    f"       coalesce(t.value, '(안 이어짐)')" + where + " LIMIT 5"
+                )
+            ).all()
+            found.append(
+                Drift(
+                    table=table,
+                    field=binding.field,
+                    label=binding.slug,
+                    count=count,
+                    examples=[
+                        f"{text_value} ↔ {term_value}" for text_value, term_value in rows
+                    ],
+                )
+            )
+    return found
+
+
+def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift]:
+    """어긋난 칸을 바로잡는다. **어휘가 정본이다.**
+
+    방향을 정해야 하는 일이라 자동으로 돌지 않는다 — 사람이 점검을 보고 누른다.
+    두 가지 어긋남이 있고 고치는 방향이 반대다.
+
+    * **어휘는 있는데 문자열이 다르다** — 문자열을 어휘 값으로 다시 쓴다. 문자열은
+      Contract 전까지의 캐시이고, 캐시가 틀렸으면 원본에서 다시 만드는 것이 유일한
+      방향이다(`recount` 와 같은 판단).
+    * **문자열은 있는데 어휘가 없다** — 백필이 못 이은 행이다. 여기서 문자열을
+      지우면 그 재료가 무엇이었는지 사라진다. 반대로 **문자열을 어휘로 올린다.**
+
+    고친 뒤 이름 훅을 때린다 — 강종이 바뀌면 재료 이름이 다시 만들어져야 한다.
+    """
+    before = drift(db)
+    touched: dict[str, set[uuid.UUID]] = {}
+
+    for table, bindings, deleted in _COUNT_SOURCES:
+        for binding in bindings:
+            where = (
+                f" FROM {table} AS x"
+                f" LEFT JOIN vocabulary_terms AS t ON t.id = x.{binding.column}"
+                f" WHERE NULLIF(x.{binding.field}, '') IS DISTINCT FROM t.value"
+                f"{deleted.replace('deleted_at', 'x.deleted_at')}"
+            )
+            rows = db.execute(
+                text(f"SELECT x.id, x.{binding.field}, x.{binding.column}" + where)
+            ).all()
+            if not rows:
+                continue
+
+            vocabulary = get_vocabulary(db, binding.slug)
+            for row_id, text_value, term_id in rows:
+                if term_id is not None:
+                    # 어휘가 정본 — 문자열을 다시 쓴다.
+                    term = db.get(VocabularyTerm, term_id)
+                    if term is None:
+                        continue
+                    db.execute(
+                        text(f"UPDATE {table} SET {binding.field} = :v WHERE id = :i"),
+                        {"v": term.value, "i": row_id},
+                    )
+                    touched.setdefault(binding.slug, set()).add(term.id)
+                    continue
+
+                # 안 이어진 행 — 문자열을 어휘로 올린다. **지우지 않는다.**
+                term = resolve_or_create(
+                    db, vocabulary, text_value, created_by_id=created_by_id
+                )
+                if term is None:
+                    continue
+                db.execute(
+                    text(
+                        f"UPDATE {table} SET {binding.field} = :v, {binding.column} = :t"
+                        f" WHERE id = :i"
+                    ),
+                    {"v": term.value, "t": term.id, "i": row_id},
+                )
+                touched.setdefault(binding.slug, set()).add(term.id)
+
+    _resync(db)
+    for slug, term_ids in touched.items():
+        for term_id in term_ids:
+            vocabulary_hooks.fire_rename(db, slug, term_id)
+    for slug in touched:
+        recount(db, get_vocabulary(db, slug))
+    return before
+
+
+def term_ids_matching(db: Session, slugs: Sequence[str], word: str) -> list[uuid.UUID]:
+    """주어진 축들에서 낱말이 걸리는 값의 id. **축으로 좁히는 것이 요점이다.**
+
+    `materials.family` 는 5만 행인데 값은 5가지다. 어휘 쪽 `family` 축은 5행이다
+    — 5행을 훑는 것이 정규화의 이득 전부인데, 축을 안 좁히면 어휘 23만 행을
+    훑어서 도로 잃는다. 실측: 2글자 검색어(trgm 을 못 탄다)에서 79ms 대 0.02ms.
+    """
+    key = compare_key(word)
+    if not key:
+        return []
+    # **축 id 를 먼저 받는다.** `vocabularies` 와 조인해서 `slug IN (...)` 로 쓰면
+    # 플래너가 축 제한을 나중에 걸고 어휘 23만 행을 훑는다 — 좁히려고 넣은 조건이
+    # 안 듣는다. 실측: 2글자 검색어에서 조인 84ms 대 축 id 0.02ms.
+    axis_ids = list(db.scalars(select(Vocabulary.id).where(Vocabulary.slug.in_(slugs))))
+    if not axis_ids:
+        return []
+    return list(
+        db.scalars(
+            select(VocabularyTerm.id).where(
+                VocabularyTerm.vocabulary_id.in_(axis_ids),
+                VocabularyTerm.normalized.ilike(f"%{key}%"),
+            )
+        )
+    )
+
+
 def add_alias(db: Session, term: VocabularyTerm, alias: str) -> VocabularyAlias | None:
     """다른 표기를 정규 값에 잇는다. **예방이다.**
 
@@ -583,8 +753,7 @@ def merge(
     )
     target.usage_count += source.usage_count
     db.delete(source)
-    db.flush()
-    db.expire_all()
+    _resync(db)
     return moved
 
 

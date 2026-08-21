@@ -1246,6 +1246,65 @@
         "title": "DismissRequest",
         "type": "object"
       },
+      "DriftOut": {
+        "description": "문자열과 어휘가 벌어진 한 칸.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "field",
+          "label",
+          "count",
+          "examples"
+        ],
+        "title": "DriftOut",
+        "type": "object"
+      },
+      "DriftReportOut": {
+        "description": "어긋남 점검 결과. **0 이어야 한다.**\n\n문자열 컬럼을 지우기(Contract) 전에 한 릴리스 동안 0 이어야 한다. 0 이 아닌\n채로 지우면 어느 쪽이 맞았는지 영영 알 수 없다.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DriftOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "DriftReportOut",
+        "type": "object"
+      },
       "EnsembleResultOut": {
         "properties": {
           "created_at": {
@@ -12213,6 +12272,50 @@
           }
         },
         "summary": "List Vocabularies",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/drift": {
+      "get": {
+        "description": "문자열 컬럼과 어휘 값이 어긋난 행. **0 이어야 한다.**\n\n**`/{slug}/...` 보다 먼저 선언한다.** FastAPI 는 선언 순서대로 맞춰 보므로,\n뒤에 두면 `drift` 가 축 이름 자리에 들어간다(`/classifications` 에서 겪었다).\n\n## 왜 이게 있어야 하나\n\n지금은 같은 사실을 두 벌로 들고 있다(ADR 0010 Expand) — `materials.family`\n문자열과 `family_term_id`. Contract 에서 문자열을 지우려면 **두 벌이 같다는\n것을 한 릴리스 동안 봐야 한다.** 볼 도구가 없으면 \"지켜봤다\" 가 말이 안 된다.\n\n만들자마자 개발 DB 에서 2건을 찾았고, 그것이 결함 하나를 드러냈다 — 어휘 값\n이름을 고치면 재료·시료·시편·시험 이름 넷은 전부 따라 바뀌는데 정작 그 값\n자신은 옛 표기 그대로였다. API 는 200 을 냈다.",
+        "operationId": "check_drift_api_vocabularies_drift_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Check Drift",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/repair": {
+      "post": {
+        "description": "어긋난 칸을 바로잡는다. **어휘가 정본이다.**\n\n고치기 전의 목록을 돌려준다 — 무엇을 건드렸는지 사람이 봐야 한다.\n\n자동으로 안 돈다. 방향을 정해야 하는 일이라(문자열을 고칠 것인가, 어휘를\n고칠 것인가) 사람이 점검을 보고 누른다.",
+        "operationId": "repair_drift_api_vocabularies_repair_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Repair Drift",
         "tags": [
           "vocabulary"
         ]
