@@ -367,6 +367,9 @@ MATERIAL_BINDINGS = (
     Binding("family", "family", "family_term_id"),
     Binding("category", "category", "category_term_id", parent_field="family"),
     Binding("grade", "grade", "grade_term_id", parent_field="category"),
+    # 용도. 이름을 안 만드는 축이라 연쇄 변경이 없다 — 그래서 부모도 안 붙인다.
+    Binding("product", "applied_product", "applied_product_term_id"),
+    Binding("part", "applied_part", "applied_part_term_id"),
 )
 SAMPLE_BINDINGS = (
     Binding("manufacturer", "manufacturer", "manufacturer_term_id"),

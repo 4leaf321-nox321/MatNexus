@@ -187,14 +187,18 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
             뭐가 있나" 를 물으려면 로트를 전부 뒤져야 했고, 같은 재료의 로트
             다섯 개에 같은 용도를 다섯 번 적어야 했다. */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-product">적용 제품</Label>
-            <Input id="edit-product" placeholder="도어" {...field('applied_product')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-part">적용 부위</Label>
-            <Input id="edit-part" placeholder="이너 패널" {...field('applied_part')} />
-          </div>
+          <VocabularyField
+            slug="product"
+            label="적용 제품"
+            value={form.applied_product}
+            onChange={(next) => setForm((current) => ({ ...current, applied_product: next }))}
+          />
+          <VocabularyField
+            slug="part"
+            label="적용 부위"
+            value={form.applied_part}
+            onChange={(next) => setForm((current) => ({ ...current, applied_part: next }))}
+          />
         </div>
 
         <div className="rounded-md border p-3">

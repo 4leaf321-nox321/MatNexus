@@ -513,6 +513,129 @@ class Test여러_축:
         assert least[0]["value"] == "오타제쳘"
 
 
+class Test용도:
+    """2단계 마지막 두 축 — **용도가 집계 축이 된다.**
+
+    "도어 이너용 재료가 뭐가 있나" 는 실제로 물어보는 질문이다. 자유 문자열이면
+    `도어`/`Door`/`도어 ` 가 갈려서 그 질문에 답이 셋 나온다.
+    """
+
+    def _material(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        grade: str,
+        product: str | None = None,
+        part: str | None = None,
+    ) -> dict[str, Any]:
+        created: dict[str, Any] = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": grade,
+                "spec_thickness": 1.0,
+                "applied_product": product,
+                "applied_part": part,
+            },
+            headers=headers,
+        ).json()
+        return created
+
+    def test_용도가_어휘를_거친다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        created = self._material(client, admin_headers, "USE01", product="도어  ", part="이너")
+        # 가운데 두 칸이 정리된 값이 재료에 들어간다.
+        assert created["applied_product"] == "도어"
+
+        found = client.get(
+            "/api/vocabularies/product/terms",
+            params={"q": "도어"},
+            headers=admin_headers,
+        ).json()["items"]
+        assert [item["value"] for item in found] == ["도어"]
+        assert found[0]["usage_count"] == 1
+
+    def test_표기가_갈려도_한_값이다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """이것이 이 축을 만든 이유 전부다."""
+        for index, spelling in enumerate(
+            ["후드", "후드 ", unicodedata.normalize("NFD", "후드")]
+        ):
+            self._material(client, admin_headers, f"USE1{index}", product=spelling)
+
+        found = client.get(
+            "/api/vocabularies/product/terms",
+            params={"q": "후드"},
+            headers=admin_headers,
+        ).json()["items"]
+        assert len(found) == 1, f"표기가 갈려 값이 여러 개 생겼다: {found}"
+        assert found[0]["usage_count"] == 3
+
+    def test_부위는_제품_아래에_안_매달린다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """**값 하나에 부모는 하나다.** `이너 패널` 은 도어에도 후드에도 쓰인다 —
+        부모를 붙이면 먼저 들어온 제품이 이기고 나머지는 조용히 틀린 곳에 매달린다.
+        """
+        self._material(client, admin_headers, "USE20", product="도어", part="이너 패널")
+        self._material(client, admin_headers, "USE21", product="후드", part="이너 패널")
+
+        found = client.get(
+            "/api/vocabularies/part/terms",
+            params={"q": "이너 패널"},
+            headers=admin_headers,
+        ).json()["items"]
+        assert len(found) == 1
+        assert found[0]["parent_value"] is None, "부위가 제품에 매달렸다"
+        assert found[0]["usage_count"] == 2
+
+        axes = {
+            item["slug"]: item
+            for item in client.get("/api/vocabularies", headers=admin_headers).json()
+        }
+        assert axes["part"]["parent_slug"] is None
+
+    def test_용도_이름을_고쳐도_재료_이름은_그대로다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """강종과 다른 점이다. 강종은 `record_name` 을 만들지만(ADR 0004) 용도는
+        안 만든다 — 그래서 연쇄 변경 훅이 없어도 된다. 다만 **문자열 컬럼은
+        따라와야 한다**(Expand 단계라 화면이 그쪽을 읽는다).
+        """
+        created = self._material(client, admin_headers, "USE30", product="구제품")
+        term = client.get(
+            "/api/vocabularies/product/terms",
+            params={"q": "구제품"},
+            headers=admin_headers,
+        ).json()["items"][0]
+
+        client.patch(
+            f"/api/vocabularies/product/terms/{term['id']}",
+            json={"value": "새제품"},
+            headers=admin_headers,
+        )
+
+        after = client.get(f"/api/materials/{created['id']}", headers=admin_headers).json()
+        assert after["applied_product"] == "새제품", "문자열이 안 따라왔다"
+        assert after["record_name"] == created["record_name"], "이름이 바뀌면 안 된다"
+
+    def test_재료를_지우면_쓰는_곳이_줄어든다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        created = self._material(client, admin_headers, "USE40", product="지울제품")
+        client.delete(f"/api/materials/{created['id']}", headers=admin_headers)
+
+        found = client.get(
+            "/api/vocabularies/product/terms",
+            params={"q": "지울제품", "include_hidden": "true"},
+            headers=admin_headers,
+        ).json()["items"]
+        assert found[0]["usage_count"] == 0
+
+
 class Test강종:
     """2-2 — **강종은 재료 이름을 만든다.**
 

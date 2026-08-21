@@ -153,6 +153,15 @@ class Material(Base):
     로트가 실제로 어디로 갔는지는 생산관리의 일이고 이 시스템의 질문이 아니다.
     """
 
+    applied_product_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    applied_part_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    """용도 어휘(ADR 0010). **이름에는 안 들어간다** — 강종과 달리 값을 고쳐도
+    재료 이름이 안 바뀐다. 그래서 연쇄 변경 훅이 필요 없다."""
+
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
     """공칭 밀도 SI(kg/m³). 문헌값·등급값이다.
 

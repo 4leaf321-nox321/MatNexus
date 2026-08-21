@@ -38,6 +38,14 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None]] = [
     ("family", "Family", "open", 1, None),
     ("category", "Category", "open", 2, "family"),
     ("grade", "강종", "open", 5, "category"),
+    # **용도는 재료의 성질이다**(전에는 시료에 있었다). "도어 이너용 재료가 뭐가
+    # 있나" 가 집계 질문이 되려면 자유 문자열이면 안 된다 — `도어`/`Door`/`도어 `
+    # 가 갈리면 그 질문에 답이 셋 나온다.
+    ("product", "적용 제품", "open", 60, None),
+    # **부위를 제품 아래에 두지 않는다.** 계층은 값 하나에 부모 하나인데(`grade`
+    # 의 부모가 `category` 하나이듯), `이너 패널` 은 도어에도 후드에도 쓰인다.
+    # 부모를 붙이면 먼저 들어온 제품이 이기고 나머지는 조용히 틀린 곳에 매달린다.
+    ("part", "적용 부위", "open", 70, None),
 ]
 
 #: **전부 `open` 이다.** `closed` 는 만들어 두고 안 켠다.

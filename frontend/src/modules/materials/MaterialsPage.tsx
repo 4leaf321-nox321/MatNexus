@@ -450,14 +450,18 @@ function RegisterDialog({
           </div>
           {/* CAE 물성. **여기 없으면 카드를 만들 때 막힌다** — 그때 되돌아와
               채우는 것보다 아는 값이면 지금 넣는 편이 싸다. 비워도 등록된다. */}
-          <div className="space-y-1.5">
-            <Label htmlFor="product">적용 제품 (선택)</Label>
-            <Input id="product" placeholder="도어" {...field('applied_product')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="part">적용 부위 (선택)</Label>
-            <Input id="part" placeholder="이너 패널" {...field('applied_part')} />
-          </div>
+          <VocabularyField
+            slug="product"
+            label="적용 제품 (선택)"
+            value={form.applied_product}
+            onChange={(next) => setForm((current) => ({ ...current, applied_product: next }))}
+          />
+          <VocabularyField
+            slug="part"
+            label="적용 부위 (선택)"
+            value={form.applied_part}
+            onChange={(next) => setForm((current) => ({ ...current, applied_part: next }))}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="density">밀도 (kg/m³, 선택)</Label>
             <Input id="density" type="number" step="1" placeholder="7850" {...field('density')} />
