@@ -30,11 +30,11 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version-file: '.python-version'
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version-file: '.node-version'
 
       # windows 러너 이미지에는 PostgreSQL 이 설치돼 있지만 꺼져 있다.
       - name: PostgreSQL 시작
