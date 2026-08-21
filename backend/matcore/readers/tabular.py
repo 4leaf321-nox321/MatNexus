@@ -131,6 +131,10 @@ def decode(data: bytes, encoding: str | None = None) -> tuple[str, str, list[str
         try:
             text = data.decode(candidate)
         except UnicodeDecodeError:
+            if index == 0:
+                salvaged = _salvage_utf8(data, warnings)
+                if salvaged is not None:
+                    return salvaged, "utf-8(일부 복구)", warnings
             continue
         if index > 0:
             warnings.append(
@@ -140,6 +144,52 @@ def decode(data: bytes, encoding: str | None = None) -> tuple[str, str, list[str
         return text, candidate, warnings
 
     raise ReadError(f"인코딩을 알 수 없습니다 ({' · '.join(ENCODINGS)} 모두 실패).")
+
+
+#: 살려 볼 만한 최대 상한 자리 수. 이보다 많으면 "상한 UTF-8" 이 아니라 애초에
+#: 다른 인코딩이다.
+#:
+#: **비율로 재면 안 된다.** 처음에 "비ASCII 글자의 5% 미만" 으로 썼다가 바로
+#: 걸렸다 — 장비 파일은 비ASCII 가 `°C` 몇 개와 시험자 이름뿐이라, 한 곳만 상해도
+#: 7.7% 가 된다. 파일이 작을수록 비율이 무의미해진다.
+MAX_SALVAGEABLE_BREAKS = 10
+
+
+def _salvage_utf8(data: bytes, warnings: list[str]) -> str | None:
+    """거의 UTF-8 인 파일을 UTF-8 로 살린다. 아니면 `None`.
+
+    **바이트 하나가 상했다고 다른 인코딩으로 내려가면 안 된다.**
+
+    실측(`Example FreqTemp2.csv`, TA DMA850): 시험자 이름 `박용진` 의 마지막
+    바이트 하나가 `?` 로 치환돼 있었다. 파일의 나머지는 전부 멀쩡한 UTF-8 인데,
+    그 한 바이트 때문에 UTF-8 해독이 실패하고 `cp949` 로 내려갔다. cp949 는
+    아무 바이트나 받아들이므로 "성공" 하고, 그 순간 **파일 전체의 `°C` 가 `째C`
+    가 된다.** 온도 단위를 시스템이 못 알아본다.
+
+    **사람 이름 한 글자가 온도 단위를 망가뜨린 것이다.** 조용히, 오류 없이.
+
+    그래서 상한 자리가 아주 적으면 UTF-8 로 읽고 **어디가 상했는지 말한다.**
+    나머지 99.97% 를 살리는 편이 낫다.
+    """
+    text = data.decode("utf-8", errors="replace")
+    broken = text.count("�")
+    if not broken:
+        return None
+    # **제대로 읽힌 비ASCII 글자가 진짜 판별이다.** 원래 cp949 인 파일에는 이게
+    # 거의 없다 — 한글 cp949 바이트는 UTF-8 로 읽으면 대부분 깨지기 때문이다.
+    # 반대로 상한 UTF-8 파일에는 멀쩡한 `°`·한글이 잔뜩 남아 있다.
+    intact = sum(1 for char in text if ord(char) > 127 and char != "�")
+    if broken > MAX_SALVAGEABLE_BREAKS or intact <= broken:
+        return None
+
+    at = text.find("�")
+    line = text.count("\n", 0, at) + 1
+    warnings.append(
+        f"UTF-8 인데 {broken}자리가 상해 있습니다(처음 상한 곳: {line}행). 그 자리만 "
+        f"'�' 로 두고 나머지는 그대로 읽었습니다 — 다른 인코딩으로 읽으면 "
+        f"단위 표기(°C 등)까지 함께 깨집니다."
+    )
+    return text
 
 
 # --- 구분자 -----------------------------------------------------------------

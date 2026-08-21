@@ -94,6 +94,70 @@ rad/s,MPa
             sniff(encode(self.JSON[: len(self.JSON) // 2]))
 
 
+class Test상한UTF8을살린다:
+    """**바이트 하나가 상했다고 다른 인코딩으로 내려가면 안 된다.**
+
+    실측(`Example FreqTemp2.csv`, TA DMA850): 시험자 이름 마지막 바이트 하나가
+    `?` 로 치환돼 있었다. 나머지는 전부 멀쩡한 UTF-8 인데 그 한 바이트 때문에
+    해독이 실패하고 `cp949` 로 내려갔다. cp949 는 아무 바이트나 받아들이므로
+    "성공" 하고, 그 순간 셋이 한꺼번에 망가졌다.
+
+        단위        °C  →  째C            온도 단위를 시스템이 못 알아본다
+        표 이름     TTS - shift factors  →  이름 없음 · 헤더 유실
+        한글        박용진  →  諛뺤슜吏
+
+    **사람 이름 한 글자가 온도 단위를 망가뜨린 것이다.** 조용히, 오류 없이.
+    """
+
+    #: 표 부분. 단위 줄이 살아남는지가 이 시험의 요점이다.
+    TAIL: ClassVar[str] = """
+온도,25
+
+주파수,저장 탄성률
+Hz,MPa
+1,201242
+2,201243
+"""
+
+    #: 멀쩡한 UTF-8 인데 **한 글자의 마지막 바이트만** `?`(0x3F) 로 치환된 파일.
+    #: 실파일이 정확히 이 모양이었다 — `진` 의 3바이트 중 끝이 날아갔다.
+    DAMAGED: ClassVar[bytes] = (
+        "Operator,박용".encode() + "진".encode()[:2] + b"?" + TAIL.encode()
+    )
+
+    def test_상한_자리만_두고_나머지를_읽는다(self) -> None:
+        structure = read(self.DAMAGED)
+        assert structure.encoding.startswith("utf-8")
+        # 단위가 살아 있어야 한다 — 이게 이 시험의 요점이다.
+        assert structure.tables[0].units == ("Hz", "MPa")
+
+    def test_어디가_상했는지_말한다(self) -> None:
+        """조용히 고치면 다음에 같은 파일이 와도 아무도 모른다."""
+        structure = read(self.DAMAGED)
+        assert any("상해 있습니다" in warning for warning in structure.warnings)
+
+    def test_진짜_cp949_는_cp949_로_읽는다(self) -> None:
+        """살리기가 지나치면 이쪽이 깨진다. 원래 cp949 인 파일에는 **제대로 읽힌
+        비ASCII 글자가 없다** — 그것이 판별이다."""
+        korean = "장비,DMA850\n시험자,박용진" + self.TAIL
+        structure = read(korean.encode("cp949"))
+        assert structure.encoding == "cp949"
+        assert dict(structure.meta)["시험자"] == "박용진"
+
+    def test_많이_상한_파일은_안_살린다(self) -> None:
+        """열 곳 넘게 상했으면 '상한 UTF-8' 이 아니라 애초에 다른 것이다.
+
+        멀쩡한 글자가 아무리 많아도 개수 한도가 먼저 걸려야 한다 — 살리기가
+        지나치면 진짜 다른 인코딩인 파일을 �로 뒤덮인 채 '성공' 시킨다.
+        """
+        # 꼬리를 ASCII 로 둔다 — 한글을 넣으면 cp949 도 못 읽어서 "인코딩을 알 수
+        # 없습니다" 가 되고, 재려던 것(개수 한도)이 아니라 다른 것이 걸린다.
+        ascii_tail = b"\n\nfrequency,storage\nHz,MPa\n1,201242\n2,201243\n3,201244\n"
+        broken = ("진".encode()[:2] + b"?") * 12
+        structure = read(("°" * 50).encode() + broken + ascii_tail)
+        assert not structure.encoding.startswith("utf-8")
+
+
 class Test엑셀패딩:
     """엑셀이 내보낸 CSV 는 빈 칸으로 줄 끝을 채운다. 실측 파일은 67칸 중 4칸만
     채워져 있었다.
