@@ -1,0 +1,34 @@
+{
+  "dma-test-frequency-temperature-sweep": {
+    "": {},
+    "Test Condition": {
+      "Specimen Number": "1",
+      "Oscillation Temperature Sweep, Strain (%)": "0.005"
+    },
+    "Test Result": {
+      "Instrument name": "DMA850-00913",
+      "Length (mm)": "50.0",
+      "Width (mm)": "4.938",
+      "Thickness (mm)": "0.989",
+      "DMA Test (Frequency-Temperature Sweep) Raw Data": {
+        "Temperature Sweep (Multifrequency) - 2": {
+          "#": ["1", "2", "3"],
+          "Angular frequency (rad/s)": ["126.289", "66.2839", "36.2839"],
+          "Temperature (°C)": ["-40.00", "-40.05", "-40.13"],
+          "Tan(delta)": ["4.78897e-3", "4.79897e-3", "4.80897e-3"],
+          "Storage modulus (MPa)": ["201242", "201243", "201244"]
+        },
+        "Temperature Sweep (Multifrequency) - 3": {
+          "#": ["1", "2", "3"],
+          "Angular frequency (rad/s)": ["126.289", "66.2839", "36.2839"],
+          "Temperature (°C)": ["-30.00", "-30.05", "-30.13"],
+          "Tan(delta)": ["5.78897e-3", "5.79897e-3", "5.80897e-3"],
+          "Storage modulus (MPa)": ["198242", "198243", "198244"]
+        }
+      }
+    },
+    "Data Information": {
+      "DMA Frequency Temperature Sweep Data ID": "DMAFreqTemp_SAMPLE_1"
+    }
+  }
+}

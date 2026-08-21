@@ -28,6 +28,7 @@ DB 도 HTTP 도 모른다. 바이트가 들어오고 구조가 나간다.
 
 from __future__ import annotations
 
+from matcore.readers.json_tables import looks_like_json, read_json
 from matcore.readers.tabular import (
     ReadError,
     ReadOptions,
@@ -37,4 +38,13 @@ from matcore.readers.tabular import (
     sniff,
 )
 
-__all__ = ["ReadError", "ReadOptions", "Table", "TabularFile", "read", "sniff"]
+__all__ = [
+    "ReadError",
+    "ReadOptions",
+    "Table",
+    "TabularFile",
+    "looks_like_json",
+    "read",
+    "read_json",
+    "sniff",
+]

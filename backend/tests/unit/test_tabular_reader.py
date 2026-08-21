@@ -20,9 +20,17 @@ def encode(text: str) -> bytes:
     return text.strip("\n").encode("utf-8")
 
 
-class TestJson을표로착각하지않는다:
+class TestJson은Json리더로간다:
     """기존 앱의 `.mtet`·`.mdss`·`.mdft` 는 JSON 인데, 배열 안 숫자 줄이 연달아
-    나와 "표 93개" 로 잡혔다. **고유 파일 131개 중 59개**가 이렇게 '성공' 했다."""
+    나와 "표 93개" 로 잡혔다. **고유 파일 131개 중 59개**가 이렇게 '성공' 했다.
+
+    처음에는 **거절**했다. 조용히 틀린 성공보다 낫기 때문이다. 그런데 거절만
+    하면 그 파일들은 영영 안 들어온다 — 그래서 `readers/json_tables.py` 를
+    만들고, `read()` 가 내용을 보고 갈라 준다.
+
+    여기 남은 시험은 **갈림길이 제대로 도는지**를 지킨다. 이 파일이 다시 구분자
+    리더로 흘러가면 그때가 '표 93개' 로 돌아가는 날이다.
+    """
 
     JSON = """
 {
@@ -42,16 +50,48 @@ class TestJson을표로착각하지않는다:
 }
 """
 
-    def test_열_이름이_없으면_표가_아니다(self) -> None:
-        with pytest.raises(ReadError) as caught:
-            sniff(encode(self.JSON))
-        assert "열 이름이 하나도 없습니다" in str(caught.value)
+    def test_숫자_줄을_표로_세지_않는다(self) -> None:
+        """**'표 93개' 가 이 시험이 막는 것이다.** 배열 안의 숫자 줄은 표가 아니다."""
+        structure = sniff(encode(self.JSON))
+        assert len(structure.tables) == 1
 
-    def test_왜_거절했는지_말한다(self) -> None:
-        """'실패' 만 알려 주면 사람은 파일이 깨진 줄 안다. JSON 일 수 있다는
-        말이 있어야 다음 행동이 정해진다."""
-        with pytest.raises(ReadError, match="JSON"):
-            sniff(encode(self.JSON))
+    def test_열_이름을_키에서_얻는다(self) -> None:
+        """구분자 리더는 이 파일에서 열 이름을 하나도 못 찾았다. JSON 은 키가
+        곧 열 이름이라 찾을 것도 없다."""
+        table = sniff(encode(self.JSON)).tables[0]
+        assert table.header == ("Standard travel",)
+        assert table.name == "Tensile Test Raw Data"
+        assert table.row_count == 4
+        # **원문 문자열 그대로.** 숫자로 바꾸는 것은 매핑을 정한 뒤의 일이다.
+        assert table.rows[0] == ("1.46484e-07",)
+
+    def test_표_안의_열이_메타로_새지_않는다(self) -> None:
+        """새면 메타가 수백 줄이 되고 사람이 미리보기에서 아무것도 못 찾는다."""
+        meta = dict(sniff(encode(self.JSON)).meta)
+        assert meta == {"Specimen Number": "1"}
+
+    def test_구분자_텍스트의_마커를_JSON_으로_보지_않는다(self) -> None:
+        """**실측으로 걸렸다.** `[` 로 시작하면 JSON 이라고 봤더니 `[step]` 마커로
+        시작하는 파일이 "1행 2칸: Expecting value" 로 죽었다 — 읽히던 것이 안
+        읽혔다. `{` 는 확실하지만 `[` 는 실제로 파싱될 때만 JSON 이다."""
+        structure = sniff(
+            encode(
+                """
+[step]
+Angular frequency,Storage modulus
+rad/s,MPa
+6.28,201242
+6.29,201243
+"""
+            )
+        )
+        assert len(structure.tables) == 1
+        assert structure.tables[0].header == ("Angular frequency", "Storage modulus")
+
+    def test_깨진_JSON_은_조용히_넘어가지_않는다(self) -> None:
+        """잘린 JSON 을 텍스트 리더로 흘려보내면 그게 '표 93개' 다."""
+        with pytest.raises(ReadError, match="파싱에 실패"):
+            sniff(encode(self.JSON[: len(self.JSON) // 2]))
 
 
 class Test엑셀패딩:

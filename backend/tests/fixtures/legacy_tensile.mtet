@@ -1,0 +1,26 @@
+{
+  "tensile-test": {
+    "": {},
+    "Test Condition": {
+      "Specimen Number": "1",
+      "Instrument name": "Zwick Z100",
+      "Specimen Real Thickness (mm)": "0.986",
+      "Specimen Real Width (mm)": "12.473"
+    },
+    "Test Result": {
+      "Force maximum (MPa)": "282.128",
+      "Force at proof stress 0.2% (MPa)": "159.979",
+      "Yield strain": "Unknown",
+      "Tensile Test Raw Data": {
+        "#": ["1", "2", "3", "4", "5"],
+        "Standard extensometer (mm)": ["0.0000", "0.0099", "0.0210", "0.0299", "0.0402"],
+        "Standard load cell (N)": ["19.4642", "26.7450", "33.8830", "41.0021", "48.2213"],
+        "Specimen width (mm)": ["12.473", "12.473", "12.473", "12.473", "12.473"]
+      }
+    },
+    "Data Information": {
+      "Technical Data Record Name": "SAMPLE_1",
+      "Tensile Data ID": "TensileTest_SAMPLE_1"
+    }
+  }
+}

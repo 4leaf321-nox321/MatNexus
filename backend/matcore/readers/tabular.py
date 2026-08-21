@@ -259,6 +259,15 @@ def read(data: bytes, options: ReadOptions | None = None) -> TabularFile:
     opts = options or ReadOptions()
     text, encoding, warnings = decode(data, opts.encoding)
 
+    # **JSON 이면 다른 리더로 간다.** 입구는 하나로 둔다 — 프로파일도 미리보기도
+    # `read()` 만 부르므로, 여기서 갈라야 양쪽이 같은 `TabularFile` 을 본다.
+    from matcore.readers import json_tables
+
+    if json_tables.looks_like_json(text):
+        return json_tables.read_json(
+            data, text=text, encoding=encoding, warnings=warnings, options=opts
+        )
+
     if opts.skip_lines:
         text = "\n".join(text.splitlines()[opts.skip_lines :])
 
