@@ -431,8 +431,8 @@ class TestClassifications:
         assert crossed["total"] == 0
 
 
-class Test어휘로_읽기:
-    """Contract — **목록·검색·집계가 문자열이 아니라 어휘를 본다**(ADR 0010).
+class Test기준정보로_읽기:
+    """Contract — **목록·검색·집계가 문자열이 아니라 기준정보를 본다**(ADR 0010).
 
     문자열 컬럼은 아직 있다. 지우기 전에 FK 경로가 같은 답을 내는지 한 릴리스
     지켜보는 것이 이 단계의 목적이고, 이 시험들이 "같은 답" 의 뜻이다.
@@ -441,7 +441,7 @@ class Test어휘로_읽기:
     def test_없는_값으로_거르면_0건이다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
-        """**어휘를 못 찾았을 때가 함정이다.** `family_term_id == None` 으로 두면
+        """**기준정보를 못 찾았을 때가 함정이다.** `family_term_id == None` 으로 두면
         그 축이 비어 있는 재료가 전부 걸린다 — 거르려고 눌렀는데 늘어난다."""
         _create_material(client, admin_headers, grade="A")
         _create_material(client, admin_headers, grade="B", family="Polymer", category="PP")
@@ -449,10 +449,10 @@ class Test어휘로_읽기:
         found = client.get("/api/materials?family=없는분류", headers=admin_headers).json()
         assert found["total"] == 0, f"없는 분류로 걸렀는데 {found['total']}건이 나왔다"
 
-    def test_어휘_이름을_고치면_필터도_새_이름을_쓴다(
+    def test_기준정보_이름을_고치면_필터도_새_이름을_쓴다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
-        """FK 를 읽는다는 것의 뜻이다 — 어휘 한 행을 고치면 목록·검색·집계가
+        """FK 를 읽는다는 것의 뜻이다 — 기준정보 한 행을 고치면 목록·검색·집계가
         전부 따라온다."""
         _create_material(client, admin_headers, grade="A", family="Foam", category="EPP")
         term = client.get(
@@ -479,7 +479,7 @@ class Test어휘로_읽기:
     def test_낱말마다_AND_가_유지된다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
-        """어휘를 거치면서 낱말 조건이 OR 로 새면 좁히려고 더 친 것이 넓어진다."""
+        """기준정보를 거치면서 낱말 조건이 OR 로 새면 좁히려고 더 친 것이 넓어진다."""
         _create_material(client, admin_headers, grade="ALPHA", category="Steel")
         _create_material(client, admin_headers, grade="BETA", family="Polymer", category="PP")
 

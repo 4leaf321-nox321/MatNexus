@@ -1,4 +1,4 @@
-"""어휘 — **눈에 같아 보이는 것을 하나로 모으는가.**
+"""기준정보 — **눈에 같아 보이는 것을 하나로 모으는가.**
 
 여기서 지키는 것 셋.
 
@@ -245,7 +245,7 @@ class Test시료와의_연결:
         db: Session,
         material: dict[str, Any],
     ) -> None:
-        """**어휘를 도입한 이유가 이 줄이다.**
+        """**기준정보를 도입한 이유가 이 줄이다.**
 
         전에는 문자열로 비교해서 '포스코' 와 '포스코 ' 를 다른 제조사로 보고
         헛경고를 냈다. 경고를 만들어 놓고 그 입력을 자유 텍스트로 두는 것이
@@ -264,7 +264,7 @@ class Test시료와의_연결:
         ids = {item["manufacturer"] for item in samples}
         assert ids == {"조용제철"}, f"저장된 표기가 갈렸다: {ids}"
 
-    def test_어휘를_거쳐_저장된다(
+    def test_기준정보를_거쳐_저장된다(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
@@ -284,7 +284,7 @@ class Test시료와의_연결:
 
 
 class Test관리:
-    """**어휘를 켜 두고 고칠 데가 없으면 절반만 한 것이다.**
+    """**기준정보를 켜 두고 고칠 데가 없으면 절반만 한 것이다.**
 
     오타가 값이 되면 그것을 고르는 다음 사람이 생기고, 오염이 자기 강화된다.
     개발 DB 에 실제로 `'???'` 가 들어가 있었다.
@@ -451,7 +451,7 @@ class Test여러_축:
         # 한 값이 **두 컬럼**에서 쓰인다.
         assert found[0]["usage_count"] == 2
 
-    def test_시편_규격도_어휘를_거친다(
+    def test_시편_규격도_기준정보를_거친다(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
@@ -557,7 +557,7 @@ class Test용도:
         ).json()
         return created
 
-    def test_용도가_어휘를_거친다(
+    def test_용도가_기준정보를_거친다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
     ) -> None:
         created = self._material(client, admin_headers, "USE01", product="도어  ", part="이너")
@@ -733,7 +733,7 @@ class Test강종:
 
 
 class Test어긋남:
-    """문자열과 어휘가 벌어졌는가. **Contract 의 검증 도구다.**
+    """문자열과 기준정보가 벌어졌는가. **Contract 의 검증 도구다.**
 
     같은 사실을 두 벌로 들고 있는 동안(Expand) 둘은 벌어질 수 있다. 벌어져도
     아무도 모르는 것이 문제다 — 개발 DB 에서 2건이 벌어진 채로 있었고, 점검을
@@ -743,7 +743,7 @@ class Test어긋남:
     def test_이름을_고치면_값_자신도_바뀐다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
     ) -> None:
-        """**실제로 안 바뀐 적이 있다.** 재료 이름 넷은 따라왔는데 정작 어휘 값은
+        """**실제로 안 바뀐 적이 있다.** 재료 이름 넷은 따라왔는데 정작 기준정보 값은
         옛 표기 그대로였다 — 이름 연쇄만 보던 시험이 못 잡았다."""
         client.post(
             "/api/materials",
@@ -793,7 +793,7 @@ class Test어긋남:
         )
         assert services.drift(db) == []
 
-        # 문자열만 뒤틀어 놓는다 — 어휘를 안 거치고 값을 바꾸는 경로가 하면
+        # 문자열만 뒤틀어 놓는다 — 기준정보를 안 거치고 값을 바꾸는 경로가 하면
         # 이렇게 된다.
         material = db.scalar(select(Material).where(Material.grade == "DRIFTC"))
         assert material is not None
@@ -856,14 +856,14 @@ class Test어긋남:
         db.expire_all()
         again = db.get(Material, material.id)
         assert again is not None
-        assert again.grade == "DRIFTE", "어휘 값으로 안 돌아왔다"
+        assert again.grade == "DRIFTE", "기준정보 값으로 안 돌아왔다"
         # **이름도 따라와야 한다.** 강종은 재료 이름을 만든다(ADR 0004) — 고쳤는데
         # 이름이 옛 강종을 그대로 달고 있으면 고친 것이 아니다.
         assert again.record_name.startswith("DRIFTE"), (
             f"이름이 안 따라왔다: {again.record_name}"
         )
 
-    def test_안_이어진_행은_어휘로_올린다(
+    def test_안_이어진_행은_기준정보로_올린다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
     ) -> None:
         """방향이 반대다. **문자열을 지우면 그 재료가 무엇이었는지 사라진다** —
@@ -895,7 +895,7 @@ class Test어긋남:
         again = db.get(Material, material.id)
         assert again is not None
         assert again.grade == "DRIFTF", "문자열이 사라졌다"
-        assert again.grade_term_id is not None, "어휘로 안 올라갔다"
+        assert again.grade_term_id is not None, "기준정보로 안 올라갔다"
         assert (
             client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 0
         )
@@ -1146,7 +1146,7 @@ class Test분류_계층:
 class Test별칭과_병합:
     """3단계 — **표기가 갈렸을 때 되돌릴 길.**
 
-    2단계까지는 어휘를 만들기만 했다. 잘못 갈린 것을 합치거나, 애초에 안 갈리게
+    2단계까지는 기준정보를 만들기만 했다. 잘못 갈린 것을 합치거나, 애초에 안 갈리게
     막을 방법이 없었다.
     """
 

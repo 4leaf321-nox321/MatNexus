@@ -1,4 +1,4 @@
-"""어휘 API 의 모양."""
+"""기준정보 API 의 모양."""
 
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ class BulkDeleteOut(BaseModel):
 
 
 class DriftOut(BaseModel):
-    """문자열과 어휘가 벌어진 한 칸."""
+    """문자열과 기준정보가 벌어진 한 칸."""
 
     table: str
     field: str
@@ -152,7 +152,7 @@ class DriftOut(BaseModel):
     """어느 축인가."""
     count: int
     examples: list[str]
-    """`문자열 ↔ 어휘 값` 몇 개. **수만 주면 무엇이 벌어졌는지 알 수 없다.**"""
+    """`문자열 ↔ 기준정보 값` 몇 개. **수만 주면 무엇이 벌어졌는지 알 수 없다.**"""
 
 
 class DriftReportOut(BaseModel):

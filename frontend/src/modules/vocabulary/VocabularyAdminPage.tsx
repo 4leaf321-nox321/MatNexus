@@ -1,7 +1,7 @@
 /**
- * 어휘 관리 — **잘못 들어간 값을 고칠 자리.**
+ * 기준정보 관리 — **잘못 들어간 값을 고칠 자리.**
  *
- * 어휘를 켜 두고 관리 화면이 없으면 절반만 한 것이다. `'???'` 같은 값이
+ * 기준정보를 켜 두고 관리 화면이 없으면 절반만 한 것이다. `'???'` 같은 값이
  * 들어갔을 때(실제로 개발 DB 에 있다) 고칠 데가 없고, 안 쓰는 값이 피커에
  * 계속 뜬다.
  *
@@ -77,7 +77,7 @@ export default function VocabularyAdminPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        title="어휘"
+        title="기준정보"
         description="제조사·강종 같은 값의 목록. 오타를 고치고, 안 쓰는 값을 감춥니다."
       />
 
@@ -105,12 +105,12 @@ export default function VocabularyAdminPage() {
 }
 
 /**
- * 어긋남 점검 — **문자열과 어휘가 같은 말을 하는가.**
+ * 어긋남 점검 — **문자열과 기준정보가 같은 말을 하는가.**
  *
  * 지금은 같은 사실을 두 벌로 들고 있다(ADR 0010 Expand). `materials.family`
  * 문자열과 `family_term_id` 다. 쓰는 경로는 하나지만 그 밖으로 새는 길이 있으면
  * 조용히 벌어진다 — **조용한 것이 문제다.** 개발 DB 에서 2건이 벌어진 채로
- * 있었고, 이 점검을 만들고 나서야 알았다. 그 2건이 결함 하나를 드러냈다: 어휘
+ * 있었고, 이 점검을 만들고 나서야 알았다. 그 2건이 결함 하나를 드러냈다: 기준정보
  * 이름을 고치면 재료·시료·시편·시험 이름 넷은 따라 바뀌는데 **정작 그 값 자신은
  * 옛 표기 그대로**였고 API 는 200 을 냈다.
  *
@@ -197,7 +197,7 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
       <ErrorNotice error={error} className="mb-2" />
 
       <p className="text-muted-foreground mb-2 text-xs">
-        값을 두 벌로 들고 있는 동안(문자열과 어휘) 둘이 벌어질 수 있습니다. 문자열
+        값을 두 벌로 들고 있는 동안(문자열과 기준정보) 둘이 벌어질 수 있습니다. 문자열
         쪽을 지우기 전에 이 수가 <strong>한 릴리스 동안</strong> 0 이어야 합니다.
         워커가 6시간마다 스스로 재고, 벌어지면 로그에 남깁니다.
       </p>
@@ -233,12 +233,12 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
               ))}
             </div>
           ))}
-          {/* **어휘가 정본이다.** 문자열은 Contract 전까지의 캐시이고, 캐시가
+          {/* **기준정보가 정본이다.** 문자열은 Contract 전까지의 캐시이고, 캐시가
               틀렸으면 원본에서 다시 만드는 것이 유일한 방향이다. 다만 안 이어진
-              행은 반대로 문자열을 어휘로 올린다 — 지우면 그 재료가 무엇이었는지
+              행은 반대로 문자열을 기준정보로 올린다 — 지우면 그 재료가 무엇이었는지
               사라진다. */}
           <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => void run(true)}>
-            어휘에 맞춰 고치기
+            기준정보에 맞춰 고치기
           </Button>
         </div>
       )}
@@ -265,7 +265,7 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [removed, setRemoved] = useState<DeleteResult | null>(null)
 
-  // 검색은 서버가 한다 — 어휘가 수만 개가 되면 전체를 받을 수 없다.
+  // 검색은 서버가 한다 — 기준정보가 수만 개가 되면 전체를 받을 수 없다.
   const terms = useResource(
     () =>
       size === ALL

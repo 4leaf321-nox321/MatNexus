@@ -64,12 +64,12 @@ export function samplePayload(form: SampleForm, densityUnit: string) {
 const FIELDS: { key: keyof SampleForm; label: string; type?: string; placeholder?: string }[] = [
   { key: 'lot_no', label: '로트번호', placeholder: 'L240612' },
   { key: 'alias', label: '별칭' },
-  // 제조사·유통사·주 벤더·판매유형은 여기 없다 — 어휘 피커로 따로 그린다.
+  // 제조사·유통사·주 벤더·판매유형은 여기 없다 — 기준정보 피커로 따로 그린다.
   { key: 'production_date', label: '생산일', type: 'date' },
   { key: 'density', label: '밀도 (kg/m³, 이 로트 실측)', placeholder: '7850' },
 ]
 
-//: 어휘를 거치는 칸. **유통사와 주 벤더가 같은 축을 본다** — 같은 회사가 로트에
+//: 기준정보를 거치는 칸. **유통사와 주 벤더가 같은 축을 본다** — 같은 회사가 로트에
 //: 따라 둘 중 어느 쪽도 되기 때문이다.
 const VOCABULARY_FIELDS: { key: keyof SampleForm; slug: string; label: string }[] = [
   { key: 'manufacturer', slug: 'manufacturer', label: '제조사' },
@@ -87,7 +87,7 @@ interface Props {
 export function SampleFields({ idPrefix, form, onChange }: Props) {
   return (
     <>
-      {/* **제조사만 어휘 피커다.**
+      {/* **제조사만 기준정보 피커다.**
           자유 텍스트로 두면 '포스코'·'포스코 '·맥에서 붙여넣은 자모 분해가 서로
           다른 제조사가 되고, 물성 탭의 "제조사가 섞였습니다" 경고가 헛돈다.
           나머지 칸은 아직 텍스트다 — 축을 하나씩 옮긴다(1단계). */}

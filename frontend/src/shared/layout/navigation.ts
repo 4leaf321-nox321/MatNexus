@@ -156,9 +156,9 @@ export const NAV_GROUPS: NavGroup[] = [
         audience: 'system_admin',
       },
       {
-        // **어휘를 켜 두고 고칠 데가 없으면 절반만 한 것이다.** 오타가 값이
+        // **기준정보를 켜 두고 고칠 데가 없으면 절반만 한 것이다.** 오타가 값이
         // 되면 그것을 고르는 다음 사람이 생기고, 오염이 자기 강화된다.
-        label: '어휘',
+        label: '기준정보',
         icon: Tags,
         to: '/admin/vocabulary',
         audience: 'system_admin',

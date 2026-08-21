@@ -190,7 +190,7 @@ def rename_descendants(db: Session, material: Material) -> None:
     #
     # 여기서 멈춰 있었다 — 재료 이름을 바꾸면 시험만 옛 이름을 달고 있었고,
     # 재료 수정 창은 "시편·시험 이름이 전부 따라 바뀝니다" 라고 **약속하고
-    # 있었다.** 강종 어휘를 붙이면서 실측으로 드러났다.
+    # 있었다.** 강종 기준정보를 붙이면서 실측으로 드러났다.
     by_specimen = {specimen.id: specimen for specimen in specimens}
     if not by_specimen:
         return
@@ -303,7 +303,7 @@ def rename_materials_of_grade(db: Session, term_id: uuid.UUID) -> None:
         ):
             logger.warning(
                 "재료 %r 의 이름을 %r 로 못 바꿨습니다 — 같은 이름이 이미 있습니다. "
-                "합치려면 어휘 병합을 쓰세요.",
+                "합치려면 기준정보 병합을 쓰세요.",
                 material.record_name,
                 renamed,
             )

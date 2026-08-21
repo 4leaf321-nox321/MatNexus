@@ -17,7 +17,7 @@
 
 ## 층 2 — `compare_key` (비교키, 저장하지 않는다)
 
-`clean` 에 casefold 를 더한다. 어휘 값의 유일성과 별칭 조회가 이 키로 돈다 —
+`clean` 에 casefold 를 더한다. 기준정보 값의 유일성과 별칭 조회가 이 키로 돈다 —
 `'포스코'` 와 `'Posco'` 는 같은 값이지만 `'포스코(주)'` 는 **다른 값일 수 있다**
 (계열사 구분일 수 있다). 그래서 구두점은 여기서 안 지운다.
 
@@ -47,7 +47,7 @@ def clean(value: str | None) -> str | None:
 
 
 def compare_key(value: str | None) -> str:
-    """비교키. **저장하지 않는다** — 어휘 값의 `normalized` 컬럼에만 들어간다."""
+    """비교키. **저장하지 않는다** — 기준정보 값의 `normalized` 컬럼에만 들어간다."""
     cleaned = clean(value)
     return cleaned.casefold() if cleaned else ""
 

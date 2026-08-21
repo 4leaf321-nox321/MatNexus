@@ -133,8 +133,8 @@ class Material(Base):
     grade_term_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
     )
-    """강종 어휘(ADR 0010). **이 값이 재료 이름을 만든다**(ADR 0004) —
-    어휘 값 이름을 고치면 재료 이름과 그 아래 시료·시편·시험 이름이 전부
+    """강종 기준정보(ADR 0010). **이 값이 재료 이름을 만든다**(ADR 0004) —
+    기준정보 값 이름을 고치면 재료 이름과 그 아래 시료·시편·시험 이름이 전부
     따라 바뀐다."""
 
     spec_thickness_m: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -159,7 +159,7 @@ class Material(Base):
     applied_part_term_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
     )
-    """용도 어휘(ADR 0010). **이름에는 안 들어간다** — 강종과 달리 값을 고쳐도
+    """용도 기준정보(ADR 0010). **이름에는 안 들어간다** — 강종과 달리 값을 고쳐도
     재료 이름이 안 바뀐다. 그래서 연쇄 변경 훅이 필요 없다."""
 
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -245,7 +245,7 @@ class Sample(Base):
         index=True,
         nullable=True,
     )
-    """제조사 어휘(ADR 0010). **문자열과 나란히 둔다 — 아직 옮기는 중이다.**
+    """제조사 기준정보(ADR 0010). **문자열과 나란히 둔다 — 아직 옮기는 중이다.**
 
     한 번에 바꾸면 롤백할 데가 없고, 백필 도중에 반쯤 옮겨진 상태로 서비스가
     돈다. 그래서 세 번에 나눈다:
@@ -258,7 +258,7 @@ class Sample(Base):
     primary_vendor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sales_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    # 어휘(ADR 0010). 유통사와 주 벤더는 **같은 축**을 가리킨다 — 같은 회사가
+    # 기준정보(ADR 0010). 유통사와 주 벤더는 **같은 축**을 가리킨다 — 같은 회사가
     # 로트에 따라 둘 중 어느 쪽도 될 수 있다.
     distributor_term_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True

@@ -210,8 +210,8 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
           />
         </div>
 
-        {/* **장비는 어휘다**(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면
-            장비별 비교가 무의미해진다. 시험자는 어휘가 아니다 — 시험을 돌린
+        {/* **장비는 기준정보다**(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면
+            장비별 비교가 무의미해진다. 시험자는 기준정보가 아니다 — 시험을 돌린
             사람이 시스템 계정이 없을 수 있고, 집계 축으로 쓸 계획도 없다. */}
         <VocabularyField
           slug="instrument"

@@ -91,7 +91,7 @@ def engine():  # type: ignore[no-untyped-def]
 def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     session = factory()
-    # **어휘 축은 있어야 한다.** 시료를 만들 때마다 제조사 어휘를 거치므로
+    # **기준정보 축은 있어야 한다.** 시료를 만들 때마다 제조사 기준정보를 거치므로
     # (ADR 0010) 축이 없으면 관계없는 테스트가 전부 404 로 죽는다. 운영에서는
     # 마이그레이션이 심고, 여기는 `create_all` 이라 따로 해 준다.
     #

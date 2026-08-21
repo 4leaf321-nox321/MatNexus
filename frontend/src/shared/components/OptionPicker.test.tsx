@@ -168,7 +168,7 @@ describe('OptionPicker', () => {
 
     it('만들기가 꺼져 있으면 새로 추가를 안 보여 준다', async () => {
       const user = userEvent.setup()
-      // 어휘 관리에서 상위 분류를 고를 때 쓴다 — 부모는 이미 있는 값이어야 하고,
+      // 기준정보 관리에서 상위 분류를 고를 때 쓴다 — 부모는 이미 있는 값이어야 하고,
       // 강종의 부모를 손보다가 Family 를 새로 만드는 것은 아무도 의도하지 않는다.
       const search = vi.fn().mockResolvedValue([])
       render(

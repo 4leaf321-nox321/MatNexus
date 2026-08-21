@@ -647,7 +647,7 @@ def upload_test_run(
         status="uploaded",
         registered_by_id=user.id,
     )
-    # 장비 어휘(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면 장비별
+    # 장비 기준정보(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면 장비별
     # 비교가 무의미해진다.
     vocabulary_services.apply_bindings(
         db,

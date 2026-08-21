@@ -1,4 +1,4 @@
-"""어휘를 찾고 만든다 — **게이트가 하나여야 한다.**
+"""기준정보를 찾고 만든다 — **게이트가 하나여야 한다.**
 
 값이 만들어지는 경로가 여럿이면(단건 폼·일괄 등록·이관 스크립트) 그 경로마다
 중복 판정이 갈린다. 그래서 모두 `resolve_or_create` 하나를 지난다.
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 def get_vocabulary(db: Session, slug: str) -> Vocabulary:
     found = db.scalar(select(Vocabulary).where(Vocabulary.slug == slug))
     if found is None:
-        raise NotFound("MNX-VOCABULARY-0001", f"어휘를 찾을 수 없습니다: {slug}")
+        raise NotFound("MNX-VOCABULARY-0001", f"기준정보를 찾을 수 없습니다: {slug}")
     return found
 
 
@@ -90,7 +90,7 @@ def resolve_or_create(
     created_by_id: uuid.UUID | None = None,
     parent: VocabularyTerm | None = None,
 ) -> VocabularyTerm | None:
-    """값 하나를 어휘로 바꾼다. **순서가 중요하다.**
+    """값 하나를 기준정보로 바꾼다. **순서가 중요하다.**
 
     1. 기존 값·별칭으로 찾아지면 **그것을 돌려준다.** 409 를 내지 않는다 —
        피커가 낙관적으로 보내도 정규 행이 돌아와야 화면이 안 멈춘다.
@@ -228,7 +228,7 @@ def count(
 def bump_usage(db: Session, term_id: uuid.UUID | None, delta: int) -> None:
     """`usage_count` 를 옮긴다. **참조가 바뀌는 자리에서 부른다.**
 
-    매번 `count(join)` 으로 세면 어휘가 커질수록 느려지고, 그 비용이 화면을 열
+    매번 `count(join)` 으로 세면 기준정보가 커질수록 느려지고, 그 비용이 화면을 열
     때마다 든다. 캐시가 어긋나면 재계산하면 되지만 — 어긋난 채로 오래 두면
     "쓰이지 않는 값" 이 피커에 남는다.
     """
@@ -252,7 +252,7 @@ def _resync(db: Session) -> None:
        세션에 남아 있고, `expire_all()` 은 그것을 버린다.**
 
     그래서 `flush()` 없이 `expire_all()` 만 하면 조용히 지워진다. 실제로 그랬다 —
-    어휘 값 이름을 고치면 재료·시료·시편·시험 이름 넷은 전부 따라 바뀌는데
+    기준정보 값 이름을 고치면 재료·시료·시편·시험 이름 넷은 전부 따라 바뀌는데
     **정작 그 값 자신은 옛 표기 그대로**였다. API 는 200 을 냈다. 이름 연쇄만
     보던 시험이 못 잡았고, 어긋남 점검(`drift`)이 개발 DB 에서 2건을 찾아내
     드러났다.
@@ -266,7 +266,7 @@ def rename(db: Session, term: VocabularyTerm, value: str) -> None:
 
     외래키라서 참조는 저절로 따라온다. 그런데 지금은 Expand 단계라 쓰는 쪽이
     문자열 컬럼도 들고 있고(`samples.manufacturer`), 화면은 그쪽을 읽는다 —
-    안 맞추면 어휘와 화면이 어긋난다.
+    안 맞추면 기준정보와 화면이 어긋난다.
 
     Contract 단계에서 문자열을 지우면 이 함수의 절반이 사라진다.
     """
@@ -302,7 +302,7 @@ def rename(db: Session, term: VocabularyTerm, value: str) -> None:
     # **Expand 단계의 문자열 컬럼 맞추기.**
     #
     # 외래키라서 참조는 저절로 따라오는데, 지금은 쓰는 쪽이 문자열 컬럼도 들고
-    # 있고 화면은 그쪽을 읽는다. 안 맞추면 어휘와 화면이 어긋난다.
+    # 있고 화면은 그쪽을 읽는다. 안 맞추면 기준정보와 화면이 어긋난다.
     #
     # 바인딩 표를 훑는다 — 축을 더할 때 이 함수를 안 고쳐도 되게. Contract 에서
     # 문자열을 지우면 이 블록이 통째로 사라진다.
@@ -321,7 +321,7 @@ def rename(db: Session, term: VocabularyTerm, value: str) -> None:
     _resync(db)
 
     # **쓰는 쪽이 자기 뒤처리를 한다.** 강종이 바뀌면 재료 이름을 다시
-    # 만들어야 하는데(ADR 0004), 그것을 여기서 하면 어휘가 재료를 알게 된다.
+    # 만들어야 하는데(ADR 0004), 그것을 여기서 하면 기준정보가 재료를 알게 된다.
     vocabulary_hooks.fire_rename(db, slug or "", term.id)
 
 
@@ -360,7 +360,7 @@ def recount(db: Session, vocabulary: Vocabulary) -> None:
 
 @dataclass(frozen=True)
 class Binding:
-    """어휘를 가리키는 컬럼 하나. **축이 늘어나도 코드가 안 늘어나게.**
+    """기준정보를 가리키는 컬럼 하나. **축이 늘어나도 코드가 안 늘어나게.**
 
     라우트마다 "resolve 하고 문자열 채우고 FK 채우고 usage 증감" 을 베껴 쓰면
     축 열 개에 같은 코드가 열 벌 생기고, 그중 하나만 고쳐지는 날이 온다 —
@@ -411,7 +411,7 @@ def apply_bindings(
     *,
     created_by_id: uuid.UUID | None = None,
 ) -> None:
-    """주어진 값들을 어휘로 바꿔 행에 넣는다. **`usage_count` 도 여기서 옮긴다.**
+    """주어진 값들을 기준정보로 바꿔 행에 넣는다. **`usage_count` 도 여기서 옮긴다.**
 
     `values` 에 없는 필드는 안 건드린다 — 수정에서 "안 보낸 것" 과 "지운 것" 을
     구분해야 한다.
@@ -474,7 +474,7 @@ def release_bindings(db: Session, row: object, bindings: Iterable[Binding]) -> N
 
 
 #: 어느 표의 어느 바인딩을 세는가. **소프트 삭제된 행은 빼야 한다** — 지운 시료가
-#: 어휘를 붙들고 있으면 "쓰는 곳" 이 실제보다 커진다.
+#: 기준정보를 붙들고 있으면 "쓰는 곳" 이 실제보다 커진다.
 _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
     ("materials", MATERIAL_BINDINGS, " AND deleted_at IS NULL"),
     ("samples", SAMPLE_BINDINGS, " AND deleted_at IS NULL"),
@@ -485,7 +485,7 @@ _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
 
 @dataclass(frozen=True)
 class Drift:
-    """문자열과 어휘가 벌어진 한 칸."""
+    """문자열과 기준정보가 벌어진 한 칸."""
 
     table: str
     field: str
@@ -495,7 +495,7 @@ class Drift:
 
 
 def drift(db: Session) -> list[Drift]:
-    """문자열 컬럼과 어휘 값이 어긋난 행을 센다. **Contract 의 검증 도구다.**
+    """문자열 컬럼과 기준정보 값이 어긋난 행을 센다. **Contract 의 검증 도구다.**
 
     지금은 같은 사실을 두 벌로 들고 있다 — `materials.family` 문자열과
     `family_term_id`. 쓰는 경로는 `apply_bindings` 하나지만 그 밖으로 새는 길이
@@ -610,16 +610,16 @@ def clean_run(db: Session) -> tuple[datetime | None, int]:
 
 
 def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift]:
-    """어긋난 칸을 바로잡는다. **어휘가 정본이다.**
+    """어긋난 칸을 바로잡는다. **기준정보가 정본이다.**
 
     방향을 정해야 하는 일이라 자동으로 돌지 않는다 — 사람이 점검을 보고 누른다.
     두 가지 어긋남이 있고 고치는 방향이 반대다.
 
-    * **어휘는 있는데 문자열이 다르다** — 문자열을 어휘 값으로 다시 쓴다. 문자열은
+    * **기준정보는 있는데 문자열이 다르다** — 문자열을 기준정보 값으로 다시 쓴다. 문자열은
       Contract 전까지의 캐시이고, 캐시가 틀렸으면 원본에서 다시 만드는 것이 유일한
       방향이다(`recount` 와 같은 판단).
-    * **문자열은 있는데 어휘가 없다** — 백필이 못 이은 행이다. 여기서 문자열을
-      지우면 그 재료가 무엇이었는지 사라진다. 반대로 **문자열을 어휘로 올린다.**
+    * **문자열은 있는데 기준정보가 없다** — 백필이 못 이은 행이다. 여기서 문자열을
+      지우면 그 재료가 무엇이었는지 사라진다. 반대로 **문자열을 기준정보로 올린다.**
 
     고친 뒤 이름 훅을 때린다 — 강종이 바뀌면 재료 이름이 다시 만들어져야 한다.
     """
@@ -643,7 +643,7 @@ def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift
             vocabulary = get_vocabulary(db, binding.slug)
             for row_id, text_value, term_id in rows:
                 if term_id is not None:
-                    # 어휘가 정본 — 문자열을 다시 쓴다.
+                    # 기준정보가 정본 — 문자열을 다시 쓴다.
                     term = db.get(VocabularyTerm, term_id)
                     if term is None:
                         continue
@@ -654,7 +654,7 @@ def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift
                     touched.setdefault(binding.slug, set()).add(term.id)
                     continue
 
-                # 안 이어진 행 — 문자열을 어휘로 올린다. **지우지 않는다.**
+                # 안 이어진 행 — 문자열을 기준정보로 올린다. **지우지 않는다.**
                 term = resolve_or_create(
                     db, vocabulary, text_value, created_by_id=created_by_id
                 )
@@ -681,15 +681,15 @@ def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift
 def term_ids_matching(db: Session, slugs: Sequence[str], word: str) -> list[uuid.UUID]:
     """주어진 축들에서 낱말이 걸리는 값의 id. **축으로 좁히는 것이 요점이다.**
 
-    `materials.family` 는 5만 행인데 값은 5가지다. 어휘 쪽 `family` 축은 5행이다
-    — 5행을 훑는 것이 정규화의 이득 전부인데, 축을 안 좁히면 어휘 23만 행을
+    `materials.family` 는 5만 행인데 값은 5가지다. 기준정보 쪽 `family` 축은 5행이다
+    — 5행을 훑는 것이 정규화의 이득 전부인데, 축을 안 좁히면 기준정보 23만 행을
     훑어서 도로 잃는다. 실측: 2글자 검색어(trgm 을 못 탄다)에서 79ms 대 0.02ms.
     """
     key = compare_key(word)
     if not key:
         return []
     # **축 id 를 먼저 받는다.** `vocabularies` 와 조인해서 `slug IN (...)` 로 쓰면
-    # 플래너가 축 제한을 나중에 걸고 어휘 23만 행을 훑는다 — 좁히려고 넣은 조건이
+    # 플래너가 축 제한을 나중에 걸고 기준정보 23만 행을 훑는다 — 좁히려고 넣은 조건이
     # 안 듣는다. 실측: 2글자 검색어에서 조인 84ms 대 축 id 0.02ms.
     axis_ids = list(db.scalars(select(Vocabulary.id).where(Vocabulary.slug.in_(slugs))))
     if not axis_ids:
@@ -831,7 +831,7 @@ def merge(
 def _vocabulary_of(db: Session, term: VocabularyTerm) -> Vocabulary:
     found = db.get(Vocabulary, term.vocabulary_id)
     if found is None:  # pragma: no cover — FK 가 막는다
-        raise NotFound("MNX-VOCABULARY-0001", "어휘를 찾을 수 없습니다.")
+        raise NotFound("MNX-VOCABULARY-0001", "기준정보를 찾을 수 없습니다.")
     return found
 
 

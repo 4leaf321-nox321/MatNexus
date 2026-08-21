@@ -225,9 +225,9 @@ _SEARCH_TEXT = (
     Material.alias,
 )
 
-#: 어휘를 거치는 검색 축과 그 FK 컬럼. **축으로 좁히는 것이 요점이다**(ADR 0010) —
-#: `materials.family` 는 5만 행인데 값은 5가지고, 어휘 쪽 `family` 축은 5행이다.
-#: 축을 안 좁히고 어휘 전체(23만)를 훑으면 정규화의 이득을 도로 잃는다
+#: 기준정보를 거치는 검색 축과 그 FK 컬럼. **축으로 좁히는 것이 요점이다**(ADR 0010) —
+#: `materials.family` 는 5만 행인데 값은 5가지고, 기준정보 쪽 `family` 축은 5행이다.
+#: 축을 안 좁히고 기준정보 전체(23만)를 훑으면 정규화의 이득을 도로 잃는다
 #: (실측: 2글자 검색어에서 79ms 대 0.02ms).
 _SEARCH_AXES = (
     ("family", Material.family_term_id),
@@ -250,7 +250,7 @@ def _search_terms(db: Session, q: str | None) -> list[Any]:
     conditions: list[Any] = []
     for word in q.split():
         branches: list[Any] = [column.ilike(f"%{word}%") for column in _SEARCH_TEXT]
-        # **어휘를 먼저 찾고 그 id 로 재료를 찾는다.** 상관 서브쿼리
+        # **기준정보를 먼저 찾고 그 id 로 재료를 찾는다.** 상관 서브쿼리
         # (`IN (SELECT ...)`) 로 쓰면 안 된다 — 그건 인덱스 조건이 아니라 필터로
         # 강등돼서 BitmapOr 에 못 낀다. 값이 박힌 `IN (id, ...)` 만 낀다.
         # 실측: 좁은 검색(4건)이 0.08ms → 90ms 로 1000배 느려졌다.
@@ -277,7 +277,7 @@ def list_classifications(
     결과가 늘 0건이다.
     """
     visible = services.visible_materials(db, user).subquery()
-    # 어휘를 거쳐 읽는다(ADR 0010 Contract). 문자열 컬럼은 아직 있지만 여기서는
+    # 기준정보를 거쳐 읽는다(ADR 0010 Contract). 문자열 컬럼은 아직 있지만 여기서는
     # 안 본다 — 지우기 전에 FK 경로가 같은 답을 내는지 한 릴리스 지켜본다.
     family_term = aliased(VocabularyTerm)
     category_term = aliased(VocabularyTerm)
@@ -385,7 +385,7 @@ def create_material(
         legacy_id=payload.legacy_id,
         registered_by_id=user.id,
     )
-    # 강종은 어휘를 거친다(ADR 0010). `SECC`/`secc` 가 서로 다른 재료를 만드는
+    # 강종은 기준정보를 거친다(ADR 0010). `SECC`/`secc` 가 서로 다른 재료를 만드는
     # 것을 막는다 — 이 축의 이득이 가장 크다.
     vocabulary_services.apply_bindings(
         db,
@@ -750,14 +750,14 @@ def create_sample(
         record_name=naming.sample_name(material=material.record_name, seq_no=seq_no),
         alias=payload.alias,
         lot_no=payload.lot_no,
-        # 어휘를 거치는 값들은 아래 `apply_bindings` 가 넣는다.
+        # 기준정보를 거치는 값들은 아래 `apply_bindings` 가 넣는다.
         production_date=payload.production_date,
         density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
         input_units={"density": payload.density_unit},
         note=payload.note,
         registered_by_id=user.id,
     )
-    # **어휘를 거쳐 들어간다**(ADR 0010). 문자열도 함께 채운다 — 아직 옮기는
+    # **기준정보를 거쳐 들어간다**(ADR 0010). 문자열도 함께 채운다 — 아직 옮기는
     # 중이라 읽는 쪽이 문자열을 본다(Expand 단계).
     vocabulary_services.apply_bindings(
         db,

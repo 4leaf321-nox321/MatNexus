@@ -56,7 +56,7 @@ def test_문자열로_훑는_컬럼은_trgm_인덱스가_있다() -> None:
     )
 
 
-def test_어휘로_거르는_컬럼은_인덱스가_있다() -> None:
+def test_기준정보로_거르는_컬럼은_인덱스가_있다() -> None:
     """`family_term_id IN (id, ...)` 가 인덱스를 타야 BitmapOr 에 낀다."""
     table = cast(Table, Material.__table__)
     indexed = {next(iter(index.columns)).name for index in table.indexes}
@@ -64,7 +64,7 @@ def test_어휘로_거르는_컬럼은_인덱스가_있다() -> None:
         assert column.name in indexed, f"{slug} 의 {column.name} 에 인덱스가 없습니다."
 
 
-def test_어휘_찾기가_trgm_인덱스를_탄다() -> None:
+def test_기준정보_찾기가_trgm_인덱스를_탄다() -> None:
     """축으로 좁혀도 `normalized ILIKE '%낱말%'` 은 여전히 색인이 필요하다 —
     강종처럼 값이 수만 개인 축이 검색 축이 되는 날이 온다."""
     assert "normalized" in _gin(VocabularyTerm)
