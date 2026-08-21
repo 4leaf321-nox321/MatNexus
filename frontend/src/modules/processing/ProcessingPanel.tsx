@@ -26,6 +26,8 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Circle,
   CircleCheck,
   FlaskConical,
@@ -35,7 +37,6 @@ import {
   Plus,
   Save,
   Trash2,
-  X,
 } from 'lucide-react'
 
 import { RecipePicker } from '@/modules/processing/RecipePicker'
@@ -425,17 +426,6 @@ export function ProcessingPanel({
               }}
             />
           )}
-          {/* **이름이 무엇을 뜻하는지 볼 데가 있어야 한다.** `strain_true_plastic`
-              만 보여 주면 코드를 읽어야 알게 되고, 그러면 아무도 안 읽는다. */}
-          <Button
-            size="sm"
-            variant={variablesOpen ? 'secondary' : 'ghost'}
-            aria-pressed={variablesOpen}
-            onClick={() => setVariablesOpen((open) => !open)}
-          >
-            <BookOpen className="size-3.5" />
-            변수 목록
-          </Button>
           {/* **잠그지 않는다.** 회색 버튼은 무엇을 고쳐야 하는지 말할 자리가
               없다 — 누르면 부족한 곳을 짚는다. */}
           <Button size="sm" variant="outline" onClick={run} disabled={busy}>
@@ -573,13 +563,15 @@ export function ProcessingPanel({
         </div>
       )}
 
-      {/* 변수 목록을 열면 단계 칸을 줄여 곡선이 덜 좁아지게 한다. 두 서식을
-          모두 소스에 그대로 적어 둔다 — Tailwind 가 만들어 붙인 이름은 못 읽는다. */}
+      {/* 변수 목록을 펴면 단계 칸을 줄여 곡선이 덜 좁아지게 한다. 접어도 오른쪽
+          가장자리에 손잡이만큼은 남는다 — **열 데가 없으면 있는 줄도 모른다.**
+          두 서식을 모두 소스에 그대로 적는다: Tailwind 는 만들어 붙인 이름을
+          못 읽는다. */}
       <div
         className={
           variablesOpen
             ? 'grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,22rem)_minmax(0,1fr)_16rem]'
-            : 'grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)]'
+            : 'grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)_2.25rem]'
         }
       >
         <FlowRail
@@ -830,12 +822,11 @@ export function ProcessingPanel({
           )}
         </div>
 
-        {variablesOpen && (
-          <VariablesSidebar
-            vocabulary={vocabulary}
-            onClose={() => setVariablesOpen(false)}
-          />
-        )}
+        <VariablesSidebar
+          vocabulary={vocabulary}
+          open={variablesOpen}
+          onToggle={() => setVariablesOpen((open) => !open)}
+        />
       </div>
     </section>
   )
@@ -853,16 +844,24 @@ export function ProcessingPanel({
  * 지금 켠 단계가 만드는 것만 보인다. 안 켠 것까지 다 보이면 "있는데 왜 못
  * 고르지" 가 되고, 그건 순서도가 답할 질문이다.
  *
- * 창이 아니라 **옆에 두는** 이유: 단계의 열을 고르면서 이름의 뜻을 보는 일이라,
- * 창이면 열었다 닫았다를 반복하게 된다. 대신 **기본은 접어 둔다** — 늘 펴 두면
- * 곡선이 그만큼 좁아진다.
+ * ## 창이 아니라 가장자리다
+ *
+ * 단계의 '변형률 열' 을 고르면서 그 이름의 뜻을 보는 일이다. 창이면 열었다 —
+ * 확인하고 — 닫았다 — 고르고 — 다시 여는 것을 반복하게 된다.
+ *
+ * **여는 손잡이도 여기 있다.** 머리에 버튼을 두면 "저 버튼이 여는 것이 어느
+ * 쪽인가" 를 한 번 더 생각해야 한다 — 접혔을 때 오른쪽 가장자리에 남는 띠가
+ * 곧 그 자리다. 접어 두는 것이 기본이다: 늘 펴 두면 곡선이 그만큼 좁아지고,
+ * 그건 이 화면을 넓힌 이유와 정면으로 부딪힌다.
  */
 function VariablesSidebar({
   vocabulary,
-  onClose,
+  open,
+  onToggle,
 }: {
   vocabulary: ReturnType<typeof vocabularyOf>
-  onClose: () => void
+  open: boolean
+  onToggle: () => void
 }) {
   const entry = (item: {
     key: string
@@ -880,11 +879,31 @@ function VariablesSidebar({
         )}
       </p>
       {item.help && <p className="text-muted-foreground mt-0.5 text-xs">{item.help}</p>}
-      <p className="text-muted-foreground mt-0.5 text-xs italic">
-        {item.madeBy ?? '장비 파일'}
-      </p>
+      <p className="text-muted-foreground mt-0.5 text-xs italic">{item.madeBy ?? '장비 파일'}</p>
     </li>
   )
+
+  if (!open) {
+    return (
+      <aside className="lg:col-span-2 xl:col-span-1">
+        {/* 접힌 상태의 손잡이. 좁은 화면에서는 가로 띠, 넓은 화면에서는 오른쪽
+            가장자리에 세로로 선다. */}
+        <button
+          type="button"
+          aria-label="변수 목록 펴기"
+          aria-expanded={false}
+          onClick={onToggle}
+          className="hover:bg-accent/50 sticky top-0 flex w-full items-center justify-center gap-2 rounded-md border py-2 xl:h-64 xl:w-9 xl:flex-col"
+        >
+          <ChevronLeft className="text-muted-foreground hidden size-4 xl:block" />
+          <BookOpen className="text-muted-foreground size-4 xl:hidden" />
+          <span className="text-muted-foreground text-xs xl:[writing-mode:vertical-rl]">
+            변수 목록
+          </span>
+        </button>
+      </aside>
+    )
+  }
 
   return (
     /* 단계 목록이 길어도 따라온다. 열을 고르면서 옆에서 뜻을 보는 자리다. */
@@ -896,10 +915,11 @@ function VariablesSidebar({
             size="icon"
             variant="ghost"
             className="ml-auto size-6"
-            onClick={onClose}
+            onClick={onToggle}
             aria-label="변수 목록 접기"
+            aria-expanded
           >
-            <X className="size-3.5" />
+            <ChevronRight className="size-3.5" />
           </Button>
         </div>
 

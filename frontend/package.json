@@ -2,7 +2,7 @@
   "name": "matnexus-frontend",
   "private": true,
   "//": "이 version 이 올라가면 auto-tag 워크플로가 태그를 만들고 릴리스가 발행된다.",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

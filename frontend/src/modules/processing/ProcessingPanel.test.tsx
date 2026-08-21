@@ -220,23 +220,30 @@ describe('변수 목록', () => {
     dimensions.mockResolvedValue({ items: [] })
   })
 
-  /** 오른쪽 사이드바. 창이 아니라 옆에 붙는다. */
+  /** 오른쪽 사이드바. 창이 아니라 화면 가장자리에 붙는다. */
   const sidebar = () => screen.getByRole('complementary')
+  const openSidebar = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(await screen.findByRole('button', { name: '변수 목록 펴기' }))
 
-  it('기본은 접혀 있다 — 늘 펴 두면 곡선이 좁아진다', async () => {
+  it('기본은 접혀 있고, 여는 손잡이가 그 자리에 있다', async () => {
+    // **머리에 버튼을 두지 않는다.** "저 버튼이 여는 것이 어느 쪽인가" 를 한 번
+    // 더 생각해야 하고, 접혔을 때 오른쪽 가장자리에 남는 띠가 곧 그 자리다.
     show()
-    await screen.findByRole('button', { name: '변수 목록' })
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    const handle = await screen.findByRole('button', { name: '변수 목록 펴기' })
+    expect(handle).toHaveAttribute('aria-expanded', 'false')
+    expect(sidebar()).not.toHaveTextContent('곡선의 세로줄')
   })
 
-  it('열고 닫을 수 있다', async () => {
+  it('가장자리에서 열고 닫는다', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
-    expect(sidebar()).toBeInTheDocument()
+    await openSidebar(user)
+    expect(sidebar()).toHaveTextContent('곡선의 세로줄')
 
     await user.click(screen.getByRole('button', { name: '변수 목록 접기' }))
-    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '변수 목록 펴기' })).toBeInTheDocument()
+    )
   })
 
   it('이름만이 아니라 뜻과 단위를 함께 보여 준다', async () => {
@@ -244,7 +251,7 @@ describe('변수 목록', () => {
     const user = userEvent.setup()
     show()
     await user.click(await screen.findByRole('button', { name: /공칭 응력-변형률/ }))
-    await user.click(screen.getByRole('button', { name: '변수 목록' }))
+    await openSidebar(user)
 
     expect(sidebar()).toHaveTextContent('strain_engineering')
     expect(sidebar()).toHaveTextContent('공칭 변형률')
@@ -255,7 +262,7 @@ describe('변수 목록', () => {
   it('원본 채널도 이름으로 읽힌다', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
+    await openSidebar(user)
 
     expect(sidebar()).toHaveTextContent('displacement')
     expect(sidebar()).toHaveTextContent('변위')
@@ -268,7 +275,7 @@ describe('변수 목록', () => {
     show()
     await user.click(await screen.findByRole('button', { name: /공칭 응력-변형률/ }))
     await user.click(await screen.findByRole('button', { name: /탄성계수/ }))
-    await user.click(screen.getByRole('button', { name: '변수 목록' }))
+    await openSidebar(user)
 
     expect(sidebar()).toHaveTextContent('youngs_modulus')
     expect(sidebar()).toHaveTextContent('탄성 구간의 기울기.')
@@ -278,7 +285,7 @@ describe('변수 목록', () => {
     // 다 보이면 "있는데 왜 못 고르지" 가 된다 — 그건 순서도가 답할 질문이다.
     const user = userEvent.setup()
     show()
-    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
+    await openSidebar(user)
 
     expect(sidebar()).not.toHaveTextContent('strain_engineering')
   })
@@ -287,7 +294,7 @@ describe('변수 목록', () => {
     // 옆에 두는 이유가 이것이다 — 창이면 열었다 닫았다를 반복하게 된다.
     const user = userEvent.setup()
     show()
-    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
+    await openSidebar(user)
     expect(sidebar()).not.toHaveTextContent('strain_engineering')
 
     await user.click(screen.getByRole('button', { name: /공칭 응력-변형률/ }))
