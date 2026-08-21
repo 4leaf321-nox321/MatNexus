@@ -16,6 +16,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
+import { RightPanelHost } from '@/shared/layout/RightPanel'
 import type { ProcessingStep } from '@/modules/processing/api'
 
 const steps = vi.fn()
@@ -105,18 +106,23 @@ const SOURCE = ['displacement', 'force', 'width']
 
 function show() {
   return render(
-    <ProcessingPanel
-      testRunId="run-1"
-      // 인장이 아닌 종류로 연다 — 인장은 기본 순서가 미리 깔려서 "처음엔 아무것도
-      // 안 켜져 있다" 를 볼 수 없다.
-      testTypeKey="flexural"
-      curveKey="curve-1"
-      sourceColumns={SOURCE}
-      sourceChannels={[
-        { key: 'displacement', label: '변위', si_unit: 'm' },
-        { key: 'force', label: '하중', si_unit: 'N' },
-      ]}
-    />
+    <>
+      {/* 변수 목록은 **껍데기의 오른쪽 영역**에 산다. 그 자리가 없으면 아무
+          데도 안 뜬다 — 시험에서도 껍데기 몫을 같이 그린다. */}
+      <RightPanelHost />
+      <ProcessingPanel
+        testRunId="run-1"
+        // 인장이 아닌 종류로 연다 — 인장은 기본 순서가 미리 깔려서 "처음엔
+        // 아무것도 안 켜져 있다" 를 볼 수 없다.
+        testTypeKey="flexural"
+        curveKey="curve-1"
+        sourceColumns={SOURCE}
+        sourceChannels={[
+          { key: 'displacement', label: '변위', si_unit: 'm' },
+          { key: 'force', label: '하중', si_unit: 'N' },
+        ]}
+      />
+    </>
   )
 }
 

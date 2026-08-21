@@ -91,6 +91,7 @@ import {
   fromDisplay,
   toDisplay,
 } from '@/shared/units'
+import { RightPanel } from '@/shared/layout/RightPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
@@ -563,17 +564,8 @@ export function ProcessingPanel({
         </div>
       )}
 
-      {/* 변수 목록을 펴면 단계 칸을 줄여 곡선이 덜 좁아지게 한다. 접어도 오른쪽
-          가장자리에 손잡이만큼은 남는다 — **열 데가 없으면 있는 줄도 모른다.**
-          두 서식을 모두 소스에 그대로 적는다: Tailwind 는 만들어 붙인 이름을
-          못 읽는다. */}
-      <div
-        className={
-          variablesOpen
-            ? 'grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,22rem)_minmax(0,1fr)_16rem]'
-            : 'grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)_2.25rem]'
-        }
-      >
+      {/* 변수 목록은 이 그리드 밖이다 — 껍데기의 오른쪽 영역에 산다. */}
+      <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)]">
         <FlowRail
           available={available}
           steps={steps}
@@ -822,12 +814,17 @@ export function ProcessingPanel({
           )}
         </div>
 
+      </div>
+
+      {/* **화면 오른쪽 끝에 붙는다.** 이 안(`mx-auto max-w-7xl`)에 두면 본문과
+          함께 가운데로 딸려 들어가고 오른쪽 끝에는 여백만 남는다. */}
+      <RightPanel>
         <VariablesSidebar
           vocabulary={vocabulary}
           open={variablesOpen}
           onToggle={() => setVariablesOpen((open) => !open)}
         />
-      </div>
+      </RightPanel>
     </section>
   )
 }
@@ -885,19 +882,19 @@ function VariablesSidebar({
 
   if (!open) {
     return (
-      <aside className="lg:col-span-2 xl:col-span-1">
-        {/* 접힌 상태의 손잡이. 좁은 화면에서는 가로 띠, 넓은 화면에서는 오른쪽
-            가장자리에 세로로 선다. */}
+      <aside className="flex h-full w-9 flex-col border-l">
+        {/* 접힌 손잡이. **화면 오른쪽 끝에 세로로 선다.** 아예 없애면 있는 줄도
+            모르므로, 폭 9(2.25rem)만 남긴다 — 곡선에 거의 영향이 없다. */}
         <button
           type="button"
           aria-label="변수 목록 펴기"
           aria-expanded={false}
           onClick={onToggle}
-          className="hover:bg-accent/50 sticky top-0 flex w-full items-center justify-center gap-2 rounded-md border py-2 xl:h-64 xl:w-9 xl:flex-col"
+          className="hover:bg-accent/50 flex h-full w-full flex-col items-center gap-2 pt-3"
         >
-          <ChevronLeft className="text-muted-foreground hidden size-4 xl:block" />
-          <BookOpen className="text-muted-foreground size-4 xl:hidden" />
-          <span className="text-muted-foreground text-xs xl:[writing-mode:vertical-rl]">
+          <ChevronLeft className="text-muted-foreground size-4 shrink-0" />
+          <BookOpen className="text-muted-foreground size-4 shrink-0" />
+          <span className="text-muted-foreground text-xs [writing-mode:vertical-rl]">
             변수 목록
           </span>
         </button>
@@ -906,22 +903,24 @@ function VariablesSidebar({
   }
 
   return (
-    /* 단계 목록이 길어도 따라온다. 열을 고르면서 옆에서 뜻을 보는 자리다. */
-    <aside className="lg:col-span-2 xl:col-span-1">
-      <div className="sticky top-0 max-h-[calc(100svh-8rem)] overflow-y-auto rounded-md border">
-        <div className="bg-background sticky top-0 flex items-center gap-1 border-b px-2 py-1.5">
-          <h3 className="text-sm font-medium">변수 목록</h3>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="ml-auto size-6"
-            onClick={onToggle}
-            aria-label="변수 목록 접기"
-            aria-expanded
-          >
-            <ChevronRight className="size-3.5" />
-          </Button>
-        </div>
+    /* **껍데기의 오른쪽 영역**에 산다. 본문과 따로 스크롤한다 — 단계 목록을
+       내리면서 이름의 뜻을 보는 자리라, 같이 굴러가면 쓸 수 없다. */
+    <aside className="flex h-full w-64 flex-col border-l">
+      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+        <h3 className="text-sm font-medium">변수 목록</h3>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="ml-auto size-6"
+          onClick={onToggle}
+          aria-label="변수 목록 접기"
+          aria-expanded
+        >
+          <ChevronRight className="size-3.5" />
+        </Button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
 
         <p className="text-muted-foreground px-2 py-1.5 text-xs">
           지금 켠 단계가 쓰고 만드는 이름입니다. <b>이름은 계산이 정합니다</b> — 파일이나

@@ -12,6 +12,7 @@ import { NoticePopup } from '@/modules/notices/NoticePopup'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Header } from '@/shared/layout/Header'
+import { RightPanelHost } from '@/shared/layout/RightPanel'
 import { Sidebar } from '@/shared/layout/Sidebar'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 
@@ -52,6 +53,10 @@ export function AppShell() {
           </Suspense>
         </main>
       </div>
+
+      {/* 화면이 채우는 오른쪽 영역. 아무도 안 쓰면 폭이 0 이다.
+          **본문 안에 두면 `mx-auto max-w-7xl` 을 따라 가운데로 딸려 들어간다.** */}
+      <RightPanelHost />
 
       {/* 읽지 않은 팝업 공지는 스스로 뜬다 — 공지 화면에 들어가야만 보이면
           "배포 없이 안내를 전한다" 는 목적이 성립하지 않는다. */}
