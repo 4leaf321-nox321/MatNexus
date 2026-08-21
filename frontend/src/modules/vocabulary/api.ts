@@ -23,6 +23,7 @@ export type Alias = components['schemas']['TermAliasOut']
 export type SpecimenField = components['schemas']['SpecimenFieldOut']
 /** 값이 고를 수 있는 종류. 키가 아니라 이름을 함께 준다. */
 export type TermKind = components['schemas']['TermKindOut']
+export type SpecimenFieldSave = components['schemas']['SpecimenFieldSaveRequest']
 export type BulkResult = components['schemas']['BulkTermOut']
 export type DeleteResult = components['schemas']['BulkDeleteOut']
 export type DriftReport = components['schemas']['DriftReportOut']
@@ -48,6 +49,19 @@ export const vocabularyApi = {
    */
   /** 이 축의 값이 고를 수 있는 종류. **치수 칸을 선언한 시험 종류만.** */
   kinds: (slug: string) => api.get<TermKind[]>(`/vocabularies/${slug}/kinds`),
+
+  /**
+   * 그 종류의 치수 칸을 **통째로** 바꾼다. 순서가 곧 화면의 순서다.
+   *
+   * 권한은 시험 종류를 고치는 것과 같다 — 전역 종류는 시스템 관리자만, 부서
+   * 종류는 그 부서 관리자도. 칸을 바꾸면 그 종류를 쓰는 **모든 규격**이 따라
+   * 바뀐다.
+   */
+  saveSpecimenFields: (slug: string, kind: string, fields: SpecimenFieldSave[]) =>
+    api.put<SpecimenField[]>(
+      `/vocabularies/${slug}/specimen-fields?kind=${encodeURIComponent(kind)}`,
+      { fields }
+    ),
 
   specimenFields: (slug: string, kind: string) =>
     api.get<SpecimenField[]>(

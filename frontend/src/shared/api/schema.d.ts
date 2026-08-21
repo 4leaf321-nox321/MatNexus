@@ -1854,7 +1854,27 @@ export interface paths {
          *     곳을 빠뜨린다 — 처리 단계의 `ParamSpec` 과 같은 자리다(D7).
          */
         get: operations["list_specimen_fields_api_vocabularies__slug__specimen_fields_get"];
-        put?: never;
+        /**
+         * Save Specimen Fields
+         * @description 이 시험 종류의 규격이 갖는 치수 칸을 정한다. **통째로 바꾼다.**
+         *
+         *     ## 왜 기준정보에서 고치는가
+         *
+         *     칸은 시험 종류의 것이지만(`test_specimen_fields`), **그것을 고치고 싶어지는
+         *     자리는 규격을 적다가**다 — "ASTM E8 에 그립부 길이도 적고 싶은데 칸이
+         *     없네" 는 규격 화면에서 나온다. 시험 종류 관리로 보내면 두 화면을 오가야 한다.
+         *
+         *     권한은 **시험 종류를 고치는 것과 같다** — 전역 종류는 시스템 관리자만,
+         *     부서 종류는 그 부서 관리자도. 칸을 바꾸는 것은 그 종류를 쓰는 모든 규격에
+         *     영향을 준다.
+         *
+         *     ## 이미 쓰이는 키를 지우면
+         *
+         *     그 키로 저장된 치수는 **스키마 밖이 되어 화면에서 사라진다.** 지우지는
+         *     않는다(값은 JSONB 에 그대로 남는다) — 칸을 되살리면 다시 보인다. 지워
+         *     버리면 되살릴 방법이 없다.
+         */
+        put: operations["save_specimen_fields_api_vocabularies__slug__specimen_fields_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4297,6 +4317,48 @@ export interface components {
             si_unit: string;
             /** Sort Order */
             sort_order: number;
+        };
+        /**
+         * SpecimenFieldSaveRequest
+         * @description 칸 하나를 저장할 때의 모양. **키는 계약이다.**
+         *
+         *     이미 저장된 규격의 속성이 이 키로 들어 있으므로, 키를 바꾸면 그 값들이 갈
+         *     곳을 잃는다. 이름(`label`)은 얼마든지 고쳐도 된다 — `TestType.key`/`label`
+         *     을 나눈 것과 같은 관계다.
+         */
+        SpecimenFieldSaveRequest: {
+            /**
+             * Dimension
+             * @default length
+             */
+            dimension: string;
+            /** Help */
+            help?: string | null;
+            /**
+             * Is Required
+             * @default false
+             */
+            is_required: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Si Unit
+             * @default m
+             */
+            si_unit: string;
+        };
+        /**
+         * SpecimenFieldsSaveRequest
+         * @description 이 시험 종류의 규격 칸 **전체**.
+         *
+         *     부분 갱신이 아니라 통째로 바꾼다 — 순서가 곧 화면의 순서라, 부분으로 두면
+         *     "3번을 지우고 5번을 2번으로" 같은 것을 표현할 수가 없다.
+         */
+        SpecimenFieldsSaveRequest: {
+            /** Fields */
+            fields: components["schemas"]["SpecimenFieldSaveRequest"][];
         };
         /** SpecimenOut */
         SpecimenOut: {
@@ -8747,6 +8809,44 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenFieldOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_specimen_fields_api_vocabularies__slug__specimen_fields_put: {
+        parameters: {
+            query: {
+                /** @description 시험 종류 키 */
+                kind: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenFieldsSaveRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

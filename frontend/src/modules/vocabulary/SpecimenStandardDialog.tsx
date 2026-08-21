@@ -21,7 +21,9 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Ruler } from 'lucide-react'
 
+import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { vocabularyApi } from '@/modules/vocabulary/api'
 import type { SpecimenField, Term } from '@/modules/vocabulary/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -61,6 +63,8 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  /** 칸 자체를 고치러 들어간 상태. **고치고 싶어지는 자리가 여기다.** */
+  const [editingFields, setEditingFields] = useState(false)
 
   const fields = useResource<SpecimenField[]>(
     () => (kind ? vocabularyApi.specimenFields(slug, kind) : Promise.resolve([])),
@@ -105,6 +109,21 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
     } finally {
       setBusy(false)
     }
+  }
+
+  if (editingFields && kind) {
+    return (
+      <SpecimenFieldsDialog
+        slug={slug}
+        kind={kind}
+        kindLabel={(kinds.data ?? []).find((item) => item.key === kind)?.label ?? kind}
+        onClose={() => setEditingFields(false)}
+        onSaved={() => {
+          setEditingFields(false)
+          fields.reload()
+        }}
+      />
+    )
   }
 
   return (
@@ -183,9 +202,22 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
             })}
             {(fields.data ?? []).length === 0 && !fields.loading && (
               <p className="text-muted-foreground text-sm">
-                이 시험 종류는 아직 규격 치수 칸을 선언하지 않았습니다.
+                이 시험 종류는 아직 규격 치수 칸이 없습니다. 아래에서 만드세요.
               </p>
             )}
+
+            {/* **칸이 모자라면 여기서 바로 고친다.** "그립부 길이도 적고 싶은데
+                칸이 없네" 는 규격을 적다가 나오는 말이지, 시험 종류 관리 화면
+                에서 나오는 말이 아니다 — 두 화면을 오가게 하면 대개 포기한다. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => setEditingFields(true)}
+            >
+              <Ruler className="size-3.5" />
+              칸 고치기
+            </Button>
           </div>
         )}
 

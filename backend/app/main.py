@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import version
 from app.config import Settings, get_settings
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.logging_setup import setup_logging
 from app.modules.accounts import routes as accounts_routes
 from app.modules.auth import routes as auth_routes
@@ -33,6 +33,7 @@ from app.modules.viscoelastic import routes as viscoelastic_routes
 from app.modules.voc import routes as voc_routes
 from app.modules.vocabulary import routes as vocabulary_routes
 from app.modules.workspaces import routes as workspaces_routes
+from app.schema_version import warn_if_behind
 from app.shared.access_log import AccessLogMiddleware
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
@@ -160,6 +161,11 @@ def create_app() -> FastAPI:
 
     # SPA catch-all은 반드시 API 라우터 뒤에 등록한다.
     _mount_spa(app, settings)
+
+    # **DB 가 코드보다 뒤처져 있으면 여기서 말한다.** 안 그러면 사람은 화면의
+    # 500 으로 먼저 만나는데, 거기엔 원인이 안 적힌다. 운영은 배포가 알아서
+    # `alembic upgrade head` 를 돌리므로 이건 개발 서버를 위한 안내다.
+    warn_if_behind(engine)
 
     logger.info("MatNexus 기동 (env=%s)", settings.app_env)
     return app

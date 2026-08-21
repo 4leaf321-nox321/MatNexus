@@ -42,10 +42,11 @@ class TestSchema:
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
         """**목록을 프론트에 적지 않는다.** 화면이 이 응답으로 폼을 그린다."""
-        tensile = client.get(
+        found = client.get(
             f"/api/vocabularies/{SLUG}/specimen-fields?kind=tensile", headers=admin_headers
-        ).json()
-        keys = [item["key"] for item in tensile]
+        )
+        assert found.status_code == 200, found.text
+        keys = [item["key"] for item in found.json()]
         assert "gauge_length" in keys
         assert "shoulder_radius" in keys
 
@@ -73,6 +74,26 @@ class TestSchema:
         # 두께·폭처럼 겹치는 칸은 있다. 그게 정상이다.
         assert {"width", "thickness"} <= tensile & dma
 
+    def test_고를_수_있는_종류를_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**상태 코드를 본다.** 처음에는 `json()` 만 보다가 500 을 놓쳤다 —
+        `SELECT DISTINCT` 에 정렬 열이 select 에 없어서 Postgres 가 거절하고
+        있었는데, 시험은 그 응답의 본문만 읽고 통과했다."""
+        found = client.get(f"/api/vocabularies/{SLUG}/kinds", headers=admin_headers)
+        assert found.status_code == 200, found.text
+        keys = [item["key"] for item in found.json()]
+        assert keys == ["tensile", "dma_sweep"]
+        # 키가 아니라 이름을 함께 준다.
+        assert found.json()[0]["label"] == "인장시험"
+
+    def test_속성을_안_쓰는_축은_종류가_없다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        found = client.get("/api/vocabularies/manufacturer/kinds", headers=admin_headers)
+        assert found.status_code == 200
+        assert found.json() == []
+
     def test_속성을_안_쓰는_축은_칸이_없다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
@@ -86,10 +107,9 @@ class TestSchema:
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
         """화면이 "치수 칸을 그릴까" 를 이걸로 정한다."""
-        axes = {
-            item["slug"]: item["attribute_source"]
-            for item in client.get("/api/vocabularies", headers=admin_headers).json()
-        }
+        listed = client.get("/api/vocabularies", headers=admin_headers)
+        assert listed.status_code == 200, listed.text
+        axes = {item["slug"]: item["attribute_source"] for item in listed.json()}
         assert axes[SLUG] == "test_type"
         assert axes["manufacturer"] is None
 
@@ -244,3 +264,138 @@ class TestUpdate:
         )
         assert renamed.status_code == 200
         assert renamed.json()["attributes"]["gauge_length"] == 0.05
+
+
+class TestFieldEditing:
+    """치수 칸을 **기준정보 화면에서 고친다.**
+
+    칸은 시험 종류의 것이지만, 고치고 싶어지는 자리는 규격을 적다가다 —
+    "ASTM E8 에 그립부 길이도 적고 싶은데 칸이 없네" 는 규격 화면에서 나온다.
+    """
+
+    def _fields(self, client: TestClient, headers: dict[str, str]) -> list[dict[str, Any]]:
+        found = client.get(
+            f"/api/vocabularies/{SLUG}/specimen-fields?kind=tensile", headers=headers
+        )
+        assert found.status_code == 200, found.text
+        rows: list[dict[str, Any]] = found.json()
+        return rows
+
+    def test_칸을_더한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        current = self._fields(client, admin_headers)
+        saved = client.put(
+            f"/api/vocabularies/{SLUG}/specimen-fields?kind=tensile",
+            json={
+                "fields": [
+                    {
+                        "key": item["key"],
+                        "label": item["label"],
+                        "dimension": item["dimension"],
+                        "si_unit": item["si_unit"],
+                        "is_required": item["is_required"],
+                        "help": item["help"],
+                    }
+                    for item in current
+                ]
+                + [
+                    {
+                        "key": "grip_length",
+                        "label": "그립부 길이",
+                        "dimension": "length",
+                        "si_unit": "m",
+                        "is_required": False,
+                        "help": None,
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        assert [item["key"] for item in saved.json()][-1] == "grip_length"
+
+    def test_뺀_칸의_값은_안_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**화면에서 사라질 뿐이다.** 지워 버리면 되살릴 방법이 없다."""
+        term_id = str(
+            make(
+                client,
+                admin_headers,
+                value="ASTM E8 wide",
+                kind="tensile",
+                attributes={"gauge_length": 0.05, "width": 0.0125, "shoulder_radius": 0.006},
+            ).json()["id"]
+        )
+
+        client.put(
+            f"/api/vocabularies/{SLUG}/specimen-fields?kind=tensile",
+            json={
+                "fields": [
+                    {
+                        "key": "gauge_length",
+                        "label": "게이지 길이",
+                        "dimension": "length",
+                        "si_unit": "m",
+                        "is_required": True,
+                        "help": None,
+                    },
+                    {
+                        "key": "width",
+                        "label": "평행부 폭",
+                        "dimension": "length",
+                        "si_unit": "m",
+                        "is_required": True,
+                        "help": None,
+                    },
+                ]
+            },
+            headers=admin_headers,
+        )
+
+        listed = client.get(
+            f"/api/vocabularies/{SLUG}/terms?q=ASTM E8 wide", headers=admin_headers
+        ).json()
+        term = next(item for item in listed["items"] if item["id"] == term_id)
+        # 값은 그대로 있다 — 칸을 되살리면 다시 보인다.
+        assert term["attributes"]["shoulder_radius"] == 0.006
+
+    def test_이름이_겹치면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        rejected = client.put(
+            f"/api/vocabularies/{SLUG}/specimen-fields?kind=tensile",
+            json={
+                "fields": [
+                    {
+                        "key": "gauge_length",
+                        "label": "게이지 길이",
+                        "dimension": "length",
+                        "si_unit": "m",
+                        "is_required": True,
+                        "help": None,
+                    },
+                    {
+                        "key": "gauge_length",
+                        "label": "또 게이지 길이",
+                        "dimension": "length",
+                        "si_unit": "m",
+                        "is_required": False,
+                        "help": None,
+                    },
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert rejected.status_code == 422
+
+    def test_속성을_안_쓰는_축에는_칸을_못_만든다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        rejected = client.put(
+            "/api/vocabularies/manufacturer/specimen-fields?kind=tensile",
+            json={"fields": []},
+            headers=admin_headers,
+        )
+        assert rejected.status_code == 422

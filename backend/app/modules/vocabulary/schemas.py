@@ -72,6 +72,32 @@ class SpecimenFieldOut(BaseModel):
     sort_order: int
 
 
+class SpecimenFieldSaveRequest(BaseModel):
+    """칸 하나를 저장할 때의 모양. **키는 계약이다.**
+
+    이미 저장된 규격의 속성이 이 키로 들어 있으므로, 키를 바꾸면 그 값들이 갈
+    곳을 잃는다. 이름(`label`)은 얼마든지 고쳐도 된다 — `TestType.key`/`label`
+    을 나눈 것과 같은 관계다.
+    """
+
+    key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=100)
+    dimension: str = Field(default="length", max_length=20)
+    si_unit: str = Field(default="m", max_length=20)
+    is_required: bool = False
+    help: str | None = None
+
+
+class SpecimenFieldsSaveRequest(BaseModel):
+    """이 시험 종류의 규격 칸 **전체**.
+
+    부분 갱신이 아니라 통째로 바꾼다 — 순서가 곧 화면의 순서라, 부분으로 두면
+    "3번을 지우고 5번을 2번으로" 같은 것을 표현할 수가 없다.
+    """
+
+    fields: list[SpecimenFieldSaveRequest]
+
+
 class TermCreateRequest(BaseModel):
     value: str = Field(min_length=1, max_length=200)
     parent_value: str | None = Field(default=None, max_length=200)

@@ -35,6 +35,7 @@ from app.modules.vocabulary.schemas import (
     DriftReportOut,
     MergeRequest,
     SpecimenFieldOut,
+    SpecimenFieldsSaveRequest,
     TermAliasCreateRequest,
     TermAliasOut,
     TermCreateRequest,
@@ -46,6 +47,7 @@ from app.modules.vocabulary.schemas import (
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import MAX_LIMIT, Page, clamp_limit
+from app.shared.permissions import require_owner_edit
 
 router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 
@@ -203,10 +205,12 @@ def list_kinds(
     vocabulary = services.get_vocabulary(db, slug)
     if vocabulary.attribute_source != "test_type":
         return []
+    # **`DISTINCT` 에는 정렬 열도 select 에 있어야 한다**(Postgres 가 거절한다).
+    # 종류당 칸이 여럿이라 조인하면 줄이 늘어나므로, 중복은 `IN` 으로 없앤다 —
+    # 정렬 열을 결과에 끌고 들어오는 것보다 이 편이 읽기 쉽다.
     rows = db.execute(
         select(TestType.key, TestType.label)
-        .join(TestSpecimenField, TestSpecimenField.test_type_id == TestType.id)
-        .distinct()
+        .where(TestType.id.in_(select(TestSpecimenField.test_type_id).distinct()))
         .order_by(TestType.sort_order, TestType.label)
     )
     return [TermKindOut(key=key, label=label) for key, label in rows]
@@ -225,6 +229,92 @@ def list_specimen_fields(
     곳을 빠뜨린다 — 처리 단계의 `ParamSpec` 과 같은 자리다(D7).
     """
     vocabulary = services.get_vocabulary(db, slug)
+    return [
+        SpecimenFieldOut(
+            key=field.key,
+            label=field.label,
+            dimension=field.dimension,
+            si_unit=field.si_unit,
+            is_required=field.is_required,
+            help=field.help,
+            sort_order=field.sort_order,
+        )
+        for field in services.attribute_fields(db, vocabulary, kind)
+    ]
+
+
+@router.put("/{slug}/specimen-fields", response_model=list[SpecimenFieldOut])
+def save_specimen_fields(
+    slug: str,
+    payload: SpecimenFieldsSaveRequest,
+    kind: str = Query(description="시험 종류 키"),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[SpecimenFieldOut]:
+    """이 시험 종류의 규격이 갖는 치수 칸을 정한다. **통째로 바꾼다.**
+
+    ## 왜 기준정보에서 고치는가
+
+    칸은 시험 종류의 것이지만(`test_specimen_fields`), **그것을 고치고 싶어지는
+    자리는 규격을 적다가**다 — "ASTM E8 에 그립부 길이도 적고 싶은데 칸이
+    없네" 는 규격 화면에서 나온다. 시험 종류 관리로 보내면 두 화면을 오가야 한다.
+
+    권한은 **시험 종류를 고치는 것과 같다** — 전역 종류는 시스템 관리자만,
+    부서 종류는 그 부서 관리자도. 칸을 바꾸는 것은 그 종류를 쓰는 모든 규격에
+    영향을 준다.
+
+    ## 이미 쓰이는 키를 지우면
+
+    그 키로 저장된 치수는 **스키마 밖이 되어 화면에서 사라진다.** 지우지는
+    않는다(값은 JSONB 에 그대로 남는다) — 칸을 되살리면 다시 보인다. 지워
+    버리면 되살릴 방법이 없다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    if vocabulary.attribute_source != "test_type":
+        raise AppError(
+            "MNX-VOCABULARY-0014",
+            f"'{vocabulary.label}' 축의 값은 치수를 갖지 않습니다.",
+            status=422,
+        )
+
+    test_type = db.scalar(select(TestType).where(TestType.key == kind))
+    if test_type is None:
+        raise NotFound("MNX-VOCABULARY-0009", f"'{kind}' 는 등록된 시험 종류가 아닙니다.")
+    require_owner_edit(
+        db,
+        user,
+        test_type.owner_workspace_id,
+        what="시험 종류",
+        code="MNX-VOCABULARY-0015",
+    )
+
+    keys = [item.key for item in payload.fields]
+    if len(keys) != len(set(keys)):
+        raise AppError("MNX-VOCABULARY-0016", "칸 이름이 겹칩니다.", status=422)
+
+    existing = {
+        row.key: row
+        for row in db.scalars(
+            select(TestSpecimenField).where(TestSpecimenField.test_type_id == test_type.id)
+        )
+    }
+    # **있던 것은 고쳐 쓴다.** 지우고 새로 만들면 id 가 바뀌는데, 그 id 를
+    # 가리키는 것이 아직 없어도 굳이 갈아 끼울 이유가 없다.
+    for order, item in enumerate(payload.fields):
+        row = existing.pop(item.key, None)
+        if row is None:
+            row = TestSpecimenField(test_type_id=test_type.id, key=item.key)
+            db.add(row)
+        row.label = item.label
+        row.dimension = item.dimension
+        row.si_unit = item.si_unit
+        row.is_required = item.is_required
+        row.help = item.help
+        row.sort_order = order * 10
+    for leftover in existing.values():
+        db.delete(leftover)
+
+    db.commit()
     return [
         SpecimenFieldOut(
             key=field.key,

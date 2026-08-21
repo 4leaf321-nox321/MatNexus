@@ -5588,6 +5588,75 @@
         "title": "SpecimenFieldOut",
         "type": "object"
       },
+      "SpecimenFieldSaveRequest": {
+        "description": "칸 하나를 저장할 때의 모양. **키는 계약이다.**\n\n이미 저장된 규격의 속성이 이 키로 들어 있으므로, 키를 바꾸면 그 값들이 갈\n곳을 잃는다. 이름(`label`)은 얼마든지 고쳐도 된다 — `TestType.key`/`label`\n을 나눈 것과 같은 관계다.",
+        "properties": {
+          "dimension": {
+            "default": "length",
+            "maxLength": 20,
+            "title": "Dimension",
+            "type": "string"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "is_required": {
+            "default": false,
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "default": "m",
+            "maxLength": 20,
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "SpecimenFieldSaveRequest",
+        "type": "object"
+      },
+      "SpecimenFieldsSaveRequest": {
+        "description": "이 시험 종류의 규격 칸 **전체**.\n\n부분 갱신이 아니라 통째로 바꾼다 — 순서가 곧 화면의 순서라, 부분으로 두면\n\"3번을 지우고 5번을 2번으로\" 같은 것을 표현할 수가 없다.",
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SpecimenFieldSaveRequest"
+            },
+            "title": "Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "title": "SpecimenFieldsSaveRequest",
+        "type": "object"
+      },
       "SpecimenOut": {
         "properties": {
           "adopted_count": {
@@ -13571,6 +13640,72 @@
           }
         },
         "summary": "List Specimen Fields",
+        "tags": [
+          "vocabulary"
+        ]
+      },
+      "put": {
+        "description": "이 시험 종류의 규격이 갖는 치수 칸을 정한다. **통째로 바꾼다.**\n\n## 왜 기준정보에서 고치는가\n\n칸은 시험 종류의 것이지만(`test_specimen_fields`), **그것을 고치고 싶어지는\n자리는 규격을 적다가**다 — \"ASTM E8 에 그립부 길이도 적고 싶은데 칸이\n없네\" 는 규격 화면에서 나온다. 시험 종류 관리로 보내면 두 화면을 오가야 한다.\n\n권한은 **시험 종류를 고치는 것과 같다** — 전역 종류는 시스템 관리자만,\n부서 종류는 그 부서 관리자도. 칸을 바꾸는 것은 그 종류를 쓰는 모든 규격에\n영향을 준다.\n\n## 이미 쓰이는 키를 지우면\n\n그 키로 저장된 치수는 **스키마 밖이 되어 화면에서 사라진다.** 지우지는\n않는다(값은 JSONB 에 그대로 남는다) — 칸을 되살리면 다시 보인다. 지워\n버리면 되살릴 방법이 없다.",
+        "operationId": "save_specimen_fields_api_vocabularies__slug__specimen_fields_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "description": "시험 종류 키",
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "description": "시험 종류 키",
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecimenFieldsSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SpecimenFieldOut"
+                  },
+                  "title": "Response Save Specimen Fields Api Vocabularies  Slug  Specimen Fields Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Specimen Fields",
         "tags": [
           "vocabulary"
         ]
