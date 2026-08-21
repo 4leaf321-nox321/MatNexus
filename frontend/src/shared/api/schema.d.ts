@@ -1765,6 +1765,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/{slug}/kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Kinds
+         * @description 이 축의 값이 고를 수 있는 종류. **치수 칸을 선언한 시험 종류만.**
+         *
+         *     선언하지 않은 종류를 고르게 두면 칸이 하나도 없는 규격이 만들어지고, 화면은
+         *     그걸 고장으로 보여 준다.
+         *
+         *     이 목록을 기준정보 API 가 내는 이유: 화면이 시험 모듈을 따로 부르지 않아도
+         *     되게. 규격의 스키마가 시험 종류에서 온다는 것은 **서버 쪽 사정**이다.
+         */
+        get: operations["list_kinds_api_vocabularies__slug__kinds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/merge-candidates": {
         parameters: {
             query?: never;
@@ -1807,6 +1833,29 @@ export interface paths {
          *     함께 둔다.
          */
         post: operations["recount_terms_api_vocabularies__slug__recount_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/specimen-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Specimen Fields
+         * @description 이 시험 종류의 규격이 갖는 치수 칸. **화면이 이걸로 입력 폼을 그린다.**
+         *
+         *     목록을 프론트에 적으면 시험 종류를 추가할 때 두 곳을 고쳐야 하고, 그러면 한
+         *     곳을 빠뜨린다 — 처리 단계의 `ParamSpec` 과 같은 자리다(D7).
+         */
+        get: operations["list_specimen_fields_api_vocabularies__slug__specimen_fields_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4226,6 +4275,29 @@ export interface components {
             /** Width */
             width?: number | null;
         };
+        /**
+         * SpecimenFieldOut
+         * @description 시편 규격이 갖는 치수 칸 하나. **시험 종류가 선언한다.**
+         *
+         *     화면이 이 응답만으로 입력 칸을 그린다 — 목록을 프론트에 적으면 시험 종류를
+         *     추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+         */
+        SpecimenFieldOut: {
+            /** Dimension */
+            dimension: string;
+            /** Help */
+            help?: string | null;
+            /** Is Required */
+            is_required: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Sort Order */
+            sort_order: number;
+        };
         /** SpecimenOut */
         SpecimenOut: {
             /**
@@ -4492,18 +4564,50 @@ export interface components {
         };
         /** TermCreateRequest */
         TermCreateRequest: {
+            /**
+             * Attributes
+             * @default {}
+             */
+            attributes: {
+                [key: string]: number;
+            };
+            /** Kind */
+            kind?: string | null;
             /** Parent Value */
             parent_value?: string | null;
             /** Value */
             value: string;
         };
+        /**
+         * TermKindOut
+         * @description 값이 고를 수 있는 종류 하나. 지금은 시험 종류다.
+         *
+         *     **키가 아니라 이름을 함께 준다** — `dma_sweep` 은 사람이 읽는 말이 아니다.
+         */
+        TermKindOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
         /** TermOut */
         TermOut: {
+            /**
+             * Attributes
+             * @default {}
+             */
+            attributes: {
+                [key: string]: number;
+            };
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Kind */
+            kind?: string | null;
+            /** Kind Label */
+            kind_label?: string | null;
             /** Parent Value */
             parent_value?: string | null;
             /**
@@ -4524,6 +4628,12 @@ export interface components {
          *     없게 된다. `deprecated` 로 감추면 피커에서만 사라진다.
          */
         TermUpdateRequest: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: number;
+            } | null;
+            /** Kind */
+            kind?: string | null;
             /** Parent Value */
             parent_value?: string | null;
             /** Status */
@@ -5014,6 +5124,8 @@ export interface components {
         };
         /** VocabularyOut */
         VocabularyOut: {
+            /** Attribute Source */
+            attribute_source?: string | null;
             /** Entry Policy */
             entry_policy: string;
             /** Label */
@@ -8529,6 +8641,37 @@ export interface operations {
             };
         };
     };
+    list_kinds_api_vocabularies__slug__kinds_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermKindOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     merge_candidates_api_vocabularies__slug__merge_candidates_get: {
         parameters: {
             query?: never;
@@ -8578,6 +8721,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TermOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_specimen_fields_api_vocabularies__slug__specimen_fields_get: {
+        parameters: {
+            query: {
+                /** @description 시험 종류 키 */
+                kind: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenFieldOut"][];
                 };
             };
             /** @description Validation Error */

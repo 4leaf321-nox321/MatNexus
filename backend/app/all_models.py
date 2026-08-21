@@ -30,6 +30,7 @@ from app.modules.tests.models import (
     TestChannel,
     TestConditionField,
     TestRun,
+    TestSpecimenField,
     TestSummary,
     TestType,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "TestChannel",
     "TestConditionField",
     "TestRun",
+    "TestSpecimenField",
     "TestSummary",
     "TestType",
     "User",

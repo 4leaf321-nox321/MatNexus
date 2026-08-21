@@ -14,6 +14,15 @@ import type { components } from '@/shared/api/schema'
 export type Vocabulary = components['schemas']['VocabularyOut']
 export type Term = components['schemas']['TermOut']
 export type Alias = components['schemas']['TermAliasOut']
+/**
+ * 시편 규격이 갖는 치수 칸 하나. **시험 종류가 선언한다.**
+ *
+ * 목록을 화면에 적지 않는다 — 시험 종류를 추가할 때 두 곳을 고쳐야 하고, 그러면
+ * 한 곳을 빠뜨린다(처리 단계의 `ParamSpec` 과 같은 자리, D7).
+ */
+export type SpecimenField = components['schemas']['SpecimenFieldOut']
+/** 값이 고를 수 있는 종류. 키가 아니라 이름을 함께 준다. */
+export type TermKind = components['schemas']['TermKindOut']
 export type BulkResult = components['schemas']['BulkTermOut']
 export type DeleteResult = components['schemas']['BulkDeleteOut']
 export type DriftReport = components['schemas']['DriftReportOut']
@@ -24,8 +33,26 @@ export const BULK_MAX = 500
 type TermUpdate = components['schemas']['TermUpdateRequest']
 
 export const vocabularyApi = {
-  /** 축 목록. 화면이 '새로 추가' 를 보여 줄지 정하는 데 쓴다. */
+  /**
+   * 축 목록. 화면이 '새로 추가' 를 보여 줄지, **치수 칸을 그릴지** 정하는 데 쓴다
+   * (`attribute_source`).
+   */
   list: () => api.get<Vocabulary[]>('/vocabularies'),
+
+  /**
+   * 이 시험 종류의 규격이 갖는 치수 칸. **화면이 이걸로 입력 폼을 그린다.**
+   *
+   * 인장 규격에는 어깨 반경이 있고 DMA 규격에는 지지 간격이 있다 — 하나의
+   * 고정된 칸 목록으로 둘을 담으면 절반이 늘 비고, 그 빈 칸이 "안 쟀다" 인지
+   * "이 규격에 없는 값" 인지 구별되지 않는다.
+   */
+  /** 이 축의 값이 고를 수 있는 종류. **치수 칸을 선언한 시험 종류만.** */
+  kinds: (slug: string) => api.get<TermKind[]>(`/vocabularies/${slug}/kinds`),
+
+  specimenFields: (slug: string, kind: string) =>
+    api.get<SpecimenField[]>(
+      `/vocabularies/${slug}/specimen-fields?kind=${encodeURIComponent(kind)}`
+    ),
 
   /**
    * 문자열 컬럼과 기준정보가 어긋난 행. **0 이어야 한다.**
@@ -156,10 +183,17 @@ export const vocabularyApi = {
    * 피커는 사람이 엔터를 치는 순간 낙관적으로 보낸다. 그때 오류를 그리게 하면,
    * 실제로 일어난 일이 "이미 있는 값을 골랐다" 뿐인데도 화면이 멈춘다.
    */
-  create: (slug: string, value: string, parentValue?: string) =>
+  create: (
+    slug: string,
+    value: string,
+    parentValue?: string,
+    /** 속성을 갖는 축(시편 규격)에서만. 값은 **SI 로 보낸다.** */
+    extra?: { kind?: string | null; attributes?: Record<string, number> }
+  ) =>
     api.post<Term>(`/vocabularies/${slug}/terms`, {
       value,
       // 새 값이 부모를 물려받는다 — 계층이 쓰면서 저절로 만들어진다.
       parent_value: parentValue ?? null,
+      ...(extra ?? {}),
     }),
 }

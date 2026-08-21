@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
@@ -980,3 +981,119 @@ def delete_term(db: Session, term: VocabularyTerm) -> str | None:
         return f"하위 값 {children}개가 이 값을 상위로 삼고 있습니다."
     db.delete(term)
     return None
+
+
+# --- 속성 있는 값 -----------------------------------------------------------
+#
+# 시편 규격은 이름이 아니라 **치수 한 벌**이다(`ASTM E8 subsize` = 게이지 길이
+# 25 mm · 평행부 폭 6 mm …). 그런데 그 칸이 시험 종류마다 다르다 — 인장 규격에는
+# 어깨 반경이 있고 DMA 규격에는 지지 간격이 있다.
+#
+# 그래서 **스키마를 시험 종류가 선언하고**(`test_specimen_fields`), 값은 자기가
+# 어느 종류의 규격인지만 적는다(`VocabularyTerm.kind`).
+
+
+def attribute_fields(db: Session, vocabulary: Vocabulary, kind: str | None) -> list[Any]:
+    """이 값이 가질 수 있는 속성 칸. 없으면 빈 목록.
+
+    축이 속성을 안 쓰거나(`attribute_source` 가 비었거나) 종류를 아직 안 골랐으면
+    칸도 없다 — **없는 스키마에 값을 넣게 두지 않는다.**
+    """
+    from app.modules.tests.models import TestSpecimenField, TestType
+
+    if vocabulary.attribute_source != "test_type" or not kind:
+        return []
+    test_type = db.scalar(select(TestType).where(TestType.key == kind))
+    if test_type is None:
+        return []
+    return list(
+        db.scalars(
+            select(TestSpecimenField)
+            .where(TestSpecimenField.test_type_id == test_type.id)
+            .order_by(TestSpecimenField.sort_order)
+        )
+    )
+
+
+def check_kind(db: Session, vocabulary: Vocabulary, kind: str | None) -> None:
+    """종류가 실제로 있는 시험 종류인가.
+
+    **오타를 값으로 받지 않는다.** `tensil` 이 들어가면 그 규격은 스키마가 빈
+    채로 저장되고, 화면은 "칸이 없는 규격" 을 보여 준다 — 고장으로 읽힌다.
+    """
+    from app.modules.tests.models import TestType
+
+    if vocabulary.attribute_source != "test_type" or kind is None:
+        return
+    if db.scalar(select(TestType).where(TestType.key == kind)) is None:
+        raise AppError(
+            "MNX-VOCABULARY-0009",
+            f"'{kind}' 는 등록된 시험 종류가 아닙니다.",
+            status=422,
+        )
+
+
+def check_attributes(
+    db: Session, vocabulary: Vocabulary, kind: str | None, attributes: dict[str, Any]
+) -> dict[str, float]:
+    """속성을 스키마에 견줘 본다. 통과하면 저장할 모양으로 돌려준다.
+
+    세 가지를 본다.
+
+      - **스키마에 없는 키는 거절한다.** 오타 하나가 조용히 새 속성이 되면
+        아무도 못 찾는다.
+      - **숫자여야 한다.** 치수 칸은 전부 길이다.
+      - **필수 칸은 비울 수 없다.** 게이지 길이 없는 인장 규격은 규격이 아니다.
+
+    값은 **SI 로 온다.** 규격서가 mm 로 적혀 있어도 화면이 바꿔서 보낸다 —
+    이 저장소는 저장을 언제나 정본 SI 로 한다.
+    """
+    fields = attribute_fields(db, vocabulary, kind)
+    if not fields:
+        if attributes:
+            raise AppError(
+                "MNX-VOCABULARY-0010",
+                "이 값은 속성을 갖지 않습니다. 시험 종류를 먼저 고르세요.",
+                status=422,
+            )
+        return {}
+
+    known = {field.key: field for field in fields}
+    unknown = sorted(set(attributes) - set(known))
+    if unknown:
+        raise AppError(
+            "MNX-VOCABULARY-0011",
+            f"이 시험 종류에 없는 속성입니다: {', '.join(unknown)}.",
+            status=422,
+        )
+
+    cleaned: dict[str, float] = {}
+    for key, raw in attributes.items():
+        if raw is None or raw == "":
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            raise AppError(
+                "MNX-VOCABULARY-0012",
+                f"'{known[key].label}' 은(는) 숫자여야 합니다: {raw!r}.",
+                status=422,
+            ) from None
+        if not math.isfinite(value) or value <= 0:
+            raise AppError(
+                "MNX-VOCABULARY-0012",
+                f"'{known[key].label}' 은(는) 0 보다 큰 값이어야 합니다.",
+                status=422,
+            )
+        cleaned[key] = value
+
+    missing = [
+        field.label for field in fields if field.is_required and field.key not in cleaned
+    ]
+    if missing:
+        raise AppError(
+            "MNX-VOCABULARY-0013",
+            f"필수 치수가 비어 있습니다: {', '.join(missing)}.",
+            status=422,
+        )
+    return cleaned

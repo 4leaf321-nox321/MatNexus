@@ -36,13 +36,13 @@ const RUN_ID = `E2E${Date.now().toString().slice(-8)}`
 test.describe.configure({ mode: 'serial' })
 
 /**
- * 어휘 피커에서 값을 고른다. 없으면 새로 만든다.
+ * 기준정보 피커에서 값을 고른다. 없으면 새로 만든다.
  *
- * **자유 입력이 아니다.** Family·Category·Grade 는 v0.7.0 부터 어휘를 거친다
+ * **자유 입력이 아니다.** Family·Category·Grade 는 v0.7.0 부터 기준정보를 거친다
  * (ADR 0010). 그때 이 시험이 `getByLabel('Family').fill()` 인 채로 남아 CI 가
  * 19번 연속 빨갰다 — 화면을 바꿀 때 스모크를 같이 안 고친 것이다.
  *
- * 새 DB 에서는 `Metal` 조차 아직 어휘에 없으므로 **고르기와 만들기를 둘 다**
+ * 새 DB 에서는 `Metal` 조차 아직 기준정보에 없으므로 **고르기와 만들기를 둘 다**
  * 할 수 있어야 한다. 하나만 하면 두 번째 실행부터(또는 첫 실행에서) 깨진다.
  */
 async function pickVocabulary(page: Page, label: string, value: string) {
@@ -97,7 +97,7 @@ test('로그인부터 곡선까지', async ({ page }) => {
     await pickVocabulary(page, 'Grade', RUN_ID)
     await page.getByLabel('스펙 두께 (mm)').fill('1.0')
     await page.getByRole('button', { name: '등록', exact: true }).click()
-    // **이름으로 좁힌다.** 어휘 피커의 팝오버도 `role="dialog"` 라, 이름 없이
+    // **이름으로 좁힌다.** 기준정보 피커의 팝오버도 `role="dialog"` 라, 이름 없이
     // 찾으면 둘이 잡혀 strict 위반이 난다.
     await expect(page.getByRole('dialog', { name: '재료 등록' })).toBeHidden()
 

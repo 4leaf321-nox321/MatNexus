@@ -19,33 +19,36 @@ from app.modules.vocabulary.models import Vocabulary
 #:
 #: `open` 은 사용자가 피커에서 즉석 추가할 수 있다. `closed` 는 관리자가 등록한
 #: 값만 고른다 — 미리 정해야 하는 분류다.
-#: (slug, label, entry_policy, sort_order, parent_slug)
+#: (slug, label, entry_policy, sort_order, parent_slug, attribute_source)
 #:
 #: **분류는 사슬이다.** Metal → Steel → SECC. 평평하게 두면 Polymer + PP + SECC
 #: 같은 조합을 아무도 안 막고, 강종이 수만 개일 때 피커가 전체를 보여 준다.
-BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None]] = [
-    ("manufacturer", "제조사", "open", 10, None),
+BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = [
+    ("manufacturer", "제조사", "open", 10, None, None),
     # **유통사와 주 벤더가 한 축을 공유한다.** 같은 회사가 어떤 로트에서는
     # 유통사고 다른 로트에서는 주 벤더다. 축을 나누면 같은 회사가 두 목록에
     # 따로 쌓이고, 그 둘을 합칠 방법도 없다.
-    ("vendor", "거래처", "open", 20, None),
-    ("sales_type", "판매 유형", "open", 30, None),
-    ("specimen_standard", "시편 규격", "open", 40, None),
-    ("instrument", "장비", "open", 50, None),
+    ("vendor", "거래처", "open", 20, None, None),
+    ("sales_type", "판매 유형", "open", 30, None, None),
+    # **속성을 갖는 유일한 축.** 규격은 이름이 아니라 치수 한 벌이고, 그 칸이
+    # 시험 종류마다 다르다 — 그래서 스키마를 시험 종류가 선언한다
+    # (`test_specimen_fields`). 값마다 어느 종류의 규격인지는 `kind` 에 적는다.
+    ("specimen_standard", "시편 규격", "open", 40, None, "test_type"),
+    ("instrument", "장비", "open", 50, None, None),
     # **가장 큰 축이고 이득도 가장 크다.** 지금은 SECC/secc/S.E.C.C 가 서로
     # 다른 재료 셋을 만든다. 다만 강종은 재료 이름을 만드는 값이라(ADR 0004)
     # 값 이름을 고치면 재료·시료·시편·시험 이름이 전부 따라 바뀐다.
-    ("family", "Family", "open", 1, None),
-    ("category", "Category", "open", 2, "family"),
-    ("grade", "강종", "open", 5, "category"),
+    ("family", "Family", "open", 1, None, None),
+    ("category", "Category", "open", 2, "family", None),
+    ("grade", "강종", "open", 5, "category", None),
     # **용도는 재료의 성질이다**(전에는 시료에 있었다). "도어 이너용 재료가 뭐가
     # 있나" 가 집계 질문이 되려면 자유 문자열이면 안 된다 — `도어`/`Door`/`도어 `
     # 가 갈리면 그 질문에 답이 셋 나온다.
-    ("product", "적용 제품", "open", 60, None),
+    ("product", "적용 제품", "open", 60, None, None),
     # **부위를 제품 아래에 두지 않는다.** 계층은 값 하나에 부모 하나인데(`grade`
     # 의 부모가 `category` 하나이듯), `이너 패널` 은 도어에도 후드에도 쓰인다.
     # 부모를 붙이면 먼저 들어온 제품이 이기고 나머지는 조용히 틀린 곳에 매달린다.
-    ("part", "적용 부위", "open", 70, None),
+    ("part", "적용 부위", "open", 70, None, None),
 ]
 
 #: **전부 `open` 이다.** `closed` 는 만들어 두고 안 켠다.
@@ -68,7 +71,7 @@ def ensure_builtin_vocabularies(db: Session) -> list[str]:
     """
     existing = set(db.scalars(select(Vocabulary.slug)))
     created: list[str] = []
-    for slug, label, policy, order, parent in BUILTIN_VOCABULARIES:
+    for slug, label, policy, order, parent, attribute_source in BUILTIN_VOCABULARIES:
         if slug in existing:
             continue
         db.add(
@@ -78,6 +81,7 @@ def ensure_builtin_vocabularies(db: Session) -> list[str]:
                 entry_policy=policy,
                 sort_order=order,
                 parent_slug=parent,
+                attribute_source=attribute_source,
             )
         )
         created.append(slug)

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.tests.models import TestSpecimenField, TestType
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import (
     Vocabulary,
@@ -33,9 +34,11 @@ from app.modules.vocabulary.schemas import (
     DriftOut,
     DriftReportOut,
     MergeRequest,
+    SpecimenFieldOut,
     TermAliasCreateRequest,
     TermAliasOut,
     TermCreateRequest,
+    TermKindOut,
     TermOut,
     TermUpdateRequest,
     VocabularyOut,
@@ -64,7 +67,18 @@ def _term_out(db: Session, item: VocabularyTerm) -> TermOut:
         parent_value=parent.value if parent else None,
         usage_count=item.usage_count,
         status=item.status,
+        kind=item.kind,
+        # **키가 아니라 이름을 보여 준다.** `dma_sweep` 은 사람이 읽는 말이 아니다.
+        kind_label=_kind_label(db, item.kind),
+        attributes=dict(item.attributes or {}),
     )
+
+
+def _kind_label(db: Session, kind: str | None) -> str | None:
+    if not kind:
+        return None
+    found = db.scalar(select(TestType).where(TestType.key == kind))
+    return found.label if found else kind
 
 
 @router.get("", response_model=list[VocabularyOut])
@@ -88,6 +102,7 @@ def list_vocabularies(
             label=item.label,
             parent_slug=item.parent_slug,
             entry_policy=item.entry_policy,
+            attribute_source=item.attribute_source,
             term_count=counts.get(item.id, 0),
         )
         for item in rows
@@ -171,6 +186,59 @@ def repair_drift(
     return _report(db, row)
 
 
+@router.get("/{slug}/kinds", response_model=list[TermKindOut])
+def list_kinds(
+    slug: str,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[TermKindOut]:
+    """이 축의 값이 고를 수 있는 종류. **치수 칸을 선언한 시험 종류만.**
+
+    선언하지 않은 종류를 고르게 두면 칸이 하나도 없는 규격이 만들어지고, 화면은
+    그걸 고장으로 보여 준다.
+
+    이 목록을 기준정보 API 가 내는 이유: 화면이 시험 모듈을 따로 부르지 않아도
+    되게. 규격의 스키마가 시험 종류에서 온다는 것은 **서버 쪽 사정**이다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    if vocabulary.attribute_source != "test_type":
+        return []
+    rows = db.execute(
+        select(TestType.key, TestType.label)
+        .join(TestSpecimenField, TestSpecimenField.test_type_id == TestType.id)
+        .distinct()
+        .order_by(TestType.sort_order, TestType.label)
+    )
+    return [TermKindOut(key=key, label=label) for key, label in rows]
+
+
+@router.get("/{slug}/specimen-fields", response_model=list[SpecimenFieldOut])
+def list_specimen_fields(
+    slug: str,
+    kind: str = Query(description="시험 종류 키"),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[SpecimenFieldOut]:
+    """이 시험 종류의 규격이 갖는 치수 칸. **화면이 이걸로 입력 폼을 그린다.**
+
+    목록을 프론트에 적으면 시험 종류를 추가할 때 두 곳을 고쳐야 하고, 그러면 한
+    곳을 빠뜨린다 — 처리 단계의 `ParamSpec` 과 같은 자리다(D7).
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    return [
+        SpecimenFieldOut(
+            key=field.key,
+            label=field.label,
+            dimension=field.dimension,
+            si_unit=field.si_unit,
+            is_required=field.is_required,
+            help=field.help,
+            sort_order=field.sort_order,
+        )
+        for field in services.attribute_fields(db, vocabulary, kind)
+    ]
+
+
 @router.get("/{slug}/terms", response_model=Page[TermOut])
 def search_terms(
     slug: str,
@@ -240,6 +308,15 @@ def create_term(
     if term is None:
         # `clean` 이 빈 값으로 만든 경우 — 공백만 친 것이다.
         raise AppError("MNX-VOCABULARY-0003", "값이 비어 있습니다.", status=422)
+
+    # **속성은 새로 만들 때만 받는다.** 이미 있는 값을 골랐을 때 조용히
+    # 덮어쓰면, 피커에서 이름만 친 사람이 남의 규격 치수를 지우게 된다.
+    if term.kind is None and not term.attributes:
+        services.check_kind(db, vocabulary, payload.kind)
+        term.kind = payload.kind
+        term.attributes = services.check_attributes(
+            db, vocabulary, payload.kind, payload.attributes
+        )
     db.commit()
     db.refresh(term)
     return _term_out(db, term)
@@ -290,6 +367,19 @@ def update_term(
                 status=422,
             )
         term.parent_term_id = parent.id if parent else None
+
+    # 종류와 속성은 **함께 본다.** 종류를 바꾸면 스키마가 바뀌므로, 예전 종류의
+    # 칸으로 채워진 속성은 그 자리에서 거절되어야 한다.
+    kind = term.kind
+    if "kind" in data:
+        kind = data["kind"] or None
+        services.check_kind(db, vocabulary, kind)
+    if "attributes" in data or ("kind" in data and kind != term.kind):
+        attributes = data.get("attributes")
+        if attributes is None:
+            attributes = {} if kind != term.kind else dict(term.attributes or {})
+        term.attributes = services.check_attributes(db, vocabulary, kind, attributes)
+    term.kind = kind
 
     db.commit()
     db.refresh(term)

@@ -5538,6 +5538,56 @@
         "title": "SpecimenCreateRequest",
         "type": "object"
       },
+      "SpecimenFieldOut": {
+        "description": "시편 규격이 갖는 치수 칸 하나. **시험 종류가 선언한다.**\n\n화면이 이 응답만으로 입력 칸을 그린다 — 목록을 프론트에 적으면 시험 종류를\n추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.",
+        "properties": {
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "dimension",
+          "si_unit",
+          "is_required",
+          "sort_order"
+        ],
+        "title": "SpecimenFieldOut",
+        "type": "object"
+      },
       "SpecimenOut": {
         "properties": {
           "adopted_count": {
@@ -6221,6 +6271,26 @@
       },
       "TermCreateRequest": {
         "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Attributes",
+            "type": "object"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
           "parent_value": {
             "anyOf": [
               {
@@ -6246,12 +6316,61 @@
         "title": "TermCreateRequest",
         "type": "object"
       },
+      "TermKindOut": {
+        "description": "값이 고를 수 있는 종류 하나. 지금은 시험 종류다.\n\n**키가 아니라 이름을 함께 준다** — `dma_sweep` 은 사람이 읽는 말이 아니다.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "TermKindOut",
+        "type": "object"
+      },
       "TermOut": {
         "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Attributes",
+            "type": "object"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "kind_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind Label"
           },
           "parent_value": {
             "anyOf": [
@@ -6289,6 +6408,32 @@
       "TermUpdateRequest": {
         "description": "표기 고치기와 감추기. **관리자만.**\n\n값을 지우는 길은 없다 — 지우면 그것을 가리키던 시료가 무엇이었는지 알 수\n없게 된다. `deprecated` 로 감추면 피커에서만 사라진다.",
         "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
           "parent_value": {
             "anyOf": [
               {
@@ -7916,6 +8061,17 @@
       },
       "VocabularyOut": {
         "properties": {
+          "attribute_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribute Source"
+          },
           "entry_policy": {
             "title": "Entry Policy",
             "type": "string"
@@ -13218,6 +13374,53 @@
         ]
       }
     },
+    "/api/vocabularies/{slug}/kinds": {
+      "get": {
+        "description": "이 축의 값이 고를 수 있는 종류. **치수 칸을 선언한 시험 종류만.**\n\n선언하지 않은 종류를 고르게 두면 칸이 하나도 없는 규격이 만들어지고, 화면은\n그걸 고장으로 보여 준다.\n\n이 목록을 기준정보 API 가 내는 이유: 화면이 시험 모듈을 따로 부르지 않아도\n되게. 규격의 스키마가 시험 종류에서 온다는 것은 **서버 쪽 사정**이다.",
+        "operationId": "list_kinds_api_vocabularies__slug__kinds_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TermKindOut"
+                  },
+                  "title": "Response List Kinds Api Vocabularies  Slug  Kinds Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Kinds",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
     "/api/vocabularies/{slug}/merge-candidates": {
       "get": {
         "description": "합칠 만한 값 묶음. **탐지만 한다.**\n\n구두점·공백까지 지운 키로 묶으므로 `'ASTM E8'` 과 `'astm-e8'` 이 함께 뜬다.\n오탐도 뜬다 — `'포스코'` 와 `'포스코특수강'` 은 다른 회사다. 그래서 합치는\n것은 사람이 누르고, 아니라고 판정한 쌍은 기억한다.",
@@ -13310,6 +13513,64 @@
           }
         },
         "summary": "Recount Terms",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/{slug}/specimen-fields": {
+      "get": {
+        "description": "이 시험 종류의 규격이 갖는 치수 칸. **화면이 이걸로 입력 폼을 그린다.**\n\n목록을 프론트에 적으면 시험 종류를 추가할 때 두 곳을 고쳐야 하고, 그러면 한\n곳을 빠뜨린다 — 처리 단계의 `ParamSpec` 과 같은 자리다(D7).",
+        "operationId": "list_specimen_fields_api_vocabularies__slug__specimen_fields_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "description": "시험 종류 키",
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "description": "시험 종류 키",
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SpecimenFieldOut"
+                  },
+                  "title": "Response List Specimen Fields Api Vocabularies  Slug  Specimen Fields Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Specimen Fields",
         "tags": [
           "vocabulary"
         ]

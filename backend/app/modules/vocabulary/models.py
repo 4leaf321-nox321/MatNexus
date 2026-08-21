@@ -78,6 +78,15 @@ class Vocabulary(Base):
 
     **계약을 축 수준에 한 번만 적는다.** 값마다 "이건 어느 축의 부모냐" 를 물으면
     같은 답을 수만 번 저장하는 셈이고, 잘못된 축을 가리키는 값이 생긴다."""
+    attribute_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """이 축의 값이 **속성을 갖는가, 그 스키마를 누가 정하는가.**
+
+    `test_type` 이면 값마다 시험 종류를 하나 정하고(`VocabularyTerm.kind`), 그
+    종류가 선언한 시편 규격 칸(`test_specimen_fields`)이 곧 그 값의 속성
+    스키마다. 지금 이걸 쓰는 축은 `specimen_standard` 하나다.
+
+    **왜 축에 적는가:** 값마다 물으면 같은 답을 수만 번 저장하는 셈이다
+    (`parent_slug` 와 같은 판단)."""
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -128,6 +137,22 @@ class VocabularyTerm(Base):
 
     부모가 지워지면 `NULL` 이 된다. 값 자체는 살아 있어야 한다 — 가리키던 재료가
     무엇이었는지는 그대로여야 하기 때문이다."""
+
+    kind: Mapped[str | None] = mapped_column(String(50), index=True, nullable=True)
+    """이 값이 **무엇의** 값인가. 축이 `attribute_source="test_type"` 이면 시험
+    종류 키(`tensile`·`dma_sweep`)다.
+
+    인장 규격과 DMA 규격은 같은 축에 살지만 **갖는 속성이 다르다.** 축을 둘로
+    나누면 "시편 규격" 이라는 개념이 둘이 되고, 어느 쪽에 넣을지를 매번 묻게
+    된다 — 종류를 값에 적는 편이 낫다."""
+    attributes: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """치수 등 이 값이 갖는 속성. **언제나 SI 로 담는다** — 규격서가 mm 로 적혀
+    있어도 저장은 m 다. 화면이 실무 단위로 바꿔 보여 준다.
+
+    키는 그 시험 종류가 선언한 칸(`test_specimen_fields.key`)이다. 스키마에 없는
+    키는 서버가 거절한다 — 오타 하나가 조용히 새 속성이 되면 아무도 못 찾는다."""
 
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     usage_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

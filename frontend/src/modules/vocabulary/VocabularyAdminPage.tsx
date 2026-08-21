@@ -26,6 +26,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Ruler,
   ShieldCheck,
   Tag,
   Trash2,
@@ -33,6 +34,7 @@ import {
 } from 'lucide-react'
 
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
+import { SpecimenStandardDialog } from '@/modules/vocabulary/SpecimenStandardDialog'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type {
   BulkResult,
@@ -73,6 +75,7 @@ export default function VocabularyAdminPage() {
   const [slug, setSlug] = useState<string | null>(null)
   const axes = vocabularies.data ?? []
   const active = axes.find((item) => item.slug === slug) ?? axes[0] ?? null
+
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -252,10 +255,17 @@ const ALL = -1
 const PAGE_SIZES = [50, 100, ALL] as const
 
 function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
+  /**
+   * 이 축의 값이 속성을 갖는가. **서버가 말한다**(`attribute_source`) — 화면에
+   * `slug === 'specimen_standard'` 를 적으면 축이 하나 더 생길 때 두 곳을
+   * 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+   */
+  const hasAttributes = vocabulary.attribute_source === 'test_type'
   const [term, setTerm] = useState('')
   const [showHidden, setShowHidden] = useState(false)
   const [leastUsed, setLeastUsed] = useState(false)
   const [editing, setEditing] = useState<Term | null>(null)
+  const [sizing, setSizing] = useState<Term | null>(null)
   const [detail, setDetail] = useState<Term | null>(null)
   const [showCandidates, setShowCandidates] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -414,6 +424,18 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         />
       )}
 
+      {sizing && hasAttributes && (
+        <SpecimenStandardDialog
+          slug={vocabulary.slug}
+          term={sizing}
+          onClose={() => setSizing(null)}
+          onSaved={() => {
+            setSizing(null)
+            terms.reload()
+          }}
+        />
+      )}
+
       {detail && (
         <TermDetailDialog
           slug={vocabulary.slug}
@@ -511,6 +533,9 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
               />
             </TableHead>
             <TableHead>값</TableHead>
+            {/* **속성을 갖는 축에서만 뜬다.** 제조사에 '치수' 칸이 있으면
+                그것이 무엇을 뜻하는지 아무도 모른다. */}
+            {hasAttributes && <TableHead>종류 · 치수</TableHead>}
             <TableHead>상위</TableHead>
             <TableHead className="text-right">쓰는 곳</TableHead>
             <TableHead className="w-40" />
@@ -535,6 +560,26 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
                   </Badge>
                 )}
               </TableCell>
+              {hasAttributes && (
+                <TableCell className="text-sm">
+                  {item.kind ? (
+                    <>
+                      <span className="text-muted-foreground">{item.kind_label}</span>
+                      {/* 치수가 비어 있으면 **그 사실을 말한다.** 규격 이름만
+                          있는 값은 시편 치수를 아무것도 못 채워 준다. */}
+                      <span className="ml-1.5">
+                        {Object.keys(item.attributes ?? {}).length > 0 ? (
+                          `치수 ${Object.keys(item.attributes).length}개`
+                        ) : (
+                          <span className="text-destructive">치수 없음</span>
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+              )}
               <TableCell className="text-muted-foreground text-sm">
                 {item.parent_value ?? '—'}
               </TableCell>
@@ -542,6 +587,17 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
                   보이지만 외래키라 이 수만큼이 함께 바뀐다. */}
               <TableCell className="text-right tabular-nums">{item.usage_count}</TableCell>
               <TableCell className="text-right">
+                {hasAttributes && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title="치수 — 이 규격이 정하는 값"
+                    aria-label={`${item.value} 치수`}
+                    onClick={() => setSizing(item)}
+                  >
+                    <Ruler className="size-3.5" />
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"

@@ -22,6 +22,9 @@ class VocabularyOut(BaseModel):
     """`open` 이면 화면이 '새로 추가' 를 보여 줘도 된다. `closed` 면 감춘다 —
     눌러 봐야 서버가 거절하는 버튼은 두지 않는다."""
     term_count: int
+    attribute_source: str | None = None
+    """이 축의 값이 속성을 갖는가. `test_type` 이면 값마다 시험 종류를 고르고,
+    그 종류가 선언한 시편 규격 칸이 속성 스키마다. 화면이 그 칸을 그린다."""
 
 
 class TermOut(BaseModel):
@@ -35,12 +38,48 @@ class TermOut(BaseModel):
     **이름을 고칠 때 몇 건이 따라오는지**이기도 하다. 외래키라 한 행을 고치면
     이 수만큼이 함께 바뀐다."""
     status: str = "active"
+    kind: str | None = None
+    """이 값이 어느 시험 종류의 것인가(`specimen_standard` 에서만 쓴다)."""
+    kind_label: str | None = None
+    """그 종류의 이름. 화면이 키를 그대로 보여 주면 사람이 못 읽는다."""
+    attributes: dict[str, float] = {}
+    """치수 등 속성. **SI 다** — 화면이 mm 로 바꿔 보여 준다."""
+
+
+class TermKindOut(BaseModel):
+    """값이 고를 수 있는 종류 하나. 지금은 시험 종류다.
+
+    **키가 아니라 이름을 함께 준다** — `dma_sweep` 은 사람이 읽는 말이 아니다.
+    """
+
+    key: str
+    label: str
+
+
+class SpecimenFieldOut(BaseModel):
+    """시편 규격이 갖는 치수 칸 하나. **시험 종류가 선언한다.**
+
+    화면이 이 응답만으로 입력 칸을 그린다 — 목록을 프론트에 적으면 시험 종류를
+    추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+    """
+
+    key: str
+    label: str
+    dimension: str
+    si_unit: str
+    is_required: bool
+    help: str | None = None
+    sort_order: int
 
 
 class TermCreateRequest(BaseModel):
     value: str = Field(min_length=1, max_length=200)
     parent_value: str | None = Field(default=None, max_length=200)
     """상위 축의 값. 주면 새 값이 그 아래로 들어간다."""
+    kind: str | None = Field(default=None, max_length=50)
+    """시험 종류 키. `specimen_standard` 처럼 속성을 갖는 축에서만 쓴다."""
+    attributes: dict[str, float] = {}
+    """치수 등 속성. SI 로 보낸다."""
 
 
 class TermUpdateRequest(BaseModel):
@@ -52,6 +91,11 @@ class TermUpdateRequest(BaseModel):
 
     value: str | None = Field(default=None, min_length=1, max_length=200)
     status: str | None = Field(default=None, pattern="^(active|deprecated)$")
+    kind: str | None = Field(default=None, max_length=50)
+    """시험 종류 키. **빈 문자열이면 뗀다** — 그러면 속성도 함께 비운다."""
+    attributes: dict[str, float] | None = None
+    """주면 통째로 바꾼다. 빠뜨린 칸은 지워진다 — 부분 갱신은 "빈 칸으로 고쳤다"
+    와 "안 보냈다" 를 구별할 수 없다."""
     parent_value: str | None = Field(default=None, max_length=200)
     """상위 축의 값. **빈 문자열이면 부모를 뗀다** — `None` 은 "안 건드림" 이라
     둘을 구분할 자리가 필요하다.
