@@ -29,6 +29,10 @@ class StepParamOut(BaseModel):
     dimension: str | None = None
     """단위만으로 못 가르는 것을 가른다 — 변형률은 %, tan δ 는 그대로."""
     help: str | None = None
+    required: bool = False
+    """비면 계산이 실패하는 칸. 화면이 **켠 단계 중 덜 채운 것**을 붉게 짚는다.
+
+    `when` 이 걸린 칸은 그 조건일 때만 필수다."""
     role: str | None = None
     """`column` 이면 프레임의 **열 이름**을 받는 칸이다. 화면이 목록을 낸다.
 

@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import numpy as np
 import pytest
 
@@ -207,3 +209,70 @@ class TestDocumented:
                     clashes.append(f"{item.key}: {seen[item.key]} 와 {plugin.id}")
                 seen[item.key] = plugin.id
         assert clashes == []
+
+
+class TestRequired:
+    """**필수 표시가 실제와 같은가.**
+
+    화면이 "켠 단계 중 덜 채운 것" 을 붉게 짚으려면 어느 칸이 필수인지 알아야
+    한다. 그걸 화면이 추측하면 틀린다 — 빈 칸이 정상인 칸도 많다(`curve.resample`
+    의 시작·끝은 비우면 관측 범위).
+
+    선언은 **틀려도 조용하다.** 필수인데 안 적으면 화면이 안 짚고, 필수가
+    아닌데 적으면 멀쩡한 구성을 붉게 칠한다. 그래서 **빼고 돌려 본다.**
+    """
+
+    def _run(self, plugin_id: str, options: dict[str, object]) -> None:
+        frame = source_frame()
+        if plugin_id != "tensile.engineering":
+            frame = processing.apply(
+                [Step("tensile.engineering", {"gauge_length": 0.05, "area": 12.12e-6})],
+                frame,
+            ).frame
+        processing.apply([Step(plugin_id, options)], frame)
+
+    #: 필수 칸을 채운 최소 구성. 여기서 하나씩 빼 본다.
+    FULL: ClassVar[dict[str, dict[str, object]]] = {
+        "tensile.engineering": {"gauge_length": 0.05, "area": 12.12e-6},
+        "tensile.elastic_modulus": {"method": "manual", "manual_modulus": 200e9},
+        "tensile.proof_stress": {"youngs_modulus": 200e9},
+        "tensile.true_plastic": {
+            "youngs_modulus": 200e9,
+            "necking_policy": "manual_index",
+            "manual_index": 100,
+        },
+    }
+
+    def test_필수라고_적은_칸은_빼면_실제로_실패한다(self) -> None:
+        for plugin_id, options in self.FULL.items():
+            plugin = registry.get(plugin_id)
+            for spec in plugin.params:
+                if not spec.required or spec.name not in options:
+                    continue
+                without = {k: v for k, v in options.items() if k != spec.name}
+                with pytest.raises(processing.ProcessingError):
+                    self._run(plugin_id, without)
+
+    def test_필수가_아니라고_한_칸은_빼도_돈다(self) -> None:
+        """멀쩡한 구성을 붉게 칠하지 않기 위한 반대쪽 검사."""
+        for plugin_id, options in self.FULL.items():
+            plugin = registry.get(plugin_id)
+            optional = [
+                spec.name
+                for spec in plugin.params
+                if not spec.required and spec.name in options and spec.default is None
+            ]
+            for name in optional:
+                without = {k: v for k, v in options.items() if k != name}
+                self._run(plugin_id, without)
+
+    def test_열을_받는_칸은_필수로_적지_않는다(self) -> None:
+        """열 칸은 **기본값이 있거나 사람이 고른다** — 빈 칸 검사와 길이 다르다.
+
+        `blockersAt` 이 열 칸은 따로 본다(그 시점에 그 열이 있는가). 여기에도
+        `required` 를 붙이면 같은 것을 두 번 짚는다.
+        """
+        for plugin in registry.list_plugins("processing"):
+            for spec in plugin.params:
+                if spec.role == "column":
+                    assert not spec.required, f"{plugin.id}.{spec.name}"

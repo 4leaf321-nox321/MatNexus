@@ -98,6 +98,7 @@ def list_steps(
                     unit=spec.unit,
                     dimension=spec.dimension,
                     help=spec.help,
+                    required=spec.required,
                     role=spec.role,
                     when={key: list(values) for key, values in spec.when.items()},
                 )

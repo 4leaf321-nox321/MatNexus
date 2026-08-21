@@ -4330,6 +4330,11 @@ export interface components {
             label: string;
             /** Name */
             name: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
             /** Role */
             role?: string | null;
             /** Type */

@@ -48,6 +48,7 @@ const column = (name: string, label: string, dflt?: string) => ({
   unit: null,
   dimension: null,
   help: null,
+  required: false,
   role: 'column',
   when: {},
 })
@@ -255,6 +256,7 @@ describe('접힌 줄의 요약', () => {
           unit: 'm',
           dimension: null,
           help: null,
+          required: false,
           role: null,
           when: {},
         },
@@ -268,6 +270,7 @@ describe('접힌 줄의 요약', () => {
           unit: null,
           dimension: null,
           help: null,
+          required: false,
           role: null,
           when: {},
         },
@@ -319,5 +322,82 @@ describe('접힌 줄의 요약', () => {
 
   it('열 이름은 그대로 적는다', () => {
     expect(stepSummary(step('tensile.strength', {}), CATALOG)).toContain('strain_engineering')
+  })
+})
+
+describe('필수 칸이 비면 막힌다', () => {
+  const CAT = new Map<string, ProcessingStep>([
+    [
+      'needs',
+      plugin({
+        id: 'needs',
+        order: 5,
+        params: [
+          {
+            name: 'gauge_length',
+            label: '게이지 길이',
+            type: 'float',
+            default: null,
+            choices: [],
+            choice_labels: {},
+            unit: 'm',
+            dimension: null,
+            help: null,
+            required: true,
+            role: null,
+            when: {},
+          },
+          {
+            name: 'method',
+            label: '방법',
+            type: 'choice',
+            default: 'auto',
+            choices: ['auto', 'manual'],
+            choice_labels: {},
+            unit: null,
+            dimension: null,
+            help: null,
+            required: false,
+            role: null,
+            when: {},
+          },
+          {
+            name: 'manual_modulus',
+            label: '직접 입력',
+            type: 'float',
+            default: null,
+            choices: [],
+            choice_labels: {},
+            unit: 'Pa',
+            dimension: null,
+            help: null,
+            required: true,
+            role: null,
+            when: { method: ['manual'] },
+          },
+        ] as ProcessingStep['params'],
+      }),
+    ],
+  ])
+
+  it('비면 무엇을 채워야 하는지 말한다', () => {
+    const steps = [step('needs', {})]
+    const blocked = blockersAt(steps[0], 0, steps, SOURCE, CAT)
+    expect(blocked.map((item) => item.reason)).toEqual(['게이지 길이을(를) 채워야 합니다.'])
+  })
+
+  it('채우면 풀린다', () => {
+    const steps = [step('needs', { gauge_length: 0.05 })]
+    expect(blockersAt(steps[0], 0, steps, SOURCE, CAT)).toEqual([])
+  })
+
+  it('지금 안 쓰이는 칸은 비어도 막지 않는다', () => {
+    // 방법이 'auto' 면 '직접 입력' 은 아무 데도 안 쓰인다. 그걸 붉게 칠하면
+    // 멀쩡한 구성을 고장으로 읽게 된다.
+    const steps = [step('needs', { gauge_length: 0.05, method: 'auto' })]
+    expect(blockersAt(steps[0], 0, steps, SOURCE, CAT)).toEqual([])
+
+    const manual = [step('needs', { gauge_length: 0.05, method: 'manual' })]
+    expect(blockersAt(manual[0], 0, manual, SOURCE, CAT)).toHaveLength(1)
   })
 })

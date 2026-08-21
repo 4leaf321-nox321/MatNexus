@@ -668,10 +668,16 @@ export function ProcessingPanel({
               const isOpen = open.has(index)
               const summary = stepSummary(step, byId)
               return (
+                /* **덜 채운 단계는 늘 붉다.** 돌려 보기를 누를 때까지
+                   기다리면, 스무 줄을 다 훑고 나서야 어디가 빈지 안다. */
                 <div
                   key={`${step.plugin}-${index}`}
                   id={`step-${index}`}
-                  className={attempted && trouble.length ? 'bg-destructive/5' : ''}
+                  className={
+                    trouble.length
+                      ? `border-destructive border-l-2 ${attempted ? 'bg-destructive/5' : ''}`
+                      : ''
+                  }
                 >
                   <div className="flex items-center gap-2 px-2 py-1.5">
                     <button
@@ -697,9 +703,9 @@ export function ProcessingPanel({
                           <span className="truncate text-sm font-medium">
                             {plugin?.label ?? step.plugin}
                           </span>
-                          {attempted && trouble.length > 0 && (
+                          {trouble.length > 0 && (
                             <Badge variant="destructive" className="shrink-0 text-xs">
-                              막힘
+                              덜 채움
                             </Badge>
                           )}
                           {!plugin && (
@@ -710,11 +716,20 @@ export function ProcessingPanel({
                         </span>
                         {/* **접힌 줄이 무엇으로 설정됐는지 말한다.** 안 그러면
                             확인하려고 하나하나 열어 봐야 한다. */}
-                        {!isOpen && summary && (
-                          <span className="text-muted-foreground block truncate text-xs">
-                            {summary}
-                          </span>
-                        )}
+                        {!isOpen &&
+                          (trouble.length > 0 ? (
+                            /* 빈 줄 대신 **무엇이 없는지**를 적는다. 붉기만 하면
+                               열어 봐야 안다. */
+                            <span className="text-destructive block truncate text-xs">
+                              {trouble[0].reason}
+                            </span>
+                          ) : (
+                            summary && (
+                              <span className="text-muted-foreground block truncate text-xs">
+                                {summary}
+                              </span>
+                            )
+                          ))}
                       </span>
                       <ChevronDown
                         className={`text-muted-foreground mt-0.5 size-3.5 shrink-0 transition-transform ${
@@ -729,13 +744,7 @@ export function ProcessingPanel({
                   {isOpen && (
                     <div className="space-y-2 border-t px-2 py-2">
                       {trouble.length > 0 && (
-                        <ul
-                          className={`space-y-0.5 rounded-md border p-2 text-xs ${
-                            attempted
-                              ? 'border-destructive/40 bg-destructive/5'
-                              : 'border-amber-500/40 bg-amber-500/5'
-                          }`}
-                        >
+                        <ul className="border-destructive/40 bg-destructive/5 space-y-0.5 rounded-md border p-2 text-xs">
                           {trouble.map((item) => (
                             <li key={item.reason}>
                               {item.reason}

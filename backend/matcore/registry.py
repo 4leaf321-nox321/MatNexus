@@ -41,6 +41,15 @@ class ParamSpec:
     0.2% 오프셋은 규격에도 그렇게 적혀 있다. 화면이 어느 쪽인지 알려면 차원이
     필요하다(`matcore/units.DIMENSION_ALIASES` 와 같은 이유)."""
     help: str | None = None
+    required: bool = False
+    """**비면 계산이 실패하는 칸.**
+
+    `option_float(options, "gauge_length")` 처럼 기본값 없이 읽는 칸이다. 화면이
+    이걸 모르면 "무엇을 더 채워야 하는가" 를 추측해야 하고, 추측은 틀린다 —
+    빈 칸이 정상인 칸도 많다(`curve.resample` 의 시작·끝은 비우면 관측 범위).
+
+    `when` 이 걸린 칸은 **그 조건일 때만** 필수다. 방법이 '직접 입력' 이 아니면
+    `manual_modulus` 는 아무 데도 안 쓰인다."""
     role: Literal["column"] | None = None
     """이 칸이 **프레임의 열 이름**을 받는가.
 

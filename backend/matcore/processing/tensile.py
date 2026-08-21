@@ -88,6 +88,7 @@ def _require_pascal_stress(frame: Frame, key: str) -> None:
             label="게이지 길이",
             type="float",
             unit="m",
+            required=True,
             help="시편 정의에서 옵니다. 변위를 이 길이로 나눠 변형률을 만듭니다.",
         ),
         ParamSpec(
@@ -95,6 +96,7 @@ def _require_pascal_stress(frame: Frame, key: str) -> None:
             label="초기 단면적",
             type="float",
             unit="m2",
+            required=True,
             help="폭 곱하기 두께. 하중을 이 넓이로 나눠 응력을 만듭니다.",
         ),
         ParamSpec(
@@ -373,6 +375,7 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="직접 입력",
             type="float",
             unit="Pa",
+            required=True,
             when={"method": ("manual",)},
         ),
         ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
@@ -523,6 +526,7 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
             label="탄성계수",
             type="float",
             unit="Pa",
+            required=True,
             help="앞 단계에서 잰 값을 그대로 쓰거나, 직접 넣습니다.",
         ),
         ParamSpec(
@@ -756,6 +760,7 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="탄성계수",
             type="float",
             unit="Pa",
+            required=True,
             help="앞 단계에서 잰 값을 그대로 쓰거나, 직접 넣습니다.",
         ),
         ParamSpec(
@@ -774,6 +779,7 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             name="manual_index",
             label="자를 위치",
             type="int",
+            required=True,
             when={"necking_policy": ("manual_index",)},
         ),
         ParamSpec(

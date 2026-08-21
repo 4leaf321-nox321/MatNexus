@@ -111,10 +111,22 @@ export function blockersAt(
   const found: Blocker[] = []
 
   for (const param of plugin.params) {
+    // 지금 안 쓰이는 칸은 비어 있어도 된다. 방법이 '최소제곱 회귀' 면
+    // '직접 입력' 칸은 아무 데도 안 쓰인다.
+    if (!isUsed(param, step.options)) continue
+
     const value = step.options[param.name] ?? param.default
+    const empty = value === null || value === undefined || value === ''
+
+    // **비면 계산이 실패하는 칸.** 어느 칸이 그런지는 계산이 선언한다
+    // (`ParamSpec.required`) — 화면이 추측하면 멀쩡한 구성을 붉게 칠한다.
+    if (param.required && empty && param.role !== 'column') {
+      found.push({ reason: `${param.label}을(를) 채워야 합니다.` })
+      continue
+    }
 
     if (param.role === 'column') {
-      if (value === null || value === undefined || value === '') {
+      if (empty) {
         found.push({ reason: `${param.label}을(를) 골라야 합니다.` })
       } else if (!columns.has(String(value))) {
         found.push({

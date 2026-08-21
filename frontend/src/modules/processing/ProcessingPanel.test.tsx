@@ -58,6 +58,7 @@ const column = (name: string, label: string, dflt: string | null = null) => ({
   unit: null,
   dimension: null,
   help: null,
+  required: false,
   role: 'column',
   when: {},
 })
@@ -458,5 +459,59 @@ describe('접힌 줄이 설정을 말한다', () => {
     await waitFor(() =>
       expect(screen.queryByRole('combobox', { name: '변위 열' })).not.toBeInTheDocument()
     )
+  })
+})
+
+describe('덜 채운 단계는 붉다', () => {
+  beforeEach(() => {
+    steps.mockResolvedValue([
+      {
+        ...CATALOG[0],
+        params: [
+          {
+            name: 'gauge_length',
+            label: '게이지 길이',
+            type: 'float',
+            default: null,
+            choices: [],
+            choice_labels: {},
+            unit: 'm',
+            dimension: null,
+            help: null,
+            required: true,
+            role: null,
+            when: {},
+          },
+        ],
+      },
+      ...CATALOG.slice(1),
+    ] as unknown as ProcessingStep[])
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+  })
+
+  it('돌려 보기를 누르기 전에도 표시된다', async () => {
+    // **누를 때까지 기다리면 스무 줄을 다 훑고 나서야 어디가 빈지 안다.**
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+
+    const row = getStep('공칭 응력-변형률')
+    expect(row).toHaveTextContent('덜 채움')
+    // **붉기만 하면 열어 봐야 안다.** 무엇이 없는지 그 줄에 적는다.
+    expect(row).toHaveTextContent('게이지 길이을(를) 채워야 합니다.')
+  })
+
+  it('채우면 표시가 사라지고 설정 요약으로 돌아간다', async () => {
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '공칭 응력-변형률') // 펴기
+
+    await user.type(await screen.findByLabelText('게이지 길이'), '50')
+    await user.click(screen.getByRole('button', { name: '모두 접기' }))
+
+    await waitFor(() => expect(getStep('공칭 응력-변형률')).not.toHaveTextContent('덜 채움'))
+    expect(getStep('공칭 응력-변형률')).toHaveTextContent('게이지 길이 50 mm')
   })
 })

@@ -5793,6 +5793,11 @@
             "title": "Name",
             "type": "string"
           },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
           "role": {
             "anyOf": [
               {
