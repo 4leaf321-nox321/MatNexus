@@ -215,3 +215,39 @@ export function vocabularyOf(
   }
   return { columns, values }
 }
+
+/**
+ * 순서도의 줄. **켠 단계는 도는 순서대로, 안 켠 것은 갈 자리에.**
+ *
+ * 순서도와 단계 목록이 따로 있으면 같은 목록이 두 칸에 있게 된다 — 가운데 칸만
+ * 세로로 길어지고 곡선 쪽은 텅 빈다. 하나로 합치되, **켠 것은 실제로 도는
+ * 순서**로 놓는다(사람이 손으로 옮겼을 수 있다). 안 켠 것은 켜면 들어갈 자리에
+ * 끼워 둔다 — 그래야 "이걸 켜면 어디에 들어가는가" 가 보인다.
+ */
+export type FlowRow =
+  | { kind: 'step'; step: RecipeStep; index: number; plugin?: ProcessingStep }
+  | { kind: 'available'; plugin: ProcessingStep }
+
+export function flowRows(
+  steps: RecipeStep[],
+  catalog: Map<string, ProcessingStep>,
+  available: ProcessingStep[]
+): FlowRow[] {
+  const rows: FlowRow[] = steps.map((step, index) => ({
+    kind: 'step',
+    step,
+    index,
+    plugin: catalog.get(step.plugin),
+  }))
+
+  const used = new Set(steps.map((step) => step.plugin))
+  for (const plugin of available) {
+    if (used.has(plugin.id)) continue
+    const at = insertionIndex(steps, plugin.id, catalog)
+    // `at` 은 **단계 번호**다. 줄 목록에는 안 켠 줄도 섞여 있으므로 그 번호의
+    // 단계 줄이 어디인지 다시 찾는다.
+    const where = rows.findIndex((row) => row.kind === 'step' && row.index >= at)
+    rows.splice(where === -1 ? rows.length : where, 0, { kind: 'available', plugin })
+  }
+  return rows
+}

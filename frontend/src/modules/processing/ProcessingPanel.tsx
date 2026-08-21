@@ -23,20 +23,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   BookMarked,
-  BookOpen,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
-  ChevronRight,
   Circle,
   CircleCheck,
-  FlaskConical,
   Link2,
   Lock,
   Play,
   Plus,
   Save,
-  Trash2,
 } from 'lucide-react'
 
 import { RecipePicker } from '@/modules/processing/RecipePicker'
@@ -78,6 +73,7 @@ import { missingSteps } from '@/modules/processing/gaps'
 import {
   blockersAt,
   columnsAt,
+  flowRows,
   insertionIndex,
   outOfOrder,
   vocabularyOf,
@@ -170,13 +166,6 @@ export function ProcessingPanel({
   })
   const [open, setOpen] = useState<number | null>(null)
   const [savingRecipe, setSavingRecipe] = useState(false)
-  /**
-   * 변수 목록 사이드바. **기본은 접혀 있다.**
-   *
-   * 곡선이 손바닥만 해지면 안 된다 — 이 목록은 가끔 들춰 보는 참고서지 늘
-   * 보는 것이 아니다. 열면 그만큼 곡선이 좁아지는 것을 사람이 알고 연다.
-   */
-  const [variablesOpen, setVariablesOpen] = useState(false)
   /**
    * '돌려 보기' 를 눌러 본 적이 있는가.
    *
@@ -377,6 +366,9 @@ export function ProcessingPanel({
   )
   const scrambled = useMemo(() => outOfOrder(steps, byId), [steps, byId])
 
+  /** 순서도의 줄. 켠 것은 도는 순서대로, 안 켠 것은 켜면 들어갈 자리에. */
+  const rows = useMemo(() => flowRows(steps, byId, available), [steps, byId, available])
+
   /** 지금 구성이 쓰는 이름 전부 — 원본 채널과 각 단계가 만드는 열·값. */
   const vocabulary = useMemo(() => {
     const known = new Map(sourceChannels.map((item) => [item.key, item]))
@@ -385,6 +377,17 @@ export function ProcessingPanel({
     )
     return vocabularyOf(steps, source, byId)
   }, [steps, sourceColumns, sourceChannels, byId])
+
+  /**
+   * 열 이름 → 그 이름의 뜻. **고르는 자리에서 바로 읽게 한다.**
+   *
+   * 뜻이 필요한 순간은 목록을 여는 때가 아니라 **열을 고르는 그 순간**이다.
+   * 그때 시선은 화면 가운데에 있지 오른쪽 끝에 있지 않다.
+   */
+  const columnInfo = useMemo(
+    () => new Map(vocabulary.columns.map((item) => [item.key, item])),
+    [vocabulary]
+  )
 
   /** 지금 구성으로 못 하게 되는 일. 인장에만 뜻이 있다. */
   const gaps = useMemo(
@@ -564,24 +567,10 @@ export function ProcessingPanel({
         </div>
       )}
 
-      {/* 변수 목록은 이 그리드 밖이다 — 껍데기의 오른쪽 영역에 산다. */}
-      <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)]">
-        <FlowRail
-          available={available}
-          steps={steps}
-          onToggle={toggle}
-          blockersFor={ifAdded}
-          scrambled={scrambled}
-        />
-
+      {/* **순서도와 단계가 한 칸이다.** 나눠 두면 같은 목록이 두 칸에 있게
+          되고, 가운데만 세로로 길어져 곡선 쪽이 텅 빈다. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
         <div className="space-y-2">
-          {steps.length === 0 && (
-            <p className="text-muted-foreground rounded-md border py-8 text-center text-xs">
-              <FlaskConical className="mx-auto mb-2 size-5 opacity-50" />
-              단계를 더해 주세요.
-            </p>
-          )}
-
           {/* **막지 않는다. 미리 말할 뿐이다.** 공칭까지만 필요한 작업도 정상이다.
               다만 그 사실을 CAE 카드 탭에서 알게 되면 20건을 다시 처리해야 한다 —
               결과는 불변이라 열을 나중에 덧붙일 수 없다. */}
@@ -598,118 +587,145 @@ export function ProcessingPanel({
             </div>
           )}
 
-          {steps.map((step, index) => {
-            const plugin = byId.get(step.plugin)
-            const stage = result?.stages[index]
-            return (
-              <div
-                key={`${step.plugin}-${index}`}
-                id={`step-${index}`}
-                className={`rounded-md border ${
-                  attempted && stepBlockers[index]?.length ? 'border-destructive/60' : ''
-                }`}
-              >
-                <div className="flex items-center gap-2 border-b px-3 py-2">
-                  <span className="text-muted-foreground font-mono text-xs">{index + 1}</span>
-                  <span className="text-sm font-medium">{plugin?.label ?? step.plugin}</span>
-                  {!plugin && (
-                    <Badge variant="destructive" className="text-xs">
-                      등록되지 않음
-                    </Badge>
-                  )}
-                  <div className="ml-auto flex gap-0.5">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7"
-                      onClick={() => move(index, -1)}
-                      disabled={index === 0}
-                      aria-label="위로"
+          <div className="divide-y overflow-hidden rounded-md border">
+            <p className="text-muted-foreground bg-muted/40 px-2 py-1.5 text-xs">
+              위에서 아래로 흐릅니다. <b>켠 것만 돕니다</b> — 이름을 누르면 그 단계의
+              칸이 펴집니다.
+            </p>
+
+            {rows.map((row) => {
+              if (row.kind === 'available') {
+                const blockers = ifAdded(row.plugin.id)
+                const needsFirst = blockers.filter((item) => item.fixedBy)
+                const locked = needsFirst.length > 0
+                return (
+                  <button
+                    key={`off-${row.plugin.id}`}
+                    type="button"
+                    disabled={locked}
+                    aria-pressed={false}
+                    onClick={() => toggle(row.plugin.id)}
+                    className={`flex w-full items-start gap-2 px-2 py-1.5 text-left ${
+                      locked ? 'cursor-not-allowed opacity-45' : 'hover:bg-accent/50'
+                    }`}
+                  >
+                    {locked ? (
+                      <Lock className="mt-0.5 size-4 shrink-0" />
+                    ) : (
+                      <Circle className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="text-muted-foreground text-sm">{row.plugin.label}</span>
+                      {locked && (
+                        <span className="text-muted-foreground mt-0.5 block text-xs">
+                          {needsFirst[0].reason}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                )
+              }
+
+              const { step, index, plugin } = row
+              const stage = result?.stages[index]
+              const trouble = stepBlockers[index] ?? []
+              const isOpen = open === index
+              return (
+                <div
+                  key={`${step.plugin}-${index}`}
+                  id={`step-${index}`}
+                  className={attempted && trouble.length ? 'bg-destructive/5' : ''}
+                >
+                  <div className="flex items-center gap-2 px-2 py-1.5">
+                    <button
+                      type="button"
+                      aria-pressed
+                      aria-label={`${plugin?.label ?? step.plugin} 끄기`}
+                      onClick={() => toggle(step.plugin)}
+                      className="shrink-0"
                     >
-                      <ChevronUp className="size-3.5" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7"
-                      onClick={() => move(index, 1)}
-                      disabled={index === steps.length - 1}
-                      aria-label="아래로"
+                      <CircleCheck className="text-primary size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      onClick={() => setOpen(isOpen ? null : index)}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      <ChevronDown className="size-3.5" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7"
-                      onClick={() => {
-                        setSteps((current) => current.filter((_, at) => at !== index))
-                        setResult(null)
-                      }}
-                      aria-label="지우기"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                      <span className="text-muted-foreground w-3 shrink-0 text-xs tabular-nums">
+                        {index + 1}
+                      </span>
+                      <span className="truncate text-sm font-medium">
+                        {plugin?.label ?? step.plugin}
+                      </span>
+                      {attempted && trouble.length > 0 && (
+                        <Badge variant="destructive" className="shrink-0 text-xs">
+                          막힘
+                        </Badge>
+                      )}
+                      {!plugin && (
+                        <Badge variant="destructive" className="shrink-0 text-xs">
+                          등록되지 않음
+                        </Badge>
+                      )}
+                      <ChevronDown
+                        className={`text-muted-foreground ml-auto size-3.5 shrink-0 transition-transform ${
+                          isOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
                   </div>
-                </div>
 
-                <div className="space-y-2 px-3 py-2">
-                  {/* **어디서 막혔는지 그 자리에서 말한다.** 아래 '돌려 보기'
-                      가 회색인데 이유가 위에만 적혀 있으면 못 잇는다. */}
-                  {stepBlockers[index]?.length > 0 && (
-                    <ul
-                      className={`space-y-0.5 rounded-md border p-2 text-xs ${
-                        attempted
-                          ? 'border-destructive/40 bg-destructive/5'
-                          : 'border-amber-500/40 bg-amber-500/5'
-                      }`}
-                    >
-                      {stepBlockers[index].map((item) => (
-                        <li key={item.reason}>
-                          {item.reason}
-                          {item.fixedBy && (
-                            <>
-                              {' '}
-                              <b>{byId.get(item.fixedBy)?.label ?? item.fixedBy}</b> 단계를 먼저
-                              켜세요.
-                            </>
-                          )}
-                        </li>
+                  {/* **한 번에 하나만 펴진다.** 여섯 단계의 입력칸이 동시에 쌓이면
+                      스무 개가 넘고, 그러면 아무것도 안 보인다. */}
+                  {isOpen && (
+                    <div className="space-y-2 border-t px-2 py-2">
+                      {trouble.length > 0 && (
+                        <ul
+                          className={`space-y-0.5 rounded-md border p-2 text-xs ${
+                            attempted
+                              ? 'border-destructive/40 bg-destructive/5'
+                              : 'border-amber-500/40 bg-amber-500/5'
+                          }`}
+                        >
+                          {trouble.map((item) => (
+                            <li key={item.reason}>
+                              {item.reason}
+                              {item.fixedBy && (
+                                <>
+                                  {' '}
+                                  <b>{byId.get(item.fixedBy)?.label ?? item.fixedBy}</b> 단계를
+                                  먼저 켜세요.
+                                </>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {(plugin?.params ?? []).map((param) => (
+                        <ParamField
+                          key={param.name}
+                          param={param}
+                          value={step.options[param.name]}
+                          columns={columnsFor(index)}
+                          columnInfo={columnInfo}
+                          /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
+                             '직접 입력' 이 살아 있으면, 거기 넣은 숫자가 무시된다는
+                             것을 알 방법이 없다 — 값을 넣었는데 아무 일도 안
+                             일어나는 것이 가장 나쁘다. 지우지 않고 잠그는 이유는
+                             그 칸이 있다는 것 자체가 정보이기 때문이다. */
+                          disabled={!isUsed(param, step.options)}
+                          onChange={(value) =>
+                            update(index, { ...step.options, [param.name]: value })
+                          }
+                        />
                       ))}
-                    </ul>
-                  )}
-                  {(plugin?.params ?? []).map((param) => (
-                    <ParamField
-                      key={param.name}
-                      param={param}
-                      value={step.options[param.name]}
-                      columns={columnsFor(index)}
-                      /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
-                         '직접 입력' 이 살아 있으면, 거기 넣은 숫자가 무시된다는
-                         것을 알 방법이 없다 — 값을 넣었는데 아무 일도 안
-                         일어나는 것이 가장 나쁘다. 지우지 않고 잠그는 이유는
-                         그 칸이 있다는 것 자체가 정보이기 때문이다. */
-                      disabled={!isUsed(param, step.options)}
-                      onChange={(value) =>
-                        update(index, { ...step.options, [param.name]: value })
-                      }
-                    />
-                  ))}
 
-                  {/* **근거는 접어 두되 버리지 않는다.** 값 옆에 없으면 반년 뒤
-                      그 값을 설명할 수 없다. */}
-                  {stage && stage.notes.length > 0 && (
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        className="text-muted-foreground text-xs underline-offset-2 hover:underline"
-                        onClick={() => setOpen(open === index ? null : index)}
-                      >
-                        근거 {stage.notes.length}줄 {open === index ? '접기' : '보기'} ·{' '}
-                        {stage.row_count.toLocaleString('ko-KR')}행
-                      </button>
-                      {open === index && (
-                        <ul className="text-muted-foreground mt-1 space-y-1 text-xs">
+                      {/* **근거는 접어 두되 버리지 않는다.** 값 옆에 없으면 반년 뒤
+                          그 값을 설명할 수 없다. */}
+                      {stage && stage.notes.length > 0 && (
+                        <ul className="text-muted-foreground space-y-1 text-xs">
                           {stage.notes.map((note) => (
                             <li key={note} className="border-l-2 pl-2">
                               {note}
@@ -717,25 +733,66 @@ export function ProcessingPanel({
                           ))}
                         </ul>
                       )}
+
+                      <div className="flex gap-0.5 pt-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          onClick={() => move(index, -1)}
+                          disabled={index === 0}
+                        >
+                          <ChevronUp className="size-3.5" />
+                          위로
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          onClick={() => move(index, 1)}
+                          disabled={index === steps.length - 1}
+                        >
+                          <ChevronDown className="size-3.5" />
+                          아래로
+                        </Button>
+                        {/* 같은 단계를 두 번 쓰는 자리 — 구간을 두 번 자르거나
+                            열 둘을 따로 평활하는 경우가 있다. */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="ml-auto h-7 text-xs"
+                          onClick={() => {
+                            setSteps((current) => [
+                              ...current.slice(0, index + 1),
+                              { plugin: step.plugin, options: { ...step.options } },
+                              ...current.slice(index + 1),
+                            ])
+                            setResult(null)
+                            setAttempted(false)
+                          }}
+                        >
+                          <Plus className="size-3.5" />
+                          한 번 더
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
 
-          <AddStep
-            available={available}
-            onAdd={(id) => {
-              setSteps((current) => [...current, { plugin: id, options: defaults(byId.get(id)) }])
-              setResult(null)
-            }}
-          />
+          {/* 손으로 위아래로 옮기면 권장 순서와 어긋날 수 있다. 막지 않는다 —
+              그렇게 해야 하는 경우가 있다(진소성변형률을 자른 뒤 다시 정렬). */}
+          {scrambled && (
+            <p className="text-muted-foreground text-xs">
+              단계 순서를 손으로 바꿨습니다. 번호가 실제로 도는 순서입니다.
+            </p>
+          )}
         </div>
 
-        {/* 좁은 화면에서는 두 칸이라 그림이 순서도 밑으로 접힌다. 그때는 폭을
-            다 쓰게 둔다 — 곡선은 좁으면 읽을 수 없다. */}
-        <div className="lg:col-span-2 xl:col-span-1">
+        {/* 좁은 화면에서는 한 칸이라 그림이 단계 밑으로 접힌다. */}
+        <div>
           {result ? (
             <>
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -818,12 +875,10 @@ export function ProcessingPanel({
 
       {/* **화면 오른쪽 끝에 붙는다.** 이 안(`mx-auto max-w-7xl`)에 두면 본문과
           함께 가운데로 딸려 들어가고 오른쪽 끝에는 여백만 남는다. */}
-      <RightPanel>
-        <VariablesSidebar
-          vocabulary={vocabulary}
-          open={variablesOpen}
-          onToggle={() => setVariablesOpen((open) => !open)}
-        />
+      {/* **여닫기는 상단 바가 한다.** 화면 오른쪽 끝의 흐린 세로 띠는 아무도
+          못 봤다 — 껍데기를 여닫는 단추는 왼쪽 사이드바 토글과 같은 자리에 있다. */}
+      <RightPanel label="변수 목록">
+        <VariablesSidebar vocabulary={vocabulary} />
       </RightPanel>
     </section>
   )
@@ -851,15 +906,7 @@ export function ProcessingPanel({
  * 곧 그 자리다. 접어 두는 것이 기본이다: 늘 펴 두면 곡선이 그만큼 좁아지고,
  * 그건 이 화면을 넓힌 이유와 정면으로 부딪힌다.
  */
-function VariablesSidebar({
-  vocabulary,
-  open,
-  onToggle,
-}: {
-  vocabulary: ReturnType<typeof vocabularyOf>
-  open: boolean
-  onToggle: () => void
-}) {
+function VariablesSidebar({ vocabulary }: { vocabulary: ReturnType<typeof vocabularyOf> }) {
   const entry = (item: {
     key: string
     label: string
@@ -880,44 +927,12 @@ function VariablesSidebar({
     </li>
   )
 
-  if (!open) {
-    return (
-      <aside className="flex h-full w-9 flex-col border-l">
-        {/* 접힌 손잡이. **화면 오른쪽 끝에 세로로 선다.** 아예 없애면 있는 줄도
-            모르므로, 폭 9(2.25rem)만 남긴다 — 곡선에 거의 영향이 없다. */}
-        <button
-          type="button"
-          aria-label="변수 목록 펴기"
-          aria-expanded={false}
-          onClick={onToggle}
-          className="hover:bg-accent/50 flex h-full w-full flex-col items-center gap-2 pt-3"
-        >
-          <ChevronLeft className="text-muted-foreground size-4 shrink-0" />
-          <BookOpen className="text-muted-foreground size-4 shrink-0" />
-          <span className="text-muted-foreground text-xs [writing-mode:vertical-rl]">
-            변수 목록
-          </span>
-        </button>
-      </aside>
-    )
-  }
-
   return (
     /* **껍데기의 오른쪽 영역**에 산다. 본문과 따로 스크롤한다 — 단계 목록을
        내리면서 이름의 뜻을 보는 자리라, 같이 굴러가면 쓸 수 없다. */
     <aside className="flex h-full w-64 flex-col border-l">
-      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+      <div className="flex shrink-0 items-center border-b px-2 py-2">
         <h3 className="text-sm font-medium">변수 목록</h3>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="ml-auto size-6"
-          onClick={onToggle}
-          aria-label="변수 목록 접기"
-          aria-expanded
-        >
-          <ChevronRight className="size-3.5" />
-        </Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -954,123 +969,6 @@ function VariablesSidebar({
 }
 
 /**
- * 처리 순서도 — **무엇을 어떤 순서로 놓아야 하는지 여기서 읽는다.**
- *
- * 전에는 '단계 더하기' 드롭다운 하나였다. 목록에 열한 개가 알파벳순으로 있고,
- * 무엇이 무엇을 필요로 하는지는 **아는 사람만 알았다** — 공칭 변환을 안 넣으면
- * 변형률 열이 없다는 것은 계산을 읽어야 나오는 판단이다.
- *
- * 순서는 서버가 준다(`order`). 못 켜는 것은 **이유를 적고 회색으로 둔다** —
- * 회색이기만 하면 고장으로 읽힌다.
- */
-function FlowRail({
-  available,
-  steps,
-  onToggle,
-  blockersFor,
-  scrambled,
-}: {
-  available: ProcessingStep[]
-  steps: RecipeStep[]
-  onToggle: (id: string) => void
-  blockersFor: (id: string) => Blocker[]
-  scrambled: boolean
-}) {
-  const position = new Map(steps.map((step, index) => [step.plugin, index + 1]))
-
-  return (
-    <div className="h-fit rounded-md border p-2">
-      <p className="px-1 pb-1.5 text-xs font-medium">처리 순서</p>
-      <p className="text-muted-foreground px-1 pb-2 text-xs">
-        위에서 아래로 흐릅니다. 켠 것만 돕니다.
-      </p>
-
-      <ol className="space-y-0.5">
-        {available.map((step) => {
-          const at = position.get(step.id)
-          const chosen = at !== undefined
-          const blockers = chosen ? [] : blockersFor(step.id)
-          // **못 켜는 것과 안 채운 것은 다르다.** 앞 단계가 있어야 하는 것만
-          // 잠근다 — '평활할 열' 처럼 켠 뒤에 고르면 되는 것은 열어 둔다.
-          const needsFirst = blockers.filter((item) => item.fixedBy)
-          const locked = needsFirst.length > 0
-
-          return (
-            <li key={step.id}>
-              <button
-                type="button"
-                disabled={locked}
-                onClick={() => onToggle(step.id)}
-                aria-pressed={chosen}
-                className={`flex w-full items-start gap-1.5 rounded px-1 py-1 text-left text-xs ${
-                  locked ? 'cursor-not-allowed opacity-45' : 'hover:bg-accent/50'
-                }`}
-              >
-                {locked ? (
-                  <Lock className="mt-0.5 size-3.5 shrink-0" />
-                ) : chosen ? (
-                  <CircleCheck className="text-primary mt-0.5 size-3.5 shrink-0" />
-                ) : (
-                  <Circle className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className={chosen ? 'font-medium' : 'text-muted-foreground'}>
-                    {step.label}
-                  </span>
-                  {locked && (
-                    <span className="text-muted-foreground mt-0.5 block">
-                      {needsFirst[0].reason}
-                    </span>
-                  )}
-                </span>
-                {chosen && <span className="text-muted-foreground shrink-0 tabular-nums">{at}</span>}
-              </button>
-            </li>
-          )
-        })}
-      </ol>
-
-      {/* 손으로 위아래 화살표를 눌러 옮기면 권장 순서와 어긋날 수 있다.
-          막지 않는다 — 그렇게 해야 하는 경우가 있다. 다만 말은 해 준다. */}
-      {scrambled && (
-        <p className="text-muted-foreground mt-2 border-t px-1 pt-2 text-xs">
-          단계 순서를 손으로 바꿨습니다. 오른쪽 번호가 실제로 도는 순서입니다.
-        </p>
-      )}
-    </div>
-  )
-}
-
-function AddStep({
-  available,
-  onAdd,
-}: {
-  available: ProcessingStep[]
-  onAdd: (id: string) => void
-}) {
-  return (
-    <Select value="" onValueChange={onAdd}>
-      {/* 순서도가 주 경로다. 여기는 **같은 단계를 두 번 쓰는** 자리 — 구간을
-          두 번 자르거나 열 둘을 따로 평활하는 경우가 있다. */}
-      <SelectTrigger className="h-8 w-full" aria-label="단계 더하기">
-        <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <Plus className="size-3.5" />
-          같은 단계 한 번 더
-        </span>
-      </SelectTrigger>
-      <SelectContent>
-        {available.map((step) => (
-          <SelectItem key={step.id} value={step.id}>
-            {step.label}
-            <span className="text-muted-foreground ml-2 font-mono text-xs">{step.id}</span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
-}
-
-/**
  * 입력 칸 하나. **서버의 `ParamSpec` 이 모양을 정한다.**
  *
  * 참조(`@…`)를 값과 같은 칸에서 다루는 이유: 사람은 "게이지 길이" 하나를 정할
@@ -1080,12 +978,15 @@ function ParamField({
   param,
   value,
   columns,
+  columnInfo,
   disabled = false,
   onChange,
 }: {
   param: StepParam
   value: unknown
   columns: string[]
+  /** 열 이름 → 그 이름의 뜻. 고르는 자리에서 바로 읽게 한다. */
+  columnInfo: Map<string, { label: string; si_unit: string; help?: string | null }>
   disabled?: boolean
   onChange: (value: unknown) => void
 }) {
@@ -1159,11 +1060,25 @@ function ParamField({
             <SelectValue placeholder="열을 고르세요" />
           </SelectTrigger>
           <SelectContent>
-            {columns.map((column) => (
-              <SelectItem key={column} value={column}>
-                {column}
-              </SelectItem>
-            ))}
+            {/* **이름과 뜻을 같이 낸다.** `strain_true_plastic` 만 있으면 그게
+                무엇인지 코드를 읽어야 알고, 뜻이 필요한 순간은 목록을 여는 때가
+                아니라 **고르는 이 순간**이다. */}
+            {columns.map((column) => {
+              const info = columnInfo.get(column)
+              return (
+                <SelectItem key={column} value={column}>
+                  <span className="flex flex-col items-start">
+                    <span className="font-mono text-xs">{column}</span>
+                    {info && (
+                      <span className="text-muted-foreground text-xs">
+                        {info.label}
+                        {info.si_unit !== '1' && ` (${info.si_unit})`}
+                      </span>
+                    )}
+                  </span>
+                </SelectItem>
+              )
+            })}
           </SelectContent>
         </Select>
       </div>

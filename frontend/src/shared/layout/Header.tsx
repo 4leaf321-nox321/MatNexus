@@ -7,10 +7,20 @@
  */
 
 import { useState } from 'react'
-import { KeyRound, LogOut, Moon, PanelLeft, Sun, User, UserCog } from 'lucide-react'
+import {
+  KeyRound,
+  LogOut,
+  Moon,
+  PanelLeft,
+  PanelRight,
+  Sun,
+  User,
+  UserCog,
+} from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
+import { useRightPanel } from '@/shared/layout/RightPanel'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -34,6 +44,7 @@ interface HeaderProps {
 
 export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
   const { theme, toggle } = useTheme()
+  const rightPanel = useRightPanel()
   const { user, logout, reload } = useAuth()
   const [changingPassword, setChangingPassword] = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
@@ -89,6 +100,24 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
       <div className="flex-1" />
 
       <NotificationBell />
+
+      {/* **오른쪽 영역을 여는 단추.** 화면이 그 자리를 쓸 때만 뜬다 — 없는
+          패널을 여는 단추가 남아 있으면 눌러도 아무 일이 안 일어난다.
+          처음에는 접힌 사이드바를 화면 오른쪽 끝에 흐린 세로 띠로 뒀는데
+          아무도 못 봤다. 껍데기를 여닫는 단추는 왼쪽 토글과 같은 자리에 있어야
+          한다. */}
+      {rightPanel.label && (
+        <Button
+          variant={rightPanel.open ? 'secondary' : 'ghost'}
+          size="icon"
+          onClick={rightPanel.toggle}
+          aria-pressed={rightPanel.open}
+          aria-label={`${rightPanel.label} ${rightPanel.open ? '접기' : '펴기'}`}
+          title={rightPanel.label}
+        >
+          <PanelRight className="size-4" />
+        </Button>
+      )}
 
       <Button variant="ghost" size="icon" onClick={toggle} aria-label="테마 전환">
         {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}

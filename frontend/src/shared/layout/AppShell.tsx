@@ -12,7 +12,7 @@ import { NoticePopup } from '@/modules/notices/NoticePopup'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Header } from '@/shared/layout/Header'
-import { RightPanelHost } from '@/shared/layout/RightPanel'
+import { RightPanelHost, RightPanelProvider } from '@/shared/layout/RightPanel'
 import { Sidebar } from '@/shared/layout/Sidebar'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 
@@ -38,7 +38,11 @@ export function AppShell() {
     slug ?? user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
 
   return (
-    <div className="flex h-svh overflow-hidden">
+    /* 오른쪽 영역의 여닫기는 **상단 바**가 한다 — 껍데기를 여닫는 단추는 다
+       거기 있다. 그래서 `Header` 와 자리(`RightPanelHost`)가 같은 제공자 안에
+       있어야 한다. */
+    <RightPanelProvider>
+      <div className="flex h-svh overflow-hidden">
       <Sidebar collapsed={collapsed} workspaceSlug={workspaceSlug} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
@@ -61,6 +65,7 @@ export function AppShell() {
       {/* 읽지 않은 팝업 공지는 스스로 뜬다 — 공지 화면에 들어가야만 보이면
           "배포 없이 안내를 전한다" 는 목적이 성립하지 않는다. */}
       <NoticePopup />
-    </div>
+      </div>
+    </RightPanelProvider>
   )
 }

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   blockersAt,
   columnsAt,
+  flowRows,
   insertionIndex,
   madeColumns,
   outOfOrder,
@@ -198,5 +199,42 @@ describe('어디에 끼우는가', () => {
     expect(outOfOrder([step('tensile.strength'), step('tensile.engineering')], CATALOG)).toBe(
       true
     )
+  })
+})
+
+describe('순서도 줄', () => {
+  it('켠 것은 도는 순서대로, 안 켠 것은 갈 자리에', () => {
+    const steps = [step('tensile.engineering'), step('tensile.strength')]
+    const rows = flowRows(steps, CATALOG, [...CATALOG.values()])
+    const names = rows.map((row) =>
+      row.kind === 'step' ? `${row.index + 1}:${row.step.plugin}` : `-:${row.plugin.id}`
+    )
+    // 탄성계수(50)는 공칭(10)과 인장강도(70) 사이에 끼어 보인다 —
+    // **켜면 어디로 들어가는지가 그 자리에서 보인다.**
+    expect(names).toEqual([
+      '1:tensile.engineering',
+      '-:curve.sort_unique',
+      '-:curve.smooth',
+      '-:tensile.elastic_modulus',
+      '-:tensile.proof_stress',
+      '2:tensile.strength',
+    ])
+  })
+
+  it('손으로 순서를 바꾸면 바꾼 순서대로 보인다', () => {
+    // 순서도가 권장 순서로 우기면 **실제로 도는 순서와 다른 그림**이 된다.
+    const steps = [step('tensile.strength'), step('tensile.engineering')]
+    const rows = flowRows(steps, CATALOG, [...CATALOG.values()])
+    const chosen = rows.filter((row) => row.kind === 'step')
+    expect(chosen.map((row) => (row.kind === 'step' ? row.step.plugin : ''))).toEqual([
+      'tensile.strength',
+      'tensile.engineering',
+    ])
+  })
+
+  it('아무것도 안 켜면 권장 순서 그대로다', () => {
+    const rows = flowRows([], CATALOG, [...CATALOG.values()])
+    expect(rows.every((row) => row.kind === 'available')).toBe(true)
+    expect(rows).toHaveLength(CATALOG.size)
   })
 })
