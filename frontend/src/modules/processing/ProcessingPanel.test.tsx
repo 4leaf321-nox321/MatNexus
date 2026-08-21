@@ -36,6 +36,13 @@ vi.mock('@/modules/tests/api', () => ({
   testsApi: { instrumentDimensions: () => dimensions() },
 }))
 
+const made = (key: string, label: string, si_unit = '1', help: string | null = null) => ({
+  key,
+  label,
+  si_unit,
+  help,
+})
+
 const column = (name: string, label: string, dflt: string | null = null) => ({
   name,
   label,
@@ -58,7 +65,10 @@ const CATALOG = [
     version: '1',
     applies_to: ['tensile'],
     params: [column('displacement', '변위 열', 'displacement'), column('force', '하중 열', 'force')],
-    makes_columns: ['strain_engineering', 'stress_engineering'],
+    makes_columns: [
+      made('strain_engineering', '공칭 변형률', '1', '변위 ÷ 게이지 길이.'),
+      made('stress_engineering', '공칭 응력', 'Pa'),
+    ],
     makes_values: [],
     order: 10,
   },
@@ -72,7 +82,7 @@ const CATALOG = [
       column('stress', '응력 열', 'stress_engineering'),
     ],
     makes_columns: [],
-    makes_values: ['youngs_modulus'],
+    makes_values: [made('youngs_modulus', '탄성계수', 'Pa', '탄성 구간의 기울기.')],
     order: 50,
   },
   {
@@ -85,7 +95,7 @@ const CATALOG = [
       column('stress', '응력 열', 'stress_engineering'),
     ],
     makes_columns: [],
-    makes_values: ['tensile_strength'],
+    makes_values: [made('tensile_strength', '인장강도', 'Pa')],
     order: 70,
   },
 ] as unknown as ProcessingStep[]
@@ -102,6 +112,10 @@ function show() {
       testTypeKey="flexural"
       curveKey="curve-1"
       sourceColumns={SOURCE}
+      sourceChannels={[
+        { key: 'displacement', label: '변위', si_unit: 'm' },
+        { key: 'force', label: '하중', si_unit: 'N' },
+      ]}
     />
   )
 }
@@ -168,20 +182,21 @@ describe('처리 순서도', () => {
     expect(screen.getByRole('button', { name: /인장강도/ })).toHaveTextContent('3')
   })
 
-  it('아무것도 안 켜면 돌려 볼 수 없다', async () => {
+  it('돌려 보기는 늘 눌린다 — 회색 버튼은 이유를 말할 자리가 없다', async () => {
     show()
     await screen.findByRole('button', { name: /공칭 응력-변형률/ })
-    expect(screen.getByRole('button', { name: '돌려 보기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '돌려 보기' })).not.toBeDisabled()
   })
 
-  it('필요한 것이 갖춰지면 돌려 볼 수 있다', async () => {
+  it('아무것도 안 켜고 누르면 무엇부터 켜야 하는지 말한다', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(await screen.findByRole('button', { name: /공칭 응력-변형률/ }))
+    await screen.findByRole('button', { name: /공칭 응력-변형률/ })
+    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
 
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: '돌려 보기' })).not.toBeDisabled()
-    )
+    expect(await screen.findByText(/켠 단계가 없습니다/)).toBeInTheDocument()
+    // 단계가 없으면 서버를 부르지 않는다 — 부를 것이 없다.
+    expect(preview).not.toHaveBeenCalled()
   })
 
   it('끄면 다시 잠긴다', async () => {
@@ -195,5 +210,137 @@ describe('처리 순서도', () => {
 
     await user.click(engineering)
     await waitFor(() => expect(screen.getByRole('button', { name: /인장강도/ })).toBeDisabled())
+  })
+})
+
+describe('변수 목록', () => {
+  beforeEach(() => {
+    steps.mockResolvedValue(CATALOG)
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+  })
+
+  it('이름만이 아니라 뜻과 단위를 함께 보여 준다', async () => {
+    // **`strain_engineering` 만 보여 주면 그게 무엇인지 코드를 읽어야 안다.**
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: /공칭 응력-변형률/ }))
+    await user.click(screen.getByRole('button', { name: '변수 목록' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('strain_engineering')
+    expect(dialog).toHaveTextContent('공칭 변형률')
+    expect(dialog).toHaveTextContent('변위 ÷ 게이지 길이.')
+    expect(dialog).toHaveTextContent('Pa')
+  })
+
+  it('원본 채널도 이름으로 읽힌다', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('displacement')
+    expect(dialog).toHaveTextContent('변위')
+    // 어디서 왔는지도 말한다 — 계산이 만든 것과 장비가 준 것은 다르다.
+    expect(dialog).toHaveTextContent('장비 파일')
+  })
+
+  it('값은 어느 단계가 내는지 말한다', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: /공칭 응력-변형률/ }))
+    await user.click(await screen.findByRole('button', { name: /탄성계수/ }))
+    await user.click(screen.getByRole('button', { name: '변수 목록' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('youngs_modulus')
+    expect(dialog).toHaveTextContent('탄성 구간의 기울기.')
+  })
+
+  it('안 켠 단계가 만드는 것은 안 보인다', async () => {
+    // 다 보이면 "있는데 왜 못 고르지" 가 된다 — 그건 순서도가 답할 질문이다.
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).not.toHaveTextContent('strain_engineering')
+  })
+})
+
+describe('돌려 보기가 막힐 때', () => {
+  beforeEach(() => {
+    steps.mockResolvedValue(CATALOG)
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+    preview.mockReset()
+    preview.mockResolvedValue({
+      source_curve_key: 'curve-1',
+      source_row_count: 100,
+      row_count: 100,
+      columns: [],
+      units: {},
+      stages: [],
+      scalars: [],
+      notes: [],
+      points: [],
+    })
+  })
+
+  it('누르기 전에는 조용하다', async () => {
+    // 단계를 쌓는 동안 미리 붉게 물들어 있으면 그건 경고가 아니라 배경이 된다.
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: /공칭 응력-변형률/ }))
+
+    expect(screen.queryByText(/못 도는 단계가/)).not.toBeInTheDocument()
+  })
+
+  it('누르면 어느 단계가 왜 막혔는지 짚는다', async () => {
+    const user = userEvent.setup()
+    show()
+    // 공칭 변환을 켜서 인장강도를 풀고, 그 다음 공칭 변환만 끈다 —
+    // 인장강도는 남고 변형률 열은 사라진 상태가 된다.
+    const engineering = await screen.findByRole('button', { name: /공칭 응력-변형률/ })
+    await user.click(engineering)
+    await user.click(await screen.findByRole('button', { name: /인장강도/ }))
+    await user.click(engineering)
+
+    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
+
+    const notice = await screen.findByText(/못 도는 단계가 1개 있습니다/)
+    expect(notice).toBeInTheDocument()
+    // **어디로 가야 하는지까지 말한다.** 이름만으로는 긴 목록에서 못 찾는다.
+    expect(screen.getByRole('button', { name: /1단계 인장강도/ })).toBeInTheDocument()
+  })
+
+  it('막혀 보여도 서버에는 보낸다', async () => {
+    // 이 판정은 선언에 기댄 추론이다. 틀렸으면 그냥 돌아가는 것이 맞다 —
+    // 우리가 사람을 가두면 안 된다.
+    const user = userEvent.setup()
+    show()
+    const engineering = await screen.findByRole('button', { name: /공칭 응력-변형률/ })
+    await user.click(engineering)
+    await user.click(await screen.findByRole('button', { name: /인장강도/ }))
+    await user.click(engineering)
+
+    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+  })
+
+  it('고치기 시작하면 짚어 둔 것을 거둔다', async () => {
+    const user = userEvent.setup()
+    show()
+    const engineering = await screen.findByRole('button', { name: /공칭 응력-변형률/ })
+    await user.click(engineering)
+    await user.click(await screen.findByRole('button', { name: /인장강도/ }))
+    await user.click(engineering)
+    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
+    await screen.findByText(/못 도는 단계가/)
+
+    // 다시 켜면 문제가 사라진다.
+    await user.click(engineering)
+    await waitFor(() => expect(screen.queryByText(/못 도는 단계가/)).not.toBeInTheDocument())
   })
 })

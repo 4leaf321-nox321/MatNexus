@@ -38,6 +38,20 @@ class StepParamOut(BaseModel):
     """이 칸이 쓰이는 조건. 비어 있으면 늘 쓰인다."""
 
 
+class ProducedOut(BaseModel):
+    """이 계산이 만들어 내는 것 하나 — 열이거나 값이다.
+
+    **이름만 주면 화면이 `strain_true_plastic` 을 그대로 보여 준다.** 그것이
+    무엇인지는 코드를 읽어야 알게 되고, 그러면 아무도 안 읽는다.
+    """
+
+    key: str
+    """`{param}` 이 있으면 그 단계 옵션 값으로 치환한다."""
+    label: str
+    si_unit: str = "1"
+    help: str | None = None
+
+
 class ProcessingStepOut(BaseModel):
     """등록된 계산 하나. **화면이 이 응답만으로 순서도와 폼을 그린다.**"""
 
@@ -47,14 +61,14 @@ class ProcessingStepOut(BaseModel):
     """계산이 바뀌면 올라간다. 결과에 기록해 "이 값은 v1 계산이다" 를 남긴다."""
     applies_to: list[str]
     params: list[StepParamOut]
-    makes_columns: list[str] = []
+    makes_columns: list[ProducedOut] = []
     """이 단계가 새로 더하는 열. `{param}` 은 그 단계 옵션 값으로 치환한다.
 
     **없으면 화면이 "지금 고를 수 있는 열" 을 모른다.** 장비가 준 것은 변위·
     하중뿐이라, 한 번 돌려 보기 전에는 `strain_engineering` 이 목록에 없었다 —
     돌려 보려면 골라야 하고 고르려면 돌려 봐야 하는 자리였다."""
-    makes_values: list[str] = []
-    """이 단계가 내는 스칼라 키. 뒤 단계가 `@` 로 가리킨다."""
+    makes_values: list[ProducedOut] = []
+    """이 단계가 내는 스칼라. 뒤 단계가 `@` 로 가리킨다."""
     order: int = 100
     """권장 순서. 작을수록 앞. 목록이 이미 이 순서로 온다."""
 

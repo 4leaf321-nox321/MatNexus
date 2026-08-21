@@ -64,6 +64,26 @@ class ParamSpec:
 
 
 @dataclass(frozen=True)
+class Produced:
+    """이 계산이 만들어 내는 것 하나 — 열이거나 값이다.
+
+    **이름만 적으면 화면이 `strain_true_plastic` 을 그대로 보여 준다.** 그것이
+    무엇인지는 코드를 읽어야 알 수 있고, 그러면 아무도 안 읽는다. 이름을 정하는
+    자리에서 뜻도 같이 적는다.
+
+    `key` 에 `{param}` 이 있으면 그 단계 옵션의 값으로 치환한다 — 평활은
+    무엇을 평활했느냐에 따라 열 이름이 달라진다.
+    """
+
+    key: str
+    label: str
+    si_unit: str = "1"
+    """**저장 단위(SI)** 다. 화면은 실무 단위로 바꿔 보여 준다."""
+    help: str | None = None
+    """무엇인지·어떻게 만들어졌는지 한 줄. 화면의 변수 목록에 그대로 뜬다."""
+
+
+@dataclass(frozen=True)
 class Plugin:
     id: str
     kind: Kind
@@ -74,7 +94,7 @@ class Plugin:
     params: tuple[ParamSpec, ...] = ()
     applies_to: tuple[str, ...] = ()
     """적용 가능한 재료군·시험종류. 비어 있으면 제한 없음."""
-    makes_columns: tuple[str, ...] = ()
+    makes_columns: tuple[Produced, ...] = ()
     """이 단계가 프레임에 **새로 더하는 열**.
 
     없으면 화면이 "지금 고를 수 있는 열" 을 알 방법이 없다. 실제로 그랬다 —
@@ -85,7 +105,7 @@ class Plugin:
 
     `{param}` 은 그 단계 옵션의 값으로 치환한다 — 평활은 `{column}_smoothed`
     를 만들므로 무엇을 평활했느냐에 따라 열 이름이 달라진다."""
-    makes_values: tuple[str, ...] = ()
+    makes_values: tuple[Produced, ...] = ()
     """이 단계가 내는 스칼라 키(`youngs_modulus` 등). 뒤 단계가 `@` 로 가리킨다.
 
     화면이 "탄성계수를 먼저 골라야 오프셋 항복강도를 쓸 수 있다" 를 말하려면
@@ -112,8 +132,8 @@ def register(
     produces: str | None = None,
     params: tuple[ParamSpec, ...] = (),
     applies_to: tuple[str, ...] = (),
-    makes_columns: tuple[str, ...] = (),
-    makes_values: tuple[str, ...] = (),
+    makes_columns: tuple[Produced, ...] = (),
+    makes_values: tuple[Produced, ...] = (),
     order: int = 100,
     version: str = "1",
     **meta: Any,

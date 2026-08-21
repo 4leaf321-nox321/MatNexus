@@ -20,7 +20,7 @@
  */
 
 import { isReference } from '@/modules/processing/api'
-import type { ProcessingStep, RecipeStep } from '@/modules/processing/api'
+import type { Produced, ProcessingStep, RecipeStep } from '@/modules/processing/api'
 
 /**
  * 바깥에서 들어오는 값. **단계가 만드는 것이 아니다.**
@@ -38,13 +38,16 @@ export function resolveTemplate(template: string, options: Record<string, unknow
   })
 }
 
-/** 이 단계가 새로 더하는 열. 옵션에 따라 이름이 달라지는 것도 있다. */
-export function madeColumns(
-  step: RecipeStep,
-  catalog: Map<string, ProcessingStep>
-): string[] {
+/**
+ * 이 단계가 새로 더하는 열. 옵션에 따라 **이름이 달라지는 것**도 있어서, 선언을
+ * 그대로 주지 않고 그 단계 옵션으로 채워서 낸다.
+ */
+export function madeColumns(step: RecipeStep, catalog: Map<string, ProcessingStep>): Produced[] {
   const plugin = catalog.get(step.plugin)
-  return (plugin?.makes_columns ?? []).map((name) => resolveTemplate(name, step.options))
+  return (plugin?.makes_columns ?? []).map((item) => ({
+    ...item,
+    key: resolveTemplate(item.key, step.options),
+  }))
 }
 
 /**
@@ -60,7 +63,7 @@ export function columnsAt(
 ): string[] {
   const seen = new Set(source)
   for (const step of steps.slice(0, index)) {
-    for (const name of madeColumns(step, catalog)) seen.add(name)
+    for (const item of madeColumns(step, catalog)) seen.add(item.key)
   }
   return [...seen]
 }
@@ -73,7 +76,7 @@ export function valuesAt(
 ): Set<string> {
   const seen = new Set<string>()
   for (const step of steps.slice(0, index)) {
-    for (const key of catalog.get(step.plugin)?.makes_values ?? []) seen.add(key)
+    for (const item of catalog.get(step.plugin)?.makes_values ?? []) seen.add(item.key)
   }
   return seen
 }
@@ -140,7 +143,7 @@ function makerOfColumn(
   catalog: Map<string, ProcessingStep>
 ): string | undefined {
   for (const plugin of catalog.values()) {
-    if (plugin.makes_columns.includes(column)) return plugin.id
+    if (plugin.makes_columns.some((item) => item.key === column)) return plugin.id
   }
   return undefined
 }
@@ -150,7 +153,7 @@ function makerOfValue(
   catalog: Map<string, ProcessingStep>
 ): string | undefined {
   for (const plugin of catalog.values()) {
-    if (plugin.makes_values.includes(key)) return plugin.id
+    if (plugin.makes_values.some((item) => item.key === key)) return plugin.id
   }
   return undefined
 }
@@ -178,4 +181,37 @@ export function outOfOrder(
 ): boolean {
   const orders = steps.map((step) => catalog.get(step.plugin)?.order ?? 100)
   return orders.some((value, index) => index > 0 && value < orders[index - 1])
+}
+
+/**
+ * 지금 구성에서 **쓸 수 있는 것 전부** — 원본 채널과, 각 단계가 만드는 열·값.
+ *
+ * 화면의 「변수 목록」이 이걸 그대로 보여 준다. `strain_true_plastic` 이 무엇인지
+ * 코드를 읽어야 알게 두지 않는다.
+ */
+export interface Vocabulary {
+  columns: (Produced & { madeBy?: string })[]
+  values: (Produced & { madeBy: string })[]
+}
+
+export function vocabularyOf(
+  steps: RecipeStep[],
+  source: { key: string; label: string; si_unit: string }[],
+  catalog: Map<string, ProcessingStep>
+): Vocabulary {
+  const columns: (Produced & { madeBy?: string })[] = source.map((item) => ({
+    key: item.key,
+    label: item.label,
+    si_unit: item.si_unit,
+    help: null,
+  }))
+  const values: (Produced & { madeBy: string })[] = []
+  for (const step of steps) {
+    const label = catalog.get(step.plugin)?.label ?? step.plugin
+    for (const item of madeColumns(step, catalog)) columns.push({ ...item, madeBy: label })
+    for (const item of catalog.get(step.plugin)?.makes_values ?? []) {
+      values.push({ ...item, madeBy: label })
+    }
+  }
+  return { columns, values }
 }

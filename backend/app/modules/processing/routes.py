@@ -35,6 +35,7 @@ from app.modules.processing.schemas import (
     ProcessingScalarOut,
     ProcessingStageOut,
     ProcessingStepOut,
+    ProducedOut,
     RecipeCreateRequest,
     RecipeOut,
     RecipeSaveRequest,
@@ -62,6 +63,10 @@ PREVIEW_POINTS = 600
 
 
 # --- 단계 목록 ---------------------------------------------------------------
+
+
+def _produced(item: registry.Produced) -> ProducedOut:
+    return ProducedOut(key=item.key, label=item.label, si_unit=item.si_unit, help=item.help)
 
 
 @router.get("/steps", response_model=list[ProcessingStepOut])
@@ -98,8 +103,8 @@ def list_steps(
                 )
                 for spec in plugin.params
             ],
-            makes_columns=list(plugin.makes_columns),
-            makes_values=list(plugin.makes_values),
+            makes_columns=[_produced(item) for item in plugin.makes_columns],
+            makes_values=[_produced(item) for item in plugin.makes_values],
             order=plugin.order,
         )
         for plugin in registry.list_plugins(kind="processing", applies_to=test_type)

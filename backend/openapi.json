@@ -3892,7 +3892,7 @@
           "makes_columns": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ProducedOut"
             },
             "title": "Makes Columns",
             "type": "array"
@@ -3900,7 +3900,7 @@
           "makes_values": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ProducedOut"
             },
             "title": "Makes Values",
             "type": "array"
@@ -3930,6 +3930,41 @@
           "params"
         ],
         "title": "ProcessingStepOut",
+        "type": "object"
+      },
+      "ProducedOut": {
+        "description": "이 계산이 만들어 내는 것 하나 — 열이거나 값이다.\n\n**이름만 주면 화면이 `strain_true_plastic` 을 그대로 보여 준다.** 그것이\n무엇인지는 코드를 읽어야 알게 되고, 그러면 아무도 안 읽는다.",
+        "properties": {
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "default": "1",
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ProducedOut",
         "type": "object"
       },
       "ProfileTryOut": {

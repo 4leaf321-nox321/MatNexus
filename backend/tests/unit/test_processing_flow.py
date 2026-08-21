@@ -77,7 +77,7 @@ class TestDeclaredOrder:
         """오프셋 항복강도는 탄성계수가 있어야 한다 — 순서도가 그 순서여야 한다."""
         by_id = {item.id: item for item in registry.list_plugins("processing")}
         maker = by_id["tensile.elastic_modulus"]
-        assert "youngs_modulus" in maker.makes_values
+        assert "youngs_modulus" in {item.key for item in maker.makes_values}
         for user in ("tensile.proof_stress", "tensile.true_plastic"):
             assert by_id[user].order > maker.order
 
@@ -93,7 +93,10 @@ class TestDeclaredColumns:
             before,
         )
         added = set(result.frame.columns) - set(before.columns)
-        assert added == set(plugin.makes_columns)
+        assert added == {item.key for item in plugin.makes_columns}
+        # **단위도 선언한다.** 화면이 실무 단위로 바꿔 보여 주는 근거다.
+        for item in plugin.makes_columns:
+            assert result.frame.units[item.key] == item.si_unit
 
     def test_진응력_단계가_선언한_열을_실제로_만든다(self) -> None:
         plugin = registry.get("tensile.true_plastic")
@@ -105,18 +108,20 @@ class TestDeclaredColumns:
             [Step("tensile.true_plastic", {"youngs_modulus": 200e9})], before
         )
         added = set(result.frame.columns) - set(before.columns)
-        assert added == set(plugin.makes_columns)
+        assert added == {item.key for item in plugin.makes_columns}
+        for item in plugin.makes_columns:
+            assert result.frame.units[item.key] == item.si_unit
 
     def test_평활은_고른_열에_따라_이름이_달라진다(self) -> None:
         """`{column}_smoothed` 는 틀이다. 화면이 옵션 값으로 채운다."""
         plugin = registry.get("curve.smooth")
-        assert plugin.makes_columns == ("{column}_smoothed",)
+        assert [item.key for item in plugin.makes_columns] == ["{column}_smoothed"]
 
         options = {"column": "force", "window": 5}
         before = source_frame()
         result = processing.apply([Step("curve.smooth", options)], before)
         added = set(result.frame.columns) - set(before.columns)
-        assert added == {resolve(plugin.makes_columns[0], options)}
+        assert added == {resolve(plugin.makes_columns[0].key, options)}
 
     def test_열을_안_만든다고_한_단계는_정말_안_만든다(self) -> None:
         """토우 보정은 **고른 열을 그 자리에서 민다** — 새 열을 더하지 않는다.
@@ -156,7 +161,7 @@ class TestWalkable:
                     continue
                 if str(wanted) not in available:
                     missing.append(f"{plugin.id}.{spec.name} → {wanted}")
-            available |= {resolve(name, options) for name in plugin.makes_columns}
+            available |= {resolve(item.key, options) for item in plugin.makes_columns}
 
         assert missing == [], (
             "순서도를 순서대로 따라가는데 아직 없는 열을 기본값으로 갖고 있습니다:\n  "
@@ -173,4 +178,32 @@ class TestWalkable:
                     assert default[1:] in made, (
                         f"{plugin.id}: {default} 를 만드는 앞 단계가 없습니다"
                     )
-            made |= set(plugin.makes_values)
+            made |= {item.key for item in plugin.makes_values}
+
+
+class TestDocumented:
+    """**이름만 적으면 화면이 `strain_true_plastic` 을 그대로 보여 준다.**
+
+    그것이 무엇인지는 코드를 읽어야 알게 되고, 그러면 아무도 안 읽는다. 이름을
+    정하는 자리에서 뜻도 같이 적게 한다 — 화면의 변수 목록이 이 선언을 그대로
+    보여 준다.
+    """
+
+    def test_만들어_내는_것에는_이름이_있다(self) -> None:
+        nameless: list[str] = []
+        for plugin in registry.list_plugins("processing"):
+            for item in (*plugin.makes_columns, *plugin.makes_values):
+                if not item.label.strip():
+                    nameless.append(f"{plugin.id}: {item.key}")
+        assert nameless == []
+
+    def test_열_이름이_겹치지_않는다(self) -> None:
+        """두 계산이 같은 열을 만들면 뒤가 앞을 덮는다 — 조용히."""
+        seen: dict[str, str] = {}
+        clashes: list[str] = []
+        for plugin in registry.list_plugins("processing"):
+            for item in plugin.makes_columns:
+                if item.key in seen:
+                    clashes.append(f"{item.key}: {seen[item.key]} 와 {plugin.id}")
+                seen[item.key] = plugin.id
+        assert clashes == []

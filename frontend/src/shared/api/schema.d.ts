@@ -3649,12 +3649,12 @@ export interface components {
              * Makes Columns
              * @default []
              */
-            makes_columns: string[];
+            makes_columns: components["schemas"]["ProducedOut"][];
             /**
              * Makes Values
              * @default []
              */
-            makes_values: string[];
+            makes_values: components["schemas"]["ProducedOut"][];
             /**
              * Order
              * @default 100
@@ -3664,6 +3664,26 @@ export interface components {
             params: components["schemas"]["StepParamOut"][];
             /** Version */
             version: string;
+        };
+        /**
+         * ProducedOut
+         * @description 이 계산이 만들어 내는 것 하나 — 열이거나 값이다.
+         *
+         *     **이름만 주면 화면이 `strain_true_plastic` 을 그대로 보여 준다.** 그것이
+         *     무엇인지는 코드를 읽어야 알게 되고, 그러면 아무도 안 읽는다.
+         */
+        ProducedOut: {
+            /** Help */
+            help?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Si Unit
+             * @default 1
+             */
+            si_unit: string;
         };
         /**
          * ProfileTryOut

@@ -23,6 +23,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   BookMarked,
+  BookOpen,
   ChevronDown,
   ChevronUp,
   Circle,
@@ -65,6 +66,14 @@ import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -72,7 +81,13 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { missingSteps } from '@/modules/processing/gaps'
-import { blockersAt, columnsAt, insertionIndex, outOfOrder } from '@/modules/processing/flow'
+import {
+  blockersAt,
+  columnsAt,
+  insertionIndex,
+  outOfOrder,
+  vocabularyOf,
+} from '@/modules/processing/flow'
 import type { Blocker } from '@/modules/processing/flow'
 import { testsApi } from '@/modules/tests/api'
 import {
@@ -90,6 +105,11 @@ interface Props {
   curveKey: string | null
   /** 원본 곡선의 채널 키. 기준 열을 고를 때 쓴다. */
   sourceColumns: string[]
+  /**
+   * 그 채널의 이름·단위. **변수 목록이 `displacement` 를 '변위 (m)' 로 읽게
+   * 하려면 필요하다** — 키만 보여 주면 무엇인지 코드를 읽어야 안다.
+   */
+  sourceChannels?: { key: string; label: string; si_unit: string }[]
   /** 관리자인 부서. 비어 있으면 '레시피로 저장' 을 감춘다 — 서버가 거절한다. */
   managedWorkspaces?: { slug: string; name: string }[]
 }
@@ -139,6 +159,7 @@ export function ProcessingPanel({
   testTypeKey,
   curveKey,
   sourceColumns,
+  sourceChannels = [],
   managedWorkspaces = [],
 }: Props) {
   const catalog = useResource(() => processingApi.steps(testTypeKey), [testTypeKey])
@@ -154,6 +175,15 @@ export function ProcessingPanel({
   })
   const [open, setOpen] = useState<number | null>(null)
   const [savingRecipe, setSavingRecipe] = useState(false)
+  const [showingVariables, setShowingVariables] = useState(false)
+  /**
+   * '돌려 보기' 를 눌러 본 적이 있는가.
+   *
+   * **누르기 전에는 조용히 있는다.** 단계를 쌓는 동안 아직 안 채운 칸이 붉게
+   * 물들어 있으면 그건 경고가 아니라 배경이 되고, 진짜 문제가 났을 때 눈에
+   * 안 띈다.
+   */
+  const [attempted, setAttempted] = useState(false)
 
   /**
    * 저장한 레시피를 다시 불러온다.
@@ -218,6 +248,9 @@ export function ProcessingPanel({
   }, [testTypeKey, curveKey, available.length, byId])
 
   async function run(): Promise<ProcessingPreview | null> {
+    // 누른 순간부터 부족한 곳을 붉게 짚는다.
+    setAttempted(true)
+    if (!steps.length) return null
     setBusy(true)
     setError(null)
     setSaved(null)
@@ -259,6 +292,9 @@ export function ProcessingPanel({
     setSteps((current) =>
       current.map((step, at) => (at === index ? { ...step, options } : step))
     )
+    // 고치는 중에는 짚어 둔 것을 거둔다 — 방금 채운 칸이 계속 붉으면 고쳐도
+    // 안 고쳐진 것처럼 보인다. 다시 누르면 다시 본다.
+    setAttempted(false)
     // 옵션을 바꾸면 앞의 결과는 더 이상 그 옵션의 결과가 아니다. 남겨 두면
     // 사람이 바뀐 값의 결과라고 읽는다.
     setResult(null)
@@ -322,15 +358,32 @@ export function ProcessingPanel({
     [steps, sourceColumns, byId]
   )
   /**
-   * **한 번이라도 돈 구성은 막지 않는다.**
+   * 못 돌 것 같은 단계들. **막는 데 쓰지 않는다.**
    *
-   * 여기 판정은 계산이 선언한 것으로 하는 추론이라, 선언이 실제와 어긋나면
-   * 틀릴 수 있다(뒤 검사가 내장 계산은 지킨다). 그런데 서버가 방금 돌려 준
-   * 구성이라면 추론이 틀렸다는 것이 이미 증명된 셈이다 — 그때는 우리 판정을
-   * 버린다. 단계를 고치면 `result` 가 지워지므로 다시 본다.
+   * 전에는 이걸로 '돌려 보기' 를 잠갔다. 그런데 **회색 버튼은 이유를 말할
+   * 자리가 없다** — 무엇을 고쳐야 하는지 모른 채로 멈춘다. 게다가 이 판정은
+   * 계산이 선언한 것에 기댄 추론이라, 선언이 실제와 어긋나면 사람을 가둔다.
+   *
+   * 그래서 지금은 **누르게 두고, 누르면 어디가 부족한지 가리킨다.** 서버에도
+   * 그대로 보낸다 — 우리 추론이 틀렸으면 그냥 돌아가는 것이 맞다.
    */
-  const blocked = !result && stepBlockers.some((list) => list.length > 0)
+  const troubled = useMemo(
+    () =>
+      stepBlockers
+        .map((list, index) => ({ index, list }))
+        .filter((item) => item.list.length > 0),
+    [stepBlockers]
+  )
   const scrambled = useMemo(() => outOfOrder(steps, byId), [steps, byId])
+
+  /** 지금 구성이 쓰는 이름 전부 — 원본 채널과 각 단계가 만드는 열·값. */
+  const vocabulary = useMemo(() => {
+    const known = new Map(sourceChannels.map((item) => [item.key, item]))
+    const source = sourceColumns.map(
+      (key) => known.get(key) ?? { key, label: key, si_unit: '1' }
+    )
+    return vocabularyOf(steps, source, byId)
+  }, [steps, sourceColumns, sourceChannels, byId])
 
   /** 지금 구성으로 못 하게 되는 일. 인장에만 뜻이 있다. */
   const gaps = useMemo(
@@ -373,15 +426,15 @@ export function ProcessingPanel({
               }}
             />
           )}
-          {/* **필요한 것이 다 갖춰져야 누를 수 있다.** 막힌 채로 눌러 봐야
-              서버가 같은 말을 하는데, 그때는 어느 단계인지 찾아야 한다. */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={run}
-            disabled={busy || !steps.length || blocked}
-            title={blocked ? '아직 못 도는 단계가 있습니다.' : undefined}
-          >
+          {/* **이름이 무엇을 뜻하는지 볼 데가 있어야 한다.** `strain_true_plastic`
+              만 보여 주면 코드를 읽어야 알게 되고, 그러면 아무도 안 읽는다. */}
+          <Button size="sm" variant="ghost" onClick={() => setShowingVariables(true)}>
+            <BookOpen className="size-3.5" />
+            변수 목록
+          </Button>
+          {/* **잠그지 않는다.** 회색 버튼은 무엇을 고쳐야 하는지 말할 자리가
+              없다 — 누르면 부족한 곳을 짚는다. */}
+          <Button size="sm" variant="outline" onClick={run} disabled={busy}>
             <Play className="size-3.5" />
             돌려 보기
           </Button>
@@ -449,6 +502,13 @@ export function ProcessingPanel({
         </div>
       )}
 
+      {showingVariables && (
+        <VariablesDialog
+          vocabulary={vocabulary}
+          onClose={() => setShowingVariables(false)}
+        />
+      )}
+
       {savingRecipe && (
         <SaveRecipeDialog
           steps={steps}
@@ -466,6 +526,44 @@ export function ProcessingPanel({
         />
       )}
 
+      {/* **눌렀는데 못 돌 때, 어디를 고쳐야 하는지 여기서 짚는다.**
+          전에는 버튼이 그냥 회색이었다 — 회색은 이유를 말할 자리가 없다. */}
+      {attempted && troubled.length > 0 && (
+        <div className="border-destructive/40 bg-destructive/5 mb-3 rounded-md border p-3 text-sm">
+          <p className="mb-1.5">
+            <b>아직 못 도는 단계가 {troubled.length}개 있습니다.</b> 서버에도 보냈으니
+            그대로 돌아갈 수도 있습니다 — 아래가 화면이 짚은 곳입니다.
+          </p>
+          <ul className="space-y-1">
+            {troubled.map(({ index, list }) => (
+              <li key={index} className="flex flex-wrap items-baseline gap-x-1.5">
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={() => {
+                    document
+                      .getElementById(`step-${index}`)
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }}
+                >
+                  {index + 1}단계 {byId.get(steps[index].plugin)?.label ?? steps[index].plugin}
+                </button>
+                <span className="text-muted-foreground text-xs">
+                  {list.map((item) => item.reason).join(' ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {attempted && !steps.length && (
+        <div className="border-destructive/40 bg-destructive/5 mb-3 rounded-md border p-3 text-sm">
+          <b>켠 단계가 없습니다.</b> 왼쪽 순서도에서 「공칭 응력-변형률」부터 켜세요 —
+          장비가 준 것은 변위·하중이라 그 단계가 응력·변형률을 만듭니다.
+        </div>
+      )}
+
       {(saved || notice) && (
         <div className="mb-3 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
           {notice ?? (
@@ -478,7 +576,7 @@ export function ProcessingPanel({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,26rem)_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)]">
         <FlowRail
           available={available}
           steps={steps}
@@ -515,7 +613,13 @@ export function ProcessingPanel({
             const plugin = byId.get(step.plugin)
             const stage = result?.stages[index]
             return (
-              <div key={`${step.plugin}-${index}`} className="rounded-md border">
+              <div
+                key={`${step.plugin}-${index}`}
+                id={`step-${index}`}
+                className={`rounded-md border ${
+                  attempted && stepBlockers[index]?.length ? 'border-destructive/60' : ''
+                }`}
+              >
                 <div className="flex items-center gap-2 border-b px-3 py-2">
                   <span className="text-muted-foreground font-mono text-xs">{index + 1}</span>
                   <span className="text-sm font-medium">{plugin?.label ?? step.plugin}</span>
@@ -564,7 +668,13 @@ export function ProcessingPanel({
                   {/* **어디서 막혔는지 그 자리에서 말한다.** 아래 '돌려 보기'
                       가 회색인데 이유가 위에만 적혀 있으면 못 잇는다. */}
                   {stepBlockers[index]?.length > 0 && (
-                    <ul className="space-y-0.5 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+                    <ul
+                      className={`space-y-0.5 rounded-md border p-2 text-xs ${
+                        attempted
+                          ? 'border-destructive/40 bg-destructive/5'
+                          : 'border-amber-500/40 bg-amber-500/5'
+                      }`}
+                    >
                       {stepBlockers[index].map((item) => (
                         <li key={item.reason}>
                           {item.reason}
@@ -716,6 +826,113 @@ export function ProcessingPanel({
         </div>
       </div>
     </section>
+  )
+}
+
+/**
+ * 변수 목록 — **이 이름이 무엇인지.**
+ *
+ * `strain_true_plastic` 만 화면에 뜨면 그게 무엇인지 코드를 읽어야 알게 되고,
+ * 그러면 아무도 안 읽는다. 이름·뜻·저장 단위·누가 만드는지를 한 자리에 놓는다.
+ *
+ * **목록을 여기 적지 않는다.** 계산이 `Produced` 로 선언한 것을 그대로 보여
+ * 준다 — 새 처리를 만들면 여기도 따라온다(D7).
+ *
+ * 지금 켠 단계가 만드는 것만 보인다. 안 켠 것까지 다 보이면 "있는데 왜 못
+ * 고르지" 가 되고, 그건 순서도가 답할 질문이다.
+ */
+function VariablesDialog({
+  vocabulary,
+  onClose,
+}: {
+  vocabulary: ReturnType<typeof vocabularyOf>
+  onClose: () => void
+}) {
+  const rows = (
+    items: { key: string; label: string; si_unit: string; help?: string | null; madeBy?: string }[]
+  ) => (
+    <TableBody>
+      {items.map((item) => (
+        <TableRow key={item.key}>
+          <TableCell className="align-top font-mono text-xs">{item.key}</TableCell>
+          <TableCell className="align-top text-sm">
+            <span className="font-medium">{item.label}</span>
+            {item.si_unit !== "1" && (
+              <span className="text-muted-foreground ml-1 text-xs">({item.si_unit})</span>
+            )}
+            {item.help && (
+              <span className="text-muted-foreground mt-0.5 block text-xs">{item.help}</span>
+            )}
+          </TableCell>
+          <TableCell className="text-muted-foreground align-top text-xs whitespace-nowrap">
+            {item.madeBy ?? "장비 파일"}
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  )
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>변수 목록</DialogTitle>
+          <DialogDescription>
+            지금 켠 단계가 쓰고 만드는 이름입니다. <b>이름은 계산이 정합니다</b> — 파일이나
+            사람이 정하지 않으므로, 다른 시험도 같은 이름이면 같은 뜻입니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <section>
+          <h3 className="mb-1 text-sm font-medium">
+            열 <span className="text-muted-foreground font-normal">— 곡선의 세로줄</span>
+          </h3>
+          <p className="text-muted-foreground mb-2 text-xs">
+            결과를 저장하면 이 열들이 <b>그대로 파일에 들어갑니다.</b> 결과는 불변이라
+            나중에 열을 덧붙일 수 없습니다 — 필요한 단계를 빼고 저장하면 다시 처리해야
+            합니다.
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-56">이름</TableHead>
+                <TableHead>뜻</TableHead>
+                <TableHead className="w-32">만드는 단계</TableHead>
+              </TableRow>
+            </TableHeader>
+            {rows(vocabulary.columns)}
+          </Table>
+        </section>
+
+        {vocabulary.values.length > 0 && (
+          <section className="mt-4">
+            <h3 className="mb-1 text-sm font-medium">
+              값 <span className="text-muted-foreground font-normal">— 곡선당 하나</span>
+            </h3>
+            <p className="text-muted-foreground mb-2 text-xs">
+              열이 아니라 숫자 하나입니다. 뒤 단계가 <code>@이름</code> 으로 가져다 씁니다 —
+              사람이 옮겨 적으면, 앞을 다시 계산했을 때 뒤만 옛 값으로 남습니다.
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-56">이름</TableHead>
+                  <TableHead>뜻</TableHead>
+                  <TableHead className="w-32">내는 단계</TableHead>
+                </TableRow>
+              </TableHeader>
+              {rows(vocabulary.values)}
+            </Table>
+          </section>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            닫기
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

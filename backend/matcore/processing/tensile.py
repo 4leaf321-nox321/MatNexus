@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 
-from matcore import ParamSpec, register
+from matcore import ParamSpec, Produced, register
 from matcore.processing import (
     Frame,
     ProcessingError,
@@ -108,7 +108,23 @@ def _require_pascal_stress(frame: Frame, key: str) -> None:
     ),
     applies_to=("tensile",),
     # **여기가 없으면 뒤가 전부 없다.** 장비는 응력-변형률을 주지 않는다.
-    makes_columns=(STRAIN, STRESS),
+    makes_columns=(
+        Produced(
+            key=STRAIN,
+            label="공칭 변형률",
+            si_unit="1",
+            help="변위 ÷ 게이지 길이. 시편이 처음 길이에 견줘 얼마나 늘었는가.",
+        ),
+        Produced(
+            key=STRESS,
+            label="공칭 응력",
+            si_unit="Pa",
+            help=(
+                "하중 ÷ 초기 단면적. **줄어드는 단면을 안 본다** — "
+                "그래서 네킹 뒤 값이 실제보다 낮게 나옵니다."
+            ),
+        ),
+    ),
     order=10,
     version="1",
 )
@@ -183,7 +199,25 @@ TOE_MIN_R_SQUARED = 0.995
     ),
     applies_to=("tensile",),
     # 열을 새로 만들지 않는다 — **고른 변형률 열을 그 자리에서 민다.**
-    makes_values=("toe_strain_offset", "toe_r_squared"),
+    makes_values=(
+        Produced(
+            key="toe_strain_offset",
+            label="토우 보정량",
+            si_unit="1",
+            help=(
+                "변형률 축을 왼쪽으로 민 양. "
+                "물린 시편이 자리를 잡는 동안 생긴 가짜 변형입니다."
+            ),
+        ),
+        Produced(
+            key="toe_r_squared",
+            label="토우 구간 R²",
+            si_unit="1",
+            help=(
+                "보정에 쓴 직선이 그 구간에 얼마나 맞는가. 낮으면 구간을 잘못 잡은 것입니다."
+            ),
+        ),
+    ),
     order=30,
     version="1",
 )
@@ -345,7 +379,29 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
-    makes_values=("youngs_modulus", "elastic_intercept", "elastic_r_squared"),
+    makes_values=(
+        Produced(
+            key="youngs_modulus",
+            label="탄성계수",
+            si_unit="Pa",
+            help="탄성 구간의 기울기(E). 항복강도·진소성변형률이 이 값을 씁니다.",
+        ),
+        Produced(
+            key="elastic_intercept",
+            label="탄성 절편",
+            si_unit="Pa",
+            help=(
+                "맞춘 직선이 변형률 0 에서 갖는 값. "
+                "0 에서 크게 벗어나면 토우가 남아 있다는 뜻입니다."
+            ),
+        ),
+        Produced(
+            key="elastic_r_squared",
+            label="탄성 구간 R²",
+            si_unit="1",
+            help="그 구간이 실제로 직선이었는가. 점이 5개 미만이면 내지 않습니다.",
+        ),
+    ),
     order=50,
     version="1",
 )
@@ -479,7 +535,26 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
-    makes_values=("proof_stress", "proof_strain", "proof_offset"),
+    makes_values=(
+        Produced(
+            key="proof_stress",
+            label="항복강도",
+            si_unit="Pa",
+            help=(
+                "오프셋 선과 곡선이 만나는 점의 응력. "
+                "**만나지 않으면 외삽하지 않고 실패합니다.**"
+            ),
+        ),
+        Produced(
+            key="proof_strain", label="항복 변형률", si_unit="1", help="그 교점의 변형률."
+        ),
+        Produced(
+            key="proof_offset",
+            label="오프셋",
+            si_unit="1",
+            help="쓴 오프셋 값. 금속은 보통 0.2% 이고 규격이 정합니다.",
+        ),
+    ),
     order=60,
     version="1",
 )
@@ -553,7 +628,29 @@ def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
-    makes_values=("tensile_strength", "strain_at_strength", "elongation_observed"),
+    makes_values=(
+        Produced(
+            key="tensile_strength",
+            label="인장강도",
+            si_unit="Pa",
+            help="최대 공칭응력(UTS). 곡선의 봉우리입니다.",
+        ),
+        Produced(
+            key="strain_at_strength",
+            label="최대하중 변형률",
+            si_unit="1",
+            help="봉우리에서의 변형률. 균일 변형이 끝나는 지점으로 봅니다.",
+        ),
+        Produced(
+            key="elongation_observed",
+            label="관측 최대 변형률",
+            si_unit="1",
+            help=(
+                "**파단 연신율이 아닙니다** — 기록이 끝난 지점입니다. "
+                "장비가 파단 뒤에도 적으면 그만큼 커집니다."
+            ),
+        ),
+    ),
     order=70,
     version="1",
 )
@@ -598,9 +695,14 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
     ),
     applies_to=("tensile",),
     makes_values=(
-        "necking_candidate_index",
-        "necking_candidate_strain",
-        "necking_candidate_stress",
+        Produced(
+            key="necking_candidate_index",
+            label="네킹 후보 위치",
+            si_unit="1",
+            help=("몇 번째 점인가. 진응력 단계의 '자를 위치'에 그대로 넣을 수 있습니다."),
+        ),
+        Produced(key="necking_candidate_strain", label="네킹 후보 변형률", si_unit="1"),
+        Produced(key="necking_candidate_stress", label="네킹 후보 응력", si_unit="Pa"),
     ),
     order=80,
     version="1",
@@ -691,7 +793,32 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
-    makes_columns=(TRUE_STRAIN, TRUE_STRESS, PLASTIC_STRAIN),
+    makes_columns=(
+        Produced(
+            key=TRUE_STRAIN,
+            label="진변형률",
+            si_unit="1",
+            help="ln(1 + 공칭변형률). 매 순간의 길이를 기준으로 다시 잰 변형률입니다.",
+        ),
+        Produced(
+            key=TRUE_STRESS,
+            label="진응력",
+            si_unit="Pa",
+            help=(
+                "공칭응력 곱하기 (1 + 공칭변형률). 줄어든 실제 단면으로 나눈 값입니다. "
+                "**CAE 카드가 이 열을 씁니다.**"
+            ),
+        ),
+        Produced(
+            key=PLASTIC_STRAIN,
+            label="진소성변형률",
+            si_unit="1",
+            help=(
+                "진변형률 빼기 진응력/E. 탄성으로 되돌아갈 몫을 뺀 것입니다. "
+                "**경화식 적합과 CAE 카드의 x 축입니다.**"
+            ),
+        ),
+    ),
     order=90,
     version="1",
 )

@@ -184,7 +184,10 @@ export default function TestRunDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    /* **이 화면만 넓다.** 처리 탭이 순서도·단계·곡선 셋을 나란히 놓는 작업
+       화면이라 4xl(896px)에서는 곡선이 손바닥만 해진다. 다른 화면은 읽는
+       화면이라 좁은 것이 맞다 — 여기만 넓힌다. */
+    <div className="mx-auto max-w-7xl">
       <PageHeader
         title={item?.record_name ?? '시험'}
         description={
@@ -509,6 +512,8 @@ export default function TestRunDetailPage() {
                 testTypeKey={item.test_type_key}
                 curveKey={activeCurve.key}
                 sourceColumns={activeCurve.channels}
+                /* 변수 목록이 `displacement` 를 '변위 (m)' 로 읽게 한다. */
+                sourceChannels={channels}
                 managedWorkspaces={managed}
               />
             ) : (

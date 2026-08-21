@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from matcore import ParamSpec, register
+from matcore import ParamSpec, Produced, register
 from matcore.processing import (
     Frame,
     ProcessingError,
@@ -235,7 +235,13 @@ def resample(frame: Frame, options: dict[str, Any]) -> StepResult:
     ),
     # 원본을 덮지 않고 `<열>_smoothed` 를 더한다 — 무엇을 평활했느냐에 따라
     # 이름이 달라지므로 옵션 값으로 치환한다.
-    makes_columns=("{column}_smoothed",),
+    makes_columns=(
+        Produced(
+            key="{column}_smoothed",
+            label="평활한 열",
+            help="원본 열을 덮지 않고 옆에 더합니다 — 무엇을 평활했는지 나란히 봅니다.",
+        ),
+    ),
     order=45,
     version="1",
 )

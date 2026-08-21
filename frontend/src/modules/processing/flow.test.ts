@@ -21,6 +21,8 @@ import type { ProcessingStep, RecipeStep } from '@/modules/processing/api'
 
 const SOURCE = ['displacement', 'force', 'width']
 
+const made = (key: string, label: string, si_unit = '1') => ({ key, label, si_unit, help: null })
+
 function plugin(over: Partial<ProcessingStep> & { id: string }): ProcessingStep {
   return {
     label: over.id,
@@ -53,7 +55,10 @@ const CATALOG = new Map<string, ProcessingStep>(
     plugin({
       id: 'tensile.engineering',
       order: 10,
-      makes_columns: ['strain_engineering', 'stress_engineering'],
+      makes_columns: [
+        made('strain_engineering', '공칭 변형률'),
+        made('stress_engineering', '공칭 응력', 'Pa'),
+      ],
       params: [
         column('displacement', '변위 열', 'displacement'),
         column('force', '하중 열', 'force'),
@@ -63,14 +68,18 @@ const CATALOG = new Map<string, ProcessingStep>(
     plugin({
       id: 'curve.smooth',
       order: 45,
-      makes_columns: ['{column}_smoothed'],
+      makes_columns: [made('{column}_smoothed', '평활한 열')],
       params: [column('column', '평활할 열')] as ProcessingStep['params'],
     }),
-    plugin({ id: 'tensile.elastic_modulus', order: 50, makes_values: ['youngs_modulus'] }),
+    plugin({
+      id: 'tensile.elastic_modulus',
+      order: 50,
+      makes_values: [made('youngs_modulus', '탄성계수', 'Pa')],
+    }),
     plugin({
       id: 'tensile.proof_stress',
       order: 60,
-      makes_values: ['proof_stress'],
+      makes_values: [made('proof_stress', '항복강도', 'Pa')],
       params: [
         {
           ...column('youngs_modulus', '탄성계수'),
@@ -117,10 +126,12 @@ describe('무엇이 있는가', () => {
 
   it('평활은 고른 열에 따라 이름이 달라진다', () => {
     const smooth = step('curve.smooth', { column: 'force' })
-    expect(madeColumns(smooth, CATALOG)).toEqual(['force_smoothed'])
-    expect(madeColumns(step('curve.smooth', { column: 'stress_engineering' }), CATALOG)).toEqual([
-      'stress_engineering_smoothed',
-    ])
+    expect(madeColumns(smooth, CATALOG).map((item) => item.key)).toEqual(['force_smoothed'])
+    expect(
+      madeColumns(step('curve.smooth', { column: 'stress_engineering' }), CATALOG).map(
+        (item) => item.key
+      )
+    ).toEqual(['stress_engineering_smoothed'])
   })
 
   it('안 고른 틀은 그대로 남는다 — 없는 열을 지어내지 않는다', () => {

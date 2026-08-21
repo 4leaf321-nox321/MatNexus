@@ -12,6 +12,13 @@ import type { components } from '@/shared/api/schema'
 
 export type ProcessingStep = components['schemas']['ProcessingStepOut']
 export type StepParam = components['schemas']['StepParamOut']
+/**
+ * 계산이 만들어 내는 것 하나 — 열이거나 값이다. 이름·뜻·저장 단위를 같이 갖는다.
+ *
+ * `strain_true_plastic` 만 보여 주면 그게 무엇인지 코드를 읽어야 알게 되고,
+ * 그러면 아무도 안 읽는다.
+ */
+export type Produced = components['schemas']['ProducedOut']
 export type ProcessingPreview = components['schemas']['ProcessingPreviewOut']
 export type ProcessingResult = components['schemas']['ProcessingResultOut']
 export type ResultCurve = components['schemas']['ResultCurveOut']
