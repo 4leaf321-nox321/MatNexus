@@ -16,6 +16,7 @@ import {
   madeColumns,
   outOfOrder,
   resolveTemplate,
+  stepSummary,
   valuesAt,
 } from '@/modules/processing/flow'
 import type { ProcessingStep, RecipeStep } from '@/modules/processing/api'
@@ -236,5 +237,87 @@ describe('순서도 줄', () => {
     const rows = flowRows([], CATALOG, [...CATALOG.values()])
     expect(rows.every((row) => row.kind === 'available')).toBe(true)
     expect(rows).toHaveLength(CATALOG.size)
+  })
+})
+
+describe('접힌 줄의 요약', () => {
+  const withParams = (over: Partial<ProcessingStep> & { id: string }) =>
+    plugin({
+      ...over,
+      params: [
+        {
+          name: 'gauge_length',
+          label: '게이지 길이',
+          type: 'float',
+          default: null,
+          choices: [],
+          choice_labels: {},
+          unit: 'm',
+          dimension: null,
+          help: null,
+          role: null,
+          when: {},
+        },
+        {
+          name: 'method',
+          label: '방법',
+          type: 'choice',
+          default: 'linear_regression',
+          choices: ['linear_regression', 'manual'],
+          choice_labels: { linear_regression: '최소제곱 회귀', manual: '직접 입력' },
+          unit: null,
+          dimension: null,
+          help: null,
+          role: null,
+          when: {},
+        },
+        {
+          name: 'manual_modulus',
+          label: '직접 입력',
+          type: 'float',
+          default: null,
+          choices: [],
+          choice_labels: {},
+          unit: 'Pa',
+          dimension: null,
+          help: null,
+          role: null,
+          when: { method: ['manual'] },
+        },
+      ] as ProcessingStep['params'],
+    })
+
+  const CAT = new Map<string, ProcessingStep>([
+    ['x', withParams({ id: 'x' })],
+    ...CATALOG,
+  ])
+
+  it('저장은 SI 지만 사람이 읽는 단위로 적는다', () => {
+    // 0.05 m 를 그대로 적으면 아무도 못 읽는다. mm 로 적는다.
+    const text = stepSummary(step('x', { gauge_length: 0.05 }), CAT)
+    expect(text).toContain('게이지 길이 50 mm')
+  })
+
+  it('고른 값은 사람이 읽는 이름으로', () => {
+    expect(stepSummary(step('x', {}), CAT)).toContain('최소제곱 회귀')
+  })
+
+  it('지금 안 쓰이는 칸은 빼고 적는다', () => {
+    // 방법이 회귀면 '직접 입력' 은 아무 데도 안 쓰인다. 그걸 적으면 요약이
+    // 거짓말이 된다.
+    const text = stepSummary(step('x', { manual_modulus: 210e9 }), CAT)
+    expect(text).not.toContain('직접 입력')
+
+    const manual = stepSummary(step('x', { method: 'manual', manual_modulus: 210e9 }), CAT)
+    expect(manual).toContain('직접 입력')
+  })
+
+  it('시편에서 오는 값은 그 사실을 적는다', () => {
+    const text = stepSummary(step('x', { gauge_length: '@specimen_gauge_length' }), CAT)
+    expect(text).toContain('시편의 게이지 길이')
+  })
+
+  it('열 이름은 그대로 적는다', () => {
+    expect(stepSummary(step('tensile.strength', {}), CATALOG)).toContain('strain_engineering')
   })
 })

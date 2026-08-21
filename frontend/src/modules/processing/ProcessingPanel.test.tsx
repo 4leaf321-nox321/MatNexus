@@ -410,3 +410,53 @@ describe('돌려 보기가 막힐 때', () => {
     await waitFor(() => expect(screen.queryByText(/못 도는 단계가/)).not.toBeInTheDocument())
   })
 })
+
+describe('접힌 줄이 설정을 말한다', () => {
+  beforeEach(() => {
+    steps.mockResolvedValue(CATALOG)
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+  })
+
+  it('열지 않아도 무엇으로 설정됐는지 보인다', async () => {
+    // **하나하나 열어서 확인해야 하면 접어 둔 뜻이 없다.**
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '인장강도')
+
+    const row = getStep('인장강도')
+    expect(row).toHaveTextContent('strain_engineering')
+    expect(row).toHaveTextContent('stress_engineering')
+  })
+
+  it('여러 단계를 나란히 펴 둘 수 있다', async () => {
+    // 아코디언(한 번에 하나)이면 견주려고 왔다 갔다 해야 한다.
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '인장강도')
+
+    await clickStep(user, '공칭 응력-변형률') // 펴기
+    await clickStep(user, '인장강도') // 펴기
+
+    expect(await screen.findByRole('combobox', { name: '변위 열' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '변형률 열' })).toBeInTheDocument()
+  })
+
+  it('모두 펴기 한 번으로 전부 본다', async () => {
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '인장강도')
+
+    await user.click(screen.getByRole('button', { name: '모두 펴기' }))
+    expect(await screen.findByRole('combobox', { name: '변위 열' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '변형률 열' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '모두 접기' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('combobox', { name: '변위 열' })).not.toBeInTheDocument()
+    )
+  })
+})

@@ -19,8 +19,9 @@
  * 화면에 적으면 계산을 고칠 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
  */
 
-import { isReference } from '@/modules/processing/api'
+import { isReference, isUsed, referenceLabel } from '@/modules/processing/api'
 import type { Produced, ProcessingStep, RecipeStep } from '@/modules/processing/api'
+import { display, toDisplay } from '@/shared/units'
 
 /**
  * 바깥에서 들어오는 값. **단계가 만드는 것이 아니다.**
@@ -250,4 +251,63 @@ export function flowRows(
     rows.splice(where === -1 ? rows.length : where, 0, { kind: 'available', plugin })
   }
   return rows
+}
+
+/** 요약에 몇 개까지. 넘으면 줄이 접혀 오히려 안 읽힌다. */
+const SUMMARY_MAX = 3
+
+/**
+ * 접힌 줄에 보일 **설정 한 줄.**
+ *
+ * 접힌 줄이 이름만 갖고 있으면 "무엇으로 설정됐지" 를 확인하려고 **하나하나
+ * 열어야 한다.** 그러면 접어 둔 뜻이 없다 — 접기는 세로 길이를 줄이려던 것이지
+ * 정보를 숨기려던 것이 아니었다.
+ *
+ * 그래서 줄에 값을 적는다. **여는 것은 고칠 때만.**
+ *
+ * 지금 안 쓰이는 칸(`when` 조건이 안 맞는 것)은 뺀다 — 방법을 '최소제곱 회귀'
+ * 로 두면 '직접 입력' 칸의 숫자는 아무 데도 안 쓰인다. 그것까지 적으면 요약이
+ * 거짓말이 된다.
+ */
+export function stepSummary(
+  step: RecipeStep,
+  catalog: Map<string, ProcessingStep>
+): string {
+  const plugin = catalog.get(step.plugin)
+  if (!plugin) return ''
+
+  const parts: string[] = []
+  for (const param of plugin.params) {
+    if (parts.length >= SUMMARY_MAX) {
+      parts.push('…')
+      break
+    }
+    if (!isUsed(param, step.options)) continue
+
+    const value = step.options[param.name] ?? param.default
+    if (value === null || value === undefined || value === '') continue
+
+    if (isReference(value)) {
+      parts.push(`${param.label} ${referenceLabel(String(value))}`)
+      continue
+    }
+    if (param.role === 'column') {
+      parts.push(String(value))
+      continue
+    }
+    if (param.type === 'choice') {
+      parts.push(param.choice_labels?.[String(value)] ?? String(value))
+      continue
+    }
+    if (param.type === 'float' || param.type === 'int') {
+      // **화면 단위로 적는다.** 저장은 SI 지만 사람은 0.05 m 를 50 mm 로 읽는다.
+      const shown = display(param.unit, param.dimension)
+      const number = toDisplay(Number(value), param.unit, param.dimension)
+      const text = Number(number.toPrecision(4)).toString()
+      parts.push(shown.unit ? `${param.label} ${text} ${shown.unit}` : `${param.label} ${text}`)
+      continue
+    }
+    parts.push(`${param.label} ${String(value)}`)
+  }
+  return parts.join(' · ')
 }

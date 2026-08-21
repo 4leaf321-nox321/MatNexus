@@ -74,6 +74,7 @@ import {
   blockersAt,
   columnsAt,
   flowRows,
+  stepSummary,
   insertionIndex,
   outOfOrder,
   vocabularyOf,
@@ -164,7 +165,25 @@ export function ProcessingPanel({
     x: 'strain_engineering',
     y: 'stress_engineering',
   })
-  const [open, setOpen] = useState<number | null>(null)
+  /**
+   * 펴 둔 단계들. **하나만 펴지게 하지 않는다.**
+   *
+   * 처음에는 아코디언(한 번에 하나)이었다. 세로 길이는 줄었는데 "무엇으로
+   * 설정됐지" 를 확인하려면 **하나하나 열어 봐야** 했다. 그건 접어 둔 뜻이
+   * 없다 — 접기는 길이를 줄이려던 것이지 정보를 숨기려던 것이 아니다.
+   *
+   * 그래서 접힌 줄이 설정을 한 줄로 보여 주고(`stepSummary`), 펴는 것은 **고칠
+   * 때**만 한다. 여럿을 나란히 펴 두고 견주는 것도 사람이 정한다.
+   */
+  const [open, setOpen] = useState<ReadonlySet<number>>(new Set())
+
+  function toggleOpen(index: number) {
+    setOpen((current) => {
+      const next = new Set(current)
+      if (!next.delete(index)) next.add(index)
+      return next
+    })
+  }
   const [savingRecipe, setSavingRecipe] = useState(false)
   /**
    * '돌려 보기' 를 눌러 본 적이 있는가.
@@ -588,10 +607,27 @@ export function ProcessingPanel({
           )}
 
           <div className="divide-y overflow-hidden rounded-md border">
-            <p className="text-muted-foreground bg-muted/40 px-2 py-1.5 text-xs">
-              위에서 아래로 흐릅니다. <b>켠 것만 돕니다</b> — 이름을 누르면 그 단계의
-              칸이 펴집니다.
-            </p>
+            <div className="bg-muted/40 flex items-center gap-2 px-2 py-1">
+              <p className="text-muted-foreground text-xs">
+                위에서 아래로 흐릅니다. <b>켠 것만 돕니다.</b>
+              </p>
+              {steps.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-6 text-xs"
+                  onClick={() =>
+                    setOpen((current) =>
+                      current.size === steps.length
+                        ? new Set()
+                        : new Set(steps.map((_, index) => index))
+                    )
+                  }
+                >
+                  {open.size === steps.length ? '모두 접기' : '모두 펴기'}
+                </Button>
+              )}
+            </div>
 
             {rows.map((row) => {
               if (row.kind === 'available') {
@@ -629,7 +665,8 @@ export function ProcessingPanel({
               const { step, index, plugin } = row
               const stage = result?.stages[index]
               const trouble = stepBlockers[index] ?? []
-              const isOpen = open === index
+              const isOpen = open.has(index)
+              const summary = stepSummary(step, byId)
               return (
                 <div
                   key={`${step.plugin}-${index}`}
@@ -649,27 +686,38 @@ export function ProcessingPanel({
                     <button
                       type="button"
                       aria-expanded={isOpen}
-                      onClick={() => setOpen(isOpen ? null : index)}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => toggleOpen(index)}
+                      className="flex min-w-0 flex-1 items-start gap-2 text-left"
                     >
-                      <span className="text-muted-foreground w-3 shrink-0 text-xs tabular-nums">
+                      <span className="text-muted-foreground mt-0.5 w-3 shrink-0 text-xs tabular-nums">
                         {index + 1}
                       </span>
-                      <span className="truncate text-sm font-medium">
-                        {plugin?.label ?? step.plugin}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">
+                            {plugin?.label ?? step.plugin}
+                          </span>
+                          {attempted && trouble.length > 0 && (
+                            <Badge variant="destructive" className="shrink-0 text-xs">
+                              막힘
+                            </Badge>
+                          )}
+                          {!plugin && (
+                            <Badge variant="destructive" className="shrink-0 text-xs">
+                              등록되지 않음
+                            </Badge>
+                          )}
+                        </span>
+                        {/* **접힌 줄이 무엇으로 설정됐는지 말한다.** 안 그러면
+                            확인하려고 하나하나 열어 봐야 한다. */}
+                        {!isOpen && summary && (
+                          <span className="text-muted-foreground block truncate text-xs">
+                            {summary}
+                          </span>
+                        )}
                       </span>
-                      {attempted && trouble.length > 0 && (
-                        <Badge variant="destructive" className="shrink-0 text-xs">
-                          막힘
-                        </Badge>
-                      )}
-                      {!plugin && (
-                        <Badge variant="destructive" className="shrink-0 text-xs">
-                          등록되지 않음
-                        </Badge>
-                      )}
                       <ChevronDown
-                        className={`text-muted-foreground ml-auto size-3.5 shrink-0 transition-transform ${
+                        className={`text-muted-foreground mt-0.5 size-3.5 shrink-0 transition-transform ${
                           isOpen ? 'rotate-180' : ''
                         }`}
                       />
