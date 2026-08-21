@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.vocabulary import services
-from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
+from app.modules.vocabulary.models import (
+    Vocabulary,
+    VocabularyAlias,
+    VocabularyDriftCheck,
+    VocabularyTerm,
+)
 from app.modules.vocabulary.normalize import clean, split_parent
 from app.modules.vocabulary.schemas import (
     BulkDeleteItemOut,
@@ -89,19 +94,14 @@ def list_vocabularies(
     ]
 
 
-def _report(found: list[services.Drift]) -> DriftReportOut:
+def _report(db: Session, row: VocabularyDriftCheck) -> DriftReportOut:
+    since, checks = services.clean_run(db)
     return DriftReportOut(
-        total=sum(item.count for item in found),
-        items=[
-            DriftOut(
-                table=item.table,
-                field=item.field,
-                label=item.label,
-                count=item.count,
-                examples=item.examples,
-            )
-            for item in found
-        ],
+        total=row.total,
+        items=[DriftOut(**item) for item in row.detail],
+        checked_at=row.checked_at,
+        clean_since=since,
+        clean_checks=checks,
     )
 
 
@@ -125,7 +125,27 @@ def check_drift(
     이름을 고치면 재료·시료·시편·시험 이름 넷은 전부 따라 바뀌는데 정작 그 값
     자신은 옛 표기 그대로였다. API 는 200 을 냈다.
     """
-    return _report(services.drift(db))
+    row = services.latest_check(db)
+    if row is None:
+        # 처음 열었을 때. 한 번은 재야 보여 줄 것이 있다.
+        row = services.record_check(db, source="manual")
+        db.commit()
+    return _report(db, row)
+
+
+@router.post("/drift", response_model=DriftReportOut)
+def measure_drift(
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> DriftReportOut:
+    """지금 다시 잰다. **읽기와 가른다** — `GET` 은 기록을 보여 주기만 한다.
+
+    화면을 열 때마다 새로 재면 이력이 사람이 창을 연 횟수가 된다. 게이트가 묻는
+    것은 "저절로 돌 때도 계속 0 이었나" 이므로 그 이력이 더러우면 안 된다.
+    """
+    row = services.record_check(db, source="manual")
+    db.commit()
+    return _report(db, row)
 
 
 @router.post("/repair", response_model=DriftReportOut)
@@ -135,14 +155,20 @@ def repair_drift(
 ) -> DriftReportOut:
     """어긋난 칸을 바로잡는다. **어휘가 정본이다.**
 
-    고치기 전의 목록을 돌려준다 — 무엇을 건드렸는지 사람이 봐야 한다.
-
     자동으로 안 돈다. 방향을 정해야 하는 일이라(문자열을 고칠 것인가, 어휘를
     고칠 것인가) 사람이 점검을 보고 누른다.
+
+    **이력에 두 줄이 남는다.** 고치기 전과 후다. 고친 뒤만 남기면 무엇이 있었는지
+    사라지고, 고치기 전만 남기면 "언제부터 0" 이 틀린다.
+
+    돌려주는 것은 **고친 뒤** 상태다 — 화면이 그것을 그대로 그리므로, 고치기 전
+    목록을 주면 눌렀는데 아무 일도 안 일어난 것처럼 보인다.
     """
-    found = services.repair(db, created_by_id=user.id)
+    before = services.repair(db, created_by_id=user.id)
+    services.record_check(db, source="manual", found=before)
+    row = services.record_check(db, source="manual")
     db.commit()
-    return _report(found)
+    return _report(db, row)
 
 
 @router.get("/{slug}/terms", response_model=Page[TermOut])

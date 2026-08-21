@@ -48,3 +48,4 @@ def load_all() -> None:
     """
     from app.modules.notifications import jobs as _notification_jobs  # noqa: F401
     from app.modules.tests import jobs as _test_jobs  # noqa: F401
+    from app.modules.vocabulary import jobs as _vocabulary_jobs  # noqa: F401

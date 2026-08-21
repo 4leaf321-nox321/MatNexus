@@ -30,3 +30,9 @@ TESTS_PARSE_UPLOAD = "tests.parse_upload"
 #: 삭제. **세 번째가 가장 크다** — 소프트 삭제는 행을 남기므로 오펀 탐색으로는
 #: 영원히 안 잡힌다. 실측(2026-08-15): 지운 시험 2건의 파일이 그대로 남아 있었다.
 TESTS_CLEANUP_STORAGE = "tests.cleanup_storage"
+
+#: 어긋남 점검 — payload 없음
+#:
+#: 문자열 컬럼과 어휘가 같은 말을 하는지 본다(ADR 0010 Contract). **주기 작업이다**
+#: — 사람이 누를 때만 도는 점검으로는 "한 릴리스 동안 0" 을 답할 수 없다.
+VOCABULARY_CHECK_DRIFT = "vocabulary.check_drift"

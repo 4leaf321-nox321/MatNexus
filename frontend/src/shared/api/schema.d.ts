@@ -1606,7 +1606,14 @@ export interface paths {
          */
         get: operations["check_drift_api_vocabularies_drift_get"];
         put?: never;
-        post?: never;
+        /**
+         * Measure Drift
+         * @description 지금 다시 잰다. **읽기와 가른다** — `GET` 은 기록을 보여 주기만 한다.
+         *
+         *     화면을 열 때마다 새로 재면 이력이 사람이 창을 연 횟수가 된다. 게이트가 묻는
+         *     것은 "저절로 돌 때도 계속 0 이었나" 이므로 그 이력이 더러우면 안 된다.
+         */
+        post: operations["measure_drift_api_vocabularies_drift_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1626,10 +1633,14 @@ export interface paths {
          * Repair Drift
          * @description 어긋난 칸을 바로잡는다. **어휘가 정본이다.**
          *
-         *     고치기 전의 목록을 돌려준다 — 무엇을 건드렸는지 사람이 봐야 한다.
-         *
          *     자동으로 안 돈다. 방향을 정해야 하는 일이라(문자열을 고칠 것인가, 어휘를
          *     고칠 것인가) 사람이 점검을 보고 누른다.
+         *
+         *     **이력에 두 줄이 남는다.** 고치기 전과 후다. 고친 뒤만 남기면 무엇이 있었는지
+         *     사라지고, 고치기 전만 남기면 "언제부터 0" 이 틀린다.
+         *
+         *     돌려주는 것은 **고친 뒤** 상태다 — 화면이 그것을 그대로 그리므로, 고치기 전
+         *     목록을 주면 눌렀는데 아무 일도 안 일어난 것처럼 보인다.
          */
         post: operations["repair_drift_api_vocabularies_repair_post"];
         delete?: never;
@@ -2582,8 +2593,19 @@ export interface components {
          *
          *     문자열 컬럼을 지우기(Contract) 전에 한 릴리스 동안 0 이어야 한다. 0 이 아닌
          *     채로 지우면 어느 쪽이 맞았는지 영영 알 수 없다.
+         *
+         *     그래서 "지금 0" 만으로는 부족하다 — `clean_since` 가 진짜 답이다.
          */
         DriftReportOut: {
+            /** Checked At */
+            checked_at?: string | null;
+            /**
+             * Clean Checks
+             * @default 0
+             */
+            clean_checks: number;
+            /** Clean Since */
+            clean_since?: string | null;
             /** Items */
             items: components["schemas"]["DriftOut"][];
             /** Total */
@@ -7918,6 +7940,26 @@ export interface operations {
         };
     };
     check_drift_api_vocabularies_drift_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftReportOut"];
+                };
+            };
+        };
+    };
+    measure_drift_api_vocabularies_drift_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -126,12 +126,25 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      const result = fix ? await vocabularyApi.repair() : await vocabularyApi.drift()
-      // 고친 뒤에는 **다시 재서** 보여 준다 — 고치기는 고치기 전 목록을 준다.
-      setReport(fix ? await vocabularyApi.drift() : result)
+      setReport(fix ? await vocabularyApi.repair() : await vocabularyApi.measureDrift())
       if (fix) onRepaired()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('점검하지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // **열 때는 기록을 읽기만 한다.** 창을 열 때마다 새로 재면 이력이 사람이
+  // 창을 연 횟수가 되고, 게이트가 묻는 "저절로 돌 때도 계속 0 이었나" 에 답할
+  // 수 없게 된다.
+  async function load() {
+    setBusy(true)
+    setError(null)
+    try {
+      setReport(await vocabularyApi.drift())
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('점검 기록을 읽지 못했습니다.'))
     } finally {
       setBusy(false)
     }
@@ -144,7 +157,7 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
         className="text-muted-foreground hover:text-foreground mt-6 text-xs underline"
         onClick={() => {
           setOpen(true)
-          void run(false)
+          void load()
         }}
       >
         어긋남 점검
@@ -157,6 +170,11 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
       <div className="mb-2 flex items-center gap-2">
         <ShieldCheck className="size-4" />
         <p className="text-sm font-medium">어긋남 점검</p>
+        {report?.checked_at && (
+          <span className="text-muted-foreground text-xs">
+            마지막 {new Date(report.checked_at).toLocaleString('ko-KR')}
+          </span>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -180,13 +198,23 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
 
       <p className="text-muted-foreground mb-2 text-xs">
         값을 두 벌로 들고 있는 동안(문자열과 어휘) 둘이 벌어질 수 있습니다. 문자열
-        쪽을 지우기 전에 이 수가 0 이어야 합니다.
+        쪽을 지우기 전에 이 수가 <strong>한 릴리스 동안</strong> 0 이어야 합니다.
+        워커가 6시간마다 스스로 재고, 벌어지면 로그에 남깁니다.
       </p>
 
       {report && report.total === 0 && (
-        <p className="text-xs">
-          어긋난 곳이 없습니다. <span className="text-muted-foreground">두 벌이 같습니다.</span>
-        </p>
+        <div className="text-xs">
+          <p>어긋난 곳이 없습니다.</p>
+          {/* **"지금 0" 이 아니라 "언제부터 0" 이 답이다.** 문자열 컬럼을 지우는
+              조건이 "한 릴리스 동안 0" 이라, 한 번 눌러서 0 인 것으로는 부족하다.
+              워커가 6시간마다 스스로 재고 여기 쌓인다. */}
+          {report.clean_since && (
+            <p className="text-muted-foreground mt-0.5">
+              {new Date(report.clean_since).toLocaleString('ko-KR')} 부터 {report.clean_checks}회
+              연속 0 입니다.
+            </p>
+          )}
+        </div>
       )}
 
       {report && report.total > 0 && (

@@ -21,16 +21,31 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.jobs import handlers, worker
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.vocabulary import services
-from app.modules.vocabulary.models import Vocabulary, VocabularyAlias, VocabularyTerm
+from app.modules.vocabulary.models import (
+    Vocabulary,
+    VocabularyAlias,
+    VocabularyDriftCheck,
+    VocabularyTerm,
+)
 from app.modules.vocabulary.normalize import clean, compare_key
 from app.modules.vocabulary.schemas import BULK_MAX
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+
+
+def drain(db: Session, limit: int = 20) -> int:
+    """큐가 빌 때까지 워커를 돌린다. 처리한 개수를 돌려준다."""
+    handlers.load_all()
+    processed = 0
+    while processed < limit and worker.run_once(session=db):
+        processed += 1
+    return processed
 
 
 def _run_in(
@@ -819,13 +834,21 @@ class Test어긋남:
         db.commit()
 
         assert (
-            client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 1
+            client.post("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 1
         )
 
         fixed = client.post("/api/vocabularies/repair", headers=admin_headers)
         assert fixed.status_code == 200, fixed.text
-        # 고치기 전 목록이 온다 — 무엇을 건드렸는지 사람이 봐야 한다.
-        assert fixed.json()["total"] == 1
+        # **고친 뒤** 상태가 온다 — 화면이 이것을 그대로 그린다.
+        assert fixed.json()["total"] == 0
+        # 다만 고치기 전 상태는 이력에 남아야 한다. 안 남기면 무엇이 있었는지
+        # 사라지고, "언제부터 0" 이 벌어진 적 없는 것처럼 답한다.
+        history = list(
+            db.scalars(select(VocabularyDriftCheck).order_by(VocabularyDriftCheck.checked_at))
+        )
+        assert [row.total for row in history][-2:] == [1, 0], (
+            f"고치기 전후가 둘 다 안 남았다: {[row.total for row in history]}"
+        )
 
         assert (
             client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 0
@@ -864,7 +887,7 @@ class Test어긋남:
         db.commit()
 
         assert (
-            client.get("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 1
+            client.post("/api/vocabularies/drift", headers=admin_headers).json()["total"] == 1
         )
         client.post("/api/vocabularies/repair", headers=admin_headers)
 
@@ -895,6 +918,113 @@ class Test어긋남:
             headers=admin_headers,
         )
         assert services.drift(db) == []
+
+
+class Test점검을_저절로_돌린다:
+    """**지켜보는 게이트가 아니면 게이트가 아니다.**
+
+    문자열 컬럼을 지우는 조건이 "한 릴리스 동안 0"(ADR 0010 Contract 4-2)인데,
+    점검이 사람이 누를 때만 돌면 일주일 뒤에 그 질문에 답할 수가 없다.
+    """
+
+    def test_때가_되면_워커가_넣고_아니면_안_넣는다(self, db: Session) -> None:
+        from app.jobs import kinds, schedule
+
+        assert schedule.enqueue_due(db) == [kinds.VOCABULARY_CHECK_DRIFT]
+        db.commit()
+
+        # **바로 또 넣지 않는다.** 워커는 콘솔 앱이라 자주 껐다 켜진다 — 재기동
+        # 마다 넣으면 하루에 열 번 켠 날 열 번 돈다.
+        assert schedule.enqueue_due(db) == []
+
+    def test_워커가_돌면_기록이_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        from app.jobs import kinds, schedule
+
+        schedule.enqueue_due(db)
+        db.commit()
+        assert drain(db) >= 1
+
+        row = services.latest_check(db)
+        assert row is not None
+        assert row.source == "worker"
+        assert row.total == 0
+        assert kinds.VOCABULARY_CHECK_DRIFT  # 이름이 살아 있는지
+
+    def test_언제부터_0_인지를_답한다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """**"지금 0" 으로는 부족하다.** 한 번이라도 벌어졌으면 거기서 다시 센다 —
+        고쳤더라도 "내내 0 이었다" 는 더 이상 참이 아니다."""
+        from app.modules.materials.models import Material
+
+        services.record_check(db, source="worker")
+        db.commit()
+        first = client.get("/api/vocabularies/drift", headers=admin_headers).json()
+        assert first["clean_checks"] == 1
+        started = first["clean_since"]
+        assert started is not None
+
+        # 한 번 벌어뜨린다.
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "WATCH1",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        material = db.scalar(select(Material).where(Material.grade == "WATCH1"))
+        assert material is not None
+        material.grade = "WATCH2"
+        db.commit()
+
+        broken = client.post("/api/vocabularies/drift", headers=admin_headers).json()
+        assert broken["total"] == 1
+        assert broken["clean_checks"] == 0, "벌어졌는데 연속 0 이 남아 있다"
+
+        # 고치면 거기서 **다시 센다** — 옛 날짜로 돌아가면 안 된다.
+        fixed = client.post("/api/vocabularies/repair", headers=admin_headers).json()
+        assert fixed["total"] == 0
+        # 고치기가 남긴 두 줄 중 앞줄이 벌어진 상태라, 연속 0 은 뒷줄부터다.
+        assert fixed["clean_checks"] == 1
+        assert fixed["clean_since"] != started, "끊긴 구간을 이어 붙였다"
+
+    def test_한_트랜잭션에_둘을_남겨도_순서가_산다(self, db: Session) -> None:
+        """**포스트그레스의 `now()` 는 트랜잭션 시작 시각이다.**
+
+        고치기는 한 번에 두 줄을 남긴다(고치기 전·후). `now()` 를 쓰면 그 둘이
+        같은 시각을 받아 순서가 사라지고, "마지막 점검" 이 어느 쪽인지도, "언제부터
+        0" 인지도 답이 틀린다. 실제로 그래서 시험이 깨졌다.
+        """
+        first = services.record_check(db, source="manual")
+        second = services.record_check(db, source="manual")
+        db.commit()
+
+        assert first.checked_at < second.checked_at, (
+            "같은 트랜잭션의 두 줄이 같은 시각을 받았다"
+        )
+        latest = services.latest_check(db)
+        assert latest is not None
+        assert latest.id == second.id
+
+    def test_읽기는_새로_재지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """화면을 열 때마다 새로 재면 이력이 **사람이 창을 연 횟수**가 된다."""
+        services.record_check(db, source="worker")
+        db.commit()
+
+        for _ in range(3):
+            client.get("/api/vocabularies/drift", headers=admin_headers)
+        assert db.scalar(select(func.count()).select_from(VocabularyDriftCheck)) == 1
+
+        client.post("/api/vocabularies/drift", headers=admin_headers)
+        assert db.scalar(select(func.count()).select_from(VocabularyDriftCheck)) == 2
 
 
 class Test분류_계층:

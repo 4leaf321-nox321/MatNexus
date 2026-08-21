@@ -37,6 +37,13 @@ export const vocabularyApi = {
   drift: () => api.get<DriftReport>('/vocabularies/drift'),
 
   /**
+   * 지금 다시 잰다. **읽기와 가른다** — 화면을 열 때마다 새로 재면 이력이
+   * 사람이 창을 연 횟수가 된다. 게이트가 묻는 것은 "저절로 돌 때도 계속 0
+   * 이었나" 이므로 그 이력이 더러우면 안 된다.
+   */
+  measureDrift: () => api.post<DriftReport>('/vocabularies/drift', {}),
+
+  /**
    * 어긋난 칸을 바로잡는다. **어휘가 정본이다.**
    *
    * 자동으로 안 돈다 — 방향을 정해야 하는 일이라 사람이 점검을 보고 누른다.

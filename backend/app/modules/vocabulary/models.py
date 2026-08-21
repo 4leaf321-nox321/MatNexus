@@ -29,8 +29,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -241,3 +243,38 @@ class VocabularyDismissal(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class VocabularyDriftCheck(Base):
+    """어긋남 점검 한 번의 결과. **"지금 0" 이 아니라 "언제부터 0" 을 답한다.**
+
+    문자열 컬럼을 지우는 조건(ADR 0010 Contract 4-2)이 "한 릴리스 동안 0" 이다.
+    그런데 점검이 사람이 누를 때만 돌면 일주일 뒤에 그 질문에 답할 수가 없다 —
+    눌렀을 때만 0 이었는지, 내내 0 이었는지 알 방법이 없다.
+
+    **지켜보는 게이트가 아니면 게이트가 아니다.** 그래서 워커가 스스로 돌리고
+    여기 남긴다.
+    """
+
+    __tablename__ = "vocabulary_drift_checks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp(), index=True
+    )
+    """**`now()` 가 아니라 `clock_timestamp()` 다.** 포스트그레스의 `now()` 는
+    트랜잭션 시작 시각이라, 한 트랜잭션에 넣은 두 줄이 같은 시각을 받는다.
+    고치기는 한 번에 두 줄을 남기므로(고치기 전·후) 그러면 순서가 사라지고
+    "언제부터 0" 이 틀린 답을 낸다."""
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    """어긋난 행 수. **0 이 정상이다.**"""
+    detail: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    """어느 칸이 몇 건인지와 예시 몇 개. 수만 남기면 나중에 무엇이 벌어졌는지
+    알 수 없다 — 그때 그 행은 이미 고쳐졌을 수 있다."""
+    source: Mapped[str] = mapped_column(String(20), default="worker")
+    """`worker` | `manual`. 사람이 눌러 본 것과 저절로 돈 것을 가른다.
+
+    연속 0 은 둘 다 센다 — 사람이 눌러서 잰 0 도 그 시점에 0 이었다는 증거다.
+    가르는 이유는 나중에 "저절로 돌긴 했나" 를 물을 수 있어야 해서다."""

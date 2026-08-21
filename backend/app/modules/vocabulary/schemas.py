@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -159,7 +160,16 @@ class DriftReportOut(BaseModel):
 
     문자열 컬럼을 지우기(Contract) 전에 한 릴리스 동안 0 이어야 한다. 0 이 아닌
     채로 지우면 어느 쪽이 맞았는지 영영 알 수 없다.
+
+    그래서 "지금 0" 만으로는 부족하다 — `clean_since` 가 진짜 답이다.
     """
 
     total: int
     items: list[DriftOut]
+    checked_at: datetime | None = None
+    """이 결과를 잰 시각."""
+    clean_since: datetime | None = None
+    """**이때부터 지금까지 계속 0 이었다.** 한 번이라도 벌어졌으면 거기서 다시
+    센다 — 고쳤더라도 "내내 0 이었다" 는 더 이상 참이 아니다."""
+    clean_checks: int = 0
+    """그동안 몇 번 쟀나. 시각만 주면 두 번 재고 이틀이 지난 것과 구분이 안 된다."""

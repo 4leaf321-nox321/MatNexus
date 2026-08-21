@@ -20,7 +20,7 @@ from types import FrameType
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.jobs import handlers, queue
+from app.jobs import handlers, queue, schedule
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,12 @@ def main() -> None:
                 revived = queue.reclaim_stalled(db)
                 if revived:
                     logger.warning("멈춰 있던 작업 %s건을 되살렸습니다.", revived)
+                # 주기 작업. **같은 타이머에 얹는다** — 6시간짜리를 위해 타이머를
+                # 하나 더 두면 그 둘이 어긋나는 날이 온다.
+                due = schedule.enqueue_due(db)
+                if due:
+                    db.commit()
+                    logger.info("주기 작업을 넣었습니다: %s", ", ".join(due))
             finally:
                 db.close()
             last_reclaim = now

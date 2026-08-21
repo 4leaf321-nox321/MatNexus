@@ -11,6 +11,7 @@ import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import Select, func, or_, select, text, update
@@ -20,6 +21,7 @@ from app.modules.vocabulary.models import (
     Vocabulary,
     VocabularyAlias,
     VocabularyDismissal,
+    VocabularyDriftCheck,
     VocabularyMerge,
     VocabularyTerm,
 )
@@ -536,6 +538,75 @@ def drift(db: Session) -> list[Drift]:
                 )
             )
     return found
+
+
+#: 점검 기록을 며칠 들고 있나. 6시간마다 돌면 90일이 360행이다 — 작지만
+#: 무한히 쌓게 두지 않는다.
+DRIFT_HISTORY_DAYS = 90
+
+
+def record_check(
+    db: Session, *, source: str = "worker", found: list[Drift] | None = None
+) -> VocabularyDriftCheck:
+    """어긋남을 재고 **남긴다.**
+
+    "지금 0" 과 "언제부터 0" 은 다른 질문이고, Contract 가 묻는 것은 뒤쪽이다.
+    남기지 않으면 일주일 뒤에 답할 수 없다.
+
+    `found` 를 주면 그것을 남긴다 — 고치기가 **고치기 전 상태**를 남길 때 쓴다.
+    다시 재면 이미 고쳐진 뒤라 무엇이 있었는지가 이력에서 사라진다.
+    """
+    found = drift(db) if found is None else found
+    row = VocabularyDriftCheck(
+        total=sum(item.count for item in found),
+        detail=[
+            {
+                "table": item.table,
+                "field": item.field,
+                "label": item.label,
+                "count": item.count,
+                "examples": item.examples,
+            }
+            for item in found
+        ],
+        source=source,
+    )
+    db.add(row)
+    db.execute(
+        text(
+            "DELETE FROM vocabulary_drift_checks"
+            " WHERE checked_at < now() - :days * interval '1 day'"
+        ),
+        {"days": DRIFT_HISTORY_DAYS},
+    )
+    db.flush()
+    return row
+
+
+def latest_check(db: Session) -> VocabularyDriftCheck | None:
+    """마지막 점검 기록. 없으면 None(아직 한 번도 안 쟀다)."""
+    return db.scalar(
+        select(VocabularyDriftCheck).order_by(VocabularyDriftCheck.checked_at.desc()).limit(1)
+    )
+
+
+def clean_run(db: Session) -> tuple[datetime | None, int]:
+    """언제부터 계속 0 이었나, 그동안 몇 번 쟀나.
+
+    **끊긴 지점을 찾는다.** 마지막으로 0 이 아니었던 점검보다 뒤에 있는 것들이
+    지금 이어지고 있는 구간이다. 한 번이라도 벌어졌으면 거기서 다시 센다 —
+    고쳤더라도 "내내 0 이었다" 는 더 이상 참이 아니다.
+    """
+    broke = db.scalar(
+        select(func.max(VocabularyDriftCheck.checked_at)).where(VocabularyDriftCheck.total > 0)
+    )
+    query = select(func.min(VocabularyDriftCheck.checked_at), func.count()).where(
+        VocabularyDriftCheck.total == 0
+    )
+    if broke is not None:
+        query = query.where(VocabularyDriftCheck.checked_at > broke)
+    since, count = db.execute(query).one()
+    return since, count
 
 
 def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift]:
