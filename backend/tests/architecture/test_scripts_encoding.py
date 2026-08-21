@@ -70,3 +70,65 @@ def test_powershell_scripts_have_utf8_bom(path: Path) -> None:
         f"{path.relative_to(REPO)} 에 UTF-8 BOM 이 없습니다. "
         f"Windows PowerShell 5.1 이 CP949 로 읽어 한글이 깨지고 구문 오류가 납니다."
     )
+
+
+#: 줄바꿈을 검사할 텍스트 확장자. 바이너리(png·parquet·tra)는 뺀다.
+_TEXT_SUFFIXES = {
+    ".md",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".css",
+    ".html",
+    ".txt",
+}
+
+
+def _text_files() -> list[Path]:
+    found = []
+    for path in REPO.rglob("*"):
+        if not path.is_file() or path.suffix not in _TEXT_SUFFIXES:
+            continue
+        parts = path.relative_to(REPO).parts
+        if _SKIP_ANYWHERE & set(parts):
+            continue
+        if parts[0] in _SKIP_TOP_LEVEL or parts[0] in {".git", "dist", "filestore", "logs"}:
+            continue
+        if _in_venv(path):
+            continue
+        found.append(path)
+    return found
+
+
+CR = b"\x0d"
+LF = b"\x0a"
+
+
+def test_홀로_있는_CR_이_없다() -> None:
+    """CR 하나가 텍스트 파일을 **바이너리로 바꾼다.**
+
+    실측(2026-08-21): 문서에 윈도우 경로를 적다가 백슬래시가 이스케이프로 먹혀
+    진짜 CR 한 바이트가 들어갔다. 눈에는 안 보인다. 그런데 git 이 그 파일을
+    `-text`(바이너리)로 판정하면서 `.gitattributes` 의 `eol=lf` 정규화를 건너뛰었고,
+    이후 **한 줄만 고쳐도 890줄 전체가 바뀐 diff** 가 나왔다. 그러면 `git blame` 도
+    `git log -p` 도 그 파일에서 쓸모가 없어진다.
+
+    CRLF 자체는 괜찮다 — `.ps1` 은 CRLF 여야 한다. 문제는 LF 가 안 따라오는 CR 이다.
+
+    바이트를 16진수로 적는 이유도 같다. 소스에 이스케이프로 적으면 이 파일을
+    고치는 다음 도구가 또 진짜 CR 로 바꿔 놓는다. 실제로 두 번 그랬다.
+    """
+    offenders = []
+    for path in _text_files():
+        data = path.read_bytes()
+        lone = data.replace(CR + LF, b"").count(CR)
+        if lone:
+            offenders.append(f"{path.relative_to(REPO)} ({lone}개)")
+    assert not offenders, (
+        "홀로 있는 CR 이 든 파일: "
+        + ", ".join(offenders)
+        + ". git 이 바이너리로 보아 줄바꿈 정규화가 꺼지고, 이후 diff 가 파일 전체가 됩니다."
+    )
