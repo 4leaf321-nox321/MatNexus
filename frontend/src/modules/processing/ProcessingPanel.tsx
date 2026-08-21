@@ -35,6 +35,7 @@ import {
   Plus,
   Save,
   Trash2,
+  X,
 } from 'lucide-react'
 
 import { RecipePicker } from '@/modules/processing/RecipePicker'
@@ -65,14 +66,6 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/shared/components/ui/table'
 import {
   Select,
   SelectContent,
@@ -175,7 +168,13 @@ export function ProcessingPanel({
   })
   const [open, setOpen] = useState<number | null>(null)
   const [savingRecipe, setSavingRecipe] = useState(false)
-  const [showingVariables, setShowingVariables] = useState(false)
+  /**
+   * 변수 목록 사이드바. **기본은 접혀 있다.**
+   *
+   * 곡선이 손바닥만 해지면 안 된다 — 이 목록은 가끔 들춰 보는 참고서지 늘
+   * 보는 것이 아니다. 열면 그만큼 곡선이 좁아지는 것을 사람이 알고 연다.
+   */
+  const [variablesOpen, setVariablesOpen] = useState(false)
   /**
    * '돌려 보기' 를 눌러 본 적이 있는가.
    *
@@ -428,7 +427,12 @@ export function ProcessingPanel({
           )}
           {/* **이름이 무엇을 뜻하는지 볼 데가 있어야 한다.** `strain_true_plastic`
               만 보여 주면 코드를 읽어야 알게 되고, 그러면 아무도 안 읽는다. */}
-          <Button size="sm" variant="ghost" onClick={() => setShowingVariables(true)}>
+          <Button
+            size="sm"
+            variant={variablesOpen ? 'secondary' : 'ghost'}
+            aria-pressed={variablesOpen}
+            onClick={() => setVariablesOpen((open) => !open)}
+          >
             <BookOpen className="size-3.5" />
             변수 목록
           </Button>
@@ -502,13 +506,6 @@ export function ProcessingPanel({
         </div>
       )}
 
-      {showingVariables && (
-        <VariablesDialog
-          vocabulary={vocabulary}
-          onClose={() => setShowingVariables(false)}
-        />
-      )}
-
       {savingRecipe && (
         <SaveRecipeDialog
           steps={steps}
@@ -576,7 +573,15 @@ export function ProcessingPanel({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)]">
+      {/* 변수 목록을 열면 단계 칸을 줄여 곡선이 덜 좁아지게 한다. 두 서식을
+          모두 소스에 그대로 적어 둔다 — Tailwind 가 만들어 붙인 이름은 못 읽는다. */}
+      <div
+        className={
+          variablesOpen
+            ? 'grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,22rem)_minmax(0,1fr)_16rem]'
+            : 'grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,24rem)_minmax(0,1fr)]'
+        }
+      >
         <FlowRail
           available={available}
           steps={steps}
@@ -824,6 +829,13 @@ export function ProcessingPanel({
             </div>
           )}
         </div>
+
+        {variablesOpen && (
+          <VariablesSidebar
+            vocabulary={vocabulary}
+            onClose={() => setVariablesOpen(false)}
+          />
+        )}
       </div>
     </section>
   )
@@ -833,106 +845,92 @@ export function ProcessingPanel({
  * 변수 목록 — **이 이름이 무엇인지.**
  *
  * `strain_true_plastic` 만 화면에 뜨면 그게 무엇인지 코드를 읽어야 알게 되고,
- * 그러면 아무도 안 읽는다. 이름·뜻·저장 단위·누가 만드는지를 한 자리에 놓는다.
+ * 그러면 아무도 안 읽는다. 이름·뜻·저장 단위·누가 만드는지를 옆에 놓는다.
  *
  * **목록을 여기 적지 않는다.** 계산이 `Produced` 로 선언한 것을 그대로 보여
  * 준다 — 새 처리를 만들면 여기도 따라온다(D7).
  *
  * 지금 켠 단계가 만드는 것만 보인다. 안 켠 것까지 다 보이면 "있는데 왜 못
  * 고르지" 가 되고, 그건 순서도가 답할 질문이다.
+ *
+ * 창이 아니라 **옆에 두는** 이유: 단계의 열을 고르면서 이름의 뜻을 보는 일이라,
+ * 창이면 열었다 닫았다를 반복하게 된다. 대신 **기본은 접어 둔다** — 늘 펴 두면
+ * 곡선이 그만큼 좁아진다.
  */
-function VariablesDialog({
+function VariablesSidebar({
   vocabulary,
   onClose,
 }: {
   vocabulary: ReturnType<typeof vocabularyOf>
   onClose: () => void
 }) {
-  const rows = (
-    items: { key: string; label: string; si_unit: string; help?: string | null; madeBy?: string }[]
-  ) => (
-    <TableBody>
-      {items.map((item) => (
-        <TableRow key={item.key}>
-          <TableCell className="align-top font-mono text-xs">{item.key}</TableCell>
-          <TableCell className="align-top text-sm">
-            <span className="font-medium">{item.label}</span>
-            {item.si_unit !== "1" && (
-              <span className="text-muted-foreground ml-1 text-xs">({item.si_unit})</span>
-            )}
-            {item.help && (
-              <span className="text-muted-foreground mt-0.5 block text-xs">{item.help}</span>
-            )}
-          </TableCell>
-          <TableCell className="text-muted-foreground align-top text-xs whitespace-nowrap">
-            {item.madeBy ?? "장비 파일"}
-          </TableCell>
-        </TableRow>
-      ))}
-    </TableBody>
+  const entry = (item: {
+    key: string
+    label: string
+    si_unit: string
+    help?: string | null
+    madeBy?: string
+  }) => (
+    <li key={item.key} className="border-b px-2 py-1.5 last:border-b-0">
+      <p className="font-mono text-xs break-all">{item.key}</p>
+      <p className="text-sm">
+        {item.label}
+        {item.si_unit !== '1' && (
+          <span className="text-muted-foreground ml-1 text-xs">({item.si_unit})</span>
+        )}
+      </p>
+      {item.help && <p className="text-muted-foreground mt-0.5 text-xs">{item.help}</p>}
+      <p className="text-muted-foreground mt-0.5 text-xs italic">
+        {item.madeBy ?? '장비 파일'}
+      </p>
+    </li>
   )
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>변수 목록</DialogTitle>
-          <DialogDescription>
-            지금 켠 단계가 쓰고 만드는 이름입니다. <b>이름은 계산이 정합니다</b> — 파일이나
-            사람이 정하지 않으므로, 다른 시험도 같은 이름이면 같은 뜻입니다.
-          </DialogDescription>
-        </DialogHeader>
+    /* 단계 목록이 길어도 따라온다. 열을 고르면서 옆에서 뜻을 보는 자리다. */
+    <aside className="lg:col-span-2 xl:col-span-1">
+      <div className="sticky top-0 max-h-[calc(100svh-8rem)] overflow-y-auto rounded-md border">
+        <div className="bg-background sticky top-0 flex items-center gap-1 border-b px-2 py-1.5">
+          <h3 className="text-sm font-medium">변수 목록</h3>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="ml-auto size-6"
+            onClick={onClose}
+            aria-label="변수 목록 접기"
+          >
+            <X className="size-3.5" />
+          </Button>
+        </div>
 
-        <section>
-          <h3 className="mb-1 text-sm font-medium">
-            열 <span className="text-muted-foreground font-normal">— 곡선의 세로줄</span>
-          </h3>
-          <p className="text-muted-foreground mb-2 text-xs">
-            결과를 저장하면 이 열들이 <b>그대로 파일에 들어갑니다.</b> 결과는 불변이라
-            나중에 열을 덧붙일 수 없습니다 — 필요한 단계를 빼고 저장하면 다시 처리해야
-            합니다.
-          </p>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-56">이름</TableHead>
-                <TableHead>뜻</TableHead>
-                <TableHead className="w-32">만드는 단계</TableHead>
-              </TableRow>
-            </TableHeader>
-            {rows(vocabulary.columns)}
-          </Table>
-        </section>
+        <p className="text-muted-foreground px-2 py-1.5 text-xs">
+          지금 켠 단계가 쓰고 만드는 이름입니다. <b>이름은 계산이 정합니다</b> — 파일이나
+          사람이 정하지 않으므로, 다른 시험도 같은 이름이면 같은 뜻입니다.
+        </p>
+
+        <p className="bg-muted/50 border-y px-2 py-1 text-xs font-medium">
+          열 <span className="text-muted-foreground font-normal">— 곡선의 세로줄</span>
+        </p>
+        <p className="text-muted-foreground px-2 py-1.5 text-xs">
+          저장하면 이 열들이 <b>그대로 파일에 들어갑니다.</b> 결과는 불변이라 나중에 열을
+          덧붙일 수 없습니다.
+        </p>
+        <ul>{vocabulary.columns.map(entry)}</ul>
 
         {vocabulary.values.length > 0 && (
-          <section className="mt-4">
-            <h3 className="mb-1 text-sm font-medium">
+          <>
+            <p className="bg-muted/50 border-y px-2 py-1 text-xs font-medium">
               값 <span className="text-muted-foreground font-normal">— 곡선당 하나</span>
-            </h3>
-            <p className="text-muted-foreground mb-2 text-xs">
-              열이 아니라 숫자 하나입니다. 뒤 단계가 <code>@이름</code> 으로 가져다 씁니다 —
-              사람이 옮겨 적으면, 앞을 다시 계산했을 때 뒤만 옛 값으로 남습니다.
             </p>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-56">이름</TableHead>
-                  <TableHead>뜻</TableHead>
-                  <TableHead className="w-32">내는 단계</TableHead>
-                </TableRow>
-              </TableHeader>
-              {rows(vocabulary.values)}
-            </Table>
-          </section>
+            <p className="text-muted-foreground px-2 py-1.5 text-xs">
+              뒤 단계가 <code>@이름</code> 으로 가져다 씁니다 — 사람이 옮겨 적으면, 앞을
+              다시 계산했을 때 뒤만 옛 값으로 남습니다.
+            </p>
+            <ul>{vocabulary.values.map(entry)}</ul>
+          </>
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            닫기
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </aside>
   )
 }
 

@@ -220,6 +220,25 @@ describe('변수 목록', () => {
     dimensions.mockResolvedValue({ items: [] })
   })
 
+  /** 오른쪽 사이드바. 창이 아니라 옆에 붙는다. */
+  const sidebar = () => screen.getByRole('complementary')
+
+  it('기본은 접혀 있다 — 늘 펴 두면 곡선이 좁아진다', async () => {
+    show()
+    await screen.findByRole('button', { name: '변수 목록' })
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+  })
+
+  it('열고 닫을 수 있다', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
+    expect(sidebar()).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '변수 목록 접기' }))
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
+  })
+
   it('이름만이 아니라 뜻과 단위를 함께 보여 준다', async () => {
     // **`strain_engineering` 만 보여 주면 그게 무엇인지 코드를 읽어야 안다.**
     const user = userEvent.setup()
@@ -227,11 +246,10 @@ describe('변수 목록', () => {
     await user.click(await screen.findByRole('button', { name: /공칭 응력-변형률/ }))
     await user.click(screen.getByRole('button', { name: '변수 목록' }))
 
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('strain_engineering')
-    expect(dialog).toHaveTextContent('공칭 변형률')
-    expect(dialog).toHaveTextContent('변위 ÷ 게이지 길이.')
-    expect(dialog).toHaveTextContent('Pa')
+    expect(sidebar()).toHaveTextContent('strain_engineering')
+    expect(sidebar()).toHaveTextContent('공칭 변형률')
+    expect(sidebar()).toHaveTextContent('변위 ÷ 게이지 길이.')
+    expect(sidebar()).toHaveTextContent('Pa')
   })
 
   it('원본 채널도 이름으로 읽힌다', async () => {
@@ -239,11 +257,10 @@ describe('변수 목록', () => {
     show()
     await user.click(await screen.findByRole('button', { name: '변수 목록' }))
 
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('displacement')
-    expect(dialog).toHaveTextContent('변위')
+    expect(sidebar()).toHaveTextContent('displacement')
+    expect(sidebar()).toHaveTextContent('변위')
     // 어디서 왔는지도 말한다 — 계산이 만든 것과 장비가 준 것은 다르다.
-    expect(dialog).toHaveTextContent('장비 파일')
+    expect(sidebar()).toHaveTextContent('장비 파일')
   })
 
   it('값은 어느 단계가 내는지 말한다', async () => {
@@ -253,9 +270,8 @@ describe('변수 목록', () => {
     await user.click(await screen.findByRole('button', { name: /탄성계수/ }))
     await user.click(screen.getByRole('button', { name: '변수 목록' }))
 
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('youngs_modulus')
-    expect(dialog).toHaveTextContent('탄성 구간의 기울기.')
+    expect(sidebar()).toHaveTextContent('youngs_modulus')
+    expect(sidebar()).toHaveTextContent('탄성 구간의 기울기.')
   })
 
   it('안 켠 단계가 만드는 것은 안 보인다', async () => {
@@ -264,8 +280,18 @@ describe('변수 목록', () => {
     show()
     await user.click(await screen.findByRole('button', { name: '변수 목록' }))
 
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog).not.toHaveTextContent('strain_engineering')
+    expect(sidebar()).not.toHaveTextContent('strain_engineering')
+  })
+
+  it('열어 둔 채로 단계를 켜면 따라 는다', async () => {
+    // 옆에 두는 이유가 이것이다 — 창이면 열었다 닫았다를 반복하게 된다.
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: '변수 목록' }))
+    expect(sidebar()).not.toHaveTextContent('strain_engineering')
+
+    await user.click(screen.getByRole('button', { name: /공칭 응력-변형률/ }))
+    await waitFor(() => expect(sidebar()).toHaveTextContent('strain_engineering'))
   })
 })
 
