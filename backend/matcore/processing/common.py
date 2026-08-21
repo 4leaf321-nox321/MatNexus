@@ -32,6 +32,7 @@ from matcore.processing import (
             name="x",
             label="기준 열",
             type="str",
+            role="column",
             help="이 열을 기준으로 오름차순 정렬합니다.",
         ),
         ParamSpec(
@@ -53,6 +54,7 @@ from matcore.processing import (
             ),
         ),
     ),
+    order=20,
     version="1",
 )
 def sort_unique(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -125,10 +127,11 @@ def sort_unique(frame: Frame, options: dict[str, Any]) -> StepResult:
     kind="processing",
     label="구간 자르기",
     params=(
-        ParamSpec(name="x", label="기준 열", type="str"),
+        ParamSpec(name="x", label="기준 열", type="str", role="column"),
         ParamSpec(name="start", label="시작", type="float", help="이 값 미만을 버립니다."),
         ParamSpec(name="end", label="끝", type="float", help="이 값 초과를 버립니다."),
     ),
+    order=40,
     version="1",
 )
 def crop(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -165,11 +168,14 @@ def crop(frame: Frame, options: dict[str, Any]) -> StepResult:
     kind="processing",
     label="균등 격자로 재샘플",
     params=(
-        ParamSpec(name="x", label="기준 열", type="str"),
+        ParamSpec(name="x", label="기준 열", type="str", role="column"),
         ParamSpec(name="count", label="점 수", type="int", default=200),
         ParamSpec(name="start", label="시작", type="float", help="비우면 관측 최솟값"),
         ParamSpec(name="end", label="끝", type="float", help="비우면 관측 최댓값"),
     ),
+    # **재샘플은 맨 뒤다.** 앞에 두면 탄성계수·항복강도가 전부 보간된 점으로
+    # 계산된다 — 잰 점이 아니라 우리가 만들어 낸 점이다.
+    order=95,
     version="1",
 )
 def resample(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -218,7 +224,7 @@ def resample(frame: Frame, options: dict[str, Any]) -> StepResult:
     kind="processing",
     label="이동평균 평활",
     params=(
-        ParamSpec(name="column", label="평활할 열", type="str"),
+        ParamSpec(name="column", label="평활할 열", type="str", role="column"),
         ParamSpec(
             name="window",
             label="창 크기(점)",
@@ -227,6 +233,10 @@ def resample(frame: Frame, options: dict[str, Any]) -> StepResult:
             help="홀수. 클수록 부드럽고, 봉우리가 낮아집니다.",
         ),
     ),
+    # 원본을 덮지 않고 `<열>_smoothed` 를 더한다 — 무엇을 평활했느냐에 따라
+    # 이름이 달라지므로 옵션 값으로 치환한다.
+    makes_columns=("{column}_smoothed",),
+    order=45,
     version="1",
 )
 def smooth(frame: Frame, options: dict[str, Any]) -> StepResult:

@@ -3634,7 +3634,10 @@ export interface components {
             /** Version */
             version: string;
         };
-        /** ProcessingStepOut */
+        /**
+         * ProcessingStepOut
+         * @description 등록된 계산 하나. **화면이 이 응답만으로 순서도와 폼을 그린다.**
+         */
         ProcessingStepOut: {
             /** Applies To */
             applies_to: string[];
@@ -3642,6 +3645,21 @@ export interface components {
             id: string;
             /** Label */
             label: string;
+            /**
+             * Makes Columns
+             * @default []
+             */
+            makes_columns: string[];
+            /**
+             * Makes Values
+             * @default []
+             */
+            makes_values: string[];
+            /**
+             * Order
+             * @default 100
+             */
+            order: number;
             /** Params */
             params: components["schemas"]["StepParamOut"][];
             /** Version */
@@ -4292,6 +4310,8 @@ export interface components {
             label: string;
             /** Name */
             name: string;
+            /** Role */
+            role?: string | null;
             /** Type */
             type: string;
             /** Unit */

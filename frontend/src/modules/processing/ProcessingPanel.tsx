@@ -25,8 +25,11 @@ import {
   BookMarked,
   ChevronDown,
   ChevronUp,
+  Circle,
+  CircleCheck,
   FlaskConical,
   Link2,
+  Lock,
   Play,
   Plus,
   Save,
@@ -69,6 +72,8 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { missingSteps } from '@/modules/processing/gaps'
+import { blockersAt, columnsAt, insertionIndex, outOfOrder } from '@/modules/processing/flow'
+import type { Blocker } from '@/modules/processing/flow'
 import { testsApi } from '@/modules/tests/api'
 import {
   axisLabel,
@@ -260,6 +265,36 @@ export function ProcessingPanel({
     setSaved(null)
   }
 
+  /**
+   * 순서도에서 켜고 끈다.
+   *
+   * **끝에 붙이지 않는다.** 탄성계수를 나중에 켰을 때 항복강도 뒤로 가면
+   * `@youngs_modulus` 가 안 풀린다 — 자리는 계산이 선언한 `order` 가 안다.
+   */
+  function toggle(pluginId: string) {
+    setResult(null)
+    setSaved(null)
+    setSteps((current) => {
+      if (current.some((step) => step.plugin === pluginId)) {
+        return current.filter((step) => step.plugin !== pluginId)
+      }
+      const at = insertionIndex(current, pluginId, byId)
+      const added = { plugin: pluginId, options: defaults(byId.get(pluginId)) }
+      return [...current.slice(0, at), added, ...current.slice(at)]
+    })
+  }
+
+  /** 아직 안 켠 단계를 켜면 돌 수 있는가. 못 돌면 그 이유를 미리 보여 준다. */
+  function ifAdded(pluginId: string): Blocker[] {
+    const at = insertionIndex(steps, pluginId, byId)
+    const next = [
+      ...steps.slice(0, at),
+      { plugin: pluginId, options: defaults(byId.get(pluginId)) },
+      ...steps.slice(at),
+    ]
+    return blockersAt(next[at], at, next, sourceColumns, byId)
+  }
+
   function move(index: number, delta: number) {
     const target = index + delta
     if (target < 0 || target >= steps.length) return
@@ -271,7 +306,31 @@ export function ProcessingPanel({
     setResult(null)
   }
 
-  const columns = result ? result.columns : sourceColumns
+  /**
+   * **각 단계가 시작될 때 프레임에 있는 열.** 돌려 보기 전에도 안다.
+   *
+   * 전에는 `result ? result.columns : sourceColumns` 였다. 장비가 준 것은
+   * 변위·하중·폭뿐이라, 한 번 돌려 보기 전에는 인장강도 단계의 '변형률 열'
+   * 목록이 비어 있었다 — **돌려 보려면 골라야 하고 고르려면 돌려 봐야 하는**
+   * 자리였다. 이제 계산이 선언한 `makes_columns` 를 접어서 계산한다.
+   */
+  const columnsFor = (index: number) => columnsAt(steps, index, sourceColumns, byId)
+
+  /** 지금 구성에서 못 도는 단계와 그 이유. **막지 않고 말한다.** */
+  const stepBlockers = useMemo(
+    () => steps.map((step, index) => blockersAt(step, index, steps, sourceColumns, byId)),
+    [steps, sourceColumns, byId]
+  )
+  /**
+   * **한 번이라도 돈 구성은 막지 않는다.**
+   *
+   * 여기 판정은 계산이 선언한 것으로 하는 추론이라, 선언이 실제와 어긋나면
+   * 틀릴 수 있다(뒤 검사가 내장 계산은 지킨다). 그런데 서버가 방금 돌려 준
+   * 구성이라면 추론이 틀렸다는 것이 이미 증명된 셈이다 — 그때는 우리 판정을
+   * 버린다. 단계를 고치면 `result` 가 지워지므로 다시 본다.
+   */
+  const blocked = !result && stepBlockers.some((list) => list.length > 0)
+  const scrambled = useMemo(() => outOfOrder(steps, byId), [steps, byId])
 
   /** 지금 구성으로 못 하게 되는 일. 인장에만 뜻이 있다. */
   const gaps = useMemo(
@@ -314,7 +373,15 @@ export function ProcessingPanel({
               }}
             />
           )}
-          <Button size="sm" variant="outline" onClick={run} disabled={busy || !steps.length}>
+          {/* **필요한 것이 다 갖춰져야 누를 수 있다.** 막힌 채로 눌러 봐야
+              서버가 같은 말을 하는데, 그때는 어느 단계인지 찾아야 한다. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={run}
+            disabled={busy || !steps.length || blocked}
+            title={blocked ? '아직 못 도는 단계가 있습니다.' : undefined}
+          >
             <Play className="size-3.5" />
             돌려 보기
           </Button>
@@ -411,7 +478,15 @@ export function ProcessingPanel({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,26rem)_minmax(0,1fr)]">
+        <FlowRail
+          available={available}
+          steps={steps}
+          onToggle={toggle}
+          blockersFor={ifAdded}
+          scrambled={scrambled}
+        />
+
         <div className="space-y-2">
           {steps.length === 0 && (
             <p className="text-muted-foreground rounded-md border py-8 text-center text-xs">
@@ -486,12 +561,30 @@ export function ProcessingPanel({
                 </div>
 
                 <div className="space-y-2 px-3 py-2">
+                  {/* **어디서 막혔는지 그 자리에서 말한다.** 아래 '돌려 보기'
+                      가 회색인데 이유가 위에만 적혀 있으면 못 잇는다. */}
+                  {stepBlockers[index]?.length > 0 && (
+                    <ul className="space-y-0.5 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+                      {stepBlockers[index].map((item) => (
+                        <li key={item.reason}>
+                          {item.reason}
+                          {item.fixedBy && (
+                            <>
+                              {' '}
+                              <b>{byId.get(item.fixedBy)?.label ?? item.fixedBy}</b> 단계를 먼저
+                              켜세요.
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {(plugin?.params ?? []).map((param) => (
                     <ParamField
                       key={param.name}
                       param={param}
                       value={step.options[param.name]}
-                      columns={columns}
+                      columns={columnsFor(index)}
                       /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
                          '직접 입력' 이 살아 있으면, 거기 넣은 숫자가 무시된다는
                          것을 알 방법이 없다 — 값을 넣었는데 아무 일도 안
@@ -541,7 +634,9 @@ export function ProcessingPanel({
           />
         </div>
 
-        <div>
+        {/* 좁은 화면에서는 두 칸이라 그림이 순서도 밑으로 접힌다. 그때는 폭을
+            다 쓰게 둔다 — 곡선은 좁으면 읽을 수 없다. */}
+        <div className="lg:col-span-2 xl:col-span-1">
           {result ? (
             <>
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -624,6 +719,94 @@ export function ProcessingPanel({
   )
 }
 
+/**
+ * 처리 순서도 — **무엇을 어떤 순서로 놓아야 하는지 여기서 읽는다.**
+ *
+ * 전에는 '단계 더하기' 드롭다운 하나였다. 목록에 열한 개가 알파벳순으로 있고,
+ * 무엇이 무엇을 필요로 하는지는 **아는 사람만 알았다** — 공칭 변환을 안 넣으면
+ * 변형률 열이 없다는 것은 계산을 읽어야 나오는 판단이다.
+ *
+ * 순서는 서버가 준다(`order`). 못 켜는 것은 **이유를 적고 회색으로 둔다** —
+ * 회색이기만 하면 고장으로 읽힌다.
+ */
+function FlowRail({
+  available,
+  steps,
+  onToggle,
+  blockersFor,
+  scrambled,
+}: {
+  available: ProcessingStep[]
+  steps: RecipeStep[]
+  onToggle: (id: string) => void
+  blockersFor: (id: string) => Blocker[]
+  scrambled: boolean
+}) {
+  const position = new Map(steps.map((step, index) => [step.plugin, index + 1]))
+
+  return (
+    <div className="h-fit rounded-md border p-2">
+      <p className="px-1 pb-1.5 text-xs font-medium">처리 순서</p>
+      <p className="text-muted-foreground px-1 pb-2 text-xs">
+        위에서 아래로 흐릅니다. 켠 것만 돕니다.
+      </p>
+
+      <ol className="space-y-0.5">
+        {available.map((step) => {
+          const at = position.get(step.id)
+          const chosen = at !== undefined
+          const blockers = chosen ? [] : blockersFor(step.id)
+          // **못 켜는 것과 안 채운 것은 다르다.** 앞 단계가 있어야 하는 것만
+          // 잠근다 — '평활할 열' 처럼 켠 뒤에 고르면 되는 것은 열어 둔다.
+          const needsFirst = blockers.filter((item) => item.fixedBy)
+          const locked = needsFirst.length > 0
+
+          return (
+            <li key={step.id}>
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => onToggle(step.id)}
+                aria-pressed={chosen}
+                className={`flex w-full items-start gap-1.5 rounded px-1 py-1 text-left text-xs ${
+                  locked ? 'cursor-not-allowed opacity-45' : 'hover:bg-accent/50'
+                }`}
+              >
+                {locked ? (
+                  <Lock className="mt-0.5 size-3.5 shrink-0" />
+                ) : chosen ? (
+                  <CircleCheck className="text-primary mt-0.5 size-3.5 shrink-0" />
+                ) : (
+                  <Circle className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className={chosen ? 'font-medium' : 'text-muted-foreground'}>
+                    {step.label}
+                  </span>
+                  {locked && (
+                    <span className="text-muted-foreground mt-0.5 block">
+                      {needsFirst[0].reason}
+                    </span>
+                  )}
+                </span>
+                {chosen && <span className="text-muted-foreground shrink-0 tabular-nums">{at}</span>}
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+
+      {/* 손으로 위아래 화살표를 눌러 옮기면 권장 순서와 어긋날 수 있다.
+          막지 않는다 — 그렇게 해야 하는 경우가 있다. 다만 말은 해 준다. */}
+      {scrambled && (
+        <p className="text-muted-foreground mt-2 border-t px-1 pt-2 text-xs">
+          단계 순서를 손으로 바꿨습니다. 오른쪽 번호가 실제로 도는 순서입니다.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function AddStep({
   available,
   onAdd,
@@ -633,10 +816,12 @@ function AddStep({
 }) {
   return (
     <Select value="" onValueChange={onAdd}>
-      <SelectTrigger className="h-9 w-full" aria-label="단계 더하기">
-        <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
+      {/* 순서도가 주 경로다. 여기는 **같은 단계를 두 번 쓰는** 자리 — 구간을
+          두 번 자르거나 열 둘을 따로 평활하는 경우가 있다. */}
+      <SelectTrigger className="h-8 w-full" aria-label="단계 더하기">
+        <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
           <Plus className="size-3.5" />
-          단계 더하기
+          같은 단계 한 번 더
         </span>
       </SelectTrigger>
       <SelectContent>
@@ -724,12 +909,14 @@ function ParamField({
     )
   }
 
-  // 열 이름을 받는 칸(`x`·`column`·`strain`·`stress`)은 자유 입력보다 목록이 낫다 —
-  // 오타 하나가 '열이 없습니다' 로 끝나고, 어떤 이름이 있는지는 화면만 안다.
-  const isColumn = ['x', 'column', 'strain', 'stress', 'displacement', 'force'].includes(
-    param.name
-  )
-  if (isColumn && columns.length) {
+  // 열 이름을 받는 칸은 자유 입력보다 목록이 낫다 — 오타 하나가 '열이 없습니다'
+  // 로 끝나고, 어떤 이름이 있는지는 화면만 안다.
+  //
+  // **어느 칸이 열을 받는지는 서버가 말한다**(`ParamSpec.role`). 전에는 여기에
+  // `['x','column','strain','stress',...]` 를 적어 뒀는데, 열을 받는 칸을 가진
+  // 계산을 새로 만들면 이 목록에도 이름을 더해야 했다 — 안 더하면 자유 입력이
+  // 되고, `ParamSpec` 이 곧 화면의 칸이라는 D7 의 약속이 거기서 깨졌다.
+  if (param.role === 'column' && columns.length) {
     return (
       <div className={`${rowClass} items-center`} aria-disabled={disabled || undefined}>
         <Label className="text-xs">{param.label}</Label>

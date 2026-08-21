@@ -29,17 +29,34 @@ class StepParamOut(BaseModel):
     dimension: str | None = None
     """단위만으로 못 가르는 것을 가른다 — 변형률은 %, tan δ 는 그대로."""
     help: str | None = None
+    role: str | None = None
+    """`column` 이면 프레임의 **열 이름**을 받는 칸이다. 화면이 목록을 낸다.
+
+    전에는 프론트에 열 받는 칸 이름을 적어 뒀다 — 새 계산을 만들 때 그 목록에도
+    이름을 더해야 했고, 안 더하면 자유 입력이 됐다."""
     when: dict[str, list[str]] = {}
     """이 칸이 쓰이는 조건. 비어 있으면 늘 쓰인다."""
 
 
 class ProcessingStepOut(BaseModel):
+    """등록된 계산 하나. **화면이 이 응답만으로 순서도와 폼을 그린다.**"""
+
     id: str
     label: str
     version: str
     """계산이 바뀌면 올라간다. 결과에 기록해 "이 값은 v1 계산이다" 를 남긴다."""
     applies_to: list[str]
     params: list[StepParamOut]
+    makes_columns: list[str] = []
+    """이 단계가 새로 더하는 열. `{param}` 은 그 단계 옵션 값으로 치환한다.
+
+    **없으면 화면이 "지금 고를 수 있는 열" 을 모른다.** 장비가 준 것은 변위·
+    하중뿐이라, 한 번 돌려 보기 전에는 `strain_engineering` 이 목록에 없었다 —
+    돌려 보려면 골라야 하고 고르려면 돌려 봐야 하는 자리였다."""
+    makes_values: list[str] = []
+    """이 단계가 내는 스칼라 키. 뒤 단계가 `@` 로 가리킨다."""
+    order: int = 100
+    """권장 순서. 작을수록 앞. 목록이 이미 이 순서로 온다."""
 
 
 class ProcessingScalarOut(BaseModel):

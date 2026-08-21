@@ -41,6 +41,15 @@ class ParamSpec:
     0.2% 오프셋은 규격에도 그렇게 적혀 있다. 화면이 어느 쪽인지 알려면 차원이
     필요하다(`matcore/units.DIMENSION_ALIASES` 와 같은 이유)."""
     help: str | None = None
+    role: Literal["column"] | None = None
+    """이 칸이 **프레임의 열 이름**을 받는가.
+
+    화면이 자유 입력 대신 목록을 내야 하는 칸이 어느 것인지 여기서 안다. 전에는
+    프론트에 `['x','column','strain','stress',...]` 를 적어 뒀는데, 열을 받는 칸을
+    가진 계산을 새로 만들면 그 목록에도 이름을 더해야 했다 — 안 더하면 자유
+    입력이 되고, 오타 하나가 '열이 없습니다' 로 끝난다.
+
+    `ParamSpec` 이 곧 화면의 칸이라는 D7 의 약속이 깨지는 자리가 정확히 거기였다."""
     when: dict[str, tuple[str, ...]] = field(default_factory=dict)
     """이 칸이 **쓰이는 조건**. `{"method": ("manual",)}` 이면 방법이 `manual`
     일 때만 쓰인다.
@@ -65,6 +74,27 @@ class Plugin:
     params: tuple[ParamSpec, ...] = ()
     applies_to: tuple[str, ...] = ()
     """적용 가능한 재료군·시험종류. 비어 있으면 제한 없음."""
+    makes_columns: tuple[str, ...] = ()
+    """이 단계가 프레임에 **새로 더하는 열**.
+
+    없으면 화면이 "지금 고를 수 있는 열" 을 알 방법이 없다. 실제로 그랬다 —
+    장비가 준 것은 변위·하중·폭뿐이라, 인장강도 단계의 '변형률 열' 목록에
+    `strain_engineering` 이 없었다. 그 열은 **앞 단계가 만드는 것**이라 한 번
+    돌려 보기 전에는 존재하지 않는다. 돌려 보려면 골라야 하고 고르려면 돌려
+    봐야 하는 자리였다.
+
+    `{param}` 은 그 단계 옵션의 값으로 치환한다 — 평활은 `{column}_smoothed`
+    를 만들므로 무엇을 평활했느냐에 따라 열 이름이 달라진다."""
+    makes_values: tuple[str, ...] = ()
+    """이 단계가 내는 스칼라 키(`youngs_modulus` 등). 뒤 단계가 `@` 로 가리킨다.
+
+    화면이 "탄성계수를 먼저 골라야 오프셋 항복강도를 쓸 수 있다" 를 말하려면
+    누가 그 값을 만드는지 알아야 한다."""
+    order: int = 100
+    """권장 순서. **작을수록 앞.** 화면이 순서도를 이 값으로 세운다.
+
+    순서는 화면의 사정이 아니라 **계산의 성질**이다 — 공칭 변환 없이는 변형률
+    열이 없고, 재샘플을 앞에 두면 그 뒤 계산이 전부 보간된 점으로 돈다."""
     version: str = "1"
     """계산이 바뀌면 올린다. 결과 아티팩트에 기록해 재현 가능성을 남긴다."""
     meta: dict[str, Any] = field(default_factory=dict)
@@ -82,6 +112,9 @@ def register(
     produces: str | None = None,
     params: tuple[ParamSpec, ...] = (),
     applies_to: tuple[str, ...] = (),
+    makes_columns: tuple[str, ...] = (),
+    makes_values: tuple[str, ...] = (),
+    order: int = 100,
     version: str = "1",
     **meta: Any,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -103,6 +136,9 @@ def register(
             produces=produces,
             params=params,
             applies_to=applies_to,
+            makes_columns=makes_columns,
+            makes_values=makes_values,
+            order=order,
             version=version,
             meta=meta,
         )
@@ -122,7 +158,10 @@ def list_plugins(kind: Kind | None = None, applies_to: str | None = None) -> lis
     items = [p for p in _REGISTRY.values() if kind is None or p.kind == kind]
     if applies_to is not None:
         items = [p for p in items if not p.applies_to or applies_to in p.applies_to]
-    return sorted(items, key=lambda p: p.id)
+    # **권장 순서로 낸다.** 화면이 순서도를 이 순서로 세우고, 사람이 단계를
+    # 고르는 순서도 이것이다 — 목록이 알파벳순이면 `curve.crop` 이 맨 앞에 오고
+    # 공칭 변환이 가운데 묻힌다.
+    return sorted(items, key=lambda p: (p.order, p.id))
 
 
 def clear() -> None:

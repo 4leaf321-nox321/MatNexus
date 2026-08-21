@@ -97,10 +97,19 @@ def _require_pascal_stress(frame: Frame, key: str) -> None:
             unit="m2",
             help="폭 곱하기 두께. 하중을 이 넓이로 나눠 응력을 만듭니다.",
         ),
-        ParamSpec(name="displacement", label="변위 열", type="str", default="displacement"),
-        ParamSpec(name="force", label="하중 열", type="str", default="force"),
+        ParamSpec(
+            name="displacement",
+            label="변위 열",
+            type="str",
+            role="column",
+            default="displacement",
+        ),
+        ParamSpec(name="force", label="하중 열", type="str", role="column", default="force"),
     ),
     applies_to=("tensile",),
+    # **여기가 없으면 뒤가 전부 없다.** 장비는 응력-변형률을 주지 않는다.
+    makes_columns=(STRAIN, STRESS),
+    order=10,
     version="1",
 )
 def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -169,10 +178,13 @@ TOE_MIN_R_SQUARED = 0.995
             default=0.004,
             unit="1",
         ),
-        ParamSpec(name="strain", label="변형률 열", type="str"),
-        ParamSpec(name="stress", label="응력 열", type="str"),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
+    # 열을 새로 만들지 않는다 — **고른 변형률 열을 그 자리에서 민다.**
+    makes_values=("toe_strain_offset", "toe_r_squared"),
+    order=30,
     version="1",
 )
 def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -329,10 +341,12 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
             unit="Pa",
             when={"method": ("manual",)},
         ),
-        ParamSpec(name="strain", label="변형률 열", type="str"),
-        ParamSpec(name="stress", label="응력 열", type="str"),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
+    makes_values=("youngs_modulus", "elastic_intercept", "elastic_r_squared"),
+    order=50,
     version="1",
 )
 def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -461,10 +475,12 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
         ParamSpec(
             name="search_end", dimension="strain", label="탐색 끝", type="float", unit="1"
         ),
-        ParamSpec(name="strain", label="변형률 열", type="str"),
-        ParamSpec(name="stress", label="응력 열", type="str"),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
+    makes_values=("proof_stress", "proof_strain", "proof_offset"),
+    order=60,
     version="1",
 )
 def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -533,10 +549,12 @@ def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
     kind="processing",
     label="인장강도·연신율",
     params=(
-        ParamSpec(name="strain", label="변형률 열", type="str"),
-        ParamSpec(name="stress", label="응력 열", type="str"),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
+    makes_values=("tensile_strength", "strain_at_strength", "elongation_observed"),
+    order=70,
     version="1",
 )
 def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -575,10 +593,16 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
     kind="processing",
     label="네킹 후보",
     params=(
-        ParamSpec(name="strain", label="변형률 열", type="str"),
-        ParamSpec(name="stress", label="응력 열", type="str"),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
+    makes_values=(
+        "necking_candidate_index",
+        "necking_candidate_strain",
+        "necking_candidate_stress",
+    ),
+    order=80,
     version="1",
 )
 def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -663,10 +687,12 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             },
             help="탄성 되돌림 때문에 초기 구간이 음수로 나옵니다.",
         ),
-        ParamSpec(name="strain", label="변형률 열", type="str"),
-        ParamSpec(name="stress", label="응력 열", type="str"),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
+    makes_columns=(TRUE_STRAIN, TRUE_STRESS, PLASTIC_STRAIN),
+    order=90,
     version="1",
 )
 def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:

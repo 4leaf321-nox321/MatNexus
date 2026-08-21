@@ -93,10 +93,14 @@ def list_steps(
                     unit=spec.unit,
                     dimension=spec.dimension,
                     help=spec.help,
+                    role=spec.role,
                     when={key: list(values) for key, values in spec.when.items()},
                 )
                 for spec in plugin.params
             ],
+            makes_columns=list(plugin.makes_columns),
+            makes_values=list(plugin.makes_values),
+            order=plugin.order,
         )
         for plugin in registry.list_plugins(kind="processing", applies_to=test_type)
     ]

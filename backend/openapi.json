@@ -3872,6 +3872,7 @@
         "type": "object"
       },
       "ProcessingStepOut": {
+        "description": "등록된 계산 하나. **화면이 이 응답만으로 순서도와 폼을 그린다.**",
         "properties": {
           "applies_to": {
             "items": {
@@ -3887,6 +3888,27 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "makes_columns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Makes Columns",
+            "type": "array"
+          },
+          "makes_values": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Makes Values",
+            "type": "array"
+          },
+          "order": {
+            "default": 100,
+            "title": "Order",
+            "type": "integer"
           },
           "params": {
             "items": {
@@ -5735,6 +5757,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
           },
           "type": {
             "title": "Type",
