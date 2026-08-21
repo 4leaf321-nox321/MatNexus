@@ -436,7 +436,8 @@ def master_curve(
     window = max(float(np.ptp(ordered[0].log_frequency())), 1e-9)
     widening = (upper - lower) / window
     notes.append(
-        f"주파수 {10**lower:.3g}~{10**upper:.3g} Hz 로 겹쳤습니다 (잰 범위보다 {widening:.1f}배 넓음)."
+        f"주파수 {10**lower:.3g}~{10**upper:.3g} Hz 로 겹쳤습니다 "
+        f"(잰 범위보다 {widening:.1f}배 넓음)."
     )
     if widening < 1.5:
         # **겹쳤는데 안 넓어졌으면 겹칠 것이 없었다는 뜻이다.**

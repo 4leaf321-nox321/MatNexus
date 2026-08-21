@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { ViscoelasticPanel } from '@/modules/viscoelastic/ViscoelasticPanel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -75,6 +76,18 @@ export default function TestRunDetailPage() {
   )
   // `?? []` 를 그대로 두면 매 렌더마다 새 배열이라 아래 useEffect 가 계속 돈다.
   const channels = useMemo(() => definition?.channels ?? [], [definition])
+
+  /**
+   * 점탄성 탭을 보여 줄지. **시험 종류 키를 박지 않는다.**
+   *
+   * `test_type_key === 'dma_sweep'` 으로 두면 부서가 자기 DMA 종류를 만드는
+   * 순간(D7 — 정의는 데이터다) 그 시험에는 탭이 안 뜬다. 대신 **저장·손실
+   * 탄성률 채널이 있는가**를 본다 — 그 둘이 있으면 겹치고 맞출 수 있다.
+   */
+  const isViscoelastic = useMemo(() => {
+    const keys = new Set(channels.map((channel) => channel.key))
+    return keys.has('storage_modulus') && keys.has('loss_modulus')
+  }, [channels])
 
   /**
    * 어느 곡선을 볼 것인가. **한 시험이 곡선을 여럿 가진다.**
@@ -274,6 +287,14 @@ export default function TestRunDetailPage() {
             <TabsTrigger value="process" disabled={item.status !== 'parsed'}>
               처리
             </TabsTrigger>
+            {/* **DMA 일 때만 뜬다.** 점탄성은 온도가 다른 스윕 여럿을 겹치는
+                일이라 인장 시험에는 할 것이 없다 — 눌러 봐야 "겹칠 스윕이
+                없습니다" 만 나오는 탭은 두지 않는다. */}
+            {isViscoelastic && (
+              <TabsTrigger value="viscoelastic" disabled={item.status !== 'parsed'}>
+                점탄성
+              </TabsTrigger>
+            )}
             <TabsTrigger value="results" disabled={item.status !== 'parsed'}>
               결과
               {item.result_count > 0 && (
@@ -496,6 +517,12 @@ export default function TestRunDetailPage() {
               </p>
             )}
           </TabsContent>
+
+          {isViscoelastic && (
+            <TabsContent value="viscoelastic">
+              <ViscoelasticPanel testRunId={item.id} />
+            </TabsContent>
+          )}
 
           <TabsContent value="results">
             <ResultsPanel testRunId={item.id} onAdoptChange={run.reload} />

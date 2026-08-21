@@ -104,7 +104,7 @@ class Test관측이동인자:
 
 class TestWLF:
     def test_아는_계수를_되찾는다(self) -> None:
-        shifts, c1, c2 = fit_wlf(SWEEPS, REFERENCE_K)
+        _, c1, c2 = fit_wlf(SWEEPS, REFERENCE_K)
         assert c1 == pytest.approx(C1_TRUE, rel=0.05)
         assert c2 == pytest.approx(C2_TRUE, rel=0.05)
 

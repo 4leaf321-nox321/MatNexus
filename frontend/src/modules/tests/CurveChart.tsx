@@ -33,6 +33,16 @@ export interface CurveChartProps {
    * 선 두 개까지는 라이브러리 없이 충분하다.
    */
   pointsLabel?: string
+  /**
+   * 로그 축. **마스터커브는 이것 없이 못 읽는다** — 주파수가 1e-6 에서 20 Hz
+   * 까지 일곱 자릿수에 걸치고, 저장 탄성률도 3 MPa 에서 3 GPa 까지 세 자릿수다.
+   * 선형으로 그리면 점 대부분이 왼쪽 끝 한 칸에 뭉친다.
+   *
+   * 눈금 라벨은 **원래 값**으로 적는다(1e-6 · 0.001 · 1 …). 사람은 Hz 로 읽지
+   * log Hz 로 읽지 않는다.
+   */
+  logX?: boolean
+  logY?: boolean
 }
 
 const PAD = { top: 16, right: 20, bottom: 44, left: 68 }
@@ -70,6 +80,8 @@ export function CurveChart({
   height = 380,
   overlay,
   pointsLabel,
+  logX = false,
+  logY = false,
 }: CurveChartProps) {
   const [hover, setHover] = useState<number | null>(null)
 
@@ -78,11 +90,17 @@ export function CurveChart({
     // 겹쳐 그리는 선도 축 범위에 넣는다. 안 넣으면 적합 곡선이 판을 벗어나
     // 잘려 보이고, 잘린 그림으로는 잘 맞는지 알 수 없다.
     const all = overlay ? [...points, ...overlay.points] : points
-    const xs = all.map((p) => p[0])
-    const ys = all.map((p) => p[1])
+    // 로그 축이면 **자리 계산만** log10 으로 한다. 원래 값은 그대로 두고 눈금
+    // 라벨에서 되돌린다 — 툴팁이 log 값을 보여 주면 아무도 못 읽는다.
+    const tx = (value: number) => (logX ? Math.log10(Math.max(value, Number.MIN_VALUE)) : value)
+    const ty = (value: number) => (logY ? Math.log10(Math.max(value, Number.MIN_VALUE)) : value)
+    const xs = all.map((p) => tx(p[0]))
+    const ys = all.map((p) => ty(p[1]))
     const xMin = Math.min(...xs)
     const xMax = Math.max(...xs)
-    const yMin = Math.min(0, ...ys) // 하중·응력은 0 부터 보는 것이 실무 감각이다
+    // 하중·응력은 0 부터 보는 것이 실무 감각이다. **로그 축에서는 안 그런다** —
+    // 0 은 로그 축에 없고, 넣으면 세 자릿수짜리 곡선이 한 줄로 뭉친다.
+    const yMin = logY ? Math.min(...ys) : Math.min(0, ...ys)
     const yMax = Math.max(...ys)
     const xSpan = xMax - xMin || 1
     const ySpan = yMax - yMin || 1
@@ -93,12 +111,15 @@ export function CurveChart({
       xMax,
       yMin,
       yMax,
-      toX: (value: number) => PAD.left + ((value - xMin) / xSpan) * plotWidth,
-      toY: (value: number) => PAD.top + plotHeight - ((value - yMin) / ySpan) * plotHeight,
+      toX: (value: number) => PAD.left + ((tx(value) - xMin) / xSpan) * plotWidth,
+      toY: (value: number) => PAD.top + plotHeight - ((ty(value) - yMin) / ySpan) * plotHeight,
+      // 눈금은 변환된 축에서 고르고, 자리와 라벨은 되돌려 쓴다.
+      fromX: (value: number) => (logX ? 10 ** value : value),
+      fromY: (value: number) => (logY ? 10 ** value : value),
       plotWidth,
       plotHeight,
     }
-  }, [points, overlay, height])
+  }, [points, overlay, height, logX, logY])
 
   if (!scale) {
     return (
@@ -110,6 +131,11 @@ export function CurveChart({
       </div>
     )
   }
+
+  // 눈금은 **변환된 축**에서 고르고(로그 축이면 자릿수 간격이 된다), 자리와
+  // 라벨은 원래 값으로 되돌려 쓴다.
+  const yTicks = ticks(scale.yMin, scale.yMax).map((tick) => scale.fromY(tick))
+  const xTicks = ticks(scale.xMin, scale.xMax).map((tick) => scale.fromX(tick))
 
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${scale.toX(p[0])},${scale.toY(p[1])}`).join(' ')
   const active = hover === null ? null : points[hover]
@@ -138,7 +164,7 @@ export function CurveChart({
           setHover(best)
         }}
       >
-        {ticks(scale.yMin, scale.yMax).map((value) => (
+        {yTicks.map((value) => (
           <g key={`y${value}`}>
             <line
               x1={PAD.left}
@@ -160,7 +186,7 @@ export function CurveChart({
           </g>
         ))}
 
-        {ticks(scale.xMin, scale.xMax).map((value) => (
+        {xTicks.map((value) => (
           <g key={`x${value}`}>
             <line
               x1={scale.toX(value)}

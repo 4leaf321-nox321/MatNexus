@@ -45,6 +45,16 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       to: 'processing',
       why: '시험 상세가 그 시험의 처리 패널을 끼워 넣는다. 원본 곡선을 보고 나서 "이게 물성으로 어떻게 되는데" 가 이어지는 자리라, 다른 화면으로 보내면 원본과 결과를 나란히 못 본다. 아래 processing → tests 의 반대 방향이고 둘은 한 화면을 나눠 그린다.',
     },
+    {
+      to: 'viscoelastic',
+      why: '시험 상세가 그 시험의 점탄성 탭을 끼워 넣는다. 겹치기는 **한 시험 안의 온도가 다른 스윕 여럿**을 고르는 일이라, 그 시험을 떠나면 무엇을 겹치는지가 사라진다. 바로 위 processing 과 같은 방향·같은 이유고 둘은 한 화면을 나눠 그린다.',
+    },
+  ],
+  viscoelastic: [
+    {
+      to: 'tests',
+      why: '마스터커브도 곡선이라 같은 CurveChart 로 그린다 — 축이 둘 다 로그인 것만 다르고, 그 옵션은 차트가 받는다. 처리·통계·적합이 같은 이유로 tests 를 부른다.',
+    },
   ],
   statistics: [
     {

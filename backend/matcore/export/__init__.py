@@ -499,7 +499,9 @@ FORMATS: dict[str, Format] = {
         key="abaqus_viscoelastic",
         label="Abaqus (점탄성)",
         extension="inp",
-        describe="*ELASTIC + *VISCOELASTIC, TIME=PRONY — 선형 점탄성. 기준 온도 하나에서 유효.",
+        describe=(
+            "*ELASTIC + *VISCOELASTIC, TIME=PRONY — 선형 점탄성. 기준 온도 하나에서 유효."
+        ),
         render=render_abaqus_viscoelastic,
         keywords=("*MATERIAL", "*ELASTIC", "*VISCOELASTIC"),
         # **OpenRadioss 는 없다.** LAW62 는 고무 초탄성(Ogden)+Prony 경로라
