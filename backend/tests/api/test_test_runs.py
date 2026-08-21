@@ -90,7 +90,15 @@ class TestDefinitions:
         response = client.get("/api/test-types", headers=admin_headers)
         assert response.status_code == 200, response.text
         types = response.json()
-        assert [t["key"] for t in types] == ["tensile"]
+
+        # **읽을 수 있는 것만 넣는다.** 처음 규율은 "파서가 있는 것만" 이었는데,
+        # 형식 프로파일이 생기면서 넓어졌다 — DMA 는 전용 파서 없이 프로파일로
+        # 읽힌다(ADR 0005). 정의만 있고 못 읽는 종류가 목록에 보이면 사용자가
+        # 올렸다가 실패하므로, 그 선은 그대로다.
+        assert [t["key"] for t in types] == ["tensile", "dma_sweep"]
+        dma_type = next(t for t in types if t["key"] == "dma_sweep")
+        assert dma_type["parser_key"] is None  # 프로파일이 읽는다
+        assert {"storage_modulus", "loss_modulus"} <= {c["key"] for c in dma_type["channels"]}
 
         tensile_type = types[0]
         assert tensile_type["parser_key"] == "zwick_tra"

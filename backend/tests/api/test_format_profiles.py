@@ -455,6 +455,46 @@ class TestEndToEnd:
         # 나란히 놓고 볼 수 있다.
         assert run.source_metadata["specimen_thickness"] == "0.986"
 
+    def test_DMA_도_기본_프로파일로_읽는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        specimen: dict[str, Any],
+    ) -> None:
+        """**설치하면 DMA 도 바로 읽힌다.** 시험 종류·프로파일 둘 다 시드다.
+
+        위의 `dma` 픽스처는 "코드 없이 API 로 만들 수 있는가" 를 보는 것이고,
+        여기는 "설치 상태에서 그냥 되는가" 를 본다. 둘은 다른 질문이다.
+        """
+        ensure_builtin_test_types(db)
+        created = ensure_builtin_format_profiles(db)
+        assert "ta_dma850" in created
+        db.commit()
+
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": "{}",
+            },
+            files={"file": ("Example FreqTemp2.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run_id = uuid.UUID(response.json()["id"])
+
+        assert services.parse_run(db, run_id) == "parsed"
+        run = db.get(TestRun, run_id)
+        assert run is not None
+        assert run.parser_version == "profile:ta_dma850"
+
+        curve_rows = list(db.scalars(select(Curve).where(Curve.test_run_id == run_id)))
+        # 측정 6벌 + 장비가 계산한 TTS 2벌. **버리지도 섞지도 않는다.**
+        assert len(curve_rows) == 8
+        assert sum(1 for curve in curve_rows if curve.kind == "derived") == 2
+
     def test_단위가_정의와_다르면_등록이_실패한다(
         self,
         client: TestClient,

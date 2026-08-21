@@ -53,6 +53,45 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("testing_group", "시험 그룹", "text", None, None, None, False),
         ],
     },
+    {
+        # **읽을 수 있는 것만 넣는다.** 인장은 `.tra` 파서가, DMA 는 형식
+        # 프로파일이 읽는다(`legacy_profiles.py`) — 둘 다 올리면 곡선이 나온다.
+        "key": "dma_sweep",
+        "label": "DMA 스윕",
+        "abbr": "DMA",
+        # 전용 파서가 없다. 프로파일이 읽는다 — 그게 ADR 0005 의 요점이다.
+        "parser_key": None,
+        "description": "동적 기계 분석. 온도·주파수 스윕에서 저장·손실 탄성률을 얻는다.",
+        "sort_order": 20,
+        # 채널은 실파일(`Example FreqTemp2.csv`, TA DMA850)을 열어 맞췄다.
+        # 온도 6단(-40~10 °C)에 주파수 8점(0.1~20 Hz)씩.
+        "channels": [
+            # **필수는 넷이다.** 점탄성 계산이 이것 없이는 성립하지 않는다.
+            # 다만 "모든 곡선" 이 아니라 "파일 전체" 기준이다 — 장비가 표마다
+            # 다른 열을 준다. 실제로 첫 스윕 표에만 `Frequency` 가 있고
+            # 나머지 여섯에는 없다.
+            ("storage_modulus", "저장 탄성률", "stress", "Pa", True),
+            ("loss_modulus", "손실 탄성률", "stress", "Pa", True),
+            ("temperature", "온도", "temperature", "K", True),
+            ("angular_frequency", "각주파수", "angular_frequency", "rad/s", True),
+            ("frequency", "주파수", "frequency", "Hz", False),
+            ("tan_delta", "손실계수", "dimensionless", "1", False),
+            ("oscillation_strain", "진동 변형률", "strain", "1", False),
+            ("oscillation_stress", "진동 응력", "stress", "Pa", False),
+            ("step_time", "구간 시간", "time", "s", False),
+            # 마스터커브 표가 함께 주는 것들. 장비가 계산한 값이라 버리지 않는다.
+            ("phase_angle", "위상각", "angle", "rad", False),
+            ("complex_modulus", "복소 탄성률", "stress", "Pa", False),
+        ],
+        "conditions": [
+            # **기준 온도가 조건이다.** 마스터커브는 어느 온도로 겹쳤느냐에
+            # 따라 다른 곡선이고, 그것을 안 적으면 나중에 알 방법이 없다.
+            # 실파일에는 20 °C 와 30 °C 두 벌이 함께 들어 있었다.
+            ("reference_temperature", "기준 온도", "number", "temperature", "K", None, False),
+            ("preload", "예하중", "number", "force", "N", None, False),
+            ("clamp", "지그", "text", None, None, None, False),
+        ],
+    },
 ]
 
 

@@ -101,6 +101,58 @@ LEGACY_TENSILE_DEFINITION: dict[str, Any] = {
     ],
 }
 
+#: TA DMA850 이 TRIOS 로 내보낸 CSV. 시험 종류는 `dma_sweep`.
+TA_DMA850_KEY = "ta_dma850"
+
+TA_DMA850_DEFINITION: dict[str, Any] = {
+    "match": {
+        # `.csv` 는 어느 장비나 쓴다 — **열 이름이 지문이다.**
+        "extensions": [".csv"],
+        "header_any": ["Angular frequency", "Storage modulus"],
+    },
+    # **버리지도 섞지도 않는다.** 실파일에는 온도 스윕 6벌과 TTS 결과가 함께 온다.
+    # TTS 는 장비가 계산한 것이므로 `derived` 로 적어 둔다 — 처리가 그것을 원본으로
+    # 착각하면 마스터커브에 또 마스터커브를 씌운다.
+    #
+    # 실측: 기준 온도를 바꿔 두 벌(20 °C·30 °C)을 만든 파일이 있었다. 그래서
+    # `^TTS` 로 넓게 잡는다 — `TTS 30 - master curve (30.0 °C)` 까지 걸려야 한다.
+    "tables": {
+        "mode": "all",
+        "include": "^Temperature Sweep|^Strain Sweep|^Frequency Sweep",
+        "derived": "^TTS",
+    },
+    "columns": {
+        "Angular frequency": {"channel": "angular_frequency"},
+        "Frequency": {"channel": "frequency"},
+        "Temperature": {"channel": "temperature"},
+        "Storage modulus": {"channel": "storage_modulus"},
+        "Loss modulus": {"channel": "loss_modulus"},
+        "Tan(delta)": {"channel": "tan_delta", "unit": "1"},
+        "Oscillation strain": {"channel": "oscillation_strain"},
+        "Oscillation stress": {"channel": "oscillation_stress"},
+        "Step time": {"channel": "step_time"},
+        "Phase angle": {"channel": "phase_angle"},
+        "Complex modulus": {"channel": "complex_modulus"},
+    },
+    # 시편 치수는 시험이 아니라 시편의 것이다(ADR 0004). 값과 단위가 한 칸에
+    # 붙어 온다(`50.0 mm`) — `_split_value_unit` 이 가른다.
+    "specimen": {
+        "Length": "specimen_length",
+        "Width": "specimen_width",
+        "Thickness": "specimen_thickness",
+    },
+    "metadata": [
+        "rundate",
+        "Instrument name",
+        "Instrument location",
+        "Operator",
+        "Sample name",
+        "Geometry name",
+        "Procedure name",
+        "proceduresegments",
+    ],
+}
+
 #: (key, label, 시험 종류 key, description, definition)
 BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
     (
@@ -109,6 +161,13 @@ BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
         "tensile",
         "MaterialAppVer2 가 남긴 JSON. 곡선과 함께 그 앱이 계산한 값도 요약으로 들어온다.",
         LEGACY_TENSILE_DEFINITION,
+    ),
+    (
+        TA_DMA850_KEY,
+        "TA DMA850 (TRIOS CSV)",
+        "dma_sweep",
+        "온도·주파수 스윕과 장비가 계산한 TTS 결과가 함께 들어온다.",
+        TA_DMA850_DEFINITION,
     ),
 ]
 
