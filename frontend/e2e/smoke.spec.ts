@@ -20,6 +20,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 const EMAIL = process.env.MNX_ADMIN_EMAIL ?? 'admin'
 const PASSWORD = process.env.MNX_ADMIN_PASSWORD ?? '32167'
@@ -34,6 +35,42 @@ const RUN_ID = `E2E${Date.now().toString().slice(-8)}`
 
 test.describe.configure({ mode: 'serial' })
 
+/**
+ * 어휘 피커에서 값을 고른다. 없으면 새로 만든다.
+ *
+ * **자유 입력이 아니다.** Family·Category·Grade 는 v0.7.0 부터 어휘를 거친다
+ * (ADR 0010). 그때 이 시험이 `getByLabel('Family').fill()` 인 채로 남아 CI 가
+ * 19번 연속 빨갰다 — 화면을 바꿀 때 스모크를 같이 안 고친 것이다.
+ *
+ * 새 DB 에서는 `Metal` 조차 아직 어휘에 없으므로 **고르기와 만들기를 둘 다**
+ * 할 수 있어야 한다. 하나만 하면 두 번째 실행부터(또는 첫 실행에서) 깨진다.
+ */
+async function pickVocabulary(page: Page, label: string, value: string) {
+  // 트리거의 접근성 이름은 `Family: Metal` 이다. 보이는 글자는 고른 값뿐이라
+  // 이름에 칸 이름이 없으면 한 폼의 피커 다섯을 구분할 수가 없다.
+  await page.getByRole('button', { name: new RegExp(`^${label}:`) }).click()
+  await page.getByPlaceholder(`${label} 찾기`).fill(value)
+
+  // **`exact` 로는 못 찾는다.** 목록 항목은 값 뒤에 쓰는 곳 수가 붙어서 접근성
+  // 이름이 `Metal 89` 다. 값만으로 정확히 맞추면 영원히 안 뜨고, 이미 있는 값은
+  // '새로 추가' 도 안 나오므로 90초를 기다리다 죽는다 — 실제로 그렇게 죽었다.
+  //
+  // 앞을 고정한다. 안 하면 트리거(`Family: Metal`)까지 걸려 둘이 잡힌다.
+  // 정규식 이스케이프는 안 한다 — 여기 넣는 값은 영숫자뿐이고, 특수문자가
+  // 들어오는 날에는 이 시험이 바로 깨져서 알려 준다.
+  const existing = page.getByRole('button', { name: new RegExp(`^${value}(\\s|$)`) })
+  const create = page.getByRole('button', { name: /새로 추가/ })
+  // 서버 검색은 debounce 가 있다. 둘 중 하나가 뜰 때까지 기다린다.
+  await existing.or(create).first().waitFor()
+  if (await existing.isVisible()) {
+    await existing.click()
+  } else {
+    await create.click()
+  }
+  // 고르면 팝오버가 닫히고 트리거에 값이 보인다.
+  await expect(page.getByRole('button', { name: `${label}: ${value}` })).toBeVisible()
+}
+
 test('로그인부터 곡선까지', async ({ page }) => {
   await test.step('로그인', async () => {
     await page.goto('/')
@@ -47,12 +84,14 @@ test('로그인부터 곡선까지', async ({ page }) => {
   await test.step('재료 등록', async () => {
     await page.goto('/materials')
     await page.getByRole('button', { name: '재료 등록' }).click()
-    await page.getByLabel('Family').fill('Metal')
-    await page.getByLabel('Category').fill('Steel')
-    await page.getByLabel('Grade').fill(RUN_ID)
+    await pickVocabulary(page, 'Family', 'Metal')
+    await pickVocabulary(page, 'Category', 'Steel')
+    await pickVocabulary(page, 'Grade', RUN_ID)
     await page.getByLabel('스펙 두께 (mm)').fill('1.0')
     await page.getByRole('button', { name: '등록', exact: true }).click()
-    await expect(page.getByRole('dialog')).toBeHidden()
+    // **이름으로 좁힌다.** 어휘 피커의 팝오버도 `role="dialog"` 라, 이름 없이
+    // 찾으면 둘이 잡혀 strict 위반이 난다.
+    await expect(page.getByRole('dialog', { name: '재료 등록' })).toBeHidden()
 
     // **목록을 훑지 않고 찾는다.** 재료는 이름순으로 정렬되고 한 쪽이 50개다.
     // 스모크가 실행마다 재료를 하나씩 남기므로, 훑는 방식은 언젠가 "만들었는데
@@ -70,7 +109,7 @@ test('로그인부터 곡선까지', async ({ page }) => {
     await page.getByRole('link', { name: new RegExp(RUN_ID) }).click()
     await page.getByRole('button', { name: '시료 추가' }).click()
     await page.getByRole('button', { name: '추가', exact: true }).click()
-    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByRole('dialog', { name: '시료 추가' })).toBeHidden()
     // 시편은 일괄 등록이 만들어 준다 — 그 경로가 실무에서 쓰는 길이다.
     await expect(page.getByText(/시편 0|시편 \d/).first()).toBeVisible()
   })

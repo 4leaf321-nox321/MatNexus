@@ -152,7 +152,16 @@ export function OptionPicker({
       <span className="text-muted-foreground text-xs">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button size="sm" variant="outline" className="h-7 gap-1 text-xs">
+          {/* **이름에 어느 칸인지가 들어가야 한다.** 보이는 글자는 고른 값뿐이라,
+              한 폼에 피커가 다섯이면 버튼 다섯 개가 전부 '고르지 않음' 이라는
+              같은 이름을 갖는다. 스크린리더로는 구분이 안 되고, 실제로 스모크
+              시험도 같은 이유로 칸을 못 찾아 깨졌다(v0.7.0 부터 CI 빨강). */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 text-xs"
+            aria-label={`${label}: ${value || anyLabel}`}
+          >
             {/* **고른 값이 트리거에 보인다.** 열어 봐야 아는 필터는 필터가 아니다. */}
             {value || anyLabel}
             <ChevronsUpDown className="size-3 opacity-50" />
