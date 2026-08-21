@@ -81,6 +81,16 @@ class Card:
     """어디서 나온 값인지. **카드 주석으로 들어간다** — 덱만 받은 사람이 되짚을
     수 있어야 한다."""
 
+    prony: tuple[tuple[float, float], ...] = ()
+    """(gᵢ, τᵢ). 점탄성 상대 탄성률과 완화시간 — `matcore.prony` 가 낸 것.
+
+    **이게 있으면 `youngs_modulus` 는 순간 탄성률(E₀)이다.** Abaqus 는
+    `*VISCOELASTIC` 이 있을 때 `*ELASTIC` 을 순간 탄성률로 읽는다. 평형
+    탄성률로 넣으면 재료가 통째로 무르게 계산된다."""
+    prony_reference_temperature: float | None = None
+    """마스터커브를 겹친 기준 온도(K). **이 카드가 유효한 온도다** — 다른
+    온도의 해석에 그대로 쓰면 안 된다는 사실이 덱에 적혀야 한다."""
+
 
 @dataclass(frozen=True)
 class Rendered:
@@ -199,12 +209,21 @@ VALUE_LABELS = {
     "youngs_modulus": "탄성계수",
     "poisson_ratio": "푸아송비",
     "density": "밀도",
+    "prony": "Prony 계수",
 }
 
 
 def _require(card: Card, names: tuple[str, ...], *, solver: str) -> None:
-    """이 솔버가 반드시 있어야 하는 값. **없으면 거부한다.**"""
-    missing = [VALUE_LABELS[name] for name in names if getattr(card, name) is None]
+    """이 솔버가 반드시 있어야 하는 값. **없으면 거부한다.**
+
+    `None` 만 보면 안 된다 — Prony 계수처럼 **빈 튜플이 기본값**인 것은 없는
+    것과 같은데 `None` 이 아니다. 실제로 그래서 검사를 빠져나갔다.
+    """
+    missing = [
+        VALUE_LABELS[name]
+        for name in names
+        if getattr(card, name) is None or getattr(card, name) == ()
+    ]
     if missing:
         raise ExportError(
             f"{solver} 카드에 {', '.join(missing)} 가 필요한데 카드에 없습니다. "
@@ -264,6 +283,97 @@ def render_abaqus(card: Card) -> Rendered:
     lines.append("*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT")
     # **응력이 먼저, 소성변형률이 나중이다.** OpenRadioss 와 순서가 반대다.
     lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+def render_abaqus_viscoelastic(card: Card) -> Rendered:
+    """Abaqus `*VISCOELASTIC, TIME=PRONY` 덱. 선형 점탄성.
+
+    ## `*ELASTIC` 이 순간 탄성률이다
+
+    Abaqus 는 `*VISCOELASTIC` 이 붙어 있으면 `*ELASTIC` 을 **순간(t=0) 탄성률**로
+    읽는다. 평형 탄성률을 넣으면 재료가 통째로 무르게 계산되는데, 덱은 멀쩡히
+    돌고 결과도 그럴듯하다.
+
+    ## 체적 완화를 0 으로 둔다 — 안 잰 값이다
+
+    Prony 행은 `g, k, τ` 셋이다. `g` 는 전단, `k` 는 체적 상대 탄성률인데
+    **DMA 는 체적을 재지 않는다.** 지어내지 않고 0 으로 둔다 — 체적은 순수
+    탄성이라는 뜻이고, 흔히 쓰는 가정이다. 그 사실을 덱 주석에 적는다.
+
+    그리고 우리가 잰 것은 인장·굽힘 `E` 인데 Abaqus 의 `g` 는 **전단** 비율이다.
+    같게 쓰는 것은 **푸아송비가 시간에 따라 안 변한다**는 가정이고, 이것도 흔한
+    가정이지만 가정은 가정이라 적는다.
+
+    ## 온도가 하나뿐이다
+
+    마스터커브는 기준 온도 하나에서만 유효하다. 다른 온도로 해석하려면
+    `*TRS`(WLF 이동)를 함께 줘야 하는데, 그건 이동인자를 카드에 싣는 별개의
+    일이다. 지금은 **유효 온도를 주석에 적고 끝낸다** — 조용히 온도 의존을
+    없는 셈 치는 것보다 낫다.
+    """
+    if not card.prony:
+        raise ExportError(
+            "점탄성 카드인데 Prony 계수가 없습니다. 마스터커브를 만들고 "
+            "Prony 를 맞춘 뒤에 내보내세요."
+        )
+    if card.youngs_modulus is None or card.poisson_ratio is None:
+        raise ExportError("순간 탄성률과 푸아송비가 있어야 *ELASTIC 을 쓸 수 있습니다.")
+
+    notes: list[str] = []
+    lines = _header(card, "**")
+    lines.append("** Consistent units: kg, m, s, Pa")
+    lines.append("** ELASTIC = instantaneous (t=0) moduli — Abaqus reads it that way")
+    lines.append("**          when *VISCOELASTIC is present.")
+    if card.prony_reference_temperature is not None:
+        celsius = card.prony_reference_temperature - 273.15
+        lines.append(
+            f"** Valid at {card.prony_reference_temperature:.2f} K ({celsius:.2f} C) only —"
+        )
+        lines.append(
+            "**   master curve reference temperature. Add *TRS for other temperatures."
+        )
+        notes.append(
+            f"기준 온도 {celsius:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다 — "
+            f"다른 온도로 해석하려면 *TRS 가 따로 필요합니다."
+        )
+    else:
+        notes.append(
+            "기준 온도가 카드에 없어 덱에 적지 못했습니다. 이 카드가 어느 온도의 "
+            "것인지 덱만으로는 알 수 없습니다."
+        )
+    lines.append(
+        "** Bulk relaxation (k) not measured by DMA — emitted as zero (elastic bulk)."
+    )
+    lines.append("** Shear ratios taken from tensile/flexural E — assumes constant Poisson.")
+
+    if card.density is None:
+        notes.append("밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다.")
+        lines.append(
+            "** DENSITY: 측정값이 없어 비웠습니다. "
+            "동적 해석에는 이 덱이 그대로 쓰이지 못합니다."
+        )
+
+    lines.append(f"*MATERIAL, NAME={card.name}")
+    if card.density is not None:
+        lines.append("*DENSITY")
+        lines.append(f"{_free(card.density)},")
+    lines.append("*ELASTIC, TYPE=ISOTROPIC")
+    lines.append(f"{_free(card.youngs_modulus)}, {_free(card.poisson_ratio)}")
+    lines.append("*VISCOELASTIC, TIME=PRONY, TYPE=ISOTROPIC")
+    # 행 하나가 g, k, τ. 순서가 뒤바뀌면 솔버가 오류 없이 다른 재료를 만든다.
+    lines.extend(f"{_free(g)}, 0.0, {_free(tau)}" for g, tau in card.prony)
+
+    total = sum(g for g, _ in card.prony)
+    if total >= 1.0:
+        raise ExportError(
+            f"Prony 상대 탄성률의 합이 {total:.4f} 로 1 이상입니다. "
+            f"평형 탄성률이 0 이하라는 뜻이라 Abaqus 가 거부합니다."
+        )
+    notes.append(
+        f"Prony {len(card.prony)}항, 상대 탄성률 합 {total:.4f} "
+        f"(평형 탄성률은 순간의 {1 - total:.4f} 배)."
+    )
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
@@ -384,6 +494,17 @@ FORMATS: dict[str, Format] = {
         keywords=("/MAT/LAW36", "/FUNCT/", "/UNIT/1", "/END"),
         # LAW36 은 RHO_I 가 자리 있는 필드다. 비울 수 없다.
         requires=("youngs_modulus", "poisson_ratio", "density"),
+    ),
+    "abaqus_viscoelastic": Format(
+        key="abaqus_viscoelastic",
+        label="Abaqus (점탄성)",
+        extension="inp",
+        describe="*ELASTIC + *VISCOELASTIC, TIME=PRONY — 선형 점탄성. 기준 온도 하나에서 유효.",
+        render=render_abaqus_viscoelastic,
+        keywords=("*MATERIAL", "*ELASTIC", "*VISCOELASTIC"),
+        # **OpenRadioss 는 없다.** LAW62 는 고무 초탄성(Ogden)+Prony 경로라
+        # 선형 점탄성과 다른 모형이다. 65 도 같은 이유로 Abaqus 만 낸다.
+        requires=("youngs_modulus", "poisson_ratio", "prony"),
     ),
     "json": Format(
         key="json",

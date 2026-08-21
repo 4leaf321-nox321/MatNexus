@@ -191,8 +191,15 @@ class Test이름:
 class Test태도:
     def test_쓴_뒤에_다시_읽는다(self) -> None:
         """키워드가 빠진 파일은 솔버가 오류 없이 무시하기도 한다 — 그러면 해석은
-        도는데 재료가 안 들어간 채로 돈다."""
+        도는데 재료가 안 들어간 채로 돈다.
+
+        **형식마다 받는 물성 모형이 다르다.** 처음에는 모든 형식에 이 탄소성
+        카드를 넣었는데, 점탄성 형식이 붙으면서 그 전제가 깨졌다(Prony 계수가
+        없다). 카드가 감당하는 형식만 돈다 — 나머지는 `Test거절` 이 본다.
+        """
         for key, target in export.FORMATS.items():
+            if "prony" in target.requires:
+                continue
             text = export.render(key, CARD).text
             for word in target.keywords:
                 assert word in text
