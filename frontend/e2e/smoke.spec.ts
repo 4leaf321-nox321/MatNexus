@@ -79,6 +79,14 @@ test('로그인부터 곡선까지', async ({ page }) => {
     await page.getByRole('button', { name: '로그인' }).click()
     // 껍데기가 떴다는 것은 인증·라우팅·토큰 보관이 다 통했다는 뜻이다.
     await expect(page.getByRole('banner')).toBeVisible()
+
+    // **첫 화면이 무엇을 하는 곳인지 말해야 한다.** 여기가 「구현 예정: Phase 1」
+    // 공사 표지판이던 동안 "어느 화면을 어떻게 써야 하는지 모르겠다" 는 말이
+    // 나왔다. 주소로 열지 않고 **로그인해서 도착한 자리**를 본다.
+    await expect(page.getByText('올린다')).toBeVisible()
+    await expect(page.getByText('처리한다')).toBeVisible()
+    await expect(page.getByText('물성을 본다')).toBeVisible()
+    await expect(page.getByText('카드를 낸다')).toBeVisible()
   })
 
   await test.step('재료 등록', async () => {

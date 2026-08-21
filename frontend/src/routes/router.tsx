@@ -18,6 +18,7 @@ import MaterialsPage from '@/modules/materials/MaterialsPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
 import TestRunsPage from '@/modules/tests/TestRunsPage'
+import { useAuth } from '@/shared/auth/AuthContext'
 import { ProtectedRoute } from '@/shared/auth/ProtectedRoute'
 import { Placeholder } from '@/shared/components/Placeholder'
 import { AppShell } from '@/shared/layout/AppShell'
@@ -56,11 +57,26 @@ const VocabularyAdminPage = lazy(
   () => import('@/modules/vocabulary/VocabularyAdminPage')
 )
 const VocPage = lazy(() => import('@/modules/voc/VocPage'))
+const WorkspaceHomePage = lazy(() => import('@/modules/workspaces/WorkspaceHomePage'))
 const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
 
 const stub = (title: string, phase: string, description?: string) => ({
   element: <Placeholder title={title} phase={phase} description={description} />,
 })
+
+/**
+ * 첫 화면 — **내 부서로 보낸다.**
+ *
+ * 여태 `/w/default` 로 고정이었다. 서버는 `home_workspace_slug` 를 이미 주고
+ * 있었는데 화면이 안 썼다 — 그래서 개발본부 사람이 로그인하면 사이드바의
+ * '시험 데이터' 가 `default` 부서를 가리켰고, 목록이 비어 보였다. 자기 부서
+ * 데이터를 못 찾는 것과 구별이 안 된다.
+ */
+function HomeRedirect() {
+  const { user } = useAuth()
+  const slug = user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
+  return <Navigate to={`/w/${slug}`} replace />
+}
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -73,7 +89,7 @@ export const router = createBrowserRouter([
         path: '/',
         element: <AppShell />,
         children: [
-          { index: true, element: <Navigate to={`/w/${DEFAULT_WORKSPACE}`} replace /> },
+          { index: true, element: <HomeRedirect /> },
 
           // 카탈로그 (전사)
           { path: 'materials', element: <MaterialsPage /> },
@@ -118,7 +134,7 @@ export const router = createBrowserRouter([
           {
             path: 'w/:slug',
             children: [
-              { index: true, ...stub('부서 홈', 'Phase 1', '최근 등록·처리 대기·내 재료.') },
+              { index: true, element: <WorkspaceHomePage /> },
               { path: 'tests', element: <TestRunsPage /> },
               { path: 'tests/upload', element: <BatchUploadPage /> },
               {

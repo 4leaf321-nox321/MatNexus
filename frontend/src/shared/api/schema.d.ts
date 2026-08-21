@@ -1237,6 +1237,10 @@ export interface paths {
          *
          *     `workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를
          *     넣어도 원래 볼 수 있던 것 안에서만 걸러진다.
+         *
+         *     `adopted=false` 는 **"올렸는데 아직 아무것도 안 한 것"** 을 세는 자리다.
+         *     부서 홈이 "처리 대기 N건" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이
+         *     세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.
          */
         get: operations["list_runs_api_test_runs_get"];
         put?: never;
@@ -7584,6 +7588,8 @@ export interface operations {
                 specimen_id?: string | null;
                 material_id?: string | null;
                 status?: string | null;
+                /** @description 채택된 처리 결과가 있는가 — 없는 것만 보려면 false */
+                adopted?: boolean | null;
                 limit?: number | null;
                 offset?: number;
             };

@@ -57,6 +57,11 @@ export interface RunQuery extends Record<string, unknown> {
   specimen_id?: string
   material_id?: string
   status?: 'uploaded' | 'parsing' | 'parsed' | 'failed'
+  /**
+   * 채택된 처리 결과가 있는가. **"올렸는데 아직 아무것도 안 한 것"** 을 세려면
+   * `false`. 목록을 받아 화면이 세면 상한에 걸린 순간 숫자가 조용히 틀린다.
+   */
+  adopted?: boolean
   limit?: number
   offset?: number
 }

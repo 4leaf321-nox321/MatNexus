@@ -9,6 +9,7 @@ import { Suspense, useState } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 
 import { NoticePopup } from '@/modules/notices/NoticePopup'
+import { useAuth } from '@/shared/auth/AuthContext'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Header } from '@/shared/layout/Header'
 import { Sidebar } from '@/shared/layout/Sidebar'
@@ -28,7 +29,12 @@ function PageSkeleton() {
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const { slug } = useParams<{ slug?: string }>()
-  const workspaceSlug = slug ?? DEFAULT_WORKSPACE
+  const { user } = useAuth()
+  // 부서 스코프가 아닌 화면(재료·알림·관리)에서도 사이드바의 '시험 데이터'·
+  // '워크벤치' 는 **어느 부서인지** 정해야 한다. `default` 로 두면 자기 부서가
+  // 아닌 곳을 가리켜 목록이 비어 보이고, 데이터가 없는 것과 구별이 안 된다.
+  const workspaceSlug =
+    slug ?? user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
 
   return (
     <div className="flex h-svh overflow-hidden">

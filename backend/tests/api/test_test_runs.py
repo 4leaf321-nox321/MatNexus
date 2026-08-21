@@ -305,6 +305,60 @@ class TestWorkspaceScope:
         assert response.status_code == 404
 
 
+class TestAdoptedFilter:
+    """**"올렸는데 아직 아무것도 안 한 것"** 을 서버가 센다.
+
+    부서 홈이 "처리 대기 N건" 을 말한다. 목록을 받아 화면이 세면 상한(`limit`)에
+    걸린 순간 숫자가 조용히 틀린다 — 100건까지만 세고 101건째부터는 없는 셈이
+    되는데, 화면에는 그냥 "100" 이라고 적힌다.
+    """
+
+    def test_채택_여부로_가른다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        runs = [_upload(client, admin_headers, specimen["id"]).json() for _ in range(2)]
+        assert services.parse_run(db, uuid.UUID(runs[0]["id"])) == "parsed"
+        stored = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": runs[0]["id"],
+                "steps": [
+                    {
+                        "plugin": "tensile.engineering",
+                        "options": {"gauge_length": 0.05, "area": 12.12e-6},
+                    }
+                ],
+            },
+            headers=admin_headers,
+        ).json()
+        client.post(f"/api/processing/results/{stored['id']}/adopt", headers=admin_headers)
+
+        def total(query: str) -> int:
+            body = client.get(f"/api/test-runs{query}", headers=admin_headers).json()
+            return int(body["total"])
+
+        assert total("") == 2
+        assert total("?adopted=true") == 1
+        assert total("?adopted=false") == 1
+
+    def test_안_주면_안_거른다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**빠뜨린 값이 필터가 되면 안 된다.** 기존 화면들이 이 인자를 안 준다."""
+        _upload(client, admin_headers, specimen["id"])
+        body = client.get("/api/test-runs", headers=admin_headers).json()
+        assert body["total"] == 1
+
+
 class TestParsing:
     def _parse(self, db: Session, run_id: str) -> TestRun:
         assert services.parse_run(db, uuid.UUID(run_id)) == "parsed"

@@ -704,6 +704,9 @@ def list_runs(
     specimen_id: uuid.UUID | None = None,
     material_id: uuid.UUID | None = None,
     status: str | None = Query(default=None, pattern="^(uploaded|parsing|parsed|failed)$"),
+    adopted: bool | None = Query(
+        default=None, description="채택된 처리 결과가 있는가 — 없는 것만 보려면 false"
+    ),
     limit: int | None = Query(default=None, le=1000),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(current_user),
@@ -718,6 +721,10 @@ def list_runs(
 
     `workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를
     넣어도 원래 볼 수 있던 것 안에서만 걸러진다.
+
+    `adopted=false` 는 **"올렸는데 아직 아무것도 안 한 것"** 을 세는 자리다.
+    부서 홈이 "처리 대기 N건" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이
+    세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.
     """
     query = services.visible_runs(db, user)
     if workspace:
@@ -735,6 +742,12 @@ def list_runs(
         )
     if status:
         query = query.where(TestRun.status == status)
+    if adopted is not None:
+        query = query.where(
+            TestRun.adopted_result_id.is_not(None)
+            if adopted
+            else TestRun.adopted_result_id.is_(None)
+        )
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
