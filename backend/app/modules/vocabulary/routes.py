@@ -14,9 +14,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.tests.models import TestSpecimenField, TestType
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import (
+    SpecimenField,
     Vocabulary,
     VocabularyAlias,
     VocabularyDriftCheck,
@@ -39,7 +39,6 @@ from app.modules.vocabulary.schemas import (
     TermAliasCreateRequest,
     TermAliasOut,
     TermCreateRequest,
-    TermKindOut,
     TermOut,
     TermUpdateRequest,
     VocabularyOut,
@@ -47,7 +46,6 @@ from app.modules.vocabulary.schemas import (
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import MAX_LIMIT, Page, clamp_limit
-from app.shared.permissions import require_owner_edit
 
 router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 
@@ -56,7 +54,7 @@ router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 SEARCH_LIMIT = 100
 
 
-def _term_out(db: Session, item: VocabularyTerm) -> TermOut:
+def _term_out(db: Session, item: VocabularyTerm, field_count: int | None = None) -> TermOut:
     """값 하나를 응답 모양으로. **한 곳에서만 만든다.**
 
     네 군데서 손으로 만들고 있었는데, 필드를 하나 더하니 그중 하나를 빠뜨렸다.
@@ -69,18 +67,30 @@ def _term_out(db: Session, item: VocabularyTerm) -> TermOut:
         parent_value=parent.value if parent else None,
         usage_count=item.usage_count,
         status=item.status,
-        kind=item.kind,
-        # **키가 아니라 이름을 보여 준다.** `dma_sweep` 은 사람이 읽는 말이 아니다.
-        kind_label=_kind_label(db, item.kind),
         attributes=dict(item.attributes or {}),
+        # **이 값이 직접 선언한 칸 수.** 분류 축에서 "이 분류는 칸이 몇 개" 를
+        # 말한다 — 0 이면 그 분류의 규격은 치수를 하나도 못 갖는다.
+        field_count=field_count
+        if field_count is not None
+        else db.scalar(
+            select(func.count())
+            .select_from(SpecimenField)
+            .where(SpecimenField.category_term_id == item.id)
+        )
+        or 0,
+        extra_fields=[
+            SpecimenFieldOut(
+                key=str(field.get("key", "")),
+                label=str(field.get("label", "")),
+                dimension=str(field.get("dimension", "length")),
+                si_unit=str(field.get("si_unit", "m")),
+                is_required=bool(field.get("is_required", False)),
+                help=field.get("help"),
+                inherited=False,
+            )
+            for field in (item.extra_fields or [])
+        ],
     )
-
-
-def _kind_label(db: Session, kind: str | None) -> str | None:
-    if not kind:
-        return None
-    found = db.scalar(select(TestType).where(TestType.key == kind))
-    return found.label if found else kind
 
 
 @router.get("", response_model=list[VocabularyOut])
@@ -188,47 +198,22 @@ def repair_drift(
     return _report(db, row)
 
 
-@router.get("/{slug}/kinds", response_model=list[TermKindOut])
-def list_kinds(
+@router.get("/{slug}/terms/{term_id}/fields", response_model=list[SpecimenFieldOut])
+def list_term_fields(
     slug: str,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> list[TermKindOut]:
-    """이 축의 값이 고를 수 있는 종류. **치수 칸을 선언한 시험 종류만.**
-
-    선언하지 않은 종류를 고르게 두면 칸이 하나도 없는 규격이 만들어지고, 화면은
-    그걸 고장으로 보여 준다.
-
-    이 목록을 기준정보 API 가 내는 이유: 화면이 시험 모듈을 따로 부르지 않아도
-    되게. 규격의 스키마가 시험 종류에서 온다는 것은 **서버 쪽 사정**이다.
-    """
-    vocabulary = services.get_vocabulary(db, slug)
-    if vocabulary.attribute_source != "test_type":
-        return []
-    # **`DISTINCT` 에는 정렬 열도 select 에 있어야 한다**(Postgres 가 거절한다).
-    # 종류당 칸이 여럿이라 조인하면 줄이 늘어나므로, 중복은 `IN` 으로 없앤다 —
-    # 정렬 열을 결과에 끌고 들어오는 것보다 이 편이 읽기 쉽다.
-    rows = db.execute(
-        select(TestType.key, TestType.label)
-        .where(TestType.id.in_(select(TestSpecimenField.test_type_id).distinct()))
-        .order_by(TestType.sort_order, TestType.label)
-    )
-    return [TermKindOut(key=key, label=label) for key, label in rows]
-
-
-@router.get("/{slug}/specimen-fields", response_model=list[SpecimenFieldOut])
-def list_specimen_fields(
-    slug: str,
-    kind: str = Query(description="시험 종류 키"),
+    term_id: uuid.UUID,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[SpecimenFieldOut]:
-    """이 시험 종류의 규격이 갖는 치수 칸. **화면이 이걸로 입력 폼을 그린다.**
+    """이 값이 가질 수 있는 치수 칸 — **분류의 기본 + 이 값의 추가.**
 
-    목록을 프론트에 적으면 시험 종류를 추가할 때 두 곳을 고쳐야 하고, 그러면 한
-    곳을 빠뜨린다 — 처리 단계의 `ParamSpec` 과 같은 자리다(D7).
+    화면이 이 응답만으로 입력 폼을 그린다. 목록을 프론트에 적으면 분류를
+    추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다(D7).
     """
     vocabulary = services.get_vocabulary(db, slug)
+    term = db.get(VocabularyTerm, term_id)
+    if term is None or term.vocabulary_id != vocabulary.id:
+        raise NotFound("MNX-VOCABULARY-0004", "값을 찾을 수 없습니다.")
     return [
         SpecimenFieldOut(
             key=field.key,
@@ -237,56 +222,36 @@ def list_specimen_fields(
             si_unit=field.si_unit,
             is_required=field.is_required,
             help=field.help,
-            sort_order=field.sort_order,
+            inherited=field.inherited,
         )
-        for field in services.attribute_fields(db, vocabulary, kind)
+        for field in services.attribute_fields(db, vocabulary, term)
     ]
 
 
-@router.put("/{slug}/specimen-fields", response_model=list[SpecimenFieldOut])
-def save_specimen_fields(
+@router.put("/{slug}/terms/{term_id}/fields", response_model=list[SpecimenFieldOut])
+def save_category_fields(
     slug: str,
+    term_id: uuid.UUID,
     payload: SpecimenFieldsSaveRequest,
-    kind: str = Query(description="시험 종류 키"),
-    user: User = Depends(current_user),
+    user: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ) -> list[SpecimenFieldOut]:
-    """이 시험 종류의 규격이 갖는 치수 칸을 정한다. **통째로 바꾼다.**
+    """**시편 분류**가 갖는 기본 칸을 정한다. 통째로 바꾼다.
 
-    ## 왜 기준정보에서 고치는가
-
-    칸은 시험 종류의 것이지만(`test_specimen_fields`), **그것을 고치고 싶어지는
-    자리는 규격을 적다가**다 — "ASTM E8 에 그립부 길이도 적고 싶은데 칸이
-    없네" 는 규격 화면에서 나온다. 시험 종류 관리로 보내면 두 화면을 오가야 한다.
-
-    권한은 **시험 종류를 고치는 것과 같다** — 전역 종류는 시스템 관리자만,
-    부서 종류는 그 부서 관리자도. 칸을 바꾸는 것은 그 종류를 쓰는 모든 규격에
-    영향을 준다.
+    이 분류에 속한 규격 **전부**가 이 칸을 갖는다. 그래서 최소로 둔다 — 그
+    분류의 규격이면 예외 없이 갖는 것만. 인장 환봉에는 폭·두께가 없고 DMA
+    인장 필름에는 지지 간격이 없다. 그런 것은 규격이 자기 칸으로 더한다
+    (`PATCH .../terms/{id}` 의 `extra_fields`).
 
     ## 이미 쓰이는 키를 지우면
 
     그 키로 저장된 치수는 **스키마 밖이 되어 화면에서 사라진다.** 지우지는
-    않는다(값은 JSONB 에 그대로 남는다) — 칸을 되살리면 다시 보인다. 지워
-    버리면 되살릴 방법이 없다.
+    않는다 — 칸을 되살리면 다시 보인다. 지워 버리면 되살릴 방법이 없다.
     """
     vocabulary = services.get_vocabulary(db, slug)
-    if vocabulary.attribute_source != "test_type":
-        raise AppError(
-            "MNX-VOCABULARY-0014",
-            f"'{vocabulary.label}' 축의 값은 치수를 갖지 않습니다.",
-            status=422,
-        )
-
-    test_type = db.scalar(select(TestType).where(TestType.key == kind))
-    if test_type is None:
-        raise NotFound("MNX-VOCABULARY-0009", f"'{kind}' 는 등록된 시험 종류가 아닙니다.")
-    require_owner_edit(
-        db,
-        user,
-        test_type.owner_workspace_id,
-        what="시험 종류",
-        code="MNX-VOCABULARY-0015",
-    )
+    term = db.get(VocabularyTerm, term_id)
+    if term is None or term.vocabulary_id != vocabulary.id:
+        raise NotFound("MNX-VOCABULARY-0004", "값을 찾을 수 없습니다.")
 
     keys = [item.key for item in payload.fields]
     if len(keys) != len(set(keys)):
@@ -295,15 +260,14 @@ def save_specimen_fields(
     existing = {
         row.key: row
         for row in db.scalars(
-            select(TestSpecimenField).where(TestSpecimenField.test_type_id == test_type.id)
+            select(SpecimenField).where(SpecimenField.category_term_id == term.id)
         )
     }
-    # **있던 것은 고쳐 쓴다.** 지우고 새로 만들면 id 가 바뀌는데, 그 id 를
-    # 가리키는 것이 아직 없어도 굳이 갈아 끼울 이유가 없다.
+    # **있던 것은 고쳐 쓴다.** 지우고 새로 만들면 id 가 바뀐다.
     for order, item in enumerate(payload.fields):
         row = existing.pop(item.key, None)
         if row is None:
-            row = TestSpecimenField(test_type_id=test_type.id, key=item.key)
+            row = SpecimenField(category_term_id=term.id, key=item.key)
             db.add(row)
         row.label = item.label
         row.dimension = item.dimension
@@ -323,10 +287,25 @@ def save_specimen_fields(
             si_unit=field.si_unit,
             is_required=field.is_required,
             help=field.help,
-            sort_order=field.sort_order,
+            inherited=True,
         )
-        for field in services.attribute_fields(db, vocabulary, kind)
+        for field in services.category_fields(db, term.id)
     ]
+
+
+def _terms_out(db: Session, items: list[VocabularyTerm]) -> list[TermOut]:
+    """목록용. **칸 수를 한 번에 센다** — 줄마다 세면 N+1 이다."""
+    if not items:
+        return []
+    counts = {
+        term_id: count
+        for term_id, count in db.execute(
+            select(SpecimenField.category_term_id, func.count())
+            .where(SpecimenField.category_term_id.in_([item.id for item in items]))
+            .group_by(SpecimenField.category_term_id)
+        )
+    }
+    return [_term_out(db, item, counts.get(item.id, 0)) for item in items]
 
 
 @router.get("/{slug}/terms", response_model=Page[TermOut])
@@ -364,7 +343,7 @@ def search_terms(
         parent=parent,
     )
     return Page(
-        items=[_term_out(db, item) for item in found],
+        items=_terms_out(db, found),
         total=services.count(
             db, vocabulary, q=q, include_hidden=include_hidden, parent=parent
         ),
@@ -399,14 +378,14 @@ def create_term(
         # `clean` 이 빈 값으로 만든 경우 — 공백만 친 것이다.
         raise AppError("MNX-VOCABULARY-0003", "값이 비어 있습니다.", status=422)
 
-    # **속성은 새로 만들 때만 받는다.** 이미 있는 값을 골랐을 때 조용히
-    # 덮어쓰면, 피커에서 이름만 친 사람이 남의 규격 치수를 지우게 된다.
-    if term.kind is None and not term.attributes:
-        services.check_kind(db, vocabulary, payload.kind)
-        term.kind = payload.kind
-        term.attributes = services.check_attributes(
-            db, vocabulary, payload.kind, payload.attributes
-        )
+    # **속성은 새로 만들 때, 그것도 실제로 보냈을 때만 받는다.**
+    #
+    # 이미 있는 값을 골랐을 때 조용히 덮어쓰면 피커에서 이름만 친 사람이 남의
+    # 규격 치수를 지운다. 그리고 **안 보낸 것을 검사하면 안 된다** — 치수를
+    # 모른 채 규격 이름부터 적는 일이 실제로 있고, 그때 필수 칸을 요구하면
+    # 피커가 막힌다.
+    if payload.attributes and not term.attributes:
+        term.attributes = services.check_attributes(db, vocabulary, term, payload.attributes)
     db.commit()
     db.refresh(term)
     return _term_out(db, term)
@@ -458,18 +437,15 @@ def update_term(
             )
         term.parent_term_id = parent.id if parent else None
 
-    # 종류와 속성은 **함께 본다.** 종류를 바꾸면 스키마가 바뀌므로, 예전 종류의
-    # 칸으로 채워진 속성은 그 자리에서 거절되어야 한다.
-    kind = term.kind
-    if "kind" in data:
-        kind = data["kind"] or None
-        services.check_kind(db, vocabulary, kind)
-    if "attributes" in data or ("kind" in data and kind != term.kind):
+    # 분류(상위 값)를 바꾸면 기본 칸이 바뀐다. 예전 분류의 칸으로 채워진 값은
+    # 그 자리에서 거절되어야 한다 — 남겨 두면 화면이 못 보여 주는 유령이 된다.
+    if "extra_fields" in data:
+        term.extra_fields = services.check_extra_fields(db, term, data["extra_fields"])
+    if "attributes" in data or "parent_value" in data:
         attributes = data.get("attributes")
         if attributes is None:
-            attributes = {} if kind != term.kind else dict(term.attributes or {})
-        term.attributes = services.check_attributes(db, vocabulary, kind, attributes)
-    term.kind = kind
+            attributes = dict(term.attributes or {})
+        term.attributes = services.check_attributes(db, vocabulary, term, attributes)
 
     db.commit()
     db.refresh(term)
@@ -492,7 +468,7 @@ def recount_terms(
     services.recount(db, vocabulary)
     db.commit()
     found = services.search(db, vocabulary, q=None, limit=MAX_LIMIT, include_hidden=True)
-    return [_term_out(db, item) for item in found]
+    return _terms_out(db, found)
 
 
 def _term_or_404(db: Session, vocabulary: Vocabulary, term_id: uuid.UUID) -> VocabularyTerm:

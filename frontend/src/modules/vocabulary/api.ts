@@ -22,7 +22,6 @@ export type Alias = components['schemas']['TermAliasOut']
  */
 export type SpecimenField = components['schemas']['SpecimenFieldOut']
 /** 값이 고를 수 있는 종류. 키가 아니라 이름을 함께 준다. */
-export type TermKind = components['schemas']['TermKindOut']
 export type SpecimenFieldSave = components['schemas']['SpecimenFieldSaveRequest']
 export type BulkResult = components['schemas']['BulkTermOut']
 export type DeleteResult = components['schemas']['BulkDeleteOut']
@@ -41,32 +40,21 @@ export const vocabularyApi = {
   list: () => api.get<Vocabulary[]>('/vocabularies'),
 
   /**
-   * 이 시험 종류의 규격이 갖는 치수 칸. **화면이 이걸로 입력 폼을 그린다.**
+   * 이 값이 가질 수 있는 치수 칸 — **분류의 기본 + 이 값의 추가.**
    *
-   * 인장 규격에는 어깨 반경이 있고 DMA 규격에는 지지 간격이 있다 — 하나의
-   * 고정된 칸 목록으로 둘을 담으면 절반이 늘 비고, 그 빈 칸이 "안 쟀다" 인지
-   * "이 규격에 없는 값" 인지 구별되지 않는다.
+   * 인장 평판은 폭·두께를 갖고 환봉은 직경을 갖는다. 목록을 화면에 적으면 분류를
+   * 추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다(D7).
    */
-  /** 이 축의 값이 고를 수 있는 종류. **치수 칸을 선언한 시험 종류만.** */
-  kinds: (slug: string) => api.get<TermKind[]>(`/vocabularies/${slug}/kinds`),
+  termFields: (slug: string, termId: string) =>
+    api.get<SpecimenField[]>(`/vocabularies/${slug}/terms/${termId}/fields`),
 
   /**
-   * 그 종류의 치수 칸을 **통째로** 바꾼다. 순서가 곧 화면의 순서다.
+   * **시편 분류**의 기본 칸을 통째로 바꾼다. 이 분류의 규격 전부가 따라 바뀐다.
    *
-   * 권한은 시험 종류를 고치는 것과 같다 — 전역 종류는 시스템 관리자만, 부서
-   * 종류는 그 부서 관리자도. 칸을 바꾸면 그 종류를 쓰는 **모든 규격**이 따라
-   * 바뀐다.
+   * 규격만의 칸은 값 수정(`update`)의 `extra_fields` 로 보낸다.
    */
-  saveSpecimenFields: (slug: string, kind: string, fields: SpecimenFieldSave[]) =>
-    api.put<SpecimenField[]>(
-      `/vocabularies/${slug}/specimen-fields?kind=${encodeURIComponent(kind)}`,
-      { fields }
-    ),
-
-  specimenFields: (slug: string, kind: string) =>
-    api.get<SpecimenField[]>(
-      `/vocabularies/${slug}/specimen-fields?kind=${encodeURIComponent(kind)}`
-    ),
+  saveCategoryFields: (slug: string, termId: string, fields: SpecimenFieldSave[]) =>
+    api.put<SpecimenField[]>(`/vocabularies/${slug}/terms/${termId}/fields`, { fields }),
 
   /**
    * 문자열 컬럼과 기준정보가 어긋난 행. **0 이어야 한다.**
@@ -197,17 +185,11 @@ export const vocabularyApi = {
    * 피커는 사람이 엔터를 치는 순간 낙관적으로 보낸다. 그때 오류를 그리게 하면,
    * 실제로 일어난 일이 "이미 있는 값을 골랐다" 뿐인데도 화면이 멈춘다.
    */
-  create: (
-    slug: string,
-    value: string,
-    parentValue?: string,
-    /** 속성을 갖는 축(시편 규격)에서만. 값은 **SI 로 보낸다.** */
-    extra?: { kind?: string | null; attributes?: Record<string, number> }
-  ) =>
+  create: (slug: string, value: string, parentValue?: string) =>
     api.post<Term>(`/vocabularies/${slug}/terms`, {
       value,
       // 새 값이 부모를 물려받는다 — 계층이 쓰면서 저절로 만들어진다.
+      // 시편 규격이면 그 부모가 곧 **시편 분류**이고, 분류가 기본 치수 칸을 준다.
       parent_value: parentValue ?? null,
-      ...(extra ?? {}),
     }),
 }

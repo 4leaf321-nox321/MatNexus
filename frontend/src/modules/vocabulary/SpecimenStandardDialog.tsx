@@ -5,14 +5,18 @@
  * 어디에도 안 적어 두면 사람이 규격서를 펴 놓고 시편마다 옮겨 적고, 그러다 한
  * 건이 틀리면 응력이 통째로 어긋나는데 숫자는 그럴듯해 보인다.
  *
- * ## 칸을 여기 적지 않는다
+ * ## 칸이 두 층이다
  *
- * **시험 종류가 자기 규격의 칸을 선언한다.** 인장 규격에는 어깨 반경이 있고
- * DMA 규격에는 지지 간격이 있다 — 하나의 고정된 칸 목록으로 둘을 담으면 절반이
- * 늘 비고, 그 빈 칸이 "안 쟀다" 인지 "이 규격에 없는 값" 인지 구별되지 않는다.
+ *   분류의 기본 칸   그 분류의 규격이면 **예외 없이** 갖는 것
+ *   이 규격의 추가 칸  이 규격만 갖는 것
  *
- * 그래서 종류를 고르면 서버에 칸을 물어서 폼을 그린다. 목록을 화면에 적으면
- * 시험 종류를 추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다(D7).
+ * **같은 시험 안에서도 시편에 따라 칸이 갈리기 때문이다.** 인장 평판은 폭·두께를
+ * 갖고 환봉은 직경을 갖는다. DMA 3점 굽힘에는 지지 간격이 있고 인장 필름에는
+ * 없다(실측: DMA 실파일 172개 전부에 장비가 적은 `Geometry name` 이 있고 155개가
+ * 3점 굽힘이었다).
+ *
+ * 분류의 기본 칸으로만 담으면 절반이 늘 비고, 그 빈 칸이 "안 쟀다" 인지 "이
+ * 규격에 없는 값" 인지 구별되지 않는다.
  *
  * ## 저장은 SI, 화면은 mm
  *
@@ -58,26 +62,14 @@ function toSi(text: string, field: SpecimenField): number | null {
 }
 
 export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) {
-  const kinds = useResource(() => vocabularyApi.kinds(slug), [slug])
-  const [kind, setKind] = useState<string | null>(term.kind ?? null)
+  const fields = useResource(() => vocabularyApi.termFields(slug, term.id), [slug, term.id])
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  /** 칸 자체를 고치러 들어간 상태. **고치고 싶어지는 자리가 여기다.** */
+  /** 이 규격만의 칸을 고치러 들어간 상태. **고치고 싶어지는 자리가 여기다.** */
   const [editingFields, setEditingFields] = useState(false)
 
-  const fields = useResource<SpecimenField[]>(
-    () => (kind ? vocabularyApi.specimenFields(slug, kind) : Promise.resolve([])),
-    [slug, kind]
-  )
-
   useEffect(() => {
-    // 종류를 바꾸면 칸이 통째로 바뀐다. **예전 종류의 값을 들고 넘어가지
-    // 않는다** — 서버도 그것을 거절한다(스키마 밖의 값이라서).
-    if (kind !== (term.kind ?? null)) {
-      setDraft({})
-      return
-    }
     const shown: Record<string, string> = {}
     for (const [key, value] of Object.entries(term.attributes ?? {})) {
       const field = (fields.data ?? []).find((item) => item.key === key)
@@ -87,7 +79,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
       )
     }
     setDraft(shown)
-  }, [kind, term, fields.data])
+  }, [term, fields.data])
 
   async function save() {
     setBusy(true)
@@ -98,12 +90,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
         const value = toSi(draft[field.key] ?? '', field)
         if (value !== null) attributes[field.key] = value
       }
-      const saved = await vocabularyApi.update(slug, term.id, {
-        // 빈 문자열이면 종류를 뗀다 — 그러면 서버가 속성도 함께 비운다.
-        kind: kind ?? '',
-        attributes,
-      })
-      onSaved(saved)
+      onSaved(await vocabularyApi.update(slug, term.id, { attributes }))
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
     } finally {
@@ -111,12 +98,11 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
     }
   }
 
-  if (editingFields && kind) {
+  if (editingFields) {
     return (
       <SpecimenFieldsDialog
         slug={slug}
-        kind={kind}
-        kindLabel={(kinds.data ?? []).find((item) => item.key === kind)?.label ?? kind}
+        term={term}
         onClose={() => setEditingFields(false)}
         onSaved={() => {
           setEditingFields(false)
@@ -125,6 +111,8 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
       />
     )
   }
+
+  const rows = fields.data ?? []
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -137,51 +125,39 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
           </DialogDescription>
         </DialogHeader>
 
-        <ErrorNotice error={kinds.error ?? fields.error ?? error} />
+        <ErrorNotice error={fields.error ?? error} />
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">시험 종류</Label>
-          {/* **종류가 칸을 정한다.** 인장 규격과 DMA 규격은 갖는 치수가 다르다. */}
-          <div className="flex flex-wrap gap-1.5">
-            {(kinds.data ?? []).map((item) => (
-              <Button
-                key={item.key}
-                size="sm"
-                variant={kind === item.key ? 'default' : 'outline'}
-                className="h-7 text-xs"
-                onClick={() => setKind(item.key)}
-              >
-                {item.label}
-              </Button>
-            ))}
-            {kind && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs"
-                onClick={() => setKind(null)}
-              >
-                종류 없음
-              </Button>
-            )}
-          </div>
-        </div>
+        {/* **분류는 상위 값이다.** 축 계층 기계를 그대로 쓴다 — 고치는 자리는
+            이 창이 아니라 값의 '표기·상위 분류' 다. 여기서는 무엇인지만 말한다. */}
+        <p className="text-muted-foreground text-sm">
+          분류 <b className="text-foreground">{term.parent_value ?? '없음'}</b>
+          {term.parent_value
+            ? ' — 그 분류의 기본 칸에 이 규격의 칸이 더해집니다.'
+            : ' — 분류를 정하면 그 분류의 기본 칸이 함께 나옵니다.'}
+        </p>
 
-        {kind === null ? (
+        {rows.length === 0 && !fields.loading ? (
           <p className="text-muted-foreground rounded-md border p-4 text-sm">
-            종류를 고르면 그 시험의 규격이 갖는 치수 칸이 나옵니다. 종류 없이 이름만 두는
-            것도 됩니다 — <b>치수를 모른 채 규격 이름부터 적는 일이 실제로 있습니다.</b>
+            아직 칸이 없습니다. 분류를 정하거나, 아래에서 이 규격만의 칸을 만드세요 —{' '}
+            <b>치수를 모른 채 규격 이름부터 적는 일이 실제로 있습니다.</b>
           </p>
         ) : (
           <div className="space-y-2">
-            {(fields.data ?? []).map((field) => {
+            {rows.map((field) => {
               const shown = display(field.si_unit, field.dimension)
               return (
                 <div key={field.key} className="grid grid-cols-[10rem_1fr] items-start gap-2">
                   <Label className="pt-1.5 text-xs">
                     {field.label}
-                    {shown.unit && <span className="text-muted-foreground ml-1">({shown.unit})</span>}
+                    {shown.unit && (
+                      <span className="text-muted-foreground ml-1">({shown.unit})</span>
+                    )}
                     {field.is_required && <span className="text-destructive ml-0.5">*</span>}
+                    {/* 분류가 준 칸인지 이 규격의 칸인지 보인다 — 지우려면 어디로
+                        가야 하는지가 달라진다. */}
+                    {!field.inherited && (
+                      <span className="text-muted-foreground ml-1 text-xs">· 이 규격</span>
+                    )}
                   </Label>
                   <div>
                     <Input
@@ -200,26 +176,20 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
                 </div>
               )
             })}
-            {(fields.data ?? []).length === 0 && !fields.loading && (
-              <p className="text-muted-foreground text-sm">
-                이 시험 종류는 아직 규격 치수 칸이 없습니다. 아래에서 만드세요.
-              </p>
-            )}
-
-            {/* **칸이 모자라면 여기서 바로 고친다.** "그립부 길이도 적고 싶은데
-                칸이 없네" 는 규격을 적다가 나오는 말이지, 시험 종류 관리 화면
-                에서 나오는 말이 아니다 — 두 화면을 오가게 하면 대개 포기한다. */}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => setEditingFields(true)}
-            >
-              <Ruler className="size-3.5" />
-              칸 고치기
-            </Button>
           </div>
         )}
+
+        {/* **칸이 모자라면 여기서 바로 더한다.** "이 규격은 환봉이라 직경이
+            필요한데" 는 규격을 적다가 나오는 말이다. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 self-start text-xs"
+          onClick={() => setEditingFields(true)}
+        >
+          <Ruler className="size-3.5" />
+          이 규격만의 칸
+        </Button>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

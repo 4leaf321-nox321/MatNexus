@@ -30,10 +30,17 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     # 따로 쌓이고, 그 둘을 합칠 방법도 없다.
     ("vendor", "거래처", "open", 20, None, None),
     ("sales_type", "판매 유형", "open", 30, None, None),
-    # **속성을 갖는 유일한 축.** 규격은 이름이 아니라 치수 한 벌이고, 그 칸이
-    # 시험 종류마다 다르다 — 그래서 스키마를 시험 종류가 선언한다
-    # (`test_specimen_fields`). 값마다 어느 종류의 규격인지는 `kind` 에 적는다.
-    ("specimen_standard", "시편 규격", "open", 40, None, "test_type"),
+    # **시편 분류가 기본 칸을 갖는다.** "인장 시편이면 늘 게이지 길이가
+    # 필요하다" 처럼, 그 분류의 규격 전부가 갖는 치수다(`specimen_fields`).
+    ("specimen_category", "시편 분류", "open", 38, None, None),
+    # **규격은 분류 아래 산다.** 부모 축 기계를 그대로 쓴다(`grade` 의 부모가
+    # `category` 이듯) — `kind` 같은 컬럼을 따로 두면 같은 것을 두 방식으로
+    # 표현하게 된다.
+    #
+    # `attribute_source="parent"` 는 "기본 칸을 상위 값이 갖는다" 는 뜻이다.
+    # 규격은 거기에 자기만의 칸을 더한다(`extra_fields`) — `ASTM E8 R1` 은
+    # 환봉이라 직경이 필요하고 `JIS 5호` 는 평판이라 필요 없다.
+    ("specimen_standard", "시편 규격", "open", 40, "specimen_category", "parent"),
     ("instrument", "장비", "open", 50, None, None),
     # **가장 큰 축이고 이득도 가장 크다.** 지금은 SECC/secc/S.E.C.C 가 서로
     # 다른 재료 셋을 만든다. 다만 강종은 재료 이름을 만드는 값이라(ADR 0004)
@@ -61,6 +68,108 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
 #: 는 모델·BOM 코드에 쓴다). 거기서는 정본에 없는 값을 만드는 것 자체가 오류다.
 #: MatNexus 에는 아직 그런 축이 없다 — 모든 값을 사람이 친다. Phase 6 에서 장비
 #: 커넥터가 붙으면 그때 켠다.
+
+
+#: 기본 시편 분류와 그 분류의 **기본 치수 칸**.
+#:
+#: (분류 값, [(키, 이름, 차원, SI 단위, 필수, 도움말)])
+#:
+#: **최소로 둔다.** 그 분류의 규격이면 **예외 없이** 갖는 것만 기본이다 —
+#: 인장 환봉에는 폭·두께가 없고, DMA 인장 필름에는 지지 간격이 없다. 그런
+#: 것은 규격이 자기 칸으로 더한다.
+BUILTIN_SPECIMEN_CATEGORIES: list[
+    tuple[str, list[tuple[str, str, str, str, bool, str | None]]]
+] = [
+    (
+        "인장",
+        [
+            (
+                "gauge_length",
+                "게이지 길이",
+                "length",
+                "m",
+                True,
+                "변위를 이 길이로 나눠 변형률을 만듭니다. 평판이든 환봉이든 있습니다.",
+            ),
+            (
+                "total_length",
+                "전체 길이",
+                "length",
+                "m",
+                False,
+                None,
+            ),
+        ],
+    ),
+    (
+        "DMA",
+        [
+            (
+                "free_length",
+                "자유 길이",
+                "length",
+                "m",
+                True,
+                "클램프 사이의 길이. 계산에 들어가는 것은 전체 길이가 아니라 이 값입니다.",
+            ),
+            ("width", "폭", "length", "m", True, None),
+            ("thickness", "두께", "length", "m", True, None),
+        ],
+    ),
+]
+
+
+def ensure_builtin_specimen_categories(db: Session) -> list[str]:
+    """기본 분류와 그 기본 칸을 보장한다. 새로 만든 값을 돌려준다.
+
+    **이미 있는 것은 손대지 않는다.** 운영 중에 관리자가 칸을 고쳤을 수 있고,
+    배포가 그것을 되돌리면 안 된다(시험 종류·축과 같은 판단).
+    """
+    from app.modules.vocabulary.models import SpecimenField, VocabularyTerm
+    from app.modules.vocabulary.normalize import clean, compare_key
+
+    axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "specimen_category"))
+    if axis is None:
+        return []
+
+    created: list[str] = []
+    for value, fields in BUILTIN_SPECIMEN_CATEGORIES:
+        term = db.scalar(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == axis.id,
+                VocabularyTerm.normalized == compare_key(value),
+            )
+        )
+        if term is None:
+            term = VocabularyTerm(
+                vocabulary_id=axis.id,
+                value=clean(value),
+                normalized=compare_key(value),
+            )
+            db.add(term)
+            db.flush()
+            created.append(value)
+        existing = set(
+            db.scalars(
+                select(SpecimenField.key).where(SpecimenField.category_term_id == term.id)
+            )
+        )
+        for order, (key, label, dimension, si_unit, required, help_text) in enumerate(fields):
+            if key in existing:
+                continue
+            db.add(
+                SpecimenField(
+                    category_term_id=term.id,
+                    key=key,
+                    label=label,
+                    dimension=dimension,
+                    si_unit=si_unit,
+                    is_required=required,
+                    help=help_text,
+                    sort_order=order * 10,
+                )
+            )
+    return created
 
 
 def ensure_builtin_vocabularies(db: Session) -> list[str]:

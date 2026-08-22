@@ -1,23 +1,22 @@
 /**
- * 치수 칸 정의 — **규격이 어떤 치수를 갖는지 여기서 정한다.**
+ * 치수 칸 정의 — **분류의 기본 칸이냐, 이 값만의 칸이냐.**
  *
- * ## 어디에 사는 값인가
+ * 같은 창이 두 자리에서 쓰인다.
  *
- * 칸은 **시험 종류의 것**이다(`test_specimen_fields`). 인장 규격 전부가 같은
- * 칸을 쓰고, DMA 규격 전부가 다른 칸을 쓴다 — 규격마다 따로 두면 `ASTM E8` 과
- * `JIS 5호` 의 '게이지 길이' 가 서로 다른 이름이 되고, 그러면 시편 치수를
- * 물려받는 쪽이 규격마다 다른 키를 알아야 한다.
+ *   시편 분류의 값에서   그 분류의 규격 **전부**가 갖는 기본 칸을 정한다
+ *   시편 규격의 값에서   그 규격**만** 갖는 칸을 더한다
  *
- * ## 그런데 왜 기준정보 화면에서 고치는가
+ * ## 왜 두 층인가
  *
- * **고치고 싶어지는 자리가 여기**이기 때문이다. "ASTM E8 에 그립부 길이도 적고
- * 싶은데 칸이 없네" 는 규격을 적다가 나오는 말이지 시험 종류 관리 화면에서
- * 나오는 말이 아니다. 두 화면을 오가게 하면 대개 그냥 포기한다.
+ * **같은 시험 안에서도 시편에 따라 칸이 갈린다.** 인장 평판은 폭·두께를 갖고
+ * 환봉은 직경을 갖는다. 규격은 계속 늘어나는데 그때마다 분류의 기본 칸을 늘리면,
+ * 안 쓰는 규격에도 빈 칸이 하나씩 쌓이고 그 빈 칸이 "안 쟀다" 인지 "이 규격에
+ * 없는 값" 인지 구별되지 않는다.
  *
  * ## 키는 계약이다
  *
- * 이미 저장된 규격의 치수가 이 키로 들어 있다. 키를 바꾸면 그 값들이 갈 곳을
- * 잃는다 — 그래서 **만든 뒤에는 못 고친다.** 이름은 얼마든지 고쳐도 된다
+ * 이미 저장된 치수가 이 키로 들어 있다. 키를 바꾸면 그 값들이 갈 곳을 잃는다 —
+ * 그래서 **만든 뒤에는 못 고친다.** 이름은 얼마든지 고쳐도 된다
  * (`TestType.key`/`label` 을 나눈 것과 같은 관계다).
  */
 
@@ -25,7 +24,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 
 import { vocabularyApi } from '@/modules/vocabulary/api'
-import type { SpecimenFieldSave, TermKind } from '@/modules/vocabulary/api'
+import type { SpecimenField, SpecimenFieldSave, Term } from '@/modules/vocabulary/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -37,7 +36,6 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
-import { Label } from '@/shared/components/ui/label'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Row extends SpecimenFieldSave {
@@ -46,7 +44,7 @@ interface Row extends SpecimenFieldSave {
 }
 
 /** 사람이 친 이름에서 키를 만든다. 영문·숫자·밑줄만 남긴다. */
-function keyFrom(label: string): string {
+export function keyFrom(label: string): string {
   const cleaned = label
     .trim()
     .toLowerCase()
@@ -57,53 +55,59 @@ function keyFrom(label: string): string {
   return /^[a-z]/.test(cleaned) ? cleaned : ''
 }
 
+const asRow = (field: SpecimenField | SpecimenFieldSave): Row => ({
+  key: field.key,
+  label: field.label,
+  dimension: field.dimension,
+  si_unit: field.si_unit,
+  is_required: field.is_required,
+  help: field.help ?? null,
+  saved: true,
+})
+
 export function SpecimenFieldsDialog({
   slug,
-  kind,
-  kindLabel,
+  term,
   onClose,
   onSaved,
 }: {
   slug: string
-  kind: string
-  kindLabel: string
+  /** 분류 값이면 기본 칸을, 규격 값이면 그 규격만의 칸을 고친다. */
+  term: Term
   onClose: () => void
   onSaved: () => void
 }) {
-  const loaded = useResource(() => vocabularyApi.specimenFields(slug, kind), [slug, kind])
+  /**
+   * **분류의 값이면 기본 칸을, 규격의 값이면 추가 칸을 고친다.**
+   *
+   * 규격은 상위(분류)를 갖는다. 그것으로 가른다 — 화면에 축 slug 를 박으면
+   * 축이 하나 더 생길 때 두 곳을 고쳐야 한다.
+   */
+  const editsBase = term.parent_value === null
+  const loaded = useResource(() => vocabularyApi.termFields(slug, term.id), [slug, term.id])
   const [rows, setRows] = useState<Row[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
     setRows(
-      (loaded.data ?? []).map((field) => ({
-        key: field.key,
-        label: field.label,
-        dimension: field.dimension,
-        si_unit: field.si_unit,
-        is_required: field.is_required,
-        help: field.help ?? null,
-        saved: true,
-      }))
+      editsBase
+        ? (loaded.data ?? []).map(asRow)
+        : (term.extra_fields ?? []).map((field) => asRow(field as SpecimenFieldSave))
     )
-  }, [loaded.data])
+  }, [loaded.data, term, editsBase])
 
   function patch(index: number, change: Partial<Row>) {
-    setRows((current) =>
-      current.map((row, at) => (at === index ? { ...row, ...change } : row))
-    )
+    setRows((current) => current.map((row, at) => (at === index ? { ...row, ...change } : row)))
   }
 
   async function save() {
     setBusy(true)
     setError(null)
     try {
-      await vocabularyApi.saveSpecimenFields(
-        slug,
-        kind,
-        rows.map(({ saved: _saved, ...field }) => field)
-      )
+      const fields = rows.map(({ saved: _saved, ...field }) => field)
+      if (editsBase) await vocabularyApi.saveCategoryFields(slug, term.id, fields)
+      else await vocabularyApi.update(slug, term.id, { extra_fields: fields })
       onSaved()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
@@ -112,22 +116,50 @@ export function SpecimenFieldsDialog({
     }
   }
 
-  const dropped = (loaded.data ?? []).filter(
-    (field) => !rows.some((row) => row.key === field.key)
-  )
+  /**
+   * 상위가 준 칸. **여기서는 못 지운다** — 지우려면 분류에서 고쳐야 한다.
+   *
+   * 분류에서 열면 `inherited` 가 전부 `false` 다(자기가 선언한 칸이라 여기서
+   * 고칠 수 있다). 규격에서 열면 분류가 준 칸이 `true` 로 온다.
+   */
+  const inherited = (loaded.data ?? []).filter((field) => field.inherited)
+  const before = editsBase
+    ? (loaded.data ?? []).filter((field) => !field.inherited)
+    : ((term.extra_fields ?? []) as SpecimenFieldSave[])
+  const dropped = before.filter((field) => !rows.some((row) => row.key === field.key))
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{kindLabel} — 치수 칸</DialogTitle>
+          <DialogTitle>
+            {term.value} — {editsBase ? '기본 치수 칸' : '이 규격만의 칸'}
+          </DialogTitle>
           <DialogDescription>
-            이 종류의 <b>모든 규격</b>이 이 칸을 씁니다. 규격마다 다른 칸을 두면 같은
-            게이지 길이가 규격마다 다른 이름이 되고, 시편이 물려받을 방법이 없어집니다.
+            {editsBase ? (
+              <>
+                이 분류의 <b>모든 규격</b>이 이 칸을 갖습니다. <b>최소로 두세요</b> — 그
+                분류의 규격이면 예외 없이 갖는 것만. 인장 환봉에는 폭·두께가 없고 DMA
+                인장 필름에는 지지 간격이 없습니다.
+              </>
+            ) : (
+              <>
+                분류의 기본 칸에 <b>더해지는</b> 칸입니다. 이 규격이 환봉이라 직경이
+                필요하다거나, 3점 굽힘이라 지지 간격이 필요할 때 씁니다.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <ErrorNotice error={loaded.error ?? error} />
+
+        {inherited.length > 0 && (
+          <p className="text-muted-foreground rounded-md border p-2.5 text-xs">
+            분류 <b>{term.parent_value}</b> 가 준 칸:{' '}
+            {inherited.map((field) => field.label).join(' · ')} —{' '}
+            <b>여기서는 못 지웁니다.</b> 분류의 기본 칸에서 고치세요.
+          </p>
+        )}
 
         <div className="space-y-1.5">
           {rows.map((row, index) => (
@@ -162,8 +194,8 @@ export function SpecimenFieldsDialog({
                   onChange={(event) => patch(index, { key: event.target.value })}
                 />
                 {row.saved && (
-                  /* **키는 계약이다.** 이미 저장된 규격의 치수가 이 키로 들어
-                     있어서, 바꾸면 그 값들이 갈 곳을 잃는다. */
+                  /* **키는 계약이다.** 이미 저장된 치수가 이 키로 들어 있어서,
+                     바꾸면 그 값들이 갈 곳을 잃는다. */
                   <p className="text-muted-foreground mt-0.5 text-xs">쓰이는 중 · 고정</p>
                 )}
               </div>
@@ -235,69 +267,6 @@ export function SpecimenFieldsDialog({
             disabled={busy || rows.some((row) => !row.key || !row.label)}
           >
             저장
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** 종류를 먼저 고르게 하는 얇은 껍데기. 축에서 바로 열 때 쓴다. */
-export function SpecimenFieldsPicker({
-  slug,
-  onClose,
-}: {
-  slug: string
-  onClose: () => void
-}) {
-  const kinds = useResource(() => vocabularyApi.kinds(slug), [slug])
-  const [picked, setPicked] = useState<TermKind | null>(null)
-
-  if (picked) {
-    return (
-      <SpecimenFieldsDialog
-        slug={slug}
-        kind={picked.key}
-        kindLabel={picked.label}
-        onClose={onClose}
-        onSaved={onClose}
-      />
-    )
-  }
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>치수 칸 정의</DialogTitle>
-          <DialogDescription>
-            어느 시험의 규격을 고칠까요? <b>칸은 시험 종류마다 다릅니다</b> — 인장 규격에는
-            어깨 반경이 있고 DMA 규격에는 지지 간격이 있습니다.
-          </DialogDescription>
-        </DialogHeader>
-
-        <ErrorNotice error={kinds.error} />
-
-        <div className="space-y-1.5">
-          <Label className="text-xs">시험 종류</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {(kinds.data ?? []).map((item) => (
-              <Button
-                key={item.key}
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => setPicked(item)}
-              >
-                {item.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            닫기
           </Button>
         </DialogFooter>
       </DialogContent>

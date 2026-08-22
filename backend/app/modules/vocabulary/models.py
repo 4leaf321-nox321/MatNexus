@@ -31,7 +31,17 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -79,11 +89,16 @@ class Vocabulary(Base):
     **계약을 축 수준에 한 번만 적는다.** 값마다 "이건 어느 축의 부모냐" 를 물으면
     같은 답을 수만 번 저장하는 셈이고, 잘못된 축을 가리키는 값이 생긴다."""
     attribute_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    """이 축의 값이 **속성을 갖는가, 그 스키마를 누가 정하는가.**
+    """이 축의 값이 **속성을 갖는가, 기본 칸을 누가 정하는가.**
 
-    `test_type` 이면 값마다 시험 종류를 하나 정하고(`VocabularyTerm.kind`), 그
-    종류가 선언한 시편 규격 칸(`test_specimen_fields`)이 곧 그 값의 속성
-    스키마다. 지금 이걸 쓰는 축은 `specimen_standard` 하나다.
+    `parent` 면 값의 **상위 값**(`parent_term_id`)이 기본 칸을 갖는다. 시편
+    규격의 상위는 시편 분류이고, 분류가 "이 종류의 시편이면 늘 필요한 치수" 를
+    선언한다(`SpecimenField`). 지금 이걸 쓰는 축은 `specimen_standard` 하나다.
+
+    규격은 거기에 **자기만의 칸을 더할 수 있다**(`VocabularyTerm.extra_fields`) —
+    `ASTM E8 R1` 은 환봉이라 직경이 필요하고, `JIS 5호` 는 평판이라 필요 없다.
+    분류의 기본 칸만으로 둘을 담으면 절반이 늘 비고, 그 빈 칸이 "안 쟀다" 인지
+    "이 규격에 없는 값" 인지 구별되지 않는다.
 
     **왜 축에 적는가:** 값마다 물으면 같은 답을 수만 번 저장하는 셈이다
     (`parent_slug` 와 같은 판단)."""
@@ -138,13 +153,17 @@ class VocabularyTerm(Base):
     부모가 지워지면 `NULL` 이 된다. 값 자체는 살아 있어야 한다 — 가리키던 재료가
     무엇이었는지는 그대로여야 하기 때문이다."""
 
-    kind: Mapped[str | None] = mapped_column(String(50), index=True, nullable=True)
-    """이 값이 **무엇의** 값인가. 축이 `attribute_source="test_type"` 이면 시험
-    종류 키(`tensile`·`dma_sweep`)다.
+    extra_fields: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """이 값**만** 갖는 치수 칸. 상위 분류의 기본 칸에 더해진다.
 
-    인장 규격과 DMA 규격은 같은 축에 살지만 **갖는 속성이 다르다.** 축을 둘로
-    나누면 "시편 규격" 이라는 개념이 둘이 되고, 어느 쪽에 넣을지를 매번 묻게
-    된다 — 종류를 값에 적는 편이 낫다."""
+    `ASTM E8 R1` 은 환봉이라 직경이 필요하고 `JIS 5호` 는 평판이라 필요 없다.
+    규격은 계속 늘어나는데 그때마다 분류의 기본 칸을 늘리면, 안 쓰는 규격에도
+    빈 칸이 하나씩 쌓인다.
+
+    모양은 기본 칸과 같다(`key`·`label`·`dimension`·`si_unit`·`is_required`·
+    `help`). **기본 칸과 같은 키는 못 쓴다** — 서버가 거절한다."""
     attributes: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )
@@ -165,6 +184,48 @@ class VocabularyTerm(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class SpecimenField(Base):
+    """시편 **분류**가 선언하는 기본 치수 칸.
+
+    "인장 시편이면 늘 게이지 길이가 필요하다" 처럼, 그 분류에 속한 규격 전부가
+    갖는 값이다. 규격마다 다른 것은 규격이 따로 더한다
+    (`VocabularyTerm.extra_fields`).
+
+    ## 왜 시험 종류가 아니라 분류인가
+
+    처음에는 시험 종류에 매달았다. 그런데 **같은 시험 안에서도 시편에 따라 칸이
+    갈린다** — 인장은 평판(폭·두께)과 환봉(직경)이 다르고, DMA 는 3점 굽힘
+    (지지 간격 있음)과 인장 필름(없음)이 다르다. 실측: DMA 실파일 172개 전부에
+    장비가 적은 `Geometry name` 이 있고 155개가 `3 Point Bending Clamp` 였다.
+
+    시험 종류는 "무엇을 쟀나" 이고 분류는 "무엇을 잘랐나" 다. 둘은 자주 겹치지만
+    같은 것이 아니다.
+    """
+
+    __tablename__ = "specimen_fields"
+    __table_args__ = (
+        UniqueConstraint("category_term_id", "key", name="uq_specimen_fields_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    category_term_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("vocabulary_terms.id", ondelete="CASCADE"),
+        index=True,
+    )
+    """시편 분류 축의 값. 이 분류에 속한 규격 전부가 이 칸을 갖는다."""
+    key: Mapped[str] = mapped_column(String(50))
+    label: Mapped[str] = mapped_column(String(100))
+    dimension: Mapped[str] = mapped_column(String(20))
+    si_unit: Mapped[str] = mapped_column(String(20))
+    """**저장 단위.** 값은 언제나 SI 로 담는다 — 규격서가 mm 로 적혀 있어도."""
+    is_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    help: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class VocabularyAlias(Base):

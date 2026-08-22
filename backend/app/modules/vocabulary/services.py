@@ -11,7 +11,7 @@ import math
 import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, cast
 
@@ -19,6 +19,7 @@ from sqlalchemy import Select, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import (
+    SpecimenField,
     Vocabulary,
     VocabularyAlias,
     VocabularyDismissal,
@@ -986,55 +987,134 @@ def delete_term(db: Session, term: VocabularyTerm) -> str | None:
 # --- 속성 있는 값 -----------------------------------------------------------
 #
 # 시편 규격은 이름이 아니라 **치수 한 벌**이다(`ASTM E8 subsize` = 게이지 길이
-# 25 mm · 평행부 폭 6 mm …). 그런데 그 칸이 시험 종류마다 다르다 — 인장 규격에는
-# 어깨 반경이 있고 DMA 규격에는 지지 간격이 있다.
+# 25 mm · 평행부 폭 6 mm …). 그런데 그 칸이 규격마다 다르다 — 인장 안에서도
+# 평판은 폭·두께를 갖고 환봉은 직경을 갖는다.
 #
-# 그래서 **스키마를 시험 종류가 선언하고**(`test_specimen_fields`), 값은 자기가
-# 어느 종류의 규격인지만 적는다(`VocabularyTerm.kind`).
+# 그래서 두 층으로 나눈다.
+#
+#   분류의 기본 칸   그 분류의 규격이면 **예외 없이** 갖는 것 (`SpecimenField`)
+#   규격의 추가 칸   그 규격만 갖는 것 (`VocabularyTerm.extra_fields`)
+#
+# 분류는 규격의 **상위 값**이다(`parent_term_id`). 축 계층 기계를 그대로 쓴다 —
+# `kind` 같은 컬럼을 따로 두면 같은 것을 두 방식으로 표현하게 된다.
 
 
-def attribute_fields(db: Session, vocabulary: Vocabulary, kind: str | None) -> list[Any]:
-    """이 값이 가질 수 있는 속성 칸. 없으면 빈 목록.
+@dataclass(frozen=True)
+class Field:
+    """치수 칸 하나. 기본 칸과 추가 칸이 같은 모양이라 한 타입으로 다룬다."""
 
-    축이 속성을 안 쓰거나(`attribute_source` 가 비었거나) 종류를 아직 안 골랐으면
-    칸도 없다 — **없는 스키마에 값을 넣게 두지 않는다.**
-    """
-    from app.modules.tests.models import TestSpecimenField, TestType
+    key: str
+    label: str
+    dimension: str
+    si_unit: str
+    is_required: bool
+    help: str | None
+    #: 분류가 준 칸인가. 화면이 "이건 분류 것이라 여기서 못 지운다" 를 말한다.
+    inherited: bool
 
-    if vocabulary.attribute_source != "test_type" or not kind:
-        return []
-    test_type = db.scalar(select(TestType).where(TestType.key == kind))
-    if test_type is None:
-        return []
-    return list(
-        db.scalars(
-            select(TestSpecimenField)
-            .where(TestSpecimenField.test_type_id == test_type.id)
-            .order_by(TestSpecimenField.sort_order)
-        )
+
+def _as_field(row: Any, *, inherited: bool) -> Field:
+    return Field(
+        key=str(row.key if hasattr(row, "key") else row["key"]),
+        label=str(row.label if hasattr(row, "label") else row["label"]),
+        dimension=str(
+            (row.dimension if hasattr(row, "dimension") else row.get("dimension")) or "length"
+        ),
+        si_unit=str((row.si_unit if hasattr(row, "si_unit") else row.get("si_unit")) or "m"),
+        is_required=bool(
+            row.is_required if hasattr(row, "is_required") else row.get("is_required", False)
+        ),
+        help=(row.help if hasattr(row, "help") else row.get("help")) or None,
+        inherited=inherited,
     )
 
 
-def check_kind(db: Session, vocabulary: Vocabulary, kind: str | None) -> None:
-    """종류가 실제로 있는 시험 종류인가.
+def category_fields(db: Session, category_term_id: uuid.UUID) -> list[Field]:
+    """이 값이 **직접 선언한** 칸. 분류가 갖는 기본 칸이 이것이다.
 
-    **오타를 값으로 받지 않는다.** `tensil` 이 들어가면 그 규격은 스키마가 빈
-    채로 저장되고, 화면은 "칸이 없는 규격" 을 보여 준다 — 고장으로 읽힌다.
+    `inherited=False` 로 낸다 — 여기서는 고칠 수 있다는 뜻이다. 그 칸이 규격
+    쪽에서 보일 때 `True` 가 된다(`attribute_fields`).
     """
-    from app.modules.tests.models import TestType
+    rows = db.scalars(
+        select(SpecimenField)
+        .where(SpecimenField.category_term_id == category_term_id)
+        .order_by(SpecimenField.sort_order)
+    )
+    return [_as_field(row, inherited=False) for row in rows]
 
-    if vocabulary.attribute_source != "test_type" or kind is None:
-        return
-    if db.scalar(select(TestType).where(TestType.key == kind)) is None:
-        raise AppError(
-            "MNX-VOCABULARY-0009",
-            f"'{kind}' 는 등록된 시험 종류가 아닙니다.",
-            status=422,
+
+def attribute_fields(
+    db: Session, vocabulary: Vocabulary, term: VocabularyTerm | None
+) -> list[Field]:
+    """이 값이 가질 수 있는 칸.
+
+    한 규칙으로 두 자리를 다 본다.
+
+        이 값이 직접 선언한 칸  +  상위가 선언한 칸  +  이 값의 추가 칸
+
+    **분류**는 자기가 선언한 칸을 갖고(상위가 없다), **규격**은 상위 분류가
+    선언한 칸에 자기 칸을 더한다. 규격 쪽에 직접 선언하는 길은 없지만, 규칙을
+    갈라 두면 "이 값은 어느 쪽이냐" 를 부르는 곳마다 물어야 한다.
+
+    `inherited` 는 **상위가 준 칸인가**다 — 그렇다면 이 값에서는 못 지운다.
+    """
+    if term is None:
+        return []
+    own = category_fields(db, term.id)
+    parent = (
+        [replace(item, inherited=True) for item in category_fields(db, term.parent_term_id)]
+        if term.parent_term_id
+        else []
+    )
+    extra = [_as_field(item, inherited=False) for item in (term.extra_fields or [])]
+    return own + parent + extra
+
+
+def check_extra_fields(
+    db: Session, term: VocabularyTerm, fields: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """이 값만의 칸을 검사한다. **분류의 기본 칸과 겹치면 거절한다.**
+
+    같은 키가 둘이면 어느 쪽이 이기는지를 사람이 알 방법이 없다 — 화면에 칸이
+    둘 뜨거나 하나가 조용히 가려진다.
+    """
+    base = {
+        item.key
+        for item in (category_fields(db, term.parent_term_id) if term.parent_term_id else [])
+    }
+    seen: set[str] = set()
+    cleaned: list[dict[str, Any]] = []
+    for item in fields:
+        key = str(item.get("key") or "").strip()
+        if not key:
+            raise AppError("MNX-VOCABULARY-0017", "칸 이름(키)이 비어 있습니다.", status=422)
+        if key in base:
+            raise AppError(
+                "MNX-VOCABULARY-0018",
+                f"'{key}' 는 분류가 이미 갖고 있는 칸입니다. 다른 이름을 쓰세요.",
+                status=422,
+            )
+        if key in seen:
+            raise AppError("MNX-VOCABULARY-0016", f"칸 이름이 겹칩니다: {key}.", status=422)
+        seen.add(key)
+        cleaned.append(
+            {
+                "key": key,
+                "label": str(item.get("label") or key),
+                "dimension": str(item.get("dimension") or "length"),
+                "si_unit": str(item.get("si_unit") or "m"),
+                "is_required": bool(item.get("is_required", False)),
+                "help": item.get("help") or None,
+            }
         )
+    return cleaned
 
 
 def check_attributes(
-    db: Session, vocabulary: Vocabulary, kind: str | None, attributes: dict[str, Any]
+    db: Session,
+    vocabulary: Vocabulary,
+    term: VocabularyTerm | None,
+    attributes: Mapping[str, Any],
 ) -> dict[str, float]:
     """속성을 스키마에 견줘 본다. 통과하면 저장할 모양으로 돌려준다.
 
@@ -1045,15 +1125,14 @@ def check_attributes(
       - **숫자여야 한다.** 치수 칸은 전부 길이다.
       - **필수 칸은 비울 수 없다.** 게이지 길이 없는 인장 규격은 규격이 아니다.
 
-    값은 **SI 로 온다.** 규격서가 mm 로 적혀 있어도 화면이 바꿔서 보낸다 —
-    이 저장소는 저장을 언제나 정본 SI 로 한다.
+    값은 **SI 로 온다.** 규격서가 mm 로 적혀 있어도 화면이 바꿔서 보낸다.
     """
-    fields = attribute_fields(db, vocabulary, kind)
+    fields = attribute_fields(db, vocabulary, term)
     if not fields:
         if attributes:
             raise AppError(
                 "MNX-VOCABULARY-0010",
-                "이 값은 속성을 갖지 않습니다. 시험 종류를 먼저 고르세요.",
+                "이 값은 아직 치수 칸이 없습니다. 분류를 고르거나 칸을 먼저 만드세요.",
                 status=422,
             )
         return {}
@@ -1063,7 +1142,7 @@ def check_attributes(
     if unknown:
         raise AppError(
             "MNX-VOCABULARY-0011",
-            f"이 시험 종류에 없는 속성입니다: {', '.join(unknown)}.",
+            f"이 규격에 없는 치수입니다: {', '.join(unknown)}.",
             status=422,
         )
 

@@ -21,12 +21,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.tests.models import (
-    TestChannel,
-    TestConditionField,
-    TestSpecimenField,
-    TestType,
-)
+from app.modules.tests.models import TestChannel, TestConditionField, TestType
 
 #: 시험 종류 → 채널 · 조건 항목.
 #:
@@ -45,45 +40,6 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("displacement", "변위", "length", "m", True),
             ("force", "하중", "force", "N", True),
             ("specimen_width", "시편 폭", "length", "m", False),
-        ],
-        # 시편 규격(`specimen_standard` 기준정보)이 갖는 치수 칸.
-        #
-        # **규격은 이름만이 아니다.** `ASTM E8 subsize` 는 게이지 길이 25 mm·
-        # 평행부 폭 6 mm 를 뜻한다. 그걸 어디에도 안 적어 두면 사람이 규격서를
-        # 펴 놓고 시편마다 옮겨 적고, 그러다 한 건이 틀리면 응력이 통째로
-        # 어긋나는데 숫자는 그럴듯해 보인다.
-        #
-        # 두께는 **규격이 정하지 않는 것이 보통이다** — 소재 두께가 그대로
-        # 시편 두께다. 그래서 필수가 아니다.
-        "specimen_fields": [
-            (
-                "gauge_length",
-                "게이지 길이",
-                "length",
-                "m",
-                True,
-                "변위를 이 길이로 나눠 변형률을 만듭니다. 규격이 정하는 값입니다.",
-            ),
-            ("width", "평행부 폭", "length", "m", True, "하중을 나눌 단면의 폭."),
-            (
-                "thickness",
-                "두께",
-                "length",
-                "m",
-                False,
-                "규격이 정하지 않는 것이 보통입니다 — 소재 두께가 그대로 시편 두께입니다.",
-            ),
-            ("parallel_length", "평행부 길이", "length", "m", False, None),
-            ("total_length", "전체 길이", "length", "m", False, None),
-            (
-                "shoulder_radius",
-                "어깨 반경",
-                "length",
-                "m",
-                False,
-                "평행부와 그립부를 잇는 곡률. 작으면 그 자리에서 끊어집니다.",
-            ),
-            ("grip_width", "그립부 폭", "length", "m", False, None),
         ],
         "conditions": [
             ("temperature", "시험 온도", "number", "temperature", "K", None, False),
@@ -107,33 +63,6 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
         "parser_key": None,
         "description": "동적 기계 분석. 온도·주파수 스윕에서 저장·손실 탄성률을 얻는다.",
         "sort_order": 20,
-        # **인장과 칸이 다르다.** DMA 시편은 클램프 사이의 자유 길이가 곧 계산에
-        # 들어가는 길이고, 굽힘 모드에서는 지지 간격이 따로 있다. 어깨 반경·
-        # 평행부 같은 것은 아예 없다 — 하나의 고정된 칸 목록으로 둘을 담으면
-        # 절반이 늘 비고, 그 빈 칸이 "안 쟀다" 인지 "이 규격에 없는 값" 인지
-        # 구별되지 않는다.
-        "specimen_fields": [
-            (
-                "free_length",
-                "자유 길이",
-                "length",
-                "m",
-                True,
-                "클램프 사이의 길이. 변형 계산에 들어가는 것은 "
-                "전체 길이가 아니라 이 값입니다.",
-            ),
-            ("width", "폭", "length", "m", True, None),
-            ("thickness", "두께", "length", "m", True, None),
-            (
-                "span",
-                "지지 간격",
-                "length",
-                "m",
-                False,
-                "3점·단순 굽힘 모드에서 지지점 사이 거리. 인장·전단 모드에는 없습니다.",
-            ),
-            ("total_length", "전체 길이", "length", "m", False, None),
-        ],
         # 채널은 실파일(`Example FreqTemp2.csv`, TA DMA850)을 열어 맞췄다.
         # 온도 6단(-40~10 °C)에 주파수 8점(0.1~20 Hz)씩.
         "channels": [
@@ -199,21 +128,6 @@ def ensure_builtin_test_types(db: Session) -> list[str]:
                     dimension=dimension,
                     si_unit=si_unit,
                     is_required=required,
-                    sort_order=order * 10,
-                )
-            )
-
-        for order, field in enumerate(spec.get("specimen_fields", [])):
-            key, label, dimension, si_unit, required, help_text = field
-            db.add(
-                TestSpecimenField(
-                    test_type_id=test_type.id,
-                    key=key,
-                    label=label,
-                    dimension=dimension,
-                    si_unit=si_unit,
-                    is_required=required,
-                    help=help_text,
                     sort_order=order * 10,
                 )
             )

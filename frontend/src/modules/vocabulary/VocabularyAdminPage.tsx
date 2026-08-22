@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
+import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { SpecimenStandardDialog } from '@/modules/vocabulary/SpecimenStandardDialog'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type {
@@ -70,6 +71,25 @@ import {
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 
+/**
+ * 이 축이 치수와 어떤 관계인가. **축 목록에서 알아낸다.**
+ *
+ *   `standard`  값이 치수를 갖는다(`attribute_source === 'parent'`)
+ *   `category`  값이 **기본 칸**을 갖는다 — 위 축의 부모다
+ *
+ * 화면에 `slug === 'specimen_standard'` 를 적으면 축이 하나 더 생길 때 두 곳을
+ * 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+ */
+export type AxisRole = 'standard' | 'category' | null
+
+export function roleOf(axis: Vocabulary, axes: Vocabulary[]): AxisRole {
+  if (axis.attribute_source === 'parent') return 'standard'
+  const child = axes.some(
+    (item) => item.parent_slug === axis.slug && item.attribute_source === 'parent'
+  )
+  return child ? 'category' : null
+}
+
 export default function VocabularyAdminPage() {
   const vocabularies = useResource(() => vocabularyApi.list(), [])
   const [slug, setSlug] = useState<string | null>(null)
@@ -100,7 +120,7 @@ export default function VocabularyAdminPage() {
         ))}
       </div>
 
-      {active && <TermTable vocabulary={active} />}
+      {active && <TermTable vocabulary={active} role={roleOf(active, axes)} />}
 
       <DriftPanel onRepaired={() => vocabularies.reload()} />
     </div>
@@ -254,13 +274,9 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
 const ALL = -1
 const PAGE_SIZES = [50, 100, ALL] as const
 
-function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
-  /**
-   * 이 축의 값이 속성을 갖는가. **서버가 말한다**(`attribute_source`) — 화면에
-   * `slug === 'specimen_standard'` 를 적으면 축이 하나 더 생길 때 두 곳을
-   * 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
-   */
-  const hasAttributes = vocabulary.attribute_source === 'test_type'
+function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRole }) {
+  /** 규격 축이면 치수를, 분류 축이면 기본 칸을 다룬다. */
+  const hasAttributes = role !== null
   const [term, setTerm] = useState('')
   const [showHidden, setShowHidden] = useState(false)
   const [leastUsed, setLeastUsed] = useState(false)
@@ -424,7 +440,21 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
         />
       )}
 
-      {sizing && hasAttributes && (
+      {/* **분류에서는 칸을, 규격에서는 값을 고친다.** 분류의 값에 치수를
+          적을 자리는 없다 — 치수는 규격이 갖는다. */}
+      {sizing && role === 'category' && (
+        <SpecimenFieldsDialog
+          slug={vocabulary.slug}
+          term={sizing}
+          onClose={() => setSizing(null)}
+          onSaved={() => {
+            setSizing(null)
+            terms.reload()
+          }}
+        />
+      )}
+
+      {sizing && role === 'standard' && (
         <SpecimenStandardDialog
           slug={vocabulary.slug}
           term={sizing}
@@ -533,9 +563,11 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
               />
             </TableHead>
             <TableHead>값</TableHead>
-            {/* **속성을 갖는 축에서만 뜬다.** 제조사에 '치수' 칸이 있으면
+            {/* **치수와 관계있는 축에서만 뜬다.** 제조사에 '치수' 칸이 있으면
                 그것이 무엇을 뜻하는지 아무도 모른다. */}
-            {hasAttributes && <TableHead>종류 · 치수</TableHead>}
+            {hasAttributes && (
+              <TableHead>{role === 'category' ? '기본 칸' : '치수'}</TableHead>
+            )}
             <TableHead>상위</TableHead>
             <TableHead className="text-right">쓰는 곳</TableHead>
             <TableHead className="w-40" />
@@ -562,21 +594,28 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
               </TableCell>
               {hasAttributes && (
                 <TableCell className="text-sm">
-                  {item.kind ? (
+                  {role === 'category' ? (
+                    /* **칸이 0 이면 그 분류의 규격은 치수를 하나도 못 갖는다.** */
+                    item.field_count > 0 ? (
+                      `${item.field_count}개`
+                    ) : (
+                      <span className="text-destructive">칸 없음</span>
+                    )
+                  ) : (
                     <>
-                      <span className="text-muted-foreground">{item.kind_label}</span>
                       {/* 치수가 비어 있으면 **그 사실을 말한다.** 규격 이름만
                           있는 값은 시편 치수를 아무것도 못 채워 준다. */}
-                      <span className="ml-1.5">
-                        {Object.keys(item.attributes ?? {}).length > 0 ? (
-                          `치수 ${Object.keys(item.attributes).length}개`
-                        ) : (
-                          <span className="text-destructive">치수 없음</span>
-                        )}
-                      </span>
+                      {Object.keys(item.attributes ?? {}).length > 0 ? (
+                        `치수 ${Object.keys(item.attributes).length}개`
+                      ) : (
+                        <span className="text-destructive">치수 없음</span>
+                      )}
+                      {(item.extra_fields ?? []).length > 0 && (
+                        <span className="text-muted-foreground ml-1.5 text-xs">
+                          · 이 규격 칸 {item.extra_fields.length}개
+                        </span>
+                      )}
                     </>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
               )}
@@ -591,8 +630,12 @@ function TermTable({ vocabulary }: { vocabulary: Vocabulary }) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    title="치수 — 이 규격이 정하는 값"
-                    aria-label={`${item.value} 치수`}
+                    title={
+                      role === 'category'
+                        ? '기본 칸 — 이 분류의 규격 전부가 갖는 치수'
+                        : '치수 — 이 규격이 정하는 값'
+                    }
+                    aria-label={`${item.value} ${role === 'category' ? '기본 칸' : '치수'}`}
                     onClick={() => setSizing(item)}
                   >
                     <Ruler className="size-3.5" />

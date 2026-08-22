@@ -171,46 +171,6 @@ class TestConditionField(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
-class TestSpecimenField(Base):
-    """이 시험 종류의 **시편 규격이 갖는 치수 칸.**
-
-    규격은 이름만이 아니다. `ASTM E8 subsize` 는 게이지 길이 25 mm·평행부 폭
-    6 mm 를 뜻하는 **객체**다. 그 값을 어디에도 안 적어 두면 사람이 규격서를
-    펴 놓고 시편마다 옮겨 적는다.
-
-    **칸이 시험 종류마다 다르다.** 인장 규격은 게이지 길이·평행부 폭·어깨
-    반경을 갖고, DMA 규격은 자유 길이·폭·두께·지지 간격을 갖는다. 하나의
-    고정된 칸 목록으로 둘을 담으면 절반이 늘 비어 있고, 그 빈 칸이 "안 쟀다"
-    인지 "이 규격에는 없는 값" 인지 구별되지 않는다.
-
-    그래서 **채널·조건과 같은 자리에 둔다** — 시험 종류가 자기 것을 선언한다
-    (D7: 정의는 데이터). 부서가 새 종류를 만들면(ADR 0006) 그 종류의 규격 칸도
-    그 부서가 정한다.
-    """
-
-    __tablename__ = "test_specimen_fields"
-    __table_args__ = (
-        UniqueConstraint("test_type_id", "key", name="uq_test_specimen_fields_key"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    test_type_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("test_types.id", ondelete="CASCADE"), index=True
-    )
-    key: Mapped[str] = mapped_column(String(50))
-    label: Mapped[str] = mapped_column(String(100))
-    dimension: Mapped[str] = mapped_column(String(20))
-    """물리 차원. 화면이 실무 단위(mm)로 보여 주고 받는 근거다."""
-    si_unit: Mapped[str] = mapped_column(String(20))
-    """**저장 단위.** 값은 언제나 SI 로 담는다 — 규격서가 mm 로 적혀 있어도."""
-    is_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    """비면 규격을 저장할 수 없는 칸. 게이지 길이 없는 인장 규격은 규격이 아니다."""
-    help: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-
-
 class TestRun(Base):
     """시험 한 번. 시편 하나를 특정 종류로 시험한 회차."""
 
