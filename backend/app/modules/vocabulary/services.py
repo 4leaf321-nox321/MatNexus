@@ -1343,6 +1343,116 @@ def check_attributes(
     return cleaned
 
 
+#: 헤더에서 값·상위·별칭을 가리키는 이름. 나머지 열은 **칸 이름**으로 본다.
+HEADER_VALUE = ("값", "이름", "value", "name")
+HEADER_PARENT = ("상위", "분류", "상위 분류", "parent")
+HEADER_ALIAS = ("표기", "별칭", "다른 표기", "alias", "aliases")
+
+#: `게이지 길이 (mm)` 에서 단위를 떼는 자리.
+_HEADER_UNIT = re.compile(r"^(?P<name>.+?)\s*[(\[](?P<unit>[^)\]]+)[)\]]\s*$")
+
+
+@dataclass(frozen=True)
+class Column:
+    """헤더 한 칸이 무엇을 가리키는가."""
+
+    kind: str
+    """`value` · `parent` · `alias` · `field` · `unknown`."""
+    field: Field | None = None
+    unit: str | None = None
+    """숫자 칸일 때 그 열이 적힌 단위. **헤더에 없으면 `None`.**"""
+    reason: str | None = None
+    """`unknown` 인 이유. 말없이 버리지 않는다."""
+
+
+def read_header(header: Sequence[str], fields: Sequence[Field]) -> list[Column]:
+    """헤더 줄을 열 뜻으로 바꾼다.
+
+    **숫자 열은 단위를 헤더에 적어야 한다.** `게이지 길이 (mm)` 처럼. 안 적으면
+    `50` 이 50 mm 인지 50 m 인지 알 수 없는데, 추측해서 mm 로 치면 m 로 적은 표
+    에서 **1000배 틀린 규격**이 만들어지고 그 숫자는 그럴듯해 보인다. 장비 파일
+    치수를 읽을 때 이미 같은 판단을 했다 — 단위를 못 찾으면 포기한다.
+    """
+    by_name: dict[str, Field] = {}
+    for item in fields:
+        by_name.setdefault(compare_key(item.label), item)
+        by_name.setdefault(compare_key(item.key), item)
+        # **사람은 괄호까지 안 적는다.** 칸 이름이 `판(edition)` 이어도 헤더에는
+        # `판` 이라고 쓴다.
+        bare = _HEADER_UNIT.match(item.label)
+        if bare:
+            by_name.setdefault(compare_key(bare.group("name")), item)
+
+    columns: list[Column] = []
+    for raw in header:
+        text = clean(raw) or ""
+        key = compare_key(text)
+        if key in {compare_key(one) for one in HEADER_VALUE}:
+            columns.append(Column("value"))
+            continue
+        if key in {compare_key(one) for one in HEADER_PARENT}:
+            columns.append(Column("parent"))
+            continue
+        if key in {compare_key(one) for one in HEADER_ALIAS}:
+            columns.append(Column("alias"))
+            continue
+
+        unit: str | None = None
+        matched = _HEADER_UNIT.match(text)
+        if matched:
+            unit = matched.group("unit").strip()
+            key = compare_key(matched.group("name"))
+
+        field = by_name.get(key)
+        if field is None:
+            columns.append(Column("unknown", reason=f"'{text}' 는 이 축의 칸이 아닙니다."))
+            continue
+        if field.kind == "number":
+            if not unit:
+                columns.append(
+                    Column(
+                        "unknown",
+                        field=field,
+                        reason=f"'{field.label}' 은(는) 단위를 헤더에 적어야 합니다 — "
+                        f"`{field.label} (mm)` 처럼.",
+                    )
+                )
+                continue
+            try:
+                unit_kit.unit_of(unit_kit.canonical(unit) or unit)
+            except unit_kit.UnknownUnit:
+                columns.append(
+                    Column("unknown", field=field, reason=f"모르는 단위입니다: {unit}")
+                )
+                continue
+        columns.append(Column("field", field=field, unit=unit))
+    return columns
+
+
+def read_cell(column: Column, raw: str) -> float | str | None:
+    """열 하나의 값을 저장할 모양으로. 빈 칸은 `None`(안 적은 것)."""
+    text = (raw or "").strip()
+    if not text or column.field is None:
+        return None
+    if column.field.kind != "number":
+        return text
+    try:
+        value = float(text)
+    except ValueError:
+        raise AppError(
+            "MNX-VOCABULARY-0030",
+            f"'{column.field.label}' 은(는) 숫자여야 합니다: {text!r}",
+            status=422,
+        ) from None
+    symbol = unit_kit.canonical(column.unit or "") or (column.unit or "")
+    try:
+        return unit_kit.to_si(value, symbol)
+    except unit_kit.UnknownUnit:
+        raise AppError(
+            "MNX-VOCABULARY-0030", f"모르는 단위입니다: {column.unit}", status=422
+        ) from None
+
+
 def check_ratio_checks(
     db: Session,
     vocabulary: Vocabulary,

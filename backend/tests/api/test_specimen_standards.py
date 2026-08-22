@@ -54,6 +54,12 @@ def category_id(client: TestClient, headers: dict[str, str], value: str) -> str:
     return str(next(item for item in listed.json()["items"] if item["value"] == value)["id"])
 
 
+def item_id(client: TestClient, headers: dict[str, str], value: str) -> str:
+    listed = client.get(f"/api/vocabularies/{SLUG}/terms?q={value}", headers=headers)
+    assert listed.status_code == 200, listed.text
+    return str(next(one for one in listed.json()["items"] if one["value"] == value)["id"])
+
+
 def fields_of(client: TestClient, headers: dict[str, str], slug: str, term_id: str) -> Any:
     found = client.get(f"/api/vocabularies/{slug}/terms/{term_id}/fields", headers=headers)
     assert found.status_code == 200, found.text
@@ -903,3 +909,202 @@ class TestCatalog:
             headers=admin_headers,
         )
         assert refused.status_code == 422, refused.text
+
+
+class TestHeaderPaste:
+    """**엑셀 표를 헤더째 붙인다.**
+
+    시편 규격은 값 하나가 아니라 치수 한 벌이다. 그런데 일괄 추가가 값·상위·별칭
+    셋만 받아서, 규격을 스무 개 넣어도 **치수는 하나도 안 들어갔다** — 그 뒤에
+    규격마다 창을 열어 손으로 채워야 했다.
+
+    **숫자 열은 헤더에 단위를 적어야 한다.** 안 적으면 `50` 이 50 mm 인지 50 m
+    인지 알 수 없고, 추측하면 1000배 틀린 값이 조용히 들어간다.
+    """
+
+    def _paste(
+        self, client: TestClient, headers: dict[str, str], lines: list[str], **extra: Any
+    ) -> Any:
+        return client.post(
+            f"/api/vocabularies/{SLUG}/terms/bulk",
+            json={"values": lines, "has_header": True, **extra},
+            headers=headers,
+        )
+
+    def test_치수까지_한_번에_넣는다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        made = self._paste(
+            client,
+            admin_headers,
+            [
+                "상위\t값\t게이지 길이 (mm)\t판",
+                "인장\t사내 규격 A\t50\t-22",
+            ],
+        )
+        assert made.status_code == 200, made.text
+        (item,) = made.json()["items"]
+        assert item["status"] == "created" and item["value"] == "사내 규격 A"
+        # **저장은 SI 다** — 헤더의 mm 로 환산해서 담는다.
+        assert item["attributes"]["gauge_length"] == pytest.approx(0.05)
+        assert item["attributes"]["edition"] == "-22"
+
+    def test_열_순서를_바꿔도_이름으로_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """엑셀에서 열을 옮기는 일은 흔하다. 자리로 읽으면 조용히 어긋난다."""
+        made = self._paste(
+            client,
+            admin_headers,
+            [
+                "게이지 길이 (mm)\t값\t상위",
+                "25\t사내 규격 B\t인장",
+            ],
+        )
+        (item,) = made.json()["items"]
+        assert item["parent_value"] == "인장"
+        assert item["attributes"]["gauge_length"] == pytest.approx(0.025)
+
+    def test_단위를_안_적으면_그_열은_안_넣고_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**추측해서 mm 로 치면 m 로 적은 표에서 1000배 틀린다.**"""
+        made = self._paste(
+            client,
+            admin_headers,
+            ["상위\t값\t게이지 길이", "인장\t사내 규격 C\t50"],
+        )
+        (item,) = made.json()["items"]
+        assert item["status"] == "created"
+        assert item["attributes"] == {}
+        assert any("단위" in one for one in item["warnings"])
+
+    def test_모르는_열은_말없이_버리지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        made = self._paste(
+            client,
+            admin_headers,
+            ["상위\t값\t없는칸 (mm)", "인장\t사내 규격 D\t7"],
+        )
+        (item,) = made.json()["items"]
+        assert any("없는칸" in one for one in item["warnings"])
+
+    def test_있는_값의_치수는_안_덮는다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**사람이 규격서를 보고 고친 값이 붙여넣기 한 번에 되돌아가면 안 된다.**"""
+        self._paste(
+            client,
+            admin_headers,
+            ["상위\t값\t게이지 길이 (mm)", "인장\t사내 규격 E\t50"],
+        )
+        again = self._paste(
+            client,
+            admin_headers,
+            [
+                "상위\t값\t게이지 길이 (mm)\t전체 길이 (mm)",
+                "인장\t사내 규격 E\t99\t200",
+            ],
+        )
+        (item,) = again.json()["items"]
+        assert item["status"] == "existing"
+        assert item["attributes"]["gauge_length"] == pytest.approx(0.05)  # 안 덮였다
+        assert item["attributes"]["total_length"] == pytest.approx(0.2)  # 빈 칸은 채운다
+
+    def test_미리보기가_치수까지_보여_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        seen = client.post(
+            f"/api/vocabularies/{SLUG}/terms/bulk/preview",
+            json={
+                "values": [
+                    "상위\t값\t게이지 길이 (mm)",
+                    "인장\t안 생길 규격\t50",
+                ],
+                "has_header": True,
+            },
+            headers=admin_headers,
+        )
+        assert seen.status_code == 200, seen.text
+        (item,) = seen.json()["items"]
+        assert item["status"] == "new"
+        assert item["attributes"]["gauge_length"] == pytest.approx(0.05)
+
+    def test_기존_값에서_열을_가져온다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**분류가 안 주는 칸이 있다.** 환봉 규격의 직경이 그렇다 — 그 칸은
+        규격 자신이 갖는다. 이미 만들어 둔 것에서 가져오면 규격마다 창을 열어
+        칸부터 만들지 않아도 된다."""
+        client.post(
+            "/api/vocabularies/specimen-standards/import",
+            json={"items": [{"key": "astm_e8_round"}]},
+            headers=admin_headers,
+        )
+
+        found = client.get(
+            f"/api/vocabularies/{SLUG}/paste-columns",
+            params={"parent_value": "인장", "like": "ASTM E8M 환봉 (12.5 mm)"},
+            headers=admin_headers,
+        )
+        assert found.status_code == 200, found.text
+        by_key = {item["key"]: item for item in found.json()}
+        # 분류가 주는 칸은 물려받은 것, 그 규격의 칸은 아니다.
+        assert by_key["gauge_length"]["inherited"] is True
+        assert by_key["diameter"]["inherited"] is False
+
+    def test_가져온_칸은_새_값에_선언된다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**값만 보내면 갈 곳이 없다.** 칸을 함께 선언해야 값이 들어간다."""
+        made = client.post(
+            f"/api/vocabularies/{SLUG}/terms/bulk",
+            json={
+                "values": [
+                    "상위	값	직경 (mm)",
+                    "인장	사내 환봉 A	12.5",
+                ],
+                "has_header": True,
+                "columns": [{"key": "diameter", "label": "직경", "symbol": "D"}],
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 200, made.text
+        (item,) = made.json()["items"]
+        assert item["status"] == "created"
+        assert item["attributes"]["diameter"] == pytest.approx(0.0125)
+
+        listed = fields_of(
+            client, admin_headers, SLUG, item_id(client, admin_headers, "사내 환봉 A")
+        )
+        diameter = next(one for one in listed if one["key"] == "diameter")
+        assert diameter["symbol"] == "D" and diameter["inherited"] is False
+
+    def test_이미_있는_칸은_안_건드린다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**사람이 고쳐 둔 이름·단위가 붙여넣기 한 번에 되돌아가면 안 된다.**"""
+        made = make(client, admin_headers, value="사내 환봉 B", parent_value="인장")
+        term_id = str(made.json()["id"])
+        client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"extra_fields": [extra("diameter", "바깥지름")]},
+            headers=admin_headers,
+        )
+
+        client.post(
+            f"/api/vocabularies/{SLUG}/terms/bulk",
+            json={
+                "values": [
+                    "상위	값	직경 (mm)",
+                    "인장	사내 환봉 B	12.5",
+                ],
+                "has_header": True,
+                "columns": [{"key": "diameter", "label": "직경"}],
+            },
+            headers=admin_headers,
+        )
+        listed = fields_of(client, admin_headers, SLUG, term_id)
+        diameter = next(one for one in listed if one["key"] == "diameter")
+        assert diameter["label"] == "바깥지름"  # 안 덮였다

@@ -18,7 +18,7 @@
  * 몇 건이 따라오는지 옆에 적어 둔다.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Eye,
   EyeOff,
@@ -35,6 +35,7 @@ import {
 
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
 import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
+import { PasteTable, columnsOf, toLines } from '@/modules/vocabulary/PasteTable'
 import { SpecimenStandardDialog } from '@/modules/vocabulary/SpecimenStandardDialog'
 import { StandardCatalogDialog } from '@/modules/vocabulary/StandardCatalogDialog'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
@@ -60,7 +61,6 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
-import { Textarea } from '@/shared/components/ui/textarea'
 import { Label } from '@/shared/components/ui/label'
 import {
   Table,
@@ -1129,11 +1129,6 @@ function MergeCandidates({
  */
 //: 붙여 넣기 예시. 부모가 있는 축이면 **줄마다 상위를 적을 수 있다**는 것을
 //: 보여 주는 것이 요점이다 — 도움말만으로는 아무도 안 읽는다.
-const PLACEHOLDER = {
-  plain: '한 줄에 하나씩\n포스코\n현대제철',
-  child: '한 줄에 하나씩\nSECC\n\n상위가 다르면\nSteel > DP590\nPP > PP-GF30',
-} as const
-
 function AddTermDialog({
   vocabulary,
   onClose,
@@ -1145,28 +1140,79 @@ function AddTermDialog({
 }) {
   const [mode, setMode] = useState<'one' | 'many'>('one')
   const [value, setValue] = useState('')
-  const [lines, setLines] = useState('')
   const [parent, setParent] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [resolved, setResolved] = useState<{ typed: string; got: string } | null>(null)
   const [bulk, setBulk] = useState<BulkResult | null>(null)
+  /**
+   * 붙여넣은 것이 **어떻게 들어갈지**. 보내기 전에 보여 준다.
+   *
+   * 엑셀에서 복사한 표가 상위·값·별칭으로 어떻게 갈리는지, 어느 줄이 이미 있는
+   * 값에 붙는지, 어느 줄이 상위를 못 찾아 떨어지는지 — 전에는 보내 봐야 알았다.
+   */
+  const [preview, setPreview] = useState<BulkResult | null>(null)
+  /**
+   * 첫 줄이 **열 이름**인가.
+   *
+   * 켜면 값·상위·별칭 말고 **속성 칸까지** 받는다 — 시편 규격을 만들면서 게이지
+   * 길이를 함께 넣을 수 있다. 전에는 규격을 스무 개 넣어도 치수는 하나도 안
+   * 들어가서, 그 뒤에 규격마다 창을 열어 손으로 채워야 했다.
+   */
+  /** 표의 줄들. 마지막 줄은 늘 비어 있다 — 계속 칠 수 있게. */
+  const [rows, setRows] = useState<string[][]>([[]])
+  /** 함께 넣을 속성. **서버가 주는 목록에서 고른다.** */
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  /**
+   * 어느 값에서 칸을 가져올까. **분류가 안 주는 칸이 있다.**
+   *
+   * 환봉 규격을 여러 개 만들 때 `직경` 이 그렇다 — 그 칸은 분류가 아니라 규격
+   * 자신이 갖는다. 이미 만들어 둔 규격을 고르면 그 칸이 열 후보로 온다.
+   */
+  const [borrow, setBorrow] = useState('')
+  const columns = useResource(
+    () => vocabularyApi.pasteColumns(vocabulary.slug, parent || undefined, borrow || undefined),
+    [vocabulary.slug, parent, borrow]
+  )
+  /**
+   * 이 붙여넣기가 **선언할** 칸. 축·분류가 주는 것은 이미 있으니 뺀다.
+   *
+   * 값만 보내면 서버가 "이 축의 칸이 아닙니다" 로 떨어뜨리고, 그러면 사람은
+   * 규격마다 창을 열어 칸부터 만들어야 한다.
+   */
+  const declared = useMemo(
+    () =>
+      (columns.data ?? [])
+        .filter((field) => picked.has(field.key) && !field.inherited)
+        .map(({ inherited: _inherited, ...field }) => field),
+    [columns.data, picked]
+  )
+  /** 값 칸이 채워진 줄. **빈 표로는 아무것도 못 보낸다.** */
+  const filled = rows.filter((row) => row.some((cell) => cell.trim())).length
+
+  const table = useMemo(
+    () => columnsOf(columns.data ?? [], picked, Boolean(vocabulary.parent_slug)),
+    [columns.data, picked, vocabulary.parent_slug]
+  )
 
   async function submitMany() {
     // 상한을 넘으면 서버가 422 를 준다 — 여기서 미리 자르면 **몇 줄이 빠졌는지
     // 아무도 모른다.** 그대로 보내고 서버가 말하게 둔다.
-    const values = lines.split(/\r?\n/)
+    const values = toLines(table, rows)
     setBusy(true)
     setFailure(null)
     setBulk(null)
     try {
+      setPreview(null)
       const result = await vocabularyApi.createBulk(
         vocabulary.slug,
         values,
-        parent || undefined
+        parent || undefined,
+        true,
+        declared
       )
       setBulk(result)
-      setLines('')
+      setRows([[]])
       onAdded()
     } catch (error) {
       setFailure(error instanceof ApiError ? error.message : '더하지 못했습니다.')
@@ -1202,9 +1248,30 @@ function AddTermDialog({
     }
   }
 
+  async function look() {
+    setBusy(true)
+    setFailure(null)
+    setBulk(null)
+    try {
+      setPreview(
+        await vocabularyApi.previewBulk(
+          vocabulary.slug,
+          toLines(table, rows),
+          parent || undefined,
+          true,
+          declared
+        )
+      )
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.message : '미리 보지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{vocabulary.label} 값 추가</DialogTitle>
           <DialogDescription>
@@ -1231,6 +1298,19 @@ function AddTermDialog({
             ))}
           </div>
 
+          {vocabulary.parent_slug && (
+            /* **먼저 고르는 자리다.** 이 축의 칸은 상위 분류가 정한다 — 분류를
+               안 고르면 축이 주는 칸 하나만 나오고, 그러면 "왜 목록이 이것뿐이지"
+               가 된다. 아래 표의 열도 이 선택을 따라 바뀐다. */
+            <VocabularyField
+              slug={vocabulary.parent_slug}
+              label="상위 분류"
+              value={parent}
+              allowCreate={false}
+              onChange={setParent}
+            />
+          )}
+
           {mode === 'one' ? (
             <div className="space-y-1.5">
               <Label htmlFor="add-value">값</Label>
@@ -1243,47 +1323,133 @@ function AddTermDialog({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <Label htmlFor="add-values">값 목록</Label>
-              {/* **줄 단위가 자연스럽다.** 엑셀에서 열을 복사하면 그대로 붙는다.
-                  빈 줄은 건너뛴다 — 붙여 넣기에는 늘 섞여 있고, 그걸 오류로
-                  만들면 사람이 손으로 지우게 된다. */}
-              <Textarea
-                id="add-values"
-                value={lines}
-                autoFocus
-                rows={8}
-                placeholder={PLACEHOLDER[vocabulary.parent_slug ? 'child' : 'plain']}
-                onChange={(event) => setLines(event.target.value)}
+              <Label>값 목록</Label>
+              {/* **무엇을 적을 수 있는지 화면이 먼저 말한다.** 빈 칸에 줄을
+                  붙여넣게 하면, 속성까지 받게 된 지금은 무엇을 적어야 하는지
+                  알 방법이 없다 — 규격의 칸은 분류가 정하고 분류마다 다르다. */}
+              {vocabulary.parent_slug && !parent && (
+                <p className="rounded-md border p-2.5 text-xs">
+                  <b>상위 분류를 먼저 고르세요.</b> 이 축의 칸은 분류가 정합니다 — 인장과
+                  DMA 가 갖는 칸이 다릅니다. 지금은 축이 주는 칸만 보입니다.
+                </p>
+              )}
+              <PasteTable
+                fields={columns.data ?? []}
+                hasParent={Boolean(vocabulary.parent_slug)}
+                picked={picked}
+                onPicked={setPicked}
+                rows={rows}
+                onRows={setRows}
+                borrow={
+                  /* **분류가 안 주는 칸이 있다.** 환봉 규격의 `직경` 이 그렇다 —
+                     그 칸은 규격 자신이 갖는다. 이미 만들어 둔 것에서 가져오면
+                     규격마다 칸을 다시 만들지 않아도 된다. */
+                  <div className="space-y-1">
+                    <VocabularyField
+                      slug={vocabulary.slug}
+                      label="다른 값의 칸 가져오기"
+                      value={borrow}
+                      allowCreate={false}
+                      onChange={setBorrow}
+                    />
+                    {borrow && (
+                      <p className="text-muted-foreground text-xs">
+                        <b>＋</b> 가 붙은 칸은 이 붙여넣기로 <b>새로 선언됩니다</b> — 고른
+                        줄의 값이 그 칸을 갖게 됩니다.
+                      </p>
+                    )}
+                  </div>
+                }
               />
               <p className="text-muted-foreground text-xs">
-                한 줄에 하나. 최대 {BULK_MAX}줄. 빈 줄은 건너뜁니다.
+                최대 {BULK_MAX}줄. 값이 빈 줄은 건너뜁니다. <b>표기</b>는 <b>;</b> 로
+                여럿 적습니다 — 미리 등록해 두면 그 표기로 값을 만들 때 새로 생기지 않고
+                이 값에 붙습니다.
                 {vocabulary.parent_slug && (
                   <>
                     {' '}
-                    줄마다 상위를 달리하려면 <b>상위 &gt; 값</b> 으로 적으세요 (엑셀에서
-                    두 열을 복사해도 됩니다). 안 적은 줄은 아래에서 고른 상위로 갑니다.
+                    <b>상위</b>를 비운 줄은 위에서 고른 상위로 갑니다.
                   </>
                 )}
               </p>
             </div>
           )}
 
-          {vocabulary.parent_slug && (
-            // 부모가 있는 축이면 여기서 정해 둔다 — 나중에 따로 잇게 하면
-            // 대부분 안 잇는다.
-            <VocabularyField
-              slug={vocabulary.parent_slug}
-              label="상위 분류 (줄에 없을 때)"
-              value={parent}
-              allowCreate={false}
-              onChange={setParent}
-            />
+          {/* **보내기 전에 보여 준다.** 서버가 같은 코드로 답하므로 여기 보이는
+              것과 실제로 들어가는 것이 어긋나지 않는다. */}
+          {preview && (
+            <div className="space-y-1.5 rounded-md border p-2.5">
+              <p className="text-sm">
+                새로 <b>{preview.created}</b> · 이미 있음 {preview.existing}
+                {preview.skipped > 0 && ` · 건너뜀 ${preview.skipped}`}
+                {preview.rejected > 0 && (
+                  <span className="text-amber-700 dark:text-amber-500">
+                    {' '}
+                    · 못 넣음 {preview.rejected}
+                  </span>
+                )}
+              </p>
+              <div className="max-h-48 overflow-y-auto text-xs">
+                <table className="w-full">
+                  <tbody>
+                    {preview.items
+                      .filter((item) => item.status !== 'skipped')
+                      .map((item, index) => (
+                        <tr key={index} className="border-t">
+                          <td className="py-0.5 pr-2 whitespace-nowrap">
+                            {item.status === 'new' && <span className="text-foreground">새로</span>}
+                            {item.status === 'existing' && (
+                              <span className="text-muted-foreground">이미 있음</span>
+                            )}
+                            {item.status === 'rejected' && (
+                              <span className="text-amber-700 dark:text-amber-500">못 넣음</span>
+                            )}
+                          </td>
+                          <td className="py-0.5 pr-2">
+                            {item.parent_value && (
+                              <span className="text-muted-foreground">
+                                {item.parent_value}{' '}
+                              </span>
+                            )}
+                            <b>{item.value ?? item.input}</b>
+                            {item.aliases.length > 0 && (
+                              <span className="text-muted-foreground">
+                                {' '}
+                                · 표기 {item.aliases.join(', ')}
+                              </span>
+                            )}
+                            {Object.keys(item.attributes).length > 0 && (
+                              <span className="text-muted-foreground">
+                                {' '}
+                                · 속성 {Object.keys(item.attributes).length}개
+                              </span>
+                            )}
+                          </td>
+                          <td className="text-muted-foreground py-0.5">
+                            {item.reason}
+                            {/* **말없이 버리지 않는다.** 값이 있는데 갈 곳이
+                                없으면(모르는 열·단위 없는 숫자 열) 말한다. */}
+                            {item.warnings.map((one, at) => (
+                              <span key={at} className="block text-amber-700 dark:text-amber-500">
+                                {one}
+                              </span>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
 
           {bulk && (
             <div className="space-y-1.5 rounded-md border p-2.5">
               <p className="text-sm">
                 새로 <b>{bulk.created}</b> · 이미 있던 것 {bulk.existing}
+                {/* 표기는 값과 따로 센다 — 이미 있던 값에 표기만 붙는 일이 흔하다. */}
+                {bulk.items.some((item) => item.aliases.length > 0) &&
+                  ` · 표기 ${bulk.items.reduce((sum, item) => sum + item.aliases.length, 0)}개`}
                 {bulk.skipped > 0 && ` · 건너뜀 ${bulk.skipped}`}
                 {bulk.rejected > 0 && (
                   <span className="text-amber-700 dark:text-amber-500">
@@ -1350,9 +1516,19 @@ function AddTermDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             닫기
           </Button>
+          {/* **여러 개일 때만 미리 본다.** 하나씩 넣는 자리는 이미 결과가 보인다. */}
+          {mode === 'many' && (
+            <Button
+              variant="outline"
+              onClick={() => void look()}
+              disabled={busy || filled === 0}
+            >
+              미리 보기
+            </Button>
+          )}
           <Button
             onClick={submit}
-            disabled={busy || (mode === 'one' ? value.trim() === '' : lines.trim() === '')}
+            disabled={busy || (mode === 'one' ? value.trim() === '' : filled === 0)}
           >
             추가
           </Button>

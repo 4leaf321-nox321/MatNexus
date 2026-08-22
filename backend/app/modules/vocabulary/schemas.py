@@ -267,6 +267,21 @@ class BulkTermCreateRequest(BaseModel):
     values: list[str] = Field(min_length=1, max_length=BULK_MAX)
     parent_value: str | None = Field(default=None, max_length=200)
     """줄에 상위가 없을 때 쓸 기본값. 줄이 적은 것이 이긴다."""
+    has_header: bool = False
+    """첫 줄이 **열 이름**인가.
+
+    켜면 값·상위·별칭 말고 **속성 칸까지** 받는다 — 시편 규격을 만들면서 게이지
+    길이를 함께 넣을 수 있다. 안 켜면 지금까지처럼 자리로 읽는다(상위·값·별칭).
+
+    **숫자 열은 헤더에 단위를 적어야 한다**(`게이지 길이 (mm)`). 안 적으면 `50`
+    이 50 mm 인지 50 m 인지 알 수 없고, 추측하면 1000배 틀린 값이 조용히 들어간다."""
+    columns: list[SpecimenFieldSaveRequest] = []
+    """**축·분류가 안 주는 칸**을 이 붙여넣기에서 선언한다.
+
+    환봉 규격 여러 개를 만들 때 `직경` 이 그렇다 — 그 칸은 분류가 아니라 규격
+    자신이 갖는다. 기존 규격에서 열을 가져오면 그 정의가 여기로 온다. 값만
+    보내면 서버가 "이 축의 칸이 아닙니다" 로 떨어뜨리고, 그러면 사람은 규격마다
+    창을 열어 칸부터 만들어야 한다."""
 
 
 class BulkTermItemOut(BaseModel):
@@ -278,11 +293,20 @@ class BulkTermItemOut(BaseModel):
 
     input: str
     status: str
-    """`created` | `existing` | `skipped` | `rejected`."""
+    """`created` | `existing` | `skipped` | `rejected`.
+
+    미리보기에서는 `created` 대신 **`new`** 다 — 아직 안 만들었기 때문이다.
+    같은 이름을 쓰면 "만들었다" 로 읽힌다."""
     value: str | None = None
     """정규 값. 별칭이나 표기 차이로 기존 값에 붙으면 친 것과 다르다."""
     parent_value: str | None = None
     """이 줄에 붙은 상위. 줄마다 다를 수 있다."""
+    aliases: list[str] = []
+    """이 줄에서 **새로 단** 표기. 이미 달려 있던 것은 안 온다."""
+    attributes: dict[str, float | str] = {}
+    """이 줄이 채운 속성. **SI 다** — 헤더의 단위로 환산해서 담는다."""
+    warnings: list[str] = []
+    """값은 들어갔지만 짚어 둘 것. 모르는 열, 단위 없는 숫자 열 같은 것."""
     reason: str | None = None
     """`rejected` 인 이유. **말없이 버리지 않는다.**"""
 

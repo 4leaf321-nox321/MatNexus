@@ -171,10 +171,56 @@ export const vocabularyApi = {
    * 개수만 보면 "50개 중 12개가 새로 생겼습니다" 로 끝나는데, 알고 싶은 것은
    * 어느 것이 안 생겼고 왜인지다 — 특히 친 것과 다른 값에 붙은 경우.
    */
-  createBulk: (slug: string, values: string[], parentValue?: string) =>
+  /**
+   * 붙여넣은 줄이 **어떻게 들어갈지** 미리 묻는다. 아무것도 안 만든다.
+   *
+   * **화면이 다시 계산하지 않는다.** 규칙을 두 곳에 두면 갈라지고, 그러면
+   * 미리보기가 거짓말을 한다 — 그건 없는 것보다 나쁘다.
+   */
+  /**
+   * 표로 붙여넣을 때 **쓸 수 있는 열**.
+   *
+   * **사용자가 무엇을 적어야 하는지 몰랐다.** 규격의 칸은 분류가 정하고 분류마다
+   * 다르므로, 화면이 실제 목록을 보여 주고 고르게 해야 한다.
+   */
+  pasteColumns: (slug: string, parentValue?: string, like?: string) => {
+    const query = new URLSearchParams()
+    if (parentValue) query.set('parent_value', parentValue)
+    // **그 값만의 칸까지 받아 온다.** 환봉 규격을 여러 개 만들 때 `직경` 을
+    // 매번 손으로 만들지 않아도 된다.
+    if (like) query.set('like', like)
+    const text = query.toString()
+    return api.get<SpecimenField[]>(
+      `/vocabularies/${slug}/paste-columns${text ? `?${text}` : ''}`
+    )
+  },
+
+  previewBulk: (
+    slug: string,
+    values: string[],
+    parentValue?: string,
+    hasHeader = false,
+    columns: SpecimenFieldSave[] = []
+  ) =>
+    api.post<BulkResult>(`/vocabularies/${slug}/terms/bulk/preview`, {
+      values,
+      parent_value: parentValue,
+      has_header: hasHeader,
+      columns,
+    }),
+
+  createBulk: (
+    slug: string,
+    values: string[],
+    parentValue?: string,
+    hasHeader = false,
+    columns: SpecimenFieldSave[] = []
+  ) =>
     api.post<BulkResult>(`/vocabularies/${slug}/terms/bulk`, {
       values,
-      parent_value: parentValue ?? null,
+      parent_value: parentValue,
+      has_header: hasHeader,
+      columns,
     }),
 
   /** 이 값의 다른 표기들. */

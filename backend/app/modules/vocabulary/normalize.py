@@ -68,3 +68,46 @@ def split_parent(line: str) -> tuple[str | None, str]:
             head, _, tail = line.partition(separator)
             return head.strip() or None, tail.strip()
     return None, line
+
+
+#: 별칭 열 안에서 여러 표기를 가르는 문자. 엑셀 한 칸에 여러 개를 적는다.
+ALIAS_SEPARATORS = (";", ",")
+
+
+def split_row(line: str, *, has_parent: bool) -> tuple[str | None, str, list[str]]:
+    """엑셀에서 복사한 한 줄을 상위·값·별칭으로 가른다.
+
+    **엑셀에서 범위를 복사하면 열이 탭으로 붙는다.** 그래서 파일을 올릴 필요도,
+    `.xlsx` 를 읽을 코드도 없다 — 붙여넣기가 곧 흡수 경로다.
+
+        부모 있는 축   Steel <TAB> SECC <TAB> SECC-1;SECC(주)
+        부모 없는 축   포스코 <TAB> POSCO;포스코(주)
+
+    ## 왜 고쳤나
+
+    전에는 `partition` 으로 **한 번만** 갈랐다. 그래서 세 열을 붙이면
+    `Steel<TAB>SECC<TAB>SECC-1` 이 값 `'SECC<TAB>SECC-1'` 로 조용히 들어갔다 —
+    오류도 안 나고 목록에 이상한 값 하나가 남는다.
+
+    **별칭을 함께 받는 이유:** 별칭은 사후 병합보다 싸다. 등록해 두면 값을 만들
+    때 게이트가 별칭까지 뒤져서 애초에 중복이 안 생긴다. 그런데 지금은 값을 넣고
+    나서 하나씩 달아야 해서, 엑셀에 이미 적혀 있어도 옮길 길이 없었다.
+    """
+    columns = [part.strip() for part in line.split("	")] if "	" in line else None
+    if columns is None:
+        # 손으로 친 줄. `>` 는 상위 표기로만 쓰고 별칭은 없다.
+        parent, body = split_parent(line) if has_parent else (None, line)
+        return parent, body, []
+
+    parent = None
+    if has_parent:
+        parent = columns.pop(0) or None if columns else None
+    value = columns.pop(0) if columns else ""
+    aliases: list[str] = []
+    for column in columns:
+        for separator in ALIAS_SEPARATORS:
+            column = column.replace(separator, ALIAS_SEPARATORS[0])
+        aliases.extend(
+            part.strip() for part in column.split(ALIAS_SEPARATORS[0]) if part.strip()
+        )
+    return parent, value, aliases

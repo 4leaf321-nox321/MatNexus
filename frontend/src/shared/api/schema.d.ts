@@ -1926,6 +1926,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/{slug}/paste-columns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Paste Columns
+         * @description 표로 붙여넣을 때 **쓸 수 있는 열**. 값·상위·표기 말고 속성 쪽이다.
+         *
+         *     **사용자가 무엇을 적어야 하는지 몰랐다.** 헤더에 칸 이름을 적으라고만 하면
+         *     그 이름이 무엇인지 알 방법이 없다 — 규격의 칸은 분류가 정하고, 분류마다
+         *     다르다. 화면이 실제 목록을 보여 주고 고르게 해야 한다.
+         *
+         *     상위(분류)에 따라 답이 달라진다 — `인장` 과 `DMA` 의 기본 칸이 다르다.
+         *
+         *     `like` 를 주면 **그 값이 가진 칸까지** 낸다. 환봉 규격을 여러 개 만들 때
+         *     `직경` 을 매번 손으로 만들지 않아도 된다 — 이미 만들어 둔 규격에서 가져온다.
+         *     그 칸은 분류가 주는 것이 아니라 **그 값만의 칸**이라 `inherited` 가 거짓으로
+         *     오고, 새로 만드는 값에는 함께 **선언**해 줘야 값이 들어간다.
+         */
+        get: operations["list_paste_columns_api_vocabularies__slug__paste_columns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/recount": {
         parameters: {
             query?: never;
@@ -1995,16 +2026,50 @@ export interface paths {
          *     같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께
          *     보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.
          *
+         *     ## 엑셀에서 복사한 열이 그대로 붙는다
+         *
+         *         부모 있는 축   Steel <TAB> SECC <TAB> SECC-1;SECC(주)
+         *         부모 없는 축   포스코 <TAB> POSCO;포스코(주)
+         *
+         *     마지막 열은 **별칭**이다. 별칭은 사후 병합보다 싸다 — 등록해 두면 값을 만들
+         *     때 게이트가 별칭까지 뒤져서 애초에 중복이 안 생긴다.
+         *
          *     ## 줄마다 상위가 다를 수 있다
          *
          *     창에서 고른 상위 하나를 전 줄에 붙이면 **분류가 섞인 목록을 못 넣는다.**
-         *     줄에 `Steel<TAB>SECC` 나 `Steel > SECC` 로 적으면 그 줄만 그 상위 아래로
-         *     간다 — 엑셀에서 두 열을 복사하면 탭으로 붙는다.
+         *     상위를 못 찾으면 그 줄만 `rejected` 다.
          *
-         *     상위를 못 찾으면 그 줄만 `rejected` 다. 그냥 만들면 그 값이 어디 속하는지
-         *     아무도 모르는 채로 목록에 남는다.
+         *     미리보기(`.../bulk/preview`)가 **같은 해석 코드**를 쓴다 — 두 곳에 두면
+         *     갈라지고, 그러면 미리보기가 거짓말을 한다.
          */
         post: operations["create_terms_bulk_api_vocabularies__slug__terms_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/{slug}/terms/bulk/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Terms Bulk
+         * @description 붙여넣은 줄이 **어떻게 들어갈지** 미리 말한다. 아무것도 쓰지 않는다.
+         *
+         *     **보내 봐야 아는 상태였다.** 엑셀에서 복사한 표가 상위·값·별칭으로 어떻게
+         *     갈리는지, 어느 줄이 이미 있는 값에 붙는지, 어느 줄이 상위를 못 찾아 떨어지는지
+         *     누르기 전에는 알 수 없었다.
+         *
+         *     **화면이 다시 계산하지 않는다.** 규칙을 두 곳에 두면 갈라지고, 그러면
+         *     미리보기가 거짓말을 한다 — 그건 없는 것보다 나쁘다.
+         */
+        post: operations["preview_terms_bulk_api_vocabularies__slug__terms_bulk_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2573,6 +2638,16 @@ export interface components {
          *     상한을 서버가 건다 — 화면이 정하게 두면 언젠가 "엑셀 통째로" 가 온다.
          */
         BulkTermCreateRequest: {
+            /**
+             * Columns
+             * @default []
+             */
+            columns: components["schemas"]["SpecimenFieldSaveRequest"][];
+            /**
+             * Has Header
+             * @default false
+             */
+            has_header: boolean;
             /** Parent Value */
             parent_value?: string | null;
             /** Values */
@@ -2586,6 +2661,18 @@ export interface components {
          *     것은 **어느 것이** 안 생겼고 왜인지다.
          */
         BulkTermItemOut: {
+            /**
+             * Aliases
+             * @default []
+             */
+            aliases: string[];
+            /**
+             * Attributes
+             * @default {}
+             */
+            attributes: {
+                [key: string]: number | string;
+            };
             /** Input */
             input: string;
             /** Parent Value */
@@ -2596,6 +2683,11 @@ export interface components {
             status: string;
             /** Value */
             value?: string | null;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
         };
         /** BulkTermOut */
         BulkTermOut: {
@@ -9292,6 +9384,40 @@ export interface operations {
             };
         };
     };
+    list_paste_columns_api_vocabularies__slug__paste_columns_get: {
+        parameters: {
+            query?: {
+                parent_value?: string | null;
+                like?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenFieldOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     recount_terms_api_vocabularies__slug__recount_post: {
         parameters: {
             query?: never;
@@ -9401,6 +9527,41 @@ export interface operations {
         };
     };
     create_terms_bulk_api_vocabularies__slug__terms_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTermCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkTermOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_terms_bulk_api_vocabularies__slug__terms_bulk_preview_post: {
         parameters: {
             query?: never;
             header?: never;

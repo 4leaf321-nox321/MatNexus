@@ -1679,3 +1679,146 @@ class Test여러_값_지우기:
             headers=admin_headers,
         ).json()
         assert first["items"][0]["id"] != second["items"][0]["id"]
+
+
+class Test엑셀붙여넣기:
+    """**엑셀에서 범위를 복사하면 열이 탭으로 붙는다.**
+
+    그래서 파일을 올릴 필요도, `.xlsx` 를 읽을 코드도 없다 — 붙여넣기가 곧 흡수
+    경로다. 다만 전에는 한 번만 갈라서, 세 열을 붙이면 값 안에 탭이 섞인 채로
+    조용히 들어갔다.
+    """
+
+    def _seed(self, client: TestClient, headers: dict[str, str]) -> None:
+        """상위(`Steel`)를 만들어 둔다. 재료를 하나 넣으면 축이 함께 채워진다."""
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "PASTESEED",
+                "details": "T",
+                "spec_thickness": 1.0,
+            },
+            headers=headers,
+        )
+
+    def test_세_열을_붙이면_별칭까지_심는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """별칭은 사후 병합보다 싸다 — 등록해 두면 게이트가 애초에 중복을 막는다."""
+        self._seed(client, admin_headers)
+        made = client.post(
+            "/api/vocabularies/grade/terms/bulk",
+            json={"values": ["Steel	SECC-X	SECCX;SECC(X)"]},
+            headers=admin_headers,
+        )
+        assert made.status_code == 200, made.text
+        (item,) = made.json()["items"]
+        # **값에 탭이 섞이면 안 된다.**
+        assert item["value"] == "SECC-X"
+        assert item["parent_value"] == "Steel"
+        assert set(item["aliases"]) == {"SECCX", "SECC(X)"}
+
+        # 별칭이 실제로 붙었다 — 그 표기로 다시 넣으면 같은 값에 붙는다.
+        again = client.post(
+            "/api/vocabularies/grade/terms/bulk",
+            json={"values": ["SECCX"]},
+            headers=admin_headers,
+        )
+        (found,) = again.json()["items"]
+        assert found["status"] == "existing" and found["value"] == "SECC-X"
+
+    def test_부모_없는_축은_둘째_열이_별칭이다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        made = client.post(
+            "/api/vocabularies/manufacturer/terms/bulk",
+            json={"values": ["한국제철	KOSTEEL;한국제철(주)"]},
+            headers=admin_headers,
+        )
+        (item,) = made.json()["items"]
+        assert item["value"] == "한국제철"
+        assert set(item["aliases"]) == {"KOSTEEL", "한국제철(주)"}
+
+    def test_같은_표를_두_번_붙여도_조용하다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**흔한 일이다.** 이미 달린 별칭을 실패로 세면 결과가 붉게 뒤덮인다."""
+        row = {"values": ["두번제철	TWICE"]}
+        client.post(
+            "/api/vocabularies/manufacturer/terms/bulk", json=row, headers=admin_headers
+        )
+        again = client.post(
+            "/api/vocabularies/manufacturer/terms/bulk", json=row, headers=admin_headers
+        )
+        assert again.status_code == 200, again.text
+        (item,) = again.json()["items"]
+        assert item["status"] == "existing"
+        # 이미 달려 있던 것은 "새로 단 것" 에 안 온다.
+        assert item["aliases"] == []
+
+    def test_손으로_친_줄은_그대로_돈다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """`Steel > SECC` 는 손으로 칠 때 읽기 좋은 표기다. 별칭은 없다."""
+        self._seed(client, admin_headers)
+        made = client.post(
+            "/api/vocabularies/grade/terms/bulk",
+            json={"values": ["Steel > SECC-Y"]},
+            headers=admin_headers,
+        )
+        (item,) = made.json()["items"]
+        assert item["value"] == "SECC-Y" and item["parent_value"] == "Steel"
+        assert item["aliases"] == []
+
+    def test_미리보기가_어떻게_들어갈지_말한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**보내 봐야 아는 상태였다.**
+
+        엑셀에서 복사한 표가 어떻게 갈리는지, 어느 줄이 이미 있는 값에 붙는지,
+        어느 줄이 상위를 못 찾아 떨어지는지 누르기 전에는 알 수 없었다.
+        """
+        self._seed(client, admin_headers)
+        client.post(
+            "/api/vocabularies/grade/terms/bulk",
+            json={"values": ["Steel	이미있는강종"]},
+            headers=admin_headers,
+        )
+
+        seen = client.post(
+            "/api/vocabularies/grade/terms/bulk/preview",
+            json={
+                "values": [
+                    "Steel	새강종	새강종-A",
+                    "Steel	이미있는강종",
+                    "없는분류	떨어질강종",
+                    "",
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert seen.status_code == 200, seen.text
+        rows = seen.json()["items"]
+        assert [row["status"] for row in rows] == ["new", "existing", "rejected", "skipped"]
+        assert rows[0]["value"] == "새강종" and rows[0]["aliases"] == ["새강종-A"]
+        assert rows[0]["parent_value"] == "Steel"
+        assert "없는분류" in rows[2]["reason"]
+
+    def test_미리보기는_아무것도_안_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**미리보기가 값을 만들면 미리보기가 아니다.**"""
+        self._seed(client, admin_headers)
+        client.post(
+            "/api/vocabularies/grade/terms/bulk/preview",
+            json={"values": ["Steel	안생길강종"]},
+            headers=admin_headers,
+        )
+        found = client.get(
+            "/api/vocabularies/grade/terms",
+            params={"q": "안생길강종"},
+            headers=admin_headers,
+        )
+        assert found.json()["items"] == []

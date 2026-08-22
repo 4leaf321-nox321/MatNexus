@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, select
@@ -22,7 +23,7 @@ from app.modules.vocabulary.models import (
     VocabularyDriftCheck,
     VocabularyTerm,
 )
-from app.modules.vocabulary.normalize import clean, compare_key, split_parent
+from app.modules.vocabulary.normalize import clean, compare_key, split_row
 from app.modules.vocabulary.schemas import (
     BulkDeleteItemOut,
     BulkDeleteOut,
@@ -795,6 +796,332 @@ def dismiss_pair(
     return Response(status_code=204)
 
 
+def _add_aliases(db: Session, term: VocabularyTerm, aliases: list[str]) -> list[str]:
+    """붙여넣은 줄의 별칭 열을 이 값에 단다. **새로 단 것만 돌려준다.**
+
+    별칭은 사후 병합보다 싸다 — 등록해 두면 값을 만들 때 게이트가 별칭까지 뒤져서
+    애초에 중복이 안 생긴다. 그런데 지금까지는 값을 넣고 나서 하나씩 달아야 해서,
+    엑셀에 이미 적혀 있어도 옮길 길이 없었다.
+
+    **이미 달린 것은 조용히 지나간다.** 같은 표를 두 번 붙여넣는 일이 흔한데,
+    그때마다 실패로 세면 결과가 붉게 뒤덮인다.
+    """
+    added: list[str] = []
+    for alias in aliases:
+        if services.add_alias(db, term, alias) is not None:
+            added.append(alias)
+    return added
+
+
+@dataclass(frozen=True)
+class _Planned:
+    """붙여넣은 한 줄을 **가르기만** 한 결과.
+
+    **있는 값인지는 여기서 정하지 않는다.** 같은 요청 안에서 `SECC` 와 `secc `
+    를 함께 보내면 뒤엣것은 **방금 만들어진 것**을 가리켜야 하는데, 앞에서 한꺼번에
+    조회해 두면 그 사실을 못 본다.
+    """
+
+    raw: str
+    parent: VocabularyTerm | None
+    parent_label: str | None
+    cleaned: str | None
+    aliases: list[str]
+    reason: str | None
+    attributes: dict[str, float | str] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+
+
+def _declared(payload: BulkTermCreateRequest) -> list[services.Field]:
+    """이 붙여넣기가 **선언하겠다는 칸**. 축·분류가 안 주는 것들이다."""
+    return [
+        services.Field(
+            key=one.key,
+            label=one.label,
+            dimension=one.dimension,
+            si_unit=one.si_unit,
+            is_required=one.is_required,
+            help=one.help,
+            inherited=False,
+            kind=one.kind,
+            choices=tuple(one.choices),
+            symbol=one.symbol,
+        )
+        for one in payload.columns
+    ]
+
+
+def _by_header(
+    raw: str, header: list[str], *, has_parent: bool
+) -> tuple[str | None, str, list[str]]:
+    """헤더가 있을 때 값·상위·별칭을 **열 이름**으로 찾는다.
+
+    자리로 읽으면 열 순서를 바꾼 표에서 조용히 어긋난다 — 엑셀에서 열을 옮기는
+    일은 흔하다.
+    """
+    cells = [part.strip() for part in raw.split("\t")]
+    names = [compare_key(one) for one in header]
+
+    def pick(candidates: tuple[str, ...]) -> str:
+        wanted = {compare_key(one) for one in candidates}
+        for index, name in enumerate(names):
+            if name in wanted and index < len(cells):
+                return cells[index]
+        return ""
+
+    value = pick(services.HEADER_VALUE)
+    parent = pick(services.HEADER_PARENT) if has_parent else ""
+    aliases_cell = pick(services.HEADER_ALIAS)
+    aliases = [
+        part.strip() for part in aliases_cell.replace(",", ";").split(";") if part.strip()
+    ]
+    return parent or None, value, aliases
+
+
+def _fields_for(
+    db: Session, vocabulary: Vocabulary, parent: VocabularyTerm | None
+) -> list[services.Field]:
+    """아직 안 만든 값이 가질 칸. **축의 칸 + 그 상위(분류)의 기본 칸.**
+
+    자기만의 칸(`extra_fields`)은 아직 없다 — 값이 생긴 뒤에 더하는 것이다.
+    """
+    return services.attribute_fields(
+        db,
+        vocabulary,
+        VocabularyTerm(
+            vocabulary_id=vocabulary.id,
+            parent_term_id=parent.id if parent else None,
+            extra_fields=[],
+            field_symbols={},
+        ),
+    )
+
+
+def _plan_bulk(
+    db: Session,
+    vocabulary: Vocabulary,
+    values: list[str],
+    fallback_parent: str | None,
+    *,
+    has_header: bool = False,
+    declared: list[services.Field] | None = None,
+) -> list[_Planned]:
+    """줄들을 상위·값·별칭으로 가른다. **아무것도 쓰지 않는다.**
+
+    미리보기와 실제 추가가 **같은 코드로 답해야 한다.** 화면이 규칙을 다시
+    구현하면 두 구현이 갈라지고, 그러면 미리보기가 거짓말을 한다 — 이름을 화면이
+    만들던 시절에 이미 겪은 실패다(ADR 0004).
+    """
+    fallback = services.parent_of(db, vocabulary, fallback_parent)
+    # 같은 상위를 줄마다 다시 조회하지 않는다 — 500줄이면 그만큼 왕복한다.
+    resolved: dict[str, VocabularyTerm | None] = {}
+
+    # **헤더는 상위마다 다르게 읽힌다.** 시편 규격의 칸은 분류가 정하므로,
+    # `인장` 줄과 `DMA` 줄에서 같은 열 이름이 다른 칸일 수 있다.
+    header: list[str] = []
+    columns_for: dict[uuid.UUID | None, list[services.Column]] = {}
+    body = list(values)
+    if has_header:
+        while body and not (body[0] or "").strip():
+            body.pop(0)  # 붙여넣기 앞에 빈 줄이 섞이는 일이 흔하다
+        if body:
+            header = [part.strip() for part in body.pop(0).split("\t")]
+
+    rows: list[_Planned] = []
+    for raw in body:
+        # **부모가 있는 축에서만 가른다.** 제조사 값에 `>` 가 들어 있을 수 있는데
+        # 부모 없는 축에서 갈라 버리면 멀쩡한 값이 반토막 난다.
+        if header:
+            line_parent, body_text, aliases = _by_header(
+                raw, header, has_parent=bool(vocabulary.parent_slug)
+            )
+        else:
+            line_parent, body_text, aliases = split_row(
+                raw, has_parent=bool(vocabulary.parent_slug)
+            )
+        cleaned = clean(body_text)
+        if cleaned is None:
+            # 빈 줄. 붙여 넣기에는 늘 섞여 있다 — 오류로 만들지 않는다.
+            rows.append(_Planned(raw, None, None, None, [], None))
+            continue
+
+        parent = fallback
+        if line_parent:
+            if line_parent not in resolved:
+                resolved[line_parent] = services.parent_of(db, vocabulary, line_parent)
+            parent = resolved[line_parent]
+            if parent is None:
+                # **말없이 버리지 않는다.** 상위를 못 찾았는데 그냥 만들면 그
+                # 값이 어디 속하는지 아무도 모르는 채로 목록에 남는다.
+                rows.append(
+                    _Planned(
+                        raw,
+                        None,
+                        line_parent,
+                        cleaned,
+                        aliases,
+                        f"상위 '{line_parent}' 를 찾을 수 없습니다.",
+                    )
+                )
+                continue
+
+        attributes: dict[str, float | str] = {}
+        warnings: list[str] = []
+        if header:
+            key = parent.id if parent else None
+            if key not in columns_for:
+                # **선언할 칸도 후보다.** 안 그러면 값이 있는데 갈 곳이 없다고
+                # 떨어뜨리고, 사람은 규격마다 창을 열어 칸부터 만들어야 한다.
+                available = _fields_for(db, vocabulary, parent)
+                known = {item.key for item in available}
+                available += [item for item in (declared or []) if item.key not in known]
+                columns_for[key] = services.read_header(header, available)
+            cells = [part.strip() for part in raw.split("\t")]
+            for index, column in enumerate(columns_for[key]):
+                cell = cells[index] if index < len(cells) else ""
+                if column.kind == "unknown":
+                    # **말없이 버리지 않는다.** 값이 있는데 갈 곳이 없으면 말한다.
+                    if cell and column.reason and column.reason not in warnings:
+                        warnings.append(column.reason)
+                    continue
+                if column.kind != "field":
+                    continue
+                value = services.read_cell(column, cell)
+                if value is not None and column.field is not None:
+                    attributes[column.field.key] = value
+
+        rows.append(
+            _Planned(
+                raw,
+                parent,
+                parent.value if parent else None,
+                cleaned,
+                aliases,
+                None,
+                attributes,
+                warnings,
+            )
+        )
+    return rows
+
+
+@router.get("/{slug}/paste-columns", response_model=list[SpecimenFieldOut])
+def list_paste_columns(
+    slug: str,
+    parent_value: str | None = Query(default=None),
+    like: str | None = Query(default=None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[SpecimenFieldOut]:
+    """표로 붙여넣을 때 **쓸 수 있는 열**. 값·상위·표기 말고 속성 쪽이다.
+
+    **사용자가 무엇을 적어야 하는지 몰랐다.** 헤더에 칸 이름을 적으라고만 하면
+    그 이름이 무엇인지 알 방법이 없다 — 규격의 칸은 분류가 정하고, 분류마다
+    다르다. 화면이 실제 목록을 보여 주고 고르게 해야 한다.
+
+    상위(분류)에 따라 답이 달라진다 — `인장` 과 `DMA` 의 기본 칸이 다르다.
+
+    `like` 를 주면 **그 값이 가진 칸까지** 낸다. 환봉 규격을 여러 개 만들 때
+    `직경` 을 매번 손으로 만들지 않아도 된다 — 이미 만들어 둔 규격에서 가져온다.
+    그 칸은 분류가 주는 것이 아니라 **그 값만의 칸**이라 `inherited` 가 거짓으로
+    오고, 새로 만드는 값에는 함께 **선언**해 줘야 값이 들어간다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    parent = services.parent_of(db, vocabulary, parent_value)
+    fields = _fields_for(db, vocabulary, parent)
+    if like:
+        template = services.resolve(db, vocabulary, like)
+        if template is not None:
+            known = {item.key for item in fields}
+            fields += [
+                item
+                for item in services.attribute_fields(db, vocabulary, template)
+                if item.key not in known
+            ]
+    return [
+        SpecimenFieldOut(
+            key=item.key,
+            label=item.label,
+            kind=item.kind,
+            choices=list(item.choices),
+            symbol=item.symbol,
+            dimension=item.dimension,
+            si_unit=item.si_unit,
+            is_required=item.is_required,
+            help=item.help,
+            inherited=item.inherited,
+        )
+        for item in fields
+    ]
+
+
+@router.post("/{slug}/terms/bulk/preview", response_model=BulkTermOut)
+def preview_terms_bulk(
+    slug: str,
+    payload: BulkTermCreateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BulkTermOut:
+    """붙여넣은 줄이 **어떻게 들어갈지** 미리 말한다. 아무것도 쓰지 않는다.
+
+    **보내 봐야 아는 상태였다.** 엑셀에서 복사한 표가 상위·값·별칭으로 어떻게
+    갈리는지, 어느 줄이 이미 있는 값에 붙는지, 어느 줄이 상위를 못 찾아 떨어지는지
+    누르기 전에는 알 수 없었다.
+
+    **화면이 다시 계산하지 않는다.** 규칙을 두 곳에 두면 갈라지고, 그러면
+    미리보기가 거짓말을 한다 — 그건 없는 것보다 나쁘다.
+    """
+    vocabulary = services.get_vocabulary(db, slug)
+    items: list[BulkTermItemOut] = []
+    # **앞 줄이 만들 값도 센다.** 같은 표에 같은 값이 두 번 있는 일이 흔한데,
+    # 둘 다 '새로' 로 세면 실제로 생길 개수와 어긋난다.
+    coming: set[str] = set()
+
+    for row in _plan_bulk(
+        db,
+        vocabulary,
+        payload.values,
+        payload.parent_value,
+        has_header=payload.has_header,
+        declared=_declared(payload),
+    ):
+        if row.cleaned is None:
+            items.append(BulkTermItemOut(input=row.raw, status="skipped"))
+            continue
+        if row.reason:
+            items.append(
+                BulkTermItemOut(
+                    input=row.raw,
+                    status="rejected",
+                    parent_value=row.parent_label,
+                    reason=row.reason,
+                )
+            )
+            continue
+
+        found = services.resolve(db, vocabulary, row.cleaned)
+        key = compare_key(row.cleaned)
+        items.append(
+            BulkTermItemOut(
+                input=row.raw,
+                status="existing" if found or key in coming else "new",
+                value=found.value if found else row.cleaned,
+                parent_value=row.parent_label,
+                aliases=row.aliases,
+                attributes=row.attributes,
+                warnings=row.warnings,
+            )
+        )
+        coming.add(key)
+    return BulkTermOut(
+        created=sum(1 for item in items if item.status == "new"),
+        existing=sum(1 for item in items if item.status == "existing"),
+        skipped=sum(1 for item in items if item.status == "skipped"),
+        rejected=sum(1 for item in items if item.status == "rejected"),
+        items=items,
+    )
+
+
 @router.post("/{slug}/terms/bulk", response_model=BulkTermOut)
 def create_terms_bulk(
     slug: str,
@@ -812,69 +1139,80 @@ def create_terms_bulk(
     같은 요청 안의 중복도 정직하게 처리된다. `'SECC'` 와 `'secc '` 를 함께
     보내면 앞은 `created`, 뒤는 `existing` 이다 — 방금 만들어진 것을 가리킨다.
 
+    ## 엑셀에서 복사한 열이 그대로 붙는다
+
+        부모 있는 축   Steel <TAB> SECC <TAB> SECC-1;SECC(주)
+        부모 없는 축   포스코 <TAB> POSCO;포스코(주)
+
+    마지막 열은 **별칭**이다. 별칭은 사후 병합보다 싸다 — 등록해 두면 값을 만들
+    때 게이트가 별칭까지 뒤져서 애초에 중복이 안 생긴다.
+
     ## 줄마다 상위가 다를 수 있다
 
     창에서 고른 상위 하나를 전 줄에 붙이면 **분류가 섞인 목록을 못 넣는다.**
-    줄에 `Steel<TAB>SECC` 나 `Steel > SECC` 로 적으면 그 줄만 그 상위 아래로
-    간다 — 엑셀에서 두 열을 복사하면 탭으로 붙는다.
+    상위를 못 찾으면 그 줄만 `rejected` 다.
 
-    상위를 못 찾으면 그 줄만 `rejected` 다. 그냥 만들면 그 값이 어디 속하는지
-    아무도 모르는 채로 목록에 남는다.
+    미리보기(`.../bulk/preview`)가 **같은 해석 코드**를 쓴다 — 두 곳에 두면
+    갈라지고, 그러면 미리보기가 거짓말을 한다.
     """
     vocabulary = services.get_vocabulary(db, slug)
-    fallback = services.parent_of(db, vocabulary, payload.parent_value)
-    # 같은 상위를 줄마다 다시 조회하지 않는다 — 500줄이면 그만큼 왕복한다.
-    resolved_parents: dict[str, VocabularyTerm | None] = {}
-
     items: list[BulkTermItemOut] = []
-    for raw in payload.values:
-        # **부모가 있는 축에서만 가른다.** 제조사 값에 `>` 가 들어 있을 수 있는데
-        # 부모 없는 축에서 갈라 버리면 멀쩡한 값이 반토막 난다.
-        line_parent, body = split_parent(raw) if vocabulary.parent_slug else (None, raw)
-        cleaned = clean(body)
-        if cleaned is None:
-            # 빈 줄. 붙여 넣기에는 늘 섞여 있다 — 오류로 만들지 않는다.
-            items.append(BulkTermItemOut(input=raw, status="skipped"))
+
+    for row in _plan_bulk(
+        db,
+        vocabulary,
+        payload.values,
+        payload.parent_value,
+        has_header=payload.has_header,
+        declared=_declared(payload),
+    ):
+        if row.cleaned is None:
+            items.append(BulkTermItemOut(input=row.raw, status="skipped"))
             continue
-
-        parent = fallback
-        if line_parent:
-            if line_parent not in resolved_parents:
-                resolved_parents[line_parent] = services.parent_of(db, vocabulary, line_parent)
-            parent = resolved_parents[line_parent]
-            if parent is None:
-                # **말없이 버리지 않는다.** 상위를 못 찾았는데 그냥 만들면 그
-                # 값이 어디 속하는지 아무도 모르는 채로 목록에 남는다.
-                items.append(
-                    BulkTermItemOut(
-                        input=raw,
-                        status="rejected",
-                        parent_value=line_parent,
-                        reason=f"상위 '{line_parent}' 를 찾을 수 없습니다.",
-                    )
-                )
-                continue
-
-        found = services.resolve(db, vocabulary, cleaned)
-        if found is not None:
+        if row.reason:
             items.append(
                 BulkTermItemOut(
-                    input=raw,
-                    status="existing",
-                    value=found.value,
-                    parent_value=parent.value if parent else None,
+                    input=row.raw,
+                    status="rejected",
+                    parent_value=row.parent_label,
+                    reason=row.reason,
                 )
             )
             continue
-        created = services.resolve_or_create(
-            db, vocabulary, cleaned, created_by_id=user.id, parent=parent
+
+        # **그때그때 조회한다.** 앞 줄이 방금 만든 값을 봐야 한다 — 미리
+        # 조회해 두면 `SECC` 와 `secc ` 를 둘 다 '새로' 로 세게 된다.
+        found = services.resolve(db, vocabulary, row.cleaned)
+        term = found or services.resolve_or_create(
+            db, vocabulary, row.cleaned, created_by_id=user.id, parent=row.parent
         )
+        if term is not None and payload.columns:
+            # **값이 들어가려면 칸이 있어야 한다.** 이미 있는 칸은 안 건드린다 —
+            # 사람이 고쳐 둔 이름·단위가 붙여넣기 한 번에 되돌아가면 안 된다.
+            have = {item.key for item in services.attribute_fields(db, vocabulary, term)}
+            missing = [one.model_dump() for one in payload.columns if one.key not in have]
+            if missing:
+                term.extra_fields = services.check_extra_fields(
+                    db, term, [*(term.extra_fields or []), *missing]
+                )
+                db.flush()
+
+        stored: dict[str, float | str] = {}
+        if term is not None and row.attributes:
+            # **있는 값의 속성은 안 덮는다.** 사람이 규격서를 보고 고친 값이
+            # 붙여넣기 한 번에 되돌아가면 안 된다 — 빈 칸만 채운다.
+            merged = {**row.attributes, **dict(term.attributes or {})}
+            stored = services.check_attributes(db, vocabulary, term, merged)
+            term.attributes = stored
         items.append(
             BulkTermItemOut(
-                input=raw,
-                status="created",
-                value=created.value if created else None,
-                parent_value=parent.value if parent else None,
+                input=row.raw,
+                status="existing" if found else "created",
+                value=term.value if term else None,
+                parent_value=row.parent_label,
+                aliases=_add_aliases(db, term, row.aliases) if term else [],
+                attributes=stored,
+                warnings=row.warnings,
             )
         )
 
