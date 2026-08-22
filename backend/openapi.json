@@ -2199,6 +2199,17 @@
             "title": "Label",
             "type": "string"
           },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
           "value_m": {
             "anyOf": [
               {

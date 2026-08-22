@@ -84,6 +84,21 @@ class TestRealFile:
         assert "specimen_width" not in parsed.metadata
         assert not any(s.key.startswith("specimen_") for s in parsed.summary)
 
+    def test_모르는_시편_항목도_결과가_아니다(self) -> None:
+        """**전에는 새어 나갔다.** 아는 이름 셋만 시편 항목으로 봤기 때문에,
+        환봉 파일의 `Specimen diameter d0` 가 요약값 목록에 '물성' 인 척 끼어
+        앉았다. 시편 치수는 우리가 잰 것이 아니라 넣은 것이다.
+
+        규격이 늘 때마다 표를 고치지 않으려면 이름으로 갈라야 한다 — Zwick 은
+        시편 항목을 늘 `Specimen ` 으로 시작한다.
+        """
+        line = b'"Specimen thickness a0",0.986,"mm"'
+        raw = GOOD.read_bytes().replace(line, line + b'\r\n"Specimen diameter d0",12.500,"mm"')
+        parsed = zwick_tra.parse(raw)
+        assert parsed.metadata["specimen_diameter_d0"] == "12.500"
+        assert parsed.metadata["specimen_diameter_d0_unit"] == "mm"
+        assert not any("diameter" in s.key for s in parsed.summary)
+
     def test_센서가_놓친_구간을_경고한다(self) -> None:
         """마지막 두 행의 폭이 0.0 이다. 진응력은 폭으로 나눈다."""
         parsed = _parse(GOOD)

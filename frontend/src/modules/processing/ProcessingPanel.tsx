@@ -509,7 +509,11 @@ export function ProcessingPanel({
               <span>이 파일이 준 값:</span>
               {fillable.map((item) => (
                 <Badge key={item.field} variant="outline" className="font-mono text-xs">
-                  {item.label} {formatScalar(item.value_m ?? 0, 'm')}
+                  {item.label}
+                  {/* **파일 항목 이름이 곧 규격 기호다** — Zwick 은 두께를 `a0`,
+                      직경을 `d0` 로 적는다. 무엇을 보고 이었는지 보여 준다. */}
+                  {item.symbol && <span className="ml-1 opacity-60">{item.symbol}</span>}{' '}
+                  {formatScalar(item.value_m ?? 0, 'm')}
                 </Badge>
               ))}
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={fill}>

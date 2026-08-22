@@ -15,7 +15,7 @@ Parquet 파일에 있고, 단위는 시험종류 정의에 있고, 시편 치수
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 from sqlalchemy import select
@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Specimen
 from app.modules.tests.models import Curve, TestChannel, TestRun
+from app.modules.vocabulary.services import Field
 from app.shared import filestore, specimen_size
 from app.shared.errors import NotFound
 from matcore import curves, processing, units
@@ -137,9 +138,9 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
 #: 파서 출력 키를 통일하지 않는 이유: 이미 저장된 `source_metadata` 가 있고,
 #: 그것을 바꾸려면 마이그레이션이 필요하다. 읽는 쪽에서 별칭을 아는 편이 싸다.
 DIMENSION_ALIASES: dict[str, tuple[str, ...]] = {
-    "thickness_m": ("specimen_thickness", "specimen_thickness_a0", "thickness"),
-    "width_m": ("specimen_width", "specimen_width_b0", "width"),
-    "gauge_length_m": ("gauge_length", "specimen_gauge_length", "l0", "specimen_length"),
+    "thickness": ("specimen_thickness", "specimen_thickness_a0", "thickness"),
+    "width": ("specimen_width", "specimen_width_b0", "width"),
+    "gauge_length": ("gauge_length", "specimen_gauge_length", "l0", "specimen_length"),
 }
 
 
@@ -173,17 +174,65 @@ def _as_metres(raw: object, unit_hint: str | None) -> float | None:
     return metres
 
 
-def instrument_dimensions(metadata: Mapping[str, object]) -> dict[str, float]:
-    """장비 파일이 준 시편 치수. 못 찾은 것은 빠진 채로 온다."""
+def _candidates(field: Field) -> tuple[str, ...]:
+    """이 칸을 가리킬 만한 파일 항목 이름들. **앞엣것이 먼저다.**
+
+    ## 기호로도 찾는다
+
+    **장비 파일의 항목 이름이 곧 규격 기호다.** Zwick 은 두께를 `a0`, 폭을 `b0`,
+    직경을 `d0` 로 적는다 — 규격서 도면의 글자를 그대로 쓴 것이다. 규격의 칸이
+    그 글자를 갖고 있으므로(`symbol`), 이름이 안 맞아도 글자로 이을 수 있다.
+
+    그래서 규격에 칸을 더하고 기호를 적어 두면 **파일 채우기가 저절로 따라온다.**
+    전에는 두께·폭·게이지 셋만 아는 표가 코드에 박혀 있어서, 환봉 파일의 직경은
+    갈 곳이 없었다.
+    """
+    names = [*DIMENSION_ALIASES.get(field.key, ()), field.key, f"specimen_{field.key}"]
+    if field.symbol:
+        mark = field.symbol.strip().lower()
+        # `Specimen diameter d0` → `specimen_diameter_d0`. 글자만으로도 받는다 —
+        # 항목 이름이 `d0` 하나인 파일이 있다.
+        names += [
+            mark,
+            f"specimen_{mark}",
+            f"{field.key}_{mark}",
+            f"specimen_{field.key}_{mark}",
+        ]
+    return tuple(dict.fromkeys(names))
+
+
+def instrument_dimensions(
+    metadata: Mapping[str, object], fields: Sequence[Field] = ()
+) -> dict[str, float]:
+    """장비 파일이 준 시편 치수. 못 찾은 것은 빠진 채로 온다.
+
+    `fields` 는 그 시편의 **규격이 선언한 칸**이다. 주면 그 칸들을 이름과 기호로
+    찾고, 안 주면 옛 셋(두께·폭·게이지)만 찾는다.
+    """
+    known = list(fields) or [
+        Field(
+            key=key,
+            label=key,
+            dimension="length",
+            si_unit="m",
+            is_required=False,
+            help=None,
+            inherited=False,
+        )
+        for key in DIMENSION_ALIASES
+    ]
+
     found: dict[str, float] = {}
-    for field, aliases in DIMENSION_ALIASES.items():
-        for alias in aliases:
+    for field in known:
+        if field.kind != "number":
+            continue
+        for alias in _candidates(field):
             if alias not in metadata:
                 continue
             metres = _as_metres(
                 metadata[alias], str(metadata.get(f"{alias}_unit") or "") or None
             )
             if metres is not None:
-                found[field] = metres
+                found[field.key] = metres
                 break
     return found

@@ -37,7 +37,12 @@ from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Specimen
 from app.modules.vocabulary.models import VocabularyTerm
-from app.modules.vocabulary.services import Field, attribute_fields, get_vocabulary
+
+# **`Field` 를 여기서 다시 내보낸다.** 모듈은 다른 모듈의 `services` 를 직접
+# import 하지 않는다(경계 검사) — 시편 치수를 다루는 다리가 이 파일이므로,
+# 그 타입도 여기를 거쳐 간다.
+from app.modules.vocabulary.services import Field as Field
+from app.modules.vocabulary.services import attribute_fields, get_vocabulary
 from matcore import ratio as ratio_kit
 from matcore import specimen as specimen_kit
 
@@ -59,6 +64,27 @@ LEGACY_LABELS = {
     "width": "폭",
     "thickness": "두께",
 }
+
+
+def legacy_fields() -> list[Field]:
+    """규격을 안 정한 시편이 쓰는 칸. **옛 셋이다.**
+
+    규격이 칸을 정하는 것이 원칙이지만, 규격을 아직 안 붙인 시편이 많다. 그때
+    칸이 하나도 없으면 **장비 파일에 값이 있어도 채울 자리가 없다** — 되던 길이
+    사라진다. 규격을 정하면 그 규격의 칸이 이것을 대신한다.
+    """
+    return [
+        Field(
+            key=key,
+            label=label,
+            dimension="length",
+            si_unit="m",
+            is_required=False,
+            help=None,
+            inherited=False,
+        )
+        for key, label in LEGACY_LABELS.items()
+    ]
 
 
 @dataclass(frozen=True)

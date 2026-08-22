@@ -447,8 +447,11 @@ class InstrumentDimensionOut(BaseModel):
     """장비 파일이 준 시편 치수 하나."""
 
     field: str
-    """`thickness_m` · `width_m` · `gauge_length_m`."""
+    """치수 칸의 키. **규격이 정한다** — `thickness` · `diameter` · `free_length`."""
     label: str
+    symbol: str | None = None
+    """그 규격의 도면이 쓰는 글자. **파일 항목 이름이 곧 이 글자다** — Zwick 은
+    두께를 `a0`, 폭을 `b0`, 직경을 `d0` 로 적는다."""
     value_m: float | None
     """파일이 준 값. **없을 수 있다** — 게이지 길이는 시험기 설정값이라 파일에
     안 적히는 것이 보통이다. 그 경우 사람이 직접 넣는 수밖에 없고, 화면이 그

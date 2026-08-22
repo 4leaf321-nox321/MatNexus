@@ -3198,6 +3198,8 @@ export interface components {
             field: string;
             /** Label */
             label: string;
+            /** Symbol */
+            symbol?: string | null;
             /** Value M */
             value_m: number | null;
         };

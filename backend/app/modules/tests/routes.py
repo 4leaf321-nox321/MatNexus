@@ -56,7 +56,7 @@ from app.modules.tests.schemas import (
 )
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
-from app.shared import curvedata, filestore, permissions
+from app.shared import curvedata, filestore, permissions, specimen_size
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -928,11 +928,21 @@ def cleanup(
 
 # --- 장비가 준 시편 치수 ------------------------------------------------------
 
-_DIMENSION_LABELS = {
-    "thickness_m": "두께",
-    "width_m": "폭",
-    "gauge_length_m": "게이지 길이",
-}
+
+def _dimension_fields(db: Session, specimen: Specimen | None) -> list[specimen_size.Field]:
+    """이 시편이 가질 수 있는 치수 칸. **규격이 정한다.**
+
+    전에는 두께·폭·게이지 셋이 코드에 박혀 있었다. 그래서 환봉 파일이 준 직경은
+    갈 곳이 없었고, 파일에 있는 값을 두고도 사람이 자를 대고 다시 쟀다.
+    """
+    if specimen is None:
+        return []
+    fields = [
+        item for item in specimen_size.sizes_of(db, specimen).fields if item.kind == "number"
+    ]
+    # **규격을 아직 안 붙인 시편이 많다.** 칸이 하나도 없으면 파일에 값이 있어도
+    # 채울 자리가 없어진다 — 되던 길이 사라지면 안 된다.
+    return fields or specimen_size.legacy_fields()
 
 
 @runs_router.get("/{run_id}/instrument-dimensions", response_model=InstrumentDimensionsOut)
@@ -948,7 +958,15 @@ def instrument_dimensions(
     """
     run = permissions.get_run(db, user, run_id)
     specimen = db.get(Specimen, run.specimen_id)
-    found = curvedata.instrument_dimensions(run.source_metadata)
+    fields = _dimension_fields(db, specimen)
+    found = curvedata.instrument_dimensions(run.source_metadata, fields)
+    measured = dict((specimen.dimensions if specimen else None) or {})
+    for key, column in specimen_size.LEGACY_COLUMNS.items():
+        if key not in measured and specimen is not None:
+            value = getattr(specimen, column, None)
+            if value:
+                measured[key] = float(value)
+
     # **찾은 것만 주지 않는다.** 화면이 "이건 파일에 없어서 직접 넣어야 한다" 를
     # 말하려면 없는 것도 알아야 한다. 찾은 것만 주면 화면은 빈 목록을 보고
     # "파일에 치수가 아예 없다" 로 잘못 읽는다.
@@ -956,12 +974,13 @@ def instrument_dimensions(
         specimen_id=run.specimen_id,
         items=[
             InstrumentDimensionOut(
-                field=field,
-                label=label,
-                value_m=found.get(field),
-                current_m=getattr(specimen, field, None) if specimen else None,
+                field=item.key,
+                label=item.label,
+                symbol=item.symbol,
+                value_m=found.get(item.key),
+                current_m=measured.get(item.key),
             )
-            for field, label in _DIMENSION_LABELS.items()
+            for item in fields
         ],
     )
 
@@ -984,19 +1003,27 @@ def apply_instrument_dimensions(
     """
     run = permissions.get_run(db, user, run_id)
     specimen = permissions.visible_specimen(db, user, run.specimen_id)
-    found = curvedata.instrument_dimensions(run.source_metadata)
+    fields = _dimension_fields(db, specimen)
+    found = curvedata.instrument_dimensions(run.source_metadata, fields)
     if not found:
         raise AppError(
             "MNX-TESTS-0030",
             "이 파일에는 시편 치수가 없습니다. 시편 기록에 직접 넣으세요.",
             status=422,
         )
+    labels = {item.key: item.label for item in fields}
+    measured = dict(specimen.dimensions or {})
     filled: list[str] = []
-    for field, value in found.items():
-        if getattr(specimen, field, None) is not None and not overwrite:
+    for key, value in found.items():
+        if measured.get(key) is not None and not overwrite:
             continue
-        setattr(specimen, field, value)
-        filled.append(_DIMENSION_LABELS.get(field, field))
+        measured[key] = value
+        filled.append(labels.get(key, key))
+    specimen.dimensions = measured
+    # **옛 컬럼도 함께 적는다**(ADR 0010 Expand). 아직 그쪽을 읽는 코드가 있다.
+    for key, column in specimen_size.LEGACY_COLUMNS.items():
+        if key in measured:
+            setattr(specimen, column, measured[key])
     if not filled:
         raise AppError(
             "MNX-TESTS-0031",

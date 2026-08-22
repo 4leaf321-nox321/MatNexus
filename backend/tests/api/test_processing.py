@@ -784,3 +784,59 @@ class Test들어오는값:
         assert given["specimen_area"]["value"] == pytest.approx(12.5e-3 * 1.0e-3)
         # **이름이 있어야 화면이 사람 말로 적는다.**
         assert given["specimen_gauge_length"]["label"]
+
+
+class Test파일값채우기:
+    """장비가 준 치수를 시편에 채운다 — **규격이 정한 칸으로.**
+
+    전에는 두께·폭·게이지 셋이 코드에 박혀 있었다. 그래서 환봉 파일이 준 직경은
+    갈 곳이 없었고, 파일에 값이 있는데도 사람이 자를 대고 다시 쟀다.
+    """
+
+    def test_파일이_준_값을_채운다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        found = client.get(
+            f"/api/test-runs/{run_id}/instrument-dimensions", headers=admin_headers
+        )
+        assert found.status_code == 200, found.text
+        items = {item["field"]: item for item in found.json()["items"]}
+        # Zwick 실파일이 a0·b0 를 준다. 규격을 안 정한 시편이라 옛 셋을 찾는다.
+        assert items["thickness"]["value_m"] == pytest.approx(0.000986)
+        assert items["width"]["value_m"] == pytest.approx(0.012473)
+        # **파일에 없는 것도 낸다** — 없으면 화면이 "직접 넣어야 한다" 를 못 말한다.
+        assert items["gauge_length"]["value_m"] is None
+
+        filled = client.post(
+            f"/api/test-runs/{run_id}/apply-instrument-dimensions", headers=admin_headers
+        )
+        assert filled.status_code == 200, filled.text
+
+        specimen_id = found.json()["specimen_id"]
+        sizes = client.get(f"/api/specimens/{specimen_id}/dimensions", headers=admin_headers)
+        by_key = {item["key"]: item for item in sizes.json()["fields"]}
+        assert by_key["thickness"]["measured"] == pytest.approx(0.000986)
+        assert by_key["thickness"]["source"] == "measured"
+
+    def test_이미_잰_값은_안_덮는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**사람이 재어 넣은 값을 파일이 조용히 바꾸면 어느 것이 맞는지 모른다.**"""
+        found = client.get(
+            f"/api/test-runs/{run_id}/instrument-dimensions", headers=admin_headers
+        )
+        specimen_id = found.json()["specimen_id"]
+        client.put(
+            f"/api/specimens/{specimen_id}/dimensions",
+            json={"dimensions": {"thickness": 0.001}},
+            headers=admin_headers,
+        )
+
+        client.post(
+            f"/api/test-runs/{run_id}/apply-instrument-dimensions", headers=admin_headers
+        )
+        sizes = client.get(f"/api/specimens/{specimen_id}/dimensions", headers=admin_headers)
+        by_key = {item["key"]: item for item in sizes.json()["fields"]}
+        assert by_key["thickness"]["measured"] == pytest.approx(0.001)
+        # 안 잰 것은 채워진다.
+        assert by_key["width"]["measured"] == pytest.approx(0.012473)

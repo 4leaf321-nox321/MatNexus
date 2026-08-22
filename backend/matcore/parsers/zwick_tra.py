@@ -80,11 +80,24 @@ SUMMARY_KEYS = {
 #:
 #: 키에 `_a0`·`_b0` 를 붙이는 이유: `specimen_width` 는 **채널 이름과 겹친다**.
 #: 곡선의 시편폭(시험 중 계속 변하는 값)과 초기 폭 b0(고정값)는 다른 것이다.
+#:
+#: 여기 적힌 것은 **이미 저장된 키**라 바꾸지 않는다. 그 밖의 `Specimen ...` 은
+#: 아래 규칙으로 자동으로 담는다.
 SPECIMEN_FIELDS = {
     "specimen number": "specimen_number",
     "specimen thickness a0": "specimen_thickness_a0",
     "specimen width b0": "specimen_width_b0",
 }
+
+#: `Specimen ...` 으로 시작하는 줄은 **전부** 시편 항목으로 본다.
+#:
+#: 전에는 위 표에 적힌 셋만 알아봤다. 그래서 환봉 파일의 `Specimen diameter d0`
+#: 가 **시험 결과로 흘러들었다** — 요약값 목록에 '시편 직경' 이 물성인 척 끼어
+#: 앉는다. 시편 치수는 우리가 잰 것이 아니라 넣은 것이라 결과가 아니다.
+#:
+#: 규격이 늘어날 때마다 표를 고치지 않으려면 이름으로 갈라야 한다. Zwick 은
+#: 시편 항목을 늘 `Specimen ` 으로 시작한다(실측: `.tra` 실파일).
+SPECIMEN_PREFIX = "specimen "
 
 #: DB 컬럼 길이(TestSummary.key/label). 모르는 항목의 slug 가 넘칠 수 있는데,
 #: 그때 DB 가 거부하면 파일 전체가 실패한다. 파서가 먼저 자른다.
@@ -386,10 +399,12 @@ def _build_summary(
         # row[2] 를 무조건 읽으면 IndexError 가 난다.
         raw_unit = row[2].strip().strip('"').strip() if len(row) > 2 else ""
 
-        if normalized in SPECIMEN_FIELDS:
-            metadata[SPECIMEN_FIELDS[normalized]] = raw_value
+        if normalized in SPECIMEN_FIELDS or normalized.startswith(SPECIMEN_PREFIX):
+            # 아는 것은 저장된 키로, 나머지는 이름을 그대로 슬러그로.
+            name = SPECIMEN_FIELDS.get(normalized) or _slug(label)
+            metadata[name] = raw_value
             if raw_unit:
-                metadata[f"{SPECIMEN_FIELDS[normalized]}_unit"] = raw_unit
+                metadata[f"{name}_unit"] = raw_unit
             continue
 
         key = _unique_key(SUMMARY_KEYS.get(normalized, _slug(label)), label, used, warnings)
