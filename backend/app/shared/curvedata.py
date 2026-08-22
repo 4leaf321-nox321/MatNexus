@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Specimen
 from app.modules.tests.models import Curve, TestChannel, TestRun
-from app.shared import filestore
+from app.shared import filestore, specimen_size
 from app.shared.errors import NotFound
 from matcore import curves, processing, units
 
@@ -92,37 +92,32 @@ def load_frame(
 def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     """시편 치수를 파이프라인이 `@` 로 참조할 수 있게 넘긴다.
 
+    **규격에서 물려받은 값도 넘어간다.** 시편이 비어 있어도 그 규격이 공칭을
+    갖고 있으면 그것으로 돈다(`specimen_size`) — 시편 41개 중 치수가 있는 것이
+    3개뿐이라 처리가 첫 단계에서 막히던 문제가 여기서 풀린다. 잰 값이 있으면
+    그것이 이긴다.
+
     **없는 값은 넘기지 않는다.** 0 이나 기본값으로 채우면 응력이 조용히 틀린다 —
     단면적이 잘못되면 자릿수가 통째로 어긋나는데 숫자는 그럴듯해 보인다. 없으면
     `@specimen_area` 참조가 "그 값이 없습니다" 로 실패하고, 그게 맞다.
-
-    일괄 등록으로 만든 시편은 치수가 비어 있는 것이 정상이라 이 실패는 자주 난다.
     """
     specimen = db.get(Specimen, run.specimen_id)
     if specimen is None:
         return []
-    given: list[processing.Scalar] = []
-    if specimen.gauge_length_m:
-        given.append(
-            processing.Scalar(
-                "specimen_gauge_length", "시편 게이지 길이", specimen.gauge_length_m, "m"
-            )
+
+    sizes = specimen_size.sizes_of(db, specimen)
+    given: list[processing.Scalar] = [
+        processing.Scalar(
+            f"specimen_{item.key}", f"시편 {item.label}", item.value, item.si_unit
         )
-    if specimen.width_m:
-        given.append(processing.Scalar("specimen_width", "시편 폭", specimen.width_m, "m"))
-    if specimen.thickness_m:
-        given.append(
-            processing.Scalar("specimen_thickness", "시편 두께", specimen.thickness_m, "m")
-        )
-    if specimen.width_m and specimen.thickness_m:
-        given.append(
-            processing.Scalar(
-                "specimen_area",
-                "시편 초기 단면적",
-                specimen.width_m * specimen.thickness_m,
-                "m2",
-            )
-        )
+        for item in sizes.items
+    ]
+
+    # 단면적은 **규격이 고른 식**으로 낸다 — 평판은 폭 곱하기 두께, 환봉은
+    # π(직경/2)². 식을 안 골랐으면 옛 규칙(폭·두께)으로 되돌아간다.
+    area = specimen_size.area_of(db, specimen)
+    if area:
+        given.append(processing.Scalar("specimen_area", "시편 초기 단면적", area, "m2"))
     return given
 
 

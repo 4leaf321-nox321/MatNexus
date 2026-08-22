@@ -35,16 +35,21 @@ from app.modules.materials.schemas import (
     SampleUpdateRequest,
     SpecimenCreateRequest,
     SpecimenOut,
+    SpecimenSizeOut,
+    SpecimenSizesOut,
+    SpecimenSizesRequest,
     SpecimenUpdateRequest,
     ValueSourceOut,
 )
 from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
+from app.shared import specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
 from matcore import naming
+from matcore import specimen as specimen_kit
 
 router = APIRouter(prefix="/materials", tags=["materials"])
 samples_router = APIRouter(prefix="/samples", tags=["materials"])
@@ -981,6 +986,106 @@ def update_specimen(
 
     db.commit()
     return _specimen_out(specimen)
+
+
+@specimens_router.get("/{specimen_id}/dimensions", response_model=SpecimenSizesOut)
+def get_specimen_dimensions(
+    specimen_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SpecimenSizesOut:
+    """이 시편이 가질 수 있는 치수 칸과 지금 값.
+
+    **칸 목록을 화면에 적지 않는다.** 규격이 정하기 때문이다 — 환봉 규격에는
+    직경 칸이 나오고 평판 규격에는 안 나온다. 화면에 세 칸(두께·폭·게이지)을
+    박아 두면 환봉을 영영 못 담는다.
+    """
+    specimen = _get_specimen(db, user, specimen_id)
+    sizes = specimen_size.sizes_of(db, specimen)
+    area = specimen_size.area_detail(db, specimen)
+    shape = specimen_kit.CROSS_SECTIONS.get(sizes.cross_section or "")
+
+    known = {field.key for field in sizes.fields}
+    # 규격이 정한 칸 + 규격에서 사라졌는데 값이 남은 칸. **뒤엣것을 숨기면
+    # 사람은 안 지워지는 값을 보게 된다** — 규격을 바꿔도 옛 실측은 남는다.
+    orphans = [
+        vocabulary_services.Field(
+            key=key,
+            label=specimen_size.LEGACY_LABELS.get(key, key),
+            dimension="length",
+            si_unit="m",
+            is_required=False,
+            help="지금 규격에는 없는 칸입니다. 비우면 사라집니다.",
+            inherited=False,
+        )
+        for key in sizes.measured
+        if key not in known
+    ]
+
+    fields: list[SpecimenSizeOut] = []
+    for field in [*sizes.fields, *orphans]:
+        measured = sizes.measured.get(field.key)
+        nominal = sizes.nominal.get(field.key)
+        source = "measured" if measured is not None else None
+        if source is None and nominal is not None:
+            source = "nominal"
+        fields.append(
+            SpecimenSizeOut(
+                key=field.key,
+                label=field.label,
+                dimension=field.dimension,
+                si_unit=field.si_unit,
+                is_required=field.is_required,
+                help=field.help,
+                inherited=field.inherited,
+                nominal=nominal,
+                measured=measured,
+                source=source,
+            )
+        )
+
+    return SpecimenSizesOut(
+        standard=sizes.standard,
+        cross_section=sizes.cross_section,
+        cross_section_label=shape.label if shape else None,
+        area=area.value,
+        area_problem=area.problem,
+        fields=fields,
+    )
+
+
+@specimens_router.put("/{specimen_id}/dimensions", response_model=SpecimenSizesOut)
+def put_specimen_dimensions(
+    specimen_id: uuid.UUID,
+    payload: SpecimenSizesRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SpecimenSizesOut:
+    """잰 값을 적는다. **규격의 공칭은 복사하지 않는다.**
+
+    복사하면 그 순간 둘이 같아 보이고, 규격을 고쳐도 시편은 옛 값을 든 채 남는다.
+    """
+    specimen = _get_specimen(db, user, specimen_id)
+
+    values: dict[str, float] = {}
+    for key, raw in payload.dimensions.items():
+        value = float(raw)
+        if value <= 0:
+            raise AppError(
+                "MNX-MATERIALS-0016",
+                f"{key} 는 0 보다 커야 합니다. 안 쟀으면 칸을 비우세요 — "
+                "0 은 '쟀는데 0' 이라는 뜻이고 그것으로 나누면 응력이 무한대가 됩니다.",
+                status=422,
+            )
+        values[key] = value
+    specimen.dimensions = values
+
+    # **옛 컬럼도 함께 적는다**(ADR 0010 Expand). 아직 그쪽을 읽는 코드가 있다.
+    for key, column in specimen_size.LEGACY_COLUMNS.items():
+        setattr(specimen, column, values.get(key))
+
+    db.commit()
+    return get_specimen_dimensions(specimen_id, user=user, db=db)
 
 
 @specimens_router.delete("/{specimen_id}", status_code=204)

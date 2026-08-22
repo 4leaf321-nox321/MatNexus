@@ -905,6 +905,44 @@
         "title": "CreateAccountRequest",
         "type": "object"
       },
+      "CrossSectionOut": {
+        "description": "고를 수 있는 단면적 식 하나.\n\n**키가 아니라 이름을 함께 준다** — `rectangle` 은 사람이 읽는 말이 아니다.",
+        "properties": {
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "needs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Needs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "needs"
+        ],
+        "title": "CrossSectionOut",
+        "type": "object"
+      },
       "CurveOut": {
         "description": "저장된 곡선 하나.\n\n**여럿일 수 있다.** TA DMA850 주파수-온도 스윕은 `[step]` 마다 별개 측정이라\n곡선이 6벌 나온다. 하나만 보여 주면 나머지는 저장돼 있는데 화면에서 영원히\n안 보인다 — 실제로 그랬다.",
         "properties": {
@@ -5784,6 +5822,187 @@
         "title": "SpecimenOut",
         "type": "object"
       },
+      "SpecimenSizeOut": {
+        "description": "시편 치수 칸 하나 — **잰 값과 규격값을 나란히 낸다.**\n\n둘을 합쳐 하나로 내면 사람은 전부 실측으로 읽는다. 규격을 고쳐도 안 따라오는\n옛 값과, 규격이 정한 값을 구별할 수 없게 된다.",
+        "properties": {
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "inherited": {
+            "title": "Inherited",
+            "type": "boolean"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "measured": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured"
+          },
+          "nominal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "dimension",
+          "si_unit",
+          "is_required",
+          "help",
+          "inherited",
+          "nominal",
+          "measured",
+          "source"
+        ],
+        "title": "SpecimenSizeOut",
+        "type": "object"
+      },
+      "SpecimenSizesOut": {
+        "description": "시편 하나의 치수 한 벌과 단면적.",
+        "properties": {
+          "area": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area"
+          },
+          "area_problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Problem"
+          },
+          "cross_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Section"
+          },
+          "cross_section_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Section Label"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SpecimenSizeOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          }
+        },
+        "required": [
+          "standard",
+          "cross_section",
+          "cross_section_label",
+          "area",
+          "area_problem",
+          "fields"
+        ],
+        "title": "SpecimenSizesOut",
+        "type": "object"
+      },
+      "SpecimenSizesRequest": {
+        "description": "잰 값만 보낸다(SI). **키를 빼면 그 칸을 안 잰 것이 된다.**",
+        "properties": {
+          "dimensions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Dimensions",
+            "type": "object"
+          }
+        },
+        "required": [
+          "dimensions"
+        ],
+        "title": "SpecimenSizesRequest",
+        "type": "object"
+      },
       "SpecimenUpdateRequest": {
         "properties": {
           "gauge_length": {
@@ -6383,6 +6602,17 @@
             "title": "Attributes",
             "type": "object"
           },
+          "cross_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Section"
+          },
           "extra_fields": {
             "default": [],
             "items": {
@@ -6450,6 +6680,18 @@
               }
             ],
             "title": "Attributes"
+          },
+          "cross_section": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Section"
           },
           "extra_fields": {
             "anyOf": [
@@ -11846,6 +12088,102 @@
         ]
       }
     },
+    "/api/specimens/{specimen_id}/dimensions": {
+      "get": {
+        "description": "이 시편이 가질 수 있는 치수 칸과 지금 값.\n\n**칸 목록을 화면에 적지 않는다.** 규격이 정하기 때문이다 — 환봉 규격에는\n직경 칸이 나오고 평판 규격에는 안 나온다. 화면에 세 칸(두께·폭·게이지)을\n박아 두면 환봉을 영영 못 담는다.",
+        "operationId": "get_specimen_dimensions_api_specimens__specimen_id__dimensions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "specimen_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Specimen Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecimenSizesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Specimen Dimensions",
+        "tags": [
+          "materials"
+        ]
+      },
+      "put": {
+        "description": "잰 값을 적는다. **규격의 공칭은 복사하지 않는다.**\n\n복사하면 그 순간 둘이 같아 보이고, 규격을 고쳐도 시편은 옛 값을 든 채 남는다.",
+        "operationId": "put_specimen_dimensions_api_specimens__specimen_id__dimensions_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "specimen_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Specimen Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecimenSizesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecimenSizesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Specimen Dimensions",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
     "/api/statistics/ensembles": {
       "get": {
         "operationId": "list_ensembles_api_statistics_ensembles_get",
@@ -13290,6 +13628,32 @@
           }
         },
         "summary": "List Vocabularies",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/cross-sections": {
+      "get": {
+        "description": "고를 수 있는 단면적 식. **목록을 화면에 적지 않는다.**\n\n식이 늘면(관·육각봉…) 화면이 따라온다 — 처리 단계의 `ParamSpec` 과 같은\n자리다(D7).",
+        "operationId": "list_cross_sections_api_vocabularies_cross_sections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CrossSectionOut"
+                  },
+                  "title": "Response List Cross Sections Api Vocabularies Cross Sections Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Cross Sections",
         "tags": [
           "vocabulary"
         ]

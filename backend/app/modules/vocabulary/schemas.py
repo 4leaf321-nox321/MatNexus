@@ -42,9 +42,24 @@ class TermOut(BaseModel):
     """치수 등 속성. **SI 다** — 화면이 mm 로 바꿔 보여 준다."""
     extra_fields: list[SpecimenFieldOut] = []
     """이 값만 갖는 칸. 상위 분류의 기본 칸에 더해진다."""
+    cross_section: str | None = None
+    """이 규격의 시편은 단면적을 어떻게 내는가(`matcore.specimen`)."""
     field_count: int = 0
     """이 값이 **직접 선언한** 칸 수. 분류 축에서 쓴다 — 0 이면 그 분류의
     규격은 치수를 하나도 못 갖는다."""
+
+
+class CrossSectionOut(BaseModel):
+    """고를 수 있는 단면적 식 하나.
+
+    **키가 아니라 이름을 함께 준다** — `rectangle` 은 사람이 읽는 말이 아니다.
+    """
+
+    key: str
+    label: str
+    needs: list[str]
+    """이 식이 요구하는 치수 칸. 화면이 "직경 칸이 없어서 못 고릅니다" 를 말한다."""
+    help: str | None = None
 
 
 class SpecimenFieldOut(BaseModel):
@@ -110,6 +125,9 @@ class TermUpdateRequest(BaseModel):
     attributes: dict[str, float] | None = None
     """주면 통째로 바꾼다. 빠뜨린 칸은 지워진다 — 부분 갱신은 "빈 칸으로 고쳤다"
     와 "안 보냈다" 를 구별할 수 없다."""
+    cross_section: str | None = Field(default=None, max_length=20)
+    """단면적 식. **빈 문자열이면 뗀다.** 그 식이 요구하는 치수 칸이 이 규격에
+    있어야 고를 수 있다 — 없는 칸을 요구하는 식은 늘 실패한다."""
     extra_fields: list[SpecimenFieldSaveRequest] | None = None
     """이 값**만** 갖는 치수 칸. 상위 분류의 기본 칸에 더해진다.
 

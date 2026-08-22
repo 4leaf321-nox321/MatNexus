@@ -217,6 +217,47 @@ class SpecimenOut(BaseModel):
     한 번에 세어 넣는다 — 시편마다 물으면 N+1 이다."""
 
 
+class SpecimenSizeOut(BaseModel):
+    """시편 치수 칸 하나 — **잰 값과 규격값을 나란히 낸다.**
+
+    둘을 합쳐 하나로 내면 사람은 전부 실측으로 읽는다. 규격을 고쳐도 안 따라오는
+    옛 값과, 규격이 정한 값을 구별할 수 없게 된다.
+    """
+
+    key: str
+    label: str
+    dimension: str
+    si_unit: str
+    is_required: bool
+    help: str | None
+    inherited: bool
+    """분류가 준 칸인가. 아니면 이 규격만의 칸이다."""
+    nominal: float | None
+    """규격이 정한 공칭(SI). 시편 행에는 복사돼 있지 않다."""
+    measured: float | None
+    """이 시편에서 실제로 잰 값(SI)."""
+    source: str | None
+    """실제로 쓰이는 값이 어디서 왔는가 — `measured` 또는 `nominal`, 없으면 빈 칸."""
+
+
+class SpecimenSizesOut(BaseModel):
+    """시편 하나의 치수 한 벌과 단면적."""
+
+    standard: str | None
+    cross_section: str | None
+    cross_section_label: str | None
+    area: float | None
+    """초기 단면적(m^2). 못 내면 `None` 이고 이유가 `area_problem` 에 있다."""
+    area_problem: str | None
+    fields: list[SpecimenSizeOut]
+
+
+class SpecimenSizesRequest(BaseModel):
+    """잰 값만 보낸다(SI). **키를 빼면 그 칸을 안 잰 것이 된다.**"""
+
+    dimensions: dict[str, float]
+
+
 class SpecimenCreateRequest(BaseModel):
     orientation: str = Field(default="NA", max_length=10)
     seq_no: int | None = Field(default=None, ge=1)

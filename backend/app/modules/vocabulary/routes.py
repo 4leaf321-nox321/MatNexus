@@ -30,6 +30,7 @@ from app.modules.vocabulary.schemas import (
     BulkTermCreateRequest,
     BulkTermItemOut,
     BulkTermOut,
+    CrossSectionOut,
     DismissRequest,
     DriftOut,
     DriftReportOut,
@@ -46,6 +47,7 @@ from app.modules.vocabulary.schemas import (
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import MAX_LIMIT, Page, clamp_limit
+from matcore import specimen as specimen_kit
 
 router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 
@@ -68,6 +70,7 @@ def _term_out(db: Session, item: VocabularyTerm, field_count: int | None = None)
         usage_count=item.usage_count,
         status=item.status,
         attributes=dict(item.attributes or {}),
+        cross_section=item.cross_section,
         # **이 값이 직접 선언한 칸 수.** 분류 축에서 "이 분류는 칸이 몇 개" 를
         # 말한다 — 0 이면 그 분류의 규격은 치수를 하나도 못 갖는다.
         field_count=field_count
@@ -196,6 +199,19 @@ def repair_drift(
     row = services.record_check(db, source="manual")
     db.commit()
     return _report(db, row)
+
+
+@router.get("/cross-sections", response_model=list[CrossSectionOut])
+def list_cross_sections(user: User = Depends(current_user)) -> list[CrossSectionOut]:
+    """고를 수 있는 단면적 식. **목록을 화면에 적지 않는다.**
+
+    식이 늘면(관·육각봉…) 화면이 따라온다 — 처리 단계의 `ParamSpec` 과 같은
+    자리다(D7).
+    """
+    return [
+        CrossSectionOut(key=item.key, label=item.label, needs=list(item.needs), help=item.help)
+        for item in specimen_kit.CROSS_SECTIONS.values()
+    ]
 
 
 @router.get("/{slug}/terms/{term_id}/fields", response_model=list[SpecimenFieldOut])
@@ -441,6 +457,10 @@ def update_term(
     # 그 자리에서 거절되어야 한다 — 남겨 두면 화면이 못 보여 주는 유령이 된다.
     if "extra_fields" in data:
         term.extra_fields = services.check_extra_fields(db, term, data["extra_fields"])
+    if "cross_section" in data:
+        term.cross_section = services.check_cross_section(
+            db, vocabulary, term, data["cross_section"] or None
+        )
     if "attributes" in data or "parent_value" in data:
         attributes = data.get("attributes")
         if attributes is None:

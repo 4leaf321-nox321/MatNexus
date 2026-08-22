@@ -24,6 +24,14 @@ type NamePreviewRequest = components['schemas']['NamePreviewRequest']
  * 나중에 아무도 답할 수 없다.
  */
 export type PropertySources = components['schemas']['PropertySourcesOut']
+/**
+ * 시편 치수 한 벌 — **칸 목록은 규격이 정한다.**
+ *
+ * 화면에 두께·폭·게이지 세 칸을 박아 두었더니 환봉을 담을 자리가 없었다.
+ * 이제 규격이 자기 칸을 갖고(ADR 0010) 화면은 그것을 그린다.
+ */
+export type SpecimenSizes = components['schemas']['SpecimenSizesOut']
+export type SpecimenSize = components['schemas']['SpecimenSizeOut']
 export type ValueSource = components['schemas']['ValueSourceOut']
 
 export const LENGTH_UNIT = 'mm'
@@ -89,6 +97,18 @@ export const materialsApi = {
   /** 시편 속성 수정 — 치수·메모. 방향과 번호는 이름을 만드는 값이라 안 바꾼다. */
   updateSpecimen: (id: string, payload: SpecimenUpdate) =>
     api.patch<Specimen>(`/specimens/${id}`, payload),
+
+  /**
+   * 이 시편이 가질 수 있는 치수 칸과 지금 값. 규격이 정한다.
+   *
+   * **공칭과 실측을 나란히 준다** — 합쳐서 하나로 주면 사람은 전부 실측으로 읽고,
+   * "이 두께가 규격값인가 잰 값인가" 를 나중에 답할 수 없다.
+   */
+  dimensions: (id: string) => api.get<SpecimenSizes>(`/specimens/${id}/dimensions`),
+
+  /** 잰 값만 보낸다(SI). **키를 빼면 그 칸을 안 잰 것이 된다.** */
+  saveDimensions: (id: string, dimensions: Record<string, number>) =>
+    api.put<SpecimenSizes>(`/specimens/${id}/dimensions`, { dimensions }),
 
   removeSpecimen: (id: string) => api.delete<void>(`/specimens/${id}`),
 }

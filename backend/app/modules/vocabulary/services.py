@@ -1176,3 +1176,32 @@ def check_attributes(
             status=422,
         )
     return cleaned
+
+
+def check_cross_section(
+    db: Session, vocabulary: Vocabulary, term: VocabularyTerm, key: str | None
+) -> str | None:
+    """단면적 식을 고를 수 있는가.
+
+    **그 식이 요구하는 치수 칸이 이 규격에 있어야 한다.** 없으면 그 식은 늘
+    실패하고, 사람은 "왜 단면적이 안 나오지" 를 처리 화면에서 만난다 — 고른
+    자리에서 거절하는 편이 낫다.
+    """
+    from matcore import specimen as specimen_kit
+
+    if key is None:
+        return None
+    shape = specimen_kit.CROSS_SECTIONS.get(key)
+    if shape is None:
+        raise AppError("MNX-VOCABULARY-0019", f"모르는 단면 모양입니다: {key}", status=422)
+
+    have = {field.key for field in attribute_fields(db, vocabulary, term)}
+    missing = [name for name in shape.needs if name not in have]
+    if missing:
+        raise AppError(
+            "MNX-VOCABULARY-0020",
+            f"'{shape.label}' 를 쓰려면 치수 칸 {', '.join(missing)} 이(가) 있어야 합니다. "
+            f"이 규격의 칸에 먼저 더하세요.",
+            status=422,
+        )
+    return key

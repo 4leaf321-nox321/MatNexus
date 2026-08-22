@@ -17,12 +17,14 @@ import { SpecimenStandardDialog } from '@/modules/vocabulary/SpecimenStandardDia
 import type { Term } from '@/modules/vocabulary/api'
 
 const termFields = vi.fn()
+const crossSections = vi.fn()
 const update = vi.fn()
 
 vi.mock('@/modules/vocabulary/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/vocabulary/api')>()),
   vocabularyApi: {
     termFields: (...args: unknown[]) => termFields(...args),
+    crossSections: () => crossSections(),
     update: (...args: unknown[]) => update(...args),
     saveCategoryFields: vi.fn(),
   },
@@ -42,6 +44,7 @@ const field = (key: string, label: string, required = false, inherited = true) =
 const FIELDS = [
   field('gauge_length', '게이지 길이', true),
   field('width', '평행부 폭', true),
+  field('thickness', '두께', false),
   field('shoulder_radius', '어깨 반경', false, false),
 ]
 
@@ -70,6 +73,10 @@ function show(term: Term = TERM) {
 describe('시편 규격 치수', () => {
   beforeEach(() => {
     termFields.mockResolvedValue(FIELDS)
+    crossSections.mockResolvedValue([
+      { key: 'rectangle', label: '평판 (폭 곱하기 두께)', needs: ['width', 'thickness'], help: null },
+      { key: 'circle', label: '환봉 (직경)', needs: ['diameter'], help: null },
+    ])
     update.mockReset()
     update.mockResolvedValue(TERM)
   })
@@ -128,5 +135,33 @@ describe('시편 규격 치수', () => {
     termFields.mockResolvedValue([])
     show({ ...TERM, parent_value: null, attributes: {} } as Term)
     expect(await screen.findByText(/아직 칸이 없습니다/)).toBeInTheDocument()
+  })
+
+  it('요구 칸이 없는 단면적 식은 못 고른다', async () => {
+    // **골라 봐야 늘 실패한다.** 사람은 그 이유를 처리 화면에서 만나게 되고,
+    // 거기엔 "왜 단면적이 안 나오지" 밖에 안 적혀 있다.
+    show()
+    await screen.findByLabelText('게이지 길이')
+    // 이 규격에는 폭·두께가 있고 직경은 없다.
+    expect(screen.getByRole('button', { name: /평판/ })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /환봉/ })).toBeDisabled()
+  })
+
+  it('안 고르면 옛 규칙으로 돈다고 말한다', async () => {
+    show()
+    await screen.findByLabelText('게이지 길이')
+    expect(screen.getByText(/옛 규칙/)).toBeInTheDocument()
+  })
+
+  it('고른 식을 함께 보낸다', async () => {
+    const user = userEvent.setup()
+    show()
+    await screen.findByLabelText('게이지 길이')
+    await user.click(screen.getByRole('button', { name: /평판/ }))
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, , body] = update.mock.calls[0]
+    expect(body.cross_section).toBe('rectangle')
   })
 })

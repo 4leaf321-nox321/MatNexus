@@ -1171,6 +1171,36 @@ export interface paths {
         patch: operations["update_specimen_api_specimens__specimen_id__patch"];
         trace?: never;
     };
+    "/api/specimens/{specimen_id}/dimensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Specimen Dimensions
+         * @description 이 시편이 가질 수 있는 치수 칸과 지금 값.
+         *
+         *     **칸 목록을 화면에 적지 않는다.** 규격이 정하기 때문이다 — 환봉 규격에는
+         *     직경 칸이 나오고 평판 규격에는 안 나온다. 화면에 세 칸(두께·폭·게이지)을
+         *     박아 두면 환봉을 영영 못 담는다.
+         */
+        get: operations["get_specimen_dimensions_api_specimens__specimen_id__dimensions_get"];
+        /**
+         * Put Specimen Dimensions
+         * @description 잰 값을 적는다. **규격의 공칭은 복사하지 않는다.**
+         *
+         *     복사하면 그 순간 둘이 같아 보이고, 규격을 고쳐도 시편은 옛 값을 든 채 남는다.
+         */
+        put: operations["put_specimen_dimensions_api_specimens__specimen_id__dimensions_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/statistics/ensembles": {
         parameters: {
             query?: never;
@@ -1668,6 +1698,29 @@ export interface paths {
          * @description 축 목록. 화면이 '새로 추가' 를 보여 줄지 정하는 데 쓴다.
          */
         get: operations["list_vocabularies_api_vocabularies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/cross-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Cross Sections
+         * @description 고를 수 있는 단면적 식. **목록을 화면에 적지 않는다.**
+         *
+         *     식이 늘면(관·육각봉…) 화면이 따라온다 — 처리 단계의 `ParamSpec` 과 같은
+         *     자리다(D7).
+         */
+        get: operations["list_cross_sections_api_vocabularies_cross_sections_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2580,6 +2633,22 @@ export interface components {
             role: string;
             /** Workspace Slug */
             workspace_slug: string;
+        };
+        /**
+         * CrossSectionOut
+         * @description 고를 수 있는 단면적 식 하나.
+         *
+         *     **키가 아니라 이름을 함께 준다** — `rectangle` 은 사람이 읽는 말이 아니다.
+         */
+        CrossSectionOut: {
+            /** Help */
+            help?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Needs */
+            needs: string[];
         };
         /**
          * CurveOut
@@ -4390,6 +4459,63 @@ export interface components {
              */
             workspace_id: string;
         };
+        /**
+         * SpecimenSizeOut
+         * @description 시편 치수 칸 하나 — **잰 값과 규격값을 나란히 낸다.**
+         *
+         *     둘을 합쳐 하나로 내면 사람은 전부 실측으로 읽는다. 규격을 고쳐도 안 따라오는
+         *     옛 값과, 규격이 정한 값을 구별할 수 없게 된다.
+         */
+        SpecimenSizeOut: {
+            /** Dimension */
+            dimension: string;
+            /** Help */
+            help: string | null;
+            /** Inherited */
+            inherited: boolean;
+            /** Is Required */
+            is_required: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Measured */
+            measured: number | null;
+            /** Nominal */
+            nominal: number | null;
+            /** Si Unit */
+            si_unit: string;
+            /** Source */
+            source: string | null;
+        };
+        /**
+         * SpecimenSizesOut
+         * @description 시편 하나의 치수 한 벌과 단면적.
+         */
+        SpecimenSizesOut: {
+            /** Area */
+            area: number | null;
+            /** Area Problem */
+            area_problem: string | null;
+            /** Cross Section */
+            cross_section: string | null;
+            /** Cross Section Label */
+            cross_section_label: string | null;
+            /** Fields */
+            fields: components["schemas"]["SpecimenSizeOut"][];
+            /** Standard */
+            standard: string | null;
+        };
+        /**
+         * SpecimenSizesRequest
+         * @description 잰 값만 보낸다(SI). **키를 빼면 그 칸을 안 잰 것이 된다.**
+         */
+        SpecimenSizesRequest: {
+            /** Dimensions */
+            dimensions: {
+                [key: string]: number;
+            };
+        };
         /** SpecimenUpdateRequest */
         SpecimenUpdateRequest: {
             /** Gauge Length */
@@ -4618,6 +4744,8 @@ export interface components {
             attributes: {
                 [key: string]: number;
             };
+            /** Cross Section */
+            cross_section?: string | null;
             /**
              * Extra Fields
              * @default []
@@ -4657,6 +4785,8 @@ export interface components {
             attributes?: {
                 [key: string]: number;
             } | null;
+            /** Cross Section */
+            cross_section?: string | null;
             /** Extra Fields */
             extra_fields?: components["schemas"]["SpecimenFieldSaveRequest"][] | null;
             /** Parent Value */
@@ -7663,6 +7793,72 @@ export interface operations {
             };
         };
     };
+    get_specimen_dimensions_api_specimens__specimen_id__dimensions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specimen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenSizesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_specimen_dimensions_api_specimens__specimen_id__dimensions_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specimen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenSizesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenSizesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_ensembles_api_statistics_ensembles_get: {
         parameters: {
             query: {
@@ -8569,6 +8765,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VocabularyOut"][];
+                };
+            };
+        };
+    };
+    list_cross_sections_api_vocabularies_cross_sections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrossSectionOut"][];
                 };
             };
         };

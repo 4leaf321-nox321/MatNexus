@@ -6,6 +6,20 @@
  * 만들므로 **치수가 빈 시편이 무더기로 생긴다** — 그 상태로는 처리가 첫 단계
  * (하중÷단면적)에서 막힌다.
  *
+ * ## 칸을 화면에 박지 않는다
+ *
+ * 전에는 두께·폭·게이지 세 칸이 여기 적혀 있었다. 그래서 **환봉 시편은 직경을
+ * 적을 자리가 아예 없었다** — `specimens` 테이블에도 직경 컬럼이 없었다. 같은
+ * 인장 시험인데 평판은 폭·두께를 갖고 환봉은 직경을 갖는다.
+ *
+ * 이제 **규격이 칸을 정한다**(ADR 0010). 이 화면은 규격이 준 칸을 그린다 —
+ * 환봉 규격을 고르면 직경 칸이 나온다.
+ *
+ * ## 규격값은 흐리게, 잰 값은 진하게
+ *
+ * 빈 칸의 흐린 숫자가 규격의 공칭이다. 그대로 두면 그 값이 쓰이고, 재서 넣으면
+ * 그 값이 이긴다. **합쳐서 하나로 보여 주면 사람은 전부 실측으로 읽는다.**
+ *
  * 방향과 번호는 여기서 안 바꾼다. 그 둘이 시편 이름을 만들고, 이름은 시험까지
  * 따라 내려간다(ADR 0004). 잘못 만들었으면 지우고 다시 만드는 편이 낫다 —
  * 시험이 달린 시편은 서버가 삭제를 막는다.
@@ -17,9 +31,9 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
-import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { materialsApi } from '@/modules/materials/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
-import type { Specimen } from '@/modules/materials/api'
+import type { Specimen, SpecimenSize, SpecimenSizes } from '@/modules/materials/api'
 import { ApiError } from '@/shared/api/client'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -33,6 +47,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { display, fromDisplay, toDisplay } from '@/shared/units'
 
 interface Props {
   specimen: Specimen
@@ -41,50 +56,66 @@ interface Props {
   onSaved: () => void
 }
 
-/** 숫자를 문자열로 들고 있는다 — `Number('0.')` 이 0 이 되어 소수점이 지워진다. */
-function initial(specimen: Specimen) {
-  return {
-    standard: specimen.standard ?? '',
-    thickness: specimen.thickness == null ? '' : String(specimen.thickness),
-    width: specimen.width == null ? '' : String(specimen.width),
-    gauge_length: specimen.gauge_length == null ? '' : String(specimen.gauge_length),
-    note: specimen.note ?? '',
-  }
+/** SI 숫자를 화면 단위 문자열로. 빈 값은 빈 칸이다 — 0 이 아니다. */
+function shownValue(value: number | null | undefined, field: SpecimenSize): string {
+  if (value == null) return ''
+  return String(Number(toDisplay(value, field.si_unit, field.dimension).toPrecision(10)))
 }
 
 export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) {
-  const [form, setForm] = useState(() => initial(specimen))
+  const [standard, setStandard] = useState(specimen.standard ?? '')
+  const [note, setNote] = useState(specimen.note ?? '')
+  const [sizes, setSizes] = useState<SpecimenSizes | null>(null)
+  /** 잰 값만 들고 있다. 문자열인 이유는 `Number('0.')` 이 소수점을 지우기 때문. */
+  const [measured, setMeasured] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
 
   useEffect(() => {
-    if (open) {
-      setForm(initial(specimen))
-      setFailure(null)
+    if (!open) return
+    setStandard(specimen.standard ?? '')
+    setNote(specimen.note ?? '')
+    setFailure(null)
+    let alive = true
+    materialsApi
+      .dimensions(specimen.id)
+      .then((loaded) => {
+        if (!alive) return
+        setSizes(loaded)
+        setMeasured(
+          Object.fromEntries(
+            loaded.fields.map((field) => [field.key, shownValue(field.measured, field)])
+          )
+        )
+      })
+      .catch((error: unknown) => {
+        if (alive) setFailure(error instanceof ApiError ? error.message : '치수를 읽지 못했습니다.')
+      })
+    return () => {
+      alive = false
     }
   }, [open, specimen])
-
-  const field = (key: keyof ReturnType<typeof initial>) => ({
-    value: form[key],
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((current) => ({ ...current, [key]: event.target.value })),
-  })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setBusy(true)
     setFailure(null)
     try {
+      // **규격을 먼저 저장한다.** 칸을 정하는 쪽이 규격이라 순서가 있다 —
+      // 새 규격의 칸은 다음 열 때 나온다.
       await materialsApi.updateSpecimen(specimen.id, {
-        standard: form.standard === '' ? null : form.standard,
-        // 빈 칸은 보내지 않는다 — 서버가 `exclude_unset` 으로 안 건드린다.
-        // 0 을 보내면 "쟀는데 0" 이 되고, 그것은 없는 것과 다르다.
-        ...(form.thickness === '' ? {} : { thickness: Number(form.thickness) }),
-        ...(form.width === '' ? {} : { width: Number(form.width) }),
-        ...(form.gauge_length === '' ? {} : { gauge_length: Number(form.gauge_length) }),
-        length_unit: LENGTH_UNIT,
-        note: form.note === '' ? null : form.note,
+        standard: standard === '' ? null : standard,
+        note: note === '' ? null : note,
       })
+
+      const values: Record<string, number> = {}
+      for (const field of sizes?.fields ?? []) {
+        const text = (measured[field.key] ?? '').trim()
+        if (text === '') continue // 빈 칸은 "안 쟀다" — 규격의 공칭이 쓰인다
+        const value = fromDisplay(Number(text), field.si_unit, field.dimension)
+        if (Number.isFinite(value)) values[field.key] = value
+      }
+      await materialsApi.saveDimensions(specimen.id, values)
       onSaved()
     } catch (error) {
       setFailure(error instanceof ApiError ? error.message : '저장하지 못했습니다.')
@@ -93,9 +124,12 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
     }
   }
 
+  const fields = sizes?.fields ?? []
+  const changedStandard = sizes !== null && standard !== (specimen.standard ?? '')
+
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             시편 수정
@@ -110,35 +144,87 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
           <VocabularyField
             slug="specimen_standard"
             label="시편 규격"
-            value={form.standard}
-            onChange={(next) => setForm((current) => ({ ...current, standard: next }))}
+            value={standard}
+            onChange={setStandard}
           />
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-thickness">두께 (mm)</Label>
-              <Input id="sp-thickness" inputMode="decimal" {...field('thickness')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-width">폭 (mm)</Label>
-              <Input id="sp-width" inputMode="decimal" {...field('width')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-gauge">게이지 길이 (mm)</Label>
-              <Input id="sp-gauge" inputMode="decimal" {...field('gauge_length')} />
-            </div>
-          </div>
+          {/* **규격이 칸을 정한다.** 바꾸면 칸도 바뀌는데, 그건 저장한 뒤라야
+              안다 — 미리 그리면 아직 저장 안 된 규격의 칸을 채우게 된다. */}
+          {changedStandard && (
+            <p className="text-muted-foreground text-xs">
+              규격을 바꿨습니다. <b>저장하면 치수 칸이 새 규격의 것으로 바뀝니다.</b>
+            </p>
+          )}
 
-          {/* **왜 중요한지 적는다.** 빈 칸이면 처리가 첫 단계에서 막히는데,
-              그때 나오는 오류만 보고는 여기로 오지 못한다. */}
-          <p className="text-muted-foreground text-xs">
-            두께와 폭으로 단면적을 구해 <b>하중을 응력으로</b> 바꿉니다. 게이지 길이로는
-            변위를 변형률로 바꿉니다 — 비어 있으면 처리가 첫 단계에서 멈춥니다.
-          </p>
+          {fields.length === 0 ? (
+            <p className="text-muted-foreground rounded-md border p-3 text-xs">
+              이 시편에는 치수 칸이 없습니다. <b>규격이 칸을 정합니다</b> — 규격을 고르거나,
+              기준정보 &gt; 시편 규격에서 그 규격의 치수 칸을 먼저 만드세요.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {fields.map((field) => {
+                const unit = display(field.si_unit, field.dimension).unit
+                return (
+                  <div key={field.key} className="grid grid-cols-[9rem_1fr] items-start gap-2">
+                    <Label htmlFor={`sp-${field.key}`} className="pt-1.5 text-xs">
+                      {field.label}
+                      {unit && <span className="text-muted-foreground ml-1">({unit})</span>}
+                    </Label>
+                    <div>
+                      <Input
+                        id={`sp-${field.key}`}
+                        inputMode="decimal"
+                        className="h-8"
+                        // 흐린 숫자가 규격의 공칭이다. 비워 두면 그 값이 쓰인다.
+                        placeholder={
+                          field.nominal == null ? '' : `규격 ${shownValue(field.nominal, field)}`
+                        }
+                        value={measured[field.key] ?? ''}
+                        onChange={(event) =>
+                          setMeasured((current) => ({
+                            ...current,
+                            [field.key]: event.target.value,
+                          }))
+                        }
+                      />
+                      {field.help && (
+                        <p className="text-muted-foreground mt-0.5 text-xs">{field.help}</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* **단면적이 왜 안 나오는지 여기서 말한다.** 처리 화면에서 만나면
+              사람은 어디를 채워야 하는지 모른 채 되돌아온다. */}
+          {sizes && (
+            <p
+              className={
+                sizes.area == null ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'
+              }
+            >
+              {sizes.area == null ? (
+                (sizes.area_problem ?? '단면적을 낼 수 없습니다.')
+              ) : (
+                <>
+                  단면적 <b>{(sizes.area * 1e6).toPrecision(4)} mm²</b>
+                  {sizes.cross_section_label && ` · ${sizes.cross_section_label}`} — 하중을 이 값으로
+                  나눠 응력을 만듭니다.
+                </>
+              )}
+            </p>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="sp-note">메모</Label>
-            <Input id="sp-note" {...field('note')} />
+            <Input
+              id="sp-note"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
           </div>
 
           {failure && <p className="text-destructive text-sm">{failure}</p>}

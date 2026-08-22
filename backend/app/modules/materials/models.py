@@ -352,6 +352,23 @@ class Specimen(Base):
     thickness_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     width_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     gauge_length_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """**평판을 전제한 옛 컬럼 셋.** 환봉에는 직경이 필요한데 여기 자리가 없다.
+
+    `dimensions` 로 옮기는 중이다(ADR 0010 Expand). 둘 다 채워 두고, 읽는 쪽은
+    `dimensions` 를 먼저 본다 — 문자열 컬럼과 기준정보를 나란히 들고 있는 것과
+    같은 단계다."""
+
+    dimensions: Mapped[dict[str, float]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """실측 치수. 키는 **그 시편의 규격이 정한 칸 이름**이고 값은 SI 다.
+
+    고정 컬럼 셋으로는 모양마다 다른 치수를 담을 수 없다 — 환봉은 직경 하나이고
+    관은 외경·내경이다. 규격이 칸을 정하고 시편은 그 칸을 채운다.
+
+    **규격의 공칭 치수를 여기 복사해 두지 않는다.** 빈 칸은 규격에서 물려받아
+    읽고, 여기 적힌 것은 **사람이 실제로 잰 값**뿐이다 — 둘을 섞으면 "이 값이
+    잰 것인가 규격에서 온 것인가" 를 나중에 답할 수 없다."""
 
     input_units: Mapped[dict[str, str]] = mapped_column(
         JSONB, default=dict, server_default="{}"

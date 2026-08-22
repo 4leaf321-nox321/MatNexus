@@ -23,6 +23,8 @@ export type Alias = components['schemas']['TermAliasOut']
 export type SpecimenField = components['schemas']['SpecimenFieldOut']
 /** 값이 고를 수 있는 종류. 키가 아니라 이름을 함께 준다. */
 export type SpecimenFieldSave = components['schemas']['SpecimenFieldSaveRequest']
+/** 고를 수 있는 단면적 식. **키가 아니라 이름과 요구 칸을 함께 준다.** */
+export type CrossSection = components['schemas']['CrossSectionOut']
 export type BulkResult = components['schemas']['BulkTermOut']
 export type DeleteResult = components['schemas']['BulkDeleteOut']
 export type DriftReport = components['schemas']['DriftReportOut']
@@ -45,6 +47,12 @@ export const vocabularyApi = {
    * 인장 평판은 폭·두께를 갖고 환봉은 직경을 갖는다. 목록을 화면에 적으면 분류를
    * 추가할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다(D7).
    */
+  /**
+   * 고를 수 있는 단면적 식. **목록을 화면에 적지 않는다** — 식이 늘면(관·
+   * 육각봉…) 화면이 따라온다.
+   */
+  crossSections: () => api.get<CrossSection[]>('/vocabularies/cross-sections'),
+
   termFields: (slug: string, termId: string) =>
     api.get<SpecimenField[]>(`/vocabularies/${slug}/terms/${termId}/fields`),
 

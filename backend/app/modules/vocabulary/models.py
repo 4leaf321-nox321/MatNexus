@@ -164,6 +164,16 @@ class VocabularyTerm(Base):
 
     모양은 기본 칸과 같다(`key`·`label`·`dimension`·`si_unit`·`is_required`·
     `help`). **기본 칸과 같은 키는 못 쓴다** — 서버가 거절한다."""
+    cross_section: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """이 규격의 시편은 단면적을 **어떻게 내는가**(`matcore.specimen`).
+
+    평판이면 폭 곱하기 두께, 환봉이면 π(직경/2)². **틀리면 응력이 자릿수째로 어긋나는데
+    숫자는 그럴듯해 보인다.**
+
+    분류가 아니라 규격에 두는 이유: 분류에 두면 "인장 평판" 과 "인장 환봉" 처럼
+    분류를 모양별로 쪼개야 한다. 규격은 어차피 자기 치수 칸을 갖고 있고
+    (`ASTM E8 R1` 에는 직경이 있다), 식이 요구하는 칸이 거기 있는지 서버가
+    검사할 수 있다."""
     attributes: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )

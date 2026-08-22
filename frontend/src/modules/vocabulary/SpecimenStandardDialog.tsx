@@ -63,6 +63,8 @@ function toSi(text: string, field: SpecimenField): number | null {
 
 export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) {
   const fields = useResource(() => vocabularyApi.termFields(slug, term.id), [slug, term.id])
+  const shapes = useResource(() => vocabularyApi.crossSections(), [])
+  const [crossSection, setCrossSection] = useState<string | null>(term.cross_section ?? null)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -90,7 +92,13 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
         const value = toSi(draft[field.key] ?? '', field)
         if (value !== null) attributes[field.key] = value
       }
-      onSaved(await vocabularyApi.update(slug, term.id, { attributes }))
+      onSaved(
+        await vocabularyApi.update(slug, term.id, {
+          attributes,
+          // 빈 문자열이면 뗀다 — 그러면 옛 규칙(폭 곱하기 두께)으로 돈다.
+          cross_section: crossSection ?? '',
+        })
+      )
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
     } finally {
@@ -178,6 +186,55 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
             })}
           </div>
         )}
+
+        {/* **단면적은 모양마다 식이 다르다.** 12.5 mm 환봉은 122.7 mm² 인데
+            평판 식으로는 그 값이 안 나온다 — 그런데 그 수로 나눈 응력은 오류
+            없이 그럴듯하다. */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">단면적</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {(shapes.data ?? []).map((shape) => {
+              // 그 식이 요구하는 칸이 이 규격에 없으면 못 고른다 — 골라 봐야
+              // 늘 실패하고, 사람은 그 이유를 처리 화면에서 만난다.
+              const missing = shape.needs.filter(
+                (need) => !rows.some((field) => field.key === need)
+              )
+              return (
+                <Button
+                  key={shape.key}
+                  size="sm"
+                  variant={crossSection === shape.key ? 'default' : 'outline'}
+                  className="h-7 text-xs"
+                  disabled={missing.length > 0}
+                  title={
+                    missing.length > 0
+                      ? `치수 칸 ${missing.join(', ')} 이(가) 없습니다`
+                      : (shape.help ?? undefined)
+                  }
+                  onClick={() => setCrossSection(shape.key)}
+                >
+                  {shape.label}
+                </Button>
+              )
+            })}
+            {crossSection && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => setCrossSection(null)}
+              >
+                안 고름
+              </Button>
+            )}
+          </div>
+          {!crossSection && (
+            <p className="text-muted-foreground text-xs">
+              안 고르면 <b>폭 곱하기 두께</b>로 계산합니다(옛 규칙). 환봉이면 반드시
+              고르세요 — 안 그러면 단면적이 안 나오거나 틀립니다.
+            </p>
+          )}
+        </div>
 
         {/* **칸이 모자라면 여기서 바로 더한다.** "이 규격은 환봉이라 직경이
             필요한데" 는 규격을 적다가 나오는 말이다. */}
