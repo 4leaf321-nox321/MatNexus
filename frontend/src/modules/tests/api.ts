@@ -7,6 +7,9 @@ export type TestType = components['schemas']['TestTypeOut']
 export type TestChannel = components['schemas']['TestChannelOut']
 export type TestConditionField = components['schemas']['TestConditionFieldOut']
 export type TestRun = components['schemas']['TestRunOut']
+/** 표로 넣은 결과. **미리보기와 실제가 같은 모양이다** — 서버가 같은 코드로 답한다. */
+export type SummaryImport = components['schemas']['SummaryImportOut']
+type SummaryImportRequest = components['schemas']['SummaryImportRequest']
 export type TestRunDetail = components['schemas']['TestRunDetailOut']
 export type TestRunPage = components['schemas']['Page_TestRunOut_']
 export type CurvePoints = components['schemas']['CurvePointsOut']
@@ -88,6 +91,21 @@ export interface UploadInput {
 }
 
 export const testsApi = {
+  /**
+   * 표로 시험을 넣는다. **한 줄이 시험 하나이고 곡선은 없다.**
+   *
+   * `dry` 면 아무것도 안 쓰고 어떻게 들어갈지만 답한다 — 미리보기와 실제가
+   * 같은 코드로 답해야 어긋나지 않는다.
+   */
+  importSummaries: (
+    payload: Omit<SummaryImportRequest, 'create_missing'>,
+    { dry, createMissing }: { dry: boolean; createMissing: boolean }
+  ) =>
+    api.post<SummaryImport>(`/test-runs/import${dry ? '/preview' : ''}`, {
+      ...payload,
+      create_missing: createMissing,
+    }),
+
   types: () => api.get<TestType[]>('/test-types'),
 
   /** 등록된 파서. **파서는 정의로 만들 수 없다 — 코드다.** */

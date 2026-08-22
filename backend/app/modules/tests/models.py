@@ -54,7 +54,15 @@ DIMENSIONS = (
 CONDITION_VALUE_TYPES = ("number", "text", "choice", "date", "boolean")
 
 #: 시험 실행 상태.
-RUN_STATUSES = ("uploaded", "parsing", "parsed", "failed")
+#:
+#: **`imported` 는 파일 처리 상태가 아니다.** 나머지 넷은 올린 원본을 읽는 과정
+#: (올림 → 읽는 중 → 읽음/실패)인데, 표로 들어온 시험은 그 길을 아예 안 지난다 —
+#: 원본 파일이 없다. `parsed` 로 두면 "읽었다" 는 거짓말이 되고, `uploaded` 로
+#: 두면 영영 처리를 기다리는 것처럼 보인다.
+#:
+#: **모자란 상태가 아니다.** 곡선이 있는 시험은 비선형 물성까지 가고, 표로 들어온
+#: 시험은 요약값이 답할 수 있는 데까지 간다 — 낼 수 있는 물성의 범위가 다를 뿐이다.
+RUN_STATUSES = ("uploaded", "parsing", "parsed", "failed", "imported")
 
 #: 요약값의 출처. 이 구분이 없으면 '장비가 준 항복강도'와 '우리가 계산한
 #: 항복강도'가 한 칸에 섞여, 나중에 계산식을 고쳤을 때 무엇이 바뀐 값인지 모른다.

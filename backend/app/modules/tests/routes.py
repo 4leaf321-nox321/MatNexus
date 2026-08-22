@@ -24,7 +24,7 @@ from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests import formats, services
+from app.modules.tests import formats, importing, services
 from app.modules.tests.models import (
     FormatProfile,
     TestChannel,
@@ -45,6 +45,9 @@ from app.modules.tests.schemas import (
     ParserOut,
     ReparseOut,
     StorageReportOut,
+    SummaryImportItemOut,
+    SummaryImportOut,
+    SummaryImportRequest,
     TestChannelOut,
     TestConditionFieldOut,
     TestRunDetailOut,
@@ -596,6 +599,101 @@ def _json_object(text: str, label: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise AppError("MNX-TESTS-0013", f"{label} 은 객체여야 합니다.", status=422)
     return parsed
+
+
+def _import_out(rows: list[importing.Row]) -> SummaryImportOut:
+    return SummaryImportOut(
+        created=sum(1 for row in rows if row.status == "new"),
+        existing=sum(1 for row in rows if row.status == "existing"),
+        skipped=sum(1 for row in rows if row.status == "skipped"),
+        rejected=sum(1 for row in rows if row.status == "rejected"),
+        specimens_created=sum(
+            1 for row in rows if row.status == "new" and row.creates_specimen
+        ),
+        items=[
+            SummaryImportItemOut(
+                input=row.raw,
+                status=row.status,
+                specimen=row.specimen.record_name
+                if row.specimen
+                else row.specimen_label or None,
+                creates_specimen=row.creates_specimen,
+                run=row.run_name,
+                conditions=row.conditions,
+                summaries={
+                    key: (value if value is not None else (text or ""))
+                    for key, _label, value, text, _unit in row.summaries
+                },
+                reason=row.reason,
+                warnings=row.warnings,
+            )
+            for row in rows
+        ],
+    )
+
+
+def _import_target(
+    db: Session, user: User, payload: SummaryImportRequest
+) -> tuple[Sample, TestType]:
+    # 시편과 같은 가시 범위를 쓴다 — 재료를 볼 수 있으면 그 시료도 본다.
+    sample = db.scalar(
+        select(Sample).where(
+            Sample.id == payload.sample_id,
+            Sample.deleted_at.is_(None),
+            Sample.material_id.in_(permissions.visible_material_ids(db, user)),
+        )
+    )
+    if sample is None:
+        raise NotFound("MNX-TESTS-0033", "시료를 찾을 수 없습니다.")
+    return sample, services.get_test_type(db, payload.test_type)
+
+
+@runs_router.post("/import/preview", response_model=SummaryImportOut)
+def preview_summary_import(
+    payload: SummaryImportRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SummaryImportOut:
+    """표가 **어떤 시험이 될지** 미리 말한다. 아무것도 쓰지 않는다.
+
+    미리보기와 실제 흡수가 **같은 코드로** 답한다 — 두 곳에 두면 갈라지고,
+    그러면 미리보기가 거짓말을 한다.
+    """
+    sample, definition = _import_target(db, user, payload)
+    rows = importing.plan(
+        db,
+        sample=sample,
+        definition=definition,
+        lines=payload.values,
+        create_missing=payload.create_missing,
+    )
+    return _import_out(rows)
+
+
+@runs_router.post("/import", response_model=SummaryImportOut)
+def import_summaries(
+    payload: SummaryImportRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SummaryImportOut:
+    """표를 시험으로 만든다. **곡선은 없다.**
+
+    곡선이 없다고 못 쓰는 데이터가 아니다 — 통계도 되고 카드의 근거도 된다.
+    안 되는 것은 곡선을 다시 처리하는 일뿐이다.
+    """
+    sample, definition = _import_target(db, user, payload)
+    rows = importing.plan(
+        db,
+        sample=sample,
+        definition=definition,
+        lines=payload.values,
+        create_missing=payload.create_missing,
+    )
+    importing.require_columns(rows)
+    importing.apply(db, sample=sample, definition=definition, rows=rows, user_id=user.id)
+    db.commit()
+
+    return _import_out(rows)
 
 
 @runs_router.post("", response_model=TestRunOut, status_code=202)

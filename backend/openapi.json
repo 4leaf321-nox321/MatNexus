@@ -6748,6 +6748,172 @@
         "title": "StructurePreviewOut",
         "type": "object"
       },
+      "SummaryImportItemOut": {
+        "description": "한 줄의 결과.",
+        "properties": {
+          "conditions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Conditions",
+            "type": "object"
+          },
+          "creates_specimen": {
+            "default": false,
+            "title": "Creates Specimen",
+            "type": "boolean"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run"
+          },
+          "specimen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summaries": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "default": {},
+            "title": "Summaries",
+            "type": "object"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "input",
+          "status"
+        ],
+        "title": "SummaryImportItemOut",
+        "type": "object"
+      },
+      "SummaryImportOut": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "existing": {
+            "title": "Existing",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SummaryImportItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "specimens_created": {
+            "default": 0,
+            "title": "Specimens Created",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created",
+          "existing",
+          "skipped",
+          "rejected",
+          "items"
+        ],
+        "title": "SummaryImportOut",
+        "type": "object"
+      },
+      "SummaryImportRequest": {
+        "description": "표로 시험을 흡수한다. **한 줄이 시험 하나다.**\n\n첫 줄은 열 이름이다 — `시편`·`방향`·`원본 파일명` 과, 시험 종류가 선언한\n조건, 나머지는 요약값이다. 숫자 열은 헤더에 단위를 적는다(`항복강도 (MPa)`).",
+        "properties": {
+          "create_missing": {
+            "default": false,
+            "title": "Create Missing",
+            "type": "boolean"
+          },
+          "sample_id": {
+            "format": "uuid",
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "test_type": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Test Type",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sample_id",
+          "test_type",
+          "values"
+        ],
+        "title": "SummaryImportRequest",
+        "type": "object"
+      },
       "SweepListOut": {
         "properties": {
           "items": {
@@ -13041,6 +13207,90 @@
           }
         },
         "summary": "Upload Test Run",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/test-runs/import": {
+      "post": {
+        "description": "표를 시험으로 만든다. **곡선은 없다.**\n\n곡선이 없다고 못 쓰는 데이터가 아니다 — 통계도 되고 카드의 근거도 된다.\n안 되는 것은 곡선을 다시 처리하는 일뿐이다.",
+        "operationId": "import_summaries_api_test_runs_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Summaries",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/test-runs/import/preview": {
+      "post": {
+        "description": "표가 **어떤 시험이 될지** 미리 말한다. 아무것도 쓰지 않는다.\n\n미리보기와 실제 흡수가 **같은 코드로** 답한다 — 두 곳에 두면 갈라지고,\n그러면 미리보기가 거짓말을 한다.",
+        "operationId": "preview_summary_import_api_test_runs_import_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Summary Import",
         "tags": [
           "tests"
         ]

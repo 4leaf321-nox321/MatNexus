@@ -1316,6 +1316,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-runs/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Summaries
+         * @description 표를 시험으로 만든다. **곡선은 없다.**
+         *
+         *     곡선이 없다고 못 쓰는 데이터가 아니다 — 통계도 되고 카드의 근거도 된다.
+         *     안 되는 것은 곡선을 다시 처리하는 일뿐이다.
+         */
+        post: operations["import_summaries_api_test_runs_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-runs/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Summary Import
+         * @description 표가 **어떤 시험이 될지** 미리 말한다. 아무것도 쓰지 않는다.
+         *
+         *     미리보기와 실제 흡수가 **같은 코드로** 답한다 — 두 곳에 두면 갈라지고,
+         *     그러면 미리보기가 거짓말을 한다.
+         */
+        post: operations["preview_summary_import_api_test_runs_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs/{run_id}": {
         parameters: {
             query?: never;
@@ -5005,6 +5051,87 @@ export interface components {
             /** Warnings */
             warnings: string[];
         };
+        /**
+         * SummaryImportItemOut
+         * @description 한 줄의 결과.
+         */
+        SummaryImportItemOut: {
+            /**
+             * Conditions
+             * @default {}
+             */
+            conditions: {
+                [key: string]: number;
+            };
+            /**
+             * Creates Specimen
+             * @default false
+             */
+            creates_specimen: boolean;
+            /** Input */
+            input: string;
+            /** Reason */
+            reason?: string | null;
+            /** Run */
+            run?: string | null;
+            /** Specimen */
+            specimen?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Summaries
+             * @default {}
+             */
+            summaries: {
+                [key: string]: number | string;
+            };
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** SummaryImportOut */
+        SummaryImportOut: {
+            /** Created */
+            created: number;
+            /** Existing */
+            existing: number;
+            /** Items */
+            items: components["schemas"]["SummaryImportItemOut"][];
+            /** Rejected */
+            rejected: number;
+            /** Skipped */
+            skipped: number;
+            /**
+             * Specimens Created
+             * @default 0
+             */
+            specimens_created: number;
+        };
+        /**
+         * SummaryImportRequest
+         * @description 표로 시험을 흡수한다. **한 줄이 시험 하나다.**
+         *
+         *     첫 줄은 열 이름이다 — `시편`·`방향`·`원본 파일명` 과, 시험 종류가 선언한
+         *     조건, 나머지는 요약값이다. 숫자 열은 헤더에 단위를 적는다(`항복강도 (MPa)`).
+         */
+        SummaryImportRequest: {
+            /**
+             * Create Missing
+             * @default false
+             */
+            create_missing: boolean;
+            /**
+             * Sample Id
+             * Format: uuid
+             */
+            sample_id: string;
+            /** Test Type */
+            test_type: string;
+            /** Values */
+            values: string[];
+        };
         /** SweepListOut */
         SweepListOut: {
             /** Items */
@@ -8435,6 +8562,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_summaries_api_test_runs_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_summary_import_api_test_runs_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryImportOut"];
                 };
             };
             /** @description Validation Error */

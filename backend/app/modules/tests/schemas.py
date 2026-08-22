@@ -471,3 +471,48 @@ class AppliedDimensionsOut(BaseModel):
 
     specimen_id: uuid.UUID
     filled: list[str]
+
+
+class SummaryImportRequest(BaseModel):
+    """표로 시험을 흡수한다. **한 줄이 시험 하나다.**
+
+    첫 줄은 열 이름이다 — `시편`·`방향`·`원본 파일명` 과, 시험 종류가 선언한
+    조건, 나머지는 요약값이다. 숫자 열은 헤더에 단위를 적는다(`항복강도 (MPa)`).
+    """
+
+    sample_id: uuid.UUID
+    """어느 시료의 표인가. **표에는 재료 이름이 없다** — 한 파일이 대개 한 시료
+    분이라, 어디 붙는지는 사람이 고른다."""
+    test_type: str = Field(min_length=1, max_length=50)
+    values: list[str] = Field(min_length=1, max_length=1000)
+    create_missing: bool = False
+    """없는 시편을 만들까.
+
+    **기본은 끔이다.** 만들면 편하지만 오타 하나가 유령 시편을 만든다 —
+    기준정보에서 겪은 것과 같은 병이다."""
+
+
+class SummaryImportItemOut(BaseModel):
+    """한 줄의 결과."""
+
+    input: str
+    status: str
+    """`new` · `existing` · `rejected` · `skipped`. 미리보기에서도 같은 말이다."""
+    specimen: str | None = None
+    creates_specimen: bool = False
+    """이 줄이 시편까지 만드는가. **켜 두면 표가 시편을 늘린다** — 보여야 한다."""
+    run: str | None = None
+    """만들어진 시험 이름. 미리보기에서는 비어 있다."""
+    conditions: dict[str, float] = {}
+    summaries: dict[str, float | str] = {}
+    reason: str | None = None
+    warnings: list[str] = []
+
+
+class SummaryImportOut(BaseModel):
+    created: int
+    existing: int
+    skipped: int
+    rejected: int
+    specimens_created: int = 0
+    items: list[SummaryImportItemOut]

@@ -15,6 +15,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   FlaskConical,
+  Table2,
   Globe2,
   Layers,
   ListTree,
@@ -50,6 +51,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
+import { SummaryImportDialog } from '@/modules/tests/SummaryImportDialog'
 import { useResource } from '@/shared/hooks/useResource'
 import { display, toDisplay } from '@/shared/units'
 
@@ -314,6 +316,13 @@ function SampleRow({
   const [open, setOpen] = useState(defaultOpen)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(false)
+  /**
+   * 표로 시험 넣기.
+   *
+   * **표에는 재료 이름이 없다** — 한 파일이 대개 한 시료 분이라, 어디 붙는지는
+   * 사람이 고른다. 그 자리가 여기다.
+   */
+  const [importing, setImporting] = useState(false)
   const [specimenError, setSpecimenError] = useState<Error | null>(null)
   const specimens = useResource(
     () => (open ? materialsApi.specimens(sample.id) : Promise.resolve([])),
@@ -390,10 +399,18 @@ function SampleRow({
               <FlaskConical className="size-3.5" />
               시편
             </span>
-            <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
-              <Plus className="size-3.5" />
-              시편 추가
-            </Button>
+            <div className="flex items-center gap-1">
+              {/* **곡선 없는 시험도 데이터다.** 기존 표에 쌓인 것을 못 가져오면
+                  사용자가 옮겨오지 않는다 — 도입 성패가 여기서 갈린다. */}
+              <Button size="sm" variant="ghost" onClick={() => setImporting(true)}>
+                <Table2 className="size-3.5" />
+                표로 시험 넣기
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
+                <Plus className="size-3.5" />
+                시편 추가
+              </Button>
+            </div>
           </div>
 
           <ErrorNotice error={specimens.error ?? specimenError} className="mb-2" />
@@ -432,6 +449,20 @@ function SampleRow({
                 />
               ))}
             </ul>
+          )}
+
+          {importing && (
+            <SummaryImportDialog
+              sampleId={sample.id}
+              sampleName={sample.record_name}
+              testType="tensile"
+              testTypeLabel="인장시험"
+              onClose={() => setImporting(false)}
+              onDone={() => {
+                specimens.reload()
+                onChanged()
+              }}
+            />
           )}
 
           <AddSpecimenDialog
