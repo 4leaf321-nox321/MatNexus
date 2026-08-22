@@ -52,7 +52,8 @@ class TestRefusals:
     def test_칸이_모자라면_무엇이_없는지_말한다(self) -> None:
         with pytest.raises(specimen.SpecimenError) as caught:
             specimen.area("circle", {"width": 0.01, "thickness": 0.001})
-        assert "diameter" in str(caught.value)
+        # **사람이 읽는 말이어야 한다.** `diameter` 는 우리 내부 이름이다.
+        assert "직경" in str(caught.value)
 
     def test_0_은_없는_것으로_본다(self) -> None:
         """0 을 값으로 받으면 단면적이 0 이 되고, 응력이 무한대가 된다."""
@@ -71,14 +72,23 @@ class TestRefusals:
 class TestCatalog:
     def test_식이_요구하는_칸을_선언한다(self) -> None:
         """화면이 "직경 칸이 없어서 이 식을 못 고릅니다" 를 말하려면 필요하다."""
-        assert specimen.CROSS_SECTIONS["circle"].needs == ("diameter",)
-        assert set(specimen.CROSS_SECTIONS["rectangle"].needs) == {"width", "thickness"}
+        assert specimen.CROSS_SECTIONS["circle"].need_keys == ("diameter",)
+        assert set(specimen.CROSS_SECTIONS["rectangle"].need_keys) == {"width", "thickness"}
+
+    def test_요구하는_칸이_어떤_칸인지도_말한다(self) -> None:
+        """**키만 주면 화면이 그 칸을 대신 만들어 줄 수 없다.**
+
+        그리고 차원이 틀리면 조용하다 — 단면적 칸을 길이로 만들면 화면이 mm 로
+        환산해 10의 6제곱 배 어긋난 값이 저장된다.
+        """
+        (need,) = specimen.CROSS_SECTIONS["manual"].needs
+        assert (need.label, need.dimension, need.si_unit) == ("단면적", "area", "m2")
 
     def test_선언한_칸만_있으면_실제로_돈다(self) -> None:
         """**선언과 실제가 어긋나면 조용하다.** 화면은 고를 수 있다고 하는데
         계산은 다른 칸을 찾아 실패한다 — 그래서 돌려 본다."""
         for shape in specimen.CROSS_SECTIONS.values():
-            values = {name: 0.01 for name in shape.needs}
+            values = {name: 0.01 for name in shape.need_keys}
             if shape.key == "tube":
                 values = {"outer_diameter": 0.02, "inner_diameter": 0.01}
             assert specimen.area(shape.key, values) > 0

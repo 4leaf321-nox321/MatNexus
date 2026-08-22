@@ -74,8 +74,21 @@ describe('시편 규격 치수', () => {
   beforeEach(() => {
     termFields.mockResolvedValue(FIELDS)
     crossSections.mockResolvedValue([
-      { key: 'rectangle', label: '평판 (폭 곱하기 두께)', needs: ['width', 'thickness'], help: null },
-      { key: 'circle', label: '환봉 (직경)', needs: ['diameter'], help: null },
+      {
+        key: 'rectangle',
+        label: '평판 (폭 곱하기 두께)',
+        needs: [
+          { key: 'width', label: '폭', dimension: 'length', si_unit: 'm' },
+          { key: 'thickness', label: '두께', dimension: 'length', si_unit: 'm' },
+        ],
+        help: null,
+      },
+      {
+        key: 'circle',
+        label: '환봉 (직경)',
+        needs: [{ key: 'diameter', label: '직경', dimension: 'length', si_unit: 'm' }],
+        help: null,
+      },
     ])
     update.mockReset()
     update.mockResolvedValue(TERM)
@@ -137,14 +150,29 @@ describe('시편 규격 치수', () => {
     expect(await screen.findByText(/아직 칸이 없습니다/)).toBeInTheDocument()
   })
 
-  it('요구 칸이 없는 단면적 식은 못 고른다', async () => {
-    // **골라 봐야 늘 실패한다.** 사람은 그 이유를 처리 화면에서 만나게 되고,
-    // 거기엔 "왜 단면적이 안 나오지" 밖에 안 적혀 있다.
+  it('없는 칸은 고르는 순간 만들어 준다', async () => {
+    // **설명 대신 실행.** 전에는 회색 버튼과 "diameter 칸이 없습니다" 만
+    // 보여 줬는데, 그 말로는 할 일을 알 수 없다 — 내부 이름인 데다 칸을
+    // 만들려면 창을 하나 더 열어 이름·키·차원을 직접 채워야 했다.
+    const user = userEvent.setup()
+    show()
+    await screen.findByLabelText('게이지 길이') // 이 규격에 직경 칸은 없다
+    await user.click(screen.getByRole('button', { name: /환봉/ }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, , body] = update.mock.calls[0]
+    const made = body.extra_fields.at(-1)
+    expect(made).toMatchObject({ key: 'diameter', label: '직경', si_unit: 'm' })
+    expect(await screen.findByText(/값을 적으세요/)).toHaveTextContent('직경')
+  })
+
+  it('있는 칸이면 그냥 고른다', async () => {
+    const user = userEvent.setup()
     show()
     await screen.findByLabelText('게이지 길이')
-    // 이 규격에는 폭·두께가 있고 직경은 없다.
-    expect(screen.getByRole('button', { name: /평판/ })).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: /환봉/ })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: /평판/ }))
+    // 폭·두께는 이미 있다 — 칸을 만들 일이 없다.
+    expect(update).not.toHaveBeenCalled()
   })
 
   it('안 고르면 옛 규칙으로 돈다고 말한다', async () => {
@@ -165,13 +193,9 @@ describe('시편 규격 치수', () => {
     expect(body.cross_section).toBe('rectangle')
   })
 
-  it('못 고르는 식은 이유를 화면에 적는다', async () => {
-    // **회색 버튼만 보이면 막다른 길이다.** 전에는 마우스를 올려야만 보였고,
-    // 칸이 하나도 없는 규격에서는 모든 식이 회색이라 할 일을 알 수 없었다.
+  it('고르면 칸이 함께 생긴다고 미리 말한다', async () => {
     show()
     await screen.findByLabelText('게이지 길이')
-    const notice = await screen.findByText(/못 고릅니다/)
-    expect(notice.closest('p')).toHaveTextContent('diameter')
-    expect(notice.closest('p')).toHaveTextContent('이 규격만의 칸')
+    expect(screen.getByText(/필요한 칸이 함께 생깁니다/)).toBeInTheDocument()
   })
 })

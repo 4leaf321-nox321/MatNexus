@@ -1248,11 +1248,11 @@ def check_cross_section(
         raise AppError("MNX-VOCABULARY-0019", f"모르는 단면 모양입니다: {key}", status=422)
 
     have = {field.key for field in attribute_fields(db, vocabulary, term)}
-    missing = [name for name in shape.needs if name not in have]
+    missing = [need.label for need in shape.needs if need.key not in have]
     if missing:
         raise AppError(
             "MNX-VOCABULARY-0020",
-            f"'{shape.label}' 를 쓰려면 치수 칸 {', '.join(missing)} 이(가) 있어야 합니다. "
+            f"'{shape.label}' 를 쓰려면 {', '.join(missing)} 칸이 있어야 합니다. "
             f"이 규격의 칸에 먼저 더하세요.",
             status=422,
         )

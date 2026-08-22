@@ -49,6 +49,15 @@ class TermOut(BaseModel):
     규격은 치수를 하나도 못 갖는다."""
 
 
+class CrossSectionNeedOut(BaseModel):
+    """식이 요구하는 칸 하나. **화면이 이것으로 칸을 대신 만들어 준다.**"""
+
+    key: str
+    label: str
+    dimension: str = "length"
+    si_unit: str = "m"
+
+
 class CrossSectionOut(BaseModel):
     """고를 수 있는 단면적 식 하나.
 
@@ -57,8 +66,9 @@ class CrossSectionOut(BaseModel):
 
     key: str
     label: str
-    needs: list[str]
-    """이 식이 요구하는 치수 칸. 화면이 "직경 칸이 없어서 못 고릅니다" 를 말한다."""
+    needs: list[CrossSectionNeedOut]
+    """이 식이 요구하는 치수 칸. **키만이 아니라 어떤 칸인지까지 준다** — 화면이
+    "직경 칸이 없습니다" 라고 말하는 대신 그 칸을 만들어 줄 수 있다."""
     help: str | None = None
 
 

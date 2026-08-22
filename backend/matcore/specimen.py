@@ -36,15 +36,37 @@ class SpecimenError(Exception):
 
 
 @dataclass(frozen=True)
+class Need:
+    """이 식이 요구하는 칸 하나 — **키만이 아니라 어떤 칸인지까지.**
+
+    화면이 "`outer_diameter` 칸이 없습니다" 라고만 말하면 사람은 무엇을 만들어야
+    하는지 모른다. 이름·차원·저장 단위를 함께 주면 **고르는 순간 그 칸을 대신
+    만들어 줄 수 있다.**
+
+    차원이 특히 중요하다 — 단면적을 직접 적는 칸을 길이로 만들면 화면이 mm 로
+    환산해 10⁶ 배 틀린다.
+    """
+
+    key: str
+    label: str
+    dimension: str = "length"
+    si_unit: str = "m"
+
+
+@dataclass(frozen=True)
 class CrossSection:
     """단면적 내는 법 하나."""
 
     key: str
     label: str
     #: 이 식이 요구하는 치수 칸. 규격에 이 칸들이 있어야 고를 수 있다.
-    needs: tuple[str, ...]
+    needs: tuple[Need, ...]
     fn: Callable[[Mapping[str, float]], float]
     help: str | None = None
+
+    @property
+    def need_keys(self) -> tuple[str, ...]:
+        return tuple(need.key for need in self.needs)
 
 
 def _rectangle(values: Mapping[str, float]) -> float:
@@ -80,27 +102,27 @@ CROSS_SECTIONS: dict[str, CrossSection] = {
         CrossSection(
             key="rectangle",
             label="평판 (폭 곱하기 두께)",
-            needs=("width", "thickness"),
+            needs=(Need("width", "폭"), Need("thickness", "두께")),
             fn=_rectangle,
             help="판재에서 자른 시편. Zwick 이 주는 a0·b0 가 이것입니다.",
         ),
         CrossSection(
             key="circle",
             label="환봉 (직경)",
-            needs=("diameter",),
+            needs=(Need("diameter", "직경"),),
             fn=_circle,
             help="봉재를 깎은 시편. 폭·두께가 아니라 직경 하나입니다.",
         ),
         CrossSection(
             key="tube",
             label="관 (외경 · 내경)",
-            needs=("outer_diameter", "inner_diameter"),
+            needs=(Need("outer_diameter", "외경"), Need("inner_diameter", "내경")),
             fn=_tube,
         ),
         CrossSection(
             key="ring",
             label="링 · 스플릿디스크 (폭 곱하기 두께 곱하기 2)",
-            needs=("width", "thickness"),
+            needs=(Need("width", "폭"), Need("thickness", "두께")),
             fn=_ring,
             help="D412 Type 1·2 링, D2290 스플릿디스크. 두 가닥이 하중을 받으므로 "
             "단면적이 평판의 두 배입니다 — 평판 식으로 내면 강도가 두 배로 나옵니다.",
@@ -108,7 +130,8 @@ CROSS_SECTIONS: dict[str, CrossSection] = {
         CrossSection(
             key="manual",
             label="직접 적음",
-            needs=("area",),
+            # **면적이다.** 길이로 두면 화면이 mm 로 환산해 10⁶ 배 틀린다.
+            needs=(Need("area", "단면적", dimension="area", si_unit="m2"),),
             fn=_manual,
             help="식으로 안 되는 모양. 단면적을 사람이 재서 적습니다.",
         ),
@@ -125,7 +148,7 @@ def area(key: str, values: Mapping[str, float]) -> float:
     shape = CROSS_SECTIONS.get(key)
     if shape is None:
         raise SpecimenError(f"모르는 단면 모양입니다: {key!r}")
-    missing = [name for name in shape.needs if not values.get(name)]
+    missing = [need.label for need in shape.needs if not values.get(need.key)]
     if missing:
         raise SpecimenError(
             f"'{shape.label}' 로 단면적을 내려면 {', '.join(missing)} 이(가) 필요합니다."

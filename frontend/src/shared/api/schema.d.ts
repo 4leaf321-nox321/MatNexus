@@ -2640,6 +2640,26 @@ export interface components {
             workspace_slug: string;
         };
         /**
+         * CrossSectionNeedOut
+         * @description 식이 요구하는 칸 하나. **화면이 이것으로 칸을 대신 만들어 준다.**
+         */
+        CrossSectionNeedOut: {
+            /**
+             * Dimension
+             * @default length
+             */
+            dimension: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Si Unit
+             * @default m
+             */
+            si_unit: string;
+        };
+        /**
          * CrossSectionOut
          * @description 고를 수 있는 단면적 식 하나.
          *
@@ -2653,7 +2673,7 @@ export interface components {
             /** Label */
             label: string;
             /** Needs */
-            needs: string[];
+            needs: components["schemas"]["CrossSectionNeedOut"][];
         };
         /**
          * CurveOut

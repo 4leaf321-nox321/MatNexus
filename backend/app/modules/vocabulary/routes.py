@@ -30,6 +30,7 @@ from app.modules.vocabulary.schemas import (
     BulkTermCreateRequest,
     BulkTermItemOut,
     BulkTermOut,
+    CrossSectionNeedOut,
     CrossSectionOut,
     DismissRequest,
     DriftOut,
@@ -209,7 +210,20 @@ def list_cross_sections(user: User = Depends(current_user)) -> list[CrossSection
     자리다(D7).
     """
     return [
-        CrossSectionOut(key=item.key, label=item.label, needs=list(item.needs), help=item.help)
+        CrossSectionOut(
+            key=item.key,
+            label=item.label,
+            needs=[
+                CrossSectionNeedOut(
+                    key=need.key,
+                    label=need.label,
+                    dimension=need.dimension,
+                    si_unit=need.si_unit,
+                )
+                for need in item.needs
+            ],
+            help=item.help,
+        )
         for item in specimen_kit.CROSS_SECTIONS.values()
     ]
 

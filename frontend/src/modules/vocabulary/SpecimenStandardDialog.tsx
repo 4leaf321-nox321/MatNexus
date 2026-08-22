@@ -29,7 +29,7 @@ import { Ruler } from 'lucide-react'
 
 import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { vocabularyApi } from '@/modules/vocabulary/api'
-import type { SpecimenField, Term } from '@/modules/vocabulary/api'
+import type { CrossSection, SpecimenField, Term } from '@/modules/vocabulary/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -70,6 +70,8 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   const [error, setError] = useState<Error | null>(null)
   /** 이 규격만의 칸을 고치러 들어간 상태. **고치고 싶어지는 자리가 여기다.** */
   const [editingFields, setEditingFields] = useState(false)
+  /** 식을 고르느라 방금 만든 칸. 값을 적어야 한다는 것을 말해 준다. */
+  const [added, setAdded] = useState<string[]>([])
 
   useEffect(() => {
     const shown: Record<string, string> = {}
@@ -82,6 +84,51 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
     }
     setDraft(shown)
   }, [term, fields.data])
+
+  /**
+   * 식을 고른다. **없는 칸은 대신 만든다.**
+   *
+   * 전에는 요구 칸이 없으면 버튼을 회색으로 두고 무엇이 없는지 적었다. 그 말만
+   * 보고는 할 일을 알 수 없었다 — `outer_diameter` 는 우리 내부 이름이고, 칸을
+   * 만들려면 창을 하나 더 열어 이름·키·차원을 직접 채워야 했다. 식이 자기가
+   * 요구하는 칸이 **어떤 칸인지**(이름·차원·저장 단위) 알고 있으므로 여기서
+   * 만들면 된다.
+   */
+  async function choose(shape: CrossSection) {
+    const missing = shape.needs.filter((need) => !rows.some((field) => field.key === need.key))
+    if (missing.length === 0) {
+      setCrossSection(shape.key)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      // 이 규격이 직접 가진 칸에 더한다. 위에서 온 칸은 여기서 못 고친다.
+      const mine = rows
+        .filter((field) => !field.inherited)
+        .map(({ inherited: _inherited, ...field }) => field)
+      await vocabularyApi.update(slug, term.id, {
+        extra_fields: [
+          ...mine,
+          ...missing.map((need) => ({
+            key: need.key,
+            label: need.label,
+            dimension: need.dimension,
+            si_unit: need.si_unit,
+            is_required: false,
+            help: null,
+          })),
+        ],
+      })
+      setAdded(missing.map((need) => need.label))
+      setCrossSection(shape.key)
+      fields.reload()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('칸을 만들지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function save() {
     setBusy(true)
@@ -122,13 +169,6 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   }
 
   const rows = fields.data ?? []
-  /** 요구 칸이 없어 못 고르는 식과, 무엇이 없는지. */
-  const blocked = (shapes.data ?? [])
-    .map((shape) => ({
-      shape,
-      missing: shape.needs.filter((need) => !rows.some((field) => field.key === need)),
-    }))
-    .filter((item) => item.missing.length > 0)
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -201,30 +241,19 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
         <div className="space-y-1.5">
           <Label className="text-xs">단면적</Label>
           <div className="flex flex-wrap gap-1.5">
-            {(shapes.data ?? []).map((shape) => {
-              // 그 식이 요구하는 칸이 이 규격에 없으면 못 고른다 — 골라 봐야
-              // 늘 실패하고, 사람은 그 이유를 처리 화면에서 만난다.
-              const missing = shape.needs.filter(
-                (need) => !rows.some((field) => field.key === need)
-              )
-              return (
-                <Button
-                  key={shape.key}
-                  size="sm"
-                  variant={crossSection === shape.key ? 'default' : 'outline'}
-                  className="h-7 text-xs"
-                  disabled={missing.length > 0}
-                  title={
-                    missing.length > 0
-                      ? `치수 칸 ${missing.join(', ')} 이(가) 없습니다`
-                      : (shape.help ?? undefined)
-                  }
-                  onClick={() => setCrossSection(shape.key)}
-                >
-                  {shape.label}
-                </Button>
-              )
-            })}
+            {(shapes.data ?? []).map((shape) => (
+              <Button
+                key={shape.key}
+                size="sm"
+                variant={crossSection === shape.key ? 'default' : 'outline'}
+                className="h-7 text-xs"
+                disabled={busy}
+                title={shape.help ?? undefined}
+                onClick={() => void choose(shape)}
+              >
+                {shape.label}
+              </Button>
+            ))}
             {crossSection && (
               <Button
                 size="sm"
@@ -236,23 +265,16 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
               </Button>
             )}
           </div>
-          {/* **못 고르는 이유가 안 보이면 막다른 길이다.** 전에는 마우스를
-              올려야만 보였다 — 칸이 하나도 없는 규격에서는 모든 식이 회색이라,
-              무엇을 해야 하는지 알 수 없었다. */}
-          {blocked.length > 0 && (
-            <p className="text-muted-foreground text-xs">
-              {blocked.map(({ shape, missing }) => (
-                <span key={shape.key} className="block">
-                  <b>{shape.label}</b> 은(는) {missing.join(' · ')} 칸이 없어 못 고릅니다.
-                </span>
-              ))}
-              아래 <b>이 규격만의 칸</b> 에서 그 칸을 먼저 더하세요.
+          {/* **설명 대신 실행.** 전에는 "칸이 없어 못 고릅니다" 를 다섯 줄로
+              적었는데, 그 말만 보고는 할 일을 알 수 없었다. */}
+          {added.length > 0 ? (
+            <p className="text-xs">
+              <b>{added.join(' · ')}</b> 칸을 만들었습니다 — 위에 값을 적으세요.
             </p>
-          )}
-          {!crossSection && (
+          ) : (
             <p className="text-muted-foreground text-xs">
-              안 고르면 <b>폭 곱하기 두께</b>로 계산합니다(옛 규칙). 환봉이면 반드시
-              고르세요 — 안 그러면 단면적이 안 나오거나 틀립니다.
+              고르면 <b>필요한 칸이 함께 생깁니다</b>. 안 고르면 폭 곱하기 두께로
+              계산합니다(옛 규칙) — 환봉이면 반드시 고르세요.
             </p>
           )}
         </div>
