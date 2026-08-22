@@ -1829,6 +1829,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vocabularies/specimen-standards/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Standard Catalog
+         * @description 가져올 수 있는 표준 규격. **치수 값은 없다.**
+         *
+         *     근거 문서가 2차 출처라(본문이 유료다) 숫자를 심으면 검증 안 된 값이 시스템의
+         *     정본이 된다 — 실제로 출처끼리 어긋난 곳이 있다. 칸과 기호는 판이 바뀌어도
+         *     그대로이므로 구조만 깔고 숫자는 사람이 규격서를 보고 넣는다.
+         */
+        get: operations["list_standard_catalog_api_vocabularies_specimen_standards_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabularies/specimen-standards/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Standards
+         * @description 고른 표준 규격을 값으로 만든다.
+         *
+         *     **이미 있는 이름은 건너뛴다.** 덮어쓰면 사람이 넣어 둔 치수가 사라진다 —
+         *     이 기능이 주는 것은 칸과 기호이지 값이 아니다.
+         *
+         *     분류가 없으면 그 항목은 만들지 않는다. 분류가 칸을 정하는 쪽이라, 없는 채로
+         *     만들면 `게이지 길이` 같은 기본 칸이 안 붙는다.
+         */
+        post: operations["import_standards_api_vocabularies_specimen_standards_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies/{slug}/dismissals": {
         parameters: {
             query?: never;
@@ -4689,6 +4739,47 @@ export interface components {
             condition: string;
             /** Help */
             help?: string | null;
+        };
+        /**
+         * StandardImportRequest
+         * @description 고른 것만 만든다. **안 쓰는 규격이 목록을 채우면 피커가 무거워진다.**
+         */
+        StandardImportRequest: {
+            /** Keys */
+            keys: string[];
+        };
+        /**
+         * StandardTemplateOut
+         * @description 가져올 수 있는 표준 규격 하나.
+         *
+         *     **치수 값은 없다.** 근거 문서가 2차 출처라 숫자는 사람이 규격서를 보고 넣는다 —
+         *     칸과 기호는 판이 바뀌어도 그대로지만 값은 바뀐다.
+         */
+        StandardTemplateOut: {
+            /** Category */
+            category: string;
+            /** Cross Section */
+            cross_section?: string | null;
+            /** Family */
+            family: string;
+            /** Fields */
+            fields: components["schemas"]["SpecimenFieldOut"][];
+            /** Help */
+            help?: string | null;
+            /** Key */
+            key: string;
+            /**
+             * Ratio Checks
+             * @default []
+             */
+            ratio_checks: components["schemas"]["RatioCheckOut"][];
+            /**
+             * Taken
+             * @default false
+             */
+            taken: boolean;
+            /** Value */
+            value: string;
         };
         /**
          * StepParamOut
@@ -9053,6 +9144,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DriftReportOut"];
+                };
+            };
+        };
+    };
+    list_standard_catalog_api_vocabularies_specimen_standards_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardTemplateOut"][];
+                };
+            };
+        };
+    };
+    import_standards_api_vocabularies_specimen_standards_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

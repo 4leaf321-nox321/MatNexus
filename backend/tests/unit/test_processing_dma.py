@@ -14,6 +14,7 @@ DMA 는 인장과 사정이 정반대다. 장비가 저장·손실 탄성률을 
 from __future__ import annotations
 
 import math
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -102,7 +103,7 @@ class TestGlassTransition:
     #: 실제 순서를 담은 스윕 — **저장 탄성률이 먼저 떨어지고, 손실이 피크를
     #: 지나고, tan δ 가 마지막에 피크다.** 셋이 같은 온도를 주면 이 파일이
     #: 지키려는 것을 증명하지 못한다.
-    SWEEP = dict(
+    SWEEP: ClassVar[dict[str, list[float]]] = dict(
         temperature=[300.0, 310.0, 320.0, 330.0, 340.0],
         storage_modulus=[1000.0, 480.0, 200.0, 60.0, 50.0],
         loss_modulus=[10.0, 90.0, 150.0, 55.0, 8.0],

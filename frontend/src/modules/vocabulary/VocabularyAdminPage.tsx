@@ -36,6 +36,7 @@ import {
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
 import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { SpecimenStandardDialog } from '@/modules/vocabulary/SpecimenStandardDialog'
+import { StandardCatalogDialog } from '@/modules/vocabulary/StandardCatalogDialog'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type {
   BulkResult,
@@ -285,6 +286,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
   const [detail, setDetail] = useState<Term | null>(null)
   const [showCandidates, setShowCandidates] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [catalog, setCatalog] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [size, setSize] = useState<number>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
@@ -403,7 +405,23 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
         </Button>
         {/* **미리 갖춰 놓을 수 있어야 한다.** 지금까지 값은 누가 폼에서 써야만
             생겼고, 그러면 첫 사람이 무엇을 칠지에 목록이 끌려간다. */}
-        <Button size="sm" className="ml-auto h-8 text-xs" onClick={() => setAdding(true)}>
+        {/* **규격은 손으로 만들면 네 단계다** — 칸 만들고, 기호 적고, 값 넣고,
+            단면적 식 고르기. 표준 것은 구조를 가져다 쓰고 숫자만 넣는다. */}
+        {role === 'standard' && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto h-8 text-xs"
+            onClick={() => setCatalog(true)}
+          >
+            표준 규격 가져오기
+          </Button>
+        )}
+        <Button
+          size="sm"
+          className={role === 'standard' ? 'h-8 text-xs' : 'ml-auto h-8 text-xs'}
+          onClick={() => setAdding(true)}
+        >
           <Plus className="size-3.5" />
           값 추가
         </Button>
@@ -431,6 +449,13 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
       </div>
 
       <ErrorNotice error={terms.error ?? error} className="mb-3" />
+
+      {catalog && (
+        <StandardCatalogDialog
+          onClose={() => setCatalog(false)}
+          onImported={() => terms.reload()}
+        />
+      )}
 
       {adding && (
         <AddTermDialog

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.vocabulary import services
+from app.modules.vocabulary import services, standards
 from app.modules.vocabulary.models import (
     SpecimenField,
     Vocabulary,
@@ -22,7 +22,7 @@ from app.modules.vocabulary.models import (
     VocabularyDriftCheck,
     VocabularyTerm,
 )
-from app.modules.vocabulary.normalize import clean, split_parent
+from app.modules.vocabulary.normalize import clean, compare_key, split_parent
 from app.modules.vocabulary.schemas import (
     BulkDeleteItemOut,
     BulkDeleteOut,
@@ -39,6 +39,8 @@ from app.modules.vocabulary.schemas import (
     RatioCheckOut,
     SpecimenFieldOut,
     SpecimenFieldsSaveRequest,
+    StandardImportRequest,
+    StandardTemplateOut,
     TermAliasCreateRequest,
     TermAliasOut,
     TermCreateRequest,
@@ -206,6 +208,118 @@ def repair_drift(
     row = services.record_check(db, source="manual")
     db.commit()
     return _report(db, row)
+
+
+@router.get("/specimen-standards/catalog", response_model=list[StandardTemplateOut])
+def list_standard_catalog(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[StandardTemplateOut]:
+    """가져올 수 있는 표준 규격. **치수 값은 없다.**
+
+    근거 문서가 2차 출처라(본문이 유료다) 숫자를 심으면 검증 안 된 값이 시스템의
+    정본이 된다 — 실제로 출처끼리 어긋난 곳이 있다. 칸과 기호는 판이 바뀌어도
+    그대로이므로 구조만 깔고 숫자는 사람이 규격서를 보고 넣는다.
+    """
+    axis = services.get_vocabulary(db, "specimen_standard")
+    taken = {
+        row
+        for row in db.scalars(
+            select(VocabularyTerm.normalized).where(VocabularyTerm.vocabulary_id == axis.id)
+        )
+    }
+    return [
+        StandardTemplateOut(
+            key=str(item["key"]),
+            value=str(item["value"]),
+            category=str(item["category"]),
+            family=str(item["family"]),
+            fields=[SpecimenFieldOut(**one) for one in item["fields"]],
+            cross_section=item.get("cross_section"),
+            ratio_checks=[RatioCheckOut(**one) for one in item.get("ratio_checks", [])],
+            help=item.get("help"),
+            taken=compare_key(str(item["value"])) in taken,
+        )
+        for item in standards.CATALOG
+    ]
+
+
+@router.post("/specimen-standards/import", response_model=list[TermOut])
+def import_standards(
+    payload: StandardImportRequest,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[TermOut]:
+    """고른 표준 규격을 값으로 만든다.
+
+    **이미 있는 이름은 건너뛴다.** 덮어쓰면 사람이 넣어 둔 치수가 사라진다 —
+    이 기능이 주는 것은 칸과 기호이지 값이 아니다.
+
+    분류가 없으면 그 항목은 만들지 않는다. 분류가 칸을 정하는 쪽이라, 없는 채로
+    만들면 `게이지 길이` 같은 기본 칸이 안 붙는다.
+    """
+    axis = services.get_vocabulary(db, "specimen_standard")
+    category_axis = services.get_vocabulary(db, "specimen_category")
+    wanted = {key for key in payload.keys}
+    made: list[VocabularyTerm] = []
+
+    for item in standards.CATALOG:
+        if item["key"] not in wanted:
+            continue
+        normalized = compare_key(str(item["value"]))
+        if db.scalar(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == axis.id,
+                VocabularyTerm.normalized == normalized,
+            )
+        ):
+            continue
+        category = db.scalar(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == category_axis.id,
+                VocabularyTerm.normalized == compare_key(str(item["category"])),
+            )
+        )
+        if category is None:
+            raise AppError(
+                "MNX-VOCABULARY-0028",
+                f"시편 분류 '{item['category']}' 가 없습니다. 분류를 먼저 만드세요 — "
+                "분류가 기본 칸을 정합니다.",
+                status=422,
+            )
+        term = VocabularyTerm(
+            vocabulary_id=axis.id,
+            value=clean(str(item["value"])),
+            normalized=normalized,
+            parent_term_id=category.id,
+            created_by_id=user.id,
+        )
+        db.add(term)
+        db.flush()
+
+        # **위가 이미 주는 칸은 다시 선언하지 않는다.** 축이 판을, 분류가 게이지
+        # 길이를 준다 — 같은 키가 둘이면 어느 쪽이 이기는지 사람이 알 수 없다.
+        # 다만 **글자는 규격마다 다르므로** 그것만 덮어쓴다(E8 은 G, ISO 는 L₀).
+        above = {field.key for field in services.attribute_fields(db, axis, term)}
+        term.extra_fields = services.check_extra_fields(
+            db, term, [one for one in item["fields"] if one["key"] not in above]
+        )
+        term.field_symbols = {
+            str(one["key"]): str(one["symbol"])
+            for one in item["fields"]
+            if one["key"] in above and one.get("symbol")
+        }
+        if item.get("cross_section"):
+            term.cross_section = str(item["cross_section"])
+        db.flush()
+        if item.get("ratio_checks"):
+            term.ratio_checks = services.check_ratio_checks(
+                db, axis, term, item["ratio_checks"]
+            )
+        made.append(term)
+
+    db.commit()
+    return [_term_out(db, term) for term in made]
 
 
 @router.get("/cross-sections", response_model=list[CrossSectionOut])

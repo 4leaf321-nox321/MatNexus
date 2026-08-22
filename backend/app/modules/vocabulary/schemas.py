@@ -115,6 +115,34 @@ class SpecimenFieldOut(BaseModel):
     """위(축·분류)가 준 칸인가. 그렇다면 이 값에서는 못 지운다."""
 
 
+class StandardTemplateOut(BaseModel):
+    """가져올 수 있는 표준 규격 하나.
+
+    **치수 값은 없다.** 근거 문서가 2차 출처라 숫자는 사람이 규격서를 보고 넣는다 —
+    칸과 기호는 판이 바뀌어도 그대로지만 값은 바뀐다.
+    """
+
+    key: str
+    value: str
+    """만들어질 값 이름. `ASTM E8/E8M 박판형`."""
+    category: str
+    """어느 시편 분류 아래로 들어가는가."""
+    family: str
+    """화면이 묶어 보여 주는 갈래. `금속 인장`."""
+    fields: list[SpecimenFieldOut]
+    cross_section: str | None = None
+    ratio_checks: list[RatioCheckOut] = []
+    help: str | None = None
+    taken: bool = False
+    """이미 그 이름의 값이 있는가. **덮어쓰지 않는다** — 있으면 건너뛴다."""
+
+
+class StandardImportRequest(BaseModel):
+    """고른 것만 만든다. **안 쓰는 규격이 목록을 채우면 피커가 무거워진다.**"""
+
+    keys: list[str] = Field(min_length=1, max_length=100)
+
+
 class SpecimenFieldSaveRequest(BaseModel):
     """칸 하나를 저장할 때의 모양. **키는 계약이다.**
 

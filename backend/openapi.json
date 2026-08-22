@@ -6317,6 +6317,97 @@
         "title": "SpecimenWarningOut",
         "type": "object"
       },
+      "StandardImportRequest": {
+        "description": "고른 것만 만든다. **안 쓰는 규격이 목록을 채우면 피커가 무거워진다.**",
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "title": "StandardImportRequest",
+        "type": "object"
+      },
+      "StandardTemplateOut": {
+        "description": "가져올 수 있는 표준 규격 하나.\n\n**치수 값은 없다.** 근거 문서가 2차 출처라 숫자는 사람이 규격서를 보고 넣는다 —\n칸과 기호는 판이 바뀌어도 그대로지만 값은 바뀐다.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "cross_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Section"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SpecimenFieldOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "ratio_checks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RatioCheckOut"
+            },
+            "title": "Ratio Checks",
+            "type": "array"
+          },
+          "taken": {
+            "default": false,
+            "title": "Taken",
+            "type": "boolean"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "category",
+          "family",
+          "fields"
+        ],
+        "title": "StandardTemplateOut",
+        "type": "object"
+      },
       "StepParamOut": {
         "description": "단계 하나의 입력 칸. **화면의 폼 필드가 여기서 생성된다.**\n\n프론트에 목록을 하드코딩하지 않는 이유: 계산을 추가할 때 두 곳을 고쳐야 하고,\n그러면 한 곳을 빠뜨린다. `matcore.ParamSpec` 을 그대로 내보낸다.",
         "properties": {
@@ -14062,6 +14153,78 @@
           }
         },
         "summary": "Repair Drift",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/specimen-standards/catalog": {
+      "get": {
+        "description": "가져올 수 있는 표준 규격. **치수 값은 없다.**\n\n근거 문서가 2차 출처라(본문이 유료다) 숫자를 심으면 검증 안 된 값이 시스템의\n정본이 된다 — 실제로 출처끼리 어긋난 곳이 있다. 칸과 기호는 판이 바뀌어도\n그대로이므로 구조만 깔고 숫자는 사람이 규격서를 보고 넣는다.",
+        "operationId": "list_standard_catalog_api_vocabularies_specimen_standards_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StandardTemplateOut"
+                  },
+                  "title": "Response List Standard Catalog Api Vocabularies Specimen Standards Catalog Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Standard Catalog",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
+    "/api/vocabularies/specimen-standards/import": {
+      "post": {
+        "description": "고른 표준 규격을 값으로 만든다.\n\n**이미 있는 이름은 건너뛴다.** 덮어쓰면 사람이 넣어 둔 치수가 사라진다 —\n이 기능이 주는 것은 칸과 기호이지 값이 아니다.\n\n분류가 없으면 그 항목은 만들지 않는다. 분류가 칸을 정하는 쪽이라, 없는 채로\n만들면 `게이지 길이` 같은 기본 칸이 안 붙는다.",
+        "operationId": "import_standards_api_vocabularies_specimen_standards_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TermOut"
+                  },
+                  "title": "Response Import Standards Api Vocabularies Specimen Standards Import Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Standards",
         "tags": [
           "vocabulary"
         ]

@@ -759,3 +759,89 @@ class TestSymbols:
         )
         listed = fields_of(client, admin_headers, SLUG, term_id)
         assert next(f for f in listed if f["key"] == "diameter")["symbol"] == "D"
+
+
+class TestCatalog:
+    """표준 규격 가져오기 — **칸과 기호는 심고, 치수 값은 안 심는다.**
+
+    근거 문서가 2차 출처라(본문이 유료다) 숫자를 심으면 검증 안 된 값이 시스템의
+    정본이 된다 — 실제로 출처끼리 어긋난 곳이 있다(D5766 전체 길이가 152 mm 와
+    250 mm 로). 칸과 기호는 판이 바뀌어도 그대로다.
+    """
+
+    def _catalog(self, client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+        found = client.get("/api/vocabularies/specimen-standards/catalog", headers=headers)
+        assert found.status_code == 200, found.text
+        return {item["key"]: item for item in found.json()}
+
+    def test_치수_값은_안_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**이 카탈로그가 주는 것은 구조지 숫자가 아니다.**"""
+        catalog = self._catalog(client, admin_headers)
+        assert "attributes" not in catalog["astm_e8_sheet"]
+
+    def test_기호를_함께_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**같은 글자가 규격마다 다른 뜻이다.** E8 의 D 는 직경, D638 의 D 는
+        그립 간 거리다. 그리고 장비 파일의 항목 이름이 곧 그 글자다."""
+        catalog = self._catalog(client, admin_headers)
+        e8 = {item["key"]: item for item in catalog["astm_e8_round"]["fields"]}
+        d638 = {item["key"]: item for item in catalog["astm_d638_type1"]["fields"]}
+        assert e8["diameter"]["symbol"] == "D"
+        assert d638["grip_separation"]["symbol"] == "D"
+        assert "diameter" not in d638
+
+    def test_가져오면_칸과_단면적_식이_함께_온다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        made = client.post(
+            "/api/vocabularies/specimen-standards/import",
+            json={"keys": ["astm_e8_round"]},
+            headers=admin_headers,
+        )
+        assert made.status_code == 200, made.text
+        (term,) = made.json()
+        assert term["parent_value"] == "인장"
+        assert term["cross_section"] == "circle"
+        assert term["attributes"] == {}
+
+        listed = fields_of(client, admin_headers, SLUG, term["id"])
+        keys = {item["key"] for item in listed}
+        # 축이 준 판 + 분류가 준 게이지 길이 + 이 규격의 칸.
+        assert {"edition", "gauge_length", "diameter", "grip_end"} <= keys
+
+    def test_비율_조건도_함께_온다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """DMA 는 숫자를 안 주고 비만 주는 파트가 대부분이다."""
+        made = client.post(
+            "/api/vocabularies/specimen-standards/import",
+            json={"keys": ["iso_6721_3"]},
+            headers=admin_headers,
+        )
+        assert made.status_code == 200, made.text
+        (term,) = made.json()
+        (check,) = term["ratio_checks"]
+        assert check["numerator"] == "length" and check["minimum"] == 50
+
+    def test_이미_있는_이름은_건너뛴다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**덮어쓰면 사람이 넣어 둔 치수가 사라진다.**"""
+        client.post(
+            "/api/vocabularies/specimen-standards/import",
+            json={"keys": ["astm_e8_sheet"]},
+            headers=admin_headers,
+        )
+        again = client.post(
+            "/api/vocabularies/specimen-standards/import",
+            json={"keys": ["astm_e8_sheet"]},
+            headers=admin_headers,
+        )
+        assert again.status_code == 200, again.text
+        assert again.json() == []
+
+        catalog = self._catalog(client, admin_headers)
+        assert catalog["astm_e8_sheet"]["taken"] is True

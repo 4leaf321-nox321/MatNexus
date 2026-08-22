@@ -25,6 +25,8 @@ export type SpecimenField = components['schemas']['SpecimenFieldOut']
 export type SpecimenFieldSave = components['schemas']['SpecimenFieldSaveRequest']
 /** 고를 수 있는 단면적 식. **키가 아니라 이름과 요구 칸을 함께 준다.** */
 export type CrossSection = components['schemas']['CrossSectionOut']
+/** 가져올 수 있는 표준 규격. **칸과 기호만 온다** — 치수 값은 사람이 넣는다. */
+export type StandardTemplate = components['schemas']['StandardTemplateOut']
 /** 규격이 요구하는 비율 조건. **어겨도 막지 않는다** — 보이게만 한다. */
 export type RatioCheck = components['schemas']['RatioCheckOut']
 export type BulkResult = components['schemas']['BulkTermOut']
@@ -54,6 +56,19 @@ export const vocabularyApi = {
    * 육각봉…) 화면이 따라온다.
    */
   crossSections: () => api.get<CrossSection[]>('/vocabularies/cross-sections'),
+
+  /**
+   * 가져올 수 있는 표준 규격.
+   *
+   * **배포할 때 전부 심지 않는다.** 안 쓰는 규격이 목록을 채우면 피커가
+   * 무거워진다 — 규격은 부서마다 쓰는 것이 다르다.
+   */
+  standardCatalog: () =>
+    api.get<StandardTemplate[]>('/vocabularies/specimen-standards/catalog'),
+
+  /** 고른 것만 만든다. **이미 있는 이름은 건너뛴다** — 덮으면 치수가 사라진다. */
+  importStandards: (keys: string[]) =>
+    api.post<Term[]>('/vocabularies/specimen-standards/import', { keys }),
 
   termFields: (slug: string, termId: string) =>
     api.get<SpecimenField[]>(`/vocabularies/${slug}/terms/${termId}/fields`),
