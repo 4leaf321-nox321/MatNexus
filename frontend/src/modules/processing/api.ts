@@ -47,29 +47,41 @@ export const REFERENCE_PREFIX = '@'
 export const isReference = (value: unknown): value is string =>
   typeof value === 'string' && value.startsWith(REFERENCE_PREFIX)
 
+/** 시편에서 온 값의 키 앞머리. `게이지 길이` 칸 ↔ `specimen_gauge_length`. */
+export const FROM_SPECIMEN = 'specimen_'
+
 /**
- * 어느 입력 칸이 무엇을 참조할 수 있는가. **칸마다 최대 하나다.**
+ * 이 입력 칸에 이어 붙일 값. **없으면 `null`.**
  *
- * 처음에는 단위로 골랐다 — `param.unit === 'm'` 인 것을 전부 후보로 냈다.
- * 그랬더니 '게이지 길이' 칸에 게이지 길이·폭·두께 **셋이 붙었고**, 버튼 이름은
- * 전부 '참조' 라 무엇을 누르는지 알 수 없었다. 셋이 똑같아 보이는데 결과는
- * 다르다 — 잘못 누르면 게이지 길이 자리에 두께가 들어가고, 변형률이 조용히
- * 50배 틀린다.
+ * ## 왜 이름으로 찾는가
  *
- * 단위가 같다고 뜻이 같은 것이 아니다. **이름으로 고른다.**
+ * 처음에는 **단위**로 골랐다 — `unit === 'm'` 인 것을 전부 후보로 냈다. 그랬더니
+ * '게이지 길이' 칸에 게이지 길이·폭·두께 **셋이 붙었고**, 버튼 이름은 전부
+ * '참조' 라 무엇을 누르는지 알 수 없었다. 잘못 누르면 게이지 길이 자리에 두께가
+ * 들어가고 **변형률이 조용히 50배 틀린다.**
+ *
+ * 그래서 이름 셋을 화면에 박았다. 이번엔 반대 문제가 났다 — 규격에 칸을 더해도
+ * (자유 길이·직경) 처리 화면이 모른다. 값은 이미 서버가 보내고 있는데 집을
+ * 자리가 없어서, 사람은 자를 대고 다시 잰다.
+ *
+ * 입력 칸 이름과 시편 치수 이름은 **원래 같은 이름 공간**이다. 그러니 목록을
+ * 들고 있을 필요가 없다 — 이름이 맞는 것 하나를 찾으면 된다. 단위로 고르는 것도
+ * 아니고 표를 박는 것도 아니다.
  */
-export const REFERENCE_FOR: Record<string, { key: string; label: string }> = {
-  gauge_length: { key: 'specimen_gauge_length', label: '시편의 게이지 길이' },
-  area: { key: 'specimen_area', label: '시편의 단면적 (폭 곱하기 두께)' },
-  youngs_modulus: { key: 'youngs_modulus', label: '앞 단계에서 잰 탄성계수' },
+export function referenceFor(
+  paramName: string,
+  available: Map<string, ProcessingScalar>
+): ProcessingScalar | null {
+  return (
+    available.get(`${FROM_SPECIMEN}${paramName}`) ?? available.get(paramName) ?? null
+  )
 }
 
 /** `@specimen_gauge_length` 같은 원문을 사람이 읽는 이름으로. */
-export function referenceLabel(raw: string): string {
+export function referenceLabel(raw: string, available?: Map<string, ProcessingScalar>): string {
   const name = raw.startsWith(REFERENCE_PREFIX) ? raw.slice(1) : raw
-  for (const item of Object.values(REFERENCE_FOR)) {
-    if (item.key === name) return item.label
-  }
+  const known = available?.get(name)
+  if (known) return known.label
   return name
 }
 
@@ -81,6 +93,15 @@ const search = (params: Record<string, string | undefined>) => {
 }
 
 export const processingApi = {
+  /**
+   * 이 시험을 돌리면 **바깥에서 들어오는 값**. 시편 치수와 단면적이다.
+   *
+   * 돌려 보기 전에 알아야 한다 — 이어 붙인 값이 몇인지 보여 주고, 그 자리에서
+   * 고칠 수 있게 하려면 화면이 숫자를 갖고 있어야 한다.
+   */
+  inputs: (testRunId: string) =>
+    api.get<ProcessingScalar[]>(`/processing/inputs?test_run_id=${testRunId}`),
+
   /** 등록된 단계와 입력 칸. **화면이 이 응답만으로 폼을 그린다.** */
   steps: (testType?: string) =>
     api.get<ProcessingStep[]>(`/processing/steps${search({ test_type: testType })}`),

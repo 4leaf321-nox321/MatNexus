@@ -8,47 +8,63 @@
  * 잘못 누르면 게이지 길이(50mm) 자리에 두께(1mm)가 들어간다. 오류는 안 난다 —
  * 변형률이 50배 커진 그럴듯한 곡선이 나올 뿐이다. 이 프로젝트가 가장 비싸게 겪는
  * "조용히 틀린 성공" 계열이다.
+ *
+ * 그래서 이름 셋을 화면에 박았는데, 이번엔 반대 문제가 났다 — 규격에 칸을 더해도
+ * (자유 길이·직경) 화면이 모른다. 값은 서버가 이미 보내고 있는데 집을 자리가
+ * 없어서 사람은 자를 대고 다시 잰다. 이제 **이름이 맞는 것 하나**를 찾는다.
  */
 
 import { describe, expect, it } from 'vitest'
 
-import {
-  REFERENCE_FOR,
-  isReference,
-  isUsed,
-  referenceLabel,
-} from '@/modules/processing/api'
+import { isReference, isUsed, referenceFor, referenceLabel } from '@/modules/processing/api'
+import type { ProcessingScalar } from '@/modules/processing/api'
+
+const scalar = (key: string, label: string, si_unit = 'm'): ProcessingScalar =>
+  ({ key, label, value: 0.05, si_unit, dimension: null }) as unknown as ProcessingScalar
+
+/** 서버가 이 시험에 넣어 주는 값들. 규격이 칸을 정하므로 시험마다 다르다. */
+const GIVEN = new Map<string, ProcessingScalar>([
+  ['specimen_gauge_length', scalar('specimen_gauge_length', '시편 게이지 길이')],
+  ['specimen_width', scalar('specimen_width', '시편 폭')],
+  ['specimen_thickness', scalar('specimen_thickness', '시편 두께')],
+  ['specimen_free_length', scalar('specimen_free_length', '시편 자유 길이')],
+  ['specimen_area', scalar('specimen_area', '시편 초기 단면적', 'm2')],
+])
 
 describe('참조', () => {
-  it('칸 하나에 후보가 하나뿐이다', () => {
-    // 단위로 고르던 때는 'm' 인 칸에 셋이 붙었다. 이름으로 고르면 구조적으로
-    // 하나다 — 이 검사는 그 구조가 유지되는지를 본다.
-    for (const [name, item] of Object.entries(REFERENCE_FOR)) {
-      expect(item.key, name).toBeTruthy()
-      expect(item.label, name).toBeTruthy()
-    }
-  })
-
   it('게이지 길이에는 게이지 길이만 붙는다', () => {
-    expect(REFERENCE_FOR.gauge_length.key).toBe('specimen_gauge_length')
-    // 폭·두께는 단위가 같지만 뜻이 다르다. 후보로 나오면 안 된다.
-    const keys = Object.values(REFERENCE_FOR).map((item) => item.key)
-    expect(keys).not.toContain('specimen_width')
-    expect(keys).not.toContain('specimen_thickness')
+    // 폭·두께는 단위가 같지만 뜻이 다르다. 이름으로 고르면 구조적으로 하나다.
+    expect(referenceFor('gauge_length', GIVEN)?.key).toBe('specimen_gauge_length')
   })
 
   it('단면적은 면적을 가리킨다', () => {
-    expect(REFERENCE_FOR.area.key).toBe('specimen_area')
+    expect(referenceFor('area', GIVEN)?.key).toBe('specimen_area')
+  })
+
+  it('규격에 칸을 더하면 화면이 저절로 따라온다', () => {
+    // **이 파일의 이유.** 전에는 이름 셋이 코드에 박혀 있어서, 값이 와 있어도
+    // 집을 자리가 없었다.
+    expect(referenceFor('free_length', GIVEN)?.key).toBe('specimen_free_length')
+  })
+
+  it('앞 단계가 낸 값도 이름으로 찾는다', () => {
+    const carried = new Map([['youngs_modulus', scalar('youngs_modulus', '탄성계수', 'Pa')]])
+    expect(referenceFor('youngs_modulus', carried)?.key).toBe('youngs_modulus')
+  })
+
+  it('올 값이 없으면 안 붙인다', () => {
+    // 없는 값을 가리키면 돌릴 때 "그 값이 없습니다" 로 실패한다. 누르기 전에 막는다.
+    expect(referenceFor('diameter', GIVEN)).toBeNull()
   })
 
   it('원문 대신 사람이 읽는 이름을 보여 준다', () => {
     // `@specimen_gauge_length` 를 그대로 띄우면 이게 무엇인지 코드를 읽어야 안다.
-    expect(referenceLabel('@specimen_gauge_length')).toBe('시편의 게이지 길이')
-    expect(referenceLabel('@youngs_modulus')).toBe('앞 단계에서 잰 탄성계수')
+    expect(referenceLabel('@specimen_gauge_length', GIVEN)).toBe('시편 게이지 길이')
   })
 
   it('모르는 참조는 원문을 그대로 보여 준다', () => {
     // 감추면 "빈 칸" 으로 읽힌다. 모르는 것은 모르는 대로 보여 주는 편이 낫다.
+    expect(referenceLabel('@made_up', GIVEN)).toBe('made_up')
     expect(referenceLabel('@made_up')).toBe('made_up')
   })
 

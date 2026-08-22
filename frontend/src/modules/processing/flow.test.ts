@@ -315,9 +315,26 @@ describe('접힌 줄의 요약', () => {
     expect(manual).toContain('직접 입력')
   })
 
-  it('시편에서 오는 값은 그 사실을 적는다', () => {
+  it('시편에서 오는 값은 사람이 읽는 이름으로 적는다', () => {
+    // 이름은 **서버가 준다** — 규격이 칸을 정하므로 화면이 목록을 들 수 없다.
+    const given = new Map([
+      [
+        'specimen_gauge_length',
+        { key: 'specimen_gauge_length', label: '시편 게이지 길이' },
+      ],
+    ] as const) as never
+    const text = stepSummary(
+      step('x', { gauge_length: '@specimen_gauge_length' }),
+      CAT,
+      given
+    )
+    expect(text).toContain('시편 게이지 길이')
+  })
+
+  it('이름을 모르면 원문을 그대로 적는다', () => {
+    // 감추면 "빈 칸" 으로 읽힌다. 모르는 것은 모르는 대로 보여 주는 편이 낫다.
     const text = stepSummary(step('x', { gauge_length: '@specimen_gauge_length' }), CAT)
-    expect(text).toContain('시편의 게이지 길이')
+    expect(text).toContain('specimen_gauge_length')
   })
 
   it('열 이름은 그대로 적는다', () => {

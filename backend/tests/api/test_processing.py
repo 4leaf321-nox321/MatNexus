@@ -741,3 +741,46 @@ class Test저장된_결과의_곡선:
         ).json()
         assert body["points"], "진응력 단계를 넣었으면 그 축으로 그려져야 한다"
         assert body["units"]["stress_true"] == "Pa"
+
+
+class Test들어오는값:
+    """**화면이 값을 알아야 한다.**
+
+    전에는 화면이 이어 붙일 이름 셋을 코드에 박아 두고 있었고(게이지 길이·
+    단면적·탄성계수), 그것도 이름만 알지 값은 몰랐다. 그래서 두 가지가 안 됐다 —
+    규격에 칸을 더해도 화면이 모르고, 이어 붙인 값이 몇인지 안 보였다.
+
+    돌려 보기 전에 답해야 하므로 파이프라인을 돌리지 않는다.
+    """
+
+    def test_시편_치수를_돌리기_전에_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        run = client.get(f"/api/test-runs/{run_id}", headers=admin_headers)
+        assert run.status_code == 200, run.text
+        specimen_id = run.json()["specimen_id"]
+
+        # 치수가 없으면 넣어 줄 것도 없다 — **0 으로 채우지 않는다.**
+        empty = client.get(
+            f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+        )
+        assert empty.status_code == 200, empty.text
+        assert empty.json() == []
+
+        saved = client.patch(
+            f"/api/specimens/{specimen_id}",
+            json={"thickness": 1.0, "width": 12.5, "gauge_length": 50.0},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+        found = client.get(
+            f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+        )
+        assert found.status_code == 200, found.text
+        given = {item["key"]: item for item in found.json()}
+        assert given["specimen_gauge_length"]["value"] == pytest.approx(0.05)
+        # 단면적은 규격이 고른 식으로 낸다 — 식을 안 골랐으면 폭 곱하기 두께.
+        assert given["specimen_area"]["value"] == pytest.approx(12.5e-3 * 1.0e-3)
+        # **이름이 있어야 화면이 사람 말로 적는다.**
+        assert given["specimen_gauge_length"]["label"]

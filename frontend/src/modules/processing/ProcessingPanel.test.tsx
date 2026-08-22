@@ -34,6 +34,7 @@ vi.mock('@/modules/processing/api', async (importOriginal) => ({
     steps: () => steps(),
     recipes: () => recipes(),
     preview: (...args: unknown[]) => preview(...args),
+    inputs: () => inputs(),
   },
 }))
 
@@ -41,11 +42,35 @@ vi.mock('@/modules/tests/api', () => ({
   testsApi: { instrumentDimensions: () => dimensions() },
 }))
 
+/** 서버가 이 시험에 넣어 주는 값. **규격이 칸을 정하므로 시험마다 다르다.** */
+const inputs = vi.fn(() => Promise.resolve([] as unknown[]))
+
 const made = (key: string, label: string, si_unit = '1', help: string | null = null) => ({
   key,
   label,
   si_unit,
   help,
+})
+
+/**
+ * 숫자 칸. 시편 값을 이어 붙일 수 있는 자리는 이쪽이다.
+ *
+ * **필수로 두지 않는다.** 여기서 지키는 것은 "값을 어떻게 잇는가" 이고, 덜 채운
+ * 단계를 붉게 하는 것은 아래 자기 목록을 쓰는 묶음이 따로 본다.
+ */
+const number = (name: string, label: string, unit = 'm') => ({
+  name,
+  label,
+  type: 'float',
+  default: null,
+  choices: [],
+  choice_labels: {},
+  unit,
+  dimension: null,
+  help: null,
+  required: false,
+  role: null,
+  when: {},
 })
 
 const column = (name: string, label: string, dflt: string | null = null) => ({
@@ -70,7 +95,11 @@ const CATALOG = [
     label: '공칭 응력-변형률',
     version: '1',
     applies_to: ['tensile'],
-    params: [column('displacement', '변위 열', 'displacement'), column('force', '하중 열', 'force')],
+    params: [
+      number('gauge_length', '게이지 길이'),
+      column('displacement', '변위 열', 'displacement'),
+      column('force', '하중 열', 'force'),
+    ],
     makes_columns: [
       made('strain_engineering', '공칭 변형률', '1', '변위 ÷ 게이지 길이.'),
       made('stress_engineering', '공칭 응력', 'Pa'),
@@ -513,5 +542,64 @@ describe('덜 채운 단계는 붉다', () => {
 
     await waitFor(() => expect(getStep('공칭 응력-변형률')).not.toHaveTextContent('덜 채움'))
     expect(getStep('공칭 응력-변형률')).toHaveTextContent('게이지 길이 50 mm')
+  })
+})
+
+describe('시편 값 이어 붙이기', () => {
+  const GIVEN = [
+    {
+      key: 'specimen_gauge_length',
+      label: '시편 게이지 길이',
+      value: 0.05,
+      si_unit: 'm',
+      dimension: null,
+    },
+  ]
+
+  beforeEach(() => {
+    steps.mockResolvedValue(CATALOG)
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+    preview.mockReset()
+    inputs.mockResolvedValue(GIVEN)
+  })
+
+  it('올 값이 있는 칸에만 버튼이 붙는다', async () => {
+    // **화면에 이름을 박아 두지 않는다.** 규격에 칸을 더하면 저절로 따라오고,
+    // 올 값이 없으면 안 붙는다 — 눌러 봐야 돌릴 때 "그 값이 없습니다" 다.
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '공칭 응력-변형률') // 켠 줄을 한 번 더 누르면 칸이 펴진다
+
+    expect(await screen.findByRole('button', { name: /시편 게이지 길이 쓰기/ })).toBeInTheDocument()
+    // 이 시험에는 단면적이 안 왔다.
+    expect(screen.queryByRole('button', { name: /단면적 쓰기/ })).not.toBeInTheDocument()
+  })
+
+  it('이어 붙이면 그 값이 몇인지 보여 준다', async () => {
+    // **규격의 공칭과 그 시편의 실측은 뜻이 조금 다르다.** 얼마인지 모르면
+    // 고칠지 말지를 판단할 수 없다.
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(await screen.findByRole('button', { name: /시편 게이지 길이 쓰기/ }))
+
+    expect(await screen.findByText(/지금 50 mm/)).toBeInTheDocument()
+  })
+
+  it('이어 붙인 값을 그 자리에서 고칠 수 있다', async () => {
+    // **객체처럼 묶여서 못 고치면 안 된다.** 규격상 치수와 이 시편의 치수는
+    // 다를 수 있다 — 지금 값을 그대로 옮겨 담고 거기서부터 고친다.
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(await screen.findByRole('button', { name: /시편 게이지 길이 쓰기/ }))
+    await user.click(await screen.findByRole('button', { name: '값 고쳐 쓰기' }))
+
+    // 잇기 전 기본값(빈 칸)이 아니라 **이어 붙었던 값**이 남는다.
+    expect(await screen.findByLabelText<HTMLInputElement>('게이지 길이')).toHaveValue('50')
   })
 })

@@ -944,6 +944,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Inputs
+         * @description 이 시험을 돌리면 **바깥에서 들어오는 값**. 시편 치수와 단면적이다.
+         *
+         *     **화면이 값을 알아야 한다.** 전에는 화면이 `@specimen_gauge_length` 로 이어
+         *     붙일 이름 셋을 코드에 박아 두고 있었고(게이지 길이·단면적·탄성계수), 그것도
+         *     이름만 알지 값은 몰랐다. 그래서 두 가지가 안 됐다.
+         *
+         *       - 규격에 칸을 더해도(자유 길이·직경) 처리 화면이 모른다. 값은 이미 서버가
+         *         보내고 있는데 집을 자리가 없어서, 사람은 자를 대고 다시 잰다.
+         *       - 이어 붙인 값이 **몇인지** 안 보인다. 규격의 공칭과 그 시편의 실측은 뜻이
+         *         조금 다른데, 얼마인지 모른 채로는 고칠지 말지를 판단할 수 없다.
+         *
+         *     돌려 보기 전에 답해야 하므로 파이프라인을 돌리지 않는다.
+         */
+        get: operations["list_inputs_api_processing_inputs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/preview": {
         parameters: {
             query?: never;
@@ -7280,6 +7311,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inputs_api_processing_inputs_get: {
+        parameters: {
+            query: {
+                test_run_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingScalarOut"][];
                 };
             };
             /** @description Validation Error */

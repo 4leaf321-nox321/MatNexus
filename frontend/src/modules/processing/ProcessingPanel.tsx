@@ -37,14 +37,15 @@ import {
 import { RecipePicker } from '@/modules/processing/RecipePicker'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import {
-  REFERENCE_FOR,
   isReference,
   isUsed,
   processingApi,
+  referenceFor,
   referenceLabel,
 } from '@/modules/processing/api'
 import type {
   ProcessingPreview,
+  ProcessingScalar,
   ProcessingStep,
   RecipeStep,
   StepParam,
@@ -228,6 +229,18 @@ export function ProcessingPanel({
       setError(caught instanceof Error ? caught : new Error('채우지 못했습니다.'))
     }
   }
+
+  /**
+   * 바깥에서 들어오는 값 — 시편 치수와 규격이 낸 단면적.
+   *
+   * **돌려 보기 전에 알아야 한다.** 이어 붙인 값이 몇인지 보여 주고 그 자리에서
+   * 고칠 수 있어야 하는데, 그러려면 화면이 숫자를 갖고 있어야 한다.
+   */
+  const given = useResource(() => processingApi.inputs(testRunId), [testRunId])
+  const inputs = useMemo(
+    () => new Map((given.data ?? []).map((item) => [item.key, item])),
+    [given.data]
+  )
 
   const available = catalog.data ?? []
   const byId = useMemo(
@@ -666,7 +679,7 @@ export function ProcessingPanel({
               const stage = result?.stages[index]
               const trouble = stepBlockers[index] ?? []
               const isOpen = open.has(index)
-              const summary = stepSummary(step, byId)
+              const summary = stepSummary(step, byId, inputs)
               return (
                 /* **덜 채운 단계는 늘 붉다.** 돌려 보기를 누를 때까지
                    기다리면, 스무 줄을 다 훑고 나서야 어디가 빈지 안다. */
@@ -767,6 +780,7 @@ export function ProcessingPanel({
                           value={step.options[param.name]}
                           columns={columnsFor(index)}
                           columnInfo={columnInfo}
+                          inputs={inputs}
                           /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
                              '직접 입력' 이 살아 있으면, 거기 넣은 숫자가 무시된다는
                              것을 알 방법이 없다 — 값을 넣었는데 아무 일도 안
@@ -1036,6 +1050,7 @@ function ParamField({
   value,
   columns,
   columnInfo,
+  inputs,
   disabled = false,
   onChange,
 }: {
@@ -1044,6 +1059,13 @@ function ParamField({
   columns: string[]
   /** 열 이름 → 그 이름의 뜻. 고르는 자리에서 바로 읽게 한다. */
   columnInfo: Map<string, { label: string; si_unit: string; help?: string | null }>
+  /**
+   * 바깥에서 들어오는 값 — 시편 치수와 단면적.
+   *
+   * **이름과 값을 둘 다 갖고 있어야 한다.** 이름만 알면 이어 붙일 수는 있어도
+   * 그것이 몇인지 못 보여 주고, 몇인지 모르면 고칠지 말지를 못 정한다.
+   */
+  inputs: Map<string, ProcessingScalar>
   disabled?: boolean
   onChange: (value: unknown) => void
 }) {
@@ -1142,8 +1164,21 @@ function ParamField({
     )
   }
 
-  // **칸마다 최대 하나다.** 단위로 고르면 '게이지 길이' 에 폭·두께까지 붙는다.
-  const reference = REFERENCE_FOR[param.name]
+  /**
+   * 이 칸에 이어 붙일 값. **이름으로 찾는다** — 화면에 목록을 박아 두면 규격에
+   * 칸을 더할 때마다 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+   */
+  const reference = referenceFor(param.name, inputs)
+
+  /** 이어 붙인 값이 지금 얼마인가. **몇인지 모르면 고칠지 말지를 못 정한다.** */
+  const linked = referenced ? (inputs.get(String(value).slice(1)) ?? null) : null
+  const linkedShown = linked
+    ? `${Number(toDisplay(linked.value, linked.si_unit, linked.dimension).toPrecision(6))}${
+        display(linked.si_unit, linked.dimension).unit
+          ? ` ${display(linked.si_unit, linked.dimension).unit}`
+          : ''
+      }`
+    : null
 
   return (
     <div className={`${rowClass} items-start`} aria-disabled={disabled || undefined}>
@@ -1161,15 +1196,22 @@ function ParamField({
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground flex items-center gap-1 text-xs">
               <Link2 className="size-3" />
-              <b className="text-foreground">{referenceLabel(String(value))}</b>를 씁니다
+              <b className="text-foreground">
+                {referenceLabel(String(value), inputs)}
+              </b>
+              를 씁니다
+              {/* **규격의 공칭과 그 시편의 실측은 뜻이 조금 다르다.** 얼마인지
+                  보여 주지 않으면 고칠지 말지를 판단할 수 없다. */}
+              {linkedShown && <b className="text-foreground"> · 지금 {linkedShown}</b>}
             </span>
             <Button
               size="sm"
               variant="outline"
               className="ml-auto h-7 shrink-0 text-xs"
-              onClick={() => onChange(param.default ?? null)}
+              title="이어 붙인 값을 지금 값 그대로 옮겨 담습니다. 그 뒤로는 원본이 바뀌어도 안 따라옵니다."
+              onClick={() => onChange(linked ? linked.value : (param.default ?? null))}
             >
-              직접 넣기
+              값 고쳐 쓰기
             </Button>
           </div>
         ) : (
@@ -1202,7 +1244,8 @@ function ParamField({
                 title={`${reference.label} 을 그때그때 가져다 씁니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`}
                 onClick={() => onChange(`@${reference.key}`)}
               >
-                {/* 이름만 적으면 라벨처럼 보인다. **누르는 것**임을 동사로 말한다. */}
+                {/* 이름만 적으면 라벨처럼 보인다. **누르는 것**임을 동사로 말한다.
+                    값을 함께 보여 준다 — 무엇이 들어오는지 누르기 전에 안다. */}
                 <Link2 className="size-3" />
                 {reference.label} 쓰기
               </Button>

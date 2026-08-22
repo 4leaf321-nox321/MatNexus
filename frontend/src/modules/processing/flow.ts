@@ -20,7 +20,12 @@
  */
 
 import { isReference, isUsed, referenceLabel } from '@/modules/processing/api'
-import type { Produced, ProcessingStep, RecipeStep } from '@/modules/processing/api'
+import type {
+  Produced,
+  ProcessingScalar,
+  ProcessingStep,
+  RecipeStep,
+} from '@/modules/processing/api'
 import { display, toDisplay } from '@/shared/units'
 
 /**
@@ -283,7 +288,9 @@ const SUMMARY_MAX = 3
  */
 export function stepSummary(
   step: RecipeStep,
-  catalog: Map<string, ProcessingStep>
+  catalog: Map<string, ProcessingStep>,
+  /** 바깥에서 들어오는 값. 있으면 참조를 사람이 읽는 이름으로 적는다. */
+  inputs?: Map<string, ProcessingScalar>
 ): string {
   const plugin = catalog.get(step.plugin)
   if (!plugin) return ''
@@ -300,7 +307,7 @@ export function stepSummary(
     if (value === null || value === undefined || value === '') continue
 
     if (isReference(value)) {
-      parts.push(`${param.label} ${referenceLabel(String(value))}`)
+      parts.push(`${param.label} ${referenceLabel(String(value), inputs)}`)
       continue
     }
     if (param.role === 'column') {
