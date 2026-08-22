@@ -117,6 +117,21 @@ interface Props {
  * 치수는 `@` 참조로 둔다 — 시편 기록에 있으면 그대로 돌고, 없으면 "시편 기록에
  * 그 값이 있는지 확인하세요" 로 실패한다. 0 을 채워 조용히 틀리는 것보다 낫다.
  */
+/**
+ * DMA 로 바로 돌려 볼 수 있는 순서.
+ *
+ * **DMA 는 인장과 사정이 정반대다.** 장비가 저장·손실 탄성률을 이미 계산해서
+ * 주므로, 첫 단계가 만드는 것이 아니라 **채우는** 일이다 — `tan_delta` 는 선택
+ * 채널이라 없는 파일이 있고, 없으면 Tg 판정이 통째로 막힌다.
+ *
+ * Tg 는 여기서 안 켠다. 정의가 셋인데 어느 것을 쓸지는 규격과 재료가 정하고,
+ * 우리가 하나를 골라 두면 그것이 기본값처럼 굳는다.
+ */
+const DMA_STARTER: RecipeStep[] = [
+  { plugin: 'dma.derived', options: {} },
+  { plugin: 'curve.sort_unique', options: { x: 'temperature', duplicate_policy: 'mean' } },
+]
+
 const TENSILE_STARTER: RecipeStep[] = [
   {
     plugin: 'tensile.engineering',
@@ -257,13 +272,17 @@ export function ProcessingPanel({
     // '열을 고르세요' 로 비어 보였는데 서버는 displacement 로 잘 돌고 있었다 —
     // 화면과 서버가 서로 다른 것을 아는 상태다.
     if (!available.length) return
-    setSteps(
+    const starter =
       testTypeKey === 'tensile'
-        ? TENSILE_STARTER.map((step) => ({
-            ...step,
-            options: { ...defaults(byId.get(step.plugin)), ...step.options },
-          }))
-        : []
+        ? TENSILE_STARTER
+        : testTypeKey === 'dma_sweep'
+          ? DMA_STARTER
+          : []
+    setSteps(
+      starter.map((step) => ({
+        ...step,
+        options: { ...defaults(byId.get(step.plugin)), ...step.options },
+      }))
     )
     setResult(null)
     setSaved(null)

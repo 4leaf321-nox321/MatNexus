@@ -1,0 +1,195 @@
+"""DMA 처리 단계.
+
+DMA 는 인장과 사정이 정반대다. 장비가 저장·손실 탄성률을 **이미 계산해서** 주므로,
+여기 단계들은 새로 만드는 것이 아니라 **채우고 바꾸는** 일을 한다.
+
+지키는 것:
+
+    없는 열을 채운다      tan δ 는 선택 채널이라 없는 파일이 있다
+    덮으면 덮었다고 적는다  "장비 값인가 우리 값인가" 를 나중에 답할 수 있어야 한다
+    정의를 값과 함께 남긴다 Tg 는 정의마다 값이 다르다
+    가정을 적는다          E → G 는 등방·선형을 가정한 변환이다
+"""
+
+from __future__ import annotations
+
+import math
+
+import numpy as np
+import pytest
+
+from matcore import processing
+from matcore.processing import Frame, ProcessingError
+
+
+def frame(**columns: list[float]) -> Frame:
+    units = {
+        "storage_modulus": "Pa",
+        "loss_modulus": "Pa",
+        "temperature": "K",
+        "frequency": "Hz",
+        "angular_frequency": "rad/s",
+        "tan_delta": "1",
+    }
+    return Frame(
+        {key: np.array(value, dtype=float) for key, value in columns.items()},
+        {key: units.get(key, "1") for key in columns},
+    )
+
+
+def run(plugin: str, source: Frame, **options: object) -> processing.PipelineResult:
+    processing.load_builtin()
+    return processing.apply([processing.Step(plugin, dict(options))], source)
+
+
+class TestDerived:
+    def test_없는_열을_채운다(self) -> None:
+        """**tan δ 는 선택 채널이다.** 없으면 Tg 판정이 통째로 막힌다."""
+        result = run(
+            "dma.derived",
+            frame(storage_modulus=[1000.0, 500.0], loss_modulus=[100.0, 250.0]),
+        )
+        assert result.frame.columns["tan_delta"] == pytest.approx([0.1, 0.5])
+        assert result.frame.columns["complex_modulus"][0] == pytest.approx(
+            math.hypot(1000.0, 100.0)
+        )
+        assert result.frame.columns["phase_angle"][0] == pytest.approx(
+            math.atan2(100.0, 1000.0)
+        )
+
+    def test_파일이_준_열을_덮으면_적는다(self) -> None:
+        """**조용히 덮으면 어느 쪽 값인지 못 답한다.**"""
+        result = run(
+            "dma.derived",
+            frame(
+                storage_modulus=[1000.0, 500.0],
+                loss_modulus=[100.0, 250.0],
+                tan_delta=[9.9, 9.9],
+            ),
+        )
+        assert result.frame.columns["tan_delta"] == pytest.approx([0.1, 0.5])
+        assert any("덮었습니다" in note for note in result.notes)
+
+    def test_저장_탄성률이_0_이면_거절한다(self) -> None:
+        """그 점에서 tan δ 가 무한대가 된다 — 오류 없이 그럴듯한 곡선이 나온다."""
+        with pytest.raises(ProcessingError):
+            run("dma.derived", frame(storage_modulus=[0.0, 500.0], loss_modulus=[1.0, 2.0]))
+
+
+class TestFrequency:
+    def test_주파수에서_각주파수를_만든다(self) -> None:
+        result = run("dma.frequency", frame(frequency=[1.0, 10.0]), direction="to_angular")
+        assert result.frame.columns["angular_frequency"] == pytest.approx(
+            [2 * math.pi, 20 * math.pi]
+        )
+
+    def test_각주파수에서_주파수를_만든다(self) -> None:
+        """**한쪽만 오는 파일이 있다.** 마스터커브는 주파수축을 쓴다."""
+        result = run(
+            "dma.frequency", frame(angular_frequency=[2 * math.pi]), direction="to_frequency"
+        )
+        assert result.frame.columns["frequency"] == pytest.approx([1.0])
+
+    def test_원본_열이_없으면_무엇이_없는지_말한다(self) -> None:
+        with pytest.raises(ProcessingError) as caught:
+            run("dma.frequency", frame(storage_modulus=[1.0]), direction="to_angular")
+        assert "주파수" in str(caught.value)
+
+
+class TestGlassTransition:
+    """**정의마다 값이 다르다.** 그래서 무엇으로 쟀는지가 값과 함께 남아야 한다."""
+
+    #: 실제 순서를 담은 스윕 — **저장 탄성률이 먼저 떨어지고, 손실이 피크를
+    #: 지나고, tan δ 가 마지막에 피크다.** 셋이 같은 온도를 주면 이 파일이
+    #: 지키려는 것을 증명하지 못한다.
+    SWEEP = dict(
+        temperature=[300.0, 310.0, 320.0, 330.0, 340.0],
+        storage_modulus=[1000.0, 480.0, 200.0, 60.0, 50.0],
+        loss_modulus=[10.0, 90.0, 150.0, 55.0, 8.0],
+        tan_delta=[0.01, 0.1875, 0.75, 0.9167, 0.16],
+    )
+
+    def _value(self, method: str, **options: object) -> float:
+        result = run("dma.glass_transition", frame(**self.SWEEP), method=method, **options)
+        return next(s.value for s in result.scalars if s.key == "glass_transition")
+
+    def test_정의마다_다른_값이_나온다(self) -> None:
+        """**이 파일의 이유.** 하나로 박아 두면 다른 정의로 보고된 값과 비교가
+        안 되고, 조용히 바꾸면 예전 값과 어긋난다."""
+        tan_peak = self._value("tan_delta_peak")
+        loss_peak = self._value("loss_peak")
+        onset = self._value("storage_onset", drop=0.5)
+        # 같은 스윕인데 셋이 20 K 씩 벌어진다.
+        assert onset == pytest.approx(310.0)
+        assert loss_peak == pytest.approx(320.0)
+        assert tan_peak == pytest.approx(330.0)
+
+    def test_피크에서의_값도_낸다(self) -> None:
+        """피크가 뚜렷한지 보는 근거다."""
+        result = run("dma.glass_transition", frame(**self.SWEEP), method="tan_delta_peak")
+        peak = next(s for s in result.scalars if s.key == "glass_transition_peak")
+        assert peak.value == pytest.approx(0.9167)
+
+    def test_끝에서_잡힌_피크는_말해_준다(self) -> None:
+        """**끝에서 잡힌 피크는 피크가 아니다.** 스윕이 전이를 안 지났다는
+        뜻인데, 값 자체는 그럴듯하게 나온다."""
+        result = run(
+            "dma.glass_transition",
+            frame(
+                temperature=[300.0, 310.0, 320.0],
+                storage_modulus=[1000.0, 900.0, 800.0],
+                loss_modulus=[1.0, 2.0, 3.0],
+                tan_delta=[0.01, 0.02, 0.03],
+            ),
+            method="tan_delta_peak",
+        )
+        assert any("끝에서 잡혔" in note for note in result.notes)
+
+    def test_전이를_안_지난_스윕은_온셋을_거절한다(self) -> None:
+        with pytest.raises(ProcessingError) as caught:
+            run(
+                "dma.glass_transition",
+                frame(
+                    temperature=[300.0, 310.0, 320.0],
+                    storage_modulus=[1000.0, 990.0, 980.0],
+                    loss_modulus=[1.0, 2.0, 3.0],
+                ),
+                method="storage_onset",
+                drop=0.5,
+            )
+        assert "떨어지는 지점이 없습니다" in str(caught.value)
+
+
+class TestToShear:
+    def test_등방_변환으로_전단을_낸다(self) -> None:
+        """**Prony 카드는 전단 기준이다.** 인장으로 쟀으면 여기를 거쳐야 한다."""
+        result = run(
+            "dma.to_shear",
+            frame(storage_modulus=[2700.0], loss_modulus=[270.0]),
+            poisson_ratio=0.35,
+        )
+        assert result.frame.columns["storage_modulus_shear"] == pytest.approx([1000.0])
+        assert result.frame.columns["loss_modulus_shear"] == pytest.approx([100.0])
+
+    def test_가정을_결과에_적는다(self) -> None:
+        """ν 는 온도에 따라 변하고 이방성 재료에서는 이 식이 성립하지 않는다."""
+        result = run(
+            "dma.to_shear",
+            frame(storage_modulus=[2700.0], loss_modulus=[270.0]),
+            poisson_ratio=0.35,
+        )
+        assert any("등방" in note and "0.35" in note for note in result.notes)
+
+    def test_포아송비를_안_주면_거절한다(self) -> None:
+        """**기본값을 안 둔다.** 이 값이 결과를 그대로 바꾼다."""
+        with pytest.raises(ProcessingError):
+            run("dma.to_shear", frame(storage_modulus=[2700.0], loss_modulus=[270.0]))
+
+    def test_0_5_는_그_자체로_못_쓴다(self) -> None:
+        """완전 비압축성이다 — 나눗셈은 되지만 뜻이 없다."""
+        with pytest.raises(ProcessingError):
+            run(
+                "dma.to_shear",
+                frame(storage_modulus=[2700.0], loss_modulus=[270.0]),
+                poisson_ratio=0.5,
+            )

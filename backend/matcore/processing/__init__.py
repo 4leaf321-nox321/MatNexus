@@ -318,7 +318,7 @@ def load_builtin() -> None:
     같은 이유다. 워커와 테스트가 같은 함수를 부르면 "테스트에서는 되는데 워커에서는
     단계가 없다" 는 어긋남이 생기지 않는다.
     """
-    from matcore.processing import common, tensile  # noqa: F401
+    from matcore.processing import common, dma, tensile  # noqa: F401
 
 
 __all__ = [
