@@ -381,3 +381,52 @@ class TestRatioWarnings:
         self._standard(client, admin_headers)
         specimen = make_specimen(client, admin_headers, standard="ISO 6721-3")
         assert dimensions_of(client, admin_headers, specimen["id"])["warnings"] == []
+
+
+class TestBriefSizes:
+    """접힌 줄이 치수를 말한다 — **이름과 출처를 함께.**
+
+    전에는 두께·폭·게이지 세 값을 이름 없이 늘어놓았다. 칸이 규격마다 다른
+    지금은 자리로 외울 수가 없다 — 환봉 규격의 첫 값은 직경이고 평판 규격의
+    첫 값은 폭이다. 그리고 규격의 공칭과 잰 값을 합쳐서 보여 주면 전부
+    실측으로 읽힌다.
+    """
+
+    def test_목록이_치수를_이름과_함께_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        make_standard(
+            client,
+            admin_headers,
+            "ASTM E8 R1",
+            extra_fields=[ROUND_FIELD],
+            attributes={"diameter": 0.0125},
+        )
+        specimen = make_specimen(client, admin_headers, standard="ASTM E8 R1")
+        client.put(
+            f"/api/specimens/{specimen['id']}/dimensions",
+            json={"dimensions": {"diameter": 0.01248}},
+            headers=admin_headers,
+        )
+
+        listed = client.get(
+            f"/api/samples/{specimen['sample_id']}/specimens", headers=admin_headers
+        )
+        assert listed.status_code == 200, listed.text
+        sizes = {item["key"]: item for item in listed.json()[0]["sizes"]}
+
+        # 잰 값이 이긴다.
+        assert sizes["diameter"]["value"] == pytest.approx(0.01248)
+        assert sizes["diameter"]["source"] == "measured"
+        assert sizes["diameter"]["label"] == "직경"
+        # 규격이 준 것은 그 사실이 함께 온다 — 화면이 흐리게 그린다.
+        assert sizes["gauge_length"]["source"] == "nominal"
+
+    def test_규격이_없으면_적을_것도_없다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        specimen = make_specimen(client, admin_headers)
+        listed = client.get(
+            f"/api/samples/{specimen['sample_id']}/specimens", headers=admin_headers
+        )
+        assert listed.json()[0]["sizes"] == []

@@ -51,6 +51,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
+import { display, toDisplay } from '@/shared/units'
 
 const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
 
@@ -511,9 +512,6 @@ function SpecimenRow({
   useEffect(() => {
     if (expand) setOpen(expand.open)
   }, [expand])
-  const dimensions = [specimen.thickness, specimen.width, specimen.gauge_length]
-    .map((value) => (value == null ? '—' : value))
-    .join(' × ')
 
   return (
     <li className="text-sm">
@@ -537,8 +535,26 @@ function SpecimenRow({
               {specimen.standard}
             </Badge>
           )}
-          <span className="text-muted-foreground ml-auto tabular-nums">
-            {dimensions} {specimen.length_unit}
+          {/* **자리로 외울 수가 없다.** 전에는 두께·폭·게이지 세 값을 이름 없이
+              늘어놓았는데, 칸이 규격마다 다른 지금은 환봉 규격의 첫 값이 직경이고
+              평판 규격의 첫 값은 폭이다. 이름을 함께 적는다.
+
+              그리고 **규격에서 온 값은 흐리게.** 합쳐서 보여 주면 전부 실측으로
+              읽히고, "이 두께가 잰 건가 규격값인가" 를 나중에 답할 수 없다. */}
+          <span className="text-muted-foreground ml-auto flex flex-wrap justify-end gap-x-2 tabular-nums">
+            {specimen.sizes.map((size) => {
+              const shown = display(size.si_unit, size.dimension)
+              return (
+                <span
+                  key={size.key}
+                  className={size.source === 'nominal' ? 'opacity-50' : undefined}
+                  title={size.source === 'nominal' ? '규격이 정한 값입니다' : '잰 값입니다'}
+                >
+                  {size.label} {Number(toDisplay(size.value, size.si_unit, size.dimension).toPrecision(6))}
+                  {shown.unit && ` ${shown.unit}`}
+                </span>
+              )
+            })}
           </span>
           {/* 접힌 줄에서 시험 상태가 보여야 한다. 없으면 하나씩 펼쳐 봐야
               "어느 시편이 실패했나 · 채택됐나" 를 알게 된다. */}

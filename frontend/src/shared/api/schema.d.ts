@@ -4382,6 +4382,36 @@ export interface components {
             /** Workspace Slug */
             workspace_slug: string;
         };
+        /**
+         * SpecimenBriefSizeOut
+         * @description 목록의 접힌 줄에 적는 치수 하나.
+         *
+         *     **이름을 함께 낸다.** 전에는 두께·폭·게이지 세 값을 `1.0 / 12.5 / 50` 처럼
+         *     이름 없이 늘어놓았다. 칸이 규격마다 다른 지금은 자리로 외울 수가 없다 —
+         *     환봉 규격의 첫 값은 직경이고 평판 규격의 첫 값은 폭이다.
+         *
+         *     그리고 **어디서 온 값인지도 낸다.** 규격의 공칭과 사람이 잰 값을 합쳐서
+         *     보여 주면 전부 실측으로 읽힌다.
+         */
+        SpecimenBriefSizeOut: {
+            /**
+             * Dimension
+             * @default length
+             */
+            dimension: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Source */
+            source: string;
+            /** Symbol */
+            symbol?: string | null;
+            /** Value */
+            value: number;
+        };
         /** SpecimenCreateRequest */
         SpecimenCreateRequest: {
             /** Gauge Length */
@@ -4541,6 +4571,11 @@ export interface components {
             sample_id: string;
             /** Seq No */
             seq_no: number;
+            /**
+             * Sizes
+             * @default []
+             */
+            sizes: components["schemas"]["SpecimenBriefSizeOut"][];
             /** Standard */
             standard: string | null;
             /**

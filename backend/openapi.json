@@ -5569,6 +5569,56 @@
         "title": "SignupRequest",
         "type": "object"
       },
+      "SpecimenBriefSizeOut": {
+        "description": "목록의 접힌 줄에 적는 치수 하나.\n\n**이름을 함께 낸다.** 전에는 두께·폭·게이지 세 값을 `1.0 / 12.5 / 50` 처럼\n이름 없이 늘어놓았다. 칸이 규격마다 다른 지금은 자리로 외울 수가 없다 —\n환봉 규격의 첫 값은 직경이고 평판 규격의 첫 값은 폭이다.\n\n그리고 **어디서 온 값인지도 낸다.** 규격의 공칭과 사람이 잰 값을 합쳐서\n보여 주면 전부 실측으로 읽힌다.",
+        "properties": {
+          "dimension": {
+            "default": "length",
+            "title": "Dimension",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "si_unit",
+          "source"
+        ],
+        "title": "SpecimenBriefSizeOut",
+        "type": "object"
+      },
       "SpecimenCreateRequest": {
         "properties": {
           "gauge_length": {
@@ -5891,6 +5941,14 @@
           "seq_no": {
             "title": "Seq No",
             "type": "integer"
+          },
+          "sizes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpecimenBriefSizeOut"
+            },
+            "title": "Sizes",
+            "type": "array"
           },
           "standard": {
             "anyOf": [

@@ -33,6 +33,7 @@ from app.modules.materials.schemas import (
     SampleCreateRequest,
     SampleOut,
     SampleUpdateRequest,
+    SpecimenBriefSizeOut,
     SpecimenCreateRequest,
     SpecimenOut,
     SpecimenSizeOut,
@@ -162,7 +163,31 @@ def _sample_out(
     )
 
 
-def _specimen_out(specimen: Specimen, *, runs: RunTally = (0, 0, 0)) -> SpecimenOut:
+def _brief_sizes(sizes: specimen_size.Sizes | None) -> list[SpecimenBriefSizeOut]:
+    """접힌 줄에 적을 치수. **이름과 출처를 함께 낸다.**"""
+    if sizes is None:
+        return []
+    known = {field.key: field for field in sizes.fields}
+    return [
+        SpecimenBriefSizeOut(
+            key=item.key,
+            label=item.label,
+            symbol=known[item.key].symbol if item.key in known else None,
+            value=item.value,
+            si_unit=item.si_unit,
+            dimension=known[item.key].dimension if item.key in known else "length",
+            source=item.source,
+        )
+        for item in sizes.items
+    ]
+
+
+def _specimen_out(
+    specimen: Specimen,
+    *,
+    runs: RunTally = (0, 0, 0),
+    sizes: specimen_size.Sizes | None = None,
+) -> SpecimenOut:
     unit = specimen.input_units.get("length", LENGTH_UNIT)
     return SpecimenOut(
         test_run_count=runs[0],
@@ -179,6 +204,7 @@ def _specimen_out(specimen: Specimen, *, runs: RunTally = (0, 0, 0)) -> Specimen
         width=services.from_si(specimen.width_m, unit),
         gauge_length=services.from_si(specimen.gauge_length_m, unit),
         length_unit=unit,
+        sizes=_brief_sizes(sizes),
         note=specimen.note,
         created_at=specimen.created_at,
     )
@@ -884,7 +910,13 @@ def list_specimens(
         ids=[item.id for item in rows],
         join_specimen=False,
     )
-    return [_specimen_out(item, runs=tallies.get(item.id, (0, 0, 0))) for item in rows]
+    # **규격별로 한 번에 읽는다.** 시편마다 읽으면 N+1 이고, 한 시료의 시편은
+    # 대개 같은 규격이라 한 벌만 읽으면 된다.
+    sizes = specimen_size.sizes_for(db, rows)
+    return [
+        _specimen_out(item, runs=tallies.get(item.id, (0, 0, 0)), sizes=sizes.get(item.id))
+        for item in rows
+    ]
 
 
 @samples_router.post("/{sample_id}/specimens", response_model=SpecimenOut, status_code=201)

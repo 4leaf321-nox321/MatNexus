@@ -204,6 +204,12 @@ class SpecimenOut(BaseModel):
     gauge_length: float | None
     length_unit: str = LENGTH_UNIT
 
+    sizes: list[SpecimenBriefSizeOut] = []
+    """이 시편의 실효 치수. **잰 값이 이기고 빈 칸은 규격에서 온다.**
+
+    목록이 시편마다 읽으면 N+1 이라 **규격별로 한 번에** 읽는다
+    (`specimen_size.sizes_for`)."""
+
     note: str | None
     created_at: datetime
 
@@ -275,6 +281,28 @@ class SpecimenSizesRequest(BaseModel):
     """잰 값만 보낸다(SI). **키를 빼면 그 칸을 안 잰 것이 된다.**"""
 
     dimensions: dict[str, float]
+
+
+class SpecimenBriefSizeOut(BaseModel):
+    """목록의 접힌 줄에 적는 치수 하나.
+
+    **이름을 함께 낸다.** 전에는 두께·폭·게이지 세 값을 `1.0 / 12.5 / 50` 처럼
+    이름 없이 늘어놓았다. 칸이 규격마다 다른 지금은 자리로 외울 수가 없다 —
+    환봉 규격의 첫 값은 직경이고 평판 규격의 첫 값은 폭이다.
+
+    그리고 **어디서 온 값인지도 낸다.** 규격의 공칭과 사람이 잰 값을 합쳐서
+    보여 주면 전부 실측으로 읽힌다.
+    """
+
+    key: str
+    label: str
+    symbol: str | None = None
+    value: float
+    """SI. 화면이 실무 단위로 바꿔 보여 준다."""
+    si_unit: str
+    dimension: str = "length"
+    source: str
+    """`measured` 사람이 잰 것 · `nominal` 규격이 정한 것."""
 
 
 class SpecimenCreateRequest(BaseModel):

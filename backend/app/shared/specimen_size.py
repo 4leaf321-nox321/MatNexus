@@ -28,8 +28,11 @@
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Specimen
@@ -116,24 +119,60 @@ def standard_of(db: Session, specimen: Specimen) -> VocabularyTerm | None:
 
 def sizes_of(db: Session, specimen: Specimen) -> Sizes:
     """이 시편의 실효 치수. **잰 값이 이기고, 빈 칸은 규격에서 온다.**"""
-    standard = standard_of(db, specimen)
-    fields: tuple[Field, ...] = ()
-    nominal: dict[str, float] = {}
-    if standard is not None:
-        axis = get_vocabulary(db, STANDARD_SLUG)
-        # **숫자 칸만 치수다.** 규격은 판(문자)·모드(선택)도 갖는데, 그것은 그
-        # 규격의 성질이지 이 시편을 잰 값이 아니다 — 시편 화면에 입력 칸으로
-        # 나오면 사람은 거기에 무엇을 적어야 하는지 알 수 없다.
-        fields = tuple(
-            item for item in attribute_fields(db, axis, standard) if item.kind == "number"
-        )
-        keys = {item.key for item in fields}
-        nominal = {
-            key: float(value)
-            for key, value in (standard.attributes or {}).items()
-            if key in keys and isinstance(value, int | float)
-        }
+    return sizes_for(db, [specimen])[specimen.id]
 
+
+def sizes_for(db: Session, specimens: Sequence[Specimen]) -> dict[uuid.UUID, Sizes]:
+    """여러 시편의 실효 치수를 **한 번에** 읽는다.
+
+    **목록에서 시편마다 읽으면 N+1 이다.** 시편 하나의 치수를 알려면 규격 값과
+    그 분류의 기본 칸을 봐야 하는데, 한 시료의 시편들은 대개 **같은 규격**이다 —
+    그 한 벌을 한 번만 읽으면 된다.
+    """
+    if not specimens:
+        return {}
+
+    standard_ids = {s.standard_term_id for s in specimens if s.standard_term_id}
+    standards: dict[uuid.UUID, VocabularyTerm] = {}
+    schema: dict[uuid.UUID, tuple[tuple[Field, ...], dict[str, float]]] = {}
+    if standard_ids:
+        axis = get_vocabulary(db, STANDARD_SLUG)
+        for term in db.scalars(
+            select(VocabularyTerm).where(VocabularyTerm.id.in_(standard_ids))
+        ):
+            standards[term.id] = term
+            # **숫자 칸만 치수다.** 규격은 판(문자)·모드(선택)도 갖는데, 그것은
+            # 그 규격의 성질이지 이 시편을 잰 값이 아니다 — 시편 화면에 입력
+            # 칸으로 나오면 사람은 거기에 무엇을 적어야 하는지 알 수 없다.
+            fields = tuple(
+                item for item in attribute_fields(db, axis, term) if item.kind == "number"
+            )
+            keys = {item.key for item in fields}
+            schema[term.id] = (
+                fields,
+                {
+                    key: float(value)
+                    for key, value in (term.attributes or {}).items()
+                    if key in keys and isinstance(value, int | float)
+                },
+            )
+
+    return {
+        specimen.id: _sizes(
+            specimen,
+            standards.get(specimen.standard_term_id) if specimen.standard_term_id else None,
+            *schema.get(specimen.standard_term_id or uuid.UUID(int=0), ((), {})),
+        )
+        for specimen in specimens
+    }
+
+
+def _sizes(
+    specimen: Specimen,
+    standard: VocabularyTerm | None,
+    fields: tuple[Field, ...],
+    nominal: dict[str, float],
+) -> Sizes:
     measured = {key: float(value) for key, value in (specimen.dimensions or {}).items()}
     # **옛 컬럼도 실측이다.** 아직 그쪽으로만 채워진 시편이 있다(ADR 0010 Expand).
     for key, column in LEGACY_COLUMNS.items():
