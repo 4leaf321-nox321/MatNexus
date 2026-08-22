@@ -71,10 +71,13 @@ const STANDARD = {
 } as unknown as Term
 
 function show(term: Term) {
+  // 역할은 **축**이 정한다 — 값에 상위가 있는지로 가늠하지 않는다. 분류를 아직
+  // 안 정한 규격이 있고, 그것을 분류로 착각하면 칸이 엉뚱한 표로 들어간다.
   return render(
     <SpecimenFieldsDialog
       slug="specimen_standard"
       term={term}
+      editsBase={term === CATEGORY}
       onClose={vi.fn()}
       onSaved={vi.fn()}
     />

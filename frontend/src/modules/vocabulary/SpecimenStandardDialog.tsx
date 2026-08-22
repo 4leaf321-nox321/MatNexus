@@ -111,6 +111,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
       <SpecimenFieldsDialog
         slug={slug}
         term={term}
+        editsBase={false}
         onClose={() => setEditingFields(false)}
         onSaved={() => {
           setEditingFields(false)
@@ -121,6 +122,13 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   }
 
   const rows = fields.data ?? []
+  /** 요구 칸이 없어 못 고르는 식과, 무엇이 없는지. */
+  const blocked = (shapes.data ?? [])
+    .map((shape) => ({
+      shape,
+      missing: shape.needs.filter((need) => !rows.some((field) => field.key === need)),
+    }))
+    .filter((item) => item.missing.length > 0)
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -141,7 +149,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
           분류 <b className="text-foreground">{term.parent_value ?? '없음'}</b>
           {term.parent_value
             ? ' — 그 분류의 기본 칸에 이 규격의 칸이 더해집니다.'
-            : ' — 분류를 정하면 그 분류의 기본 칸이 함께 나옵니다.'}
+            : ' — 분류를 정하면 그 분류의 기본 칸(인장이면 게이지 길이 …)이 함께 나옵니다. 값 목록에서 이 값을 눌러 상위 분류를 정하세요.'}
         </p>
 
         {rows.length === 0 && !fields.loading ? (
@@ -228,6 +236,19 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
               </Button>
             )}
           </div>
+          {/* **못 고르는 이유가 안 보이면 막다른 길이다.** 전에는 마우스를
+              올려야만 보였다 — 칸이 하나도 없는 규격에서는 모든 식이 회색이라,
+              무엇을 해야 하는지 알 수 없었다. */}
+          {blocked.length > 0 && (
+            <p className="text-muted-foreground text-xs">
+              {blocked.map(({ shape, missing }) => (
+                <span key={shape.key} className="block">
+                  <b>{shape.label}</b> 은(는) {missing.join(' · ')} 칸이 없어 못 고릅니다.
+                </span>
+              ))}
+              아래 <b>이 규격만의 칸</b> 에서 그 칸을 먼저 더하세요.
+            </p>
+          )}
           {!crossSection && (
             <p className="text-muted-foreground text-xs">
               안 고르면 <b>폭 곱하기 두께</b>로 계산합니다(옛 규칙). 환봉이면 반드시

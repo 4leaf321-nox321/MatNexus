@@ -409,6 +409,39 @@ class TestBaseFieldsAreNotRequired:
         assert saved.status_code == 200, saved.text
 
 
+class TestRoles:
+    """**기본 칸을 선언하는 쪽인지는 축이 정한다.**
+
+    화면이 그것을 값의 상태로 가늠했다 — 상위 값이 비어 있으면 분류로 봤다.
+    그런데 **분류를 아직 안 정한 규격**이 있다. 그런 규격에 칸을 만들면 규격의
+    칸이 아니라 분류 기본 칸 표로 들어갔고, 들어간 뒤에는 손댈 길이 없었다 —
+    규격 화면은 자기 칸으로 안 보고 분류 화면에는 그 값이 안 뜬다.
+    """
+
+    def test_규격에는_기본_칸을_못_만든다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        term_id = str(make(client, admin_headers, value="분류 없는 규격").json()["id"])
+        refused = client.put(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}/fields",
+            json={"fields": [{"key": "aaa", "label": "111"}]},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-VOCABULARY-0025"
+
+    def test_분류에는_만들_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        saved = client.put(
+            f"/api/vocabularies/{CATEGORY_SLUG}/terms/"
+            f"{category_id(client, admin_headers, '인장')}/fields",
+            json={"fields": [{"key": "gauge_length", "label": "게이지 길이"}]},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+
 class TestDimensions:
     """**길이만 다루던 시절이 끝났다.**
 

@@ -164,4 +164,14 @@ describe('시편 규격 치수', () => {
     const [, , body] = update.mock.calls[0]
     expect(body.cross_section).toBe('rectangle')
   })
+
+  it('못 고르는 식은 이유를 화면에 적는다', async () => {
+    // **회색 버튼만 보이면 막다른 길이다.** 전에는 마우스를 올려야만 보였고,
+    // 칸이 하나도 없는 규격에서는 모든 식이 회색이라 할 일을 알 수 없었다.
+    show()
+    await screen.findByLabelText('게이지 길이')
+    const notice = await screen.findByText(/못 고릅니다/)
+    expect(notice.closest('p')).toHaveTextContent('diameter')
+    expect(notice.closest('p')).toHaveTextContent('이 규격만의 칸')
+  })
 })

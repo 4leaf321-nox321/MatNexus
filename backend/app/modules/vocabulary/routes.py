@@ -274,6 +274,21 @@ def save_category_fields(
     if term is None or term.vocabulary_id != vocabulary.id:
         raise NotFound("MNX-VOCABULARY-0004", "값을 찾을 수 없습니다.")
 
+    # **기본 칸을 선언하는 쪽인지는 축이 정한다.**
+    #
+    # `attribute_source="parent"` 는 "이 축의 값은 기본 칸을 상위에서 받는다" 는
+    # 뜻이다 — 그런 값은 기본 칸을 선언하지 않는다. 화면이 그것을 값의 상태로
+    # 가늠하다가(상위가 비었으면 분류로 봤다) **분류를 아직 안 정한 규격**에
+    # 칸을 만들어 넣었고, 그 칸은 규격의 칸도 아니고 지울 수도 없었다.
+    if vocabulary.attribute_source == "parent":
+        raise AppError(
+            "MNX-VOCABULARY-0025",
+            f"'{vocabulary.label}' 의 값은 기본 칸을 선언하지 않습니다 — "
+            "상위 분류에서 받습니다. 이 값만의 칸은 값 수정의 '이 규격만의 칸' 으로 "
+            "더하세요.",
+            status=422,
+        )
+
     keys = [item.key for item in payload.fields]
     if len(keys) != len(set(keys)):
         raise AppError("MNX-VOCABULARY-0016", "칸 이름이 겹칩니다.", status=422)

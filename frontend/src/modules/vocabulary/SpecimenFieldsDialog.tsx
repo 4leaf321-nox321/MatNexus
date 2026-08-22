@@ -69,22 +69,26 @@ const asRow = (field: SpecimenField | SpecimenFieldSave): Row => ({
 export function SpecimenFieldsDialog({
   slug,
   term,
+  editsBase,
   onClose,
   onSaved,
 }: {
   slug: string
-  /** 분류 값이면 기본 칸을, 규격 값이면 그 규격만의 칸을 고친다. */
   term: Term
+  /**
+   * **이 값이 기본 칸을 선언하는 쪽인가.**
+   *
+   * 전에는 상위 값이 있는지로 가늠했다(`term.parent_value === null`). 그런데
+   * **분류를 아직 안 정한 규격**이 있다 — 그러면 규격을 분류로 착각해서, 거기서
+   * 만든 칸이 규격의 칸(`extra_fields`)이 아니라 분류 기본 칸 표로 들어갔다.
+   * 실제로 개발 DB 에서 그렇게 됐고, 그 칸은 지울 수도 없었다.
+   *
+   * 역할은 **축**이 정한다(`roleOf`). 값의 상태로 가늠하지 않는다.
+   */
+  editsBase: boolean
   onClose: () => void
   onSaved: () => void
 }) {
-  /**
-   * **분류의 값이면 기본 칸을, 규격의 값이면 추가 칸을 고친다.**
-   *
-   * 규격은 상위(분류)를 갖는다. 그것으로 가른다 — 화면에 축 slug 를 박으면
-   * 축이 하나 더 생길 때 두 곳을 고쳐야 한다.
-   */
-  const editsBase = term.parent_value === null
   const loaded = useResource(() => vocabularyApi.termFields(slug, term.id), [slug, term.id])
   const [rows, setRows] = useState<Row[]>([])
   const [busy, setBusy] = useState(false)

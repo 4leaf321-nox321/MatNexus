@@ -446,6 +446,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
         <SpecimenFieldsDialog
           slug={vocabulary.slug}
           term={sizing}
+          editsBase
           onClose={() => setSizing(null)}
           onSaved={() => {
             setSizing(null)
