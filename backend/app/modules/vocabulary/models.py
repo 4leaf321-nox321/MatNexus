@@ -191,6 +191,18 @@ class VocabularyTerm(Base):
 
     **글자로 값을 묶지는 않는다.** 계산이 잡는 것은 `key` 다 — E8 의 `D` 는
     직경이고 D638 의 `D` 는 그립 간 거리라, 글자로 묶으면 바로 충돌한다."""
+    ratio_checks: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """이 규격이 요구하는 **비율 조건**. `L/h >= 50` 같은 것.
+
+    **규격이 치수를 안 주고 비만 주는 일이 흔하다.** DMA 는 숫자를 실제로 주는
+    파트가 ISO 6721-2·-3·-10 셋뿐이고 나머지는 전부 비율이거나 장비 위임이다.
+
+    어겼다고 **막지 않는다.** ISO 6721-4 는 클램프 간 50~100 mm 를 권하는데
+    Netzsch 15 · Mettler 20 · TA 30 이 한계라 **어느 장비도 만족하지 못한다.**
+    막으면 실제로 잰 데이터를 못 넣게 되고, 그러면 사람은 시스템 밖에서 일한다.
+    대신 어긴 채로 쟀다는 것이 눈에 보여야 한다."""
     cross_section: Mapped[str | None] = mapped_column(String(20), nullable=True)
     """이 규격의 시편은 단면적을 **어떻게 내는가**(`matcore.specimen`).
 

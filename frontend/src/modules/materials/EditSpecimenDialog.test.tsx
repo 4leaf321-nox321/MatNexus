@@ -142,4 +142,35 @@ describe('시편 치수', () => {
     show()
     expect(await screen.findByText(/단면적 식을 안 골랐고/)).toBeInTheDocument()
   })
+
+  it('규격 비율을 어기면 말하되 막지 않는다', async () => {
+    // **규격이 권장값을 주는데 장비가 못 맞추는 일이 실제로 있다** — ISO 6721-4 는
+    // 클램프 간 50~100 mm 를 권하지만 어느 DMA 장비도 그 값을 못 준다. 막으면
+    // 실제로 잰 데이터를 못 넣고, 그러면 사람은 시스템 밖에서 일한다.
+    const user = userEvent.setup()
+    dimensions.mockResolvedValue({
+      standard: 'ISO 6721-3',
+      cross_section: null,
+      cross_section_label: null,
+      area: null,
+      area_problem: null,
+      fields: [size('gauge_length', '게이지 길이', { measured: 0.05 })],
+      warnings: [
+        {
+          condition: '게이지 길이 / 두께 >= 50',
+          actual: 10,
+          help: '저장탄성률 ±5 % 정확도 확보',
+        },
+      ],
+    })
+    show()
+
+    const notice = (await screen.findByText(/규격이 요구하는 비율/)).closest('div')
+    expect(notice).toHaveTextContent('게이지 길이 / 두께 >= 50')
+    expect(notice).toHaveTextContent('10.0')
+
+    // 그래도 저장은 된다.
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(saveDimensions).toHaveBeenCalled())
+  })
 })

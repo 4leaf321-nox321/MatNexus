@@ -36,6 +36,7 @@ from app.modules.vocabulary.schemas import (
     DriftOut,
     DriftReportOut,
     MergeRequest,
+    RatioCheckOut,
     SpecimenFieldOut,
     SpecimenFieldsSaveRequest,
     TermAliasCreateRequest,
@@ -72,6 +73,7 @@ def _term_out(db: Session, item: VocabularyTerm, field_count: int | None = None)
         status=item.status,
         attributes=dict(item.attributes or {}),
         field_symbols=dict(item.field_symbols or {}),
+        ratio_checks=[RatioCheckOut(**row) for row in (item.ratio_checks or [])],
         cross_section=item.cross_section,
         # **이 값이 직접 선언한 칸 수.** 분류 축에서 "이 분류는 칸이 몇 개" 를
         # 말한다 — 0 이면 그 분류의 규격은 치수를 하나도 못 갖는다.
@@ -507,6 +509,10 @@ def update_term(
             for key, value in (data["field_symbols"] or {}).items()
             if str(value).strip()
         }
+    if "ratio_checks" in data:
+        term.ratio_checks = services.check_ratio_checks(
+            db, vocabulary, term, data["ratio_checks"] or []
+        )
     if "cross_section" in data:
         term.cross_section = services.check_cross_section(
             db, vocabulary, term, data["cross_section"] or None

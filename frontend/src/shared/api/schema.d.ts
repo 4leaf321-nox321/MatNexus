@@ -4009,6 +4009,25 @@ export interface components {
             /** Rows */
             rows: components["schemas"]["ValueSourceOut"][];
         };
+        /**
+         * RatioCheckOut
+         * @description 비율 조건 하나 — `분자 / 분모` 가 `[최소, 최대]` 안에 있어야 한다.
+         *
+         *     **규격이 치수를 안 주고 비만 주는 일이 흔하다.** DMA 는 숫자를 실제로 주는
+         *     파트가 셋뿐이고 나머지는 비율이거나 장비 위임이다.
+         */
+        RatioCheckOut: {
+            /** Denominator */
+            denominator: string;
+            /** Help */
+            help?: string | null;
+            /** Maximum */
+            maximum?: number | null;
+            /** Minimum */
+            minimum?: number | null;
+            /** Numerator */
+            numerator: string;
+        };
         /** RecipeCreateRequest */
         RecipeCreateRequest: {
             /** Description */
@@ -4554,6 +4573,11 @@ export interface components {
             fields: components["schemas"]["SpecimenSizeOut"][];
             /** Standard */
             standard: string | null;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["SpecimenWarningOut"][];
         };
         /**
          * SpecimenSizesRequest
@@ -4579,6 +4603,24 @@ export interface components {
             thickness?: number | null;
             /** Width */
             width?: number | null;
+        };
+        /**
+         * SpecimenWarningOut
+         * @description 규격이 요구하는 비율을 어겼다 — **막지는 않는다.**
+         *
+         *     규격이 권장값을 주는데 장비가 못 맞추는 일이 실제로 있다. ISO 6721-4 는
+         *     클램프 간 50~100 mm 를 권하지만 어느 DMA 장비도 그 값을 못 준다(Netzsch 15 ·
+         *     Mettler 20 · TA 30). 막으면 실제로 잰 데이터를 못 넣고, 그러면 사람은 시스템
+         *     밖에서 일한다. 대신 어긴 채로 쟀다는 것이 눈에 보여야 한다 — 규격 이름만 적힌
+         *     보고서는 재현이 안 된다.
+         */
+        SpecimenWarningOut: {
+            /** Actual */
+            actual: number;
+            /** Condition */
+            condition: string;
+            /** Help */
+            help?: string | null;
         };
         /**
          * StepParamOut
@@ -4820,6 +4862,11 @@ export interface components {
             /** Parent Value */
             parent_value?: string | null;
             /**
+             * Ratio Checks
+             * @default []
+             */
+            ratio_checks: components["schemas"]["RatioCheckOut"][];
+            /**
              * Status
              * @default active
              */
@@ -4851,6 +4898,8 @@ export interface components {
             } | null;
             /** Parent Value */
             parent_value?: string | null;
+            /** Ratio Checks */
+            ratio_checks?: components["schemas"]["RatioCheckOut"][] | null;
             /** Status */
             status?: string | null;
             /** Value */

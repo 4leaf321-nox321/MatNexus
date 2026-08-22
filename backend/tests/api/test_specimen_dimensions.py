@@ -59,6 +59,7 @@ def make_standard(
     attributes: dict[str, float] | None = None,
     extra_fields: list[dict[str, Any]] | None = None,
     cross_section: str | None = None,
+    ratio_checks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """규격 하나. 칸을 먼저 만들고 값을 넣는다 — 서버가 스키마 밖을 거절한다."""
     created = client.post(
@@ -76,6 +77,8 @@ def make_standard(
         body["attributes"] = {**BASE, **attributes}
     if cross_section is not None:
         body["cross_section"] = cross_section
+    if ratio_checks is not None:
+        body["ratio_checks"] = ratio_checks
     if body:
         updated = client.patch(
             f"/api/vocabularies/specimen_standard/terms/{term['id']}",
@@ -309,3 +312,72 @@ class TestOnlyNumbers:
         payload = dimensions_of(client, admin_headers, specimen["id"])
         assert field_named(payload, "edition") is None
         assert field_named(payload, "gauge_length") is not None
+
+
+class TestRatioWarnings:
+    """**어긴 채로 쟀다는 것이 보여야 한다. 다만 막지는 않는다.**
+
+    규격이 권장값을 주는데 장비가 못 맞추는 일이 실제로 있다 — ISO 6721-4 는
+    클램프 간 50~100 mm 를 권하지만 Netzsch 15 · Mettler 20 · TA 30 이 한계라
+    어느 장비도 만족하지 못한다. 막으면 실제로 잰 데이터를 못 넣고, 그러면
+    사람은 시스템 밖에서 일한다.
+    """
+
+    def _standard(self, client: TestClient, headers: dict[str, str]) -> None:
+        make_standard(
+            client,
+            headers,
+            "ISO 6721-3",
+            extra_fields=[
+                {"key": "thickness", "label": "두께"},
+            ],
+            attributes={},
+            # L/h >= 50 — 저장탄성률 ±5 % 정확도가 여기 달려 있다.
+            ratio_checks=[
+                {
+                    "numerator": "gauge_length",
+                    "denominator": "thickness",
+                    "minimum": 50,
+                    "help": "저장탄성률 ±5 % 정확도 확보",
+                }
+            ],
+        )
+
+    def test_어기면_말하되_저장은_시킨다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        self._standard(client, admin_headers)
+        specimen = make_specimen(client, admin_headers, standard="ISO 6721-3")
+        saved = client.put(
+            f"/api/specimens/{specimen['id']}/dimensions",
+            # 게이지 50 mm · 두께 5 mm → 10 배. 50 을 한참 밑돈다.
+            json={"dimensions": {"gauge_length": 0.05, "thickness": 0.005}},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+        (warning,) = saved.json()["warnings"]
+        assert warning["actual"] == pytest.approx(10)
+        # **키를 그대로 띄우면 못 읽는다.**
+        assert "게이지 길이" in warning["condition"] and "두께" in warning["condition"]
+        assert warning["help"] == "저장탄성률 ±5 % 정확도 확보"
+
+    def test_지키면_조용하다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        self._standard(client, admin_headers)
+        specimen = make_specimen(client, admin_headers, standard="ISO 6721-3")
+        saved = client.put(
+            f"/api/specimens/{specimen['id']}/dimensions",
+            json={"dimensions": {"gauge_length": 0.05, "thickness": 0.0005}},
+            headers=admin_headers,
+        )
+        assert saved.json()["warnings"] == []
+
+    def test_안_잰_칸이_있으면_판정하지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**못 잰 것과 어긴 것은 다르다.** 0 으로 치면 경고가 소음이 된다."""
+        self._standard(client, admin_headers)
+        specimen = make_specimen(client, admin_headers, standard="ISO 6721-3")
+        assert dimensions_of(client, admin_headers, specimen["id"])["warnings"] == []

@@ -39,6 +39,7 @@ from app.modules.materials.schemas import (
     SpecimenSizesOut,
     SpecimenSizesRequest,
     SpecimenUpdateRequest,
+    SpecimenWarningOut,
     ValueSourceOut,
 )
 from app.modules.tests.models import TestRun
@@ -1045,6 +1046,14 @@ def get_specimen_dimensions(
         )
 
     return SpecimenSizesOut(
+        warnings=[
+            SpecimenWarningOut(
+                condition=item.check.label({f.key: f.label for f in sizes.fields}),
+                actual=item.actual,
+                help=item.check.help,
+            )
+            for item in sizes.violations()
+        ],
         standard=sizes.standard,
         cross_section=sizes.cross_section,
         cross_section_label=shape.label if shape else None,

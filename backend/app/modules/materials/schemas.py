@@ -240,6 +240,23 @@ class SpecimenSizeOut(BaseModel):
     """실제로 쓰이는 값이 어디서 왔는가 — `measured` 또는 `nominal`, 없으면 빈 칸."""
 
 
+class SpecimenWarningOut(BaseModel):
+    """규격이 요구하는 비율을 어겼다 — **막지는 않는다.**
+
+    규격이 권장값을 주는데 장비가 못 맞추는 일이 실제로 있다. ISO 6721-4 는
+    클램프 간 50~100 mm 를 권하지만 어느 DMA 장비도 그 값을 못 준다(Netzsch 15 ·
+    Mettler 20 · TA 30). 막으면 실제로 잰 데이터를 못 넣고, 그러면 사람은 시스템
+    밖에서 일한다. 대신 어긴 채로 쟀다는 것이 눈에 보여야 한다 — 규격 이름만 적힌
+    보고서는 재현이 안 된다.
+    """
+
+    condition: str
+    """사람이 읽는 조건. `게이지 길이 / 두께 >= 50`"""
+    actual: float
+    """실제 비. **값이 없으면 무엇을 고쳐야 할지 모른다.**"""
+    help: str | None = None
+
+
 class SpecimenSizesOut(BaseModel):
     """시편 하나의 치수 한 벌과 단면적."""
 
@@ -250,6 +267,8 @@ class SpecimenSizesOut(BaseModel):
     """초기 단면적(m^2). 못 내면 `None` 이고 이유가 `area_problem` 에 있다."""
     area_problem: str | None
     fields: list[SpecimenSizeOut]
+    warnings: list[SpecimenWarningOut] = []
+    """규격이 요구하는 비율을 어긴 것. **저장은 막지 않는다.**"""
 
 
 class SpecimenSizesRequest(BaseModel):

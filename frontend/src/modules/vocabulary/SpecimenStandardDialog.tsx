@@ -25,11 +25,16 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Ruler } from 'lucide-react'
+import { Plus, Ruler, Trash2 } from 'lucide-react'
 
 import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { vocabularyApi } from '@/modules/vocabulary/api'
-import type { CrossSection, SpecimenField, Term } from '@/modules/vocabulary/api'
+import type {
+  CrossSection,
+  RatioCheck,
+  SpecimenField,
+  Term,
+} from '@/modules/vocabulary/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -50,6 +55,14 @@ interface Props {
   term: Term
   onClose: () => void
   onSaved: (term: Term) => void
+}
+
+/** 빈 칸은 `null`. `Number('')` 이 0 이 되어 "최소 0" 이 되면 안 된다. */
+function numberOrNull(text: string): number | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  const value = Number(trimmed)
+  return Number.isFinite(value) ? value : null
 }
 
 /** 이 칸이 담는 것이 숫자인가. 문자·선택은 단위도 환산도 없다. */
@@ -75,6 +88,13 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   const [editingFields, setEditingFields] = useState(false)
   /** 식을 고르느라 방금 만든 칸. 값을 적어야 한다는 것을 말해 준다. */
   const [added, setAdded] = useState<string[]>([])
+  /**
+   * 이 규격이 요구하는 **비율 조건.**
+   *
+   * 규격이 치수를 안 주고 비만 주는 일이 흔하다 — DMA 는 숫자를 실제로 주는
+   * 파트가 셋뿐이고 나머지는 전부 비율이거나 장비 위임이다.
+   */
+  const [checks, setChecks] = useState<RatioCheck[]>(term.ratio_checks ?? [])
 
   useEffect(() => {
     const shown: Record<string, string> = {}
@@ -152,6 +172,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
       }
       onSaved(
         await vocabularyApi.update(slug, term.id, {
+          ratio_checks: checks.filter((one) => one.numerator && one.denominator),
           attributes,
           // 빈 문자열이면 뗀다 — 그러면 옛 규칙(폭 곱하기 두께)으로 돈다.
           cross_section: crossSection ?? '',
@@ -180,6 +201,12 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   }
 
   const rows = fields.data ?? []
+  /** 비를 잴 수 있는 칸은 숫자 칸뿐이다. */
+  const numbers = rows.filter(isNumber)
+
+  function patchCheck(index: number, change: Partial<RatioCheck>) {
+    setChecks((now) => now.map((one, at) => (at === index ? { ...one, ...change } : one)))
+  }
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -312,6 +339,104 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
               계산합니다(옛 규칙) — 환봉이면 반드시 고르세요.
             </p>
           )}
+        </div>
+
+        {/* **규격이 치수를 안 주고 비만 주는 일이 흔하다.** 그리고 어겼다고
+            막지 않는다 — ISO 6721-4 는 클램프 간 50~100 mm 를 권하는데 어느
+            DMA 장비도 그 값을 못 준다. 막으면 실제로 잰 데이터를 못 넣는다. */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">비율 조건</Label>
+          {checks.map((check, index) => (
+            <div key={index} className="flex flex-wrap items-center gap-1.5 text-xs">
+              <select
+                aria-label={`${index + 1}번 조건 분자`}
+                className="border-input bg-background h-7 rounded-md border px-1.5 text-xs"
+                value={check.numerator}
+                onChange={(event) => patchCheck(index, { numerator: event.target.value })}
+              >
+                <option value="">—</option>
+                {numbers.map((field) => (
+                  <option key={field.key} value={field.key}>
+                    {field.label}
+                  </option>
+                ))}
+              </select>
+              <span>/</span>
+              <select
+                aria-label={`${index + 1}번 조건 분모`}
+                className="border-input bg-background h-7 rounded-md border px-1.5 text-xs"
+                value={check.denominator}
+                onChange={(event) => patchCheck(index, { denominator: event.target.value })}
+              >
+                <option value="">—</option>
+                {numbers.map((field) => (
+                  <option key={field.key} value={field.key}>
+                    {field.label}
+                  </option>
+                ))}
+              </select>
+              <span>=</span>
+              <Input
+                aria-label={`${index + 1}번 조건 최소`}
+                placeholder="최소"
+                inputMode="decimal"
+                className="h-7 w-16 text-xs"
+                value={check.minimum ?? ''}
+                onChange={(event) =>
+                  patchCheck(index, { minimum: numberOrNull(event.target.value) })
+                }
+              />
+              <span>~</span>
+              <Input
+                aria-label={`${index + 1}번 조건 최대`}
+                placeholder="최대"
+                inputMode="decimal"
+                className="h-7 w-16 text-xs"
+                value={check.maximum ?? ''}
+                onChange={(event) =>
+                  patchCheck(index, { maximum: numberOrNull(event.target.value) })
+                }
+              />
+              <Input
+                aria-label={`${index + 1}번 조건 이유`}
+                placeholder="왜 이 조건이 있나 (안 적어도 됩니다)"
+                className="h-7 flex-1 text-xs"
+                value={check.help ?? ''}
+                onChange={(event) => patchCheck(index, { help: event.target.value || null })}
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                aria-label={`${index + 1}번 조건 빼기`}
+                onClick={() => setChecks((now) => now.filter((_, at) => at !== index))}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={numbers.length < 2}
+              onClick={() =>
+                setChecks((now) => [
+                  ...now,
+                  { numerator: '', denominator: '', minimum: null, maximum: null, help: null },
+                ])
+              }
+            >
+              <Plus className="size-3.5" />
+              조건 더하기
+            </Button>
+            <span className="text-muted-foreground text-xs">
+              {numbers.length < 2
+                ? '치수 칸이 둘 이상이어야 비를 잴 수 있습니다.'
+                : '어겨도 저장은 됩니다 — 시편 화면이 붉게 말합니다.'}
+            </span>
+          </div>
         </div>
 
         {/* **칸이 모자라면 여기서 바로 더한다.** "이 규격은 환봉이라 직경이

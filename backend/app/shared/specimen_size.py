@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from app.modules.materials.models import Specimen
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.vocabulary.services import Field, attribute_fields, get_vocabulary
+from matcore import ratio as ratio_kit
 from matcore import specimen as specimen_kit
 
 #: 시편 규격 축. 기준정보 slug 는 저장된 계약이라 코드가 이 이름으로 건다.
@@ -84,6 +85,18 @@ class Sizes:
     measured: dict[str, float]
     #: 규격 값(`ASTM E8 R1`). 없으면 규격을 안 정한 시편이다.
     standard: str | None
+    #: 이 규격이 요구하는 비율 조건. **어겨도 막지 않는다** — 보이게만 한다.
+    checks: tuple[ratio_kit.Check, ...] = ()
+
+    def violations(self) -> list[ratio_kit.Violation]:
+        """어긴 조건. 잴 수 없는 것(값이 빈 칸)은 건너뛴다."""
+        return ratio_kit.violations(self.checks, self.values())
+
+    def label_of(self, key: str) -> str:
+        for item in self.fields:
+            if item.key == key:
+                return item.label
+        return key
 
     def values(self) -> dict[str, float]:
         return {item.key: item.value for item in self.items}
@@ -152,6 +165,16 @@ def sizes_of(db: Session, specimen: Specimen) -> Sizes:
         )
 
     return Sizes(
+        checks=tuple(
+            ratio_kit.Check(
+                numerator=str(row.get("numerator")),
+                denominator=str(row.get("denominator")),
+                minimum=row.get("minimum"),
+                maximum=row.get("maximum"),
+                help=row.get("help"),
+            )
+            for row in ((standard.ratio_checks if standard else None) or [])
+        ),
         items=tuple(items),
         cross_section=standard.cross_section if standard else None,
         fields=fields,

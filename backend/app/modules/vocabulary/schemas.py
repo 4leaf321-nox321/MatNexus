@@ -47,9 +47,25 @@ class TermOut(BaseModel):
     """이 값만 갖는 칸. 상위 분류의 기본 칸에 더해진다."""
     cross_section: str | None = None
     """이 규격의 시편은 단면적을 어떻게 내는가(`matcore.specimen`)."""
+    ratio_checks: list[RatioCheckOut] = []
+    """이 규격이 요구하는 비율 조건. **어겨도 막지 않는다** — 보이게만 한다."""
     field_count: int = 0
     """이 값이 **직접 선언한** 칸 수. 분류 축에서 쓴다 — 0 이면 그 분류의
     규격은 치수를 하나도 못 갖는다."""
+
+
+class RatioCheckOut(BaseModel):
+    """비율 조건 하나 — `분자 / 분모` 가 `[최소, 최대]` 안에 있어야 한다.
+
+    **규격이 치수를 안 주고 비만 주는 일이 흔하다.** DMA 는 숫자를 실제로 주는
+    파트가 셋뿐이고 나머지는 비율이거나 장비 위임이다.
+    """
+
+    numerator: str
+    denominator: str
+    minimum: float | None = None
+    maximum: float | None = None
+    help: str | None = None
 
 
 class CrossSectionNeedOut(BaseModel):
@@ -147,6 +163,7 @@ class TermUpdateRequest(BaseModel):
     status: str | None = Field(default=None, pattern="^(active|deprecated)$")
     attributes: dict[str, float | str] | None = None
     field_symbols: dict[str, str] | None = None
+    ratio_checks: list[RatioCheckOut] | None = None
     """주면 통째로 바꾼다. 빠뜨린 칸은 지워진다 — 부분 갱신은 "빈 칸으로 고쳤다"
     와 "안 보냈다" 를 구별할 수 없다."""
     cross_section: str | None = Field(default=None, max_length=20)

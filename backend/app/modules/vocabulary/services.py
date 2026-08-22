@@ -1343,6 +1343,82 @@ def check_attributes(
     return cleaned
 
 
+def check_ratio_checks(
+    db: Session,
+    vocabulary: Vocabulary,
+    term: VocabularyTerm,
+    rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """비율 조건을 검사한다.
+
+    **두 칸 다 이 규격이 갖는 숫자 칸이어야 한다.** 없는 칸을 가리키면 그 조건은
+    영영 판정되지 않고, 사람은 "왜 경고가 안 뜨지" 를 묻게 된다 — 조용한 실패다.
+    """
+    numbers = {
+        field.key: field
+        for field in attribute_fields(db, vocabulary, term)
+        if field.kind == "number"
+    }
+    cleaned: list[dict[str, Any]] = []
+    for row in rows:
+        top = str(row.get("numerator") or "").strip()
+        bottom = str(row.get("denominator") or "").strip()
+        for key in (top, bottom):
+            if key not in numbers:
+                raise AppError(
+                    "MNX-VOCABULARY-0026",
+                    f"'{key}' 는 이 규격의 숫자 칸이 아닙니다. "
+                    "비율 조건은 이 규격이 갖는 치수 칸으로만 걸 수 있습니다.",
+                    status=422,
+                )
+        if top == bottom:
+            raise AppError(
+                "MNX-VOCABULARY-0026",
+                "같은 칸끼리는 비를 잴 수 없습니다.",
+                status=422,
+            )
+
+        minimum = _as_bound(row.get("minimum"))
+        maximum = _as_bound(row.get("maximum"))
+        if minimum is None and maximum is None:
+            raise AppError(
+                "MNX-VOCABULARY-0027",
+                f"'{numbers[top].label} / {numbers[bottom].label}' 에 최소나 최대 중 "
+                "하나는 적어야 합니다 — 둘 다 비면 아무것도 안 재는 조건입니다.",
+                status=422,
+            )
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise AppError(
+                "MNX-VOCABULARY-0027",
+                "최소가 최대보다 큽니다.",
+                status=422,
+            )
+        cleaned.append(
+            {
+                "numerator": top,
+                "denominator": bottom,
+                "minimum": minimum,
+                "maximum": maximum,
+                "help": (str(row.get("help")).strip() if row.get("help") else None) or None,
+            }
+        )
+    return cleaned
+
+
+def _as_bound(raw: Any) -> float | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise AppError(
+            "MNX-VOCABULARY-0027", f"숫자가 아닙니다: {raw!r}.", status=422
+        ) from None
+    if not math.isfinite(value) or value <= 0:
+        raise AppError("MNX-VOCABULARY-0027", "비율 한계는 0 보다 커야 합니다.", status=422)
+    return value
+
+
 def check_cross_section(
     db: Session, vocabulary: Vocabulary, term: VocabularyTerm, key: str | None
 ) -> str | None:

@@ -25,6 +25,8 @@ export type SpecimenField = components['schemas']['SpecimenFieldOut']
 export type SpecimenFieldSave = components['schemas']['SpecimenFieldSaveRequest']
 /** 고를 수 있는 단면적 식. **키가 아니라 이름과 요구 칸을 함께 준다.** */
 export type CrossSection = components['schemas']['CrossSectionOut']
+/** 규격이 요구하는 비율 조건. **어겨도 막지 않는다** — 보이게만 한다. */
+export type RatioCheck = components['schemas']['RatioCheckOut']
 export type BulkResult = components['schemas']['BulkTermOut']
 export type DeleteResult = components['schemas']['BulkDeleteOut']
 export type DriftReport = components['schemas']['DriftReportOut']

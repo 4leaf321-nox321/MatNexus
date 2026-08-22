@@ -198,4 +198,36 @@ describe('시편 규격 치수', () => {
     await screen.findByLabelText('게이지 길이')
     expect(screen.getByText(/필요한 칸이 함께 생깁니다/)).toBeInTheDocument()
   })
+
+  it('비율 조건을 더하고 지운다', async () => {
+    // **규격이 치수를 안 주고 비만 주는 일이 흔하다** — DMA 는 숫자를 실제로
+    // 주는 파트가 셋뿐이고 나머지는 전부 비율이거나 장비 위임이다.
+    const user = userEvent.setup()
+    show()
+    await screen.findByLabelText('게이지 길이')
+
+    await user.click(screen.getByRole('button', { name: /조건 더하기/ }))
+    await user.selectOptions(screen.getByLabelText('1번 조건 분자'), 'gauge_length')
+    await user.selectOptions(screen.getByLabelText('1번 조건 분모'), 'thickness')
+    await user.type(screen.getByLabelText('1번 조건 최소'), '50')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, , body] = update.mock.calls[0]
+    expect(body.ratio_checks).toEqual([
+      {
+        numerator: 'gauge_length',
+        denominator: 'thickness',
+        minimum: 50,
+        maximum: null,
+        help: null,
+      },
+    ])
+  })
+
+  it('어겨도 저장은 된다고 말한다', async () => {
+    show()
+    await screen.findByLabelText('게이지 길이')
+    expect(screen.getByText(/어겨도 저장은 됩니다/)).toBeInTheDocument()
+  })
 })

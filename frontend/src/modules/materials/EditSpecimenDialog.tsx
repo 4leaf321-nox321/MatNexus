@@ -198,6 +198,23 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
             </div>
           )}
 
+          {/* **어긴 채로 쟀다는 것이 보여야 한다.** 막지는 않는다 — 규격이
+              권장값을 주는데 장비가 못 맞추는 일이 실제로 있다(ISO 6721-4 는
+              클램프 간 50~100 mm 를 권하는데 어느 DMA 장비도 그 값을 못 준다).
+              막으면 실제로 잰 데이터를 못 넣고, 사람은 시스템 밖에서 일한다. */}
+          {(sizes?.warnings ?? []).length > 0 && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
+              <b>규격이 요구하는 비율을 벗어났습니다.</b> 저장은 됩니다 — 다만 이 조건을
+              어긴 채로 쟀다는 것을 시험 보고서에 함께 적어야 재현이 됩니다.
+              {(sizes?.warnings ?? []).map((warning, index) => (
+                <p key={index} className="mt-1">
+                  {warning.condition} — 지금 <b>{warning.actual.toPrecision(3)}</b>
+                  {warning.help && <span className="text-muted-foreground"> · {warning.help}</span>}
+                </p>
+              ))}
+            </div>
+          )}
+
           {/* **단면적이 왜 안 나오는지 여기서 말한다.** 처리 화면에서 만나면
               사람은 어디를 채워야 하는지 모른 채 되돌아온다. */}
           {sizes && (
