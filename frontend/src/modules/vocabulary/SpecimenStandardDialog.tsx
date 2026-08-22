@@ -52,6 +52,9 @@ interface Props {
   onSaved: (term: Term) => void
 }
 
+/** 이 칸이 담는 것이 숫자인가. 문자·선택은 단위도 환산도 없다. */
+const isNumber = (field: SpecimenField) => (field.kind ?? 'number') === 'number'
+
 /** 화면 단위의 문자열 → SI 숫자. 빈 칸은 안 보낸다(= 그 치수는 없다). */
 function toSi(text: string, field: SpecimenField): number | null {
   const trimmed = text.trim()
@@ -78,9 +81,9 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
     for (const [key, value] of Object.entries(term.attributes ?? {})) {
       const field = (fields.data ?? []).find((item) => item.key === key)
       if (!field) continue
-      shown[key] = String(
-        Number(toDisplay(Number(value), field.si_unit, field.dimension).toPrecision(10))
-      )
+      shown[key] = isNumber(field)
+        ? String(Number(toDisplay(Number(value), field.si_unit, field.dimension).toPrecision(10)))
+        : String(value)
     }
     setDraft(shown)
   }, [term, fields.data])
@@ -113,6 +116,9 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
           ...missing.map((need) => ({
             key: need.key,
             label: need.label,
+            kind: 'number',
+            choices: [],
+            symbol: null,
             dimension: need.dimension,
             si_unit: need.si_unit,
             is_required: false,
@@ -134,8 +140,13 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
     setBusy(true)
     setError(null)
     try {
-      const attributes: Record<string, number> = {}
+      const attributes: Record<string, number | string> = {}
       for (const field of fields.data ?? []) {
+        if (!isNumber(field)) {
+          const text = (draft[field.key] ?? '').trim()
+          if (text) attributes[field.key] = text
+          continue
+        }
         const value = toSi(draft[field.key] ?? '', field)
         if (value !== null) attributes[field.key] = value
       }
@@ -205,7 +216,13 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
                 <div key={field.key} className="grid grid-cols-[10rem_1fr] items-start gap-2">
                   <Label className="pt-1.5 text-xs">
                     {field.label}
-                    {shown.unit && (
+                    {/* **도면은 글자로 적혀 있다.** 시편을 발주할 때 사람이 보는
+                        것도 그 글자다 — 같은 D 가 규격마다 다른 뜻이라 함께 보여
+                        주지 않으면 옮겨 적다가 틀린다. */}
+                    {field.symbol && (
+                      <span className="ml-1 font-mono font-semibold">{field.symbol}</span>
+                    )}
+                    {isNumber(field) && shown.unit && (
                       <span className="text-muted-foreground ml-1">({shown.unit})</span>
                     )}
                     {field.is_required && <span className="text-destructive ml-0.5">*</span>}
@@ -216,15 +233,33 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
                     )}
                   </Label>
                   <div>
-                    <Input
-                      aria-label={field.label}
-                      inputMode="decimal"
-                      className="h-8"
-                      value={draft[field.key] ?? ''}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, [field.key]: event.target.value }))
-                      }
-                    />
+                    {field.kind === 'choice' ? (
+                      <select
+                        aria-label={field.label}
+                        className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm"
+                        value={draft[field.key] ?? ''}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, [field.key]: event.target.value }))
+                        }
+                      >
+                        <option value="">— 안 고름 —</option>
+                        {field.choices.map((one) => (
+                          <option key={one} value={one}>
+                            {one}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        aria-label={field.label}
+                        inputMode={isNumber(field) ? 'decimal' : 'text'}
+                        className="h-8"
+                        value={draft[field.key] ?? ''}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, [field.key]: event.target.value }))
+                        }
+                      />
+                    )}
                     {field.help && (
                       <p className="text-muted-foreground mt-0.5 text-xs">{field.help}</p>
                     )}

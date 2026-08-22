@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.vocabulary.definitions import (
+    ensure_builtin_axis_fields,
     ensure_builtin_specimen_categories,
     ensure_builtin_vocabularies,
 )
@@ -41,6 +42,7 @@ from app.shared import specimen_size
 @pytest.fixture
 def seeded(db: Session) -> None:
     ensure_builtin_vocabularies(db)
+    ensure_builtin_axis_fields(db)
     ensure_builtin_specimen_categories(db)
     db.commit()
 

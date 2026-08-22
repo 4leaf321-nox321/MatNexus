@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.definitions import (
+    ensure_builtin_axis_fields,
     ensure_builtin_specimen_categories,
     ensure_builtin_vocabularies,
 )
@@ -38,6 +39,7 @@ CATEGORY_SLUG = "specimen_category"
 @pytest.fixture
 def seeded(db: Session) -> None:
     ensure_builtin_vocabularies(db)
+    ensure_builtin_axis_fields(db)
     ensure_builtin_specimen_categories(db)
     db.commit()
 
@@ -119,7 +121,9 @@ class TestSchema:
     ) -> None:
         """**피커를 막지 않는다.** 치수를 모른 채 규격 이름부터 적는 일이 있다."""
         term_id = str(make(client, admin_headers, value="사내 규격 A").json()["id"])
-        assert fields_of(client, admin_headers, SLUG, term_id) == []
+        # 판(edition) 은 축이 주므로 늘 있다. 분류가 주는 칸은 없다.
+        listed = fields_of(client, admin_headers, SLUG, term_id)
+        assert [field["key"] for field in listed] == ["edition"]
 
 
 class TestInherit:
@@ -141,7 +145,7 @@ class TestInherit:
     ) -> None:
         term_id = self._standard(client, admin_headers, "ASTM E8 subsize")
         keys = [item["key"] for item in fields_of(client, admin_headers, SLUG, term_id)]
-        assert keys == ["gauge_length", "total_length"]
+        assert keys == ["edition", "gauge_length", "total_length"]
 
     def test_규격이_자기_칸을_더한다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
@@ -151,9 +155,15 @@ class TestInherit:
         assert self._add_diameter(client, admin_headers, term_id).status_code == 200
 
         fields = fields_of(client, admin_headers, SLUG, term_id)
-        assert [item["key"] for item in fields] == ["gauge_length", "total_length", "diameter"]
+        # 축이 준 판 + 분류가 준 칸 + 이 규격의 칸.
+        assert [item["key"] for item in fields] == [
+            "edition",
+            "gauge_length",
+            "total_length",
+            "diameter",
+        ]
         # 어느 쪽 칸인지 가른다 — 지우려면 갈 곳이 다르다.
-        assert [item["inherited"] for item in fields] == [True, True, False]
+        assert [item["inherited"] for item in fields] == [True, True, True, False]
 
     def test_다른_규격은_그_칸을_안_갖는다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
@@ -598,3 +608,154 @@ class TestDimensions:
         )
         assert refused.status_code == 422, refused.text
         assert refused.json()["error"]["code"] == "MNX-VOCABULARY-0021"
+
+
+class TestKinds:
+    """**규격은 치수만 갖지 않는다.**
+
+    판(문자)·모드(선택)·단부 형식(선택)이 있고, 숫자 칸만 두면 그것들이 값
+    이름에 섞여 `D638 Type I` 과 `D638-22 Type I` 이 별개 값으로 갈린다 —
+    애초에 풀려던 병이 되돌아온다.
+    """
+
+    def test_판은_축이_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**분류마다 적으면 새 분류에서 빠뜨린다.** 판은 모든 규격이 갖는다."""
+        term_id = str(make(client, admin_headers, value="분류 없는 규격").json()["id"])
+        listed = fields_of(client, admin_headers, SLUG, term_id)
+        edition = next(field for field in listed if field["key"] == "edition")
+        assert edition["kind"] == "text" and edition["inherited"] is True
+
+    def test_판을_문자로_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """`D638-22` 는 숫자가 아니다 — 숫자 규칙을 대면 거절된다."""
+        term_id = str(make(client, admin_headers, value="ASTM D638").json()["id"])
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"attributes": {"edition": "D638-22"}},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["attributes"]["edition"] == "D638-22"
+
+    def test_모드는_DMA_분류가_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**모드가 곧 시편 형상이다.** DMA 규격은 대개 치수를 안 정한다."""
+        term_id = str(
+            make(client, admin_headers, value="ASTM D5418", parent_value="DMA").json()["id"]
+        )
+        listed = fields_of(client, admin_headers, SLUG, term_id)
+        mode = next(field for field in listed if field["key"] == "mode")
+        assert mode["kind"] == "choice"
+        assert "이중 캔틸레버" in mode["choices"]
+
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"attributes": {"mode": "이중 캔틸레버"}},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+    def test_목록에_없는_선택은_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        term_id = str(
+            make(client, admin_headers, value="ASTM D5023", parent_value="DMA").json()["id"]
+        )
+        refused = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"attributes": {"mode": "삼점굽힘"}},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+
+    def test_단부_형식은_그_규격만의_선택_칸이다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """E8 환봉만 갖는다 — 분류에 두면 평판 규격에도 빈 칸이 생긴다."""
+        term_id = str(
+            make(client, admin_headers, value="ASTM E8 R1", parent_value="인장").json()["id"]
+        )
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={
+                "extra_fields": [
+                    {
+                        "key": "grip_end",
+                        "label": "단부 형식",
+                        "kind": "choice",
+                        "choices": ["나사", "숄더", "평행", "버튼헤드"],
+                    }
+                ],
+                "attributes": {"grip_end": "숄더"},
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["attributes"]["grip_end"] == "숄더"
+
+    def test_선택_칸에_고를_값이_없으면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """빈 목록은 아무것도 못 고르게 한다 — 그럴 거면 문자 칸이다."""
+        term_id = self._standard(client, admin_headers)
+        refused = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"extra_fields": [{"key": "grip_end", "label": "단부", "kind": "choice"}]},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-VOCABULARY-0024"
+
+    def _standard(self, client: TestClient, headers: dict[str, str]) -> str:
+        created = make(client, headers, value="ASTM E8 sub2", parent_value="인장")
+        assert created.status_code == 201, created.text
+        return str(created.json()["id"])
+
+
+class TestSymbols:
+    """**규격서와 도면은 뜻이 아니라 글자로 적혀 있다.**
+
+    같은 글자가 규격마다 다른 뜻이다 — E8 의 `D` 는 직경, D638 의 `D` 는 그립 간
+    거리다. 그래서 키는 뜻으로 짓고 글자는 따로 담는다.
+    """
+
+    def test_규격이_자기_글자로_덮어쓴다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """게이지 길이는 **분류**가 선언한 칸인데 글자는 규격마다 다르다 —
+        E8·D638 은 `G`, ISO 527-2 는 `L₀`."""
+        term_id = str(
+            make(client, admin_headers, value="ISO 527-2", parent_value="인장").json()["id"]
+        )
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"field_symbols": {"gauge_length": "L0"}},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+        listed = fields_of(client, admin_headers, SLUG, term_id)
+        gauge = next(field for field in listed if field["key"] == "gauge_length")
+        assert gauge["symbol"] == "L0"
+
+    def test_안_덮으면_칸이_가진_글자다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        term_id = str(
+            make(client, admin_headers, value="ASTM E8 R3", parent_value="인장").json()["id"]
+        )
+        client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={
+                "extra_fields": [
+                    {"key": "diameter", "label": "직경", "symbol": "D"},
+                ]
+            },
+            headers=admin_headers,
+        )
+        listed = fields_of(client, admin_headers, SLUG, term_id)
+        assert next(f for f in listed if f["key"] == "diameter")["symbol"] == "D"

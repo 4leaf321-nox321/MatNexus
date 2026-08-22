@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -70,9 +72,54 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
 #: 커넥터가 붙으면 그때 켠다.
 
 
-#: 기본 시편 분류와 그 분류의 **기본 치수 칸**.
+#: 칸 하나의 기본값. 종류·선택지·기호는 대개 안 쓰므로 여기서 채운다.
+def _field(
+    key: str,
+    label: str,
+    *,
+    kind: str = "number",
+    dimension: str = "length",
+    si_unit: str = "m",
+    choices: list[str] | None = None,
+    symbol: str | None = None,
+    help: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "key": key,
+        "label": label,
+        "kind": kind,
+        "choices": choices or [],
+        "symbol": symbol,
+        "dimension": dimension if kind == "number" else "dimensionless",
+        "si_unit": si_unit if kind == "number" else "1",
+        "is_required": False,
+        "help": help,
+    }
+
+
+#: 축이 갖는 칸 — **그 축의 값이면 무엇이든 갖는다.**
 #:
-#: (분류 값, [(키, 이름, 차원, SI 단위, 필수, 도움말)])
+#: 지금은 시편 규격의 판(edition) 하나다. ASTM 문서가 못 박는다: *"규격 번호만
+#: 으로는 부족하다. 판 연도와 시편 타입을 함께 지정해야 한다"*(`ASTM D638-22
+#: Type I`). 판이 다르면 치수가 다르고, E8 과 E8M 은 환봉 게이지 길이가 4D 대
+#: 5D 라 **연신율을 직접 비교할 수 없다.**
+#:
+#: **왜 분류가 아니라 축인가:** 분류마다 적으면 새 분류에서 빠뜨린다. 판은
+#: 인장이든 DMA 든 모든 규격이 갖는다.
+BUILTIN_AXIS_FIELDS: dict[str, list[dict[str, Any]]] = {
+    "specimen_standard": [
+        _field(
+            "edition",
+            "판(edition)",
+            kind="text",
+            help="규격의 판 연도. 판이 다르면 치수가 다릅니다 — "
+            "`-22`, `-24`, `-17(2025)` 처럼 규격서 표기 그대로 적으세요.",
+        )
+    ],
+}
+
+
+#: 기본 시편 분류와 그 분류의 **기본 칸**.
 #:
 #: **최소로 둔다.** 그 분류의 규격이면 대개 갖는 것만 기본이다 — 인장 환봉에는
 #: 폭·두께가 없고, DMA 인장 필름에는 지지 간격이 없다. 그런 것은 규격이 자기
@@ -82,67 +129,86 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
 #: 길이와 DMA 의 자유길이·폭·두께를 필수로 두었는데, ASTM·ISO 규격표가 그것을
 #: 반증했다.
 #:
-#:   인장 — D3039·D3518·D5766 은 게이지 길이를 시편에 새기지 않는다(그립 간
+#:   인장 - D3039·D3518·D5766 은 게이지 길이를 시편에 새기지 않는다(그립 간
 #:   거리가 곧 게이지다). D1708 은 표점 게이지를 두지 않고, D412 링은 표점이
 #:   아니라 내부 원주로 초기 길이를 정의한다. D5083·D2290·D897·D2095 도 없다.
 #:
-#:   DMA — 자유길이·폭·두께 셋을 다 갖는 파트는 ISO 6721-4(인장) 하나뿐이다.
+#:   DMA - 자유길이·폭·두께 셋을 다 갖는 파트는 ISO 6721-4(인장) 하나뿐이다.
 #:   -2·-3·-8·-10 은 자유길이가 없고, -6 전단·-10 평행판·-12 압축은 폭이 없다
 #:   (직경이다). D4065 는 "specimen size is not fixed by this practice" 라고
 #:   문장으로 못 박는다.
 #:
 #: 필수로 두면 그런 규격은 **저장 자체가 안 된다.** 필수 여부는 부서가 자기
 #: 규격을 보고 화면에서 정한다.
-BUILTIN_SPECIMEN_CATEGORIES: list[
-    tuple[str, list[tuple[str, str, str, str, bool, str | None]]]
-] = [
+BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
     (
         "인장",
         [
-            (
+            _field(
                 "gauge_length",
                 "게이지 길이",
-                "length",
-                "m",
-                False,
-                "변위를 이 길이로 나눠 변형률을 만듭니다. "
-                "복합재(D3039 계열)처럼 표점을 안 새기고 그립 간 거리를 쓰는 규격도 있습니다.",
+                help="변위를 이 길이로 나눠 변형률을 만듭니다. 복합재(D3039 계열)처럼 "
+                "표점을 안 새기고 그립 간 거리를 쓰는 규격도 있습니다.",
             ),
-            (
-                "total_length",
-                "전체 길이",
-                "length",
-                "m",
-                False,
-                None,
-            ),
+            _field("total_length", "전체 길이"),
         ],
     ),
     (
         "DMA",
         [
-            (
+            # **모드가 곧 시편 형상이다.** DMA 규격은 대개 치수를 안 정하고
+            # 모드와 형상만 정한 뒤 장비 클램프에 넘긴다(D4065: "specimen size
+            # is not fixed by this practice"). 그래서 모드를 안 적으면 그 시편이
+            # 무엇이었는지 나중에 알 수 없다 — 같은 규격·같은 재료라도 모드가
+            # 다르면 저장탄성률 절대값을 직접 비교할 수 없다.
+            _field(
+                "mode",
+                "변형 모드",
+                kind="choice",
+                choices=[
+                    "이중 캔틸레버",
+                    "단일 캔틸레버",
+                    "3점 굽힘",
+                    "인장",
+                    "압축",
+                    "전단 샌드위치",
+                    "비틀림",
+                    "평행판",
+                ],
+                help="모드가 곧 시편 형상입니다. 보고서에는 규격 번호만이 아니라 "
+                "모드·스팬·시편 치수를 함께 적어야 재현이 됩니다.",
+            ),
+            _field(
                 "free_length",
                 "자유 길이",
-                "length",
-                "m",
-                False,
-                "클램프 사이의 길이. 계산에 들어가는 것은 전체 길이가 아니라 이 값입니다. "
-                "장비 카탈로그의 스팬은 시편 길이가 아니라 클램프 사이 거리입니다 — "
+                help="클램프 사이의 길이. 계산에 들어가는 것은 전체 길이가 "
+                "아니라 이 값입니다. "
+                "장비 카탈로그의 스팬은 시편 길이가 아니라 클램프 사이 거리입니다 - "
                 "물림 여유를 더한 블랭크 길이는 별도 칸으로 두세요.",
             ),
-            (
-                "width",
-                "폭",
-                "length",
-                "m",
-                False,
-                "압축·평행판·전단 모드에는 폭 대신 직경이 옵니다.",
-            ),
-            ("thickness", "두께", "length", "m", False, None),
+            _field("width", "폭", help="압축·평행판·전단 모드에는 폭 대신 직경이 옵니다."),
+            _field("thickness", "두께"),
         ],
     ),
 ]
+
+
+def ensure_builtin_axis_fields(db: Session) -> list[str]:
+    """축의 칸을 보장한다. 채운 축의 slug 를 돌려준다.
+
+    **이미 칸이 있으면 손대지 않는다.** 관리자가 고쳤을 수 있고, 배포가 그것을
+    되돌리면 안 된다(축·시험 종류와 같은 판단).
+    """
+    filled: list[str] = []
+    for slug, fields in BUILTIN_AXIS_FIELDS.items():
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == slug))
+        if axis is None or axis.base_fields:
+            continue
+        axis.base_fields = fields
+        filled.append(slug)
+    if filled:
+        db.flush()
+    return filled
 
 
 def ensure_builtin_specimen_categories(db: Session) -> list[str]:
@@ -180,19 +246,14 @@ def ensure_builtin_specimen_categories(db: Session) -> list[str]:
                 select(SpecimenField.key).where(SpecimenField.category_term_id == term.id)
             )
         )
-        for order, (key, label, dimension, si_unit, required, help_text) in enumerate(fields):
-            if key in existing:
+        for order, field in enumerate(fields):
+            if field["key"] in existing:
                 continue
             db.add(
                 SpecimenField(
                     category_term_id=term.id,
-                    key=key,
-                    label=label,
-                    dimension=dimension,
-                    si_unit=si_unit,
-                    is_required=required,
-                    help=help_text,
                     sort_order=order * 10,
+                    **field,
                 )
             )
     return created

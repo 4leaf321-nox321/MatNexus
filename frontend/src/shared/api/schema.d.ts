@@ -4365,6 +4365,11 @@ export interface components {
          *     화면이 이 응답만으로 입력 폼을 그린다.
          */
         SpecimenFieldOut: {
+            /**
+             * Choices
+             * @default []
+             */
+            choices: string[];
             /** Dimension */
             dimension: string;
             /** Help */
@@ -4378,10 +4383,17 @@ export interface components {
             is_required: boolean;
             /** Key */
             key: string;
+            /**
+             * Kind
+             * @default number
+             */
+            kind: string;
             /** Label */
             label: string;
             /** Si Unit */
             si_unit: string;
+            /** Symbol */
+            symbol?: string | null;
         };
         /**
          * SpecimenFieldSaveRequest
@@ -4392,6 +4404,11 @@ export interface components {
          *     을 나눈 것과 같은 관계다.
          */
         SpecimenFieldSaveRequest: {
+            /**
+             * Choices
+             * @default []
+             */
+            choices: string[];
             /**
              * Dimension
              * @default length
@@ -4406,6 +4423,11 @@ export interface components {
             is_required: boolean;
             /** Key */
             key: string;
+            /**
+             * Kind
+             * @default number
+             */
+            kind: string;
             /** Label */
             label: string;
             /**
@@ -4413,6 +4435,8 @@ export interface components {
              * @default m
              */
             si_unit: string;
+            /** Symbol */
+            symbol?: string | null;
         };
         /**
          * SpecimenFieldsSaveRequest
@@ -4767,7 +4791,7 @@ export interface components {
              * @default {}
              */
             attributes: {
-                [key: string]: number;
+                [key: string]: number | string;
             };
             /** Cross Section */
             cross_section?: string | null;
@@ -4781,6 +4805,13 @@ export interface components {
              * @default 0
              */
             field_count: number;
+            /**
+             * Field Symbols
+             * @default {}
+             */
+            field_symbols: {
+                [key: string]: string;
+            };
             /**
              * Id
              * Format: uuid
@@ -4808,12 +4839,16 @@ export interface components {
         TermUpdateRequest: {
             /** Attributes */
             attributes?: {
-                [key: string]: number;
+                [key: string]: number | string;
             } | null;
             /** Cross Section */
             cross_section?: string | null;
             /** Extra Fields */
             extra_fields?: components["schemas"]["SpecimenFieldSaveRequest"][] | null;
+            /** Field Symbols */
+            field_symbols?: {
+                [key: string]: string;
+            } | null;
             /** Parent Value */
             parent_value?: string | null;
             /** Status */

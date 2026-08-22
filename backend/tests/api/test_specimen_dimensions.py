@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.vocabulary.definitions import (
+    ensure_builtin_axis_fields,
     ensure_builtin_specimen_categories,
     ensure_builtin_vocabularies,
 )
@@ -44,6 +45,7 @@ BASE = {"gauge_length": 0.05}
 @pytest.fixture
 def seeded(db: Session) -> None:
     ensure_builtin_vocabularies(db)
+    ensure_builtin_axis_fields(db)
     ensure_builtin_specimen_categories(db)
     ensure_builtin_test_types(db)
     db.commit()
@@ -293,3 +295,17 @@ class TestArea:
         payload = dimensions_of(client, admin_headers, specimen["id"])
         assert payload["area"] is None
         assert payload["area_problem"]
+
+
+class TestOnlyNumbers:
+    def test_판과_모드는_시편_치수가_아니다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**그 규격의 성질이지 이 시편을 잰 값이 아니다.** 시편 화면에 입력
+        칸으로 나오면 사람은 거기에 무엇을 적어야 하는지 알 수 없다."""
+        make_standard(client, admin_headers, "ASTM E8", attributes={})
+        specimen = make_specimen(client, admin_headers, standard="ASTM E8")
+
+        payload = dimensions_of(client, admin_headers, specimen["id"])
+        assert field_named(payload, "edition") is None
+        assert field_named(payload, "gauge_length") is not None

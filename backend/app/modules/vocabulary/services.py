@@ -1002,7 +1002,10 @@ def delete_term(db: Session, term: VocabularyTerm) -> str | None:
 
 @dataclass(frozen=True)
 class Field:
-    """치수 칸 하나. 기본 칸과 추가 칸이 같은 모양이라 한 타입으로 다룬다."""
+    """칸 하나 — **값이 들어갈 자리의 정의.** 값 자체는 여기 없다.
+
+    축·분류·값 어디서 선언되든 모양이 같아서 한 타입으로 다룬다.
+    """
 
     key: str
     label: str
@@ -1010,8 +1013,14 @@ class Field:
     si_unit: str
     is_required: bool
     help: str | None
-    #: 분류가 준 칸인가. 화면이 "이건 분류 것이라 여기서 못 지운다" 를 말한다.
+    #: 상위(축·분류)가 준 칸인가. 화면이 "여기서 못 지운다" 를 말한다.
     inherited: bool
+    #: 담는 것 — `number` · `text` · `choice`.
+    kind: str = "number"
+    #: `choice` 일 때 고를 수 있는 값.
+    choices: tuple[str, ...] = ()
+    #: 그 규격의 도면이 쓰는 글자(`G`·`W`·`D`). 규격이 덮어쓸 수 있다.
+    symbol: str | None = None
 
 
 def _as_field(row: Any, *, inherited: bool) -> Field:
@@ -1027,6 +1036,14 @@ def _as_field(row: Any, *, inherited: bool) -> Field:
         ),
         help=(row.help if hasattr(row, "help") else row.get("help")) or None,
         inherited=inherited,
+        kind=str((row.kind if hasattr(row, "kind") else row.get("kind")) or "number"),
+        choices=tuple(
+            str(item)
+            for item in (
+                (row.choices if hasattr(row, "choices") else row.get("choices")) or ()
+            )
+        ),
+        symbol=(row.symbol if hasattr(row, "symbol") else row.get("symbol")) or None,
     )
 
 
@@ -1044,20 +1061,31 @@ def category_fields(db: Session, category_term_id: uuid.UUID) -> list[Field]:
     return [_as_field(row, inherited=False) for row in rows]
 
 
+def axis_fields(vocabulary: Vocabulary) -> list[Field]:
+    """**이 축의 값이면 무엇이든 갖는 칸.** 시편 규격의 판(edition) 이 그렇다.
+
+    분류마다 적으면 새 분류를 만들 때 빠뜨린다 — 축에 한 번만 적는다.
+    """
+    return [_as_field(item, inherited=True) for item in (vocabulary.base_fields or [])]
+
+
 def attribute_fields(
     db: Session, vocabulary: Vocabulary, term: VocabularyTerm | None
 ) -> list[Field]:
     """이 값이 가질 수 있는 칸.
 
-    한 규칙으로 두 자리를 다 본다.
+    한 규칙으로 네 자리를 다 본다.
 
-        이 값이 직접 선언한 칸  +  상위가 선언한 칸  +  이 값의 추가 칸
+        축의 칸  +  이 값이 직접 선언한 칸  +  상위가 선언한 칸  +  이 값의 추가 칸
 
-    **분류**는 자기가 선언한 칸을 갖고(상위가 없다), **규격**은 상위 분류가
-    선언한 칸에 자기 칸을 더한다. 규격 쪽에 직접 선언하는 길은 없지만, 규칙을
-    갈라 두면 "이 값은 어느 쪽이냐" 를 부르는 곳마다 물어야 한다.
+    **분류**는 자기가 선언한 칸을 갖고(상위가 없다), **규격**은 축과 상위 분류가
+    선언한 칸에 자기 칸을 더한다. 규칙을 갈라 두면 "이 값은 어느 쪽이냐" 를
+    부르는 곳마다 물어야 한다.
 
-    `inherited` 는 **상위가 준 칸인가**다 — 그렇다면 이 값에서는 못 지운다.
+    `inherited` 는 **위에서 온 칸인가**다 — 그렇다면 이 값에서는 못 지운다.
+
+    마지막으로 **규격이 자기 글자를 덮어쓴다**(`field_symbols`). 같은 게이지
+    길이라도 E8 은 `G`, ISO 527-2 는 `L₀` 로 적기 때문이다.
     """
     if term is None:
         return []
@@ -1068,7 +1096,15 @@ def attribute_fields(
         else []
     )
     extra = [_as_field(item, inherited=False) for item in (term.extra_fields or [])]
-    return own + parent + extra
+    fields = axis_fields(vocabulary) + own + parent + extra
+
+    overrides = term.field_symbols or {}
+    if not overrides:
+        return fields
+    return [
+        replace(item, symbol=str(overrides[item.key])) if item.key in overrides else item
+        for item in fields
+    ]
 
 
 #: 칸이 쓸 수 있는 차원 — **단위표에 있는 것 전부.**
@@ -1080,6 +1116,54 @@ def attribute_fields(
 #:
 #: **차원과 저장 단위가 짝이라는 규칙만 지킨다**(`check_dimension`).
 SPECIMEN_DIMENSIONS = tuple(unit_kit.SI_UNITS)
+
+
+#: 칸이 담을 수 있는 것.
+FIELD_KINDS = ("number", "text", "choice")
+
+
+def check_kind(item: Mapping[str, Any]) -> dict[str, Any]:
+    """칸의 종류와 그에 딸린 것들을 정리한다.
+
+    **종류마다 뜻이 있는 항목이 다르다.** 문자 칸에 차원·저장 단위는 뜻이 없고,
+    선택 칸은 고를 값이 있어야 한다. 뒤섞어 두면 화면이 문자 칸에 mm 를 붙인다.
+    """
+    kind = str(item.get("kind") or "number")
+    if kind not in FIELD_KINDS:
+        raise AppError(
+            "MNX-VOCABULARY-0023",
+            f"칸의 종류는 {', '.join(FIELD_KINDS)} 중 하나여야 합니다: {kind}.",
+            status=422,
+        )
+
+    choices = [str(one).strip() for one in (item.get("choices") or []) if str(one).strip()]
+    if kind == "choice" and not choices:
+        raise AppError(
+            "MNX-VOCABULARY-0024",
+            "선택 칸에는 고를 값을 적어야 합니다. "
+            "고를 것이 없으면 문자 칸으로 두세요 — 빈 목록은 아무것도 못 고르게 합니다.",
+            status=422,
+        )
+    if kind != "choice":
+        choices = []
+
+    if kind == "number":
+        dimension, si_unit = check_dimension(
+            str(item.get("dimension") or "length"), str(item.get("si_unit") or "m")
+        )
+    else:
+        # 숫자가 아니면 차원이 뜻이 없다. 자리는 남기되 무차원으로 고정한다 —
+        # 빼 버리면 읽는 쪽이 전부 `None` 을 다뤄야 한다.
+        dimension, si_unit = "dimensionless", "1"
+
+    symbol = str(item.get("symbol") or "").strip() or None
+    return {
+        "kind": kind,
+        "choices": choices,
+        "dimension": dimension,
+        "si_unit": si_unit,
+        "symbol": symbol,
+    }
 
 
 def check_dimension(dimension: str, si_unit: str) -> tuple[str, str]:
@@ -1115,7 +1199,9 @@ def check_extra_fields(
     같은 키가 둘이면 어느 쪽이 이기는지를 사람이 알 방법이 없다 — 화면에 칸이
     둘 뜨거나 하나가 조용히 가려진다.
     """
-    base = {
+    axis = db.get(Vocabulary, term.vocabulary_id)
+    base = {item.key for item in (axis_fields(axis) if axis else [])}
+    base |= {
         item.key
         for item in (category_fields(db, term.parent_term_id) if term.parent_term_id else [])
     }
@@ -1128,26 +1214,67 @@ def check_extra_fields(
         if key in base:
             raise AppError(
                 "MNX-VOCABULARY-0018",
-                f"'{key}' 는 분류가 이미 갖고 있는 칸입니다. 다른 이름을 쓰세요.",
+                f"'{key}' 는 위에서 이미 갖고 있는 칸입니다(축 또는 분류). "
+                "다른 이름을 쓰세요.",
                 status=422,
             )
         if key in seen:
             raise AppError("MNX-VOCABULARY-0016", f"칸 이름이 겹칩니다: {key}.", status=422)
         seen.add(key)
-        dimension, si_unit = check_dimension(
-            str(item.get("dimension") or "length"), str(item.get("si_unit") or "m")
-        )
         cleaned.append(
             {
                 "key": key,
                 "label": str(item.get("label") or key),
-                "dimension": dimension,
-                "si_unit": si_unit,
                 "is_required": bool(item.get("is_required", False)),
                 "help": item.get("help") or None,
+                **check_kind(item),
             }
         )
     return cleaned
+
+
+def _clean_value(field: Field, raw: Any) -> float | str:
+    """값 하나를 그 칸의 종류에 맞게 정리한다.
+
+    **치수만 있는 것이 아니다.** 규격은 판(문자)과 모드·단부 형식(선택)도 갖는다.
+    숫자 규칙을 문자에 그대로 대면 판 `D638-22` 가 거절된다.
+    """
+    if field.kind == "text":
+        text = str(raw).strip()
+        if len(text) > 200:
+            raise AppError(
+                "MNX-VOCABULARY-0012",
+                f"'{field.label}' 이(가) 너무 깁니다(200자까지).",
+                status=422,
+            )
+        return text
+
+    if field.kind == "choice":
+        text = str(raw).strip()
+        if field.choices and text not in field.choices:
+            raise AppError(
+                "MNX-VOCABULARY-0012",
+                f"'{field.label}' 은(는) {', '.join(field.choices)} 중 하나여야 합니다: "
+                f"{text!r}.",
+                status=422,
+            )
+        return text
+
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise AppError(
+            "MNX-VOCABULARY-0012",
+            f"'{field.label}' 은(는) 숫자여야 합니다: {raw!r}.",
+            status=422,
+        ) from None
+    if not math.isfinite(value) or value <= 0:
+        raise AppError(
+            "MNX-VOCABULARY-0012",
+            f"'{field.label}' 은(는) 0 보다 큰 값이어야 합니다.",
+            status=422,
+        )
+    return value
 
 
 def check_attributes(
@@ -1155,7 +1282,7 @@ def check_attributes(
     vocabulary: Vocabulary,
     term: VocabularyTerm | None,
     attributes: Mapping[str, Any],
-) -> dict[str, float]:
+) -> dict[str, float | str]:
     """속성을 스키마에 견줘 본다. 통과하면 저장할 모양으로 돌려준다.
 
     세 가지를 본다.
@@ -1198,25 +1325,11 @@ def check_attributes(
             status=422,
         )
 
-    cleaned: dict[str, float] = dict(orphans)
+    cleaned: dict[str, float | str] = dict(orphans)
     for key, raw in attributes.items():
         if raw is None or raw == "" or key in orphans:
             continue
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            raise AppError(
-                "MNX-VOCABULARY-0012",
-                f"'{known[key].label}' 은(는) 숫자여야 합니다: {raw!r}.",
-                status=422,
-            ) from None
-        if not math.isfinite(value) or value <= 0:
-            raise AppError(
-                "MNX-VOCABULARY-0012",
-                f"'{known[key].label}' 은(는) 0 보다 큰 값이어야 합니다.",
-                status=422,
-            )
-        cleaned[key] = value
+        cleaned[key] = _clean_value(known[key], raw)
 
     missing = [
         field.label for field in fields if field.is_required and field.key not in cleaned

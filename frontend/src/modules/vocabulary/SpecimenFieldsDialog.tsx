@@ -42,6 +42,14 @@ import { DIMENSIONS, DIMENSION_LABELS, SI_BY_DIMENSION, display } from '@/shared
 interface Row extends SpecimenFieldSave {
   /** 이미 저장된 칸인가. **저장된 키는 못 고친다** — 계약이라서. */
   saved: boolean
+  /**
+   * 선택지를 **친 그대로** 들고 있는다.
+   *
+   * 쪼갠 결과(`choices`)만 들고 있으면 한 글자 칠 때마다 쪼갰다 다시 합치게 되고,
+   * `나사,` 의 쉼표가 그 순간 사라져 `나사숄더평행` 이 된다. 소수점을 문자열로
+   * 들고 있는 것과 같은 이유다.
+   */
+  choicesText?: string
 }
 
 /** 사람이 친 이름에서 키를 만든다. 영문·숫자·밑줄만 남긴다. */
@@ -59,12 +67,28 @@ export function keyFrom(label: string): string {
 const asRow = (field: SpecimenField | SpecimenFieldSave): Row => ({
   key: field.key,
   label: field.label,
+  kind: field.kind ?? 'number',
+  choices: field.choices ?? [],
+  symbol: field.symbol ?? null,
   dimension: field.dimension,
   si_unit: field.si_unit,
   is_required: field.is_required,
   help: field.help ?? null,
   saved: true,
 })
+
+/**
+ * 칸이 담는 것. **치수만 있는 것이 아니다.**
+ *
+ * 규격은 판(문자)과 모드·단부 형식(선택)도 갖는다. 숫자 칸만 두면 그것들이 값
+ * 이름에 섞이고 `D638 Type I` 과 `D638-22 Type I` 이 별개 값으로 갈린다 —
+ * 애초에 풀려던 병이 되돌아온다.
+ */
+const KINDS = [
+  { value: 'number', label: '숫자' },
+  { value: 'text', label: '문자' },
+  { value: 'choice', label: '선택' },
+] as const
 
 export function SpecimenFieldsDialog({
   slug,
@@ -116,7 +140,7 @@ export function SpecimenFieldsDialog({
     setBusy(true)
     setError(null)
     try {
-      const fields = rows.map(({ saved: _saved, ...field }) => field)
+      const fields = rows.map(({ saved: _saved, choicesText: _text, ...field }) => field)
       if (editsBase) await vocabularyApi.saveCategoryFields(slug, term.id, fields)
       else await vocabularyApi.update(slug, term.id, { extra_fields: fields })
       onSaved()
@@ -174,7 +198,7 @@ export function SpecimenFieldsDialog({
           {rows.map((row, index) => (
             <div
               key={index}
-              className="grid grid-cols-[1fr_9rem_8rem_4rem_auto] items-start gap-2"
+              className="grid grid-cols-[1fr_9rem_5rem_8rem_4rem_auto] items-start gap-2"
             >
               <div>
                 <Input
@@ -195,6 +219,33 @@ export function SpecimenFieldsDialog({
                   value={row.help ?? ''}
                   onChange={(event) => patch(index, { help: event.target.value || null })}
                 />
+                {/* **규격서와 도면은 뜻이 아니라 글자로 적혀 있다.** 같은 글자가
+                    규격마다 다른 뜻이라(E8 의 D 는 직경, D638 의 D 는 그립 간
+                    거리) 키는 뜻으로 짓고 글자는 여기 둔다. */}
+                <Input
+                  aria-label={`${index + 1}번 칸 기호`}
+                  placeholder="규격 기호 (G · W · D)"
+                  className="mt-1 h-7 text-xs"
+                  value={row.symbol ?? ''}
+                  onChange={(event) => patch(index, { symbol: event.target.value || null })}
+                />
+                {row.kind === 'choice' && (
+                  <Input
+                    aria-label={`${index + 1}번 칸 선택지`}
+                    placeholder="고를 값을 쉼표로 (나사, 숄더, 평행)"
+                    className="mt-1 h-7 text-xs"
+                    value={row.choicesText ?? (row.choices ?? []).join(', ')}
+                    onChange={(event) =>
+                      patch(index, {
+                        choicesText: event.target.value,
+                        choices: event.target.value
+                          .split(',')
+                          .map((one) => one.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                )}
               </div>
               <div>
                 <Input
@@ -212,9 +263,29 @@ export function SpecimenFieldsDialog({
                 )}
               </div>
               <div>
+                <select
+                  aria-label={`${index + 1}번 칸 종류`}
+                  className="border-input bg-background h-8 w-full rounded-md border px-2 text-xs"
+                  value={row.kind}
+                  onChange={(event) => patch(index, { kind: event.target.value })}
+                >
+                  {KINDS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 {/* **차원이 정해지면 저장 단위도 정해진다** — 따로 고를 것이
                     없다. 정의에 mm 라고 적었는데 저장된 숫자가 m 인 상태가
-                    만들어지면 화면·계산이 1000배 틀리고, 숫자는 멀쩡해 보인다. */}
+                    만들어지면 화면·계산이 1000배 틀리고, 숫자는 멀쩡해 보인다.
+                    문자·선택 칸에는 차원이 뜻이 없다. */}
+                {row.kind !== 'number' ? (
+                  <p className="text-muted-foreground pt-2 text-xs">단위 없음</p>
+                ) : (
+                  <>
                 <select
                   aria-label={`${index + 1}번 칸 차원`}
                   className="border-input bg-background h-8 w-full rounded-md border px-2 text-xs"
@@ -234,7 +305,8 @@ export function SpecimenFieldsDialog({
                 </select>
                 {/* **이미 적어 둔 숫자는 안 바뀐다.** 두께 0.001 을 면적으로
                     바꾸면 그 값이 0.001 m² 로 읽힌다 — 오류 없이. */}
-                {row.saved && row.dimension !== before.find((f) => f.key === row.key)?.dimension ? (
+                {row.saved &&
+                row.dimension !== before.find((f) => f.key === row.key)?.dimension ? (
                   <p className="text-destructive mt-0.5 text-xs">
                     이미 적어 둔 값이 <b>{display(row.si_unit, row.dimension).unit || '수치'}</b>
                     (으)로 읽힙니다 — 다시 확인하세요.
@@ -243,6 +315,8 @@ export function SpecimenFieldsDialog({
                   <p className="text-muted-foreground mt-0.5 text-xs">
                     화면 {display(row.si_unit, row.dimension).unit || '수치'}
                   </p>
+                )}
+                  </>
                 )}
               </div>
               <label className="flex items-center gap-1 pt-2 text-xs">
@@ -276,6 +350,9 @@ export function SpecimenFieldsDialog({
                 {
                   key: '',
                   label: '',
+                  kind: 'number',
+                  choices: [],
+                  symbol: null,
                   dimension: 'length',
                   si_unit: 'm',
                   is_required: false,

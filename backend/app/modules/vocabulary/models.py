@@ -102,6 +102,21 @@ class Vocabulary(Base):
 
     **왜 축에 적는가:** 값마다 물으면 같은 답을 수만 번 저장하는 셈이다
     (`parent_slug` 와 같은 판단)."""
+    base_fields: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """**이 축의 값이면 무엇이든 갖는 칸.**
+
+    시편 규격의 `판(edition)` 이 그렇다 — ASTM 본문이 못 박는다: *"규격 번호만
+    으로는 부족하다. 판 연도와 시편 타입을 함께 지정해야 한다"*(`ASTM D638-22
+    Type I`). 판이 다르면 치수가 다르고, E8 과 E8M 은 환봉 게이지 길이가 4D 대
+    5D 라 **연신율을 직접 비교할 수 없다.**
+
+    **왜 분류가 아니라 축인가:** 분류마다 적으면 새 분류를 만들 때 빠뜨린다. 판은
+    인장이든 DMA 든 모든 규격이 갖는다 — `parent_slug`·`attribute_source` 를 축에
+    적는 것과 같은 판단이다.
+
+    모양은 분류의 기본 칸과 같다(`SpecimenField` 참고)."""
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -164,6 +179,18 @@ class VocabularyTerm(Base):
 
     모양은 기본 칸과 같다(`key`·`label`·`dimension`·`si_unit`·`is_required`·
     `help`). **기본 칸과 같은 키는 못 쓴다** — 서버가 거절한다."""
+    field_symbols: Mapped[dict[str, str]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """이 규격의 도면이 그 칸을 **어느 글자로 부르는가.** `{"gauge_length": "G"}`
+
+    **같은 칸인데 규격마다 글자가 다르다.** 게이지 길이는 E8·D638 에서 `G`,
+    ISO 527-2 에서 `L₀` 다. 전체 길이는 `L`·`LO`·`l₃` 로 셋 다 다르다. 그런데
+    그 칸을 선언하는 것은 분류라 거기에 글자를 적을 수 없다 — 그래서 규격이
+    덮어쓴다(실측이 공칭을 덮는 것과 같은 모양).
+
+    **글자로 값을 묶지는 않는다.** 계산이 잡는 것은 `key` 다 — E8 의 `D` 는
+    직경이고 D638 의 `D` 는 그립 간 거리라, 글자로 묶으면 바로 충돌한다."""
     cross_section: Mapped[str | None] = mapped_column(String(20), nullable=True)
     """이 규격의 시편은 단면적을 **어떻게 내는가**(`matcore.specimen`).
 
@@ -177,11 +204,17 @@ class VocabularyTerm(Base):
     attributes: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )
-    """치수 등 이 값이 갖는 속성. **언제나 SI 로 담는다** — 규격서가 mm 로 적혀
-    있어도 저장은 m 다. 화면이 실무 단위로 바꿔 보여 준다.
+    """이 값이 갖는 속성. 키는 **선언된 칸**의 키다(축·분류·자기 칸).
 
-    키는 그 시험 종류가 선언한 칸(`test_specimen_fields.key`)이다. 스키마에 없는
-    키는 서버가 거절한다 — 오타 하나가 조용히 새 속성이 되면 아무도 못 찾는다."""
+    숫자만은 아니다.
+
+        숫자   치수. **언제나 SI 로 담는다** — 규격서가 mm 로 적혀 있어도
+               저장은 m 다. 화면이 실무 단위로 바꿔 보여 준다.
+        문자   판(edition) 처럼 수치가 아닌 것. `D638-22`
+        선택   모드·단부 형식처럼 정해진 목록에서 고르는 것
+
+    스키마에 없는 키는 서버가 거절한다 — 오타 하나가 조용히 새 속성이 되면
+    아무도 못 찾는다."""
 
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     usage_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -230,6 +263,23 @@ class SpecimenField(Base):
     """시편 분류 축의 값. 이 분류에 속한 규격 전부가 이 칸을 갖는다."""
     key: Mapped[str] = mapped_column(String(50))
     label: Mapped[str] = mapped_column(String(100))
+    kind: Mapped[str] = mapped_column(String(10), default="number", server_default="number")
+    """이 칸이 담는 것 — `number` · `text` · `choice`.
+
+    **치수만 있는 것이 아니다.** 규격은 판(문자)과 모드·단부 형식(선택)도 갖는다.
+    숫자 칸만 두면 그것들이 값 이름에 섞이고, `D638 Type I` 과 `D638-22 Type I`
+    이 별개 값으로 갈린다 — 애초에 풀려던 병이 되돌아온다."""
+    choices: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    """`choice` 일 때 고를 수 있는 값. 비어 있으면 아무 문자나 받는 것과 같다."""
+    symbol: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """그 규격의 **도면이 쓰는 글자**. `G`·`W`·`D`.
+
+    규격서와 도면은 뜻이 아니라 글자로 적혀 있고, 시편을 발주할 때 사람이 보는
+    것도 그 글자다. **같은 글자가 규격마다 다른 뜻이다** — E8 의 `D` 는 직경,
+    D638 의 `D` 는 그립 간 거리다. 그래서 `key` 는 뜻으로 짓고 글자는 여기 둔다.
+
+    분류가 선언한 칸의 글자는 규격마다 다르므로, 규격이
+    `VocabularyTerm.field_symbols` 로 덮어쓴다."""
     dimension: Mapped[str] = mapped_column(String(20))
     si_unit: Mapped[str] = mapped_column(String(20))
     """**저장 단위.** 값은 언제나 SI 로 담는다 — 규격서가 mm 로 적혀 있어도."""

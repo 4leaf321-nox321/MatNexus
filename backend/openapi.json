@@ -5608,6 +5608,14 @@
       "SpecimenFieldOut": {
         "description": "치수 칸 하나.\n\n**분류가 준 것과 이 규격이 더한 것을 함께 낸다** — `inherited` 로 가른다.\n화면이 이 응답만으로 입력 폼을 그린다.",
         "properties": {
+          "choices": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
           "dimension": {
             "title": "Dimension",
             "type": "string"
@@ -5636,6 +5644,11 @@
             "title": "Key",
             "type": "string"
           },
+          "kind": {
+            "default": "number",
+            "title": "Kind",
+            "type": "string"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -5643,6 +5656,17 @@
           "si_unit": {
             "title": "Si Unit",
             "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
           }
         },
         "required": [
@@ -5658,6 +5682,14 @@
       "SpecimenFieldSaveRequest": {
         "description": "칸 하나를 저장할 때의 모양. **키는 계약이다.**\n\n이미 저장된 규격의 속성이 이 키로 들어 있으므로, 키를 바꾸면 그 값들이 갈\n곳을 잃는다. 이름(`label`)은 얼마든지 고쳐도 된다 — `TestType.key`/`label`\n을 나눈 것과 같은 관계다.",
         "properties": {
+          "choices": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
           "dimension": {
             "default": "length",
             "maxLength": 20,
@@ -5687,6 +5719,12 @@
             "title": "Key",
             "type": "string"
           },
+          "kind": {
+            "default": "number",
+            "maxLength": 10,
+            "title": "Kind",
+            "type": "string"
+          },
           "label": {
             "maxLength": 100,
             "minLength": 1,
@@ -5698,6 +5736,18 @@
             "maxLength": 20,
             "title": "Si Unit",
             "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
           }
         },
         "required": [
@@ -6625,7 +6675,14 @@
         "properties": {
           "attributes": {
             "additionalProperties": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
             },
             "default": {},
             "title": "Attributes",
@@ -6654,6 +6711,14 @@
             "default": 0,
             "title": "Field Count",
             "type": "integer"
+          },
+          "field_symbols": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Field Symbols",
+            "type": "object"
           },
           "id": {
             "format": "uuid",
@@ -6700,7 +6765,14 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "type": "number"
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
                 },
                 "type": "object"
               },
@@ -6735,6 +6807,20 @@
               }
             ],
             "title": "Extra Fields"
+          },
+          "field_symbols": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Symbols"
           },
           "parent_value": {
             "anyOf": [

@@ -108,8 +108,18 @@ def sizes_of(db: Session, specimen: Specimen) -> Sizes:
     nominal: dict[str, float] = {}
     if standard is not None:
         axis = get_vocabulary(db, STANDARD_SLUG)
-        fields = tuple(attribute_fields(db, axis, standard))
-        nominal = {key: float(value) for key, value in (standard.attributes or {}).items()}
+        # **숫자 칸만 치수다.** 규격은 판(문자)·모드(선택)도 갖는데, 그것은 그
+        # 규격의 성질이지 이 시편을 잰 값이 아니다 — 시편 화면에 입력 칸으로
+        # 나오면 사람은 거기에 무엇을 적어야 하는지 알 수 없다.
+        fields = tuple(
+            item for item in attribute_fields(db, axis, standard) if item.kind == "number"
+        )
+        keys = {item.key for item in fields}
+        nominal = {
+            key: float(value)
+            for key, value in (standard.attributes or {}).items()
+            if key in keys and isinstance(value, int | float)
+        }
 
     measured = {key: float(value) for key, value in (specimen.dimensions or {}).items()}
     # **옛 컬럼도 실측이다.** 아직 그쪽으로만 채워진 시편이 있다(ADR 0010 Expand).

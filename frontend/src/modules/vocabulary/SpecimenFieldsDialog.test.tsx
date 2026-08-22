@@ -237,4 +237,45 @@ describe('치수 칸 정의', () => {
     await user.selectOptions(await screen.findByLabelText('1번 칸 차원'), 'area')
     expect(await screen.findAllByText(/다시 확인하세요/)).not.toHaveLength(0)
   })
+
+  it('선택 칸에는 고를 값을 적는다', async () => {
+    // **규격은 치수만 갖지 않는다.** 모드·단부 형식은 목록에서 고르는 것이다.
+    const user = userEvent.setup()
+    show(STANDARD)
+    await screen.findByLabelText('1번 칸 이름')
+
+    await user.selectOptions(screen.getByLabelText('1번 칸 종류'), 'choice')
+    await user.type(screen.getByLabelText('1번 칸 선택지'), '나사, 숄더, 평행')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, , body] = update.mock.calls[0]
+    expect(body.extra_fields[0]).toMatchObject({
+      kind: 'choice',
+      choices: ['나사', '숄더', '평행'],
+    })
+  })
+
+  it('문자 칸에는 단위가 없다', async () => {
+    // 판(edition) 은 `D638-22` 다 — 차원도 단위도 뜻이 없다.
+    const user = userEvent.setup()
+    show(STANDARD)
+    await screen.findByLabelText('1번 칸 이름')
+
+    await user.selectOptions(screen.getByLabelText('1번 칸 종류'), 'text')
+    expect(screen.queryByLabelText('1번 칸 차원')).not.toBeInTheDocument()
+    expect(screen.getByText('단위 없음')).toBeInTheDocument()
+  })
+
+  it('규격 기호를 적는다', async () => {
+    // **도면은 뜻이 아니라 글자로 적혀 있다.** E8 의 D 는 직경, D638 의 D 는
+    // 그립 간 거리다 — 키는 뜻으로 짓고 글자는 따로 담는다.
+    const user = userEvent.setup()
+    show(STANDARD)
+    await user.type(await screen.findByLabelText('1번 칸 기호'), 'D')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0][2].extra_fields[0].symbol).toBe('D')
+  })
 })

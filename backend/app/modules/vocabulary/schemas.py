@@ -38,8 +38,11 @@ class TermOut(BaseModel):
     **이름을 고칠 때 몇 건이 따라오는지**이기도 하다. 외래키라 한 행을 고치면
     이 수만큼이 함께 바뀐다."""
     status: str = "active"
-    attributes: dict[str, float] = {}
-    """치수 등 속성. **SI 다** — 화면이 mm 로 바꿔 보여 준다."""
+    attributes: dict[str, float | str] = {}
+    """이 값의 속성. 숫자 치수는 **SI 다**(화면이 mm 로 바꿔 보여 준다). 판
+    (edition) 처럼 문자인 것과, 모드처럼 목록에서 고르는 것도 함께 담긴다."""
+    field_symbols: dict[str, str] = {}
+    """이 규격이 그 칸을 **어느 글자로 부르는가.** 위에서 온 칸의 글자를 덮는다."""
     extra_fields: list[SpecimenFieldOut] = []
     """이 값만 갖는 칸. 상위 분류의 기본 칸에 더해진다."""
     cross_section: str | None = None
@@ -81,12 +84,19 @@ class SpecimenFieldOut(BaseModel):
 
     key: str
     label: str
+    kind: str = "number"
+    """담는 것 — `number` · `text` · `choice`. 치수만 있는 것이 아니다."""
+    choices: list[str] = []
+    """`choice` 일 때 고를 수 있는 값."""
+    symbol: str | None = None
+    """그 규격의 도면이 쓰는 글자(`G`·`W`·`D`). **뜻이 아니라 글자다** — 같은
+    `D` 가 E8 에서는 직경, D638 에서는 그립 간 거리다."""
     dimension: str
     si_unit: str
     is_required: bool
     help: str | None = None
     inherited: bool = False
-    """분류가 준 칸인가. 그렇다면 이 규격에서는 못 지운다 — 분류에서 고쳐야 한다."""
+    """위(축·분류)가 준 칸인가. 그렇다면 이 값에서는 못 지운다."""
 
 
 class SpecimenFieldSaveRequest(BaseModel):
@@ -99,6 +109,9 @@ class SpecimenFieldSaveRequest(BaseModel):
 
     key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
     label: str = Field(min_length=1, max_length=100)
+    kind: str = Field(default="number", max_length=10)
+    choices: list[str] = []
+    symbol: str | None = Field(default=None, max_length=20)
     dimension: str = Field(default="length", max_length=20)
     si_unit: str = Field(default="m", max_length=20)
     is_required: bool = False
@@ -132,7 +145,8 @@ class TermUpdateRequest(BaseModel):
 
     value: str | None = Field(default=None, min_length=1, max_length=200)
     status: str | None = Field(default=None, pattern="^(active|deprecated)$")
-    attributes: dict[str, float] | None = None
+    attributes: dict[str, float | str] | None = None
+    field_symbols: dict[str, str] | None = None
     """주면 통째로 바꾼다. 빠뜨린 칸은 지워진다 — 부분 갱신은 "빈 칸으로 고쳤다"
     와 "안 보냈다" 를 구별할 수 없다."""
     cross_section: str | None = Field(default=None, max_length=20)

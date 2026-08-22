@@ -71,6 +71,7 @@ def _term_out(db: Session, item: VocabularyTerm, field_count: int | None = None)
         usage_count=item.usage_count,
         status=item.status,
         attributes=dict(item.attributes or {}),
+        field_symbols=dict(item.field_symbols or {}),
         cross_section=item.cross_section,
         # **이 값이 직접 선언한 칸 수.** 분류 축에서 "이 분류는 칸이 몇 개" 를
         # 말한다 — 0 이면 그 분류의 규격은 치수를 하나도 못 갖는다.
@@ -86,6 +87,9 @@ def _term_out(db: Session, item: VocabularyTerm, field_count: int | None = None)
             SpecimenFieldOut(
                 key=str(field.get("key", "")),
                 label=str(field.get("label", "")),
+                kind=str(field.get("kind") or "number"),
+                choices=[str(one) for one in (field.get("choices") or [])],
+                symbol=field.get("symbol"),
                 dimension=str(field.get("dimension", "length")),
                 si_unit=str(field.get("si_unit", "m")),
                 is_required=bool(field.get("is_required", False)),
@@ -248,6 +252,9 @@ def list_term_fields(
         SpecimenFieldOut(
             key=field.key,
             label=field.label,
+            kind=field.kind,
+            choices=list(field.choices),
+            symbol=field.symbol,
             dimension=field.dimension,
             si_unit=field.si_unit,
             is_required=field.is_required,
@@ -320,7 +327,8 @@ def save_category_fields(
             row = SpecimenField(category_term_id=term.id, key=item.key)
             db.add(row)
         row.label = item.label
-        row.dimension, row.si_unit = services.check_dimension(item.dimension, item.si_unit)
+        for name, value in services.check_kind(item.model_dump()).items():
+            setattr(row, name, value)
         row.is_required = item.is_required
         row.help = item.help
         row.sort_order = order * 10
@@ -332,6 +340,9 @@ def save_category_fields(
         SpecimenFieldOut(
             key=field.key,
             label=field.label,
+            kind=field.kind,
+            choices=list(field.choices),
+            symbol=field.symbol,
             dimension=field.dimension,
             si_unit=field.si_unit,
             is_required=field.is_required,
@@ -490,6 +501,12 @@ def update_term(
     # 그 자리에서 거절되어야 한다 — 남겨 두면 화면이 못 보여 주는 유령이 된다.
     if "extra_fields" in data:
         term.extra_fields = services.check_extra_fields(db, term, data["extra_fields"])
+    if "field_symbols" in data:
+        term.field_symbols = {
+            str(key): str(value).strip()
+            for key, value in (data["field_symbols"] or {}).items()
+            if str(value).strip()
+        }
     if "cross_section" in data:
         term.cross_section = services.check_cross_section(
             db, vocabulary, term, data["cross_section"] or None
