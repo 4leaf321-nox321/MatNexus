@@ -1866,8 +1866,11 @@ export interface paths {
          * Import Standards
          * @description 고른 표준 규격을 값으로 만든다.
          *
-         *     **이미 있는 이름은 건너뛴다.** 덮어쓰면 사람이 넣어 둔 치수가 사라진다 —
-         *     이 기능이 주는 것은 칸과 기호이지 값이 아니다.
+         *     **이름을 바꿔 한 벌 더 만들 수 있다.** 이 기능이 가장 값을 하는 때가 그때다 —
+         *     같은 규격을 부서가 자기 치수로 쓰는 경우다. 규격서가 범위나 최소만 주는 칸이
+         *     많아서(`R >= 25`, `폭 5~25.4`) 실제 값은 부서마다 갈린다.
+         *
+         *     **이미 있는 이름은 건너뛴다.** 덮어쓰면 사람이 넣어 둔 치수가 사라진다.
          *
          *     분류가 없으면 그 항목은 만들지 않는다. 분류가 칸을 정하는 쪽이라, 없는 채로
          *     만들면 `게이지 길이` 같은 기본 칸이 안 붙는다.
@@ -4741,12 +4744,29 @@ export interface components {
             help?: string | null;
         };
         /**
+         * StandardImportItem
+         * @description 가져올 규격 하나.
+         *
+         *     **이름을 바꿔 한 벌 더 만들 수 있어야 한다.** 이 기능이 가장 값을 하는 때가
+         *     그때다 — 같은 규격을 부서가 자기 치수로 쓰는 경우다. 규격서가 범위나 최소만
+         *     주는 칸이 많아서(`R >= 25`, `폭 5~25.4`) 실제 값은 부서마다 갈린다.
+         *
+         *     그때 **이름이 그 차이를 말해야 한다.** `ASTM E8/E8M 박판형` 이 둘이면 어느
+         *     것이 무엇인지 시편에 붙은 이름만 보고는 알 수 없다.
+         */
+        StandardImportItem: {
+            /** Key */
+            key: string;
+            /** Value */
+            value?: string | null;
+        };
+        /**
          * StandardImportRequest
          * @description 고른 것만 만든다. **안 쓰는 규격이 목록을 채우면 피커가 무거워진다.**
          */
         StandardImportRequest: {
-            /** Keys */
-            keys: string[];
+            /** Items */
+            items: components["schemas"]["StandardImportItem"][];
         };
         /**
          * StandardTemplateOut
@@ -4756,6 +4776,13 @@ export interface components {
          *     칸과 기호는 판이 바뀌어도 그대로지만 값은 바뀐다.
          */
         StandardTemplateOut: {
+            /**
+             * Attributes
+             * @default {}
+             */
+            attributes: {
+                [key: string]: number;
+            };
             /** Category */
             category: string;
             /** Cross Section */

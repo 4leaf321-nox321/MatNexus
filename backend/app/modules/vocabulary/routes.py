@@ -236,6 +236,7 @@ def list_standard_catalog(
             family=str(item["family"]),
             fields=[SpecimenFieldOut(**one) for one in item["fields"]],
             cross_section=item.get("cross_section"),
+            attributes=dict(item.get("attributes") or {}),
             ratio_checks=[RatioCheckOut(**one) for one in item.get("ratio_checks", [])],
             help=item.get("help"),
             taken=compare_key(str(item["value"])) in taken,
@@ -252,21 +253,30 @@ def import_standards(
 ) -> list[TermOut]:
     """고른 표준 규격을 값으로 만든다.
 
-    **이미 있는 이름은 건너뛴다.** 덮어쓰면 사람이 넣어 둔 치수가 사라진다 —
-    이 기능이 주는 것은 칸과 기호이지 값이 아니다.
+    **이름을 바꿔 한 벌 더 만들 수 있다.** 이 기능이 가장 값을 하는 때가 그때다 —
+    같은 규격을 부서가 자기 치수로 쓰는 경우다. 규격서가 범위나 최소만 주는 칸이
+    많아서(`R >= 25`, `폭 5~25.4`) 실제 값은 부서마다 갈린다.
+
+    **이미 있는 이름은 건너뛴다.** 덮어쓰면 사람이 넣어 둔 치수가 사라진다.
 
     분류가 없으면 그 항목은 만들지 않는다. 분류가 칸을 정하는 쪽이라, 없는 채로
     만들면 `게이지 길이` 같은 기본 칸이 안 붙는다.
     """
     axis = services.get_vocabulary(db, "specimen_standard")
     category_axis = services.get_vocabulary(db, "specimen_category")
-    wanted = {key for key in payload.keys}
+    templates = {str(one["key"]): one for one in standards.CATALOG}
     made: list[VocabularyTerm] = []
 
-    for item in standards.CATALOG:
-        if item["key"] not in wanted:
-            continue
-        normalized = compare_key(str(item["value"]))
+    for wanted in payload.items:
+        item = templates.get(wanted.key)
+        if item is None:
+            raise AppError(
+                "MNX-VOCABULARY-0029", f"모르는 표준 규격입니다: {wanted.key}", status=422
+            )
+        # **이름을 바꿔 한 벌 더 만들 수 있다.** 같은 규격을 부서가 자기 치수로
+        # 쓰는 경우가 이 기능이 가장 값을 하는 자리다.
+        name = clean(wanted.value) if wanted.value else clean(str(item["value"]))
+        normalized = compare_key(name)
         if db.scalar(
             select(VocabularyTerm).where(
                 VocabularyTerm.vocabulary_id == axis.id,
@@ -289,7 +299,7 @@ def import_standards(
             )
         term = VocabularyTerm(
             vocabulary_id=axis.id,
-            value=clean(str(item["value"])),
+            value=name,
             normalized=normalized,
             parent_term_id=category.id,
             created_by_id=user.id,
@@ -311,6 +321,10 @@ def import_standards(
         }
         if item.get("cross_section"):
             term.cross_section = str(item["cross_section"])
+        # **규격이 딱 정해 둔 값만 온다.** 최소값·범위·근사·재료가 정하는 것은
+        # 카탈로그에 없다 — 그런 칸은 빈 채로 와서 사람이 채운다.
+        if item.get("attributes"):
+            term.attributes = services.check_attributes(db, axis, term, item["attributes"])
         db.flush()
         if item.get("ratio_checks"):
             term.ratio_checks = services.check_ratio_checks(

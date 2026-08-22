@@ -1,9 +1,23 @@
-"""표준 시편 규격 카탈로그 — **칸과 기호는 심고, 치수 값은 안 심는다.**
+"""표준 시편 규격 카탈로그 — **구조는 확실하고, 값은 시작점이다.**
 
 규격 하나를 쓸모 있게 만들려면 칸을 만들고, 기호를 적고, 값을 넣고, 단면적 식을
 고르는 네 단계를 손으로 해야 한다. 규격이 스물이면 여든 번이다.
 
-## 값을 왜 안 심는가
+## 값은 **딱 정해진 것만** 심는다
+
+같은 치수표 안에서도 성격이 섞여 있다.
+
+    고정값      G 200.0 ± 0.2        규격이 그 숫자로 정한다        → 심는다
+    최소값만    R >= 25, L >= 450    실제 값은 시편마다 다르다      → 안 심는다
+    근사        C ~= 50 (그립부 폭)  "근사" 라고 적혀 있다          → 안 심는다
+    재료가 정함 T = 재료 두께         시편마다 다르다                → 안 심는다
+    범위        ISO 6721-2 40~120    권장이 있어도 범위다            → 안 심는다
+    권장        D3039 "변경 가능"     규격이 스스로 그렇게 적었다     → 안 심는다
+
+**규격을 다 채워도 시편 치수가 다 정해지지는 않는다.** 두께는 늘 재료가 정하고,
+최소값만 있는 칸은 실제 값이 시편마다 다르다.
+
+## 값을 그대로 믿으면 안 된다
 
 이 카탈로그의 근거인 규격 정리 문서는 **본문이 유료라 2차 출처 기반**이고, 스스로
 이렇게 적어 두었다.
@@ -12,12 +26,18 @@
      작성·시편 발주에는 해당 규격의 최신판 원문을 확인하세요."
 
 실제로 출처끼리 어긋난 곳이 있다 — D5766 전체 길이가 152 mm 와 250 mm 로,
-D6693 두께 범위가 초록끼리 상충한다. **그 숫자를 심으면 검증 안 된 값이 시스템의
-정본이 된다.** 치수는 자릿수 하나만 틀려도 응력이 통째로 어긋나는데 숫자는
-그럴듯해 보인다.
+D6693 두께 범위가 초록끼리 상충한다. **여기 심는 값은 시작점이지 정본이 아니다.**
+상충한 항목은 아예 안 심었고(D5766 전체 길이), 관리자가 규격서를 보고 고치는 것을
+전제한다.
 
-칸과 기호는 그런 위험이 없다. **판이 바뀌어도 `게이지 길이 = G` 는 그대로다** —
-바뀌는 것은 그 값이다. 그래서 구조만 깔고 숫자는 사람이 규격서를 보고 넣는다.
+칸과 기호에는 그런 위험이 없다. **판이 바뀌어도 `게이지 길이 = G` 는 그대로다** —
+바뀌는 것은 값이다. 그래서 구조는 확실하고 값은 확인이 필요하다.
+
+## 판을 함께 적는다
+
+E8 과 E8M 은 **환산 관계가 아니라 별개의 단위계 규격**이고, 환봉 게이지가 4D 대
+5D 라 연신율을 직접 비교할 수 없다. 그래서 값을 심는 항목은 **어느 판의 값인지**를
+이름에 담는다.
 
 ## 기호를 왜 함께 심는가
 
@@ -215,6 +235,8 @@ CATALOG: list[dict[str, Any]] = [
     # ── 금속 인장 ─────────────────────────────────────────────────────────
     {
         "key": "astm_e8_plate",
+        # G·W 만 고정값이다. R·L·A·B 는 "최소", C 는 "근사", T 는 재료 두께다.
+        "attributes": {"gauge_length": 0.200, "width": 0.040},
         "value": "ASTM E8/E8M 판재형",
         "category": TENSILE,
         "family": "금속 인장",
@@ -224,6 +246,8 @@ CATALOG: list[dict[str, Any]] = [
     },
     {
         "key": "astm_e8_sheet",
+        # G·W 만 고정값이다. R·L·A·B 는 "최소", C 는 "근사", T 는 재료 두께다.
+        "attributes": {"gauge_length": 0.050, "width": 0.0125},
         "value": "ASTM E8/E8M 박판형",
         "category": TENSILE,
         "family": "금속 인장",
@@ -233,6 +257,8 @@ CATALOG: list[dict[str, Any]] = [
     },
     {
         "key": "astm_e8_subsize",
+        # G·W 만 고정값이다. R·L·A·B 는 "최소", C 는 "근사", T 는 재료 두께다.
+        "attributes": {"gauge_length": 0.025, "width": 0.006},
         "value": "ASTM E8/E8M 소형",
         "category": TENSILE,
         "family": "금속 인장",
@@ -242,7 +268,9 @@ CATALOG: list[dict[str, Any]] = [
     },
     {
         "key": "astm_e8_round",
-        "value": "ASTM E8/E8M 환봉",
+        "value": "ASTM E8M 환봉 (12.5 mm)",
+        # E8M 표준: D 12.5 → G 62.5 (5D). **E8(inch-pound)은 4D 라 값이 다르다.**
+        "attributes": {"diameter": 0.0125, "gauge_length": 0.0625},
         "category": TENSILE,
         "family": "금속 인장",
         "fields": [
@@ -256,7 +284,8 @@ CATALOG: list[dict[str, Any]] = [
             ),
         ],
         "cross_section": "circle",
-        "help": "E8 은 게이지가 4D, E8M 은 5D 입니다 — 연신율을 직접 비교할 수 없습니다.",
+        "help": "E8M 미터계 표준입니다. E8(inch-pound)은 게이지가 4D 라 값이 "
+        "다르고, 연신율을 직접 비교할 수 없습니다.",
     },
     {
         "key": "astm_e8_tube_strip",
@@ -271,6 +300,14 @@ CATALOG: list[dict[str, Any]] = [
     # ── 고분자 인장 ───────────────────────────────────────────────────────
     {
         "key": "astm_d638_type1",
+        # WO·LO 는 "최소", 두께는 범위(7 mm 이하)라 안 심는다.
+        "attributes": {
+            "width": 0.013,
+            "narrow_length": 0.057,
+            "gauge_length": 0.050,
+            "grip_separation": 0.115,
+            "fillet_radius": 0.076,
+        },
         "value": "ASTM D638 Type I",
         "category": TENSILE,
         "family": "고분자 인장",
@@ -280,6 +317,14 @@ CATALOG: list[dict[str, Any]] = [
     },
     {
         "key": "astm_d638_type4",
+        "attributes": {
+            "width": 0.006,
+            "narrow_length": 0.033,
+            "gauge_length": 0.025,
+            "grip_separation": 0.065,
+            "fillet_radius": 0.014,
+            "outer_radius": 0.025,
+        },
         "value": "ASTM D638 Type IV",
         "category": TENSILE,
         "family": "고분자 인장",
@@ -289,6 +334,13 @@ CATALOG: list[dict[str, Any]] = [
     },
     {
         "key": "astm_d638_type5",
+        "attributes": {
+            "width": 0.00318,
+            "narrow_length": 0.00953,
+            "gauge_length": 0.00762,
+            "grip_separation": 0.0254,
+            "fillet_radius": 0.0127,
+        },
         "value": "ASTM D638 Type V",
         "category": TENSILE,
         "family": "고분자 인장",
@@ -297,13 +349,107 @@ CATALOG: list[dict[str, Any]] = [
         "help": "재료가 부족할 때 쓰는 소형(두께 4 mm 이하).",
     },
     {
-        "key": "astm_d412_die",
-        "value": "ASTM D412 덤벨 다이",
+        "key": "astm_d412_die_a",
+        "value": "ASTM D412 Die A",
         "category": TENSILE,
         "family": "고분자 인장",
         "fields": _D412_DIE,
         "cross_section": "rectangle",
-        "help": "Die C 가 사실상 표준입니다. 좁은 부분 길이 L 과 표점 게이지는 다른 값입니다.",
+        "attributes": {
+            "end_width": 0.025,
+            "overall_length": 0.14,
+            "narrow_length": 0.059,
+            "width": 0.012,
+            "gauge_length": 0.05,
+            "thickness": 0.002,
+        },
+        "help": "좁은 부분 길이 L 과 표점 게이지는 다른 값입니다.",
+    },
+    {
+        "key": "astm_d412_die_b",
+        "value": "ASTM D412 Die B",
+        "category": TENSILE,
+        "family": "고분자 인장",
+        "fields": _D412_DIE,
+        "cross_section": "rectangle",
+        "attributes": {
+            "end_width": 0.025,
+            "overall_length": 0.14,
+            "narrow_length": 0.059,
+            "width": 0.006,
+            "gauge_length": 0.05,
+            "thickness": 0.002,
+        },
+        "help": "좁은 부분 길이 L 과 표점 게이지는 다른 값입니다.",
+    },
+    {
+        "key": "astm_d412_die_c",
+        "value": "ASTM D412 Die C",
+        "category": TENSILE,
+        "family": "고분자 인장",
+        "fields": _D412_DIE,
+        "cross_section": "rectangle",
+        "attributes": {
+            "end_width": 0.025,
+            "overall_length": 0.115,
+            "narrow_length": 0.033,
+            "width": 0.006,
+            "gauge_length": 0.025,
+            "thickness": 0.002,
+        },
+        "help": "사실상의 표준 다이입니다. 좁은 부분 길이 L(33 mm)과 표점 "
+        "게이지(25 mm)는 다른 값입니다 — 인터넷에 도는 표가 이 둘을 자주 섞습니다.",
+    },
+    {
+        "key": "astm_d412_die_d",
+        "value": "ASTM D412 Die D",
+        "category": TENSILE,
+        "family": "고분자 인장",
+        "fields": _D412_DIE,
+        "cross_section": "rectangle",
+        "attributes": {
+            "end_width": 0.016,
+            "overall_length": 0.1,
+            "narrow_length": 0.033,
+            "width": 0.003,
+            "gauge_length": 0.025,
+            "thickness": 0.002,
+        },
+        "help": "좁은 부분 길이 L 과 표점 게이지는 다른 값입니다.",
+    },
+    {
+        "key": "astm_d412_die_e",
+        "value": "ASTM D412 Die E",
+        "category": TENSILE,
+        "family": "고분자 인장",
+        "fields": _D412_DIE,
+        "cross_section": "rectangle",
+        "attributes": {
+            "end_width": 0.016,
+            "overall_length": 0.125,
+            "narrow_length": 0.059,
+            "width": 0.003,
+            "gauge_length": 0.05,
+            "thickness": 0.002,
+        },
+        "help": "좁은 부분 길이 L 과 표점 게이지는 다른 값입니다.",
+    },
+    {
+        "key": "astm_d412_die_f",
+        "value": "ASTM D412 Die F",
+        "category": TENSILE,
+        "family": "고분자 인장",
+        "fields": _D412_DIE,
+        "cross_section": "rectangle",
+        "attributes": {
+            "end_width": 0.016,
+            "overall_length": 0.125,
+            "narrow_length": 0.059,
+            "width": 0.006,
+            "gauge_length": 0.05,
+            "thickness": 0.002,
+        },
+        "help": "좁은 부분 길이 L 과 표점 게이지는 다른 값입니다.",
     },
     {
         "key": "astm_d412_ring",
@@ -345,6 +491,8 @@ CATALOG: list[dict[str, Any]] = [
     },
     {
         "key": "astm_d5766",
+        # **전체 길이는 안 심는다** — 출처가 152 mm 와 250 mm 로 상충한다.
+        "attributes": {"width": 0.036, "hole_diameter": 0.006, "width_to_hole": 6},
         "value": "ASTM D5766 (오픈홀)",
         "category": TENSILE,
         "family": "복합재",

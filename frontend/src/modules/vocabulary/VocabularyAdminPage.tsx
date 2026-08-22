@@ -322,6 +322,9 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
     setPicked(new Set())
   }, [vocabulary.slug, term, showHidden, leastUsed, size])
 
+  /** 지우려고 확인을 기다리는 값. **묻지 않고 지우지 않는다.** */
+  const [removing, setRemoving] = useState<Term | null>(null)
+
   async function removeSelected() {
     setError(null)
     setRemoved(null)
@@ -449,6 +452,18 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
       </div>
 
       <ErrorNotice error={terms.error ?? error} className="mb-3" />
+
+      {removing && (
+        <ConfirmDeleteDialog
+          slug={vocabulary.slug}
+          term={removing}
+          onClose={() => setRemoving(null)}
+          onRemoved={() => {
+            setRemoving(null)
+            terms.reload()
+          }}
+        />
+      )}
 
       {catalog && (
         <StandardCatalogDialog
@@ -682,6 +697,18 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                   onClick={() => setEditing(item)}
                 >
                   <Pencil className="size-3.5" />
+                </Button>
+                {/* **지우기는 되돌릴 길이 없다.** 그래서 묻고 나서 지운다.
+                    쓰이는 중이면 서버가 막고, 그때 무엇이 막았는지 말한다. */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="hover:text-destructive"
+                  title="지우기 — 되돌릴 수 없습니다"
+                  aria-label={`${item.value} 지우기`}
+                  onClick={() => setRemoving(item)}
+                >
+                  <Trash2 className="size-3.5" />
                 </Button>
                 {/* 지우기가 아니라 감추기다. 지우면 그것을 가리키던 시료가
                     무엇이었는지 알 수 없게 된다. */}
@@ -1328,6 +1355,89 @@ function AddTermDialog({
             disabled={busy || (mode === 'one' ? value.trim() === '' : lines.trim() === '')}
           >
             추가
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+
+/**
+ * 값 하나를 지우기 전에 묻는다.
+ *
+ * **지우기는 되돌릴 길이 없다.** 그런데 줄에서 한 번 누르면 끝나는 자리에 두었다 —
+ * 감추기 바로 옆이라 손이 미끄러지기도 쉽다. 그래서 무엇을 지우는지 이름으로 다시
+ * 보여 주고 한 번 더 묻는다.
+ *
+ * **쓰이는 중이면 서버가 막는다.** 지우면서 참조를 끊으면 그 시료가 어느
+ * 제조사였는지 영영 알 수 없게 되는데, 그건 값을 정리하는 것과 전혀 다른 일이다.
+ * 여기서는 막힐 것을 미리 말해 주고 대신 쓸 길(감추기·병합)을 짚는다.
+ */
+export function ConfirmDeleteDialog({
+  slug,
+  term,
+  onClose,
+  onRemoved,
+}: {
+  slug: string
+  term: Term
+  onClose: () => void
+  onRemoved: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [refused, setRefused] = useState<string | null>(null)
+  const used = term.usage_count > 0
+
+  async function remove() {
+    setBusy(true)
+    setRefused(null)
+    try {
+      const result = await vocabularyApi.removeMany(slug, [term.id])
+      const item = result.items[0]
+      if (item?.deleted) return onRemoved()
+      // **막힌 이유는 서버가 안다.** 화면이 다시 판단하면 두 규칙이 갈라진다.
+      setRefused(item?.reason ?? '지우지 못했습니다.')
+    } catch (caught) {
+      setRefused(caught instanceof Error ? caught.message : '지우지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>지울까요?</DialogTitle>
+          <DialogDescription>
+            <b>{term.value}</b> 을(를) 지웁니다. <b>되돌릴 수 없습니다.</b>
+          </DialogDescription>
+        </DialogHeader>
+
+        {used ? (
+          /* **쓰이는 값은 못 지운다.** 눌러 보고 알게 하는 대신 미리 말한다. */
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
+            이 값을 <b>{term.usage_count}곳</b>에서 쓰고 있어 지울 수 없습니다. 목록에서만
+            치우려면 <b>감추기</b>를, 다른 값으로 합치려면 <b>병합</b>을 쓰세요 — 지우면서
+            참조를 끊으면 그 시료가 무엇이었는지 알 수 없게 됩니다.
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            지금 이 값을 쓰는 곳은 없습니다. 하위 값이 달려 있으면 서버가 막습니다 —
+            지우면 그것들이 고아가 됩니다.
+          </p>
+        )}
+
+        {refused && <p className="text-destructive text-xs">{refused}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            그만두기
+          </Button>
+          <Button variant="destructive" disabled={busy || used} onClick={() => void remove()}>
+            <Trash2 className="size-3.5" />
+            지우기
           </Button>
         </DialogFooter>
       </DialogContent>

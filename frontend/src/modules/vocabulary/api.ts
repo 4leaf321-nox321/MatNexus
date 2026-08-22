@@ -66,9 +66,14 @@ export const vocabularyApi = {
   standardCatalog: () =>
     api.get<StandardTemplate[]>('/vocabularies/specimen-standards/catalog'),
 
-  /** 고른 것만 만든다. **이미 있는 이름은 건너뛴다** — 덮으면 치수가 사라진다. */
-  importStandards: (keys: string[]) =>
-    api.post<Term[]>('/vocabularies/specimen-standards/import', { keys }),
+  /**
+   * 고른 것만 만든다. **이미 있는 이름은 건너뛴다** — 덮으면 치수가 사라진다.
+   *
+   * `value` 를 주면 그 이름으로 한 벌 더 만든다. 같은 규격을 부서가 자기 치수로
+   * 쓰는 경우가 이 기능이 가장 값을 하는 자리다.
+   */
+  importStandards: (items: { key: string; value?: string }[]) =>
+    api.post<Term[]>('/vocabularies/specimen-standards/import', { items }),
 
   termFields: (slug: string, termId: string) =>
     api.get<SpecimenField[]>(`/vocabularies/${slug}/terms/${termId}/fields`),

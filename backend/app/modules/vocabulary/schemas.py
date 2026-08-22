@@ -131,16 +131,37 @@ class StandardTemplateOut(BaseModel):
     """화면이 묶어 보여 주는 갈래. `금속 인장`."""
     fields: list[SpecimenFieldOut]
     cross_section: str | None = None
+    attributes: dict[str, float] = {}
+    """**규격이 딱 정해 둔 값만.** SI 다.
+
+    최소값(`R >= 25`)·범위(`40~120`)·근사(`C ~= 50`)·재료가 정하는 것(두께)은
+    없다 — 그런 칸은 빈 채로 와서 사람이 채운다."""
     ratio_checks: list[RatioCheckOut] = []
     help: str | None = None
     taken: bool = False
     """이미 그 이름의 값이 있는가. **덮어쓰지 않는다** — 있으면 건너뛴다."""
 
 
+class StandardImportItem(BaseModel):
+    """가져올 규격 하나.
+
+    **이름을 바꿔 한 벌 더 만들 수 있어야 한다.** 이 기능이 가장 값을 하는 때가
+    그때다 — 같은 규격을 부서가 자기 치수로 쓰는 경우다. 규격서가 범위나 최소만
+    주는 칸이 많아서(`R >= 25`, `폭 5~25.4`) 실제 값은 부서마다 갈린다.
+
+    그때 **이름이 그 차이를 말해야 한다.** `ASTM E8/E8M 박판형` 이 둘이면 어느
+    것이 무엇인지 시편에 붙은 이름만 보고는 알 수 없다.
+    """
+
+    key: str = Field(min_length=1, max_length=100)
+    value: str | None = Field(default=None, min_length=1, max_length=200)
+    """비우면 카탈로그의 이름을 쓴다."""
+
+
 class StandardImportRequest(BaseModel):
     """고른 것만 만든다. **안 쓰는 규격이 목록을 채우면 피커가 무거워진다.**"""
 
-    keys: list[str] = Field(min_length=1, max_length=100)
+    items: list[StandardImportItem] = Field(min_length=1, max_length=100)
 
 
 class SpecimenFieldSaveRequest(BaseModel):
