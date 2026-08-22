@@ -32,6 +32,16 @@ class TestFormulas:
         area = specimen.area("tube", {"outer_diameter": 0.02, "inner_diameter": 0.018})
         assert area == pytest.approx(math.pi / 4 * (0.02**2 - 0.018**2), rel=1e-12)
 
+    def test_링은_두_가닥이다(self) -> None:
+        """**평판 식으로 내면 강도가 두 배로 나온다** — 오류 없이.
+
+        D412 Type 1·2 링과 D2290 스플릿디스크는 링을 두 핀에 걸어 당기므로
+        하중이 걸리는 단면이 둘이다.
+        """
+        values = {"width": 0.006, "thickness": 0.002}
+        assert specimen.area("ring", values) == pytest.approx(2 * 0.006 * 0.002)
+        assert specimen.area("ring", values) == 2 * specimen.area("rectangle", values)
+
     def test_직접_적은_값은_그대로(self) -> None:
         assert specimen.area("manual", {"area": 1.5e-4}) == pytest.approx(1.5e-4)
 

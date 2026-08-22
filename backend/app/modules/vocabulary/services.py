@@ -30,6 +30,7 @@ from app.modules.vocabulary.models import (
 from app.modules.vocabulary.normalize import clean, compare_key
 from app.shared import vocabulary_hooks
 from app.shared.errors import AppError, NotFound
+from matcore import units as unit_kit
 
 logger = logging.getLogger(__name__)
 
@@ -1070,6 +1071,42 @@ def attribute_fields(
     return own + parent + extra
 
 
+#: 칸이 쓸 수 있는 차원 — **단위표에 있는 것 전부.**
+#:
+#: 처음에는 길이·면적·각도·무차원·질량 다섯으로 좁혔다. 좁힐 근거가 없었다 —
+#: 규격표만 봐도 길이(치수)·각도(탭 베벨)·무차원(w/d, 시편 2장)·면적(직접 잰
+#: 단면적)·질량(ISO 6721-10 의 시료 3~5 g)이 나오고, 시편에 붙는 값이 그것으로
+#: 끝난다는 보장이 없다. 좁혀 두면 필요해질 때마다 코드를 고쳐야 한다.
+#:
+#: **차원과 저장 단위가 짝이라는 규칙만 지킨다**(`check_dimension`).
+SPECIMEN_DIMENSIONS = tuple(unit_kit.SI_UNITS)
+
+
+def check_dimension(dimension: str, si_unit: str) -> tuple[str, str]:
+    """차원과 저장 단위가 짝인가. **여기서 안 막으면 조용히 틀린다.**
+
+    단면적 칸을 길이(m)로 만들어 두면 화면이 mm 로 환산해 **10⁶ 배** 어긋난 값이
+    저장되고, 숫자는 멀쩡해 보인다. 시험 종류 정의에서 같은 판단을 이미 했다 —
+    저장 단위는 고르는 것이 아니라 차원이 정한다.
+    """
+    if dimension not in SPECIMEN_DIMENSIONS:
+        raise AppError(
+            "MNX-VOCABULARY-0021",
+            f"시편 치수로 쓸 수 없는 차원입니다: {dimension}. "
+            f"쓸 수 있는 것: {', '.join(SPECIMEN_DIMENSIONS)}.",
+            status=422,
+        )
+    expected = unit_kit.SI_UNITS[dimension]
+    if si_unit != expected:
+        raise AppError(
+            "MNX-VOCABULARY-0022",
+            f"'{dimension}' 의 저장 단위는 {expected} 입니다({si_unit} 이 아니라). "
+            "저장은 언제나 SI 이고, 화면 단위는 보여 줄 때 정합니다.",
+            status=422,
+        )
+    return dimension, si_unit
+
+
 def check_extra_fields(
     db: Session, term: VocabularyTerm, fields: Sequence[Mapping[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -1097,12 +1134,15 @@ def check_extra_fields(
         if key in seen:
             raise AppError("MNX-VOCABULARY-0016", f"칸 이름이 겹칩니다: {key}.", status=422)
         seen.add(key)
+        dimension, si_unit = check_dimension(
+            str(item.get("dimension") or "length"), str(item.get("si_unit") or "m")
+        )
         cleaned.append(
             {
                 "key": key,
                 "label": str(item.get("label") or key),
-                "dimension": str(item.get("dimension") or "length"),
-                "si_unit": str(item.get("si_unit") or "m"),
+                "dimension": dimension,
+                "si_unit": si_unit,
                 "is_required": bool(item.get("is_required", False)),
                 "help": item.get("help") or None,
             }
@@ -1122,8 +1162,11 @@ def check_attributes(
 
       - **스키마에 없는 키는 거절한다.** 오타 하나가 조용히 새 속성이 되면
         아무도 못 찾는다.
-      - **숫자여야 한다.** 치수 칸은 전부 길이다.
-      - **필수 칸은 비울 수 없다.** 게이지 길이 없는 인장 규격은 규격이 아니다.
+      - **숫자여야 한다.** 값은 그 칸이 선언한 차원의 SI 수치다 — 길이만은
+        아니다(탭 베벨각은 각도, w/d 는 무차원, 직접 잰 단면적은 면적).
+      - **필수라고 표시한 칸은 비울 수 없다.** 다만 기본 칸을 필수로 두지는
+        않는다 — 게이지 길이가 없는 인장 규격이 실제로 여럿이다(D3039 계열은
+        그립 간 거리가 곧 게이지다).
 
     값은 **SI 로 온다.** 규격서가 mm 로 적혀 있어도 화면이 바꿔서 보낸다.
     """
@@ -1138,7 +1181,16 @@ def check_attributes(
         return {}
 
     known = {field.key: field for field in fields}
-    unknown = sorted(set(attributes) - set(known))
+    # **이미 들어 있던 값은 칸이 없어져도 막지 않는다.** 칸을 빼도 값은 남기기
+    # 때문이다(칸을 되살리면 다시 보인다) — 그 값 때문에 다음 저장이 422 가 되면
+    # 칸을 지운 사람이 아무것도 못 하게 된다.
+    stored = dict((term.attributes if term else None) or {})
+    orphans = {
+        key: value
+        for key, value in attributes.items()
+        if key not in known and key in stored and stored[key] == value
+    }
+    unknown = sorted(set(attributes) - set(known) - set(orphans))
     if unknown:
         raise AppError(
             "MNX-VOCABULARY-0011",
@@ -1146,9 +1198,9 @@ def check_attributes(
             status=422,
         )
 
-    cleaned: dict[str, float] = {}
+    cleaned: dict[str, float] = dict(orphans)
     for key, raw in attributes.items():
-        if raw is None or raw == "":
+        if raw is None or raw == "" or key in orphans:
             continue
         try:
             value = float(raw)

@@ -6,6 +6,7 @@
     평판   폭 곱하기 두께
     환봉   π (직경/2)²
     관     π/4 (외경 제곱 빼기 내경 제곱)
+    링     폭 곱하기 두께 곱하기 2   ← **두 가닥이 하중을 받는다**
 
 **틀리면 응력이 자릿수째로 어긋나는데 숫자는 그럴듯해 보인다.** 12.5 mm 환봉을
 평판 식으로 계산하면 단면적이 없어서 실패하거나, 폭 자리에 직경을 넣었다면 두께를
@@ -62,6 +63,12 @@ def _tube(values: Mapping[str, float]) -> float:
     return math.pi / 4.0 * (outer**2 - inner**2)
 
 
+def _ring(values: Mapping[str, float]) -> float:
+    # **두 가닥이다.** 링을 두 핀에 걸어 당기므로 하중이 걸리는 단면이 둘이다.
+    # 평판 식으로 내면 면적이 절반이 되고 강도가 두 배로 나온다 — 오류 없이.
+    return 2.0 * float(values["width"]) * float(values["thickness"])
+
+
 def _manual(values: Mapping[str, float]) -> float:
     return float(values["area"])
 
@@ -89,6 +96,14 @@ CROSS_SECTIONS: dict[str, CrossSection] = {
             label="관 (외경 · 내경)",
             needs=("outer_diameter", "inner_diameter"),
             fn=_tube,
+        ),
+        CrossSection(
+            key="ring",
+            label="링 · 스플릿디스크 (폭 곱하기 두께 곱하기 2)",
+            needs=("width", "thickness"),
+            fn=_ring,
+            help="D412 Type 1·2 링, D2290 스플릿디스크. 두 가닥이 하중을 받으므로 "
+            "단면적이 평판의 두 배입니다 — 평판 식으로 내면 강도가 두 배로 나옵니다.",
         ),
         CrossSection(
             key="manual",

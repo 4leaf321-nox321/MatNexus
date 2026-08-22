@@ -37,6 +37,9 @@ def _u(symbol: str, dimension: str, factor: str, offset: str = "0") -> Unit:
 #: 차원별 SI 기본단위. 저장할 때 쓰는 단위다.
 SI_UNITS = {
     "length": "m",
+    # 시편 단면적을 사람이 직접 재서 적는 자리가 있다(식으로 안 되는 모양).
+    # 길이로 두면 화면이 mm 로 환산해 10⁶ 배 틀린다.
+    "area": "m2",
     "force": "N",
     "stress": "Pa",
     "strain": "1",  # 무차원의 별칭. 화면·정의에서 뜻을 드러내려고 남긴다.
@@ -63,6 +66,9 @@ UNITS: dict[str, Unit] = {
         _u("cm", "length", "0.01"),
         _u("mm", "length", "0.001"),
         _u("um", "length", "0.000001"),
+        _u("m2", "area", "1"),
+        _u("mm2", "area", "0.000001"),
+        _u("cm2", "area", "0.0001"),
         _u("N", "force", "1"),
         _u("kN", "force", "1000"),
         # 국내 현장 표기. 시험기 설정이 kgf 인 곳이 아직 있다.
@@ -147,6 +153,12 @@ NOTATION_ALIASES = {
     "degc": "degC",
     "°": "deg",
     # 응력
+    # 면적. 위 첨자 표기가 성적서·규격서에 그대로 나온다.
+    "m²": "m2",
+    "mm²": "mm2",
+    "cm²": "cm2",
+    "m^2": "m2",
+    "mm^2": "mm2",
     "n/mm2": "MPa",
     "n/mm²": "MPa",
     "n/mm^2": "MPa",

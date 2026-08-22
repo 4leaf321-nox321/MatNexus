@@ -32,6 +32,8 @@ export interface Display {
 
 const BY_SI: Record<string, Display> = {
   m: { unit: 'mm', factor: 1000, offset: 0 },
+  // 각도. 라디안으로 보여 주면 아무도 안 읽는다 — 규격서도 7°·90° 로 적는다.
+  rad: { unit: '°', factor: 57.29577951308232, offset: 0 },
   // 단면적. CAE 입력은 mm² 다 — 1e-5 를 치라고 하면 사람이 자릿수를 센다.
   m2: { unit: 'mm²', factor: 1e6, offset: 0 },
   N: { unit: 'N', factor: 1, offset: 0 },
@@ -180,6 +182,7 @@ export function conditionUnits(
  */
 export const SI_BY_DIMENSION: Record<string, string> = {
   length: 'm',
+  area: 'm2',
   force: 'N',
   stress: 'Pa',
   strain: '1',
@@ -199,6 +202,7 @@ export const SI_BY_DIMENSION: Record<string, string> = {
 
 export const UNITS_BY_DIMENSION: Record<string, string[]> = {
   length: ['m', 'mm', 'cm', 'um'],
+  area: ['m2', 'mm2', 'cm2'],
   force: ['N', 'kN'],
   stress: ['Pa', 'kPa', 'MPa', 'GPa'],
   strain: ['1', '%'],
@@ -217,7 +221,32 @@ export const UNITS_BY_DIMENSION: Record<string, string[]> = {
   dimensionless: ['1'],
 }
 
-/** 서버 `matcore.units.SI_UNITS` 의 16차원과 같아야 한다. 어긋나면 정의 저장을
+/**
+ * 차원의 우리말 이름. **골라야 하는 자리에 `strain_rate` 라고 띄우지 않는다.**
+ *
+ * 표에 없으면 키를 그대로 보여 준다 — 서버에 차원이 늘어도 화면이 안 멈춘다.
+ */
+export const DIMENSION_LABELS: Record<string, string> = {
+  length: '길이',
+  area: '면적',
+  force: '힘',
+  stress: '응력',
+  strain: '변형률',
+  strain_rate: '변형률 속도',
+  velocity: '속도',
+  time: '시간',
+  temperature: '온도',
+  frequency: '주파수',
+  angular_frequency: '각주파수',
+  inverse_temperature: '온도 역수',
+  compliance: '컴플라이언스',
+  mass: '질량',
+  density: '밀도',
+  angle: '각도',
+  dimensionless: '무차원 (비율·개수)',
+}
+
+/** 서버 `matcore.units.SI_UNITS` 의 차원과 같아야 한다. 어긋나면 정의 저장을
  *  서버가 거절하므로 **조용히 틀리지는 않는다** — 화면에서 바로 드러난다. */
 export const DIMENSIONS = Object.keys(UNITS_BY_DIMENSION)
 

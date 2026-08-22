@@ -211,18 +211,29 @@ class TestAttributes:
         assert rejected.status_code == 422
         assert "span" in rejected.json()["error"]["message"]
 
-    def test_필수_치수가_비면_거절한다(
+    def test_필수라고_표시한_칸이_비면_거절한다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
-        """게이지 길이 없는 인장 규격은 규격이 아니다."""
-        term_id = self._standard(client, admin_headers)
+        """**필수는 부서가 정한다.** 우리가 기본으로 필수를 박아 두지는 않는다 —
+        게이지 길이가 없는 인장 규격이 실제로 여럿이다(D3039 계열은 그립 간
+        거리가 곧 게이지다). 다만 필수로 표시한 칸은 비울 수 없어야 한다."""
+        term_id = str(
+            make(client, admin_headers, value="ASTM E8 R2", parent_value="인장").json()["id"]
+        )
+        marked = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"extra_fields": [extra("diameter", "직경", required=True)]},
+            headers=admin_headers,
+        )
+        assert marked.status_code == 200, marked.text
+
         rejected = client.patch(
             f"/api/vocabularies/{SLUG}/terms/{term_id}",
             json={"attributes": {"total_length": 0.2}},
             headers=admin_headers,
         )
         assert rejected.status_code == 422
-        assert "게이지 길이" in rejected.json()["error"]["message"]
+        assert "직경" in rejected.json()["error"]["message"]
 
     def test_규격이_더한_칸에도_적을_수_있다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
@@ -327,3 +338,230 @@ class TestCategoryFields:
             ],
         )
         assert rejected.status_code == 422
+
+
+class TestBaseFieldsAreNotRequired:
+    """**"그 분류면 예외 없이 갖는다" 가 생각보다 잘 깨진다.**
+
+    처음에는 인장의 게이지 길이와 DMA 의 자유길이·폭·두께를 필수로 두었다.
+    ASTM·ISO 규격표가 그것을 반증했다.
+
+        인장  D3039·D3518·D5766 은 게이지 길이를 시편에 새기지 않는다 —
+              그립 간 거리가 곧 게이지다. D1708·D5083·D2290·D412 링도 없다.
+
+        DMA   자유길이·폭·두께 셋을 다 갖는 파트는 ISO 6721-4(인장) 하나뿐이다.
+              D4065 는 "specimen size is not fixed by this practice" 라고
+              문장으로 못 박는다.
+
+    필수로 두면 그런 규격은 **저장 자체가 안 된다.**
+    """
+
+    def test_기본_칸은_필수가_아니다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        listed = fields_of(
+            client,
+            admin_headers,
+            CATEGORY_SLUG,
+            category_id(client, admin_headers, "인장"),
+        )
+        assert [field["key"] for field in listed if field["is_required"]] == []
+
+    def test_게이지_길이_없는_인장_규격을_저장한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """D3039 — 그립 간 거리가 곧 게이지라 표점을 안 새긴다."""
+        created = make(client, admin_headers, value="ASTM D3039", parent_value="인장")
+        assert created.status_code == 201, created.text
+
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{created.json()['id']}",
+            json={
+                "extra_fields": [
+                    {
+                        "key": "grip_separation",
+                        "label": "그립 간 거리",
+                        "dimension": "length",
+                        "si_unit": "m",
+                        "is_required": False,
+                        "help": None,
+                    }
+                ],
+                "attributes": {"grip_separation": 0.138},
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["attributes"]["grip_separation"] == 0.138
+
+    def test_치수를_아예_안_주는_DMA_규격도_저장한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """ASTM D5418 은 매트릭스가 전 항목 "없음" 이다 — 장비 클램프에 위임한다."""
+        created = make(client, admin_headers, value="ASTM D5418", parent_value="DMA")
+        assert created.status_code == 201, created.text
+
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{created.json()['id']}",
+            json={"attributes": {}},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+
+class TestDimensions:
+    """**길이만 다루던 시절이 끝났다.**
+
+    D3039 의 탭 베벨각은 7° 또는 90°(각도), D5766 의 w/d 는 비율(무차원),
+    C1557·D897 은 단면적을 직접 준다(면적).
+    """
+
+    def _standard(self, client: TestClient, headers: dict[str, str]) -> str:
+        created = make(client, headers, value="ASTM D3039 0deg", parent_value="인장")
+        assert created.status_code == 201, created.text
+        return str(created.json()["id"])
+
+    def test_각도_칸을_만든다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        term_id = self._standard(client, admin_headers)
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={
+                "extra_fields": [
+                    {
+                        "key": "tab_bevel",
+                        "label": "탭 베벨각",
+                        "dimension": "angle",
+                        "si_unit": "rad",
+                        "is_required": False,
+                        "help": None,
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        listed = fields_of(client, admin_headers, SLUG, term_id)
+        bevel = next(field for field in listed if field["key"] == "tab_bevel")
+        assert bevel["dimension"] == "angle" and bevel["si_unit"] == "rad"
+
+    def test_차원과_저장_단위가_어긋나면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**단면적 칸을 길이로 만들면 10의 6제곱 배 틀린다** — 조용히."""
+        term_id = self._standard(client, admin_headers)
+        refused = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={
+                "extra_fields": [
+                    {
+                        "key": "section_area",
+                        "label": "단면적",
+                        "dimension": "area",
+                        "si_unit": "m",
+                        "is_required": False,
+                        "help": None,
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-VOCABULARY-0022"
+
+    def test_칸을_지워도_다음_저장이_막히지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**뺀 칸의 값은 남긴다**(칸을 되살리면 다시 보인다). 그런데 그 값이
+        스키마 밖이라고 다음 저장을 422 로 막으면, 칸을 지운 사람이 그 규격에
+        아무것도 못 하게 된다."""
+        term_id = self._standard(client, admin_headers)
+        client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"extra_fields": [extra("diameter", "직경")]},
+            headers=admin_headers,
+        )
+        client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"attributes": {"diameter": 0.0125}},
+            headers=admin_headers,
+        )
+
+        dropped = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"extra_fields": []},
+            headers=admin_headers,
+        )
+        assert dropped.status_code == 200, dropped.text
+
+        # 칸이 없어진 뒤에도 값을 고칠 수 있어야 한다.
+        again = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"attributes": {"gauge_length": 0.05, "diameter": 0.0125}},
+            headers=admin_headers,
+        )
+        assert again.status_code == 200, again.text
+        # 값은 남아 있다 — 칸을 되살리면 다시 보인다.
+        assert again.json()["attributes"]["diameter"] == 0.0125
+
+    def test_스키마_밖의_새_값은_여전히_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """남겨 두는 것은 **이미 있던 값**뿐이다. 오타는 그대로 막는다."""
+        term_id = self._standard(client, admin_headers)
+        refused = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={"attributes": {"gauge_length": 0.05, "gage_length": 0.05}},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert "gage_length" in refused.json()["error"]["message"]
+
+    def test_단위표에_있는_차원은_다_쓸_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**좁힐 근거가 없었다.** 시편에 붙는 값이 길이·면적·각도로 끝난다는
+        보장이 없다 — ISO 6721-10 은 시료를 3~5 g 으로 준다."""
+        term_id = self._standard(client, admin_headers)
+        saved = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={
+                "extra_fields": [
+                    {
+                        "key": "charge",
+                        "label": "시료량",
+                        "dimension": "mass",
+                        "si_unit": "kg",
+                        "is_required": False,
+                        "help": None,
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+    def test_모르는_차원은_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """오타가 조용히 새 차원이 되면 저장 단위 검사가 통째로 헐거워진다."""
+        term_id = self._standard(client, admin_headers)
+        refused = client.patch(
+            f"/api/vocabularies/{SLUG}/terms/{term_id}",
+            json={
+                "extra_fields": [
+                    {
+                        "key": "sweep",
+                        "label": "길이",
+                        "dimension": "lenght",
+                        "si_unit": "m",
+                        "is_required": False,
+                        "help": None,
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-VOCABULARY-0021"

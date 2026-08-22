@@ -141,3 +141,24 @@ class Test장비마다다른표기:
         # 고르면 자릿수가 틀린다 — 충돌하는 키는 아예 뺀다.
         collisions = [key for key, symbol in units.CASE_INDEX.items() if not symbol]
         assert collisions == []
+
+
+class TestArea:
+    """**면적은 길이가 아니다.**
+
+    시편 단면적을 사람이 직접 재서 적는 칸(`manual` 단면 식)이 있다. 그 칸을
+    길이(m)로 만들어 두면 화면이 mm 로 환산해 **10⁶ 배** 어긋난 값이 저장되고,
+    그 수로 나눈 응력은 오류 없이 그럴듯한 다른 값이다.
+    """
+
+    def test_면적_차원의_저장_단위는_m2_다(self) -> None:
+        assert units.SI_UNITS["area"] == "m2"
+
+    def test_mm2_를_m2_로_바꾼다(self) -> None:
+        # 12.5 mm 곱하기 2 mm = 25 mm². 자릿수가 여섯이라 눈으로 안 잡힌다.
+        assert units.to_si(25.0, "mm2") == pytest.approx(25e-6)
+
+    def test_위_첨자_표기도_받는다(self) -> None:
+        """규격서와 성적서가 `mm²` 로 적는다."""
+        assert units.canonical("mm²") == "mm2"
+        assert units.canonical("m^2") == "m2"
