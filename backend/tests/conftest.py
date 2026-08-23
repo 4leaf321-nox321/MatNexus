@@ -42,15 +42,15 @@ from app.modules.vocabulary.definitions import ensure_builtin_vocabularies
 def _test_url() -> str:
     """`<개발DB>_test`.
 
-    **병렬(`pytest -n`)은 안 쓴다.** 재 보고 접었다 — 32코어에서 470초가 369초로
-    21% 줄었는데 `InsufficientPrivilege`("파일을 만들 수 없음")가 12번 났다.
+    **병렬(`pytest -n`)은 안 쓴다 — 필요가 없어졌다.**
 
-    병목이 클라이언트가 아니라 **PostgreSQL 자신**이다. 테이블 36개를 769번 비우는 일은
-    디스크 I/O 이고, 클라이언트를 32개로 늘려도 서버는 하나다 — 줄 서는 곳만
-    옮겨진다. 게다가 그만큼이 동시에 파일을 만들고 지우니 Windows 가 못 버틴다.
+    한때 32코어에서 470초를 369초로 줄이려고 넣었다가 `InsufficientPrivilege`
+    ("파일을 만들 수 없음")가 12번 나서 접었다. 그때는 **병렬이 원인이라고 적었는데
+    틀렸다** — 원인은 아래의 `TRUNCATE` 였다. 워커 32개가 각자 72번씩 파일을 만들고
+    지우니 Windows 가 못 버틴 것이다.
 
-    얻는 101초보다 **간헐적 오류**가 비싸다. TRUNCATE 를 건드린 테이블만 비우는
-    안을 접은 것과 같은 판단이다.
+    `DELETE` 로 바꾸고 시험의 bcrypt 라운드를 낮추니 스위트가 **72초**다. 병렬로
+    얻을 것이 의존성 하나와 워커별 DB 를 지는 값보다 작다.
     """
     url = make_url(get_settings().database_url)
     # str(URL) 은 비밀번호를 '***' 로 마스킹한다. 그대로 쓰면 인증에 실패한다.
