@@ -42,7 +42,7 @@ fitting.register_family(
         label="Norton 크리프",
         parameter_names=("a", "n"),
         parameter_units=("1/s", "1"),
-        evaluate=...,   # (파라미터, x) -> y
+        evaluate=...,  # (파라미터, x) -> y
         guess=...,
         bounds=...,
         describe="...",
@@ -51,6 +51,7 @@ fitting.register_family(
         block="creep",
     )
 )
+
 
 # ③ 솔버 — 어느 블록을 먹고 어떻게 적히는지
 @export.register_renderer(
@@ -61,8 +62,7 @@ fitting.register_family(
     keywords=("*CREEP",),
     needs=(export.Need("creep", values=("a", "n")),),
 )
-def render(deck: export.Deck) -> export.Rendered:
-    ...
+def render(deck: export.Deck) -> export.Rendered: ...
 ```
 
 셋 다 필요한 것은 아니다. 계산만 더하면 ②만, 새 솔버만 더하면 ③만 쓴다.

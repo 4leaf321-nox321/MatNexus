@@ -58,3 +58,29 @@ def test_배포_문서가_패키지에_들어간다() -> None:
         "배포.md 가 package_deploy.ps1 에 없습니다. zip 에 안 들어가면 서버에서 "
         "절차를 볼 방법이 없습니다."
     )
+
+
+def test_확장_폴더가_패키지에_남는다() -> None:
+    """물성 확장은 **폴더로 배포된다**(ADR 0013).
+
+    `pip install` 이 아니라 폴더로 둔 이유가 폐쇄망이다 — 반입물이 zip 하나이고
+    `Copy-Item -Recurse .\backend` 가 통째로 담으므로 저절로 따라간다.
+
+    그런데 그 아래 **걷어내는 목록**이 있다(`.venv`·`__pycache__`·`logs`…).
+    거기에 `extensions` 가 들어가면 확장이 조용히 사라지고, **서버에서 그 물성만
+    목록에 안 뜬다.** 빌드는 성공하고 릴리스도 발행되므로 알아챌 길이 없다.
+    """
+    packager = PACKAGER.read_text(encoding="utf-8-sig")
+    stripped = [
+        line
+        for line in packager.splitlines()
+        if "foreach ($junk" in line and "extensions" in line
+    ]
+    assert not stripped, (
+        "package_deploy.ps1 이 extensions 를 걷어냅니다. 그러면 확장 물성이 "
+        "서버에서 조용히 사라집니다 — 빌드는 성공하고 릴리스도 발행됩니다."
+    )
+    assert (ROOT / "backend" / "extensions").is_dir(), (
+        "backend/extensions 폴더가 없습니다. 비어 있어도 README 로 남겨 둡니다 — "
+        "폴더가 없으면 어디에 확장을 넣어야 하는지 알 길이 없습니다."
+    )
