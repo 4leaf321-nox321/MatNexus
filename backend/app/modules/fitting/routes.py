@@ -48,6 +48,7 @@ from app.shared import permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
 from matcore import cards, export, fitting, prony, statistics
+from matcore.fitting import hyperelastic
 from matcore.registry import Produced
 
 router = APIRouter(prefix="/fitting", tags=["fitting"])
@@ -62,8 +63,18 @@ FIT_Y = "stress_true"
 
 
 @router.get("/families", response_model=list[FamilyOut])
-def list_families(user: User = Depends(current_user)) -> list[FamilyOut]:
-    """등록된 경화식. **화면이 이 응답만으로 목록을 그린다.**"""
+def list_families(
+    material_id: uuid.UUID | None = Query(default=None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[FamilyOut]:
+    """등록된 적합식. **화면이 이 응답만으로 목록을 그린다.**
+
+    재료를 주면 그 재료군에서 뜻이 있는 것만 낸다. **금속 경화식과 고무 초탄성을
+    한 목록에 섞어 RMSE 로 줄 세우면 안 된다** — 같은 물음의 답이 아니다.
+    """
+    fitting.load_builtin()
+    material = db.get(Material, material_id) if material_id else None
     return [
         FamilyOut(
             key=family.key,
@@ -71,8 +82,11 @@ def list_families(user: User = Depends(current_user)) -> list[FamilyOut]:
             describe=family.describe,
             parameter_names=list(family.parameter_names),
             parameter_units=list(family.parameter_units),
+            block=family.block,
+            x_label=family.x_label,
+            y_label=family.y_label,
         )
-        for family in fitting.FAMILIES.values()
+        for family in fitting.families_for(material.family if material else None)
     ]
 
 
@@ -181,9 +195,17 @@ def _inherit_poisson(material: Material, override: float | None) -> Inherited:
 
 
 def _representative(
-    db: Session, user: User, material_id: uuid.UUID, test_type_key: str, orientation: str
+    db: Session,
+    user: User,
+    material_id: uuid.UUID,
+    test_type_key: str,
+    orientation: str,
+    family: fitting.Family | None = None,
 ) -> tuple[statistics_services.Group, np.ndarray, np.ndarray, list[str]]:
-    """대표 곡선에서 (소성변형률, 진응력) 을 꺼낸다.
+    """대표 곡선에서 **그 식이 쓰는 축**을 꺼낸다.
+
+    금속 경화식은 진응력·진소성변형률, 고무 초탄성은 공칭이다 — 축은 식이 안다
+    (`Family.x_column`). 전에는 이 함수가 금속의 축을 상수로 들고 있었다.
 
     **여러 개의 평균이 낫다.** 하나로 적합하면 그 시편의 물성을 재료의 물성이라고
     부르는 셈이고, 그 시편이 하필 이상치였는지 알 방법이 없다.
@@ -212,19 +234,23 @@ def _representative(
             status=422,
         )
 
-    curve, notes = statistics_services.curve_table(db, group, x=FIT_X, y=FIT_Y)
+    x_column = family.x_column if family else FIT_X
+    y_column = family.y_column if family else FIT_Y
+    curve, notes = statistics_services.curve_table(db, group, x=x_column, y=y_column)
     if curve is None:
         raise AppError(
             "MNX-FITTING-0003",
             "대표 곡선을 만들 수 없습니다. "
             + " ".join(notes)
-            + " 레시피에 '진응력·진소성변형률' 단계가 들어 있는지도 확인하세요.",
+            + f" 레시피가 '{x_column}'·'{y_column}' 열을 만드는지 확인하세요.",
             status=422,
         )
     mean = np.asarray(curve["mean"], dtype=np.float64)
-    # **탄성 구간의 자국을 걷어내고 넘긴다.** 안 걷어내면 x 가 전부 0 인 점
-    # 수십 개가 적합을 지배해서, 식이 맞는데도 R² 가 0.4 로 나온다.
-    strain, stress, trimmed = fitting.plastic_branch(mean[:, 0], mean[:, 1])
+    # **적합 전에 구간을 다듬는다.** 무엇을 다듬는지는 식이 안다 — 금속은 탄성
+    # 구간의 자국을 걷고(안 걷으면 x 가 전부 0 인 점 수십 개가 적합을 지배해서
+    # 식이 맞는데도 R² 가 0.4 로 나온다), 고무는 식이 성립하지 않는 점을 걷는다.
+    prepare = (family.prepare if family else None) or fitting.plastic_branch
+    strain, stress, trimmed = prepare(mean[:, 0], mean[:, 1])
     single = (
         [
             "시편 1개의 곡선으로 적합했습니다 — 재료의 대푯값이 아니라 그 시편의 "
@@ -243,6 +269,8 @@ def _fit_out(result: fitting.FitResult) -> FitOut:
     grid = np.linspace(result.strain_min, result.strain_max, CURVE_POINTS)
     drawn = result.evaluate(grid)
     return FitOut(
+        x_label=fitting.FAMILIES[result.family].x_label,
+        y_label=fitting.FAMILIES[result.family].y_label,
         family=result.family,
         label=result.label,
         parameters=[
@@ -279,10 +307,45 @@ def preview(
     상대 RMSE 순으로 주되 **어느 것이 맞는지는 고르지 않는다.** 적합 구간에서
     비슷한 두 식이 그 밖에서 갈리고, 어디까지 쓸 것인지는 해석하는 사람이 안다.
     """
-    group, strain, stress, notes = _representative(
-        db, user, payload.material_id, payload.test_type_key, payload.orientation
-    )
-    results = fitting.compare(strain, stress, families=tuple(payload.families))
+    fitting.load_builtin()
+    material = db.get(Material, payload.material_id)
+    chosen = [
+        item
+        for item in fitting.families_for(material.family if material else None)
+        if not payload.families or item.key in payload.families
+    ]
+    if not chosen:
+        raise NotFound("MNX-FITTING-0013", "고른 식이 이 재료군에 없습니다.")
+
+    # **축이 다르면 곡선도 다르다.** 같은 대표 곡선에서 금속은 진응력을, 고무는
+    # 공칭을 꺼낸다 — 축마다 한 번씩만 꺼내고 그 축을 쓰는 식들에 함께 물린다.
+    results: list[fitting.FitResult] = []
+    group = None
+    strain = np.asarray([], dtype=np.float64)
+    stress = np.asarray([], dtype=np.float64)
+    notes: list[str] = []
+    for axes in dict.fromkeys((item.x_column, item.y_column) for item in chosen):
+        same = [item for item in chosen if (item.x_column, item.y_column) == axes]
+        found, x, y, axis_notes = _representative(
+            db, user, payload.material_id, payload.test_type_key, payload.orientation, same[0]
+        )
+        if group is None:
+            # **점은 첫 축의 것이다.** 축이 섞이면 아래에서 그 사실을 말한다 —
+            # 그래프 하나에 두 축의 점을 겹쳐 놓으면 무엇을 보는지 알 수 없다.
+            group, strain, stress = found, x, y
+            notes.extend(axis_notes)
+        # **자기 축의 곡선에 맞춘다.** 여기서 `strain`(첫 축의 점)을 넘기면 두
+        # 번째 축의 식이 남의 데이터에 맞춰지고, 그 결과는 그럴듯하게 나온다.
+        results.extend(fitting.compare(x, y, families=tuple(item.key for item in same)))
+    results.sort(key=lambda item: item.relative_rmse)
+    assert group is not None
+    axis_pairs = {(item.x_column, item.y_column) for item in chosen}
+    if len(axis_pairs) > 1:
+        notes.append(
+            "축이 다른 식이 섞여 있습니다 — 아래 그래프의 점은 첫 번째 축의 것이고, "
+            "다른 축에 맞춘 식은 그 점 위에 겹쳐 그리면 안 됩니다. 재료군을 정하면 "
+            "한 축만 남습니다."
+        )
     if not results:
         raise AppError(
             "MNX-FITTING-0004",
@@ -370,17 +433,26 @@ def create_card(
     **표는 언제나 저장한다.** 많은 솔버가 식보다 표를 그대로 받고, 식이 안 맞는
     재료에서는 표가 더 정확하다. 식은 골랐을 때만 함께 넣는다.
     """
+    fitting.load_builtin()
+    spec = fitting.FAMILIES.get(payload.family) if payload.family else None
+    if payload.family and spec is None:
+        raise NotFound("MNX-FITTING-0013", f"모르는 적합식입니다: {payload.family}")
+
     group, strain, stress, notes = _representative(
-        db, user, payload.material_id, payload.test_type_key, payload.orientation
+        db, user, payload.material_id, payload.test_type_key, payload.orientation, spec
     )
 
-    hardening: dict[str, Any] = {}
-    if payload.family:
+    fitted: dict[str, Any] = {}
+    if spec is not None:
         try:
-            result = fitting.fit(payload.family, strain, stress)
+            result = fitting.fit(spec.key, strain, stress)
         except fitting.FittingError as exc:
             raise AppError("MNX-FITTING-0004", str(exc), status=422) from exc
-        hardening = {
+        # **식이 자기 요약값을 낸다.** 초탄성의 초기 전단탄성률처럼, 식마다
+        # 계산이 다른데 서로 견줄 수 있는 값이 있다.
+        values = np.asarray([item.value for item in result.parameters], dtype=np.float64)
+        extras = spec.extras(values) if spec.extras else {}
+        fitted = {
             "values": {
                 "family": result.family,
                 "label": result.label,
@@ -392,6 +464,7 @@ def create_card(
                 "max_residual": result.max_residual,
                 "strain_min": result.strain_min,
                 "strain_max": result.strain_max,
+                **extras,
             },
             # **행이 자기 단위를 든다.** 경화식 파라미터는 식마다 단위가 다르다 —
             # Voce 의 `b` 는 무차원이고 `q` 는 Pa 다. 열 선언 하나로는 못 적는다.
@@ -466,15 +539,23 @@ def create_card(
         },
         blocks={
             **({"elastic": {"values": elastic}} if elastic else {}),
-            **({"hardening": hardening} if hardening else {}),
-            "table": {
-                "rows": [
-                    {"plastic_strain": float(x), "true_stress": float(y)}
-                    for x, y in zip(strain, stress, strict=True)
-                ]
-            },
+            **({spec.block: fitted} if spec is not None and fitted else {}),
+            # **소성 표는 금속 카드의 것이다.** 고무는 공칭 축에 맞췄고, 그 점을
+            # `*PLASTIC` 자리에 넣으면 덱은 돌고 재료만 딴판이 된다.
+            **(
+                {
+                    "table": {
+                        "rows": [
+                            {"plastic_strain": float(x), "true_stress": float(y)}
+                            for x, y in zip(strain, stress, strict=True)
+                        ]
+                    }
+                }
+                if spec is None or spec.block == "hardening"
+                else {}
+            ),
         },
-        point_count=len(strain),
+        point_count=len(strain) if spec is None or spec.block == "hardening" else 0,
         note=payload.note,
         created_by_id=user.id,
     )
@@ -699,6 +780,7 @@ def export_card(
     cards.load_builtin()
     elastic = cards.values_of(item.blocks.get("elastic"))
     hardening = cards.values_of(item.blocks.get("hardening"))
+    hyper = cards.values_of(item.blocks.get("hyperelastic"))
     provenance = [
         f"재료 {material.record_name if material else '?'} · "
         f"{test_type.key if test_type else '?'} · {item.orientation}",
@@ -722,6 +804,17 @@ def export_card(
         if elastic.get(key) is not None and origin:
             provenance.append(f"{label}: {origin}")
 
+    if hyper.get("label"):
+        # **단축 하나로 맞췄다는 사실이 덱까지 따라가야 한다.** 평면 전단·등이축
+        # 에서는 크게 빗나갈 수 있다 — 덱만 받은 사람은 알 길이 없다.
+        provenance.append(
+            f"초탄성 식: {hyper['label']} · {hyper.get('mode', '?')} 데이터 · 상대 RMSE "
+            f"{float(hyper.get('relative_rmse', 0.0)) * 100:.3g}% · 공칭 변형률 "
+            f"{float(hyper.get('strain_min', 0.0)):.5g}~"
+            f"{float(hyper.get('strain_max', 0.0)):.5g} "
+            f"(그 밖은 검증되지 않았습니다)"
+        )
+        provenance.append(hyperelastic.UNIAXIAL_ONLY)
     if hardening.get("label"):
         # **경화식은 덱에 안 들어간다.** 표로 나간다. 그래도 어떤 식으로 봤는지는
         # 적어 둔다 — 이 표가 어디까지 검증된 것인지가 거기에 있다.

@@ -91,6 +91,15 @@ class Card:
     """마스터커브를 겹친 기준 온도(K). **이 카드가 유효한 온도다** — 다른
     온도의 해석에 그대로 쓰면 안 된다는 사실이 덱에 적혀야 한다."""
 
+    hyperelastic_family: str | None = None
+    """`neo_hookean` · `mooney_rivlin` · `yeoh` · `ogden_1`.
+
+    **이름을 그대로 받는다.** 식마다 솔버 키워드와 계수 순서가 다르고, 그 매핑은
+    여기가 안다 — 카드 쪽에서 미리 섞으면 두 곳이 갈라진다."""
+    hyperelastic_parameters: tuple[tuple[str, float], ...] = ()
+    """`(이름, 값)`. 순서가 아니라 **이름으로** 자리를 찾는다 — 순서로 받으면
+    파라미터가 하나 늘었을 때 조용히 어긋난다."""
+
 
 @dataclass(frozen=True)
 class Rendered:
@@ -211,6 +220,7 @@ VALUE_LABELS = {
     "density": "밀도",
     "prony": "Prony 계수",
     "points": "소성 표",
+    "hyperelastic_parameters": "초탄성 계수",
 }
 
 
@@ -378,6 +388,82 @@ def render_abaqus_viscoelastic(card: Card) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
+#: 식 → (Abaqus 키워드, 계수 이름 순서).
+#:
+#: **순서가 아니라 이름으로 찾는다.** 65 는 배열 순서로 넘겼는데, 파라미터가 하나
+#: 늘어난 식이 붙으면 그때부터 조용히 어긋난다 — 덱은 돌고 재료만 다르다.
+HYPERELASTIC_KEYWORDS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "neo_hookean": ("NEO HOOKE", ("c10",)),
+    "mooney_rivlin": ("MOONEY-RIVLIN", ("c10", "c01")),
+    "yeoh": ("YEOH", ("c10", "c20", "c30")),
+    "ogden_1": ("OGDEN, N=1", ("mu", "alpha")),
+}
+
+#: 비압축 계수 D. **재지 않은 값이라 0 으로 둔다.**
+#:
+#: Abaqus 에서 `D=0` 은 완전 비압축이고 **하이브리드 요소(C3D8H 등)를 요구한다.**
+#: 일반 요소로 돌리면 오류로 멈춘다 — 조용히 틀리는 것보다 낫지만, 그 사실을
+#: 모르면 "덱이 안 돌아간다" 로만 보인다. 그래서 덱 주석에 적는다.
+INCOMPRESSIBLE_D = 0.0
+
+
+def render_abaqus_hyperelastic(card: Card) -> Rendered:
+    """Abaqus `*HYPERELASTIC` 덱. 고무 초탄성.
+
+    ## 계수를 그대로 낸다 — 표가 아니다
+
+    Abaqus 는 시험 데이터를 주고 자기가 맞추게 할 수도 있다(`*UNIAXIAL TEST DATA`).
+    그 길을 안 쓴다 — **어느 식을 어느 구간에 맞췄는지가 우리 쪽에 남아야** 카드가
+    자기 근거를 들 수 있고, 솔버마다 다른 적합기가 다른 답을 내는 것도 막는다.
+
+    ## D = 0 은 하이브리드 요소를 요구한다
+
+    비압축 계수를 재지 않았으므로 0 으로 둔다. **완전 비압축**이라는 뜻이고,
+    Abaqus 는 그때 하이브리드 요소를 요구한다. 지어내지 않고 그 사실을 적는다.
+    """
+    if not card.hyperelastic_family:
+        raise ExportError("초탄성 카드가 아닙니다. 어느 식으로 맞췄는지가 없습니다.")
+    target = HYPERELASTIC_KEYWORDS.get(card.hyperelastic_family)
+    if target is None:
+        known = ", ".join(sorted(HYPERELASTIC_KEYWORDS))
+        raise ExportError(
+            f"'{card.hyperelastic_family}' 는 Abaqus 매핑이 없는 식입니다. 있는 것: {known}"
+        )
+    keyword, order = target
+
+    values = dict(card.hyperelastic_parameters)
+    missing = [name for name in order if name not in values]
+    if missing:
+        raise ExportError(
+            f"{keyword} 에 필요한 계수가 없습니다: {', '.join(missing)}. "
+            f"카드가 다른 식으로 맞춰졌을 수 있습니다."
+        )
+
+    notes: list[str] = []
+    lines = _header(card, "**")
+    lines.append("** Consistent units: kg, m, s, Pa")
+    lines.append("** Nominal (engineering) stress-strain basis — not true stress.")
+    # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
+    lines.append("** D = 0 : fully incompressible — requires hybrid elements (e.g. C3D8H).")
+    notes.append(
+        "비압축 계수 D 를 0 으로 두었습니다(재지 않은 값입니다) — 완전 비압축이라는 "
+        "뜻이고, Abaqus 는 그때 하이브리드 요소를 요구합니다."
+    )
+    if card.density is not None:
+        lines.append(f"*MATERIAL, NAME={card.name}")
+        lines.append("*DENSITY")
+        lines.append(f"{_free(card.density)},")
+    else:
+        lines.append(f"*MATERIAL, NAME={card.name}")
+        notes.append("밀도가 없어 *DENSITY 를 비웠습니다 — 동적 해석에는 그대로 못 씁니다.")
+
+    lines.append(f"*HYPERELASTIC, {keyword}")
+    lines.append(
+        ", ".join([*(_free(values[name]) for name in order), _free(INCOMPRESSIBLE_D)])
+    )
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
 def render_openradioss(card: Card) -> Rendered:
     """OpenRadioss `/MAT/LAW36` + `/FUNCT`.
 
@@ -512,6 +598,20 @@ FORMATS: dict[str, Format] = {
         # **OpenRadioss 는 없다.** LAW62 는 고무 초탄성(Ogden)+Prony 경로라
         # 선형 점탄성과 다른 모형이다. 65 도 같은 이유로 Abaqus 만 낸다.
         requires=("youngs_modulus", "poisson_ratio", "prony"),
+    ),
+    "abaqus_hyperelastic": Format(
+        key="abaqus_hyperelastic",
+        label="Abaqus (초탄성)",
+        extension="inp",
+        describe=(
+            "*HYPERELASTIC — 고무 초탄성. 공칭 응력 기준이고 D=0(완전 비압축)이라 "
+            "하이브리드 요소가 필요하다."
+        ),
+        render=render_abaqus_hyperelastic,
+        keywords=("*MATERIAL", "*HYPERELASTIC"),
+        # **OpenRadioss 는 아직 안 낸다.** LAW42(Ogden)는 계수 규약이 다르고,
+        # 65 도 LAW82/94 를 Ogden+Prony 로 묶어 다뤘다 — 그 조합은 여기 없다.
+        requires=("hyperelastic_parameters",),
     ),
     "json": Format(
         key="json",

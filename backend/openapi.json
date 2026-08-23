@@ -1672,6 +1672,11 @@
       },
       "FamilyOut": {
         "properties": {
+          "block": {
+            "default": "hardening",
+            "title": "Block",
+            "type": "string"
+          },
           "describe": {
             "title": "Describe",
             "type": "string"
@@ -1697,6 +1702,16 @@
             },
             "title": "Parameter Units",
             "type": "array"
+          },
+          "x_label": {
+            "default": "진소성변형률",
+            "title": "X Label",
+            "type": "string"
+          },
+          "y_label": {
+            "default": "진응력",
+            "title": "Y Label",
+            "type": "string"
           }
         },
         "required": [
@@ -1777,6 +1792,16 @@
           "strain_min": {
             "title": "Strain Min",
             "type": "number"
+          },
+          "x_label": {
+            "default": "진소성변형률",
+            "title": "X Label",
+            "type": "string"
+          },
+          "y_label": {
+            "default": "진응력",
+            "title": "Y Label",
+            "type": "string"
           }
         },
         "required": [
@@ -10670,8 +10695,27 @@
     },
     "/api/fitting/families": {
       "get": {
-        "description": "등록된 경화식. **화면이 이 응답만으로 목록을 그린다.**",
+        "description": "등록된 적합식. **화면이 이 응답만으로 목록을 그린다.**\n\n재료를 주면 그 재료군에서 뜻이 있는 것만 낸다. **금속 경화식과 고무 초탄성을\n한 목록에 섞어 RMSE 로 줄 세우면 안 된다** — 같은 물음의 답이 아니다.",
         "operationId": "list_families_api_fitting_families_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "material_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Material Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10686,6 +10730,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Families",

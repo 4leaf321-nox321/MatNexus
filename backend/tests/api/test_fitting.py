@@ -735,3 +735,157 @@ class Test물려받기:
         ).json()
         assert values(card, "elastic")["poisson_ratio"] == 0.33
         assert values(card, "elastic")["poisson_ratio_source"] == "manual"
+
+
+class Test초탄성:
+    """고무 카드가 **같은 엔드포인트로** 나온다.
+
+    점탄성은 별도 라우트가 필요했다(Prony 는 시험 1건에 매달린다). 초탄성은 경화
+    카드와 **같은 묶음·같은 대표 곡선**에서 나오고 축만 다르다 — 그래서 축을 식이
+    선언하게 하니 새 엔드포인트가 필요 없었다. 그 사실을 여기서 지킨다.
+
+    **물리는 여기서 안 본다.** 계수가 되돌아오는지는 답을 아는 합성 곡선으로
+    `tests/unit/test_hyperelastic.py` 가 본다. 여기 데이터는 강판이고, Ogden 을
+    강판에 맞춘 값은 뜻이 없다 — 이 시험이 보는 것은 **경로**다.
+    """
+
+    @pytest.fixture
+    def rubber(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> dict[str, Any]:
+        ensure_builtin_test_types(db)
+        db.commit()
+        created: dict[str, Any] = client.post(
+            "/api/materials",
+            json={
+                "family": "Polymer",
+                "category": "EPDM",
+                "grade": "HYPER",
+                "details": "MD",
+                "spec_thickness": 2.0,
+            },
+            headers=admin_headers,
+        ).json()
+        _adopted(client, admin_headers, db, created["id"], 2)
+        return created
+
+    def test_재료군이_식_목록을_가른다(
+        self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
+    ) -> None:
+        """**Voce 와 Ogden 을 한 목록에 섞어 RMSE 로 줄 세우면 안 된다.**"""
+        listed = client.get(
+            "/api/fitting/families",
+            params={"material_id": rubber["id"]},
+            headers=admin_headers,
+        ).json()
+        keys = {item["key"] for item in listed}
+        assert "ogden_1" in keys
+        assert "voce" not in keys
+
+    def test_고무는_공칭_축에_맞춘다(
+        self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
+    ) -> None:
+        """**축이 금속과 반대다.** 화면의 축 라벨이 여기서 온다."""
+        seen = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": rubber["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+            },
+            headers=admin_headers,
+        )
+        assert seen.status_code == 200, seen.text
+        fits = seen.json()["fits"]
+        assert fits, "고무 식이 하나도 안 맞았습니다"
+        for item in fits:
+            assert item["x_label"] == "공칭 변형률"
+            assert item["y_label"] == "공칭 응력"
+
+    def test_카드가_초탄성_블록을_든다(
+        self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
+    ) -> None:
+        made = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": rubber["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "EPDM 초탄성",
+                "family": "ogden_1",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        card = made.json()
+        assert "hyperelastic" in card["blocks"]
+        assert "hardening" not in card["blocks"]
+        block = values(card, "hyperelastic")
+        assert block["family"] == "ogden_1"
+        # **식이 자기 요약값을 낸다** — RMSE 하나로는 안 보이는 것이다.
+        assert block["shear_modulus"] > 0
+        assert block["mode"] == "단축 인장"
+
+    def test_소성_표를_안_만든다(
+        self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
+    ) -> None:
+        """공칭 축에 맞춘 점을 `*PLASTIC` 자리에 넣으면 **덱은 돌고 재료만 딴판**이다."""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": rubber["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "표 없음",
+                "family": "neo_hookean",
+            },
+            headers=admin_headers,
+        ).json()
+        assert "table" not in card["blocks"]
+        assert card["point_count"] == 0
+        assert "abaqus" not in card["available_formats"]
+        assert "abaqus_hyperelastic" in card["available_formats"]
+
+    def test_덱이_나온다(
+        self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
+    ) -> None:
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": rubber["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "덱",
+                "family": "ogden_1",
+            },
+            headers=admin_headers,
+        ).json()
+        deck = client.get(
+            f"/api/fitting/cards/{card['id']}/export",
+            params={"format": "abaqus_hyperelastic"},
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        assert "*HYPERELASTIC, OGDEN, N=1" in deck.text
+        # **단축 하나로 맞췄다는 사실이 덱까지 따라가야 한다.**
+        assert "단축 인장 하나로 맞춘 계수" in deck.text
+        # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
+        assert "hybrid elements" in deck.text
+
+    def test_금속_식은_고무에_안_준다(
+        self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
+    ) -> None:
+        """섞이면 **조용히 틀린 카드**가 나온다 — 진응력 축에 맞춘 값이 고무 카드에
+        들어앉는다. 여기서는 대표 곡선을 못 만들거나 목록에 없다고 말해야 한다."""
+        made = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": rubber["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "families": ["voce"],
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 404
+        assert "재료군" in made.text

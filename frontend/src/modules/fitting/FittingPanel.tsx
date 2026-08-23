@@ -238,6 +238,11 @@ function FitComparison({
   // 전에는 여기서 `?? preview.fits[0]` 로 되돌려서, 표만 쓰겠다는 선택이
   // 화면에서 사라졌다 — 서버는 받는데 갈 길이 없었다.
   const fit = chosen === null ? null : preview.fits.find((item) => item.family === chosen)
+  // **축 이름을 화면이 정하지 않는다.** 금속은 진응력·진소성변형률에, 고무는
+  // 공칭에 맞춘다 — 그래프 축이 "진소성변형률" 이라고 붙으면 그것은 거짓말이고,
+  // 그 거짓말은 화면에서만 보인다. 식 없이 표만 쓸 때는 소성 표라서 금속 축이다.
+  const xLabel = `${fit?.x_label ?? '진소성변형률'} (%)`
+  const yLabel = `${fit?.y_label ?? '진응력'} (MPa)`
   // 표시 단위로 맞춘다. 축만 바꾸고 점을 안 바꾸면 1000배 어긋난다.
   const shown = (points: [number, number][]): [number, number][] =>
     points.map(([x, y]) => [toDisplay(x, '1', 'strain'), toDisplay(y, 'Pa')])
@@ -305,8 +310,8 @@ function FitComparison({
             <CurveChart
               points={shown(preview.source_points as [number, number][])}
               pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
-              xLabel="진소성변형률 (%)"
-              yLabel="진응력 (MPa)"
+              xLabel={xLabel}
+              yLabel={yLabel}
               height={300}
             />
             <p className="text-muted-foreground text-xs">
@@ -326,8 +331,8 @@ function FitComparison({
                 label: `${fit.label} 적합`,
               }}
               pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
-              xLabel="진소성변형률 (%)"
-              yLabel="진응력 (MPa)"
+              xLabel={xLabel}
+              yLabel={yLabel}
               height={300}
             />
 

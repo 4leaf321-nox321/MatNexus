@@ -15,6 +15,12 @@ class FamilyOut(BaseModel):
     describe: str
     parameter_names: list[str]
     parameter_units: list[str]
+    block: str = "hardening"
+    """적합 결과가 담기는 물성 블록(ADR 0012). 초탄성은 `hyperelastic` 이다."""
+    x_label: str = "진소성변형률"
+    y_label: str = "진응력"
+    """이 식이 맞추는 축의 이름. **고무는 공칭이다** — 화면의 축 라벨이
+    "진소성변형률" 이라고 붙으면 그것은 거짓말이다."""
 
 
 class FittedParameterOut(BaseModel):
@@ -42,6 +48,10 @@ class FitOut(BaseModel):
     notes: list[str]
     curve: list[tuple[float, float]]
     """적합된 식을 그린 것. 데이터와 겹쳐 봐야 맞는지 눈으로 판단할 수 있다."""
+    x_label: str = "진소성변형률"
+    y_label: str = "진응력"
+    """이 적합이 선 축의 이름. **고무는 공칭이다** — 그래프의 축이 "진소성변형률"
+    이라고 붙으면 그것은 거짓말이고, 그 거짓말은 화면에서만 보인다."""
 
 
 class FitPreviewRequest(BaseModel):

@@ -196,12 +196,15 @@ class Test태도:
         **형식마다 받는 물성 모형이 다르다.** 처음에는 모든 형식에 이 탄소성
         카드를 넣었는데, 점탄성 형식이 붙으면서 그 전제가 깨졌다(Prony 계수가
         없다). 카드가 감당하는 형식만 돈다 — 나머지는 `Test거절` 이 본다.
+
+        **무엇을 감당하는지는 카드에게 묻는다.** 전에는 여기서 `"prony" in
+        requires` 로 걸러냈는데, 초탄성 형식이 붙자 그 목록에도 이름을 더해야
+        했다 — 안 더하면 이 시험이 빨개진다. 새 형식이 붙을 때마다 시험을 고쳐야
+        하면 그 시험은 형식의 목록을 두 번째로 적어 둔 것일 뿐이다.
         """
-        for key, target in export.FORMATS.items():
-            if "prony" in target.requires:
-                continue
+        for key in export.available_formats(CARD):
             text = export.render(key, CARD).text
-            for word in target.keywords:
+            for word in export.FORMATS[key].keywords:
                 assert word in text
 
     def test_모르는_형식은_있는_것을_알려_준다(self) -> None:

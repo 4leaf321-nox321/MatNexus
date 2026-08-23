@@ -85,19 +85,67 @@ class FitResult:
 
 @dataclass(frozen=True)
 class Family:
-    """경화식 한 종류."""
+    """적합할 식 한 종류.
+
+    **어느 축에 맞추는지를 식이 선언한다.** 전에는 라우트가 `strain_true_plastic`·
+    `stress_true` 를 상수로 들고 있었는데, 그것은 금속 소성의 축이다. 고무는
+    **공칭 응력과 공칭 변형률**에 맞춘다 — 축이 다르면 같은 데이터로도 전혀 다른
+    파라미터가 나온다.
+
+    축을 여기 적어 두면 새 식을 더할 때 라우트를 안 고친다(D7).
+    """
 
     key: str
     label: str
     parameter_names: tuple[str, ...]
     parameter_units: tuple[str, ...]
     evaluate: Any
-    """`(파라미터 배열, 소성변형률 배열) -> 응력 배열`"""
+    """`(파라미터 배열, x 배열) -> y 배열`"""
     guess: Any
-    """`(소성변형률, 응력) -> 초기값`. 초기값이 나쁘면 엉뚱한 곳에 수렴한다."""
+    """`(x, y) -> 초기값`. 초기값이 나쁘면 엉뚱한 곳에 수렴한다."""
     bounds: Any
-    """`(소성변형률, 응력) -> (하한, 상한)`"""
+    """`(x, y) -> (하한, 상한)`"""
     describe: str
+
+    x_label: str = "진소성변형률"
+    y_label: str = "진응력"
+    """사람이 읽는 축 이름. 메모와 **화면의 축 라벨**에 그대로 들어간다.
+
+    고무 카드에 "소성변형률 0~2 구간" 이라고 적히거나 그래프의 x 축이 그렇게
+    붙으면 그것은 거짓말이다 — 고무는 공칭 변형률에 맞춘다."""
+
+    x_column: str = "strain_true_plastic"
+    y_column: str = "stress_true"
+    """**적합에 쓰는 축.** 금속 소성은 진응력·진소성변형률, 고무는 공칭이다.
+
+    솔버가 받는 것이 그 축이기 때문이다 — 공칭으로 맞춘 파라미터를 진응력 자리에
+    넣으면 조용히 틀린 해석이 된다."""
+
+    prepare: Any = None
+    """`(x, y) -> (x, y, 메모)`. 적합 전에 구간을 다듬는다.
+
+    금속은 탄성 구간의 자국을 걷어낸다(`plastic_branch`) — 안 걷으면 x 가 전부
+    0 인 점 수십 개가 적합을 지배해서, 식이 맞는데도 R² 가 0.4 로 나온다."""
+
+    block: str = "hardening"
+    """적합 결과가 담기는 물성 블록(ADR 0012). 초탄성은 `hyperelastic` 이다."""
+
+    applies_to: tuple[str, ...] = ()
+    """이 식이 뜻을 갖는 재료군. 비면 제한 없음.
+
+    **Voce 와 Ogden 을 나란히 세워 RMSE 로 줄 세우면 안 된다** — 금속 경화식과
+    고무 초탄성은 같은 물음의 답이 아니다. 무엇이 나란히 설 수 있는지는 식이 안다."""
+
+    extras: Any = None
+    """`(파라미터) -> {키: 값}`. 이 식만의 요약값.
+
+    초탄성의 초기 전단탄성률이 그렇다 — 식마다 계산이 다른데(Neo-Hookean 은
+    `2·C10`, Ogden 은 `μ`), **식이 달라도 이 값은 비슷하게 나와야 한다.** 서로
+    견줄 수 있는 유일한 공통 척도라 카드에 함께 담는다."""
+
+    stability: Any = None
+    """`(파라미터, x) -> 경고 목록`. 적합 자체는 됐는데 **해석이 발산하는** 계수를
+    짚는다. 고무에서 실제로 나는 일이다 — 막지 않고 말한다."""
 
 
 def _voce(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
@@ -160,6 +208,13 @@ def _hockett_bounds(strain: np.ndarray, stress: np.ndarray) -> tuple[np.ndarray,
     )
 
 
+#: 금속 소성식이 뜻을 갖는 재료군.
+#:
+#: **비워 두면 "제한 없음" 이라 고무 재료에도 뜬다.** 처음에 그렇게 뒀더니 EPDM
+#: 재료의 식 목록에 Voce 가 나란히 섰고, 그 둘은 축이 달라서(진응력 vs 공칭) 한
+#: 그래프에 겹쳐 그릴 수도 없다.
+METALLIC = ("Metal",)
+
 FAMILIES: dict[str, Family] = {
     "voce": Family(
         key="voce",
@@ -170,6 +225,7 @@ FAMILIES: dict[str, Family] = {
         guess=_voce_guess,
         bounds=_voce_bounds,
         describe="sigma = s0 + Q(1 - exp(-b*eps)) — 포화형. 큰 변형에서 일정해진다.",
+        applies_to=METALLIC,
     ),
     "swift": Family(
         key="swift",
@@ -180,6 +236,7 @@ FAMILIES: dict[str, Family] = {
         guess=_swift_guess,
         bounds=_swift_bounds,
         describe="sigma = K(e0 + eps)^n — 멱함수형. 큰 변형에서도 계속 올라간다.",
+        applies_to=METALLIC,
     ),
     "hockett_sherby": Family(
         key="hockett_sherby",
@@ -190,8 +247,45 @@ FAMILIES: dict[str, Family] = {
         guess=_hockett_guess,
         bounds=_hockett_bounds,
         describe="sigma = s0 + Q(1 - exp(-b*eps^n)) — 포화형이면서 초기 기울기가 자유롭다.",
+        applies_to=METALLIC,
     ),
 }
+
+
+def register_family(family: Family) -> Family:
+    """식을 레지스트리에 등록한다. **등록하면 API·화면이 따라온다.**"""
+    if family.key in FAMILIES:
+        raise ValueError(f"적합식 key 중복: {family.key}")
+    FAMILIES[family.key] = family
+    return family
+
+
+def load_builtin() -> None:
+    """내장 적합식을 등록한다.
+
+    import 부작용에 기대지 않고 명시적으로 부른다 — `processing.load_builtin`·
+    `cards.load_builtin` 과 같은 이유다.
+    """
+    from matcore.fitting import hyperelastic  # noqa: F401
+
+
+def families_for(material_family: str | None = None) -> list[Family]:
+    """이 재료군에서 뜻이 있는 식.
+
+    **금속 경화식과 고무 초탄성을 한 목록에 섞어 RMSE 로 줄 세우면 안 된다** —
+    같은 물음의 답이 아니고, 축도 달라서 한 그래프에 겹쳐 그릴 수 없다.
+
+    **아무 식도 이 재료군을 선언하지 않았으면 감추지 않는다.** 재료군 축은
+    `open` 이라 사람이 `Foam` 이든 `Composite` 든 만들 수 있다(기준정보 정의
+    참조). 그때 목록을 비우면 화면이 텅 비고, **왜 비었는지 알 길이 없다** —
+    사람은 시스템 밖에서 계산하게 된다. 모르면 전부 주고 고르게 한다.
+    """
+    load_builtin()
+    every = list(FAMILIES.values())
+    if material_family is None:
+        return every
+    matched = [item for item in every if material_family in item.applies_to]
+    return matched or every
 
 
 def plastic_branch(
@@ -278,7 +372,7 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
     relative = rmse / scale
 
     notes = [
-        f"{family.label} 을 소성변형률 {float(strain[0]):.5g}~{float(strain[-1]):.5g} "
+        f"{family.label} 을 {family.x_label} {float(strain[0]):.5g}~{float(strain[-1]):.5g} "
         f"구간의 {len(strain)}점에 적합했습니다 (상대 RMSE {relative * 100:.3g}%).",
         # **적합 구간 밖은 식마다 전혀 다르다.** Swift 는 계속 올라가고 Voce 는
         # 포화한다 — 어느 쪽이 맞는지는 데이터에 없다.
@@ -292,6 +386,10 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
         )
     if not solved.success:
         notes.append("최적화가 수렴하지 않았습니다. 파라미터가 경계에 붙어 있는지 확인하세요.")
+    # **적합은 됐는데 해석이 발산하는 계수가 있다.** 고무에서 실제로 나는 일이라
+    # 식이 스스로 짚는다 — 막지는 않는다.
+    if family.stability is not None:
+        notes.extend(family.stability(fitted, strain))
     for index, name in enumerate(family.parameter_names):
         if np.isclose(fitted[index], lower[index]) or np.isclose(fitted[index], upper[index]):
             notes.append(

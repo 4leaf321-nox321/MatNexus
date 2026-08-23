@@ -486,7 +486,10 @@ export interface paths {
         };
         /**
          * List Families
-         * @description 등록된 경화식. **화면이 이 응답만으로 목록을 그린다.**
+         * @description 등록된 적합식. **화면이 이 응답만으로 목록을 그린다.**
+         *
+         *     재료를 주면 그 재료군에서 뜻이 있는 것만 낸다. **금속 경화식과 고무 초탄성을
+         *     한 목록에 섞어 RMSE 로 줄 세우면 안 된다** — 같은 물음의 답이 아니다.
          */
         get: operations["list_families_api_fitting_families_get"];
         put?: never;
@@ -3228,6 +3231,11 @@ export interface components {
         };
         /** FamilyOut */
         FamilyOut: {
+            /**
+             * Block
+             * @default hardening
+             */
+            block: string;
             /** Describe */
             describe: string;
             /** Key */
@@ -3238,6 +3246,16 @@ export interface components {
             parameter_names: string[];
             /** Parameter Units */
             parameter_units: string[];
+            /**
+             * X Label
+             * @default 진소성변형률
+             */
+            x_label: string;
+            /**
+             * Y Label
+             * @default 진응력
+             */
+            y_label: string;
         };
         /** FitOut */
         FitOut: {
@@ -3268,6 +3286,16 @@ export interface components {
             strain_max: number;
             /** Strain Min */
             strain_min: number;
+            /**
+             * X Label
+             * @default 진소성변형률
+             */
+            x_label: string;
+            /**
+             * Y Label
+             * @default 진응력
+             */
+            y_label: string;
         };
         /** FitPreviewOut */
         FitPreviewOut: {
@@ -6928,7 +6956,9 @@ export interface operations {
     };
     list_families_api_fitting_families_get: {
         parameters: {
-            query?: never;
+            query?: {
+                material_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6942,6 +6972,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FamilyOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
