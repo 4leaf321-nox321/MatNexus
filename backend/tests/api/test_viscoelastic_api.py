@@ -26,7 +26,7 @@ from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
 from app.modules.viscoelastic import services
-from matcore import cards
+from matcore import cards, export
 from matcore.registry import Produced
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -392,19 +392,20 @@ class Test블록선언:
 
 
 class TestD7:
-    """**새 물성 1종에 드는 것이 `BlockSpec` 하나인가.**
+    """**새 물성 1종에 드는 것이 블록 선언과 렌더러뿐인가.**
 
     ADR 0012 의 주장이고 Phase 5 의 수용 기준이다. 사람이 세지 않고 기계가 센다 —
     "마이그레이션 없이 붙는다" 는 말은 지키기 쉬운 대신 **어긴 것을 눈치채기가
     어렵다.** 컬럼 하나를 슬쩍 더하면 그 순간 주장이 무너지는데 아무도 모른다.
     """
 
-    def test_블록_하나로_API_까지_따라온다(
+    def test_블록과_렌더러만으로_API_까지_따라온다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
-        saved = cards.list_blocks()
+        blocks = cards.list_blocks()
+        renderers = export.list_renderers()
         try:
-            # **이것이 새 물성 1종을 더하는 전부다.** 아래로 아무것도 안 고친다.
+            # ── 새 물성 1종을 더하는 전부다. 아래로 아무것도 안 고친다 ──────
             cards.register_block(
                 cards.BlockSpec(
                     key="pretend_hyperelastic",
@@ -412,22 +413,54 @@ class TestD7:
                     help="D7 을 재려고 지어냈다. 실제 물성이 아니다.",
                     produces=(Produced(key="mu_1", label="μ₁", si_unit="Pa"),),
                     rows=(Produced(key="alpha", label="지수", si_unit="1"),),
-                    to_card=lambda payload: {"density": 1000.0},
                 )
             )
 
+            @export.register_renderer(
+                key="pretend_solver",
+                label="지어낸 솔버",
+                extension="txt",
+                describe="D7 을 재려고 지어냈다.",
+                keywords=("*PRETEND",),
+                needs=(export.Need("pretend_hyperelastic", values=("mu_1",)),),
+            )
+            def render(deck: export.Deck) -> export.Rendered:
+                mu = deck.number("pretend_hyperelastic", "mu_1")
+                return export.Rendered(text=f"*PRETEND\n{mu}\n")
+
+            # ── 여기서부터는 전부 따라와야 한다 ────────────────────────────
             listed = client.get("/api/fitting/blocks", headers=admin_headers).json()
             mine = next(one for one in listed if one["key"] == "pretend_hyperelastic")
             assert mine["label"] == "지어낸 초탄성"
             assert mine["produces"][0]["si_unit"] == "Pa"
             assert mine["rows"][0]["label"] == "지수"
+            # **덱에 실리는지는 렌더러가 정한다.** 블록이 스스로 말하지 않는다.
             assert mine["in_deck"] is True
 
-            # 카드에 실리는 자리도 따라온다 — 마이그레이션 0.
-            assert cards.card_kwargs({"pretend_hyperelastic": {"values": {"mu_1": 1.0}}}) == {
-                "density": 1000.0
-            }
+            formats = client.get("/api/fitting/formats", headers=admin_headers).json()
+            solver = next(one for one in formats if one["key"] == "pretend_solver")
+            assert solver["label"] == "지어낸 솔버"
+            # **누르기 전에 알려 준다** — 무엇이 있어야 하는지를 값 이름으로.
+            # 블록 이름("지어낸 초탄성")이 아니라 값 이름("μ₁")이다: 사람이 찾는
+            # 것은 "이 카드에 뭐가 빠졌나" 이지 "어느 블록이냐" 가 아니다.
+            assert solver["requires"] == ["μ₁"]
+
+            # 덱까지 실제로 나온다.
+            deck = export.Deck(
+                name="M",
+                solver_id=1,
+                blocks={"pretend_hyperelastic": {"values": {"mu_1": 1.0}}},
+            )
+            assert "pretend_solver" in export.available_formats(deck)
+            assert "*PRETEND" in export.render("pretend_solver", deck).text
+
+            # 값이 없으면 못 낸다고 말한다.
+            empty = export.Deck(name="M", solver_id=1, blocks={})
+            assert export.missing_for(empty, "pretend_solver") == ("지어낸 초탄성",)
         finally:
             cards.clear()
-            for spec in saved:
+            for spec in blocks:
                 cards.register_block(spec)
+            export.clear_renderers()
+            for item in renderers:
+                export.add_renderer(item)

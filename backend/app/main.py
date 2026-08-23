@@ -37,8 +37,10 @@ from app.schema_version import warn_if_behind
 from app.shared.access_log import AccessLogMiddleware
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
+from matcore import extensions
 
 logger = logging.getLogger(__name__)
+
 
 API_PREFIX = "/api"
 
@@ -127,6 +129,18 @@ def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings)
     _guard_production_secrets(settings)
+
+    # **확장을 먼저 읽는다.** 라우트가 뜨기 전에 레지스트리가 차 있어야
+    # `/fitting/blocks`·`/fitting/formats` 가 확장의 물성을 낸다.
+    #
+    # 하나가 터져도 서버는 뜬다 — 남의 확장 때문에 내 물성을 못 쓰면 안 되고,
+    # 그 사실이 "서버가 안 켜진다" 로만 보이면 더 나쁘다.
+    for failed in extensions.failures(extensions.load(settings.extensions_dir)):
+        logger.error(
+            "확장 '%s' 를 읽지 못했습니다 — 그 물성은 목록에 안 뜹니다.\n%s",
+            failed.name,
+            failed.error,
+        )
 
     app = FastAPI(
         title="MatNexus API",

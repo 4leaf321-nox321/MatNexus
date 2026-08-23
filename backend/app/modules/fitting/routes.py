@@ -102,6 +102,10 @@ def list_blocks(user: User = Depends(current_user)) -> list[BlockSpecOut]:
     더하는 값을 마이그레이션 0·화면 0 으로 만드는 자리다(D7).
     """
     cards.load_builtin()
+    # **어느 블록이 덱에 실리는지는 렌더러들이 안다.** 전에는 블록이 스스로
+    # 선언했는데(`to_card is not None`), 실제로 쓰이는지와 어긋날 수 있었다 —
+    # 지금은 등록된 솔버들이 실제로 요구하는 것에서 계산한다.
+    in_decks = export.blocks_in_decks()
     return [
         BlockSpecOut(
             key=spec.key,
@@ -109,7 +113,7 @@ def list_blocks(user: User = Depends(current_user)) -> list[BlockSpecOut]:
             help=spec.help,
             produces=[_produced(one) for one in spec.produces],
             rows=[_produced(one) for one in spec.rows],
-            in_deck=spec.to_card is not None,
+            in_deck=spec.key in in_decks,
         )
         for spec in cards.list_blocks()
     ]
@@ -375,15 +379,17 @@ def preview(
     )
 
 
-def _export_card(
-    item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()
-) -> export.Card:
-    """카드 행을 솔버 카드로. **여기가 블록 이름을 모른다** — 레지스트리가 푼다."""
-    return export.Card(
+def _deck(item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()) -> export.Deck:
+    """카드 행을 솔버 덱으로. **블록을 그대로 넘긴다.**
+
+    전에는 여기서 `card_kwargs` 로 블록을 "카드 양식" 의 칸에 옮겨 담았다. 그
+    양식이 없어졌으므로 옮길 일도 없다 — 무엇이 필요한지는 렌더러가 안다.
+    """
+    return export.Deck(
         name=name,
         solver_id=export.solver_id_from(str(item.id)),
+        blocks=item.blocks,
         provenance=provenance,
-        **cards.card_kwargs(item.blocks),
     )
 
 
@@ -397,12 +403,14 @@ def _card_out(db: Session, item: PropertyCard) -> PropertyCardOut:
     # 모르는 블록이 실려 있으면(그 물성을 만든 계산이 지금 코드에 없으면) 목록
     # 전체가 죽지 않게 붙잡되, **없던 일로 하지는 않는다** — `problem` 에 담아
     # 화면이 그 카드만 짚을 수 있게 한다.
-    problem: str | None = None
-    formats: list[str] = []
-    try:
-        formats = list(export.available_formats(_export_card(item, name="CARD")))
-    except cards.CardError as exc:
-        problem = str(exc)
+    strays = cards.unknown(item.blocks)
+    problem = (
+        f"모르는 물성 블록입니다: {', '.join(strays)}. 이 카드를 만든 계산이 지금 "
+        f"코드에 없습니다."
+        if strays
+        else None
+    )
+    formats = list(export.available_formats(_deck(item, name="CARD")))
     return PropertyCardOut(
         id=item.id,
         material_id=item.material_id,
@@ -751,9 +759,9 @@ def list_formats(user: User = Depends(current_user)) -> list[ExportFormatOut]:
             label=item.label,
             extension=item.extension,
             describe=item.describe,
-            requires=[export.VALUE_LABELS[name] for name in item.requires],
+            requires=list(export.requires_labels(item.key)),
         )
-        for item in export.FORMATS.values()
+        for item in export.list_renderers()
     ]
 
 
@@ -825,23 +833,18 @@ def export_card(
             f"{float(hardening.get('strain_max', 0.0)):.5g} (그 밖은 검증되지 않았습니다)"
         )
 
+    deck = _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
     try:
-        card = _export_card(
-            item, name=export.sanitize_name(base), provenance=tuple(provenance)
-        )
-    except cards.CardError as exc:
-        raise AppError("MNX-FITTING-0010", str(exc), status=422) from exc
-    try:
-        rendered = export.render(format, card)
+        rendered = export.render(format, deck)
+        target = export.renderer(format)
     except export.ExportError as exc:
         raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
 
-    target = export.FORMATS[format]
     return Response(
         content=rendered.text,
         media_type=target.media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{card.name}.{target.extension}"'
+            "Content-Disposition": f'attachment; filename="{deck.name}.{target.extension}"'
         },
     )
 

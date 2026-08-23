@@ -11,20 +11,46 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
 from matcore import export
 
-CARD = export.Card(
-    name="DP600_MD",
-    solver_id=42,
-    youngs_modulus=200e9,
-    poisson_ratio=0.3,
-    density=7850.0,
-    points=((0.0, 250e6), (0.01, 300e6), (0.05, 340e6)),
-    provenance=("시편 3개 · SECC_MDOI_1.0",),
-)
+
+def deck(
+    *,
+    youngs_modulus: float | None = 200e9,
+    poisson_ratio: float | None = 0.3,
+    density: float | None = 7850.0,
+    points: tuple[tuple[float, float], ...] = (
+        (0.0, 250e6),
+        (0.01, 300e6),
+        (0.05, 340e6),
+    ),
+    provenance: tuple[str, ...] = ("시편 3개 · SECC_MDOI_1.0",),
+) -> export.Deck:
+    """탄소성 덱 하나. **블록으로 담는다** — 카드 양식은 없어졌다."""
+    elastic = {
+        key: value
+        for key, value in (
+            ("youngs_modulus", youngs_modulus),
+            ("poisson_ratio", poisson_ratio),
+            ("density", density),
+        )
+        if value is not None
+    }
+    blocks: dict[str, Any] = {}
+    if elastic:
+        blocks["elastic"] = {"values": elastic}
+    if points:
+        blocks["table"] = {
+            "rows": [{"plastic_strain": x, "true_stress": y} for x, y in points]
+        }
+    return export.Deck(name="DP600_MD", solver_id=42, blocks=blocks, provenance=provenance)
+
+
+CARD = deck()
 
 
 class Test형식:
@@ -47,7 +73,7 @@ class Test형식:
         lines = export.render("openradioss", CARD).text.splitlines()
         start = lines.index(f"#{'X':>19}{'Y':>20}") + 1
         rows = lines[start : lines.index("/END")]
-        assert len(rows) == len(CARD.points)
+        assert len(rows) == len(CARD.rows("table"))
         for row in rows:
             assert len(row) == 40, row
         # 스칼라 한 줄짜리 필드도 같은 칸이다.
@@ -61,10 +87,19 @@ class Test형식:
         # Abaqus 는 단위 키워드가 없다. 그래서 주석으로 적는다.
         assert "Consistent units: kg, m, s, Pa" in export.render("abaqus", CARD).text
 
-    def test_중립_JSON_은_단위를_필드_이름에_박는다(self) -> None:
+    def test_중립_JSON_은_스스로_설명한다(self) -> None:
+        """**받는 사람이 되짚을 수 있어야 한다.** 값 옆에 이름과 단위를 적는다 —
+        `200000000000` 만 남으면 Pa 인지 MPa 인지 알 길이 없다.
+
+        정해진 칸이 없다. 카드에 실린 블록을 그대로 낸다 — 새 물성이 저절로
+        따라온다."""
         body = json.loads(export.render("json", CARD).text)
-        assert body["elastic"]["youngs_modulus_pa"] == 200e9
-        assert body["plasticity"]["points"][0]["true_stress_pa"] == 250e6
+        elastic = body["blocks"]["elastic"]
+        assert elastic["values"]["youngs_modulus"] == 200e9
+        assert elastic["declared"]["youngs_modulus"]["si_unit"] == "Pa"
+        assert elastic["label"] == "탄성"
+        rows = body["blocks"]["table"]["rows"]
+        assert rows[0]["true_stress"] == 250e6
 
     def test_같은_카드는_같은_바이트다(self) -> None:
         # 두 파일이 다른지 보려고 열어 보는 일이 실제로 생긴다.
@@ -80,32 +115,20 @@ class Test형식:
 class Test없는값:
     def test_푸아송비가_없으면_거부한다(self) -> None:
         """0.3 을 넣으면 그것이 측정값인지 덱만 봐서는 알 수 없다."""
-        card = export.Card(name="X", solver_id=1, youngs_modulus=200e9, points=CARD.points)
+        card = deck(poisson_ratio=None, density=None)
         with pytest.raises(export.ExportError, match="푸아송비"):
             export.render("abaqus", card)
 
     def test_밀도가_없으면_openradioss_는_거부한다(self) -> None:
         # LAW36 은 RHO_I 가 자리 있는 필드다. 비울 수 없다.
-        card = export.Card(
-            name="X",
-            solver_id=1,
-            youngs_modulus=200e9,
-            poisson_ratio=0.3,
-            points=CARD.points,
-        )
+        card = deck(density=None)
         with pytest.raises(export.ExportError, match="밀도"):
             export.render("openradioss", card)
 
     def test_밀도가_없으면_abaqus_는_빼고_그_사실을_적는다(self) -> None:
         """`*DENSITY` 는 Abaqus 에서 선택이다. 빼되 **왜 뺐는지 덱에 적는다** —
         동적 해석을 돌리려던 사람이 덱만 보고 알 수 있어야 한다."""
-        card = export.Card(
-            name="X",
-            solver_id=1,
-            youngs_modulus=200e9,
-            poisson_ratio=0.3,
-            points=CARD.points,
-        )
+        card = deck(density=None)
         result = export.render("abaqus", card)
         assert "*DENSITY" not in result.text
         assert "동적 해석" in result.text
@@ -119,14 +142,8 @@ class Test표정리:
         **마지막 0 점이 항복점이다.** 첫 점을 쓰면 응력이 0 에 가까운 곳을
         항복강도라고 적게 된다.
         """
-        card = export.Card(
-            name="X",
-            solver_id=1,
-            youngs_modulus=200e9,
-            poisson_ratio=0.3,
-            points=((0.0, 10e6), (0.0, 150e6), (0.0, 250e6), (0.01, 300e6)),
-        )
-        points, notes = export.prepare(card.points)
+        card = deck(points=((0.0, 10e6), (0.0, 150e6), (0.0, 250e6), (0.01, 300e6)))
+        points, notes = export.prepare(card.pairs("table", "plastic_strain", "true_stress"))
         assert points[0] == (0.0, 250e6)
         assert len(points) == 2
         assert any("항복점" in note for note in notes)
@@ -204,7 +221,7 @@ class Test태도:
         """
         for key in export.available_formats(CARD):
             text = export.render(key, CARD).text
-            for word in export.FORMATS[key].keywords:
+            for word in export.renderer(key).keywords:
                 assert word in text
 
     def test_모르는_형식은_있는_것을_알려_준다(self) -> None:

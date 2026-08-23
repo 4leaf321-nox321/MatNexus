@@ -6,22 +6,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from matcore.cards import BlockSpec, register_block, rows_of, values_of
+from matcore.cards import BlockSpec, register_block
 from matcore.registry import Produced
-
-
-def _elastic_to_card(payload: Any) -> dict[str, Any]:
-    """**없는 값은 넣지 않는다.** 0 이나 0.3 으로 채우면 그것이 측정값인지
-    우리가 채운 값인지 덱만 봐서는 알 수 없다."""
-    values = values_of(payload)
-    return {
-        name: values[name]
-        for name in ("youngs_modulus", "poisson_ratio", "density")
-        if values.get(name) is not None
-    }
-
 
 ELASTIC = register_block(
     BlockSpec(
@@ -53,7 +39,6 @@ ELASTIC = register_block(
                 help="동적 해석에 필요하다. 시료의 실측값이 있으면 그것을 쓴다.",
             ),
         ),
-        to_card=_elastic_to_card,
         order=10,
     )
 )
@@ -102,20 +87,9 @@ HARDENING = register_block(
             Produced(key="value", label="값", si_unit="1", help="행이 자기 단위를 들고 있다."),
         ),
         # **덱에 안 실린다.** 실리지 않는다고 쓸모없는 것이 아니라 실리는 자리가
-        # 다르다 — 내보내기가 주석에 한 줄로 적는다.
-        to_card=None,
         order=20,
     )
 )
-
-
-def _table_to_card(payload: Any) -> dict[str, Any]:
-    return {
-        "points": tuple(
-            (float(row["plastic_strain"]), float(row["true_stress"]))
-            for row in rows_of(payload)
-        )
-    }
 
 
 TABLE = register_block(
@@ -130,7 +104,6 @@ TABLE = register_block(
             Produced(key="plastic_strain", label="진소성변형률", si_unit="1"),
             Produced(key="true_stress", label="진응력", si_unit="Pa"),
         ),
-        to_card=_table_to_card,
         order=30,
     )
 )

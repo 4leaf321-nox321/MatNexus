@@ -505,10 +505,16 @@ class Test내보내기:
         body = client.get(
             f"/api/fitting/cards/{card['id']}/export?format=json", headers=admin_headers
         ).json()
-        assert body["schema"] == "matnexus.property-card/1"
+        # **/2 는 정해진 칸을 없앤 판이다.** 전에는 `elastic`·`plasticity` 를
+        # 손으로 적어서 물성이 늘면 이 함수도 커졌다. 지금은 카드에 실린 블록을
+        # 그대로 내고, 값의 이름·단위 선언을 같이 싣는다.
+        assert body["schema"] == "matnexus.property-card/2"
         assert body["units"]["stress"] == "Pa"
-        assert body["elastic"]["youngs_modulus_pa"] > 0
-        assert len(body["plasticity"]["points"]) >= 2
+        elastic = body["blocks"]["elastic"]
+        assert elastic["values"]["youngs_modulus"] > 0
+        # **스스로 설명한다** — 값 옆에 이름과 단위가 함께 실린다.
+        assert elastic["declared"]["youngs_modulus"]["si_unit"] == "Pa"
+        assert len(body["blocks"]["table"]["rows"]) >= 2
 
 
 class Test상태:

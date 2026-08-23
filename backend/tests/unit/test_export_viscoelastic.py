@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from matcore.export import FORMATS, Card, ExportError, render
+from matcore.export import Deck, ExportError, list_renderers, render
 from matcore.prony import PronySeries, PronyTerm
 
 SERIES = PronySeries(
@@ -29,25 +29,50 @@ SERIES = PronySeries(
 )
 
 
-def card(**overrides: object) -> Card:
-    values: dict[str, object] = {
-        "name": "EPDM_60",
-        "solver_id": 42,
-        "youngs_modulus": SERIES.instantaneous_pa,
-        "poisson_ratio": 0.45,
-        "density": 1100.0,
-        "prony": tuple(
-            zip(
-                SERIES.relative_moduli,
-                [term.relaxation_time_s for term in SERIES.terms],
-                strict=True,
-            )
-        ),
-        "prony_reference_temperature": 293.15,
-        "provenance": ("DMA 스윕 6단 · WLF 겹침 · Prony 3항",),
+def card(
+    *,
+    youngs_modulus: float | None = None,
+    poisson_ratio: float | None = 0.45,
+    density: float | None = 1100.0,
+    prony: bool = True,
+    reference: float | None = 293.15,
+) -> Deck:
+    """점탄성 덱 하나. **블록으로 담는다.**
+
+    `*ELASTIC` 에 들어갈 E₀ 는 **탄성 블록**이 든다. 평형 탄성률이 실리면 재료가
+    통째로 무르게 계산되는데 덱은 멀쩡히 돌고 결과도 그럴듯하다.
+    """
+    elastic = {
+        key: value
+        for key, value in (
+            (
+                "youngs_modulus",
+                SERIES.instantaneous_pa if youngs_modulus is None else youngs_modulus,
+            ),
+            ("poisson_ratio", poisson_ratio),
+            ("density", density),
+        )
+        if value is not None
     }
-    values.update(overrides)
-    return Card(**values)  # type: ignore[arg-type]
+    blocks: dict[str, object] = {"elastic": {"values": elastic}}
+    if prony:
+        blocks["viscoelastic"] = {
+            "values": {"reference_temperature_k": reference},
+            "rows": [
+                {
+                    "relative_modulus": ratio,
+                    "relaxation_time_s": term.relaxation_time_s,
+                    "modulus_pa": term.modulus_pa,
+                }
+                for ratio, term in zip(SERIES.relative_moduli, SERIES.terms, strict=True)
+            ],
+        }
+    return Deck(
+        name="EPDM_60",
+        solver_id=42,
+        blocks=blocks,
+        provenance=("DMA 스윕 6단 · WLF 겹침 · Prony 3항",),
+    )
 
 
 class Test카드:
@@ -108,7 +133,7 @@ class Test적어야하는것:
 
     def test_온도가_없으면_없다고_말한다(self) -> None:
         """조용히 빼면 이 카드가 어느 온도의 것인지 덱만으로는 알 수 없다."""
-        result = render("abaqus_viscoelastic", card(prony_reference_temperature=None))
+        result = render("abaqus_viscoelastic", card(reference=None))
         assert any("기준 온도가 카드에 없어" in note for note in result.notes)
 
     def test_한_일을_노트로_남긴다(self) -> None:
@@ -118,10 +143,11 @@ class Test적어야하는것:
 
 class Test거절:
     def test_Prony_가_없으면_거절한다(self) -> None:
-        """**빈 튜플이 기본값이라 `None` 검사만으로는 안 걸린다.** 실제로 그래서
-        검사를 빠져나갔다."""
-        with pytest.raises(ExportError, match="Prony 계수"):
-            render("abaqus_viscoelastic", card(prony=()))
+        """**빈 블록은 없는 것과 같다.** 전에는 빈 튜플이 기본값이라 `None`
+        검사를 빠져나갔는데, 지금은 렌더러가 "점탄성 블록에 표 1줄 이상" 을
+        선언하고 그 검사가 한 곳에 있다."""
+        with pytest.raises(ExportError, match="점탄성"):
+            render("abaqus_viscoelastic", card(prony=False))
 
     def test_푸아송비가_없으면_거절한다(self) -> None:
         """0.3 을 넣으면 그것이 측정값인지 덱만 봐서는 알 수 없다."""
@@ -131,8 +157,20 @@ class Test거절:
     def test_상대_탄성률_합이_1_이상이면_거절한다(self) -> None:
         """평형 탄성률이 0 이하라는 뜻이라 Abaqus 가 거부한다. 여기서 막는 편이
         낫다 — 솔버가 뱉는 오류는 우리 계수 이야기를 안 해 준다."""
+        over = card()
+        blocks = dict(over.blocks)
+        blocks["viscoelastic"] = {
+            "values": {"reference_temperature_k": 293.15},
+            "rows": [
+                {"relative_modulus": 0.6, "relaxation_time_s": 1e-2},
+                {"relative_modulus": 0.5, "relaxation_time_s": 1.0},
+            ],
+        }
         with pytest.raises(ExportError, match="1 이상"):
-            render("abaqus_viscoelastic", card(prony=((0.6, 1e-2), (0.5, 1.0))))
+            render(
+                "abaqus_viscoelastic",
+                Deck(name=over.name, solver_id=over.solver_id, blocks=blocks),
+            )
 
     def test_밀도는_없어도_된다(self) -> None:
         """`*DENSITY` 는 Abaqus 에서 선택이다. 빼되 **왜 뺐는지 적는다.**"""
@@ -143,21 +181,33 @@ class Test거절:
 
 class Test형식목록:
     def test_점탄성이_목록에_있다(self) -> None:
-        assert "abaqus_viscoelastic" in FORMATS
+        assert "abaqus_viscoelastic" in {item.key for item in list_renderers()}
 
     def test_OpenRadioss_점탄성은_없다(self) -> None:
         """**LAW62 는 고무 초탄성 경로다.** 검증 못 하는 솔버 문법을 지어내지
         않는다 — 65 도 같은 이유로 Abaqus 만 낸다."""
-        assert not any("radioss" in key and "visco" in key for key in FORMATS)
+        keys = {item.key for item in list_renderers()}
+        assert not any("radioss" in key and "visco" in key for key in keys)
 
     def test_탄소성_카드는_그대로다(self) -> None:
         """점탄성을 붙이면서 기존 경로가 안 깨져야 한다."""
-        plastic = Card(
+        plastic = Deck(
             name="SECC",
             solver_id=1,
-            youngs_modulus=200e9,
-            poisson_ratio=0.3,
-            density=7850.0,
-            points=((0.0, 300e6), (0.05, 350e6)),
+            blocks={
+                "elastic": {
+                    "values": {
+                        "youngs_modulus": 200e9,
+                        "poisson_ratio": 0.3,
+                        "density": 7850.0,
+                    }
+                },
+                "table": {
+                    "rows": [
+                        {"plastic_strain": 0.0, "true_stress": 300e6},
+                        {"plastic_strain": 0.05, "true_stress": 350e6},
+                    ]
+                },
+            },
         )
         assert "*PLASTIC" in render("abaqus", plastic).text

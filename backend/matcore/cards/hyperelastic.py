@@ -7,29 +7,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from matcore.cards import BlockSpec, register_block, rows_of, values_of
+from matcore.cards import BlockSpec, register_block
 from matcore.registry import Produced
-
-
-def _to_card(payload: Any) -> dict[str, Any]:
-    """식 이름과 계수를 그대로 넘긴다.
-
-    **환산하지 않는다.** Abaqus 의 `*HYPERELASTIC` 은 식마다 받는 계수의 이름과
-    순서가 다르고, 그 매핑은 내보내기가 안다 — 여기서 섞으면 두 곳이 갈라진다.
-    """
-    values = values_of(payload)
-    family = values.get("family")
-    if not family:
-        return {}
-    return {
-        "hyperelastic_family": str(family),
-        "hyperelastic_parameters": tuple(
-            (str(row["name"]), float(row["value"])) for row in rows_of(payload)
-        ),
-    }
-
 
 HYPERELASTIC = register_block(
     BlockSpec(
@@ -86,7 +65,6 @@ HYPERELASTIC = register_block(
             Produced(key="name", label="파라미터", si_unit="1"),
             Produced(key="value", label="값", si_unit="1", help="행이 자기 단위를 든다."),
         ),
-        to_card=_to_card,
         order=25,
     )
 )

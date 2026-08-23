@@ -34,7 +34,7 @@ DB 도 HTTP 도 모른다. `tests/architecture` 가 검사한다.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -66,39 +66,74 @@ class ExportError(Exception):
 
 
 @dataclass(frozen=True)
-class Card:
-    """내보낼 물성 한 벌. **전부 SI 다.**"""
+class Need:
+    """이 솔버가 **어느 물성 블록을 먹는지.**
+
+    전에는 `Card` 의 필드 이름을 가리켰다(`("youngs_modulus", "prony")`). 그래서
+    새 물성이 붙을 때마다 그 dataclass 에 칸을 뚫어야 했고, 그것이 **중심 코드를
+    고쳐야 하는 마지막 자리**였다.
+
+    지금은 블록 이름을 가리킨다. 블록은 레지스트리의 데이터라(ADR 0012) 새 물성이
+    붙어도 이 파일은 안 커진다.
+    """
+
+    block: str
+    values: tuple[str, ...] = ()
+    """이 블록에서 반드시 있어야 하는 값."""
+    rows_min: int = 0
+    """이 블록의 표에 최소 몇 줄이 있어야 하는가."""
+    optional: bool = False
+    """없어도 덱은 나온다. **다만 덱에 그 사실을 적는다** — 밀도가 그렇다."""
+
+
+@dataclass(frozen=True)
+class Deck:
+    """솔버 덱으로 나갈 것 — **물성 블록을 그대로 들고 있다.**
+
+    전에는 `Card` 라는 **정해진 양식**이었다. 칸이 미리 뚫려 있어서(탄성계수·
+    푸아송비·밀도·소성표·Prony·초탄성 계수) 물성이 늘 때마다 이 파일에 칸을 더해야
+    했다. 점탄성이 2칸, 초탄성이 3칸을 뚫었다.
+
+    지금은 카드가 가진 블록을 통째로 받고, 무엇이 필요한지는 **렌더러가 선언한다**.
+
+    ## 값은 전부 SI 다
+
+    블록에 담기는 순간 SI 로 저장된다(ADR 0012). 여기서 환산하지 않는다 — 단위계가
+    섞인 덱은 조용히 1000배 틀린 답을 낸다.
+    """
 
     name: str
     """솔버 덱 안의 재료 이름. ASCII 로 정리된 것이 들어온다."""
     solver_id: int
-    youngs_modulus: float | None = None
-    poisson_ratio: float | None = None
-    density: float | None = None
-    points: tuple[tuple[float, float], ...] = ()
-    """(진소성변형률, 진응력). 정리 전 원본이 들어온다 — 정리는 여기서 한다."""
+    blocks: Mapping[str, Any] = field(default_factory=dict)
+    """`{블록 key: {"values": {...}, "rows": [...], "notes": [...]}}`."""
     provenance: tuple[str, ...] = ()
     """어디서 나온 값인지. **카드 주석으로 들어간다** — 덱만 받은 사람이 되짚을
     수 있어야 한다."""
 
-    prony: tuple[tuple[float, float], ...] = ()
-    """(gᵢ, τᵢ). 점탄성 상대 탄성률과 완화시간 — `matcore.prony` 가 낸 것.
+    def has(self, block: str) -> bool:
+        return bool(self.blocks.get(block))
 
-    **이게 있으면 `youngs_modulus` 는 순간 탄성률(E₀)이다.** Abaqus 는
-    `*VISCOELASTIC` 이 있을 때 `*ELASTIC` 을 순간 탄성률로 읽는다. 평형
-    탄성률로 넣으면 재료가 통째로 무르게 계산된다."""
-    prony_reference_temperature: float | None = None
-    """마스터커브를 겹친 기준 온도(K). **이 카드가 유효한 온도다** — 다른
-    온도의 해석에 그대로 쓰면 안 된다는 사실이 덱에 적혀야 한다."""
+    def values(self, block: str) -> dict[str, Any]:
+        payload = self.blocks.get(block) or {}
+        got = payload.get("values") if isinstance(payload, Mapping) else None
+        return dict(got) if isinstance(got, Mapping) else {}
 
-    hyperelastic_family: str | None = None
-    """`neo_hookean` · `mooney_rivlin` · `yeoh` · `ogden_1`.
+    def rows(self, block: str) -> list[dict[str, Any]]:
+        payload = self.blocks.get(block) or {}
+        got = payload.get("rows") if isinstance(payload, Mapping) else None
+        return [dict(row) for row in got] if isinstance(got, list) else []
 
-    **이름을 그대로 받는다.** 식마다 솔버 키워드와 계수 순서가 다르고, 그 매핑은
-    여기가 안다 — 카드 쪽에서 미리 섞으면 두 곳이 갈라진다."""
-    hyperelastic_parameters: tuple[tuple[str, float], ...] = ()
-    """`(이름, 값)`. 순서가 아니라 **이름으로** 자리를 찾는다 — 순서로 받으면
-    파라미터가 하나 늘었을 때 조용히 어긋난다."""
+    def number(self, block: str, key: str) -> float | None:
+        """숫자 하나. **없으면 없는 채로 준다** — 0 으로 바꾸지 않는다."""
+        value = self.values(block).get(key)
+        return float(value) if isinstance(value, int | float) else None
+
+    def pairs(self, block: str, x: str, y: str) -> tuple[tuple[float, float], ...]:
+        """표에서 두 열을 뽑아 점 목록으로."""
+        return tuple(
+            (float(row[x]), float(row[y])) for row in self.rows(block) if x in row and y in row
+        )
 
 
 @dataclass(frozen=True)
@@ -214,34 +249,167 @@ def prepare(
 
 
 #: 값 이름의 한국어. 오류 메시지와 형식 목록이 같은 말을 쓴다.
-VALUE_LABELS = {
-    "youngs_modulus": "탄성계수",
-    "poisson_ratio": "푸아송비",
-    "density": "밀도",
-    "prony": "Prony 계수",
-    "points": "소성 표",
-    "hyperelastic_parameters": "초탄성 계수",
-}
+def _label(block: str, key: str | None = None) -> str:
+    """사람이 읽는 이름. **레지스트리가 이미 갖고 있다** — 여기서 다시 적지 않는다.
 
-
-def _require(card: Card, names: tuple[str, ...], *, solver: str) -> None:
-    """이 솔버가 반드시 있어야 하는 값. **없으면 거부한다.**
-
-    `None` 만 보면 안 된다 — Prony 계수처럼 **빈 튜플이 기본값**인 것은 없는
-    것과 같은데 `None` 이 아니다. 실제로 그래서 검사를 빠져나갔다.
+    등록되지 않은 블록이면 key 를 그대로 쓴다. 이름을 모른다고 침묵하는 것보다
+    낫다 — 그 상황 자체가 알려야 할 일이다.
     """
-    missing = [
-        VALUE_LABELS[name]
-        for name in names
-        if getattr(card, name) is None or getattr(card, name) == ()
-    ]
-    if missing:
-        raise ExportError(
-            f"{solver} 카드에 {', '.join(missing)} 가 필요한데 카드에 없습니다. "
-            f"푸아송비와 밀도는 인장시험이 주지 않습니다 — 카드를 만들 때 넣거나, "
-            f"아는 값이 없으면 이 솔버로는 내보낼 수 없습니다. "
-            f"기본값으로 채워 내보내면 그것이 측정값인지 덱만 봐서는 알 수 없습니다."
+    from matcore import cards
+
+    try:
+        spec = cards.block(block)
+    except KeyError:
+        return f"{block}.{key}" if key else block
+    if key is None:
+        return spec.label
+    # **값의 이름만 쓴다.** "탄성 탄성계수" 는 읽기 나쁘고, 값 이름은 이미
+    # 그 자체로 알아볼 수 있게 지어져 있다(탄성계수·푸아송비·밀도).
+    for item in (*spec.produces, *spec.rows):
+        if item.key == key:
+            return item.label
+    return f"{spec.label} {key}"
+
+
+def missing_for(deck: Deck, format_key: str) -> tuple[str, ...]:
+    """이 형식으로 내보내려면 덱에 더 있어야 하는 것. 사람이 읽는 이름으로.
+
+    **누르기 전에 알아야 한다.** 내려받기를 누른 뒤에 "푸아송비가 없습니다" 를
+    보는 것은 늦다.
+    """
+    target = _RENDERERS.get(format_key)
+    if target is None:
+        return ()
+    missing: list[str] = []
+    for need in target.needs:
+        if need.optional:
+            continue
+        if not deck.has(need.block):
+            missing.append(_label(need.block))
+            continue
+        values = deck.values(need.block)
+        missing.extend(
+            _label(need.block, key) for key in need.values if values.get(key) is None
         )
+        if need.rows_min and len(deck.rows(need.block)) < need.rows_min:
+            missing.append(f"{_label(need.block)}(표 {need.rows_min}줄 이상)")
+    return tuple(missing)
+
+
+def requires_labels(format_key: str) -> tuple[str, ...]:
+    """이 형식이 **반드시** 요구하는 것. 카드를 보기 전에도 답할 수 있다.
+
+    화면의 형식 목록에 그대로 뜬다 — *"이 솔버는 밀도가 있어야 합니다"* 를 카드를
+    고르기 전에 알 수 있어야 한다. 선택인 것(`optional`)은 안 넣는다.
+    """
+    target = _RENDERERS.get(format_key)
+    if target is None:
+        return ()
+    out: list[str] = []
+    for need in target.needs:
+        if need.optional:
+            continue
+        out.extend(_label(need.block, key) for key in need.values)
+        if need.rows_min and not need.values:
+            out.append(_label(need.block))
+    return tuple(dict.fromkeys(out))
+
+
+def available_formats(deck: Deck) -> tuple[str, ...]:
+    """이 덱으로 지금 낼 수 있는 형식."""
+    return tuple(key for key in _RENDERERS if not missing_for(deck, key))
+
+
+def blocks_in_decks() -> set[str]:
+    """어느 블록이든 하나라도 솔버가 먹는가.
+
+    화면이 "이 물성은 덱에 안 실림" 을 말하는 근거다. 전에는 블록이 스스로
+    선언했는데(`to_card is not None`), **실제로 쓰이는지와 어긋날 수 있었다** —
+    지금은 렌더러들이 실제로 요구하는 것에서 계산한다.
+    """
+    return {need.block for item in _RENDERERS.values() for need in item.needs}
+
+
+@dataclass(frozen=True)
+class Renderer:
+    """솔버 하나가 덱을 만드는 법."""
+
+    key: str
+    label: str
+    extension: str
+    describe: str
+    render: Callable[[Deck], Rendered]
+    keywords: tuple[str, ...] = ()
+    """이 형식이면 반드시 들어 있어야 하는 문자열. 쓴 뒤 확인한다 — 키워드가
+    빠진 파일은 솔버가 오류 없이 무시하기도 한다."""
+    needs: tuple[Need, ...] = ()
+    media_type: str = "text/plain; charset=utf-8"
+
+
+_RENDERERS: dict[str, Renderer] = {}
+
+
+def register_renderer(
+    *,
+    key: str,
+    label: str,
+    extension: str,
+    describe: str,
+    keywords: tuple[str, ...] = (),
+    needs: tuple[Need, ...] = (),
+    media_type: str = "text/plain; charset=utf-8",
+) -> Callable[[Callable[[Deck], Rendered]], Callable[[Deck], Rendered]]:
+    """솔버 하나를 등록한다. **등록하면 API·화면·내려받기가 따라온다.**
+
+    전에는 `FORMATS` 라는 딕셔너리에 손으로 줄을 적었다. 그러면 새 솔버나 새
+    물성을 **이 파일 안에서만** 더할 수 있고, 확장 폴더에서는 못 붙인다.
+    """
+
+    def decorator(fn: Callable[[Deck], Rendered]) -> Callable[[Deck], Rendered]:
+        add_renderer(
+            Renderer(
+                key=key,
+                label=label,
+                extension=extension,
+                describe=describe,
+                render=fn,
+                keywords=keywords,
+                needs=needs,
+                media_type=media_type,
+            )
+        )
+        return fn
+
+    return decorator
+
+
+def add_renderer(item: Renderer) -> Renderer:
+    """이미 만들어진 렌더러를 등록한다.
+
+    `register_renderer` 가 부르고, **되돌리기가 쓴다** — 시험이 레지스트리를
+    건드린 뒤 원래대로 돌려놓을 길이 있어야 한다(`cards.register_block` 과 같다).
+    """
+    if item.key in _RENDERERS:
+        raise ValueError(f"솔버 형식 key 중복: {item.key}")
+    _RENDERERS[item.key] = item
+    return item
+
+
+def renderer(key: str) -> Renderer:
+    try:
+        return _RENDERERS[key]
+    except KeyError:
+        known = ", ".join(sorted(_RENDERERS))
+        raise ExportError(f"모르는 형식입니다: {key}. 있는 것: {known}") from None
+
+
+def list_renderers() -> list[Renderer]:
+    return list(_RENDERERS.values())
+
+
+def clear_renderers() -> None:
+    """테스트 전용."""
+    _RENDERERS.clear()
 
 
 def _free(value: float) -> str:
@@ -254,26 +422,44 @@ def _fixed(value: float) -> str:
     return f"{value:>20.9E}"
 
 
-def _header(card: Card, comment: str) -> list[str]:
+def _header(deck: Deck, comment: str) -> list[str]:
     """근거를 카드 안에 적는다.
 
     **덱만 받은 사람이 되짚을 수 있어야 한다.** 파일이 메일로 돌아다니는 동안
     이 주석이 유일한 출처 표시다.
     """
-    return [f"{comment} {line}" for line in ("MatNexus 물성 카드", *card.provenance)]
+    return [f"{comment} {line}" for line in ("MatNexus 물성 카드", *deck.provenance)]
 
 
-def render_abaqus(card: Card) -> Rendered:
+@register_renderer(
+    key="abaqus",
+    label="Abaqus",
+    extension="inp",
+    describe="*MATERIAL / *ELASTIC / *PLASTIC — 표 형식 소성. 단위는 SI(kg·m·s·Pa).",
+    keywords=("*MATERIAL", "*ELASTIC", "*PLASTIC"),
+    needs=(
+        Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        # 밀도는 빠져도 된다 — *DENSITY 는 선택 키워드다. 대신 왜 없는지 덱에 적는다.
+        Need("elastic", values=("density",), optional=True),
+        # **표는 빠지면 안 된다.** 전에는 검사를 지나 `render` 안에서 터졌고,
+        # 그러면 화면이 "이 형식은 아직 못 낸다" 를 미리 말할 수 없다.
+        Need("table", rows_min=MIN_POINTS),
+    ),
+)
+def render_abaqus(deck: Deck) -> Rendered:
     """Abaqus `*MATERIAL` 덱.
 
     **단위 키워드가 없는 솔버다.** 그래서 단위를 주석으로 선언한다 — 값은 SI 그대로
     나가고, 덱의 다른 재료도 SI 여야 한다는 사실을 사람이 읽게 한다.
     """
-    points, notes = prepare(card.points)
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    points, notes = prepare(deck.pairs("table", "plastic_strain", "true_stress"))
 
-    lines = _header(card, "**")
+    lines = _header(deck, "**")
     lines.append("** Consistent units: kg, m, s, Pa")
-    if card.density is None:
+    if density is None:
         # *DENSITY 는 Abaqus 에서 선택이다. 빼되 **왜 뺐는지 적는다** — 동적
         # 해석을 돌리려던 사람이 덱만 보고 알 수 있어야 한다.
         notes.append("밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다.")
@@ -281,13 +467,13 @@ def render_abaqus(card: Card) -> Rendered:
             "** DENSITY: 측정값이 없어 비웠습니다. "
             "동적 해석에는 이 덱이 그대로 쓰이지 못합니다."
         )
-    lines.append(f"*MATERIAL, NAME={card.name}")
-    if card.density is not None:
+    lines.append(f"*MATERIAL, NAME={deck.name}")
+    if density is not None:
         lines.append("*DENSITY")
-        lines.append(f"{_free(card.density)},")
+        lines.append(f"{_free(density)},")
     lines.append("*ELASTIC, TYPE=ISOTROPIC")
-    assert card.youngs_modulus is not None and card.poisson_ratio is not None
-    lines.append(f"{_free(card.youngs_modulus)}, {_free(card.poisson_ratio)}")
+    assert youngs is not None and poisson is not None
+    lines.append(f"{_free(youngs)}, {_free(poisson)}")
     # EXTRAPOLATION=CONSTANT — 표 밖에서 응력을 일정하게 둔다. 기본값(오류 중단)
     # 보다 낫다고 볼 수도 있지만, 여기서는 **적합 구간 밖을 외삽하지 않는다** 는
     # 이 프로젝트의 태도와 같은 말이다: 모르는 구간에서 값을 지어내지 않는다.
@@ -297,7 +483,20 @@ def render_abaqus(card: Card) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
-def render_abaqus_viscoelastic(card: Card) -> Rendered:
+@register_renderer(
+    key="abaqus_viscoelastic",
+    label="Abaqus (점탄성)",
+    extension="inp",
+    describe=("*ELASTIC + *VISCOELASTIC, TIME=PRONY — 선형 점탄성. 기준 온도 하나에서 유효."),
+    keywords=("*MATERIAL", "*ELASTIC", "*VISCOELASTIC"),
+    needs=(
+        # **OpenRadioss 는 없다.** LAW62 는 고무 초탄성(Ogden)+Prony 경로라
+        # 선형 점탄성과 다른 모형이다. 65 도 같은 이유로 Abaqus 만 낸다.
+        Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        Need("viscoelastic", rows_min=1),
+    ),
+)
+def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
     """Abaqus `*VISCOELASTIC, TIME=PRONY` 덱. 선형 점탄성.
 
     ## `*ELASTIC` 이 순간 탄성률이다
@@ -323,24 +522,31 @@ def render_abaqus_viscoelastic(card: Card) -> Rendered:
     일이다. 지금은 **유효 온도를 주석에 적고 끝낸다** — 조용히 온도 의존을
     없는 셈 치는 것보다 낫다.
     """
-    if not card.prony:
+    prony = tuple(
+        (float(row["relative_modulus"]), float(row["relaxation_time_s"]))
+        for row in deck.rows("viscoelastic")
+        if "relative_modulus" in row and "relaxation_time_s" in row
+    )
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    reference = deck.number("viscoelastic", "reference_temperature_k")
+    if not prony:
         raise ExportError(
             "점탄성 카드인데 Prony 계수가 없습니다. 마스터커브를 만들고 "
             "Prony 를 맞춘 뒤에 내보내세요."
         )
-    if card.youngs_modulus is None or card.poisson_ratio is None:
+    if youngs is None or poisson is None:
         raise ExportError("순간 탄성률과 푸아송비가 있어야 *ELASTIC 을 쓸 수 있습니다.")
 
     notes: list[str] = []
-    lines = _header(card, "**")
+    lines = _header(deck, "**")
     lines.append("** Consistent units: kg, m, s, Pa")
     lines.append("** ELASTIC = instantaneous (t=0) moduli — Abaqus reads it that way")
     lines.append("**          when *VISCOELASTIC is present.")
-    if card.prony_reference_temperature is not None:
-        celsius = card.prony_reference_temperature - 273.15
-        lines.append(
-            f"** Valid at {card.prony_reference_temperature:.2f} K ({celsius:.2f} C) only —"
-        )
+    if reference is not None:
+        celsius = reference - 273.15
+        lines.append(f"** Valid at {reference:.2f} K ({celsius:.2f} C) only -")
         lines.append(
             "**   master curve reference temperature. Add *TRS for other temperatures."
         )
@@ -358,31 +564,31 @@ def render_abaqus_viscoelastic(card: Card) -> Rendered:
     )
     lines.append("** Shear ratios taken from tensile/flexural E — assumes constant Poisson.")
 
-    if card.density is None:
+    if density is None:
         notes.append("밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다.")
         lines.append(
             "** DENSITY: 측정값이 없어 비웠습니다. "
             "동적 해석에는 이 덱이 그대로 쓰이지 못합니다."
         )
 
-    lines.append(f"*MATERIAL, NAME={card.name}")
-    if card.density is not None:
+    lines.append(f"*MATERIAL, NAME={deck.name}")
+    if density is not None:
         lines.append("*DENSITY")
-        lines.append(f"{_free(card.density)},")
+        lines.append(f"{_free(density)},")
     lines.append("*ELASTIC, TYPE=ISOTROPIC")
-    lines.append(f"{_free(card.youngs_modulus)}, {_free(card.poisson_ratio)}")
+    lines.append(f"{_free(youngs)}, {_free(poisson)}")
     lines.append("*VISCOELASTIC, TIME=PRONY, TYPE=ISOTROPIC")
     # 행 하나가 g, k, τ. 순서가 뒤바뀌면 솔버가 오류 없이 다른 재료를 만든다.
-    lines.extend(f"{_free(g)}, 0.0, {_free(tau)}" for g, tau in card.prony)
+    lines.extend(f"{_free(g)}, 0.0, {_free(tau)}" for g, tau in prony)
 
-    total = sum(g for g, _ in card.prony)
+    total = sum(g for g, _ in prony)
     if total >= 1.0:
         raise ExportError(
             f"Prony 상대 탄성률의 합이 {total:.4f} 로 1 이상입니다. "
             f"평형 탄성률이 0 이하라는 뜻이라 Abaqus 가 거부합니다."
         )
     notes.append(
-        f"Prony {len(card.prony)}항, 상대 탄성률 합 {total:.4f} "
+        f"Prony {len(prony)}항, 상대 탄성률 합 {total:.4f} "
         f"(평형 탄성률은 순간의 {1 - total:.4f} 배)."
     )
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
@@ -407,7 +613,23 @@ HYPERELASTIC_KEYWORDS: dict[str, tuple[str, tuple[str, ...]]] = {
 INCOMPRESSIBLE_D = 0.0
 
 
-def render_abaqus_hyperelastic(card: Card) -> Rendered:
+@register_renderer(
+    key="abaqus_hyperelastic",
+    label="Abaqus (초탄성)",
+    extension="inp",
+    describe=(
+        "*HYPERELASTIC — 고무 초탄성. 공칭 응력 기준이고 D=0(완전 비압축)이라 "
+        "하이브리드 요소가 필요하다."
+    ),
+    keywords=("*MATERIAL", "*HYPERELASTIC"),
+    needs=(
+        # `family` 를 `values` 로 요구하지 않는다 — 그건 내부 key 라 화면에
+        # "초탄성 family 가 필요합니다" 로 뜬다. 없으면 아래에서 짚는다.
+        Need("hyperelastic", rows_min=1),
+        Need("elastic", values=("density",), optional=True),
+    ),
+)
+def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
     """Abaqus `*HYPERELASTIC` 덱. 고무 초탄성.
 
     ## 계수를 그대로 낸다 — 표가 아니다
@@ -421,17 +643,21 @@ def render_abaqus_hyperelastic(card: Card) -> Rendered:
     비압축 계수를 재지 않았으므로 0 으로 둔다. **완전 비압축**이라는 뜻이고,
     Abaqus 는 그때 하이브리드 요소를 요구한다. 지어내지 않고 그 사실을 적는다.
     """
-    if not card.hyperelastic_family:
+    family = deck.values("hyperelastic").get("family")
+    density = deck.number("elastic", "density")
+    if not family:
         raise ExportError("초탄성 카드가 아닙니다. 어느 식으로 맞췄는지가 없습니다.")
-    target = HYPERELASTIC_KEYWORDS.get(card.hyperelastic_family)
+    target = HYPERELASTIC_KEYWORDS.get(str(family))
     if target is None:
         known = ", ".join(sorted(HYPERELASTIC_KEYWORDS))
-        raise ExportError(
-            f"'{card.hyperelastic_family}' 는 Abaqus 매핑이 없는 식입니다. 있는 것: {known}"
-        )
+        raise ExportError(f"'{family}' 는 Abaqus 매핑이 없는 식입니다. 있는 것: {known}")
     keyword, order = target
 
-    values = dict(card.hyperelastic_parameters)
+    values = {
+        str(row["name"]): float(row["value"])
+        for row in deck.rows("hyperelastic")
+        if "name" in row and "value" in row
+    }
     missing = [name for name in order if name not in values]
     if missing:
         raise ExportError(
@@ -440,7 +666,7 @@ def render_abaqus_hyperelastic(card: Card) -> Rendered:
         )
 
     notes: list[str] = []
-    lines = _header(card, "**")
+    lines = _header(deck, "**")
     lines.append("** Consistent units: kg, m, s, Pa")
     lines.append("** Nominal (engineering) stress-strain basis — not true stress.")
     # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
@@ -449,12 +675,11 @@ def render_abaqus_hyperelastic(card: Card) -> Rendered:
         "비압축 계수 D 를 0 으로 두었습니다(재지 않은 값입니다) — 완전 비압축이라는 "
         "뜻이고, Abaqus 는 그때 하이브리드 요소를 요구합니다."
     )
-    if card.density is not None:
-        lines.append(f"*MATERIAL, NAME={card.name}")
+    lines.append(f"*MATERIAL, NAME={deck.name}")
+    if density is not None:
         lines.append("*DENSITY")
-        lines.append(f"{_free(card.density)},")
+        lines.append(f"{_free(density)},")
     else:
-        lines.append(f"*MATERIAL, NAME={card.name}")
         notes.append("밀도가 없어 *DENSITY 를 비웠습니다 — 동적 해석에는 그대로 못 씁니다.")
 
     lines.append(f"*HYPERELASTIC, {keyword}")
@@ -464,44 +689,55 @@ def render_abaqus_hyperelastic(card: Card) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
-def render_openradioss(card: Card) -> Rendered:
+@register_renderer(
+    key="openradioss",
+    label="OpenRadioss",
+    extension="rad",
+    describe="/MAT/LAW36 + /FUNCT — 표 형식 소성. /UNIT 블록으로 단위를 선언한다.",
+    keywords=("/MAT/LAW36", "/FUNCT/", "/UNIT/1", "/END"),
+    needs=(
+        # LAW36 은 RHO_I 가 자리 있는 필드다. 비울 수 없다.
+        Need("elastic", values=("youngs_modulus", "poisson_ratio", "density")),
+        Need("table", rows_min=MIN_POINTS),
+    ),
+)
+def render_openradioss(deck: Deck) -> Rendered:
     """OpenRadioss `/MAT/LAW36` + `/FUNCT`.
 
     **고정 20칸 형식이다.** 칸이 하나 어긋나면 다른 필드로 읽히고, 솔버는 오류 없이
     엉뚱한 재료로 계산한다.
     """
-    points, notes = prepare(card.points)
-    assert (
-        card.youngs_modulus is not None
-        and card.poisson_ratio is not None
-        and card.density is not None
-    )
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    points, notes = prepare(deck.pairs("table", "plastic_strain", "true_stress"))
+    assert youngs is not None and poisson is not None and density is not None
 
-    lines = ["#RADIOSS STARTER", *_header(card, "#")]
+    lines = ["#RADIOSS STARTER", *_header(deck, "#")]
     # **단위를 선언한다.** Abaqus 와 달리 이 솔버는 단위 블록이 있어서 값이 아니라
     # 선언으로 맞출 수 있다.
     lines.extend(["/UNIT/1", "MNX_SI_KG_M_S", f"{'kg':<20}{'m':<20}s"])
-    lines.append(f"/MAT/LAW36/{card.solver_id}/1")
-    lines.append(card.name)
+    lines.append(f"/MAT/LAW36/{deck.solver_id}/1")
+    lines.append(deck.name)
     lines.append(f"#{'RHO_I':>19}")
-    lines.append(_fixed(card.density))
+    lines.append(_fixed(density))
     lines.append(f"#{'E':>19}{'nu':>20}{'Eps_p_max':>20}{'Eps_t':>20}{'Eps_m':>20}")
-    lines.append(_fixed(card.youngs_modulus) + _fixed(card.poisson_ratio))
+    lines.append(_fixed(youngs) + _fixed(poisson))
     lines.append(
         f"#{'N_funct':>9}{'F_smooth':>10}{'C_hard':>20}{'F_cut':>20}{'Eps_f':>20}{'VP':>20}"
     )
     lines.append(f"{1:>10}")
     lines.append(f"#{'fct_IDp':>9}{'Fscale':>20}{'Fct_IDE':>10}{'EInf':>20}{'CE':>20}")
     lines.append("# func_ID1")
-    lines.append(f"{card.solver_id:>10}")
+    lines.append(f"{deck.solver_id:>10}")
     lines.append(f"#{'Fscale_1':>19}")
     lines.append(_fixed(1.0))
     lines.append(f"#{'Eps_dot_1':>19}")
     # 변형률 속도 하나짜리 표다. 속도 의존을 넣으려면 곡선이 여러 개 있어야 하고,
     # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다.
     lines.append(_fixed(0.0))
-    lines.append(f"/FUNCT/{card.solver_id}")
-    lines.append(f"{card.name}_TRUE_STRESS_VS_TRUE_PLASTIC_STRAIN")
+    lines.append(f"/FUNCT/{deck.solver_id}")
+    lines.append(f"{deck.name}_TRUE_STRESS_VS_TRUE_PLASTIC_STRAIN")
     lines.append(f"#{'X':>19}{'Y':>20}")
     # **소성변형률이 먼저, 응력이 나중이다.** Abaqus 와 순서가 반대다.
     lines.extend(f"{strain:>20.12E}{stress:>20.9E}" for strain, stress in points)
@@ -509,163 +745,93 @@ def render_openradioss(card: Card) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
-def render_json(card: Card) -> Rendered:
-    """솔버 중립 JSON.
+@register_renderer(
+    key="json",
+    label="중립 JSON",
+    extension="json",
+    describe="솔버 중립 — 우리가 만들지 않은 솔버를 쓰는 사람이 직접 덱을 만든다.",
+    keywords=("matnexus.property-card",),
+    media_type="application/json; charset=utf-8",
+)
+def render_json(deck: Deck) -> Rendered:
+    """솔버 중립 JSON — **카드가 가진 것을 그대로.**
 
-    **우리가 안 만든 솔버를 쓰는 사람이 있다.** 카드를 데이터로 내보내면 각자
-    자기 덱을 만들 수 있다. 단위를 필드 이름에 박아 두는 이유는 같다 — 파일이
-    돌아다니는 동안 단위가 어디에 적혀 있었는지 잊힌다.
+    우리가 안 만든 솔버를 쓰는 사람이 있다. 카드를 데이터로 내보내면 각자 자기
+    덱을 만들 수 있다.
+
+    ## 스스로 설명하는 파일이다
+
+    값 옆에 **이름과 단위를 함께 적는다.** 파일이 돌아다니는 동안 단위가 어디에
+    적혀 있었는지 잊히고, `youngs_modulus: 200000000000` 만 남으면 그것이 Pa 인지
+    MPa 인지 받는 사람이 알 수 없다. 뜻은 레지스트리가 이미 갖고 있다(ADR 0012).
+
+    ## 정해진 칸이 없다
+
+    전에는 `elastic`·`plasticity` 라는 칸을 손으로 적었고, 물성이 늘면 이 함수도
+    커졌다. 지금은 카드에 실린 블록을 그대로 낸다 — **새 물성이 저절로 따라온다.**
     """
     import json
 
-    points, notes = prepare(card.points)
+    from matcore import cards
+
+    blocks: dict[str, Any] = {}
+    for key, payload in deck.blocks.items():
+        try:
+            spec: Any = cards.block(key)
+        except KeyError:
+            spec = None
+        blocks[key] = {
+            "label": spec.label if spec else key,
+            "values": deck.values(key),
+            # 값의 뜻과 단위. **받는 사람이 되짚을 수 있어야 한다.**
+            "declared": (
+                {
+                    item.key: {"label": item.label, "si_unit": item.si_unit}
+                    for item in (*spec.produces, *spec.rows)
+                }
+                if spec
+                else {}
+            ),
+            "rows": deck.rows(key),
+            "notes": list(payload.get("notes", [])) if isinstance(payload, Mapping) else [],
+        }
+
     body: dict[str, Any] = {
-        "schema": "matnexus.property-card/1",
-        "name": card.name,
+        "schema": "matnexus.property-card/2",
+        "name": deck.name,
         "units": {"length": "m", "mass": "kg", "time": "s", "stress": "Pa"},
-        "elastic": {
-            "youngs_modulus_pa": card.youngs_modulus,
-            "poisson_ratio": card.poisson_ratio,
-            "density_kg_per_m3": card.density,
-        },
-        "plasticity": {
-            "type": "tabulated_isotropic",
-            "points": [
-                {"true_plastic_strain": strain, "true_stress_pa": stress}
-                for strain, stress in points
-            ],
-        },
-        "provenance": list(card.provenance),
-        "notes": notes,
+        "blocks": blocks,
+        "provenance": list(deck.provenance),
     }
     # 정렬해서 쓴다. 같은 카드는 언제 내보내도 같은 바이트여야 한다 — 두 파일이
     # 다른지 보려고 열어 보는 일이 실제로 생긴다.
-    return Rendered(
-        text=json.dumps(body, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        notes=tuple(notes),
-    )
+    return Rendered(text=json.dumps(body, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
 
 
-@dataclass(frozen=True)
-class Format:
-    key: str
-    label: str
-    extension: str
-    describe: str
-    render: Callable[[Card], Rendered]
-    keywords: tuple[str, ...]
-    """이 형식이면 반드시 들어 있어야 하는 문자열. 쓴 뒤 확인한다."""
-    requires: tuple[str, ...] = ()
-    """없으면 이 형식으로 내보낼 수 없는 값. **화면이 미리 알려 줄 수 있어야 한다** —
-    내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
-    media_type: str = "text/plain; charset=utf-8"
-
-
-FORMATS: dict[str, Format] = {
-    "abaqus": Format(
-        key="abaqus",
-        label="Abaqus",
-        extension="inp",
-        describe="*MATERIAL / *ELASTIC / *PLASTIC — 표 형식 소성. 단위는 SI(kg·m·s·Pa).",
-        render=render_abaqus,
-        keywords=("*MATERIAL", "*ELASTIC", "*PLASTIC"),
-        # 밀도는 빠져도 된다 — *DENSITY 는 선택 키워드다. 대신 왜 없는지 덱에 적는다.
-        #
-        # **표는 빠지면 안 된다.** 전에는 `requires` 에 없어서 검사를 지나고
-        # `render` 안에서 터졌다 — 그러면 화면이 "이 형식은 아직 못 낸다" 를
-        # 미리 말할 수 없다. 점탄성 카드가 생기면서 실제로 걸리는 자리가 됐다.
-        requires=("youngs_modulus", "poisson_ratio", "points"),
-    ),
-    "openradioss": Format(
-        key="openradioss",
-        label="OpenRadioss",
-        extension="rad",
-        describe="/MAT/LAW36 + /FUNCT — 표 형식 소성. /UNIT 블록으로 단위를 선언한다.",
-        render=render_openradioss,
-        keywords=("/MAT/LAW36", "/FUNCT/", "/UNIT/1", "/END"),
-        # LAW36 은 RHO_I 가 자리 있는 필드다. 비울 수 없다.
-        requires=("youngs_modulus", "poisson_ratio", "density", "points"),
-    ),
-    "abaqus_viscoelastic": Format(
-        key="abaqus_viscoelastic",
-        label="Abaqus (점탄성)",
-        extension="inp",
-        describe=(
-            "*ELASTIC + *VISCOELASTIC, TIME=PRONY — 선형 점탄성. 기준 온도 하나에서 유효."
-        ),
-        render=render_abaqus_viscoelastic,
-        keywords=("*MATERIAL", "*ELASTIC", "*VISCOELASTIC"),
-        # **OpenRadioss 는 없다.** LAW62 는 고무 초탄성(Ogden)+Prony 경로라
-        # 선형 점탄성과 다른 모형이다. 65 도 같은 이유로 Abaqus 만 낸다.
-        requires=("youngs_modulus", "poisson_ratio", "prony"),
-    ),
-    "abaqus_hyperelastic": Format(
-        key="abaqus_hyperelastic",
-        label="Abaqus (초탄성)",
-        extension="inp",
-        describe=(
-            "*HYPERELASTIC — 고무 초탄성. 공칭 응력 기준이고 D=0(완전 비압축)이라 "
-            "하이브리드 요소가 필요하다."
-        ),
-        render=render_abaqus_hyperelastic,
-        keywords=("*MATERIAL", "*HYPERELASTIC"),
-        # **OpenRadioss 는 아직 안 낸다.** LAW42(Ogden)는 계수 규약이 다르고,
-        # 65 도 LAW82/94 를 Ogden+Prony 로 묶어 다뤘다 — 그 조합은 여기 없다.
-        requires=("hyperelastic_parameters",),
-    ),
-    "json": Format(
-        key="json",
-        label="중립 JSON",
-        extension="json",
-        describe="솔버 중립 — 우리가 만들지 않은 솔버를 쓰는 사람이 직접 덱을 만든다.",
-        render=render_json,
-        keywords=("matnexus.property-card",),
-        media_type="application/json; charset=utf-8",
-    ),
-}
-
-
-def missing_for(card: Card, format_key: str) -> tuple[str, ...]:
-    """이 형식으로 내보내려면 카드에 더 있어야 하는 것. 사람이 읽는 이름으로.
-
-    **누르기 전에 알아야 한다.** `requires` 의 독스트링이 처음부터 그렇게 적혀
-    있었는데 그것을 읽는 곳이 없었다 — 화면은 형식을 전부 보여 주고, 못 내는
-    형식은 내려받기를 누른 뒤에야 알려 줬다.
-    """
-    target = FORMATS.get(format_key)
-    if target is None:
-        return ()
-    return tuple(
-        VALUE_LABELS[name]
-        for name in target.requires
-        if getattr(card, name) is None or getattr(card, name) == ()
-    )
-
-
-def available_formats(card: Card) -> tuple[str, ...]:
-    """이 카드로 지금 낼 수 있는 형식."""
-    return tuple(key for key in FORMATS if not missing_for(card, key))
-
-
-def render(format_key: str, card: Card) -> Rendered:
-    """카드를 솔버 텍스트로 만든다.
+def render(format_key: str, deck: Deck) -> Rendered:
+    """덱을 솔버 텍스트로 만든다.
 
     **쓰고 나서 다시 읽는다.** 키워드가 빠진 파일은 솔버가 오류 없이 무시하기도
     한다 — 그러면 해석은 도는데 재료가 안 들어간 채로 돈다.
     """
-    target = FORMATS.get(format_key)
-    if target is None:
-        known = ", ".join(sorted(FORMATS))
-        raise ExportError(f"모르는 형식입니다: {format_key}. 있는 것: {known}")
+    target = renderer(format_key)
 
-    # **필요한 값 검사가 여기 한 곳에 있다.** 형식마다 흩어져 있으면 새 형식이
+    # **모자란 것 검사가 여기 한 곳에 있다.** 형식마다 흩어져 있으면 새 형식이
     # 붙을 때 빠뜨리고, 빠뜨린 형식은 0 을 써서 내보낸다.
-    _require(card, target.requires, solver=target.label)
-    result = target.render(card)
-    missing = [word for word in target.keywords if word not in result.text]
+    missing = missing_for(deck, format_key)
     if missing:
         raise ExportError(
-            f"{target.label} 카드에 있어야 할 키워드가 빠졌습니다: {', '.join(missing)}. "
+            f"{target.label} 덱에 {', '.join(missing)} 가 필요한데 카드에 없습니다. "
+            f"푸아송비와 밀도는 인장시험이 주지 않습니다 — 카드를 만들 때 넣거나, "
+            f"아는 값이 없으면 이 솔버로는 내보낼 수 없습니다. "
+            f"기본값으로 채워 내보내면 그것이 측정값인지 덱만 봐서는 알 수 없습니다."
+        )
+
+    result = target.render(deck)
+    absent = [word for word in target.keywords if word not in result.text]
+    if absent:
+        raise ExportError(
+            f"{target.label} 덱에 있어야 할 키워드가 빠졌습니다: {', '.join(absent)}. "
             f"내보내기 코드의 문제입니다 — 이대로 쓰면 솔버가 재료 없이 해석을 돌립니다."
         )
     return result

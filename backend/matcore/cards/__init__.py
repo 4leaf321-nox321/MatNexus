@@ -43,7 +43,7 @@ DB 도 HTTP 도 모른다. `tests/architecture` 가 검사한다.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -77,12 +77,6 @@ class BlockSpec:
 
     **행이 `si_unit` 을 들고 있으면 그것이 이긴다** — 경화식 파라미터는 식마다
     단위가 다르다."""
-
-    to_card: Callable[[Any], dict[str, Any]] | None = None
-    """블록 payload → `matcore.export.Card` 키워드.
-
-    `None` 이면 덱에 안 실린다. 경화식이 그렇다 — 표로 나가고 식은 주석에만
-    남는다. 안 실린다고 쓸모없는 것이 아니라 **실리는 자리가 다르다.**"""
 
     order: int = 100
     """화면에 보이는 순서. **작을수록 앞.**"""
@@ -141,39 +135,17 @@ def is_empty(payload: Any) -> bool:
     return not values_of(payload) and not rows_of(payload)
 
 
-def card_kwargs(blocks: Mapping[str, Any]) -> dict[str, Any]:
-    """블록 묶음을 `export.Card` 키워드로 편다.
+def unknown(blocks: Mapping[str, Any]) -> tuple[str, ...]:
+    """이 카드에 실렸는데 **레지스트리가 모르는** 블록.
 
-    **모르는 블록을 조용히 버리지 않는다.** 카드에 실린 블록이 이 버전의
-    레지스트리에 없다는 것은 그 물성을 만든 코드가 사라졌거나 이름이 바뀌었다는
-    뜻이다. 넘어가면 덱에 그 물성만 빠진 채로 나가고, 덱은 멀쩡히 돈다.
+    그 물성을 만든 코드가 사라졌거나 이름이 바뀌었다는 뜻이다. 조용히 넘기면
+    덱에 그 물성만 빠진 채로 나가고, **덱은 멀쩡히 돈다.**
 
-    **두 블록이 같은 자리를 채우는 것도 막는다.** 점탄성 카드의 `*ELASTIC` 은
-    순간 탄성률이어야 하는데, 탄성 블록이 평형 탄성률을 들고 있으면 재료가 통째로
-    무르게 계산된다 — 그런데 덱은 돌고 결과도 그럴듯하다. 나중에 알 수 없는
-    종류의 틀림이라 여기서 막는다.
+    전에는 카드를 솔버 양식으로 옮기다가(`card_kwargs`) 알아챘는데, 이제 옮기는
+    단계가 없어졌다 — 렌더러가 블록을 직접 읽는다. 그래서 검사를 따로 둔다.
     """
-    out: dict[str, Any] = {}
-    owner: dict[str, str] = {}
-    for key, payload in blocks.items():
-        spec = _BLOCKS.get(key)
-        if spec is None:
-            known = ", ".join(sorted(_BLOCKS))
-            raise CardError(
-                f"모르는 물성 블록입니다: {key}. 이 카드를 만든 계산이 지금 코드에 "
-                f"없습니다. 있는 것: {known}"
-            )
-        if spec.to_card is None or is_empty(payload):
-            continue
-        for field_name, value in spec.to_card(payload).items():
-            if field_name in owner:
-                raise CardError(
-                    f"'{owner[field_name]}' 과 '{key}' 가 같은 자리({field_name})를 "
-                    f"채웁니다. 어느 값이 덱에 실릴지 정해져 있지 않습니다."
-                )
-            owner[field_name] = key
-            out[field_name] = value
-    return out
+    load_builtin()
+    return tuple(key for key in blocks if key not in _BLOCKS)
 
 
 def load_builtin() -> None:
@@ -190,12 +162,12 @@ __all__ = [
     "BlockSpec",
     "CardError",
     "block",
-    "card_kwargs",
     "clear",
     "is_empty",
     "list_blocks",
     "load_builtin",
     "register_block",
     "rows_of",
+    "unknown",
     "values_of",
 ]

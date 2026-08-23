@@ -4,7 +4,11 @@
 
     선언만으로 화면이 그려진다      이름 없는 블록은 등록이 거절한다
     모르는 블록에 소리를 낸다       조용히 넘기면 덱에 그 물성만 빠진다
-    한 자리는 한 블록이 채운다      둘이 채우면 어느 값이 실릴지 모른다
+    덱에 실리는지는 렌더러가 안다   블록이 스스로 말하면 실제와 어긋날 수 있다
+
+"한 자리를 둘이 채우면 거절한다" 는 시험이 여기 있었다. **구조가 그 문제를
+없앴다** — 카드 양식(`export.Card`)이 사라져서 두 블록이 같은 칸을 두고 다툴 일이
+없다. 렌더러가 필요한 블록을 이름으로 읽는다.
 """
 
 from __future__ import annotations
@@ -56,91 +60,55 @@ class TestDeclaration:
             )
 
 
-class TestToCard:
-    def test_탄성은_있는_값만_싣는다(self) -> None:
-        """**없는 값은 넣지 않는다.** 0.3 으로 채우면 덱만 봐서는 못 가른다."""
-        got = cards.card_kwargs({"elastic": {"values": {"youngs_modulus": 2.0e11}}})
-        assert got == {"youngs_modulus": 2.0e11}
+class TestDeck:
+    """**블록이 덱에 어떻게 실리는지는 블록이 모른다.**
 
-    def test_경화식은_덱에_안_실린다(self) -> None:
-        """실리지 않는다고 쓸모없는 것이 아니라 **실리는 자리가 다르다.**"""
-        got = cards.card_kwargs({"hardening": {"values": {"label": "Voce"}}})
-        assert got == {}
+    전에는 블록이 `to_card` 로 "나는 솔버 카드의 이 칸에 들어간다" 를 적었다.
+    그러면 `export.Card` 라는 정해진 양식이 있어야 하고, 물성이 늘 때마다 그
+    양식에 칸을 뚫어야 한다. 지금은 렌더러가 블록을 직접 읽는다.
+    """
 
-    def test_점탄성은_상대_탄성률과_기준_온도를_낸다(self) -> None:
-        got = cards.card_kwargs(
-            {
-                "viscoelastic": {
-                    "values": {"reference_temperature_k": 293.15},
-                    "rows": [
-                        {
-                            "relaxation_time_s": 0.1,
-                            "modulus_pa": 1e8,
-                            "relative_modulus": 0.4,
-                        },
-                        {
-                            "relaxation_time_s": 10.0,
-                            "modulus_pa": 5e7,
-                            "relative_modulus": 0.2,
-                        },
-                    ],
-                }
-            }
-        )
-        assert got["prony"] == ((0.4, 0.1), (0.2, 10.0))
-        assert got["prony_reference_temperature"] == 293.15
-
-    def test_빈_블록은_안_싣는다(self) -> None:
-        assert cards.card_kwargs({"elastic": {}, "table": {"rows": []}}) == {}
-
-    def test_모르는_블록에_소리를_낸다(self) -> None:
+    def test_모르는_블록을_짚는다(self) -> None:
         """조용히 넘기면 **덱에 그 물성만 빠진 채로 나가고, 덱은 멀쩡히 돈다.**"""
-        with pytest.raises(cards.CardError, match="모르는 물성 블록"):
-            cards.card_kwargs({"ogden": {"values": {"mu_1": 1.0}}})
+        assert cards.unknown({"elastic": {}, "ogden": {}}) == ("ogden",)
 
-    def test_한_자리를_둘이_채우면_거절한다(self, sandbox: Any) -> None:
-        """점탄성 덱의 `*ELASTIC` 은 순간 탄성률이어야 한다. 평형 탄성률이
-        실리면 재료가 무르게 계산되는데 **덱은 돌고 결과도 그럴듯하다.**"""
-        cards.register_block(
-            cards.BlockSpec(
-                key="rival",
-                label="겹치는 것",
-                help="시험용",
-                produces=(Produced(key="youngs_modulus", label="탄성계수", si_unit="Pa"),),
-                to_card=lambda payload: {"youngs_modulus": 1.0},
-            )
-        )
-        with pytest.raises(cards.CardError, match="같은 자리"):
-            cards.card_kwargs(
-                {
-                    "elastic": {"values": {"youngs_modulus": 2.0e11}},
-                    "rival": {"values": {"youngs_modulus": 1.0}},
-                }
-            )
+    def test_아는_블록만_있으면_조용하다(self) -> None:
+        assert cards.unknown({"elastic": {}, "viscoelastic": {}}) == ()
+
+    def test_덱에_실리는_블록은_렌더러가_정한다(self) -> None:
+        """**경화식은 덱에 안 실린다** — 표로 나가고 식은 주석에만 남는다.
+
+        전에는 블록이 스스로 그렇게 선언했는데, 실제로 쓰이는지와 어긋날 수
+        있었다. 지금은 등록된 솔버들이 실제로 요구하는 것에서 나온다."""
+        in_decks = export.blocks_in_decks()
+        assert {"elastic", "table", "viscoelastic", "hyperelastic"} <= in_decks
+        assert "hardening" not in in_decks
 
 
 class TestFormats:
     """**누르기 전에 알아야 한다.** 못 내는 형식을 미리 짚는다."""
 
-    def _card(self, **kwargs: Any) -> export.Card:
-        return export.Card(name="M", solver_id=1, **kwargs)
+    def _deck(self, **blocks: Any) -> export.Deck:
+        return export.Deck(name="M", solver_id=1, blocks=blocks)
 
     def test_표가_없으면_소성_덱은_못_낸다(self) -> None:
-        card = self._card(youngs_modulus=2e11, poisson_ratio=0.3)
-        assert "소성 표" in export.missing_for(card, "abaqus")
-        assert "abaqus" not in export.available_formats(card)
+        deck = self._deck(elastic={"values": {"youngs_modulus": 2e11, "poisson_ratio": 0.3}})
+        # **블록 말로 답한다.** 전에는 카드 양식의 칸 이름으로 답했다.
+        assert "소성 표" in export.missing_for(deck, "abaqus")
+        assert "abaqus" not in export.available_formats(deck)
 
     def test_점탄성_카드는_점탄성_형식이_열린다(self) -> None:
-        card = self._card(
-            youngs_modulus=2e9,
-            poisson_ratio=0.45,
-            prony=((0.4, 0.1),),
-            prony_reference_temperature=293.15,
+        deck = self._deck(
+            elastic={"values": {"youngs_modulus": 2e9, "poisson_ratio": 0.45}},
+            viscoelastic={
+                "values": {"reference_temperature_k": 293.15},
+                "rows": [{"relative_modulus": 0.4, "relaxation_time_s": 0.1}],
+            },
         )
-        assert "abaqus_viscoelastic" in export.available_formats(card)
+        assert "abaqus_viscoelastic" in export.available_formats(deck)
         # 같은 카드로 소성 덱은 못 낸다 — 표가 없다.
-        assert "abaqus" not in export.available_formats(card)
+        assert "abaqus" not in export.available_formats(deck)
 
     def test_중립_JSON_은_늘_열린다(self) -> None:
         """우리가 만들지 않은 솔버를 쓰는 사람에게 남는 길이다."""
-        assert "json" in export.available_formats(self._card())
+        assert "json" in export.available_formats(self._deck())

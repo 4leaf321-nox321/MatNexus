@@ -11,35 +11,14 @@
 무르게 계산된다. 그런데 덱은 멀쩡히 돌고 결과도 그럴듯하다.
 
 그래서 점탄성 카드를 만들 때 E₀ 를 **탄성 블록에** 출처 `prony` 로 넣는다.
-`cards.card_kwargs` 가 자리 겹침을 막으므로, 이 규칙을 어기면 조용히 넘어가지
-않고 거절된다.
+`abaqus_viscoelastic` 렌더러가 `*ELASTIC` 을 탄성 블록에서 읽는다 — 여기서 E₀ 를
+내면 두 곳이 같은 값을 들게 되고, 어긋나는 순간 어느 쪽이 덱에 실렸는지 알 수 없다.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from matcore.cards import BlockSpec, register_block, rows_of, values_of
+from matcore.cards import BlockSpec, register_block
 from matcore.registry import Produced
-
-
-def _to_card(payload: Any) -> dict[str, Any]:
-    """`(gᵢ, τᵢ)` 와 기준 온도를 낸다.
-
-    `gᵢ` 는 **상대** 탄성률이라 이미 정규화되어 저장된다 — 여기서 다시 나누면
-    무엇으로 나눈 것인지가 두 곳에 적히게 된다.
-    """
-    values = values_of(payload)
-    terms = tuple(
-        (float(row["relative_modulus"]), float(row["relaxation_time_s"]))
-        for row in rows_of(payload)
-    )
-    out: dict[str, Any] = {"prony": terms}
-    reference = values.get("reference_temperature_k")
-    if reference is not None:
-        out["prony_reference_temperature"] = float(reference)
-    return out
-
 
 VISCOELASTIC = register_block(
     BlockSpec(
@@ -97,7 +76,6 @@ VISCOELASTIC = register_block(
                 help="Eᵢ/E₀. Abaqus *VISCOELASTIC 이 그대로 먹는 값이다.",
             ),
         ),
-        to_card=_to_card,
         order=40,
     )
 )

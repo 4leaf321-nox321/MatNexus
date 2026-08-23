@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     log_retention_days: int = 30
 
     filestore_dir: Path = BACKEND_DIR / "filestore"
+    extensions_dir: Path = BACKEND_DIR / "extensions"
+    """물성 확장이 사는 폴더. **폴더에 넣으면 읽는다**(`matcore.extensions`).
+
+    새 물성을 더할 때 중심 코드에 이름을 적지 않아도 되게 하는 자리다. 여러
+    사람이 각자 물성을 붙여도 같은 줄을 서로 고치지 않는다."""
     """곡선 Parquet와 장비 원본이 사는 곳. DB에는 경로와 해시만 둔다(D10)."""
 
     filestore_retention_days: int = 30
