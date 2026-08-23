@@ -1106,3 +1106,98 @@ class Test재현기록:
         got = card["source"]["runtime"]
         assert {"python", "numpy", "scipy", "pyarrow", "digest"} <= set(got)
         assert got["scipy"] != "없음"
+
+
+class Test미리보기외삽:
+    """**194 MPa 가 갈리는 결정을 눈으로 못 보고 내리면 안 된다.**
+
+    측정 구간에서 거의 같은 두 식이 외삽에서 갈리는데, 저장 뒤에야 결과를 보면
+    판단할 자리가 없다. 미리보기가 늘린 곡선과 섞은 곡선을 그려 준다.
+    """
+
+    def _preview(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        material_id: str,
+        **extra: Any,
+    ) -> Any:
+        return client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": material_id,
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                **extra,
+            },
+            headers=headers,
+        )
+
+    def test_비우면_적합_구간까지만_그린다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        body = self._preview(client, admin_headers, ready["id"]).json()
+        for fit in body["fits"]:
+            assert fit["extrapolated_to"] is None
+            assert fit["curve"][-1][0] == pytest.approx(fit["strain_max"], rel=1e-6)
+
+    def test_늘리면_그_너머까지_그린다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        got = self._preview(client, admin_headers, ready["id"], extrapolate_to=1.0)
+        assert got.status_code == 200, got.text
+        for fit in got.json()["fits"]:
+            assert fit["extrapolated_to"] == pytest.approx(1.0)
+            assert fit["curve"][-1][0] == pytest.approx(1.0)
+            # **경계가 보여야 한다** — 어디까지가 시험인지 구별이 안 되면 안 된다.
+            assert fit["strain_max"] < 1.0
+
+    def test_저장하지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """미리보기는 아무것도 안 쓴다 — 견주는 동안 카드가 쌓이면 안 된다."""
+        before = len(client.get("/api/fitting/cards", headers=admin_headers).json())
+        self._preview(client, admin_headers, ready["id"], extrapolate_to=1.0)
+        after = len(client.get("/api/fitting/cards", headers=admin_headers).json())
+        assert before == after
+
+    def test_섞은_곡선이_후보에_하나_더_붙는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**가중치는 데이터가 정해 주지 않는다** — 눈으로 봐야 고를 수 있다."""
+        plain = self._preview(client, admin_headers, ready["id"]).json()
+        mixed = self._preview(
+            client,
+            admin_headers,
+            ready["id"],
+            blend_primary="voce",
+            blend_with="swift",
+            blend_weight=0.5,
+        ).json()
+        assert len(mixed["fits"]) == len(plain["fits"]) + 1
+        blended = [f for f in mixed["fits"] if f["family"] == "voce+swift"]
+        assert len(blended) == 1
+        assert "Voce" in blended[0]["label"] and "Swift" in blended[0]["label"]
+        # 계수는 두 식의 것이 이름을 달고 나란히 온다.
+        names = [p["name"] for p in blended[0]["parameters"]]
+        assert any(n.startswith("Voce") for n in names)
+        assert any(n.startswith("Swift") for n in names)
+
+    def test_비중이_곡선_끝을_옮긴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """슬라이더를 움직이면 끝이 움직이는 것이 보여야 한다."""
+        ends = []
+        for weight in (1.0, 0.0):
+            body = self._preview(
+                client,
+                admin_headers,
+                ready["id"],
+                extrapolate_to=1.0,
+                blend_primary="voce",
+                blend_with="swift",
+                blend_weight=weight,
+            ).json()
+            blended = next(f for f in body["fits"] if f["family"] == "voce+swift")
+            ends.append(blended["curve"][-1][1])
+        assert ends[0] != pytest.approx(ends[1])

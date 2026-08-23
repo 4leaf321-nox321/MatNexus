@@ -1852,6 +1852,17 @@
             "title": "Curve",
             "type": "array"
           },
+          "extrapolated_to": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extrapolated To"
+          },
           "family": {
             "title": "Family",
             "type": "string"
@@ -1987,6 +1998,54 @@
       },
       "FitPreviewRequest": {
         "properties": {
+          "blend_primary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blend Primary"
+          },
+          "blend_weight": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blend Weight"
+          },
+          "blend_with": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blend With"
+          },
+          "extrapolate_to": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extrapolate To"
+          },
           "families": {
             "default": [],
             "items": {

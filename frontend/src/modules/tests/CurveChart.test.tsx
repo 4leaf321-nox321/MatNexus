@@ -68,3 +68,50 @@ describe('CurveChart 로그 축', () => {
     expect(screen.getByText('1.00e+6')).toBeTruthy() // 가장 작은 값이 바닥이다
   })
 })
+
+/**
+ * 경계선 — **외삽을 그릴 때 없으면 안 된다.**
+ *
+ * 늘린 구간과 측정 구간은 선 하나로 이어져 있다. 경계를 표시하지 않으면 어디까지가
+ * 시험이고 어디부터가 식의 주장인지 구별할 방법이 없고, 그 구별이 없으면 지어낸
+ * 값을 측정값으로 읽는다.
+ */
+describe('CurveChart 경계선', () => {
+  const POINTS: [number, number][] = [
+    [0, 300],
+    [0.1, 450],
+    [0.2, 500],
+  ]
+
+  it('준 자리에 선을 긋고 이름을 적는다', () => {
+    const { container } = render(
+      <CurveChart
+        points={POINTS}
+        xLabel="진소성변형률"
+        yLabel="진응력"
+        marker={{ x: 0.2, label: '여기까지 시험' }}
+      />,
+    )
+    expect(screen.getByText('여기까지 시험')).toBeInTheDocument()
+    // 점선이어야 눈금선과 구별된다.
+    const dashed = container.querySelectorAll('line[stroke-dasharray]')
+    expect(dashed).toHaveLength(1)
+    // 곡선의 마지막 x 와 같은 자리에 서야 한다.
+    const last = Number(
+      (container.querySelector('path')?.getAttribute('d') ?? '')
+        .split(/[ML]/)
+        .filter(Boolean)
+        .at(-1)
+        ?.split(',')[0],
+    )
+    expect(Number(dashed[0].getAttribute('x1'))).toBeCloseTo(last, 3)
+  })
+
+  it('안 주면 긋지 않는다', () => {
+    // 안 늘렸으면 경계가 곧 곡선 끝이라 선이 겹친다.
+    const { container } = render(
+      <CurveChart points={POINTS} xLabel="진소성변형률" yLabel="진응력" />,
+    )
+    expect(container.querySelectorAll('line[stroke-dasharray]')).toHaveLength(0)
+  })
+})

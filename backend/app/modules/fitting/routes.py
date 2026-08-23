@@ -267,14 +267,28 @@ def _representative(
     return group, strain, stress, [*notes, *single, *trimmed]
 
 
-def _fit_out(result: fitting.FitResult) -> FitOut:
-    # 적합된 식을 그려 함께 준다. 숫자만 보고는 맞는지 알 수 없다 — 데이터와
-    # 겹쳐 봐야 어디가 어긋났는지 보인다.
-    grid = np.linspace(result.strain_min, result.strain_max, CURVE_POINTS)
+def _fit_out(
+    result: fitting.FitResult | fitting.Blended, *, extrapolate_to: float | None = None
+) -> FitOut:
+    """적합된 식을 그려 함께 준다.
+
+    숫자만 보고는 맞는지 알 수 없다 — 데이터와 겹쳐 봐야 어디가 어긋났는지 보인다.
+
+    `extrapolate_to` 를 주면 **적합 구간 너머까지 그린다.** 저장하지 않는다 —
+    194 MPa 가 갈리는 결정을 눈으로 보고 내리라는 것이 이 값의 전부다.
+    """
+    top = result.strain_max
+    if extrapolate_to is not None and extrapolate_to > result.strain_max:
+        top = extrapolate_to
+    grid = np.linspace(result.strain_min, top, CURVE_POINTS)
     drawn = result.evaluate(grid)
+    spec = fitting.FAMILIES.get(
+        result.family if isinstance(result, fitting.FitResult) else result.primary.family
+    )
     return FitOut(
-        x_label=fitting.FAMILIES[result.family].x_label,
-        y_label=fitting.FAMILIES[result.family].y_label,
+        extrapolated_to=top if top > result.strain_max else None,
+        x_label=spec.x_label if spec else "진소성변형률",
+        y_label=spec.y_label if spec else "진응력",
         family=result.family,
         label=result.label,
         parameters=[
@@ -341,6 +355,20 @@ def preview(
         # **자기 축의 곡선에 맞춘다.** 여기서 `strain`(첫 축의 점)을 넘기면 두
         # 번째 축의 식이 남의 데이터에 맞춰지고, 그 결과는 그럴듯하게 나온다.
         results.extend(fitting.compare(x, y, families=tuple(item.key for item in same)))
+    # **섞은 곡선도 후보로 그린다.** 저장 모달에서 숫자만 바꾸고 눈으로 못 보면
+    # 가중치를 고를 근거가 없다 — 데이터가 정해 주지 않는 값이라 더 그렇다.
+    drawn: list[fitting.FitResult | fitting.Blended] = list(results)
+    if payload.blend_primary and payload.blend_with and payload.blend_weight is not None:
+        by_key = {item.family: item for item in results}
+        first, second = by_key.get(payload.blend_primary), by_key.get(payload.blend_with)
+        if first is not None and second is not None:
+            try:
+                drawn.append(
+                    fitting.blend(first, second, payload.blend_weight, strain, stress)
+                )
+            except fitting.FittingError as exc:
+                notes.append(str(exc))
+
     results.sort(key=lambda item: item.relative_rmse)
     assert group is not None
     axis_pairs = {(item.x_column, item.y_column) for item in chosen}
@@ -365,7 +393,7 @@ def preview(
     return FitPreviewOut(
         source_points=[(float(x), float(y)) for x, y in zip(strain, stress, strict=True)],
         sample_count=len(group.members),
-        fits=[_fit_out(item) for item in results],
+        fits=[_fit_out(item, extrapolate_to=payload.extrapolate_to) for item in drawn],
         elastic=[
             InheritedValueOut(
                 key=key, label=label, value=got.value, source=got.source, detail=got.detail

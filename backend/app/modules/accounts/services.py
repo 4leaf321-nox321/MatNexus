@@ -19,6 +19,7 @@ from app.modules.accounts.schemas import AccountOut
 from app.modules.auth import security
 from app.modules.auth.models import RefreshToken
 from app.modules.workspaces.models import Workspace, WorkspaceMember
+from app.shared import audit
 from app.shared.dependents import Reference, references_to, transfer_ownership
 from app.shared.errors import AppError, Conflict, NotFound
 
@@ -154,6 +155,16 @@ def approve(
             "to_user_id": str(user.id),
         },
     )
+    audit.record(
+        db,
+        action=audit.ACCOUNT_DECIDED,
+        actor=decided_by,
+        target_table="users",
+        target_id=user.id,
+        target_label=user.display_name or user.email,
+        workspace_id=workspace.id,
+        changes={"status": {"before": "pending", "after": "active"}, "role": {"after": role}},
+    )
     db.commit()
     return user
 
@@ -186,6 +197,18 @@ def reject(db: Session, *, user_id: uuid.UUID, decided_by: User, note: str) -> U
             "link": None,
             "to_user_id": str(user.id),
         },
+    )
+    audit.record(
+        db,
+        action=audit.ACCOUNT_DECIDED,
+        actor=decided_by,
+        target_table="users",
+        target_id=user.id,
+        target_label=user.display_name or user.email,
+        changes={"status": {"before": "pending", "after": "suspended"}},
+        # **거절 사유가 곧 근거다.** 사유 없이 거절만 남으면 나중에 같은 사람이
+        # 다시 신청했을 때 무엇을 보고 판단했는지 알 수 없다.
+        reason=user.decision_note,
     )
     db.commit()
     return user
@@ -277,6 +300,7 @@ def set_status(db: Session, *, user_id: uuid.UUID, status: str, actor: User) -> 
     if status not in ("active", "suspended"):
         raise AppError("MNX-ACCOUNTS-0007", "허용되지 않는 상태입니다.", status=400)
 
+    before = user.status
     user.status = status
     if status == "suspended":
         # 접근을 즉시 끊는다. 세션이 남아 있으면 정지가 무의미하다.
@@ -286,6 +310,17 @@ def set_status(db: Session, *, user_id: uuid.UUID, status: str, actor: User) -> 
             )
         ):
             token.revoked_at = _now()
+    # 정지는 **되돌릴 수 있어도 접근을 끊는다.** 누가 언제 끊었는지 남지 않으면
+    # "왜 로그인이 안 되죠" 를 설명할 근거가 없다.
+    audit.record(
+        db,
+        action=audit.ACCOUNT_SUSPENDED,
+        actor=actor,
+        target_table="users",
+        target_id=user.id,
+        target_label=user.display_name or user.email,
+        changes={"status": {"before": before, "after": status}},
+    )
     db.commit()
     return user
 
@@ -370,6 +405,20 @@ def delete_account(
     user.deleted_at = _now()
     user.status = "suspended"
     user.home_workspace_id = None
+    audit.record(
+        db,
+        action=audit.ACCOUNT_DELETED,
+        actor=actor,
+        target_table="users",
+        target_id=user.id,
+        target_label=user.display_name or user.email,
+        # 무엇이 누구에게 넘어갔는지가 이 기록의 핵심이다. 자료는 남고 소유자만
+        # 바뀌므로, 넘긴 내역이 없으면 나중에 그 자료의 출처를 되짚을 수 없다.
+        changes={
+            "deleted_at": {"after": user.deleted_at.isoformat()},
+            "transferred": {"after": [f"{ref.table} {ref.count}건" for ref in moved]},
+        },
+    )
     db.commit()
     return moved
 

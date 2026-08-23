@@ -43,6 +43,12 @@ export interface CurveChartProps {
    */
   logX?: boolean
   logY?: boolean
+  /**
+   * x 축의 한 지점에 세로선을 긋는다. **외삽을 그릴 때 없으면 안 된다** — 늘린
+   * 구간과 측정 구간은 선이 이어져 있어서, 경계를 표시하지 않으면 어디까지가
+   * 시험이고 어디부터가 식의 주장인지 구별할 방법이 없다.
+   */
+  marker?: { x: number; label: string }
 }
 
 const PAD = { top: 16, right: 20, bottom: 44, left: 68 }
@@ -82,6 +88,7 @@ export function CurveChart({
   pointsLabel,
   logX = false,
   logY = false,
+  marker,
 }: CurveChartProps) {
   const [hover, setHover] = useState<number | null>(null)
 
@@ -206,6 +213,27 @@ export function CurveChart({
             </text>
           </g>
         ))}
+
+        {marker !== undefined && (
+          <g>
+            <line
+              x1={scale.toX(marker.x)}
+              x2={scale.toX(marker.x)}
+              y1={PAD.top}
+              y2={height - PAD.bottom}
+              className="stroke-amber-500"
+              strokeWidth={1.5}
+              strokeDasharray="5 3"
+            />
+            <text
+              x={scale.toX(marker.x) + 4}
+              y={PAD.top + 11}
+              className="fill-amber-600 text-[11px]"
+            >
+              {marker.label}
+            </text>
+          </g>
+        )}
 
         <path d={path} fill="none" className="stroke-primary" strokeWidth={1.75} />
 

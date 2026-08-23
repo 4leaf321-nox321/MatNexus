@@ -73,6 +73,12 @@ export function FittingPanel({ materialId }: Props) {
   const [group, setGroup] = useState<GroupKey | null>(null)
   const [preview, setPreview] = useState<FitPreview | null>(null)
   const [chosen, setChosen] = useState<string | null>(null)
+  // **눈으로 보고 정하는 값들이다.** 저장 모달에 있었더니 숫자를 타이핑하고
+  // 저장 버튼을 누른 뒤에야 결과를 봤다 — 194 MPa 가 갈리는 결정을 눈 감고
+  // 내리는 셈이었다. 여기로 올려 그래프와 함께 움직이게 한다.
+  const [extrapolate, setExtrapolate] = useState('')
+  const [blendWith, setBlendWith] = useState('')
+  const [blendWeight, setBlendWeight] = useState(0.5)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
@@ -105,27 +111,47 @@ export function FittingPanel({ materialId }: Props) {
     if (!group && groups.length > 0) setGroup(groups[0])
   }, [group, groups])
 
-  async function run(target: GroupKey) {
+  async function run(target: GroupKey, keep = false) {
     setBusy(true)
     setError(null)
-    setPreview(null)
-    setChosen(null)
+    if (!keep) {
+      setPreview(null)
+      setChosen(null)
+    }
     try {
       const result = await fittingApi.preview({
         material_id: materialId,
         test_type_key: target.test_type_key,
         orientation: target.orientation,
+        // 비우면 등록된 식 전부를 견준다.
+        families: [],
+        extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
+        // 셋을 함께 줘야 혼합 곡선이 후보에 하나 더 붙는다.
+        blend_primary: blendWith && chosen ? chosen : null,
+        blend_with: blendWith || null,
+        blend_weight: blendWith ? blendWeight : null,
       })
       setPreview(result)
-      // 가장 잘 맞는 것을 **미리 켜 두기만** 한다. 고른 것은 아니다 — 바꿀 수 있고,
-      // 바꾸는 것이 이 화면의 목적이다.
-      setChosen(result.fits[0]?.family ?? null)
+      if (!keep) {
+        // 가장 잘 맞는 것을 **미리 켜 두기만** 한다. 고른 것은 아니다 — 바꿀 수
+        // 있고, 바꾸는 것이 이 화면의 목적이다.
+        setChosen(result.fits[0]?.family ?? null)
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('적합에 실패했습니다.'))
     } finally {
       setBusy(false)
     }
   }
+
+  // **조정하면 다시 그린다.** 계산은 서버가 한다 — 화면이 식을 복제하면 두
+  // 곳이 갈리고, 그때 그래프가 카드와 다른 곡선을 보여 준다.
+  useEffect(() => {
+    if (!group || !preview) return
+    const timer = setTimeout(() => void run(group, true), 350)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extrapolate, blendWith, blendWeight, chosen])
 
   // 묶음도 없고 카드도 없다 — 무엇을 하라고 할지가 갈리는 자리다.
   const nothing = !stats.loading && groups.length === 0 && (cards.data ?? []).length === 0
@@ -189,6 +215,12 @@ export function FittingPanel({ materialId }: Props) {
 
       {preview && (
         <FitComparison
+          extrapolate={extrapolate}
+          onExtrapolate={setExtrapolate}
+          blendWith={blendWith}
+          onBlendWith={setBlendWith}
+          blendWeight={blendWeight}
+          onBlendWeight={setBlendWeight}
           preview={preview}
           chosen={chosen}
           onChoose={setChosen}
@@ -208,6 +240,9 @@ export function FittingPanel({ materialId }: Props) {
       {group && (
         <SaveDialog
           candidates={preview?.fits ?? []}
+          extrapolate={extrapolate}
+          blendWith={blendWith}
+          blendWeight={blendWeight}
           open={saving}
           materialId={materialId}
           group={group}
@@ -229,11 +264,24 @@ function FitComparison({
   chosen,
   onChoose,
   onSave,
+  extrapolate,
+  onExtrapolate,
+  blendWith,
+  onBlendWith,
+  blendWeight,
+  onBlendWeight,
 }: {
   preview: FitPreview
   chosen: string | null
   onChoose: (family: string | null) => void
   onSave: () => void
+  /** 여기까지 늘려 **그린다.** 저장은 아직 아니다. */
+  extrapolate: string
+  onExtrapolate: (value: string) => void
+  blendWith: string
+  onBlendWith: (value: string) => void
+  blendWeight: number
+  onBlendWeight: (value: number) => void
 }) {
   // **`chosen === null` 은 '아직 안 골랐다' 가 아니라 '식을 안 쓴다' 다.**
   // 전에는 여기서 `?? preview.fits[0]` 로 되돌려서, 표만 쓰겠다는 선택이
@@ -265,6 +313,66 @@ function FitComparison({
       </header>
 
       <div className="space-y-4 p-3">
+        {/* **눈으로 보고 정하는 값들이다.** 저장 모달에 있었을 때는 숫자를
+            타이핑하고 저장한 뒤에야 결과를 봤다 — 194 MPa 가 갈리는 결정을
+            눈 감고 내리는 셈이었다. */}
+        <div className="bg-muted/40 grid gap-3 rounded-md p-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="extrapolate">늘려서 보기 (진소성변형률)</Label>
+            <Input
+              id="extrapolate"
+              inputMode="decimal"
+              placeholder="비우면 측정 구간까지만"
+              value={extrapolate}
+              onChange={(event) => onExtrapolate(event.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">
+              인장시험은 <b>네킹까지</b>만 줍니다(강판이면 0.1~0.25). 충돌 해석은
+              0.5~1.5 를 씁니다 — 그래프의 <b>세로선 오른쪽이 식이 지어낸 구간</b>입니다.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="blend">섞을 식</Label>
+            <select
+              id="blend"
+              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+              value={blendWith}
+              onChange={(event) => onBlendWith(event.target.value)}
+              disabled={chosen === null}
+            >
+              <option value="">안 섞음</option>
+              {preview.fits
+                .filter((item) => item.family !== chosen && !item.family.includes('+'))
+                .map((item) => (
+                  <option key={item.family} value={item.family}>
+                    {item.label}
+                  </option>
+                ))}
+            </select>
+            {blendWith !== '' && (
+              <>
+                <input
+                  aria-label="섞는 비중"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={blendWeight}
+                  onChange={(event) => onBlendWeight(Number(event.target.value))}
+                  className="w-full"
+                />
+                <p className="text-muted-foreground text-xs">
+                  고른 식 <b>{blendWeight.toFixed(2)}</b> : 섞을 식{' '}
+                  <b>{(1 - blendWeight).toFixed(2)}</b>. <b>데이터가 이 값을 정해 주지
+                  않습니다</b> — 적합 구간에서는 어느 값이든 비슷하게 맞으므로, 얼마나
+                  보수적으로 볼지가 정합니다.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+
         {preview.notes.length > 0 && (
           <ul className="text-muted-foreground space-y-1 text-xs">
             {preview.notes.map((note) => (
@@ -335,7 +443,22 @@ function FitComparison({
               xLabel={xLabel}
               yLabel={yLabel}
               height={300}
+              // 늘려 그린 때만 긋는다. 안 늘렸으면 경계가 곧 곡선 끝이라 선이 겹친다.
+              marker={
+                fit.extrapolated_to === null || fit.extrapolated_to === undefined
+                  ? undefined
+                  : { x: fit.strain_max, label: '여기까지 시험' }
+              }
             />
+
+            {fit.extrapolated_to != null && (
+              <p className="text-muted-foreground text-xs">
+                세로선 오른쪽 <b>{fit.strain_max.toPrecision(2)} ~{' '}
+                {fit.extrapolated_to.toPrecision(2)}</b> 구간은 측정한 것이 아니라{' '}
+                <b>{fit.label} 이 지어낸 값</b>입니다. 식마다 여기서 갈리므로, 후보를
+                바꿔 가며 끝값을 견주고 정하세요.
+              </p>
+            )}
 
             <div>
               <h4 className="mb-1.5 text-sm font-medium">{fit.label} 파라미터</h4>
@@ -587,6 +710,9 @@ function ExportMenu({
 
 function SaveDialog({
   candidates,
+  extrapolate,
+  blendWith,
+  blendWeight,
   open,
   materialId,
   group,
@@ -595,7 +721,15 @@ function SaveDialog({
   onClose,
   onSaved,
 }: {
-  /** 섞을 상대를 여기서 고른다. **적합해 본 것만 섞을 수 있다.** */
+  /**
+   * 비교 화면에서 정한 것. **여기서 다시 고르지 않는다** — 늘린 한계와 섞는
+   * 비중은 곡선을 보면서 정하는 값이라, 그래프가 없는 모달에서 숫자만 바꾸면
+   * 194 MPa 가 갈리는 결정을 눈 감고 내리게 된다.
+   */
+  extrapolate: string
+  blendWith: string
+  blendWeight: number
+  /** 섞을 상대의 이름을 적기 위해서만 쓴다. */
   candidates: Fit[]
   open: boolean
   materialId: string
@@ -623,13 +757,6 @@ function SaveDialog({
       : `${Number(row.value.toPrecision(6))} (물려받음)`
   }
   const [note, setNote] = useState('')
-  // **비워 두면 측정 구간 그대로.** 기본값을 두면 그 값이 곧 결정이 되는데,
-  // 아무도 그것을 결정이라고 인식하지 않는다.
-  const [extrapolate, setExtrapolate] = useState('')
-  // **적합을 좋게 하려는 것이 아니라 외삽을 조정하는 것이다.** 측정 구간에서는
-  // 두 식이 거의 같은데 그 밖에서 크게 갈린다.
-  const [blendWith, setBlendWith] = useState('')
-  const [blendWeight, setBlendWeight] = useState('0.5')
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -652,7 +779,7 @@ function SaveDialog({
         poisson_ratio: poisson === '' ? null : Number(poisson),
         density: density === '' ? null : Number(density),
         blend_with: blendWith === '' ? null : blendWith,
-        blend_weight: blendWith === '' ? null : Number(blendWeight),
+        blend_weight: blendWith === '' ? null : blendWeight,
         extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
         note: note === '' ? null : note,
       })
@@ -720,68 +847,33 @@ function SaveDialog({
             카드는 <b>값과 출처를 함께</b> 박아 둡니다.
           </p>
 
-          {/* **두 식은 적합 구간에서 비슷하고 그 밖에서 갈린다.** Swift 는 과대,
-              Voce 는 과소 예측하는 경향이 알려져 있어 섞어 쓴다 — 고장력강 카드에서는
-              사실상 표준 기법이다. */}
-          {family !== null && (
-            <div className="space-y-1.5">
-              <Label htmlFor="blend">섞을 식 (선택)</Label>
-              <div className="flex gap-2">
-                <select
-                  id="blend"
-                  className="border-input bg-background h-9 flex-1 rounded-md border px-2 text-sm"
-                  value={blendWith}
-                  onChange={(event) => setBlendWith(event.target.value)}
-                >
-                  <option value="">안 섞음</option>
-                  {candidates
-                    .filter((item) => item.family !== family)
-                    .map((item) => (
-                      <option key={item.family} value={item.family}>
-                        {item.label}
-                      </option>
-                    ))}
-                </select>
-                <Input
-                  aria-label="섞는 비중"
-                  className="w-24"
-                  inputMode="decimal"
-                  value={blendWeight}
-                  onChange={(event) => setBlendWeight(event.target.value)}
-                  disabled={blendWith === ''}
-                />
-              </div>
-              <p className="text-muted-foreground text-xs">
-                비중은 <b>고른 식 쪽</b>입니다(0~1). <b>적합을 좋게 하려는 것이
-                아닙니다</b> — 두 식은 적합 구간에서 비슷하고 그 밖에서 갈립니다.
-                혼합의 오차가 두 식 모두보다 커도 그 자체는 문제가 아닙니다.
-                <br />
-                <b>데이터가 비중을 정하지 못합니다.</b> 적합 구간에서는 어느 값이든
-                비슷하게 맞으므로, 얼마나 보수적으로 볼지가 정합니다.
-              </p>
-            </div>
-          )}
-
-          {/* **측정 구간만 내보내는 것도 결정이다.** 솔버는 표 밖에서 마지막
-              응력을 붙들고 가는데, 금속은 계속 경화하므로 그 구간에서 하중을 낮게
-              계산한다. 지어내지 않는 것이 아니라 다른 값을 조용히 지어내는 것이다. */}
-          <div className="space-y-1.5">
-            <Label htmlFor="extrapolate">소성 표를 늘릴 한계 (진소성변형률)</Label>
-            <Input
-              id="extrapolate"
-              inputMode="decimal"
-              placeholder="비우면 측정 구간까지만"
-              value={extrapolate}
-              onChange={(event) => setExtrapolate(event.target.value)}
-              disabled={family === null}
-            />
-            <p className="text-muted-foreground text-xs">
-              인장시험은 <b>네킹까지</b>만 줍니다(강판이면 0.1~0.25). 충돌 해석은
-              0.5~1.5, 성형은 0.3~1.0 을 씁니다 — 그 사이를 비워 두면 솔버가 마지막
-              응력을 붙들고 갑니다. <b>그것도 물리적 주장입니다.</b>
-              {family === null
-                ? ' 식을 골라야 늘릴 수 있습니다 — 표만 저장하면 늘릴 근거가 없습니다.'
-                : ' 얼마까지 필요한지는 무슨 해석을 하느냐가 정합니다.'}
+          {/* **여기서는 확인만 한다.** 늘린 한계도 섞는 비중도 그래프를 보며
+              정하는 값이라, 곡선이 없는 이 자리에서 숫자만 바꾸면 무엇이 달라지는지
+              모르는 채 정하게 된다. 고치려면 비교 화면으로 돌아간다. */}
+          <div className="bg-muted/40 space-y-1 rounded-md p-3 text-xs">
+            <p className="text-sm font-medium">비교 화면에서 정한 것</p>
+            <p>
+              <span className="text-muted-foreground">늘릴 한계</span>{' '}
+              {extrapolate === '' ? (
+                <b>측정 구간까지만</b>
+              ) : (
+                <b>진소성변형률 {extrapolate} 까지</b>
+              )}
+            </p>
+            <p>
+              <span className="text-muted-foreground">섞을 식</span>{' '}
+              {blendWith === '' ? (
+                <b>안 섞음</b>
+              ) : (
+                <b>
+                  {candidates.find((item) => item.family === blendWith)?.label ?? blendWith}{' '}
+                  비중 {blendWeight.toFixed(2)}
+                </b>
+              )}
+            </p>
+            <p className="text-muted-foreground pt-1">
+              바꾸려면 이 창을 닫고 <b>비교 화면</b>에서 조정하세요 — 곡선이 함께
+              움직이는 것을 보고 정하는 값입니다.
             </p>
           </div>
 

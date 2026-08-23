@@ -3323,6 +3323,8 @@ export interface components {
                 number,
                 number
             ][];
+            /** Extrapolated To */
+            extrapolated_to?: number | null;
             /** Family */
             family: string;
             /** Label */
@@ -3377,6 +3379,14 @@ export interface components {
         };
         /** FitPreviewRequest */
         FitPreviewRequest: {
+            /** Blend Primary */
+            blend_primary?: string | null;
+            /** Blend Weight */
+            blend_weight?: number | null;
+            /** Blend With */
+            blend_with?: string | null;
+            /** Extrapolate To */
+            extrapolate_to?: number | null;
             /**
              * Families
              * @default []

@@ -159,3 +159,138 @@ class Test바뀐것만:
 
     def test_없던_값이_생긴_것도_바뀐_것이다(self) -> None:
         assert audit.diff({}, {"a": 1}) == {"a": {"before": None, "after": 1}}
+
+
+class Test나머지_경로:
+    """**행위 상수만 있고 부르는 곳이 없으면 없는 기능이다.**
+
+    v1.49.0 에 열 개를 선언했는데 실제로 남기는 곳은 카드 세 곳뿐이었다. 화면을
+    붙이고 나서야 드러났다 — 목록이 거의 비어 있었다.
+    """
+
+    def test_계정_정지가_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], workspace: Any
+    ) -> None:
+        """정지는 되돌릴 수 있어도 **접근을 끊는다.** 누가 끊었는지 남지 않으면
+        "왜 로그인이 안 되죠" 에 답할 근거가 없다."""
+        made = client.post(
+            "/api/accounts",
+            json={
+                "email": "정지@example.com",
+                "display_name": "정지 대상",
+                "role": "member",
+                "workspace_slug": "metal",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code in (200, 201), made.text
+        account_id = made.json()["account"]["id"]
+
+        done = client.post(f"/api/accounts/{account_id}/suspend", headers=admin_headers)
+        assert done.status_code == 200, done.text
+
+        entries = client.get(
+            "/api/audit", params={"action": "account.suspended"}, headers=admin_headers
+        ).json()
+        assert [item["target_id"] for item in entries] == [account_id]
+        assert entries[0]["changes"]["status"]["after"] == "suspended"
+
+    def test_기준정보_이름_변경이_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**이름 하나가 수천 건을 바꾼다.** 외래키라 참조가 저절로 따라오고,
+        강종이면 재료 이름까지 다시 만들어진다(ADR 0004)."""
+        made = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "감사제철"},
+            headers=admin_headers,
+        )
+        assert made.status_code in (200, 201), made.text
+        term_id = made.json()["id"]
+
+        changed = client.patch(
+            f"/api/vocabularies/manufacturer/terms/{term_id}",
+            json={"value": "감사제철(주)"},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+
+        entries = client.get(
+            "/api/audit", params={"action": "vocabulary.renamed"}, headers=admin_headers
+        ).json()
+        assert len(entries) == 1
+        assert entries[0]["changes"]["value"] == {
+            "before": "감사제철",
+            "after": "감사제철(주)",
+        }
+
+    def test_감추는_것은_안_남긴다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**감춤은 피커에서만 사라지고 자료는 그대로다.** 이름 변경과 같은
+        무게로 남기면 목록이 소음으로 찬다."""
+        made = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "감출제철"},
+            headers=admin_headers,
+        )
+        term_id = made.json()["id"]
+        client.patch(
+            f"/api/vocabularies/manufacturer/terms/{term_id}",
+            json={"status": "deprecated"},
+            headers=admin_headers,
+        )
+        entries = client.get(
+            "/api/audit", params={"action": "vocabulary.renamed"}, headers=admin_headers
+        ).json()
+        assert entries == []
+
+    def test_시험_종류_변경이_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """고치는 것은 **이미 저장된 곡선의 읽는 법을 바꾼다.**"""
+        ensure_builtin_test_types(db)
+        db.commit()
+        before = client.get("/api/test-types", headers=admin_headers).json()
+        target = next(item for item in before if item["key"] == "tensile")
+
+        payload = {key: target[key] for key in target if key not in ("id", "key")}
+        payload["label"] = "인장(감사)"
+        changed = client.put("/api/test-types/tensile", json=payload, headers=admin_headers)
+        assert changed.status_code == 200, changed.text
+
+        entries = client.get(
+            "/api/audit", params={"action": "test_type.changed"}, headers=admin_headers
+        ).json()
+        assert len(entries) == 1
+        assert entries[0]["changes"]["label"]["after"] == "인장(감사)"
+
+    def test_안_바뀌면_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """**저장 버튼을 눌렀다는 사실은 감사 대상이 아니다.** 아무것도 안
+        바뀐 저장이 기록으로 남으면, 진짜 변경이 그 사이에 묻힌다.
+
+        같은 것을 **두 번** 저장해서 본다. 한 번만으로는 부족하다 — 응답이 준
+        모양을 그대로 돌려보내도 첫 저장은 진짜로 뭔가를 바꾼다(`max_upload_bytes`
+        가 그렇다: 응답은 실제로 쓰이는 50MB 를 주는데 저장된 값은 비어 있어서,
+        되돌려보내면 그 기본값이 박힌다). 그것을 안 남기면 오히려 틀린다.
+        """
+        ensure_builtin_test_types(db)
+        db.commit()
+        shown = client.get("/api/test-types", headers=admin_headers).json()
+        target = next(item for item in shown if item["key"] == "tensile")
+        payload = {key: target[key] for key in target if key not in ("id", "key")}
+
+        for _ in range(2):
+            assert (
+                client.put(
+                    "/api/test-types/tensile", json=payload, headers=admin_headers
+                ).status_code
+                == 200
+            )
+        entries = client.get(
+            "/api/audit", params={"action": "test_type.changed"}, headers=admin_headers
+        ).json()
+        # 첫 번째만 남는다. 두 번째는 정말로 아무것도 안 바꿨다.
+        assert len(entries) == 1, [item["changes"] for item in entries]

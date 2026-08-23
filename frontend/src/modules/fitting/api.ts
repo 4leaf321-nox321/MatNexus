@@ -12,6 +12,7 @@ import type { components } from '@/shared/api/schema'
 export type Family = components['schemas']['FamilyOut']
 export type Fit = components['schemas']['FitOut']
 export type FitPreview = components['schemas']['FitPreviewOut']
+export type FitPreviewRequest = components['schemas']['FitPreviewRequest']
 export type InheritedValue = components['schemas']['InheritedValueOut']
 export type FittedParameter = components['schemas']['FittedParameterOut']
 export type PropertyCard = components['schemas']['PropertyCardOut']
@@ -35,12 +36,7 @@ export const fittingApi = {
   blocks: () => api.get<BlockSpec[]>('/fitting/blocks'),
 
   /** 저장하지 않고 견줘 본다. `families` 를 비우면 등록된 식 전부. */
-  preview: (body: {
-    material_id: string
-    test_type_key: string
-    orientation: string
-    families?: string[]
-  }) => api.post<FitPreview>('/fitting/preview', body),
+  preview: (body: FitPreviewRequest) => api.post<FitPreview>('/fitting/preview', body),
 
   cards: (materialId?: string) =>
     api.get<PropertyCard[]>(

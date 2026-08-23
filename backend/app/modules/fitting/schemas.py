@@ -48,6 +48,9 @@ class FitOut(BaseModel):
     notes: list[str]
     curve: list[tuple[float, float]]
     """적합된 식을 그린 것. 데이터와 겹쳐 봐야 맞는지 눈으로 판단할 수 있다."""
+    extrapolated_to: float | None = None
+    """늘려 그린 한계. **`strain_max` 부터 여기까지가 외삽 구간**이고, 화면은 그
+    경계를 표시해야 한다 — 점이 나란히 있으면 어디까지가 시험인지 구별이 안 된다."""
     x_label: str = "진소성변형률"
     y_label: str = "진응력"
     """이 적합이 선 축의 이름. **고무는 공칭이다** — 그래프의 축이 "진소성변형률"
@@ -60,6 +63,17 @@ class FitPreviewRequest(BaseModel):
     orientation: str
     families: list[str] = []
     """비우면 등록된 식 전부를 견준다."""
+    extrapolate_to: float | None = Field(default=None, gt=0, le=10.0)
+    """여기까지 늘려 **그려 준다.** 저장하지 않는다.
+
+    **194 MPa 가 갈리는 결정을 눈으로 못 보고 내리면 안 된다.** 측정 구간에서
+    거의 같은 두 식이 외삽에서 갈리는데, 저장 뒤에야 결과를 보면 판단할 자리가
+    없다."""
+    blend_with: str | None = None
+    """`blend_primary` 와 섞어 그릴 두 번째 식."""
+    blend_primary: str | None = None
+    blend_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    """셋을 함께 줘야 혼합 곡선이 후보에 하나 더 붙는다."""
 
 
 class InheritedValueOut(BaseModel):

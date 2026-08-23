@@ -22,6 +22,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.modules.accounts.models import User
 from app.modules.tests.models import (
     Curve,
     FormatProfile,
@@ -31,7 +32,7 @@ from app.modules.tests.models import (
     TestSummary,
     TestType,
 )
-from app.shared import filestore, permissions
+from app.shared import audit, filestore, permissions
 from app.shared.errors import AppError, NotFound
 from matcore import curves, parsers, readers, registry, units
 from matcore.parsers import ParsedTest, ParseError
@@ -238,6 +239,17 @@ def definition_is_locked(db: Session, test_type_id: uuid.UUID) -> tuple[bool, in
     return count > 0, count
 
 
+def _count_children(db: Session, model: type[Any], test_type_id: uuid.UUID) -> int:
+    """채널·조건이 몇 개였나. **개수가 줄었다는 것 자체가 신호다** — 채널이 사라지면
+    그 채널을 읽던 곡선이 해석을 잃는다."""
+    return (
+        db.scalar(
+            select(func.count()).select_from(model).where(model.test_type_id == test_type_id)
+        )
+        or 0
+    )
+
+
 def save_definition(
     db: Session,
     *,
@@ -252,11 +264,16 @@ def save_definition(
     channels: list[dict[str, Any]],
     conditions: list[dict[str, Any]],
     owner_workspace_id: uuid.UUID | None = None,
+    actor: User | None = None,
 ) -> TestType:
     """정의 한 벌을 저장한다. 없으면 만들고, 있으면 갈아 끼운다.
 
     `owner_workspace_id` 는 **만들 때만** 쓴다. 소유를 옮기는 것(전역 승격)은
     성격이 다른 결정이라 이 경로로 조용히 일어나면 안 된다.
+
+    `actor` 를 주면 **고칠 때만** 감사 기록을 남긴다. 만드는 것은 되돌릴 수 있고
+    아직 아무것도 안 가리키지만, 고치는 것은 이미 저장된 곡선의 읽는 법을
+    바꾼다 — 그 둘은 같은 무게가 아니다.
     """
     if not channels:
         raise AppError("MNX-TESTS-0015", "채널이 하나도 없습니다.", status=422)
@@ -294,6 +311,15 @@ def save_definition(
     else:
         _guard_locked_changes(db, test_type, channels, conditions)
 
+    before = {
+        "label": test_type.label,
+        "abbr": test_type.abbr,
+        "parser_key": test_type.parser_key,
+        "is_active": test_type.is_active,
+        "max_upload_bytes": test_type.max_upload_bytes,
+        "channels": _count_children(db, TestChannel, test_type.id),
+        "conditions": _count_children(db, TestConditionField, test_type.id),
+    }
     test_type.label = label
     test_type.abbr = abbr
     test_type.description = description
@@ -304,6 +330,30 @@ def save_definition(
     db.flush()
 
     _replace_children(db, test_type, channels, conditions)
+    if actor is not None and not creating:
+        changed = audit.diff(
+            before,
+            {
+                "label": label,
+                "abbr": abbr,
+                "parser_key": parser_key,
+                "is_active": is_active,
+                "max_upload_bytes": max_upload_bytes,
+                "channels": len(channels),
+                "conditions": len(conditions),
+            },
+        )
+        if changed:
+            audit.record(
+                db,
+                action=audit.TEST_TYPE_CHANGED,
+                actor=actor,
+                target_table="test_types",
+                target_id=test_type.id,
+                target_label=f"{label} ({key})",
+                workspace_id=test_type.owner_workspace_id,
+                changes=changed,
+            )
     db.commit()
     db.refresh(test_type)
     logger.info("시험 종류 %s: %s", "생성" if creating else "수정", key)

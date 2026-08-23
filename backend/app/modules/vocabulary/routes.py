@@ -49,6 +49,7 @@ from app.modules.vocabulary.schemas import (
     TermUpdateRequest,
     VocabularyOut,
 )
+from app.shared import audit
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import MAX_LIMIT, Page, clamp_limit
@@ -612,6 +613,7 @@ def update_term(
         raise NotFound("MNX-VOCABULARY-0004", "값을 찾을 수 없습니다.")
 
     data = payload.model_dump(exclude_unset=True)
+    before = term.value
     if "value" in data:
         services.rename(db, term, data["value"])
     if "status" in data:
@@ -651,6 +653,22 @@ def update_term(
         if attributes is None:
             attributes = dict(term.attributes or {})
         term.attributes = services.check_attributes(db, vocabulary, term, attributes)
+
+    # **이름 하나가 수천 건을 바꾼다.** 외래키라 참조가 저절로 따라오고, 강종이면
+    # 재료 이름까지 다시 만들어진다(ADR 0004). 그렇게 넓게 퍼지는 변경이 아무
+    # 흔적 없이 일어나면, 나중에 "이 재료 이름이 왜 이렇죠" 에 답할 근거가 없다.
+    #
+    # 감춤(`status`)은 남기지 않는다 — 피커에서만 사라지고 자료는 그대로다.
+    if before != term.value:
+        audit.record(
+            db,
+            action=audit.VOCABULARY_RENAMED,
+            actor=user,
+            target_table="vocabulary_terms",
+            target_id=term.id,
+            target_label=f"{vocabulary.label} · {term.value}",
+            changes={"value": {"before": before, "after": term.value}},
+        )
 
     db.commit()
     db.refresh(term)

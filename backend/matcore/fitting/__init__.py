@@ -24,7 +24,7 @@ DB 도 HTTP 도 모른다. `tests/architecture` 가 검사한다.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -358,6 +358,19 @@ class Blended:
     @property
     def family(self) -> str:
         return f"{self.primary.family}+{self.secondary.family}"
+
+    @property
+    def parameters(self) -> tuple[Parameter, ...]:
+        """두 식의 계수를 나란히. **이름에 어느 식인지 붙인다.**
+
+        섞여 들어오므로 `sigma_0` 만으로는 어느 쪽 것인지 구별이 안 된다. 카드가
+        표에 담을 때도 같은 방식을 쓴다.
+        """
+        return tuple(
+            replace(item, name=f"{parent.label}·{item.name}")
+            for parent in (self.primary, self.secondary)
+            for item in parent.parameters
+        )
 
     def evaluate(self, plastic_strain: np.ndarray) -> np.ndarray:
         grid = np.asarray(plastic_strain, dtype=np.float64)

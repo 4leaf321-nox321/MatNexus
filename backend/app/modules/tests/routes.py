@@ -59,7 +59,7 @@ from app.modules.tests.schemas import (
 )
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
-from app.shared import curvedata, filestore, permissions, specimen_size
+from app.shared import audit, curvedata, filestore, permissions, specimen_size
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -377,7 +377,7 @@ def update_test_type(
     require_owner_edit(
         db, user, existing.owner_workspace_id, what="시험 종류", code="MNX-TESTS-0029"
     )
-    test_type = services.save_definition(db, key=key, **payload.model_dump())
+    test_type = services.save_definition(db, key=key, actor=user, **payload.model_dump())
     return _type_out(db, test_type)
 
 
@@ -977,6 +977,18 @@ def delete_run(
     run = services.get_run(db, user, run_id)
     run.deleted_at = _now()
     vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
+    # **되돌릴 수 있어도 남긴다.** 되돌리려면 먼저 지워졌다는 것을 알아야 하고,
+    # 파일 정리 잡이 나중에 파일을 치우면 그때는 정말로 되돌릴 수 없다.
+    audit.record(
+        db,
+        action=audit.TEST_RUN_DELETED,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.source_filename or str(run.id),
+        workspace_id=run.workspace_id,
+        changes={"deleted_at": {"after": run.deleted_at.isoformat()}},
+    )
     db.commit()
     return Response(status_code=204)
 

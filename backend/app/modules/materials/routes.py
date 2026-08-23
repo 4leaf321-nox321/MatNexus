@@ -46,7 +46,7 @@ from app.modules.materials.schemas import (
 from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import specimen_size
+from app.shared import audit, specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -727,6 +727,18 @@ def delete_material(
         )
     material.deleted_at = _now()
     vocabulary_services.release_bindings(db, material, vocabulary_services.MATERIAL_BINDINGS)
+    # 소프트 삭제라 행은 남지만 **목록에서 사라진다.** 누가 치웠는지 남지 않으면
+    # "있던 재료가 없어졌다" 를 설명할 길이 없다.
+    audit.record(
+        db,
+        action=audit.MATERIAL_DELETED,
+        actor=user,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        workspace_id=material.owner_workspace_id,
+        changes={"deleted_at": {"after": material.deleted_at.isoformat()}},
+    )
     db.commit()
     return Response(status_code=204)
 
