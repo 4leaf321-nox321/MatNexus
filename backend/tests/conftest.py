@@ -28,6 +28,18 @@ from app.modules.vocabulary.definitions import ensure_builtin_vocabularies
 
 
 def _test_url() -> str:
+    """`<개발DB>_test`.
+
+    **병렬(`pytest -n`)은 안 쓴다.** 재 보고 접었다 — 32코어에서 470초가 369초로
+    21% 줄었는데 `InsufficientPrivilege`("파일을 만들 수 없음")가 12번 났다.
+
+    병목이 클라이언트가 아니라 **PostgreSQL 자신**이다. 테이블 36개를 769번 비우는 일은
+    디스크 I/O 이고, 클라이언트를 32개로 늘려도 서버는 하나다 — 줄 서는 곳만
+    옮겨진다. 게다가 그만큼이 동시에 파일을 만들고 지우니 Windows 가 못 버틴다.
+
+    얻는 101초보다 **간헐적 오류**가 비싸다. TRUNCATE 를 건드린 테이블만 비우는
+    안을 접은 것과 같은 판단이다.
+    """
     url = make_url(get_settings().database_url)
     # str(URL) 은 비밀번호를 '***' 로 마스킹한다. 그대로 쓰면 인증에 실패한다.
     return url.set(database=f"{url.database}_test").render_as_string(hide_password=False)
