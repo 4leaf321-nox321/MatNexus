@@ -102,6 +102,19 @@ class PropertyCardSaveRequest(BaseModel):
     """**인장시험이 주지 않는 값이다.** 없으면 없는 채로 둔다 — 0.3 으로 채우면
     그것이 측정값인지 기본값인지 나중에 알 수 없다."""
     density: float | None = Field(default=None, gt=0)
+    blend_with: str | None = None
+    """`family` 와 섞을 두 번째 식. **외삽에서 갈리는 구간을 조정한다.**
+
+    측정 구간에서는 두 식이 거의 같은데 외삽에서 크게 갈린다 — Swift 는 과대,
+    Voce 는 과소 예측하는 경향이 알려져 있어 이 도메인에서는 둘을 섞어 쓴다.
+
+    **적합을 좋게 하려는 것이 아니다.** 혼합의 RMSE 가 두 식 모두보다 나쁠 수 있고
+    그 자체는 문제가 아니다."""
+    blend_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    """`family` 쪽 비중. `blend_with` 를 주면 함께 줘야 한다.
+
+    **기본값을 두지 않는다.** 적합 구간에서는 어느 값이든 비슷하게 맞으므로
+    데이터가 못 정한다 — 얼마나 보수적으로 볼지가 정하고 그건 해석하는 사람이 안다."""
     extrapolate_to: float | None = Field(default=None, gt=0, le=10.0)
     """소성 표를 어디까지 늘릴까. **비우면 측정 구간 그대로.**
 

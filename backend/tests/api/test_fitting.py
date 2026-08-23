@@ -997,3 +997,85 @@ class Test외삽:
         made = self._card(client, admin_headers, ready["id"], extrapolate_to=0.0001)
         assert made.status_code == 422
         assert "늘릴 구간이 없습니다" in made.text
+
+
+class Test혼합:
+    """두 식을 섞어 외삽을 조정한다 — 고장력강 카드의 표준 기법이다."""
+
+    def _make(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        material_id: str,
+        **extra: Any,
+    ) -> Any:
+        return client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": material_id,
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "혼합",
+                "family": "voce",
+                **extra,
+            },
+            headers=headers,
+        )
+
+    def test_섞은_식이_카드에_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        made = self._make(
+            client, admin_headers, ready["id"], blend_with="swift", blend_weight=0.6
+        )
+        assert made.status_code == 201, made.text
+        block = values(made.json(), "hardening")
+        assert block["family"] == "voce+swift"
+        assert block["blend_with"] == "swift"
+        assert block["blend_weight"] == pytest.approx(0.6)
+        assert "Voce" in block["label"] and "Swift" in block["label"]
+
+    def test_어느_식의_계수인지_이름에_남긴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**둘이 섞여 들어오므로 이름만으로는 구별이 안 된다.**"""
+        card = self._make(
+            client, admin_headers, ready["id"], blend_with="swift", blend_weight=0.5
+        ).json()
+        names = [row["name"] for row in rows(card, "hardening")]
+        assert any(name.startswith("Voce") for name in names)
+        assert any(name.startswith("Swift") for name in names)
+
+    def test_섞은_곡선으로_늘린다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """외삽이 혼합의 목적이다 — 늘릴 때 섞인 곡선을 써야 한다."""
+        card = self._make(
+            client,
+            admin_headers,
+            ready["id"],
+            blend_with="swift",
+            blend_weight=0.5,
+            extrapolate_to=1.0,
+        ).json()
+        table = values(card, "table")
+        assert table["source"] == "외삽"
+        assert "Voce" in table["family"] and "Swift" in table["family"]
+
+    def test_비중을_안_주면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**데이터가 정하지 못하는 값이라 기본값을 두지 않는다.**"""
+        made = self._make(client, admin_headers, ready["id"], blend_with="swift")
+        assert made.status_code == 422
+        assert "비중을 함께" in made.text
+
+    def test_섞을_수_없는_식은_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """초탄성은 축이 달라 경화식과 못 섞는다."""
+        made = self._make(
+            client, admin_headers, ready["id"], blend_with="ogden_1", blend_weight=0.5
+        )
+        assert made.status_code == 422
+        assert "섞을 수 있는" in made.text

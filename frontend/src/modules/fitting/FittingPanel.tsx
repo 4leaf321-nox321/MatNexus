@@ -207,6 +207,7 @@ export function FittingPanel({ materialId }: Props) {
 
       {group && (
         <SaveDialog
+          candidates={preview?.fits ?? []}
           open={saving}
           materialId={materialId}
           group={group}
@@ -585,6 +586,7 @@ function ExportMenu({
 }
 
 function SaveDialog({
+  candidates,
   open,
   materialId,
   group,
@@ -593,6 +595,8 @@ function SaveDialog({
   onClose,
   onSaved,
 }: {
+  /** 섞을 상대를 여기서 고른다. **적합해 본 것만 섞을 수 있다.** */
+  candidates: Fit[]
   open: boolean
   materialId: string
   group: GroupKey
@@ -622,6 +626,10 @@ function SaveDialog({
   // **비워 두면 측정 구간 그대로.** 기본값을 두면 그 값이 곧 결정이 되는데,
   // 아무도 그것을 결정이라고 인식하지 않는다.
   const [extrapolate, setExtrapolate] = useState('')
+  // **적합을 좋게 하려는 것이 아니라 외삽을 조정하는 것이다.** 측정 구간에서는
+  // 두 식이 거의 같은데 그 밖에서 크게 갈린다.
+  const [blendWith, setBlendWith] = useState('')
+  const [blendWeight, setBlendWeight] = useState('0.5')
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -643,6 +651,8 @@ function SaveDialog({
         // 나중에 알 수 없다.
         poisson_ratio: poisson === '' ? null : Number(poisson),
         density: density === '' ? null : Number(density),
+        blend_with: blendWith === '' ? null : blendWith,
+        blend_weight: blendWith === '' ? null : Number(blendWeight),
         extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
         note: note === '' ? null : note,
       })
@@ -709,6 +719,48 @@ function SaveDialog({
             여기 적으면 그 값이 이기고, 카드에 '직접 입력' 으로 남습니다. 어느 쪽이든
             카드는 <b>값과 출처를 함께</b> 박아 둡니다.
           </p>
+
+          {/* **두 식은 적합 구간에서 비슷하고 그 밖에서 갈린다.** Swift 는 과대,
+              Voce 는 과소 예측하는 경향이 알려져 있어 섞어 쓴다 — 고장력강 카드에서는
+              사실상 표준 기법이다. */}
+          {family !== null && (
+            <div className="space-y-1.5">
+              <Label htmlFor="blend">섞을 식 (선택)</Label>
+              <div className="flex gap-2">
+                <select
+                  id="blend"
+                  className="border-input bg-background h-9 flex-1 rounded-md border px-2 text-sm"
+                  value={blendWith}
+                  onChange={(event) => setBlendWith(event.target.value)}
+                >
+                  <option value="">안 섞음</option>
+                  {candidates
+                    .filter((item) => item.family !== family)
+                    .map((item) => (
+                      <option key={item.family} value={item.family}>
+                        {item.label}
+                      </option>
+                    ))}
+                </select>
+                <Input
+                  aria-label="섞는 비중"
+                  className="w-24"
+                  inputMode="decimal"
+                  value={blendWeight}
+                  onChange={(event) => setBlendWeight(event.target.value)}
+                  disabled={blendWith === ''}
+                />
+              </div>
+              <p className="text-muted-foreground text-xs">
+                비중은 <b>고른 식 쪽</b>입니다(0~1). <b>적합을 좋게 하려는 것이
+                아닙니다</b> — 두 식은 적합 구간에서 비슷하고 그 밖에서 갈립니다.
+                혼합의 오차가 두 식 모두보다 커도 그 자체는 문제가 아닙니다.
+                <br />
+                <b>데이터가 비중을 정하지 못합니다.</b> 적합 구간에서는 어느 값이든
+                비슷하게 맞으므로, 얼마나 보수적으로 볼지가 정합니다.
+              </p>
+            </div>
+          )}
 
           {/* **측정 구간만 내보내는 것도 결정이다.** 솔버는 표 밖에서 마지막
               응력을 붙들고 가는데, 금속은 계속 경화하므로 그 구간에서 하중을 낮게

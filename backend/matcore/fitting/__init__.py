@@ -82,6 +82,21 @@ class FitResult:
         )
         return computed
 
+    def tangent(self, plastic_strain: np.ndarray) -> np.ndarray | None:
+        """적합된 식의 기울기. 식이 접선을 선언하지 않았으면 `None`.
+
+        **수치 미분으로 대신하지 않는다.** 특이점에서 거짓말을 하고, 그것이
+        "여기서 기울기가 크다" 로 읽히면 위험한 외삽을 안전해 보이게 만든다.
+        """
+        family = FAMILIES[self.family]
+        if family.tangent is None:
+            return None
+        values = np.asarray([item.value for item in self.parameters], dtype=np.float64)
+        computed: np.ndarray = family.tangent(
+            values, np.asarray(plastic_strain, dtype=np.float64)
+        )
+        return computed
+
 
 @dataclass(frozen=True)
 class Family:
@@ -298,6 +313,160 @@ FAMILIES: dict[str, Family] = {
 
 
 @dataclass(frozen=True)
+class Blended:
+    """두 식을 가중평균한 것 — **외삽에서 갈리는 구간을 사람이 조정한다.**
+
+    ## 왜 필요한가
+
+    측정 구간에서 두 식이 거의 같은데 외삽에서 크게 갈린다. 실측(합성 곡선, 측정
+    0~0.2):
+
+        측정 구간 상대 RMSE   Voce 0.00%   Swift 1.02%
+        외삽 1.0 의 응력      Voce 550     Swift 744 MPa
+
+    **어느 쪽도 맞지 않을 수 있다.** Swift 는 과대, Voce 는 과소 예측하는 경향이
+    알려져 있고, 그래서 이 도메인에서는 둘을 섞어 쓴다 — 고장력강 카드에서는
+    사실상 표준 기법이다(65 `metal_hardening.py` 도 같은 것을 갖고 있다).
+
+    ## 적합을 좋게 하려는 것이 아니다
+
+    혼합의 상대 RMSE 가 두 식 모두보다 나쁠 수 있다. **그 자체는 문제가 아니다** —
+    목적이 적합 구간이 아니라 외삽 구간이기 때문이다. 다만 그 사실을 메모에 적어,
+    "RMSE 가 나쁘니 잘못됐다" 고 읽히지 않게 한다.
+
+    ## 가중치는 데이터가 못 정한다
+
+    적합 구간에서는 어느 `w` 든 비슷하게 맞는다 — 그러니 RMSE 로 고를 수 없다.
+    얼마나 보수적으로 볼지가 정하고, 그건 해석하는 사람이 안다. 기본값을 두지
+    않는 이유가 같다.
+    """
+
+    primary: FitResult
+    secondary: FitResult
+    weight: float
+    """`primary` 쪽 비중. 1 이면 `primary` 만, 0 이면 `secondary` 만."""
+    label: str
+    rmse: float
+    relative_rmse: float
+    r_squared: float
+    max_residual: float
+    point_count: int
+    strain_min: float
+    strain_max: float
+    notes: tuple[str, ...]
+
+    @property
+    def family(self) -> str:
+        return f"{self.primary.family}+{self.secondary.family}"
+
+    def evaluate(self, plastic_strain: np.ndarray) -> np.ndarray:
+        grid = np.asarray(plastic_strain, dtype=np.float64)
+        return np.asarray(
+            self.weight * self.primary.evaluate(grid)
+            + (1.0 - self.weight) * self.secondary.evaluate(grid),
+            dtype=np.float64,
+        )
+
+    def tangent(self, plastic_strain: np.ndarray) -> np.ndarray | None:
+        """**접선도 같이 섞인다.** 가중평균의 미분은 미분의 가중평균이다.
+
+        한쪽이라도 접선을 선언하지 않았으면 `None` 이다 — 반쪽만 가지고 연화를
+        판정하면 없는 안전을 있다고 말하게 된다.
+        """
+        grid = np.asarray(plastic_strain, dtype=np.float64)
+        first = self.primary.tangent(grid)
+        second = self.secondary.tangent(grid)
+        if first is None or second is None:
+            return None
+        return np.asarray(self.weight * first + (1.0 - self.weight) * second, dtype=np.float64)
+
+
+def blend(
+    primary: FitResult,
+    secondary: FitResult,
+    weight: float,
+    plastic_strain: np.ndarray,
+    true_stress: np.ndarray,
+) -> Blended:
+    """두 적합을 가중평균하고, **측정 데이터에 다시 재서** 품질을 낸다.
+
+    부모의 RMSE 를 섞어 쓰지 않는다 — 혼합은 다른 곡선이고, 그 곡선이 데이터와
+    얼마나 맞는지는 다시 재야 안다.
+
+    **부모끼리 견주지도 않는다.** 처음에 두 부모의 평균을 기준으로 삼았더니
+    `w=0.5` 에서 오차가 0 이 나왔다 — 50:50 혼합이 50:50 평균과 같은 것은 당연하고,
+    그 숫자는 아무것도 말해 주지 않는다. 순환 논리였다.
+    """
+    if not 0.0 <= weight <= 1.0:
+        raise FittingError(f"혼합 비중은 0~1 이어야 합니다: {weight}")
+    if primary.family == secondary.family:
+        raise FittingError(f"같은 식끼리는 섞을 수 없습니다: {primary.family}")
+
+    strain = np.asarray(plastic_strain, dtype=np.float64)
+    stress = np.asarray(true_stress, dtype=np.float64)
+    if len(strain) < MIN_POINTS:
+        raise FittingError(
+            f"혼합을 재려면 {MIN_POINTS}점 이상이 필요한데 {len(strain)}점입니다."
+        )
+
+    label = f"{primary.label} {weight:.3g} + {secondary.label} {1.0 - weight:.3g}"
+    draft = Blended(
+        primary=primary,
+        secondary=secondary,
+        weight=weight,
+        label=label,
+        rmse=0.0,
+        relative_rmse=0.0,
+        r_squared=0.0,
+        max_residual=0.0,
+        point_count=len(strain),
+        strain_min=float(strain[0]),
+        strain_max=float(strain[-1]),
+        notes=(),
+    )
+    errors = draft.evaluate(strain) - stress
+    scale = float(np.mean(np.abs(stress))) or 1.0
+    rmse = float(np.sqrt(np.mean(errors**2)))
+    total = float(np.sum((stress - np.mean(stress)) ** 2))
+    relative = rmse / scale
+
+    notes = [
+        f"{primary.label} 과 {secondary.label} 을 {weight:.3g} : {1.0 - weight:.3g} 로 "
+        f"섞었습니다 (측정 {len(strain)}점 기준 상대 RMSE {relative * 100:.3g}%).",
+        "**적합을 좋게 하려는 것이 아니라 외삽을 조정하는 것입니다** — 두 식은 적합 "
+        "구간에서 비슷하고 그 밖에서 갈립니다. 혼합의 RMSE 가 두 식 모두보다 나빠도 "
+        "그 자체는 문제가 아닙니다.",
+        "가중치는 데이터가 정하지 못합니다. 적합 구간에서는 어느 값이든 비슷하게 "
+        "맞으므로, 얼마나 보수적으로 볼지가 정합니다.",
+    ]
+    worse = relative > max(primary.relative_rmse, secondary.relative_rmse)
+    if worse:
+        notes.append(
+            f"적합 구간에서는 두 식 각각보다 덜 맞습니다 "
+            f"({primary.label} {primary.relative_rmse * 100:.3g}%, "
+            f"{secondary.label} {secondary.relative_rmse * 100:.3g}%) — "
+            f"외삽을 위해 치르는 값입니다."
+        )
+    if primary.tangent(strain) is None or secondary.tangent(strain) is None:
+        notes.append("한쪽 식이 접선을 선언하지 않아 외삽 구간의 연화를 검사하지 못합니다.")
+
+    return Blended(
+        primary=primary,
+        secondary=secondary,
+        weight=weight,
+        label=label,
+        rmse=rmse,
+        relative_rmse=relative,
+        r_squared=1.0 - float(np.sum(errors**2)) / total if total > 0 else 0.0,
+        max_residual=float(np.max(np.abs(errors))),
+        point_count=len(strain),
+        strain_min=float(strain[0]),
+        strain_max=float(strain[-1]),
+        notes=tuple(notes),
+    )
+
+
+@dataclass(frozen=True)
 class Extended:
     """측정 표를 적합식으로 늘린 결과."""
 
@@ -313,7 +482,7 @@ class Extended:
 
 
 def extend_table(
-    result: FitResult,
+    result: FitResult | Blended,
     plastic_strain: np.ndarray,
     true_stress: np.ndarray,
     *,
@@ -363,10 +532,8 @@ def extend_table(
             f"늘릴 구간이 없습니다."
         )
 
-    family = FAMILIES[result.family]
-    values = np.asarray([item.value for item in result.parameters], dtype=np.float64)
     grid = np.linspace(measured_max, to, points + 1)[1:]
-    predicted = np.asarray(family.evaluate(values, grid), dtype=np.float64)
+    predicted = np.asarray(result.evaluate(grid), dtype=np.float64)
 
     notes: list[str] = [
         f"측정은 소성변형률 {measured_max:.5g} 에서 끝납니다. 그 위 {to:.5g} 까지 "
@@ -374,7 +541,7 @@ def extend_table(
     ]
 
     # **이음매가 벌어지면 그 식은 끝을 못 따라간 것이다.**
-    at_junction = float(np.asarray(family.evaluate(values, np.asarray([measured_max])))[0])
+    at_junction = float(np.asarray(result.evaluate(np.asarray([measured_max])))[0])
     last = measured[-1][1]
     gap = abs(at_junction - last) / abs(last) if last else 0.0
     if gap > 0.02:
@@ -385,8 +552,9 @@ def extend_table(
         )
 
     # **외삽 구간의 연화는 식이 지어낸 것이다.** 측정 구간과 다르다.
-    if family.tangent is not None:
-        slope = np.asarray(family.tangent(values, grid), dtype=np.float64)
+    slope_values = result.tangent(grid)
+    if slope_values is not None:
+        slope = np.asarray(slope_values, dtype=np.float64)
         soft = np.isfinite(slope) & (slope < 0.0)
         if bool(np.any(soft)):
             notes.append(

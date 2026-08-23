@@ -175,3 +175,80 @@ class Test경고:
         finally:
             fitting.FAMILIES.clear()
             fitting.FAMILIES.update(saved)
+
+
+class Test혼합:
+    """**적합을 좋게 하려는 것이 아니라 외삽을 조정하는 것이다.**
+
+    측정 구간에서는 두 식이 거의 같은데 그 밖에서 크게 갈린다. Swift 는 과대,
+    Voce 는 과소 예측하는 경향이 알려져 있어 이 도메인에서는 둘을 섞어 쓴다 —
+    고장력강 카드에서는 사실상 표준 기법이다.
+    """
+
+    def _pair(self) -> tuple[np.ndarray, np.ndarray, fitting.FitResult, fitting.FitResult]:
+        strain, stress = measured()
+        return (
+            strain,
+            stress,
+            fitting.fit("voce", strain, stress),
+            fitting.fit("swift", strain, stress),
+        )
+
+    def test_비중이_외삽을_옮긴다(self) -> None:
+        """**이것이 혼합의 존재 이유다.** 적합은 거의 안 변하는데 외삽이 움직인다."""
+        strain, stress, voce, swift = self._pair()
+        ends = []
+        for weight in (1.0, 0.5, 0.0):
+            mixed = fitting.blend(voce, swift, weight, strain, stress)
+            extended = fitting.extend_table(mixed, strain, stress, to=1.0, points=10)
+            ends.append(extended.points[-1][1])
+        # Voce(포화) → 섞음 → Swift(멱함수) 순으로 커진다.
+        assert ends[0] < ends[1] < ends[2]
+        assert ends[2] > ends[0] * 1.2
+
+    def test_품질을_측정_데이터에_다시_잰다(self) -> None:
+        """부모의 RMSE 를 섞어 쓰지 않는다 — 혼합은 다른 곡선이다.
+
+        **처음에 두 부모의 평균을 기준으로 삼았더니 `w=0.5` 에서 오차가 0 이
+        나왔다.** 50:50 혼합이 50:50 평균과 같은 것은 당연하고, 그 숫자는 아무것도
+        말해 주지 않는다 — 순환 논리였다.
+        """
+        strain, stress, voce, swift = self._pair()
+        assert fitting.blend(voce, swift, 1.0, strain, stress).relative_rmse == pytest.approx(
+            voce.relative_rmse, abs=1e-9
+        )
+        assert fitting.blend(voce, swift, 0.0, strain, stress).relative_rmse == pytest.approx(
+            swift.relative_rmse, abs=1e-9
+        )
+        middle = fitting.blend(voce, swift, 0.5, strain, stress).relative_rmse
+        assert voce.relative_rmse < middle < swift.relative_rmse
+
+    def test_접선도_같이_섞인다(self) -> None:
+        """가중평균의 미분은 미분의 가중평균이다 — 외삽 구간의 연화 검사가 살아 있다."""
+        strain, stress, voce, swift = self._pair()
+        mixed = fitting.blend(voce, swift, 0.5, strain, stress)
+        far = np.asarray([0.5])
+        first, second = voce.tangent(far), swift.tangent(far)
+        assert first is not None and second is not None
+        got = mixed.tangent(far)
+        assert got is not None
+        assert float(got[0]) == pytest.approx(float(0.5 * first[0] + 0.5 * second[0]))
+
+    def test_덜_맞으면_그_사실을_적는다(self) -> None:
+        """RMSE 가 두 식 모두보다 나빠도 **그 자체는 문제가 아니다** — 다만 그렇게
+        읽히지 않게 이유를 함께 적는다."""
+        strain, stress, voce, swift = self._pair()
+        mixed = fitting.blend(voce, swift, 0.5, strain, stress)
+        joined = " ".join(mixed.notes)
+        assert "외삽을 조정하는 것" in joined
+        assert "가중치는 데이터가 정하지 못합니다" in joined
+
+    def test_같은_식끼리는_못_섞는다(self) -> None:
+        strain, stress, voce, _swift = self._pair()
+        with pytest.raises(fitting.FittingError, match="같은 식끼리"):
+            fitting.blend(voce, voce, 0.5, strain, stress)
+
+    def test_비중이_범위를_벗어나면_거절한다(self) -> None:
+        strain, stress, voce, swift = self._pair()
+        with pytest.raises(fitting.FittingError, match="0~1"):
+            fitting.blend(voce, swift, 1.5, strain, stress)

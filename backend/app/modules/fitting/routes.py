@@ -456,38 +456,90 @@ def create_card(
             result = fitting.fit(spec.key, strain, stress)
         except fitting.FittingError as exc:
             raise AppError("MNX-FITTING-0004", str(exc), status=422) from exc
+        # ── 두 식을 섞을까 ──────────────────────────────────────────────
+        #
+        # **적합을 좋게 하려는 것이 아니라 외삽을 조정하는 것이다.** 측정 구간에서는
+        # 두 식이 거의 같은데 그 밖에서 크게 갈린다.
+        curve: fitting.FitResult | fitting.Blended = result
+        rows = [
+            {
+                "name": item.name,
+                "value": item.value,
+                "si_unit": item.si_unit,
+                "lower": item.lower,
+                "upper": item.upper,
+                "initial": item.initial,
+            }
+            for item in result.parameters
+        ]
+        blend_values: dict[str, Any] = {}
+        if payload.blend_with is not None:
+            if payload.blend_weight is None:
+                raise AppError(
+                    "MNX-FITTING-0015",
+                    "섞을 비중을 함께 주세요. 데이터가 정하지 못하는 값이라 "
+                    "기본값을 두지 않습니다.",
+                    status=422,
+                )
+            other = fitting.FAMILIES.get(payload.blend_with)
+            if other is None or other.block != spec.block:
+                raise AppError(
+                    "MNX-FITTING-0015",
+                    f"'{payload.blend_with}' 는 '{spec.label}' 과 섞을 수 있는 식이 아닙니다.",
+                    status=422,
+                )
+            try:
+                second = fitting.fit(other.key, strain, stress)
+                curve = fitting.blend(result, second, payload.blend_weight, strain, stress)
+            except fitting.FittingError as exc:
+                raise AppError("MNX-FITTING-0015", str(exc), status=422) from exc
+            # **어느 식의 계수인지 이름에 남긴다.** 둘이 섞여 들어오므로 이름만으로는
+            # 구별이 안 된다.
+            rows = [
+                {**row, "name": f"{parent.label}·{row['name']}"}
+                for parent, source in ((result, result), (second, second))
+                for row in (
+                    {
+                        "name": item.name,
+                        "value": item.value,
+                        "si_unit": item.si_unit,
+                        "lower": item.lower,
+                        "upper": item.upper,
+                        "initial": item.initial,
+                    }
+                    for item in source.parameters
+                )
+            ]
+            blend_values = {
+                "blend_with": second.family,
+                "blend_weight": payload.blend_weight,
+            }
+            notes.extend(curve.notes)
+
         # **식이 자기 요약값을 낸다.** 초탄성의 초기 전단탄성률처럼, 식마다
-        # 계산이 다른데 서로 견줄 수 있는 값이 있다.
+        # 계산이 다른데 서로 견줄 수 있는 값이 있다. 혼합에는 파라미터 배열이
+        # 하나가 아니므로 낼 수 없다.
         values = np.asarray([item.value for item in result.parameters], dtype=np.float64)
-        extras = spec.extras(values) if spec.extras else {}
+        extras = spec.extras(values) if spec.extras and payload.blend_with is None else {}
         fitted = {
             "values": {
-                "family": result.family,
-                "label": result.label,
+                "family": curve.family,
+                "label": curve.label,
                 # **적합도를 함께 저장한다.** 파라미터만 남기면 그 값이 데이터와
                 # 얼마나 맞는지 다시 알 수 없고, 그러면 카드를 믿을 근거가 사라진다.
-                "rmse": result.rmse,
-                "relative_rmse": result.relative_rmse,
-                "r_squared": result.r_squared,
-                "max_residual": result.max_residual,
-                "strain_min": result.strain_min,
-                "strain_max": result.strain_max,
+                "rmse": curve.rmse,
+                "relative_rmse": curve.relative_rmse,
+                "r_squared": curve.r_squared,
+                "max_residual": curve.max_residual,
+                "strain_min": curve.strain_min,
+                "strain_max": curve.strain_max,
                 **extras,
+                **blend_values,
             },
             # **행이 자기 단위를 든다.** 경화식 파라미터는 식마다 단위가 다르다 —
             # Voce 의 `b` 는 무차원이고 `q` 는 Pa 다. 열 선언 하나로는 못 적는다.
-            "rows": [
-                {
-                    "name": item.name,
-                    "value": item.value,
-                    "si_unit": item.si_unit,
-                    "lower": item.lower,
-                    "upper": item.upper,
-                    "initial": item.initial,
-                }
-                for item in result.parameters
-            ],
-            "notes": list(result.notes),
+            "rows": rows,
+            "notes": list(curve.notes),
         }
 
     modulus = next(
@@ -532,7 +584,7 @@ def create_card(
                 status=422,
             )
         try:
-            extended = fitting.extend_table(result, strain, stress, to=payload.extrapolate_to)
+            extended = fitting.extend_table(curve, strain, stress, to=payload.extrapolate_to)
         except fitting.FittingError as exc:
             raise AppError("MNX-FITTING-0014", str(exc), status=422) from exc
         table_rows = [
@@ -542,7 +594,7 @@ def create_card(
             "source": "외삽",
             "measured_max": extended.measured_max,
             "extrapolated_to": extended.extrapolated_to,
-            "family": result.label,
+            "family": curve.label,
             "junction_gap": extended.junction_gap,
         }
         notes.extend(extended.notes)

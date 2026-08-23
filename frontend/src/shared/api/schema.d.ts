@@ -4308,6 +4308,10 @@ export interface components {
         };
         /** PropertyCardSaveRequest */
         PropertyCardSaveRequest: {
+            /** Blend Weight */
+            blend_weight?: number | null;
+            /** Blend With */
+            blend_with?: string | null;
             /** Density */
             density?: number | null;
             /** Extrapolate To */

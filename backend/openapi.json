@@ -4521,6 +4521,30 @@
       },
       "PropertyCardSaveRequest": {
         "properties": {
+          "blend_weight": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blend Weight"
+          },
+          "blend_with": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blend With"
+          },
           "density": {
             "anyOf": [
               {
