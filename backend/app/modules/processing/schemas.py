@@ -140,6 +140,9 @@ class ProcessingResultOut(BaseModel):
     scalars: list[ProcessingScalarOut]
     row_count: int
     columns: list[str]
+    runtime: dict[str, str] = {}
+    """이 결과를 낸 환경(python·numpy·scipy·pyarrow). **비어 있으면 v1.48.0 이전에
+    만들어진 것**이고, 그때 무엇이었는지는 알 길이 없다."""
     created_at: datetime
 
 

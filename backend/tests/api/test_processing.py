@@ -840,3 +840,39 @@ class Test파일값채우기:
         assert by_key["thickness"]["measured"] == pytest.approx(0.001)
         # 안 잰 것은 채워진다.
         assert by_key["width"]["measured"] == pytest.approx(0.012473)
+
+
+class Test재현기록:
+    """**계산이 무엇 위에서 돌았는지.**
+
+    플러그인 버전이 "어느 계산이었나" 에 답한다면 이것은 "그 계산이 무엇 위에서
+    돌았나" 에 답한다. 우리 적합은 `scipy.optimize.least_squares` 를 쓰고, scipy 가
+    바뀌면 같은 데이터·같은 플러그인 버전에서 다른 파라미터가 나올 수 있다.
+    """
+
+    def test_처리_결과가_환경을_들고_있다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert stored.status_code == 201, stored.text
+        got = stored.json()["runtime"]
+        assert {"python", "numpy", "scipy", "pyarrow", "digest"} <= set(got)
+        assert got["scipy"] != "없음"
+
+    def test_같은_환경에서_돌면_지문이_같다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """두 결과가 같은 환경에서 나왔는지 문자열 하나로 본다."""
+        digests = set()
+        for _ in range(2):
+            stored = client.post(
+                "/api/processing/results",
+                json={"test_run_id": run_id, "steps": STEPS},
+                headers=admin_headers,
+            )
+            digests.add(stored.json()["runtime"]["digest"])
+        assert len(digests) == 1

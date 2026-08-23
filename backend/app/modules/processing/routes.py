@@ -53,7 +53,7 @@ from app.shared.permissions import (
     resolve_owner_workspace,
     visible_owner_clause,
 )
-from matcore import curves, processing, registry
+from matcore import curves, processing, registry, runtime
 from matcore.parsers import Channel
 
 router = APIRouter(prefix="/processing", tags=["processing"])
@@ -211,6 +211,9 @@ def _store(
             }
             for s in result.scalars
         ],
+        # **계산이 무엇 위에서 돌았는지.** 플러그인 버전이 "어느 계산" 이라면
+        # 이것은 "그 계산이 무엇 위에서" 다 — 둘 다 있어야 재현이 닫힌다.
+        runtime=runtime.manifest(),
         storage_path=stored.relative_path,
         row_count=frame.length(),
         sha256=stored.sha256,
@@ -379,6 +382,7 @@ def _result_out(item: ProcessingResult, *, adopted: bool = False) -> ProcessingR
         ],
         row_count=item.row_count,
         columns=item.columns,
+        runtime={str(k): str(v) for k, v in (item.runtime or {}).items()},
         created_at=item.created_at,
     )
 

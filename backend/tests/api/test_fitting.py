@@ -1079,3 +1079,30 @@ class Test혼합:
         )
         assert made.status_code == 422
         assert "섞을 수 있는" in made.text
+
+
+class Test재현기록:
+    """**카드가 자기 근거를 들고 있다** 는 원칙의 나머지 절반.
+
+    값이 무엇에서 나왔는지에 더해 **무엇 위에서 계산됐는지**. 적합은
+    `scipy.optimize.least_squares` 를 쓰고, scipy 가 바뀌면 같은 데이터에서 다른
+    파라미터가 나올 수 있다.
+    """
+
+    def test_카드가_환경을_들고_있다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "재현",
+                "family": "voce",
+            },
+            headers=admin_headers,
+        ).json()
+        got = card["source"]["runtime"]
+        assert {"python", "numpy", "scipy", "pyarrow", "digest"} <= set(got)
+        assert got["scipy"] != "없음"

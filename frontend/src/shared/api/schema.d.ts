@@ -4039,6 +4039,13 @@ export interface components {
             recipe_label: string | null;
             /** Row Count */
             row_count: number;
+            /**
+             * Runtime
+             * @default {}
+             */
+            runtime: {
+                [key: string]: string;
+            };
             /** Scalars */
             scalars: components["schemas"]["ProcessingScalarOut"][];
             /** Source Curve Key */

@@ -3902,6 +3902,14 @@
             "title": "Row Count",
             "type": "integer"
           },
+          "runtime": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Runtime",
+            "type": "object"
+          },
           "scalars": {
             "items": {
               "$ref": "#/components/schemas/ProcessingScalarOut"

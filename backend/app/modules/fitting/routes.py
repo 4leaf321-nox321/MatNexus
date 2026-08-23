@@ -47,7 +47,7 @@ from app.modules.workspaces.models import Workspace
 from app.shared import permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
-from matcore import cards, export, fitting, prony, statistics
+from matcore import cards, export, fitting, prony, runtime, statistics
 from matcore.fitting import hyperelastic
 from matcore.registry import Produced
 
@@ -635,6 +635,9 @@ def create_card(
             "strain_min": float(strain[0]),
             "strain_max": float(strain[-1]),
             "notes": [*notes, *[line for line in inherited_notes if line]],
+            # **카드가 자기 근거를 들고 있다** 는 원칙의 나머지 절반이다 —
+            # 값이 무엇에서 나왔는지에 더해 **무엇 위에서 계산됐는지**.
+            "runtime": runtime.manifest(),
         },
         blocks={
             **({"elastic": {"values": elastic}} if elastic else {}),
@@ -745,6 +748,9 @@ def create_viscoelastic_card(
             "prony_fit_id": str(fit.id),
             "master_curve_id": str(curve.id),
             "notes": [line for line in notes if line],
+            # **카드가 자기 근거를 들고 있다** 는 원칙의 나머지 절반이다 —
+            # 값이 무엇에서 나왔는지에 더해 **무엇 위에서 계산됐는지**.
+            "runtime": runtime.manifest(),
         },
         blocks={
             "elastic": {

@@ -156,6 +156,17 @@ class ProcessingResult(Base):
     byte_size: Mapped[int] = mapped_column(BigInteger)
     columns: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
+    runtime: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    """이 결과를 낸 **환경** — python·numpy·scipy·pyarrow 버전(`matcore.runtime`).
+
+    `stages` 의 플러그인 버전이 "어느 계산이었나" 에 답한다면, 이것은 "그 계산이
+    무엇 위에서 돌았나" 에 답한다. **둘 다 있어야 재현이 닫힌다** — 우리 적합은
+    `scipy.optimize.least_squares` 를 쓰고, scipy 가 바뀌면 같은 데이터에서 다른
+    파라미터가 나올 수 있다.
+
+    **비어 있으면 v1.48.0 이전에 만들어진 것**이다. 그때 무엇이었는지는 알 길이
+    없고, 그래서 `runtime.same` 은 기록이 없는 쪽을 "같다" 고 하지 않는다."""
+
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
