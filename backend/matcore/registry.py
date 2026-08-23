@@ -98,8 +98,16 @@ class Plugin:
     kind: Kind
     label: str
     fn: Callable[..., Any]
-    inputs: tuple[str, ...] = ()
     produces: str | None = None
+    """이 계산이 내는 것의 종류. 지금은 파서만 쓴다(`"curve"`).
+
+    처리 단계는 이것 대신 `makes_columns`·`makes_values` 로 **무엇을 만드는지
+    낱낱이** 선언한다 — 종류 하나로는 화면이 "지금 고를 수 있는 열" 을 못 만든다.
+
+    한때 짝으로 `inputs` 가 있었는데 **아무도 채우지 않고 아무도 읽지 않았다.**
+    v1.18.0 이 그 상태를 두고 *"있는 줄 알았던 것이 없었다"* 라고 적었고, 그때
+    대체품(`makes_columns`·`order`·`ParamSpec.role`)을 만들면서도 원본은 안 지웠다.
+    지금 지운다 — 남겨 두면 다음 사람이 또 "의존성 검사가 있구나" 하고 믿는다."""
     params: tuple[ParamSpec, ...] = ()
     applies_to: tuple[str, ...] = ()
     """적용 가능한 재료군·시험종류. 비어 있으면 제한 없음."""
@@ -137,7 +145,6 @@ def register(
     id: str,
     kind: Kind,
     label: str,
-    inputs: tuple[str, ...] = (),
     produces: str | None = None,
     params: tuple[ParamSpec, ...] = (),
     applies_to: tuple[str, ...] = (),
@@ -161,7 +168,6 @@ def register(
             kind=kind,
             label=label,
             fn=fn,
-            inputs=inputs,
             produces=produces,
             params=params,
             applies_to=applies_to,

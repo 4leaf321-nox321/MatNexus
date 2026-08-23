@@ -41,6 +41,7 @@ import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
  * 늘 밟는 길에서 그 대가를 치를 이유가 없다 — 둘을 합쳐도 예산의 절반이다.
  */
 const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
+const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
 const FormatProfileEditorPage = lazy(
   () => import('@/modules/tests/FormatProfileEditorPage')
@@ -117,6 +118,7 @@ export const router = createBrowserRouter([
           // 먹히지 않는다. 순서에 기대지 않도록 적어 둔다.
           { path: 'settings/test-types', element: <TestTypesPage /> },
           { path: 'settings/recipes', element: <RecipesPage /> },
+          { path: 'settings/audit', element: <AuditPage /> },
           { path: 'settings/formats', element: <FormatProfilesPage /> },
           { path: 'settings/formats/new', element: <FormatProfileEditorPage /> },
           { path: 'settings/formats/:key', element: <FormatProfileEditorPage /> },

@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Plug,
   Ruler,
+  ScrollText,
   Server,
   SlidersHorizontal,
   Tags,
@@ -135,6 +136,15 @@ export const NAV_GROUPS: NavGroup[] = [
         label: '처리 레시피',
         icon: FlaskConical,
         to: '/settings/recipes',
+        audience: 'manager',
+      },
+      {
+        // **기록만 쌓이고 볼 자리가 없으면 자산이 아니다.** 레시피·프로파일에서
+        // 같은 판단을 했다. 여기에는 만들기·고치기·지우기가 없다 — 고칠 수
+        // 있으면 감사가 아니다.
+        label: '감사 기록',
+        icon: ScrollText,
+        to: '/settings/audit',
         audience: 'manager',
       },
       { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members`, audience: 'manager' },
