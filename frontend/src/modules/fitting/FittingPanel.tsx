@@ -49,21 +49,12 @@ import {
 } from '@/shared/components/ui/dropdown-menu'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { CardBlocks } from '@/modules/fitting/CardBlocks'
 import { useResource } from '@/shared/hooks/useResource'
 import { formatScalar, toDisplay } from '@/shared/units'
 
 /** 이 이상 어긋나면 눈에 띄게 한다. 커널이 같은 값에서 경고를 단다. */
 const NOTABLE_RMSE = 0.05
-
-/**
- * 형식이 요구하는 값이 카드에 있는가. **서버가 한국어 이름으로 요구를 준다**
- * (`ExportFormatOut.requires`) — 화면이 그 이름을 카드 필드에 이어 붙인다.
- */
-const HAS: Record<string, (card: PropertyCard) => boolean> = {
-  탄성계수: (card) => typeof card.elastic.youngs_modulus === 'number',
-  푸아송비: (card) => typeof card.elastic.poisson_ratio === 'number',
-  밀도: (card) => typeof card.elastic.density === 'number',
-}
 
 interface Props {
   materialId: string
@@ -136,14 +127,25 @@ export function FittingPanel({ materialId }: Props) {
     }
   }
 
+  // 묶음도 없고 카드도 없다 — 무엇을 하라고 할지가 갈리는 자리다.
+  const nothing = !stats.loading && groups.length === 0 && (cards.data ?? []).length === 0
+
   return (
     <section>
       <ErrorNotice error={stats.error ?? cards.error ?? error} className="mb-4" />
 
-      {!stats.loading && groups.length === 0 && (
+      {/* **카드가 있으면 이 말은 거짓이다.** 점탄성 카드는 통계 묶음 없이
+          만들어진다(Prony 는 시험 1건에 매달린다) — 전에는 묶음이 없으면 카드도
+          있을 수 없어서 같은 조건이었는데, 이제 갈린다.
+
+          이때는 아래 목록을 아예 안 그린다. 빈 상자 둘이 겹쳐 뜨면 무엇을
+          하라는 말인지가 흐려진다. */}
+      {nothing && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           적합할 곡선이 없습니다. 시험 상세의 <b>처리</b> 탭에서 돌려 보고 저장한 뒤{' '}
           <b>채택</b>하면, 그 곡선이 여기의 입력이 됩니다.
+          <br />
+          점탄성 카드는 시험 상세의 <b>점탄성</b> 탭에서 Prony 를 맞춘 뒤 만듭니다.
         </div>
       )}
 
@@ -194,12 +196,14 @@ export function FittingPanel({ materialId }: Props) {
         />
       )}
 
-      <CardList
-        cards={cards.data ?? []}
-        loading={cards.loading}
-        onChanged={() => cards.reload()}
-        onError={setError}
-      />
+      {!nothing && (
+        <CardList
+          cards={cards.data ?? []}
+          loading={cards.loading}
+          onChanged={() => cards.reload()}
+          onError={setError}
+        />
+      )}
 
       {group && (
         <SaveDialog
@@ -413,6 +417,9 @@ function CardList({
 }) {
   // 카드마다 부르지 않는다 — 목록에 20장이 있으면 같은 요청이 20번 나간다.
   const formats = useResource(() => fittingApi.formats(), [])
+  // **화면이 물성의 이름을 모른다.** 무엇을 그릴지는 이 선언이 정한다.
+  const blocks = useResource(() => fittingApi.blocks(), [])
+  const specs = blocks.data ?? []
   const [renaming, setRenaming] = useState<string | null>(null)
 
   async function act(action: () => Promise<unknown>) {
@@ -507,47 +514,9 @@ function CardList({
             </div>
           </div>
 
-          <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
-            <Item
-              label="탄성계수"
-              value={
-                typeof card.elastic.youngs_modulus === 'number'
-                  ? formatScalar(card.elastic.youngs_modulus, 'Pa')
-                  : '—'
-              }
-            />
-            <Item
-              label="푸아송비"
-              value={
-                typeof card.elastic.poisson_ratio === 'number'
-                  ? String(card.elastic.poisson_ratio)
-                  : '—'
-              }
-            />
-            <Item
-              label="경화식"
-              value={typeof card.hardening.label === 'string' ? card.hardening.label : '표만'}
-            />
-            <Item
-              label="상대 RMSE"
-              value={
-                typeof card.hardening.relative_rmse === 'number'
-                  ? `${(card.hardening.relative_rmse * 100).toPrecision(3)}%`
-                  : '—'
-              }
-            />
-          </dl>
-
-          {/* **적합 구간을 카드에 적어 둔다.** 이 밖은 외삽이고 식마다 전혀
-              다른 값이 나온다. */}
-          {typeof card.hardening.strain_max === 'number' && (
-            <p className="text-muted-foreground mt-2 text-xs">
-              적합 구간: 진소성변형률{' '}
-              {(Number(card.hardening.strain_min) * 100).toPrecision(3)}% ~{' '}
-              {(Number(card.hardening.strain_max) * 100).toPrecision(3)}%. 이 밖은
-              검증되지 않았습니다.
-            </p>
-          )}
+          {/* **화면이 물성의 이름을 모른다.** 선언이 무엇을 그릴지 정한다 —
+              새 물성이 붙어도 이 파일은 안 고친다. */}
+          <CardBlocks specs={specs} card={card} />
         </div>
       ))}
     </div>
@@ -575,13 +544,15 @@ function ExportMenu({
         {formats.map((format) => {
           // **누르기 전에 알려 준다.** 내려받기를 누른 뒤에 "푸아송비가
           // 없습니다" 를 보는 것은 늦다.
-          const missing = format.requires.filter(
-            (name) => !HAS[name]?.(card as PropertyCard)
-          )
+          //
+          // 전에는 화면이 한국어 이름(`탄성계수`)을 카드 필드에 손으로 이어
+          // 붙였다 — 새 물성이 붙으면 그 표에도 줄을 더해야 했고, 안 더하면
+          // 낼 수 있는 형식이 회색으로 남았다. 지금은 **서버가 판정해 준다.**
+          const blocked = !card.available_formats.includes(format.key)
           return (
             <DropdownMenuItem
               key={format.key}
-              disabled={missing.length > 0}
+              disabled={blocked}
               onSelect={() => {
                 fittingApi
                   .download(card.id, format, card.label)
@@ -595,8 +566,8 @@ function ExportMenu({
               <div>
                 <p className="text-sm">{format.label}</p>
                 <p className="text-muted-foreground text-xs">
-                  {missing.length > 0
-                    ? `${missing.join('·')} 가 카드에 없어 내보낼 수 없습니다.`
+                  {blocked
+                    ? `${format.requires.join('·')} 가 있어야 냅니다. 카드에 아직 없습니다.`
                     : format.describe}
                 </p>
               </div>
@@ -605,15 +576,6 @@ function ExportMenu({
         })}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-function Item({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
-    </div>
   )
 }
 

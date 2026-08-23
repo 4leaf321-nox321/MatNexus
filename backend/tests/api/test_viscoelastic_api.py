@@ -6,6 +6,8 @@
   - 한 시험의 어느 곡선이 온도 스윕인가
   - 온도는 어느 채널에서 어떻게 읽는가(한 스윕 안에서도 흔들린다)
   - 장비가 계산한 TTS 를 원본으로 착각하지 않는가
+  - **그 계수가 솔버 덱까지 가는가** — 형식은 v1.14.0 에 있었는데 거기로 가는
+    카드가 없어서, 한 번도 불릴 수 없는 상태였다
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
 from app.modules.viscoelastic import services
+from matcore import cards
+from matcore.registry import Produced
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
@@ -251,3 +255,179 @@ class Test커널과이어진다:
             float(np.min(columns["frequency"])), row.minimum_frequency_hz, rel_tol=1e-9
         )
         assert float(np.min(columns["storage_modulus"])) > 0
+
+
+class Test점탄성카드:
+    """**형식이 있는데 거기로 가는 길이 없었다.**
+
+    `abaqus_viscoelastic` 은 v1.14.0 에 등록됐는데 `fitting` 에 prony 를 아는
+    코드가 한 줄도 없어서, 만들어 둔 렌더러가 한 번도 불릴 수 없었다.
+    """
+
+    @staticmethod
+    def _fit(
+        client: TestClient, headers: dict[str, str], run: dict[str, Any]
+    ) -> dict[str, Any]:
+        curve = Test마스터커브._make(client, headers, run)
+        fit: dict[str, Any] = client.post(
+            f"/api/viscoelastic/master-curves/{curve['id']}/prony",
+            json={"terms": 2},
+            headers=headers,
+        ).json()
+        return fit
+
+    def test_적합에서_카드가_나온다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """**묶음을 받지 않는다** — 재료·방향은 적합에서 체인을 따라간다."""
+        fit = self._fit(client, admin_headers, dma_run)
+        response = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "EPDM 점탄성", "poisson_ratio": 0.45},
+            headers=admin_headers,
+        )
+        assert response.status_code == 201, response.text
+        card = response.json()
+        assert card["orientation"] == "MD"
+        assert card["source"]["sample_count"] == 1
+        assert card["source"]["prony_fit_id"] == fit["id"]
+
+    def test_순간_탄성률이_탄성_블록에_든다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """평형 탄성률이 실리면 재료가 통째로 무르게 계산되는데 **덱은 멀쩡히
+        돌고 결과도 그럴듯하다.** 나중에 알 수 없는 종류의 틀림이다."""
+        fit = self._fit(client, admin_headers, dma_run)
+        card = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "E0", "poisson_ratio": 0.45},
+            headers=admin_headers,
+        ).json()
+        elastic = card["blocks"]["elastic"]["values"]
+        assert elastic["youngs_modulus"] == pytest.approx(fit["instantaneous_pa"])
+        assert elastic["youngs_modulus_source"] == "prony"
+        assert (
+            elastic["youngs_modulus"]
+            > card["blocks"]["viscoelastic"]["values"]["equilibrium_pa"]
+        )
+
+    def test_점탄성_형식이_열린다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """**누르기 전에 알아야 한다.** 소성 표가 없으니 인장 덱은 안 열린다."""
+        fit = self._fit(client, admin_headers, dma_run)
+        card = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "형식", "poisson_ratio": 0.45},
+            headers=admin_headers,
+        ).json()
+        assert "abaqus_viscoelastic" in card["available_formats"]
+        assert "abaqus" not in card["available_formats"]
+        assert card["problem"] is None
+
+    def test_덱이_실제로_나온다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """여기가 v1.14.0 이 만들어 두고 못 부르던 자리다."""
+        fit = self._fit(client, admin_headers, dma_run)
+        card = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "덱", "poisson_ratio": 0.45},
+            headers=admin_headers,
+        ).json()
+        deck = client.get(
+            f"/api/fitting/cards/{card['id']}/export",
+            params={"format": "abaqus_viscoelastic"},
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        assert "*VISCOELASTIC" in deck.text
+        assert "*ELASTIC" in deck.text
+        # **기준 온도가 덱에 적혀 있어야 한다** — 다른 온도에 쓰면 안 된다.
+        assert "master curve reference temperature" in deck.text
+
+    def test_푸아송비가_없으면_그렇게_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """**DMA 는 푸아송비를 재지 않는다.** 0.3 으로 채우지 않고 못 낸다고 한다."""
+        fit = self._fit(client, admin_headers, dma_run)
+        card = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "없음"},
+            headers=admin_headers,
+        ).json()
+        assert card["available_formats"] == ["json"]
+        failed = client.get(
+            f"/api/fitting/cards/{card['id']}/export",
+            params={"format": "abaqus_viscoelastic"},
+            headers=admin_headers,
+        )
+        assert failed.status_code == 422
+        assert "푸아송비" in failed.text
+
+    def test_없는_적합은_404(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        response = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": str(uuid.uuid4()), "label": "없다"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 404
+
+
+class Test블록선언:
+    def test_화면이_블록_이름을_모른다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**선언만으로 그린다.** 여기 없는 것은 화면에도 없다."""
+        listed = client.get("/api/fitting/blocks", headers=admin_headers).json()
+        by_key = {item["key"]: item for item in listed}
+        assert {"elastic", "hardening", "table", "viscoelastic"} <= set(by_key)
+        for item in listed:
+            assert item["label"] and item["help"]
+            for one in (*item["produces"], *item["rows"]):
+                assert one["label"], one["key"]
+        # **경화식은 덱에 안 실린다** — 표로 나가고 식은 주석에만 남는다.
+        assert by_key["hardening"]["in_deck"] is False
+        assert by_key["viscoelastic"]["in_deck"] is True
+
+
+class TestD7:
+    """**새 물성 1종에 드는 것이 `BlockSpec` 하나인가.**
+
+    ADR 0012 의 주장이고 Phase 5 의 수용 기준이다. 사람이 세지 않고 기계가 센다 —
+    "마이그레이션 없이 붙는다" 는 말은 지키기 쉬운 대신 **어긴 것을 눈치채기가
+    어렵다.** 컬럼 하나를 슬쩍 더하면 그 순간 주장이 무너지는데 아무도 모른다.
+    """
+
+    def test_블록_하나로_API_까지_따라온다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        saved = cards.list_blocks()
+        try:
+            # **이것이 새 물성 1종을 더하는 전부다.** 아래로 아무것도 안 고친다.
+            cards.register_block(
+                cards.BlockSpec(
+                    key="pretend_hyperelastic",
+                    label="지어낸 초탄성",
+                    help="D7 을 재려고 지어냈다. 실제 물성이 아니다.",
+                    produces=(Produced(key="mu_1", label="μ₁", si_unit="Pa"),),
+                    rows=(Produced(key="alpha", label="지수", si_unit="1"),),
+                    to_card=lambda payload: {"density": 1000.0},
+                )
+            )
+
+            listed = client.get("/api/fitting/blocks", headers=admin_headers).json()
+            mine = next(one for one in listed if one["key"] == "pretend_hyperelastic")
+            assert mine["label"] == "지어낸 초탄성"
+            assert mine["produces"][0]["si_unit"] == "Pa"
+            assert mine["rows"][0]["label"] == "지수"
+            assert mine["in_deck"] is True
+
+            # 카드에 실리는 자리도 따라온다 — 마이그레이션 0.
+            assert cards.card_kwargs({"pretend_hyperelastic": {"values": {"mu_1": 1.0}}}) == {
+                "density": 1000.0
+            }
+        finally:
+            cards.clear()
+            for spec in saved:
+                cards.register_block(spec)

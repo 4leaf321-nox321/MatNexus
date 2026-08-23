@@ -27,6 +27,7 @@ import type {
 } from '@/modules/viscoelastic/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
+import { ViscoelasticCardDialog } from '@/modules/viscoelastic/ViscoelasticCardDialog'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
@@ -426,7 +427,14 @@ function MasterCurveView({ curve }: { curve: MasterCurve }) {
         <ErrorNotice error={error} className="mb-2" />
 
         {latest ? (
-          <PronyView fit={latest} busy={busy} onPick={(terms) => void fit(terms)} />
+          <PronyView
+            fit={latest}
+            busy={busy}
+            onPick={(terms) => void fit(terms)}
+            // **기준 온도가 이름에 든다.** 같은 재료의 카드가 여럿이면 어느
+            // 온도의 것인지가 이름에서 보여야 한다.
+            cardLabel={`점탄성 ${celsius(curve.reference_temperature_k)}`}
+          />
         ) : (
           <p className="text-muted-foreground rounded-md border p-6 text-center text-sm">
             아직 맞춘 계수가 없습니다.
@@ -441,14 +449,30 @@ function PronyView({
   fit,
   busy,
   onPick,
+  cardLabel,
 }: {
   fit: PronyFit
   busy: boolean
   onPick: (terms: number) => void
+  /** 카드 이름의 첫 제안. 재료·시편에서 온다. */
+  cardLabel: string
 }) {
   const best = fit.terms.length
+  const [making, setMaking] = useState(false)
+  const [made, setMade] = useState(false)
   return (
     <div className="space-y-3">
+      {making && (
+        <ViscoelasticCardDialog
+          fit={fit}
+          suggestedLabel={cardLabel}
+          onClose={() => setMaking(false)}
+          onDone={() => {
+            setMaking(false)
+            setMade(true)
+          }}
+        />
+      )}
       {fit.at_bound.length > 0 && (
         <p className="text-destructive text-sm">
           완화시간 {fit.at_bound.map((value) => value.toExponential(2)).join(', ')} 초가 관측 범위
@@ -543,6 +567,19 @@ function PronyView({
         <p className="text-muted-foreground mt-1 text-xs">
           Abaqus <code>*VISCOELASTIC, TIME=PRONY</code> 는 마지막 칸(g)을 받습니다.
         </p>
+      </div>
+
+      {/* **계수만으로는 해석에 못 들어간다.** 여기서 카드가 되어야 덱이 나온다 —
+          형식은 진작 있었는데 거기로 가는 길이 없었다. */}
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={() => setMaking(true)} disabled={busy}>
+          이 계수로 물성 카드 만들기
+        </Button>
+        {made && (
+          <span className="text-muted-foreground text-xs">
+            만들었습니다 — 재료 상세의 「CAE 카드」 에서 덱을 받습니다.
+          </span>
+        )}
       </div>
     </div>
   )

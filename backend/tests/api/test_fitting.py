@@ -97,6 +97,21 @@ def ready(
     return material
 
 
+def values(card: dict[str, Any], block: str) -> dict[str, Any]:
+    """카드에서 블록의 값 묶음을 꺼낸다.
+
+    **화면도 이렇게 읽는다.** 카드가 `elastic`·`hardening` 을 컬럼으로 들고
+    있던 때에는 응답에서 바로 꺼냈는데, 물성의 갈래가 데이터가 되면서 한 겹
+    들어갔다 — 그 대신 새 물성이 마이그레이션 없이 붙는다.
+    """
+    return dict(card["blocks"][block]["values"])
+
+
+def rows(card: dict[str, Any], block: str) -> list[dict[str, Any]]:
+    """블록의 표. 경화식 파라미터와 소성 표가 여기 있다."""
+    return list(card["blocks"][block]["rows"])
+
+
 class Test경화식목록:
     def test_화면이_이_응답만으로_목록을_그린다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -247,7 +262,7 @@ class Test물성카드:
         assert fixed.status_code == 200, fixed.text
         assert fixed.json()["label"] == "인장 MD (상온)"
         # **값은 그대로다.** 여기가 흔들리면 카드를 믿을 근거가 사라진다.
-        assert fixed.json()["elastic"] == card["elastic"]
+        assert values(fixed.json(), "elastic") == values(card, "elastic")
         assert fixed.json()["point_count"] == card["point_count"]
 
     def test_확정된_카드는_이름도_못_바꾼다(
@@ -296,7 +311,7 @@ class Test물성카드:
         )
         assert card.status_code == 201, card.text
         body = card.json()
-        assert not body["hardening"], "식을 안 골랐으면 비어 있어야 한다"
+        assert not body["blocks"].get("hardening"), "식을 안 골랐으면 비어 있어야 한다"
         assert body["point_count"] > 1, "표는 언제나 저장한다"
 
         deck = client.get(
@@ -333,10 +348,10 @@ class Test물성카드:
         assert len(card["source"]["test_run_ids"]) == 3
         # **적합도를 함께 저장한다.** 파라미터만 남기면 그 값이 데이터와 얼마나
         # 맞는지 다시 알 수 없다.
-        assert card["hardening"]["family"] == "voce"
-        assert "relative_rmse" in card["hardening"]
-        assert card["hardening"]["strain_max"] > 0
-        for item in card["hardening"]["parameters"]:
+        assert values(card, "hardening")["family"] == "voce"
+        assert "relative_rmse" in values(card, "hardening")
+        assert values(card, "hardening")["strain_max"] > 0
+        for item in rows(card, "hardening"):
             # 경계와 초기값이 없으면 같은 데이터로 다시 돌려도 재현이 안 된다.
             assert item["lower"] <= item["value"] <= item["upper"]
 
@@ -354,9 +369,9 @@ class Test물성카드:
             },
             headers=admin_headers,
         ).json()
-        assert card["hardening"] == {}
-        assert card["point_count"] == len(card["table"]) > 0
-        assert {"plastic_strain", "true_stress"} == set(card["table"][0])
+        assert "hardening" not in card["blocks"]
+        assert card["point_count"] == len(rows(card, "table")) > 0
+        assert {"plastic_strain", "true_stress"} == set(rows(card, "table")[0])
 
     def test_없는_값은_넣지_않는다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
@@ -375,9 +390,9 @@ class Test물성카드:
             },
             headers=admin_headers,
         ).json()
-        assert "poisson_ratio" not in card["elastic"]
+        assert "poisson_ratio" not in values(card, "elastic")
         # 탄성계수는 시험이 준다 — 통계 평균이 들어간다.
-        assert card["elastic"]["youngs_modulus"] > 0
+        assert values(card, "elastic")["youngs_modulus"] > 0
 
     def test_넣은_값은_그대로_들어간다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
@@ -394,8 +409,8 @@ class Test물성카드:
             },
             headers=admin_headers,
         ).json()
-        assert card["elastic"]["poisson_ratio"] == pytest.approx(0.29)
-        assert card["elastic"]["density"] == pytest.approx(7850.0)
+        assert values(card, "elastic")["poisson_ratio"] == pytest.approx(0.29)
+        assert values(card, "elastic")["density"] == pytest.approx(7850.0)
 
 
 class Test내보내기:
@@ -547,7 +562,7 @@ class Test상태:
         # 내려도 남아 있다 — 지워지지 않는다.
         remains = client.get(f"/api/fitting/cards/{card['id']}", headers=admin_headers)
         assert remains.status_code == 200
-        assert remains.json()["hardening"]["family"] == "voce"
+        assert values(remains.json(), "hardening")["family"] == "voce"
 
     def test_확정은_부서_관리자만(
         self,
@@ -625,12 +640,12 @@ class Test물려받기:
             headers=admin_headers,
         ).json()
 
-        assert card["elastic"]["poisson_ratio"] == 0.29
-        assert card["elastic"]["density"] == 7830
+        assert values(card, "elastic")["poisson_ratio"] == 0.29
+        assert values(card, "elastic")["density"] == 7830
         # **출처를 함께 박는다.** 재료를 나중에 고쳐도 이 카드가 무엇을 썼는지는
         # 그대로 남아야 한다 — 카드는 불변이다.
-        assert card["elastic"]["poisson_ratio_source"] == "material"
-        assert card["elastic"]["density_source"] == "material"
+        assert values(card, "elastic")["poisson_ratio_source"] == "material"
+        assert values(card, "elastic")["density_source"] == "material"
 
     def test_시료에서_잰_밀도가_재료_공칭값을_이긴다(
         self,
@@ -718,5 +733,5 @@ class Test물려받기:
             },
             headers=admin_headers,
         ).json()
-        assert card["elastic"]["poisson_ratio"] == 0.33
-        assert card["elastic"]["poisson_ratio_source"] == "manual"
+        assert values(card, "elastic")["poisson_ratio"] == 0.33
+        assert values(card, "elastic")["poisson_ratio_source"] == "manual"

@@ -55,6 +55,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       to: 'tests',
       why: '마스터커브도 곡선이라 같은 CurveChart 로 그린다 — 축이 둘 다 로그인 것만 다르고, 그 옵션은 차트가 받는다. 처리·통계·적합이 같은 이유로 tests 를 부른다.',
     },
+    {
+      to: 'fitting',
+      why: '적합에서 물성 카드를 만드는 버튼이 Prony 결과 옆에 있어야 한다 — 계수를 보고 나서 "이걸로 카드" 가 이어지는 자리다. 카드는 fitting 의 것이라 그 API 를 부른다. 반대로 뒤집으면(fitting 이 점탄성을 앎) 경화 카드 화면이 DMA 를 알아야 하고, 새 물성마다 그 목록이 는다 — 그것이 바로 물성 블록으로 걷어낸 결합이다.',
+    },
   ],
   statistics: [
     {

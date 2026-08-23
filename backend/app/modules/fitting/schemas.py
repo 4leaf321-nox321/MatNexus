@@ -105,6 +105,38 @@ class ExportFormatOut(BaseModel):
     내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
 
 
+class CardValueOut(BaseModel):
+    """카드에 담기는 값 하나의 이름과 뜻. **화면이 이것만으로 칸을 그린다.**
+
+    `processing` 의 `ProducedOut` 과 같은 것을 담지만 이름을 가른다 — 같은 클래스
+    이름이 둘이면 OpenAPI 가 **양쪽 다** 이름을 바꿔 버려서, 손대지 않은 처리
+    화면의 타입까지 깨진다. 실제로 한 번 깨뜨리고 알았다.
+    """
+
+    key: str
+    label: str
+    si_unit: str
+    """**저장 단위(SI)** 다. 화면은 실무 단위로 바꿔 보여 준다."""
+    help: str | None = None
+
+
+class BlockSpecOut(BaseModel):
+    """물성 블록 한 갈래의 선언.
+
+    **화면이 블록 이름을 하나도 모른다.** 그것이 새 물성을 더하는 값을
+    마이그레이션 0·화면 0 으로 만드는 자리다.
+    """
+
+    key: str
+    label: str
+    help: str
+    produces: list[CardValueOut]
+    rows: list[CardValueOut]
+    """표의 열 선언. 비어 있으면 이 블록에는 표가 없다."""
+    in_deck: bool
+    """덱에 실리는가. 경화식은 안 실린다 — 표로 나가고 식은 주석에만 남는다."""
+
+
 class PropertyCardOut(BaseModel):
     id: uuid.UUID
     material_id: uuid.UUID
@@ -115,19 +147,41 @@ class PropertyCardOut(BaseModel):
     status: str
     """`draft` | `published` | `deprecated`. 전환 권한은 D8·D12 참조."""
     source: dict[str, Any]
-    elastic: dict[str, Any]
-    hardening: dict[str, Any]
-    table: list[dict[str, Any]]
+    blocks: dict[str, Any]
+    """물성 블록 묶음. 무엇이 들어 있는지는 `GET /fitting/blocks` 의 선언이 푼다."""
+    available_formats: list[str] = []
+    """이 카드로 **지금 낼 수 있는** 형식. 누르기 전에 알아야 한다 —
+    내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
+    problem: str | None = None
+    """이 카드를 풀지 못한 이유. 실린 블록을 만든 계산이 지금 코드에 없을 때
+    채워진다 — **목록에서 없던 일로 하지 않는다.**"""
     point_count: int
     note: str | None
     published_at: datetime | None
     created_at: datetime
 
 
+class ViscoelasticCardSaveRequest(BaseModel):
+    """Prony 적합에서 점탄성 카드를 만든다.
+
+    **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
+    나오지만 Prony 는 마스터커브 하나에 매달려 있다 — 재료·방향은 그 체인
+    (적합 → 마스터커브 → 시험 → 시편 → 시료 → 재료)에서 따라간다.
+    """
+
+    prony_fit_id: uuid.UUID
+    label: str = Field(min_length=1, max_length=120)
+    poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
+    """**DMA 는 이것을 재지 않는다.** 재료에서 물려받거나 사람이 넣는다 —
+    없으면 없는 채로 두고, `*ELASTIC` 을 못 쓴다고 그때 말한다."""
+    density: float | None = Field(default=None, gt=0)
+    note: str | None = None
+
+
 class PropertyCardUpdateRequest(BaseModel):
     """**이름과 메모만.** 값은 못 바꾼다.
 
-    카드는 불변이다 — `elastic`·`hardening`·`table` 을 고치는 길은 없고, 고치려면
+    카드는 불변이다 — 물성 블록을 고치는 길은 없고, 고치려면
     새로 만든다(ADR 0007 과 같은 모델). 그런데 그 원칙이 **이름 오타까지 못 고치게**
     만들고 있었다. 지우고 다시 만드는 수밖에 없었고, 그러면 적합을 다시 돌린다.
 

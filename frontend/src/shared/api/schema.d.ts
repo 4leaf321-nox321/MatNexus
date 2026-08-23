@@ -297,6 +297,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Blocks
+         * @description 등록된 물성 블록. **화면이 이 응답만으로 카드를 그린다.**
+         *
+         *     화면이 `elastic`·`viscoelastic` 같은 이름을 하나도 모른다 — 그것이 새 물성을
+         *     더하는 값을 마이그레이션 0·화면 0 으로 만드는 자리다(D7).
+         */
+        get: operations["list_blocks_api_fitting_blocks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards": {
         parameters: {
             query?: never;
@@ -315,6 +338,40 @@ export interface paths {
          *     재료에서는 표가 더 정확하다. 식은 골랐을 때만 함께 넣는다.
          */
         post: operations["create_card_api_fitting_cards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/viscoelastic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Viscoelastic Card
+         * @description Prony 적합에서 점탄성 카드를 만든다.
+         *
+         *     **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
+         *     나오지만 Prony 는 마스터커브 하나에 매달려 있다. 그것을 묶음에 억지로 끼우면
+         *     "여러 시편의 평균" 이라는 묶음의 뜻이 무너진다 — 재료·방향은 체인을 따라간다.
+         *
+         *     시편 1건짜리 카드는 이미 허용하기로 한 것이다(`_representative` 참조). 막으면
+         *     사람은 시스템 밖에서 계산해 카드 없이 덱을 만들고, 그러면 근거가 아무 데도
+         *     안 남는다. 대신 **표본 1건이라는 사실을 카드에 박는다.**
+         *
+         *     ## `*ELASTIC` 은 순간 탄성률이다
+         *
+         *     E₀ 를 **탄성 블록에** 출처 `prony` 로 넣는다. Abaqus 는 `*VISCOELASTIC` 이
+         *     있을 때 `*ELASTIC` 을 순간 탄성률로 읽는데, 평형 탄성률을 넣으면 재료가
+         *     통째로 무르게 계산되고 **덱은 멀쩡히 돌고 결과도 그럴듯하다.**
+         */
+        post: operations["create_viscoelastic_card_api_fitting_cards_viscoelastic_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2589,6 +2646,27 @@ export interface components {
             /** Test Run Ids */
             test_run_ids: string[];
         };
+        /**
+         * BlockSpecOut
+         * @description 물성 블록 한 갈래의 선언.
+         *
+         *     **화면이 블록 이름을 하나도 모른다.** 그것이 새 물성을 더하는 값을
+         *     마이그레이션 0·화면 0 으로 만드는 자리다.
+         */
+        BlockSpecOut: {
+            /** Help */
+            help: string;
+            /** In Deck */
+            in_deck: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Produces */
+            produces: components["schemas"]["CardValueOut"][];
+            /** Rows */
+            rows: components["schemas"]["CardValueOut"][];
+        };
         /** Body_detect_test_type_api_test_types_detect_post */
         Body_detect_test_type_api_test_types_detect_post: {
             /** File */
@@ -2750,6 +2828,24 @@ export interface components {
             rejected: number;
             /** Skipped */
             skipped: number;
+        };
+        /**
+         * CardValueOut
+         * @description 카드에 담기는 값 하나의 이름과 뜻. **화면이 이것만으로 칸을 그린다.**
+         *
+         *     `processing` 의 `ProducedOut` 과 같은 것을 담지만 이름을 가른다 — 같은 클래스
+         *     이름이 둘이면 OpenAPI 가 **양쪽 다** 이름을 바꿔 버려서, 손대지 않은 처리
+         *     화면의 타입까지 깨진다. 실제로 한 번 깨뜨리고 알았다.
+         */
+        CardValueOut: {
+            /** Help */
+            help?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
@@ -4136,18 +4232,19 @@ export interface components {
         /** PropertyCardOut */
         PropertyCardOut: {
             /**
+             * Available Formats
+             * @default []
+             */
+            available_formats: string[];
+            /** Blocks */
+            blocks: {
+                [key: string]: unknown;
+            };
+            /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Elastic */
-            elastic: {
-                [key: string]: unknown;
-            };
-            /** Hardening */
-            hardening: {
-                [key: string]: unknown;
-            };
             /**
              * Id
              * Format: uuid
@@ -4168,6 +4265,8 @@ export interface components {
             orientation: string;
             /** Point Count */
             point_count: number;
+            /** Problem */
+            problem?: string | null;
             /** Published At */
             published_at: string | null;
             /** Source */
@@ -4176,10 +4275,6 @@ export interface components {
             };
             /** Status */
             status: string;
-            /** Table */
-            table: {
-                [key: string]: unknown;
-            }[];
             /** Test Type Key */
             test_type_key: string;
         };
@@ -4209,7 +4304,7 @@ export interface components {
          * PropertyCardUpdateRequest
          * @description **이름과 메모만.** 값은 못 바꾼다.
          *
-         *     카드는 불변이다 — `elastic`·`hardening`·`table` 을 고치는 길은 없고, 고치려면
+         *     카드는 불변이다 — 물성 블록을 고치는 길은 없고, 고치려면
          *     새로 만든다(ADR 0007 과 같은 모델). 그런데 그 원칙이 **이름 오타까지 못 고치게**
          *     만들고 있었다. 지우고 다시 만드는 수밖에 없었고, 그러면 적합을 다시 돌린다.
          *
@@ -5745,6 +5840,29 @@ export interface components {
             /** Value */
             value: number | null;
         };
+        /**
+         * ViscoelasticCardSaveRequest
+         * @description Prony 적합에서 점탄성 카드를 만든다.
+         *
+         *     **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
+         *     나오지만 Prony 는 마스터커브 하나에 매달려 있다 — 재료·방향은 그 체인
+         *     (적합 → 마스터커브 → 시험 → 시편 → 시료 → 재료)에서 따라간다.
+         */
+        ViscoelasticCardSaveRequest: {
+            /** Density */
+            density?: number | null;
+            /** Label */
+            label: string;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+            /**
+             * Prony Fit Id
+             * Format: uuid
+             */
+            prony_fit_id: string;
+        };
         /** VocCreateRequest */
         VocCreateRequest: {
             /** Body */
@@ -6501,6 +6619,26 @@ export interface operations {
             };
         };
     };
+    list_blocks_api_fitting_blocks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockSpecOut"][];
+                };
+            };
+        };
+    };
     list_cards_api_fitting_cards_get: {
         parameters: {
             query?: {
@@ -6542,6 +6680,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PropertyCardSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_viscoelastic_card_api_fitting_cards_viscoelastic_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViscoelasticCardSaveRequest"];
             };
         };
         responses: {

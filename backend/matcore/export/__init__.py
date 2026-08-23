@@ -210,6 +210,7 @@ VALUE_LABELS = {
     "poisson_ratio": "푸아송비",
     "density": "밀도",
     "prony": "Prony 계수",
+    "points": "소성 표",
 }
 
 
@@ -483,7 +484,11 @@ FORMATS: dict[str, Format] = {
         render=render_abaqus,
         keywords=("*MATERIAL", "*ELASTIC", "*PLASTIC"),
         # 밀도는 빠져도 된다 — *DENSITY 는 선택 키워드다. 대신 왜 없는지 덱에 적는다.
-        requires=("youngs_modulus", "poisson_ratio"),
+        #
+        # **표는 빠지면 안 된다.** 전에는 `requires` 에 없어서 검사를 지나고
+        # `render` 안에서 터졌다 — 그러면 화면이 "이 형식은 아직 못 낸다" 를
+        # 미리 말할 수 없다. 점탄성 카드가 생기면서 실제로 걸리는 자리가 됐다.
+        requires=("youngs_modulus", "poisson_ratio", "points"),
     ),
     "openradioss": Format(
         key="openradioss",
@@ -493,7 +498,7 @@ FORMATS: dict[str, Format] = {
         render=render_openradioss,
         keywords=("/MAT/LAW36", "/FUNCT/", "/UNIT/1", "/END"),
         # LAW36 은 RHO_I 가 자리 있는 필드다. 비울 수 없다.
-        requires=("youngs_modulus", "poisson_ratio", "density"),
+        requires=("youngs_modulus", "poisson_ratio", "density", "points"),
     ),
     "abaqus_viscoelastic": Format(
         key="abaqus_viscoelastic",
@@ -518,6 +523,28 @@ FORMATS: dict[str, Format] = {
         media_type="application/json; charset=utf-8",
     ),
 }
+
+
+def missing_for(card: Card, format_key: str) -> tuple[str, ...]:
+    """이 형식으로 내보내려면 카드에 더 있어야 하는 것. 사람이 읽는 이름으로.
+
+    **누르기 전에 알아야 한다.** `requires` 의 독스트링이 처음부터 그렇게 적혀
+    있었는데 그것을 읽는 곳이 없었다 — 화면은 형식을 전부 보여 주고, 못 내는
+    형식은 내려받기를 누른 뒤에야 알려 줬다.
+    """
+    target = FORMATS.get(format_key)
+    if target is None:
+        return ()
+    return tuple(
+        VALUE_LABELS[name]
+        for name in target.requires
+        if getattr(card, name) is None or getattr(card, name) == ()
+    )
+
+
+def available_formats(card: Card) -> tuple[str, ...]:
+    """이 카드로 지금 낼 수 있는 형식."""
+    return tuple(key for key in FORMATS if not missing_for(card, key))
 
 
 def render(format_key: str, card: Card) -> Rendered:

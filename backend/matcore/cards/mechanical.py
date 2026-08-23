@@ -1,0 +1,136 @@
+"""금속 소성 카드의 블록 — 탄성·경화식·소성 표.
+
+인장 한 줄기가 파일에서 솔버 덱까지 닫히면서 굳은 셋이다. 전에는 이것이
+`property_cards` 의 컬럼 이름이었다 — 여기로 옮기면서 **데이터가 됐다.**
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from matcore.cards import BlockSpec, register_block, rows_of, values_of
+from matcore.registry import Produced
+
+
+def _elastic_to_card(payload: Any) -> dict[str, Any]:
+    """**없는 값은 넣지 않는다.** 0 이나 0.3 으로 채우면 그것이 측정값인지
+    우리가 채운 값인지 덱만 봐서는 알 수 없다."""
+    values = values_of(payload)
+    return {
+        name: values[name]
+        for name in ("youngs_modulus", "poisson_ratio", "density")
+        if values.get(name) is not None
+    }
+
+
+ELASTIC = register_block(
+    BlockSpec(
+        key="elastic",
+        label="탄성",
+        help=(
+            "탄성계수·푸아송비·밀도. 푸아송비와 밀도는 인장시험이 주지 않는다 — "
+            "재료나 시료에서 물려받거나 사람이 넣는다."
+        ),
+        produces=(
+            Produced(
+                key="youngs_modulus",
+                label="탄성계수",
+                si_unit="Pa",
+                help=(
+                    "대표 곡선의 탄성 구간에서 잰 값. 점탄성 카드에서는 순간(t=0) 탄성률이다."
+                ),
+            ),
+            Produced(
+                key="poisson_ratio",
+                label="푸아송비",
+                si_unit="1",
+                help="인장시험이 주지 않는다. 재료에서 물려받거나 사람이 넣는다.",
+            ),
+            Produced(
+                key="density",
+                label="밀도",
+                si_unit="kg/m3",
+                help="동적 해석에 필요하다. 시료의 실측값이 있으면 그것을 쓴다.",
+            ),
+        ),
+        to_card=_elastic_to_card,
+        order=10,
+    )
+)
+
+
+HARDENING = register_block(
+    BlockSpec(
+        key="hardening",
+        label="경화식",
+        help=(
+            "적합한 경화식과 그 적합도. **덱에는 안 실린다** — 소성은 표로 나가고 "
+            "식은 주석에만 남는다. 이 표가 어디까지 검증된 것인지가 여기에 있다."
+        ),
+        produces=(
+            Produced(
+                key="label",
+                label="식",
+                si_unit="1",
+                help="Voce·Swift·Hockett-Sherby 중 고른 것.",
+            ),
+            Produced(
+                key="relative_rmse",
+                label="상대 RMSE",
+                si_unit="1",
+                help="적합 구간에서 데이터와 얼마나 벌어지는가. 작을수록 잘 맞는다.",
+            ),
+            Produced(key="r_squared", label="R²", si_unit="1", help="결정계수."),
+            Produced(
+                key="max_residual",
+                label="최대 잔차",
+                si_unit="Pa",
+                help="가장 크게 벌어진 한 점. 평균이 좋아도 여기가 크면 국소적으로 안 맞는다.",
+            ),
+            Produced(
+                key="strain_min",
+                label="적합 구간 시작",
+                si_unit="1",
+                help="진소성변형률. **그 밖은 검증되지 않았다.**",
+            ),
+            Produced(
+                key="strain_max", label="적합 구간 끝", si_unit="1", help="진소성변형률."
+            ),
+        ),
+        rows=(
+            Produced(key="name", label="파라미터", si_unit="1", help="식 안에서의 이름."),
+            Produced(key="value", label="값", si_unit="1", help="행이 자기 단위를 들고 있다."),
+        ),
+        # **덱에 안 실린다.** 실리지 않는다고 쓸모없는 것이 아니라 실리는 자리가
+        # 다르다 — 내보내기가 주석에 한 줄로 적는다.
+        to_card=None,
+        order=20,
+    )
+)
+
+
+def _table_to_card(payload: Any) -> dict[str, Any]:
+    return {
+        "points": tuple(
+            (float(row["plastic_strain"]), float(row["true_stress"]))
+            for row in rows_of(payload)
+        )
+    }
+
+
+TABLE = register_block(
+    BlockSpec(
+        key="table",
+        label="소성 표",
+        help=(
+            "진소성변형률·진응력의 점 목록. **많은 솔버가 식보다 표를 그대로 받고**, "
+            "식이 안 맞는 재료에서는 표가 더 정확하다."
+        ),
+        rows=(
+            Produced(key="plastic_strain", label="진소성변형률", si_unit="1"),
+            Produced(key="true_stress", label="진응력", si_unit="Pa"),
+        ),
+        to_card=_table_to_card,
+        order=30,
+    )
+)

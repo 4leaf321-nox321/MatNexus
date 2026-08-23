@@ -10,6 +10,16 @@
 규칙이 보이기 전에 절차를 만들면 그 절차가 일을 정의해 버린다. `published` 로
 올리는 권한만 부서 관리자에게 준다(D12).
 
+## 물성의 갈래는 데이터다
+
+전에는 `elastic`·`hardening`·`table` 이라는 **컬럼 셋**이었다. 점탄성을 더하려면
+네 번째 컬럼이, 초탄성이면 다섯 번째가 필요했고 그때마다 마이그레이션·스키마·
+화면이 딸려 왔다 — 폴리머 점탄성에서 D7 이 못 미친 45% 의 정체가 그것이다.
+
+셋 다 **이미 JSONB 였다.** 안은 형식이 없는데 바깥의 컬럼 이름만 굳어 있었다.
+지금은 `blocks` 한 칸이고, 무엇이 들어갈 수 있는지는 `matcore.cards` 레지스트리가
+안다. 새 물성 1종에 드는 것은 `BlockSpec` 하나이고 마이그레이션은 0 이다.
+
 ## 불변이 아니다 — 대신 상태가 바뀐다
 
 처리 결과·앙상블과 다른 점이다. 카드는 **사람이 검토하고 승인하는 대상**이라
@@ -65,27 +75,21 @@ class PropertyCard(Base):
     source: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     """쓴 시험·표본 수·적합 구간. 카드가 자기 근거를 들고 있어야 한다."""
 
-    elastic: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    """탄성: `youngs_modulus`(Pa) · `poisson_ratio` · `density`.
+    blocks: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    """물성 블록 묶음 — `{블록 key: {values, rows, notes}}`.
 
-    **푸아송비와 밀도는 인장시험이 주지 않는다.** 사람이 넣거나 재료 DB 에서
-    온다 — 값이 없으면 없는 채로 두고, 0 으로 채우지 않는다."""
+    무엇이 들어갈 수 있는지는 **`matcore.cards` 레지스트리가 안다.** 여기서는
+    이름을 하나도 모른다 — 그것이 새 물성을 더하는 값을 마이그레이션 0 으로
+    만드는 자리다.
 
-    hardening: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    """경화: `family` · `parameters` · `rmse` · `relative_rmse` · `r_squared` ·
-    `strain_min` · `strain_max` · `notes`.
+    지금 등록된 것: `elastic` · `hardening` · `table` · `viscoelastic`.
 
-    **적합도를 함께 저장한다.** 파라미터만 남기면 그 값이 데이터와 얼마나 맞는지
-    다시 알 수 없고, 그러면 카드를 믿을 근거가 사라진다."""
-
-    table: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, default=list, server_default="[]"
-    )
-    """tabulated plasticity — `[{plastic_strain, true_stress}]`.
-
-    많은 솔버가 식보다 표를 그대로 받는다. 식이 안 맞는 재료에서는 표가 더 정확하다."""
+    **적합도를 값과 함께 담는다.** 파라미터만 남기면 그 값이 데이터와 얼마나
+    맞는지 다시 알 수 없고, 그러면 카드를 믿을 근거가 사라진다."""
 
     point_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """소성 표의 점 수. **목록이 표를 안 읽고도 보여 줄 수 있어야 한다** —
+    카드 하나의 표가 수천 점이다."""
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -18,9 +18,21 @@ export type PropertyCard = components['schemas']['PropertyCardOut']
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']
 type PropertyCardUpdate = components['schemas']['PropertyCardUpdateRequest']
 export type ExportFormat = components['schemas']['ExportFormatOut']
+export type BlockSpec = components['schemas']['BlockSpecOut']
+export type Produced = components['schemas']['CardValueOut']
+export type ViscoelasticCardSaveRequest =
+  components['schemas']['ViscoelasticCardSaveRequest']
 
 export const fittingApi = {
   families: () => api.get<Family[]>('/fitting/families'),
+
+  /**
+   * 물성 블록 선언. **화면이 이것만으로 카드를 그린다.**
+   *
+   * 화면이 `elastic`·`viscoelastic` 같은 이름을 하나도 모른다 — 그것이 새 물성을
+   * 더하는 값을 마이그레이션 0·화면 0 으로 만드는 자리다(D7).
+   */
+  blocks: () => api.get<BlockSpec[]>('/fitting/blocks'),
 
   /** 저장하지 않고 견줘 본다. `families` 를 비우면 등록된 식 전부. */
   preview: (body: {
@@ -39,6 +51,16 @@ export const fittingApi = {
 
   create: (body: PropertyCardSaveRequest) =>
     api.post<PropertyCard>('/fitting/cards', body),
+
+  /**
+   * Prony 적합에서 점탄성 카드를 만든다.
+   *
+   * **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
+   * 나오지만 Prony 는 마스터커브 하나에 매달려 있다 — 재료·방향은 서버가 체인을
+   * 따라 찾는다.
+   */
+  createViscoelastic: (body: ViscoelasticCardSaveRequest) =>
+    api.post<PropertyCard>('/fitting/cards/viscoelastic', body),
 
   /** 확정 — 부서 관리자만. 올린 뒤에는 값을 바꿀 수 없다. */
   /**

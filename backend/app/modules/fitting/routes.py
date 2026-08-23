@@ -25,6 +25,8 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.fitting.schemas import (
+    BlockSpecOut,
+    CardValueOut,
     ExportFormatOut,
     FamilyOut,
     FitOut,
@@ -35,15 +37,18 @@ from app.modules.fitting.schemas import (
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
+    ViscoelasticCardSaveRequest,
 )
-from app.modules.materials.models import Material, Sample
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestType
+from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
 from app.shared import permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
-from matcore import export, fitting, statistics
+from matcore import cards, export, fitting, prony, statistics
+from matcore.registry import Produced
 
 router = APIRouter(prefix="/fitting", tags=["fitting"])
 
@@ -68,6 +73,31 @@ def list_families(user: User = Depends(current_user)) -> list[FamilyOut]:
             parameter_units=list(family.parameter_units),
         )
         for family in fitting.FAMILIES.values()
+    ]
+
+
+def _produced(item: Produced) -> CardValueOut:
+    return CardValueOut(key=item.key, label=item.label, si_unit=item.si_unit, help=item.help)
+
+
+@router.get("/blocks", response_model=list[BlockSpecOut])
+def list_blocks(user: User = Depends(current_user)) -> list[BlockSpecOut]:
+    """등록된 물성 블록. **화면이 이 응답만으로 카드를 그린다.**
+
+    화면이 `elastic`·`viscoelastic` 같은 이름을 하나도 모른다 — 그것이 새 물성을
+    더하는 값을 마이그레이션 0·화면 0 으로 만드는 자리다(D7).
+    """
+    cards.load_builtin()
+    return [
+        BlockSpecOut(
+            key=spec.key,
+            label=spec.label,
+            help=spec.help,
+            produces=[_produced(one) for one in spec.produces],
+            rows=[_produced(one) for one in spec.rows],
+            in_deck=spec.to_card is not None,
+        )
+        for spec in cards.list_blocks()
     ]
 
 
@@ -282,9 +312,34 @@ def preview(
     )
 
 
+def _export_card(
+    item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()
+) -> export.Card:
+    """카드 행을 솔버 카드로. **여기가 블록 이름을 모른다** — 레지스트리가 푼다."""
+    return export.Card(
+        name=name,
+        solver_id=export.solver_id_from(str(item.id)),
+        provenance=provenance,
+        **cards.card_kwargs(item.blocks),
+    )
+
+
 def _card_out(db: Session, item: PropertyCard) -> PropertyCardOut:
+    cards.load_builtin()
     material = db.get(Material, item.material_id)
     test_type = db.get(TestType, item.test_type_id)
+    # **낼 수 있는 형식을 미리 말한다.** 내려받기를 누른 뒤에 "푸아송비가
+    # 없습니다" 를 보는 것은 늦다.
+    #
+    # 모르는 블록이 실려 있으면(그 물성을 만든 계산이 지금 코드에 없으면) 목록
+    # 전체가 죽지 않게 붙잡되, **없던 일로 하지는 않는다** — `problem` 에 담아
+    # 화면이 그 카드만 짚을 수 있게 한다.
+    problem: str | None = None
+    formats: list[str] = []
+    try:
+        formats = list(export.available_formats(_export_card(item, name="CARD")))
+    except cards.CardError as exc:
+        problem = str(exc)
     return PropertyCardOut(
         id=item.id,
         material_id=item.material_id,
@@ -294,9 +349,9 @@ def _card_out(db: Session, item: PropertyCard) -> PropertyCardOut:
         label=item.label,
         status=item.status,
         source=item.source,
-        elastic=item.elastic,
-        hardening=item.hardening,
-        table=item.table,
+        blocks=item.blocks,
+        available_formats=formats,
+        problem=problem,
         point_count=item.point_count,
         note=item.note,
         published_at=item.published_at,
@@ -326,11 +381,21 @@ def create_card(
         except fitting.FittingError as exc:
             raise AppError("MNX-FITTING-0004", str(exc), status=422) from exc
         hardening = {
-            "family": result.family,
-            "label": result.label,
-            # **적합도를 함께 저장한다.** 파라미터만 남기면 그 값이 데이터와 얼마나
-            # 맞는지 다시 알 수 없고, 그러면 카드를 믿을 근거가 사라진다.
-            "parameters": [
+            "values": {
+                "family": result.family,
+                "label": result.label,
+                # **적합도를 함께 저장한다.** 파라미터만 남기면 그 값이 데이터와
+                # 얼마나 맞는지 다시 알 수 없고, 그러면 카드를 믿을 근거가 사라진다.
+                "rmse": result.rmse,
+                "relative_rmse": result.relative_rmse,
+                "r_squared": result.r_squared,
+                "max_residual": result.max_residual,
+                "strain_min": result.strain_min,
+                "strain_max": result.strain_max,
+            },
+            # **행이 자기 단위를 든다.** 경화식 파라미터는 식마다 단위가 다르다 —
+            # Voce 의 `b` 는 무차원이고 `q` 는 Pa 다. 열 선언 하나로는 못 적는다.
+            "rows": [
                 {
                     "name": item.name,
                     "value": item.value,
@@ -341,12 +406,6 @@ def create_card(
                 }
                 for item in result.parameters
             ],
-            "rmse": result.rmse,
-            "relative_rmse": result.relative_rmse,
-            "r_squared": result.r_squared,
-            "max_residual": result.max_residual,
-            "strain_min": result.strain_min,
-            "strain_max": result.strain_max,
             "notes": list(result.notes),
         }
 
@@ -368,6 +427,29 @@ def create_card(
         f"밀도: {density.detail}" if density.detail else "",
     ]
 
+    elastic = {
+        # **없는 값은 넣지 않는다.** 0 이나 0.3 으로 채우면 그것이 측정값인지
+        # 기본값인지 나중에 알 수 없다.
+        #
+        # 값과 함께 **출처**를 박는다(`<키>_source`). 재료·시료를 나중에 고쳐도
+        # 이 카드가 무엇을 썼는지는 그대로 남는다.
+        **(
+            {"youngs_modulus": modulus, "youngs_modulus_source": "measured"}
+            if modulus is not None
+            else {}
+        ),
+        **(
+            {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
+            if poisson.value is not None
+            else {}
+        ),
+        **(
+            {"density": density.value, "density_source": density.source}
+            if density.value is not None
+            else {}
+        ),
+    }
+
     item = PropertyCard(
         material_id=group.material.id,
         test_type_id=group.test_type.id,
@@ -382,34 +464,157 @@ def create_card(
             "strain_max": float(strain[-1]),
             "notes": [*notes, *[line for line in inherited_notes if line]],
         },
-        elastic={
-            # **없는 값은 넣지 않는다.** 0 이나 0.3 으로 채우면 그것이 측정값인지
-            # 기본값인지 나중에 알 수 없다.
-            #
-            # 값과 함께 **출처**를 박는다. 재료·시료를 나중에 고쳐도 이 카드가
-            # 무엇을 썼는지는 그대로 남는다.
-            **(
-                {"youngs_modulus": modulus, "youngs_modulus_source": "measured"}
-                if modulus is not None
-                else {}
-            ),
-            **(
-                {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
-                if poisson.value is not None
-                else {}
-            ),
-            **(
-                {"density": density.value, "density_source": density.source}
-                if density.value is not None
-                else {}
-            ),
+        blocks={
+            **({"elastic": {"values": elastic}} if elastic else {}),
+            **({"hardening": hardening} if hardening else {}),
+            "table": {
+                "rows": [
+                    {"plastic_strain": float(x), "true_stress": float(y)}
+                    for x, y in zip(strain, stress, strict=True)
+                ]
+            },
         },
-        hardening=hardening,
-        table=[
-            {"plastic_strain": float(x), "true_stress": float(y)}
-            for x, y in zip(strain, stress, strict=True)
-        ],
         point_count=len(strain),
+        note=payload.note,
+        created_by_id=user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item)
+
+
+@router.post("/cards/viscoelastic", response_model=PropertyCardOut, status_code=201)
+def create_viscoelastic_card(
+    payload: ViscoelasticCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """Prony 적합에서 점탄성 카드를 만든다.
+
+    **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
+    나오지만 Prony 는 마스터커브 하나에 매달려 있다. 그것을 묶음에 억지로 끼우면
+    "여러 시편의 평균" 이라는 묶음의 뜻이 무너진다 — 재료·방향은 체인을 따라간다.
+
+    시편 1건짜리 카드는 이미 허용하기로 한 것이다(`_representative` 참조). 막으면
+    사람은 시스템 밖에서 계산해 카드 없이 덱을 만들고, 그러면 근거가 아무 데도
+    안 남는다. 대신 **표본 1건이라는 사실을 카드에 박는다.**
+
+    ## `*ELASTIC` 은 순간 탄성률이다
+
+    E₀ 를 **탄성 블록에** 출처 `prony` 로 넣는다. Abaqus 는 `*VISCOELASTIC` 이
+    있을 때 `*ELASTIC` 을 순간 탄성률로 읽는데, 평형 탄성률을 넣으면 재료가
+    통째로 무르게 계산되고 **덱은 멀쩡히 돌고 결과도 그럴듯하다.**
+    """
+    cards.load_builtin()
+    fit = db.get(PronyFit, payload.prony_fit_id)
+    if fit is None:
+        raise NotFound("MNX-FITTING-0011", "Prony 적합을 찾을 수 없습니다.")
+    curve = db.get(MasterCurve, fit.master_curve_id)
+    if curve is None:
+        raise NotFound("MNX-FITTING-0011", "마스터커브를 찾을 수 없습니다.")
+    run = permissions.get_run(db, user, curve.test_run_id)  # 볼 권한이 있는가
+    specimen = db.get(Specimen, run.specimen_id)
+    sample = db.get(Sample, specimen.sample_id) if specimen else None
+    material = db.get(Material, sample.material_id) if sample else None
+    if specimen is None or sample is None or material is None:
+        raise NotFound("MNX-FITTING-0011", "이 적합이 어느 재료의 것인지 따라갈 수 없습니다.")
+
+    series = prony.PronySeries(
+        equilibrium_pa=fit.equilibrium_pa,
+        terms=tuple(
+            prony.PronyTerm(
+                modulus_pa=float(term["modulus_pa"]),
+                relaxation_time_s=float(term["relaxation_time_s"]),
+            )
+            for term in fit.terms
+        ),
+        normalized_rmse=fit.normalized_rmse,
+        bic=fit.bic,
+        at_bound=tuple(fit.at_bound),
+    )
+    try:
+        relative = series.relative_moduli
+    except prony.PronyError as exc:
+        raise AppError("MNX-FITTING-0012", str(exc), status=422) from exc
+
+    poisson = _inherit_poisson(material, payload.poisson_ratio)
+    density = _inherit_density(material, [sample], payload.density)
+    notes = [
+        # **1건이라는 사실이 덱까지 따라가야 한다.** 솔버 결과를 놓고 "이 물성
+        # 어디서 났나" 를 묻는 자리에서 그 오해가 제일 비싸다.
+        f"시편 {specimen.record_name} 한 건의 마스터커브에서 만들었습니다 — "
+        f"재료의 대푯값이 아니라 그 시편의 값입니다.",
+        f"푸아송비: {poisson.detail}" if poisson.detail else "",
+        f"밀도: {density.detail}" if density.detail else "",
+    ]
+    if series.at_bound:
+        # **관측 밖을 외삽하고 있다.** 조용히 넘기면 덱을 받은 사람이 모른다.
+        notes.append(
+            f"완화시간 {len(series.at_bound)}개가 관측 범위 경계에 붙어 있습니다 — "
+            f"그만큼은 잰 범위 밖을 외삽한 값입니다."
+        )
+
+    item = PropertyCard(
+        material_id=material.id,
+        test_type_id=run.test_type_id,
+        orientation=specimen.orientation,
+        label=payload.label,
+        status="draft",
+        # **적합을 외래키로 잡지 않는다.** 시험을 지우면 마스터커브와 적합이
+        # 함께 지워지는데(CASCADE), 그때 카드까지 못 지우게 막거나 값을 잃으면
+        # 안 된다 — 카드는 **자기 근거를 들고 있는 스냅샷**이다. 가리키던 적합이
+        # 사라져도 계수·기준 온도·표본 수는 카드 안에 그대로 남는다.
+        source={
+            "sample_count": 1,
+            "test_run_ids": [str(run.id)],
+            "record_names": [run.record_name],
+            "prony_fit_id": str(fit.id),
+            "master_curve_id": str(curve.id),
+            "notes": [line for line in notes if line],
+        },
+        blocks={
+            "elastic": {
+                "values": {
+                    # **순간 탄성률이다.** 평형 탄성률을 넣으면 재료가 무르게 계산된다.
+                    "youngs_modulus": series.instantaneous_pa,
+                    "youngs_modulus_source": "prony",
+                    **(
+                        {
+                            "poisson_ratio": poisson.value,
+                            "poisson_ratio_source": poisson.source,
+                        }
+                        if poisson.value is not None
+                        else {}
+                    ),
+                    **(
+                        {"density": density.value, "density_source": density.source}
+                        if density.value is not None
+                        else {}
+                    ),
+                }
+            },
+            "viscoelastic": {
+                "values": {
+                    "equilibrium_pa": fit.equilibrium_pa,
+                    "instantaneous_pa": series.instantaneous_pa,
+                    "reference_temperature_k": curve.reference_temperature_k,
+                    "normalized_rmse": fit.normalized_rmse,
+                    "bic": fit.bic,
+                    "shift_method": curve.method,
+                },
+                "rows": [
+                    {
+                        "relaxation_time_s": term.relaxation_time_s,
+                        "modulus_pa": term.modulus_pa,
+                        "relative_modulus": ratio,
+                    }
+                    for term, ratio in zip(series.terms, relative, strict=True)
+                ],
+                "notes": list(curve.notes),
+            },
+        },
+        point_count=0,
         note=payload.note,
         created_by_id=user.id,
     )
@@ -491,7 +696,9 @@ def export_card(
     # 솔버 덱의 이름은 재료 이름에서 만든다. 카드 이름은 한국어일 때가 많고,
     # 그러면 이름이 통째로 사라진다.
     base = f"{material.record_name if material else item.label}_{item.orientation}"
-    hardening = item.hardening or {}
+    cards.load_builtin()
+    elastic = cards.values_of(item.blocks.get("elastic"))
+    hardening = cards.values_of(item.blocks.get("hardening"))
     provenance = [
         f"재료 {material.record_name if material else '?'} · "
         f"{test_type.key if test_type else '?'} · {item.orientation}",
@@ -511,8 +718,8 @@ def export_card(
         ("poisson_ratio", "푸아송비"),
         ("density", "밀도"),
     ):
-        origin = SOURCE_NOTES.get(str(item.elastic.get(f"{key}_source", "")))
-        if item.elastic.get(key) is not None and origin:
+        origin = SOURCE_NOTES.get(str(elastic.get(f"{key}_source", "")))
+        if elastic.get(key) is not None and origin:
             provenance.append(f"{label}: {origin}")
 
     if hardening.get("label"):
@@ -525,17 +732,12 @@ def export_card(
             f"{float(hardening.get('strain_max', 0.0)):.5g} (그 밖은 검증되지 않았습니다)"
         )
 
-    card = export.Card(
-        name=export.sanitize_name(base),
-        solver_id=export.solver_id_from(str(item.id)),
-        youngs_modulus=item.elastic.get("youngs_modulus"),
-        poisson_ratio=item.elastic.get("poisson_ratio"),
-        density=item.elastic.get("density"),
-        points=tuple(
-            (float(row["plastic_strain"]), float(row["true_stress"])) for row in item.table
-        ),
-        provenance=tuple(provenance),
-    )
+    try:
+        card = _export_card(
+            item, name=export.sanitize_name(base), provenance=tuple(provenance)
+        )
+    except cards.CardError as exc:
+        raise AppError("MNX-FITTING-0010", str(exc), status=422) from exc
     try:
         rendered = export.render(format, card)
     except export.ExportError as exc:
