@@ -170,6 +170,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Entries
+         * @description 감사 기록. **최근 것부터.**
+         *
+         *     부서 관리자는 자기 부서 것만 본다. 부서가 없는 기록(계정처럼 전사에 걸린
+         *     일)은 **시스템 관리자만** 본다 — 어느 부서 소관인지 정할 수 없는 일이라
+         *     부서 관리자에게 보이면 소관 밖을 보는 것이 된다.
+         */
+        get: operations["list_entries_api_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/change-password": {
         parameters: {
             query?: never;
@@ -2593,6 +2617,41 @@ export interface components {
             role: string;
             /** Workspace Slug */
             workspace_slug?: string | null;
+        };
+        /** AuditEntryOut */
+        AuditEntryOut: {
+            /** Action */
+            action: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Actor Label */
+            actor_label: string;
+            /** Changes */
+            changes: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Target Id */
+            target_id: string | null;
+            /** Target Label */
+            target_label: string;
+            /** Target Table */
+            target_table: string;
+            /** Workspace Id */
+            workspace_id: string | null;
         };
         /** BatchItemOut */
         BatchItemOut: {
@@ -6410,6 +6469,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_entries_api_audit_get: {
+        parameters: {
+            query?: {
+                action?: string | null;
+                target_id?: string | null;
+                workspace_id?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEntryOut"][];
                 };
             };
             /** @description Validation Error */

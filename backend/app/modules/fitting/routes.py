@@ -44,7 +44,7 @@ from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestType
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
-from app.shared import permissions
+from app.shared import audit, permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
 from matcore import cards, export, fitting, prony, runtime, statistics
@@ -832,6 +832,12 @@ def get_card(
     return _card_out(db, item)
 
 
+def _card_workspace(db: Session, item: PropertyCard) -> uuid.UUID | None:
+    """카드가 어느 부서의 것인가. 감사 목록의 가시성 판정에 쓴다."""
+    material = db.get(Material, item.material_id)
+    return material.owner_workspace_id if material else None
+
+
 def _visible_card(db: Session, user: User, card_id: uuid.UUID) -> PropertyCard:
     item = db.get(PropertyCard, card_id)
     if item is None:
@@ -1010,6 +1016,18 @@ def publish(
     item.status = "published"
     item.published_by_id = user.id
     item.published_at = datetime.now(UTC)
+    # **이 값으로 해석이 돌 수 있다.** 누가 언제 올렸는지가 남아야 하고, 카드를
+    # 나중에 지워도 그 기록은 남는다.
+    audit.record(
+        db,
+        action=audit.CARD_PUBLISHED,
+        actor=user,
+        target_table="property_cards",
+        target_id=item.id,
+        target_label=item.label,
+        workspace_id=_card_workspace(db, item),
+        changes={"status": {"before": "draft", "after": "published"}},
+    )
     db.commit()
     db.refresh(item)
     return _card_out(db, item)
@@ -1049,7 +1067,18 @@ def deprecate(
         # 올린 사람과 같은 권한으로만 내린다. 확정된 값을 아무나 무를 수 있으면
         # 확정에 권한을 둔 뜻이 없다.
         _require_publisher(db, user, item)
+    before = item.status
     item.status = "deprecated"
+    audit.record(
+        db,
+        action=audit.CARD_DEPRECATED,
+        actor=user,
+        target_table="property_cards",
+        target_id=item.id,
+        target_label=item.label,
+        workspace_id=_card_workspace(db, item),
+        changes={"status": {"before": before, "after": "deprecated"}},
+    )
     db.commit()
     db.refresh(item)
     return _card_out(db, item)
@@ -1070,6 +1099,17 @@ def remove_card(
             "이 값으로 해석이 돌았을 수 있습니다.",
             status=409,
         )
+    # **지워도 기록은 남는다.** 대상에 외래키를 안 건 이유가 이것이다 — 카드가
+    # 사라져도 "그 카드가 있었고 누가 지웠다" 는 남아야 한다.
+    audit.record(
+        db,
+        action=audit.CARD_DELETED,
+        actor=user,
+        target_table="property_cards",
+        target_id=item.id,
+        target_label=item.label,
+        workspace_id=_card_workspace(db, item),
+    )
     db.delete(item)
     db.commit()
     return Response(status_code=204)
