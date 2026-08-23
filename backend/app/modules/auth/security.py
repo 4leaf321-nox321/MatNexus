@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -29,8 +30,22 @@ def _prepared(password: str) -> bytes:
     return base64.b64encode(hashlib.sha256(password.encode("utf-8")).digest())
 
 
+#: bcrypt 라운드. **일부러 느린 함수이고 그것이 값이다** — 운영에서는 12 가 맞다.
+#:
+#: 시험만 낮춘다. 라운드 12 는 해시 185ms·검증 188ms 인데, 시험 하나가 계정을
+#: 만들고(해시) 로그인하므로(검증) **테스트당 373ms** 를 여기서 쓴다. 769개면
+#: 4분 이상이고, 그 시간은 **인증 로직이 아니라 bcrypt 의 설계 목적**을 재는 데
+#: 쓰인다 — 시험이 보려는 것이 아니다.
+#:
+#: 낮춰도 검사하는 것은 그대로다: 같은 알고리즘, 같은 sha256 전처리, 같은 경로.
+#: 라운드는 **얼마나 오래 걸리게 할지**만 정한다.
+#:
+#: 환경변수로 두는 이유는 코드가 시험을 알면 안 되기 때문이다. `conftest` 가 켠다.
+BCRYPT_ROUNDS = int(os.environ.get("MNX_BCRYPT_ROUNDS", "12"))
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(_prepared(password), bcrypt.gensalt()).decode("ascii")
+    return bcrypt.hashpw(_prepared(password), bcrypt.gensalt(BCRYPT_ROUNDS)).decode("ascii")
 
 
 def verify_password(password: str, password_hash: str) -> bool:

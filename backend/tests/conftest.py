@@ -11,6 +11,18 @@
 
 from __future__ import annotations
 
+import os
+
+# **bcrypt 를 낮춘다 — 다른 무엇보다 먼저.** `app.*` 를 import 하는 순간
+# `security.py` 가 이 값을 읽으므로, 아래 import 보다 위에 있어야 한다.
+#
+# 라운드 12 는 해시 185ms·검증 188ms 다. 시험 하나가 계정을 만들고(해시)
+# 로그인하므로(검증) **테스트당 373ms** 를 bcrypt 에 쓴다 — 769개면 4분 이상이고,
+# 그것은 **인증 로직이 아니라 bcrypt 의 설계 목적**을 재는 시간이다.
+#
+# 알고리즘·전처리·경로는 그대로다. 라운드는 얼마나 오래 걸리게 할지만 정한다.
+os.environ.setdefault("MNX_BCRYPT_ROUNDS", "4")
+
 from collections.abc import Iterator
 
 import psycopg
@@ -138,9 +150,26 @@ def db(engine, factory) -> Iterator[Session]:  # type: ignore[no-untyped-def]
     finally:
         session.close()
         # 서비스가 commit 하므로 롤백으로는 격리되지 않는다. 테이블을 비운다.
+        #
+        # **`DELETE` 다. `TRUNCATE` 였다가 310배 느린 것을 재고 바꿨다.**
+        #
+        #     TRUNCATE ... RESTART IDENTITY CASCADE   434.4 ms
+        #     DELETE FROM (36개)                        1.4 ms
+        #
+        # 행이 없어도 TRUNCATE 는 할 일이 있다 — 테이블마다 **새 파일을 만들고 옛
+        # 파일을 지운다**(36개면 72번의 파일 조작). 거기에 시퀀스 카탈로그를 쓰고
+        # FK 를 훑고 36개 테이블에 ACCESS EXCLUSIVE 를 건다. `DELETE` 는 빈
+        # 테이블에서 스캔 한 번이고 끝이다.
+        #
+        # 769번 도니 그 차이가 **334초**였다 — 스위트의 70% 다.
+        #
+        # `RESTART IDENTITY` 를 잃는 것이 없다: **이 스키마에 시퀀스가 0개**다(PK 가
+        # 전부 UUID). `CASCADE` 대신 **역순 삭제**로 FK 를 지킨다 — `sorted_tables` 가
+        # 부모부터이므로 뒤집으면 자식부터다. 52 프로젝트가 같은 방식이고, 거기서는
+        # 이 문제를 겪지 않았다.
         with engine.begin() as conn:
-            tables = ", ".join(f'"{t.name}"' for t in reversed(Base.metadata.sorted_tables))
-            conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+            for table in reversed(Base.metadata.sorted_tables):
+                conn.execute(table.delete())
 
 
 @pytest.fixture
