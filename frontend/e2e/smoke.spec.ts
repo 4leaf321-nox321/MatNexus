@@ -211,7 +211,14 @@ test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) =
   await page.getByRole('button', { name: '로그인' }).click()
   await expect(page.getByRole('banner')).toBeVisible()
 
-  await page.getByRole('link', { name: '파일 형식' }).click()
+  // **사이드바 안에서 찾는다.** 부서 홈의 안내 카드에도 「파일 형식」 이라는
+  // 말이 들어 있어서, 화면 전체에서 이름으로 찾으면 둘이 걸린다 — 실제로 CI 가
+  // 그렇게 멈췄다. 이 시험이 보려는 것은 **사이드바로 갈 수 있는가** 이므로
+  // 범위를 좁히는 것이 시험의 뜻에도 맞다.
+  await page
+    .locator('[data-app-chrome="sidebar"]')
+    .getByRole('link', { name: '파일 형식' })
+    .click()
   await expect(page).toHaveURL(/\/settings\/formats$/)
   await expect(page.getByRole('link', { name: '프로파일 만들기' })).toBeVisible()
 
