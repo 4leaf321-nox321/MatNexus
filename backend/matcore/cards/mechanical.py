@@ -100,6 +100,41 @@ TABLE = register_block(
             "진소성변형률·진응력의 점 목록. **많은 솔버가 식보다 표를 그대로 받고**, "
             "식이 안 맞는 재료에서는 표가 더 정확하다."
         ),
+        produces=(
+            Produced(
+                key="source",
+                label="표를 만든 방법",
+                si_unit="1",
+                help="`측정` 이면 대표 곡선 그대로, `외삽` 이면 그 뒤를 적합식으로 이었다.",
+            ),
+            Produced(
+                key="measured_max",
+                label="측정이 끝난 변형률",
+                si_unit="1",
+                help="**여기까지가 시험이 답한 범위다.** 그 위는 식이 답한 것이다.",
+            ),
+            Produced(
+                key="extrapolated_to",
+                label="늘린 한계",
+                si_unit="1",
+                help="어디까지 늘렸나. 얼마까지 필요한지는 무슨 해석을 하느냐가 정한다.",
+            ),
+            Produced(
+                key="family",
+                label="늘릴 때 쓴 식",
+                si_unit="1",
+                help="적합 구간에서 비슷한 두 식이 외삽에서 크게 갈린다.",
+            ),
+            Produced(
+                key="junction_gap",
+                label="이음매 벌어짐",
+                si_unit="1",
+                help=(
+                    "이음매에서 식이 측정과 벌어진 정도. "
+                    "크면 그 식이 곡선의 끝을 못 따라간 것이다."
+                ),
+            ),
+        ),
         rows=(
             Produced(key="plastic_strain", label="진소성변형률", si_unit="1"),
             Produced(key="true_stress", label="진응력", si_unit="Pa"),

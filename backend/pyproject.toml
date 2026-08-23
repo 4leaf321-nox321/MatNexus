@@ -14,9 +14,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 # 물성의 표기다. `ν`(포아송비)를 `v` 로, `E′`(저장 탄성률)를 `E'` 로, `α`(Ogden
-# 지수)를 `a` 로 적으면 읽는 사람이 다른 것으로 본다 — 여기서는 그 글자가 정답이다.
+# 지수)를 `a` 로, `σ`(응력)를 `o` 로 적으면 읽는 사람이 다른 것으로 본다 — 여기서는
+# 그 글자가 정답이다. 특히 `dσ/dε` 는 이 도메인에서 그렇게만 쓴다.
 # ASCII 로 바꿔 쓸 수 있는 `×`·`−` 는 그대로 막아 둔다(그건 실제로 오타가 섞인다).
-allowed-confusables = ["ν", "′", "″", "α"]
+allowed-confusables = ["ν", "′", "″", "α", "σ"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI의 의존성 주입은 기본값 자리에 Depends()를 쓰는 것이 정식 문법이라

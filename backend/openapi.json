@@ -4533,6 +4533,19 @@
             ],
             "title": "Density"
           },
+          "extrapolate_to": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extrapolate To"
+          },
           "family": {
             "anyOf": [
               {

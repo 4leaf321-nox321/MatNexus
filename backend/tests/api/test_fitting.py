@@ -895,3 +895,105 @@ class Test초탄성:
         )
         assert made.status_code == 404
         assert "재료군" in made.text
+
+
+class Test외삽:
+    """**측정 구간만 내보내는 것도 결정이다.**
+
+    솔버는 표 밖에서 마지막 응력을 붙들고 가는데, 금속은 계속 경화하므로 그 구간에서
+    하중을 낮게 계산한다. 지어내지 않는 것이 아니라 다른 값을 조용히 지어내는 것이다.
+
+    통상적으로 하는 일이고 이름이 있다 — 유동곡선 외삽.
+    """
+
+    def _card(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        material_id: str,
+        **extra: Any,
+    ) -> Any:
+        return client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": material_id,
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "외삽",
+                "family": "voce",
+                # 덱까지 내보내는 시험이 있어 인장이 안 주는 값을 함께 넣는다.
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+                **extra,
+            },
+            headers=headers,
+        )
+
+    def test_비우면_측정_구간_그대로다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**기본값을 두지 않는다.** 얼마까지 필요한지는 해석하는 사람이 안다."""
+        card = self._card(client, admin_headers, ready["id"]).json()
+        assert values(card, "table")["source"] == "측정"
+        assert "extrapolated_to" not in values(card, "table")
+
+    def test_늘리면_표가_길어지고_카드가_그렇게_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        plain = self._card(client, admin_headers, ready["id"]).json()
+        made = self._card(client, admin_headers, ready["id"], extrapolate_to=1.0)
+        assert made.status_code == 201, made.text
+        card = made.json()
+
+        assert card["point_count"] > plain["point_count"]
+        table = values(card, "table")
+        assert table["source"] == "외삽"
+        assert table["extrapolated_to"] == pytest.approx(1.0)
+        # **여기까지가 시험이 답한 범위다.** 그 위는 식이 답한 것이다.
+        assert table["measured_max"] < 1.0
+        assert rows(card, "table")[-1]["plastic_strain"] == pytest.approx(1.0)
+
+    def test_늘렸다는_사실이_덱까지_간다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**덱만 받은 사람이 알아야 한다.** 어디까지가 시험이고 어디부터가 식인지
+        표만 봐서는 구별이 안 된다 — 점이 나란히 있을 뿐이다."""
+        card = self._card(client, admin_headers, ready["id"], extrapolate_to=1.0).json()
+        # **Abaqus 가 아니라 JSON 으로 본다.** 이 픽스처의 실측 곡선은 네킹 뒤가
+        # 섞여 있어 응력이 떨어지고, 소성 덱은 그것을 **거절하는 것이 맞다**
+        # (눕혀 내보내면 실제와 다른 재료가 된다). 근거 줄은 형식과 무관하게
+        # 카드에서 나오므로 여기서는 그것만 본다.
+        deck = client.get(
+            f"/api/fitting/cards/{card['id']}/export",
+            params={"format": "json"},
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        joined = " ".join(deck.json()["provenance"])
+        assert "까지는 측정" in joined
+        assert "외삽 구간은 시험으로 검증되지 않았습니다" in joined
+
+    def test_식을_안_골랐으면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """표만 저장하면 늘릴 근거가 없다."""
+        made = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "근거 없음",
+                "extrapolate_to": 1.0,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 422
+        assert "늘릴 식을 안 골랐습니다" in made.text
+
+    def test_측정_끝보다_짧게_늘리면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        made = self._card(client, admin_headers, ready["id"], extrapolate_to=0.0001)
+        assert made.status_code == 422
+        assert "늘릴 구간이 없습니다" in made.text

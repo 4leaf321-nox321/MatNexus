@@ -136,6 +136,17 @@ class Family:
     **Voce 와 Ogden 을 나란히 세워 RMSE 로 줄 세우면 안 된다** — 금속 경화식과
     고무 초탄성은 같은 물음의 답이 아니다. 무엇이 나란히 설 수 있는지는 식이 안다."""
 
+    tangent: Any = None
+    """`(파라미터, x) -> dy/dx`. **외삽이 물리적으로 말이 되는지 보는 근거다.**
+
+    접선이 음수면 그 구간에서 재료가 연화한다는 뜻이고, 해석은 발산하거나 조용히
+    이상한 답을 낸다. 측정 구간 안에서는 데이터가 그 모양이면 그런 것이지만,
+    **외삽 구간의 연화는 식이 지어낸 것**이라 반드시 짚어야 한다.
+
+    수치 미분으로 대신할 수도 있지만 그러면 특이점에서 거짓말을 한다 —
+    Hockett-Sherby 의 접선은 ε=0 에서 **진짜 +∞ 극한**이지 큰 유한값이 아니다.
+    """
+
     extras: Any = None
     """`(파라미터) -> {키: 값}`. 이 식만의 요약값.
 
@@ -170,6 +181,12 @@ def _voce_bounds(strain: np.ndarray, stress: np.ndarray) -> tuple[np.ndarray, np
     )
 
 
+def _voce_tangent(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    """dσ/dε = Q·b·exp(-b·ε). **늘 양수이고 0 으로 수렴한다** — 포화형의 정의다."""
+    _sigma_0, q, b = parameters
+    return np.asarray(q * b * np.exp(-b * np.maximum(strain, 0.0)), dtype=np.float64)
+
+
 def _swift(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     k, epsilon_0, n = parameters
     return np.asarray(k * np.power(np.maximum(epsilon_0 + strain, 1e-12), n), dtype=np.float64)
@@ -187,10 +204,35 @@ def _swift_bounds(strain: np.ndarray, stress: np.ndarray) -> tuple[np.ndarray, n
     )
 
 
+def _swift_tangent(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    """dσ/dε = K·n·(ε0+ε)^(n-1). **줄어들지만 0 이 되지 않는다** — 멱함수형이라
+    큰 변형에서도 계속 오른다."""
+    k, epsilon_0, n = parameters
+    base = np.maximum(epsilon_0 + strain, 1e-12)
+    return np.asarray(k * n * np.power(base, n - 1.0), dtype=np.float64)
+
+
 def _hockett_sherby(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     sigma_0, q, b, n = parameters
     safe = np.maximum(strain, 0.0)
     return np.asarray(sigma_0 + q * (1.0 - np.exp(-b * np.power(safe, n))), dtype=np.float64)
+
+
+def _hockett_tangent(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    """dσ/dε = Q·b·n·ε^(n-1)·exp(-b·ε^n).
+
+    **ε=0 에서 n<1 이면 진짜 +∞ 다.** 유한한 큰 수로 바꿔 돌려주면 "여기서 기울기가
+    아주 크다" 와 "여기서 정의되지 않는다" 를 구별할 수 없게 된다. `inf` 를 그대로
+    낸다 — 받는 쪽이 그것을 보고 판단한다.
+    """
+    _sigma_0, q, b, n = parameters
+    safe = np.maximum(strain, 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        power = np.power(safe, n - 1.0)
+        value = q * b * n * power * np.exp(-b * np.power(safe, n))
+    return np.asarray(
+        np.where(safe > 0.0, value, np.inf if n < 1.0 else value), dtype=np.float64
+    )
 
 
 def _hockett_guess(strain: np.ndarray, stress: np.ndarray) -> np.ndarray:
@@ -225,6 +267,7 @@ FAMILIES: dict[str, Family] = {
         guess=_voce_guess,
         bounds=_voce_bounds,
         describe="sigma = s0 + Q(1 - exp(-b*eps)) — 포화형. 큰 변형에서 일정해진다.",
+        tangent=_voce_tangent,
         applies_to=METALLIC,
     ),
     "swift": Family(
@@ -236,6 +279,7 @@ FAMILIES: dict[str, Family] = {
         guess=_swift_guess,
         bounds=_swift_bounds,
         describe="sigma = K(e0 + eps)^n — 멱함수형. 큰 변형에서도 계속 올라간다.",
+        tangent=_swift_tangent,
         applies_to=METALLIC,
     ),
     "hockett_sherby": Family(
@@ -247,9 +291,130 @@ FAMILIES: dict[str, Family] = {
         guess=_hockett_guess,
         bounds=_hockett_bounds,
         describe="sigma = s0 + Q(1 - exp(-b*eps^n)) — 포화형이면서 초기 기울기가 자유롭다.",
+        tangent=_hockett_tangent,
         applies_to=METALLIC,
     ),
 }
+
+
+@dataclass(frozen=True)
+class Extended:
+    """측정 표를 적합식으로 늘린 결과."""
+
+    points: tuple[tuple[float, float], ...]
+    """전체 표 — 측정 구간은 그대로, 그 뒤가 식으로 만든 점이다."""
+    measured_max: float
+    """측정이 끝난 변형률. **여기까지가 시험이 답한 범위다.**"""
+    extrapolated_to: float
+    added: int
+    junction_gap: float
+    """이음매에서 식과 측정이 벌어진 정도(상대). 크면 그 식이 끝을 못 따라간 것이다."""
+    notes: tuple[str, ...]
+
+
+def extend_table(
+    result: FitResult,
+    plastic_strain: np.ndarray,
+    true_stress: np.ndarray,
+    *,
+    to: float,
+    points: int = 20,
+) -> Extended:
+    """측정 표 뒤에 적합식으로 만든 점을 잇는다.
+
+    ## 왜 필요한가
+
+    인장시험은 **네킹까지**만 준다(강판이면 진소성변형률 0.1~0.25). 그 뒤로는 변형이
+    한 곳에 몰려서 공칭→진응력 변환식이 성립하지 않는다. 그런데 충돌 해석은 0.5~1.5,
+    성형은 0.3~1.0 을 쓴다 — **시험이 답한 범위와 해석이 쓰는 범위 사이에 구멍이
+    있다.**
+
+    안 채우면 솔버가 자기 기본값으로 채운다(대개 마지막 응력을 붙들고 간다). 그것도
+    **물리적 주장**이다 — 금속은 계속 경화하므로 그 구간에서 하중을 낮게 계산한다.
+    "지어내지 않는 것" 이 아니라 **다른 값을 조용히 지어내는 것**이다.
+
+    이 도메인에서 통상적으로 하는 일이고, 이름이 있다 — 유동곡선 외삽.
+
+    ## 측정점을 지우지 않는다
+
+    측정 구간은 **그대로 두고 뒤에만 잇는다.** 전 구간을 식으로 다시 그리면 매끄럽긴
+    하지만 시험이 실제로 답한 것과 식이 답한 것이 섞여 구별이 사라진다.
+
+    대신 이음매에서 식과 측정이 벌어진 정도를 잰다(`junction_gap`). 크면 그 식이
+    곡선의 끝을 못 따라간 것이고, 그런 식으로 외삽하면 안 된다.
+
+    ## 어디까지 늘릴지는 여기서 안 정한다
+
+    `to` 를 받는다. 얼마까지 필요한지는 **무슨 해석을 하느냐**가 정하고 그건 해석하는
+    사람이 안다. 기본값을 두면 그 값이 곧 결정이 되는데, 아무도 그것을 결정이라고
+    인식하지 않는다.
+    """
+    if points < 2:
+        raise FittingError("외삽 점은 2개 이상이어야 합니다.")
+    measured = tuple(
+        (float(x), float(y)) for x, y in zip(plastic_strain, true_stress, strict=True)
+    )
+    if not measured:
+        raise FittingError("측정 표가 비어 있어 늘릴 것이 없습니다.")
+    measured_max = measured[-1][0]
+    if to <= measured_max:
+        raise FittingError(
+            f"늘릴 한계({to:.5g})가 측정 끝({measured_max:.5g}) 이하입니다 — "
+            f"늘릴 구간이 없습니다."
+        )
+
+    family = FAMILIES[result.family]
+    values = np.asarray([item.value for item in result.parameters], dtype=np.float64)
+    grid = np.linspace(measured_max, to, points + 1)[1:]
+    predicted = np.asarray(family.evaluate(values, grid), dtype=np.float64)
+
+    notes: list[str] = [
+        f"측정은 소성변형률 {measured_max:.5g} 에서 끝납니다. 그 위 {to:.5g} 까지 "
+        f"{result.label} 으로 늘렸습니다 — **외삽 구간은 시험으로 검증되지 않았습니다.**"
+    ]
+
+    # **이음매가 벌어지면 그 식은 끝을 못 따라간 것이다.**
+    at_junction = float(np.asarray(family.evaluate(values, np.asarray([measured_max])))[0])
+    last = measured[-1][1]
+    gap = abs(at_junction - last) / abs(last) if last else 0.0
+    if gap > 0.02:
+        notes.append(
+            f"이음매에서 식이 측정보다 {gap * 100:.3g}% 벌어집니다 "
+            f"(측정 {last / 1e6:.4g} MPa vs 식 {at_junction / 1e6:.4g} MPa) — "
+            f"이 식은 곡선의 끝을 못 따라갑니다. 다른 식을 견줘 보세요."
+        )
+
+    # **외삽 구간의 연화는 식이 지어낸 것이다.** 측정 구간과 다르다.
+    if family.tangent is not None:
+        slope = np.asarray(family.tangent(values, grid), dtype=np.float64)
+        soft = np.isfinite(slope) & (slope < 0.0)
+        if bool(np.any(soft)):
+            notes.append(
+                f"외삽 구간에서 접선이 음수가 됩니다(소성변형률 "
+                f"{float(grid[np.argmax(soft)]):.5g} 부터) — 재료가 연화한다는 뜻이고 "
+                f"해석이 발산하거나 조용히 이상한 답을 낼 수 있습니다. **측정 구간이 "
+                f"아니라 식이 지어낸 모양입니다.**"
+            )
+    else:
+        notes.append(
+            f"{result.label} 은 접선 선언이 없어 외삽 구간의 연화를 검사하지 못했습니다."
+        )
+
+    if bool(np.any(np.diff(predicted) < 0)):
+        notes.append(
+            "외삽 구간에서 응력이 떨어집니다 — 솔버가 받지 않는 표입니다. "
+            "한계를 줄이거나 다른 식을 고르세요."
+        )
+
+    return Extended(
+        points=measured
+        + tuple((float(x), float(y)) for x, y in zip(grid, predicted, strict=True)),
+        measured_max=measured_max,
+        extrapolated_to=float(to),
+        added=len(grid),
+        junction_gap=float(gap),
+        notes=tuple(notes),
+    )
 
 
 def register_family(family: Family) -> Family:

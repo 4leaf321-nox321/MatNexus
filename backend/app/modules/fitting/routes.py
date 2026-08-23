@@ -508,6 +508,45 @@ def create_card(
         f"밀도: {density.detail}" if density.detail else "",
     ]
 
+    # ── 소성 표를 어디까지 낼까 ─────────────────────────────────────────
+    #
+    # **측정 구간만 내보내는 것도 결정이다.** 솔버는 표 밖에서 마지막 응력을
+    # 붙들고 가는데, 금속은 계속 경화하므로 그 구간에서 하중을 낮게 계산한다.
+    # 지어내지 않는 것이 아니라 다른 값을 조용히 지어내는 것이다.
+    table_values: dict[str, Any] = {"source": "측정", "measured_max": float(strain[-1])}
+    table_rows = [
+        {"plastic_strain": float(x), "true_stress": float(y)}
+        for x, y in zip(strain, stress, strict=True)
+    ]
+    if payload.extrapolate_to is not None:
+        if spec is None:
+            raise AppError(
+                "MNX-FITTING-0014",
+                "늘릴 식을 안 골랐습니다. 표만 저장하면 늘릴 근거가 없습니다.",
+                status=422,
+            )
+        if spec.block != "hardening":
+            raise AppError(
+                "MNX-FITTING-0014",
+                f"'{spec.label}' 은 소성 표를 만드는 식이 아닙니다.",
+                status=422,
+            )
+        try:
+            extended = fitting.extend_table(result, strain, stress, to=payload.extrapolate_to)
+        except fitting.FittingError as exc:
+            raise AppError("MNX-FITTING-0014", str(exc), status=422) from exc
+        table_rows = [
+            {"plastic_strain": float(x), "true_stress": float(y)} for x, y in extended.points
+        ]
+        table_values = {
+            "source": "외삽",
+            "measured_max": extended.measured_max,
+            "extrapolated_to": extended.extrapolated_to,
+            "family": result.label,
+            "junction_gap": extended.junction_gap,
+        }
+        notes.extend(extended.notes)
+
     elastic = {
         # **없는 값은 넣지 않는다.** 0 이나 0.3 으로 채우면 그것이 측정값인지
         # 기본값인지 나중에 알 수 없다.
@@ -551,19 +590,12 @@ def create_card(
             # **소성 표는 금속 카드의 것이다.** 고무는 공칭 축에 맞췄고, 그 점을
             # `*PLASTIC` 자리에 넣으면 덱은 돌고 재료만 딴판이 된다.
             **(
-                {
-                    "table": {
-                        "rows": [
-                            {"plastic_strain": float(x), "true_stress": float(y)}
-                            for x, y in zip(strain, stress, strict=True)
-                        ]
-                    }
-                }
+                {"table": {"values": table_values, "rows": table_rows}}
                 if spec is None or spec.block == "hardening"
                 else {}
             ),
         },
-        point_count=len(strain) if spec is None or spec.block == "hardening" else 0,
+        point_count=len(table_rows) if spec is None or spec.block == "hardening" else 0,
         note=payload.note,
         created_by_id=user.id,
     )
@@ -789,6 +821,7 @@ def export_card(
     elastic = cards.values_of(item.blocks.get("elastic"))
     hardening = cards.values_of(item.blocks.get("hardening"))
     hyper = cards.values_of(item.blocks.get("hyperelastic"))
+    table = cards.values_of(item.blocks.get("table"))
     provenance = [
         f"재료 {material.record_name if material else '?'} · "
         f"{test_type.key if test_type else '?'} · {item.orientation}",
@@ -812,6 +845,15 @@ def export_card(
         if elastic.get(key) is not None and origin:
             provenance.append(f"{label}: {origin}")
 
+    if table.get("source") == "외삽":
+        # **덱만 받은 사람이 알아야 한다.** 어디까지가 시험이고 어디부터가 식인지
+        # 표만 봐서는 구별이 안 된다 — 점이 나란히 있을 뿐이다.
+        provenance.append(
+            f"소성 표: 소성변형률 {float(table.get('measured_max', 0.0)):.5g} 까지는 측정, "
+            f"그 위 {float(table.get('extrapolated_to', 0.0)):.5g} 까지는 "
+            f"{table.get('family', '?')} 으로 늘렸습니다 — 외삽 구간은 시험으로 "
+            f"검증되지 않았습니다."
+        )
     if hyper.get("label"):
         # **단축 하나로 맞췄다는 사실이 덱까지 따라가야 한다.** 평면 전단·등이축
         # 에서는 크게 빗나갈 수 있다 — 덱만 받은 사람은 알 길이 없다.

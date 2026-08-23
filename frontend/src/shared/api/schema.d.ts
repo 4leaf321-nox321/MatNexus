@@ -4310,6 +4310,8 @@ export interface components {
         PropertyCardSaveRequest: {
             /** Density */
             density?: number | null;
+            /** Extrapolate To */
+            extrapolate_to?: number | null;
             /** Family */
             family?: string | null;
             /** Label */

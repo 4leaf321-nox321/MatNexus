@@ -619,6 +619,9 @@ function SaveDialog({
       : `${Number(row.value.toPrecision(6))} (물려받음)`
   }
   const [note, setNote] = useState('')
+  // **비워 두면 측정 구간 그대로.** 기본값을 두면 그 값이 곧 결정이 되는데,
+  // 아무도 그것을 결정이라고 인식하지 않는다.
+  const [extrapolate, setExtrapolate] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -640,6 +643,7 @@ function SaveDialog({
         // 나중에 알 수 없다.
         poisson_ratio: poisson === '' ? null : Number(poisson),
         density: density === '' ? null : Number(density),
+        extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
         note: note === '' ? null : note,
       })
       onSaved()
@@ -705,6 +709,29 @@ function SaveDialog({
             여기 적으면 그 값이 이기고, 카드에 '직접 입력' 으로 남습니다. 어느 쪽이든
             카드는 <b>값과 출처를 함께</b> 박아 둡니다.
           </p>
+
+          {/* **측정 구간만 내보내는 것도 결정이다.** 솔버는 표 밖에서 마지막
+              응력을 붙들고 가는데, 금속은 계속 경화하므로 그 구간에서 하중을 낮게
+              계산한다. 지어내지 않는 것이 아니라 다른 값을 조용히 지어내는 것이다. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="extrapolate">소성 표를 늘릴 한계 (진소성변형률)</Label>
+            <Input
+              id="extrapolate"
+              inputMode="decimal"
+              placeholder="비우면 측정 구간까지만"
+              value={extrapolate}
+              onChange={(event) => setExtrapolate(event.target.value)}
+              disabled={family === null}
+            />
+            <p className="text-muted-foreground text-xs">
+              인장시험은 <b>네킹까지</b>만 줍니다(강판이면 0.1~0.25). 충돌 해석은
+              0.5~1.5, 성형은 0.3~1.0 을 씁니다 — 그 사이를 비워 두면 솔버가 마지막
+              응력을 붙들고 갑니다. <b>그것도 물리적 주장입니다.</b>
+              {family === null
+                ? ' 식을 골라야 늘릴 수 있습니다 — 표만 저장하면 늘릴 근거가 없습니다.'
+                : ' 얼마까지 필요한지는 무슨 해석을 하느냐가 정합니다.'}
+            </p>
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="note">메모</Label>
