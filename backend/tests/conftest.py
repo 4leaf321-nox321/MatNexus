@@ -87,9 +87,32 @@ def engine():  # type: ignore[no-untyped-def]
     eng.dispose()
 
 
+@pytest.fixture(scope="session")
+def factory(engine):  # type: ignore[no-untyped-def]
+    """세션 팩토리는 한 번만 만든다. 엔진에 묶여 있을 뿐 상태가 없다."""
+    return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+@pytest.fixture(scope="session")
+def application(engine):  # type: ignore[no-untyped-def]
+    """FastAPI 앱을 **한 번만 조립한다.**
+
+    전에는 `client` 픽스처가 테스트마다 `create_app()` 을 불렀다 — 458번이다.
+    그 함수는 매번 로그 파일 핸들러를 새로 열고, 미들웨어 3개를 붙이고, 라우터
+    전체를 등록하고, 확장 폴더를 훑는다. **테스트가 보려는 것과 아무 상관이 없는
+    일이고, 769개짜리 스위트에서 그 고정비가 지배한다.**
+
+    앱은 상태를 거의 안 갖는다 — 테스트마다 달라지는 것은 `dependency_overrides`
+    와 `state.session_factory` 둘뿐이고, 그 둘은 아래에서 갈아 끼운다.
+
+    기동 이벤트(lifespan)는 없다. 있었다면 `TestClient` 가 매번 돌리므로 이 최적화의
+    효과가 줄었을 것이다.
+    """
+    return create_app()
+
+
 @pytest.fixture
-def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
-    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+def db(engine, factory) -> Iterator[Session]:  # type: ignore[no-untyped-def]
     session = factory()
     # **기준정보 축은 있어야 한다.** 시료를 만들 때마다 제조사 기준정보를 거치므로
     # (ADR 0010) 축이 없으면 관계없는 테스트가 전부 404 로 죽는다. 운영에서는
@@ -109,16 +132,20 @@ def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-def client(db: Session, engine) -> Iterator[TestClient]:  # type: ignore[no-untyped-def]
-    application = create_app()
+def client(db: Session, factory, application) -> Iterator[TestClient]:  # type: ignore[no-untyped-def]
+    """**앱은 공용, 세션만 갈아 끼운다.**
+
+    `dependency_overrides` 를 끝에 비우는 것이 격리의 전부다 — 안 비우면 다음
+    테스트가 앞 테스트의 세션을 쓰게 되고, 그 세션은 이미 닫혀 있다.
+    """
     application.dependency_overrides[get_db] = lambda: db
     # 요청 처리 밖에서 DB 를 쓰는 곳(접근 로그 미들웨어)도 테스트 DB 를 보게 한다.
-    application.state.session_factory = sessionmaker(
-        bind=engine, autoflush=False, expire_on_commit=False
-    )
-    with TestClient(application, raise_server_exceptions=False) as test_client:
-        yield test_client
-    application.dependency_overrides.clear()
+    application.state.session_factory = factory
+    try:
+        with TestClient(application, raise_server_exceptions=False) as test_client:
+            yield test_client
+    finally:
+        application.dependency_overrides.clear()
 
 
 ADMIN_PASSWORD = "admin-password-1"

@@ -29,8 +29,20 @@ def test_코드의_head_를_읽는다() -> None:
 
 def test_붙지_못하면_조용히_넘어간다() -> None:
     """**기동을 막지 않는다.** DB 에 못 붙는 상황에서 서버가 안 뜨면 원인을 볼
-    화면조차 없다."""
-    dead = create_engine("postgresql+psycopg://nobody@127.0.0.1:1/none")
+    화면조차 없다.
+
+    `connect_timeout` 이 있는 이유는 속도다. 이 시험 하나가 **260초**를 먹고 있었다
+    (769개짜리 스위트의 4분). 안 여는 포트로 붙는데도 그런 이유는 Windows 방화벽이
+    거절(RST)이 아니라 **패킷을 버려서**, 붙는 쪽이 기본 타임아웃을 끝까지 기다리기
+    때문이다. 재 보기 전에는 "DB 시험이 많아서 느리다" 고 짐작하고 있었다.
+
+    libpq 의 최소 타임아웃이 2초라 그 이하로는 안 내려간다(1 을 줘도 2 로 읽는다).
+    260초 → 4.4초.
+    """
+    dead = create_engine(
+        "postgresql+psycopg://nobody@127.0.0.1:1/none",
+        connect_args={"connect_timeout": 1},
+    )
     assert schema_version.db_revision(dead) is None
     assert schema_version.warn_if_behind(dead) is None
 
