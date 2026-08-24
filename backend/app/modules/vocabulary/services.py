@@ -151,7 +151,7 @@ def _filtered(
     if not include_hidden:
         query = query.where(VocabularyTerm.status == "active")
     if parent is not None:
-        # **부모로 좁힌다.** 강종이 수만 개일 때 Steel 을 골랐으면 후보가 수천으로
+        # **부모로 좁힌다.** Grade 가 수만 개일 때 Steel 을 골랐으면 후보가 수천으로
         # 줄어야 한다 — 규모에서 가장 큰 이득이다.
         #
         # 부모가 안 붙은 값도 함께 보여 준다. 계층은 쓰면서 채워지므로 초기에는
@@ -323,7 +323,7 @@ def rename(db: Session, term: VocabularyTerm, value: str) -> None:
             )
     _resync(db)
 
-    # **쓰는 쪽이 자기 뒤처리를 한다.** 강종이 바뀌면 재료 이름을 다시
+    # **쓰는 쪽이 자기 뒤처리를 한다.** Grade 가 바뀌면 재료 이름을 다시
     # 만들어야 하는데(ADR 0004), 그것을 여기서 하면 기준정보가 재료를 알게 된다.
     vocabulary_hooks.fire_rename(db, slug or "", term.id)
 
@@ -426,7 +426,7 @@ def apply_bindings(
     for binding in bindings:
         if binding.field not in values:
             # 이 요청이 안 건드린 필드다. 다만 **자식의 부모로는 쓰인다** —
-            # 강종만 고치는 수정에서도 부모(Category)는 행에 있는 값을 봐야 한다.
+            # Grade 만 고치는 수정에서도 부모(Category)는 행에 있는 값을 봐야 한다.
             if binding.parent_field is None:
                 resolved[binding.field] = _term_on(db, row, binding)
             continue
@@ -624,7 +624,7 @@ def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift
     * **문자열은 있는데 기준정보가 없다** — 백필이 못 이은 행이다. 여기서 문자열을
       지우면 그 재료가 무엇이었는지 사라진다. 반대로 **문자열을 기준정보로 올린다.**
 
-    고친 뒤 이름 훅을 때린다 — 강종이 바뀌면 재료 이름이 다시 만들어져야 한다.
+    고친 뒤 이름 훅을 때린다 — Grade 가 바뀌면 재료 이름이 다시 만들어져야 한다.
     """
     before = drift(db)
     touched: dict[str, set[uuid.UUID]] = {}

@@ -70,6 +70,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { VocabularyAxisPanel } from '@/modules/vocabulary/VocabularyAxisPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 /**
@@ -102,24 +103,15 @@ export default function VocabularyAdminPage() {
     <div>
       <PageHeader
         title="기준정보"
-        description="제조사·강종 같은 값의 목록. 오타를 고치고, 안 쓰는 값을 감춥니다."
+        description="제조사·Grade 같은 값의 목록. 오타를 고치고, 안 쓰는 값을 감춥니다."
       />
 
       <ErrorNotice error={vocabularies.error} className="mb-4" />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {axes.map((item) => (
-          <Button
-            key={item.slug}
-            size="sm"
-            variant={active?.slug === item.slug ? 'default' : 'outline'}
-            onClick={() => setSlug(item.slug)}
-          >
-            {item.label}
-            <span className="ml-1 opacity-60">{item.term_count}</span>
-          </Button>
-        ))}
-      </div>
+      {/* **축이 열한 개다.** 가로 버튼 줄로는 줄이 넘치고, 무엇보다 부모-자식이
+          안 보였다 — Grade 는 Category 아래, Category 는 Family 아래인데
+          나란히 놓으면 그냥 열한 개다. 세로로 세워 들여쓰기로 그린다. */}
+      <VocabularyAxisPanel axes={axes} current={active?.slug ?? null} onPick={setSlug} />
 
       {active && <TermTable vocabulary={active} role={roleOf(active, axes)} />}
 

@@ -190,7 +190,7 @@ def rename_descendants(db: Session, material: Material) -> None:
     #
     # 여기서 멈춰 있었다 — 재료 이름을 바꾸면 시험만 옛 이름을 달고 있었고,
     # 재료 수정 창은 "시편·시험 이름이 전부 따라 바뀝니다" 라고 **약속하고
-    # 있었다.** 강종 기준정보를 붙이면서 실측으로 드러났다.
+    # 있었다.** Grade 기준정보를 붙이면서 실측으로 드러났다.
     by_specimen = {specimen.id: specimen for specimen in specimens}
     if not by_specimen:
         return
@@ -270,10 +270,10 @@ def workspace_names(db: Session, ids: Sequence[uuid.UUID | None]) -> dict[uuid.U
 
 
 def rename_materials_of_grade(db: Session, term_id: uuid.UUID) -> None:
-    """강종 값 이름이 바뀌면 그 강종을 쓰는 재료 이름을 다시 만든다.
+    """Grade 값 이름이 바뀌면 그 Grade 를 쓰는 재료 이름을 다시 만든다.
 
-    강종은 재료 이름을 만든다(ADR 0004). 문자열만 맞추면 이름이 옛 강종을 그대로
-    달고 있게 된다 — `SECC_-_1.0` 인데 강종은 `SPCC` 인 상태.
+    Grade 는 재료 이름을 만든다(ADR 0004). 문자열만 맞추면 이름이 옛 Grade 를 그대로
+    달고 있게 된다 — `SECC_-_1.0` 인데 Grade 는 `SPCC` 인 상태.
 
     **이름이 겹치면 그 재료만 건너뛴다.** `SECC_-_1.0` 과 `SPCC_-_1.0` 이 있는데
     `SPCC` 를 `SECC` 로 고치면 둘이 같은 이름이 된다 — 유니크 제약에 걸려 요청

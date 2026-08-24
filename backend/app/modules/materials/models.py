@@ -133,7 +133,7 @@ class Material(Base):
     grade_term_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
     )
-    """강종 기준정보(ADR 0010). **이 값이 재료 이름을 만든다**(ADR 0004) —
+    """Grade 기준정보(ADR 0010). **이 값이 재료 이름을 만든다**(ADR 0004) —
     기준정보 값 이름을 고치면 재료 이름과 그 아래 시료·시편·시험 이름이 전부
     따라 바뀐다."""
 
@@ -159,7 +159,7 @@ class Material(Base):
     applied_part_term_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
     )
-    """용도 기준정보(ADR 0010). **이름에는 안 들어간다** — 강종과 달리 값을 고쳐도
+    """용도 기준정보(ADR 0010). **이름에는 안 들어간다** — Grade 와 달리 값을 고쳐도
     재료 이름이 안 바뀐다. 그래서 연쇄 변경 훅이 필요 없다."""
 
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -172,7 +172,7 @@ class Material(Base):
     poisson_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
     """**재료의 성질이다. 시료가 아니다.**
 
-    같은 강종의 다른 로트가 푸아송비가 다르지 않다. 게다가 인장시험은 이 값을
+    같은 Grade 의 다른 로트가 푸아송비가 다르지 않다. 게다가 인장시험은 이 값을
     주지 않는다 — 횡변형을 따로 재야 한다. 들어오는 값은 대개 문헌값이고,
     그것은 재료 등급에 붙는다.
 

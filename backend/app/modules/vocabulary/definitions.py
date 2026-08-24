@@ -24,7 +24,7 @@ from app.modules.vocabulary.models import Vocabulary
 #: (slug, label, entry_policy, sort_order, parent_slug, attribute_source)
 #:
 #: **분류는 사슬이다.** Metal → Steel → SECC. 평평하게 두면 Polymer + PP + SECC
-#: 같은 조합을 아무도 안 막고, 강종이 수만 개일 때 피커가 전체를 보여 준다.
+#: 같은 조합을 아무도 안 막고, Grade 가 수만 개일 때 피커가 전체를 보여 준다.
 BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = [
     ("manufacturer", "제조사", "open", 10, None, None),
     # **유통사와 주 벤더가 한 축을 공유한다.** 같은 회사가 어떤 로트에서는
@@ -45,11 +45,16 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     ("specimen_standard", "시편 규격", "open", 40, "specimen_category", "parent"),
     ("instrument", "장비", "open", 50, None, None),
     # **가장 큰 축이고 이득도 가장 크다.** 지금은 SECC/secc/S.E.C.C 가 서로
-    # 다른 재료 셋을 만든다. 다만 강종은 재료 이름을 만드는 값이라(ADR 0004)
+    # 다른 재료 셋을 만든다. 다만 Grade 는 재료 이름을 만드는 값이라(ADR 0004)
     # 값 이름을 고치면 재료·시료·시편·시험 이름이 전부 따라 바뀐다.
+    #
+    # **「강종」이 아니라 「Grade」다.** 강종(鋼種)은 강(鋼)에만 쓰는 말인데 이
+    # 축은 재료군을 안 가린다 — 개발 DB 에 Polymer/PP 의 Grade `S6F58` 이 있고,
+    # 그것을 강종이라 부르면 틀린 말이다. 재료 화면은 처음부터 "Grade" 로
+    # 부르고 있었으므로(`NewMaterialDialog`), 기준정보만 다른 이름을 쓰고 있었다.
     ("family", "Family", "open", 1, None, None),
     ("category", "Category", "open", 2, "family", None),
-    ("grade", "강종", "open", 5, "category", None),
+    ("grade", "Grade", "open", 5, "category", None),
     # **용도는 재료의 성질이다**(전에는 시료에 있었다). "도어 이너용 재료가 뭐가
     # 있나" 가 집계 질문이 되려면 자유 문자열이면 안 된다 — `도어`/`Door`/`도어 `
     # 가 갈리면 그 질문에 답이 셋 나온다.

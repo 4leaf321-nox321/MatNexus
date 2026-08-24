@@ -151,10 +151,10 @@ describe('OptionPicker', () => {
         .mockResolvedValue([{ value: 'SECC180' }])
 
       render(
-        <OptionPicker label="강종" value="" options={[]} search={search} onChange={vi.fn()} />
+        <OptionPicker label="Grade" value="" options={[]} search={search} onChange={vi.fn()} />
       )
       await user.click(screen.getByRole('button', { name: /전체/ }))
-      const box = screen.getByPlaceholderText('강종 찾기')
+      const box = screen.getByPlaceholderText('Grade 찾기')
       await user.type(box, 'S')
       await waitFor(() => expect(search).toHaveBeenCalledTimes(1))
       await user.type(box, 'ECC')
@@ -169,7 +169,7 @@ describe('OptionPicker', () => {
     it('만들기가 꺼져 있으면 새로 추가를 안 보여 준다', async () => {
       const user = userEvent.setup()
       // 기준정보 관리에서 상위 분류를 고를 때 쓴다 — 부모는 이미 있는 값이어야 하고,
-      // 강종의 부모를 손보다가 Family 를 새로 만드는 것은 아무도 의도하지 않는다.
+      // Grade 의 부모를 손보다가 Family 를 새로 만드는 것은 아무도 의도하지 않는다.
       const search = vi.fn().mockResolvedValue([])
       render(
         <OptionPicker
@@ -192,7 +192,7 @@ describe('OptionPicker', () => {
       const onCreate = vi.fn().mockResolvedValue({ value: '만든값' })
       render(
         <OptionPicker
-          label="강종"
+          label="Grade"
           value=""
           options={[]}
           search={search}
@@ -201,16 +201,16 @@ describe('OptionPicker', () => {
         />
       )
       await user.click(screen.getByRole('button', { name: /전체/ }))
-      await user.type(screen.getByPlaceholderText('강종 찾기'), '새강종')
+      await user.type(screen.getByPlaceholderText('Grade 찾기'), '새Grade')
       await waitFor(() => expect(search).toHaveBeenCalled())
       await user.click(await screen.findByText(/새로 추가/))
-      expect(onCreate).toHaveBeenCalledWith('새강종')
+      expect(onCreate).toHaveBeenCalledWith('새Grade')
     })
 
     it('열기 전에는 서버를 안 부른다', () => {
       const search = vi.fn().mockResolvedValue([])
       render(
-        <OptionPicker label="강종" value="" options={[]} search={search} onChange={vi.fn()} />
+        <OptionPicker label="Grade" value="" options={[]} search={search} onChange={vi.fn()} />
       )
       expect(search).not.toHaveBeenCalled()
     })

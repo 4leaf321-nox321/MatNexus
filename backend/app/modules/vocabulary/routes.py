@@ -514,7 +514,7 @@ def search_terms(
     ),
     parent_value: str | None = Query(
         default=None,
-        description="상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만",
+        description="상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 Grade 만",
     ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
@@ -562,7 +562,7 @@ def create_term(
         vocabulary,
         payload.value,
         created_by_id=user.id,
-        # **새 값이 부모를 물려받는다.** Steel 을 고른 상태에서 강종을 추가하면
+        # **새 값이 부모를 물려받는다.** Steel 을 고른 상태에서 Grade 를 추가하면
         # 그 아래로 들어간다 — 계층이 쓰면서 저절로 만들어진다.
         parent=services.parent_of(db, vocabulary, payload.parent_value),
     )
@@ -654,7 +654,7 @@ def update_term(
             attributes = dict(term.attributes or {})
         term.attributes = services.check_attributes(db, vocabulary, term, attributes)
 
-    # **이름 하나가 수천 건을 바꾼다.** 외래키라 참조가 저절로 따라오고, 강종이면
+    # **이름 하나가 수천 건을 바꾼다.** 외래키라 참조가 저절로 따라오고, Grade 면
     # 재료 이름까지 다시 만들어진다(ADR 0004). 그렇게 넓게 퍼지는 변경이 아무
     # 흔적 없이 일어나면, 나중에 "이 재료 이름이 왜 이렇죠" 에 답할 근거가 없다.
     #

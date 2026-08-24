@@ -31,7 +31,7 @@ class TermOut(BaseModel):
     id: uuid.UUID
     value: str
     parent_value: str | None = None
-    """상위 축의 값. 화면이 "이 강종은 Metal/Steel 아래 있습니다" 를 말하는 데 쓴다."""
+    """상위 축의 값. 화면이 "이 Grade 는 Metal/Steel 아래 있습니다" 를 말하는 데 쓴다."""
     usage_count: int
     """피커가 많이 쓰는 것을 위로 올린다. 개수가 보이면 고르기 전에 안다.
 

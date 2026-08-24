@@ -417,7 +417,7 @@ def create_material(
         legacy_id=payload.legacy_id,
         registered_by_id=user.id,
     )
-    # 강종은 기준정보를 거친다(ADR 0010). `SECC`/`secc` 가 서로 다른 재료를 만드는
+    # Grade 는 기준정보를 거친다(ADR 0010). `SECC`/`secc` 가 서로 다른 재료를 만드는
     # 것을 막는다 — 이 축의 이득이 가장 크다.
     vocabulary_services.apply_bindings(
         db,
