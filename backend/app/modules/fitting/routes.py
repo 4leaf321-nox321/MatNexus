@@ -276,19 +276,30 @@ def _fit_out(
 
     `extrapolate_to` 를 주면 **적합 구간 너머까지 그린다.** 저장하지 않는다 —
     194 MPa 가 갈리는 결정을 눈으로 보고 내리라는 것이 이 값의 전부다.
+
+    **소성 표를 만드는 식에서만 늘린다.** 초탄성은 늘려도 갈 곳이 없다(덱의
+    `*HYPERELASTIC` 은 표가 아니라 계수를 받는다). 여기서 안 막으면 미리보기는
+    늘어난 곡선을 그리는데 저장은 422 로 거절한다 — **보고 정하라고 만든 화면이
+    보여 준 것을 저장 못 하는 것**이 이 저장소가 반복해서 데인 자리다.
     """
-    top = result.strain_max
-    if extrapolate_to is not None and extrapolate_to > result.strain_max:
-        top = extrapolate_to
-    grid = np.linspace(result.strain_min, top, CURVE_POINTS)
-    drawn = result.evaluate(grid)
     spec = fitting.FAMILIES.get(
         result.family if isinstance(result, fitting.FitResult) else result.primary.family
     )
+    block = spec.block if spec else "hardening"
+    top = result.strain_max
+    if (
+        block == "hardening"
+        and extrapolate_to is not None
+        and extrapolate_to > result.strain_max
+    ):
+        top = extrapolate_to
+    grid = np.linspace(result.strain_min, top, CURVE_POINTS)
+    drawn = result.evaluate(grid)
     return FitOut(
         extrapolated_to=top if top > result.strain_max else None,
         x_label=spec.x_label if spec else "진소성변형률",
         y_label=spec.y_label if spec else "진응력",
+        block=block,
         family=result.family,
         label=result.label,
         parameters=[

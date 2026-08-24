@@ -3447,6 +3447,11 @@ export interface components {
         };
         /** FitOut */
         FitOut: {
+            /**
+             * Block
+             * @default hardening
+             */
+            block: string;
             /** Curve */
             curve: [
                 number,

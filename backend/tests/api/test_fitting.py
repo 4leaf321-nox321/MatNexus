@@ -808,6 +808,59 @@ class Test초탄성:
             assert item["x_label"] == "공칭 변형률"
             assert item["y_label"] == "공칭 응력"
 
+    def test_미리보기와_저장이_같은_답을_한다(
+        self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
+    ) -> None:
+        """**보여 준 것을 저장 못 하면 안 된다.**
+
+        저장은 초탄성에 늘리기를 422 로 거절한다(소성 표를 만드는 식이 아니다).
+        그런데 미리보기가 늘어난 곡선을 그려 주면, 사람은 그 곡선을 보고 정한 뒤
+        저장 버튼에서 거절당한다 — 이 저장소가 반복해서 데인 자리다.
+
+        화면이 칸을 잠그는 근거로 `block` 도 함께 준다.
+        """
+        body = {
+            "material_id": rubber["id"],
+            "test_type_key": "tensile",
+            "orientation": "MD",
+            "extrapolate_to": 3.0,
+        }
+        fits = client.post("/api/fitting/preview", json=body, headers=admin_headers).json()[
+            "fits"
+        ]
+        assert fits, "고무 식이 하나도 안 맞았습니다"
+        for item in fits:
+            assert item["block"] == "hyperelastic"
+            # 늘려 달라고 했는데 안 늘렸다 — 그것이 맞다.
+            assert item["extrapolated_to"] is None
+
+        # 저장도 같은 이유로 거절한다. 둘이 어긋나면 화면이 거짓말을 한다.
+        refused = client.post(
+            "/api/fitting/cards",
+            json={**body, "label": "늘리려는 고무", "family": "ogden_1"},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        assert refused.json()["error"]["code"] == "MNX-FITTING-0014"
+
+    def test_금속은_그대로_늘어난다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """막은 것이 초탄성이지 늘리기 자체가 아니다."""
+        fits = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "extrapolate_to": 1.0,
+                "families": ["voce"],
+            },
+            headers=admin_headers,
+        ).json()["fits"]
+        assert fits[0]["block"] == "hardening"
+        assert fits[0]["extrapolated_to"] == 1.0
+
     def test_카드가_초탄성_블록을_든다(
         self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
     ) -> None:

@@ -2073,6 +2073,11 @@
       },
       "FitOut": {
         "properties": {
+          "block": {
+            "default": "hardening",
+            "title": "Block",
+            "type": "string"
+          },
           "curve": {
             "items": {
               "maxItems": 2,

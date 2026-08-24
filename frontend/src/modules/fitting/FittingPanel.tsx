@@ -292,6 +292,14 @@ function FitComparison({
   // 그 거짓말은 화면에서만 보인다. 식 없이 표만 쓸 때는 소성 표라서 금속 축이다.
   const xLabel = `${fit?.x_label ?? '진소성변형률'} (%)`
   const yLabel = `${fit?.y_label ?? '진응력'} (MPa)`
+  // 늘리기 칸에 붙일 축 이름. 그래프 축과 달리 단위 접미사가 없다.
+  const axisLabel = fit?.x_label ?? '진소성변형률'
+  // **늘릴 수 있는 식인가.** 늘리는 것은 소성 표를 만드는 일이라 `hardening`
+  // 에서만 뜻이 있다. 서버도 같은 이유로 저장을 거절하므로(MNX-FITTING-0014)
+  // 여기서 안 잠그면 **보여 준 것을 저장 못 하는** 상태가 된다.
+  //
+  // 식을 안 고른 상태(표만 쓰기)에서도 잠근다 — 늘릴 근거가 되는 식이 없다.
+  const stretchable = fit !== null && fit !== undefined && fit.block === 'hardening'
   // 표시 단위로 맞춘다. 축만 바꾸고 점을 안 바꾸면 1000배 어긋난다.
   const shown = (points: [number, number][]): [number, number][] =>
     points.map(([x, y]) => [toDisplay(x, '1', 'strain'), toDisplay(y, 'Pa')])
@@ -318,17 +326,37 @@ function FitComparison({
             눈 감고 내리는 셈이었다. */}
         <div className="bg-muted/40 grid gap-3 rounded-md p-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="extrapolate">늘려서 보기 (진소성변형률)</Label>
+            {/* **축 이름을 하드코딩하지 않는다.** 고무는 공칭 변형률이고, 여기에
+                "진소성변형률" 이라고 붙으면 그것은 거짓말이다. 식이 자기 축을
+                선언하므로(ADR 0013) 그것을 그대로 쓴다. */}
+            <Label htmlFor="extrapolate">늘려서 보기 ({axisLabel})</Label>
             <Input
               id="extrapolate"
               inputMode="decimal"
-              placeholder="비우면 측정 구간까지만"
-              value={extrapolate}
+              placeholder={stretchable ? '비우면 측정 구간까지만' : '이 식은 늘리지 않습니다'}
+              value={stretchable ? extrapolate : ''}
               onChange={(event) => onExtrapolate(event.target.value)}
+              disabled={!stretchable}
             />
             <p className="text-muted-foreground text-xs">
-              인장시험은 <b>네킹까지</b>만 줍니다(강판이면 0.1~0.25). 충돌 해석은
-              0.5~1.5 를 씁니다 — 그래프의 <b>세로선 오른쪽이 식이 지어낸 구간</b>입니다.
+              {stretchable ? (
+                <>
+                  인장시험은 <b>네킹까지</b>만 줍니다(강판이면 0.1~0.25). 충돌 해석은
+                  0.5~1.5 를 씁니다 — 그래프의{' '}
+                  <b>세로선 오른쪽이 식이 지어낸 구간</b>입니다.
+                </>
+              ) : fit ? (
+                <>
+                  <b>{fit.label}</b> 은 소성 표를 만드는 식이 아닙니다. 덱의
+                  초탄성 블록은 표가 아니라 <b>계수</b>를 받으므로 늘릴 자리가
+                  없습니다.
+                </>
+              ) : (
+                <>
+                  <b>식을 골라야 늘릴 수 있습니다.</b> 표만 저장하면 측정한 점이
+                  그대로 덱에 실리고, 그 밖을 채울 근거가 없습니다.
+                </>
+              )}
             </p>
           </div>
 
