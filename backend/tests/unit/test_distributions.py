@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -19,6 +21,9 @@ from matcore import distributions
 #: 시험을 빠르게 돌리려고 낮춘다. 부트스트랩 p 의 **정밀도**만 떨어지고
 #: 통계량·파라미터는 그대로다. 기본값(999)은 API 가 쓴다.
 ROUNDS = 149
+
+#: p 값 자체를 보는 시험만 높인다. 149 로는 0.05 근처가 흔들린다.
+BOOTSTRAP_FOR_P = 499
 
 
 def weibull(
@@ -241,3 +246,112 @@ class Test레지스트리:
             assert report.best == "_지수"
         finally:
             distributions.DISTRIBUTIONS.pop("_지수", None)
+
+
+BENCHMARKS = Path(__file__).resolve().parents[1] / "fixtures" / "reliability_benchmarks.txt"
+
+
+def benchmark(name: str) -> list[float]:
+    """문헌 데이터 하나. 출처는 픽스처 머리글에 있다."""
+    values: list[float] = []
+    current = None
+    for line in BENCHMARKS.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("["):
+            current = line.strip("[]")
+            continue
+        if current == name:
+            values.extend(float(token) for token in line.split())
+    assert values, f"'{name}' 를 픽스처에서 못 찾았습니다."
+    return values
+
+
+class Test문헌_벤치마크:
+    """**우리가 만든 표본으로는 견주기를 시험할 수 없다.**
+
+    위의 시험들은 전부 우리가 뽑은 표본이다 — 와이블에서 뽑아 와이블이 1등인지
+    보는 식이다. 그것은 *계수가 되돌아오는지* 를 보는 시험이지 **후보 중 무엇을
+    고를 것인가** 를 보는 시험이 아니다.
+
+    실측으로 확인했다(2026-08-25): `_aicc` 를 `lambda ll, n, k: -ll` 로 바꿔
+    **유한표본 보정도 파라미터 벌점도 통째로 지웠는데 시험이 전부 통과했다.**
+    와이블 데이터에서는 우도만으로도 와이블이 이기기 때문이다.
+
+    그래서 **우리가 안 만든 데이터**를 쓴다. 초탄성에서 Treloar 로 한 것과 같다
+    (v1.57.0). 셋 다 신뢰성 문헌의 표준 예제이고 와이블로 다루는 것이 합의돼
+    있다.
+    """
+
+    def test_유리섬유에서_와이블이_이긴다(self) -> None:
+        """**유리섬유는 약한 고리가 정한다** — 가장 약한 결함 하나가 끊는 자리를
+        정하므로 와이블이 맞는 모양이라는 것이 문헌의 합의다.
+
+        실측(2026-08-25, ΔAICc):
+
+            1.5cm (n=63)   와이블 0.00 · 정규 5.41 · 로그정규 25.60
+            15cm  (n=46)   와이블 0.00 · 정규 2.84 · 로그정규 19.81
+
+        **로그정규가 크게 진다** — 이것이 우리가 만든 표본으로는 못 보던 것이다.
+        """
+        for name, expected_gap in (("glassfiber1_5", 20.0), ("glassfiber15", 15.0)):
+            report = distributions.fit_all(benchmark(name), bootstrap=ROUNDS)
+            assert report.best == "weibull", name
+            lognormal = next(item for item in report.candidates if item.key == "lognormal")
+            assert lognormal.delta_aicc is not None
+            assert lognormal.delta_aicc > expected_gap, name
+
+    def test_짧은_섬유는_와이블도_안_맞는다고_말한다(self) -> None:
+        """**1등이라고 맞는다는 뜻이 아니다.**
+
+        1.5cm 섬유에서 와이블이 1등인데 p 값이 0.007 이다 — AICc 는 *후보 중
+        어느 것이 나은가* 를 답하고 Anderson-Darling 은 *맞기는 하나* 를 답한다.
+        둘이 다른 것을 본다는 것이 여기서 눈에 보인다.
+
+        실제로 Smith·Naylor 가 이 데이터로 **3-파라미터** 와이블을 논한 이유가
+        그것이다. 우리는 2-파라미터만 쓰므로 왼쪽 꼬리를 못 따라간다.
+        """
+        report = distributions.fit_all(benchmark("glassfiber1_5"), bootstrap=BOOTSTRAP_FOR_P)
+        winner = next(item for item in report.candidates if item.key == report.best)
+        assert winner.p_value is not None
+        assert winner.p_value < 0.05
+
+    def test_베어링은_구별되지_않는다고_말한다(self) -> None:
+        """**n=23 에서는 로그정규와 와이블이 안 갈린다.**
+
+        문헌은 베어링 수명을 와이블로 다루는데, 우리 결과는 로그정규가 1등이고
+        와이블이 ΔAICc 1.13 이다. **그것을 틀렸다고 보지 않는다** — 표본이
+        스물셋이고 두 분포가 이 자리에서 거의 같은 모양이기 때문이다.
+
+        중요한 것은 **우리가 그 사실을 말하는가** 다. ΔAICc 2 미만이면 안내에
+        "이 데이터로는 구별되지 않습니다" 가 뜬다 — 그 안내가 없으면 사람은
+        「로그정규」를 답으로 읽는다.
+        """
+        report = distributions.fit_all(benchmark("bearings"), bootstrap=ROUNDS)
+        weibull_fit = next(item for item in report.candidates if item.key == "weibull")
+        assert weibull_fit.delta_aicc is not None
+        assert weibull_fit.delta_aicc < 2.0
+        assert any("구별되지 않습니다" in note for note in report.notes)
+
+    def test_AICc_를_망가뜨리면_잡힌다(self) -> None:
+        """**이 시험 묶음이 존재하는 이유다.**
+
+        우리가 만든 표본으로 하는 시험은 `_aicc` 를 통째로 지워도 전부 통과했다.
+        문헌 데이터에서는 그것이 드러나야 한다 — 안 드러나면 이 파일도 장식이다.
+        """
+        values = benchmark("glassfiber15")
+        real = distributions._aicc
+        try:
+            # 유한표본 보정도 파라미터 벌점도 없앤다.
+            distributions._aicc = lambda ll, n, k: -ll  # type: ignore[assignment]
+            broken = distributions.fit_all(values, bootstrap=0)
+        finally:
+            distributions._aicc = real
+        sound = distributions.fit_all(values, bootstrap=0)
+
+        # 1등은 그대로일 수 있다. **갈린 정도가 달라지는 것**이 신호다.
+        broken_gap = next(i for i in broken.candidates if i.key == "normal").delta_aicc
+        sound_gap = next(i for i in sound.candidates if i.key == "normal").delta_aicc
+        assert broken_gap is not None and sound_gap is not None
+        assert abs(broken_gap - sound_gap) > 0.5
