@@ -62,7 +62,7 @@ def list_entries(
         if not managed:
             raise Forbidden(
                 "MNX-AUDIT-0001",
-                "감사 기록은 시스템 관리자나 부서 관리자만 볼 수 있습니다.",
+                "변경 이력은 시스템 관리자나 부서 관리자만 볼 수 있습니다.",
             )
         query = query.where(AuditEntry.workspace_id.in_(managed))
 

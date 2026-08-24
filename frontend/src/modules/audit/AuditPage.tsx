@@ -1,13 +1,16 @@
 /**
- * 감사 기록 — **무엇이 바뀌었고 누가 승인했는가.**
+ * 변경 이력 — **무엇이 바뀌었고 누가 승인했는가.**
+ *
+ * 화면에서는 「변경 이력」이라 부른다. 코드·API 는 `audit` 그대로다 —
+ * 「감사 로그」는 개발자에게는 정확한 말이지만 **쓰는 사람이 안 쓰는 말**이다.
  *
  * 기록은 v1.49.0 부터 쌓이는데 **볼 자리가 API 뿐이었다.** 이 저장소가 반복해서
  * 데인 패턴이라(만들어 두고 안 쓰는 것) 바로 붙인다.
  *
  * ## 고치는 단추가 없다
  *
- * 이 화면에는 만들기·고치기·지우기가 없다. 감사 기록은 **변경이 일어난 그
- * 트랜잭션 안에서만** 생기고, API 에도 쓰는 길이 없다 — 고칠 수 있으면 감사가
+ * 이 화면에는 만들기·고치기·지우기가 없다. 이력은 **변경이 일어난 그
+ * 트랜잭션 안에서만** 생기고, API 에도 쓰는 길이 없다 — 고칠 수 있으면 이력이
  * 아니다.
  *
  * ## 바뀐 것만 보인다
@@ -33,7 +36,7 @@ import {
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 
-/** 언제 일어났나. 감사는 **시각이 근거의 일부**라 날짜만으로는 부족하다. */
+/** 언제 일어났나. **시각이 근거의 일부**라 날짜만으로는 부족하다. */
 function when(value: string): string {
   const at = new Date(value)
   return `${at.toLocaleDateString('ko-KR')} ${at.toLocaleTimeString('ko-KR')}`
@@ -66,8 +69,8 @@ export default function AuditPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="감사 기록"
-        description="되돌릴 수 없거나 권한이 실린 변경만 남습니다. 고칠 수 있으면 감사가 아니므로, 이 화면에는 만들기·고치기·지우기가 없습니다."
+        title="변경 이력"
+        description="되돌릴 수 없거나 권한이 실린 변경만 남습니다. 고칠 수 있으면 이력이 아니므로, 이 화면에는 만들기·고치기·지우기가 없습니다."
       />
 
       <ErrorNotice error={entries.error} />

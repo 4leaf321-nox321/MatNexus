@@ -1,5 +1,5 @@
 /**
- * 감사 기록 화면.
+ * 변경 이력 화면.
  *
  * 여기서 지키는 것은 셋이다.
  *
@@ -43,7 +43,7 @@ beforeEach(() => {
   list.mockResolvedValue([entry()])
 })
 
-describe('감사 기록', () => {
+describe('변경 이력', () => {
   it('행위를 사람이 읽는 말로 보인다', async () => {
     render(<AuditPage />)
     expect(await screen.findByText('물성 카드 확정')).toBeInTheDocument()

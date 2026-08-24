@@ -50,7 +50,7 @@ from app.shared.errors import AppError
 
 
 def _who(db: Session, target_id: uuid.UUID | None) -> str:
-    """누가 언제 고쳤나. **감사 기록이 이미 답을 갖고 있다**(v1.52.0).
+    """누가 언제 고쳤나. **변경 이력이 이미 답을 갖고 있다**(v1.52.0).
 
     409 만 던지면 사람은 새로고침하고 자기 작업을 **다시** 잃는다. 무엇이
     바뀌었는지 볼 자리를 알려 줘야 그 앞에서 판단할 수 있다.
@@ -68,7 +68,7 @@ def _who(db: Session, target_id: uuid.UUID | None) -> str:
     when = entry.created_at.astimezone().strftime("%Y-%m-%d %H:%M")
     return (
         f" {entry.actor_label} 이 {when} 에 고쳤습니다 — "
-        f"감사 기록에서 무엇이 바뀌었는지 볼 수 있습니다."
+        f"변경 이력에서 무엇이 바뀌었는지 볼 수 있습니다."
     )
 
 
