@@ -490,7 +490,10 @@ function RowEditor({
                 onChange={(event) => onChange(index, { key: toChannelKey(event.target.value) })}
               />
             </div>
-            <div className="flex-1 space-y-1">
+            {/* **이름은 고정, 차원이 남는 폭을 가져간다.** 전에는 이름이
+                `flex-1` 이라 모달을 넓힐수록 이름 칸만 커지고 차원은 128px 에
+                묶여 있었다 — 차원 값은 `angular_frequency` 처럼 17자까지 간다. */}
+            <div className="w-48 space-y-1">
               <Label className="text-muted-foreground text-xs">이름</Label>
               <Input
                 className="h-8"
@@ -521,7 +524,7 @@ function RowEditor({
               </div>
             )}
 
-            <div className="w-32 space-y-1">
+            <div className="flex-1 space-y-1">
               <Label className="text-muted-foreground text-xs">
                 차원 {frozen && <Lock className="inline size-3" />}
               </Label>
