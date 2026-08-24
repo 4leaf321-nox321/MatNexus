@@ -66,6 +66,8 @@ class PropertyItemOut(BaseModel):
     dimension: str
     si_unit: str
     symbol: str | None
+    level: str
+    """`재료` | `시료`. **어디에 붙는가** — 화면이 이 값으로 피커를 가른다."""
     units: list[str]
     """이 차원에서 고를 수 있는 단위.
 
@@ -205,6 +207,11 @@ class SampleOut(BaseModel):
     density_unit: str = DENSITY_UNIT
     """**이 로트에서 잰 값이다.** 공칭은 재료에 있다."""
 
+    declared_properties: list[DeclaredPropertyOut] = []
+    """밀시트가 준 값들(ADR 0016). **재료의 같은 칸과 층이 다르다** — 여기 것은
+    로트마다 달라지는 값이고(항복강도·인장강도), 재료 것은 Grade 가 같으면 같은
+    값이다(탄성계수·열물성)."""
+
     note: str | None
     specimen_count: int
     created_at: datetime
@@ -218,6 +225,41 @@ class SampleOut(BaseModel):
     있나" 를 알려고 시료·시편을 전부 펼쳐야 한다. 특히 `adopted_count` 는
     물성 탭의 n 이 왜 그 수인지를 설명한다 — 통계와 적합에 들어가는 것은
     채택된 것뿐이다(ADR 0007)."""
+
+
+class MillCheckRowOut(BaseModel):
+    """밀시트가 말한 값 하나와 **우리가 잰 값.**
+
+    밀시트는 「이 로트가 규격에 맞나」를 증명하는 문서다(EN 10204 3.1). 그
+    증명이 맞는지 확인할 자리가 지금까지 없었다 — 값은 문서에, 시험 결과는
+    시스템에 따로 있었다.
+    """
+
+    item: str
+    label: str
+    declared: float
+    """밀시트가 말한 값. 정본 SI."""
+    declared_unit: str
+    reference: str
+    measured: float | None = None
+    """우리가 잰 값의 평균. 채택된 처리 결과에서만 온다(ADR 0007)."""
+    measured_count: int = 0
+    """몇 건을 평균했나. **0 이면 잰 적이 없다** — 값이 0 인 것과 다르다."""
+    si_unit: str
+    difference: float | None = None
+    """`(잰 값 빼기 적은 값) ÷ 적은 값`. 둘 다 있을 때만 낸다.
+
+    **판정을 안 한다.** 몇 %부터 문제인지는 규격과 용도가 정하고, 그것을 여기서
+    상수로 박으면 그 숫자가 곧 규격 행세를 한다."""
+    note: str | None = None
+    """비교할 수 없을 때 그 이유. **조용히 빼지 않는다.**"""
+
+
+class MillCheckOut(BaseModel):
+    """이 시료의 밀시트 대조표."""
+
+    sample_name: str
+    rows: list[MillCheckRowOut]
 
 
 class SampleCreateRequest(BaseModel):
@@ -244,6 +286,9 @@ class SampleUpdateRequest(BaseModel):
     production_date: date | None = None
     density: float | None = Field(default=None, gt=0)
     density_unit: str | None = None
+    declared_properties: list[DeclaredPropertyIn] | None = None
+    """**통째로 바꾼다.** 줄 하나를 지우는 것과 안 보낸 것을 구별할 방법이
+    없어서, 안 보내면 그대로 두고 보내면 그 목록이 전부가 된다."""
     note: str | None = None
 
 

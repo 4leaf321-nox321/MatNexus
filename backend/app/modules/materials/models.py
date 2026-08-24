@@ -312,6 +312,22 @@ class Sample(Base):
     푸아송비는 여기 없다. 재료로 올렸다 — 로트마다 달라지는 값이 아니고,
     같은 값을 로트 수만큼 적게 하면 그중 하나만 고쳐지는 일이 생긴다."""
 
+    declared_properties: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """**밀시트가 준 값들**(ADR 0016). 재료의 같은 이름 칸과 층이 다르다.
+
+        문헌·규격   Grade 가 같으면 같다   E · ν · α · Cp · k   → 재료
+        밀시트      로트마다 다르다        항복강도 · 인장강도    → 여기
+
+    밀시트는 **「이 로트가 규격에 맞나」를 증명하는 문서**지 물리 상수표가
+    아니다(EN 10204 3.1). 그 값을 재료에 적으면 첫 로트의 값이 그 Grade 전체의
+    값이 되고, 두 번째 로트가 들어오는 순간 둘 중 하나가 조용히 진다.
+
+    **우리가 잰 값에 대응이 있다** — 처리 결과의 `proof_stress`·
+    `tensile_strength` 가 같은 물성이다. 그래서 이 칸은 기록으로 끝나지 않고
+    「밀시트가 말한 값과 우리가 잰 값이 맞나」를 물을 수 있게 한다."""
+
     input_units: Mapped[dict[str, str]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )

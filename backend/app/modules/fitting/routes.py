@@ -27,6 +27,8 @@ from app.modules.fitting.models import PropertyCard
 from app.modules.fitting.schemas import (
     BlockSpecOut,
     CardValueOut,
+    DeclaredCardPreviewOut,
+    DeclaredCardSaveRequest,
     ExportFormatOut,
     FamilyOut,
     FitOut,
@@ -271,6 +273,99 @@ def _thermal_block(material: Material) -> dict[str, Any]:
     if values and len(temperatures) == 1:
         values["reference_temperature"] = next(iter(temperatures))
     return values
+
+
+def _visible_material(db: Session, user: User, material_id: uuid.UUID) -> Material:
+    """볼 권한이 있는 재료 하나."""
+    material = db.scalar(
+        permissions.visible_materials(db, user).where(Material.id == material_id)
+    )
+    if material is None:
+        raise NotFound("MNX-MATERIALS-0001", "재료를 찾을 수 없습니다.")
+    return material
+
+
+def _declared_blocks(
+    db: Session,
+    material: Material,
+    poisson_override: float | None,
+    density_override: float | None,
+) -> tuple[dict[str, Any], dict[str, Any], list[InheritedValueOut]]:
+    """적어 둔 값만으로 만들 블록들과 **그 근거 목록.**
+
+    미리보기와 저장이 **같은 함수를 쓴다.** 각자 만들면 화면이 "실린다" 고 한
+    값이 안 실리거나 그 반대가 되는데, 그때 사람은 화면을 믿을 근거를 잃는다
+    (`FitPreviewOut.elastic` 이 같은 이유로 적합 응답에 실린다).
+
+    밀도는 **시료 실측을 여전히 먼저 본다.** 시험을 안 했어도 시료의 밀도는 잰
+    값일 수 있고, 이 경로가 그것을 무시하면 같은 재료가 어느 버튼을 눌렀느냐에
+    따라 다른 밀도를 갖는다.
+    """
+    stated = _declared(material, "탄성계수")
+    stated_row = _declared_row(material, "탄성계수")
+    poisson = _inherit_poisson(material, poisson_override)
+    samples = list(db.scalars(select(Sample).where(Sample.material_id == material.id)))
+    density = _inherit_density(material, samples, density_override)
+
+    elastic: dict[str, Any] = {
+        **(
+            {
+                "youngs_modulus": stated.value,
+                "youngs_modulus_source": stated.source,
+                **(
+                    {"youngs_modulus_reference": str(stated_row["reference"])}
+                    if stated_row and stated_row.get("reference")
+                    else {}
+                ),
+            }
+            if stated.value is not None
+            else {}
+        ),
+        **(
+            {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
+            if poisson.value is not None
+            else {}
+        ),
+        **(
+            {"density": density.value, "density_source": density.source}
+            if density.value is not None
+            else {}
+        ),
+    }
+    thermal = _thermal_block(material)
+
+    found = [
+        InheritedValueOut(
+            key=key, label=label, value=one.value, source=one.source, detail=one.detail
+        )
+        for key, label, one in (
+            ("youngs_modulus", "탄성계수", stated),
+            ("poisson_ratio", "푸아송비", poisson),
+            ("density", "밀도", density),
+            *(
+                (key, label, _declared(material, label))
+                for key, label in THERMAL_ITEMS.items()
+                if key in thermal
+            ),
+        )
+        if one.value is not None
+    ]
+    return elastic, thermal, found
+
+
+def _thermal_notes(material: Material, thermal: dict[str, Any]) -> list[str]:
+    """열물성 값마다 근거 한 줄. 블록에 실린 것만 적는다.
+
+    **두 카드 경로가 같은 문장을 낸다.** 각자 만들면 한쪽만 고쳐지고, 그때
+    같은 재료의 두 카드가 서로 다른 근거를 들게 된다.
+    """
+    return [
+        f"{label}: {found.detail}"
+        for key, label in THERMAL_ITEMS.items()
+        if key in thermal
+        for found in [_declared(material, label)]
+        if found.detail
+    ]
 
 
 def _inherit_poisson(material: Material, override: float | None) -> Inherited:
@@ -523,7 +618,9 @@ def _deck(item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()) ->
 def _card_out(db: Session, item: PropertyCard) -> PropertyCardOut:
     cards.load_builtin()
     material = db.get(Material, item.material_id)
-    test_type = db.get(TestType, item.test_type_id)
+    # **없으면 없는 채로 낸다.** 전에는 `"?"` 를 냈는데, 그것은 "시험이 지워졌다"
+    # 와 "시험에서 나온 카드가 아니다" 를 같은 모양으로 만든다.
+    test_type = db.get(TestType, item.test_type_id) if item.test_type_id else None
     # **낼 수 있는 형식을 미리 말한다.** 내려받기를 누른 뒤에 "푸아송비가
     # 없습니다" 를 보는 것은 늦다.
     #
@@ -542,7 +639,7 @@ def _card_out(db: Session, item: PropertyCard) -> PropertyCardOut:
         id=item.id,
         material_id=item.material_id,
         material_name=material.record_name if material else "?",
-        test_type_key=test_type.key if test_type else "?",
+        test_type_key=test_type.key if test_type else None,
         orientation=item.orientation,
         label=item.label,
         status=item.status,
@@ -691,11 +788,7 @@ def create_card(
         f"탄성계수: {stated.detail}" if modulus is None and stated.value is not None else "",
         f"푸아송비: {poisson.detail}" if poisson.detail else "",
         f"밀도: {density.detail}" if density.detail else "",
-        *(
-            f"{THERMAL_ITEMS[key]}: {_declared(group.material, THERMAL_ITEMS[key]).detail}"
-            for key in THERMAL_ITEMS
-            if key in thermal
-        ),
+        *_thermal_notes(group.material, thermal),
     ]
 
     # ── 소성 표를 어디까지 낼까 ─────────────────────────────────────────
@@ -805,6 +898,105 @@ def create_card(
             ),
         },
         point_count=len(table_rows) if spec is None or spec.block == "hardening" else 0,
+        note=payload.note,
+        created_by_id=user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item)
+
+
+@router.get("/cards/declared/preview", response_model=DeclaredCardPreviewOut)
+def preview_declared_card(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeclaredCardPreviewOut:
+    """적어 둔 값만으로 카드를 만들면 무엇이 실리는지.
+
+    **카드를 만들 때 실제로 쓰는 계산과 같은 코드가 낸다.** 화면이 재료 API 를
+    따로 불러 나름대로 판정하면 규칙이 두 벌이 되고, 둘이 어긋나는 순간 화면이
+    거짓말을 한다 — `FitPreviewOut.elastic` 이 같은 이유로 있다.
+    """
+    material = _visible_material(db, user, material_id)
+    elastic, thermal, found = _declared_blocks(db, material, None, None)
+    return DeclaredCardPreviewOut(
+        material_name=material.record_name,
+        values=found,
+        blocks=[
+            *(["elastic"] if elastic else []),
+            *(["thermal"] if thermal else []),
+        ],
+    )
+
+
+@router.post("/cards/declared", response_model=PropertyCardOut, status_code=201)
+def create_declared_card(
+    payload: DeclaredCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """**시험 없이** 선언 물성만으로 카드를 만든다(ADR 0016).
+
+    ## 왜 따로 있나
+
+    `POST /cards` 는 대표 곡선에서 시작한다 — 재료+시험종류+방향의 묶음이 없으면
+    아무것도 못 만든다. 그런데 개발 DB 의 재료 94개 중 **14개는 시험이 하나도
+    없다.** 그 재료의 탄성계수·열물성을 사람이 적어 두어도 지금까지는 덱까지
+    가는 길이 없었다 — 넣어 두고 안 쓰는 칸이었다.
+
+    적합이 없으므로 식도 소성 표도 없다. `elastic` 과 `thermal` 만 든다.
+    소성 표를 요구하는 형식은 `available_formats` 에서 저절로 빠진다.
+
+    ## 빈 카드를 안 만든다
+
+    블록이 하나도 안 나오면 **거절한다.** 값이 없는 카드는 근거가 없는 것을
+    넘어서, 목록에서 「이 재료는 물성이 있다」고 말하는 거짓말이 된다.
+
+    ## 시험종류를 비워 둔다
+
+    아무 시험종류나 채우면 그 카드가 인장시험에서 나온 것처럼 보이고, 덱을 받은
+    사람은 그 숫자를 잰 값으로 읽는다. **비어 있는 것이 사실이다.**
+    """
+    material = _visible_material(db, user, payload.material_id)
+    elastic, thermal, found = _declared_blocks(
+        db, material, payload.poisson_ratio, payload.density
+    )
+
+    if not elastic and not thermal:
+        raise AppError(
+            "MNX-FITTING-0016",
+            "이 재료에는 적어 둔 물성이 없습니다. 재료의 '물성' 탭에서 선언 물성을 "
+            "먼저 채우세요 — 값이 없는 카드는 목록에서 '이 재료는 물성이 있다' 고 "
+            "말하게 됩니다.",
+            status=422,
+        )
+
+    item = PropertyCard(
+        material_id=material.id,
+        test_type_id=None,
+        orientation=None,
+        label=payload.label,
+        status="draft",
+        source={
+            "sample_count": 0,
+            "test_run_ids": [],
+            "record_names": [],
+            # **이 한 줄이 이 카드의 정체다.** 덱만 받은 사람이 표본 0 을 보고
+            # "시험이 지워졌나" 를 묻지 않게 문장으로 적는다.
+            "declared_only": True,
+            "notes": [
+                "시험에서 나온 값이 하나도 없습니다 — 재료에 적어 둔 값으로만 만들었습니다.",
+                *[f"{item.label}: {item.detail}" for item in found if item.detail],
+            ],
+            "runtime": runtime.manifest(),
+        },
+        blocks={
+            **({"elastic": {"values": elastic}} if elastic else {}),
+            **({"thermal": {"values": thermal}} if thermal else {}),
+        },
+        point_count=0,
         note=payload.note,
         created_by_id=user.id,
     )
@@ -1030,24 +1222,43 @@ def export_card(
     """
     item = _visible_card(db, user, card_id)
     material = db.get(Material, item.material_id)
-    test_type = db.get(TestType, item.test_type_id)
+    test_type = db.get(TestType, item.test_type_id) if item.test_type_id else None
 
     # 솔버 덱의 이름은 재료 이름에서 만든다. 카드 이름은 한국어일 때가 많고,
     # 그러면 이름이 통째로 사라진다.
-    base = f"{material.record_name if material else item.label}_{item.orientation}"
+    #
+    # **방향이 없으면 안 붙인다.** 선언 물성 카드에는 방향이 없는데(ADR 0016),
+    # 그대로 이어 붙이면 덱 이름이 `SECC_MDOI_1.0_None` 이 된다.
+    base = "_".join(
+        part
+        for part in (material.record_name if material else item.label, item.orientation)
+        if part
+    )
     cards.load_builtin()
     elastic = cards.values_of(item.blocks.get("elastic"))
     hardening = cards.values_of(item.blocks.get("hardening"))
     hyper = cards.values_of(item.blocks.get("hyperelastic"))
     table = cards.values_of(item.blocks.get("table"))
     provenance = [
-        f"재료 {material.record_name if material else '?'} · "
-        f"{test_type.key if test_type else '?'} · {item.orientation}",
+        # **없는 것을 `?` 로 적지 않는다.** `?` 는 "있었는데 못 찾았다" 로
+        # 읽힌다 — 선언 물성 카드에는 시험도 방향도 처음부터 없다.
+        " · ".join(
+            part
+            for part in (
+                f"재료 {material.record_name if material else '?'}",
+                test_type.key if test_type else None,
+                item.orientation,
+            )
+            if part
+        ),
         # **덱을 나중에 읽는 사람에게는 이 줄이 근거의 전부다.** 1개짜리를
         # '대표 곡선' 이라고 쓰면 여러 시편의 평균으로 읽힌다 — 솔버 결과를
         # 놓고 "이 물성 어디서 났나" 를 물을 때 그 오해가 제일 비싸다.
         (
-            "시편 1개의 곡선에서 만들었습니다 — 재료의 대푯값이 아니라 그 시편의 값입니다."
+            "시험에서 나온 값이 하나도 없습니다 — 재료에 적어 둔 값으로만 만들었습니다."
+            if item.source.get("declared_only")
+            else "시편 1개의 곡선에서 만들었습니다 — 재료의 대푯값이 아니라 "
+            "그 시편의 값입니다."
             if item.source.get("sample_count") == 1
             else f"시편 {item.source.get('sample_count', '?')}개의 대표 곡선에서 만들었습니다."
         ),

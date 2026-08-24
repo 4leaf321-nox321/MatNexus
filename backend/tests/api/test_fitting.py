@@ -1452,3 +1452,206 @@ class Test선언물성이_덱까지:
         assert "*CONDUCTIVITY, TYPE=ISO" in text
         assert "source=declared:literature" in text
         assert "ASM Handbook Vol.1 p.123" in text
+
+
+class Test시험_없이_카드:
+    """**시험이 하나도 없는 재료에서 덱이 나간다**(ADR 0016, 2단계 마무리).
+
+    `POST /cards` 는 대표 곡선에서 시작하므로 시험이 없으면 아무것도 못 만든다.
+    그런데 탄성계수·열물성은 인장시험이 주지 않는 값이고, 개발 DB 의 재료 94개
+    중 14개는 시험이 하나도 없다 — 그 재료의 선언 물성은 갈 데가 없었다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _axis(self, db: Session) -> None:
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        db.commit()
+
+    @pytest.fixture
+    def bare(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> dict[str, Any]:
+        """**시험도 시료도 없는 재료.** `ready` 와 대비되는 자리다."""
+        declare(
+            client,
+            admin_headers,
+            material["id"],
+            [
+                {
+                    "item": "탄성계수",
+                    "value": 206,
+                    "input_unit": "GPa",
+                    "source": "literature",
+                    "reference": "ASM Handbook Vol.1 p.12",
+                },
+                {
+                    "item": "열전도도",
+                    "value": 45,
+                    "input_unit": "W/(m.K)",
+                    "source": "literature",
+                    "reference": "ASM Handbook Vol.1 p.12",
+                },
+            ],
+        )
+        return material
+
+    def test_시험이_없어도_카드가_나온다(
+        self, client: TestClient, admin_headers: dict[str, str], bare: dict[str, Any]
+    ) -> None:
+        made = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": bare["id"], "label": "문헌값", "poisson_ratio": 0.3},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        card = made.json()
+        assert values(card, "elastic")["youngs_modulus"] == pytest.approx(206e9)
+        assert values(card, "elastic")["youngs_modulus_source"] == "declared:literature"
+        assert values(card, "thermal")["thermal_conductivity"] == pytest.approx(45.0)
+        # **적합이 없으므로 표도 없다.**
+        assert "table" not in card["blocks"]
+        assert card["point_count"] == 0
+
+    def test_시험종류를_안_지어낸다(
+        self, client: TestClient, admin_headers: dict[str, str], bare: dict[str, Any]
+    ) -> None:
+        """아무 시험종류나 채우면 그 카드가 인장시험에서 나온 것처럼 보이고,
+        **덱을 받은 사람은 그 숫자를 잰 값으로 읽는다.**"""
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": bare["id"], "label": "문헌값"},
+            headers=admin_headers,
+        ).json()
+        assert card["test_type_key"] is None
+        assert card["orientation"] is None
+        assert card["source"]["declared_only"] is True
+        # 표본 0 을 보고 "시험이 지워졌나" 를 묻지 않게 문장으로 적는다.
+        assert any(
+            "시험에서 나온 값이 하나도 없습니다" in line for line in card["source"]["notes"]
+        )
+
+    def test_적어_둔_것이_없으면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**빈 카드를 안 만든다.** 값이 없는 카드는 근거가 없는 것을 넘어서,
+        목록에서 「이 재료는 물성이 있다」고 말하는 거짓말이 된다."""
+        response = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": material["id"], "label": "빈 것"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
+        assert "선언 물성" in response.json()["error"]["message"]
+
+    def test_소성_표가_필요한_형식은_안_뜬다(
+        self, client: TestClient, admin_headers: dict[str, str], bare: dict[str, Any]
+    ) -> None:
+        """**누르기 전에 안다.** 이 카드로는 `*PLASTIC` 을 낼 수 없다 — 형식
+        목록이 그것을 스스로 말해야 한다(렌더러의 `Need` 가 정한다)."""
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={
+                "material_id": bare["id"],
+                "label": "문헌값",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        assert "abaqus" not in card["available_formats"]
+        assert "json" in card["available_formats"]
+
+    def test_덱에_시험에서_안_나왔다고_적힌다(
+        self, client: TestClient, admin_headers: dict[str, str], bare: dict[str, Any]
+    ) -> None:
+        """**덱만 받은 사람이 알아야 한다.** 이 값들은 잰 것이 아니다."""
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": bare["id"], "label": "문헌값", "poisson_ratio": 0.3},
+            headers=admin_headers,
+        ).json()
+        text = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=json", headers=admin_headers
+        ).text
+        assert "*CONDUCTIVITY" not in text  # json 은 키워드를 안 쓴다
+        assert "ASM Handbook Vol.1 p.12" in text
+        # **덱 이름에 방향을 안 붙인다.** 선언 물성 카드에는 방향이 없는데
+        # 그대로 이어 붙이면 `..._None` 이 된다.
+        assert "None" not in text
+        # `?` 는 "있었는데 못 찾았다" 로 읽힌다 — 여기는 처음부터 없다.
+        assert "· ?" not in text
+        assert "시험에서 나온 값이 하나도 없습니다" in text
+
+    def test_무엇이_실릴지_누르기_전에_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], bare: dict[str, Any]
+    ) -> None:
+        """**만들기를 누른 뒤에 "적어 둔 물성이 없습니다" 를 보는 것은 늦다.**"""
+        body = client.get(
+            f"/api/fitting/cards/declared/preview?material_id={bare['id']}",
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        found = body.json()
+        assert set(found["blocks"]) == {"elastic", "thermal"}
+        by_key = {row["key"]: row for row in found["values"]}
+        assert by_key["youngs_modulus"]["value"] == pytest.approx(206e9)
+        assert by_key["youngs_modulus"]["source"] == "declared:literature"
+        assert "ASM Handbook Vol.1 p.12" in by_key["thermal_conductivity"]["detail"]
+
+    def test_미리보기와_저장이_같은_값을_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], bare: dict[str, Any]
+    ) -> None:
+        """**화면이 "실린다" 고 한 값이 안 실리면 화면을 믿을 근거가 없다.**
+        둘이 같은 함수를 쓰는지 여기서 확인한다."""
+        found = client.get(
+            f"/api/fitting/cards/declared/preview?material_id={bare['id']}",
+            headers=admin_headers,
+        ).json()
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": bare["id"], "label": "문헌값"},
+            headers=admin_headers,
+        ).json()
+        assert set(found["blocks"]) == set(card["blocks"])
+        for row in found["values"]:
+            block = "thermal" if row["key"] in values(card, "thermal") else "elastic"
+            assert values(card, block)[row["key"]] == pytest.approx(row["value"])
+
+    def test_적어_둔_것이_없으면_미리보기가_빈다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        found = client.get(
+            f"/api/fitting/cards/declared/preview?material_id={material['id']}",
+            headers=admin_headers,
+        ).json()
+        assert found["blocks"] == []
+
+    def test_시료_실측_밀도를_여전히_먼저_본다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        bare: dict[str, Any],
+    ) -> None:
+        """**같은 재료가 어느 버튼을 눌렀느냐에 따라 다른 밀도를 가지면 안 된다.**"""
+        made = client.post(
+            f"/api/materials/{bare['id']}/samples",
+            json={"lot": "L1", "density": 7900.0, "density_unit": "kg/m3"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": bare["id"], "label": "문헌값"},
+            headers=admin_headers,
+        ).json()
+        assert values(card, "elastic")["density"] == pytest.approx(7900.0)
+        assert values(card, "elastic")["density_source"] == "sample"

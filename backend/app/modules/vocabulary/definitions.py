@@ -152,6 +152,24 @@ BUILTIN_AXIS_FIELDS: dict[str, list[dict[str, Any]]] = {
             kind="text",
             help="덱과 화면에 쓰는 기호. `E`·`alpha`·`Cp` 처럼 적으세요.",
         ),
+        _field(
+            "measured_key",
+            "우리가 재는 값",
+            kind="choice",
+            choices=[],  # `ensure_builtin_axis_fields` 가 레지스트리에서 채운다
+            help="같은 물성을 처리 결과가 낸다면 그 값의 키. 채우면 화면이 "
+            "**적어 둔 값과 우리가 잰 값을 나란히** 보여 줍니다 — 밀시트가 말한 "
+            "항복강도와 우리 인장시험이 낸 항복강도가 그렇습니다. 비워도 됩니다.",
+        ),
+        _field(
+            "level",
+            "붙는 곳",
+            kind="choice",
+            choices=["재료", "시료"],
+            help="이 값이 어디에 붙는가. **Grade 가 같으면 같은 값**이면 재료입니다"
+            "(탄성계수·열물성 — 문헌·규격에서 옵니다). **로트마다 다르면** 시료입니다"
+            "(항복강도·인장강도 — 밀시트가 줍니다). 비우면 재료로 봅니다.",
+        ),
     ],
 }
 
@@ -237,14 +255,33 @@ BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
 #: 재료가 대부분이다), 열물성 셋은 인장시험이 아예 안 준다.
 #:
 #: 밀시트(EN 10204 3.1)가 주는 것은 항복강도·인장강도·연신율·경도다 — 그것들은
-#: 이미 처리 결과에 있으므로 여기 안 넣는다. **롯마다 다른 밀시트 값**은 시료
-#: 층의 일이라 다음 단계다.
-BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str]] = [
-    ("탄성계수", "stress", "E"),
-    ("전단탄성계수", "stress", "G"),
-    ("열팽창계수", "inverse_temperature", "alpha"),
-    ("비열", "specific_heat", "Cp"),
-    ("열전도도", "thermal_conductivity", "k"),
+#: 이미 처리 결과에 있으므로 여기 안 넣는다.
+#:
+#: **층이 갈린다**(ADR 0016). 앞의 다섯은 Grade 가 같으면 같은 값이라 재료에
+#: 붙고, 뒤의 셋은 로트마다 달라서 시료에 붙는다 — 밀시트가 주는 것이 정확히
+#: 뒤엣것이다(EN 10204 3.1).
+#:
+#: **경도는 안 넣는다.** 밀시트가 주기는 하는데 `HV 200` 과 `HB 200` 과
+#: `HRC 200` 은 서로 다른 값이고 환산식이 없다(규격이 참고표를 주지만 재료마다
+#: 다르다). 지금 기계는 값 하나에 단위 하나라 셋을 한 칸에 받게 되고, 그러면
+#: **숫자는 그럴듯한데 뜻이 다른** 값이 저장된다 — 이 저장소가 가장 경계하는
+#: 종류다. 시험 척도를 값의 속성으로 드는 것이 먼저다.
+#: `(값, 차원, 기호, 붙는 곳, 우리가 재는 값)`.
+BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None]] = [
+    ("탄성계수", "stress", "E", "재료", None),
+    ("전단탄성계수", "stress", "G", "재료", None),
+    ("열팽창계수", "inverse_temperature", "alpha", "재료", None),
+    ("비열", "specific_heat", "Cp", "재료", None),
+    ("열전도도", "thermal_conductivity", "k", "재료", None),
+    # 밀시트가 주는 것들. 앞의 둘은 **우리가 잰 값에 대응이 있다** — 그래서
+    # 「밀시트가 말한 값과 우리가 잰 값이 맞나」를 물을 수 있다.
+    ("항복강도", "stress", "Rp", "시료", "proof_stress"),
+    ("인장강도", "stress", "Rm", "시료", "tensile_strength"),
+    # **연신율은 비워 둔다.** 밀시트의 A 는 파단 후 연신율인데 우리가 내는
+    # `elongation_observed` 는 시험 창 안의 관측 최대 변형률이다 — 가깝지만
+    # 같지 않다. 이어 붙이면 화면이 「맞다/틀리다」를 말하게 되고, 그 판정은
+    # 두 값이 같은 것일 때만 뜻이 있다.
+    ("연신율", "strain", "A", "시료", None),
 ]
 
 
@@ -261,7 +298,7 @@ def ensure_builtin_property_items(db: Session) -> list[str]:
         return []
 
     created: list[str] = []
-    for value, dimension, symbol in BUILTIN_PROPERTY_ITEMS:
+    for value, dimension, symbol, level, measured in BUILTIN_PROPERTY_ITEMS:
         cleaned = clean(value)
         if cleaned is None:
             continue
@@ -278,13 +315,37 @@ def ensure_builtin_property_items(db: Session) -> list[str]:
                 vocabulary_id=axis.id,
                 value=cleaned,
                 normalized=key,
-                attributes={"dimension": dimension, "symbol": symbol},
+                attributes={
+                    "dimension": dimension,
+                    "symbol": symbol,
+                    "level": level,
+                    **({"measured_key": measured} if measured else {}),
+                },
             )
         )
         created.append(cleaned)
     if created:
         db.flush()
     return created
+
+
+def measured_keys() -> list[str]:
+    """처리 결과가 내는 스칼라 키들. **레지스트리가 정본이다.**
+
+    물성 항목의 `measured_key` 를 이 목록에서 고르게 한다 — 손으로 적게 두면
+    오타가 조용히 "잰 값 없음" 이 되고, 그때 사람은 비교가 안 되는 이유를
+    알 방법이 없다.
+
+    씨앗을 심을 때 부른다. 새 처리 단계가 붙은 뒤 목록을 다시 채우려면 축의
+    칸을 비우고 다시 심어야 하는데, 그것은 관리자가 화면에서 고르는 편이 낫다
+    (이 함수는 **관리자가 고친 칸을 되돌리지 않는다**).
+    """
+    from matcore import processing, registry
+
+    processing.load_builtin()
+    return sorted(
+        {value.key for plugin in registry.list_plugins() for value in plugin.makes_values}
+    )
 
 
 def ensure_builtin_axis_fields(db: Session) -> list[str]:
@@ -295,6 +356,12 @@ def ensure_builtin_axis_fields(db: Session) -> list[str]:
     """
     filled: list[str] = []
     for slug, fields in BUILTIN_AXIS_FIELDS.items():
+        fields = [
+            {**field, "choices": measured_keys()}
+            if field.get("key") == "measured_key"
+            else field
+            for field in fields
+        ]
         axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == slug))
         if axis is None or axis.base_fields:
             continue

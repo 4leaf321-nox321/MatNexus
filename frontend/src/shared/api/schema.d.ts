@@ -368,6 +368,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/declared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Declared Card
+         * @description **시험 없이** 선언 물성만으로 카드를 만든다(ADR 0016).
+         *
+         *     ## 왜 따로 있나
+         *
+         *     `POST /cards` 는 대표 곡선에서 시작한다 — 재료+시험종류+방향의 묶음이 없으면
+         *     아무것도 못 만든다. 그런데 개발 DB 의 재료 94개 중 **14개는 시험이 하나도
+         *     없다.** 그 재료의 탄성계수·열물성을 사람이 적어 두어도 지금까지는 덱까지
+         *     가는 길이 없었다 — 넣어 두고 안 쓰는 칸이었다.
+         *
+         *     적합이 없으므로 식도 소성 표도 없다. `elastic` 과 `thermal` 만 든다.
+         *     소성 표를 요구하는 형식은 `available_formats` 에서 저절로 빠진다.
+         *
+         *     ## 빈 카드를 안 만든다
+         *
+         *     블록이 하나도 안 나오면 **거절한다.** 값이 없는 카드는 근거가 없는 것을
+         *     넘어서, 목록에서 「이 재료는 물성이 있다」고 말하는 거짓말이 된다.
+         *
+         *     ## 시험종류를 비워 둔다
+         *
+         *     아무 시험종류나 채우면 그 카드가 인장시험에서 나온 것처럼 보이고, 덱을 받은
+         *     사람은 그 숫자를 잰 값으로 읽는다. **비어 있는 것이 사실이다.**
+         */
+        post: operations["create_declared_card_api_fitting_cards_declared_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/declared/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Declared Card
+         * @description 적어 둔 값만으로 카드를 만들면 무엇이 실리는지.
+         *
+         *     **카드를 만들 때 실제로 쓰는 계산과 같은 코드가 낸다.** 화면이 재료 API 를
+         *     따로 불러 나름대로 판정하면 규칙이 두 벌이 되고, 둘이 어긋나는 순간 화면이
+         *     거짓말을 한다 — `FitPreviewOut.elastic` 이 같은 이유로 있다.
+         */
+        get: operations["preview_declared_card_api_fitting_cards_declared_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/viscoelastic": {
         parameters: {
             query?: never;
@@ -805,6 +869,9 @@ export interface paths {
         /**
          * Property Items
          * @description 넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7).
+         *
+         *     `level` 로 층을 좁힌다 — `재료` 는 Grade 가 같으면 같은 값(탄성계수·열물성),
+         *     `시료` 는 로트마다 다른 값(항복강도·인장강도)이다. **안 주면 전부** 준다.
          *
          *     화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다 — 항목을 코드에
          *     박으면 부서가 필요한 물성 하나를 넣으려고 배포를 기다려야 한다.
@@ -1273,6 +1340,42 @@ export interface paths {
         head?: never;
         /** Update Sample */
         patch: operations["update_sample_api_samples__sample_id__patch"];
+        trace?: never;
+    };
+    "/api/samples/{sample_id}/mill-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mill Check
+         * @description 밀시트가 말한 값과 **우리가 잰 값을 나란히.**
+         *
+         *     이것이 시료 층 선언 물성의 쓸모다. 값을 적어 두기만 하면 기록으로 끝나는데,
+         *     같은 물성을 우리 처리 결과가 낸다 — `proof_stress`·`tensile_strength` 가
+         *     밀시트의 항복강도·인장강도와 같은 값이다.
+         *
+         *     ## 무엇을 세는가
+         *
+         *     **채택된 처리 결과만**(ADR 0007). 채택은 "이 계산을 이 시험의 답으로 삼는다"
+         *     는 선언이고, 안 채택된 것까지 평균에 넣으면 시험해 본 것과 결론을 낸 것이
+         *     섞인다.
+         *
+         *     ## 판정하지 않는다
+         *
+         *     차이를 비율로 낼 뿐 「맞다/틀리다」를 말하지 않는다. 몇 %부터 문제인지는
+         *     규격과 용도가 정하고, 그것을 여기서 상수로 박으면 **그 숫자가 곧 규격 행세를
+         *     한다.**
+         */
+        get: operations["mill_check_api_samples__sample_id__mill_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/samples/{sample_id}/specimens": {
@@ -3220,6 +3323,52 @@ export interface components {
             y: string;
         };
         /**
+         * DeclaredCardPreviewOut
+         * @description 적어 둔 값만으로 카드를 만들면 **무엇이 실리는가.**
+         *
+         *     화면이 재료 API 를 따로 불러 나름대로 판정하지 않게 하려고 둔다 — 규칙이
+         *     두 벌이 되면 어긋나는 순간 화면이 거짓말을 한다. `FitPreviewOut.elastic` 이
+         *     같은 이유로 있다.
+         *
+         *     **누르기 전에 알아야 한다.** 만들기를 누른 뒤에 "적어 둔 물성이 없습니다" 를
+         *     보는 것은 늦다.
+         */
+        DeclaredCardPreviewOut: {
+            /** Blocks */
+            blocks: string[];
+            /** Material Name */
+            material_name: string;
+            /** Values */
+            values: components["schemas"]["InheritedValueOut"][];
+        };
+        /**
+         * DeclaredCardSaveRequest
+         * @description **시험 없이** 선언 물성만으로 카드를 만든다(ADR 0016).
+         *
+         *     시험이 하나도 없는 재료는 대표 곡선이 없어서 `POST /cards` 를 탈 수 없었다.
+         *     그런데 탄성계수·열물성은 인장시험이 주지 않는 값이고, 그것만으로도 열해석·
+         *     선형 정적 해석의 덱은 나간다.
+         *
+         *     **적합이 없으므로 식도 표도 없다.** 여기서 나오는 카드는 `elastic` 과
+         *     `thermal` 블록만 든다 — 소성 표가 필요한 형식은 `available_formats` 에서
+         *     저절로 빠진다(렌더러가 `Need` 로 선언한다).
+         */
+        DeclaredCardSaveRequest: {
+            /** Density */
+            density?: number | null;
+            /** Label */
+            label: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+        };
+        /**
          * DeclaredPropertyIn
          * @description 넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다.
          */
@@ -4086,6 +4235,49 @@ export interface components {
              */
             into_id: string;
         };
+        /**
+         * MillCheckOut
+         * @description 이 시료의 밀시트 대조표.
+         */
+        MillCheckOut: {
+            /** Rows */
+            rows: components["schemas"]["MillCheckRowOut"][];
+            /** Sample Name */
+            sample_name: string;
+        };
+        /**
+         * MillCheckRowOut
+         * @description 밀시트가 말한 값 하나와 **우리가 잰 값.**
+         *
+         *     밀시트는 「이 로트가 규격에 맞나」를 증명하는 문서다(EN 10204 3.1). 그
+         *     증명이 맞는지 확인할 자리가 지금까지 없었다 — 값은 문서에, 시험 결과는
+         *     시스템에 따로 있었다.
+         */
+        MillCheckRowOut: {
+            /** Declared */
+            declared: number;
+            /** Declared Unit */
+            declared_unit: string;
+            /** Difference */
+            difference?: number | null;
+            /** Item */
+            item: string;
+            /** Label */
+            label: string;
+            /** Measured */
+            measured?: number | null;
+            /**
+             * Measured Count
+             * @default 0
+             */
+            measured_count: number;
+            /** Note */
+            note?: string | null;
+            /** Reference */
+            reference: string;
+            /** Si Unit */
+            si_unit: string;
+        };
         /** NamePreviewOut */
         NamePreviewOut: {
             /** Record Name */
@@ -4651,7 +4843,7 @@ export interface components {
             /** Note */
             note: string | null;
             /** Orientation */
-            orientation: string;
+            orientation: string | null;
             /** Point Count */
             point_count: number;
             /** Problem */
@@ -4665,7 +4857,7 @@ export interface components {
             /** Status */
             status: string;
             /** Test Type Key */
-            test_type_key: string;
+            test_type_key: string | null;
         };
         /** PropertyCardSaveRequest */
         PropertyCardSaveRequest: {
@@ -4720,6 +4912,8 @@ export interface components {
             dimension: string;
             /** Item */
             item: string;
+            /** Level */
+            level: string;
             /** Si Unit */
             si_unit: string;
             /** Symbol */
@@ -4949,6 +5143,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Declared Properties
+             * @default []
+             */
+            declared_properties: components["schemas"]["DeclaredPropertyOut"][];
             /** Density */
             density: number | null;
             /**
@@ -5008,6 +5207,8 @@ export interface components {
         SampleUpdateRequest: {
             /** Alias */
             alias?: string | null;
+            /** Declared Properties */
+            declared_properties?: components["schemas"]["DeclaredPropertyIn"][] | null;
             /** Density */
             density?: number | null;
             /** Density Unit */
@@ -7169,6 +7370,70 @@ export interface operations {
             };
         };
     };
+    create_declared_card_api_fitting_cards_declared_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclaredCardSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_declared_card_api_fitting_cards_declared_preview_get: {
+        parameters: {
+            query: {
+                material_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeclaredCardPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_viscoelastic_card_api_fitting_cards_viscoelastic_post: {
         parameters: {
             query?: never;
@@ -7883,7 +8148,9 @@ export interface operations {
     };
     property_items_api_materials_property_items_get: {
         parameters: {
-            query?: never;
+            query?: {
+                level?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7897,6 +8164,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8832,6 +9108,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mill_check_api_samples__sample_id__mill_check_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MillCheckOut"];
                 };
             };
             /** @description Validation Error */

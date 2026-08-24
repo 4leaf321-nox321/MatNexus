@@ -20,6 +20,7 @@ import {
   Globe2,
   Layers,
   ListTree,
+  FileCheck2,
   Pencil,
   Plus,
   Trash2,
@@ -38,6 +39,7 @@ import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
+import { MillSheetDialog } from '@/modules/materials/MillSheetDialog'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -192,7 +194,14 @@ export default function MaterialDetailPage() {
             있는 재료에 문헌값을 또 적는다(ADR 0016). */}
         <TabsContent value="properties" className="space-y-6">
           {item && (
-            <DeclaredPropertiesCard material={item} onSaved={() => void material.reload()} />
+            <DeclaredPropertiesCard
+              level="재료"
+              rows={item.declared_properties}
+              onSave={async (rows) => {
+                await materialsApi.update(item.id, { declared_properties: rows })
+                material.reload()
+              }}
+            />
           )}
           {id && <PropertiesPanel materialId={id} />}
         </TabsContent>
@@ -326,6 +335,7 @@ function SampleRow({
   const [open, setOpen] = useState(defaultOpen)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [mill, setMill] = useState(false)
   /**
    * 표로 시험 넣기.
    *
@@ -369,6 +379,19 @@ function SampleRow({
             />
           </span>
         </button>
+        {/* **밀시트는 이 로트의 것이다.** 재료가 아니라 여기에 붙는다 —
+            로트마다 다른 값이라, 재료에 적으면 첫 로트가 그 Grade 전체의
+            값이 된다(ADR 0016). */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="shrink-0"
+          onClick={() => setMill(true)}
+          aria-label="밀시트"
+          title="밀시트가 준 값 — 우리가 잰 값과 견줍니다"
+        >
+          <FileCheck2 className="size-3.5" />
+        </Button>
         <Button
           size="sm"
           variant="ghost"
@@ -379,6 +402,13 @@ function SampleRow({
           <Pencil className="size-3.5" />
         </Button>
       </div>
+
+      <MillSheetDialog
+        sample={sample}
+        open={mill}
+        onClose={() => setMill(false)}
+        onSaved={onChanged}
+      />
 
       <EditSampleDialog
         sample={sample}

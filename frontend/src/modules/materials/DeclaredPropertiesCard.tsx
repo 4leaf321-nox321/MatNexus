@@ -15,6 +15,15 @@
  * 사람은 먼저 "시험에서 나온 게 있나" 를 봐야 하고, 그 둘이 다른 화면에 있으면
  * 잰 값이 있는 재료에 문헌값을 또 적는다.
  *
+ * ## 재료와 시료가 같은 화면을 쓴다
+ *
+ * 층만 다르고 하는 일이 같다 — 항목을 고르고, 값과 단위를 적고, 출처와 근거
+ * 문서를 남긴다. 무엇을 넣을 수 있는지만 다르고 **그 판정은 서버가 한다**
+ * (`?level=`). 화면을 둘로 나누면 한쪽만 고쳐지는 날이 온다.
+ *
+ *     문헌·규격   Grade 가 같으면 같다   E · ν · α · Cp · k   → 재료
+ *     밀시트      로트마다 다르다        항복강도 · 인장강도    → 시료
+ *
  * ## 항목 목록을 코드에 박지 않는다
  *
  * 무엇을 넣을 수 있는지는 `/materials/property-items` 가 준다 — 기준정보의
@@ -30,7 +39,11 @@ import { BookOpen, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { materialsApi } from '@/modules/materials/api'
-import type { DeclaredProperty, Material, PropertyItem } from '@/modules/materials/api'
+import type {
+  DeclaredProperty,
+  DeclaredPropertyIn,
+  PropertyItem,
+} from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -85,13 +98,20 @@ function toDraft(row: DeclaredProperty): Draft {
 }
 
 export function DeclaredPropertiesCard({
-  material,
-  onSaved,
+  level,
+  rows: saved,
+  onSave,
+  title,
+  hint,
 }: {
-  material: Material
-  onSaved: (updated: Material) => void
+  /** `재료` | `시료`. **넣을 수 있는 항목이 이것으로 갈린다.** */
+  level: string
+  rows: DeclaredProperty[]
+  onSave: (rows: DeclaredPropertyIn[]) => Promise<void>
+  title?: string
+  hint?: React.ReactNode
 }) {
-  const items = useResource(() => materialsApi.propertyItems(), [])
+  const items = useResource(() => materialsApi.propertyItems(level), [level])
   const known = useMemo(() => items.data ?? [], [items.data])
 
   const [rows, setRows] = useState<Draft[]>([])
@@ -103,8 +123,8 @@ export function DeclaredPropertiesCard({
   // 다시 읽히면 타이핑하던 것이 사라진다.
   useEffect(() => {
     if (dirty) return
-    setRows(material.declared_properties.map(toDraft))
-  }, [material.declared_properties, dirty])
+    setRows(saved.map(toDraft))
+  }, [saved, dirty])
 
   const used = new Set(rows.map((row) => row.item))
   const free = known.filter((item) => !used.has(item.item))
@@ -134,8 +154,8 @@ export function DeclaredPropertiesCard({
     setSaving(true)
     setError(null)
     try {
-      const updated = await materialsApi.update(material.id, {
-        declared_properties: rows.map((row) => ({
+      await onSave(
+        rows.map((row) => ({
           item: row.item,
           value: Number(row.value),
           input_unit: row.input_unit,
@@ -145,10 +165,9 @@ export function DeclaredPropertiesCard({
           // 사람은 없다.
           temperature_k: row.temperature === '' ? null : Number(row.temperature) + 273.15,
           note: row.note || null,
-        })),
-      })
+        }))
+      )
       setDirty(false)
-      onSaved(updated)
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
     } finally {
@@ -161,7 +180,7 @@ export function DeclaredPropertiesCard({
       <div className="mb-1 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-medium">
           <BookOpen className="size-4" />
-          선언 물성
+          {title ?? '선언 물성'}
         </h3>
         <div className="flex items-center gap-2">
           {free.length > 0 && (
@@ -188,17 +207,22 @@ export function DeclaredPropertiesCard({
       </div>
 
       <p className="text-muted-foreground mb-3 text-xs">
-        <b>인장시험이 주지 않는 값</b>입니다 — 핸드북·규격·밀시트에서 옵니다. 여기 적은
-        값은 <b>잰 값이 없을 때만</b> 물성 카드에 실리고, 덱에는 「사람이 적은 값」이라고
-        근거 문서와 함께 나갑니다.
+        {hint ?? (
+          <>
+            <b>인장시험이 주지 않는 값</b>입니다 — 핸드북·규격에서 옵니다. 여기 적은 값은{' '}
+            <b>잰 값이 없을 때만</b> 물성 카드에 실리고, 덱에는 「사람이 적은 값」이라고
+            근거 문서와 함께 나갑니다.
+          </>
+        )}
       </p>
 
       <ErrorNotice error={items.error ?? error} className="mb-3" />
 
       {known.length === 0 && !items.loading && (
         <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-          넣을 수 있는 물성 항목이 없습니다. 기준정보의 <b>물성 항목</b> 축에 먼저
-          등록하세요 — 무엇을 넣을 수 있는지는 코드가 아니라 기준정보가 정합니다.
+          {level}에 넣을 수 있는 물성 항목이 없습니다. 기준정보의 <b>물성 항목</b> 축에
+          먼저 등록하고 <b>붙는 곳</b>을 {level} 로 두세요 — 무엇을 넣을 수 있는지는 코드가
+          아니라 기준정보가 정합니다.
         </p>
       )}
 

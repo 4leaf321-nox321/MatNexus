@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,17 @@ from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Material
 from app.modules.tests.definitions import ensure_builtin_test_types
+
+#: 인장 한 벌 — 밀시트 대조가 「우리가 잰 값」을 어디서 얻는지 보이려고 쓴다.
+TENSILE_FILE = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+TENSILE_STEPS: list[dict[str, Any]] = [
+    {"plugin": "tensile.engineering", "options": {"gauge_length": 0.05, "area": 12.12e-6}},
+    {
+        "plugin": "curve.sort_unique",
+        "options": {"x": "strain_engineering", "duplicate_policy": "mean"},
+    },
+    {"plugin": "tensile.strength", "options": {}},
+]
 
 SECC = {
     "family": "Metal",
@@ -676,7 +688,7 @@ class Test선언물성:
             json={
                 "declared_properties": [
                     {
-                        "item": "항복강도",
+                        "item": "자기저항",
                         "value": 295,
                         "input_unit": "MPa",
                         "source": "datasheet",
@@ -689,6 +701,34 @@ class Test선언물성:
         assert refused.status_code == 422
         message = refused.json()["error"]["message"]
         assert "있는 것:" in message and "탄성계수" in message
+
+    def test_다른_층의_항목이면_어디에_적는지_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**"등록된 항목이 아닙니다" 만 말하면 안 된다.** 기준정보에 뻔히 있는
+        이름을 두고 사람이 그것을 또 만들고, 그때부터 같은 물성이 두 항목이 된다.
+
+        항복강도는 로트마다 다르다 — 재료에 적으면 첫 로트의 값이 그 Grade
+        전체의 값이 되고, 두 번째 로트가 들어오는 순간 둘 중 하나가 조용히
+        진다(ADR 0016)."""
+        refused = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "항복강도",
+                        "value": 295,
+                        "input_unit": "MPa",
+                        "source": "datasheet",
+                        "reference": "MTC-2024-0812",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        message = refused.json()["error"]["message"]
+        assert "시료" in message and "로트마다" in message
 
     def test_같은_항목을_두_번_못_넣는다(
         self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
@@ -741,3 +781,238 @@ class Test선언물성:
             "열팽창계수",
             "탄성계수",
         ]
+
+
+class Test밀시트값:
+    """**밀시트가 주는 것은 로트마다 다르다**(ADR 0016, EN 10204 3.1).
+
+        문헌·규격   Grade 가 같으면 같다   E · ν · α · Cp · k   → 재료
+        밀시트      로트마다 다르다        항복강도 · 인장강도    → 시료
+
+    앞엣것을 재료에 적는 것이 v1.71.0~v1.72.0 이었고, 여기는 뒤엣것이다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _axis(self, db: Session) -> None:
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        # 인장 한 벌을 실제로 태워야 「우리가 잰 값」이 생긴다.
+        ensure_builtin_test_types(db)
+        db.commit()
+
+    @pytest.fixture
+    def material(self, client: TestClient, admin_headers: dict[str, str]) -> dict[str, Any]:
+        made: dict[str, Any] = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "MILL",
+                "details": "MDOI",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        return made
+
+    @pytest.fixture
+    def sample(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> dict[str, Any]:
+        made = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"lot_no": "L-2024-0812"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        created: dict[str, Any] = made.json()
+        return created
+
+    MILL = {
+        "item": "항복강도",
+        "value": 295,
+        "input_unit": "MPa",
+        "source": "datasheet",
+        "reference": "MTC-2024-0812",
+    }
+
+    def test_시료에_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        saved = client.patch(
+            f"/api/samples/{sample['id']}",
+            json={"declared_properties": [self.MILL]},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        row = saved.json()["declared_properties"][0]
+        assert row["value_si"] == pytest.approx(295e6)
+        # 적은 단위를 그대로 돌려준다 — 2.95e8 로 보이면 자기가 적은 값인지 모른다.
+        assert row["value"] == pytest.approx(295)
+        assert row["input_unit"] == "MPa"
+
+    def test_재료_물성은_시료에_못_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        """**같은 값을 로트 수만큼 적게 하면 그중 하나만 고쳐진다.**"""
+        refused = client.patch(
+            f"/api/samples/{sample['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "value": 206,
+                        "input_unit": "GPa",
+                        "source": "literature",
+                        "reference": "ASM",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        message = refused.json()["error"]["message"]
+        assert "재료" in message and "Grade" in message
+
+    def test_피커가_층으로_갈린다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**화면이 층을 판정하지 않는다.** 목록을 서버가 갈라 준다."""
+        at_sample = client.get(
+            "/api/materials/property-items?level=시료", headers=admin_headers
+        ).json()
+        names = {row["item"] for row in at_sample}
+        assert "항복강도" in names and "인장강도" in names
+        assert "탄성계수" not in names
+
+        at_material = client.get(
+            "/api/materials/property-items?level=재료", headers=admin_headers
+        ).json()
+        assert "탄성계수" in {row["item"] for row in at_material}
+
+        # 안 주면 전부. 이미 저장된 값을 읽어 보여 줄 때는 층으로 거르면 안 된다.
+        every = client.get("/api/materials/property-items", headers=admin_headers).json()
+        assert len(every) > len(at_sample)
+
+    def test_잰_적이_없으면_없다고_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        """**조용히 빼지 않는다.** 줄이 없으면 사람은 적은 값이 사라진 줄 안다."""
+        client.patch(
+            f"/api/samples/{sample['id']}",
+            json={"declared_properties": [self.MILL]},
+            headers=admin_headers,
+        )
+        found = client.get(f"/api/samples/{sample['id']}/mill-check", headers=admin_headers)
+        assert found.status_code == 200, found.text
+        row = found.json()["rows"][0]
+        assert row["declared"] == pytest.approx(295e6)
+        assert row["measured"] is None
+        assert row["measured_count"] == 0
+        assert row["difference"] is None
+        assert "채택된 처리 결과가 없습니다" in row["note"]
+
+    def test_잰_값과_나란히_놓는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        sample: dict[str, Any],
+    ) -> None:
+        """**이것이 시료 층 선언 물성의 쓸모다.** 값을 적어 두기만 하면 기록으로
+        끝나는데, 같은 물성을 우리 처리 결과가 낸다 — 밀시트가 말한 인장강도와
+        우리 인장시험이 낸 인장강도를 여기서 견준다."""
+        from app.modules.tests import services as test_services
+
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        made = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example.tra", TENSILE_FILE.read_bytes())},
+            headers=admin_headers,
+        )
+        # 202 다 — 업로드는 받아 두고 워커가 판다. 시험에서는 직접 태운다.
+        assert made.status_code == 202, made.text
+        run = made.json()
+        assert test_services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run["id"], "steps": TENSILE_STEPS},
+            headers=admin_headers,
+        )
+        assert stored.status_code == 201, stored.text
+        # **채택된 것만 센다**(ADR 0007). 채택 전에는 잰 값이 없는 것과 같다.
+        before = client.get(f"/api/samples/{sample['id']}/mill-check", headers=admin_headers)
+        client.patch(
+            f"/api/samples/{sample['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "인장강도",
+                        "value": 400,
+                        "input_unit": "MPa",
+                        "source": "datasheet",
+                        "reference": "MTC-2024-0812",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert before.status_code == 200
+        stale = client.get(
+            f"/api/samples/{sample['id']}/mill-check", headers=admin_headers
+        ).json()["rows"][0]
+        assert stale["measured"] is None, "채택 전인데 셌습니다"
+
+        client.post(
+            f"/api/processing/results/{stored.json()['id']}/adopt", headers=admin_headers
+        )
+        row = client.get(
+            f"/api/samples/{sample['id']}/mill-check", headers=admin_headers
+        ).json()["rows"][0]
+        assert row["measured_count"] == 1
+        assert row["measured"] is not None
+        assert row["si_unit"] == "Pa"
+        # **판정을 안 한다.** 차이를 비율로 낼 뿐이다 — 몇 %부터 문제인지는
+        # 규격과 용도가 정하고, 상수로 박으면 그 숫자가 규격 행세를 한다.
+        assert row["difference"] == pytest.approx((row["measured"] - 400e6) / 400e6)
+        assert row["note"] is None
+
+    def test_이어져_있지_않으면_그렇다고_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        """연신율은 우리가 재는 값에 안 이어져 있다 — 밀시트의 A 는 파단 후
+        연신율인데 `elongation_observed` 는 시험 창 안의 관측 최대 변형률이라
+        **가깝지만 같지 않다.** 이어 붙이면 화면이 「맞다/틀리다」를 말하게 되고,
+        그 판정은 두 값이 같은 것일 때만 뜻이 있다."""
+        client.patch(
+            f"/api/samples/{sample['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "연신율",
+                        "value": 32,
+                        "input_unit": "%",
+                        "source": "datasheet",
+                        "reference": "MTC-2024-0812",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        row = client.get(
+            f"/api/samples/{sample['id']}/mill-check", headers=admin_headers
+        ).json()["rows"][0]
+        assert row["measured"] is None
+        assert "이어져 있지 않습니다" in row["note"]

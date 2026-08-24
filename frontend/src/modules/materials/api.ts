@@ -40,6 +40,10 @@ export type ValueSource = components['schemas']['ValueSourceOut']
  * `2.06e11` 만 돌려주면 자기가 적은 값인지 알기 어렵다.
  */
 export type DeclaredProperty = components['schemas']['DeclaredPropertyOut']
+/** 넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다. */
+export type DeclaredPropertyIn = components['schemas']['DeclaredPropertyIn']
+/** 밀시트가 말한 값과 우리가 잰 값을 나란히(ADR 0016). */
+export type MillCheck = components['schemas']['MillCheckOut']
 /** 넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7). */
 export type PropertyItem = components['schemas']['PropertyItemOut']
 
@@ -85,7 +89,20 @@ export const materialsApi = {
    * **재료마다 다르지 않다** — 재료 id 를 안 받는 이유다. 무엇을 넣을 수
    * 있는지는 부서의 결정이고 재료의 성질이 아니다.
    */
-  propertyItems: () => api.get<PropertyItem[]>('/materials/property-items'),
+  propertyItems: (level?: string) =>
+    api.get<PropertyItem[]>(
+      `/materials/property-items${level ? `?level=${encodeURIComponent(level)}` : ''}`
+    ),
+
+  /**
+   * 밀시트가 말한 값과 **우리가 잰 값을 나란히**(ADR 0016).
+   *
+   * 밀시트는 「이 로트가 규격에 맞나」를 증명하는 문서다(EN 10204 3.1). 그
+   * 증명이 맞는지 확인할 자리가 지금까지 없었다 — 값은 문서에, 시험 결과는
+   * 시스템에 따로 있었다.
+   */
+  millCheck: (sampleId: string) =>
+    api.get<MillCheck>(`/samples/${sampleId}/mill-check`),
 
   /** 어떤 값이 어디에 적혀 있고 무엇에 쓰이는지. 화면이 이 배치를 외우지 않는다. */
   propertySources: (id: string) =>

@@ -39,6 +39,17 @@ from matcore import units
 
 AXIS = "property_item"
 
+#: 값이 **어디에 붙는가.** 이 갈래가 이 파일에서 하는 일의 나머지 절반이다.
+#:
+#:     문헌·규격   Grade 가 같으면 같다   E · ν · α · Cp · k   → 재료
+#:     밀시트      로트마다 다르다        항복강도 · 인장강도    → 시료
+#:
+#: 밀시트는 **「이 로트가 규격에 맞나」를 증명하는 문서**지 물리 상수표가 아니다
+#: (EN 10204 3.1). 그래서 거기 실린 값을 재료에 적으면 첫 로트의 값이 그 Grade
+#: 전체의 값이 되고, 두 번째 로트가 들어오는 순간 둘 중 하나가 조용히 진다.
+LEVELS = ("재료", "시료")
+DEFAULT_LEVEL = "재료"
+
 #: 값이 어디서 왔나. **추정도 출처다** — 「모름」을 두지 않는 이유는, 그것을
 #: 두면 대부분이 거기로 가고 그때부터 이 칸이 뜻을 잃기 때문이다.
 SOURCES = {
@@ -49,8 +60,12 @@ SOURCES = {
 }
 
 
-def catalog(db: Session) -> dict[str, dict[str, Any]]:
-    """넣을 수 있는 물성 항목. `{값: {dimension, symbol, si_unit}}`.
+def catalog(db: Session, *, level: str | None = None) -> dict[str, dict[str, Any]]:
+    """넣을 수 있는 물성 항목. `{값: {dimension, symbol, si_unit, level}}`.
+
+    `level` 을 주면 그 층에 붙는 것만 준다. **주지 않으면 전부** 준다 — 이미
+    저장된 값을 읽어 보여 줄 때는 층으로 거르면 안 되기 때문이다(항목의 층이
+    나중에 바뀌어도 옛 값은 그대로 있다).
 
     감춘 값(`deprecated`)은 뺀다 — 피커에서 사라진 항목을 새로 넣을 수 있으면
     감춘 뜻이 없다. **이미 넣어 둔 값은 그대로 남는다**(지우는 것이 아니다).
@@ -66,16 +81,31 @@ def catalog(db: Session) -> dict[str, dict[str, Any]]:
     ):
         attributes = term.attributes or {}
         dimension = str(attributes.get("dimension") or "dimensionless")
+        # **비면 재료로 본다.** 이 축은 재료 물성만 담던 때가 있었고, 그때 넣은
+        # 값에는 이 칸이 없다 — 없다고 목록에서 빼면 쓰던 항목이 사라진다.
+        at = str(attributes.get("level") or DEFAULT_LEVEL)
+        if level is not None and at != level:
+            continue
         found[term.value] = {
             "dimension": dimension,
             "symbol": attributes.get("symbol") or None,
             "si_unit": units.SI_UNITS.get(dimension, "1"),
+            "level": at,
+            # 같은 물성을 처리 결과가 낸다면 그 키. 있으면 「적은 값과 잰 값」을
+            # 견줄 수 있다 — 밀시트 대조가 이것으로 돈다.
+            "measured_key": attributes.get("measured_key") or None,
         }
     return found
 
 
-def check(db: Session, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def check(
+    db: Session, rows: list[dict[str, Any]], *, level: str = DEFAULT_LEVEL
+) -> list[dict[str, Any]]:
     """넣을 값들을 검사해 **저장할 모양**으로 바꾼다.
+
+    `level` 이 그 층에 붙는 항목만 받게 한다 — 항복강도를 재료에 적으면 첫
+    로트의 값이 그 Grade 전체의 값이 되고, 두 번째 로트가 들어오는 순간 둘 중
+    하나가 조용히 진다.
 
     사람이 적은 단위(`input_unit`)는 그대로 남기고 값은 정본 SI 로 담는다 —
     시험 채널과 같은 규칙이다. `GPa` 로 적어도 저장은 `Pa` 이고, 화면이 적은
@@ -84,11 +114,12 @@ def check(db: Session, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     **한 항목을 두 번 넣지 못한다.** 탄성계수가 두 줄이면 카드가 어느 것을 쓸지
     정할 수 없고, 그 판단을 여기서 안 하면 나중에 조용히 하나가 이긴다.
     """
-    known = catalog(db)
+    known = catalog(db, level=level)
     if not known:
         raise AppError(
             "MNX-MATERIALS-0020",
-            "물성 항목이 하나도 없습니다. 기준정보의 '물성 항목' 축에 먼저 넣으세요.",
+            f"{level}에 넣을 수 있는 물성 항목이 하나도 없습니다. 기준정보의 "
+            f"'물성 항목' 축에 먼저 넣고, '붙는 곳' 을 {level} 로 두세요.",
             status=422,
         )
 
@@ -103,10 +134,25 @@ def check(db: Session, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             None,
         )
         if spec is None:
+            # **다른 층의 항목인지 먼저 본다.** "등록된 항목이 아닙니다" 만
+            # 말하면 기준정보에 뻔히 있는 이름을 두고 사람이 그것을 또 만든다.
+            elsewhere = catalog(db).get(name)
+            if elsewhere is not None:
+                why = (
+                    "로트마다 다른 값이라 시료에 적습니다"
+                    if elsewhere["level"] == "시료"
+                    else "Grade 가 같으면 같은 값이라 재료에 적습니다"
+                )
+                raise AppError(
+                    "MNX-MATERIALS-0021",
+                    f"'{name}' 은 {elsewhere['level']} 에 붙는 물성입니다. {why} — "
+                    f"지금 적으려는 곳은 {level} 입니다.",
+                    status=422,
+                )
             raise AppError(
                 "MNX-MATERIALS-0021",
-                f"'{name}' 은 등록된 물성 항목이 아닙니다. 기준정보의 '물성 항목' 축에 "
-                f"먼저 넣으세요 — 있는 것: {', '.join(sorted(known))}",
+                f"'{name}' 은 {level}에 넣을 수 있는 물성 항목이 아닙니다. 기준정보의 "
+                f"'물성 항목' 축에 먼저 넣으세요 — 있는 것: {', '.join(sorted(known))}",
                 status=422,
             )
         key = compare_key(name)

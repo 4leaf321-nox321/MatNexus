@@ -23,6 +23,8 @@ export type BlockSpec = components['schemas']['BlockSpecOut']
 export type Produced = components['schemas']['CardValueOut']
 export type ViscoelasticCardSaveRequest =
   components['schemas']['ViscoelasticCardSaveRequest']
+export type DeclaredCardSaveRequest = components['schemas']['DeclaredCardSaveRequest']
+export type DeclaredCardPreview = components['schemas']['DeclaredCardPreviewOut']
 
 export const fittingApi = {
   families: () => api.get<Family[]>('/fitting/families'),
@@ -57,6 +59,28 @@ export const fittingApi = {
    */
   createViscoelastic: (body: ViscoelasticCardSaveRequest) =>
     api.post<PropertyCard>('/fitting/cards/viscoelastic', body),
+
+  /**
+   * **시험 없이** 적어 둔 값만으로 카드를 만든다(ADR 0016).
+   *
+   * `create` 는 대표 곡선에서 시작하므로 시험이 하나도 없는 재료는 탈 수 없다.
+   * 그런데 탄성계수·열물성은 인장시험이 주지 않는 값이라, 그것만으로도 열해석·
+   * 선형 정적 해석의 덱은 나간다.
+   */
+  createDeclaredCard: (body: DeclaredCardSaveRequest) =>
+    api.post<PropertyCard>('/fitting/cards/declared', body),
+
+  /**
+   * 그 카드에 **무엇이 실리는지.** 만들기 전에 묻는다.
+   *
+   * 화면이 재료 API 를 따로 불러 나름대로 판정하지 않는다 — 규칙이 두 벌이
+   * 되면 어긋나는 순간 화면이 거짓말을 한다. 카드를 만들 때 실제로 쓰는
+   * 계산과 **같은 코드**가 이 답을 낸다.
+   */
+  declaredPreview: (materialId: string) =>
+    api.get<DeclaredCardPreview>(
+      `/fitting/cards/declared/preview?material_id=${materialId}`
+    ),
 
   /** 확정 — 부서 관리자만. 올린 뒤에는 값을 바꿀 수 없다. */
   /**

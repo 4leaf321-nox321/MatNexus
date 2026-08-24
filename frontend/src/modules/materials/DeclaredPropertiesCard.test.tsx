@@ -14,16 +14,13 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
-import type { Material } from '@/modules/materials/api'
 
 const propertyItems = vi.fn()
-const update = vi.fn()
 
 vi.mock('@/modules/materials/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/materials/api')>()),
   materialsApi: {
-    propertyItems: () => propertyItems(),
-    update: (...args: unknown[]) => update(...args),
+    propertyItems: (...args: unknown[]) => propertyItems(...args),
   },
 }))
 
@@ -54,17 +51,15 @@ const ITEMS = [
 ]
 
 
-function material(rows: unknown[] = []): Material {
-  return {
-    id: 'm-1',
-    record_name: 'SECC_MDOI_1.0',
-    declared_properties: rows,
-  } as unknown as Material
-}
-
-function panel(rows: unknown[] = [], onSaved = vi.fn()) {
-  render(<DeclaredPropertiesCard material={material(rows)} onSaved={onSaved} />)
-  return onSaved
+function panel(rows: unknown[] = [], onSave = vi.fn().mockResolvedValue(undefined)) {
+  render(
+    <DeclaredPropertiesCard
+      level="재료"
+      rows={rows as never}
+      onSave={onSave}
+    />
+  )
+  return onSave
 }
 
 const DECLARED_E = {
@@ -82,7 +77,6 @@ const DECLARED_E = {
 beforeEach(() => {
   vi.clearAllMocks()
   propertyItems.mockResolvedValue(ITEMS)
-  update.mockResolvedValue(material([DECLARED_E]))
 })
 
 describe('선언 물성 편집', () => {
@@ -137,29 +131,26 @@ describe('선언 물성 편집', () => {
   it('적은 단위를 그대로 보낸다', async () => {
     // **환산 규칙이 두 곳에 있으면 언젠가 갈라진다**(ADR 0004). 화면은
     // `206 GPa` 를 보내고 서버가 SI 로 바꾼다.
-    const onSaved = panel([DECLARED_E])
+    const onSave = panel([DECLARED_E])
     await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
     await userEvent.clear(screen.getByLabelText('값'))
     await userEvent.type(screen.getByLabelText('값'), '210')
     await userEvent.click(screen.getByRole('button', { name: '저장' }))
-    await waitFor(() => expect(update).toHaveBeenCalled())
-    const [, payload] = update.mock.calls[0] as [string, { declared_properties: unknown[] }]
-    expect(payload.declared_properties[0]).toMatchObject({
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect((onSave.mock.calls[0][0] as unknown[])[0]).toMatchObject({
       item: '탄성계수',
       value: 210,
       input_unit: 'GPa',
     })
-    expect(onSaved).toHaveBeenCalled()
   })
 
   it('잰 온도는 ℃ 로 받아 K 로 보낸다', async () => {
     // **상온을 298 로 적는 사람은 없다.**
-    panel([DECLARED_E])
+    const onSave = panel([DECLARED_E])
     await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
     await userEvent.type(screen.getByLabelText('잰 온도 (℃)'), '20')
     await userEvent.click(screen.getByRole('button', { name: '저장' }))
-    await waitFor(() => expect(update).toHaveBeenCalled())
-    const [, payload] = update.mock.calls[0] as [string, { declared_properties: unknown[] }]
-    expect(payload.declared_properties[0]).toMatchObject({ temperature_k: 293.15 })
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect((onSave.mock.calls[0][0] as unknown[])[0]).toMatchObject({ temperature_k: 293.15 })
   })
 })

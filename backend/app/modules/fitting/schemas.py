@@ -197,8 +197,12 @@ class PropertyCardOut(BaseModel):
     id: uuid.UUID
     material_id: uuid.UUID
     material_name: str
-    test_type_key: str
-    orientation: str
+    test_type_key: str | None
+    """어느 시험에서 나왔나. **빌 수 있다** — 선언 물성만으로 만든 카드다.
+
+    자리표시를 안 넣는다: 아무 시험종류나 채우면 그 카드가 인장시험에서 나온
+    것처럼 보이고, 덱을 받은 사람은 그 숫자를 잰 값으로 읽는다."""
+    orientation: str | None
     label: str
     status: str
     """`draft` | `published` | `deprecated`. 전환 권한은 D8·D12 참조."""
@@ -215,6 +219,44 @@ class PropertyCardOut(BaseModel):
     note: str | None
     published_at: datetime | None
     created_at: datetime
+
+
+class DeclaredCardPreviewOut(BaseModel):
+    """적어 둔 값만으로 카드를 만들면 **무엇이 실리는가.**
+
+    화면이 재료 API 를 따로 불러 나름대로 판정하지 않게 하려고 둔다 — 규칙이
+    두 벌이 되면 어긋나는 순간 화면이 거짓말을 한다. `FitPreviewOut.elastic` 이
+    같은 이유로 있다.
+
+    **누르기 전에 알아야 한다.** 만들기를 누른 뒤에 "적어 둔 물성이 없습니다" 를
+    보는 것은 늦다.
+    """
+
+    material_name: str
+    values: list[InheritedValueOut]
+    """실릴 값들. 선언 물성과 물려받은 푸아송비·밀도가 함께 온다."""
+    blocks: list[str]
+    """생길 블록 이름. 비면 카드를 만들 수 없다."""
+
+
+class DeclaredCardSaveRequest(BaseModel):
+    """**시험 없이** 선언 물성만으로 카드를 만든다(ADR 0016).
+
+    시험이 하나도 없는 재료는 대표 곡선이 없어서 `POST /cards` 를 탈 수 없었다.
+    그런데 탄성계수·열물성은 인장시험이 주지 않는 값이고, 그것만으로도 열해석·
+    선형 정적 해석의 덱은 나간다.
+
+    **적합이 없으므로 식도 표도 없다.** 여기서 나오는 카드는 `elastic` 과
+    `thermal` 블록만 든다 — 소성 표가 필요한 형식은 `available_formats` 에서
+    저절로 빠진다(렌더러가 `Need` 로 선언한다).
+    """
+
+    material_id: uuid.UUID
+    label: str = Field(min_length=1, max_length=120)
+    poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
+    """비우면 재료에 적힌 값을 쓴다. **없으면 없는 채로 둔다.**"""
+    density: float | None = Field(default=None, gt=0)
+    note: str | None = None
 
 
 class ViscoelasticCardSaveRequest(BaseModel):

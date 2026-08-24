@@ -17,8 +17,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, FileDown, Pencil, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, BookOpen, Check, FileDown, Pencil, Plus, Trash2 } from 'lucide-react'
 
+import { DeclaredCardDialog } from '@/modules/fitting/DeclaredCardDialog'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type {
   ExportFormat,
@@ -82,6 +83,7 @@ export function FittingPanel({ materialId }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
+  const [declaring, setDeclaring] = useState(false)
 
   const groups: GroupKey[] = (stats.data?.groups ?? [])
     // **채택된 것이 있으면 적합할 수 있다.** 1건이면 그 곡선이 곧 입력이다 —
@@ -174,6 +176,27 @@ export function FittingPanel({ materialId }: Props) {
           점탄성 카드는 시험 상세의 <b>점탄성</b> 탭에서 Prony 를 맞춘 뒤 만듭니다.
         </div>
       )}
+
+      {/* **시험이 없어도 길이 있다.** 묶음 줄 안에 두면 시험이 하나도 없는
+          재료에서는 그 줄 자체가 안 떠서, 정작 이 버튼이 가장 필요한 자리에서
+          사라진다(ADR 0016). */}
+      <div className="mb-4 flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => setDeclaring(true)}>
+          <BookOpen className="size-4" />
+          적어 둔 값으로 카드 만들기
+        </Button>
+        <span className="text-muted-foreground text-xs">
+          시험에서 나온 값이 하나도 안 들어갑니다 — 재료의 <b>물성</b> 탭에 적은 값만
+          싣습니다.
+        </span>
+      </div>
+
+      <DeclaredCardDialog
+        materialId={materialId}
+        open={declaring}
+        onClose={() => setDeclaring(false)}
+        onSaved={() => void cards.reload()}
+      />
 
       {groups.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -624,9 +647,20 @@ function CardList({
             >
               {STATUS_LABELS[card.status] ?? card.status}
             </Badge>
+            {/* **시험에서 나온 카드와 같은 모양으로 그리면 안 된다.**
+                시험종류가 비어 있으면 `· · 시편 0개` 로 보이는데, 그것은
+                "시험이 지워졌다" 로 읽힌다. 무엇인지 말로 적는다. */}
             <span className="text-muted-foreground text-sm">
-              {card.test_type_key} · {card.orientation} · 시편{' '}
-              {String(card.source.sample_count ?? '?')}개 · {card.point_count}점
+              {card.test_type_key === null ? (
+                <span className="text-amber-700 dark:text-amber-500">
+                  시험 없음 · 적어 둔 값
+                </span>
+              ) : (
+                <>
+                  {card.test_type_key} · {card.orientation} · 시편{' '}
+                  {String(card.source.sample_count ?? '?')}개 · {card.point_count}점
+                </>
+              )}
             </span>
 
             <div className="ml-auto flex gap-1">

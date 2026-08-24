@@ -28,6 +28,8 @@ from app.modules.materials.schemas import (
     MaterialCreateRequest,
     MaterialOut,
     MaterialUpdateRequest,
+    MillCheckOut,
+    MillCheckRowOut,
     NamePreviewOut,
     NamePreviewRequest,
     PropertyItemOut,
@@ -45,6 +47,7 @@ from app.modules.materials.schemas import (
     SpecimenWarningOut,
     ValueSourceOut,
 )
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
@@ -163,6 +166,10 @@ def _sample_out(
         production_date=sample.production_date,
         density=services.from_si(sample.density_si, unit),
         density_unit=unit,
+        declared_properties=[
+            DeclaredPropertyOut(**row, value=units.from_si(row["value_si"], row["input_unit"]))
+            for row in (sample.declared_properties or [])
+        ],
         note=sample.note,
         specimen_count=specimen_count,
         created_at=sample.created_at,
@@ -306,10 +313,14 @@ def _search_terms(db: Session, q: str | None) -> list[Any]:
 # 있는 것과 같은 이유다.
 @router.get("/property-items", response_model=list[PropertyItemOut])
 def property_items(
+    level: str | None = None,
     _: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[PropertyItemOut]:
     """넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7).
+
+    `level` 로 층을 좁힌다 — `재료` 는 Grade 가 같으면 같은 값(탄성계수·열물성),
+    `시료` 는 로트마다 다른 값(항복강도·인장강도)이다. **안 주면 전부** 준다.
 
     화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다 — 항목을 코드에
     박으면 부서가 필요한 물성 하나를 넣으려고 배포를 기다려야 한다.
@@ -323,9 +334,10 @@ def property_items(
             dimension=spec["dimension"],
             si_unit=spec["si_unit"],
             symbol=spec["symbol"],
+            level=spec["level"],
             units=units.units_for(spec["dimension"]),
         )
-        for name, spec in sorted(declared.catalog(db).items())
+        for name, spec in sorted(declared.catalog(db, level=level).items())
     ]
 
 
@@ -864,6 +876,88 @@ def _get_sample(db: Session, user: User, sample_id: uuid.UUID) -> Sample:
     return sample
 
 
+@samples_router.get("/{sample_id}/mill-check", response_model=MillCheckOut)
+def mill_check(
+    sample_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MillCheckOut:
+    """밀시트가 말한 값과 **우리가 잰 값을 나란히.**
+
+    이것이 시료 층 선언 물성의 쓸모다. 값을 적어 두기만 하면 기록으로 끝나는데,
+    같은 물성을 우리 처리 결과가 낸다 — `proof_stress`·`tensile_strength` 가
+    밀시트의 항복강도·인장강도와 같은 값이다.
+
+    ## 무엇을 세는가
+
+    **채택된 처리 결과만**(ADR 0007). 채택은 "이 계산을 이 시험의 답으로 삼는다"
+    는 선언이고, 안 채택된 것까지 평균에 넣으면 시험해 본 것과 결론을 낸 것이
+    섞인다.
+
+    ## 판정하지 않는다
+
+    차이를 비율로 낼 뿐 「맞다/틀리다」를 말하지 않는다. 몇 %부터 문제인지는
+    규격과 용도가 정하고, 그것을 여기서 상수로 박으면 **그 숫자가 곧 규격 행세를
+    한다.**
+    """
+    sample = _get_sample(db, user, sample_id)
+    known = declared.catalog(db)
+
+    # 이 시료의 시편들에서 채택된 결과의 스칼라를 모은다.
+    measured: dict[str, list[float]] = {}
+    rows = db.execute(
+        select(ProcessingResult.scalars)
+        .join(TestRun, TestRun.adopted_result_id == ProcessingResult.id)
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .where(
+            Specimen.sample_id == sample.id,
+            Specimen.deleted_at.is_(None),
+            TestRun.deleted_at.is_(None),
+        )
+    ).scalars()
+    for scalars in rows:
+        for scalar in scalars or []:
+            value = scalar.get("value")
+            if isinstance(value, (int, float)):
+                measured.setdefault(str(scalar.get("key", "")), []).append(float(value))
+
+    out: list[MillCheckRowOut] = []
+    for row in sample.declared_properties or []:
+        spec = known.get(str(row.get("item"))) or {}
+        key = str(spec.get("measured_key") or "")
+        found = measured.get(key) or []
+        mean = sum(found) / len(found) if found else None
+        stated = float(row["value_si"])
+        out.append(
+            MillCheckRowOut(
+                item=str(row["item"]),
+                label=str(row["item"]),
+                declared=stated,
+                declared_unit=str(row["input_unit"]),
+                reference=str(row.get("reference") or ""),
+                measured=mean,
+                measured_count=len(found),
+                si_unit=str(spec.get("si_unit") or "1"),
+                # **적은 값이 0 이면 비율이 뜻을 잃는다.** 나눗셈을 막는 것이
+                # 아니라, 그 자리에 낼 답이 없다는 뜻이다.
+                difference=(
+                    (mean - stated) / stated if mean is not None and stated != 0 else None
+                ),
+                note=(
+                    None
+                    if found
+                    else (
+                        "우리가 재는 값으로 이어져 있지 않습니다 — 기준정보의 물성 항목에서 "
+                        "'우리가 재는 값' 을 고르면 여기서 견줍니다."
+                        if not key
+                        else "이 시료에 채택된 처리 결과가 없습니다."
+                    )
+                ),
+            )
+        )
+    return MillCheckOut(sample_name=sample.record_name, rows=out)
+
+
 @samples_router.get("/{sample_id}", response_model=SampleOut)
 def get_sample(
     sample_id: uuid.UUID,
@@ -901,6 +995,13 @@ def update_sample(
     vocabulary_services.apply_bindings(
         db, sample, vocabulary_services.SAMPLE_BINDINGS, data, created_by_id=user.id
     )
+
+    if "declared_properties" in data:
+        # **시료 층이다.** 항목이 그 층의 것인지는 `check` 가 본다 — 탄성계수를
+        # 여기 적으면 같은 값을 로트 수만큼 적게 되고, 그중 하나만 고쳐진다.
+        sample.declared_properties = declared.check(
+            db, data["declared_properties"] or [], level="시료"
+        )
 
     if "density" in data or "density_unit" in data:
         unit = data.get("density_unit") or sample.input_units.get("density", DENSITY_UNIT)

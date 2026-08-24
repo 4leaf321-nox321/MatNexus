@@ -56,10 +56,20 @@ class PropertyCard(Base):
     material_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("materials.id"), index=True
     )
-    test_type_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("test_types.id"), index=True
+    test_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("test_types.id"), index=True, nullable=True
     )
-    orientation: Mapped[str] = mapped_column(String(10), index=True)
+    """어느 시험에서 나왔나. **빌 수 있다** — 시험이 하나도 없는 재료의 카드다.
+
+    선언 물성만으로 만든 카드가 그렇다(ADR 0016). 여기에 아무 시험종류나 채워
+    넣으면 그 카드가 인장시험에서 나온 것처럼 보이고, **덱을 받은 사람은 그
+    숫자를 잰 값으로 읽는다.** 비어 있는 것이 사실이므로 비워 둔다."""
+
+    orientation: Mapped[str | None] = mapped_column(String(10), index=True, nullable=True)
+    """압연 방향 등. `test_type_id` 와 함께 빈다 — 시험을 안 했으면 방향도 없다.
+
+    `"—"` 같은 자리표시를 넣지 않는 이유는 같다: 목록이 그것을 방향 이름으로
+    줄 세우고, 나중에 그 값을 거르는 코드가 생긴다."""
 
     label: Mapped[str] = mapped_column(String(120))
     status: Mapped[str] = mapped_column(
