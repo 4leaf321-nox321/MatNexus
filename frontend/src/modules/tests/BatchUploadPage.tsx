@@ -381,7 +381,7 @@ export default function BatchUploadPage() {
 
   /** 줄의 Select 가 쓸 재료 목록 — 검색 결과 + 이 줄이 이미 가리키는 재료. */
   return (
-    <div className="mx-auto max-w-6xl">
+    <div>
       <PageHeader
         title="일괄 등록"
         description="파일을 한꺼번에 올립니다. 줄마다 다른 재료·시료·시험 종류를 가리킬 수 있습니다."

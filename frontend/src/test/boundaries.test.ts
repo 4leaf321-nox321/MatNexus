@@ -223,3 +223,47 @@ describe('모듈 경계', () => {
     expect(offenders, `API 절대주소가 있습니다:\n  ${offenders.join('\n  ')}`).toEqual([])
   })
 })
+
+/**
+ * 본문 폭 — **한 곳에서 정한다.**
+ *
+ * 전에는 화면마다 `mx-auto max-w-4xl` ~ `max-w-7xl` 을 제각각 달았다. 17개
+ * 화면에 5가지 폭이었고, 규칙이 없으니 새 화면은 옆 파일을 베꼈다. 그래서 같은
+ * 성격의 표가 화면마다 다른 폭으로 잘렸다.
+ *
+ * 지금은 `AppShell` 의 `main` 이 정한다. **읽는 화면만 자기 안에서 다시 좁힌다** —
+ * 공지·알림·VOC 는 글이라 폭이 넓을수록 읽기 나쁘다.
+ *
+ * 이 검사가 없으면 다음 화면이 또 제 폭을 단다. 65가 프론트 122파일 평면이 된
+ * 경로와 같은 종류다 — **규율이 아니라 검사가 막는다.**
+ */
+const NARROW_BY_DESIGN = new Set([
+  path.join('notices', 'NoticesPage.tsx'),
+  path.join('notifications', 'NotificationsPage.tsx'),
+  path.join('voc', 'VocPage.tsx'),
+])
+
+describe('본문 폭', () => {
+  it('화면이 제 폭을 정하지 않는다', () => {
+    const offenders: string[] = []
+    for (const file of walk(MODULES)) {
+      const rel = path.relative(MODULES, file)
+      if (NARROW_BY_DESIGN.has(rel)) continue
+      const source = readFileSync(file, 'utf-8')
+      // 주석에 적힌 것은 설명이다. **`className` 안에 있는 것만** 본다.
+      for (const match of source.matchAll(/className="[^"]*mx-auto max-w-[^"]*"/g)) {
+        offenders.push(`${rel}: ${match[0]}`)
+      }
+    }
+    expect(
+      offenders,
+      '본문 폭은 AppShell 이 정합니다. 좁아야 하는 화면이면 NARROW_BY_DESIGN 에 ' +
+        '사유와 함께 넣으세요.'
+    ).toEqual([])
+  })
+
+  it('AppShell 이 폭을 들고 있다', () => {
+    const shell = readFileSync(path.join(SRC, SHELL, 'AppShell.tsx'), 'utf-8')
+    expect(shell).toMatch(/max-w-\[1600px\]/)
+  })
+})

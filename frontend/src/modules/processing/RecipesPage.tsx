@@ -48,7 +48,7 @@ export default function RecipesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageHeader
         title="처리 레시피"
         description="변위·하중을 물성으로 바꾸는 단계 묶음. 시험 하나에서 맞춘 뒤 나머지에 한 번에 겁니다."

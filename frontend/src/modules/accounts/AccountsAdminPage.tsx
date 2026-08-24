@@ -98,7 +98,7 @@ export default function AccountsAdminPage() {
   const rows = accounts.data ?? []
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageHeader
         title="계정 관리"
         description="가입 신청을 승인하고 계정 상태를 관리합니다."

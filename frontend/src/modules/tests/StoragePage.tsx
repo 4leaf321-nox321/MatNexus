@@ -57,7 +57,7 @@ export default function StoragePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <PageHeader
         title="저장소 정리"
         description="시험 원본과 곡선 파일이 사는 곳. 주인 없는 파일은 여기서 치웁니다."

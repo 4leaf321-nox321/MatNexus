@@ -55,7 +55,7 @@ export default function TestTypesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <PageHeader
         title="시험종류 정의"
         description="어떤 시험을 받을 수 있고, 각각 어떤 채널과 조건을 갖는지. 정의는 코드가 아니라 데이터입니다 — 배포 없이 추가됩니다."

@@ -91,7 +91,7 @@ export default function WorkspacesAdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageHeader
         title="부서 관리"
         description="조직도 그대로 봅니다. 끌어 놓아 옮기고, 개편해도 자료는 따라 움직이지 않습니다."

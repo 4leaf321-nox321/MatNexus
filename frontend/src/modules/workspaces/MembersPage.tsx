@@ -72,7 +72,7 @@ export default function MembersPage() {
   const rows = members.data ?? []
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <PageHeader
         title="부서 멤버"
         description={`${membership?.name ?? slug} 의 구성원과 역할입니다.`}

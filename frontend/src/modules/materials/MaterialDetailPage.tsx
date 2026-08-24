@@ -83,7 +83,7 @@ export default function MaterialDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <PageHeader
         title={item?.record_name ?? '재료'}
         description={item?.alias ?? undefined}

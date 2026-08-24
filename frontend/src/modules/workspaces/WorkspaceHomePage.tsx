@@ -106,7 +106,7 @@ export default function WorkspaceHomePage() {
   const failedCount = failed.data?.total ?? 0
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="space-y-6">
       <div>
         {/* 시스템 관리자는 자기 소속이 아닌 부서도 연다 — 그때는 이름을 모르니
             slug 라도 적는다. '부서' 라고만 쓰면 어디에 있는지 알 수 없다. */}

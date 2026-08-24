@@ -99,7 +99,7 @@ export default function VocabularyAdminPage() {
 
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <PageHeader
         title="기준정보"
         description="제조사·강종 같은 값의 목록. 오타를 고치고, 안 쓰는 값을 감춥니다."

@@ -91,7 +91,7 @@ export default function MaterialsPage() {
   const truncated = all && rows.length < total
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageHeader
         title="재료"
         description="규격 단위로 관리합니다. 실물 한 덩이는 시료, 잘라낸 조각은 시편입니다."

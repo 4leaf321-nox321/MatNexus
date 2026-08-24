@@ -99,7 +99,7 @@ export default function TestRunsPage() {
   }, [pending, runs])
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div>
       <PageHeader
         title="시험 데이터"
         description={`장비 원본을 올리면 서버가 읽어 곡선으로 만듭니다.${

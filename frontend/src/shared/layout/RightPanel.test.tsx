@@ -73,7 +73,7 @@ describe('오른쪽 영역', () => {
     await user.click(screen.getByRole('button', { name: '변수 목록 펴기' }))
 
     const host = document.getElementById('app-right-panel')
-    // 본문 안이면 `mx-auto max-w-7xl` 을 따라 가운데로 딸려 들어간다.
+    // 본문 안이면 폭 제한(`max-w-[1600px]`)을 따라 가운데로 딸려 들어간다.
     expect(host).toContainElement(screen.getByRole('complementary'))
     expect(screen.getByTestId('main')).not.toContainElement(screen.getByRole('complementary'))
   })

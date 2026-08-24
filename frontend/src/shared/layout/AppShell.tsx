@@ -19,7 +19,7 @@ import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 /** 화면 조각을 받아 오는 동안. **빈 화면을 보이지 않는다.** */
 function PageSkeleton() {
   return (
-    <div className="mx-auto max-w-4xl space-y-3">
+    <div className="space-y-3">
       <Skeleton className="h-8 w-56" />
       <Skeleton className="h-4 w-80" />
       <Skeleton className="h-64 w-full" />
@@ -50,16 +50,29 @@ export function AppShell() {
           workspaceSlug={workspaceSlug}
         />
         <main className="flex-1 overflow-auto p-6">
-          {/* 화면 대부분을 나눠 싣는다(router.tsx). 껍데기는 이미 떠 있으므로
-              여기서 기다리는 동안에도 사이드바와 상단 바는 그대로 있다. */}
-          <Suspense fallback={<PageSkeleton />}>
-            <Outlet />
-          </Suspense>
+          {/* **본문 폭을 여기 한 곳에서 정한다.**
+              전에는 화면마다 `mx-auto max-w-4xl` ~ `max-w-7xl` 을 제각각 달았다
+              (17개 화면에 5가지 폭). 규칙이 없으니 새 화면은 옆 파일을 베꼈고,
+              그래서 같은 성격의 표가 화면마다 다른 폭으로 잘렸다.
+
+              1600px 인 이유: 시험 목록·재료 목록의 열이 10개를 넘는데
+              1152px(6xl)에서는 이름과 날짜가 줄바꿈됐다. 반대로 제한을 아예
+              없애면 4K 에서 표 한 줄이 화면을 가로지른다 — 눈이 행을 놓친다.
+
+              좁아야 하는 화면(공지·알림·VOC 같이 **읽는** 것)은 자기 안에서
+              다시 좁힌다. 그쪽은 폭이 넓을수록 읽기 나쁘다. */}
+          <div className="mx-auto w-full max-w-[1600px]">
+            {/* 화면 대부분을 나눠 싣는다(router.tsx). 껍데기는 이미 떠 있으므로
+                여기서 기다리는 동안에도 사이드바와 상단 바는 그대로 있다. */}
+            <Suspense fallback={<PageSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </div>
         </main>
       </div>
 
       {/* 화면이 채우는 오른쪽 영역. 아무도 안 쓰면 폭이 0 이다.
-          **본문 안에 두면 `mx-auto max-w-7xl` 을 따라 가운데로 딸려 들어간다.** */}
+          **본문 안에 두면 폭 제한(`max-w-[1600px]`)을 따라 가운데로 딸려 들어간다.** */}
       <RightPanelHost />
 
       {/* 읽지 않은 팝업 공지는 스스로 뜬다 — 공지 화면에 들어가야만 보이면

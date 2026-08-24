@@ -46,7 +46,7 @@ export default function FormatProfilesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageHeader
         title="형식 프로파일"
         description="장비 파일을 어떻게 읽을지. 구조는 코드가 자동으로 읽고, '이 열이 무엇인가'만 여기에 저장합니다 — 새 장비를 붙이는 데 배포가 필요 없습니다."

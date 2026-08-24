@@ -89,7 +89,7 @@ export default function UnitsPage() {
   const rows = units.data?.dimensions ?? []
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageHeader
         title="단위"
         description="장비 파일과 입력 폼이 어떤 표기를 받고, 무엇으로 저장하고, 화면에 무엇으로 보여 주는지."
