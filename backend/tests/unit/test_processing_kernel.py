@@ -136,6 +136,63 @@ class Test탄성계수:
         assert scalar(result, "elastic_r_squared") == pytest.approx(1.0)
         assert any("믿을 수 없습니다" in note for note in result.notes)
 
+    def test_사실상_한_점인_구간을_막는다(self) -> None:
+        """**`polyfit` 은 퇴화한 구간에도 숫자를 돌려준다.**
+
+        점 두 개의 변형률이 부동소수 정밀도 안에서 같으면, 나온 기울기는 유한하고
+        양수라 뒤따르는 `isfinite`·`> 0` 검사를 그냥 지나간다. 그 값이 그대로
+        탄성계수가 되어 카드를 거쳐 솔버 덱까지 간다 — **조용히 틀리는 자리다.**
+
+        토우 보정에만 있던 방어인데 탄성계수 회귀는 `count < 2` 만 보고 있었다.
+        같은 함수를 같은 방식으로 쓰면서 한쪽만 막아 둔 것이었다.
+        """
+        # 1e-18 은 0.001 옆에서 배정밀도로 구별되지 않는다.
+        strain = np.array([0.001, 0.001 + 1e-18, 0.05])
+        frame = Frame(
+            {"strain_engineering": strain, "stress_engineering": np.array([2e8, 9e8, 5e8])},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="사실상 한 점"):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.elastic_modulus",
+                        {"minimum_strain": 0.0005, "maximum_strain": 0.002},
+                    )
+                ],
+                frame,
+            )
+
+    def test_반올림_찌꺼기를_탄성계수라고_부르지_않는다(self) -> None:
+        """**`modulus > 0` 은 방어가 아니다 — 운이다.**
+
+        400 MPa 근처에서 폭 0.002 인 구간에 직선을 얹으면, 배정밀도의 반올림
+        찌꺼기만으로도 기울기가 1e-3 Pa 규모까지 흔들린다. 그 아래에서는 부호가
+        데이터가 아니라 **반올림이 정한다** — 여기 쓴 곡선은 실질 상수인데
+        `polyfit` 이 9.2e-4 Pa 라는 유한한 양수를 돌려주고, 옛 검사는 그것을
+        통과시켰다.
+
+        eps 에 데이터 크기를 곱해 만든 바닥은 그 구간 전체를 거절한다.
+        """
+        strain = np.linspace(0.0005, 0.0025, 30)
+        noise_only = Frame(
+            {
+                "strain_engineering": strain,
+                "stress_engineering": 4e8 + (strain - strain[0]) * 1e-3,
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="탄성계수가 유한한 양수가 아닙니다"):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.elastic_modulus",
+                        {"minimum_strain": 0.0005, "maximum_strain": 0.0025},
+                    )
+                ],
+                noise_only,
+            )
+
     def test_구간에_점이_없으면_실제_범위를_알려_준다(self) -> None:
         with pytest.raises(ProcessingError, match="관측 범위는"):
             processing.apply(

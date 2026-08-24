@@ -557,7 +557,8 @@ export default function FormatProfileEditorPage() {
         parser_key: testType.parser_key,
         is_active: testType.is_active,
         sort_order: 0,
-        max_upload_bytes: null,
+        // 위 주석대로 **그대로 다시 보낸다.** `null` 을 박으면 저장된 한도가 사라진다.
+        max_upload_bytes: testType.max_upload_bytes,
         channels: [
           ...testType.channels.map((channel, index) => ({
             key: channel.key,

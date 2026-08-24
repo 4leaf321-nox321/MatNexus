@@ -159,7 +159,10 @@ def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
         parser_key=test_type.parser_key,
         extensions=_extensions(test_type.parser_key),
         is_active=test_type.is_active,
-        max_upload_bytes=test_type.max_upload_bytes or get_settings().max_upload_bytes,
+        max_upload_bytes=test_type.max_upload_bytes,
+        max_upload_bytes_effective=(
+            test_type.max_upload_bytes or get_settings().max_upload_bytes
+        ),
         channels=[
             TestChannelOut(
                 key=c.key,
@@ -460,7 +463,8 @@ def list_test_types(
             parser_key=t.parser_key,
             extensions=_extensions(t.parser_key),
             is_active=t.is_active,
-            max_upload_bytes=t.max_upload_bytes or fallback,
+            max_upload_bytes=t.max_upload_bytes,
+            max_upload_bytes_effective=t.max_upload_bytes or fallback,
             channels=[
                 TestChannelOut(
                     key=c.key,

@@ -8607,7 +8607,18 @@
             "type": "string"
           },
           "max_upload_bytes": {
-            "title": "Max Upload Bytes",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Upload Bytes"
+          },
+          "max_upload_bytes_effective": {
+            "title": "Max Upload Bytes Effective",
             "type": "integer"
           },
           "owner_workspace_name": {
@@ -8661,6 +8672,7 @@
           "extensions",
           "is_active",
           "max_upload_bytes",
+          "max_upload_bytes_effective",
           "run_count",
           "channels",
           "conditions"

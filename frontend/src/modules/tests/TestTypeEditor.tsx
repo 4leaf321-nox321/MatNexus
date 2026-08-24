@@ -151,7 +151,10 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
         parser_key: form.parser_key || null,
         is_active: form.is_active,
         sort_order: type?.channels.length ? 0 : 0,
-        max_upload_bytes: null,
+        // **받은 것을 그대로 돌려보낸다.** 정의는 한 벌 통째로 갈아 끼우므로
+        // `null` 을 박으면 부서가 올려 둔 한도가 저장 한 번에 사라진다.
+        // `null` 자체는 "전역 설정을 따른다" 는 뜻이라 새로 만들 때는 맞다.
+        max_upload_bytes: type?.max_upload_bytes ?? null,
         channels: channels.map((channel, index) => ({
           key: channel.key,
           label: channel.label,

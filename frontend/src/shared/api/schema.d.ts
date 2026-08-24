@@ -5778,7 +5778,9 @@ export interface components {
             /** Label */
             label: string;
             /** Max Upload Bytes */
-            max_upload_bytes: number;
+            max_upload_bytes: number | null;
+            /** Max Upload Bytes Effective */
+            max_upload_bytes_effective: number;
             /** Owner Workspace Name */
             owner_workspace_name: string | null;
             /** Owner Workspace Slug */

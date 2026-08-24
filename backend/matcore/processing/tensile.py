@@ -288,35 +288,7 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
         )
 
     selected_x, selected_y = strain[mask], stress[mask]
-
-    # **퇴화한 구간을 먼저 거른다.** `polyfit` 은 거의 한 점인 구간이나 상수 응력에
-    # 대해서도 숫자를 돌려준다 — 유한하고 양수인 기울기가 나오므로 아래 검사를
-    # 빠져나가고, 그 값으로 원점이 옮겨진다. 조용히 틀리는 자리다.
-    #
-    # 절대값으로 못 막는다: 고무는 MPa 이고 금속은 GPa 라 "이보다 작으면 이상하다"
-    # 는 기준이 재료마다 다르다. **부동소수의 eps 에 데이터 크기를 곱해** 그 재료
-    # 기준의 바닥을 만든다.
-    span = float(selected_x[-1] - selected_x[0])
-    centered_x = selected_x - float(np.mean(selected_x))
-    spread = float(np.dot(centered_x, centered_x))
-    x_scale = max(float(np.max(np.abs(selected_x))), span)
-    floor = (
-        np.finfo(np.float64).eps * count * max(x_scale * x_scale, np.finfo(np.float64).tiny)
-    )
-    if span <= 0 or spread <= floor:
-        raise ProcessingError(
-            f"구간의 변형률이 사실상 한 점입니다(폭 {span:.3g}). 직선을 얹을 수 "
-            f"없습니다 — 구간을 넓히세요."
-        )
-
-    slope, intercept = (float(value) for value in np.polyfit(selected_x, selected_y, 1))
-    y_scale = max(float(np.max(np.abs(selected_y))), 1.0)
-    slope_floor = np.finfo(np.float64).eps * count * y_scale / span
-    if not math.isfinite(slope) or slope <= slope_floor:
-        raise ProcessingError(
-            f"구간의 기울기가 유한한 양수가 아닙니다: {slope:.6g}. "
-            f"구간이 항복 뒤에 걸쳐 있거나 응력 부호가 뒤집혔을 수 있습니다."
-        )
+    slope, intercept = _fit_line(selected_x, selected_y, what="구간의 기울기")
 
     # 직선이 응력 0 을 만나는 변형률. 토우가 있으면 양수이고, 그만큼 왼쪽으로 민다.
     offset = -intercept / slope
@@ -466,7 +438,7 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             )
         selected_x, selected_y = strain[mask], stress[mask]
         if method == "linear_regression":
-            modulus, intercept = (float(v) for v in np.polyfit(selected_x, selected_y, 1))
+            modulus, intercept = _fit_line(selected_x, selected_y, what="탄성계수")
         elif method == "chord":
             start_stress = float(np.interp(low, strain, stress))
             end_stress = float(np.interp(high, strain, stress))
@@ -519,6 +491,46 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"초기 토우(시편 물림) 구간이 섞였는지 확인하세요."
         )
     return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+
+
+def _fit_line(x: np.ndarray, y: np.ndarray, *, what: str) -> tuple[float, float]:
+    """구간에 직선을 얹는다. **퇴화한 구간은 숫자를 내기 전에 막는다.**
+
+    `polyfit` 은 거의 한 점인 구간이나 상수 응력에 대해서도 숫자를 돌려준다 —
+    유한하고 양수인 기울기가 나오므로 뒤따르는 `isfinite`·`> 0` 검사를 빠져나가고,
+    그 값이 그대로 탄성계수가 되거나 원점을 옮긴다. **조용히 틀리는 자리다.**
+
+    절대값으로 못 막는다: 고무는 MPa 이고 금속은 GPa 라 "이보다 작으면 이상하다"
+    는 기준이 재료마다 다르다. **부동소수의 eps 에 데이터 크기를 곱해** 그 재료
+    기준의 바닥을 만든다.
+
+    토우 보정에만 있던 방어다. 탄성계수 회귀는 `count < 2` 만 보고 있었는데,
+    **같은 함수를 같은 방식으로 쓰면서 한쪽만 막아 둔 것**이라 옮겨 왔다. 탄성계수는
+    처리 경로에서 가장 많이 불리고, 그 값은 카드를 거쳐 솔버 덱까지 간다.
+    """
+    count = int(x.size)
+    span = float(x[-1] - x[0])
+    centered = x - float(np.mean(x))
+    spread = float(np.dot(centered, centered))
+    x_scale = max(float(np.max(np.abs(x))), span)
+    floor = (
+        np.finfo(np.float64).eps * count * max(x_scale * x_scale, np.finfo(np.float64).tiny)
+    )
+    if span <= 0 or spread <= floor:
+        raise ProcessingError(
+            f"구간의 변형률이 사실상 한 점입니다(폭 {span:.3g}). 직선을 얹을 수 "
+            f"없습니다 — 구간을 넓히세요."
+        )
+
+    slope, intercept = (float(value) for value in np.polyfit(x, y, 1))
+    y_scale = max(float(np.max(np.abs(y))), 1.0)
+    slope_floor = np.finfo(np.float64).eps * count * y_scale / span
+    if not math.isfinite(slope) or slope <= slope_floor:
+        raise ProcessingError(
+            f"{what}가 유한한 양수가 아닙니다: {slope:.6g}. "
+            f"구간이 항복 뒤에 걸쳐 있거나 응력 부호가 뒤집혔을 수 있습니다."
+        )
+    return slope, intercept
 
 
 def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> float:

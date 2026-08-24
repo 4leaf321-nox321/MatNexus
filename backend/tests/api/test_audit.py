@@ -271,10 +271,14 @@ class Test나머지_경로:
         """**저장 버튼을 눌렀다는 사실은 감사 대상이 아니다.** 아무것도 안
         바뀐 저장이 기록으로 남으면, 진짜 변경이 그 사이에 묻힌다.
 
-        같은 것을 **두 번** 저장해서 본다. 한 번만으로는 부족하다 — 응답이 준
-        모양을 그대로 돌려보내도 첫 저장은 진짜로 뭔가를 바꾼다(`max_upload_bytes`
-        가 그렇다: 응답은 실제로 쓰이는 50MB 를 주는데 저장된 값은 비어 있어서,
-        되돌려보내면 그 기본값이 박힌다). 그것을 안 남기면 오히려 틀린다.
+        이 시험은 한 번 뒤집혔다. 처음 썼을 때는 첫 저장에 `max_upload_bytes:
+        None → 52428800` 이 남았다 — 응답이 *실효값*(50MB)을 주는데 저장 요청의
+        같은 이름은 *저장할 값*이라, 받은 것을 돌려보내면 전역 기본값이 행에
+        박혔기 때문이다. **감사 로그가 찾아낸 결함이었다**(§11).
+
+        v1.53.0 에 출력을 `max_upload_bytes`(저장값)와
+        `max_upload_bytes_effective`(실효값)로 가르면서 그 왕복이 진짜 무변경이
+        됐다. 그래서 여기서 아무것도 안 남는 것이 **이제는 맞다.**
         """
         ensure_builtin_test_types(db)
         db.commit()
@@ -292,5 +296,4 @@ class Test나머지_경로:
         entries = client.get(
             "/api/audit", params={"action": "test_type.changed"}, headers=admin_headers
         ).json()
-        # 첫 번째만 남는다. 두 번째는 정말로 아무것도 안 바꿨다.
-        assert len(entries) == 1, [item["changes"] for item in entries]
+        assert entries == [], [item["changes"] for item in entries]

@@ -209,6 +209,92 @@ class TestEditWithoutData:
         assert "저장 단위는 N" in response.json()["error"]["message"]
 
 
+class Test업로드한도:
+    """**한 이름이 두 뜻이면 화면은 되돌려 보낼 값을 잃는다.**
+
+    `max_upload_bytes` 는 저장된 값이고 `None` 이 "전역 설정을 따른다" 는 뜻인데,
+    출력이 실효값(설정 기본값 50MB)만 주던 동안 화면은 돌려보낼 것이 없어 `null`
+    을 박아 넣었다. 정의는 한 벌 통째로 갈아 끼우므로, 부서가 올려 둔 한도가
+    편집기에서 저장 한 번에 조용히 사라졌다.
+    """
+
+    def _definition(self, shown: dict[str, Any]) -> dict[str, Any]:
+        """화면이 보낼 법한 저장 본문. **받은 것을 그대로 돌려보낸다.**"""
+        return {
+            "label": shown["label"],
+            "abbr": shown["abbr"],
+            "parser_key": shown["parser_key"],
+            "is_active": shown["is_active"],
+            "max_upload_bytes": shown["max_upload_bytes"],
+            "channels": [
+                {
+                    "key": channel["key"],
+                    "label": channel["label"],
+                    "dimension": channel["dimension"],
+                    "si_unit": channel["si_unit"],
+                }
+                for channel in shown["channels"]
+            ],
+            "conditions": [],
+        }
+
+    def _shown(self, client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+        types = client.get("/api/test-types", headers=headers).json()
+        return next(item for item in types if item["key"] == "tensile")
+
+    def test_저장한_값과_실제로_쓰이는_값을_가른다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        shown = self._shown(client, admin_headers)
+        # 안 정했으면 저장된 값은 비고, 실효값은 전역 기본값이다.
+        assert shown["max_upload_bytes"] is None
+        assert shown["max_upload_bytes_effective"] == 50 * 1024 * 1024
+
+    def test_저장하면_한도가_사라지지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """**이것이 실제로 났던 일이다.** 한도를 올려 둔 뒤 편집기에서 아무것도
+        안 바꾸고 저장하면 그 한도가 없어졌다."""
+        payload = self._definition(self._shown(client, admin_headers))
+        payload["max_upload_bytes"] = 200 * 1024 * 1024
+        assert (
+            client.put(
+                "/api/test-types/tensile", json=payload, headers=admin_headers
+            ).status_code
+            == 200
+        )
+
+        # 화면이 받은 것을 그대로 돌려보낸다 — 아무것도 안 바꾼 저장.
+        again = self._shown(client, admin_headers)
+        assert (
+            client.put(
+                "/api/test-types/tensile",
+                json=self._definition(again),
+                headers=admin_headers,
+            ).status_code
+            == 200
+        )
+
+        after = self._shown(client, admin_headers)
+        assert after["max_upload_bytes"] == 200 * 1024 * 1024
+        assert after["max_upload_bytes_effective"] == 200 * 1024 * 1024
+
+    def test_비우면_설정을_다시_따른다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """`None` 은 "값이 없다" 가 아니라 **"설정을 따른다"** 는 뜻이다."""
+        payload = self._definition(self._shown(client, admin_headers))
+        payload["max_upload_bytes"] = 200 * 1024 * 1024
+        client.put("/api/test-types/tensile", json=payload, headers=admin_headers)
+
+        payload["max_upload_bytes"] = None
+        client.put("/api/test-types/tensile", json=payload, headers=admin_headers)
+
+        after = self._shown(client, admin_headers)
+        assert after["max_upload_bytes"] is None
+        assert after["max_upload_bytes_effective"] == 50 * 1024 * 1024
+
+
 class TestEditWithData:
     @pytest.fixture
     def with_run(

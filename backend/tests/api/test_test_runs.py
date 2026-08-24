@@ -109,7 +109,10 @@ class TestDefinitions:
         ]
         assert {c["si_unit"] for c in tensile_type["channels"]} == {"m", "N"}
         assert "temperature" in {c["key"] for c in tensile_type["conditions"]}
-        assert tensile_type["max_upload_bytes"] > 0  # 정의가 비어도 전역값이 채워진다
+        # 정의가 비면 **저장된 값은 비고** 실효값에만 전역값이 채워진다. 한 칸에
+        # 섞어 두면 화면이 되돌려 보낼 값을 잃는다 — §11 참조.
+        assert tensile_type["max_upload_bytes"] is None
+        assert tensile_type["max_upload_bytes_effective"] > 0
 
 
 class TestUpload:

@@ -111,7 +111,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
     }
   }
 
-  const limitMb = selected ? Math.round(selected.max_upload_bytes / (1024 * 1024)) : 0
+  const limitMb = selected ? Math.round(selected.max_upload_bytes_effective / (1024 * 1024)) : 0
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>

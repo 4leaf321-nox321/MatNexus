@@ -112,7 +112,7 @@ export default function TestTypesPage() {
                 </Badge>
               )}
               <span className="text-muted-foreground ml-auto text-xs">
-                최대 {Math.round(type.max_upload_bytes / (1024 * 1024))}MB
+                최대 {Math.round(type.max_upload_bytes_effective / (1024 * 1024))}MB
               </span>
               <Button
                 size="sm"
