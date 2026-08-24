@@ -12,7 +12,12 @@ import { NoticePopup } from '@/modules/notices/NoticePopup'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Header } from '@/shared/layout/Header'
-import { RightPanelHost, RightPanelProvider } from '@/shared/layout/RightPanel'
+import {
+  LeftPanelHost,
+  LeftPanelProvider,
+  RightPanelHost,
+  RightPanelProvider,
+} from '@/shared/layout/SidePanel'
 import { Sidebar } from '@/shared/layout/Sidebar'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 
@@ -42,8 +47,13 @@ export function AppShell() {
        거기 있다. 그래서 `Header` 와 자리(`RightPanelHost`)가 같은 제공자 안에
        있어야 한다. */
     <RightPanelProvider>
+      <LeftPanelProvider>
       <div className="flex h-svh overflow-hidden">
       <Sidebar collapsed={collapsed} workspaceSlug={workspaceSlug} />
+
+      {/* 화면이 채우는 왼쪽 영역 — **사이드바 바로 옆**이다. 재료 상세가 다른
+          재료 목록을 여기 넣는다. 아무도 안 쓰면 폭이 0 이다. */}
+      <LeftPanelHost />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           onToggleSidebar={() => setCollapsed((value) => !value)}
@@ -79,6 +89,7 @@ export function AppShell() {
           "배포 없이 안내를 전한다" 는 목적이 성립하지 않는다. */}
       <NoticePopup />
       </div>
+      </LeftPanelProvider>
     </RightPanelProvider>
   )
 }

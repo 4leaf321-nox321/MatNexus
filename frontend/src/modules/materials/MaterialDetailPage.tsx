@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
+  ChevronLeft,
   ChevronsUpDown,
   FlaskConical,
   Table2,
@@ -23,13 +24,14 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Sample, Specimen } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { EditMaterialDialog } from '@/modules/materials/EditMaterialDialog'
 import { EditSpecimenDialog } from '@/modules/materials/EditSpecimenDialog'
+import { MaterialListPanel } from '@/modules/materials/MaterialListPanel'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { NewSpecimenDialog } from '@/modules/materials/NewSpecimenDialog'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
@@ -84,11 +86,24 @@ export default function MaterialDetailPage() {
 
   return (
     <div>
+      {/* 왼쪽 사이드바 옆에 붙는 재료 목록. **다른 재료를 보려고 뒤로 갈 필요가
+          없다** — 재료를 여러 개 견주는 일이 흔하다. */}
+      <MaterialListPanel currentId={id} />
+
       <PageHeader
         title={item?.record_name ?? '재료'}
         description={item?.alias ?? undefined}
         actions={
           <div className="flex gap-2">
+            {/* **돌아갈 길이 없었다.** 브라우저 뒤로 가기가 유일한 길이었는데,
+                그건 화면이 준 길이 아니다 — 상세로 바로 들어온 사람(링크·북마크)
+                에게는 뒤가 이 화면이 아니다. */}
+            <Button variant="ghost" asChild>
+              <Link to="/materials">
+                <ChevronLeft className="size-4" />
+                목록
+              </Link>
+            </Button>
             {/* **어느 탭에서든 같은 버튼이다.** 카드를 만들다 말고 화면을 옮기지
                 않아도 값이 어디 있는지 볼 수 있어야 한다. */}
             <Button variant="outline" onClick={() => setSources(true)} disabled={!item}>

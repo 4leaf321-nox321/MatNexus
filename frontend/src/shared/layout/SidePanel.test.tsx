@@ -21,7 +21,7 @@ import {
   RightPanelHost,
   RightPanelProvider,
   useRightPanel,
-} from '@/shared/layout/RightPanel'
+} from '@/shared/layout/SidePanel'
 
 /** 상단 바 몫 — 패널이 등록됐을 때만 단추를 낸다. */
 function FakeHeader() {

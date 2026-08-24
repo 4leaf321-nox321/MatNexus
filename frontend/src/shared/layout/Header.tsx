@@ -12,6 +12,7 @@ import {
   LogOut,
   Moon,
   PanelLeft,
+  PanelLeftClose,
   PanelRight,
   Sun,
   User,
@@ -20,7 +21,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
-import { useRightPanel } from '@/shared/layout/RightPanel'
+import { useLeftPanel, useRightPanel } from '@/shared/layout/SidePanel'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -45,6 +46,7 @@ interface HeaderProps {
 export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
   const { theme, toggle } = useTheme()
   const rightPanel = useRightPanel()
+  const leftPanel = useLeftPanel()
   const { user, logout, reload } = useAuth()
   const [changingPassword, setChangingPassword] = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
@@ -78,6 +80,21 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
       >
         <PanelLeft className="size-4" />
       </Button>
+
+      {/* **왼쪽 영역을 여는 단추.** 사이드바 토글 바로 옆이다 — 껍데기를 여닫는
+          단추는 다 여기 있다. 화면이 그 자리를 쓸 때만 뜬다. */}
+      {leftPanel.label && (
+        <Button
+          variant={leftPanel.open ? 'secondary' : 'ghost'}
+          size="icon"
+          onClick={leftPanel.toggle}
+          aria-pressed={leftPanel.open}
+          aria-label={`${leftPanel.label} ${leftPanel.open ? '접기' : '펴기'}`}
+          title={leftPanel.label}
+        >
+          <PanelLeftClose className="size-4" />
+        </Button>
+      )}
 
       <Separator orientation="vertical" className="mx-1 h-6" />
 

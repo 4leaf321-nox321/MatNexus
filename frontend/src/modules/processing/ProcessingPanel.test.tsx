@@ -20,7 +20,7 @@ import {
   RightPanelHost,
   RightPanelProvider,
   useRightPanel,
-} from '@/shared/layout/RightPanel'
+} from '@/shared/layout/SidePanel'
 import type { ProcessingStep } from '@/modules/processing/api'
 
 const steps = vi.fn()

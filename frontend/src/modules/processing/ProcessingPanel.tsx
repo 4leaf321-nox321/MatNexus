@@ -89,7 +89,7 @@ import {
   fromDisplay,
   toDisplay,
 } from '@/shared/units'
-import { RightPanel } from '@/shared/layout/RightPanel'
+import { RightPanel } from '@/shared/layout/SidePanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
