@@ -366,6 +366,111 @@ class Test통계:
         assert td["mean"] / md["mean"] == pytest.approx(TD_FACTOR, rel=0.05)
 
 
+class Test분포:
+    """흩어짐에 **모양**을 붙인다. 위의 `Test통계` 는 얼마나 큰지를 봤다.
+
+    **여기서도 답을 안다.** `_draw` 가 정규분포로 시편을 흩뜨리므로, 정규가
+    후보에서 밀려나면 안 된다 — 다만 *1등이어야 한다* 고는 못 한다(단위 시험의
+    `test_정규_표본에서는_1등을_고를_수_없다` 에 실측을 적어 뒀다: 재료 시험의
+    좁은 CV 에서는 로그정규가 수치적으로 거의 같은 곡선이라 n=200 으로도 안
+    갈린다).
+    """
+
+    @pytest.fixture
+    def report(
+        self, client: TestClient, admin_headers: dict[str, str], loaded: dict[str, Any]
+    ) -> dict[str, Any]:
+        _process(client, admin_headers, loaded, UNIFORM_END)
+        # 부트스트랩을 낮춘다 — p 의 정밀도만 떨어지고 통계량은 그대로다.
+        response = client.get(
+            f"/api/statistics/materials/{loaded['material_id']}/distributions",
+            params={
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "scalar_key": "proof_stress",
+                "bootstrap": 99,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        return dict(response.json())
+
+    def test_넣은_모양이_후보에_남는다(
+        self, report: dict[str, Any], population: list[Truth]
+    ) -> None:
+        assert report["count"] == len([i for i in population if i.orientation == "MD"])
+        normal = next(item for item in report["candidates"] if item["key"] == "normal")
+        assert normal["status"] == "succeeded"
+        # 정규로 흩뜨렸으므로 정규가 거절당하면 안 된다.
+        assert normal["p_value"] is None or normal["p_value"] > 0.05
+
+    def test_하위_5퍼센트를_준다(self, report: dict[str, Any]) -> None:
+        """**설계가 묻는 것은 파라미터가 아니라 하위 5% 다.**"""
+        winner = next(item for item in report["candidates"] if item["key"] == report["best"])
+        quantiles = winner["quantiles"]
+        assert quantiles["p05"] < quantiles["p50"] < quantiles["p95"]
+        # 항복강도이므로 Pa 단위의 그럴듯한 값이어야 한다.
+        assert 100e6 < quantiles["p05"] < 1000e6
+
+    def test_어느_시편이_쓰였는지_되짚는다(self, report: dict[str, Any]) -> None:
+        """조용히 빼면 "왜 8개죠" 를 답할 수 없다."""
+        assert len(report["observations"]) == report["count"]
+        assert all(item["specimen_label"] for item in report["observations"])
+        assert {item["status"] for item in report["observations"]} == {"observed"}
+
+    def test_물어볼_수_있는_항목을_먼저_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str], loaded: dict[str, Any]
+    ) -> None:
+        """**눌러 보고 나서 "모자랍니다" 를 받는 것보다 미리 아는 것이 낫다.**"""
+        _process(client, admin_headers, loaded, UNIFORM_END)
+        body = client.get(
+            f"/api/statistics/materials/{loaded['material_id']}/distributable",
+            params={"test_type_key": "tensile", "orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        keys = {item["key"]: item for item in body}
+        assert "proof_stress" in keys
+        assert keys["proof_stress"]["count"] == MD_COUNT
+        assert keys["proof_stress"]["si_unit"] == "Pa"
+
+    def test_표본이_적은_묶음은_대상이_아니라고_한다(
+        self, client: TestClient, admin_headers: dict[str, str], loaded: dict[str, Any]
+    ) -> None:
+        """TD 는 3건이다. **적합 실패가 아니라 물음이 성립하지 않는 것**이고,
+        그 둘을 한 칸에 넣으면 나중에 못 가른다."""
+        _process(client, admin_headers, loaded, UNIFORM_END)
+        body = client.get(
+            f"/api/statistics/materials/{loaded['material_id']}/distributions",
+            params={
+                "test_type_key": "tensile",
+                "orientation": "TD",
+                "scalar_key": "proof_stress",
+                "bootstrap": 0,
+            },
+            headers=admin_headers,
+        ).json()
+        assert body["best"] is None
+        assert {item["status"] for item in body["candidates"]} == {"not_eligible"}
+        assert any("모자란 것이지" in note for note in body["notes"])
+
+    def test_없는_항목은_404_다(
+        self, client: TestClient, admin_headers: dict[str, str], loaded: dict[str, Any]
+    ) -> None:
+        _process(client, admin_headers, loaded, UNIFORM_END)
+        response = client.get(
+            f"/api/statistics/materials/{loaded['material_id']}/distributions",
+            params={
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "scalar_key": "없는값",
+                "bootstrap": 0,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "MNX-STATISTICS-0003"
+
+
 class Test적합:
     def test_참_Voce_파라미터를_되찾는다(
         self, client: TestClient, admin_headers: dict[str, str], loaded: dict[str, Any]

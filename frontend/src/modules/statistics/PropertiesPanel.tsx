@@ -22,6 +22,7 @@
 import { useState } from 'react'
 import { AlertTriangle, Save, Sigma } from 'lucide-react'
 
+import { DistributionPanel } from '@/modules/statistics/DistributionPanel'
 import { statisticsApi } from '@/modules/statistics/api'
 import type { ScalarStats, StatisticsGroup } from '@/modules/statistics/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
@@ -88,6 +89,7 @@ export function PropertiesPanel({ materialId }: Props) {
         {groups.map((group) => (
           <GroupCard
             key={`${group.test_type_key}-${group.orientation}`}
+            materialId={materialId}
             group={group}
             onSave={() => save(group)}
           />
@@ -97,7 +99,15 @@ export function PropertiesPanel({ materialId }: Props) {
   )
 }
 
-function GroupCard({ group, onSave }: { group: StatisticsGroup; onSave: () => void }) {
+function GroupCard({
+  group,
+  materialId,
+  onSave,
+}: {
+  group: StatisticsGroup
+  materialId: string
+  onSave: () => void
+}) {
   const enough = group.sample_count >= 2
   return (
     <div className="rounded-md border">
@@ -153,6 +163,20 @@ function GroupCard({ group, onSave }: { group: StatisticsGroup; onSave: () => vo
         )}
 
         {group.curve && <EnsembleCurve group={group} />}
+
+        {/* **흩어짐이 얼마나 큰지와 어떤 모양인지는 다른 물음이다.** 위 표가
+            앞엣것을 냈다. 설계가 묻는 하위 5% 는 모양이 정한다 — 같은 평균과
+            같은 SD 에서도 달라진다.
+
+            기본으로 접어 둔다. 부트스트랩 999회가 도는 일이라 물어보지도 않았는데
+            돌릴 일이 아니다. */}
+        {group.sample_count > 0 && (
+          <DistributionPanel
+            materialId={materialId}
+            testTypeKey={group.test_type_key}
+            orientation={group.orientation}
+          />
+        )}
       </div>
     </div>
   )

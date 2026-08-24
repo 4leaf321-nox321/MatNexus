@@ -1546,6 +1546,244 @@
         "title": "DismissRequest",
         "type": "object"
       },
+      "DistributableKeyOut": {
+        "description": "분포를 물어볼 수 있는 항목 하나.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "si_unit",
+          "count"
+        ],
+        "title": "DistributableKeyOut",
+        "type": "object"
+      },
+      "DistributionCandidateOut": {
+        "description": "분포 하나를 맞춰 본 결과. **실패한 것도 목록에 남는다.**",
+        "properties": {
+          "aicc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aicc"
+          },
+          "anderson_darling": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anderson Darling"
+          },
+          "delta_aicc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta Aicc"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "log_likelihood": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Likelihood"
+          },
+          "p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Value"
+          },
+          "parameter_labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parameter Labels",
+            "type": "array"
+          },
+          "parameter_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parameter Names",
+            "type": "array"
+          },
+          "parameters": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Parameters",
+            "type": "array"
+          },
+          "quantiles": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Quantiles",
+            "type": "object"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "status",
+          "reason",
+          "parameters",
+          "parameter_names",
+          "parameter_labels",
+          "log_likelihood",
+          "aicc",
+          "delta_aicc",
+          "anderson_darling",
+          "p_value",
+          "quantiles"
+        ],
+        "title": "DistributionCandidateOut",
+        "type": "object"
+      },
+      "DistributionReportOut": {
+        "description": "한 항목에 대한 분포 적합 한 벌.",
+        "properties": {
+          "best": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/DistributionCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ObservationOut"
+            },
+            "title": "Observations",
+            "type": "array"
+          },
+          "orientation": {
+            "title": "Orientation",
+            "type": "string"
+          },
+          "scalar_key": {
+            "title": "Scalar Key",
+            "type": "string"
+          },
+          "scalar_label": {
+            "title": "Scalar Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "test_type_key": {
+            "title": "Test Type Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_id",
+          "test_type_key",
+          "orientation",
+          "scalar_key",
+          "scalar_label",
+          "si_unit",
+          "count",
+          "observations",
+          "candidates",
+          "best",
+          "notes"
+        ],
+        "title": "DistributionReportOut",
+        "type": "object"
+      },
       "DriftOut": {
         "description": "문자열과 기준정보가 벌어진 한 칸.",
         "properties": {
@@ -3648,6 +3886,37 @@
           "created_at"
         ],
         "title": "NotificationOut",
+        "type": "object"
+      },
+      "ObservationOut": {
+        "description": "값 하나가 어떻게 됐는가. **없는 것과 못 쓰는 것을 가른다.**",
+        "properties": {
+          "specimen_label": {
+            "title": "Specimen Label",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "specimen_label",
+          "status",
+          "value"
+        ],
+        "title": "ObservationOut",
         "type": "object"
       },
       "OutlierOut": {
@@ -13611,6 +13880,155 @@
           }
         },
         "summary": "Material Statistics",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/materials/{material_id}/distributable": {
+      "get": {
+        "description": "분포를 물어볼 수 있는 항목 목록.\n\n**값이 몇 개인지 함께 준다.** 화면이 미리 \"이 항목은 5개뿐입니다\" 를 말할 수\n있어야 한다 — 눌러 보고 나서 \"모자랍니다\" 를 받으면 무엇이 문제인지 알기\n어렵다(잠그는 이유를 함께 보이는 것, 시험 종류 편집과 같은 태도다).",
+        "operationId": "distributable_api_statistics_materials__material_id__distributable_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "test_type_key",
+            "required": true,
+            "schema": {
+              "title": "Test Type Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "orientation",
+            "required": true,
+            "schema": {
+              "title": "Orientation",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DistributableKeyOut"
+                  },
+                  "title": "Response Distributable Api Statistics Materials  Material Id  Distributable Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Distributable",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/materials/{material_id}/distributions": {
+      "get": {
+        "description": "정규·로그정규·와이블을 나란히 맞춘다. **고르지 않고 견줘 준다.**\n\n경화식과 같은 태도다(ADR 0009) — 1등만 돌려주면 2등과 얼마나 갈렸는지가\n사라지고, 그 차이가 작을 때는 데이터가 정한 것이 아니라 우리가 정한 것이 된다.\n\n`bootstrap` 을 낮추면 빨라지는 대신 p 값이 거칠어진다. 0 이면 p 를 안 낸다 —\n**화면을 넘기며 훑을 때** 쓰라고 열어 둔다. 기본값은 999 다.",
+        "operationId": "distribution_report_api_statistics_materials__material_id__distributions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "test_type_key",
+            "required": true,
+            "schema": {
+              "title": "Test Type Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "orientation",
+            "required": true,
+            "schema": {
+              "title": "Orientation",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scalar_key",
+            "required": true,
+            "schema": {
+              "title": "Scalar Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bootstrap",
+            "required": false,
+            "schema": {
+              "default": 999,
+              "maximum": 2000,
+              "minimum": 0,
+              "title": "Bootstrap",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DistributionReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Distribution Report",
         "tags": [
           "statistics"
         ]

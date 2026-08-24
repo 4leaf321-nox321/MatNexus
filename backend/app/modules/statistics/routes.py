@@ -22,17 +22,21 @@ from app.modules.statistics import services
 from app.modules.statistics.models import EnsembleResult
 from app.modules.statistics.schemas import (
     CurveStatsOut,
+    DistributableKeyOut,
+    DistributionCandidateOut,
+    DistributionReportOut,
     EnsembleResultOut,
     EnsembleSaveRequest,
     GroupOut,
     MaterialStatisticsOut,
+    ObservationOut,
     OutlierOut,
     ScalarStatsOut,
 )
 from app.modules.tests.models import TestType
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
-from matcore import statistics
+from matcore import distributions, statistics
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
@@ -220,3 +224,124 @@ def list_ensembles(
         )
         for item in items
     ]
+
+
+# --- 분포 ------------------------------------------------------------------
+#
+# **흩어짐이 얼마나 큰지와 어떤 모양인지는 다른 물음이다.** 위쪽이 평균·SD·CV 를
+# 내고 여기가 모양을 묻는다. 설계가 실제로 알고 싶은 것은 대개 "하위 5% 가
+# 얼마인가" 인데, 그 답은 같은 평균·같은 SD 에서도 모양에 따라 달라진다.
+
+
+def _find_group(
+    db: Session, user: User, material_id: uuid.UUID, test_type_key: str, orientation: str
+) -> tuple[object, services.Group]:
+    material, groups = services.groups_for_material(db, user, material_id)
+    group = next(
+        (
+            item
+            for item in groups
+            if item.test_type.key == test_type_key and item.orientation == orientation
+        ),
+        None,
+    )
+    if group is None:
+        raise NotFound("MNX-STATISTICS-0001", "그 묶음을 찾을 수 없습니다.")
+    return material, group
+
+
+@router.get("/materials/{material_id}/distributable", response_model=list[DistributableKeyOut])
+def distributable(
+    material_id: uuid.UUID,
+    test_type_key: str = Query(...),
+    orientation: str = Query(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[DistributableKeyOut]:
+    """분포를 물어볼 수 있는 항목 목록.
+
+    **값이 몇 개인지 함께 준다.** 화면이 미리 "이 항목은 5개뿐입니다" 를 말할 수
+    있어야 한다 — 눌러 보고 나서 "모자랍니다" 를 받으면 무엇이 문제인지 알기
+    어렵다(잠그는 이유를 함께 보이는 것, 시험 종류 편집과 같은 태도다).
+    """
+    _material, group = _find_group(db, user, material_id, test_type_key, orientation)
+    out: list[DistributableKeyOut] = []
+    for key in services.distributable_keys(group):
+        values, _labels, label, unit = services.scalar_values(group, key)
+        out.append(
+            DistributableKeyOut(
+                key=key,
+                label=label,
+                si_unit=unit,
+                count=sum(1 for value in values if value is not None),
+            )
+        )
+    return out
+
+
+@router.get("/materials/{material_id}/distributions", response_model=DistributionReportOut)
+def distribution_report(
+    material_id: uuid.UUID,
+    test_type_key: str = Query(...),
+    orientation: str = Query(...),
+    scalar_key: str = Query(...),
+    bootstrap: int = Query(default=distributions.BOOTSTRAP, ge=0, le=2000),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DistributionReportOut:
+    """정규·로그정규·와이블을 나란히 맞춘다. **고르지 않고 견줘 준다.**
+
+    경화식과 같은 태도다(ADR 0009) — 1등만 돌려주면 2등과 얼마나 갈렸는지가
+    사라지고, 그 차이가 작을 때는 데이터가 정한 것이 아니라 우리가 정한 것이 된다.
+
+    `bootstrap` 을 낮추면 빨라지는 대신 p 값이 거칠어진다. 0 이면 p 를 안 낸다 —
+    **화면을 넘기며 훑을 때** 쓰라고 열어 둔다. 기본값은 999 다.
+    """
+    _material, group = _find_group(db, user, material_id, test_type_key, orientation)
+    values, labels, label, unit = services.scalar_values(group, scalar_key)
+    if not any(value is not None for value in values):
+        raise NotFound(
+            "MNX-STATISTICS-0003",
+            f"'{scalar_key}' 값을 가진 시험이 이 묶음에 없습니다.",
+        )
+
+    try:
+        report = distributions.fit_all(values, bootstrap=bootstrap)
+    except distributions.DistributionError as caught:
+        raise AppError("MNX-STATISTICS-0004", str(caught), status=422) from caught
+
+    return DistributionReportOut(
+        material_id=material_id,
+        test_type_key=test_type_key,
+        orientation=orientation,
+        scalar_key=scalar_key,
+        scalar_label=label,
+        si_unit=unit,
+        count=report.count,
+        observations=[
+            ObservationOut(
+                specimen_label=labels[item.index], status=item.status, value=item.value
+            )
+            for item in report.observations
+        ],
+        candidates=[
+            DistributionCandidateOut(
+                key=item.key,
+                label=item.label,
+                status=item.status,
+                reason=item.reason,
+                parameters=list(item.parameters),
+                parameter_names=list(item.parameter_names),
+                parameter_labels=list(item.parameter_labels),
+                log_likelihood=item.log_likelihood,
+                aicc=item.aicc,
+                delta_aicc=item.delta_aicc,
+                anderson_darling=item.anderson_darling,
+                p_value=item.p_value,
+                quantiles=item.quantiles,
+            )
+            for item in report.candidates
+        ],
+        best=report.best,
+        notes=list(report.notes),
+    )

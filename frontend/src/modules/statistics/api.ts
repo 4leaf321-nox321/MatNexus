@@ -15,6 +15,9 @@ export type ScalarStats = components['schemas']['ScalarStatsOut']
 export type CurveStats = components['schemas']['CurveStatsOut']
 export type Outlier = components['schemas']['OutlierOut']
 export type EnsembleResult = components['schemas']['EnsembleResultOut']
+export type DistributionReport = components['schemas']['DistributionReportOut']
+export type DistributionCandidate = components['schemas']['DistributionCandidateOut']
+export type DistributableKey = components['schemas']['DistributableKeyOut']
 
 export const statisticsApi = {
   forMaterial: (materialId: string, threshold?: number) =>
@@ -28,4 +31,36 @@ export const statisticsApi = {
 
   ensembles: (materialId: string) =>
     api.get<EnsembleResult[]>(`/statistics/ensembles?material_id=${materialId}`),
+
+  /**
+   * 분포를 물어볼 수 있는 항목. **값이 몇 개인지 함께 준다** — 화면이 미리
+   * "이 항목은 5개뿐입니다" 를 말할 수 있어야 한다.
+   */
+  distributable: (materialId: string, testTypeKey: string, orientation: string) =>
+    api.get<DistributableKey[]>(
+      `/statistics/materials/${materialId}/distributable` +
+        `?test_type_key=${encodeURIComponent(testTypeKey)}` +
+        `&orientation=${encodeURIComponent(orientation)}`
+    ),
+
+  /**
+   * 정규·로그정규·와이블을 나란히 맞춘다. **고르지 않고 견줘 준다.**
+   *
+   * `bootstrap` 을 낮추면 빨라지는 대신 p 값이 거칠어진다. 항목을 넘기며 훑을
+   * 때 쓰라고 열어 뒀다 — 서버 기본값은 999 다.
+   */
+  distributions: (
+    materialId: string,
+    testTypeKey: string,
+    orientation: string,
+    scalarKey: string,
+    bootstrap?: number
+  ) =>
+    api.get<DistributionReport>(
+      `/statistics/materials/${materialId}/distributions` +
+        `?test_type_key=${encodeURIComponent(testTypeKey)}` +
+        `&orientation=${encodeURIComponent(orientation)}` +
+        `&scalar_key=${encodeURIComponent(scalarKey)}` +
+        (bootstrap === undefined ? '' : `&bootstrap=${bootstrap}`)
+    ),
 }

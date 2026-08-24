@@ -1364,6 +1364,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statistics/materials/{material_id}/distributable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Distributable
+         * @description 분포를 물어볼 수 있는 항목 목록.
+         *
+         *     **값이 몇 개인지 함께 준다.** 화면이 미리 "이 항목은 5개뿐입니다" 를 말할 수
+         *     있어야 한다 — 눌러 보고 나서 "모자랍니다" 를 받으면 무엇이 문제인지 알기
+         *     어렵다(잠그는 이유를 함께 보이는 것, 시험 종류 편집과 같은 태도다).
+         */
+        get: operations["distributable_api_statistics_materials__material_id__distributable_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/materials/{material_id}/distributions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Distribution Report
+         * @description 정규·로그정규·와이블을 나란히 맞춘다. **고르지 않고 견줘 준다.**
+         *
+         *     경화식과 같은 태도다(ADR 0009) — 1등만 돌려주면 2등과 얼마나 갈렸는지가
+         *     사라지고, 그 차이가 작을 때는 데이터가 정한 것이 아니라 우리가 정한 것이 된다.
+         *
+         *     `bootstrap` 을 낮추면 빨라지는 대신 p 값이 거칠어진다. 0 이면 p 를 안 낸다 —
+         *     **화면을 넘기며 훑을 때** 쓰라고 열어 둔다. 기본값은 999 다.
+         */
+        get: operations["distribution_report_api_statistics_materials__material_id__distributions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs": {
         parameters: {
             query?: never;
@@ -3179,6 +3229,85 @@ export interface components {
             second_id: string;
         };
         /**
+         * DistributableKeyOut
+         * @description 분포를 물어볼 수 있는 항목 하나.
+         */
+        DistributableKeyOut: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+        };
+        /**
+         * DistributionCandidateOut
+         * @description 분포 하나를 맞춰 본 결과. **실패한 것도 목록에 남는다.**
+         */
+        DistributionCandidateOut: {
+            /** Aicc */
+            aicc: number | null;
+            /** Anderson Darling */
+            anderson_darling: number | null;
+            /** Delta Aicc */
+            delta_aicc: number | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Log Likelihood */
+            log_likelihood: number | null;
+            /** P Value */
+            p_value: number | null;
+            /** Parameter Labels */
+            parameter_labels: string[];
+            /** Parameter Names */
+            parameter_names: string[];
+            /** Parameters */
+            parameters: number[];
+            /** Quantiles */
+            quantiles: {
+                [key: string]: number;
+            };
+            /** Reason */
+            reason: string | null;
+            /** Status */
+            status: string;
+        };
+        /**
+         * DistributionReportOut
+         * @description 한 항목에 대한 분포 적합 한 벌.
+         */
+        DistributionReportOut: {
+            /** Best */
+            best: string | null;
+            /** Candidates */
+            candidates: components["schemas"]["DistributionCandidateOut"][];
+            /** Count */
+            count: number;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Notes */
+            notes: string[];
+            /** Observations */
+            observations: components["schemas"]["ObservationOut"][];
+            /** Orientation */
+            orientation: string;
+            /** Scalar Key */
+            scalar_key: string;
+            /** Scalar Label */
+            scalar_label: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /**
          * DriftOut
          * @description 문자열과 기준정보가 벌어진 한 칸.
          */
@@ -3952,6 +4081,18 @@ export interface components {
             read_at: string | null;
             /** Title */
             title: string;
+        };
+        /**
+         * ObservationOut
+         * @description 값 하나가 어떻게 됐는가. **없는 것과 못 쓰는 것을 가른다.**
+         */
+        ObservationOut: {
+            /** Specimen Label */
+            specimen_label: string;
+            /** Status */
+            status: string;
+            /** Value */
+            value: number | null;
         };
         /**
          * OutlierOut
@@ -8818,6 +8959,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaterialStatisticsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    distributable_api_statistics_materials__material_id__distributable_get: {
+        parameters: {
+            query: {
+                test_type_key: string;
+                orientation: string;
+            };
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DistributableKeyOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    distribution_report_api_statistics_materials__material_id__distributions_get: {
+        parameters: {
+            query: {
+                test_type_key: string;
+                orientation: string;
+                scalar_key: string;
+                bootstrap?: number;
+            };
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DistributionReportOut"];
                 };
             };
             /** @description Validation Error */

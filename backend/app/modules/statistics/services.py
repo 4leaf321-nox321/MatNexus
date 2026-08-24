@@ -399,3 +399,49 @@ def default_axes(db: Session, group: Group) -> tuple[str, str]:
     """무엇을 x·y 로 볼지. 후보 중 첫 번째다."""
     found = axis_candidates(db, group)
     return found[0] if found else ("", "")
+
+
+def scalar_values(group: Group, key: str) -> tuple[list[float | None], list[str], str, str]:
+    """한 항목의 **시편별 값 그대로.** 통계를 내지 않는다.
+
+    `scalar_table` 은 평균·SD 로 접어 준다. 분포 적합은 그 반대가 필요하다 —
+    접기 전의 값 n 개가 있어야 모양을 물을 수 있다.
+
+    **없는 값을 건너뛰지 않고 `None` 으로 남긴다.** 시편 12개 중 3개에 그 항목이
+    없으면, 조용히 9개만 넘기면 나중에 "왜 9개죠" 를 답할 수 없다. 어느 시편이
+    비었는지가 함께 나가야 한다.
+    """
+    values: list[float | None] = []
+    labels: list[str] = []
+    label = key
+    unit = "1"
+    for member in group.members:
+        found: float | None = None
+        for scalar in member.result.scalars:
+            if str(scalar.get("key", "")) != key:
+                continue
+            label = str(scalar.get("label") or key)
+            unit = str(scalar.get("si_unit") or "1")
+            raw = scalar.get("value")
+            found = float(raw) if isinstance(raw, (int, float)) else None
+            break
+        values.append(found)
+        labels.append(
+            member.specimen.record_name or member.run.source_filename or str(member.run.id)
+        )
+    return values, labels, label, unit
+
+
+def distributable_keys(group: Group) -> list[str]:
+    """분포를 물어볼 수 있는 항목. **`scalar_table` 과 같은 잣대를 쓴다.**
+
+    다른 잣대를 쓰면 통계 표에는 있는데 분포 목록에는 없는 항목이 생기고, 그것은
+    고장으로 보인다.
+    """
+    keys: list[str] = []
+    for member in group.members:
+        for scalar in member.result.scalars:
+            key = str(scalar.get("key", ""))
+            if key and _is_averageable(scalar) and key not in keys:
+                keys.append(key)
+    return keys
