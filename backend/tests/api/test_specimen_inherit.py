@@ -34,9 +34,9 @@ from app.modules.vocabulary.definitions import (
     ensure_builtin_vocabularies,
 )
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
-from app.modules.vocabulary.normalize import clean, compare_key
 from app.modules.workspaces.models import Workspace
 from app.shared import specimen_size
+from app.shared.text import clean, compare_key
 
 
 @pytest.fixture

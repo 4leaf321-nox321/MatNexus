@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -538,3 +539,205 @@ class Test시편규격:
         assert "specimen_standard" not in keys
         # 시험할 때 정해지는 것들은 그대로 남는다.
         assert {"temperature", "speed_elastic", "sensor_type"} <= keys
+
+
+class Test선언물성:
+    """**시험이 주지 않는 물성을 사람이 적는다.**
+
+    탄성계수는 처리 결과에서만 왔고 열팽창계수·비열·열전도도는 자리가 아예
+    없었다 — 그런데 인장시험이 안 주는 값들이다. 시험을 안 한 재료가 대부분인데
+    그 재료로는 해석용 카드를 만들 수 없었다.
+
+    항목 목록은 **기준정보가 정한다**(D7). 열해석을 안 하는 부서에 비열 칸이 뜰
+    이유가 없고, 코드에 박으면 필요한 항목 하나를 넣으려고 배포를 기다려야 한다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _axis(self, db: Session) -> None:
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        db.commit()
+
+    @pytest.fixture
+    def material(self, client: TestClient, admin_headers: dict[str, str]) -> dict[str, Any]:
+        made = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "DECL",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        return dict(made.json())
+
+    def test_넣을_수_있는_항목을_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다."""
+        body = client.get("/api/materials/property-items", headers=admin_headers).json()
+        by_item = {row["item"]: row for row in body}
+        assert by_item["탄성계수"]["dimension"] == "stress"
+        assert by_item["탄성계수"]["si_unit"] == "Pa"
+        assert by_item["탄성계수"]["symbol"] == "E"
+        assert by_item["비열"]["si_unit"] == "J/(kg.K)"
+
+    def test_적은_단위로_넣고_SI_로_담는다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**시험 채널과 같은 규칙이다.** `GPa` 로 적어도 저장은 `Pa` 다."""
+        saved = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "value": 206,
+                        "input_unit": "GPa",
+                        "source": "literature",
+                        "reference": "KS D 3512 표 3",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        row = saved.json()["declared_properties"][0]
+        assert row["value_si"] == pytest.approx(206e9)
+        # **적은 단위를 그대로 돌려준다.** 2.06e11 로 보이면 자기가 적은 값인지
+        # 알기 어렵다.
+        assert row["input_unit"] == "GPa"
+        assert row["reference"] == "KS D 3512 표 3"
+
+    def test_차원이_안_맞으면_막는다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**이것이 이 기능의 절반이다.**
+
+        비열 자리에 열전도도를 넣어도 숫자는 그럴듯하다 — 값은 멀쩡한데 뜻이
+        다르다. ADR 0013 이 *"밀도 자리에 온도를 넣어도 아무도 모른다"* 고
+        적어 둔 구멍이 이 축에서는 막혀 있다.
+        """
+        refused = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "비열",
+                        "value": 45,
+                        "input_unit": "W/(m.K)",
+                        "source": "literature",
+                        "reference": "ASM Handbook",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        message = refused.json()["error"]["message"]
+        assert "specific_heat" in message and "thermal_conductivity" in message
+
+    def test_출처_없이는_못_넣는다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**카드가 자기 근거를 들고 있어야 한다**(ADR 0009·0012). 값만 있고
+        어디서 왔는지 모르면 그 값으로 돌린 해석의 근거를 되짚을 수 없다."""
+        for missing in ("source", "reference"):
+            row = {
+                "item": "탄성계수",
+                "value": 206,
+                "input_unit": "GPa",
+                "source": "literature",
+                "reference": "KS D 3512",
+            }
+            row.pop(missing)
+            refused = client.patch(
+                f"/api/materials/{material['id']}",
+                json={"declared_properties": [row]},
+                headers=admin_headers,
+            )
+            assert refused.status_code == 422, missing
+
+    def test_등록_안_된_항목은_거절하고_있는_것을_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """거절만 하면 사람은 무엇을 넣을 수 있는지 모른다."""
+        refused = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "항복강도",
+                        "value": 295,
+                        "input_unit": "MPa",
+                        "source": "datasheet",
+                        "reference": "MTC-2024-0812",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        message = refused.json()["error"]["message"]
+        assert "있는 것:" in message and "탄성계수" in message
+
+    def test_같은_항목을_두_번_못_넣는다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """두 값이 있으면 **카드가 어느 것을 쓸지 정할 수 없다.** 그 판단을
+        여기서 안 하면 나중에 조용히 하나가 이긴다."""
+        row = {
+            "item": "탄성계수",
+            "value": 206,
+            "input_unit": "GPa",
+            "source": "literature",
+            "reference": "A",
+        }
+        refused = client.patch(
+            f"/api/materials/{material['id']}",
+            json={"declared_properties": [row, {**row, "value": 200, "reference": "B"}]},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        assert "두 번" in refused.json()["error"]["message"]
+
+    def test_항목_이름으로_정렬해_담는다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """넣은 순서대로 두면 **같은 내용의 재료가 서로 다른 순서를 갖고**,
+        비교·변경 이력에서 바뀐 것처럼 보인다."""
+        saved = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "열팽창계수",
+                        "value": 1.17e-5,
+                        "input_unit": "1/K",
+                        "source": "standard",
+                        "reference": "KS",
+                    },
+                    {
+                        "item": "탄성계수",
+                        "value": 206,
+                        "input_unit": "GPa",
+                        "source": "literature",
+                        "reference": "ASM",
+                    },
+                ]
+            },
+            headers=admin_headers,
+        ).json()
+        assert [row["item"] for row in saved["declared_properties"]] == [
+            "열팽창계수",
+            "탄성계수",
+        ]

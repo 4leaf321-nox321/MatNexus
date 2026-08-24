@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     Date,
@@ -178,6 +179,35 @@ class Material(Base):
 
     전에는 시료에 있었다. 로트 5개에 0.3 을 다섯 번 적어야 했고, 그중 하나를
     0.28 로 고치면 같은 재료가 두 값을 갖게 됐다."""
+
+    declared_properties: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """**시험이 주지 않는 물성.** 사람이 문헌·규격·밀시트를 보고 적는다.
+
+    탄성계수는 처리 결과에서만 왔고 열팽창계수·비열·열전도도는 자리가 아예
+    없었다 — 그런데 그것들은 인장시험이 안 준다. 시험을 안 한 재료가 대부분인데
+    그 재료로는 해석용 카드를 만들 수 없었다.
+
+    한 줄의 모양:
+
+        item        물성 항목(기준정보 `property_item`)의 값. `"탄성계수"`
+        value_si    **언제나 정본 SI.** 사람이 GPa 로 적어도 저장은 Pa 다
+        input_unit  사람이 적은 단위. 화면이 그대로 되돌려 보여 준다
+        source      `literature` · `datasheet` · `standard` · `estimate`
+        reference   **어느 문서인가.** "KS D 3512 표 3", "MTC-2024-0812"
+        temperature_k  잰 온도. 비면 상온으로 본다
+
+    **출처가 필수다.** 이 저장소는 카드가 자기 근거를 들고 있어야 한다는 원칙
+    위에 서 있다(ADR 0009·0012). 값만 있고 어디서 왔는지 모르면, 그 값으로 돌린
+    해석의 근거를 나중에 되짚을 수 없다.
+
+    **왜 컬럼이 아니라 JSONB 인가:** 항목 목록을 부서가 정한다(D7). 컬럼으로
+    두면 물성 하나를 더할 때마다 마이그레이션이고, 재료 표가 물성 창고가 된다.
+
+    **왜 재료인가:** Grade 가 같으면 같은 값이다 — 푸아송비를 시료에서 재료로
+    옮긴 것과 같은 판단이다. 롯마다 다른 밀시트 값(항복강도 등)은 시료 층의
+    일이고 아직 안 만들었다."""
 
     input_units: Mapped[dict[str, str]] = mapped_column(
         JSONB, default=dict, server_default="{}"

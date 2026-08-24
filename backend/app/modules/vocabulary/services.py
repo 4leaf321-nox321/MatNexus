@@ -27,9 +27,9 @@ from app.modules.vocabulary.models import (
     VocabularyMerge,
     VocabularyTerm,
 )
-from app.modules.vocabulary.normalize import clean, compare_key
 from app.shared import vocabulary_hooks
 from app.shared.errors import AppError, NotFound
+from app.shared.text import clean, compare_key
 from matcore import units as unit_kit
 
 logger = logging.getLogger(__name__)

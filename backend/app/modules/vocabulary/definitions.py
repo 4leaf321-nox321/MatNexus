@@ -16,6 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import Vocabulary
+from matcore.units import SI_UNITS
+
+#: 물성 항목이 고를 수 있는 차원. `units` 가 아는 것만 — 모르는 차원을 적으면
+#: 단위 검사가 못 돈다.
+DIMENSIONS = tuple(sorted(SI_UNITS))
 
 #: (slug, label, entry_policy, sort_order)
 #:
@@ -58,6 +63,14 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     # **용도는 재료의 성질이다**(전에는 시료에 있었다). "도어 이너용 재료가 뭐가
     # 있나" 가 집계 질문이 되려면 자유 문자열이면 안 된다 — `도어`/`Door`/`도어 `
     # 가 갈리면 그 질문에 답이 셋 나온다.
+    # **시험이 주지 않는 물성.** 탄성계수·열팽창계수·비열은 인장시험이 안 준다 —
+    # 핸드북·규격·밀시트에서 온다. 어떤 항목을 받을지는 **부서가 정한다**(D7):
+    # 열해석을 안 하는 부서에 비열 칸이 뜰 이유가 없고, 반대로 우리가 목록을
+    # 코드에 박으면 필요한 항목을 넣으려고 배포를 기다려야 한다.
+    #
+    # 값마다 **차원**을 든다. 그래야 「비열 자리에 열전도도」가 막힌다 —
+    # ADR 0013 이 "밀도 자리에 온도를 넣어도 아무도 모른다" 고 적어 둔 구멍이다.
+    ("property_item", "물성 항목", "open", 55, None, None),
     ("product", "적용 제품", "open", 60, None, None),
     # **부위를 제품 아래에 두지 않는다.** 계층은 값 하나에 부모 하나인데(`grade`
     # 의 부모가 `category` 하나이듯), `이너 패널` 은 도어에도 후드에도 쓰인다.
@@ -120,6 +133,25 @@ BUILTIN_AXIS_FIELDS: dict[str, list[dict[str, Any]]] = {
             help="규격의 판 연도. 판이 다르면 치수가 다릅니다 — "
             "`-22`, `-24`, `-17(2025)` 처럼 규격서 표기 그대로 적으세요.",
         )
+    ],
+    # **물성 항목이면 무엇이든 차원을 갖는다.** 단위가 아니라 차원인 이유:
+    # 저장은 언제나 정본 SI 이고 사람이 보는 단위는 화면이 정한다(시험 채널과
+    # 같은 규칙). `GPa` 로 적어도 저장은 `Pa` 다.
+    "property_item": [
+        _field(
+            "dimension",
+            "차원",
+            kind="choice",
+            choices=sorted(DIMENSIONS),
+            help="이 물성이 무엇의 차원인가. 값을 넣을 때 단위가 이것으로 검사됩니다 — "
+            "「비열 자리에 열전도도」 같은 것이 여기서 막힙니다.",
+        ),
+        _field(
+            "symbol",
+            "기호",
+            kind="text",
+            help="덱과 화면에 쓰는 기호. `E`·`alpha`·`Cp` 처럼 적으세요.",
+        ),
     ],
 }
 
@@ -198,6 +230,63 @@ BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
 ]
 
 
+#: 기본 물성 항목. **최소로 둔다** — 나머지는 부서가 필요할 때 넣는다(D7).
+#:
+#: 여기 있는 것들의 공통점: **시험이 안 주는데 해석에는 꼭 필요하다.** 탄성계수는
+#: 인장시험이 주기도 하지만 밀시트·핸드북 값을 쓰는 일이 더 흔하고(시험을 안 한
+#: 재료가 대부분이다), 열물성 셋은 인장시험이 아예 안 준다.
+#:
+#: 밀시트(EN 10204 3.1)가 주는 것은 항복강도·인장강도·연신율·경도다 — 그것들은
+#: 이미 처리 결과에 있으므로 여기 안 넣는다. **롯마다 다른 밀시트 값**은 시료
+#: 층의 일이라 다음 단계다.
+BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str]] = [
+    ("탄성계수", "stress", "E"),
+    ("전단탄성계수", "stress", "G"),
+    ("열팽창계수", "inverse_temperature", "alpha"),
+    ("비열", "specific_heat", "Cp"),
+    ("열전도도", "thermal_conductivity", "k"),
+]
+
+
+def ensure_builtin_property_items(db: Session) -> list[str]:
+    """기본 물성 항목을 보장한다. **이미 있는 것은 손대지 않는다.**
+
+    부서가 이름을 고치거나 지웠을 수 있고, 배포가 그것을 되돌리면 안 된다.
+    """
+    from app.modules.vocabulary.models import VocabularyTerm
+    from app.shared.text import clean, compare_key
+
+    axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+    if axis is None:
+        return []
+
+    created: list[str] = []
+    for value, dimension, symbol in BUILTIN_PROPERTY_ITEMS:
+        cleaned = clean(value)
+        if cleaned is None:
+            continue
+        key = compare_key(cleaned)
+        found = db.scalar(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == axis.id, VocabularyTerm.normalized == key
+            )
+        )
+        if found is not None:
+            continue
+        db.add(
+            VocabularyTerm(
+                vocabulary_id=axis.id,
+                value=cleaned,
+                normalized=key,
+                attributes={"dimension": dimension, "symbol": symbol},
+            )
+        )
+        created.append(cleaned)
+    if created:
+        db.flush()
+    return created
+
+
 def ensure_builtin_axis_fields(db: Session) -> list[str]:
     """축의 칸을 보장한다. 채운 축의 slug 를 돌려준다.
 
@@ -223,7 +312,7 @@ def ensure_builtin_specimen_categories(db: Session) -> list[str]:
     배포가 그것을 되돌리면 안 된다(시험 종류·축과 같은 판단).
     """
     from app.modules.vocabulary.models import SpecimenField, VocabularyTerm
-    from app.modules.vocabulary.normalize import clean, compare_key
+    from app.shared.text import clean, compare_key
 
     axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "specimen_category"))
     if axis is None:

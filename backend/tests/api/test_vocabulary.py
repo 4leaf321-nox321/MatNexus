@@ -33,8 +33,8 @@ from app.modules.vocabulary.models import (
     VocabularyDriftCheck,
     VocabularyTerm,
 )
-from app.modules.vocabulary.normalize import clean, compare_key
 from app.modules.vocabulary.schemas import BULK_MAX
+from app.shared.text import clean, compare_key
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 

@@ -13,7 +13,7 @@ import logging
 from alembic import op
 import sqlalchemy as sa
 
-from app.modules.vocabulary.normalize import clean, compare_key
+from app.shared.text import clean, compare_key
 
 logger = logging.getLogger("alembic.runtime.migration")
 

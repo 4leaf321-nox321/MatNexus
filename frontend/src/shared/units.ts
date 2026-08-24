@@ -193,6 +193,10 @@ export const SI_BY_DIMENSION: Record<string, string> = {
   frequency: 'Hz',
   angular_frequency: 'rad/s',
   inverse_temperature: '1/K',
+  // **해석용 열물성.** 시험이 안 주고 문헌·규격에서 온다 — 선언 물성으로
+  // 들어온다(ADR 0016). 차원이 여기 있어야 화면이 단위 칸을 그릴 수 있다.
+  specific_heat: 'J/(kg.K)',
+  thermal_conductivity: 'W/(m.K)',
   compliance: '1/Pa',
   mass: 'kg',
   density: 'kg/m3',
@@ -214,6 +218,10 @@ export const UNITS_BY_DIMENSION: Record<string, string[]> = {
   // DMA 가 각주파수를 준다. 이것이 빠져 있어서 화면에서 DMA 종류를 만들 수 없었다.
   angular_frequency: ['rad/s'],
   inverse_temperature: ['1/K'],
+  // 실무 표기를 함께 받는다. `J/kgK` 는 규격서에서, `kJ/(kg.K)` 는 폴리머
+  // 자료에서 흔하다.
+  specific_heat: ['J/(kg.K)', 'J/kgK', 'kJ/(kg.K)'],
+  thermal_conductivity: ['W/(m.K)', 'W/mK'],
   compliance: ['1/Pa', '1/MPa'],
   mass: ['kg', 'g', 'tonne'],
   density: ['kg/m3', 'g/cm3', 'tonne/mm3'],
@@ -239,6 +247,8 @@ export const DIMENSION_LABELS: Record<string, string> = {
   frequency: '주파수',
   angular_frequency: '각주파수',
   inverse_temperature: '온도 역수',
+  specific_heat: '비열',
+  thermal_conductivity: '열전도도',
   compliance: '컴플라이언스',
   mass: '질량',
   density: '밀도',

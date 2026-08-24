@@ -1385,6 +1385,124 @@
         "title": "CurveStatsOut",
         "type": "object"
       },
+      "DeclaredPropertyIn": {
+        "description": "넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다.",
+        "properties": {
+          "input_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Unit"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "value",
+          "source",
+          "reference"
+        ],
+        "title": "DeclaredPropertyIn",
+        "type": "object"
+      },
+      "DeclaredPropertyOut": {
+        "description": "시험이 주지 않아 사람이 적은 물성 한 줄.",
+        "properties": {
+          "input_unit": {
+            "title": "Input Unit",
+            "type": "string"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
+          },
+          "value_si": {
+            "title": "Value Si",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "value_si",
+          "input_unit",
+          "source",
+          "reference"
+        ],
+        "title": "DeclaredPropertyOut",
+        "type": "object"
+      },
       "DeleteAccountRequest": {
         "properties": {
           "transfer_to_id": {
@@ -3189,6 +3307,14 @@
             "title": "Created At",
             "type": "string"
           },
+          "declared_properties": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DeclaredPropertyOut"
+            },
+            "title": "Declared Properties",
+            "type": "array"
+          },
           "density": {
             "anyOf": [
               {
@@ -3421,6 +3547,20 @@
               }
             ],
             "title": "Category"
+          },
+          "declared_properties": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DeclaredPropertyIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Properties"
           },
           "density": {
             "anyOf": [
@@ -5193,6 +5333,42 @@
           }
         },
         "title": "PropertyCardUpdateRequest",
+        "type": "object"
+      },
+      "PropertyItemOut": {
+        "description": "넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다.",
+        "properties": {
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "item",
+          "dimension",
+          "si_unit",
+          "symbol"
+        ],
+        "title": "PropertyItemOut",
         "type": "object"
       },
       "PropertySourcesOut": {
@@ -12168,6 +12344,32 @@
           }
         },
         "summary": "Preview Name",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/property-items": {
+      "get": {
+        "description": "넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7).\n\n화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다 — 항목을 코드에\n박으면 부서가 필요한 물성 하나를 넣으려고 배포를 기다려야 한다.\n\n감춘 항목은 안 나온다. **이미 넣어 둔 값은 그대로 남는다** — 감추는 것은\n\"앞으로 새로 고르지 말라\" 는 뜻이지 과거를 지우는 것이 아니다.",
+        "operationId": "property_items_api_materials_property_items_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PropertyItemOut"
+                  },
+                  "title": "Response Property Items Api Materials Property Items Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Property Items",
         "tags": [
           "materials"
         ]

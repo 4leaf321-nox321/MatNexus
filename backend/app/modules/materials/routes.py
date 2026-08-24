@@ -18,17 +18,19 @@ from sqlalchemy.orm import Session, aliased
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.materials import services
+from app.modules.materials import declared, services
 from app.modules.materials.models import ORIENTATIONS, Material, Sample, Specimen
 from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
     ClassificationOut,
+    DeclaredPropertyOut,
     MaterialCreateRequest,
     MaterialOut,
     MaterialUpdateRequest,
     NamePreviewOut,
     NamePreviewRequest,
+    PropertyItemOut,
     PropertySourcesOut,
     SampleCreateRequest,
     SampleOut,
@@ -88,6 +90,9 @@ def _material_out(
         density=services.from_si(material.density_si, density_unit),
         density_unit=density_unit,
         poisson_ratio=material.poisson_ratio,
+        declared_properties=[
+            DeclaredPropertyOut(**row) for row in (material.declared_properties or [])
+        ],
         note=material.note,
         legacy_id=material.legacy_id,
         sample_count=sample_count,
@@ -293,6 +298,33 @@ def _search_terms(db: Session, q: str | None) -> list[Any]:
             branches += [column.in_(ids) for _, column in _SEARCH_AXES]
         conditions.append(or_(*branches))
     return conditions
+
+
+# **고정 경로는 `/{material_id}` 보다 위에 둔다.** 아래 두면 FastAPI 가
+# `property-items` 를 재료 id 로 읽고 422 를 낸다 — `classifications` 가 여기
+# 있는 것과 같은 이유다.
+@router.get("/property-items", response_model=list[PropertyItemOut])
+def property_items(
+    _: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[PropertyItemOut]:
+    """넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7).
+
+    화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다 — 항목을 코드에
+    박으면 부서가 필요한 물성 하나를 넣으려고 배포를 기다려야 한다.
+
+    감춘 항목은 안 나온다. **이미 넣어 둔 값은 그대로 남는다** — 감추는 것은
+    "앞으로 새로 고르지 말라" 는 뜻이지 과거를 지우는 것이 아니다.
+    """
+    return [
+        PropertyItemOut(
+            item=name,
+            dimension=spec["dimension"],
+            si_unit=spec["si_unit"],
+            symbol=spec["symbol"],
+        )
+        for name, spec in sorted(declared.catalog(db).items())
+    ]
 
 
 @router.get("/classifications", response_model=list[ClassificationOut])
@@ -656,6 +688,11 @@ def update_material(
     ):
         if field in data:
             setattr(material, field, data[field])
+
+    if "declared_properties" in data:
+        # **통째로 갈아 끼운다.** 검사·단위 변환은 `declared.check` 가 한다 —
+        # 차원이 안 맞으면 거기서 막힌다(비열 자리에 열전도도 같은 것).
+        material.declared_properties = declared.check(db, data["declared_properties"] or [])
 
     if "density" in data or "density_unit" in data:
         unit = data.get("density_unit") or material.input_units.get("density", DENSITY_UNIT)

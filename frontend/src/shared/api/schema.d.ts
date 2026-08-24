@@ -795,6 +795,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/property-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Property Items
+         * @description 넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7).
+         *
+         *     화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다 — 항목을 코드에
+         *     박으면 부서가 필요한 물성 하나를 넣으려고 배포를 기다려야 한다.
+         *
+         *     감춘 항목은 안 나온다. **이미 넣어 둔 값은 그대로 남는다** — 감추는 것은
+         *     "앞으로 새로 고르지 말라" 는 뜻이지 과거를 지우는 것이 아니다.
+         */
+        get: operations["property_items_api_materials_property_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{material_id}": {
         parameters: {
             query?: never;
@@ -3193,6 +3219,46 @@ export interface components {
             /** Y */
             y: string;
         };
+        /**
+         * DeclaredPropertyIn
+         * @description 넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다.
+         */
+        DeclaredPropertyIn: {
+            /** Input Unit */
+            input_unit?: string | null;
+            /** Item */
+            item: string;
+            /** Note */
+            note?: string | null;
+            /** Reference */
+            reference: string;
+            /** Source */
+            source: string;
+            /** Temperature K */
+            temperature_k?: number | null;
+            /** Value */
+            value: number;
+        };
+        /**
+         * DeclaredPropertyOut
+         * @description 시험이 주지 않아 사람이 적은 물성 한 줄.
+         */
+        DeclaredPropertyOut: {
+            /** Input Unit */
+            input_unit: string;
+            /** Item */
+            item: string;
+            /** Note */
+            note?: string | null;
+            /** Reference */
+            reference: string;
+            /** Source */
+            source: string;
+            /** Temperature K */
+            temperature_k?: number | null;
+            /** Value Si */
+            value_si: number;
+        };
         /** DeleteAccountRequest */
         DeleteAccountRequest: {
             /** Transfer To Id */
@@ -3879,6 +3945,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Declared Properties
+             * @default []
+             */
+            declared_properties: components["schemas"]["DeclaredPropertyOut"][];
             /** Density */
             density: number | null;
             /**
@@ -3948,6 +4019,8 @@ export interface components {
             applied_product?: string | null;
             /** Category */
             category?: string | null;
+            /** Declared Properties */
+            declared_properties?: components["schemas"]["DeclaredPropertyIn"][] | null;
             /** Density */
             density?: number | null;
             /** Density Unit */
@@ -4635,6 +4708,20 @@ export interface components {
             label?: string | null;
             /** Note */
             note?: string | null;
+        };
+        /**
+         * PropertyItemOut
+         * @description 넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다.
+         */
+        PropertyItemOut: {
+            /** Dimension */
+            dimension: string;
+            /** Item */
+            item: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Symbol */
+            symbol: string | null;
         };
         /** PropertySourcesOut */
         PropertySourcesOut: {
@@ -7786,6 +7873,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    property_items_api_materials_property_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyItemOut"][];
                 };
             };
         };

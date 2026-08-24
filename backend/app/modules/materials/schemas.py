@@ -19,6 +19,49 @@ DENSITY_UNIT = "kg/m3"
 # --- 재료 -------------------------------------------------------------------
 
 
+class DeclaredPropertyOut(BaseModel):
+    """시험이 주지 않아 사람이 적은 물성 한 줄."""
+
+    item: str
+    """기준정보 `property_item` 축의 값. 항목 목록을 **부서가 정한다**(D7)."""
+    value_si: float
+    """**언제나 정본 SI.** 사람이 GPa 로 적어도 저장은 Pa 다."""
+    input_unit: str
+    """사람이 적은 단위. 화면이 그대로 되돌려 보여 준다 — 206 GPa 를 넣었는데
+    2.06e11 Pa 로 보이면 자기가 적은 값인지 알기 어렵다."""
+    source: str
+    """`literature` · `standard` · `datasheet` · `estimate`. **필수다** — 값만
+    있고 어디서 왔는지 모르면 그 값으로 돌린 해석의 근거를 되짚을 수 없다."""
+    reference: str
+    """어느 문서인가. `'문헌'` 만으로는 어느 핸드북 몇 판인지 알 수 없다."""
+    temperature_k: float | None = None
+    """잰 온도. 비면 상온으로 본다. **지금은 값 하나에 온도 하나**이고, 나중에
+    온도-값 표로 자라도 옛 값이 살아남는다."""
+    note: str | None = None
+
+
+class DeclaredPropertyIn(BaseModel):
+    """넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다."""
+
+    item: str
+    value: float
+    input_unit: str | None = None
+    """비우면 그 항목의 정본 SI 단위로 본다."""
+    source: str
+    reference: str
+    temperature_k: float | None = None
+    note: str | None = None
+
+
+class PropertyItemOut(BaseModel):
+    """넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다."""
+
+    item: str
+    dimension: str
+    si_unit: str
+    symbol: str | None
+
+
 class MaterialOut(BaseModel):
     id: uuid.UUID
     record_name: str
@@ -45,6 +88,11 @@ class MaterialOut(BaseModel):
     """공칭 밀도. 로트 실측은 시료에 있고, 카드는 실측을 먼저 본다."""
     poisson_ratio: float | None
     """인장시험이 주지 않는 값이다 — 대개 문헌값이고 재료 등급에 붙는다."""
+
+    declared_properties: list[DeclaredPropertyOut] = []
+    """**시험이 주지 않는 물성.** 탄성계수·열팽창계수·비열·열전도도처럼 핸드북·
+    규격·밀시트에서 오는 값들이다. 밀도·푸아송비가 컬럼으로 있는 것과 같은
+    성격인데, **항목을 부서가 정하므로** 컬럼이 아니라 목록이다."""
 
     note: str | None
     legacy_id: str | None
@@ -98,6 +146,10 @@ class MaterialUpdateRequest(BaseModel):
     density: float | None = Field(default=None, gt=0)
     density_unit: str | None = None
     poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
+    declared_properties: list[DeclaredPropertyIn] | None = None
+    """**통째로 갈아 끼운다.** 줄 하나만 고치는 길을 두면 "어느 줄인가" 를
+    가리킬 열쇠가 필요한데, 항목 이름이 그 열쇠다 — 이름을 고치는 것과 값을
+    고치는 것이 같은 요청에 섞이면 어느 쪽인지 알 수 없다."""
     alias: str | None = Field(default=None, max_length=200)
     note: str | None = None
 

@@ -23,7 +23,6 @@ from app.modules.vocabulary.models import (
     VocabularyDriftCheck,
     VocabularyTerm,
 )
-from app.modules.vocabulary.normalize import clean, compare_key, split_row
 from app.modules.vocabulary.schemas import (
     BulkDeleteItemOut,
     BulkDeleteOut,
@@ -53,6 +52,7 @@ from app.shared import audit
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import MAX_LIMIT, Page, clamp_limit
+from app.shared.text import clean, compare_key, split_row
 from matcore import specimen as specimen_kit
 
 router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
