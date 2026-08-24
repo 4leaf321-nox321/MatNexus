@@ -940,8 +940,12 @@ export function ProcessingPanel({
                 height={300}
               />
 
+              {/* **라벨이 짧고 값이 한 줄이다.** 2열이면 카드 하나가 570px 이
+                  되는데(본문 1600px 의 오른쪽 칸), 「최대하중 변형률 / 0.148」
+                  같은 내용에 그 폭은 빈 공간이다. 적합 화면의 파라미터 격자와
+                  같은 단계를 쓴다. */}
               {result.scalars.length > 0 && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {result.scalars.map((scalar) => (
                     <div key={scalar.key} className="rounded-md border px-3 py-2">
                       <div className="text-muted-foreground text-xs">{scalar.label}</div>
