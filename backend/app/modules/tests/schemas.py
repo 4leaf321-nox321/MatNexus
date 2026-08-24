@@ -70,6 +70,12 @@ class TestTypeOut(BaseModel):
     max_upload_bytes_effective: int
     """**실제로 강제되는 값.** 저장된 값이 없으면 전역 기본값이 채워져 나간다 —
     화면이 한도를 보여 줄 때 두 곳을 보지 않게."""
+    revision: int
+    """저장할 때마다 오르는 번호. **고칠 때 이 값을 그대로 돌려보내야 한다**
+    (ADR 0015) — 그사이 남이 고쳤으면 서버가 409 로 막는다.
+
+    이 정의는 한 벌 통째로 갈아 끼우므로, 못 막으면 뒤에 저장한 쪽이 앞을 덮는
+    것이 아니라 **자식까지 통째로 지운다.**"""
     run_count: int
     """이 종류로 등록된 시험 수. 0 이 아니면 채널의 key·단위·차원이 잠긴다.
 
@@ -294,6 +300,16 @@ class TestTypeSaveRequest(BaseModel):
     max_upload_bytes: int | None = Field(default=None, gt=0)
     channels: list[ChannelInput]
     conditions: list[ConditionInput] = []
+
+
+class TestTypeUpdateRequest(TestTypeSaveRequest):
+    """고칠 때만 쓴다. 만들 때는 견줄 상대가 없다."""
+
+    expected_revision: int
+    """**열었을 때 받은 `revision` 을 그대로 넣는다.**
+
+    선택이 아니라 필수다. 선택으로 두면 안 보내는 클라이언트가 조용히 검사를
+    지나가고, **빠뜨린 것이 사고가 난 뒤에야 드러난다.**"""
 
 
 class TestTypeCreateRequest(TestTypeSaveRequest):

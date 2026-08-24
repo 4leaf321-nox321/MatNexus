@@ -4651,6 +4651,8 @@ export interface components {
             owner_workspace_name: string | null;
             /** Owner Workspace Slug */
             owner_workspace_slug: string | null;
+            /** Revision */
+            revision: number;
             /** Steps */
             steps: {
                 [key: string]: unknown;
@@ -4665,10 +4667,15 @@ export interface components {
              */
             updated_at: string;
         };
-        /** RecipeSaveRequest */
-        RecipeSaveRequest: {
+        /**
+         * RecipeUpdateRequest
+         * @description 고칠 때만 쓴다. 만들 때는 견줄 상대가 없다.
+         */
+        RecipeUpdateRequest: {
             /** Description */
             description?: string | null;
+            /** Expected Revision */
+            expected_revision: number;
             /**
              * Is Active
              * @default true
@@ -5933,18 +5940,16 @@ export interface components {
             owner_workspace_slug: string | null;
             /** Parser Key */
             parser_key: string | null;
+            /** Revision */
+            revision: number;
             /** Run Count */
             run_count: number;
         };
         /**
-         * TestTypeSaveRequest
-         * @description 정의 한 벌을 통째로 저장한다.
-         *
-         *     항목별 엔드포인트를 늘어놓지 않는 이유: 화면은 폼 하나를 채워 저장한다.
-         *     부분 갱신으로 쪼개면 "채널만 바꿨는데 조건이 사라졌다" 같은 어긋남이 생기고,
-         *     무엇이 지워졌는지 판정하는 곳도 화면과 서버 둘로 갈라진다.
+         * TestTypeUpdateRequest
+         * @description 고칠 때만 쓴다. 만들 때는 견줄 상대가 없다.
          */
-        TestTypeSaveRequest: {
+        TestTypeUpdateRequest: {
             /** Abbr */
             abbr: string;
             /** Channels */
@@ -5956,6 +5961,8 @@ export interface components {
             conditions: components["schemas"]["ConditionInput"][];
             /** Description */
             description?: string | null;
+            /** Expected Revision */
+            expected_revision: number;
             /**
              * Is Active
              * @default true
@@ -8314,7 +8321,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RecipeSaveRequest"];
+                "application/json": components["schemas"]["RecipeUpdateRequest"];
             };
         };
         responses: {
@@ -9536,7 +9543,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TestTypeSaveRequest"];
+                "application/json": components["schemas"]["TestTypeUpdateRequest"];
             };
         };
         responses: {

@@ -180,7 +180,15 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
           key: form.key,
           owner_workspace_slug: owner,
         })
-      } else await testsApi.updateType(form.key, payload)
+      } else {
+        // **열었을 때 받은 리비전을 그대로 돌려보낸다**(ADR 0015). 그사이 남이
+        // 고쳤으면 서버가 409 로 막는다 — 이 정의는 한 벌 통째로 갈아 끼우므로
+        // 안 막으면 남의 채널·조건이 통째로 사라진다.
+        await testsApi.updateType(form.key, {
+          ...payload,
+          expected_revision: type?.revision ?? 0,
+        })
+      }
       onSaved()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))

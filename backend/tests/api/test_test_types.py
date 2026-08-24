@@ -66,6 +66,24 @@ def tensile(db: Session) -> None:
     db.commit()
 
 
+def current_revision(client: TestClient, headers: dict[str, str], key: str = "tensile") -> int:
+    """지금 리비전. **고칠 때 이 값을 함께 보내야 한다**(ADR 0015).
+
+    시험이 매번 이걸 부르는 것이 번거로워 보이지만, 그게 실제 순서다 — 사람도
+    화면을 **열어서 본 뒤** 고친다. 필수로 둔 이유가 그것이다: 선택으로 두면
+    안 보내는 쪽이 조용히 검사를 지나간다.
+    """
+    return int(current_definition(client, headers, key)["revision"])
+
+
+def current_definition(
+    client: TestClient, headers: dict[str, str], key: str = "tensile"
+) -> dict[str, Any]:
+    """지금 저장돼 있는 정의 한 벌. 화면이 편집을 시작할 때 보는 것과 같다."""
+    listed = client.get("/api/test-types", headers=headers).json()
+    return dict(next(item for item in listed if item["key"] == key))
+
+
 class TestCreate:
     def test_배포_없이_새_종류를_만든다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -172,6 +190,7 @@ class TestEditWithoutData:
                     {"key": "force", "label": "응력", "dimension": "stress", "si_unit": "Pa"},
                 ],
                 "conditions": [],
+                "expected_revision": current_revision(client, admin_headers),
             },
             headers=admin_headers,
         )
@@ -201,6 +220,7 @@ class TestEditWithoutData:
                     {"key": "force", "label": "하중", "dimension": "force", "si_unit": "kN"},
                 ],
                 "conditions": [],
+                "expected_revision": current_revision(client, admin_headers),
             },
             headers=admin_headers,
         )
@@ -221,6 +241,8 @@ class Test업로드한도:
     def _definition(self, shown: dict[str, Any]) -> dict[str, Any]:
         """화면이 보낼 법한 저장 본문. **받은 것을 그대로 돌려보낸다.**"""
         return {
+            # 열어서 본 리비전을 그대로 돌려보낸다 — 그것이 실제 편집 순서다.
+            "expected_revision": shown["revision"],
             "label": shown["label"],
             "abbr": shown["abbr"],
             "parser_key": shown["parser_key"],
@@ -287,6 +309,9 @@ class Test업로드한도:
         payload["max_upload_bytes"] = 200 * 1024 * 1024
         client.put("/api/test-types/tensile", json=payload, headers=admin_headers)
 
+        # **저장할 때마다 다시 읽는다.** 리비전이 올랐으므로 옛것을 그대로 다시
+        # 보내면 409 다(ADR 0015) — 화면도 저장 응답으로 새 리비전을 받는다.
+        payload = self._definition(self._shown(client, admin_headers))
         payload["max_upload_bytes"] = None
         client.put("/api/test-types/tensile", json=payload, headers=admin_headers)
 
@@ -340,6 +365,7 @@ class TestEditWithData:
                 "parser_key": "zwick_tra",
                 "channels": channels,
                 "conditions": [],
+                "expected_revision": current_revision(client, headers),
             },
             headers=headers,
         )
@@ -521,3 +547,126 @@ class Test검증오류메시지:
             headers=admin_headers,
         )
         assert response.json()["error"]["details"]["errors"]
+
+
+class Test덮어쓰기잠금:
+    """**뒤에 저장한 쪽이 앞을 지운다** — 그것을 막는다(ADR 0015).
+
+    관리자 둘이 같은 시험 종류를 연다. A 가 채널 라벨을 고치고 저장하고, B 가
+    (A 의 변경을 못 본 화면에서) 조건을 하나 더하고 저장한다. 이 정의는 **한 벌
+    통째로 갈아 끼우므로** A 의 변경이 덮이는 것이 아니라 **자식까지 통째로
+    사라진다.**
+    """
+
+    def _body(
+        self, client: TestClient, headers: dict[str, str], **changes: Any
+    ) -> dict[str, Any]:
+        shown = current_definition(client, headers)
+        body = {key: shown[key] for key in shown if key not in ("id", "key")}
+        body["expected_revision"] = body.pop("revision")
+        body.update(changes)
+        return body
+
+    def test_저장하면_리비전이_오른다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        before = current_revision(client, admin_headers)
+        saved = client.put(
+            "/api/test-types/tensile",
+            json=self._body(client, admin_headers, label="인장(1차)"),
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["revision"] == before + 1
+
+    def test_자식만_바꿔도_리비전이_오른다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """**여기가 `updated_at` 을 못 쓰는 이유다.**
+
+        실측했다(2026-08-24): `onupdate=func.now()` 는 부모 행이 더러울 때만
+        걸린다. 채널 라벨만 고치면 부모는 안 바뀌므로 `updated_at` 이 그대로다 —
+        바뀌었는데 안 바뀐 것처럼 보이고, 그 위에 세운 잠금은 통과시킨다.
+        """
+        before = current_revision(client, admin_headers)
+        body = self._body(client, admin_headers)
+        # 부모 필드는 하나도 안 건드리고 채널 라벨만 고친다.
+        body["channels"] = [
+            {**channel, "label": channel["label"] + "(개정)"} for channel in body["channels"]
+        ]
+        saved = client.put("/api/test-types/tensile", json=body, headers=admin_headers)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["revision"] == before + 1
+
+    def test_그사이_바뀌었으면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """**A 와 B 가 같은 화면을 연 상황이다.**"""
+        a = self._body(client, admin_headers, label="A 가 고침")
+        b = self._body(client, admin_headers, label="B 가 고침")
+
+        assert (
+            client.put("/api/test-types/tensile", json=a, headers=admin_headers).status_code
+            == 200
+        )
+
+        blocked = client.put("/api/test-types/tensile", json=b, headers=admin_headers)
+        assert blocked.status_code == 409, blocked.text
+        assert blocked.json()["error"]["code"] == "MNX-TESTS-0030"
+
+        # **A 의 변경이 살아 있어야 한다.** 이것이 이 잠금의 전부다.
+        assert current_definition(client, admin_headers)["label"] == "A 가 고침"
+
+    def test_무엇을_해야_하는지_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """409 만 던지면 사람은 새로고침하고 자기 작업을 **다시** 잃는다."""
+        stale = self._body(client, admin_headers, label="먼저 연 쪽")
+        client.put(
+            "/api/test-types/tensile",
+            json=self._body(client, admin_headers, label="나중에 저장한 쪽"),
+            headers=admin_headers,
+        )
+        message = client.put(
+            "/api/test-types/tensile", json=stale, headers=admin_headers
+        ).json()["error"]["message"]
+        # 몇에서 몇으로 갔는지 숫자로 준다 — 애매한 거절은 고칠 수 없다.
+        assert "열었을 때" in message and "지금" in message
+        # **지금 저장하면 무슨 일이 나는지**를 적는다.
+        assert "지워집니다" in message
+        # 감사 기록이 이미 답을 갖고 있다(v1.52.0) — 누가 고쳤는지 짚는다.
+        assert "시스템 관리자" in message
+
+    def test_안_보내면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], tensile: None
+    ) -> None:
+        """**선택으로 두면 안 보내는 쪽이 조용히 검사를 지나간다.**
+
+        그러면 빠뜨린 것이 사고가 난 뒤에야 드러난다 — 이 저장소가 반복해서
+        데인 모양이다.
+        """
+        body = self._body(client, admin_headers)
+        body.pop("expected_revision")
+        refused = client.put("/api/test-types/tensile", json=body, headers=admin_headers)
+        assert refused.status_code == 422
+        assert "expected_revision" in refused.json()["error"]["message"]
+
+    def test_만들_때는_안_묻는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**견줄 상대가 없다.** 만드는 것은 남의 것을 지울 수 없다."""
+        made = client.post(
+            "/api/test-types",
+            json={
+                "key": "fresh_rig",
+                "label": "새 장비",
+                "abbr": "FR",
+                "channels": [
+                    {"key": "force", "label": "하중", "dimension": "force", "si_unit": "N"}
+                ],
+                "conditions": [],
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["revision"] == 1

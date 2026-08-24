@@ -55,11 +55,11 @@ from app.modules.tests.schemas import (
     TestSummaryOut,
     TestTypeCreateRequest,
     TestTypeOut,
-    TestTypeSaveRequest,
+    TestTypeUpdateRequest,
 )
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, curvedata, filestore, permissions, specimen_size
+from app.shared import audit, curvedata, filestore, permissions, revision, specimen_size
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -163,6 +163,7 @@ def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
         max_upload_bytes_effective=(
             test_type.max_upload_bytes or get_settings().max_upload_bytes
         ),
+        revision=test_type.revision,
         channels=[
             TestChannelOut(
                 key=c.key,
@@ -365,7 +366,7 @@ def create_test_type(
 @router.put("/{key}", response_model=TestTypeOut)
 def update_test_type(
     key: str,
-    payload: TestTypeSaveRequest,
+    payload: TestTypeUpdateRequest,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> TestTypeOut:
@@ -380,7 +381,17 @@ def update_test_type(
     require_owner_edit(
         db, user, existing.owner_workspace_id, what="시험 종류", code="MNX-TESTS-0029"
     )
-    test_type = services.save_definition(db, key=key, actor=user, **payload.model_dump())
+    # **덮어쓰기를 막는다**(ADR 0015). 정의를 한 벌 통째로 갈아 끼우므로, 뒤에
+    # 저장한 쪽이 앞의 채널·조건을 통째로 지운다 — 덮는 것이 아니라 지우는 것이다.
+    revision.guard(
+        db, existing, payload.expected_revision, what="시험 종류", code="MNX-TESTS-0030"
+    )
+    # **자식만 바뀌어도 올린다.** 여기서 올려 두면 `save_definition` 의 커밋에
+    # 함께 실린다 — `updated_at` 이 못 하던 바로 그 일이다.
+    revision.bump(existing)
+    body = payload.model_dump()
+    body.pop("expected_revision", None)
+    test_type = services.save_definition(db, key=key, actor=user, **body)
     return _type_out(db, test_type)
 
 
@@ -465,6 +476,7 @@ def list_test_types(
             is_active=t.is_active,
             max_upload_bytes=t.max_upload_bytes,
             max_upload_bytes_effective=t.max_upload_bytes or fallback,
+            revision=t.revision,
             channels=[
                 TestChannelOut(
                     key=c.key,

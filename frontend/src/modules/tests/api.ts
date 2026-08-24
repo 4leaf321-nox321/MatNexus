@@ -18,9 +18,9 @@ export type Parser = components['schemas']['ParserOut']
 export type Detected = components['schemas']['DetectOut']
 export type InstrumentDimensions = components['schemas']['InstrumentDimensionsOut']
 export type AppliedDimensions = components['schemas']['AppliedDimensionsOut']
-type TestTypeSave = components['schemas']['TestTypeSaveRequest']
+type TestTypeUpdate = components['schemas']['TestTypeUpdateRequest']
 type TestTypeCreate = components['schemas']['TestTypeCreateRequest']
-export type TestChannelSave = TestTypeSave['channels'][number]
+export type TestChannelSave = TestTypeCreate['channels'][number]
 type CleanupRequest = components['schemas']['CleanupRequest']
 
 export type FormatProfile = components['schemas']['FormatProfileOut']
@@ -125,7 +125,14 @@ export const testsApi = {
   },
   createType: (payload: TestTypeCreate) => api.post<TestType>('/test-types', payload),
   /** 정의 한 벌을 갈아 끼운다. 데이터가 있으면 서버가 key·단위 변경을 거절한다. */
-  updateType: (key: string, payload: TestTypeSave) =>
+  /**
+   * 정의 한 벌을 갈아 끼운다. **`expected_revision` 을 함께 보내야 한다**
+   * (ADR 0015) — 열었을 때 받은 `revision` 을 그대로 넣는다.
+   *
+   * 그사이 남이 고쳤으면 서버가 409 로 막는다. 안 막으면 **덮는 것이 아니라
+   * 자식까지 통째로 지운다.**
+   */
+  updateType: (key: string, payload: TestTypeUpdate) =>
     api.put<TestType>(`/test-types/${key}`, payload),
   removeType: (key: string) => api.delete<void>(`/test-types/${key}`),
 

@@ -27,7 +27,7 @@ export type ProcessingScalar = components['schemas']['ProcessingScalarOut']
 export type Recipe = components['schemas']['RecipeOut']
 export type BatchOut = components['schemas']['BatchOut']
 export type BatchItem = components['schemas']['BatchItemOut']
-type RecipeSave = components['schemas']['RecipeSaveRequest']
+type RecipeUpdate = components['schemas']['RecipeUpdateRequest']
 type RecipeCreate = components['schemas']['RecipeCreateRequest']
 
 /** 레시피의 한 줄. 서버는 `dict` 로 받으므로 생성 타입이 안 나온다. */
@@ -160,7 +160,8 @@ export const processingApi = {
 
   createRecipe: (payload: RecipeCreate) => api.post<Recipe>('/processing/recipes', payload),
 
-  updateRecipe: (key: string, payload: RecipeSave) =>
+  /** 단계를 통째로 갈아 끼운다. `expected_revision` 필수 — ADR 0015. */
+  updateRecipe: (key: string, payload: RecipeUpdate) =>
     api.put<Recipe>(`/processing/recipes/${key}`, payload),
 
   removeRecipe: (key: string) => api.delete<void>(`/processing/recipes/${key}`),

@@ -551,6 +551,8 @@ export default function FormatProfileEditorPage() {
       // 채널을 **더하는** 것은 기존 데이터의 해석을 바꾸지 않으므로 서버가 허용한다.
       // 기존 정의를 그대로 다시 보내야 한다 — 정의는 한 벌 통째로 갈아 끼운다.
       await testsApi.updateType(testType.key, {
+        // 받은 리비전을 그대로 돌려보낸다 — ADR 0015.
+        expected_revision: testType.revision,
         label: testType.label,
         abbr: testType.abbr,
         description: testType.description,

@@ -154,6 +154,16 @@ class RecipeSaveRequest(BaseModel):
     is_active: bool = True
 
 
+class RecipeUpdateRequest(RecipeSaveRequest):
+    """고칠 때만 쓴다. 만들 때는 견줄 상대가 없다."""
+
+    expected_revision: int
+    """**열었을 때 받은 `revision` 을 그대로 넣는다.**
+
+    선택이 아니라 필수다. 선택으로 두면 안 보내는 클라이언트가 조용히 검사를
+    지나가고, **빠뜨린 것이 사고가 난 뒤에야 드러난다.**"""
+
+
 class RecipeCreateRequest(RecipeSaveRequest):
     key: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     owner_workspace_slug: str | None = None
@@ -174,6 +184,12 @@ class RecipeOut(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    revision: int
+    """저장할 때마다 오르는 번호. **고칠 때 이 값을 그대로 돌려보내야 한다**
+    (ADR 0015) — 그사이 남이 고쳤으면 서버가 409 로 막는다.
+
+    이 정의는 한 벌 통째로 갈아 끼우므로, 못 막으면 뒤에 저장한 쪽이 앞을 덮는
+    것이 아니라 **자식까지 통째로 지운다.**"""
 
 
 # --- 배치 --------------------------------------------------------------------

@@ -278,6 +278,7 @@ class Test결과는불변:
                 "test_type_key": "tensile",
                 "steps": changed,
                 "is_active": True,
+                "expected_revision": recipe["revision"],
             },
             headers=admin_headers,
         )

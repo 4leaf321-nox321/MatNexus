@@ -38,13 +38,13 @@ from app.modules.processing.schemas import (
     ProducedOut,
     RecipeCreateRequest,
     RecipeOut,
-    RecipeSaveRequest,
+    RecipeUpdateRequest,
     ResultCurveOut,
     StepParamOut,
 )
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
 from app.modules.workspaces.models import Workspace
-from app.shared import curvedata, filestore
+from app.shared import curvedata, filestore, revision
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import (
@@ -420,6 +420,7 @@ def _recipe_out(db: Session, item: ProcessingRecipe) -> RecipeOut:
         key=item.key,
         label=item.label,
         description=item.description,
+        revision=item.revision,
         owner_workspace_slug=owner.slug if owner else None,
         owner_workspace_name=owner.name if owner else None,
         is_global=item.owner_workspace_id is None,
@@ -519,7 +520,7 @@ def create_recipe(
 @router.put("/recipes/{key}", response_model=RecipeOut)
 def update_recipe(
     key: str,
-    payload: RecipeSaveRequest,
+    payload: RecipeUpdateRequest,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> RecipeOut:
@@ -534,12 +535,18 @@ def update_recipe(
     require_owner_edit(
         db, user, item.owner_workspace_id, what="레시피", code="MNX-PROCESSING-0007"
     )
+    # **덮어쓰기를 막는다**(ADR 0015). 레시피는 단계를 통째로 갈아 끼우므로,
+    # 뒤에 저장한 쪽이 앞의 단계 구성을 지운다.
+    revision.guard(
+        db, item, payload.expected_revision, what="레시피", code="MNX-PROCESSING-0010"
+    )
     _validate(payload.steps)
     item.label = payload.label
     item.description = payload.description
     item.test_type_id = _resolve_type(db, payload.test_type_key).id
     item.steps = payload.steps
     item.is_active = payload.is_active
+    revision.bump(item)
     db.commit()
     db.refresh(item)
     return _recipe_out(db, item)

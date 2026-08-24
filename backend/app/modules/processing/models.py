@@ -97,6 +97,17 @@ class ProcessingRecipe(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    """저장할 때마다 오르는 번호. **덮어쓰기를 막는 근거다**(ADR 0015).
+
+    `updated_at` 을 쓰지 않은 이유를 실측으로 확인했다(2026-08-24): `onupdate` 는
+    **부모 행이 더러울 때만** 걸린다. 채널 라벨만 고치면 부모는 안 바뀌므로
+    `updated_at` 이 그대로다 — 바뀌었는데 안 바뀐 것처럼 보인다.
+
+    이 정의는 **한 벌 통째로 갈아 끼운다.** 그래서 뒤에 저장한 쪽이 앞을 덮는
+    것이 아니라 **지운다** — 자식까지 통째로. 그 사고를 막는 자리다.
+    """
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

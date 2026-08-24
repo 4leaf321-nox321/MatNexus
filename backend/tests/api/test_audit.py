@@ -255,6 +255,7 @@ class Test나머지_경로:
         target = next(item for item in before if item["key"] == "tensile")
 
         payload = {key: target[key] for key in target if key not in ("id", "key")}
+        payload["expected_revision"] = payload.pop("revision")
         payload["label"] = "인장(감사)"
         changed = client.put("/api/test-types/tensile", json=payload, headers=admin_headers)
         assert changed.status_code == 200, changed.text
@@ -264,6 +265,10 @@ class Test나머지_경로:
         ).json()
         assert len(entries) == 1
         assert entries[0]["changes"]["label"]["after"] == "인장(감사)"
+
+    def _shown(self, client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+        listed = client.get("/api/test-types", headers=headers).json()
+        return next(item for item in listed if item["key"] == "tensile")
 
     def test_안_바뀌면_안_남는다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
@@ -285,8 +290,13 @@ class Test나머지_경로:
         shown = client.get("/api/test-types", headers=admin_headers).json()
         target = next(item for item in shown if item["key"] == "tensile")
         payload = {key: target[key] for key in target if key not in ("id", "key")}
+        payload.pop("revision")
 
+        # **매번 다시 읽는다.** 저장하면 리비전이 오르므로 같은 것을 두 번 보내면
+        # 두 번째는 409 다(ADR 0015) — 그것이 맞는 동작이고, 실제 화면도 저장 뒤
+        # 응답으로 새 리비전을 받는다.
         for _ in range(2):
+            payload["expected_revision"] = self._shown(client, admin_headers)["revision"]
             assert (
                 client.put(
                     "/api/test-types/tensile", json=payload, headers=admin_headers

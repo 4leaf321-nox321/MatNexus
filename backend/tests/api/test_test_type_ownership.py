@@ -124,6 +124,9 @@ class Test누가만드는가:
     ) -> None:
         ensure_builtin_test_types(db)
         payload = {k: v for k, v in RIG.items() if k != "key"}
+        # **권한 검사가 리비전 검사보다 앞이다.** 못 고치는 사람에게 "먼저
+        # 새로고침하세요" 라고 말하면 길을 잘못 알려 주는 것이다.
+        payload["expected_revision"] = 1
         response = client.put("/api/test-types/tensile", json=payload, headers=manager)
         assert response.status_code == 403, response.text
         # 이유가 없으면 "권한 없음" 은 벽이다. 왜 안 되는지를 말해야 한다.
@@ -219,7 +222,12 @@ class Test채널이름은전사자산:
                 "si_unit": "m",
             }
         ]
-        again = client.put("/api/test-types/edit_rig", json=payload, headers=admin_headers)
+        shown = client.get("/api/test-types", headers=admin_headers).json()
+        body = dict(payload)
+        body["expected_revision"] = next(item for item in shown if item["key"] == "edit_rig")[
+            "revision"
+        ]
+        again = client.put("/api/test-types/edit_rig", json=body, headers=admin_headers)
         assert again.status_code == 200, again.text
 
 
