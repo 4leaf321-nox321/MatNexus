@@ -16,6 +16,13 @@
  * 검색은 서버가 한다. 앞 200개를 받아 화면에서 거르던 방식은 재료가 그보다
  * 많아지는 순간 **뒤엣것을 없는 재료처럼** 보이게 만든다 — `MaterialPicker` 가
  * 같은 이유로 서버 검색을 쓴다.
+ *
+ * ## 분류 필터도 목록 화면과 같다
+ *
+ * 세는 규칙(`classification.ts`)과 고르는 컴포넌트(`OptionPicker`)를 그대로
+ * 쓴다. **Category 는 Family 에 종속이다** — Family 를 고르면 그 안의 것만
+ * 남긴다. 안 그러면 `Metal + PP` 처럼 결과가 늘 0건인 조합을 고를 수 있고,
+ * 사람은 재료가 없는 줄 안다.
  */
 
 import { useEffect, useState } from 'react'
@@ -24,7 +31,10 @@ import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Material } from '@/modules/materials/api'
+import { categoriesOf, familiesOf } from '@/modules/materials/classification'
+import { OptionPicker } from '@/shared/components/OptionPicker'
 import { Input } from '@/shared/components/ui/input'
+import { useResource } from '@/shared/hooks/useResource'
 import { LeftPanel } from '@/shared/layout/SidePanel'
 
 /** 한 번에 받아 오는 수. 옆 목록이라 스크롤로 훑는 것이 전부다. */
@@ -32,6 +42,8 @@ const LIMIT = 50
 
 export function MaterialListPanel({ currentId }: { currentId: string | undefined }) {
   const [query, setQuery] = useState('')
+  const [family, setFamily] = useState('')
+  const [category, setCategory] = useState('')
   const [rows, setRows] = useState<Material[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -42,7 +54,7 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
     // 글자마다 요청하면 옆 목록 하나가 서버를 두드리는 꼴이 된다.
     const timer = setTimeout(() => {
       materialsApi
-        .list({ q: query.trim() || undefined, limit: LIMIT, offset: 0 })
+        .list({ q: query.trim() || undefined, family, category, limit: LIMIT, offset: 0 })
         .then((page) => {
           if (dropped) return
           setRows(page.items)
@@ -59,7 +71,12 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
       dropped = true
       clearTimeout(timer)
     }
-  }, [query])
+  }, [query, family, category])
+
+  // 무엇으로 거를 수 있는지는 **데이터가 정한다.** 실제로 있는 조합만 준다 —
+  // 고정 목록을 박으면 부서가 새 분류를 쓰기 시작할 때 고를 수 없게 된다.
+  const classes = useResource(() => materialsApi.classifications(), [])
+  const known = classes.data ?? []
 
   return (
     <LeftPanel label="재료 목록">
@@ -73,6 +90,26 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
               placeholder="이름 · 별칭 · Grade"
               className="h-8 pl-7 text-xs"
               aria-label="재료 찾기"
+            />
+          </div>
+
+          <div className="mt-1.5 grid grid-cols-2 gap-1">
+            <OptionPicker
+              label="Family"
+              value={family}
+              options={familiesOf(known)}
+              onChange={(next) => {
+                setFamily(next)
+                // **Family 를 바꾸면 이전 Category 가 그 안에 없을 수 있다.**
+                // 남겨 두면 조용히 0건이 되고, 사람은 재료가 없는 줄 안다.
+                setCategory('')
+              }}
+            />
+            <OptionPicker
+              label="Category"
+              value={category}
+              options={categoriesOf(known, family)}
+              onChange={setCategory}
             />
           </div>
         </div>

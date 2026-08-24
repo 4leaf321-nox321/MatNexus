@@ -12,6 +12,7 @@ import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search, X } from 'lucid
 import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
+import { categoriesOf, familiesOf } from '@/modules/materials/classification'
 import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -39,19 +40,6 @@ import { useResource } from '@/shared/hooks/useResource'
 const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 
-/**
- * 같은 이름끼리 개수를 합친다.
- *
- * 서버는 (Family, Category) 쌍으로 세어 주므로 Family 하나가 여러 줄에 걸쳐
- * 있다 — Metal/Steel 58, Metal/Aluminum 3. Family 목록에는 61 로 합쳐 보여야
- * "Metal 을 고르면 몇 건인가" 가 맞는다.
- */
-function tally(pairs: [string, number][]): { value: string; count: number }[] {
-  const sums = new Map<string, number>()
-  for (const [name, count] of pairs) sums.set(name, (sums.get(name) ?? 0) + count)
-  return [...sums].map(([value, count]) => ({ value, count }))
-}
-
 export default function MaterialsPage() {
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
@@ -65,14 +53,9 @@ export default function MaterialsPage() {
   // 무엇으로 거를 수 있는지는 **데이터가 정한다.** 목록에 실제로 있는 조합만 준다.
   const classes = useResource(() => materialsApi.classifications(), [])
   const rowsOf = classes.data ?? []
-  const families = tally(rowsOf.map((item) => [item.family, item.count]))
-  // Family 를 고르면 그 안의 Category 만 남긴다. 안 그러면 Metal + PP 처럼
-  // **결과가 늘 0건인 조합**을 고를 수 있다.
-  const categories = tally(
-    rowsOf
-      .filter((item) => !family || item.family === family)
-      .map((item) => [item.category, item.count])
-  )
+  // 세는 규칙은 옆패널과 **같은 것을 쓴다**(`classification.ts`).
+  const families = familiesOf(rowsOf)
+  const categories = categoriesOf(rowsOf, family)
 
   const materials = useResource(
     () =>
