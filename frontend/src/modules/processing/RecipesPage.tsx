@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
-import { TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPanel'
+import { ownerOf, TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function RecipesPage() {
@@ -38,8 +38,16 @@ export default function RecipesPage() {
   const [open, setOpen] = useState<string | null>(null)
   // `null` 이면 전체. **인장 레시피를 손보는 사람에게 DMA 레시피는 소음이다.**
   const [kind, setKind] = useState<string | null>(null)
+  // 부서 축. 켜지 않으면 늘 `null` 이다(패널이 끄면서 풀어 준다).
+  const [owner, setOwner] = useState<string | null>(null)
   const all = recipes.data ?? []
-  const rows = kind === null ? all : all.filter((item) => item.test_type_key === kind)
+  // **두 축이 함께 걸린다**(AND). 「인장 + 우리 부서」가 실제로 찾는 것이고,
+  // 하나만 고르게 하면 절반은 여전히 눈으로 훑어야 한다.
+  const rows = all.filter(
+    (item) =>
+      (kind === null || item.test_type_key === kind) &&
+      (owner === null || ownerOf(item) === owner)
+  )
 
   async function remove(item: Recipe) {
     setError(null)
@@ -60,6 +68,9 @@ export default function RecipesPage() {
         rows={all}
         current={kind}
         onPick={setKind}
+        owner={owner}
+        onPickOwner={setOwner}
+        ownerKey="recipes"
       />
 
       <PageHeader
@@ -72,11 +83,11 @@ export default function RecipesPage() {
       {/* **걸러서 0건인 것과 하나도 없는 것은 다르다.** 「저장된 레시피가
           없습니다」라고 하면 거짓말이고, 사람은 만들러 갔다가 이미 있는 것을
           또 만든다. */}
-      {!recipes.loading && rows.length === 0 && kind !== null ? (
+      {!recipes.loading && rows.length === 0 && (kind !== null || owner !== null) ? (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
-          이 시험 종류의 레시피가 없습니다.
+          거른 조건에 맞는 레시피가 없습니다.
           <p className="mx-auto mt-2 max-w-md text-xs">
-            왼쪽에서 <b>전체</b> 를 누르면 다른 종류의 레시피를 볼 수 있습니다.
+            왼쪽에서 <b>전체</b> 를 누르면 나머지를 볼 수 있습니다.
           </p>
         </div>
       ) : !recipes.loading && rows.length === 0 ? (
