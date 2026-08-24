@@ -33,6 +33,27 @@ import numpy as np
 #: 나오는데 그것은 적합이 아니라 보간이다.
 MIN_POINTS = 6
 
+#: 되돌아가도 되는 한계. **폭 대비 되돌아간 총 거리**로 잰다 — 1.0 이면 폭만큼
+#: 통째로 내려갔다는 뜻이고, 3.0 이면 그것을 세 번 했다는 뜻이다.
+#:
+#: **고무 시험이 실제로 그렇게 생겼다.** Mullins 효과 때문에 예비 사이클을
+#: 3~5회 돌린 뒤 본시험을 재는 것이 표준이라, 장비가 뱉는 파일에는 올림·내림이
+#: 여러 벌 들어 있다.
+#:
+#: 문턱은 실측으로 잡았다(2026-08-24).
+#:
+#:     단조 (깨끗)                0.000
+#:     잡음 폭의 0.67%            0.004   ← 실제 신율계는 0.05% 이하다
+#:     10% 부분 제하              0.085
+#:     50% 부분 제하              0.492
+#:     1 사이클                   1.000
+#:     예비 3사이클 + 본시험        3.000
+#:
+#: 0.10 은 실제 잡음의 **25배** 위이고 부분 제하부터 걸린다. 잡음이 이 값을
+#: 넘으려면 폭의 2% 는 흔들려야 하는데, 그건 신율계가 고장 난 것이다 — 그때
+#: 거절하는 것도 틀리지 않다.
+BACKTRACK_LIMIT = 0.10
+
 
 class FittingError(Exception):
     """이 데이터로는 이 식을 적합할 수 없다.
@@ -743,6 +764,41 @@ def plastic_branch(
     )
 
 
+def _require_single_valued(x: np.ndarray, family: Family) -> None:
+    """되돌아가는 곡선을 거절한다. **정렬로 덮으면 조용히 틀린다.**
+
+    `fit` 은 x 로 정렬한 뒤 맞춘다. 그런데 데이터에 하강 가지가 섞여 있으면
+    정렬이 **올릴 때의 점과 내릴 때의 점을 같은 x 자리에 뒤섞는다.** 식은
+    x 하나에 y 하나를 주는 함수라 그 둘을 동시에 맞출 수 없고, 그래서 둘
+    사이 어딘가로 수렴한다.
+
+    실측(2026-08-24): 참 μ=500 kPa 인 Ogden 곡선에 이력 15% 짜리 1 사이클을
+    붙였더니 **μ=475 kPa, R²=0.975** 가 나왔다. 5% 틀린 값인데 R² 는 그럴듯하고,
+    큰 RMSE 경고는 *"이 식이 이 재료의 모양과 안 맞을 수 있습니다"* 라고 **식을
+    탓한다** — 문제는 식이 아니라 데이터인데.
+
+    막지 않고 짚을 수도 있었다. 그러지 않은 이유: 이력 곡선을 단일값 함수로
+    맞추는 것은 **위험한 것이 아니라 뜻이 없는 것**이다. 어느 가지를 쓸지는
+    사람이 정해야 하고, 그것은 경고로 전할 일이 아니다.
+    """
+    if x.size < 2:
+        return
+    steps = np.diff(x)
+    backward = float(-np.sum(steps[steps < 0]))
+    span = float(x.max() - x.min())
+    if span <= 0 or backward <= span * BACKTRACK_LIMIT:
+        return
+    raise FittingError(
+        f"{family.x_label}이 되돌아갑니다 — 폭의 {backward / span * 100:.0f}% 만큼 "
+        f"내려갔습니다. **예비 사이클이 섞인 파일일 수 있습니다**"
+        f"(고무는 Mullins 효과 때문에 3~5회 돌린 뒤 본시험을 잽니다). "
+        f"식은 {family.x_label} 하나에 값 하나를 주므로 올림과 내림을 동시에 "
+        f"맞출 수 없습니다 — 정렬해서 맞추면 둘 사이 어딘가로 수렴하고, "
+        f"그 값은 그럴듯해 보입니다. "
+        f"처리 단계에서 **쓸 구간만 잘라** 주세요(대개 마지막 올림 가지)."
+    )
+
+
 def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) -> FitResult:
     """경화식 하나를 적합한다.
 
@@ -768,6 +824,8 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
             f"파라미터 수만큼의 점으로 맞추면 잔차가 0 이 나오는데, 그것은 적합이 "
             f"아니라 보간입니다."
         )
+    _require_single_valued(strain, family)
+
     order = np.argsort(strain)
     strain, stress = strain[order], stress[order]
 
