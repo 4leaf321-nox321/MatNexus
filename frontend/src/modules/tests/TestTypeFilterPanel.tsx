@@ -121,6 +121,25 @@ export function TestTypeFilterPanel<Row extends HasTestType & HasOwner>({
   return (
     <LeftPanel label={label}>
       <aside className="bg-background flex h-full w-56 flex-col border-r">
+        {/* **맨 위다.** 목록 아래에 두면 축이 길어질수록 멀어지고, 스크롤을
+            내려야 보인다 — 목록의 모양을 바꾸는 단추가 그 목록에 가려지면 안 된다.
+
+            부서가 하나뿐인 조직에서는 이 축이 늘 한 줄짜리 소음이라 기본은 꺼져
+            있고, 켠 상태는 다음에 올 때까지 남는다. */}
+        {splittable && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-pressed={split}
+            className="text-muted-foreground h-7 shrink-0 justify-start rounded-none border-b px-3 text-xs"
+            onClick={() => setSplit(!split)}
+          >
+            <Building2 className="size-3.5" />
+            부서로 나누기 {split ? '끄기' : '켜기'}
+          </Button>
+        )}
+
         <div className="min-h-0 flex-1 overflow-auto py-1">
           <Row
             label="전체"
@@ -167,21 +186,6 @@ export function TestTypeFilterPanel<Row extends HasTestType & HasOwner>({
           )}
         </div>
 
-        {/* **부서가 하나뿐인 조직에서는 이 축이 늘 한 줄짜리 소음이다.**
-            그래서 기본은 꺼져 있고, 켠 상태는 다음에 올 때까지 남는다. */}
-        {splittable && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-pressed={split}
-            className="text-muted-foreground h-7 justify-start rounded-none border-t px-3 text-xs"
-            onClick={() => setSplit(!split)}
-          >
-            <Building2 className="size-3.5" />
-            부서로 나누기 {split ? '끄기' : '켜기'}
-          </Button>
-        )}
         {footer}
       </aside>
     </LeftPanel>
