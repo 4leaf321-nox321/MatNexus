@@ -199,7 +199,14 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+      {/* **가장 빡빡한 모달이다.** 채널 한 줄에만 칸이 여섯이다 —
+          키(128px) · 라벨(가변) · 값형(96) · 차원(96) · 단위(80) · 필수 · 삭제.
+          768px(3xl)에서는 라벨 칸이 250px 남짓이라 「크로스헤드 변위」가 잘렸다.
+          거기에 위쪽 기본 정보 3열과 파서 선택이 같은 폭을 나눠 쓴다.
+
+          `max-w-6xl`(1152px)은 본문 폭(1600px)보다 좁다 — 모달이 화면을 통째로
+          덮으면 뒤가 안 보여 어디서 열었는지 잃는다. */}
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{creating ? '시험 종류 만들기' : `${type?.label} 편집`}</DialogTitle>
           <DialogDescription>
