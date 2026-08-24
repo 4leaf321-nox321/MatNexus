@@ -130,7 +130,7 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>재료 수정</DialogTitle>
           <DialogDescription>

@@ -115,7 +115,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>시험 등록</DialogTitle>
           <DialogDescription>

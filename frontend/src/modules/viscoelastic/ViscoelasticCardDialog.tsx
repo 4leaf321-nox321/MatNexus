@@ -70,7 +70,7 @@ export function ViscoelasticCardDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>물성 카드 만들기</DialogTitle>
           <DialogDescription>

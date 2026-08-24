@@ -47,6 +47,18 @@ function DialogOverlay({
   )
 }
 
+/**
+ * 기본 폭은 **512px(`lg`)** 이다. 전에는 384px(`sm`) 이었는데, 그 안에 2열·3열
+ * 폼이 들어가 있었다 — 시편 추가는 「실측 두께 (mm)」 같은 라벨 셋을 **각 110px**
+ * 칸에 욱여넣었고, 라벨이 칸보다 길었다.
+ *
+ * 384px 로 두면 **아무것도 안 적은 모달이 제일 좁아진다.** 폼이 대부분인데
+ * 기본값이 확인창 크기였던 셈이다. 확인창은 짧은 문장 하나와 단추 둘이라
+ * 좁아야 맞고, 그건 **그쪽이 `sm:max-w-sm` 을 적는 것**이 옳다.
+ *
+ * 내용에 따라 넓히는 것은 자유다(2열은 `xl`, 3열이나 표는 `2xl` 이상). 다만
+ * **좁히려면 이유가 있어야 한다** — 기본값이 폼에 맞춰져 있으므로.
+ */
 function DialogContent({
   className,
   children,
@@ -61,7 +73,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

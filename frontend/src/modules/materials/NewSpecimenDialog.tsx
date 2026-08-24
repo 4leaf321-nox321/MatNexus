@@ -73,7 +73,7 @@ export function NewSpecimenDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>시편 추가</DialogTitle>
           <DialogDescription>

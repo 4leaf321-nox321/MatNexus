@@ -821,7 +821,7 @@ function SaveDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>물성 카드 만들기</DialogTitle>
           <DialogDescription>
@@ -1010,7 +1010,7 @@ function RenameCardDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>카드 이름 고치기</DialogTitle>
           <DialogDescription>

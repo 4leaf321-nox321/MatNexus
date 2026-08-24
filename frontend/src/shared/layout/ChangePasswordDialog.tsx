@@ -81,7 +81,7 @@ export function ChangePasswordDialog({ open, onClose, onChanged }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>비밀번호 변경</DialogTitle>
           <DialogDescription>

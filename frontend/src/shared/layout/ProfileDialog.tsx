@@ -65,7 +65,7 @@ export function ProfileDialog({ open, email, displayName, onClose, onSaved }: Pr
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>내 정보</DialogTitle>
           <DialogDescription>

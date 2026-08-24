@@ -1334,7 +1334,7 @@ function SaveRecipeDialog({
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>레시피로 저장</DialogTitle>
           <DialogDescription>

@@ -421,7 +421,9 @@ function DeleteDialog({
 
   return (
     <Dialog open={workspace !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      {/* 확인창 — 입력 칸이 없다. 짧은 문장과 단추 둘뿐이라
+          기본값(폼 폭)은 여기 과하다. */}
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{workspace?.name} 삭제</DialogTitle>
           <DialogDescription>

@@ -849,7 +849,7 @@ function RenameDialog({
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>이름 고치기</DialogTitle>
           <DialogDescription>
