@@ -28,12 +28,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function FormatProfilesPage() {
   const profiles = useResource(() => testsApi.formats(), [])
   const [error, setError] = useState<Error | null>(null)
-  const rows = profiles.data ?? []
+  // `null` 이면 전체. **DMA 프로파일을 찾는 사람에게 인장 프로파일은 소음이다.**
+  const [kind, setKind] = useState<string | null>(null)
+  const all = profiles.data ?? []
+  const rows = kind === null ? all : all.filter((item) => item.test_type_key === kind)
 
   async function remove(item: FormatProfile) {
     setError(null)
@@ -47,6 +51,15 @@ export default function FormatProfilesPage() {
 
   return (
     <div>
+      {/* 시험 종류로 거른다. **표에 종류를 보여만 주고 거르지는 못했다** —
+          다른 종류의 것을 눈으로 훑어 넘겨야 했다. */}
+      <TestTypeFilterPanel
+        label="프로파일 종류"
+        rows={all}
+        current={kind}
+        onPick={setKind}
+      />
+
       <PageHeader
         title="형식 프로파일"
         description="장비 파일을 어떻게 읽을지. 구조는 코드가 자동으로 읽고, '이 열이 무엇인가'만 여기에 저장합니다 — 새 장비를 붙이는 데 배포가 필요 없습니다."
@@ -62,7 +75,16 @@ export default function FormatProfilesPage() {
 
       <ErrorNotice error={profiles.error ?? error} className="mb-4" />
 
-      {!profiles.loading && rows.length === 0 ? (
+      {/* **걸러서 0건인 것과 하나도 없는 것은 다르다.** 「프로파일이 없습니다」
+          라고 하면 거짓말이고, 사람은 만들러 갔다가 이미 있는 것을 또 만든다. */}
+      {!profiles.loading && rows.length === 0 && kind !== null ? (
+        <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
+          이 시험 종류의 프로파일이 없습니다.
+          <p className="mx-auto mt-2 max-w-md text-xs">
+            왼쪽에서 <b>전체</b> 를 누르면 다른 종류의 프로파일을 볼 수 있습니다.
+          </p>
+        </div>
+      ) : !profiles.loading && rows.length === 0 ? (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           <FileCode2 className="mx-auto mb-2 size-5 opacity-50" />
           프로파일이 없습니다.

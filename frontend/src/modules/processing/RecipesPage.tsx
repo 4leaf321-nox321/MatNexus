@@ -29,13 +29,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function RecipesPage() {
   const recipes = useResource(() => processingApi.recipes(), [])
   const [error, setError] = useState<Error | null>(null)
   const [open, setOpen] = useState<string | null>(null)
-  const rows = recipes.data ?? []
+  // `null` 이면 전체. **인장 레시피를 손보는 사람에게 DMA 레시피는 소음이다.**
+  const [kind, setKind] = useState<string | null>(null)
+  const all = recipes.data ?? []
+  const rows = kind === null ? all : all.filter((item) => item.test_type_key === kind)
 
   async function remove(item: Recipe) {
     setError(null)
@@ -49,6 +53,15 @@ export default function RecipesPage() {
 
   return (
     <div>
+      {/* 시험 종류로 거른다. **표에 종류를 보여만 주고 거르지는 못했다** —
+          다른 종류의 것을 눈으로 훑어 넘겨야 했다. */}
+      <TestTypeFilterPanel
+        label="레시피 종류"
+        rows={all}
+        current={kind}
+        onPick={setKind}
+      />
+
       <PageHeader
         title="처리 레시피"
         description="변위·하중을 물성으로 바꾸는 단계 묶음. 시험 하나에서 맞춘 뒤 나머지에 한 번에 겁니다."
@@ -56,7 +69,17 @@ export default function RecipesPage() {
 
       <ErrorNotice error={recipes.error ?? error} className="mb-4" />
 
-      {!recipes.loading && rows.length === 0 ? (
+      {/* **걸러서 0건인 것과 하나도 없는 것은 다르다.** 「저장된 레시피가
+          없습니다」라고 하면 거짓말이고, 사람은 만들러 갔다가 이미 있는 것을
+          또 만든다. */}
+      {!recipes.loading && rows.length === 0 && kind !== null ? (
+        <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
+          이 시험 종류의 레시피가 없습니다.
+          <p className="mx-auto mt-2 max-w-md text-xs">
+            왼쪽에서 <b>전체</b> 를 누르면 다른 종류의 레시피를 볼 수 있습니다.
+          </p>
+        </div>
+      ) : !recipes.loading && rows.length === 0 ? (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           <FlaskConical className="mx-auto mb-2 size-5 opacity-50" />
           저장된 레시피가 없습니다.
