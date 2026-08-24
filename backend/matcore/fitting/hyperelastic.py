@@ -88,6 +88,51 @@ def _ogden_1(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     return np.asarray((2.0 * mu / alpha) * factor, dtype=np.float64)
 
 
+# ── 야코비안 ────────────────────────────────────────────────────────────
+#
+# I₁ 계열 셋(Neo-Hookean·Mooney-Rivlin·Yeoh)은 **파라미터에 선형이다.** 그래서
+# 야코비안이 파라미터를 아예 안 쓴다 — 계수를 곱하는 자리마다 그 인자를 그대로
+# 세우면 끝이다. Ogden 만 지수 자리에 α 가 들어서 진짜 미분이 필요하다.
+
+
+def _neo_hookean_jacobian(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    return np.stack([2.0 * _uniaxial_shape(_stretch(strain))], axis=1)
+
+
+def _mooney_rivlin_jacobian(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    stretch = _stretch(strain)
+    shape = _uniaxial_shape(stretch)
+    return np.stack([2.0 * shape, 2.0 * shape / stretch], axis=1)
+
+
+def _yeoh_jacobian(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    stretch = _stretch(strain)
+    shape = _uniaxial_shape(stretch)
+    shifted = stretch**2.0 + 2.0 / stretch - 3.0
+    return np.stack([2.0 * shape, 4.0 * shifted * shape, 6.0 * shifted**2.0 * shape], axis=1)
+
+
+def _ogden_1_jacobian(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    """P = (2μ/α)(λ^(α-1) - λ^(-α/2-1)) 를 μ·α 로 미분한 것.
+
+    **α 가 지수와 분모 양쪽에 있다.** 곱셈 규칙으로 두 항이 나오고, 그중 -f/α²
+    항이 α 가 작을 때(하한 1e-3) 커진다.
+
+    그래서 여기가 가장 크게 갈릴 줄 알았는데 **실측은 그렇지 않았다** — 초기값을
+    200번 흔들어도 수치·해석 둘 다 200/200 이었다. 남는 값은 속도뿐이다.
+    """
+    mu, alpha = parameters
+    stretch = _stretch(strain)
+    if alpha <= 0:
+        raise ValueError("Ogden 의 α 는 양수여야 합니다.")
+    high = stretch ** (alpha - 1.0)
+    low = stretch ** (-alpha / 2.0 - 1.0)
+    factor = high - low
+    log = np.log(stretch)
+    by_alpha = 2.0 * mu * (log * (high + 0.5 * low) / alpha - factor / alpha**2.0)
+    return np.stack([(2.0 / alpha) * factor, by_alpha], axis=1)
+
+
 def _scale(stress: np.ndarray) -> float:
     """응력 크기. 고무는 MPa 단위이고 금속은 GPa 라 경계를 절대값으로 못 적는다."""
     top = float(np.max(np.abs(np.asarray(stress, dtype=np.float64))))
@@ -204,6 +249,7 @@ def _family(
     bounds: object,
     describe: str,
     shear: object,
+    jacobian: object,
 ) -> Family:
     return Family(
         key=key,
@@ -223,6 +269,7 @@ def _family(
         applies_to=RUBBERY,
         extras=_shear(shear),
         stability=_monotonic(evaluate),
+        jacobian=jacobian,
     )
 
 
@@ -237,6 +284,7 @@ register_family(
         names=("c10",),
         units=("Pa",),
         evaluate=_neo_hookean,
+        jacobian=_neo_hookean_jacobian,
         guess=_guess(1, 1.0 / 6.0),
         bounds=_bounds((1e-8,), (10.0,)),
         describe="P = 2·C10·(λ - λ⁻²) — 가장 단순한 초탄성. 30% 안쪽 변형에서 쓸 만하다.",
@@ -251,6 +299,7 @@ register_family(
         names=("c10", "c01"),
         units=("Pa", "Pa"),
         evaluate=_mooney_rivlin,
+        jacobian=_mooney_rivlin_jacobian,
         guess=_guess(2, 1.0 / 12.0),
         bounds=_bounds((1e-8, 0.0), (10.0, 10.0)),
         describe="P = 2(C10 + C01/λ)(λ - λ⁻²) — I₂ 항이 있어 중간 변형까지 따라간다.",
@@ -265,6 +314,7 @@ register_family(
         names=("c10", "c20", "c30"),
         units=("Pa", "Pa", "Pa"),
         evaluate=_yeoh,
+        jacobian=_yeoh_jacobian,
         guess=_guess(3, 1.0 / 6.0),
         bounds=_bounds((1e-8, -10.0, -10.0), (10.0, 10.0, 10.0)),
         describe="I₁ 3차 — 큰 변형에서 다시 뻣뻣해지는 모양(upturn)을 낸다.",
@@ -279,6 +329,7 @@ register_family(
         parameter_names=("mu", "alpha"),
         parameter_units=("Pa", "1"),
         evaluate=_ogden_1,
+        jacobian=_ogden_1_jacobian,
         # α 는 응력 크기와 무관한 지수라 스케일을 곱하면 안 된다.
         guess=lambda strain, stress: np.asarray([_scale(stress) / 3.0, 2.0], dtype=np.float64),
         bounds=lambda strain, stress: (

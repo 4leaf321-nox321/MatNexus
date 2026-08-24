@@ -170,3 +170,107 @@ class Test견주기:
         assert [item.relative_rmse for item in results] == sorted(
             item.relative_rmse for item in results
         )
+
+
+#: 식이 성립하는 자리의 x 와 그럴듯한 파라미터. 경계에 붙지 않은 값으로 고른다.
+SAMPLES: dict[str, tuple[np.ndarray, np.ndarray]] = {
+    "voce": (np.linspace(0.001, 0.25, 15), np.array([250e6, 200e6, 12.0])),
+    "swift": (np.linspace(0.001, 0.25, 15), np.array([800e6, 0.005, 0.18])),
+    "hockett_sherby": (
+        np.linspace(0.0, 0.25, 15),  # ε=0 을 일부러 넣는다 — 특이점이 거기다
+        np.array([250e6, 200e6, 8.0, 0.7]),
+    ),
+    "neo_hookean": (np.linspace(0.0, 2.0, 15), np.array([0.4e6])),
+    "mooney_rivlin": (np.linspace(0.0, 2.0, 15), np.array([0.3e6, 0.1e6])),
+    "yeoh": (np.linspace(0.0, 2.0, 15), np.array([0.4e6, -0.02e6, 0.005e6])),
+    "ogden_1": (np.linspace(0.0, 2.0, 15), np.array([0.5e6, 2.3])),
+}
+
+
+class Test야코비안:
+    """**틀린 미분은 막히지 않는다 — 다른 답에 수렴할 뿐이다.**
+
+    `least_squares` 는 준 야코비안이 식과 맞는지 확인하지 않는다. 부호 하나를
+    틀려도 예외 없이 돌아가고, 그럴듯한 파라미터와 그럴듯한 R² 를 낸다. 그래서
+    **선언한 식마다 수치 미분과 대조한다.**
+
+    등록된 식을 훑으므로 새 식이 야코비안을 달면 이 시험이 자동으로 덮는다 —
+    안 달면 건너뛴다(수치 미분으로 도는 것은 정상이다, ADR 0013).
+    """
+
+    def test_해석적_미분이_수치_미분과_맞는다(self) -> None:
+        fitting.load_builtin()
+        checked = []
+        for key, family in sorted(fitting.FAMILIES.items()):
+            if family.jacobian is None:
+                continue
+            assert key in SAMPLES, (
+                f"'{key}' 가 야코비안을 선언했는데 대조할 표본이 없습니다. "
+                f"`SAMPLES` 에 그 식이 성립하는 x 와 파라미터를 넣으세요."
+            )
+            x, parameters = SAMPLES[key]
+            analytic = np.asarray(family.jacobian(parameters, x), dtype=np.float64)
+            assert analytic.shape == (len(x), len(parameters)), (
+                f"'{key}' 야코비안의 모양이 (점 수, 파라미터 수) 가 아닙니다: {analytic.shape}"
+            )
+            assert np.all(np.isfinite(analytic)), f"'{key}' 야코비안에 NaN·inf 가 있습니다."
+
+            # 중앙 차분. 파라미터마다 **제 크기에 비례한** 폭을 쓴다 — Pa(1e8)와
+            # 무차원(0.1)에 같은 폭을 쓰면 한쪽은 반올림에 묻힌다.
+            for index in range(len(parameters)):
+                step = max(abs(float(parameters[index])), 1.0) * 1e-6
+                up, down = (
+                    parameters.astype(np.float64).copy(),
+                    parameters.astype(np.float64).copy(),
+                )
+                up[index] += step
+                down[index] -= step
+                numeric = (family.evaluate(up, x) - family.evaluate(down, x)) / (2.0 * step)
+                scale = max(float(np.max(np.abs(numeric))), 1e-12)
+                assert np.allclose(
+                    analytic[:, index], numeric, rtol=1e-4, atol=scale * 1e-6
+                ), f"'{key}' 의 {family.parameter_names[index]} 미분이 어긋납니다."
+            checked.append(key)
+
+        # 하나도 안 돌고 통과하면 시험이 아니다.
+        assert len(checked) >= 7, f"대조한 식이 {len(checked)}개뿐입니다: {checked}"
+
+    def test_없어도_적합은_돈다(self) -> None:
+        """**확장은 야코비안 없이 식만 등록할 수 있다**(ADR 0013). 그때는 scipy 가
+        차분으로 낸다 — 느릴 뿐 틀리지 않는다."""
+        bare = fitting.Family(
+            key="_바닐라",
+            label="야코비안 없는 식",
+            parameter_names=("a", "b"),
+            parameter_units=("Pa", "1"),
+            evaluate=lambda p, x: p[0] * (1.0 - np.exp(-p[1] * x)),
+            guess=lambda x, y: np.asarray([float(np.max(y)), 10.0]),
+            bounds=lambda x, y: (
+                np.asarray([0.0, 1e-6]),
+                np.asarray([float(np.max(y)) * 5.0, 1e4]),
+            ),
+            describe="시험용",
+        )
+        assert bare.jacobian is None
+        try:
+            fitting.register_family(bare)
+            strain = np.linspace(0.001, 0.25, 30)
+            result = fitting.fit("_바닐라", strain, 300e6 * (1.0 - np.exp(-9.0 * strain)))
+            values = {item.name: item.value for item in result.parameters}
+            assert values["a"] == pytest.approx(300e6, rel=1e-3)
+            assert values["b"] == pytest.approx(9.0, rel=1e-3)
+        finally:
+            fitting.FAMILIES.pop("_바닐라", None)
+
+    def test_같은_답에_수렴한다(self) -> None:
+        """**해석적 미분은 답을 바꾸는 것이 아니라 가는 길을 바꾼다.**
+
+        아는 곡선에서 아는 파라미터가 여전히 되돌아와야 한다 — 안 그러면 미분이
+        틀린 것이고, 그때는 그럴듯한 다른 답이 나온다.
+        """
+        strain, stress = voce_curve()
+        result = fitting.fit("voce", strain, stress)
+        values = {item.name: item.value for item in result.parameters}
+        assert values["sigma_0"] == pytest.approx(SIGMA_0, rel=1e-4)
+        assert values["q"] == pytest.approx(Q, rel=1e-4)
+        assert values["b"] == pytest.approx(B, rel=1e-4)

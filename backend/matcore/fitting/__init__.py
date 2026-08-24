@@ -173,6 +173,33 @@ class Family:
     """`(파라미터, x) -> 경고 목록`. 적합 자체는 됐는데 **해석이 발산하는** 계수를
     짚는다. 고무에서 실제로 나는 일이다 — 막지 않고 말한다."""
 
+    jacobian: Any = None
+    """`(파라미터, x) -> (점 수, 파라미터 수)` 행렬. `∂y/∂p` 를 해석적으로 준다.
+
+    없으면 `least_squares` 가 수치 미분한다 — 파라미터마다 식을 한 번 더 돌려
+    차분을 낸다.
+
+    **재고 나서 이 주석을 고쳤다.** 계획서에는 *"수렴이 느리고 초기값에 더
+    민감하다 — 같은 데이터에서 답이 흔들리는 자리를 줄인다"* 고 적혀 있었는데,
+    **뒤엣것은 우리 식들에서 사실이 아니었다.**
+
+        초기값을 200번 흔들어 제대로 수렴한 횟수 (2026-08-24 실측)
+
+        voce  1% 잡음        198 → 198        swift  1% 잡음     154 → 154
+        hockett_sherby 1%    166 → 168        같은 것 3% 잡음    173 → 178
+        ogden_1  2% 잡음     200 → 200        yeoh   2% 잡음     200 → 200
+
+    이유가 있다. scipy 의 `2-point` 는 이미 **파라미터마다 제 크기에 비례한**
+    차분 폭을 쓴다(`rel_step · max(1, |x|)`). Pa 와 무차원이 한 벡터에 섞여도
+    한쪽이 반올림에 묻히지 않는다 — 내가 근거로 든 것이 틀렸다.
+
+    **남는 값은 속도다.** 2000점 기준 1.3~1.5배(voce 2.7→2.0ms, swift 3.3→2.5,
+    hockett_sherby 7.4→4.8). 미리보기가 식 여럿을 한 번에 맞추므로 그만큼 줄고,
+    파라미터가 많은 식일수록 크다.
+
+    선언 안 하면 그대로 수치 미분으로 돈다. 확장이 야코비안 없이 식만 등록해도
+    막히지 않는다(ADR 0013)."""
+
 
 def _voce(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     sigma_0, q, b = parameters
@@ -202,6 +229,16 @@ def _voce_tangent(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     return np.asarray(q * b * np.exp(-b * np.maximum(strain, 0.0)), dtype=np.float64)
 
 
+def _voce_jacobian(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    """σ = σ₀ + Q(1 - e^(-bε)) 를 파라미터로 미분한 것."""
+    _sigma_0, q, b = parameters
+    decay = np.exp(-b * strain)
+    return np.stack(
+        [np.ones_like(strain), 1.0 - decay, q * strain * decay],
+        axis=1,
+    )
+
+
 def _swift(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     k, epsilon_0, n = parameters
     return np.asarray(k * np.power(np.maximum(epsilon_0 + strain, 1e-12), n), dtype=np.float64)
@@ -227,6 +264,21 @@ def _swift_tangent(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     return np.asarray(k * n * np.power(base, n - 1.0), dtype=np.float64)
 
 
+def _swift_jacobian(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    """σ = K(ε₀+ε)^n 를 파라미터로 미분한 것.
+
+    `evaluate` 와 **같은 하한으로 자른다.** 다른 값을 쓰면 잘리는 구간에서
+    야코비안이 식과 어긋나고, `least_squares` 는 그 어긋남을 곡률로 읽는다.
+    """
+    k, _epsilon_0, n = parameters
+    base = np.maximum(_epsilon_0 + strain, 1e-12)
+    power = np.power(base, n)
+    return np.stack(
+        [power, k * n * np.power(base, n - 1.0), k * power * np.log(base)],
+        axis=1,
+    )
+
+
 def _hockett_sherby(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
     sigma_0, q, b, n = parameters
     safe = np.maximum(strain, 0.0)
@@ -247,6 +299,26 @@ def _hockett_tangent(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
         value = q * b * n * power * np.exp(-b * np.power(safe, n))
     return np.asarray(
         np.where(safe > 0.0, value, np.inf if n < 1.0 else value), dtype=np.float64
+    )
+
+
+def _hockett_jacobian(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+    """σ = σ₀ + Q(1 - e^(-b·ε^n)) 를 파라미터로 미분한 것.
+
+    **ε=0 에서 `∂σ/∂n` 은 0 이다.** ε^n 이 n 과 무관하게 0 이므로 그 점은 n 에
+    반응하지 않는다. 식대로 쓰면 `0 · ln 0` 이라 NaN 이 나오는데, NaN 하나가
+    야코비안에 섞이면 `least_squares` 는 그 반복에서 방향을 통째로 잃는다.
+    """
+    _sigma_0, q, b, n = parameters
+    safe = np.maximum(strain, 0.0)
+    powered = np.power(safe, n)
+    decay = np.exp(-b * powered)
+    by_n = np.where(
+        safe > 0.0, q * b * decay * powered * np.log(np.maximum(safe, 1e-300)), 0.0
+    )
+    return np.stack(
+        [np.ones_like(safe), 1.0 - decay, q * powered * decay, by_n],
+        axis=1,
     )
 
 
@@ -283,6 +355,7 @@ FAMILIES: dict[str, Family] = {
         bounds=_voce_bounds,
         describe="sigma = s0 + Q(1 - exp(-b*eps)) — 포화형. 큰 변형에서 일정해진다.",
         tangent=_voce_tangent,
+        jacobian=_voce_jacobian,
         applies_to=METALLIC,
     ),
     "swift": Family(
@@ -295,6 +368,7 @@ FAMILIES: dict[str, Family] = {
         bounds=_swift_bounds,
         describe="sigma = K(e0 + eps)^n — 멱함수형. 큰 변형에서도 계속 올라간다.",
         tangent=_swift_tangent,
+        jacobian=_swift_jacobian,
         applies_to=METALLIC,
     ),
     "hockett_sherby": Family(
@@ -307,6 +381,7 @@ FAMILIES: dict[str, Family] = {
         bounds=_hockett_bounds,
         describe="sigma = s0 + Q(1 - exp(-b*eps^n)) — 포화형이면서 초기 기울기가 자유롭다.",
         tangent=_hockett_tangent,
+        jacobian=_hockett_jacobian,
         applies_to=METALLIC,
     ),
 }
@@ -707,7 +782,22 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
         difference: np.ndarray = family.evaluate(parameters, strain) - stress
         return difference / scale
 
-    solved = least_squares(residual, initial, bounds=(lower, upper), max_nfev=5000)
+    # **해석적 미분이 있으면 준다.** 없으면 scipy 가 차분으로 낸다 — 답은 같고
+    # 1.3~1.5배 느릴 뿐이다(실측은 `Family.jacobian` 주석).
+    jacobian: Any = "2-point"
+    if family.jacobian is not None:
+
+        def analytic(parameters: np.ndarray) -> np.ndarray:
+            assert family is not None
+            matrix: np.ndarray = family.jacobian(parameters, strain)
+            # 잔차를 scale 로 나눴으므로 미분도 같이 나눈다.
+            return np.asarray(matrix, dtype=np.float64) / scale
+
+        jacobian = analytic
+
+    solved = least_squares(
+        residual, initial, jac=jacobian, bounds=(lower, upper), max_nfev=5000
+    )
     fitted = np.asarray(solved.x, dtype=np.float64)
 
     predicted = family.evaluate(fitted, strain)
