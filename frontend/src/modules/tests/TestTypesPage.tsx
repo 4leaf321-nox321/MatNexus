@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { TestTypeListPanel } from '@/modules/tests/TestTypeListPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function TestTypesPage() {
@@ -41,7 +42,12 @@ export default function TestTypesPage() {
   const [editing, setEditing] = useState<TestType | null>(null)
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  // **한 번에 하나만 본다.** 카드 하나가 채널 표 + 조건 표라 백 줄이 넘는데,
+  // 넷을 쌓으면 채널만 스물셋이 한 화면에 온다.
+  const [picked, setPicked] = useState<string | null>(null)
   const rows = types.data ?? []
+  // 안 고른 상태를 두지 않는다 — 빈 본문은 고장으로 보인다.
+  const active = rows.find((item) => item.key === picked) ?? rows[0] ?? null
 
   async function remove(type: TestType) {
     setError(null)
@@ -72,6 +78,12 @@ export default function TestTypesPage() {
         }
       />
 
+      <TestTypeListPanel
+        types={rows}
+        current={active?.key ?? null}
+        onPick={setPicked}
+      />
+
       <ErrorNotice error={types.error ?? error} className="mb-4" />
 
       {!types.loading && rows.length === 0 && (
@@ -84,41 +96,42 @@ export default function TestTypesPage() {
         </div>
       )}
 
+      {/* 고른 하나만 그린다. 목록은 왼쪽에 있다. */}
       <div className="space-y-6">
-        {rows.map((type) => (
-          <section key={type.key} className="rounded-md border">
+        {active && (
+          <section key={active.key} className="rounded-md border">
             <header className="flex flex-wrap items-center gap-2 border-b p-4">
-              <h2 className="font-medium">{type.label}</h2>
+              <h2 className="font-medium">{active.label}</h2>
               <Badge variant="secondary" className="font-mono">
-                {type.key}
+                {active.key}
               </Badge>
-              <Badge variant="outline">{type.abbr}</Badge>
+              <Badge variant="outline">{active.abbr}</Badge>
               {/* **누구 것인지 안 보이면 왜 못 고치는지 알 수 없다.** 전역은 여러
                   부서가 함께 써서 시스템 관리자만 손댄다 — 그 사실이 화면에
                   없으면 편집을 눌러 보고 403 을 받고서야 알게 된다. */}
-              {type.is_global ? (
+              {active.is_global ? (
                 <Badge variant="outline" className="gap-1" title="모든 부서가 씁니다. 시스템 관리자만 고칠 수 있습니다.">
                   <Globe2 className="size-3" />
                   전역
                 </Badge>
               ) : (
-                <Badge variant="secondary">{type.owner_workspace_name}</Badge>
+                <Badge variant="secondary">{active.owner_workspace_name}</Badge>
               )}
-              {!type.is_active && <Badge variant="destructive">중단</Badge>}
-              {type.run_count > 0 && (
+              {!active.is_active && <Badge variant="destructive">중단</Badge>}
+              {active.run_count > 0 && (
                 <Badge variant="outline" className="gap-1" title="등록된 시험이 있어 채널의 키·단위가 잠깁니다">
                   <Lock className="size-3" />
-                  시험 {type.run_count}건
+                  시험 {active.run_count}건
                 </Badge>
               )}
               <span className="text-muted-foreground ml-auto text-xs">
-                최대 {Math.round(type.max_upload_bytes_effective / (1024 * 1024))}MB
+                최대 {Math.round(active.max_upload_bytes_effective / (1024 * 1024))}MB
               </span>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  setEditing(type)
+                  setEditing(active)
                   setOpen(true)
                 }}
               >
@@ -128,33 +141,33 @@ export default function TestTypesPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={type.run_count > 0}
+                disabled={active.run_count > 0}
                 title={
-                  type.run_count > 0
+                  active.run_count > 0
                     ? '등록된 시험이 있습니다. 더 쓰지 않으려면 편집에서 중단으로 바꾸세요.'
                     : '삭제'
                 }
-                onClick={() => remove(type)}
+                onClick={() => remove(active)}
               >
                 <Trash2 className="size-3.5" />
               </Button>
             </header>
 
             <div className="space-y-4 p-4">
-              {type.description && (
-                <p className="text-muted-foreground text-sm">{type.description}</p>
+              {active.description && (
+                <p className="text-muted-foreground text-sm">{active.description}</p>
               )}
 
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Plug className="text-muted-foreground size-3.5" />
                 <span className="text-muted-foreground text-xs">파서</span>
-                {type.parser_key ? (
+                {active.parser_key ? (
                   <>
                     <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
-                      {type.parser_key}
+                      {active.parser_key}
                     </code>
-                    {type.extensions.length > 0 ? (
-                      type.extensions.map((extension) => (
+                    {active.extensions.length > 0 ? (
+                      active.extensions.map((extension) => (
                         <Badge key={extension} variant="outline" className="font-mono">
                           {extension}
                         </Badge>
@@ -186,7 +199,7 @@ export default function TestTypesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {type.channels.map((channel) => (
+                    {active.channels.map((channel) => (
                       <TableRow key={channel.key}>
                         <TableCell className="font-mono text-xs">{channel.key}</TableCell>
                         <TableCell className="text-sm">{channel.label}</TableCell>
@@ -214,11 +227,11 @@ export default function TestTypesPage() {
                 </p>
               </div>
 
-              {type.conditions.length > 0 && (
+              {active.conditions.length > 0 && (
                 <div>
                   <p className="mb-1 text-xs font-medium">조건 (입력 항목)</p>
                   <div className="flex flex-wrap gap-2">
-                    {type.conditions.map((field) => (
+                    {active.conditions.map((field) => (
                       <span
                         key={field.key}
                         className="rounded-md border px-2 py-1 text-xs"
@@ -239,7 +252,7 @@ export default function TestTypesPage() {
               )}
             </div>
           </section>
-        ))}
+        )}
       </div>
 
       <TestTypeEditor
