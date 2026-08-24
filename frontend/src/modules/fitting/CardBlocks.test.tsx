@@ -88,6 +88,44 @@ describe('물성 카드 내용', () => {
     expect(screen.getByText('(재료 공칭)')).toBeInTheDocument()
   })
 
+  it('사람이 적은 값임을 짚고 근거 문서를 함께 든다', () => {
+    // **시험이 준 값과 사람이 적은 값을 같은 모양으로 그리면 안 된다.**
+    // 이 화면에서 그 둘이 구별되지 않으면, 문헌값으로 돌린 해석이 실측인 줄
+    // 알고 나간다(ADR 0016).
+    render(
+      <CardBlocks
+        specs={SPECS}
+        card={card({
+          imaginary: {
+            values: {
+              strength: 2e8,
+              strength_source: 'declared:standard',
+              strength_reference: 'KS D 3512 표 3',
+            },
+          },
+        })}
+      />
+    )
+    const origin = screen.getByText('(적은 값 · 규격)')
+    expect(origin).toBeInTheDocument()
+    // 근거 문서는 자리를 안 먹되 손에 닿는 데 둔다 — 값이 의심스러울 때
+    // 확인할 길이 없으면 적어 둔 뜻이 반쯤 사라진다.
+    expect(origin).toHaveAttribute('title', 'KS D 3512 표 3')
+  })
+
+  it('모르는 출처 코드는 조용히 지어내지 않는다', () => {
+    // 아는 척하면 그 표시가 곧 거짓말이 된다.
+    render(
+      <CardBlocks
+        specs={SPECS}
+        card={card({
+          imaginary: { values: { strength: 2e8, strength_source: 'declared:점술' } },
+        })}
+      />
+    )
+    expect(screen.getByText('(적은 값)')).toBeInTheDocument()
+  })
+
   it('표를 접되 몇 행 접었는지 말한다', () => {
     // **조용히 자르면 그것이 전부인 줄 안다.** 소성 표 하나가 수천 점이다.
     const rows = Array.from({ length: 20 }, (_, index) => ({

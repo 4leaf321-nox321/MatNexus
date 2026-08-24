@@ -37,3 +37,13 @@ if (!window.ResizeObserver) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
 }
+
+// Radix 의 Select·DropdownMenu 는 포인터 캡처 API 로 연다. jsdom 에 그것이
+// 없어서 **누르면 아무 일도 안 일어났다** — 그래서 "선택지에 X 가 없다" 는
+// 시험이 목록을 한 번도 열어 보지 않고 통과했다. 없는 것을 검사한 것이 아니라
+// 아무것도 안 검사한 것이다.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.setPointerCapture = () => {}
+  Element.prototype.releasePointerCapture = () => {}
+}

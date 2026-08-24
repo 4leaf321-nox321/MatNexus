@@ -35,6 +35,28 @@ const SOURCE_LABELS: Record<string, string> = {
   prony: 'Prony 적합',
 }
 
+/**
+ * 사람이 적은 값의 출처(ADR 0016). `declared:<어디서>` 로 온다.
+ *
+ * **「적은 값」이라는 사실이 앞에 온다.** 열팽창계수 옆의 `(문헌)` 은 그 값이
+ * 이 시험들에서 나오지 않았다는 뜻이고, 그것이 핸드북 이름보다 먼저 알아야 할
+ * 것이다.
+ */
+const DECLARED_LABELS: Record<string, string> = {
+  literature: '문헌',
+  standard: '규격',
+  datasheet: '밀시트',
+  estimate: '추정',
+}
+
+function originOf(source: string): string {
+  if (source.startsWith('declared:')) {
+    const where = DECLARED_LABELS[source.slice('declared:'.length)]
+    return where ? `적은 값 · ${where}` : '적은 값'
+  }
+  return SOURCE_LABELS[source] ?? ''
+}
+
 function cell(value: unknown, siUnit: string | null | undefined): string {
   if (value === null || value === undefined) return '—'
   if (typeof value === 'number') return formatScalar(value, siUnit)
@@ -48,7 +70,10 @@ function Values({ spec, values }: { spec: BlockSpec; values: Record<string, unkn
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
       {shown.map((one) => {
-        const origin = SOURCE_LABELS[String(values[`${one.key}_source`] ?? '')]
+        const origin = originOf(String(values[`${one.key}_source`] ?? ''))
+        // **근거 문서를 값에 붙인다.** 「문헌」만으로는 어느 핸드북 몇 판인지
+        // 알 수 없고, 값이 의심스러울 때 확인할 길이 없다.
+        const reference = values[`${one.key}_reference`]
         return (
           <div key={one.key}>
             <dt className="text-muted-foreground text-xs" title={one.help ?? undefined}>
@@ -59,7 +84,12 @@ function Values({ spec, values }: { spec: BlockSpec; values: Record<string, unkn
               {/* **값과 함께 출처를 보인다.** 나중에 "이 물성 어디서 났나" 를
                   묻는 자리에서 그 오해가 제일 비싸다. */}
               {origin && (
-                <span className="text-muted-foreground ml-1 text-xs">({origin})</span>
+                <span
+                  className="text-muted-foreground ml-1 text-xs"
+                  title={typeof reference === 'string' ? reference : undefined}
+                >
+                  ({origin})
+                </span>
               )}
             </dd>
           </div>

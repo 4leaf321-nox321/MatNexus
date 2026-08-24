@@ -39,6 +39,7 @@ from app.modules.fitting.schemas import (
     PropertyCardUpdateRequest,
     ViscoelasticCardSaveRequest,
 )
+from app.modules.materials import declared
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestType
@@ -127,7 +128,21 @@ SOURCE_NOTES = {
     "sample": "시료에서 잰 값",
     "material": "재료에 적힌 공칭값",
     "manual": "사람이 직접 넣은 값",
+    "prony": "Prony 적합의 순간 탄성률",
 }
+
+
+def _origin(source: str) -> str:
+    """출처 코드를 사람이 읽는 말로. 모르는 코드면 빈 문자열.
+
+    선언 물성은 `declared:<어디서>` 로 온다(ADR 0016). **「적은 값」이라는
+    사실이 앞에 오게 한다** — 덱만 받은 사람에게는 잰 값인지 적은 값인지가
+    핸드북 이름보다 먼저 알아야 할 것이다.
+    """
+    if source.startswith("declared:"):
+        where = declared.SOURCES.get(source.removeprefix("declared:"))
+        return f"사람이 적은 값 ({where})" if where else "사람이 적은 값"
+    return SOURCE_NOTES.get(source, "")
 
 
 @dataclass(frozen=True)
@@ -183,6 +198,79 @@ def _inherit_density(
             f"재료의 공칭값입니다 ({material.density_si:.4g} kg/m³).",
         )
     return Inherited(None, "missing", "재료에도 시료에도 밀도가 없습니다.")
+
+
+def _declared(material: Material, item: str) -> Inherited:
+    """재료에 **사람이 적어 둔** 물성 하나(ADR 0016).
+
+    시험이 안 주는 값들이다 — 탄성계수는 시험을 안 한 재료에서, 열물성은
+    언제나 여기서 온다.
+
+    출처를 `declared:<어디서>` 로 남긴다. `measured` 와 한 글자도 안 겹쳐야
+    한다 — 덱을 받은 사람이 **잰 값인지 적은 값인지** 구별할 수 있어야 하고,
+    그 구별이 이 저장소가 카드에 근거를 박는 이유 전부다.
+    """
+    row = _declared_row(material, item)
+    if row is None:
+        return Inherited(None, "missing", f"재료에 '{item}' 이 없습니다.")
+    where = str(row.get("source") or "declared")
+    reference = str(row.get("reference") or "").strip()
+    return Inherited(
+        float(row["value_si"]),
+        f"declared:{where}",
+        f"사람이 적은 값입니다 — {reference or '근거 문서 없음'}.",
+    )
+
+
+def _declared_row(material: Material, item: str) -> dict[str, Any] | None:
+    """선언 물성 한 줄. 값이 숫자가 아니면 없는 것으로 본다."""
+    for row in material.declared_properties or []:
+        if str(row.get("item")) == item and isinstance(row.get("value_si"), (int, float)):
+            return dict(row)
+    return None
+
+
+#: 열물성 블록의 키 ↔ 기준정보 물성 항목 이름.
+#:
+#: **이름을 코드에 박는다.** 항목 목록 자체는 기준정보가 정하지만(D7), 덱의
+#: `*EXPANSION` 이 무엇을 받는지는 솔버가 정한 것이라 데이터가 아니다. 항목을
+#: 지우거나 이름을 바꾸면 그냥 이 블록이 비는 것이고, 그것이 맞는 결과다 —
+#: **틀린 값이 실리는 것보다 안 실리는 것이 낫다.**
+THERMAL_ITEMS = {
+    "thermal_expansion": "열팽창계수",
+    "specific_heat": "비열",
+    "thermal_conductivity": "열전도도",
+}
+
+
+def _thermal_block(material: Material) -> dict[str, Any]:
+    """선언 물성에서 열물성 블록을 만든다. 셋 다 없으면 빈 dict.
+
+    **하나만 있어도 낸다.** 열팽창만 아는 재료로 열응력 해석은 돌아간다 —
+    셋을 다 요구하면 그 재료는 영영 덱이 안 나온다.
+
+    기준 온도는 **값들이 서로 다른 온도에서 왔으면 안 적는다.** 하나를 골라
+    적으면 나머지 둘이 그 온도의 값인 것처럼 보인다.
+    """
+    values: dict[str, Any] = {}
+    temperatures: set[float] = set()
+    for key, item in THERMAL_ITEMS.items():
+        found = _declared(material, item)
+        if found.value is None:
+            continue
+        values[key] = found.value
+        values[f"{key}_source"] = found.source
+        # **근거 문서를 카드 안에 복사한다.** 재료의 선언 물성을 나중에 고쳐도
+        # 이미 확정한 카드가 무엇을 근거로 했는지는 그대로 남아야 한다 —
+        # 값을 복사하면서 근거를 참조로 두면 그 둘이 어긋난다.
+        row = _declared_row(material, item) or {}
+        if row.get("reference"):
+            values[f"{key}_reference"] = str(row["reference"])
+        if isinstance(row.get("temperature_k"), (int, float)):
+            temperatures.add(float(row["temperature_k"]))
+    if values and len(temperatures) == 1:
+        values["reference_temperature"] = next(iter(temperatures))
+    return values
 
 
 def _inherit_poisson(material: Material, override: float | None) -> Inherited:
@@ -592,11 +680,22 @@ def create_card(
         None,
     )
     samples = _samples_of(db, group)
+    stated = _declared(group.material, "탄성계수")
+    stated_row = _declared_row(group.material, "탄성계수")
     poisson = _inherit_poisson(group.material, payload.poisson_ratio)
     density = _inherit_density(group.material, samples, payload.density)
+    thermal = _thermal_block(group.material)
     inherited_notes = [
+        # 잰 값이면 처리 결과가 근거를 들고 있다. 적은 값일 때만 적는다 —
+        # **어느 문서에서 왔는지가 카드에 없으면 되짚을 수 없다.**
+        f"탄성계수: {stated.detail}" if modulus is None and stated.value is not None else "",
         f"푸아송비: {poisson.detail}" if poisson.detail else "",
         f"밀도: {density.detail}" if density.detail else "",
+        *(
+            f"{THERMAL_ITEMS[key]}: {_declared(group.material, THERMAL_ITEMS[key]).detail}"
+            for key in THERMAL_ITEMS
+            if key in thermal
+        ),
     ]
 
     # ── 소성 표를 어디까지 낼까 ─────────────────────────────────────────
@@ -644,10 +743,25 @@ def create_card(
         #
         # 값과 함께 **출처**를 박는다(`<키>_source`). 재료·시료를 나중에 고쳐도
         # 이 카드가 무엇을 썼는지는 그대로 남는다.
+        # **측정 → 선언 순.** 시험을 한 재료는 잰 값을 쓰고, 안 한 재료는
+        # 사람이 적은 문헌값을 쓴다 — 밀도가 `시료 실측 → 재료 공칭` 으로
+        # 떨어지는 것과 같은 규칙이다(ADR 0016).
         **(
             {"youngs_modulus": modulus, "youngs_modulus_source": "measured"}
             if modulus is not None
-            else {}
+            else (
+                {
+                    "youngs_modulus": stated.value,
+                    "youngs_modulus_source": stated.source,
+                    **(
+                        {"youngs_modulus_reference": str(stated_row["reference"])}
+                        if stated_row and stated_row.get("reference")
+                        else {}
+                    ),
+                }
+                if stated.value is not None
+                else {}
+            )
         ),
         **(
             {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
@@ -680,6 +794,7 @@ def create_card(
         },
         blocks={
             **({"elastic": {"values": elastic}} if elastic else {}),
+            **({"thermal": {"values": thermal}} if thermal else {}),
             **({spec.block: fitted} if spec is not None and fitted else {}),
             # **소성 표는 금속 카드의 것이다.** 고무는 공칭 축에 맞췄고, 그 점을
             # `*PLASTIC` 자리에 넣으면 덱은 돌고 재료만 딴판이 된다.
@@ -939,14 +1054,22 @@ def export_card(
         f"카드 {item.id} ({STATUS_NOTES.get(item.status, item.status)})",
     ]
     # 값마다 어디서 왔는지 한 줄씩. 없는 값은 애초에 카드에 없다.
-    for key, label in (
-        ("youngs_modulus", "탄성계수"),
-        ("poisson_ratio", "푸아송비"),
-        ("density", "밀도"),
+    thermal = cards.values_of(item.blocks.get("thermal"))
+    for values, key, label in (
+        (elastic, "youngs_modulus", "탄성계수"),
+        (elastic, "poisson_ratio", "푸아송비"),
+        (elastic, "density", "밀도"),
+        (thermal, "thermal_expansion", "열팽창계수"),
+        (thermal, "specific_heat", "비열"),
+        (thermal, "thermal_conductivity", "열전도도"),
     ):
-        origin = SOURCE_NOTES.get(str(elastic.get(f"{key}_source", "")))
-        if elastic.get(key) is not None and origin:
-            provenance.append(f"{label}: {origin}")
+        origin = _origin(str(values.get(f"{key}_source", "")))
+        if values.get(key) is None or not origin:
+            continue
+        # **근거 문서까지 낸다.** 「사람이 적은 값」 만으로는 어느 핸드북 몇
+        # 판인지 알 수 없고, 값이 의심스러울 때 확인할 길이 없다.
+        reference = values.get(f"{key}_reference")
+        provenance.append(f"{label}: {origin}{f' — {reference}' if reference else ''}")
 
     if table.get("source") == "외삽":
         # **덱만 받은 사람이 알아야 한다.** 어디까지가 시험이고 어디부터가 식인지

@@ -1,0 +1,165 @@
+/**
+ * 선언 물성 편집 — **시험이 주지 않는 값을 사람이 적는다**(ADR 0016).
+ *
+ * 여기서 지키는 것은 넷이다.
+ *
+ *   항목을 코드에 안 박는다   기준정보가 정한다. 목록이 비면 그렇다고 말한다
+ *   차원이 맞는 단위만 뜬다   비열 자리에 W/(m.K) 가 보이면 안 된다
+ *   적은 단위로 되돌려 보인다  `2.06e11` 로 보이면 자기가 적은 값인지 모른다
+ *   한 항목은 한 줄           이미 적은 항목은 추가 목록에서 사라진다
+ */
+
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
+import type { Material } from '@/modules/materials/api'
+
+const propertyItems = vi.fn()
+const update = vi.fn()
+
+vi.mock('@/modules/materials/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/materials/api')>()),
+  materialsApi: {
+    propertyItems: () => propertyItems(),
+    update: (...args: unknown[]) => update(...args),
+  },
+}))
+
+// **항목이 자기 단위를 들고 온다.** 차원으로 거르는 일은 서버가 한다 —
+// 화면이 하면 그 규칙이 두 곳에 생기고, 갈라지는 날 비열 자리에 W/(m.K) 가 뜬다.
+const ITEMS = [
+  {
+    item: '탄성계수',
+    dimension: 'stress',
+    si_unit: 'Pa',
+    symbol: 'E',
+    units: ['Pa', 'MPa', 'GPa'],
+  },
+  {
+    item: '비열',
+    dimension: 'specific_heat',
+    si_unit: 'J/(kg.K)',
+    symbol: 'Cp',
+    units: ['J/(kg.K)', 'kJ/(kg.K)'],
+  },
+  {
+    item: '열전도도',
+    dimension: 'thermal_conductivity',
+    si_unit: 'W/(m.K)',
+    symbol: 'k',
+    units: ['W/(m.K)'],
+  },
+]
+
+
+function material(rows: unknown[] = []): Material {
+  return {
+    id: 'm-1',
+    record_name: 'SECC_MDOI_1.0',
+    declared_properties: rows,
+  } as unknown as Material
+}
+
+function panel(rows: unknown[] = [], onSaved = vi.fn()) {
+  render(<DeclaredPropertiesCard material={material(rows)} onSaved={onSaved} />)
+  return onSaved
+}
+
+const DECLARED_E = {
+  item: '탄성계수',
+  value_si: 206e9,
+  // **되돌린 값도 서버가 준다.** 화면이 나눗셈을 하면 그 규칙이 두 곳에 생긴다.
+  value: 206,
+  input_unit: 'GPa',
+  source: 'literature',
+  reference: 'KS D 3512 표 3',
+  temperature_k: null,
+  note: null,
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  propertyItems.mockResolvedValue(ITEMS)
+  update.mockResolvedValue(material([DECLARED_E]))
+})
+
+describe('선언 물성 편집', () => {
+  it('적은 단위로 되돌려 보인다', async () => {
+    // **저장은 SI 지만 `2.06e11` 로 보이면 자기가 적은 값인지 알기 어렵다.**
+    panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    expect(screen.getByDisplayValue('KS D 3512 표 3')).toBeInTheDocument()
+  })
+
+  it('차원이 맞는 단위만 고르게 한다', async () => {
+    // **비열 자리에 W/(m.K) 를 넣으면 값은 멀쩡한데 뜻이 다르다.** 서버도
+    // 막지만, 고를 수 있게 두면 사람이 저장을 눌러 보고서야 안다.
+    panel([{ ...DECLARED_E, item: '비열', value_si: 462, value: 462, input_unit: 'J/(kg.K)' }])
+    await waitFor(() => expect(screen.getByDisplayValue('462')).toBeInTheDocument())
+    await userEvent.click(screen.getByLabelText('단위'))
+    // 목록이 실제로 열린 것을 먼저 확인한다 — 안 열린 채로 「없다」를 보면
+    // 검사한 것이 아무것도 없다.
+    expect(await screen.findByRole('option', { name: 'J/(kg.K)' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'W/(m.K)' })).not.toBeInTheDocument()
+  })
+
+  it('이미 적은 항목은 추가 목록에서 사라진다', async () => {
+    // **한 항목은 한 줄이다.** 탄성계수가 두 줄이면 카드가 어느 것을 쓸지
+    // 정할 수 없고, 그 판단을 여기서 안 하면 나중에 조용히 하나가 이긴다.
+    panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('combobox', { name: '항목 추가' }))
+    // **목록이 뜬 뒤에 본다.** 안 뜬 상태로 「없다」를 검사하면 무엇을 감췄든
+    // 통과한다 — 아무것도 안 검사한 것과 같다.
+    expect(await screen.findByRole('option', { name: /비열/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /탄성계수/ })).not.toBeInTheDocument()
+  })
+
+  it('항목이 하나도 없으면 어디에 등록하는지 말한다', async () => {
+    // **"항목 추가가 안 뜬다" 로 끝나면 사람은 고장으로 읽는다.**
+    propertyItems.mockResolvedValue([])
+    panel()
+    await waitFor(() =>
+      expect(screen.getByText(/기준정보의/)).toHaveTextContent('물성 항목')
+    )
+  })
+
+  it('고치기 전에는 저장을 못 누른다', async () => {
+    panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
+    await userEvent.clear(screen.getByDisplayValue('206'))
+    expect(screen.getByRole('button', { name: '저장' })).toBeEnabled()
+  })
+
+  it('적은 단위를 그대로 보낸다', async () => {
+    // **환산 규칙이 두 곳에 있으면 언젠가 갈라진다**(ADR 0004). 화면은
+    // `206 GPa` 를 보내고 서버가 SI 로 바꾼다.
+    const onSaved = panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    await userEvent.clear(screen.getByLabelText('값'))
+    await userEvent.type(screen.getByLabelText('값'), '210')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, payload] = update.mock.calls[0] as [string, { declared_properties: unknown[] }]
+    expect(payload.declared_properties[0]).toMatchObject({
+      item: '탄성계수',
+      value: 210,
+      input_unit: 'GPa',
+    })
+    expect(onSaved).toHaveBeenCalled()
+  })
+
+  it('잰 온도는 ℃ 로 받아 K 로 보낸다', async () => {
+    // **상온을 298 로 적는 사람은 없다.**
+    panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText('잰 온도 (℃)'), '20')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, payload] = update.mock.calls[0] as [string, { declared_properties: unknown[] }]
+    expect(payload.declared_properties[0]).toMatchObject({ temperature_k: 293.15 })
+  })
+})

@@ -33,6 +33,15 @@ export type PropertySources = components['schemas']['PropertySourcesOut']
 export type SpecimenSizes = components['schemas']['SpecimenSizesOut']
 export type SpecimenSize = components['schemas']['SpecimenSizeOut']
 export type ValueSource = components['schemas']['ValueSourceOut']
+/**
+ * 시험이 주지 않아 사람이 적은 물성 한 줄(ADR 0016).
+ *
+ * 값은 언제나 SI(`value_si`)로 오고 적은 단위(`input_unit`)가 함께 온다 —
+ * `2.06e11` 만 돌려주면 자기가 적은 값인지 알기 어렵다.
+ */
+export type DeclaredProperty = components['schemas']['DeclaredPropertyOut']
+/** 넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7). */
+export type PropertyItem = components['schemas']['PropertyItemOut']
 
 export const LENGTH_UNIT = 'mm'
 export const DENSITY_UNIT = 'kg/m3'
@@ -69,6 +78,14 @@ export const materialsApi = {
   update: (id: string, payload: MaterialUpdate) =>
     api.patch<Material>(`/materials/${id}`, payload),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),
+
+  /**
+   * 넣을 수 있는 물성 항목. 기준정보의 `물성 항목` 축이 정한다.
+   *
+   * **재료마다 다르지 않다** — 재료 id 를 안 받는 이유다. 무엇을 넣을 수
+   * 있는지는 부서의 결정이고 재료의 성질이 아니다.
+   */
+  propertyItems: () => api.get<PropertyItem[]>('/materials/property-items'),
 
   /** 어떤 값이 어디에 적혀 있고 무엇에 쓰이는지. 화면이 이 배치를 외우지 않는다. */
   propertySources: (id: string) =>

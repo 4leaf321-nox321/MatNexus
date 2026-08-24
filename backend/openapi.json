@@ -1488,6 +1488,10 @@
             ],
             "title": "Temperature K"
           },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
           "value_si": {
             "title": "Value Si",
             "type": "number"
@@ -1496,6 +1500,7 @@
         "required": [
           "item",
           "value_si",
+          "value",
           "input_unit",
           "source",
           "reference"
@@ -5360,13 +5365,21 @@
               }
             ],
             "title": "Symbol"
+          },
+          "units": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Units",
+            "type": "array"
           }
         },
         "required": [
           "item",
           "dimension",
           "si_unit",
-          "symbol"
+          "symbol",
+          "units"
         ],
         "title": "PropertyItemOut",
         "type": "object"

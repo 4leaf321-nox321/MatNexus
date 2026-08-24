@@ -3256,6 +3256,8 @@ export interface components {
             source: string;
             /** Temperature K */
             temperature_k?: number | null;
+            /** Value */
+            value: number;
             /** Value Si */
             value_si: number;
         };
@@ -4722,6 +4724,8 @@ export interface components {
             si_unit: string;
             /** Symbol */
             symbol: string | null;
+            /** Units */
+            units: string[];
         };
         /** PropertySourcesOut */
         PropertySourcesOut: {

@@ -227,3 +227,81 @@ class Test태도:
     def test_모르는_형식은_있는_것을_알려_준다(self) -> None:
         with pytest.raises(export.ExportError, match="있는 것"):
             export.render("nastran", CARD)
+
+
+def thermal_deck(**values: float | str) -> export.Deck:
+    """열물성이 붙은 덱. 시험이 안 주는 값들이라 대개 선언 물성에서 온다."""
+    base = deck()
+    return export.Deck(
+        name=base.name,
+        solver_id=base.solver_id,
+        blocks={**base.blocks, "thermal": {"values": dict(values)}},
+        provenance=base.provenance,
+    )
+
+
+class Test열물성:
+    """`*EXPANSION` · `*SPECIFIC HEAT` · `*CONDUCTIVITY`.
+
+    **인장시험이 하나도 안 주는 값들이다.** 여기까지 이어져야 선언 물성이 실제
+    쓸모를 갖는다 — 그전까지는 넣어 두고 안 쓰는 칸이다(ADR 0016).
+    """
+
+    def test_없으면_한_줄도_안_낸다(self) -> None:
+        text = export.render("abaqus", CARD).text
+        assert "*EXPANSION" not in text
+        assert "*SPECIFIC HEAT" not in text
+        assert "*CONDUCTIVITY" not in text
+
+    def test_셋_다_실린다(self) -> None:
+        text = export.render(
+            "abaqus",
+            thermal_deck(
+                thermal_expansion=1.17e-05,
+                specific_heat=462.0,
+                thermal_conductivity=45.0,
+            ),
+        ).text
+        assert f"*EXPANSION, TYPE=ISO\n{1.17e-05:.12E}," in text
+        assert f"*SPECIFIC HEAT\n{462.0:.12E}," in text
+        assert f"*CONDUCTIVITY, TYPE=ISO\n{45.0:.12E}," in text
+
+    def test_하나만_있어도_낸다(self) -> None:
+        """**셋을 묶지 않는다.** 열팽창만 아는 재료로 열응력 해석은 돌아간다 —
+        셋을 다 요구하면 그 재료는 영영 덱이 안 나온다."""
+        text = export.render("abaqus", thermal_deck(thermal_conductivity=45.0)).text
+        assert "*CONDUCTIVITY" in text
+        assert "*EXPANSION" not in text
+        assert "*SPECIFIC HEAT" not in text
+
+    def test_기준_온도가_없으면_ZERO_를_안_붙인다(self) -> None:
+        """`ZERO` 는 열변형이 0 이 되는 온도다. 없는데 293.15 를 적어 넣으면
+        **덱은 멀쩡히 돌고 열응력만 통째로 어긋난다.** 안 적으면 Abaqus 가
+        해석의 초기 온도를 쓴다 — 그것이 맞는 기본값이다."""
+        text = export.render("abaqus", thermal_deck(thermal_expansion=1.17e-05)).text
+        assert "ZERO" not in text
+        with_zero = export.render(
+            "abaqus", thermal_deck(thermal_expansion=1.17e-05, reference_temperature=293.15)
+        ).text
+        assert f"*EXPANSION, TYPE=ISO, ZERO={293.15:.12E}" in with_zero
+
+    def test_잰_값인지_적은_값인지_덱에_남는다(self) -> None:
+        """덱만 받은 사람이 이 숫자의 무게를 알 수 있어야 한다."""
+        text = export.render(
+            "abaqus",
+            thermal_deck(specific_heat=462.0, specific_heat_source="declared:standard"),
+        ).text
+        assert "source=declared:standard" in text
+
+    def test_소성_표보다_먼저_나온다(self) -> None:
+        """`*PLASTIC` 뒤에 오면 그 줄들이 소성 표의 데이터 줄로 읽힌다 —
+        Abaqus 는 키워드 뒤의 숫자 줄을 그 키워드의 것으로 먹는다."""
+        text = export.render("abaqus", thermal_deck(specific_heat=462.0)).text
+        assert text.index("*SPECIFIC HEAT") < text.index("*PLASTIC")
+
+    def test_열물성만으로는_덱이_안_나온다(self) -> None:
+        """**선택이라는 말이 '없어도 된다' 지 '그것만 있어도 된다' 는 아니다.**"""
+        alone = export.Deck(
+            name="X", solver_id=1, blocks={"thermal": {"values": {"specific_heat": 462.0}}}
+        )
+        assert export.missing_for(alone, "abaqus")

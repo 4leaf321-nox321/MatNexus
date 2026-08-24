@@ -1254,3 +1254,201 @@ class Test미리보기외삽:
             blended = next(f for f in body["fits"] if f["family"] == "voce+swift")
             ends.append(blended["curve"][-1][1])
         assert ends[0] != pytest.approx(ends[1])
+
+
+def declare(
+    client: TestClient,
+    headers: dict[str, str],
+    material_id: str,
+    rows: list[dict[str, Any]],
+) -> None:
+    """재료에 선언 물성을 적어 둔다(ADR 0016)."""
+    saved = client.patch(
+        f"/api/materials/{material_id}",
+        json={"declared_properties": rows},
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+
+
+class Test선언물성이_덱까지:
+    """**시험이 안 준 값이 덱에 실린다.**
+
+    1단계는 넣을 자리만 만들었다 — 넣어 두고 안 쓰는 기능이었다. 여기가 쓸모가
+    생기는 지점이다: 재료에 적은 문헌값이 카드 블록이 되고 솔버 키워드가 된다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _axis(self, db: Session) -> None:
+        """물성 항목 축을 시드한다 — 항목 목록은 기준정보가 정한다(D7)."""
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        db.commit()
+
+    def test_시험이_준_값이_이긴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**잰 값이 있으면 적은 값은 안 쓴다.** 순서가 뒤집히면 실측을 해 놓고
+        문헌값으로 해석하게 되는데, 카드는 멀쩡해 보인다."""
+        declare(
+            client,
+            admin_headers,
+            ready["id"],
+            [
+                {
+                    "item": "탄성계수",
+                    "value": 1.0,
+                    "input_unit": "GPa",
+                    "source": "estimate",
+                    "reference": "일부러 틀린 값",
+                }
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "측정이 이긴다",
+            },
+            headers=admin_headers,
+        ).json()
+        elastic = values(card, "elastic")
+        assert elastic["youngs_modulus_source"] == "measured"
+        assert elastic["youngs_modulus"] > 1e10
+
+    def test_열물성_블록이_생긴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        declare(
+            client,
+            admin_headers,
+            ready["id"],
+            [
+                {
+                    "item": "열팽창계수",
+                    "value": 1.17e-05,
+                    "input_unit": "1/K",
+                    "source": "standard",
+                    "reference": "ASM Handbook Vol.1",
+                    "temperature_k": 293.15,
+                },
+                {
+                    "item": "비열",
+                    "value": 462,
+                    "input_unit": "J/(kg.K)",
+                    "source": "standard",
+                    "reference": "ASM Handbook Vol.1",
+                    "temperature_k": 293.15,
+                },
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "열물성",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        thermal = values(card, "thermal")
+        assert thermal["thermal_expansion"] == pytest.approx(1.17e-05)
+        assert thermal["specific_heat"] == pytest.approx(462.0)
+        # **출처가 값 옆에 박힌다.** 재료를 나중에 고쳐도 이 카드가 무엇을
+        # 썼는지는 그대로 남는다.
+        assert thermal["specific_heat_source"] == "declared:standard"
+        assert thermal["reference_temperature"] == pytest.approx(293.15)
+        # 안 적은 것은 안 생긴다 — 0 으로 채우면 측정값인지 알 수 없다.
+        assert "thermal_conductivity" not in thermal
+        # 근거 문서가 카드에 남는다.
+        notes = " ".join(card["source"]["notes"])
+        assert "ASM Handbook Vol.1" in notes
+
+    def test_온도가_서로_다르면_기준_온도를_안_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """하나를 골라 적으면 나머지가 그 온도의 값인 것처럼 보인다."""
+        declare(
+            client,
+            admin_headers,
+            ready["id"],
+            [
+                {
+                    "item": "비열",
+                    "value": 462,
+                    "input_unit": "J/(kg.K)",
+                    "source": "standard",
+                    "reference": "A",
+                    "temperature_k": 293.15,
+                },
+                {
+                    "item": "열전도도",
+                    "value": 45,
+                    "input_unit": "W/(m.K)",
+                    "source": "standard",
+                    "reference": "A",
+                    "temperature_k": 373.15,
+                },
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "온도가 다르다",
+            },
+            headers=admin_headers,
+        ).json()
+        assert "reference_temperature" not in values(card, "thermal")
+
+    def test_덱에_실린다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**여기가 이 기능의 끝이다.** 시험이 하나도 안 주는 값으로 해석용
+        키워드가 나간다."""
+        declare(
+            client,
+            admin_headers,
+            ready["id"],
+            [
+                {
+                    "item": "열전도도",
+                    "value": 45,
+                    "input_unit": "W/(m.K)",
+                    "source": "literature",
+                    "reference": "ASM Handbook Vol.1 p.123",
+                }
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "덱까지",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        text = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+        ).text
+        assert "*CONDUCTIVITY, TYPE=ISO" in text
+        assert "source=declared:literature" in text
+        assert "ASM Handbook Vol.1 p.123" in text

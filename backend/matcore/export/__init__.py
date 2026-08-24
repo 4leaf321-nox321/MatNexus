@@ -431,6 +431,48 @@ def _header(deck: Deck, comment: str) -> list[str]:
     return [f"{comment} {line}" for line in ("MatNexus 물성 카드", *deck.provenance)]
 
 
+#: `*EXPANSION` 등이 받는 값 ↔ 블록 키. 값이 하나인 키워드들이라 표가 아니다.
+THERMAL_KEYWORDS: tuple[tuple[str, str, str], ...] = (
+    ("thermal_expansion", "*EXPANSION, TYPE=ISO", "1/K"),
+    ("specific_heat", "*SPECIFIC HEAT", "J/(kg.K)"),
+    ("thermal_conductivity", "*CONDUCTIVITY, TYPE=ISO", "W/(m.K)"),
+)
+
+
+def _thermal_lines(deck: Deck) -> list[str]:
+    """열물성 키워드. 블록이 없으면 **한 줄도 안 낸다.**
+
+    ## 셋을 묶지 않는다
+
+    열팽창만 아는 재료로 열응력 해석은 돌아가고, 전도도만 아는 재료로 정상
+    열해석은 돌아간다. 셋을 다 요구하면 그 재료는 영영 덱이 안 나온다.
+
+    ## `ZERO=` 를 함부로 안 붙인다
+
+    `*EXPANSION` 의 `ZERO` 는 **열변형이 0 이 되는 온도**다. 안 적으면 Abaqus 는
+    해석의 초기 온도를 쓴다. 카드에 기준 온도가 있을 때만 적는다 — 없는데
+    293.15 를 적어 넣으면 **덱은 멀쩡히 돌고 열응력만 통째로 어긋난다.**
+    """
+    if not deck.has("thermal"):
+        return []
+    lines: list[str] = []
+    zero = deck.number("thermal", "reference_temperature")
+    for key, keyword, unit in THERMAL_KEYWORDS:
+        value = deck.number("thermal", key)
+        if value is None:
+            continue
+        source = deck.values("thermal").get(f"{key}_source")
+        # **잰 값인지 적은 값인지 덱에서 보인다.** 덱만 받은 사람이 이 숫자의
+        # 무게를 알 수 있어야 한다.
+        lines.append(f"** {key}: {unit}, source={source or 'unknown'}")
+        head = keyword
+        if key == "thermal_expansion" and zero is not None:
+            head = f"{keyword}, ZERO={_free(zero)}"
+        lines.append(head)
+        lines.append(f"{_free(value)},")
+    return lines
+
+
 @register_renderer(
     key="abaqus",
     label="Abaqus",
@@ -441,6 +483,8 @@ def _header(deck: Deck, comment: str) -> list[str]:
         Need("elastic", values=("youngs_modulus", "poisson_ratio")),
         # 밀도는 빠져도 된다 — *DENSITY 는 선택 키워드다. 대신 왜 없는지 덱에 적는다.
         Need("elastic", values=("density",), optional=True),
+        # 열물성은 셋 다 선택이다. 있으면 싣고 없으면 그 키워드가 안 나간다.
+        Need("thermal", optional=True),
         # **표는 빠지면 안 된다.** 전에는 검사를 지나 `render` 안에서 터졌고,
         # 그러면 화면이 "이 형식은 아직 못 낸다" 를 미리 말할 수 없다.
         Need("table", rows_min=MIN_POINTS),
@@ -477,6 +521,7 @@ def render_abaqus(deck: Deck) -> Rendered:
     # EXTRAPOLATION=CONSTANT — 표 밖에서 응력을 일정하게 둔다. 기본값(오류 중단)
     # 보다 낫다고 볼 수도 있지만, 여기서는 **적합 구간 밖을 외삽하지 않는다** 는
     # 이 프로젝트의 태도와 같은 말이다: 모르는 구간에서 값을 지어내지 않는다.
+    lines.extend(_thermal_lines(deck))
     lines.append("*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT")
     # **응력이 먼저, 소성변형률이 나중이다.** OpenRadioss 와 순서가 반대다.
     lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
@@ -493,6 +538,7 @@ def render_abaqus(deck: Deck) -> Rendered:
         # **OpenRadioss 는 없다.** LAW62 는 고무 초탄성(Ogden)+Prony 경로라
         # 선형 점탄성과 다른 모형이다. 65 도 같은 이유로 Abaqus 만 낸다.
         Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        Need("thermal", optional=True),
         Need("viscoelastic", rows_min=1),
     ),
 )
@@ -577,6 +623,7 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
         lines.append(f"{_free(density)},")
     lines.append("*ELASTIC, TYPE=ISOTROPIC")
     lines.append(f"{_free(youngs)}, {_free(poisson)}")
+    lines.extend(_thermal_lines(deck))
     lines.append("*VISCOELASTIC, TIME=PRONY, TYPE=ISOTROPIC")
     # 행 하나가 g, k, τ. 순서가 뒤바뀌면 솔버가 오류 없이 다른 재료를 만든다.
     lines.extend(f"{_free(g)}, 0.0, {_free(tau)}" for g, tau in prony)
@@ -627,6 +674,8 @@ INCOMPRESSIBLE_D = 0.0
         # "초탄성 family 가 필요합니다" 로 뜬다. 없으면 아래에서 짚는다.
         Need("hyperelastic", rows_min=1),
         Need("elastic", values=("density",), optional=True),
+        # 열물성은 셋 다 선택이다. 있으면 싣고 없으면 그 키워드가 안 나간다.
+        Need("thermal", optional=True),
     ),
 )
 def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
@@ -682,6 +731,7 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
     else:
         notes.append("밀도가 없어 *DENSITY 를 비웠습니다 — 동적 해석에는 그대로 못 씁니다.")
 
+    lines.extend(_thermal_lines(deck))
     lines.append(f"*HYPERELASTIC, {keyword}")
     lines.append(
         ", ".join([*(_free(values[name]) for name in order), _free(INCOMPRESSIBLE_D)])

@@ -52,7 +52,7 @@ from app.shared import audit, specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
-from matcore import naming
+from matcore import naming, units
 from matcore import specimen as specimen_kit
 
 router = APIRouter(prefix="/materials", tags=["materials"])
@@ -91,7 +91,8 @@ def _material_out(
         density_unit=density_unit,
         poisson_ratio=material.poisson_ratio,
         declared_properties=[
-            DeclaredPropertyOut(**row) for row in (material.declared_properties or [])
+            DeclaredPropertyOut(**row, value=units.from_si(row["value_si"], row["input_unit"]))
+            for row in (material.declared_properties or [])
         ],
         note=material.note,
         legacy_id=material.legacy_id,
@@ -322,6 +323,7 @@ def property_items(
             dimension=spec["dimension"],
             si_unit=spec["si_unit"],
             symbol=spec["symbol"],
+            units=units.units_for(spec["dimension"]),
         )
         for name, spec in sorted(declared.catalog(db).items())
     ]

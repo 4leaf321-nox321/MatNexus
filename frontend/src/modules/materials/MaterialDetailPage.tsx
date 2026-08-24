@@ -38,6 +38,7 @@ import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
+import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -186,7 +187,13 @@ export default function MaterialDetailPage() {
           <TabsTrigger value="cards">CAE 카드</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="properties">
+        {/* **적은 값이 잰 값 위에 온다.** 탄성계수를 적으려는 사람은 먼저
+            "시험에서 나온 게 있나" 를 봐야 한다 — 두 화면에 갈라 두면 잰 값이
+            있는 재료에 문헌값을 또 적는다(ADR 0016). */}
+        <TabsContent value="properties" className="space-y-6">
+          {item && (
+            <DeclaredPropertiesCard material={item} onSaved={() => void material.reload()} />
+          )}
           {id && <PropertiesPanel materialId={id} />}
         </TabsContent>
 

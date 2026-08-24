@@ -26,6 +26,12 @@ class DeclaredPropertyOut(BaseModel):
     """기준정보 `property_item` 축의 값. 항목 목록을 **부서가 정한다**(D7)."""
     value_si: float
     """**언제나 정본 SI.** 사람이 GPa 로 적어도 저장은 Pa 다."""
+    value: float
+    """`input_unit` 단위로 되돌린 값 — 화면이 그대로 그린다.
+
+    **환산을 화면에서 안 한다.** 규칙이 두 곳에 있으면 언젠가 갈라지고
+    (ADR 0004), 갈라진 쪽이 화면이면 사람은 자기가 적은 값과 다른 숫자를
+    보면서 그것이 저장된 값이라고 믿는다."""
     input_unit: str
     """사람이 적은 단위. 화면이 그대로 되돌려 보여 준다 — 206 GPa 를 넣었는데
     2.06e11 Pa 로 보이면 자기가 적은 값인지 알기 어렵다."""
@@ -60,6 +66,12 @@ class PropertyItemOut(BaseModel):
     dimension: str
     si_unit: str
     symbol: str | None
+    units: list[str]
+    """이 차원에서 고를 수 있는 단위.
+
+    **항목이 자기 단위를 들고 온다.** 화면이 단위 표를 따로 읽어서 차원으로
+    거르게 두면, 거르는 규칙이 화면에도 생긴다 — 그 규칙이 서버와 갈라지는
+    날 비열 자리에 W/(m.K) 가 뜬다. 여기서 주면 화면은 그리기만 한다."""
 
 
 class MaterialOut(BaseModel):
