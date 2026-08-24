@@ -1414,6 +1414,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statistics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description 홈에 뿌리는 요약 한 벌.
+         *
+         *     **부서 범위는 각 항목이 원래 따르는 규칙 그대로다.** 재료·시험은
+         *     `permissions` 의 가시성을 쓰고, 카드는 재료를 따라간다. 여기서 규칙을 새로
+         *     만들면 홈의 숫자와 목록 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 방법이
+         *     없다.
+         */
+        get: operations["overview_api_statistics_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs": {
         parameters: {
             query?: never;
@@ -4118,6 +4143,45 @@ export interface components {
             /** Value */
             value: number;
         };
+        /**
+         * OverviewOut
+         * @description 홈에 뿌리는 요약.
+         *
+         *     **세는 일을 서버가 한다.** 재료 94개를 세려고 94행을 화면으로 보낼 이유가
+         *     없다 — 목록 엔드포인트만 있으면 그렇게 된다.
+         *
+         *     부서 범위는 **각 항목이 원래 따르는 규칙 그대로**다. 시험은 부서 것이고
+         *     재료·카드는 전사 카탈로그다(ADR 0004: 남의 부서가 잰 물성도 보라고 만든
+         *     자리다). 여기서 규칙을 새로 만들면 홈의 숫자와 목록 화면의 숫자가 갈린다.
+         */
+        OverviewOut: {
+            /** Card Deprecated */
+            card_deprecated: number;
+            /** Card Draft */
+            card_draft: number;
+            /** Card Published */
+            card_published: number;
+            /** Card Total */
+            card_total: number;
+            /** Families */
+            families: components["schemas"]["TallyOut"][];
+            /** Material Count */
+            material_count: number;
+            /** Materials With Card */
+            materials_with_card: number;
+            /** Parse Failed */
+            parse_failed: number;
+            /** Run Count */
+            run_count: number;
+            /** Sample Count */
+            sample_count: number;
+            /** Specimen Count */
+            specimen_count: number;
+            /** Test Types */
+            test_types: components["schemas"]["TallyOut"][];
+            /** Waiting To Process */
+            waiting_to_process: number;
+        };
         /** Page[MaterialOut] */
         Page_MaterialOut_: {
             /** Items */
@@ -5540,6 +5604,18 @@ export interface components {
             unit_symbols: (string | null)[];
             /** Units */
             units: string[];
+        };
+        /**
+         * TallyOut
+         * @description 이름 하나와 개수. 분류·시험 종류처럼 **무엇이 몇 건인가** 를 담는다.
+         */
+        TallyOut: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /**
          * TemporaryPasswordResponse
@@ -9054,6 +9130,26 @@ export interface operations {
             };
         };
     };
+    overview_api_statistics_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewOut"];
+                };
+            };
+        };
+    };
     list_runs_api_test_runs_get: {
         parameters: {
             query?: {
@@ -10204,7 +10300,7 @@ export interface operations {
                 include_hidden?: boolean;
                 /** @description 적게 쓰이는 것부터. 오타를 찾을 때 쓴다 */
                 least_used?: boolean;
-                /** @description 상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만 */
+                /** @description 상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 Grade 만 */
                 parent_value?: string | null;
             };
             header?: never;

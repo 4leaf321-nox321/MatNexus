@@ -11,13 +11,17 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.fitting.models import PropertyCard
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.statistics import services
 from app.modules.statistics.models import EnsembleResult
 from app.modules.statistics.schemas import (
@@ -31,9 +35,12 @@ from app.modules.statistics.schemas import (
     MaterialStatisticsOut,
     ObservationOut,
     OutlierOut,
+    OverviewOut,
     ScalarStatsOut,
+    TallyOut,
 )
-from app.modules.tests.models import TestType
+from app.modules.tests.models import TestRun, TestType
+from app.shared import permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from matcore import distributions, statistics
@@ -344,4 +351,94 @@ def distribution_report(
         ],
         best=report.best,
         notes=list(report.notes),
+    )
+
+
+# --- 요약 ------------------------------------------------------------------
+#
+# **세는 일을 서버가 한다.** 목록 엔드포인트만 있으면 화면이 재료 94개를 세려고
+# 94행을 받게 된다. 홈은 매일 열리는 화면이라 그 비용이 매일 든다.
+
+
+def _tally(rows: Sequence[Any]) -> list[TallyOut]:
+    return [TallyOut(key=str(key), label=str(key), count=int(count)) for key, count in rows]
+
+
+@router.get("/overview", response_model=OverviewOut)
+def overview(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> OverviewOut:
+    """홈에 뿌리는 요약 한 벌.
+
+    **부서 범위는 각 항목이 원래 따르는 규칙 그대로다.** 재료·시험은
+    `permissions` 의 가시성을 쓰고, 카드는 재료를 따라간다. 여기서 규칙을 새로
+    만들면 홈의 숫자와 목록 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 방법이
+    없다.
+    """
+    materials = permissions.visible_material_ids(db, user).subquery()
+    material_ids = select(materials.c[0])
+
+    families = _tally(
+        db.execute(
+            select(Material.family, func.count())
+            .where(Material.id.in_(material_ids))
+            .group_by(Material.family)
+            .order_by(func.count().desc())
+        ).all()
+    )
+
+    runs = permissions.visible_runs(db, user).subquery()
+    run_ids = select(runs.c.id)
+    test_types = _tally(
+        db.execute(
+            select(TestType.label, func.count())
+            .join(TestRun, TestRun.test_type_id == TestType.id)
+            .where(TestRun.id.in_(run_ids))
+            .group_by(TestType.label)
+            .order_by(func.count().desc())
+        ).all()
+    )
+
+    cards = (
+        select(PropertyCard.status, func.count())
+        .where(PropertyCard.material_id.in_(material_ids))
+        .group_by(PropertyCard.status)
+    )
+    by_status = {str(status): int(count) for status, count in db.execute(cards).all()}
+
+    def count(query: Select[Any]) -> int:
+        return int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
+
+    return OverviewOut(
+        material_count=count(select(materials.c[0])),
+        families=families,
+        sample_count=count(
+            select(Sample.id).where(
+                Sample.material_id.in_(material_ids), Sample.deleted_at.is_(None)
+            )
+        ),
+        specimen_count=count(
+            select(Specimen.id)
+            .join(Sample, Sample.id == Specimen.sample_id)
+            .where(Sample.material_id.in_(material_ids), Specimen.deleted_at.is_(None))
+        ),
+        run_count=count(select(runs.c.id)),
+        test_types=test_types,
+        card_total=sum(by_status.values()),
+        card_published=by_status.get("published", 0),
+        card_draft=by_status.get("draft", 0),
+        card_deprecated=by_status.get("deprecated", 0),
+        materials_with_card=count(
+            select(PropertyCard.material_id)
+            .where(PropertyCard.material_id.in_(material_ids))
+            .group_by(PropertyCard.material_id)
+        ),
+        # **읽혔는데 아직 채택이 없는 것.** 이것이 2단계에 남은 일이다.
+        waiting_to_process=count(
+            select(runs.c.id).where(
+                runs.c.status == "parsed", runs.c.adopted_result_id.is_(None)
+            )
+        ),
+        parse_failed=count(select(runs.c.id).where(runs.c.status == "failed")),
     )

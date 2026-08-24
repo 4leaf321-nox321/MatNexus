@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.tests import services
@@ -424,3 +425,114 @@ class Test제조사섞임:
             f"/api/statistics/materials/{material['id']}", headers=admin_headers
         ).json()["groups"][0]
         assert not any("제조사" in note for note in group["notes"])
+
+
+class Test요약:
+    """홈에 뿌리는 요약 — **세는 일을 서버가 한다.**
+
+    목록 엔드포인트만 있으면 화면이 재료 94개를 세려고 94행을 받는다. 홈은 매일
+    열리는 화면이라 그 비용이 매일 든다.
+
+    **부서 범위는 각 항목이 원래 따르는 규칙 그대로다.** 여기서 새 규칙을 만들면
+    홈의 숫자와 목록 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 방법이 없다.
+    """
+
+    def test_아무것도_없으면_전부_0_이다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        body = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert body["material_count"] == 0
+        assert body["card_total"] == 0
+        assert body["families"] == []
+        # **0 은 0 이라고 말한다.** 화면이 "안 보이게" 정하는 것이지 서버가
+        # 감추면 "못 셌다" 와 구별이 안 된다.
+        assert body["parse_failed"] == 0
+
+    def test_넣은_만큼_센다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        run_id = _run(client, admin_headers, db, material["id"], "MD")
+
+        body = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert body["material_count"] == 1
+        # `_run` 이 시료를 새로 만든다. 재료 픽스처는 시료를 안 만든다.
+        assert body["sample_count"] == 1
+        assert body["specimen_count"] == 1
+        assert body["run_count"] == 1
+        assert [(item["label"], item["count"]) for item in body["families"]] == [("Metal", 1)]
+        assert [(item["label"], item["count"]) for item in body["test_types"]] == [
+            ("인장시험", 1)
+        ]
+
+        # **채택 전이면 처리 대기다.** 이것이 2단계에 남은 일이다.
+        assert body["waiting_to_process"] == 1
+        _adopt(client, admin_headers, run_id)
+        after = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert after["waiting_to_process"] == 0
+
+    def test_카드를_상태별로_가른다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session, material: Any
+    ) -> None:
+        """**초안과 확정을 한 숫자로 뭉치면 남은 일이 안 보인다.**
+
+        개발 DB 가 초안 10 · 확정 1 이었다 — 만들어 놓고 승인을 안 받은 것이
+        열이라는 뜻인데, 합쳐 놓으면 「카드 11」로만 보인다.
+
+        카드를 API 로 만들려면 진응력 열까지 처리해야 한다. 여기서 보는 것은
+        **세는 방식**이지 카드 만들기가 아니므로 행을 직접 넣는다.
+        """
+        from app.modules.fitting.models import PropertyCard
+        from app.modules.tests.models import TestType
+
+        test_type = db.scalar(select(TestType).where(TestType.key == "tensile"))
+        assert test_type is not None
+        card = PropertyCard(
+            material_id=uuid.UUID(material["id"]),
+            test_type_id=test_type.id,
+            orientation="MD",
+            label="요약용",
+            status="draft",
+        )
+        db.add(card)
+        db.commit()
+
+        body = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert body["card_total"] == 1
+        assert body["card_draft"] == 1
+        assert body["card_published"] == 0
+        # 덮인 정도. 재료 1개 중 1개에 카드가 있다.
+        assert body["materials_with_card"] == 1
+
+        card.status = "published"
+        db.commit()
+        after = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert after["card_draft"] == 0
+        assert after["card_published"] == 1
+
+    def test_안_보이는_재료는_안_센다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**홈의 숫자와 목록 화면의 숫자가 갈리면 안 된다.**
+
+        재료 목록이 `visible_materials` 로 좁히는데 요약이 전부 세면, 목록에
+        94개가 뜨는데 홈은 120이라고 말한다. 그때 어느 쪽이 맞는지 알 방법이 없다.
+        """
+        client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "OV3",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        )
+        listed = client.get(
+            "/api/materials", params={"limit": 1}, headers=admin_headers
+        ).json()
+        body = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert body["material_count"] == listed["total"]

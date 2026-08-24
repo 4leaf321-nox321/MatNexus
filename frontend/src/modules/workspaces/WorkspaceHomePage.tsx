@@ -25,6 +25,8 @@ import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
+import { statisticsApi } from '@/modules/statistics/api'
+import { OverviewPanel } from '@/modules/statistics/OverviewPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 /** 최근 목록에 몇 건. 훑어보는 자리라 한 화면을 넘기지 않는다. */
@@ -100,6 +102,8 @@ export default function WorkspaceHomePage() {
   // 재료는 **전사 카탈로그**다. 부서로 안 좁히는 것이 맞다 — 남의 부서가 잰
   // 물성도 보라고 만든 자리다.
   const materials = useResource(() => materialsApi.list({ limit: 1 }), [])
+  // **세는 일은 서버가 한다.** 재료 94개를 세려고 94행을 받을 이유가 없다.
+  const summary = useResource(() => statisticsApi.overview(), [])
 
   const rows = recent.data?.items ?? []
   const loading = recent.loading || waiting.loading || failed.loading || materials.loading
@@ -118,7 +122,15 @@ export default function WorkspaceHomePage() {
         </p>
       </div>
 
-      <ErrorNotice error={recent.error ?? materials.error} />
+      <ErrorNotice error={recent.error ?? materials.error ?? summary.error} />
+
+      {/* **매일 오는 사람에게는 안내가 아니라 현황이 필요하다.** 아래 4단계는
+          한 번 읽으면 끝인데 자리는 계속 차지한다 — 요약을 그 위에 둔다. */}
+      <OverviewPanel
+        data={summary.data ?? null}
+        loading={summary.loading}
+        workspaceSlug={workspaceSlug}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Step

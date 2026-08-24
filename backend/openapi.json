@@ -3966,6 +3966,86 @@
         "title": "OutlierOut",
         "type": "object"
       },
+      "OverviewOut": {
+        "description": "홈에 뿌리는 요약.\n\n**세는 일을 서버가 한다.** 재료 94개를 세려고 94행을 화면으로 보낼 이유가\n없다 — 목록 엔드포인트만 있으면 그렇게 된다.\n\n부서 범위는 **각 항목이 원래 따르는 규칙 그대로**다. 시험은 부서 것이고\n재료·카드는 전사 카탈로그다(ADR 0004: 남의 부서가 잰 물성도 보라고 만든\n자리다). 여기서 규칙을 새로 만들면 홈의 숫자와 목록 화면의 숫자가 갈린다.",
+        "properties": {
+          "card_deprecated": {
+            "title": "Card Deprecated",
+            "type": "integer"
+          },
+          "card_draft": {
+            "title": "Card Draft",
+            "type": "integer"
+          },
+          "card_published": {
+            "title": "Card Published",
+            "type": "integer"
+          },
+          "card_total": {
+            "title": "Card Total",
+            "type": "integer"
+          },
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/TallyOut"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "material_count": {
+            "title": "Material Count",
+            "type": "integer"
+          },
+          "materials_with_card": {
+            "title": "Materials With Card",
+            "type": "integer"
+          },
+          "parse_failed": {
+            "title": "Parse Failed",
+            "type": "integer"
+          },
+          "run_count": {
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "specimen_count": {
+            "title": "Specimen Count",
+            "type": "integer"
+          },
+          "test_types": {
+            "items": {
+              "$ref": "#/components/schemas/TallyOut"
+            },
+            "title": "Test Types",
+            "type": "array"
+          },
+          "waiting_to_process": {
+            "title": "Waiting To Process",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "material_count",
+          "families",
+          "sample_count",
+          "specimen_count",
+          "run_count",
+          "test_types",
+          "card_total",
+          "card_published",
+          "card_draft",
+          "card_deprecated",
+          "materials_with_card",
+          "waiting_to_process",
+          "parse_failed"
+        ],
+        "title": "OverviewOut",
+        "type": "object"
+      },
       "Page_MaterialOut_": {
         "properties": {
           "items": {
@@ -7685,6 +7765,30 @@
           "sample_rows"
         ],
         "title": "TablePreviewOut",
+        "type": "object"
+      },
+      "TallyOut": {
+        "description": "이름 하나와 개수. 분류·시험 종류처럼 **무엇이 몇 건인가** 를 담는다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "count"
+        ],
+        "title": "TallyOut",
         "type": "object"
       },
       "TemporaryPasswordResponse": {
@@ -14060,6 +14164,28 @@
         ]
       }
     },
+    "/api/statistics/overview": {
+      "get": {
+        "description": "홈에 뿌리는 요약 한 벌.\n\n**부서 범위는 각 항목이 원래 따르는 규칙 그대로다.** 재료·시험은\n`permissions` 의 가시성을 쓰고, 카드는 재료를 따라간다. 여기서 규칙을 새로\n만들면 홈의 숫자와 목록 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 방법이\n없다.",
+        "operationId": "overview_api_statistics_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Overview",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
     "/api/test-runs": {
       "get": {
         "description": "**가시 범위와 기본 필터는 다른 것이다.**\n\n가시 범위(`visible_runs`)는 \"볼 권한이 있는가\"이고 재료를 따라간다. 그런데\n화면이 `/w/:slug/tests` 라고 말해 놓고 전사를 보여 주면, 사이드바의 '부서'\n라는 말이 거짓이 된다. 부서가 하나뿐인 동안은 드러나지 않지만 두 번째 부서가\n쓰기 시작하면 바로 이상해진다.\n\n`workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를\n넣어도 원래 볼 수 있던 것 안에서만 걸러진다.\n\n`adopted=false` 는 **\"올렸는데 아직 아무것도 안 한 것\"** 을 세는 자리다.\n부서 홈이 \"처리 대기 N건\" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이\n세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.",
@@ -15904,7 +16030,7 @@
             }
           },
           {
-            "description": "상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만",
+            "description": "상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 Grade 만",
             "in": "query",
             "name": "parent_value",
             "required": false,
@@ -15917,7 +16043,7 @@
                   "type": "null"
                 }
               ],
-              "description": "상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 강종만",
+              "description": "상위 축의 값으로 좁힌다. 'Steel' 을 주면 그 아래 Grade 만",
               "title": "Parent Value"
             }
           }

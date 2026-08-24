@@ -157,3 +157,47 @@ class DistributableKeyOut(BaseModel):
     count: int
     """값이 있는 시편 수. **`MIN_ELIGIBLE` 미만이면 화면이 미리 말해 준다** —
     눌러 보고 나서 "모자랍니다" 를 받는 것보다 낫다."""
+
+
+class TallyOut(BaseModel):
+    """이름 하나와 개수. 분류·시험 종류처럼 **무엇이 몇 건인가** 를 담는다."""
+
+    key: str
+    label: str
+    count: int
+
+
+class OverviewOut(BaseModel):
+    """홈에 뿌리는 요약.
+
+    **세는 일을 서버가 한다.** 재료 94개를 세려고 94행을 화면으로 보낼 이유가
+    없다 — 목록 엔드포인트만 있으면 그렇게 된다.
+
+    부서 범위는 **각 항목이 원래 따르는 규칙 그대로**다. 시험은 부서 것이고
+    재료·카드는 전사 카탈로그다(ADR 0004: 남의 부서가 잰 물성도 보라고 만든
+    자리다). 여기서 규칙을 새로 만들면 홈의 숫자와 목록 화면의 숫자가 갈린다.
+    """
+
+    material_count: int
+    families: list[TallyOut]
+    """재료의 재료군 분포. **잘못 만든 분류가 여기서 드러난다** — 개발 DB 에
+    `Family` 라는 재료군의 재료가 1건 있었고, 요약을 만들고 나서 보였다."""
+
+    sample_count: int
+    specimen_count: int
+    run_count: int
+    test_types: list[TallyOut]
+    """시험 종류 분포. 새로 붙인 장비가 안 쓰이고 있으면 여기서 드러난다."""
+
+    card_total: int
+    card_published: int
+    card_draft: int
+    card_deprecated: int
+    materials_with_card: int
+    """카드가 하나라도 있는 재료 수. `material_count` 와 견주면 **덮인 정도**다."""
+
+    waiting_to_process: int
+    """읽혔는데 아직 채택된 처리 결과가 없는 시험. **2단계에 남은 일이다.**"""
+    parse_failed: int
+    """읽기에 실패한 시험. 0 이면 화면이 안 보인다 — 0을 보이면 그것도 상태처럼
+    읽힌다."""

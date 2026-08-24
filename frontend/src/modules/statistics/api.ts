@@ -15,11 +15,18 @@ export type ScalarStats = components['schemas']['ScalarStatsOut']
 export type CurveStats = components['schemas']['CurveStatsOut']
 export type Outlier = components['schemas']['OutlierOut']
 export type EnsembleResult = components['schemas']['EnsembleResultOut']
+export type Overview = components['schemas']['OverviewOut']
 export type DistributionReport = components['schemas']['DistributionReportOut']
 export type DistributionCandidate = components['schemas']['DistributionCandidateOut']
 export type DistributableKey = components['schemas']['DistributableKeyOut']
 
 export const statisticsApi = {
+  /**
+   * 홈에 뿌리는 요약. **세는 일을 서버가 한다** — 재료 94개를 세려고 94행을
+   * 받을 이유가 없다.
+   */
+  overview: () => api.get<Overview>('/statistics/overview'),
+
   forMaterial: (materialId: string, threshold?: number) =>
     api.get<MaterialStatistics>(
       `/statistics/materials/${materialId}${threshold ? `?threshold=${threshold}` : ''}`

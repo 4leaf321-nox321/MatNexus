@@ -125,6 +125,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       to: 'materials',
       why: '같은 이유로 3·4단계(물성·CAE 카드)의 입구와 재료 수를 보여 준다. 재료는 전사 카탈로그라 부서로 좁히지도 않는다 — 목록을 부르는 것이 전부다.',
     },
+    {
+      to: 'statistics',
+      why: '홈 요약(`OverviewPanel`)을 조립한다. 세는 일은 전부 서버가 하고(`/statistics/overview`) 홈은 받은 숫자를 그린다 — 재료 94개를 세려고 94행을 받는 대신이다. 요약 화면이 통계 모듈에 있는 이유는 재료 목록·기준정보 축 패널과 같다: 내용이 그 도메인의 것이고 홈은 자리만 내준다.',
+    },
   ],
 }
 
