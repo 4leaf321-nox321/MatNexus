@@ -27,6 +27,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # 경계 검사가 base 와 비교하려면 히스토리가 있어야 한다.
+          fetch-depth: 0
+
+      # **지침과 소유는 선의에 기댄다.** 에이전트는 규칙을 읽고도 「스코프 안에서
+      # 바로잡는다」 를 넓게 해석할 수 있고, 사람도 급하면 남의 파일을 고친다 —
+      # 그때 막는 것은 여기뿐이다(docs/협업.md).
+      - name: 경계 검사 (확장 ↔ 중심)
+        if: github.event_name == 'pull_request'
+        run: python scripts/check_boundary.py origin/${{ github.base_ref }}
 
       - uses: actions/setup-python@v6
         with:
