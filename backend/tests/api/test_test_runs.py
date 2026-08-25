@@ -690,3 +690,110 @@ class TestStorageCleanup:
             "/api/maintenance/storage", headers={"Authorization": f"Bearer {token}"}
         )
         assert response.status_code == 403
+
+
+class Test목록_거르기와_여러_건_삭제:
+    """실사용에서 나온 셋.
+
+    *"등록한 사람도 나오게 해줘"* · *"각 열에 필터"* · *"체크박스로 고른 것을
+    한꺼번에 삭제"*.
+    """
+
+    @pytest.fixture
+    def parsed(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> dict[str, Any]:
+        """올려서 읽힌 시험 하나."""
+        del tensile
+        made = _upload(client, admin_headers, specimen["id"])
+        assert made.status_code == 202, made.text
+        run: dict[str, Any] = made.json()
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        return run
+
+    def test_등록한_사람이_목록에_실린다(
+        self, client: TestClient, admin_headers: dict[str, str], parsed: dict[str, Any]
+    ) -> None:
+        """**파일이 이상할 때 물어볼 데가 거기다.** 전에는 상세를 열어야 알 수
+        있었고, 20건이 이상하면 20번 열어야 했다."""
+        assert parsed
+        body = client.get("/api/test-runs", headers=admin_headers).json()
+        assert body["items"], body
+        assert body["items"][0]["registered_by"]
+
+    def test_열로_거른다(
+        self, client: TestClient, admin_headers: dict[str, str], parsed: dict[str, Any]
+    ) -> None:
+        """**거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이
+        없는 시험이 된다."""
+        assert parsed
+        got = client.get("/api/test-runs?test_type_key=tensile", headers=admin_headers).json()
+        assert got["total"] >= 1
+        none = client.get(
+            "/api/test-runs?test_type_key=없는종류", headers=admin_headers
+        ).json()
+        # **필터를 무시하고 전부 주면 안 된다.** 그러면 화면이 「이 종류에
+        # 이만큼 있다」고 말하게 된다.
+        assert none["total"] == 0
+
+    def test_거를_수_있는_것과_그_수를_준다(
+        self, client: TestClient, admin_headers: dict[str, str], parsed: dict[str, Any]
+    ) -> None:
+        assert parsed
+        found = client.get("/api/test-runs/facets", headers=admin_headers)
+        assert found.status_code == 200, found.text
+        body = found.json()
+        assert any(row["key"] == "tensile" for row in body["test_types"])
+        assert body["registrants"], body
+        assert body["statuses"], body
+
+    def test_개수는_한_쪽이_아니라_전체를_센다(
+        self, client: TestClient, admin_headers: dict[str, str], parsed: dict[str, Any]
+    ) -> None:
+        """화면이 한 쪽에서 세면 「인장시험 1」이라고 적히는데 실제로는 여러
+        건이다 — **필터 옆의 숫자가 거짓말을 하면 필터 자체를 못 믿는다.**"""
+        assert parsed
+        page = client.get("/api/test-runs?limit=1", headers=admin_headers).json()
+        assert len(page["items"]) == 1
+        body = client.get("/api/test-runs/facets", headers=admin_headers).json()
+        counted = {row["key"]: row["count"] for row in body["test_types"]}
+        assert counted["tensile"] == page["total"]
+
+    def test_여러_건을_한_번에_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], parsed: dict[str, Any]
+    ) -> None:
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        ids = [row["id"] for row in listed["items"]]
+        assert ids
+
+        done = client.post(
+            "/api/test-runs/delete", json={"run_ids": ids}, headers=admin_headers
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["deleted"] == len(ids)
+        assert done.json()["blocked"] == []
+
+        after = client.get("/api/test-runs", headers=admin_headers).json()
+        assert after["total"] == 0
+
+    def test_못_지운_것을_이름으로_돌려준다(
+        self, client: TestClient, admin_headers: dict[str, str], parsed: dict[str, Any]
+    ) -> None:
+        """**한 건이 막혔다고 나머지를 되돌리지 않는다.** 20건을 골라 지우는데
+        하나가 권한 밖이라 전부 실패하면, 사람은 어느 것이 문제인지 모른 채
+        다시 골라야 한다."""
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        ids = [row["id"] for row in listed["items"]]
+        assert ids
+        ghost = "00000000-0000-0000-0000-000000000000"
+
+        done = client.post(
+            "/api/test-runs/delete", json={"run_ids": [*ids, ghost]}, headers=admin_headers
+        ).json()
+        assert done["deleted"] == len(ids)
+        assert done["blocked"] == [ghost]

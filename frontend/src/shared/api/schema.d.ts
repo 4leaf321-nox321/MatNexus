@@ -1644,6 +1644,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-runs/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Runs
+         * @description 여러 건을 한 번에 지운다. **소프트 삭제이고, 건마다 기록을 남긴다.**
+         *
+         *     ## 왜 하나가 막혀도 멈추지 않는가
+         *
+         *     20건을 골라 지우는데 하나가 권한 밖이라 전부 실패하면, 사람은 어느 것이
+         *     문제인지 모른 채 다시 골라야 한다. **지울 수 있는 것은 지우고, 못 지운
+         *     것은 이름으로 돌려준다.**
+         *
+         *     ## 왜 `DELETE` 가 아니라 `POST /delete` 인가
+         *
+         *     본문에 목록을 싣는다. `DELETE` 에 본문을 싣는 것은 규격이 권하지 않고,
+         *     id 를 쿼리로 늘어놓으면 URL 길이 제한에 걸린다 — 200건을 고르는 화면이다.
+         */
+        post: operations["delete_runs_api_test_runs_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/test-runs/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Facets
+         * @description 무엇으로 거를 수 있나. **화면이 목록에서 세지 않는다.**
+         *
+         *     한 쪽만 받아 세면 「인장시험 50」이라고 적히는데 실제로는 300건일 수 있고,
+         *     그러면 필터 옆의 숫자가 거짓말을 한다(카드 목록과 같은 판단).
+         *
+         *     **지금 걸린 필터를 안 본다** — 「무엇이 있나」를 답하는 자리다.
+         */
+        get: operations["run_facets_api_test_runs_facets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs/import": {
         parameters: {
             query?: never;
@@ -5218,6 +5274,60 @@ export interface components {
             /** Y */
             y: string;
         };
+        /**
+         * RunDeleteOut
+         * @description 무엇이 지워졌고 무엇이 안 지워졌나.
+         *
+         *     **한 건이 막혔다고 나머지를 되돌리지 않는다.** 20건을 골라 지우는데 하나가
+         *     권한 밖이라 전부 실패하면, 사람은 어느 것이 문제인지 모른 채 다시 골라야
+         *     한다. 대신 **안 지워진 것을 이름과 이유로 돌려준다.**
+         */
+        RunDeleteOut: {
+            /** Blocked */
+            blocked: string[];
+            /** Deleted */
+            deleted: number;
+        };
+        /**
+         * RunDeleteRequest
+         * @description 여러 건을 한 번에 지운다.
+         */
+        RunDeleteRequest: {
+            /** Run Ids */
+            run_ids: string[];
+        };
+        /**
+         * RunFacetOut
+         * @description 거를 수 있는 값 하나와 **그것이 몇 건인가.**
+         *
+         *     화면이 한 쪽에서 세면 안 된다 — 50건만 받아 세면 「인장시험 50」이라고
+         *     적히는데 실제로는 300건일 수 있고, 그러면 필터 옆의 숫자가 거짓말을 한다.
+         */
+        RunFacetOut: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * RunFacetsOut
+         * @description 무엇으로 거를 수 있나. **지금 걸린 필터를 안 본다.**
+         *
+         *     「무엇이 있나」를 답하는 자리다 — 필터를 걸 때마다 다른 축의 숫자가 같이
+         *     줄면, 필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.
+         */
+        RunFacetsOut: {
+            /** Orientations */
+            orientations: components["schemas"]["RunFacetOut"][];
+            /** Registrants */
+            registrants: components["schemas"]["RunFacetOut"][];
+            /** Statuses */
+            statuses: components["schemas"]["RunFacetOut"][];
+            /** Test Types */
+            test_types: components["schemas"]["RunFacetOut"][];
+        };
         /** SampleCreateRequest */
         SampleCreateRequest: {
             /** Alias */
@@ -6229,6 +6339,8 @@ export interface components {
             parser_version: string | null;
             /** Record Name */
             record_name: string;
+            /** Registered By */
+            registered_by?: string | null;
             /**
              * Result Count
              * @default 0
@@ -6306,6 +6418,8 @@ export interface components {
             parse_error: string | null;
             /** Record Name */
             record_name: string;
+            /** Registered By */
+            registered_by?: string | null;
             /**
              * Result Count
              * @default 0
@@ -9732,6 +9846,10 @@ export interface operations {
                 specimen_id?: string | null;
                 material_id?: string | null;
                 status?: string | null;
+                test_type_key?: string | null;
+                orientation?: string | null;
+                registered_by?: string | null;
+                q?: string | null;
                 /** @description 채택된 처리 결과가 있는가 — 없는 것만 보려면 false */
                 adopted?: boolean | null;
                 limit?: number | null;
@@ -9783,6 +9901,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_runs_api_test_runs_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDeleteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_facets_api_test_runs_facets_get: {
+        parameters: {
+            query?: {
+                workspace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunFacetsOut"];
                 };
             };
             /** @description Validation Error */

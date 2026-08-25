@@ -11,18 +11,18 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronsDownUp,
-  ChevronLeft,
   ChevronsUpDown,
+  FileCheck2,
   FlaskConical,
-  Table2,
   Globe2,
   Layers,
   ListTree,
-  FileCheck2,
   Pencil,
   Plus,
+  Table2,
   Trash2,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -42,6 +42,7 @@ import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
 import { MillSheetDialog } from '@/modules/materials/MillSheetDialog'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { CreatedOn } from '@/shared/components/CreatedOn'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -266,7 +267,11 @@ export default function MaterialDetailPage() {
         </div>
       )}
 
-      <ul className="space-y-2">
+      {/* **위의 재료 정보는 붙박이다.** 전에는 시료·시편이 늘면 페이지 전체가
+          늘어나서, 재료의 밀도나 Grade 를 보려고 위로 다시 굴려야 했다 —
+          시료를 견주는 동안 그 값이 계속 보여야 한다.
+          높이는 화면에 맞춘다. 좁은 화면에서는 굴릴 여지가 적으므로 넉넉히 둔다. */}
+      <ul className="max-h-[60vh] space-y-2 overflow-y-auto pr-1 lg:max-h-[calc(100vh-26rem)]">
         {(samples.data ?? []).map((sample, index) => (
           <SampleRow
             key={sample.id}
@@ -338,6 +343,24 @@ function SampleRow({
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(false)
   const [mill, setMill] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<Error | null>(null)
+
+  async function removeSample() {
+    setBusy(true)
+    setFailure(null)
+    try {
+      await materialsApi.removeSample(sample.id)
+      setRemoving(false)
+      onChanged()
+    } catch (caught) {
+      // 서버가 "시편 N건이 남아 있어 지울 수 없습니다" 를 이유와 함께 준다.
+      setFailure(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
   /**
    * 표로 시험 넣기.
    *
@@ -399,13 +422,50 @@ function SampleRow({
         <Button
           size="sm"
           variant="ghost"
-          className="mr-2 shrink-0"
+          className="shrink-0"
           onClick={() => setEditing(true)}
           aria-label="시료 수정"
         >
           <Pencil className="size-3.5" />
         </Button>
+        {/* **시편이 남아 있으면 서버가 막는다.** 그 이유를 그대로 보여 준다 —
+            "지울 수 없습니다" 만으로는 무엇을 먼저 치워야 하는지 모른다. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mr-2 shrink-0"
+          onClick={() => setRemoving(true)}
+          aria-label="시료 삭제"
+          title="시편이 남아 있으면 지울 수 없습니다"
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
       </div>
+
+      <ConfirmDialog
+        open={removing}
+        busy={busy}
+        title="이 시료를 지웁니다"
+        body={
+          <>
+            <p>
+              <b className="font-mono">{sample.record_name}</b>
+              {sample.lot_no ? ` (로트 ${sample.lot_no})` : ''} 이 사라집니다.
+            </p>
+            {failure && <p className="text-destructive mt-2 text-xs">{failure.message}</p>}
+            {sample.specimen_count > 0 && (
+              // **누르기 전에 안다.** 서버도 막지만, 막힌다는 것을 미리 알면
+              // 시편을 먼저 치우러 갈 수 있다.
+              <p className="text-destructive mt-2 text-xs">
+                시편 {sample.specimen_count}건이 남아 있어 지울 수 없습니다. 시편을 먼저
+                지우세요.
+              </p>
+            )}
+          </>
+        }
+        onConfirm={removeSample}
+        onClose={() => setRemoving(false)}
+      />
 
       <MillSheetDialog
         sample={sample}

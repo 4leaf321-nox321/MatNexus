@@ -15,17 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import {
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  FileUp,
-  FlaskConical,
-  Layers,
-  Plus,
-  RefreshCw,
-  Star,
-} from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
@@ -34,8 +24,15 @@ import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -64,6 +61,55 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
 const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 
+/**
+ * 열 하나를 좁힌다. **개수는 서버가 센다.**
+ *
+ * 화면이 한 쪽에서 세면 「인장시험 50」이라고 적히는데 실제로는 300건일 수
+ * 있고, 그러면 필터 옆의 숫자가 거짓말을 한다.
+ *
+ * 「전체」가 첫 줄이다 — 고른 것을 푸는 길이 없으면 새로고침으로 푸는 사람이
+ * 생긴다.
+ */
+function ColumnFilter({
+  label,
+  rows,
+  current,
+  onPick,
+}: {
+  label: string
+  rows: { key: string; label: string; count: number }[]
+  current?: string
+  onPick: (value: string | undefined) => void
+}) {
+  if (rows.length === 0) return <>{label}</>
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="hover:text-foreground -ml-1 inline-flex items-center gap-1 rounded px-1"
+        >
+          {label}
+          {/* **걸린 것이 보여야 한다.** 목록이 왜 짧은지 여기서 설명된다. */}
+          {current && <Badge variant="secondary" className="text-[10px]">{current}</Badge>}
+          <ChevronDown className="size-3 opacity-60" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+        <DropdownMenuItem onSelect={() => onPick(undefined)}>
+          <span className={current ? '' : 'font-medium'}>전체</span>
+        </DropdownMenuItem>
+        {rows.map((row) => (
+          <DropdownMenuItem key={row.key} onSelect={() => onPick(row.key)}>
+            <span className={row.key === current ? 'font-medium' : ''}>{row.label}</span>
+            <span className="text-muted-foreground ml-auto tabular-nums">{row.count}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export default function TestRunsPage() {
   const { slug } = useParams<{ slug?: string }>()
   const [uploading, setUploading] = useState(false)
@@ -71,13 +117,51 @@ export default function TestRunsPage() {
   const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
   const all = size === 'all'
+  // **거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이 없는
+  // 시험이 된다 — 이 화면의 머리말이 그 이야기다.
+  const [filters, setFilters] = useState<Record<string, string | undefined>>({})
   const runs = useResource(
     () =>
       all
-        ? fetchAll((limit, from) => testsApi.runs({ workspace: slug, limit, offset: from }))
-        : testsApi.runs({ workspace: slug, limit: size, offset }),
-    [slug, size, offset, all]
+        ? fetchAll((limit, from) =>
+            testsApi.runs({ workspace: slug, limit, offset: from, ...filters })
+          )
+        : testsApi.runs({ workspace: slug, limit: size, offset, ...filters }),
+    [slug, size, offset, all, filters]
   )
+  // 거르기 목록은 필터와 함께 안 바뀐다 — 「무엇이 있나」를 답하는 자리다.
+  const facets = useResource(() => testsApi.runFacets(slug), [slug])
+
+  /** 열 하나를 좁힌다. **필터가 바뀌면 처음부터 다시 본다.** */
+  function narrow(key: string, value: string | undefined) {
+    setOffset(0)
+    setPicked(new Set())
+    setFilters((current) => ({ ...current, [key]: value }))
+  }
+
+  async function removePicked() {
+    setBusy(true)
+    setFailure(null)
+    try {
+      const done = await testsApi.removeMany([...picked])
+      if (done.blocked.length > 0) {
+        // **조용히 세지 않는다.** 무엇이 안 지워졌는지 말해야 다시 고를 수 있다.
+        setFailure(
+          new Error(
+            `${done.deleted}건을 지웠습니다. ${done.blocked.length}건은 권한이 없어 남았습니다.`
+          )
+        )
+      }
+      setPicked(new Set())
+      setRemoving(false)
+      runs.reload()
+      facets.reload()
+    } catch (caught) {
+      setFailure(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
   const rows = runs.data?.items ?? []
   const total = runs.data?.total ?? 0
   const truncated = all && rows.length < total
@@ -85,6 +169,9 @@ export default function TestRunsPage() {
 
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [batching, setBatching] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<Error | null>(null)
   /** 읽히지 않은 시험은 처리할 곡선이 없다. 고를 수 있게 두면 전부 실패한다. */
   const processable = rows.filter((run) => run.status === 'parsed')
   /** 한 배치는 **한 종류**여야 한다 — 인장 레시피가 DMA 곡선에 걸리면 실패한다. */
@@ -125,7 +212,7 @@ export default function TestRunsPage() {
         }
       />
 
-      <ErrorNotice error={runs.error} className="mb-4" />
+      <ErrorNotice error={runs.error ?? facets.error ?? failure} className="mb-4" />
 
       {/* **고른 게 있을 때만 나타난다.** 늘 떠 있으면 목록의 기본 상태가
           "무언가 골라야 하는 화면" 으로 읽힌다. */}
@@ -152,9 +239,38 @@ export default function TestRunsPage() {
               <Layers className="size-4" />
               레시피 적용
             </Button>
+            {/* **여러 건을 한 번에 지운다.** 한 건씩 열어 지우는 것은 일이
+                아니다 — 잘못 올린 배치는 통째로 잘못 올라온다. */}
+            <Button size="sm" variant="destructive" onClick={() => setRemoving(true)}>
+              <Trash2 className="size-4" />
+              삭제
+            </Button>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={removing}
+        busy={busy}
+        title={`시험 ${picked.size}건을 지웁니다`}
+        body={
+          <>
+            <p className="mb-2">
+              고른 <b>{picked.size}건</b>이 목록에서 사라집니다. 원본 파일과 처리 결과도
+              함께 가려집니다.
+            </p>
+            <ul className="text-muted-foreground max-h-40 space-y-0.5 overflow-y-auto font-mono text-xs">
+              {rows
+                .filter((run) => picked.has(run.id))
+                .map((run) => (
+                  <li key={run.id}>{run.record_name}</li>
+                ))}
+            </ul>
+          </>
+        }
+        onConfirm={removePicked}
+        onClose={() => setRemoving(false)}
+      />
 
       {batching && (
         <BatchDialog
@@ -215,11 +331,40 @@ export default function TestRunsPage() {
               </TableHead>
               <TableHead>이름</TableHead>
               <TableHead>재료</TableHead>
-              <TableHead>방향</TableHead>
-              <TableHead>종류</TableHead>
-              <TableHead>상태</TableHead>
+              <TableHead>
+                <ColumnFilter
+                  label="방향"
+                  rows={facets.data?.orientations ?? []}
+                  current={filters.orientation}
+                  onPick={(value) => narrow('orientation', value)}
+                />
+              </TableHead>
+              <TableHead>
+                <ColumnFilter
+                  label="종류"
+                  rows={facets.data?.test_types ?? []}
+                  current={filters.test_type_key}
+                  onPick={(value) => narrow('test_type_key', value)}
+                />
+              </TableHead>
+              <TableHead>
+                <ColumnFilter
+                  label="상태"
+                  rows={facets.data?.statuses ?? []}
+                  current={filters.status}
+                  onPick={(value) => narrow('status', value)}
+                />
+              </TableHead>
               <TableHead>처리</TableHead>
               <TableHead className="text-right">행</TableHead>
+              <TableHead>
+                <ColumnFilter
+                  label="등록한 사람"
+                  rows={facets.data?.registrants ?? []}
+                  current={filters.registered_by}
+                  onPick={(value) => narrow('registered_by', value)}
+                />
+              </TableHead>
               <TableHead>등록</TableHead>
             </TableRow>
           </TableHeader>
@@ -284,6 +429,11 @@ export default function TestRunsPage() {
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {run.row_count?.toLocaleString('ko-KR') ?? '—'}
+                </TableCell>
+                {/* **파일이 이상할 때 물어볼 데가 여기다.** 전에는 상세를
+                    열어야 알 수 있었고, 20건이 이상하면 20번 열어야 했다. */}
+                <TableCell className="text-muted-foreground text-sm">
+                  {run.registered_by ?? '—'}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
                   {new Date(run.created_at).toLocaleDateString('ko-KR')}

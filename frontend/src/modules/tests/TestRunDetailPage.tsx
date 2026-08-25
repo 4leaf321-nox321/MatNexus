@@ -29,6 +29,7 @@ import { NOTABLE_DIFFERENCE, pairSummaries } from '@/modules/tests/summaries'
 import { axisLabel, formatValue, toDisplay } from '@/shared/units'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -51,6 +52,7 @@ export default function TestRunDetailPage() {
   const types = useResource(() => testsApi.types(), [])
   const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
   const [action, setAction] = useState<Error | null>(null)
+  const [removing, setRemoving] = useState(false)
 
   const { user } = useAuth()
   /** 관리자인 부서만. 아닌 부서 것으로 레시피를 만들면 서버가 거절한다. */
@@ -175,6 +177,7 @@ export default function TestRunDetailPage() {
 
   async function remove() {
     setAction(null)
+    setRemoving(false)
     try {
       await testsApi.remove(id)
       navigate('/materials')
@@ -188,6 +191,19 @@ export default function TestRunDetailPage() {
        화면이라 4xl(896px)에서는 곡선이 손바닥만 해진다. 다른 화면은 읽는
        화면이라 좁은 것이 맞다 — 여기만 넓힌다. */
     <div>
+      <ConfirmDialog
+        open={removing}
+        title="이 시험을 지웁니다"
+        body={
+          <>
+            <b className="font-mono">{item?.record_name}</b> 이 목록에서 사라집니다.
+            원본 파일과 처리 결과도 함께 가려집니다.
+          </>
+        }
+        onConfirm={remove}
+        onClose={() => setRemoving(false)}
+      />
+
       <PageHeader
         title={item?.record_name ?? '시험'}
         description={
@@ -213,7 +229,7 @@ export default function TestRunDetailPage() {
               <RefreshCw className="size-4" />
               다시 읽기
             </Button>
-            <Button variant="outline" size="sm" onClick={remove}>
+            <Button variant="outline" size="sm" onClick={() => setRemoving(true)}>
               <Trash2 className="size-4" />
             </Button>
           </>

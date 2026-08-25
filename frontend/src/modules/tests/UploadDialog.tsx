@@ -19,6 +19,7 @@ import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { TestType } from '@/modules/tests/api'
 import { conditionUnits, display } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { FileDrop } from '@/shared/components/FileDrop'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -164,12 +165,18 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
           <Label htmlFor="file">
             원본 파일 {selected?.parser_key && `(${selected.parser_key})`}
           </Label>
-          <Input
-            id="file"
-            type="file"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          {/* **끌어다 놓기가 일괄 등록에만 있었다.** 같은 일을 하는 두 화면이
+              다르게 동작하면, 몸에 밴 동작이 여기서는 아무 일도 안 일어나고
+              사람은 그것을 고장으로 읽는다. */}
+          <FileDrop
+            onFiles={(files) => setFile(files[0] ?? null)}
+            hint={`최대 ${limitMb}MB`}
           />
-          <p className="text-muted-foreground text-xs">최대 {limitMb}MB</p>
+          {file && (
+            <p className="text-muted-foreground text-xs">
+              고른 파일: <b className="text-foreground font-mono">{file.name}</b>
+            </p>
+          )}
         </div>
 
         {selected && selected.conditions.length > 0 && (

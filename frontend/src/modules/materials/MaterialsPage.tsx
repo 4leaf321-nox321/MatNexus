@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import { categoriesOf, familiesOf } from '@/modules/materials/classification'
+import { BulkMaterialDialog } from '@/modules/materials/BulkMaterialDialog'
 import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -44,6 +45,7 @@ export default function MaterialsPage() {
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [registering, setRegistering] = useState(false)
+  const [bulk, setBulk] = useState(false)
   const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
   const [family, setFamily] = useState('')
@@ -79,10 +81,18 @@ export default function MaterialsPage() {
         title="재료"
         description="규격 단위로 관리합니다. 실물 한 덩이는 시료, 잘라낸 조각은 시편입니다."
         actions={
-          <Button onClick={() => setRegistering(true)}>
-            <Plus className="size-4" />
-            재료 등록
-          </Button>
+          <>
+            {/* **한 판에 열 몇 개를 넣는 것이 실제 작업이다.** 창을 열고 닫기를
+                열 번 하면 그 자체가 일이 되고, 그러다 하나를 빠뜨린다. */}
+            <Button variant="secondary" onClick={() => setBulk(true)}>
+              <Plus className="size-4" />
+              여러 개 등록
+            </Button>
+            <Button onClick={() => setRegistering(true)}>
+              <Plus className="size-4" />
+              재료 등록
+            </Button>
+          </>
         }
       />
 
@@ -277,6 +287,12 @@ export default function MaterialsPage() {
           )}
         </>
       )}
+
+      <BulkMaterialDialog
+        open={bulk}
+        onClose={() => setBulk(false)}
+        onDone={() => materials.reload()}
+      />
 
       <NewMaterialDialog
         open={registering}

@@ -7,6 +7,8 @@ export type TestType = components['schemas']['TestTypeOut']
 export type TestChannel = components['schemas']['TestChannelOut']
 export type TestConditionField = components['schemas']['TestConditionFieldOut']
 export type TestRun = components['schemas']['TestRunOut']
+export type RunFacets = components['schemas']['RunFacetsOut']
+export type RunDeleteResult = components['schemas']['RunDeleteOut']
 /** 표로 넣은 결과. **미리보기와 실제가 같은 모양이다** — 서버가 같은 코드로 답한다. */
 export type SummaryImport = components['schemas']['SummaryImportOut']
 type SummaryImportRequest = components['schemas']['SummaryImportRequest']
@@ -173,6 +175,18 @@ export const testsApi = {
   runs: (query: RunQuery = {}) => api.get<TestRunPage>(`/test-runs${search(query)}`),
   run: (id: string) => api.get<TestRunDetail>(`/test-runs/${id}`),
   remove: (id: string) => api.delete<void>(`/test-runs/${id}`),
+
+  /**
+   * 여러 건을 한 번에 지운다. **한 건이 막혀도 나머지는 지운다** —
+   * 20건을 골랐는데 하나가 권한 밖이라 전부 실패하면, 어느 것이 문제인지
+   * 모른 채 다시 골라야 한다.
+   */
+  removeMany: (runIds: string[]) =>
+    api.post<RunDeleteResult>('/test-runs/delete', { run_ids: runIds }),
+
+  /** 무엇으로 거를 수 있고 각각 몇 건인가. **화면이 한 쪽에서 세지 않는다.** */
+  runFacets: (workspace?: string) =>
+    api.get<RunFacets>(`/test-runs/facets${workspace ? `?workspace=${workspace}` : ''}`),
   /** 장비 파일이 준 시편 치수와, 시편에 지금 들어 있는 값. */
   instrumentDimensions: (id: string) =>
     api.get<InstrumentDimensions>(`/test-runs/${id}/instrument-dimensions`),

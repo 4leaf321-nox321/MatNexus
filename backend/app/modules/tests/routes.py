@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -44,6 +44,10 @@ from app.modules.tests.schemas import (
     InstrumentDimensionsOut,
     ParserOut,
     ReparseOut,
+    RunDeleteOut,
+    RunDeleteRequest,
+    RunFacetOut,
+    RunFacetsOut,
     StorageReportOut,
     SummaryImportItemOut,
     SummaryImportOut,
@@ -519,8 +523,18 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
             "types": {},
             "curves": {},
             "results": {},
+            "users": {},
         }
 
+    # **올린 사람.** 파일이 이상할 때 물어볼 데가 거기다.
+    people = {
+        u.id: u
+        for u in db.scalars(
+            select(User).where(
+                User.id.in_([r.registered_by_id for r in runs if r.registered_by_id])
+            )
+        )
+    }
     specimen_ids = [r.specimen_id for r in runs]
     specimens = {
         s.id: s for s in db.scalars(select(Specimen).where(Specimen.id.in_(specimen_ids)))
@@ -559,6 +573,7 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
         "types": types,
         "curves": {c.test_run_id: c for c in curve_rows},
         "results": counts,
+        "users": people,
     }
 
 
@@ -567,6 +582,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
     sample = ctx["samples"].get(specimen.sample_id) if specimen else None
     material = ctx["materials"].get(sample.material_id) if sample else None
     test_type = ctx["types"].get(run.test_type_id)
+    person = ctx["users"].get(run.registered_by_id) if run.registered_by_id else None
     curve = ctx["curves"].get(run.id)
     warnings = run.source_metadata.get("_warnings", "")
 
@@ -580,6 +596,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         specimen_name=specimen.record_name if specimen else None,
         orientation=specimen.orientation if specimen else None,
         specimen_standard=specimen.standard if specimen else None,
+        registered_by=person.display_name if person else None,
         material_id=material.id if material else None,
         material_name=material.record_name if material else None,
         test_type_key=test_type.key if test_type else "?",
@@ -818,6 +835,10 @@ def list_runs(
     specimen_id: uuid.UUID | None = None,
     material_id: uuid.UUID | None = None,
     status: str | None = Query(default=None, pattern="^(uploaded|parsing|parsed|failed)$"),
+    test_type_key: str | None = Query(default=None),
+    orientation: str | None = Query(default=None),
+    registered_by: str | None = Query(default=None),
+    q: str | None = Query(default=None),
     adopted: bool | None = Query(
         default=None, description="채택된 처리 결과가 있는가 — 없는 것만 보려면 false"
     ),
@@ -856,6 +877,32 @@ def list_runs(
         )
     if status:
         query = query.where(TestRun.status == status)
+    # **거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이 없는
+    # 시험이 된다 — 목록이 조용히 잘리는 것이 가장 나쁘다(이 화면의 머리말이
+    # 그 이야기다).
+    if test_type_key:
+        found = db.scalar(select(TestType).where(TestType.key == test_type_key))
+        query = query.where(
+            TestRun.test_type_id == (found.id if found else None),
+            TestRun.test_type_id.is_not(None),
+        )
+    if orientation:
+        query = query.where(
+            TestRun.specimen_id.in_(
+                select(Specimen.id).where(Specimen.orientation == orientation)
+            )
+        )
+    if registered_by:
+        query = query.where(
+            TestRun.registered_by_id.in_(
+                select(User.id).where(User.display_name == registered_by)
+            )
+        )
+    if q and (text := q.strip()):
+        like = f"%{text}%"
+        query = query.where(
+            or_(TestRun.record_name.ilike(like), TestRun.source_filename.ilike(like))
+        )
     if adopted is not None:
         query = query.where(
             TestRun.adopted_result_id.is_not(None)
@@ -871,6 +918,72 @@ def list_runs(
     ctx = _context(db, runs)
     return Page(
         items=[_run_out(run, ctx) for run in runs], total=total, limit=size, offset=offset
+    )
+
+
+@runs_router.get("/facets", response_model=RunFacetsOut)
+def run_facets(
+    workspace: str | None = Query(default=None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RunFacetsOut:
+    """무엇으로 거를 수 있나. **화면이 목록에서 세지 않는다.**
+
+    한 쪽만 받아 세면 「인장시험 50」이라고 적히는데 실제로는 300건일 수 있고,
+    그러면 필터 옆의 숫자가 거짓말을 한다(카드 목록과 같은 판단).
+
+    **지금 걸린 필터를 안 본다** — 「무엇이 있나」를 답하는 자리다.
+    """
+    query = services.visible_runs(db, user)
+    if workspace:
+        scope = permissions.workspace_by_slug(db, workspace)
+        query = query.where(TestRun.workspace_id == scope.id)
+    base = query.subquery()
+
+    def tally(column: Any) -> list[tuple[Any, int]]:
+        return [
+            (row[0], int(row[1]))
+            for row in db.execute(
+                select(column, func.count()).select_from(base).group_by(column)
+            ).all()
+        ]
+
+    labels = {row.id: (row.key, row.label) for row in db.scalars(select(TestType))}
+    names = {row.id: row.display_name for row in db.scalars(select(User))}
+    kinds = [
+        RunFacetOut(
+            key=labels.get(key, (str(key), str(key)))[0],
+            label=labels.get(key, (str(key), str(key)))[1],
+            count=count,
+        )
+        for key, count in tally(base.c.test_type_id)
+        if key is not None
+    ]
+    people = [
+        RunFacetOut(key=names[key], label=names[key], count=count)
+        for key, count in tally(base.c.registered_by_id)
+        if key is not None and key in names
+    ]
+    # 방향은 시편에 있다 — 시험에서 바로 못 센다.
+    directions = [
+        RunFacetOut(key=str(value), label=str(value), count=int(count))
+        for value, count in db.execute(
+            select(Specimen.orientation, func.count())
+            .select_from(base)
+            .join(Specimen, Specimen.id == base.c.specimen_id)
+            .group_by(Specimen.orientation)
+        ).all()
+        if value
+    ]
+    statuses = [
+        RunFacetOut(key=str(value), label=str(value), count=count)
+        for value, count in tally(base.c.status)
+    ]
+    return RunFacetsOut(
+        test_types=sorted(kinds, key=lambda one: one.label),
+        orientations=sorted(directions, key=lambda one: one.label),
+        registrants=sorted(people, key=lambda one: one.label),
+        statuses=sorted(statuses, key=lambda one: one.key),
     )
 
 
@@ -977,6 +1090,51 @@ def reparse(
     queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})
     db.commit()
     return ReparseOut(status="queued", message="다시 읽기를 큐에 넣었습니다.")
+
+
+@runs_router.post("/delete", response_model=RunDeleteOut)
+def delete_runs(
+    payload: RunDeleteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RunDeleteOut:
+    """여러 건을 한 번에 지운다. **소프트 삭제이고, 건마다 기록을 남긴다.**
+
+    ## 왜 하나가 막혀도 멈추지 않는가
+
+    20건을 골라 지우는데 하나가 권한 밖이라 전부 실패하면, 사람은 어느 것이
+    문제인지 모른 채 다시 골라야 한다. **지울 수 있는 것은 지우고, 못 지운
+    것은 이름으로 돌려준다.**
+
+    ## 왜 `DELETE` 가 아니라 `POST /delete` 인가
+
+    본문에 목록을 싣는다. `DELETE` 에 본문을 싣는 것은 규격이 권하지 않고,
+    id 를 쿼리로 늘어놓으면 URL 길이 제한에 걸린다 — 200건을 고르는 화면이다.
+    """
+    deleted = 0
+    blocked: list[str] = []
+    for run_id in payload.run_ids:
+        try:
+            run = services.get_run(db, user, run_id)
+        except AppError:
+            # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
+            blocked.append(str(run_id))
+            continue
+        run.deleted_at = _now()
+        vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
+        audit.record(
+            db,
+            action=audit.TEST_RUN_DELETED,
+            actor=user,
+            target_table="test_runs",
+            target_id=run.id,
+            target_label=run.source_filename or str(run.id),
+            workspace_id=run.workspace_id,
+            changes={"deleted_at": {"after": run.deleted_at.isoformat()}},
+        )
+        deleted += 1
+    db.commit()
+    return RunDeleteOut(deleted=deleted, blocked=blocked)
 
 
 @runs_router.delete("/{run_id}", status_code=204)

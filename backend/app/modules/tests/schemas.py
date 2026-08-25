@@ -88,6 +88,49 @@ class TestTypeOut(BaseModel):
 # --- 시험 -------------------------------------------------------------------
 
 
+class RunDeleteRequest(BaseModel):
+    """여러 건을 한 번에 지운다."""
+
+    run_ids: list[uuid.UUID]
+
+
+class RunDeleteOut(BaseModel):
+    """무엇이 지워졌고 무엇이 안 지워졌나.
+
+    **한 건이 막혔다고 나머지를 되돌리지 않는다.** 20건을 골라 지우는데 하나가
+    권한 밖이라 전부 실패하면, 사람은 어느 것이 문제인지 모른 채 다시 골라야
+    한다. 대신 **안 지워진 것을 이름과 이유로 돌려준다.**
+    """
+
+    deleted: int
+    blocked: list[str]
+
+
+class RunFacetOut(BaseModel):
+    """거를 수 있는 값 하나와 **그것이 몇 건인가.**
+
+    화면이 한 쪽에서 세면 안 된다 — 50건만 받아 세면 「인장시험 50」이라고
+    적히는데 실제로는 300건일 수 있고, 그러면 필터 옆의 숫자가 거짓말을 한다.
+    """
+
+    key: str
+    label: str
+    count: int
+
+
+class RunFacetsOut(BaseModel):
+    """무엇으로 거를 수 있나. **지금 걸린 필터를 안 본다.**
+
+    「무엇이 있나」를 답하는 자리다 — 필터를 걸 때마다 다른 축의 숫자가 같이
+    줄면, 필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.
+    """
+
+    test_types: list[RunFacetOut]
+    orientations: list[RunFacetOut]
+    registrants: list[RunFacetOut]
+    statuses: list[RunFacetOut]
+
+
 class TestRunOut(BaseModel):
     id: uuid.UUID
     result_count: int = 0
@@ -118,6 +161,10 @@ class TestRunOut(BaseModel):
     tested_at: datetime | None
     operator: str | None
     instrument: str | None
+
+    registered_by: str | None = None
+    """올린 사람. **목록에서 보여야 한다** — 파일이 이상할 때 물어볼 데가
+    거기다. 계정이 지워졌으면 빈다(기록은 남고 이름만 사라진다)."""
 
     source_filename: str | None
     source_bytes: int | None
