@@ -109,7 +109,9 @@ describe('선언 물성 편집', () => {
         input_unit: 'J/(kg.K)',
       },
     ])
-    await waitFor(() => expect(screen.getByDisplayValue('462')).toBeInTheDocument())
+    // 목록이 온 뒤에 본다 — 오기 전에는 단위 후보가 적힌 것 하나뿐이라,
+    // 「W/(m.K) 가 없다」가 **거르기 때문인지 안 왔기 때문인지** 알 수 없다.
+    await screen.findByRole('combobox', { name: '항목 추가' })
     await userEvent.click(screen.getByLabelText('단위'))
     // 목록이 실제로 열린 것을 먼저 확인한다 — 안 열린 채로 「없다」를 보면
     // 검사한 것이 아무것도 없다.
@@ -121,8 +123,10 @@ describe('선언 물성 편집', () => {
     // **한 항목은 한 줄이다.** 탄성계수가 두 줄이면 카드가 어느 것을 쓸지
     // 정할 수 없고, 그 판단을 여기서 안 하면 나중에 조용히 하나가 이긴다.
     panel([DECLARED_E])
-    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('combobox', { name: '항목 추가' }))
+    // **적어 둔 값은 곧바로 뜨지만 항목 목록은 나중에 온다.** 값이 보이는 것을
+    // 기다린 뒤 트리거를 `getBy` 로 찾으면, 목록이 늦는 기계에서만 깨진다 —
+    // 실제로 CI 에서만 그랬다.
+    await userEvent.click(await screen.findByRole('combobox', { name: '항목 추가' }))
     // **목록이 뜬 뒤에 본다.** 안 뜬 상태로 「없다」를 검사하면 무엇을 감췄든
     // 통과한다 — 아무것도 안 검사한 것과 같다.
     expect(await screen.findByRole('option', { name: /비열/ })).toBeInTheDocument()
@@ -188,6 +192,35 @@ describe('선언 물성 편집', () => {
   it('척도는 척도 칸으로 보낸다', async () => {
     // **단위 자리에 보내면 서버가 「모르는 단위」로 거절하고, 사람은 왜인지
     // 모른다.**
+    const onSave = panel([
+      {
+        item: '경도',
+        points: [{ value_si: 200, value: 200, temperature_k: null }],
+        input_unit: null,
+        scale: 'HV',
+        source: 'datasheet',
+        reference: 'MTC',
+        note: null,
+      },
+    ])
+    await waitFor(() => expect(screen.getByDisplayValue('200')).toBeInTheDocument())
+    await userEvent.clear(screen.getByLabelText('경도 값'))
+    await userEvent.type(screen.getByLabelText('경도 값'), '210')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const row = (onSave.mock.calls[0][0] as Record<string, unknown>[])[0]
+    expect(row).toMatchObject({ item: '경도', scale: 'HV' })
+    expect(row).not.toHaveProperty('input_unit')
+  })
+
+  it('항목 목록이 안 와도 척도는 척도 칸으로 간다', async () => {
+    // **줄이 자기 성격을 든다.** 저장할 때 항목 목록을 다시 뒤지면, 목록이
+    // 도착하기 전에 저장을 누른 사람이 척도를 단위 자리로 보내게 되고 서버가
+    // 「모르는 단위」로 거절한다 — 사람은 왜인지 모른다.
+    //
+    // CI 에서 같은 뿌리의 흔들림이 났다: 값은 곧바로 뜨는데 목록은 나중에 온다.
+    propertyItems.mockReturnValue(new Promise(() => {})) // 영영 안 온다
     const onSave = panel([
       {
         item: '경도',

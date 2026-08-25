@@ -91,6 +91,14 @@ interface Draft {
    * 서버와 갈라지는 날 경도에 MPa 가 뜬다.
    */
   measure: string
+  /**
+   * 이 줄이 **척도로 재는 물성인가.**
+   *
+   * 저장할 때 항목 목록을 다시 뒤지지 않으려고 든다. 목록은 비동기로 오는데,
+   * 도착하기 전에 저장을 누르면 **척도를 단위 칸으로 보내고** 서버가 「모르는
+   * 단위」로 거절한다 — 사람은 왜인지 모른다.
+   */
+  isScale: boolean
   source: string
   reference: string
   note: string
@@ -106,6 +114,7 @@ function toDraft(row: DeclaredProperty): Draft {
       temperature: point.temperature_k == null ? '' : String(point.temperature_k - 273.15),
     })),
     measure: row.scale ?? row.input_unit ?? '',
+    isScale: row.scale != null,
     source: row.source,
     reference: row.reference,
     note: row.note ?? '',
@@ -158,6 +167,7 @@ export function DeclaredPropertiesCard({
         points: [{ value: '', temperature: '' }],
         // 척도를 든 항목은 **첫 척도**로 시작한다. 단위는 정본 SI 로.
         measure: item.scales.length > 0 ? item.scales[0] : item.si_unit,
+        isScale: item.scales.length > 0,
         source: 'literature',
         reference: '',
         note: '',
@@ -196,11 +206,10 @@ export function DeclaredPropertiesCard({
             temperature_k:
               point.temperature === '' ? null : Number(point.temperature) + 273.15,
           })),
-          // **어느 칸으로 보낼지는 항목이 정한다.** 척도를 단위 자리에
-          // 보내면 서버가 「모르는 단위」로 거절하고, 사람은 왜인지 모른다.
-          ...(known.find((item) => item.item === row.item)?.scales.length
-            ? { scale: row.measure }
-            : { input_unit: row.measure }),
+          // **어느 칸으로 보낼지는 줄 자신이 안다.** 항목 목록을 여기서
+          // 다시 뒤지면, 목록이 도착하기 전에 저장을 누른 사람이 척도를 단위
+          // 자리로 보내게 된다.
+          ...(row.isScale ? { scale: row.measure } : { input_unit: row.measure }),
           source: row.source,
           reference: row.reference,
           note: row.note || null,
