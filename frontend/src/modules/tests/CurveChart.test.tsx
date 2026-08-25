@@ -9,7 +9,7 @@
  * 않는다) 둘 다 본다.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { CurveChart } from '@/modules/tests/CurveChart'
@@ -176,5 +176,90 @@ describe('뒤에 깔리는 원곡선', () => {
       <CurveChart points={[[0, 0], [1, 100]]} xLabel="x" yLabel="y" />
     )
     expect(container.querySelector('path title')).toBeNull()
+  })
+})
+
+describe('확대와 값 읽기', () => {
+  const MEAN: [number, number][] = [
+    [0, 0],
+    [1, 100],
+    [2, 200],
+  ]
+  const RAW = [
+    { label: '시편 1', points: [[0, 0], [1, 90], [2, 180]] as [number, number][] },
+    { label: '시편 2', points: [[0, 0], [1, 110], [2, 220]] as [number, number][] },
+  ]
+
+  function draw() {
+    return render(
+      <CurveChart points={MEAN} background={RAW} xLabel="변형률" yLabel="응력" />
+    )
+  }
+
+  it('확대하는 법을 적어 둔다', () => {
+    // 굴려 보기 전에는 되는지 알 수 없고, 안 되는 줄 알면 아무도 안 굴린다.
+    draw()
+    expect(screen.getByText(/휠로 확대/)).toBeInTheDocument()
+  })
+
+  it('전체를 보고 있으면 「전체 보기」 를 안 띄운다', () => {
+    // 눌러도 아무 일도 안 하는 단추는 고장으로 읽힌다.
+    draw()
+    expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
+  })
+
+  it('휠을 굴리면 범위가 좁아지고 되돌릴 수 있다', () => {
+    const { container } = draw()
+    const svg = container.querySelector('svg')!
+    // jsdom 은 크기를 0 으로 준다 — 비율 계산이 NaN 이 되면 확대가 안 일어난다.
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 760, height: 380 }) as DOMRect
+    // `fireEvent` 로 보낸다 — 그냥 `dispatchEvent` 하면 상태 갱신이 `act` 밖에서
+    // 일어나 화면에 반영되기 전에 검사하게 된다.
+    // 굴리기 전에는 x 축 눈금이 0 부터 2 까지다.
+    const before = container.querySelector('svg')!.textContent ?? ''
+    expect(before).toContain('2')
+
+    fireEvent.wheel(svg, { deltaY: -100 })
+    const back = screen.getByRole('button', { name: '전체 보기' })
+    expect(back).toBeInTheDocument()
+
+    // **단추가 뜨는 것만으로는 부족하다.** 실제로 좁아진 범위를 그려야 한다 —
+    // 도구 줄이 지금 보고 있는 x 구간을 적는다.
+    const shown = screen.getByText(/^x /).textContent ?? ''
+    const [, end] = shown.replace('x ', '').split(' ~ ')
+    expect(Number(end)).toBeLessThan(2)
+
+    fireEvent.click(back)
+    expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
+  })
+
+  it('가리킨 x 에서 곡선을 전부 읽어 준다', () => {
+    // **여러 곡선을 깔아 놓고 값은 하나만 보여 주면** 흩어짐이 보이는데
+    // 얼마나 벌어졌는지는 못 읽는다.
+    const { container } = draw()
+    const svg = container.querySelector('svg')!
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 760, height: 380 }) as DOMRect
+    fireEvent.mouseMove(svg, { clientX: 400, clientY: 100 })
+
+    // `<title>` 에도 같은 이름이 있다 — 값 목록 쪽을 본다.
+    const list = container.querySelector('ul')!
+    expect(list.textContent).toContain('시편 1')
+    expect(list.textContent).toContain('시편 2')
+    // 대표와 시편들이 **다른 값**으로 읽혀야 뜻이 있다.
+    expect(list.textContent).toContain('90')
+    expect(list.textContent).toContain('110')
+  })
+
+  it('깔린 곡선이 없으면 값 목록을 안 만든다', () => {
+    const { container } = render(
+      <CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />
+    )
+    const svg = container.querySelector('svg')!
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 760, height: 380 }) as DOMRect
+    fireEvent.mouseMove(svg, { clientX: 400, clientY: 100 })
+    expect(container.querySelector('ul')).toBeNull()
   })
 })
