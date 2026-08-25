@@ -105,6 +105,25 @@ def _material_out(
     )
 
 
+def _why_not_compared(compared: bool, spec: dict[str, Any], key: str) -> str | None:
+    """왜 안 견줬는지. **조용히 빼지 않는다** — 줄이 비면 사람은 잰 값이 0
+    이라고 읽거나, 적은 값이 사라진 줄 안다.
+    """
+    if compared:
+        return None
+    if spec.get("scales"):
+        return (
+            "시험 척도로 재는 값이라 우리가 잰 값과 견주지 않습니다 — "
+            "척도가 다르면 서로 환산되지 않습니다."
+        )
+    if not key:
+        return (
+            "우리가 재는 값으로 이어져 있지 않습니다 — 기준정보의 물성 항목에서 "
+            "'우리가 재는 값' 을 고르면 여기서 견줍니다."
+        )
+    return "이 시료에 채택된 처리 결과가 없습니다."
+
+
 def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
     """저장된 한 줄을 응답 모양으로.
 
@@ -112,18 +131,22 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
     생기고(ADR 0004), 갈라진 쪽이 화면이면 사람은 자기가 적은 값과 다른 숫자를
     보면서 그것이 저장된 값이라고 믿는다.
     """
-    symbol = str(row["input_unit"])
+    symbol = row.get("input_unit")
     return DeclaredPropertyOut(
         item=str(row["item"]),
         points=[
             DeclaredPointOut(
                 temperature_k=point.get("temperature_k"),
                 value_si=float(point["value_si"]),
-                value=units.from_si(point["value_si"], symbol),
+                # **척도는 환산이 없다.** 적은 값이 곧 저장 값이다.
+                value=units.from_si(point["value_si"], symbol)
+                if symbol
+                else float(point["value_si"]),
             )
             for point in row["points"]
         ],
         input_unit=symbol,
+        scale=row.get("scale"),
         source=str(row["source"]),
         reference=str(row["reference"]),
         note=row.get("note"),
@@ -357,7 +380,10 @@ def property_items(
             si_unit=spec["si_unit"],
             symbol=spec["symbol"],
             level=spec["level"],
-            units=units.units_for(spec["dimension"]),
+            scales=spec["scales"],
+            # **척도를 든 항목에는 단위를 안 준다.** 둘 다 주면 화면이 어느
+            # 쪽을 그릴지 스스로 판단해야 하고, 그 판단이 서버와 갈라진다.
+            units=[] if spec["scales"] else units.units_for(spec["dimension"]),
         )
         for name, spec in sorted(declared.catalog(db, level=level).items())
     ]
@@ -946,7 +972,10 @@ def mill_check(
     out: list[MillCheckRowOut] = []
     for row in sample.declared_properties or []:
         spec = known.get(str(row.get("item"))) or {}
-        key = str(spec.get("measured_key") or "")
+        # **척도로 재는 물성은 안 견준다.** 우리가 내는 스칼라는 SI 값이고
+        # 밀시트의 경도는 척도 위의 숫자다 — 둘을 빼면 숫자는 나오는데 뜻이
+        # 없다. 이어져 있더라도 여기서 끊는다.
+        key = "" if spec.get("scales") else str(spec.get("measured_key") or "")
         found = measured.get(key) or []
         mean = sum(found) / len(found) if found else None
         # **첫 점과 견준다.** 밀시트는 대개 상온 한 점이고, 여러 온도를 적어
@@ -961,7 +990,7 @@ def mill_check(
                 item=str(row["item"]),
                 label=str(row["item"]),
                 declared=stated,
-                declared_unit=str(row["input_unit"]),
+                declared_unit=str(row.get("scale") or row.get("input_unit") or ""),
                 reference=str(row.get("reference") or ""),
                 measured=mean,
                 measured_count=len(found),
@@ -971,16 +1000,7 @@ def mill_check(
                 difference=(
                     (mean - stated) / stated if mean is not None and stated != 0 else None
                 ),
-                note=(
-                    None
-                    if found
-                    else (
-                        "우리가 재는 값으로 이어져 있지 않습니다 — 기준정보의 물성 항목에서 "
-                        "'우리가 재는 값' 을 고르면 여기서 견줍니다."
-                        if not key
-                        else "이 시료에 채택된 처리 결과가 없습니다."
-                    )
-                ),
+                note=_why_not_compared(bool(found), spec, key),
             )
         )
     return MillCheckOut(sample_name=sample.record_name, rows=out)

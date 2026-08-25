@@ -33,6 +33,7 @@ const ITEMS = [
     si_unit: 'Pa',
     symbol: 'E',
     units: ['Pa', 'MPa', 'GPa'],
+    scales: [],
   },
   {
     item: '비열',
@@ -40,6 +41,7 @@ const ITEMS = [
     si_unit: 'J/(kg.K)',
     symbol: 'Cp',
     units: ['J/(kg.K)', 'kJ/(kg.K)'],
+    scales: [],
   },
   {
     item: '열전도도',
@@ -47,6 +49,16 @@ const ITEMS = [
     si_unit: 'W/(m.K)',
     symbol: 'k',
     units: ['W/(m.K)'],
+    scales: [],
+  },
+  // **척도로 재는 물성.** 단위 자리에 척도 목록이 뜨고 환산이 없다.
+  {
+    item: '경도',
+    dimension: 'dimensionless',
+    si_unit: '1',
+    symbol: 'H',
+    units: [],
+    scales: ['HV', 'HB', 'HRC'],
   },
 ]
 
@@ -148,6 +160,67 @@ describe('선언 물성 편집', () => {
       points: [{ value: 210 }],
       input_unit: 'GPa',
     })
+  })
+
+  it('척도로 재는 물성은 단위 대신 척도를 고르게 한다', async () => {
+    // **척도는 단위가 아니다.** `HV 200` 과 `HB 200` 은 다른 값이고 환산식이
+    // 없다 — 단위 목록에 섞어 두면 사람이 MPa 를 고를 수 있게 된다.
+    panel([
+      {
+        item: '경도',
+        points: [{ value_si: 200, value: 200, temperature_k: null }],
+        input_unit: null,
+        scale: 'HV',
+        source: 'datasheet',
+        reference: 'MTC-2024-0812',
+        note: null,
+      },
+    ])
+    expect(await screen.findByLabelText('시험 척도')).toBeInTheDocument()
+    expect(screen.queryByLabelText('단위')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText('시험 척도'))
+    expect(await screen.findByRole('option', { name: 'HB' })).toBeInTheDocument()
+    // 단위는 하나도 안 뜬다.
+    expect(screen.queryByRole('option', { name: 'MPa' })).not.toBeInTheDocument()
+  })
+
+  it('척도는 척도 칸으로 보낸다', async () => {
+    // **단위 자리에 보내면 서버가 「모르는 단위」로 거절하고, 사람은 왜인지
+    // 모른다.**
+    const onSave = panel([
+      {
+        item: '경도',
+        points: [{ value_si: 200, value: 200, temperature_k: null }],
+        input_unit: null,
+        scale: 'HV',
+        source: 'datasheet',
+        reference: 'MTC',
+        note: null,
+      },
+    ])
+    await waitFor(() => expect(screen.getByDisplayValue('200')).toBeInTheDocument())
+    await userEvent.clear(screen.getByLabelText('경도 값'))
+    await userEvent.type(screen.getByLabelText('경도 값'), '210')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const row = (onSave.mock.calls[0][0] as Record<string, unknown>[])[0]
+    expect(row).toMatchObject({ item: '경도', scale: 'HV' })
+    expect(row).not.toHaveProperty('input_unit')
+  })
+
+  it('보통 물성은 단위 칸으로 보낸다', async () => {
+    const onSave = panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    await userEvent.clear(screen.getByLabelText('탄성계수 값'))
+    await userEvent.type(screen.getByLabelText('탄성계수 값'), '210')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const row = (onSave.mock.calls[0][0] as Record<string, unknown>[])[0]
+    expect(row).toMatchObject({ input_unit: 'GPa' })
+    expect(row).not.toHaveProperty('scale')
   })
 
   it('온도를 더해 표로 만든다', async () => {

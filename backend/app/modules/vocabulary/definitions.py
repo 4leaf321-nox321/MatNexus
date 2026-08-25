@@ -162,6 +162,16 @@ BUILTIN_AXIS_FIELDS: dict[str, list[dict[str, Any]]] = {
             "항복강도와 우리 인장시험이 낸 항복강도가 그렇습니다. 비워도 됩니다.",
         ),
         _field(
+            "scales",
+            "시험 척도",
+            kind="text",
+            help="**단위가 아니라 척도**인 물성에 적습니다. 쉼표로 나눠 적으세요 — "
+            "`HV, HB, HRC`. 적으면 이 항목은 단위 대신 척도를 고르게 되고, "
+            "**서로 환산하지 않습니다**: `HV 200` 과 `HB 200` 은 다른 값이고 "
+            "환산식이 없습니다(규격의 참고표는 재료마다 다릅니다). 비워 두면 "
+            "보통 물성처럼 '차원' 으로 단위를 검사합니다.",
+        ),
+        _field(
             "level",
             "붙는 곳",
             kind="choice",
@@ -266,22 +276,30 @@ BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
 #: 다르다). 지금 기계는 값 하나에 단위 하나라 셋을 한 칸에 받게 되고, 그러면
 #: **숫자는 그럴듯한데 뜻이 다른** 값이 저장된다 — 이 저장소가 가장 경계하는
 #: 종류다. 시험 척도를 값의 속성으로 드는 것이 먼저다.
-#: `(값, 차원, 기호, 붙는 곳, 우리가 재는 값)`.
-BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None]] = [
-    ("탄성계수", "stress", "E", "재료", None),
-    ("전단탄성계수", "stress", "G", "재료", None),
-    ("열팽창계수", "inverse_temperature", "alpha", "재료", None),
-    ("비열", "specific_heat", "Cp", "재료", None),
-    ("열전도도", "thermal_conductivity", "k", "재료", None),
+#: `(값, 차원, 기호, 붙는 곳, 우리가 재는 값, 시험 척도)`.
+BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None]] = [
+    ("탄성계수", "stress", "E", "재료", None, None),
+    ("전단탄성계수", "stress", "G", "재료", None, None),
+    ("열팽창계수", "inverse_temperature", "alpha", "재료", None, None),
+    ("비열", "specific_heat", "Cp", "재료", None, None),
+    ("열전도도", "thermal_conductivity", "k", "재료", None, None),
     # 밀시트가 주는 것들. 앞의 둘은 **우리가 잰 값에 대응이 있다** — 그래서
     # 「밀시트가 말한 값과 우리가 잰 값이 맞나」를 물을 수 있다.
-    ("항복강도", "stress", "Rp", "시료", "proof_stress"),
-    ("인장강도", "stress", "Rm", "시료", "tensile_strength"),
+    ("항복강도", "stress", "Rp", "시료", "proof_stress", None),
+    ("인장강도", "stress", "Rm", "시료", "tensile_strength", None),
     # **연신율은 비워 둔다.** 밀시트의 A 는 파단 후 연신율인데 우리가 내는
     # `elongation_observed` 는 시험 창 안의 관측 최대 변형률이다 — 가깝지만
     # 같지 않다. 이어 붙이면 화면이 「맞다/틀리다」를 말하게 되고, 그 판정은
     # 두 값이 같은 것일 때만 뜻이 있다.
-    ("연신율", "strain", "A", "시료", None),
+    ("연신율", "strain", "A", "시료", None, None),
+    # **경도는 척도로 든다.** `HV 200`·`HB 200`·`HRC 200` 은 서로 다른 값이고
+    # 환산식이 없다 — 규격(ASTM E140)이 참고표를 주지만 재료마다 다르고 그것도
+    # 「대략」이라고 명시한다. 한 칸에 받으면 **숫자는 그럴듯한데 뜻이 다른**
+    # 값이 저장되므로, 척도를 값의 일부로 든다.
+    #
+    # 차원 자리는 안 쓴다(척도가 있으면 단위 검사를 건너뛴다). 자리를 비울 수
+    # 없어 `dimensionless` 를 적어 둔다.
+    ("경도", "dimensionless", "H", "시료", None, "HV, HB, HRC, HRB, HS"),
 ]
 
 
@@ -298,7 +316,7 @@ def ensure_builtin_property_items(db: Session) -> list[str]:
         return []
 
     created: list[str] = []
-    for value, dimension, symbol, level, measured in BUILTIN_PROPERTY_ITEMS:
+    for value, dimension, symbol, level, measured, scales in BUILTIN_PROPERTY_ITEMS:
         cleaned = clean(value)
         if cleaned is None:
             continue
@@ -320,6 +338,7 @@ def ensure_builtin_property_items(db: Session) -> list[str]:
                     "symbol": symbol,
                     "level": level,
                     **({"measured_key": measured} if measured else {}),
+                    **({"scales": scales} if scales else {}),
                 },
             )
         )

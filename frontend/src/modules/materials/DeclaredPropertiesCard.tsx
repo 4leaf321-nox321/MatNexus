@@ -83,7 +83,14 @@ interface Point {
 interface Draft {
   item: string
   points: Point[]
-  input_unit: string
+  /**
+   * 단위 또는 **척도**. 한 칸에 든다 — 그 항목이 어느 쪽인지는 서버가 정하고
+   * (`scales` 가 비었나), 화면은 드롭다운의 후보만 갈아 끼운다.
+   *
+   * 둘을 따로 두면 화면이 「지금 어느 쪽이지」를 매번 판단해야 하고, 그 판단이
+   * 서버와 갈라지는 날 경도에 MPa 가 뜬다.
+   */
+  measure: string
   source: string
   reference: string
   note: string
@@ -98,7 +105,7 @@ function toDraft(row: DeclaredProperty): Draft {
       value: String(Number(point.value.toPrecision(12))),
       temperature: point.temperature_k == null ? '' : String(point.temperature_k - 273.15),
     })),
-    input_unit: row.input_unit,
+    measure: row.scale ?? row.input_unit ?? '',
     source: row.source,
     reference: row.reference,
     note: row.note ?? '',
@@ -149,7 +156,8 @@ export function DeclaredPropertiesCard({
       {
         item: item.item,
         points: [{ value: '', temperature: '' }],
-        input_unit: item.si_unit,
+        // 척도를 든 항목은 **첫 척도**로 시작한다. 단위는 정본 SI 로.
+        measure: item.scales.length > 0 ? item.scales[0] : item.si_unit,
         source: 'literature',
         reference: '',
         note: '',
@@ -188,7 +196,11 @@ export function DeclaredPropertiesCard({
             temperature_k:
               point.temperature === '' ? null : Number(point.temperature) + 273.15,
           })),
-          input_unit: row.input_unit,
+          // **어느 칸으로 보낼지는 항목이 정한다.** 척도를 단위 자리에
+          // 보내면 서버가 「모르는 단위」로 거절하고, 사람은 왜인지 모른다.
+          ...(known.find((item) => item.item === row.item)?.scales.length
+            ? { scale: row.measure }
+            : { input_unit: row.measure }),
           source: row.source,
           reference: row.reference,
           note: row.note || null,
@@ -262,7 +274,7 @@ export function DeclaredPropertiesCard({
       <div className="space-y-3">
         {rows.map((row, index) => {
           const spec = known.find((item) => item.item === row.item)
-          const choices = spec?.units ?? [row.input_unit]
+          const choices = spec?.units.length ? spec.units : [row.measure]
           return (
             <div key={row.item} className="grid grid-cols-12 items-end gap-2 rounded-md border p-3">
               <div className="col-span-12 sm:col-span-3">
@@ -279,19 +291,23 @@ export function DeclaredPropertiesCard({
 
               <div className="col-span-7 sm:col-span-2">
                 <Label htmlFor={`${row.item}-unit`} className="text-muted-foreground mb-1 text-[11px]">
-                  단위
+                  {spec?.scales.length ? '시험 척도' : '단위'}
                 </Label>
                 {/* **차원이 맞는 단위만 뜬다.** 비열 자리에 W/(m.K) 를 넣으면
-                    값은 멀쩡한데 뜻이 다르다 — 서버도 같은 검사를 한다. */}
+                    값은 멀쩡한데 뜻이 다르다 — 서버도 같은 검사를 한다.
+
+                    경도처럼 **척도로 재는 물성**은 여기가 척도 목록이 된다.
+                    `HV 200` 과 `HB 200` 은 다른 값이고 환산식이 없어서, 척도는
+                    단위가 아니라 값의 일부다. */}
                 <Select
-                  value={row.input_unit}
-                  onValueChange={(value) => edit(index, { input_unit: value })}
+                  value={row.measure}
+                  onValueChange={(value) => edit(index, { measure: value })}
                 >
                   <SelectTrigger id={`${row.item}-unit`} className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {choices.map((unit) => (
+                    {(spec?.scales.length ? spec.scales : choices).map((unit) => (
                       <SelectItem key={unit} value={unit}>
                         {unit}
                       </SelectItem>
@@ -358,7 +374,7 @@ export function DeclaredPropertiesCard({
                           editPoint(index, spot, { value: event.target.value })
                         }
                       />
-                      <span className="text-muted-foreground text-xs">{row.input_unit}</span>
+                      <span className="text-muted-foreground text-xs">{row.measure}</span>
                       <span className="text-muted-foreground text-xs">@</span>
                       <Input
                         aria-label={

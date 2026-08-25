@@ -1021,3 +1021,163 @@ class Test밀시트값:
         ).json()["rows"][0]
         assert row["measured"] is None
         assert "이어져 있지 않습니다" in row["note"]
+
+
+class Test경도척도:
+    """**척도는 단위가 아니다.**
+
+        MPa → Pa   곱하기 1e6      단위는 계수로 환산된다
+        HV  → HB   불가능          척도는 안 된다
+
+    `HV 200` 과 `HB 200` 은 다른 값이고 환산식이 없다 — 규격(ASTM E140)이
+    참고표를 주지만 재료마다 다르고 그것도 「대략」이라고 명시한다. 한 칸에
+    받으면 **숫자는 그럴듯한데 뜻이 다른** 값이 저장된다.
+
+    v1.73.0 에서 경도를 일부러 뺀 이유가 이것이고, 여기서 그 자리를 만든다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _axis(self, db: Session) -> None:
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        ensure_builtin_test_types(db)
+        db.commit()
+
+    @pytest.fixture
+    def sample(self, client: TestClient, admin_headers: dict[str, str]) -> dict[str, Any]:
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "HARD",
+                "details": "MDOI",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        made = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"lot_no": "L-1"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        created: dict[str, Any] = made.json()
+        return created
+
+    def test_척도를_고르면_환산_없이_담는다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        saved = client.patch(
+            f"/api/samples/{sample['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "경도",
+                        "points": [{"value": 200}],
+                        "scale": "HV",
+                        "source": "datasheet",
+                        "reference": "MTC-2024-0812",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        row = saved.json()["declared_properties"][0]
+        assert row["scale"] == "HV"
+        # **환산이 없다.** 적은 값이 곧 저장 값이다.
+        assert row["points"][0]["value_si"] == pytest.approx(200)
+        assert row["points"][0]["value"] == pytest.approx(200)
+        assert row["input_unit"] is None
+
+    def test_척도를_안_고르면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        """**200 만 적으면 그것이 HV 인지 HB 인지 알 방법이 없다.**"""
+        refused = client.patch(
+            f"/api/samples/{sample['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "경도",
+                        "points": [{"value": 200}],
+                        "source": "datasheet",
+                        "reference": "MTC",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        message = refused.json()["error"]["message"]
+        assert "HV" in message and "환산" in message
+
+    def test_모르는_척도는_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        refused = client.patch(
+            f"/api/samples/{sample['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "경도",
+                        "points": [{"value": 200}],
+                        "scale": "HZ",
+                        "source": "datasheet",
+                        "reference": "MTC",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+
+    def test_피커가_단위_대신_척도를_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**둘 다 주면 화면이 어느 쪽을 그릴지 스스로 판단해야 하고, 그 판단이
+        서버와 갈라진다.**"""
+        items = client.get(
+            "/api/materials/property-items?level=시료", headers=admin_headers
+        ).json()
+        by_item = {row["item"]: row for row in items}
+        assert by_item["경도"]["scales"] == ["HV", "HB", "HRC", "HRB", "HS"]
+        assert by_item["경도"]["units"] == []
+        # 보통 물성은 그대로다.
+        assert by_item["항복강도"]["scales"] == []
+        assert "MPa" in by_item["항복강도"]["units"]
+
+    def test_잰_값과_안_견주고_왜_그런지_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], sample: dict[str, Any]
+    ) -> None:
+        """우리가 내는 스칼라는 SI 값이고 밀시트의 경도는 척도 위의 숫자다 —
+        **둘을 빼면 숫자는 나오는데 뜻이 없다.**"""
+        client.patch(
+            f"/api/samples/{sample['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "경도",
+                        "points": [{"value": 200}],
+                        "scale": "HV",
+                        "source": "datasheet",
+                        "reference": "MTC",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        row = client.get(
+            f"/api/samples/{sample['id']}/mill-check", headers=admin_headers
+        ).json()["rows"][0]
+        assert row["measured"] is None
+        assert row["declared_unit"] == "HV"
+        assert "척도" in row["note"] and "환산되지 않습니다" in row["note"]

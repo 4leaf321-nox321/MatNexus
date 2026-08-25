@@ -60,6 +60,18 @@ SOURCES = {
 }
 
 
+def _scales(given: Any) -> list[str]:
+    """`"HV, HB, HRC"` → `["HV", "HB", "HRC"]`.
+
+    **환산하지 않는다.** `HV 200` 과 `HB 200` 은 다른 값이고 환산식이 없다 —
+    규격(ASTM E140)이 참고표를 주지만 재료마다 다르고 그것도 「대략」이라고
+    명시한다. 척도는 **값의 일부**지 단위가 아니다.
+    """
+    if not isinstance(given, str):
+        return []
+    return [one for one in (part.strip() for part in given.split(",")) if one]
+
+
 def catalog(db: Session, *, level: str | None = None) -> dict[str, dict[str, Any]]:
     """넣을 수 있는 물성 항목. `{값: {dimension, symbol, si_unit, level}}`.
 
@@ -94,12 +106,16 @@ def catalog(db: Session, *, level: str | None = None) -> dict[str, dict[str, Any
             # 같은 물성을 처리 결과가 낸다면 그 키. 있으면 「적은 값과 잰 값」을
             # 견줄 수 있다 — 밀시트 대조가 이것으로 돈다.
             "measured_key": attributes.get("measured_key") or None,
+            # **단위가 아니라 척도인 물성.** 비어 있으면 보통 물성이다.
+            "scales": _scales(attributes.get("scales")),
         }
     return found
 
 
-def _points(given: list[Any], *, name: str, symbol: str) -> list[dict[str, Any]]:
+def _points(given: list[Any], *, name: str, symbol: str | None) -> list[dict[str, Any]]:
     """온도-값 점들을 검사해 저장할 모양으로.
+
+    `symbol` 이 없으면 **환산하지 않는다** — 척도로 재는 물성(경도)이 그렇다.
 
     **온도 오름차순으로 고정한다.** 뒤섞인 채로 솔버에 나가면 Abaqus 가 조용히
     이상한 보간을 한다 — 오류를 내지 않고, 결과만 틀린다.
@@ -119,7 +135,7 @@ def _points(given: list[Any], *, name: str, symbol: str) -> list[dict[str, Any]]
                 "temperature_k": float(temperature)
                 if isinstance(temperature, (int, float))
                 else None,
-                "value_si": units.to_si(raw, symbol),
+                "value_si": units.to_si(raw, symbol) if symbol else float(raw),
             }
         )
 
@@ -250,6 +266,36 @@ def check(
                 f"말하는 거짓말이 됩니다.",
                 status=422,
             )
+        # ── 척도인가 단위인가 ────────────────────────────────────────
+        #
+        # **둘은 다른 것이다.** 단위는 계수로 환산되고(MPa → Pa), 척도는 안 된다
+        # (HV → HB). 척도를 든 항목은 단위 검사를 통째로 건너뛰고, 대신 값이
+        # 어느 척도의 것인지를 받는다.
+        if spec["scales"]:
+            scale = clean(str(row.get("scale") or ""))
+            if scale not in spec["scales"]:
+                raise AppError(
+                    "MNX-MATERIALS-0027",
+                    f"'{name}' 은 시험 척도를 골라야 합니다 — "
+                    f"{' · '.join(spec['scales'])} 중 하나입니다. "
+                    f"척도가 다르면 서로 환산되지 않습니다: 같은 200 이라도 "
+                    f"HV 와 HB 는 다른 값입니다.",
+                    status=422,
+                )
+            out.append(
+                {
+                    "item": name,
+                    # 환산이 없으므로 적은 값이 곧 저장 값이다.
+                    "points": _points(given, name=name, symbol=None),
+                    "scale": scale,
+                    "input_unit": None,
+                    "source": source,
+                    "reference": reference,
+                    "note": clean(str(row.get("note") or "")),
+                }
+            )
+            continue
+
         symbol = str(row.get("input_unit") or spec["si_unit"])
         try:
             unit = units.unit_of(symbol)
@@ -265,11 +311,11 @@ def check(
                 status=422,
             )
 
-        points = _points(given, name=name, symbol=symbol)
         out.append(
             {
                 "item": name,
-                "points": points,
+                "points": _points(given, name=name, symbol=symbol),
+                "scale": None,
                 "input_unit": symbol,
                 "source": source,
                 "reference": reference,

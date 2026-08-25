@@ -3474,6 +3474,8 @@ export interface components {
             points: components["schemas"]["DeclaredPointIn"][];
             /** Reference */
             reference: string;
+            /** Scale */
+            scale?: string | null;
             /** Source */
             source: string;
         };
@@ -3488,7 +3490,7 @@ export interface components {
          */
         DeclaredPropertyOut: {
             /** Input Unit */
-            input_unit: string;
+            input_unit?: string | null;
             /** Item */
             item: string;
             /** Note */
@@ -3497,6 +3499,8 @@ export interface components {
             points: components["schemas"]["DeclaredPointOut"][];
             /** Reference */
             reference: string;
+            /** Scale */
+            scale?: string | null;
             /** Source */
             source: string;
         };
@@ -5022,6 +5026,11 @@ export interface components {
             item: string;
             /** Level */
             level: string;
+            /**
+             * Scales
+             * @default []
+             */
+            scales: string[];
             /** Si Unit */
             si_unit: string;
             /** Symbol */

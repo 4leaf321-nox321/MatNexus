@@ -48,12 +48,22 @@ class DeclaredPropertyOut(BaseModel):
     """기준정보 `property_item` 축의 값. 항목 목록을 **부서가 정한다**(D7)."""
     points: list[DeclaredPointOut]
     """온도-값 점들. **온도 오름차순이고 비지 않는다.**"""
-    input_unit: str
+    input_unit: str | None = None
     """사람이 적은 단위. 화면이 그대로 되돌려 보여 준다 — 206 GPa 를 넣었는데
     2.06e11 Pa 로 보이면 자기가 적은 값인지 알기 어렵다.
 
     **점마다 두지 않는다.** 한 물성을 GPa 와 MPa 로 섞어 적을 이유가 없고,
-    섞을 수 있게 두면 표를 읽는 사람이 열마다 단위를 확인해야 한다."""
+    섞을 수 있게 두면 표를 읽는 사람이 열마다 단위를 확인해야 한다.
+
+    척도로 재는 물성(경도)에서는 비어 있다 — `scale` 이 그 자리다."""
+    scale: str | None = None
+    """시험 척도(`HV`·`HB`·`HRC`…). **단위가 아니다.**
+
+    단위는 계수로 환산되지만(MPa → Pa) 척도는 안 된다 — `HV 200` 과 `HB 200` 은
+    다른 값이고 환산식이 없다(ASTM E140 의 참고표는 재료마다 다르고 「대략」이라고
+    명시한다). 그래서 **척도는 값의 일부**이고, 다른 척도끼리는 견주지 않는다.
+
+    `input_unit` 과 **둘 중 하나만** 채워진다."""
     source: str
     """`literature` · `standard` · `datasheet` · `estimate`. **필수다** — 값만
     있고 어디서 왔는지 모르면 그 값으로 돌린 해석의 근거를 되짚을 수 없다."""
@@ -74,7 +84,9 @@ class DeclaredPropertyIn(BaseModel):
     points: list[DeclaredPointIn]
     """**비면 거절한다.** 값 없는 항목은 「이 물성이 있다」고 말하는 거짓말이다."""
     input_unit: str | None = None
-    """비우면 그 항목의 정본 SI 단위로 본다."""
+    """비우면 그 항목의 정본 SI 단위로 본다. **척도로 재는 물성에서는 안 쓴다.**"""
+    scale: str | None = None
+    """시험 척도. 그 항목이 척도를 들면 **필수**이고, 안 들면 무시한다."""
     source: str
     reference: str
     note: str | None = None
@@ -89,6 +101,9 @@ class PropertyItemOut(BaseModel):
     symbol: str | None
     level: str
     """`재료` | `시료`. **어디에 붙는가** — 화면이 이 값으로 피커를 가른다."""
+    scales: list[str] = []
+    """비어 있지 않으면 **단위 대신 척도를 고른다**(경도). 화면이 이 값으로
+    단위 드롭다운을 척도 드롭다운으로 바꾼다."""
     units: list[str]
     """이 차원에서 고를 수 있는 단위.
 
@@ -259,8 +274,9 @@ class MillCheckRowOut(BaseModel):
     item: str
     label: str
     declared: float
-    """밀시트가 말한 값. 정본 SI."""
+    """밀시트가 말한 값. 정본 SI — 척도로 재는 물성이면 적은 그대로."""
     declared_unit: str
+    """단위 또는 척도. 사람이 읽는 자리라 둘을 한 칸에 둔다."""
     reference: str
     measured: float | None = None
     """우리가 잰 값의 평균. 채택된 처리 결과에서만 온다(ADR 0007)."""
