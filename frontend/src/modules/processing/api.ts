@@ -67,14 +67,23 @@ export const FROM_SPECIMEN = 'specimen_'
  * 입력 칸 이름과 시편 치수 이름은 **원래 같은 이름 공간**이다. 그러니 목록을
  * 들고 있을 필요가 없다 — 이름이 맞는 것 하나를 찾으면 된다. 단위로 고르는 것도
  * 아니고 표를 박는 것도 아니다.
+ *
+ * ## 이름이 다를 때는 칸이 말해 준다
+ *
+ * 이름이 늘 같지는 않다. 네킹을 자르는 `manual_index` 칸은 앞 단계가 낸
+ * `necking_candidate_index` 를 받는데, **이름이 달라서 단추가 안 떴다** —
+ * 사람이 후보 index 를 눈으로 보고 손으로 옮겨 적어야 했고, 곡선을 다시
+ * 처리하면 옛 index 가 남는다.
+ *
+ * 그래서 칸이 `links_to` 로 가리킨다. **화면이 짝을 외우지 않는다** — 새
+ * 계산이 그런 칸을 만들어도 여기는 안 고친다(D7).
  */
 export function referenceFor(
-  paramName: string,
+  param: Pick<StepParam, 'name' | 'links_to'>,
   available: Map<string, ProcessingScalar>
 ): ProcessingScalar | null {
-  return (
-    available.get(`${FROM_SPECIMEN}${paramName}`) ?? available.get(paramName) ?? null
-  )
+  const wanted = param.links_to ?? param.name
+  return available.get(`${FROM_SPECIMEN}${wanted}`) ?? available.get(wanted) ?? null
 }
 
 /** `@specimen_gauge_length` 같은 원문을 사람이 읽는 이름으로. */

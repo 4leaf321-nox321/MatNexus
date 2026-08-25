@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.fitting.routes import NO_TEST
@@ -2227,3 +2228,113 @@ class Test되짚어_찾은_것:
             names[form] = got.headers["content-disposition"]
         assert names["openradioss"] != names["openradioss_thermal"], names
         assert "_thermal.rad" in names["openradioss_thermal"]
+
+
+class Test네킹을_안_자르면:
+    """**네킹 뒤는 균일 변형이 아니다.**
+
+    진응력 변환식이 성립하지 않는 구간인데, 안 자르고 변환하면 그 구간의 진응력이
+    실제보다 낮게 나오고 그 표가 그대로 `*PLASTIC` 으로 간다 — **덱은 멀쩡히
+    돌고 재료만 무르게 계산된다.**
+
+    막지는 않는다. 어디서 네킹이 시작됐는지는 곡선만 봐서는 확정할 수 없고(그래서
+    그 단계가 「후보」다), 막으면 사람은 시스템 밖에서 계산해 카드 없이 덱을
+    만든다 — 그러면 근거가 아무 데도 안 남는다.
+    """
+
+    def test_카드가_그_사실을_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "안 자름",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        notes = " ".join(card.json()["source"]["notes"])
+        assert "네킹을 안 자른" in notes
+        # **무엇을 하라는지 말한다.** "섞여 있습니다" 만으로는 어디를 만져야
+        # 하는지 모른다.
+        assert "지정한 위치에서 자름" in notes
+
+    def test_덱에도_따라간다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**소성 표만 봐서는 구별할 방법이 없다** — 점이 나란히 있을 뿐이다."""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "안 자름",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        text = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+        ).text
+        assert "네킹을 안 자른" in text
+
+    def test_막지는_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """한 번 재고 해석부터 돌려 보는 것은 정상 작업이다. 막으면 사람은
+        시스템 밖에서 계산하고, 그러면 근거가 아무 데도 안 남는다."""
+        made = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "그래도 만든다",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+    def test_자른_곡선에는_안_적는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        ready: dict[str, Any],
+    ) -> None:
+        """**늘 적으면 그 문장이 경고로 안 읽힌다.**"""
+        from app.modules.processing.models import ProcessingResult
+
+        # 이 재료의 처리 결과를 「자른 것」으로 바꿔 둔다.
+        for result in db.scalars(select(ProcessingResult)):
+            steps = [dict(step) for step in result.steps_snapshot or []]
+            for step in steps:
+                if step.get("plugin") == "tensile.true_plastic":
+                    step["options"] = {
+                        **(step.get("options") or {}),
+                        "necking_policy": "manual_index",
+                        "manual_index": 50,
+                    }
+            result.steps_snapshot = steps
+        db.commit()
+
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "잘랐다",
+                "poisson_ratio": 0.3,
+            },
+            headers=admin_headers,
+        ).json()
+        notes = " ".join(card["source"]["notes"])
+        assert "네킹을 안 자른" not in notes, notes

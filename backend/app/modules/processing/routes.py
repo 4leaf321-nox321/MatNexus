@@ -100,6 +100,7 @@ def list_steps(
                     help=spec.help,
                     required=spec.required,
                     role=spec.role,
+                    links_to=spec.links_to,
                     when={key: list(values) for key, values in spec.when.items()},
                 )
                 for spec in plugin.params

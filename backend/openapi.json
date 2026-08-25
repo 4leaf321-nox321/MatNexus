@@ -7814,6 +7814,17 @@
             "title": "Label",
             "type": "string"
           },
+          "links_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Links To"
+          },
           "name": {
             "title": "Name",
             "type": "string"

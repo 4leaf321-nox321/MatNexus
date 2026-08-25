@@ -499,6 +499,48 @@ def _declared_table(
     return rows
 
 
+#: 네킹을 자르는 단계와 그 옵션. **이름을 여기 적는다** — 처리 플러그인이
+#: 무엇을 하는지는 부서의 데이터가 아니라 계산의 성질이다.
+TRUE_PLASTIC = "tensile.true_plastic"
+CUT_POLICY = "manual_index"
+
+
+def _uncut_necking(group: statistics_services.Group) -> list[str]:
+    """네킹을 안 자른 곡선이 섞여 있으면 그 사실을 말한다. **막지는 않는다.**
+
+    ## 왜 짚어야 하나
+
+    네킹 뒤의 공칭 응력-변형률은 **균일 변형이 아니라서 진응력 변환식이 성립하지
+    않는다.** 안 자르고 변환하면 그 구간의 진응력이 실제보다 낮게 나오고, 그
+    표가 그대로 `*PLASTIC` 으로 간다 — **덱은 멀쩡히 돌고 재료만 무르게
+    계산된다.**
+
+    ## 왜 막지는 않나
+
+    어디서 네킹이 시작됐는지는 곡선만 봐서는 확정할 수 없다(그래서 그 단계가
+    「후보」다). 한 번 재고 해석부터 돌려 보는 것은 정상 작업이고, 막으면 사람은
+    시스템 밖에서 계산해 카드 없이 덱을 만든다 — 그러면 근거가 아무 데도 안
+    남는다. 초탄성의 Drucker 검사와 같은 자리다.
+    """
+    uncut: list[str] = []
+    for member in group.members:
+        for step in member.result.steps_snapshot or []:
+            if str(step.get("plugin")) != TRUE_PLASTIC:
+                continue
+            options = step.get("options") or {}
+            if str(options.get("necking_policy") or "") != CUT_POLICY:
+                uncut.append(member.run.record_name)
+    if not uncut:
+        return []
+    return [
+        f"네킹을 안 자른 곡선이 {len(uncut)}건 섞여 있습니다({', '.join(uncut[:3])}"
+        f"{' 외' if len(uncut) > 3 else ''}). 네킹 뒤는 균일 변형이 아니라 진응력 "
+        f"변환식이 성립하지 않습니다 — 그 구간이 소성 표에 들어가면 재료가 실제보다 "
+        f"무르게 계산됩니다. 처리의 '진응력·진소성변형률' 단계에서 네킹 경계를 "
+        f"'지정한 위치에서 자름' 으로 두고, 앞 단계가 낸 후보 위치를 이어 붙이세요."
+    ]
+
+
 def _thermal_notes(material: Material, thermal: dict[str, Any]) -> list[str]:
     """열물성 값마다 근거 한 줄. 블록에 실린 것만 적는다.
 
@@ -943,6 +985,7 @@ def create_card(
     poisson = _inherit_poisson(group.material, payload.poisson_ratio)
     density = _inherit_density(group.material, samples, payload.density)
     thermal = _thermal_block(group.material)
+    uncut = _uncut_necking(group)
     thermal_rows = _declared_table(group.material, THERMAL_COLUMNS)
     inherited_notes = [
         # 잰 값이면 처리 결과가 근거를 들고 있다. 적은 값일 때만 적는다 —
@@ -951,6 +994,9 @@ def create_card(
         f"푸아송비: {poisson.detail}" if poisson.detail else "",
         f"밀도: {density.detail}" if density.detail else "",
         *_thermal_notes(group.material, thermal),
+        # **덱을 받은 사람이 알아야 한다.** 표만 봐서는 네킹 뒤가 섞였는지
+        # 구별할 방법이 없다 — 점이 나란히 있을 뿐이다.
+        *uncut,
     ]
 
     # ── 소성 표를 어디까지 낼까 ─────────────────────────────────────────
@@ -1572,6 +1618,11 @@ def export_card(
         ),
         f"카드 {item.id} ({STATUS_NOTES.get(item.status, item.status)})",
     ]
+    # **네킹을 안 잘랐다는 사실은 덱까지 따라가야 한다.** 소성 표만 봐서는
+    # 구별할 방법이 없다 — 점이 나란히 있을 뿐이다.
+    provenance.extend(
+        line for line in item.source.get("notes", []) if str(line).startswith("네킹을 안 자른")
+    )
     # 값마다 어디서 왔는지 한 줄씩. 없는 값은 애초에 카드에 없다.
     thermal = cards.values_of(item.blocks.get("thermal"))
     for values, key, label in (

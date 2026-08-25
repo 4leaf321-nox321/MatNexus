@@ -50,6 +50,18 @@ class ParamSpec:
 
     `when` 이 걸린 칸은 **그 조건일 때만** 필수다. 방법이 '직접 입력' 이 아니면
     `manual_modulus` 는 아무 데도 안 쓰인다."""
+    links_to: str | None = None
+    """이 칸에 이어 붙일 수 있는 **앞 단계의 값 이름.**
+
+    비면 **칸 이름과 같은 이름**을 찾는다 — `youngs_modulus` 칸이 앞 단계의
+    `youngs_modulus` 를 집는 것이 그 경우다. 이름이 다를 때만 적는다.
+
+    실제로 그 자리가 있었다: 네킹 경계를 자르는 `manual_index` 칸은 앞 단계가
+    낸 `necking_candidate_index` 를 받아야 하는데 이름이 달라서 **화면에 이어
+    붙이기 단추가 안 떴다.** 사람이 후보 index 를 눈으로 보고 손으로 옮겨
+    적어야 했고, 그러면 곡선을 다시 처리했을 때 **옛 index 가 남는다** — 그
+    결과는 그럴듯해 보인다. `@youngs_modulus` 를 만든 이유와 같다."""
+
     role: Literal["column"] | None = None
     """이 칸이 **프레임의 열 이름**을 받는가.
 

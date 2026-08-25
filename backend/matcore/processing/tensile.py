@@ -815,7 +815,13 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="자를 위치",
             type="int",
             required=True,
+            # **앞 단계가 낸 후보를 그대로 집는다.** 손으로 옮겨 적게 하면
+            # 곡선을 다시 처리했을 때 옛 index 가 남고, 그 결과는 그럴듯해
+            # 보인다 — 네킹을 엉뚱한 데서 자른 표가 덱으로 간다.
+            links_to="necking_candidate_index",
             when={"necking_policy": ("manual_index",)},
+            help="네킹 후보 단계가 낸 위치를 이어 붙일 수 있습니다. 그 점까지가 "
+            "균일 변형이고, 뒤는 진응력 변환식이 성립하지 않습니다.",
         ),
         ParamSpec(
             name="negative_policy",

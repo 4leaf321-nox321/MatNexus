@@ -38,6 +38,12 @@ class StepParamOut(BaseModel):
 
     전에는 프론트에 열 받는 칸 이름을 적어 뒀다 — 새 계산을 만들 때 그 목록에도
     이름을 더해야 했고, 안 더하면 자유 입력이 됐다."""
+    links_to: str | None = None
+    """이 칸에 이어 붙일 수 있는 **앞 단계의 값 이름.**
+
+    비면 화면이 **칸 이름과 같은 이름**을 찾는다. 이름이 다를 때만 채워진다 —
+    네킹을 자르는 `manual_index` 칸이 `necking_candidate_index` 를 받는 것이
+    그 경우다."""
     when: dict[str, list[str]] = {}
     """이 칸이 쓰이는 조건. 비어 있으면 늘 쓰인다."""
 

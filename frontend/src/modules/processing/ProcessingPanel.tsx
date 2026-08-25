@@ -1195,7 +1195,7 @@ function ParamField({
    * 이 칸에 이어 붙일 값. **이름으로 찾는다** — 화면에 목록을 박아 두면 규격에
    * 칸을 더할 때마다 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
    */
-  const reference = referenceFor(param.name, inputs)
+  const reference = referenceFor(param, inputs)
 
   /** 이어 붙인 값이 지금 얼마인가. **몇인지 모르면 고칠지 말지를 못 정한다.** */
   const linked = referenced ? (inputs.get(String(value).slice(1)) ?? null) : null
