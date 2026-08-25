@@ -71,6 +71,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { missingSteps } from '@/modules/processing/gaps'
+import { missingStandard } from '@/modules/processing/standard'
 import {
   blockersAt,
   columnsAt,
@@ -440,6 +441,24 @@ export function ProcessingPanel({
     [vocabulary]
   )
 
+  /**
+   * 표준 단계 중 **빠진 것만** 뒤에 붙인다.
+   *
+   * 통째로 갈아 끼우지 않는다 — 사람이 손댄 옵션(적합 구간·오프셋)을 말없이
+   * 되돌리면, 그 사람은 자기가 정한 값이 사라진 것을 나중에 결과에서 안다.
+   *
+   * 순서는 `standard.ts` 가 정한 대로 붙는다. 자리가 어긋나면 아래 「권장
+   * 순서와 다릅니다」 가 짚어 주고, 그때 옮기는 것은 사람이 한다.
+   */
+  function fillStandard() {
+    setSteps((current) => [
+      ...current,
+      ...missingStandard(current.map((step) => step.plugin)),
+    ])
+    setResult(null)
+    setAttempted(false)
+  }
+
   /** 지금 구성으로 못 하게 되는 일. 인장에만 뜻이 있다. */
   const gaps = useMemo(
     () => (testTypeKey === 'tensile' ? missingSteps(steps.map((step) => step.plugin)) : []),
@@ -634,6 +653,21 @@ export function ProcessingPanel({
           {/* **막지 않는다. 미리 말할 뿐이다.** 공칭까지만 필요한 작업도 정상이다.
               다만 그 사실을 CAE 카드 탭에서 알게 되면 20건을 다시 처리해야 한다 —
               결과는 불변이라 열을 나중에 덧붙일 수 없다. */}
+          {/* **비어 있으면 채워 주는 편이 낫다.** 빈 목록에서 시작하면 사람들은
+              필요한 것만 골라 담고 대개 「공칭 → 정렬 → 강도」 셋에서 멈추는데,
+              그 구성은 화면에서 잘 돌아 보이면서 카드도 대표 곡선도 못 만든다. */}
+          {steps.length === 0 && testTypeKey === 'tensile' && (
+            <div className="rounded-md border p-2.5 text-xs">
+              <p className="mb-1.5">
+                인장시험의 <b>표준 단계</b>를 한 번에 넣을 수 있습니다 — 넣고 나서 고치면
+                됩니다.
+              </p>
+              <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={fillStandard}>
+                <Plus className="size-3.5" />표준 인장 처리 채우기
+              </Button>
+            </div>
+          )}
+
           {steps.length > 0 && gaps.length > 0 && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
               <p className="mb-1 font-medium">이 단계 구성으로는 나중에 할 수 없는 것</p>
@@ -644,6 +678,17 @@ export function ProcessingPanel({
                   </li>
                 ))}
               </ul>
+              {/* **말하는 것과 넣어 주는 것은 다르다.** 무엇을 어느 자리에 어떤
+                  옵션으로 넣어야 하는지가 또 하나의 문제여서, 알고도 못 하는
+                  사람이 있었다. */}
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2 h-7 text-xs"
+                onClick={fillStandard}
+              >
+                <Plus className="size-3.5" />빠진 표준 단계 넣기
+              </Button>
             </div>
           )}
 
