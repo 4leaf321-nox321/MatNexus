@@ -44,6 +44,7 @@ from app.modules.tests.schemas import (
     InstrumentDimensionsOut,
     ParserOut,
     ReparseOut,
+    ReparseRequest,
     RunBulkUpdateOut,
     RunBulkUpdateRequest,
     RunDeleteOut,
@@ -1057,6 +1058,11 @@ def get_run(
         ],
         source_metadata={k: v for k, v in run.source_metadata.items() if k != "_warnings"},
         parser_version=run.parser_version,
+        parse_profile_key=(
+            pinned.key if (pinned := db.get(FormatProfile, run.parse_profile_id)) else None
+        )
+        if run.parse_profile_id
+        else None,
         curves=[
             CurveOut(
                 key=curve.key,
@@ -1118,18 +1124,66 @@ def download_source(
 @runs_router.post("/{run_id}/reparse", response_model=ReparseOut, status_code=202)
 def reparse(
     run_id: uuid.UUID,
+    payload: ReparseRequest | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> ReparseOut:
-    """파서를 고친 뒤 다시 읽는다. 원본을 보관하는 이유가 이것이다."""
+    """다시 읽는다. 원본을 보관하는 이유가 이것이다.
+
+    ## 왜 형식을 고를 수 있어야 하는가
+
+    자동 선택이 틀리는 자리가 있다. 같은 장비의 형식이 조금 달라져 프로파일을
+    하나 더 만들면 지문이 겹치고, 우선순위가 높은 쪽이 이겨서 **엉뚱한 것으로
+    읽거나 아예 실패한다.** 그때 「다시 읽기」 만 있으면 **같은 선택을 그대로
+    반복한다** — 고칠 자리가 없었다.
+
+    고른 것은 시험에 남는다(`parse_profile_id`). 큐 페이로드에만 실으면
+    재시도에서 사라지고, 나중에 누가 다시 읽으면 또 자동으로 돌아간다.
+
+    비워 보내면 **고정을 푼다** — 프로파일을 고친 뒤 자동으로 되돌리는 길이다.
+    """
     run = services.get_run(db, user, run_id)
     if not run.source_path:
         raise AppError("MNX-TESTS-0014", "원본 파일이 없어 다시 읽을 수 없습니다.", status=422)
+
+    # **안 보낸 것과 비운 것을 구별한다.** 안 구별하면 그냥 「다시 읽기」 를
+    # 누를 때마다 고정이 풀리고, 그 사실은 또 실패해야 드러난다.
+    given = payload is not None and "profile_key" in payload.model_fields_set
+    key = payload.profile_key if payload else None
+    if given and key:
+        # **이 시험 종류의 것만.** 다른 종류의 프로파일로 읽으면 채널 이름이
+        # 안 맞아 어차피 실패하는데, 그 실패는 「형식이 틀렸다」 로 안 읽힌다.
+        profile = db.scalar(
+            formats.visible_profiles(db, user).where(
+                FormatProfile.key == key,
+                FormatProfile.test_type_id == run.test_type_id,
+            )
+        )
+        if profile is None:
+            raise AppError(
+                "MNX-TESTS-0022",
+                f"그 시험 종류로 쓸 수 있는 형식이 아닙니다: {key}",
+                status=422,
+            )
+        run.parse_profile_id = profile.id
+    elif given:
+        # 명시적으로 비웠다 — 자동으로 되돌린다.
+        run.parse_profile_id = None
+
     run.status = "uploaded"
     run.parse_error = None
     queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})
     db.commit()
-    return ReparseOut(status="queued", message="다시 읽기를 큐에 넣었습니다.")
+    pinned = db.get(FormatProfile, run.parse_profile_id) if run.parse_profile_id else None
+    return ReparseOut(
+        status="queued",
+        message=(
+            f"'{pinned.key}' 로 다시 읽기를 큐에 넣었습니다."
+            if pinned
+            else "다시 읽기를 큐에 넣었습니다(형식은 자동으로 고릅니다)."
+        ),
+        profile_key=pinned.key if pinned else None,
+    )
 
 
 def _plain(value: object) -> object:

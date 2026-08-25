@@ -277,6 +277,11 @@ class TestRunDetailOut(TestRunOut):
     parser_version: str | None
     """무엇으로 읽었는가(`profile:ta_dma850` · `zwick_tra:1`). 곡선이 이상할 때
     가장 먼저 봐야 하는 값이다."""
+    parse_profile_key: str | None = None
+    """**사람이 고른** 형식. 비어 있으면 자동으로 고른다.
+
+    `parser_version` 과 다르다 — 그쪽은 「무엇으로 읽혔나」(결과)이고 이쪽은
+    「무엇으로 읽으라고 정했나」(결정)다. 실패한 시험에는 결과가 없다."""
 
 
 class CurvePointsOut(BaseModel):
@@ -288,9 +293,28 @@ class CurvePointsOut(BaseModel):
     points: list[tuple[float, float]]
 
 
+class ReparseRequest(BaseModel):
+    """무엇으로 읽을까.
+
+    **안 보낸 것과 비운 것을 구별한다** — 선언 물성·일괄 수정과 같은 규칙이다.
+
+        안 보냄        지금 정해진 대로. 그냥 「다시 읽기」 다.
+        `null`         고정을 푼다 — 자동으로 고르게 되돌린다.
+        `"ta_dma850"`  이것으로 읽는다.
+
+    구별 안 하면 **그냥 다시 읽을 때마다 고정이 풀린다.** 사람은 형식을 골라
+    뒀는데 다음에 누가 「다시 읽기」 를 누르는 순간 자동으로 돌아가고, 그 사실은
+    또 실패해야 드러난다.
+    """
+
+    profile_key: str | None = None
+
+
 class ReparseOut(BaseModel):
     status: str
     message: str
+    profile_key: str | None = None
+    """이번에 무엇으로 읽기로 했나. `null` 이면 자동."""
 
 
 # --- 저장소 정리 ------------------------------------------------------------

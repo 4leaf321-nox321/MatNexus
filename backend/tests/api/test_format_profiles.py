@@ -952,3 +952,172 @@ class Test받는_확장자:
         # DMA 종류는 파서가 없다 — 파서 쪽 목록은 비어 있어야 한다.
         assert types["dma_sweep"]["extensions"] == []
         assert types["dma_sweep"]["profile_extensions"] == [".csv"]
+
+
+def _upload_dma(client: TestClient, headers: dict[str, str], specimen_id: str) -> Any:
+    """DMA 파일 하나를 올린다. 파싱은 부르는 쪽이 한다."""
+    response = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen_id, "test_type": "dma_sweep", "conditions": "{}"},
+        files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+        headers=headers,
+    )
+    assert response.status_code == 202, response.text
+    return response.json()
+
+
+class Test읽을_형식_고르기:
+    """*"읽기 실패한 것을 옵션을 바꿔 다시 읽으려는데 「다시 읽기」 만 있다"* —
+    실사용에서 나왔다.
+
+    자동 선택이 틀리는 자리가 있다. 그때 「다시 읽기」 는 **같은 선택을 그대로
+    반복한다** — 고칠 자리가 없었다.
+    """
+
+    def test_고른_형식으로_읽는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        del dma
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        again = client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": "ta_dma850"},
+            headers=admin_headers,
+        )
+        assert again.status_code == 202, again.text
+        assert again.json()["profile_key"] == "ta_dma850"
+
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["parse_profile_key"] == "ta_dma850"
+        assert detail["parser_version"] == "profile:ta_dma850"
+
+    def test_자동이_고를_것과_다른_것을_고를_수_있다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**이 기능의 요점이다.** 자동이 이기는 프로파일이 따로 있을 때, 그것을
+        제치고 내가 고른 것으로 읽혀야 한다 — 안 그러면 골라도 소용이 없다.
+
+        같은 장비의 형식이 조금 달라져 프로파일을 하나 더 만들면 지문이 겹치고,
+        우선순위가 높은 쪽이 이긴다. 실제로 생기는 자리다.
+        """
+        del dma
+        # 우선순위가 더 높은 쌍둥이. 자동은 이쪽을 고른다.
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": "ta_dma850_hi",
+                "label": "TA DMA850 (우선)",
+                "test_type_key": "dma_sweep",
+                "definition": DMA_PROFILE,
+                "priority": 99,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        auto = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert auto["parser_version"] == "profile:ta_dma850_hi", "자동이 우선순위를 안 봤다"
+
+        # 낮은 쪽을 고르면 그것으로 읽혀야 한다.
+        client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": "ta_dma850"},
+            headers=admin_headers,
+        )
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        pinned = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert pinned["parser_version"] == "profile:ta_dma850"
+        assert pinned["parse_profile_key"] == "ta_dma850"
+
+    def test_고른_것이_남아서_다음에도_이어진다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**큐 페이로드에만 실으면 재시도에서 사라진다.** 나중에 누가 그냥
+        「다시 읽기」 를 눌러도 그 결정이 이어져야 한다."""
+        del dma
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": "ta_dma850"},
+            headers=admin_headers,
+        )
+        services.parse_run(db, uuid.UUID(run["id"]))
+
+        # 형식을 안 적고 다시 읽어도 고정은 그대로다.
+        client.post(f"/api/test-runs/{run['id']}/reparse", json={}, headers=admin_headers)
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["parse_profile_key"] == "ta_dma850"
+
+    def test_비워_보내면_고정을_푼다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """프로파일을 고친 뒤 자동으로 되돌리는 길이다."""
+        del dma
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": "ta_dma850"},
+            headers=admin_headers,
+        )
+        client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": None},
+            headers=admin_headers,
+        )
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["parse_profile_key"] is None
+
+    def test_다른_종류의_형식은_못_고른다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**다른 종류로 읽으면 채널 이름이 안 맞아 어차피 실패한다.** 그 실패는
+        「형식이 틀렸다」 로 안 읽히므로 여기서 막는다."""
+        del dma, tensile
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        blocked = client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": "없는형식"},
+            headers=admin_headers,
+        )
+        assert blocked.status_code == 422
+        assert blocked.json()["error"]["code"] == "MNX-TESTS-0022"
+
+    def test_고를_수_있는_형식을_목록으로_준다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """**무엇을 고를 수 있는지 화면이 알아야 한다.** 키를 외워서 치게 할 수는
+        없다 — 이미 있는 목록 엔드포인트를 그대로 쓴다."""
+        del dma
+        found = client.get(
+            "/api/formats", params={"test_type": "dma_sweep"}, headers=admin_headers
+        ).json()
+        assert [item["key"] for item in found] == ["ta_dma850"]

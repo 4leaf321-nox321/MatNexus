@@ -300,6 +300,20 @@ class TestRun(Base):
     여기 온다. 자동으로 시편 실측치를 덮어쓰지 않는다 — 사람이 이미 재어 넣은
     값을 장비 파일이 조용히 바꾸면, 어느 것이 맞는지 나중에 알 수 없다.
     화면이 "이 값으로 채울까요?" 를 물어보는 데 쓴다."""
+    parse_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("format_profiles.id"), index=True, nullable=True
+    )
+    """**이 파일은 이 형식으로 읽는다** — 사람이 고른 것.
+
+    비어 있으면 지문으로 자동으로 고른다(`_pick_reader`). 자동이 틀리는 자리가
+    실제로 있다: 같은 장비의 형식이 조금 달라져 프로파일을 하나 더 만들면 지문이
+    겹치고, 우선순위가 높은 쪽이 이겨서 **엉뚱한 것으로 읽거나 아예 실패한다.**
+
+    그때 「다시 읽기」 만 있으면 같은 선택을 그대로 반복한다 — 고칠 자리가
+    없었다. 고른 것을 여기 남겨 두는 이유는, 나중에 누가 다시 읽어도 **그 결정이
+    이어져야** 하기 때문이다. 큐 페이로드에만 실으면 재시도에서 사라진다.
+    """
+
     parser_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
     """무엇으로 읽었는가(`profile:ta_dma850` · `zwick_tra:1`).
 

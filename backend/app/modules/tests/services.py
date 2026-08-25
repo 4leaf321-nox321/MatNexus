@@ -677,6 +677,18 @@ def _pick_reader(
     형식이 조금 달라져 프로파일을 하나 더 만들면 지문이 겹친다.
     """
     filename = run.source_filename or ""
+
+    # **사람이 고른 것이 있으면 그것만 쓴다.** 자동으로 되돌아가면 고른 뜻이
+    # 없고, 「분명 그걸로 지정했는데」 를 설명할 길도 없다.
+    if run.parse_profile_id is not None:
+        chosen = db.get(FormatProfile, run.parse_profile_id)
+        if chosen is None or not chosen.is_active:
+            return None
+        return (
+            f"profile:{chosen.key}",
+            lambda raw, rule=chosen.definition: profiles.apply(rule, raw),
+        )
+
     candidates = list(
         db.scalars(
             select(FormatProfile)

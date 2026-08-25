@@ -1950,7 +1950,19 @@ export interface paths {
         put?: never;
         /**
          * Reparse
-         * @description 파서를 고친 뒤 다시 읽는다. 원본을 보관하는 이유가 이것이다.
+         * @description 다시 읽는다. 원본을 보관하는 이유가 이것이다.
+         *
+         *     ## 왜 형식을 고를 수 있어야 하는가
+         *
+         *     자동 선택이 틀리는 자리가 있다. 같은 장비의 형식이 조금 달라져 프로파일을
+         *     하나 더 만들면 지문이 겹치고, 우선순위가 높은 쪽이 이겨서 **엉뚱한 것으로
+         *     읽거나 아예 실패한다.** 그때 「다시 읽기」 만 있으면 **같은 선택을 그대로
+         *     반복한다** — 고칠 자리가 없었다.
+         *
+         *     고른 것은 시험에 남는다(`parse_profile_id`). 큐 페이로드에만 실으면
+         *     재시도에서 사라지고, 나중에 누가 다시 읽으면 또 자동으로 돌아간다.
+         *
+         *     비워 보내면 **고정을 푼다** — 프로파일을 고친 뒤 자동으로 되돌리는 길이다.
          */
         post: operations["reparse_api_test_runs__run_id__reparse_post"];
         delete?: never;
@@ -5542,8 +5554,28 @@ export interface components {
         ReparseOut: {
             /** Message */
             message: string;
+            /** Profile Key */
+            profile_key?: string | null;
             /** Status */
             status: string;
+        };
+        /**
+         * ReparseRequest
+         * @description 무엇으로 읽을까.
+         *
+         *     **안 보낸 것과 비운 것을 구별한다** — 선언 물성·일괄 수정과 같은 규칙이다.
+         *
+         *         안 보냄        지금 정해진 대로. 그냥 「다시 읽기」 다.
+         *         `null`         고정을 푼다 — 자동으로 고르게 되돌린다.
+         *         `"ta_dma850"`  이것으로 읽는다.
+         *
+         *     구별 안 하면 **그냥 다시 읽을 때마다 고정이 풀린다.** 사람은 형식을 골라
+         *     뒀는데 다음에 누가 「다시 읽기」 를 누르는 순간 자동으로 돌아가고, 그 사실은
+         *     또 실패해야 드러난다.
+         */
+        ReparseRequest: {
+            /** Profile Key */
+            profile_key?: string | null;
         };
         /**
          * ResultCurveOut
@@ -6673,6 +6705,8 @@ export interface components {
             orientation: string | null;
             /** Parse Error */
             parse_error: string | null;
+            /** Parse Profile Key */
+            parse_profile_key?: string | null;
             /** Parser Version */
             parser_version: string | null;
             /** Record Name */
@@ -10700,7 +10734,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReparseRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

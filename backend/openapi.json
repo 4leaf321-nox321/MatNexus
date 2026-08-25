@@ -6752,6 +6752,17 @@
             "title": "Message",
             "type": "string"
           },
+          "profile_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Key"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -6762,6 +6773,24 @@
           "message"
         ],
         "title": "ReparseOut",
+        "type": "object"
+      },
+      "ReparseRequest": {
+        "description": "무엇으로 읽을까.\n\n**안 보낸 것과 비운 것을 구별한다** — 선언 물성·일괄 수정과 같은 규칙이다.\n\n    안 보냄        지금 정해진 대로. 그냥 「다시 읽기」 다.\n    `null`         고정을 푼다 — 자동으로 고르게 되돌린다.\n    `\"ta_dma850\"`  이것으로 읽는다.\n\n구별 안 하면 **그냥 다시 읽을 때마다 고정이 풀린다.** 사람은 형식을 골라\n뒀는데 다음에 누가 「다시 읽기」 를 누르는 순간 자동으로 돌아가고, 그 사실은\n또 실패해야 드러난다.",
+        "properties": {
+          "profile_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Key"
+          }
+        },
+        "title": "ReparseRequest",
         "type": "object"
       },
       "ResultCurveOut": {
@@ -9763,6 +9792,17 @@
               }
             ],
             "title": "Parse Error"
+          },
+          "parse_profile_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Profile Key"
           },
           "parser_version": {
             "anyOf": [
@@ -16921,7 +16961,7 @@
     },
     "/api/test-runs/{run_id}/reparse": {
       "post": {
-        "description": "파서를 고친 뒤 다시 읽는다. 원본을 보관하는 이유가 이것이다.",
+        "description": "다시 읽는다. 원본을 보관하는 이유가 이것이다.\n\n## 왜 형식을 고를 수 있어야 하는가\n\n자동 선택이 틀리는 자리가 있다. 같은 장비의 형식이 조금 달라져 프로파일을\n하나 더 만들면 지문이 겹치고, 우선순위가 높은 쪽이 이겨서 **엉뚱한 것으로\n읽거나 아예 실패한다.** 그때 「다시 읽기」 만 있으면 **같은 선택을 그대로\n반복한다** — 고칠 자리가 없었다.\n\n고른 것은 시험에 남는다(`parse_profile_id`). 큐 페이로드에만 실으면\n재시도에서 사라지고, 나중에 누가 다시 읽으면 또 자동으로 돌아간다.\n\n비워 보내면 **고정을 푼다** — 프로파일을 고친 뒤 자동으로 되돌리는 길이다.",
         "operationId": "reparse_api_test_runs__run_id__reparse_post",
         "parameters": [
           {
@@ -16935,6 +16975,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReparseRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {

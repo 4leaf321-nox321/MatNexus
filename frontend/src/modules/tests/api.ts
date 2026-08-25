@@ -61,6 +61,8 @@ export type BulkUpdateField =
   components['schemas']['RunBulkUpdateRequest']['field']
 export type BulkUpdateResult = components['schemas']['RunBulkUpdateOut']
 
+export type ReparseResult = components['schemas']['ReparseOut']
+
 export interface RunQuery extends Record<string, unknown> {
   /** 부서 slug. 좁히기만 한다 — 권한을 넓히지 않는다. */
   workspace?: string
@@ -219,7 +221,21 @@ export const testsApi = {
       {}
     ),
 
-  reparse: (id: string) => api.post<{ status: string; message: string }>(`/test-runs/${id}/reparse`),
+  /**
+   * 다시 읽는다. **형식을 고를 수 있다.**
+   *
+   *   `undefined`  지금 정해진 대로 — 그냥 다시 읽기
+   *   `null`       고정을 푼다(자동으로 고르게)
+   *   `'키'`       그것으로 읽는다
+   *
+   * 안 보낸 것과 비운 것을 구별하지 않으면 **그냥 다시 읽을 때마다 고정이
+   * 풀린다** — 사람은 골라 뒀는데 다음 사람이 누르는 순간 자동으로 돌아간다.
+   */
+  reparse: (id: string, profileKey?: string | null) =>
+    api.post<ReparseResult>(
+      `/test-runs/${id}/reparse`,
+      profileKey === undefined ? {} : { profile_key: profileKey }
+    ),
 
   /** 축약된 점들. 서버가 LTTB 로 줄여 주므로 전부 받지 않는다. */
   curve: (

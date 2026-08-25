@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Download, RefreshCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Download, RefreshCw, Trash2 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
@@ -29,6 +29,14 @@ import { NOTABLE_DIFFERENCE, pairSummaries } from '@/modules/tests/summaries'
 import { axisLabel, formatValue, toDisplay } from '@/shared/units'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -53,6 +61,13 @@ export default function TestRunDetailPage() {
   const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
   const [action, setAction] = useState<Error | null>(null)
   const [removing, setRemoving] = useState(false)
+  /** 이 시험 종류로 쓸 수 있는 형식들. **키를 외워서 치게 할 수는 없다.** */
+  const formats = useResource(
+    () => testsApi.formats(run.data?.test_type_key ?? undefined),
+    [run.data?.test_type_key]
+  )
+  /** 다시 읽기가 무엇으로 걸렸는지. **말 안 하면 눌렸는지도 모른다.** */
+  const [notice, setNotice] = useState<string | null>(null)
 
   const { user } = useAuth()
   /** 관리자인 부서만. 아닌 부서 것으로 레시피를 만들면 서버가 거절한다. */
@@ -165,10 +180,17 @@ export default function TestRunDetailPage() {
     }
   }
 
-  async function reparse() {
+  /**
+   * 다시 읽는다.
+   *
+   * `profileKey` 를 안 주면 **지금 정해진 대로** 읽는다 — 고정을 골라 뒀으면
+   * 그것이 이어진다. `null` 이면 고정을 풀고 자동으로 되돌린다.
+   */
+  async function reparse(profileKey?: string | null) {
     setAction(null)
     try {
-      await testsApi.reparse(id)
+      const done = await testsApi.reparse(id, profileKey)
+      setNotice(done.message)
       run.reload()
     } catch (caught) {
       setAction(caught instanceof Error ? caught : new Error('다시 읽기에 실패했습니다.'))
@@ -225,10 +247,55 @@ export default function TestRunDetailPage() {
               <Download className="size-4" />
               원본
             </Button>
-            <Button variant="outline" size="sm" onClick={reparse}>
-              <RefreshCw className="size-4" />
-              다시 읽기
-            </Button>
+            {/* **자동이 틀리면 고칠 자리가 있어야 한다.** 전에는 「다시 읽기」
+                뿐이라 같은 선택을 그대로 반복했다 — 실패한 파일은 손쓸 방법이
+                없었다. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <RefreshCw className="size-4" />
+                  다시 읽기
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem onSelect={() => void reparse()}>
+                  같은 형식으로 다시
+                  {item?.parse_profile_key && (
+                    <span className="text-muted-foreground ml-auto text-xs">
+                      {item.parse_profile_key}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs font-normal">
+                  형식을 골라 읽기
+                </DropdownMenuLabel>
+                {(formats.data ?? []).map((one) => (
+                  <DropdownMenuItem
+                    key={one.key}
+                    onSelect={() => void reparse(one.key)}
+                    disabled={one.key === item?.parse_profile_key}
+                  >
+                    <span className="truncate">{one.label}</span>
+                    <span className="text-muted-foreground ml-auto text-xs">{one.key}</span>
+                  </DropdownMenuItem>
+                ))}
+                {(formats.data?.length ?? 0) === 0 && (
+                  <DropdownMenuItem disabled>
+                    이 시험 종류에 등록된 형식이 없습니다
+                  </DropdownMenuItem>
+                )}
+                {item?.parse_profile_key && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => void reparse(null)}>
+                      고정 풀고 자동으로
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" size="sm" onClick={() => setRemoving(true)}>
               <Trash2 className="size-4" />
             </Button>
@@ -237,6 +304,12 @@ export default function TestRunDetailPage() {
       />
 
       <ErrorNotice error={run.error ?? action} className="mb-4" />
+
+      {notice && (
+        // **눌렀는지 모르면 또 누른다.** 큐에 들어간 것은 바로 안 보이므로
+        // 무엇으로 걸렸는지 한 줄로 말한다.
+        <p className="bg-muted/40 mb-4 rounded-md border px-3 py-2 text-sm">{notice}</p>
+      )}
 
       {item && (
         <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -268,8 +341,9 @@ export default function TestRunDetailPage() {
           <p className="font-medium">읽지 못했습니다</p>
           <p className="mt-1">{item.parse_error}</p>
           <p className="mt-2 text-xs opacity-80">
-            원본을 내려받아 형식을 확인하세요. 파서를 고친 뒤 '다시 읽기' 를 누르면 같은
-            원본으로 다시 시도합니다.
+            원본을 내려받아 형식을 확인하세요. <b>「다시 읽기」 를 열면 형식을 골라
+            읽을 수 있습니다</b> — 자동으로 고른 것이 틀렸을 때 쓰는 길입니다. 맞는
+            형식이 없으면 <b>기준정보 · 파일 형식</b>에서 새로 만들고 다시 읽습니다.
           </p>
         </div>
       )}
