@@ -217,8 +217,40 @@ class PropertyCardOut(BaseModel):
     채워진다 — **목록에서 없던 일로 하지 않는다.**"""
     point_count: int
     note: str | None
+    owner_workspace_name: str | None = None
+    """재료의 소유 부서. **카드에 따로 안 둔다** — 재료를 따라간다."""
+    is_global: bool = False
     published_at: datetime | None
     created_at: datetime
+
+
+class CardFacetOut(BaseModel):
+    """거를 수 있는 값 하나와 **그것이 몇 장인가.**
+
+    화면이 한 페이지에서 세면 안 된다. 50장만 받아 세면 「인장시험 12」라고
+    적히는데 실제로는 40장일 수 있고, 그러면 **필터 옆의 숫자가 거짓말을 한다.**
+    레시피 필터는 목록을 통째로 받으므로 화면에서 세도 됐지만, 카드는 페이지로
+    온다.
+    """
+
+    key: str
+    label: str
+    count: int
+
+
+class CardFacetsOut(BaseModel):
+    """무엇으로 거를 수 있나. **지금 걸린 필터와 무관하게 전체를 센다.**
+
+    「무엇이 있나」를 답하는 자리다 — 필터를 걸 때마다 다른 축의 숫자가 같이
+    줄면, 필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.
+    """
+
+    statuses: list[CardFacetOut]
+    test_types: list[CardFacetOut]
+    """`test_type_key`. **시험 없이 만든 카드는 `none` 으로 온다** — 안 그러면
+    선언 물성 카드가 어느 필터에도 안 걸려 목록에서 사라진다."""
+    owners: list[CardFacetOut]
+    """소유 부서. 전역은 `global`."""
 
 
 class DeclaredCardPreviewOut(BaseModel):

@@ -14,6 +14,7 @@ import {
   Boxes,
   Building2,
   FileCode2,
+  FileDown,
   FlaskConical,
   GitCompare,
   HardDrive,
@@ -92,6 +93,9 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '카탈로그',
     items: [
       { label: '재료', icon: Boxes, to: '/materials' },
+      // **재료를 거치지 않고 카드를 찾는다.** 재료 상세의 'CAE 카드' 탭은 그
+      // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
+      { label: '물성 카드', icon: FileDown, to: '/cards' },
       { label: '곡선 비교', icon: GitCompare, to: '/compare' },
     ],
   },

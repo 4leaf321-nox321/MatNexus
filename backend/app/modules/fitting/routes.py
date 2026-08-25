@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,6 +26,8 @@ from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.fitting.schemas import (
     BlockSpecOut,
+    CardFacetOut,
+    CardFacetsOut,
     CardValueOut,
     DeclaredCardPreviewOut,
     DeclaredCardSaveRequest,
@@ -47,9 +49,10 @@ from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestType
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, permissions
+from app.shared import audit, pagination, permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
+from app.shared.pagination import Page
 from matcore import cards, export, fitting, prony, runtime, statistics
 from matcore.fitting import hyperelastic
 from matcore.registry import Produced
@@ -615,9 +618,22 @@ def _deck(item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()) ->
     )
 
 
-def _card_out(db: Session, item: PropertyCard) -> PropertyCardOut:
+def _card_out(
+    db: Session, item: PropertyCard, *, material: Material | None = None
+) -> PropertyCardOut:
+    """카드 하나를 응답 모양으로.
+
+    `material` 을 받는 이유는 **목록의 N+1 때문**이다. 한 장씩 부르면 카드마다
+    재료를 다시 읽는데, 50장이면 그것만 50번이다 — 목록은 join 으로 한 번에
+    끌어와 여기에 넘긴다.
+    """
     cards.load_builtin()
-    material = db.get(Material, item.material_id)
+    material = material or db.get(Material, item.material_id)
+    workspace = (
+        db.get(Workspace, material.owner_workspace_id)
+        if material is not None and material.owner_workspace_id is not None
+        else None
+    )
     # **없으면 없는 채로 낸다.** 전에는 `"?"` 를 냈는데, 그것은 "시험이 지워졌다"
     # 와 "시험에서 나온 카드가 아니다" 를 같은 모양으로 만든다.
     test_type = db.get(TestType, item.test_type_id) if item.test_type_id else None
@@ -649,6 +665,8 @@ def _card_out(db: Session, item: PropertyCard) -> PropertyCardOut:
         problem=problem,
         point_count=item.point_count,
         note=item.note,
+        owner_workspace_name=workspace.name if workspace else None,
+        is_global=material is not None and material.owner_workspace_id is None,
         published_at=item.published_at,
         created_at=item.created_at,
     )
@@ -1149,23 +1167,150 @@ def create_viscoelastic_card(
     return _card_out(db, item)
 
 
-@router.get("/cards", response_model=list[PropertyCardOut])
-def list_cards(
+#: 시험 없이 만든 카드를 가리키는 값(ADR 0016). **`null` 을 쿼리로 못 보낸다.**
+#:
+#: 이 값이 없으면 선언 물성 카드가 어느 시험종류 필터에도 안 걸려 **목록에서
+#: 사라진다** — 거르는 축에 없는 것은 없는 것이 되고, 그러면 그 카드들은 필터를
+#: 전부 푸는 사람만 볼 수 있다.
+NO_TEST = "none"
+
+#: 전역 재료(소유 부서 없음)를 가리키는 값. 같은 이유로 둔다.
+GLOBAL_OWNER = "global"
+
+
+def _cards_query(db: Session, user: User, material_id: uuid.UUID | None) -> Select[Any]:
+    """볼 수 있는 카드. **재료를 안 주면 볼 수 있는 재료의 것만** 준다 —
+    안 그러면 남의 부서 재료의 물성이 목록에 섞인다."""
+    query = select(PropertyCard, Material).join(
+        Material, Material.id == PropertyCard.material_id
+    )
+    if material_id:
+        statistics_services.groups_for_material(db, user, material_id)  # 가시성 판정
+        return query.where(PropertyCard.material_id == material_id)
+    return query.where(
+        PropertyCard.material_id.in_(permissions.visible_material_ids(db, user))
+    )
+
+
+@router.get("/cards/facets", response_model=CardFacetsOut)
+def card_facets(
     material_id: uuid.UUID | None = Query(default=None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> list[PropertyCardOut]:
-    query = select(PropertyCard).order_by(PropertyCard.created_at.desc())
-    if material_id:
-        statistics_services.groups_for_material(db, user, material_id)  # 가시성 판정
-        query = query.where(PropertyCard.material_id == material_id)
-    else:
-        # 재료를 안 주면 볼 수 있는 재료의 카드만 준다. 안 그러면 남의 부서
-        # 재료의 물성이 목록에 섞인다.
-        query = query.where(
-            PropertyCard.material_id.in_(permissions.visible_material_ids(db, user))
+) -> CardFacetsOut:
+    """무엇으로 거를 수 있고 **각각 몇 장인가.**
+
+    ## 왜 서버가 세는가
+
+    화면이 한 페이지에서 세면 「인장시험 12」라고 적히는데 실제로는 40장일 수
+    있다. 레시피 필터는 목록을 통째로 받아서 화면에서 세도 됐지만, 카드는
+    페이지로 온다 — **필터 옆의 숫자가 거짓말을 하면 필터 자체를 못 믿는다.**
+
+    ## 지금 걸린 필터를 안 본다
+
+    「무엇이 있나」를 답하는 자리다. 필터를 걸 때마다 다른 축의 숫자가 같이
+    줄면, **필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.**
+    """
+    base = _cards_query(db, user, material_id).subquery()
+
+    def tally(column: Any) -> list[tuple[Any, int]]:
+        return [
+            (row[0], int(row[1]))
+            for row in db.execute(
+                select(column, func.count()).select_from(base).group_by(column)
+            ).all()
+        ]
+
+    statuses = [
+        CardFacetOut(key=str(key), label=STATUS_NOTES.get(str(key), str(key)), count=count)
+        for key, count in tally(base.c.status)
+    ]
+    labels = {row.id: (row.label, row.key) for row in db.scalars(select(TestType))}
+    test_types = []
+    for key, count in tally(base.c.test_type_id):
+        if key is None:
+            test_types.append(CardFacetOut(key=NO_TEST, label="시험 없음", count=count))
+            continue
+        found = labels.get(key)
+        test_types.append(
+            CardFacetOut(
+                key=found[1] if found else str(key),
+                label=found[0] if found else str(key),
+                count=count,
+            )
         )
-    return [_card_out(db, item) for item in db.scalars(query)]
+    owners = []
+    names = {row.id: row.name for row in db.scalars(select(Workspace))}
+    for key, count in tally(base.c.owner_workspace_id):
+        owners.append(
+            CardFacetOut(
+                key=GLOBAL_OWNER if key is None else str(key),
+                label="(전역)" if key is None else names.get(key, "?"),
+                count=count,
+            )
+        )
+    return CardFacetsOut(
+        statuses=sorted(statuses, key=lambda one: one.key),
+        test_types=sorted(test_types, key=lambda one: (one.key == NO_TEST, one.label)),
+        # 전역이 먼저다 — 모든 부서가 쓰는 것이라 목록의 뿌리에 가깝다.
+        owners=sorted(owners, key=lambda one: (one.key != GLOBAL_OWNER, one.label)),
+    )
+
+
+@router.get("/cards", response_model=Page[PropertyCardOut])
+def list_cards(
+    material_id: uuid.UUID | None = Query(default=None),
+    status: str | None = Query(default=None),
+    test_type_key: str | None = Query(default=None),
+    owner: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int | None = Query(default=None, le=pagination.MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Page[PropertyCardOut]:
+    """물성 카드 목록.
+
+    **거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는
+    카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.
+
+    `test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=global`
+    은 전역 재료의 카드다.
+    """
+    query = _cards_query(db, user, material_id)
+    if status:
+        query = query.where(PropertyCard.status == status)
+    if test_type_key == NO_TEST:
+        query = query.where(PropertyCard.test_type_id.is_(None))
+    elif test_type_key:
+        found = db.scalar(select(TestType).where(TestType.key == test_type_key))
+        # **없는 종류를 물으면 0건이다.** 필터를 무시하고 전부 주면 화면이
+        # 「이 종류에 이만큼 있다」고 말하게 된다.
+        query = query.where(
+            PropertyCard.test_type_id == (found.id if found else None),
+            PropertyCard.test_type_id.is_not(None),
+        )
+    if owner == GLOBAL_OWNER:
+        query = query.where(Material.owner_workspace_id.is_(None))
+    elif owner:
+        query = query.where(Material.owner_workspace_id == uuid.UUID(owner))
+    if q and (text := q.strip()):
+        like = f"%{text}%"
+        query = query.where(
+            or_(Material.record_name.ilike(like), PropertyCard.label.ilike(like))
+        )
+
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    size = pagination.clamp_limit(limit)
+    rows = db.execute(
+        query.order_by(PropertyCard.created_at.desc()).limit(size).offset(offset)
+    ).all()
+    return Page(
+        items=[_card_out(db, card, material=material) for card, material in rows],
+        total=total,
+        limit=size,
+        offset=offset,
+    )
 
 
 @router.get("/cards/{card_id}", response_model=PropertyCardOut)

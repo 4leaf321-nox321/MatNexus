@@ -42,6 +42,7 @@ import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
  */
 const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
+const CardsPage = lazy(() => import('@/modules/fitting/CardsPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
 const FormatProfileEditorPage = lazy(
   () => import('@/modules/tests/FormatProfileEditorPage')
@@ -94,6 +95,9 @@ export const router = createBrowserRouter([
 
           // 카탈로그 (전사)
           { path: 'materials', element: <MaterialsPage /> },
+          // **재료를 거치지 않고 카드를 찾는 자리.** 재료 상세의 'CAE 카드'
+          // 탭은 그 재료의 것만 본다.
+          { path: 'cards', element: <CardsPage /> },
           { path: 'materials/:id', element: <MaterialDetailPage /> },
           { path: 'test-runs/:id', element: <TestRunDetailPage /> },
           { path: 'compare', ...stub('곡선 비교', 'Phase 3') },

@@ -17,12 +17,12 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, BookOpen, Check, FileDown, Pencil, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, BookOpen, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { DeclaredCardDialog } from '@/modules/fitting/DeclaredCardDialog'
+import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type {
-  ExportFormat,
   Fit,
   FitPreview,
   InheritedValue,
@@ -42,12 +42,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/dropdown-menu'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { CardBlocks } from '@/modules/fitting/CardBlocks'
@@ -70,7 +64,10 @@ interface GroupKey {
 
 export function FittingPanel({ materialId }: Props) {
   const stats = useResource(() => statisticsApi.forMaterial(materialId), [materialId])
-  const cards = useResource(() => fittingApi.cards(materialId), [materialId])
+  // **재료 상세는 그 재료의 카드만 본다.** 쪽으로 오지만 한 재료의 카드가
+  // 상한을 넘는 일은 없다 — 넘으면 그것 자체가 알아야 할 일이다.
+  const cards = useResource(() => fittingApi.cards({ material_id: materialId }), [materialId])
+  const cardRows = cards.data?.items ?? []
   const [group, setGroup] = useState<GroupKey | null>(null)
   const [preview, setPreview] = useState<FitPreview | null>(null)
   const [chosen, setChosen] = useState<string | null>(null)
@@ -156,7 +153,7 @@ export function FittingPanel({ materialId }: Props) {
   }, [extrapolate, blendWith, blendWeight, chosen])
 
   // 묶음도 없고 카드도 없다 — 무엇을 하라고 할지가 갈리는 자리다.
-  const nothing = !stats.loading && groups.length === 0 && (cards.data ?? []).length === 0
+  const nothing = !stats.loading && groups.length === 0 && cardRows.length === 0
 
   return (
     <section>
@@ -253,7 +250,7 @@ export function FittingPanel({ materialId }: Props) {
 
       {!nothing && (
         <CardList
-          cards={cards.data ?? []}
+          cards={cardRows}
           loading={cards.loading}
           onChanged={() => cards.reload()}
           onError={setError}
@@ -711,62 +708,6 @@ function CardList({
         </div>
       ))}
     </div>
-  )
-}
-
-function ExportMenu({
-  card,
-  formats,
-  onError,
-}: {
-  card: PropertyCard
-  formats: ExportFormat[]
-  onError: (error: Error) => void
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="outline">
-          <FileDown className="size-3.5" />
-          내보내기
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
-        {formats.map((format) => {
-          // **누르기 전에 알려 준다.** 내려받기를 누른 뒤에 "푸아송비가
-          // 없습니다" 를 보는 것은 늦다.
-          //
-          // 전에는 화면이 한국어 이름(`탄성계수`)을 카드 필드에 손으로 이어
-          // 붙였다 — 새 물성이 붙으면 그 표에도 줄을 더해야 했고, 안 더하면
-          // 낼 수 있는 형식이 회색으로 남았다. 지금은 **서버가 판정해 준다.**
-          const blocked = !card.available_formats.includes(format.key)
-          return (
-            <DropdownMenuItem
-              key={format.key}
-              disabled={blocked}
-              onSelect={() => {
-                fittingApi
-                  .download(card.id, format, card.label)
-                  .catch((caught: unknown) =>
-                    onError(
-                      caught instanceof Error ? caught : new Error('내보내지 못했습니다.')
-                    )
-                  )
-              }}
-            >
-              <div>
-                <p className="text-sm">{format.label}</p>
-                <p className="text-muted-foreground text-xs">
-                  {blocked
-                    ? `${format.requires.join('·')} 가 있어야 냅니다. 카드에 아직 없습니다.`
-                    : format.describe}
-                </p>
-              </div>
-            </DropdownMenuItem>
-          )
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }
 

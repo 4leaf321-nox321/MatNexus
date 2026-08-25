@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.modules.fitting.routes import NO_TEST
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
 
@@ -1655,3 +1656,138 @@ class Test시험_없이_카드:
         ).json()
         assert values(card, "elastic")["density"] == pytest.approx(7900.0)
         assert values(card, "elastic")["density_source"] == "sample"
+
+
+class Test카드_목록:
+    """전역 카드 목록 — **재료를 거치지 않고 찾는다.**
+
+    지금까지 카드에 닿는 길은 재료 상세뿐이었다. *"지난주에 만든 그 카드가 어느
+    재료였더라"* 를 물으면 재료 94개를 뒤져야 했다.
+    """
+
+    @pytest.fixture
+    def several(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        made = []
+        for label in ("첫째", "둘째", "셋째"):
+            card = client.post(
+                "/api/fitting/cards",
+                json={
+                    "material_id": ready["id"],
+                    "test_type_key": "tensile",
+                    "orientation": "MD",
+                    "label": label,
+                },
+                headers=admin_headers,
+            )
+            assert card.status_code == 201, card.text
+            made.append(card.json())
+        return made
+
+    def test_페이지로_준다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        """**상한을 서버가 강제한다.** `?limit=1000000` 한 번에 서버가 죽으면 안
+        된다 — 악의가 없어도 화면이 '전부 보기' 를 구현하면서 큰 수를 넣는다."""
+        body = client.get("/api/fitting/cards?limit=2", headers=admin_headers).json()
+        assert len(body["items"]) == 2
+        # **`total` 이 있어야** 화면이 "다음 장이 있나" 를 알려고 한 건 더
+        # 요청하는 편법을 안 쓴다.
+        assert body["total"] >= 3
+        assert body["limit"] == 2
+
+        # **상한 밖은 거절한다.** 조용히 200 으로 줄여 주면 화면은 100만 장을
+        # 받았다고 믿고 "이게 전부" 라고 그린다.
+        over = client.get("/api/fitting/cards?limit=999999", headers=admin_headers)
+        assert over.status_code == 422
+
+    def test_상태로_거른다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        client.post(f"/api/fitting/cards/{several[0]['id']}/publish", headers=admin_headers)
+        body = client.get("/api/fitting/cards?status=published", headers=admin_headers).json()
+        assert [item["label"] for item in body["items"]] == ["첫째"]
+        assert body["total"] == 1
+
+    def test_시험_없는_카드를_따로_거른다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        """**`null` 을 쿼리로 못 보낸다.** 이 값이 없으면 선언 물성 카드가 어느
+        시험종류 필터에도 안 걸려 목록에서 사라진다 — 거르는 축에 없는 것은
+        없는 것이 된다."""
+        assert several
+        yes = client.get(
+            "/api/fitting/cards?test_type_key=tensile", headers=admin_headers
+        ).json()
+        assert yes["total"] == 3
+        none = client.get(
+            f"/api/fitting/cards?test_type_key={NO_TEST}", headers=admin_headers
+        ).json()
+        assert none["total"] == 0
+
+    def test_모르는_종류를_물으면_0건이다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        """**필터를 무시하고 전부 주면 안 된다.** 그러면 화면이 「이 종류에
+        이만큼 있다」고 말하게 된다."""
+        assert several
+        body = client.get(
+            "/api/fitting/cards?test_type_key=없는종류", headers=admin_headers
+        ).json()
+        assert body["total"] == 0
+
+    def test_이름으로_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        """**검색은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는
+        카드가 된다."""
+        assert several
+        body = client.get("/api/fitting/cards?q=둘째", headers=admin_headers).json()
+        assert [item["label"] for item in body["items"]] == ["둘째"]
+
+        # 재료 이름으로도 찾는다 — 카드 이름을 기억 못 하는 것이 보통이다.
+        by_material = client.get("/api/fitting/cards?q=FIT_MDOI", headers=admin_headers).json()
+        assert by_material["total"] >= 3
+
+    def test_소유_부서를_함께_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        """**부서로 나누려면 소유가 보여야 한다.** 카드에 따로 안 두고 재료를
+        따라간다 — 두 곳에 두면 재료를 옮겼을 때 둘이 갈린다."""
+        assert several
+        item = client.get("/api/fitting/cards", headers=admin_headers).json()["items"][0]
+        assert "is_global" in item and "owner_workspace_name" in item
+
+    def test_거를_수_있는_것과_그_수를_준다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        assert several
+        found = client.get("/api/fitting/cards/facets", headers=admin_headers)
+        assert found.status_code == 200, found.text
+        body = found.json()
+        by_key = {row["key"]: row["count"] for row in body["test_types"]}
+        assert by_key["tensile"] == 3
+        assert {row["key"] for row in body["statuses"]} == {"draft"}
+
+    def test_개수는_페이지가_아니라_전체를_센다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        """**여기가 이 엔드포인트가 따로 있는 이유다.** 화면이 한 페이지에서
+        세면 「인장시험 1」이라고 적히는데 실제로는 3장이다 — 필터 옆의 숫자가
+        거짓말을 하면 필터 자체를 못 믿는다."""
+        assert several
+        page = client.get("/api/fitting/cards?limit=1", headers=admin_headers).json()
+        assert len(page["items"]) == 1
+        body = client.get("/api/fitting/cards/facets", headers=admin_headers).json()
+        assert {row["key"]: row["count"] for row in body["test_types"]}["tensile"] == 3
+
+    def test_필터를_걸어도_셈은_안_줄어든다(
+        self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
+    ) -> None:
+        """「무엇이 있나」를 답하는 자리다. 필터를 걸 때마다 다른 축의 숫자가
+        같이 줄면 **필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.**"""
+        client.post(f"/api/fitting/cards/{several[0]['id']}/publish", headers=admin_headers)
+        body = client.get("/api/fitting/cards/facets", headers=admin_headers).json()
+        assert {row["key"]: row["count"] for row in body["test_types"]}["tensile"] == 3
+        assert {row["key"] for row in body["statuses"]} == {"draft", "published"}

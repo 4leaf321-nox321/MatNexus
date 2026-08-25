@@ -25,6 +25,41 @@ export type ViscoelasticCardSaveRequest =
   components['schemas']['ViscoelasticCardSaveRequest']
 export type DeclaredCardSaveRequest = components['schemas']['DeclaredCardSaveRequest']
 export type DeclaredCardPreview = components['schemas']['DeclaredCardPreviewOut']
+export type CardPage = components['schemas']['Page_PropertyCardOut_']
+/** 거를 수 있는 값들과 **각각 몇 장인가.** 개수는 서버가 센다. */
+export type CardFacets = components['schemas']['CardFacetsOut']
+
+/**
+ * 카드 목록을 좁히는 축.
+ *
+ * **거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는
+ * 카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.
+ */
+export interface CardQuery {
+  material_id?: string
+  status?: string
+  /** 시험종류 key. **`none` 은 시험 없이 만든 카드**다(ADR 0016). */
+  test_type_key?: string
+  /** 부서 id. `global` 은 전역 재료의 카드. */
+  owner?: string
+  q?: string
+  limit?: number
+  offset?: number
+}
+
+/** 시험 없이 만든 카드를 가리키는 값. 서버의 `NO_TEST` 와 같다. */
+export const NO_TEST = 'none'
+/** 전역 재료를 가리키는 값. 서버의 `GLOBAL_OWNER` 와 같다. */
+export const GLOBAL_OWNER = 'global'
+
+function search(query: CardQuery): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  }
+  const text = params.toString()
+  return text ? `?${text}` : ''
+}
 
 export const fittingApi = {
   families: () => api.get<Family[]>('/fitting/families'),
@@ -40,9 +75,21 @@ export const fittingApi = {
   /** 저장하지 않고 견줘 본다. `families` 를 비우면 등록된 식 전부. */
   preview: (body: FitPreviewRequest) => api.post<FitPreview>('/fitting/preview', body),
 
-  cards: (materialId?: string) =>
-    api.get<PropertyCard[]>(
-      `/fitting/cards${materialId ? `?material_id=${materialId}` : ''}`
+  /**
+   * 물성 카드 목록. **쪽으로 온다** — `total` 이 함께 오므로 화면이 "다음 쪽이
+   * 있나" 를 알려고 한 건 더 요청하는 편법을 안 쓴다.
+   */
+  cards: (query: CardQuery = {}) => api.get<CardPage>(`/fitting/cards${search(query)}`),
+
+  /**
+   * 거를 수 있는 값들과 각각 몇 장인가.
+   *
+   * **화면이 한 페이지에서 세면 안 된다.** 50장만 받아 세면 「인장시험 12」라고
+   * 적히는데 실제로는 40장일 수 있고, 그러면 필터 옆의 숫자가 거짓말을 한다.
+   */
+  cardFacets: (materialId?: string) =>
+    api.get<CardFacets>(
+      `/fitting/cards/facets${materialId ? `?material_id=${materialId}` : ''}`
     ),
 
   card: (id: string) => api.get<PropertyCard>(`/fitting/cards/${id}`),

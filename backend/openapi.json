@@ -847,6 +847,63 @@
         "title": "BulkTermOut",
         "type": "object"
       },
+      "CardFacetOut": {
+        "description": "거를 수 있는 값 하나와 **그것이 몇 장인가.**\n\n화면이 한 페이지에서 세면 안 된다. 50장만 받아 세면 「인장시험 12」라고\n적히는데 실제로는 40장일 수 있고, 그러면 **필터 옆의 숫자가 거짓말을 한다.**\n레시피 필터는 목록을 통째로 받으므로 화면에서 세도 됐지만, 카드는 페이지로\n온다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "count"
+        ],
+        "title": "CardFacetOut",
+        "type": "object"
+      },
+      "CardFacetsOut": {
+        "description": "무엇으로 거를 수 있나. **지금 걸린 필터와 무관하게 전체를 센다.**\n\n「무엇이 있나」를 답하는 자리다 — 필터를 걸 때마다 다른 축의 숫자가 같이\n줄면, 필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.",
+        "properties": {
+          "owners": {
+            "items": {
+              "$ref": "#/components/schemas/CardFacetOut"
+            },
+            "title": "Owners",
+            "type": "array"
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/CardFacetOut"
+            },
+            "title": "Statuses",
+            "type": "array"
+          },
+          "test_types": {
+            "items": {
+              "$ref": "#/components/schemas/CardFacetOut"
+            },
+            "title": "Test Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "statuses",
+          "test_types",
+          "owners"
+        ],
+        "title": "CardFacetsOut",
+        "type": "object"
+      },
       "CardValueOut": {
         "description": "카드에 담기는 값 하나의 이름과 뜻. **화면이 이것만으로 칸을 그린다.**\n\n`processing` 의 `ProducedOut` 과 같은 것을 담지만 이름을 가른다 — 같은 클래스\n이름이 둘이면 OpenAPI 가 **양쪽 다** 이름을 바꿔 버려서, 손대지 않은 처리\n화면의 타입까지 깨진다. 실제로 한 번 깨뜨리고 알았다.",
         "properties": {
@@ -4409,6 +4466,37 @@
         "title": "Page[MaterialOut]",
         "type": "object"
       },
+      "Page_PropertyCardOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyCardOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[PropertyCardOut]",
+        "type": "object"
+      },
       "Page_TermOut_": {
         "properties": {
           "items": {
@@ -5294,6 +5382,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_global": {
+            "default": false,
+            "title": "Is Global",
+            "type": "boolean"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -5328,6 +5421,17 @@
               }
             ],
             "title": "Orientation"
+          },
+          "owner_workspace_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Name"
           },
           "point_count": {
             "title": "Point Count",
@@ -11434,6 +11538,7 @@
     },
     "/api/fitting/cards": {
       "get": {
+        "description": "물성 카드 목록.\n\n**거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는\n카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.\n\n`test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=global`\n은 전역 재료의 카드다.",
         "operationId": "list_cards_api_fitting_cards_get",
         "parameters": [
           {
@@ -11452,6 +11557,98 @@
               ],
               "title": "Material Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "test_type_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Test Type Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 200,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -11459,11 +11656,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PropertyCardOut"
-                  },
-                  "title": "Response List Cards Api Fitting Cards Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_PropertyCardOut_"
                 }
               }
             },
@@ -11607,6 +11800,57 @@
           }
         },
         "summary": "Preview Declared Card",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/cards/facets": {
+      "get": {
+        "description": "무엇으로 거를 수 있고 **각각 몇 장인가.**\n\n## 왜 서버가 세는가\n\n화면이 한 페이지에서 세면 「인장시험 12」라고 적히는데 실제로는 40장일 수\n있다. 레시피 필터는 목록을 통째로 받아서 화면에서 세도 됐지만, 카드는\n페이지로 온다 — **필터 옆의 숫자가 거짓말을 하면 필터 자체를 못 믿는다.**\n\n## 지금 걸린 필터를 안 본다\n\n「무엇이 있나」를 답하는 자리다. 필터를 걸 때마다 다른 축의 숫자가 같이\n줄면, **필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.**",
+        "operationId": "card_facets_api_fitting_cards_facets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "material_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Material Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardFacetsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Card Facets",
         "tags": [
           "fitting"
         ]

@@ -351,7 +351,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Cards */
+        /**
+         * List Cards
+         * @description 물성 카드 목록.
+         *
+         *     **거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는
+         *     카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.
+         *
+         *     `test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=global`
+         *     은 전역 재료의 카드다.
+         */
         get: operations["list_cards_api_fitting_cards_get"];
         put?: never;
         /**
@@ -424,6 +433,37 @@ export interface paths {
          *     거짓말을 한다 — `FitPreviewOut.elastic` 이 같은 이유로 있다.
          */
         get: operations["preview_declared_card_api_fitting_cards_declared_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Card Facets
+         * @description 무엇으로 거를 수 있고 **각각 몇 장인가.**
+         *
+         *     ## 왜 서버가 세는가
+         *
+         *     화면이 한 페이지에서 세면 「인장시험 12」라고 적히는데 실제로는 40장일 수
+         *     있다. 레시피 필터는 목록을 통째로 받아서 화면에서 세도 됐지만, 카드는
+         *     페이지로 온다 — **필터 옆의 숫자가 거짓말을 하면 필터 자체를 못 믿는다.**
+         *
+         *     ## 지금 걸린 필터를 안 본다
+         *
+         *     「무엇이 있나」를 답하는 자리다. 필터를 걸 때마다 다른 축의 숫자가 같이
+         *     줄면, **필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.**
+         */
+        get: operations["card_facets_api_fitting_cards_facets_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3096,6 +3136,38 @@ export interface components {
             skipped: number;
         };
         /**
+         * CardFacetOut
+         * @description 거를 수 있는 값 하나와 **그것이 몇 장인가.**
+         *
+         *     화면이 한 페이지에서 세면 안 된다. 50장만 받아 세면 「인장시험 12」라고
+         *     적히는데 실제로는 40장일 수 있고, 그러면 **필터 옆의 숫자가 거짓말을 한다.**
+         *     레시피 필터는 목록을 통째로 받으므로 화면에서 세도 됐지만, 카드는 페이지로
+         *     온다.
+         */
+        CardFacetOut: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * CardFacetsOut
+         * @description 무엇으로 거를 수 있나. **지금 걸린 필터와 무관하게 전체를 센다.**
+         *
+         *     「무엇이 있나」를 답하는 자리다 — 필터를 걸 때마다 다른 축의 숫자가 같이
+         *     줄면, 필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.
+         */
+        CardFacetsOut: {
+            /** Owners */
+            owners: components["schemas"]["CardFacetOut"][];
+            /** Statuses */
+            statuses: components["schemas"]["CardFacetOut"][];
+            /** Test Types */
+            test_types: components["schemas"]["CardFacetOut"][];
+        };
+        /**
          * CardValueOut
          * @description 카드에 담기는 값 하나의 이름과 뜻. **화면이 이것만으로 칸을 그린다.**
          *
@@ -4460,6 +4532,17 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[PropertyCardOut] */
+        Page_PropertyCardOut_: {
+            /** Items */
+            items: components["schemas"]["PropertyCardOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** Page[TermOut] */
         Page_TermOut_: {
             /** Items */
@@ -4831,6 +4914,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Global
+             * @default false
+             */
+            is_global: boolean;
             /** Label */
             label: string;
             /**
@@ -4844,6 +4932,8 @@ export interface components {
             note: string | null;
             /** Orientation */
             orientation: string | null;
+            /** Owner Workspace Name */
+            owner_workspace_name?: string | null;
             /** Point Count */
             point_count: number;
             /** Problem */
@@ -7310,6 +7400,12 @@ export interface operations {
         parameters: {
             query?: {
                 material_id?: string | null;
+                status?: string | null;
+                test_type_key?: string | null;
+                owner?: string | null;
+                q?: string | null;
+                limit?: number | null;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -7323,7 +7419,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyCardOut"][];
+                    "application/json": components["schemas"]["Page_PropertyCardOut_"];
                 };
             };
             /** @description Validation Error */
@@ -7421,6 +7517,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeclaredCardPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    card_facets_api_fitting_cards_facets_get: {
+        parameters: {
+            query?: {
+                material_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardFacetsOut"];
                 };
             };
             /** @description Validation Error */
