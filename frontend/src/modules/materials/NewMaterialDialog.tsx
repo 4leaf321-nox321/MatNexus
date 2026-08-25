@@ -16,6 +16,7 @@ import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api
 import type { Material, NamePreview } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
+import { VocabularyMultiField } from '@/modules/vocabulary/VocabularyMultiField'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -35,8 +36,6 @@ const EMPTY = {
   grade: '',
   details: '',
   spec_thickness: '',
-  applied_product: '',
-  applied_part: '',
   density: '',
   poisson_ratio: '',
   alias: '',
@@ -57,6 +56,8 @@ export function NewMaterialDialog({
   onDone: (material: Material) => void
 }) {
   const [form, setForm] = useState(EMPTY)
+  const [products, setProducts] = useState<string[]>([])
+  const [parts, setParts] = useState<string[]>([])
   const [preview, setPreview] = useState<NamePreview | null>(null)
   const [error, setError] = useState<ApiError | Error | null>(null)
   const [saving, setSaving] = useState(false)
@@ -84,6 +85,8 @@ export function NewMaterialDialog({
   useEffect(() => {
     if (open) {
       setForm(EMPTY)
+      setProducts([])
+      setParts([])
       setPreview(null)
       setError(null)
     }
@@ -100,8 +103,8 @@ export function NewMaterialDialog({
         details: form.details || null,
         spec_thickness: thickness,
         spec_thickness_unit: LENGTH_UNIT,
-        applied_product: form.applied_product || null,
-        applied_part: form.applied_part || null,
+        applied_products: products,
+        applied_parts: parts,
         density: form.density === '' ? null : Number(form.density),
         density_unit: DENSITY_UNIT,
         poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
@@ -166,17 +169,20 @@ export function NewMaterialDialog({
           </div>
           {/* CAE 물성. **여기 없으면 카드를 만들 때 막힌다** — 그때 되돌아와
               채우는 것보다 아는 값이면 지금 넣는 편이 싸다. 비워도 등록된다. */}
-          <VocabularyField
+          {/* **여러 개 고를 수 있다.** 한 재료가 여러 제품에 들어간다 —
+              칸 하나였을 때는 `도어이너/후드이너` 처럼 밀어 넣었고, 그러면
+              기준정보가 그 덩어리를 새 용어로 만들었다. */}
+          <VocabularyMultiField
             slug="product"
             label="적용 제품 (선택)"
-            value={form.applied_product}
-            onChange={(next) => setForm((current) => ({ ...current, applied_product: next }))}
+            values={products}
+            onChange={setProducts}
           />
-          <VocabularyField
+          <VocabularyMultiField
             slug="part"
             label="적용 부위 (선택)"
-            value={form.applied_part}
-            onChange={(next) => setForm((current) => ({ ...current, applied_part: next }))}
+            values={parts}
+            onChange={setParts}
           />
           <div className="space-y-1.5">
             <Label htmlFor="density">밀도 ({DENSITY_SYMBOL}, 선택)</Label>

@@ -15,7 +15,7 @@ from app.modules.accounts.models import User
 from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.fitting.models import PropertyCard
-from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.materials.models import Material, MaterialUse, Sample, Specimen
 from app.modules.notices.models import Notice, NoticeRead
 from app.modules.notifications.models import (
     Notification,
@@ -44,6 +44,7 @@ __all__ = [
     "FormatProfile",
     "Job",
     "Material",
+    "MaterialUse",
     "Notice",
     "NoticeRead",
     "Notification",

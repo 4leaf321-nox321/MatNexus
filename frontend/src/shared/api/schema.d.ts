@@ -3205,10 +3205,10 @@ export interface components {
         BulkMaterialRequest: {
             /** Alias */
             alias?: string | null;
-            /** Applied Part */
-            applied_part?: string | null;
-            /** Applied Product */
-            applied_product?: string | null;
+            /** Applied Parts */
+            applied_parts?: string[];
+            /** Applied Products */
+            applied_products?: string[];
             /** Category */
             category: string;
             /** Density */
@@ -4435,10 +4435,10 @@ export interface components {
         MaterialCreateRequest: {
             /** Alias */
             alias?: string | null;
-            /** Applied Part */
-            applied_part?: string | null;
-            /** Applied Product */
-            applied_product?: string | null;
+            /** Applied Parts */
+            applied_parts?: string[];
+            /** Applied Products */
+            applied_products?: string[];
             /** Category */
             category: string;
             /** Density */
@@ -4486,10 +4486,10 @@ export interface components {
         MaterialOut: {
             /** Alias */
             alias: string | null;
-            /** Applied Part */
-            applied_part: string | null;
-            /** Applied Product */
-            applied_product: string | null;
+            /** Applied Parts */
+            applied_parts?: string[];
+            /** Applied Products */
+            applied_products?: string[];
             /** Category */
             category: string;
             /**
@@ -4565,10 +4565,10 @@ export interface components {
         MaterialUpdateRequest: {
             /** Alias */
             alias?: string | null;
-            /** Applied Part */
-            applied_part?: string | null;
-            /** Applied Product */
-            applied_product?: string | null;
+            /** Applied Parts */
+            applied_parts?: string[] | null;
+            /** Applied Products */
+            applied_products?: string[] | null;
             /** Category */
             category?: string | null;
             /** Declared Properties */

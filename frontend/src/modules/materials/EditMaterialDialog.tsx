@@ -19,6 +19,7 @@ import { ArrowRight } from 'lucide-react'
 
 import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
+import { VocabularyMultiField } from '@/modules/vocabulary/VocabularyMultiField'
 import type { Material, NamePreview } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -49,8 +50,6 @@ function initial(material: Material) {
     // **문자열로 들고 있는다.** 숫자 입력을 제어 컴포넌트로 두면 `Number('0.')`
     // 이 0 이 되어 소수점을 찍는 순간 지워진다 — 처리 옵션에서 겪은 것과 같다.
     spec_thickness: material.spec_thickness == null ? '' : String(material.spec_thickness),
-    applied_product: material.applied_product ?? '',
-    applied_part: material.applied_part ?? '',
     density: material.density == null ? '' : String(material.density),
     poisson_ratio: material.poisson_ratio == null ? '' : String(material.poisson_ratio),
     alias: material.alias ?? '',
@@ -63,6 +62,8 @@ const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
   const [form, setForm] = useState(() => initial(material))
+  const [products, setProducts] = useState<string[]>(material.applied_products ?? [])
+  const [parts, setParts] = useState<string[]>(material.applied_parts ?? [])
   const [preview, setPreview] = useState<NamePreview | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
@@ -72,6 +73,8 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
   useEffect(() => {
     if (open) {
       setForm(initial(material))
+      setProducts(material.applied_products ?? [])
+      setParts(material.applied_parts ?? [])
       setPreview(null)
       setError(null)
     }
@@ -116,8 +119,8 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
         details: form.details || null,
         spec_thickness: thickness,
         spec_thickness_unit: LENGTH_UNIT,
-        applied_product: form.applied_product || null,
-        applied_part: form.applied_part || null,
+        applied_products: products,
+        applied_parts: parts,
         density: form.density === '' ? null : Number(form.density),
         density_unit: DENSITY_UNIT,
         poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
@@ -191,17 +194,18 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
             뭐가 있나" 를 물으려면 로트를 전부 뒤져야 했고, 같은 재료의 로트
             다섯 개에 같은 용도를 다섯 번 적어야 했다. */}
         <div className="grid grid-cols-2 gap-3">
-          <VocabularyField
+          {/* **여러 개 고를 수 있다**(v1.89.0). 한 재료가 여러 제품에 들어간다. */}
+          <VocabularyMultiField
             slug="product"
             label="적용 제품"
-            value={form.applied_product}
-            onChange={(next) => setForm((current) => ({ ...current, applied_product: next }))}
+            values={products}
+            onChange={setProducts}
           />
-          <VocabularyField
+          <VocabularyMultiField
             slug="part"
             label="적용 부위"
-            value={form.applied_part}
-            onChange={(next) => setForm((current) => ({ ...current, applied_part: next }))}
+            values={parts}
+            onChange={setParts}
           />
         </div>
 

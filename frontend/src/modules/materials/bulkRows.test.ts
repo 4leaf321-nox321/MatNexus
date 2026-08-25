@@ -22,6 +22,7 @@ import {
   problems,
   spreads,
   tally,
+  toTsv,
 } from '@/modules/materials/bulkRows'
 import type { Column, Row } from '@/modules/materials/bulkRows'
 
@@ -163,6 +164,22 @@ describe('나무로 묶기', () => {
     const tree = group([row({ ...SECC })])
     expect(tree.materials[0]).not.toHaveProperty('alias')
     expect(tree.materials[0].spec_thickness).toBe(1)
+  })
+
+  it('용도는 한 칸에 여럿을 담는다', () => {
+    // **쉼표·탭은 못 쓴다** — 붙여 넣기가 그것으로 칸을 가른다. 값 안에 두면
+    // 엑셀에서 돌아온 표가 통째로 밀린다.
+    const tree = group([
+      row({ ...SECC, 'material.applied_product': '도어; 후드', 'material.applied_part': '이너' }),
+    ])
+    expect(tree.materials[0].applied_products).toEqual(['도어', '후드'])
+    expect(tree.materials[0].applied_parts).toEqual(['이너'])
+  })
+
+  it('세미콜론만 적힌 칸은 안 보낸다', () => {
+    // 빈 목록을 보내면 「다 지운다」 는 뜻이 되는데, 사람이 의도한 것이 아니다.
+    const tree = group([row({ ...SECC, 'material.applied_product': ' ; ; ' })])
+    expect(tree.materials[0]).not.toHaveProperty('applied_products')
   })
 
   it('꺼진 열의 값은 보내지 않는다', () => {
@@ -317,5 +334,53 @@ describe('보내는 값', () => {
     // 서버는 대문자만 받는다. 사람이 소문자로 적는 것을 막을 이유는 없다.
     const tree = group([row({ ...SECC, 'specimen.orientation': 'md' })])
     expect(tree.materials[0].samples?.[0].specimens?.[0].orientation).toBe('MD')
+  })
+})
+
+describe('표 복사', () => {
+  it('첫 줄이 머리글이다', () => {
+    // **머리글이 없으면** 엑셀에서 어느 열이 무엇인지 다시 세어야 하고, 한 칸
+    // 밀린 것을 모른 채 되돌려 붙인다. 그때 두께 자리에 별칭이 들어간다.
+    const head = toTsv(blankRows(2)).split('\n')[0].split('\t')
+    expect(head[0]).toBe('Family')
+    expect(head).toContain('Grade')
+    expect(head).toHaveLength(COLUMNS.length)
+  })
+
+  it('단위를 머리글에 붙인다', () => {
+    expect(toTsv(blankRows(1))).toContain('두께 (mm)')
+  })
+
+  it('적은 줄이 없어도 머리글은 나간다', () => {
+    // 머리글만 받아 엑셀에서 먼저 채우고 돌아오는 것이 이 기능의 쓰임 절반이다.
+    expect(toTsv(blankRows(5)).split('\n')).toHaveLength(1)
+  })
+
+  it('보이는 열만 내보낸다', () => {
+    // 엑셀의 열 수와 화면의 열 수가 다르면 되돌려 붙일 때 어긋난다.
+    const visible = COLUMNS.filter((column) => column.group === 'material')
+    const lines = toTsv([row({ ...SECC, 'sample.lot_no': 'LOT-A' })], visible).split('\n')
+    expect(lines[0].split('\t')).toHaveLength(visible.length)
+    expect(lines[1]).not.toContain('LOT-A')
+  })
+
+  it('복사한 것을 그대로 되돌려 붙일 수 있다', () => {
+    // **이 왕복이 이 기능의 전부다.** 탭으로 내보내는 이유이기도 하다 —
+    // 쉼표로 내보내면 `1,000` 같은 값이 두 칸으로 갈라진다.
+    const before = [
+      row({ ...SECC, 'material.alias': '도어 이너, 아우터' }),
+      row({ 'material.family': 'Metal', 'material.category': 'Steel', 'material.grade': 'SGCC' }),
+    ]
+    const body = toTsv(before).split('\n').slice(1).join('\n')
+    const after = paste(blankRows(1), body, 0, 0, COLUMNS)
+    expect(after[0]['material.alias']).toBe('도어 이너, 아우터')
+    expect(after[1]['material.grade']).toBe('SGCC')
+  })
+
+  it('칸 안의 탭과 줄바꿈은 빈칸으로 바꾼다', () => {
+    // 안 바꾸면 한 칸이 두 칸이 되어 **그 줄부터 전부 밀린다.**
+    const lines = toTsv([row({ ...SECC, 'material.alias': 'A\tB' })]).split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toContain('A B')
   })
 })

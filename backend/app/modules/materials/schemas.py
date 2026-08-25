@@ -18,6 +18,9 @@ from pydantic import BaseModel, Field, model_validator
 from app.shared.display import DENSITY_UNIT as DENSITY_UNIT
 from app.shared.display import LENGTH_UNIT as LENGTH_UNIT
 
+MAX_USES = 20
+"""한 재료에 붙일 수 있는 용도 수. 스무 개가 넘으면 그건 분류가 아니라 메모다."""
+
 MAX_BULK = 200
 """한 번에 받는 줄 수의 상한.
 
@@ -139,8 +142,10 @@ class MaterialOut(BaseModel):
     spec_thickness_unit: str = LENGTH_UNIT
     """**규격 두께다.** 계산에 쓰는 것은 시편의 실측 두께다."""
 
-    applied_product: str | None
-    applied_part: str | None
+    applied_products: list[str] = Field(default_factory=list)
+    applied_parts: list[str] = Field(default_factory=list)
+    """이 재료를 어디에 쓰는가. **여러 개다**(v1.89.0) — 한 재료가 여러 제품에
+    들어간다. 적은 순서를 지킨다: 첫 번째가 대표값처럼 읽힌다."""
     """이 재료를 어디에 쓰는가. **재료의 용도이지 로트의 행선지가 아니다.**"""
 
     density: float | None
@@ -168,8 +173,8 @@ class MaterialCreateRequest(BaseModel):
     details: str | None = Field(default=None, max_length=100)
     spec_thickness: float | None = Field(default=None, gt=0)
     spec_thickness_unit: str = LENGTH_UNIT
-    applied_product: str | None = Field(default=None, max_length=100)
-    applied_part: str | None = Field(default=None, max_length=100)
+    applied_products: list[str] = Field(default_factory=list, max_length=MAX_USES)
+    applied_parts: list[str] = Field(default_factory=list, max_length=MAX_USES)
     density: float | None = Field(default=None, gt=0)
     density_unit: str = DENSITY_UNIT
     poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
@@ -201,8 +206,10 @@ class MaterialUpdateRequest(BaseModel):
     details: str | None = Field(default=None, max_length=100)
     spec_thickness: float | None = Field(default=None, gt=0)
     spec_thickness_unit: str | None = None
-    applied_product: str | None = Field(default=None, max_length=100)
-    applied_part: str | None = Field(default=None, max_length=100)
+    applied_products: list[str] | None = Field(default=None, max_length=MAX_USES)
+    applied_parts: list[str] | None = Field(default=None, max_length=MAX_USES)
+    """**통째로 바꾼다.** 줄 하나를 지운 것과 안 보낸 것을 구별할 방법이 없어서,
+    안 보내면 그대로 두고 보내면 그 목록이 전부가 된다."""
     density: float | None = Field(default=None, gt=0)
     density_unit: str | None = None
     poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)

@@ -143,25 +143,8 @@ class Material(Base):
     쓰는 것은 시편의 실측 두께(`Specimen.thickness_m`)다. 1.0t 판재를 재면
     0.98 이 나오는데, 둘을 합치면 규격이 흔들리거나 계산이 틀린다."""
 
-    applied_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    applied_part: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    """이 재료를 어디에 쓰는가. **재료의 용도이지 로트의 행선지가 아니다.**
-
-    전에는 시료에 있었다. 그러면 "도어 이너용 재료가 뭐가 있나" 를 물을 때 로트를
-    전부 뒤져야 하고, 같은 재료의 로트 다섯 개에 같은 용도를 다섯 번 적게 된다 —
-    푸아송비를 시료에서 올린 것과 같은 이유다.
-
-    로트가 실제로 어디로 갔는지는 생산관리의 일이고 이 시스템의 질문이 아니다.
-    """
-
-    applied_product_term_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
-    )
-    applied_part_term_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
-    )
-    """용도 기준정보(ADR 0010). **이름에는 안 들어간다** — Grade 와 달리 값을 고쳐도
-    재료 이름이 안 바뀐다. 그래서 연쇄 변경 훅이 필요 없다."""
+    # 용도(적용 제품·부위)는 `material_uses` 에 있다. 한 재료가 여러 제품에
+    # 들어가는 것이 보통이라 칸 하나로는 못 담는다 — v1.89.0 에 옮겼다.
 
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
     """공칭 밀도 SI(kg/m³). 문헌값·등급값이다.
@@ -232,6 +215,56 @@ class Material(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True, nullable=True
     )
+
+
+#: 용도 축 — 기준정보 슬러그와 **같은 이름**이다(`product`·`part`).
+#: 문자열을 새로 짓지 않는다: 두 이름이 생기면 매핑 표가 하나 더 필요해진다.
+USE_AXES = ("product", "part")
+
+
+class MaterialUse(Base):
+    """재료의 용도 한 줄 — 적용 제품 또는 적용 부위.
+
+    ## 왜 칸이 아니라 표인가
+
+    한 재료가 여러 제품에 들어간다. 도어 이너용 강판이 후드 이너에도 쓰이고,
+    부위도 마찬가지다. 칸 하나로 받던 동안 사람들은 `도어이너/후드이너` 처럼
+    **한 칸에 두 값을 밀어 넣었고**, 그러면 기준정보가 그 덩어리를 새 용어로
+    만든다 — 「도어 이너」 로는 검색이 안 되고 「쓰는 곳」 도 갈라진다.
+
+    ## 이름에는 안 들어간다
+
+    Grade 와 달리 용도를 고쳐도 재료 이름이 안 바뀐다(ADR 0004). 그래서 연쇄
+    변경 훅이 필요 없고, 여기서 값을 늘리거나 줄여도 하위 이름이 흔들리지 않는다.
+
+    ## 문자열과 term 을 함께 든다
+
+    나머지 축과 같은 Expand 단계다(ADR 0010) — 읽는 쪽이 아직 문자열을 본다.
+    어긋남은 `vocabulary.drift` 가 이 표까지 센다.
+    """
+
+    __tablename__ = "material_uses"
+    __table_args__ = (
+        # 같은 재료에 같은 용도를 두 번 적을 이유가 없다. 목록에 같은 칩이 둘
+        # 보이면 사람은 둘 중 하나가 다른 뜻이라고 읽는다.
+        UniqueConstraint("material_id", "axis", "term_id", name="uq_material_uses_axis_term"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("materials.id"), index=True
+    )
+    axis: Mapped[str] = mapped_column(String(20), index=True)
+    """`product` 또는 `part`. `USE_AXES` 를 본다."""
+
+    term_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True
+    )
+    value: Mapped[str] = mapped_column(String(100))
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    """사람이 적은 순서. 첫 번째가 대표값처럼 읽히므로 흔들리면 안 된다."""
 
 
 class Sample(Base):

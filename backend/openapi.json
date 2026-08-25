@@ -749,29 +749,21 @@
             ],
             "title": "Alias"
           },
-          "applied_part": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Part"
+          "applied_parts": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Applied Parts",
+            "type": "array"
           },
-          "applied_product": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Product"
+          "applied_products": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Applied Products",
+            "type": "array"
           },
           "category": {
             "maxLength": 50,
@@ -3875,29 +3867,21 @@
             ],
             "title": "Alias"
           },
-          "applied_part": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Part"
+          "applied_parts": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Applied Parts",
+            "type": "array"
           },
-          "applied_product": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Product"
+          "applied_products": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Applied Products",
+            "type": "array"
           },
           "category": {
             "maxLength": 50,
@@ -4072,27 +4056,19 @@
             ],
             "title": "Alias"
           },
-          "applied_part": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Part"
+          "applied_parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applied Parts",
+            "type": "array"
           },
-          "applied_product": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applied Product"
+          "applied_products": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applied Products",
+            "type": "array"
           },
           "category": {
             "title": "Category",
@@ -4253,8 +4229,6 @@
           "grade",
           "details",
           "spec_thickness",
-          "applied_product",
-          "applied_part",
           "density",
           "poisson_ratio",
           "note",
@@ -4307,29 +4281,35 @@
             ],
             "title": "Alias"
           },
-          "applied_part": {
+          "applied_parts": {
             "anyOf": [
               {
-                "maxLength": 100,
-                "type": "string"
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Applied Part"
+            "title": "Applied Parts"
           },
-          "applied_product": {
+          "applied_products": {
             "anyOf": [
               {
-                "maxLength": 100,
-                "type": "string"
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Applied Product"
+            "title": "Applied Products"
           },
           "category": {
             "anyOf": [

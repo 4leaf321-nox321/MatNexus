@@ -68,6 +68,13 @@ export interface Column {
    * 이어지면 같은 재료가 두 줄이 된다.
    */
   carry?: boolean
+  /**
+   * 한 칸에 **여러 값**이 들어가는가. `;` 로 나눈다.
+   *
+   * 쉼표·탭은 이미 붙여 넣기가 칸을 가르는 데 쓴다 — 그것을 값 안에 두면
+   * 엑셀에서 돌아온 표가 통째로 밀린다.
+   */
+  list?: boolean
 }
 
 const GROUP_LABELS: Record<Group, string> = {
@@ -154,21 +161,25 @@ export const COLUMNS: Column[] = [
   },
   {
     key: 'material.applied_product',
-    field: 'applied_product',
+    field: 'applied_products',
     group: 'material',
     label: '적용 제품',
     kind: 'text',
     width: 'w-24',
     carry: true,
+    list: true,
+    hint: '; 로 나눔',
   },
   {
     key: 'material.applied_part',
-    field: 'applied_part',
+    field: 'applied_parts',
     group: 'material',
     label: '적용 부위',
     kind: 'text',
     width: 'w-24',
     carry: true,
+    list: true,
+    hint: '; 로 나눔',
   },
   {
     key: 'material.density',
@@ -444,6 +455,40 @@ export function paste(
   return next
 }
 
+/**
+ * 표를 **엑셀에 붙일 수 있는 글자**로. 첫 줄은 머리글이다.
+ *
+ * ## 왜 머리글이 반드시 들어가는가
+ *
+ * 붙여 넣은 사람이 엑셀에서 그 시트를 이어 쓴다. 머리글이 없으면 어느 열이
+ * 무엇인지 그 자리에서 다시 세어야 하고, **한 칸 밀린 것을 알아채지 못한 채**
+ * 표로 되돌려 붙인다. 그때 두께 자리에 별칭이 들어간다.
+ *
+ * ## 왜 탭인가
+ *
+ * 붙여 넣기가 탭을 먼저 본다(`parseGrid`). 같은 글자를 복사해 되돌려 붙이면
+ * 그대로 돌아온다 — 쉼표로 내보내면 `1,000` 같은 값이 두 칸으로 갈라진다.
+ *
+ * ## 보이는 열만
+ *
+ * 안 보이는 칸까지 내보내면 엑셀의 열 수와 화면의 열 수가 달라지고, 되돌려
+ * 붙일 때 어긋난다. **화면에 있는 표를 그대로 옮긴다.**
+ */
+export function toTsv(rows: Row[], visible: Column[] = COLUMNS): string {
+  const head = visible.map((column) =>
+    column.hint ? `${column.label} (${column.hint})` : column.label
+  )
+  const body = rows
+    .filter((row) => !isEmpty(row, visible))
+    .map((row) =>
+      visible.map((column) => (row[column.key] ?? '').trim().replace(/[\t\n]/g, ' '))
+    )
+  // 적은 줄이 없어도 머리글은 나간다 — **엑셀에서 먼저 채우고 돌아오는 것**이
+  // 이 기능의 쓰임 절반이다.
+  return [head, ...body].map((cells) => cells.join('\t')).join('\n')
+}
+
+
 /** 서버가 이름을 만드는 값들 — 같은 이름이 될 줄을 알아보려고 쓴다. */
 function nameKey(row: Row): string {
   return ['material.grade', 'material.details', 'material.spec_thickness']
@@ -541,12 +586,26 @@ type SpecimenNode = NonNullable<SampleNode['specimens']>[number]
  * 이 갈래의 값들. **빈 칸은 안 보낸다** — 빈 문자열을 보내면 `''` 가 저장되고,
  * 나중에 「비었나」 를 물을 수 없다.
  */
-function values(row: Row, target: Group, visible: Column[]): Record<string, string | number> {
-  const out: Record<string, string | number> = {}
+function values(
+  row: Row,
+  target: Group,
+  visible: Column[]
+): Record<string, string | number | string[]> {
+  const out: Record<string, string | number | string[]> = {}
   for (const column of visible) {
     if (column.group !== target) continue
     const text = (row[column.key] ?? '').trim()
     if (text === '') continue
+    if (column.list) {
+      const many = text
+        .split(';')
+        .map((one) => one.trim())
+        .filter(Boolean)
+      // 세미콜론만 적힌 칸은 **안 보낸다.** 빈 목록을 보내면 「다 지운다」 는
+      // 뜻이 되는데, 그건 사람이 의도한 것이 아니다.
+      if (many.length > 0) out[column.field] = many
+      continue
+    }
     out[column.field] = column.kind === 'number' ? Number(text) : text
   }
   return out

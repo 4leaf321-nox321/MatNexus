@@ -153,8 +153,10 @@ export default function MaterialDetailPage() {
           />
           {/* **용도는 재료의 성질이다.** 시료에 있을 때는 로트를 전부 뒤져야
               "이 재료 어디에 쓰나" 를 알 수 있었다. */}
-          <Field label="적용 제품" value={item.applied_product ?? '—'} />
-          <Field label="적용 부위" value={item.applied_part ?? '—'} />
+          {/* 여러 개다 — 쉼표로 잇는다. 값 자체에 쉼표가 들어갈 일은 없다
+              (기준정보를 거친 용어다). */}
+          <Field label="적용 제품" value={(item.applied_products ?? []).join(', ') || '—'} />
+          <Field label="적용 부위" value={(item.applied_parts ?? []).join(', ') || '—'} />
           <Field label="밀도" value={item.density == null ? '—' : `${item.density} ${item.density_unit}`} />
           <Field label="푸아송비" value={item.poisson_ratio == null ? '—' : String(item.poisson_ratio)} />
           <Field

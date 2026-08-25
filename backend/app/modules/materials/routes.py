@@ -82,8 +82,13 @@ def _now() -> datetime:
 
 
 def _material_out(
-    material: Material, *, sample_count: int, workspace_name: str | None
+    material: Material,
+    *,
+    sample_count: int,
+    workspace_name: str | None,
+    uses: dict[str, list[str]] | None = None,
 ) -> MaterialOut:
+    """`uses` 는 **밖에서 미리 읽어 넘긴다** — 목록이 재료마다 물으면 N+1 이다."""
     unit = material.input_units.get("spec_thickness", LENGTH_UNIT)
     density_unit = material.input_units.get("density", DENSITY_UNIT)
     return MaterialOut(
@@ -99,8 +104,8 @@ def _material_out(
         details=material.details,
         spec_thickness=services.from_si(material.spec_thickness_m, unit),
         spec_thickness_unit=unit,
-        applied_product=material.applied_product,
-        applied_part=material.applied_part,
+        applied_products=(uses or {}).get("product", []),
+        applied_parts=(uses or {}).get("part", []),
         density=services.from_si(material.density_si, density_unit),
         density_unit=density_unit,
         poisson_ratio=material.poisson_ratio,
@@ -471,6 +476,8 @@ def list_materials(
 
     counts = services.sample_counts(db, [m.id for m in rows])
     names = services.workspace_names(db, [m.owner_workspace_id for m in rows])
+    # **한 번에 읽는다.** 재료마다 물으면 200건짜리 화면에서 200번이 된다.
+    uses = services.uses_of(db, [m.id for m in rows])
     return Page(
         items=[
             _material_out(
@@ -479,6 +486,7 @@ def list_materials(
                 workspace_name=(
                     names.get(m.owner_workspace_id) if m.owner_workspace_id else None
                 ),
+                uses=uses.get(m.id),
             )
             for m in rows
         ],
@@ -519,8 +527,6 @@ def _make_material(
         spec_thickness_m=services.to_si(
             payload.spec_thickness, payload.spec_thickness_unit, field="두께"
         ),
-        applied_product=payload.applied_product,
-        applied_part=payload.applied_part,
         density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
         poisson_ratio=payload.poisson_ratio,
         input_units={
@@ -542,6 +548,9 @@ def _make_material(
     )
     db.add(material)
     db.flush()
+    # 용도는 재료의 칸이 아니라 매달린 줄이라, 재료가 id 를 받은 뒤에 붙는다.
+    services.set_uses(db, material, "product", payload.applied_products, created_by_id=user.id)
+    services.set_uses(db, material, "part", payload.applied_parts, created_by_id=user.id)
     return material
 
 
@@ -554,7 +563,12 @@ def create_material(
     workspace = services.resolve_workspace(db, user, payload.workspace_slug)
     material = _make_material(db, user, payload, workspace=workspace)
     db.commit()
-    return _material_out(material, sample_count=0, workspace_name=workspace.name)
+    return _material_out(
+        material,
+        sample_count=0,
+        workspace_name=workspace.name,
+        uses=services.uses_of(db, [material.id]).get(material.id),
+    )
 
 
 @router.post("/delete", response_model=MaterialDeleteOut)
@@ -600,6 +614,7 @@ def delete_materials(
         vocabulary_services.release_bindings(
             db, material, vocabulary_services.MATERIAL_BINDINGS
         )
+        services.release_uses(db, material)
         audit.record(
             db,
             action=audit.MATERIAL_DELETED,
@@ -730,6 +745,7 @@ def get_material(
         workspace_name=(
             names.get(material.owner_workspace_id) if material.owner_workspace_id else None
         ),
+        uses=services.uses_of(db, [material.id]).get(material.id),
     )
 
 
@@ -931,14 +947,7 @@ def update_material(
     services.require_writable(db, user, material)
 
     data = payload.model_dump(exclude_unset=True)
-    for field in (
-        "details",
-        "alias",
-        "note",
-        "poisson_ratio",
-        "applied_product",
-        "applied_part",
-    ):
+    for field in ("details", "alias", "note", "poisson_ratio"):
         if field in data:
             setattr(material, field, data[field])
 
@@ -969,6 +978,11 @@ def update_material(
         material.spec_thickness_m = services.to_si(value, unit, field="두께")
         material.input_units = {**material.input_units, "spec_thickness": unit}
 
+    for field, axis in (("applied_products", "product"), ("applied_parts", "part")):
+        if field in data:
+            # 안 보낸 것과 비운 것을 구별한다 — 빈 목록을 보내면 다 지우는 뜻이다.
+            services.set_uses(db, material, axis, data[field] or [], created_by_id=user.id)
+
     vocabulary_services.apply_bindings(
         db, material, vocabulary_services.MATERIAL_BINDINGS, data, created_by_id=user.id
     )
@@ -997,6 +1011,7 @@ def update_material(
         workspace_name=(
             names.get(material.owner_workspace_id) if material.owner_workspace_id else None
         ),
+        uses=services.uses_of(db, [material.id]).get(material.id),
     )
 
 
@@ -1017,6 +1032,7 @@ def delete_material(
         )
     material.deleted_at = _now()
     vocabulary_services.release_bindings(db, material, vocabulary_services.MATERIAL_BINDINGS)
+    services.release_uses(db, material)
     # 소프트 삭제라 행은 남지만 **목록에서 사라진다.** 누가 치웠는지 남지 않으면
     # "있던 재료가 없어졌다" 를 설명할 길이 없다.
     audit.record(

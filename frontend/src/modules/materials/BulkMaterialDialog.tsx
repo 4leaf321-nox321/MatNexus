@@ -23,7 +23,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Columns3, Plus, Trash2 } from 'lucide-react'
+import { Check, Columns3, Copy, Plus, Trash2 } from 'lucide-react'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { BulkResult } from '@/modules/materials/api'
@@ -42,8 +42,10 @@ import {
   problems,
   spreads,
   tally,
+  toTsv,
 } from '@/modules/materials/bulkRows'
 import type { Group, Row } from '@/modules/materials/bulkRows'
+import { copyText } from '@/shared/lib/clipboard'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -170,6 +172,8 @@ export function BulkMaterialDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [result, setResult] = useState<BulkResult | null>(null)
+  /** 복사 직후 잠깐 바뀌는 표시. **아무 반응이 없으면 됐는지 알 수 없다.** */
+  const [copied, setCopied] = useState(false)
   const first = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -177,6 +181,7 @@ export function BulkMaterialDialog({
     setRows(blankRows())
     setError(null)
     setResult(null)
+    setCopied(false)
     // 열자마자 첫 칸에 적을 수 있어야 한다 — 붙여 넣기가 이 창의 주된 쓰임이다.
     setTimeout(() => first.current?.focus(), 0)
   }, [open])
@@ -197,6 +202,16 @@ export function BulkMaterialDialog({
   const bad = Object.keys(found).length
   const filled = rows.filter((row) => !isEmpty(row, visible)).length
   const ready = filled > 0 && bad === 0 && filled <= MAX_ROWS && !busy
+
+  async function copyTable() {
+    const done = await copyText(toTsv(rows, visible))
+    if (!done) {
+      setError(new Error('복사하지 못했습니다. 표를 직접 끌어 골라 복사하세요.'))
+      return
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   function edit(at: number, key: string, value: string) {
     setRows((current) => current.map((row, i) => (i === at ? { ...row, [key]: value } : row)))
@@ -250,6 +265,14 @@ export function BulkMaterialDialog({
             onClick={() => setRows((current) => [...current, blankRow()])}
           >
             <Plus className="size-3.5" /> 줄 추가
+          </Button>
+          {/* **머리글까지 복사한다.** 엑셀에서 이어 쓰다 한 칸 밀린 것을
+              알아채지 못하면, 되돌려 붙일 때 두께 자리에 별칭이 들어간다.
+              적은 줄이 없어도 눌린다 — 머리글만 받아 엑셀에서 먼저 채우고
+              돌아오는 것이 이 기능의 쓰임 절반이다. */}
+          <Button variant="outline" size="sm" onClick={copyTable}>
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            {copied ? '복사했습니다' : '표 복사 (머리글 포함)'}
           </Button>
           <p className="text-muted-foreground text-xs">
             {counted.materials > 0 || counted.samples > 0 ? (

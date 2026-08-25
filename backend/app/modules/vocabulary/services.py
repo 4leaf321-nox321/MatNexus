@@ -344,7 +344,8 @@ def recount(db: Session, vocabulary: Vocabulary) -> None:
     지운 행은 안 센다 — "쓰는 곳" 은 지금 쓰이는 수다.
     """
     parts = [
-        f"(SELECT count(*) FROM {table} WHERE {binding.column} = vocabulary_terms.id{deleted})"
+        f"(SELECT count(*) FROM {table} WHERE {binding.column} = vocabulary_terms.id"
+        f"{deleted.format(t=table)})"
         for table, bindings, deleted in _COUNT_SOURCES
         for binding in bindings
         if binding.slug == vocabulary.slug
@@ -390,9 +391,9 @@ MATERIAL_BINDINGS = (
     Binding("family", "family", "family_term_id"),
     Binding("category", "category", "category_term_id", parent_field="family"),
     Binding("grade", "grade", "grade_term_id", parent_field="category"),
-    # 용도. 이름을 안 만드는 축이라 연쇄 변경이 없다 — 그래서 부모도 안 붙인다.
-    Binding("product", "applied_product", "applied_product_term_id"),
-    Binding("part", "applied_part", "applied_part_term_id"),
+    # 용도(적용 제품·부위)는 여기 없다. 재료의 칸이 아니라 `material_uses` 의
+    # 줄이라서다(v1.89.0) — 한 재료가 여러 제품에 들어간다. 세는 것과 어긋남
+    # 검사는 아래 `_COUNT_SOURCES` 가 그 표를 직접 본다.
 )
 SAMPLE_BINDINGS = (
     Binding("manufacturer", "manufacturer", "manufacturer_term_id"),
@@ -476,13 +477,28 @@ def release_bindings(db: Session, row: object, bindings: Iterable[Binding]) -> N
         bump_usage(db, getattr(row, binding.column), -1)
 
 
+#: 용도 표를 볼 때 쓰는 바인딩. 축은 줄마다 다르지만(`product`·`part`) 세는
+#: 일과 어긋남 검사에는 상관없다 — 둘 다 「문자열이 term 과 같은가」만 본다.
+USE_BINDINGS = (Binding("product", "value", "term_id"), Binding("part", "value", "term_id"))
+
 #: 어느 표의 어느 바인딩을 세는가. **소프트 삭제된 행은 빼야 한다** — 지운 시료가
 #: 기준정보를 붙들고 있으면 "쓰는 곳" 이 실제보다 커진다.
+#:
+#: 세 번째 칸은 WHERE 조각이고 `{t}` 가 그 표를 가리킨다. 표를 별칭으로 읽는
+#: 자리가 있어서(`drift`) 이름을 박아 둘 수 없다.
 _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
-    ("materials", MATERIAL_BINDINGS, " AND deleted_at IS NULL"),
-    ("samples", SAMPLE_BINDINGS, " AND deleted_at IS NULL"),
-    ("specimens", SPECIMEN_BINDINGS, " AND deleted_at IS NULL"),
-    ("test_runs", TEST_RUN_BINDINGS, " AND deleted_at IS NULL"),
+    ("materials", MATERIAL_BINDINGS, " AND {t}.deleted_at IS NULL"),
+    ("samples", SAMPLE_BINDINGS, " AND {t}.deleted_at IS NULL"),
+    ("specimens", SPECIMEN_BINDINGS, " AND {t}.deleted_at IS NULL"),
+    ("test_runs", TEST_RUN_BINDINGS, " AND {t}.deleted_at IS NULL"),
+    # 용도는 재료에 매달려 있다. **지운 재료의 용도가 남으면** 「쓰는 곳」 이
+    # 실제보다 커지고, 안 쓰는 용어가 피커 위쪽에 계속 앉아 있다.
+    (
+        "material_uses",
+        USE_BINDINGS,
+        " AND EXISTS (SELECT 1 FROM materials AS m"
+        " WHERE m.id = {t}.material_id AND m.deleted_at IS NULL)",
+    ),
 )
 
 
@@ -512,13 +528,20 @@ def drift(db: Session) -> list[Drift]:
     종류가 되는데, 그건 어긋남이 아니라 표기 문제다(`clean()` 이 이미 막는다).
     """
     found: list[Drift] = []
+    # 한 표의 같은 칸을 두 축이 함께 가리킬 수 있다(용도의 제품·부위는 같은
+    # `value`·`term_id` 를 본다). 그대로 두면 **같은 어긋남이 두 번 실린다** —
+    # 목록의 수를 믿을 수 없게 된다.
+    seen: set[tuple[str, str, str]] = set()
     for table, bindings, deleted in _COUNT_SOURCES:
         for binding in bindings:
+            if (table, binding.field, binding.column) in seen:
+                continue
+            seen.add((table, binding.field, binding.column))
             where = (
                 f" FROM {table} AS x"
                 f" LEFT JOIN vocabulary_terms AS t ON t.id = x.{binding.column}"
                 f" WHERE NULLIF(x.{binding.field}, '') IS DISTINCT FROM t.value"
-                f"{deleted.replace('deleted_at', 'x.deleted_at')}"
+                f"{deleted.format(t='x')}"
             )
             count = db.scalar(text("SELECT count(*)" + where)) or 0
             if not count:
@@ -629,13 +652,19 @@ def repair(db: Session, *, created_by_id: uuid.UUID | None = None) -> list[Drift
     before = drift(db)
     touched: dict[str, set[uuid.UUID]] = {}
 
+    # `drift` 와 같은 이유로 중복을 건너뛴다 — 한 표의 같은 칸을 두 축이 함께
+    # 가리킬 수 있다. 두 번 고치면 두 번째는 **엉뚱한 축의 사전**을 들고 온다.
+    seen: set[tuple[str, str, str]] = set()
     for table, bindings, deleted in _COUNT_SOURCES:
         for binding in bindings:
+            if (table, binding.field, binding.column) in seen:
+                continue
+            seen.add((table, binding.field, binding.column))
             where = (
                 f" FROM {table} AS x"
                 f" LEFT JOIN vocabulary_terms AS t ON t.id = x.{binding.column}"
                 f" WHERE NULLIF(x.{binding.field}, '') IS DISTINCT FROM t.value"
-                f"{deleted.replace('deleted_at', 'x.deleted_at')}"
+                f"{deleted.format(t='x')}"
             )
             rows = db.execute(
                 text(f"SELECT x.id, x.{binding.field}, x.{binding.column}" + where)
@@ -944,7 +973,8 @@ def references_to(db: Session, term: VocabularyTerm) -> int:
                 continue
             found = db.execute(
                 text(
-                    f"SELECT count(*) FROM {table} WHERE {binding.column} = :term_id{deleted}"
+                    f"SELECT count(*) FROM {table} WHERE {binding.column} = :term_id"
+                    f"{deleted.format(t=table)}"
                 ),
                 {"term_id": term.id},
             ).scalar()

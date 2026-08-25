@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.jobs import handlers, worker
@@ -550,8 +550,8 @@ class Test용도:
                 "category": "Steel",
                 "grade": grade,
                 "spec_thickness": 1.0,
-                "applied_product": product,
-                "applied_part": part,
+                "applied_products": [product] if product else [],
+                "applied_parts": [part] if part else [],
             },
             headers=headers,
         ).json()
@@ -562,7 +562,7 @@ class Test용도:
     ) -> None:
         created = self._material(client, admin_headers, "USE01", product="도어  ", part="이너")
         # 가운데 두 칸이 정리된 값이 재료에 들어간다.
-        assert created["applied_product"] == "도어"
+        assert created["applied_products"] == ["도어"]
 
         found = client.get(
             "/api/vocabularies/product/terms",
@@ -588,6 +588,172 @@ class Test용도:
         ).json()["items"]
         assert len(found) == 1, f"표기가 갈려 값이 여러 개 생겼다: {found}"
         assert found[0]["usage_count"] == 3
+
+    def test_여러_제품에_들어간다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """**한 재료가 여러 제품에 쓰인다.** 칸 하나로 받던 동안 사람들은
+        `도어이너/후드이너` 처럼 한 칸에 두 값을 밀어 넣었고, 그러면 기준정보가
+        그 덩어리를 새 용어로 만든다 — 「도어 이너」 로는 검색이 안 된다."""
+        created: dict[str, Any] = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "USE50",
+                "applied_products": ["도어", "후드"],
+                "applied_parts": ["이너", "아우터"],
+            },
+            headers=admin_headers,
+        ).json()
+        assert created["applied_products"] == ["도어", "후드"]
+        assert created["applied_parts"] == ["이너", "아우터"]
+
+        # 값마다 따로 세어진다 — 덩어리로 들어갔으면 「도어」 는 0 이다.
+        for value in ("도어", "후드"):
+            found = client.get(
+                "/api/vocabularies/product/terms",
+                params={"q": value},
+                headers=admin_headers,
+            ).json()["items"]
+            assert [item["value"] for item in found] == [value]
+            assert found[0]["usage_count"] == 1
+
+    def test_적은_순서를_지킨다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """첫 번째가 대표값처럼 읽힌다. 순서가 흔들리면 목록이 다시 열 때마다
+        다른 것을 앞세운다."""
+        created = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "USE51",
+                "applied_products": ["후드", "도어", "펜더"],
+            },
+            headers=admin_headers,
+        ).json()
+        again = client.get(f"/api/materials/{created['id']}", headers=admin_headers).json()
+        assert again["applied_products"] == ["후드", "도어", "펜더"]
+
+    def test_같은_값을_두_번_적으면_하나다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """목록에 같은 칩이 둘 보이면 사람은 둘 중 하나가 다른 뜻이라고 읽는다.
+        표기가 갈린 것도 기준정보가 한 값으로 모으므로 여기서 겹친다."""
+        created = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "USE52",
+                "applied_products": ["도어", "도어 ", "도어"],
+            },
+            headers=admin_headers,
+        ).json()
+        assert created["applied_products"] == ["도어"]
+
+    def test_수정은_통째로_갈아_끼운다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """**안 보낸 것과 비운 것을 구별한다.** 안 보내면 그대로 두고, 빈 목록을
+        보내면 다 지운다 — 선언 물성과 같은 규칙이다."""
+        created = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "USE53",
+                "applied_products": ["도어", "후드"],
+                "applied_parts": ["이너"],
+            },
+            headers=admin_headers,
+        ).json()
+
+        # 제품만 보낸다 — 부위는 그대로 있어야 한다.
+        after = client.patch(
+            f"/api/materials/{created['id']}",
+            json={"applied_products": ["펜더"]},
+            headers=admin_headers,
+        ).json()
+        assert after["applied_products"] == ["펜더"]
+        assert after["applied_parts"] == ["이너"]
+
+        # 빈 목록은 「다 지운다」 는 뜻이다.
+        empty = client.patch(
+            f"/api/materials/{created['id']}",
+            json={"applied_products": []},
+            headers=admin_headers,
+        ).json()
+        assert empty["applied_products"] == []
+
+        # 떼어 낸 값의 「쓰는 곳」 도 함께 줄어야 한다.
+        found = client.get(
+            "/api/vocabularies/product/terms",
+            params={"q": "펜더", "include_hidden": "true"},
+            headers=admin_headers,
+        ).json()["items"]
+        assert found[0]["usage_count"] == 0
+
+    def test_하나만_더_붙여도_나머지가_산다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """통째로 갈아 끼우므로 **있던 값을 다시 실어 보낸다.** 그때 같은 값을
+        지웠다 넣는 셈이라 유일 제약에 걸릴 수 있다 — 실제로 걸리는지 본다."""
+        created = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "USE54",
+                "applied_products": ["도어"],
+            },
+            headers=admin_headers,
+        ).json()
+        after = client.patch(
+            f"/api/materials/{created['id']}",
+            json={"applied_products": ["도어", "후드"]},
+            headers=admin_headers,
+        )
+        assert after.status_code == 200, after.text
+        assert after.json()["applied_products"] == ["도어", "후드"]
+
+        # 남아 있는 쪽의 「쓰는 곳」 이 지웠다 넣느라 0 이 되면 안 된다.
+        found = client.get(
+            "/api/vocabularies/product/terms", params={"q": "도어"}, headers=admin_headers
+        ).json()["items"]
+        assert found[0]["usage_count"] == 1
+
+    def test_스무_개까지만_받는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """스무 개가 넘으면 그건 분류가 아니라 메모다."""
+        response = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "USE55",
+                "applied_products": [f"제품{index}" for index in range(21)],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+
+    def test_어긋남을_한_번만_센다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        """용도 표는 두 축이 같은 칸을 가리킨다(`value`·`term_id`). 그대로 두면
+        **같은 어긋남이 두 번 실려** 목록의 수를 믿을 수 없게 된다."""
+        self._material(client, admin_headers, "USE56", product="도어")
+        db.execute(text("UPDATE material_uses SET value = '어긋난값' WHERE axis = 'product'"))
+        db.commit()
+
+        report = client.get("/api/vocabularies/drift", headers=admin_headers).json()
+        uses = [row for row in report["items"] if row["table"] == "material_uses"]
+        assert len(uses) == 1, f"같은 어긋남이 여러 번 실렸다: {uses}"
+        assert uses[0]["count"] == 1
 
     def test_부위는_제품_아래에_안_매달린다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
@@ -634,7 +800,7 @@ class Test용도:
         )
 
         after = client.get(f"/api/materials/{created['id']}", headers=admin_headers).json()
-        assert after["applied_product"] == "새제품", "문자열이 안 따라왔다"
+        assert after["applied_products"] == ["새제품"], "문자열이 안 따라왔다"
         assert after["record_name"] == created["record_name"], "이름이 바뀌면 안 된다"
 
     def test_재료를_지우면_쓰는_곳이_줄어든다(
