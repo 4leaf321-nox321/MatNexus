@@ -193,6 +193,8 @@ export function BulkMaterialDialog({
   // 사람이 적은 것과, 위에서 이어받은 것을 채운 것. 화면은 앞을, 검사와
   // 보내기는 뒤를 본다.
   const effective = useMemo(() => carried(rows, visible), [rows, visible])
+  /** 한 칸에 여럿을 적는 열 중 지금 켜져 있는 것. */
+  const listed = useMemo(() => visible.filter((column) => column.list), [visible])
   const found = useMemo(() => problems(effective, visible), [effective, visible])
   const tree = useMemo(() => group(effective, visible), [effective, visible])
   const counted = useMemo(
@@ -290,6 +292,18 @@ export function BulkMaterialDialog({
             {bad > 0 && <span className="text-destructive"> · {bad}줄을 고쳐야 합니다</span>}
           </p>
         </div>
+
+        {listed.length > 0 && (
+          // **머리글의 `(; 로 나눔)` 만으로는 안 읽힌다.** 여러 개를 적을 수
+          // 있다는 것 자체를 모르면 머리글의 괄호도 안 본다 — 그래서 그 열이
+          // 켜져 있을 때만 한 줄로 말한다.
+          <p className="bg-muted/40 rounded-md border px-3 py-2 text-xs">
+            <b>{listed.map((column) => column.label).join(' · ')}</b>는 한 칸에{' '}
+            <b>여러 개</b>를 적을 수 있습니다 — <code className="font-mono">도어; 후드</code>{' '}
+            처럼 <b>세미콜론(;)</b>으로 나누세요. 쉼표와 탭은 붙여 넣기가 칸을 가르는 데
+            쓰므로 값 안에는 넣을 수 없습니다.
+          </p>
+        )}
 
         <div className="rounded-md border">
           <Table className="text-sm">

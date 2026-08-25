@@ -80,6 +80,23 @@ describe('여러 개 등록', () => {
     expect(bulk.mock.calls[0][0].materials[0].samples).toEqual([])
   })
 
+  it('여러 개 적는 칸을 켜면 나누는 법을 말해 준다', async () => {
+    // **머리글의 `(; 로 나눔)` 만으로는 안 읽힌다.** 여러 개를 적을 수 있다는
+    // 것 자체를 모르면 괄호도 안 본다 — 그때 사람은 `도어, 후드` 라고 적고,
+    // 그 쉼표는 붙여 넣기가 칸을 가르는 글자다.
+    open()
+    expect(screen.queryByText(/세미콜론/)).toBeNull()
+
+    fireEvent.keyDown(screen.getByRole('button', { name: /열 고르기/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: '적용 제품' }))
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+    // 어느 열이 그런지도 함께 말해야 한다 — 「세미콜론으로 나누세요」 만으로는
+    // 어느 칸 얘기인지 모른다.
+    const notice = (await screen.findByText(/세미콜론/)).closest('p')
+    expect(notice).toHaveTextContent('적용 제품')
+  })
+
   it('분류를 위 줄에서 이어받는다', async () => {
     // Grade 열에만 붙여 넣는 것이 실제 작업이다. 줄마다 다시 적게 하면
     // 오타 하나가 분류를 갈라 놓는다.
