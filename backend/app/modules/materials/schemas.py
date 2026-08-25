@@ -8,12 +8,21 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 #: 화면이 기본으로 쓰는 단위. 저장은 SI 로 하되 주고받는 것은 이쪽이다.
 LENGTH_UNIT = "mm"
 DENSITY_UNIT = "kg/m3"
+
+
+MAX_BULK = 200
+"""한 번에 받는 줄 수의 상한.
+
+**서버가 강제한다.** 화면이 200줄까지만 그린다고 해서 요청이 200줄이라는
+보장은 없다. 상한이 없으면 붙여 넣기 한 번이 수만 줄짜리 요청이 된다.
+"""
 
 
 # --- 재료 -------------------------------------------------------------------
@@ -202,6 +211,28 @@ class MaterialUpdateRequest(BaseModel):
     고치는 것이 같은 요청에 섞이면 어느 쪽인지 알 수 없다."""
     alias: str | None = Field(default=None, max_length=200)
     note: str | None = None
+
+
+class MaterialDeleteRequest(BaseModel):
+    material_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_BULK)
+
+
+class MaterialBlockedOut(BaseModel):
+    """못 지운 것 하나. **이유를 함께 준다.**
+
+    재료는 시료가 남아 있으면 안 지워진다 — 그것은 권한 문제와 다르고, 사람이
+    해야 할 일도 다르다(하나는 관리자에게 말하는 것, 하나는 시료를 먼저 치우는
+    것). 개수만 돌려주면 둘을 구별할 수 없다.
+    """
+
+    id: uuid.UUID
+    name: str | None
+    reason: str
+
+
+class MaterialDeleteOut(BaseModel):
+    deleted: int
+    blocked: list[MaterialBlockedOut]
 
 
 class NamePreviewRequest(BaseModel):
@@ -501,3 +532,67 @@ class PropertySourcesOut(BaseModel):
     material_id: uuid.UUID
     material_name: str
     rows: list[ValueSourceOut]
+
+
+# --- 여러 개 한꺼번에 -------------------------------------------------------
+
+
+class BulkSpecimenRequest(SpecimenCreateRequest):
+    row: int = 0
+    """표의 몇 번째 줄이 이것을 만들었나. **화면이 그 줄을 짚을 수 있어야 한다** —
+    「3건 실패」만 돌려주면 스무 줄 중 어디를 고쳐야 하는지 알 수 없다."""
+
+
+class BulkSampleRequest(SampleCreateRequest):
+    row: int = 0
+    specimens: list[BulkSpecimenRequest] = Field(default_factory=list)
+
+
+class BulkMaterialRequest(MaterialCreateRequest):
+    row: int = 0
+    samples: list[BulkSampleRequest] = Field(default_factory=list)
+
+
+class BulkRequest(BaseModel):
+    """여러 개를 한꺼번에 — **평평한 표가 아니라 나무로 받는다.**
+
+    화면의 표는 평평하다. 재료 칸이 빈 줄은 위 줄의 재료에 붙는다 — 엑셀에서
+    늘 하는 방식이다. 그 「빈 칸은 위와 같다」를 서버가 다시 해석하게 하면
+    규칙이 두 곳에 살고, 언젠가 갈라진다. 화면이 한 번 묶어서 보낸다.
+    """
+
+    materials: list[BulkMaterialRequest] = Field(min_length=1, max_length=MAX_BULK)
+
+    @model_validator(mode="after")
+    def _within_limit(self) -> BulkRequest:
+        total = sum(
+            1 + len(sample.specimens)
+            for material in self.materials
+            for sample in material.samples
+        ) + len(self.materials)
+        if total > MAX_BULK:
+            # 표의 한 줄이 마디 하나다. 재료만 세면 시편 수천 개짜리 요청이 통과한다.
+            raise ValueError(f"한 번에 {MAX_BULK}줄까지 넣을 수 있습니다 (지금 {total}줄)")
+        return self
+
+
+class BulkMadeOut(BaseModel):
+    row: int
+    kind: Literal["material", "sample", "specimen"]
+    name: str
+    reused: bool = False
+    """있던 것을 찾아 쓴 것인가. **말해 주지 않으면 놀란다** — 같은 이름을
+    적었을 때 조용히 남의 재료 밑에 시료가 붙을 수 있다."""
+
+
+class BulkBlockedOut(BaseModel):
+    row: int
+    reason: str
+
+
+class BulkOut(BaseModel):
+    materials: int
+    samples: int
+    specimens: int
+    made: list[BulkMadeOut]
+    blocked: list[BulkBlockedOut]

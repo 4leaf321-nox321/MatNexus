@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from typing import Any
@@ -34,6 +35,8 @@ _VALIDATION_MESSAGES = {
     "bool_parsing": "예/아니오 값이어야 합니다",
     "value_error": "값이 올바르지 않습니다",
     "greater_than_equal": "너무 작습니다",
+    "too_long": "너무 많습니다",
+    "too_short": "개수가 모자랍니다",
     "less_than_equal": "너무 큽니다",
 }
 
@@ -61,15 +64,53 @@ def describe_validation(errors: Sequence[Any]) -> str:
         for index, item in enumerate(location):
             where += f"[{item}]" if item.isdigit() else (f".{item}" if index else item)
 
-        reason = _VALIDATION_MESSAGES.get(str(error.get("type")), str(error.get("msg", "")))
-        pattern = (error.get("ctx") or {}).get("pattern")
+        kind = str(error.get("type"))
+        message = str(error.get("msg", ""))
+        # 직접 쓴 검증기가 붙인 말이 있으면 **그것이 낫다.** pydantic 은 그 말
+        # 앞에 `Value error, ` 를 붙여 준다 — 우리가 적은 한국어가 그 뒤에 있다.
+        reason = (
+            message.removeprefix("Value error, ")
+            if kind == "value_error" and message.startswith("Value error, ")
+            else _VALIDATION_MESSAGES.get(kind, message)
+        )
+        context = error.get("ctx") or {}
+        pattern = context.get("pattern")
         if pattern:
             reason = f"{reason} (허용: {pattern})"
+        # **한도를 말해 주지 않으면 고칠 수 없다.** 「너무 많습니다」만 보고
+        # 몇 개까지인지 알아내려면 코드를 읽어야 한다.
+        limit = context.get("max_length") or context.get("actual_length")
+        if limit is not None and kind in ("too_long", "too_short"):
+            reason = f"{reason} (최대 {limit}개)"
         parts.append(f"{where or '요청'} — {reason}")
 
     more = len(errors) - len(parts)
     summary = " / ".join(parts)
     return f"{summary} 외 {more}건" if more > 0 else summary
+
+
+def _plain(errors: Sequence[Any]) -> list[dict[str, Any]]:
+    """검증 오류를 JSON 으로 낼 수 있는 형태로 바꾼다.
+
+    **직접 쓴 검증기가 500 을 냈다.** pydantic 은 `ValueError` 를 그대로
+    `ctx["error"]` 에 담아 주는데, 그것을 응답 본문에 실으려다 직렬화에서
+    터진다 — 422 를 내려던 자리에서 "서버 오류" 가 나가고, 사람은 자기가 뭘
+    잘못 적었는지 알 수 없다. 관측하고 고쳤다(v1.87.0).
+    """
+    out: list[dict[str, Any]] = []
+    for error in errors:
+        item = dict(error)
+        context = item.get("ctx")
+        if isinstance(context, dict):
+            item["ctx"] = {key: str(value) for key, value in context.items()}
+        # `input` 에는 무엇이든 올 수 있다 — 파일 객체까지.
+        if "input" in item:
+            try:
+                json.dumps(item["input"])
+            except (TypeError, ValueError):
+                item["input"] = str(item["input"])
+        out.append(item)
+    return out
 
 
 class AppError(Exception):
@@ -136,16 +177,11 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:
-        logger.warning(
-            "%s %s -> 422 validation: %s", request.method, request.url.path, exc.errors()
-        )
+        errors = _plain(exc.errors())
+        logger.warning("%s %s -> 422 validation: %s", request.method, request.url.path, errors)
         return JSONResponse(
             status_code=422,
-            content=_body(
-                "MNX-COMMON-0422",
-                describe_validation(exc.errors()),
-                {"errors": exc.errors()},
-            ),
+            content=_body("MNX-COMMON-0422", describe_validation(errors), {"errors": errors}),
         )
 
     @app.exception_handler(Exception)

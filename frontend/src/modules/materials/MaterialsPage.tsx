@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react'
-import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search, X } from 'lucide-react'
+import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search, Trash2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
@@ -16,6 +16,7 @@ import { categoriesOf, familiesOf } from '@/modules/materials/classification'
 import { BulkMaterialDialog } from '@/modules/materials/BulkMaterialDialog'
 import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
 import { fetchAll } from '@/shared/api/paging'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { OptionPicker } from '@/shared/components/OptionPicker'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -50,6 +51,10 @@ export default function MaterialsPage() {
   const [offset, setOffset] = useState(0)
   const [family, setFamily] = useState('')
   const [category, setCategory] = useState('')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [removing, setRemoving] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<Error | null>(null)
   const all = size === 'all'
 
   // 무엇으로 거를 수 있는지는 **데이터가 정한다.** 목록에 실제로 있는 조합만 준다.
@@ -68,6 +73,34 @@ export default function MaterialsPage() {
         : materialsApi.list({ q: applied, family, category, limit: size, offset }),
     [applied, family, category, size, offset, all]
   )
+
+  async function removePicked() {
+    setBusy(true)
+    setFailure(null)
+    try {
+      const done = await materialsApi.removeMany([...picked])
+      if (done.blocked.length > 0) {
+        // **조용히 세지 않는다.** 막히는 이유가 둘이라(권한 · 시료가 남음)
+        // 개수만 말하면 무엇을 해야 하는지 알 수 없다.
+        setFailure(
+          new Error(
+            `${done.deleted}건을 지웠습니다. 남은 것: ` +
+              done.blocked
+                .map((item) => `${item.name ?? item.id} (${item.reason})`)
+                .join(' · ')
+          )
+        )
+      }
+      setPicked(new Set())
+      setRemoving(false)
+      materials.reload()
+      classes.reload()
+    } catch (caught) {
+      setFailure(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const page = materials.data
   const rows = page?.items ?? []
@@ -134,6 +167,7 @@ export default function MaterialsPage() {
               // 조용히 0건이 되고, 사람은 재료가 없는 줄 안다.
               setCategory('')
               setOffset(0)
+              setPicked(new Set())
             }}
           />
           <OptionPicker
@@ -164,6 +198,46 @@ export default function MaterialsPage() {
       )}
 
       <ErrorNotice error={materials.error} className="mb-4" />
+      <ErrorNotice error={failure} className="mb-4" />
+
+      {picked.size > 0 && (
+        <div className="bg-muted/40 mb-3 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2">
+          <span className="text-sm">
+            <b>{picked.size}건</b> 선택
+          </span>
+          <Button size="sm" variant="destructive" onClick={() => setRemoving(true)}>
+            <Trash2 className="size-3.5" />
+            지우기
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+            선택 해제
+          </Button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={removing}
+        onClose={() => setRemoving(false)}
+        title={`재료 ${picked.size}건을 지웁니다`}
+        body={
+          <>
+            <p>
+              고른 <b>{picked.size}건</b>이 목록에서 사라집니다. <b>시료가 남아 있는 재료는
+              지워지지 않고</b> 이유와 함께 돌아옵니다.
+            </p>
+            <ul className="text-muted-foreground mt-2 max-h-32 space-y-0.5 overflow-y-auto font-mono text-xs">
+              {rows
+                .filter((material) => picked.has(material.id))
+                .map((material) => (
+                  <li key={material.id}>{material.record_name}</li>
+                ))}
+            </ul>
+          </>
+        }
+        confirmLabel="지우기"
+        busy={busy}
+        onConfirm={removePicked}
+      />
 
       {!materials.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
@@ -179,6 +253,24 @@ export default function MaterialsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                {/* **20건을 하나씩 여는 것은 일이 아니다.** 골라서 한 번에 지운다. */}
+                <TableHead className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="전부 선택"
+                    checked={picked.size > 0 && picked.size === rows.length}
+                    ref={(node) => {
+                      if (node) node.indeterminate = picked.size > 0 && picked.size < rows.length
+                    }}
+                    onChange={(event) =>
+                      setPicked(
+                        event.target.checked
+                          ? new Set(rows.map((material) => material.id))
+                          : new Set()
+                      )
+                    }
+                  />
+                </TableHead>
                 <TableHead>이름</TableHead>
                 <TableHead>별칭</TableHead>
                 <TableHead>분류</TableHead>
@@ -190,6 +282,21 @@ export default function MaterialsPage() {
             <TableBody>
               {rows.map((material) => (
                 <TableRow key={material.id}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      aria-label={`${material.record_name} 선택`}
+                      checked={picked.has(material.id)}
+                      onChange={(event) =>
+                        setPicked((current) => {
+                          const next = new Set(current)
+                          if (event.target.checked) next.add(material.id)
+                          else next.delete(material.id)
+                          return next
+                        })
+                      }
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-xs">
                     <Link
                       to={`/materials/${material.id}`}

@@ -1181,3 +1181,305 @@ class Test경도척도:
         assert row["measured"] is None
         assert row["declared_unit"] == "HV"
         assert "척도" in row["note"] and "환산되지 않습니다" in row["note"]
+
+
+def _bulk(client: TestClient, headers: dict[str, str], materials: list[dict[str, Any]]) -> Any:
+    response = client.post(
+        "/api/materials/bulk", json={"materials": materials}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+class Test여러_개_한꺼번에:
+    """실사용에서 나왔다 — *"여러 카테고리 재료를 한 번에"*,
+    *"한 재료 안에 다양한 시료·시편"*."""
+
+    def test_분류가_줄마다_달라도_된다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**한 판에 한 분류가 아니다.** 분류를 창 위에 하나만 두면 알루미늄 한
+        줄을 넣으려고 창을 다시 열어야 한다."""
+        body = _bulk(
+            client,
+            admin_headers,
+            [
+                {**SECC, "row": 0},
+                {"family": "Metal", "category": "Aluminum", "grade": "A5052", "row": 1},
+            ],
+        )
+        assert body["materials"] == 2
+        assert body["blocked"] == []
+
+        listing = client.get("/api/materials", headers=admin_headers).json()
+        assert {row["category"] for row in listing["items"]} == {"Steel", "Aluminum"}
+
+    def test_한_재료_아래에_시료를_여러_벌_넣는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """재료는 한 번만 만들어지고 시료가 둘 붙는다 — 이 기능의 요점이다."""
+        body = _bulk(
+            client,
+            admin_headers,
+            [
+                {
+                    **SECC,
+                    "row": 0,
+                    "samples": [
+                        {"lot_no": "LOT-A", "row": 0},
+                        {"lot_no": "LOT-B", "row": 1},
+                    ],
+                }
+            ],
+        )
+        assert (body["materials"], body["samples"]) == (1, 2)
+        names = [item["name"] for item in body["made"] if item["kind"] == "sample"]
+        assert names == ["SECC_MDOI_1.0__01", "SECC_MDOI_1.0__02"]
+
+    def test_시료_아래에_시편을_여러_개_넣는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        body = _bulk(
+            client,
+            admin_headers,
+            [
+                {
+                    **SECC,
+                    "row": 0,
+                    "samples": [
+                        {
+                            "lot_no": "LOT-A",
+                            "row": 0,
+                            "specimens": [
+                                {"orientation": "MD", "row": 0},
+                                {"orientation": "MD", "row": 1},
+                                {"orientation": "TD", "row": 2},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+        assert (body["materials"], body["samples"], body["specimens"]) == (1, 1, 3)
+        made = [item["name"] for item in body["made"] if item["kind"] == "specimen"]
+        # 방향별로 채번한다 — LT 는 1·2, TD 는 다시 1.
+        assert made == [
+            "SECC_MDOI_1.0__01__MD_01",
+            "SECC_MDOI_1.0__01__MD_02",
+            "SECC_MDOI_1.0__01__TD_01",
+        ]
+
+    def test_있는_재료_아래에_붙인다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """어제 만든 재료에 오늘 온 판을 붙이는 것이 실제 작업이다."""
+        _create_material(client, admin_headers)
+        body = _bulk(
+            client,
+            admin_headers,
+            [{**SECC, "row": 0, "samples": [{"lot_no": "LOT-C", "row": 1}]}],
+        )
+        assert body["materials"] == 0
+        assert body["samples"] == 1
+        reused = [item["reused"] for item in body["made"] if item["kind"] == "material"]
+        assert reused == [True]
+
+    def test_딸린_것_없이_이름만_겹치면_막는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**조용히 넘어가면 안 된다.** 아무것도 안 만들어졌는데 성공으로 읽힌다."""
+        _create_material(client, admin_headers)
+        body = _bulk(client, admin_headers, [{**SECC, "row": 3}])
+        assert body["materials"] == 0
+        assert body["blocked"] == [
+            {"row": 3, "reason": "같은 이름의 재료가 이미 있습니다: SECC_MDOI_1.0"}
+        ]
+
+    def test_막힌_줄만_빼고_나머지는_만든다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**한 줄이 막혔다고 전부 되돌리지 않는다.** 스무 줄을 다시 적게 된다."""
+        _create_material(client, admin_headers)
+        body = _bulk(
+            client,
+            admin_headers,
+            [
+                {**SECC, "row": 0},
+                {"family": "Metal", "category": "Steel", "grade": "SGCC", "row": 1},
+            ],
+        )
+        assert body["materials"] == 1
+        assert [item["row"] for item in body["blocked"]] == [0]
+        assert client.get("/api/materials?q=SGCC", headers=admin_headers).json()["total"] == 1
+
+    def test_막힌_재료_아래는_줄마다_짚는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """재료가 안 만들어지면 그 아래 시료·시편도 못 만든다. **말 없이
+        사라지게 두면** 사람은 표를 보며 「분명 넣었는데」 를 한다."""
+        body = _bulk(
+            client,
+            admin_headers,
+            [
+                {
+                    "family": "Metal",
+                    "category": "Steel",
+                    "grade": "SECC",
+                    "spec_thickness": 1.0,
+                    "spec_thickness_unit": "웁스",
+                    "row": 0,
+                    "samples": [{"row": 1, "specimens": [{"orientation": "MD", "row": 2}]}],
+                }
+            ],
+        )
+        assert [item["row"] for item in body["blocked"]] == [0, 1, 2]
+
+    def test_시편이_막혀도_재료와_시료는_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """마디마다 세이브포인트를 두는 이유. 방향 하나가 틀렸다고 재료까지
+        되돌리면 사람은 처음부터 다시 적는다."""
+        body = _bulk(
+            client,
+            admin_headers,
+            [
+                {
+                    **SECC,
+                    "row": 0,
+                    "samples": [
+                        {
+                            "row": 1,
+                            "specimens": [
+                                {"orientation": "MD", "row": 2},
+                                {"orientation": "옆으로", "row": 3},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+        assert (body["materials"], body["samples"], body["specimens"]) == (1, 1, 1)
+        assert [item["row"] for item in body["blocked"]] == [3]
+        # 세션이 살아 있다는 것도 함께 본다 — 되감기가 틀리면 다음 읽기가 터진다.
+        assert client.get("/api/materials", headers=admin_headers).json()["total"] == 1
+
+    def test_같은_번호를_두_번_적으면_뒤엣것만_막힌다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**여기가 세이브포인트가 실제로 필요한 자리다.**
+
+        방향 이름이 틀린 것은 DB 에 닿기 전에 걸린다. 같은 방향·번호는 넣어
+        본 뒤에야 걸리고, 그때 세션은 깨져 있다 — 되감지 않으면 그 뒤의 커밋과
+        읽기가 엉뚱한 데서 터진다.
+        """
+        body = _bulk(
+            client,
+            admin_headers,
+            [
+                {
+                    **SECC,
+                    "row": 0,
+                    "samples": [
+                        {
+                            "row": 1,
+                            "specimens": [
+                                {"orientation": "MD", "seq_no": 1, "row": 2},
+                                {"orientation": "MD", "seq_no": 1, "row": 3},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+        assert body["specimens"] == 1
+        assert [item["row"] for item in body["blocked"]] == [3]
+        assert "이미 있습니다" in body["blocked"][0]["reason"]
+        # 커밋이 살아남았는지 — 세션이 깨졌으면 여기서 드러난다.
+        listing = client.get("/api/materials", headers=admin_headers).json()
+        assert listing["total"] == 1
+
+    def test_상한을_서버가_강제한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """화면이 200줄까지만 그린다고 요청도 200줄이라는 보장은 없다."""
+        rows = [
+            {"family": "Metal", "category": "Steel", "grade": f"S{index}", "row": index}
+            for index in range(201)
+        ]
+        response = client.post(
+            "/api/materials/bulk", json={"materials": rows}, headers=admin_headers
+        )
+        assert response.status_code == 422
+        # **직접 쓴 검증기가 붙인 말이 그대로 와야 한다.** 「값이 올바르지
+        # 않습니다」만 오면 무엇이 한도인지 알 수 없고, 전에는 이 자리에서
+        # 직렬화가 터져 500 이 나갔다.
+        assert "최대 200개" in response.json()["error"]["message"]
+
+    def test_시편까지_세어_상한을_넘기지_못한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """재료만 세면 시편 수천 개짜리 요청이 통과한다."""
+        response = client.post(
+            "/api/materials/bulk",
+            json={
+                "materials": [
+                    {
+                        **SECC,
+                        "samples": [
+                            {"specimens": [{"orientation": "MD"} for _ in range(300)]}
+                        ],
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-COMMON-0422"
+
+
+class Test여러_개_한꺼번에_지우기:
+    def test_고른_것을_지운다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        one = _create_material(client, admin_headers)
+        two = _create_material(client, admin_headers, grade="SGCC")
+
+        done = client.post(
+            "/api/materials/delete",
+            json={"material_ids": [one["id"], two["id"]]},
+            headers=admin_headers,
+        )
+        assert done.status_code == 200, done.text
+        assert done.json() == {"deleted": 2, "blocked": []}
+        assert client.get("/api/materials", headers=admin_headers).json()["total"] == 0
+
+    def test_시료가_남은_것은_이유와_함께_돌려준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**막히는 이유가 둘이다** — 권한이 없는 것과 시료가 남은 것. 사람이
+        해야 할 일이 다르니 개수만 주면 안 된다."""
+        one = _create_material(client, admin_headers)
+        two = _create_material(client, admin_headers, grade="SGCC")
+        client.post(f"/api/materials/{two['id']}/samples", json={}, headers=admin_headers)
+
+        body = client.post(
+            "/api/materials/delete",
+            json={"material_ids": [one["id"], two["id"]]},
+            headers=admin_headers,
+        ).json()
+        assert body["deleted"] == 1
+        assert len(body["blocked"]) == 1
+        assert body["blocked"][0]["name"] == "SGCC_MDOI_1.0"
+        assert "시료 1건" in body["blocked"][0]["reason"]
+        # 막힌 것은 그대로 있다.
+        assert (
+            client.get(f"/api/materials/{two['id']}", headers=admin_headers).status_code == 200
+        )
+
+    def test_없는_것은_id_로_짚는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        ghost = str(uuid.uuid4())
+        body = client.post(
+            "/api/materials/delete", json={"material_ids": [ghost]}, headers=admin_headers
+        ).json()
+        assert body["deleted"] == 0
+        assert body["blocked"][0]["id"] == ghost

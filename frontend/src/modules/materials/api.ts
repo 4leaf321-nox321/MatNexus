@@ -9,6 +9,11 @@ export type Sample = components['schemas']['SampleOut']
 export type Specimen = components['schemas']['SpecimenOut']
 export type NamePreview = components['schemas']['NamePreviewOut']
 export type Classification = components['schemas']['ClassificationOut']
+/** 못 지운 것과 그 이유. */
+export type MaterialDeleteResult = components['schemas']['MaterialDeleteOut']
+export type BulkRequest = components['schemas']['BulkRequest']
+/** 무엇이 만들어졌고 어느 줄이 막혔는가. */
+export type BulkResult = components['schemas']['BulkOut']
 
 type MaterialCreate = components['schemas']['MaterialCreateRequest']
 type MaterialUpdate = components['schemas']['MaterialUpdateRequest']
@@ -47,6 +52,14 @@ export type MillCheck = components['schemas']['MillCheckOut']
 /** 넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7). */
 export type PropertyItem = components['schemas']['PropertyItemOut']
 
+/**
+ * 시편 방향. **서버의 `ORIENTATIONS` 와 같은 목록이다.**
+ *
+ * 세 화면이 각자 배열을 적어 두고 있었다 — 하나를 늘리면 나머지 둘이 조용히
+ * 뒤처진다. 재료 모듈이 시편의 주인이라 여기에 둔다.
+ */
+export const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
+
 export const LENGTH_UNIT = 'mm'
 export const DENSITY_UNIT = 'kg/m3'
 
@@ -82,6 +95,19 @@ export const materialsApi = {
   update: (id: string, payload: MaterialUpdate) =>
     api.patch<Material>(`/materials/${id}`, payload),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),
+
+  /**
+   * 고른 것을 한 번에 지운다. **하나가 막혀도 나머지는 지운다** — 막힌 것은
+   * 이유와 함께 돌아온다(권한 · 시료가 남음).
+   */
+  removeMany: (materialIds: string[]) =>
+    api.post<MaterialDeleteResult>('/materials/delete', { material_ids: materialIds }),
+
+  /**
+   * 재료·시료·시편을 한 번에. 본문은 **나무**다 — 화면의 평평한 표를
+   * `bulkRows.group` 이 묶어서 보낸다.
+   */
+  bulk: (body: BulkRequest) => api.post<BulkResult>('/materials/bulk', body),
 
   /**
    * 넣을 수 있는 물성 항목. 기준정보의 `물성 항목` 축이 정한다.

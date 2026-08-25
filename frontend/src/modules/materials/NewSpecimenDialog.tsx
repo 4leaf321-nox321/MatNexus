@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 
-import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { LENGTH_UNIT, ORIENTATIONS, materialsApi } from '@/modules/materials/api'
 import type { Specimen } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -25,7 +25,6 @@ import { Label } from '@/shared/components/ui/label'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 
 /** 방향은 자를 때 정해진다. `NA` 는 방향이 뜻 없는 시험용. */
-const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
 
 export function NewSpecimenDialog({
   sampleId,

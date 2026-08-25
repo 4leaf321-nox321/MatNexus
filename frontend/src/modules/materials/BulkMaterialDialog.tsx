@@ -1,47 +1,49 @@
 /**
- * 재료를 **여러 개 한꺼번에** 등록한다 — 표로.
+ * 재료·시료·시편을 **표 하나로 한꺼번에** 등록한다.
  *
- * 한 판에 같은 Family·Category 로 열 몇 개를 넣는 일이 실제 작업이다. 창을
- * 열고 닫기를 열 번 하면 그 자체가 일이 되고, 그러다 하나를 빠뜨린다.
+ * 판이 하나 들어오면 셋이 같은 순간에 정해진다. 창을 셋 거치게 하면 그 사이에
+ * 하나를 빠뜨리고, 빠뜨린 것은 시험 파일이 도착할 때에야 보인다.
  *
- * ## 공통은 위에, 다른 것만 줄로
+ * ## 빈 칸은 위와 같다
  *
- * Family·Category·적용 제품·부위는 대개 같다. 그것을 줄마다 적게 하면 **오타
- * 하나가 분류를 갈라 놓고**, 그때 목록이 두 덩이로 보인다. 다만 줄에 적은 값이
- * 이긴다 — 한 판에 부위가 다른 것이 하나 섞이는 일은 늘 있다.
+ * 재료 칸이 빈 줄은 위 줄의 재료에, 시료 칸이 빈 줄은 위 줄의 시료에 붙는다.
+ * 엑셀에서 늘 하는 방식이고, 덕분에 한 재료 아래 시료 여럿·한 시료 아래 시편
+ * 여럿이 표에서 그대로 읽힌다. 묶는 규칙은 `bulkRows.group` 하나에만 산다.
  *
- * ## 이름은 서버가 만든다
+ * ## 열은 켜고 끈다
  *
- * 화면이 규칙을 다시 구현하지 않는다(ADR 0004). 여기서는 재료를 하나씩 만들고
- * 서버가 붙인 이름을 그대로 받는다 — 미리 보여 주려면 줄마다 서버에 물어야
- * 하는데, 스무 줄이면 스무 번이다. 대신 **같은 이름이 될 줄끼리는 표에서 짚는다**
- * (`bulkRows.problems`).
+ * 셋을 다 받으면 칸이 스물 몇 개다. 재료만 넣는 날에 시편 칸까지 펼쳐 두면
+ * 아무것도 못 읽는다. 그래서 **필요한 열만 켠다.**
  *
- * ## 한 줄이 막혀도 나머지는 만든다
+ * ## 보내는 것은 한 번
  *
- * 열 줄 중 셋째가 이미 있는 이름이라 전부 실패하면, 사람은 무엇이 문제인지
- * 모른 채 다시 적어야 한다. **만들 수 있는 것은 만들고, 못 만든 줄은 이유와
- * 함께 남긴다.** 그리고 **성공한 줄은 표에서 지운다** — 안 지우면 다시 눌렀을
- * 때 같은 재료를 또 만들려 든다.
+ * 줄마다 요청을 보내면 스무 줄이 예순 번이 되고, 중간에 끊기면 재료만 만들어진
+ * 채로 남는다. 서버가 마디마다 세이브포인트를 두고 한 번에 받는다 —
+ * **만들 수 있는 것은 만들고, 못 만든 마디는 줄 번호와 이유로 돌아온다.**
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Columns3, Plus, Trash2 } from 'lucide-react'
 
-import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
+import { materialsApi } from '@/modules/materials/api'
+import type { BulkResult } from '@/modules/materials/api'
 import {
   COLUMNS,
+  MAX_ROWS,
   blankRow,
   blankRows,
+  carried,
+  group,
+  groupLabel,
+  has,
+  initialShown,
   isEmpty,
-  numberOf,
   paste,
   problems,
   spreads,
-  textOf,
+  tally,
 } from '@/modules/materials/bulkRows'
-import type { Row } from '@/modules/materials/bulkRows'
-import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
+import type { Group, Row } from '@/modules/materials/bulkRows'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -53,6 +55,15 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
+import {
   Table,
   TableBody,
   TableCell,
@@ -60,6 +71,90 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+
+const GROUPS: Group[] = ['material', 'sample', 'specimen']
+
+/** 갈래마다 다른 바탕색 — 스물 몇 칸에서 어디까지가 시료인지 눈으로 잡는다. */
+const TINT: Record<Group, string> = {
+  material: '',
+  sample: 'bg-muted/30',
+  specimen: 'bg-muted/60',
+}
+
+function ColumnPicker({
+  shown,
+  onChange,
+}: {
+  shown: Set<string>
+  onChange: (next: Set<string>) => void
+}) {
+  /** 이 갈래가 하나라도 켜져 있나. */
+  function on(target: Group): boolean {
+    return COLUMNS.some((column) => column.group === target && shown.has(column.key))
+  }
+
+  function toggle(key: string) {
+    const next = new Set(shown)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    onChange(next)
+  }
+
+  function toggleGroup(target: Group) {
+    const off = on(target)
+    const next = new Set(shown)
+    for (const column of COLUMNS.filter((column) => column.group === target)) {
+      // 켤 때는 **쓸 만한 것만** 켠다. 아홉 칸을 한꺼번에 펼치면 표가 화면을
+      // 벗어나고, 사람은 무엇이 켜졌는지도 모른다.
+      if (off) next.delete(column.key)
+      else if (column.shown) next.add(column.key)
+    }
+    onChange(next)
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Columns3 className="size-3.5" />열 고르기 ({shown.size})
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-96 w-56 overflow-y-auto">
+        {GROUPS.map((target) => (
+          <div key={target}>
+            {target !== 'material' && <DropdownMenuSeparator />}
+            <DropdownMenuLabel className="flex items-center justify-between">
+              {groupLabel(target)}
+              <button
+                type="button"
+                aria-label={`${groupLabel(target)} 열 ${on(target) ? '끄기' : '켜기'}`}
+                className="text-primary text-xs font-normal hover:underline"
+                onClick={(event) => {
+                  event.preventDefault()
+                  toggleGroup(target)
+                }}
+              >
+                {on(target) ? '끄기' : '켜기'}
+              </button>
+            </DropdownMenuLabel>
+            {COLUMNS.filter((column) => column.group === target).map((column) => (
+              <DropdownMenuCheckboxItem
+                key={column.key}
+                checked={shown.has(column.key)}
+                onSelect={(event) => event.preventDefault()}
+                onCheckedChange={() => toggle(column.key)}
+              >
+                {column.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </div>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onChange(initialShown())}>처음으로</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export function BulkMaterialDialog({
   open,
@@ -70,29 +165,38 @@ export function BulkMaterialDialog({
   onClose: () => void
   onDone: () => void
 }) {
-  const [family, setFamily] = useState('Metal')
-  const [category, setCategory] = useState('Steel')
-  const [product, setProduct] = useState('')
-  const [part, setPart] = useState('')
+  const [shown, setShown] = useState<Set<string>>(initialShown)
   const [rows, setRows] = useState<Row[]>(blankRows)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const [blocked, setBlocked] = useState<string[]>([])
+  const [result, setResult] = useState<BulkResult | null>(null)
   const first = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
     setRows(blankRows())
     setError(null)
-    setBlocked([])
+    setResult(null)
     // 열자마자 첫 칸에 적을 수 있어야 한다 — 붙여 넣기가 이 창의 주된 쓰임이다.
     setTimeout(() => first.current?.focus(), 0)
   }, [open])
 
-  const filled = useMemo(() => rows.filter((row) => !isEmpty(row)), [rows])
-  const found = useMemo(() => problems(rows), [rows])
+  const visible = useMemo(
+    () => COLUMNS.filter((column) => shown.has(column.key)),
+    [shown]
+  )
+  // 사람이 적은 것과, 위에서 이어받은 것을 채운 것. 화면은 앞을, 검사와
+  // 보내기는 뒤를 본다.
+  const effective = useMemo(() => carried(rows, visible), [rows, visible])
+  const found = useMemo(() => problems(effective, visible), [effective, visible])
+  const tree = useMemo(() => group(effective, visible), [effective, visible])
+  const counted = useMemo(
+    () => tally(tree, effective, visible),
+    [tree, effective, visible]
+  )
   const bad = Object.keys(found).length
-  const ready = filled.length > 0 && bad === 0 && Boolean(category) && !busy
+  const filled = rows.filter((row) => !isEmpty(row, visible)).length
+  const ready = filled > 0 && bad === 0 && filled <= MAX_ROWS && !busy
 
   function edit(at: number, key: string, value: string) {
     setRows((current) => current.map((row, i) => (i === at ? { ...row, [key]: value } : row)))
@@ -101,159 +205,45 @@ export function BulkMaterialDialog({
   async function submit() {
     setBusy(true)
     setError(null)
-    const failed: string[] = []
-    const made: Row[] = []
-
-    for (const row of filled) {
-      try {
-        await materialsApi.create({
-          family,
-          category,
-          grade: row.grade.trim(),
-          details: textOf(row, 'details'),
-          spec_thickness: numberOf(row, 'spec_thickness'),
-          spec_thickness_unit: LENGTH_UNIT,
-          alias: textOf(row, 'alias'),
-          // 줄에 적었으면 그것이, 아니면 위에서 고른 것이 간다.
-          applied_product: textOf(row, 'applied_product') ?? (product || null),
-          applied_part: textOf(row, 'applied_part') ?? (part || null),
-          density: numberOf(row, 'density'),
-          density_unit: DENSITY_UNIT,
-          poisson_ratio: numberOf(row, 'poisson_ratio'),
-        })
-        made.push(row)
-      } catch (caught) {
-        failed.push(
-          `${row.grade}${row.details ? ` ${row.details}` : ''} — ${
-            caught instanceof Error ? caught.message : '실패'
-          }`
-        )
+    setResult(null)
+    try {
+      const done = await materialsApi.bulk(tree)
+      setResult(done)
+      if (done.materials + done.samples + done.specimens > 0) onDone()
+      if (done.blocked.length === 0) {
+        onClose()
+        return
       }
+      // **하나도 못 만들었으면 창을 닫지 않는다.** 적어 둔 것이 사라진다.
+      // 만들어진 줄만 걷어 내고 문제 있는 줄을 남긴다.
+      const stuck = new Set(done.blocked.map((item) => item.row))
+      setRows((current) => {
+        const left = current.filter((_, at) => stuck.has(at))
+        return left.length > 0 ? left : blankRows()
+      })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('등록하지 못했습니다.'))
+    } finally {
+      setBusy(false)
     }
-
-    setBusy(false)
-    setBlocked(failed)
-    if (made.length > 0) onDone()
-    if (failed.length === 0) {
-      onClose()
-      return
-    }
-    // **하나도 못 만들었으면 창을 닫지 않는다.** 적어 둔 것이 사라진다.
-    // 만들어진 줄만 걷어 내고 문제 있는 줄을 남긴다.
-    setRows((current) => {
-      const left = current.filter((row) => !made.includes(row))
-      return left.length > 0 ? left : blankRows()
-    })
-    setError(new Error(`${made.length}건을 만들었습니다. ${failed.length}건은 못 만들었습니다.`))
   }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-[min(96vw,72rem)]">
+      <DialogContent className="sm:max-w-[min(97vw,84rem)]">
         <DialogHeader>
-          <DialogTitle>재료 여러 개 등록</DialogTitle>
+          <DialogTitle>여러 개 등록</DialogTitle>
           <DialogDescription>
-            한 줄이 재료 하나입니다. <b>엑셀에서 복사해 표에 그대로 붙여 넣을 수 있습니다</b> —
-            붙여 넣은 자리부터 채워지고 줄이 모자라면 늘어납니다.
+            한 줄이 하나입니다. <b>재료 칸이 빈 줄은 위 줄의 재료에</b>, 시료 칸이 빈 줄은 위
+            줄의 시료에 붙습니다 — 한 재료 아래 시료 여럿, 한 시료 아래 시편 여럿을 그렇게
+            넣습니다. 엑셀에서 복사해 표에 그대로 붙여 넣을 수 있습니다.
           </DialogDescription>
         </DialogHeader>
 
         <ErrorNotice error={error} />
 
-        <div className="grid grid-cols-4 gap-3">
-          <VocabularyField slug="family" label="Family" value={family} onChange={setFamily} />
-          <VocabularyField
-            slug="category"
-            label="Category"
-            value={category}
-            parentValue={family}
-            onChange={setCategory}
-          />
-          <VocabularyField
-            slug="product"
-            label="적용 제품 (모든 줄)"
-            value={product}
-            onChange={setProduct}
-          />
-          <VocabularyField
-            slug="part"
-            label="적용 부위 (모든 줄)"
-            value={part}
-            onChange={setPart}
-          />
-        </div>
-
-        <div className="rounded-md border">
-          <Table className="text-sm">
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="w-10 text-center text-xs">#</TableHead>
-                {COLUMNS.map((column) => (
-                  <TableHead key={column.key} className={`${column.width} text-xs`}>
-                    {column.label}
-                    {column.hint && (
-                      <span className="text-muted-foreground font-normal"> ({column.hint})</span>
-                    )}
-                    {column.key === 'grade' && <span className="text-destructive"> *</span>}
-                  </TableHead>
-                ))}
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row, at) => (
-                <TableRow key={at} className="hover:bg-transparent">
-                  <TableCell className="text-muted-foreground p-0 text-center text-xs">
-                    {at + 1}
-                  </TableCell>
-                  {COLUMNS.map((column, across) => {
-                    const why = found[at]?.[column.key]
-                    return (
-                      <TableCell key={column.key} className="p-0">
-                        <input
-                          ref={at === 0 && across === 0 ? first : undefined}
-                          aria-label={`${at + 1}번 줄 ${column.label}`}
-                          aria-invalid={why ? true : undefined}
-                          title={why}
-                          inputMode={column.kind === 'number' ? 'decimal' : undefined}
-                          value={row[column.key] ?? ''}
-                          placeholder={at === 0 ? column.placeholder : undefined}
-                          onChange={(event) => edit(at, column.key, event.target.value)}
-                          onPaste={(event) => {
-                            const text = event.clipboardData.getData('text')
-                            if (!spreads(text)) return
-                            // 여러 칸짜리다. 그대로 두면 탭까지 한 칸에 들어간다.
-                            event.preventDefault()
-                            setRows((current) => paste(current, text, at, across))
-                          }}
-                          className={`focus:bg-accent/40 h-8 w-full bg-transparent px-2 outline-none ${
-                            why ? 'text-destructive bg-destructive/10' : ''
-                          }`}
-                        />
-                      </TableCell>
-                    )
-                  })}
-                  <TableCell className="p-0 text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7"
-                      aria-label={`${at + 1}번 줄 지우기`}
-                      disabled={rows.length === 1}
-                      onClick={() =>
-                        setRows((current) => current.filter((_, i) => i !== at))
-                      }
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ColumnPicker shown={shown} onChange={setShown} />
           <Button
             variant="secondary"
             size="sm"
@@ -262,20 +252,151 @@ export function BulkMaterialDialog({
             <Plus className="size-3.5" /> 줄 추가
           </Button>
           <p className="text-muted-foreground text-xs">
-            {filled.length > 0 ? <b>{filled.length}건</b> : '적은 줄이 없습니다'}
-            {filled.length > 0 && '을 만듭니다'}
+            {counted.materials > 0 || counted.samples > 0 ? (
+              <>
+                재료 <b>{counted.materials}</b> · 시료 <b>{counted.samples}</b> · 시편{' '}
+                <b>{counted.specimens}</b>
+              </>
+            ) : (
+              '적은 줄이 없습니다'
+            )}
+            {counted.implied > 0 && (
+              // **말해 주지 않으면 놀란다.** 시편만 적으면 시료가 저절로 생긴다.
+              <span> · 시료 {counted.implied}건은 시편 때문에 저절로 만들어집니다</span>
+            )}
             {bad > 0 && <span className="text-destructive"> · {bad}줄을 고쳐야 합니다</span>}
-            {' · 이름은 서버가 규칙대로 붙입니다.'}
           </p>
         </div>
 
-        {blocked.length > 0 && (
-          // **조용히 세지 않는다.** 무엇이 안 만들어졌는지 말해야 다시 적을 수 있다.
-          <ul className="text-destructive max-h-32 space-y-0.5 overflow-y-auto text-xs">
-            {blocked.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+        <div className="rounded-md border">
+          <Table className="text-sm">
+            <TableHeader className="bg-muted/40">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-8" />
+                {GROUPS.filter((target) =>
+                  visible.some((column) => column.group === target)
+                ).map((target) => (
+                  <TableHead
+                    key={target}
+                    colSpan={visible.filter((column) => column.group === target).length}
+                    className={`border-l text-center text-xs ${TINT[target]}`}
+                  >
+                    {groupLabel(target)}
+                  </TableHead>
+                ))}
+                <TableHead className="w-8" />
+              </TableRow>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-8 text-center text-xs">#</TableHead>
+                {visible.map((column, across) => (
+                  <TableHead
+                    key={column.key}
+                    className={`${column.width} text-xs ${TINT[column.group]} ${
+                      visible[across - 1]?.group !== column.group ? 'border-l' : ''
+                    }`}
+                  >
+                    {column.label}
+                    {column.hint && (
+                      <span className="text-muted-foreground font-normal"> ({column.hint})</span>
+                    )}
+                  </TableHead>
+                ))}
+                <TableHead className="w-8" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row, at) => {
+                // 재료 칸이 채워진 줄이 새 덩이의 시작이다. 얇은 선 하나로
+                // 「여기부터 다른 재료」를 보인다.
+                const starts = at > 0 && has(row, 'material', visible)
+                return (
+                  <TableRow
+                    key={at}
+                    className={`hover:bg-transparent ${starts ? 'border-t-foreground/25 border-t-2' : ''}`}
+                  >
+                    <TableCell className="text-muted-foreground p-0 text-center text-xs">
+                      {at + 1}
+                    </TableCell>
+                    {visible.map((column, across) => {
+                      const why = found[at]?.[column.key]
+                      return (
+                        <TableCell
+                          key={column.key}
+                          className={`p-0 ${TINT[column.group]} ${
+                            visible[across - 1]?.group !== column.group ? 'border-l' : ''
+                          }`}
+                        >
+                          <input
+                            ref={at === 0 && across === 0 ? first : undefined}
+                            aria-label={`${at + 1}번 줄 ${groupLabel(column.group)} ${column.label}`}
+                            aria-invalid={why ? true : undefined}
+                            title={why}
+                            inputMode={column.kind === 'number' ? 'decimal' : undefined}
+                            value={row[column.key] ?? ''}
+                            placeholder={
+                              // 이어받은 값은 **흐리게 비쳐 준다.** 안 보이면
+                              // 사람은 분류가 비었다고 읽고 줄마다 다시 적는다.
+                              (row[column.key] ?? '') === '' && effective[at]?.[column.key]
+                                ? effective[at][column.key]
+                                : at === 0
+                                  ? column.placeholder
+                                  : undefined
+                            }
+                            onChange={(event) => edit(at, column.key, event.target.value)}
+                            onPaste={(event) => {
+                              const text = event.clipboardData.getData('text')
+                              if (!spreads(text)) return
+                              // 여러 칸짜리다. 그대로 두면 탭까지 한 칸에 들어간다.
+                              event.preventDefault()
+                              setRows((current) => paste(current, text, at, across, visible))
+                            }}
+                            className={`focus:bg-accent/50 h-8 w-full bg-transparent px-2 outline-none ${
+                              why ? 'text-destructive bg-destructive/10' : ''
+                            }`}
+                          />
+                        </TableCell>
+                      )
+                    })}
+                    <TableCell className="p-0 text-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        aria-label={`${at + 1}번 줄 지우기`}
+                        disabled={rows.length === 1}
+                        onClick={() => setRows((current) => current.filter((_, i) => i !== at))}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+
+        {filled > MAX_ROWS && (
+          <p className="text-destructive text-xs">
+            한 번에 {MAX_ROWS}줄까지 넣을 수 있습니다. 지금 {filled}줄입니다.
+          </p>
+        )}
+
+        {result && result.blocked.length > 0 && (
+          // **조용히 세지 않는다.** 어느 줄이 왜 막혔는지 말해야 고칠 수 있다.
+          <div className="text-xs">
+            <p className="mb-1">
+              재료 {result.materials} · 시료 {result.samples} · 시편 {result.specimens}건을
+              만들었습니다.
+            </p>
+            <ul className="text-destructive max-h-32 space-y-0.5 overflow-y-auto">
+              {result.blocked.map((item) => (
+                <li key={`${item.row}-${item.reason}`}>
+                  {item.row + 1}번 줄 — {item.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         <DialogFooter>
@@ -283,7 +404,7 @@ export function BulkMaterialDialog({
             취소
           </Button>
           <Button onClick={submit} disabled={!ready}>
-            {busy ? '만드는 중…' : `${filled.length || ''}건 등록`}
+            {busy ? '만드는 중…' : '등록'}
           </Button>
         </DialogFooter>
       </DialogContent>

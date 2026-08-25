@@ -850,6 +850,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Bulk
+         * @description 재료·시료·시편을 한 번에 넣는다.
+         *
+         *     ## 마디마다 세이브포인트
+         *
+         *     시편 하나가 막혔다고 재료와 시료까지 되돌리면, 사람은 스무 줄을 다시
+         *     적어야 한다. **만들 수 있는 것은 만들고, 못 만든 마디는 줄 번호와 이유로
+         *     돌려준다.** 그래서 마디마다 `begin_nested()` 로 감싼다 — 실패한 마디만
+         *     되감기고 세션은 계속 쓸 수 있다.
+         *
+         *     ## 이미 있는 재료는 찾아 쓴다
+         *
+         *     같은 재료 아래에 시료를 여러 벌 넣는 것이 이 기능의 요점이다. 그런데
+         *     **딸린 것이 없는데 이름만 겹치면 그것은 실수다** — 조용히 넘어가면 아무것도
+         *     안 만들어졌는데 성공으로 읽힌다. 그때만 막는다.
+         */
+        post: operations["create_bulk_api_materials_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/classifications": {
         parameters: {
             query?: never;
@@ -870,6 +903,33 @@ export interface paths {
         get: operations["list_classifications_api_materials_classifications_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Materials
+         * @description 여러 개를 한 번에 지운다. **하나가 막혀도 나머지는 지운다.**
+         *
+         *     막히는 이유가 둘이라 이유를 함께 돌려준다 — 권한이 없는 것과 시료가 남아
+         *     있는 것. 사람이 해야 할 일이 다르다(관리자에게 말하기 · 시료 먼저 치우기).
+         *     개수만 주면 그 둘을 구별할 수 없다.
+         *
+         *     `DELETE` 가 아니라 `POST /delete` 인 이유는 시험 쪽과 같다: 본문에 목록을
+         *     싣는다.
+         */
+        post: operations["delete_materials_api_materials_delete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3089,6 +3149,13 @@ export interface components {
             /** Tested At */
             tested_at?: string | null;
         };
+        /** BulkBlockedOut */
+        BulkBlockedOut: {
+            /** Reason */
+            reason: string;
+            /** Row */
+            row: number;
+        };
         /** BulkDeleteItemOut */
         BulkDeleteItemOut: {
             /** Deleted */
@@ -3116,6 +3183,159 @@ export interface components {
         BulkDeleteRequest: {
             /** Ids */
             ids: string[];
+        };
+        /** BulkMadeOut */
+        BulkMadeOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "material" | "sample" | "specimen";
+            /** Name */
+            name: string;
+            /**
+             * Reused
+             * @default false
+             */
+            reused: boolean;
+            /** Row */
+            row: number;
+        };
+        /** BulkMaterialRequest */
+        BulkMaterialRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Applied Part */
+            applied_part?: string | null;
+            /** Applied Product */
+            applied_product?: string | null;
+            /** Category */
+            category: string;
+            /** Density */
+            density?: number | null;
+            /**
+             * Density Unit
+             * @default kg/m3
+             */
+            density_unit: string;
+            /** Details */
+            details?: string | null;
+            /** Family */
+            family: string;
+            /** Grade */
+            grade: string;
+            /** Legacy Id */
+            legacy_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+            /**
+             * Row
+             * @default 0
+             */
+            row: number;
+            /** Samples */
+            samples?: components["schemas"]["BulkSampleRequest"][];
+            /** Spec Thickness */
+            spec_thickness?: number | null;
+            /**
+             * Spec Thickness Unit
+             * @default mm
+             */
+            spec_thickness_unit: string;
+            /** Workspace Slug */
+            workspace_slug?: string | null;
+        };
+        /** BulkOut */
+        BulkOut: {
+            /** Blocked */
+            blocked: components["schemas"]["BulkBlockedOut"][];
+            /** Made */
+            made: components["schemas"]["BulkMadeOut"][];
+            /** Materials */
+            materials: number;
+            /** Samples */
+            samples: number;
+            /** Specimens */
+            specimens: number;
+        };
+        /**
+         * BulkRequest
+         * @description 여러 개를 한꺼번에 — **평평한 표가 아니라 나무로 받는다.**
+         *
+         *     화면의 표는 평평하다. 재료 칸이 빈 줄은 위 줄의 재료에 붙는다 — 엑셀에서
+         *     늘 하는 방식이다. 그 「빈 칸은 위와 같다」를 서버가 다시 해석하게 하면
+         *     규칙이 두 곳에 살고, 언젠가 갈라진다. 화면이 한 번 묶어서 보낸다.
+         */
+        BulkRequest: {
+            /** Materials */
+            materials: components["schemas"]["BulkMaterialRequest"][];
+        };
+        /** BulkSampleRequest */
+        BulkSampleRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Density */
+            density?: number | null;
+            /**
+             * Density Unit
+             * @default kg/m3
+             */
+            density_unit: string;
+            /** Distributor */
+            distributor?: string | null;
+            /** Lot No */
+            lot_no?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Primary Vendor */
+            primary_vendor?: string | null;
+            /** Production Date */
+            production_date?: string | null;
+            /**
+             * Row
+             * @default 0
+             */
+            row: number;
+            /** Sales Type */
+            sales_type?: string | null;
+            /** Specimens */
+            specimens?: components["schemas"]["BulkSpecimenRequest"][];
+            /** Workspace Slug */
+            workspace_slug?: string | null;
+        };
+        /** BulkSpecimenRequest */
+        BulkSpecimenRequest: {
+            /** Gauge Length */
+            gauge_length?: number | null;
+            /**
+             * Length Unit
+             * @default mm
+             */
+            length_unit: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Orientation
+             * @default NA
+             */
+            orientation: string;
+            /**
+             * Row
+             * @default 0
+             */
+            row: number;
+            /** Seq No */
+            seq_no?: number | null;
+            /** Standard */
+            standard?: string | null;
+            /** Thickness */
+            thickness?: number | null;
+            /** Width */
+            width?: number | null;
         };
         /**
          * BulkTermCreateRequest
@@ -4192,6 +4412,25 @@ export interface components {
             /** Reference Temperature K */
             reference_temperature_k: number;
         };
+        /**
+         * MaterialBlockedOut
+         * @description 못 지운 것 하나. **이유를 함께 준다.**
+         *
+         *     재료는 시료가 남아 있으면 안 지워진다 — 그것은 권한 문제와 다르고, 사람이
+         *     해야 할 일도 다르다(하나는 관리자에게 말하는 것, 하나는 시료를 먼저 치우는
+         *     것). 개수만 돌려주면 둘을 구별할 수 없다.
+         */
+        MaterialBlockedOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string | null;
+            /** Reason */
+            reason: string;
+        };
         /** MaterialCreateRequest */
         MaterialCreateRequest: {
             /** Alias */
@@ -4230,6 +4469,18 @@ export interface components {
             spec_thickness_unit: string;
             /** Workspace Slug */
             workspace_slug?: string | null;
+        };
+        /** MaterialDeleteOut */
+        MaterialDeleteOut: {
+            /** Blocked */
+            blocked: components["schemas"]["MaterialBlockedOut"][];
+            /** Deleted */
+            deleted: number;
+        };
+        /** MaterialDeleteRequest */
+        MaterialDeleteRequest: {
+            /** Material Ids */
+            material_ids: string[];
         };
         /** MaterialOut */
         MaterialOut: {
@@ -8361,6 +8612,39 @@ export interface operations {
             };
         };
     };
+    create_bulk_api_materials_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_classifications_api_materials_classifications_get: {
         parameters: {
             query?: never;
@@ -8377,6 +8661,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClassificationOut"][];
+                };
+            };
+        };
+    };
+    delete_materials_api_materials_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialDeleteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

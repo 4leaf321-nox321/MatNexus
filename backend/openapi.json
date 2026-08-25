@@ -604,6 +604,24 @@
         "title": "Body_upload_test_run_api_test_runs_post",
         "type": "object"
       },
+      "BulkBlockedOut": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "reason"
+        ],
+        "title": "BulkBlockedOut",
+        "type": "object"
+      },
       "BulkDeleteItemOut": {
         "properties": {
           "deleted": {
@@ -682,6 +700,501 @@
           "ids"
         ],
         "title": "BulkDeleteRequest",
+        "type": "object"
+      },
+      "BulkMadeOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "material",
+              "sample",
+              "specimen"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reused": {
+            "default": false,
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "kind",
+          "name"
+        ],
+        "title": "BulkMadeOut",
+        "type": "object"
+      },
+      "BulkMaterialRequest": {
+        "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
+          "applied_part": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Part"
+          },
+          "applied_product": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Product"
+          },
+          "category": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "density": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density"
+          },
+          "density_unit": {
+            "default": "kg/m3",
+            "title": "Density Unit",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "family": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Family",
+            "type": "string"
+          },
+          "grade": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Grade",
+            "type": "string"
+          },
+          "legacy_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "poisson_ratio": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 0.5,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio"
+          },
+          "row": {
+            "default": 0,
+            "title": "Row",
+            "type": "integer"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/BulkSampleRequest"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "spec_thickness": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spec Thickness"
+          },
+          "spec_thickness_unit": {
+            "default": "mm",
+            "title": "Spec Thickness Unit",
+            "type": "string"
+          },
+          "workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Slug"
+          }
+        },
+        "required": [
+          "family",
+          "category",
+          "grade"
+        ],
+        "title": "BulkMaterialRequest",
+        "type": "object"
+      },
+      "BulkOut": {
+        "properties": {
+          "blocked": {
+            "items": {
+              "$ref": "#/components/schemas/BulkBlockedOut"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "made": {
+            "items": {
+              "$ref": "#/components/schemas/BulkMadeOut"
+            },
+            "title": "Made",
+            "type": "array"
+          },
+          "materials": {
+            "title": "Materials",
+            "type": "integer"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "materials",
+          "samples",
+          "specimens",
+          "made",
+          "blocked"
+        ],
+        "title": "BulkOut",
+        "type": "object"
+      },
+      "BulkRequest": {
+        "description": "여러 개를 한꺼번에 — **평평한 표가 아니라 나무로 받는다.**\n\n화면의 표는 평평하다. 재료 칸이 빈 줄은 위 줄의 재료에 붙는다 — 엑셀에서\n늘 하는 방식이다. 그 「빈 칸은 위와 같다」를 서버가 다시 해석하게 하면\n규칙이 두 곳에 살고, 언젠가 갈라진다. 화면이 한 번 묶어서 보낸다.",
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/BulkMaterialRequest"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Materials",
+            "type": "array"
+          }
+        },
+        "required": [
+          "materials"
+        ],
+        "title": "BulkRequest",
+        "type": "object"
+      },
+      "BulkSampleRequest": {
+        "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
+          "density": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density"
+          },
+          "density_unit": {
+            "default": "kg/m3",
+            "title": "Density Unit",
+            "type": "string"
+          },
+          "distributor": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distributor"
+          },
+          "lot_no": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot No"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "primary_vendor": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Vendor"
+          },
+          "production_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production Date"
+          },
+          "row": {
+            "default": 0,
+            "title": "Row",
+            "type": "integer"
+          },
+          "sales_type": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sales Type"
+          },
+          "specimens": {
+            "items": {
+              "$ref": "#/components/schemas/BulkSpecimenRequest"
+            },
+            "title": "Specimens",
+            "type": "array"
+          },
+          "workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Slug"
+          }
+        },
+        "title": "BulkSampleRequest",
+        "type": "object"
+      },
+      "BulkSpecimenRequest": {
+        "properties": {
+          "gauge_length": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gauge Length"
+          },
+          "length_unit": {
+            "default": "mm",
+            "title": "Length Unit",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "orientation": {
+            "default": "NA",
+            "maxLength": 10,
+            "title": "Orientation",
+            "type": "string"
+          },
+          "row": {
+            "default": 0,
+            "title": "Row",
+            "type": "integer"
+          },
+          "seq_no": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seq No"
+          },
+          "standard": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          },
+          "thickness": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thickness"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          }
+        },
+        "title": "BulkSpecimenRequest",
         "type": "object"
       },
       "BulkTermCreateRequest": {
@@ -3316,6 +3829,38 @@
         "title": "MasterCurveRequest",
         "type": "object"
       },
+      "MaterialBlockedOut": {
+        "description": "못 지운 것 하나. **이유를 함께 준다.**\n\n재료는 시료가 남아 있으면 안 지워진다 — 그것은 권한 문제와 다르고, 사람이\n해야 할 일도 다르다(하나는 관리자에게 말하는 것, 하나는 시료를 먼저 치우는\n것). 개수만 돌려주면 둘을 구별할 수 없다.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "reason"
+        ],
+        "title": "MaterialBlockedOut",
+        "type": "object"
+      },
       "MaterialCreateRequest": {
         "properties": {
           "alias": {
@@ -3472,6 +4017,46 @@
           "grade"
         ],
         "title": "MaterialCreateRequest",
+        "type": "object"
+      },
+      "MaterialDeleteOut": {
+        "properties": {
+          "blocked": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialBlockedOut"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted",
+          "blocked"
+        ],
+        "title": "MaterialDeleteOut",
+        "type": "object"
+      },
+      "MaterialDeleteRequest": {
+        "properties": {
+          "material_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Material Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "material_ids"
+        ],
+        "title": "MaterialDeleteRequest",
         "type": "object"
       },
       "MaterialOut": {
@@ -13041,6 +13626,48 @@
         ]
       }
     },
+    "/api/materials/bulk": {
+      "post": {
+        "description": "재료·시료·시편을 한 번에 넣는다.\n\n## 마디마다 세이브포인트\n\n시편 하나가 막혔다고 재료와 시료까지 되돌리면, 사람은 스무 줄을 다시\n적어야 한다. **만들 수 있는 것은 만들고, 못 만든 마디는 줄 번호와 이유로\n돌려준다.** 그래서 마디마다 `begin_nested()` 로 감싼다 — 실패한 마디만\n되감기고 세션은 계속 쓸 수 있다.\n\n## 이미 있는 재료는 찾아 쓴다\n\n같은 재료 아래에 시료를 여러 벌 넣는 것이 이 기능의 요점이다. 그런데\n**딸린 것이 없는데 이름만 겹치면 그것은 실수다** — 조용히 넘어가면 아무것도\n안 만들어졌는데 성공으로 읽힌다. 그때만 막는다.",
+        "operationId": "create_bulk_api_materials_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Bulk",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
     "/api/materials/classifications": {
       "get": {
         "description": "쓰이고 있는 Family·Category 조합.\n\n**`/{material_id}` 보다 먼저 선언해야 한다.** FastAPI 는 선언 순서대로 맞춰\n보므로, 뒤에 두면 `classifications` 가 UUID 자리에 들어가 422 가 난다.\n\n보이는 범위 안에서만 센다 — 남의 부서 분류가 목록에 뜨면 고를 수는 있는데\n결과가 늘 0건이다.",
@@ -13062,6 +13689,48 @@
           }
         },
         "summary": "List Classifications",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/delete": {
+      "post": {
+        "description": "여러 개를 한 번에 지운다. **하나가 막혀도 나머지는 지운다.**\n\n막히는 이유가 둘이라 이유를 함께 돌려준다 — 권한이 없는 것과 시료가 남아\n있는 것. 사람이 해야 할 일이 다르다(관리자에게 말하기 · 시료 먼저 치우기).\n개수만 주면 그 둘을 구별할 수 없다.\n\n`DELETE` 가 아니라 `POST /delete` 인 이유는 시험 쪽과 같다: 본문에 목록을\n싣는다.",
+        "operationId": "delete_materials_api_materials_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialDeleteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Materials",
         "tags": [
           "materials"
         ]

@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import false, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from app.database import get_db
@@ -23,10 +24,18 @@ from app.modules.materials.models import ORIENTATIONS, Material, Sample, Specime
 from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
+    BulkBlockedOut,
+    BulkMadeOut,
+    BulkMaterialRequest,
+    BulkOut,
+    BulkRequest,
     ClassificationOut,
     DeclaredPointOut,
     DeclaredPropertyOut,
+    MaterialBlockedOut,
     MaterialCreateRequest,
+    MaterialDeleteOut,
+    MaterialDeleteRequest,
     MaterialOut,
     MaterialUpdateRequest,
     MillCheckOut,
@@ -52,6 +61,7 @@ from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
+from app.modules.workspaces.models import Workspace
 from app.shared import audit, specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
@@ -478,19 +488,27 @@ def list_materials(
     )
 
 
-@router.post("", response_model=MaterialOut, status_code=201)
-def create_material(
-    payload: MaterialCreateRequest,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> MaterialOut:
-    workspace = services.resolve_workspace(db, user, payload.workspace_slug)
-    thickness_m = services.to_si(
-        payload.spec_thickness, payload.spec_thickness_unit, field="두께"
+def _record_name(payload: MaterialCreateRequest) -> str:
+    """이 값들이 만들 재료 이름. **이름을 만드는 곳은 서버 하나다**(ADR 0004)."""
+    return services.material_record_name(
+        grade=payload.grade,
+        details=payload.details,
+        spec_thickness_m=services.to_si(
+            payload.spec_thickness, payload.spec_thickness_unit, field="두께"
+        ),
     )
-    record_name = services.material_record_name(
-        grade=payload.grade, details=payload.details, spec_thickness_m=thickness_m
-    )
+
+
+def _make_material(
+    db: Session, user: User, payload: MaterialCreateRequest, *, workspace: Workspace
+) -> Material:
+    """재료 하나를 만들어 세션에 넣는다 — **커밋은 부르는 쪽이 한다.**
+
+    하나씩 등록하는 길과 한꺼번에 넣는 길이 같은 코드를 지나게 하려고 뺐다.
+    두 벌로 두면 한쪽에만 기준정보 연결이 붙거나, 한쪽만 단위를 기록하는 일이
+    생긴다 — 그때 나는 차이는 몇 달 뒤 목록에서야 보인다.
+    """
+    record_name = _record_name(payload)
     services.ensure_name_free(db, owner_workspace_id=workspace.id, record_name=record_name)
 
     material = Material(
@@ -498,7 +516,9 @@ def create_material(
         record_name=record_name,
         alias=payload.alias,
         details=payload.details,
-        spec_thickness_m=thickness_m,
+        spec_thickness_m=services.to_si(
+            payload.spec_thickness, payload.spec_thickness_unit, field="두께"
+        ),
         applied_product=payload.applied_product,
         applied_part=payload.applied_part,
         density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
@@ -521,8 +541,179 @@ def create_material(
         created_by_id=user.id,
     )
     db.add(material)
+    db.flush()
+    return material
+
+
+@router.post("", response_model=MaterialOut, status_code=201)
+def create_material(
+    payload: MaterialCreateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MaterialOut:
+    workspace = services.resolve_workspace(db, user, payload.workspace_slug)
+    material = _make_material(db, user, payload, workspace=workspace)
     db.commit()
     return _material_out(material, sample_count=0, workspace_name=workspace.name)
+
+
+@router.post("/delete", response_model=MaterialDeleteOut)
+def delete_materials(
+    payload: MaterialDeleteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MaterialDeleteOut:
+    """여러 개를 한 번에 지운다. **하나가 막혀도 나머지는 지운다.**
+
+    막히는 이유가 둘이라 이유를 함께 돌려준다 — 권한이 없는 것과 시료가 남아
+    있는 것. 사람이 해야 할 일이 다르다(관리자에게 말하기 · 시료 먼저 치우기).
+    개수만 주면 그 둘을 구별할 수 없다.
+
+    `DELETE` 가 아니라 `POST /delete` 인 이유는 시험 쪽과 같다: 본문에 목록을
+    싣는다.
+    """
+    counts = services.sample_counts(db, payload.material_ids)
+    deleted = 0
+    blocked: list[MaterialBlockedOut] = []
+
+    for material_id in payload.material_ids:
+        try:
+            material = services.get_material(db, user, material_id)
+            services.require_writable(db, user, material)
+        except AppError as exc:
+            # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
+            blocked.append(MaterialBlockedOut(id=material_id, name=None, reason=exc.message))
+            continue
+
+        remaining = counts.get(material.id, 0)
+        if remaining:
+            blocked.append(
+                MaterialBlockedOut(
+                    id=material.id,
+                    name=material.record_name,
+                    reason=f"시료 {remaining}건이 남아 있습니다",
+                )
+            )
+            continue
+
+        material.deleted_at = _now()
+        vocabulary_services.release_bindings(
+            db, material, vocabulary_services.MATERIAL_BINDINGS
+        )
+        audit.record(
+            db,
+            action=audit.MATERIAL_DELETED,
+            actor=user,
+            target_table="materials",
+            target_id=material.id,
+            target_label=material.record_name,
+            workspace_id=material.owner_workspace_id,
+            changes={"deleted_at": {"after": material.deleted_at.isoformat()}},
+        )
+        deleted += 1
+
+    db.commit()
+    return MaterialDeleteOut(deleted=deleted, blocked=blocked)
+
+
+def _skipped(material: BulkMaterialRequest, why: str) -> list[BulkBlockedOut]:
+    """재료가 막혔으면 그 아래도 못 만든다. **말 없이 사라지게 두지 않는다.**"""
+    out: list[BulkBlockedOut] = []
+    for sample in material.samples:
+        out.append(BulkBlockedOut(row=sample.row, reason=why))
+        out.extend(BulkBlockedOut(row=item.row, reason=why) for item in sample.specimens)
+    return out
+
+
+@router.post("/bulk", response_model=BulkOut)
+def create_bulk(
+    payload: BulkRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BulkOut:
+    """재료·시료·시편을 한 번에 넣는다.
+
+    ## 마디마다 세이브포인트
+
+    시편 하나가 막혔다고 재료와 시료까지 되돌리면, 사람은 스무 줄을 다시
+    적어야 한다. **만들 수 있는 것은 만들고, 못 만든 마디는 줄 번호와 이유로
+    돌려준다.** 그래서 마디마다 `begin_nested()` 로 감싼다 — 실패한 마디만
+    되감기고 세션은 계속 쓸 수 있다.
+
+    ## 이미 있는 재료는 찾아 쓴다
+
+    같은 재료 아래에 시료를 여러 벌 넣는 것이 이 기능의 요점이다. 그런데
+    **딸린 것이 없는데 이름만 겹치면 그것은 실수다** — 조용히 넘어가면 아무것도
+    안 만들어졌는데 성공으로 읽힌다. 그때만 막는다.
+    """
+    made: list[BulkMadeOut] = []
+    blocked: list[BulkBlockedOut] = []
+    materials = samples = specimens = 0
+
+    for item in payload.materials:
+        try:
+            with db.begin_nested():
+                workspace = services.resolve_workspace(db, user, item.workspace_slug)
+                record_name = _record_name(item)
+                material = services.find_by_name(
+                    db, owner_workspace_id=workspace.id, record_name=record_name
+                )
+                reused = material is not None
+                if material is None:
+                    material = _make_material(db, user, item, workspace=workspace)
+                elif not item.samples:
+                    raise Conflict(
+                        "MNX-MATERIALS-0004",
+                        f"같은 이름의 재료가 이미 있습니다: {record_name}",
+                    )
+                else:
+                    services.require_writable(db, user, material)
+        except AppError as exc:
+            blocked.append(BulkBlockedOut(row=item.row, reason=exc.message))
+            blocked.extend(_skipped(item, "재료를 만들지 못해 건너뛰었습니다"))
+            continue
+
+        made.append(
+            BulkMadeOut(row=item.row, kind="material", name=record_name, reused=reused)
+        )
+        if not reused:
+            materials += 1
+
+        for entry in item.samples:
+            try:
+                with db.begin_nested():
+                    sample = _make_sample(db, user, material, entry, workspace=workspace)
+            except AppError as exc:
+                blocked.append(BulkBlockedOut(row=entry.row, reason=exc.message))
+                blocked.extend(
+                    BulkBlockedOut(row=one.row, reason="시료를 만들지 못해 건너뛰었습니다")
+                    for one in entry.specimens
+                )
+                continue
+
+            samples += 1
+            made.append(BulkMadeOut(row=entry.row, kind="sample", name=sample.record_name))
+
+            for one in entry.specimens:
+                try:
+                    with db.begin_nested():
+                        specimen = _make_specimen(db, user, sample, one)
+                except AppError as exc:
+                    blocked.append(BulkBlockedOut(row=one.row, reason=exc.message))
+                    continue
+                specimens += 1
+                made.append(
+                    BulkMadeOut(row=one.row, kind="specimen", name=specimen.record_name)
+                )
+
+    db.commit()
+    return BulkOut(
+        materials=materials,
+        samples=samples,
+        specimens=specimens,
+        made=made,
+        blocked=blocked,
+    )
 
 
 @router.get("/{material_id}", response_model=MaterialOut)
@@ -875,16 +1066,15 @@ def list_samples(
     ]
 
 
-@router.post("/{material_id}/samples", response_model=SampleOut, status_code=201)
-def create_sample(
-    material_id: uuid.UUID,
+def _make_sample(
+    db: Session,
+    user: User,
+    material: Material,
     payload: SampleCreateRequest,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> SampleOut:
-    material = services.get_material(db, user, material_id)
-    workspace = services.resolve_workspace(db, user, payload.workspace_slug)
-
+    *,
+    workspace: Workspace,
+) -> Sample:
+    """시료 하나. **커밋은 부르는 쪽이 한다** — `_make_material` 과 같은 이유다."""
     seq_no = services.next_sample_seq(db, material.id)
     sample = Sample(
         workspace_id=workspace.id,
@@ -910,6 +1100,20 @@ def create_sample(
         created_by_id=user.id,
     )
     db.add(sample)
+    db.flush()
+    return sample
+
+
+@router.post("/{material_id}/samples", response_model=SampleOut, status_code=201)
+def create_sample(
+    material_id: uuid.UUID,
+    payload: SampleCreateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SampleOut:
+    material = services.get_material(db, user, material_id)
+    workspace = services.resolve_workspace(db, user, payload.workspace_slug)
+    sample = _make_sample(db, user, material, payload, workspace=workspace)
     db.commit()
     return _sample_out(sample, specimen_count=0, workspace_name=workspace.name)
 
@@ -1119,15 +1323,11 @@ def list_specimens(
     ]
 
 
-@samples_router.post("/{sample_id}/specimens", response_model=SpecimenOut, status_code=201)
-def create_specimen(
-    sample_id: uuid.UUID,
-    payload: SpecimenCreateRequest,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> SpecimenOut:
-    sample = _get_sample(db, user, sample_id)
-
+def _make_specimen(
+    db: Session, user: User, sample: Sample, payload: SpecimenCreateRequest
+) -> Specimen:
+    """시편 하나. 같은 방향·번호가 이미 있으면 `Conflict` 로 바꿔 올린다 —
+    `IntegrityError` 를 그대로 흘리면 화면은 "서버 오류" 만 본다."""
     orientation = payload.orientation.upper()
     if orientation not in ORIENTATIONS:
         raise AppError(
@@ -1163,13 +1363,30 @@ def create_specimen(
     )
     db.add(specimen)
     try:
-        db.commit()
-    except Exception as exc:  # 같은 방향·번호가 이미 있다
-        db.rollback()
+        db.flush()
+    except IntegrityError as exc:
         raise Conflict(
             "MNX-MATERIALS-0013",
             f"{orientation} 방향 {seq_no}번 시편이 이미 있습니다.",
         ) from exc
+    return specimen
+
+
+@samples_router.post("/{sample_id}/specimens", response_model=SpecimenOut, status_code=201)
+def create_specimen(
+    sample_id: uuid.UUID,
+    payload: SpecimenCreateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SpecimenOut:
+    sample = _get_sample(db, user, sample_id)
+    try:
+        specimen = _make_specimen(db, user, sample, payload)
+    except AppError:
+        # 플러시가 깨진 세션을 그대로 두면 다음 요청이 엉뚱한 데서 터진다.
+        db.rollback()
+        raise
+    db.commit()
     return _specimen_out(specimen)
 
 

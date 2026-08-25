@@ -139,6 +139,26 @@ def name_taken(
     return bool(db.scalar(query))
 
 
+def find_by_name(
+    db: Session, *, owner_workspace_id: uuid.UUID | None, record_name: str
+) -> Material | None:
+    """이름으로 살아 있는 재료 하나를 찾는다.
+
+    여러 개를 한꺼번에 넣을 때 쓴다 — 같은 재료 아래에 시료를 여러 벌 넣으려면
+    **두 번째 줄부터는 만드는 것이 아니라 찾는 것**이어야 한다. `name_taken` 은
+    지운 것까지 세지만(이름은 계속 잡아 둔다) 여기서는 살아 있는 것만 본다.
+    """
+    query = select(Material).where(
+        Material.record_name == record_name, Material.deleted_at.is_(None)
+    )
+    query = (
+        query.where(Material.owner_workspace_id.is_(None))
+        if owner_workspace_id is None
+        else query.where(Material.owner_workspace_id == owner_workspace_id)
+    )
+    return db.scalar(query)
+
+
 def ensure_name_free(
     db: Session,
     *,
