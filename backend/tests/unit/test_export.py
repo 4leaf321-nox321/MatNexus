@@ -417,3 +417,130 @@ class Test온도의존:
         heat = text[text.index("*SPECIFIC HEAT") :]
         assert f"{462.0:.12E}," in heat
         assert "0.000000000000E+00" not in heat.splitlines()[1]
+
+
+def heat_deck(
+    *,
+    density: float | None = 7850.0,
+    values: dict[str, float] | None = None,
+    rows: list[dict[str, Any]] | None = None,
+) -> export.Deck:
+    """열해석용 덱 하나."""
+    blocks: dict[str, Any] = {}
+    if density is not None:
+        blocks["elastic"] = {"values": {"density": density}}
+    thermal: dict[str, Any] = {"values": values or {}}
+    if rows:
+        thermal["rows"] = rows
+    if thermal["values"] or rows:
+        blocks["thermal"] = thermal
+    return export.Deck(name="SECC_MD", solver_id=42, blocks=blocks)
+
+
+BASE = {"specific_heat": 462.0, "thermal_conductivity": 45.0, "reference_temperature": 293.15}
+
+
+class TestOpenRadioss열물성:
+    """`/HEAT/MAT` — **Abaqus 와 받는 모양이 다르다.**
+
+        Abaqus        온도-값 표를 그대로
+        OpenRadioss   체적 열용량 상수 + 전도도 직선 두 계수
+
+    바꾸는 과정에 실수가 숨을 자리가 둘 있다: 비열에 밀도를 안 곱하는 것과,
+    표를 직선으로 누른 사실을 안 적는 것이다.
+    """
+
+    def test_비열에_밀도를_곱한다(self) -> None:
+        """**체적 열용량이다**(J/(m³·K)). 우리가 담은 것은 질량 기준
+        비열(J/(kg·K))이라 곱하지 않으면 밀도 배만큼 틀리고, **덱은 멀쩡히 돌고
+        온도만 안 오른다.**"""
+        text = export.render("openradioss_thermal", heat_deck(values=BASE)).text
+        assert f"{7850.0 * 462.0:>20.9E}" in text
+        # 비열 그 자체가 들어가면 안 된다.
+        assert f"{462.0:>20.9E}" not in text
+
+    def test_밀도가_없으면_못_낸다(self) -> None:
+        """0 을 넣으면 열용량 0 인 재료가 된다."""
+        assert "openradioss_thermal" not in export.available_formats(
+            heat_deck(density=None, values=BASE)
+        )
+
+    def test_전도도가_없으면_거절한다(self) -> None:
+        """**AS 는 자리 있는 필드다.** 0 을 넣으면 열이 안 퍼지는 재료가 된다."""
+        with pytest.raises(export.ExportError) as caught:
+            export.render("openradioss_thermal", heat_deck(values={"specific_heat": 462.0}))
+        assert "열전도도" in str(caught.value)
+
+    def test_전도도를_직선으로_맞춘다(self) -> None:
+        """`/HEAT/MAT` 은 표를 안 받는다 — `AS + BS·T` 두 계수다."""
+        rows = [
+            {"temperature": 300.0, "thermal_conductivity": 45.0},
+            {"temperature": 500.0, "thermal_conductivity": 41.0},
+        ]
+        text = export.render("openradioss_thermal", heat_deck(values=BASE, rows=rows)).text
+        # 두 점이면 직선이 정확히 지난다: 기울기 -0.02, 절편 51
+        assert f"{51.0:>20.9E}" in text
+        assert f"{-0.02:>20.9E}" in text
+
+    def test_누른_어긋남을_적는다(self) -> None:
+        """**안 적으면 사람은 표를 넣은 대로 나갔다고 믿는다** — 실제로는
+        직선으로 눌린 값이 솔버에 간다."""
+        rows = [
+            {"temperature": 300.0, "thermal_conductivity": 45.0},
+            {"temperature": 400.0, "thermal_conductivity": 30.0},
+            {"temperature": 500.0, "thermal_conductivity": 41.0},
+        ]
+        rendered = export.render("openradioss_thermal", heat_deck(values=BASE, rows=rows))
+        joined = " ".join(rendered.notes)
+        assert "직선으로 맞췄습니다" in joined
+        assert "어긋남" in joined
+        # **판정하지 않는다.** 몇 %부터 문제인지는 규격과 용도가 정한다.
+        assert "합격" not in joined and "부적합" not in joined
+
+    def test_두_점까지는_어긋남을_안_적는다(self) -> None:
+        """직선이 정확히 지나가므로 적을 것이 없다. 늘 적으면 그 문장이
+        **경고로 안 읽힌다.**"""
+        rows = [
+            {"temperature": 300.0, "thermal_conductivity": 45.0},
+            {"temperature": 500.0, "thermal_conductivity": 41.0},
+        ]
+        rendered = export.render("openradioss_thermal", heat_deck(values=BASE, rows=rows))
+        assert not any("직선으로 맞췄습니다" in note for note in rendered.notes)
+
+    def test_열팽창은_안_실었다고_말한다(self) -> None:
+        """Radioss 에서 열팽창은 역학 법칙 쪽이 받는다. **조용히 빼면** 넣은 줄
+        알고 열응력 해석을 돌려 팽창 0 인 재료가 된다."""
+        rendered = export.render(
+            "openradioss_thermal",
+            heat_deck(values={**BASE, "thermal_expansion": 1.17e-05}),
+        )
+        assert any("열팽창계수" in note for note in rendered.notes)
+        assert "EXPANSION" in rendered.text
+
+    def test_비열이_표면_어느_온도를_썼는지_말한다(self) -> None:
+        """RHOCP 는 상수 한 칸이다 — 표를 넣으면 하나를 골라야 하고, **어느
+        것을 골랐는지 말하지 않으면 사람이 알 방법이 없다.**"""
+        rows = [
+            {"temperature": 300.0, "specific_heat": 462.0, "thermal_conductivity": 45.0},
+            {"temperature": 500.0, "specific_heat": 520.0, "thermal_conductivity": 41.0},
+        ]
+        rendered = export.render("openradioss_thermal", heat_deck(values=BASE, rows=rows))
+        assert any("가장 낮은 온도" in note for note in rendered.notes)
+        assert f"{7850.0 * 462.0:>20.9E}" in rendered.text
+
+    def test_고정_20칸을_지킨다(self) -> None:
+        """**칸이 어긋나면 다른 필드로 읽힌다.** 솔버는 오류를 안 낸다."""
+        text = export.render("openradioss_thermal", heat_deck(values=BASE)).text
+        row = [
+            line
+            for line in text.splitlines()
+            if line and not line.startswith(("#", "/")) and "E+" in line
+        ][0]
+        assert len(row) == 80, f"{len(row)}칸: {row!r}"
+
+    def test_소성_덱과_따로다(self) -> None:
+        """Radioss 는 열물성을 별도 블록으로 받는다 — Abaqus 처럼 `*MATERIAL`
+        아래 이어 붙이는 구조가 아니다."""
+        text = export.render("openradioss_thermal", heat_deck(values=BASE)).text
+        assert "/MAT/LAW36" not in text
+        assert text.rstrip().endswith("/END")

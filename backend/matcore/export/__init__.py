@@ -862,6 +862,156 @@ def render_openradioss(deck: Deck) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
+def _thermal_points(deck: Deck, key: str) -> list[tuple[float, float]]:
+    """온도-값 점들. 표가 있으면 표, 없으면 값 하나(온도는 기준 온도)."""
+    rows = [
+        (float(row["temperature"]), float(row[key]))
+        for row in deck.rows("thermal")
+        if isinstance(row.get(key), (int, float))
+        and isinstance(row.get("temperature"), (int, float))
+    ]
+    if rows:
+        return sorted(rows)
+    value = deck.number("thermal", key)
+    if value is None:
+        return []
+    zero = deck.number("thermal", "reference_temperature")
+    return [(zero if zero is not None else 0.0, value)]
+
+
+def _linear_in_temperature(points: list[tuple[float, float]]) -> tuple[float, float, float]:
+    """`값 = a + b·T` 로 맞춘다. `(a, b, 가장 큰 상대 어긋남)`.
+
+    ## 왜 직선인가 — 우리가 고른 것이 아니다
+
+    Abaqus 는 온도-값 **표**를 그대로 받지만 OpenRadioss `/HEAT/MAT` 은
+    전도도를 **`AS + BS·T` 두 계수로** 받는다. 표를 그 두 수로 바꾸는 것은
+    솔버가 요구하는 모양이지 우리가 고른 근사가 아니다.
+
+    ## 어긋남을 숨기지 않는다
+
+    점이 둘이면 직선이 정확히 지나가고, 셋 이상이면 **맞추는 것**이다. 그
+    어긋남을 말하지 않으면 사람은 표를 넣은 대로 나갔다고 믿는다 — 실제로는
+    직선으로 눌린 값이 솔버에 간다.
+
+    **몇 %부터 문제인지는 판정하지 않는다.** 그것은 규격과 용도가 정하고, 여기서
+    상수로 박으면 그 숫자가 곧 규격 행세를 한다(밀시트 대조와 같은 판단).
+    """
+    if len(points) == 1:
+        return points[0][1], 0.0, 0.0
+
+    import numpy as np
+
+    temperatures = np.array([one for one, _ in points], dtype=float)
+    values = np.array([one for _, one in points], dtype=float)
+    slope, intercept = (float(one) for one in np.polyfit(temperatures, values, 1))
+    fitted = intercept + slope * temperatures
+    scale = float(np.max(np.abs(values)))
+    gap = float(np.max(np.abs(fitted - values)) / scale) if scale > 0 else 0.0
+    return intercept, slope, gap
+
+
+@register_renderer(
+    key="openradioss_thermal",
+    label="OpenRadioss (열물성)",
+    extension="rad",
+    describe=(
+        "/HEAT/MAT — 열해석용 재료. 체적 열용량(RHOCP(밀도 곱하기 비열))과 전도도를 받는다. "
+        "전도도는 표가 아니라 `AS + BS·T` 두 계수다."
+    ),
+    keywords=("/HEAT/MAT", "/UNIT/1", "/END"),
+    needs=(
+        # **RHOCP 로 들어간다** — 밀도 곱하기 비열이다. 비열만으로는 못 만들고,
+        # 0 을 넣으면 열용량 0 인 재료가 된다.
+        Need("elastic", values=("density",)),
+        Need("thermal", values=("specific_heat",)),
+    ),
+)
+def render_openradioss_thermal(deck: Deck) -> Rendered:
+    """OpenRadioss `/HEAT/MAT`.
+
+    ## 왜 `/MAT/LAW36` 과 같은 파일에 못 넣나
+
+    Radioss 는 **열물성을 별도 블록으로 받는다** — Abaqus 처럼 `*MATERIAL` 아래
+    키워드를 이어 붙이는 구조가 아니다. 그래서 렌더러도 따로다. 두 파일을 같은
+    `mat_ID` 로 묶어 쓴다.
+
+    ## Cp 가 아니라 RHOCP(밀도 곱하기 비열) 다
+
+    `/HEAT/MAT` 은 **체적 열용량**을 받는다(J/(m³·K)). 우리가 담은 것은 질량
+    기준 비열(J/(kg·K))이라 밀도를 곱해야 한다 — 그 곱을 안 하고 넣으면 밀도
+    배만큼 틀린 재료가 되고, **덱은 멀쩡히 돌고 온도만 안 오른다.**
+
+    ## 전도도는 표가 아니라 직선이다
+
+    `AS + BS·T`. 우리가 고른 근사가 아니라 이 솔버가 요구하는 모양이다. 맞춘
+    어긋남을 덱 주석에 적는다 — 안 적으면 사람은 표를 넣은 대로 나갔다고 믿는다.
+
+    ## 열팽창은 여기 없다
+
+    Radioss 에서 열팽창은 **역학 법칙 쪽**이 받는다(`/MAT/LAW` 계열). 이 블록에
+    넣을 자리가 없어서 **조용히 빼지 않고 그 사실을 적는다** — 넣은 줄 알고 열응력
+    해석을 돌리면 팽창이 0 인 재료가 된다.
+    """
+    density = deck.number("elastic", "density")
+    assert density is not None
+
+    heats = _thermal_points(deck, "specific_heat")
+    if not heats:
+        raise ExportError(
+            "비열이 없어 체적 열용량(RHOCP(밀도 곱하기 비열))을 만들 수 없습니다."
+        )
+
+    notes: list[str] = []
+    lines = ["#RADIOSS STARTER", *_header(deck, "#")]
+    lines.extend(["/UNIT/1", "MNX_SI_KG_M_S", f"{'kg':<20}{'m':<20}s"])
+
+    # RHOCP(밀도 곱하기 비열). **비열이 온도를 타면 첫 점을 쓴다** — 이 필드는 상수 하나다.
+    volumetric = density * heats[0][1]
+    if len(heats) > 1:
+        notes.append(
+            f"비열이 온도 {len(heats)}점으로 적혀 있는데 /HEAT/MAT 의 RHOCP 는 상수 "
+            f"한 칸입니다. 가장 낮은 온도({heats[0][0]:.5g} K)의 값을 썼습니다."
+        )
+
+    conductivities = _thermal_points(deck, "thermal_conductivity")
+    if conductivities:
+        intercept, slope, gap = _linear_in_temperature(conductivities)
+        if len(conductivities) > 2:
+            notes.append(
+                f"전도도를 AS + BS·T 직선으로 맞췄습니다 — {len(conductivities)}점에서 "
+                f"가장 큰 어긋남 {gap * 100:.3g}%. /HEAT/MAT 이 표를 안 받습니다."
+            )
+    else:
+        # **0 을 넣지 않는다.** 전도도 0 은 열이 안 퍼지는 재료다.
+        raise ExportError(
+            "열전도도가 없습니다. /HEAT/MAT 의 AS 는 자리 있는 필드라 비울 수 없고, "
+            "0 을 넣으면 열이 안 퍼지는 재료가 됩니다."
+        )
+
+    expansion = _thermal_points(deck, "thermal_expansion")
+    if expansion:
+        notes.append(
+            "열팽창계수는 /HEAT/MAT 에 자리가 없습니다 — Radioss 에서는 역학 법칙 쪽이 "
+            "받습니다. 이 덱에는 안 실렸습니다."
+        )
+        lines.append(
+            "# EXPANSION: 이 블록에 자리가 없어 안 실었습니다. 역학 법칙 쪽에 넣으세요."
+        )
+
+    initial = conductivities[0][0]
+    lines.append(
+        f"# RHOCP = density x specific_heat = {_free(density)} x {_free(heats[0][1])}"
+    )
+    lines.append(f"# CONDUCTIVITY = AS + BS*T  ({len(conductivities)} point(s))")
+    lines.append(f"/HEAT/MAT/{deck.solver_id}/1")
+    lines.append(deck.name)
+    lines.append(f"#{'T0':>19}{'RHOCP':>20}{'AS':>20}{'BS':>20}")
+    lines.append(_fixed(initial) + _fixed(volumetric) + _fixed(intercept) + _fixed(slope))
+    lines.append("/END")
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
 @register_renderer(
     key="json",
     label="중립 JSON",
