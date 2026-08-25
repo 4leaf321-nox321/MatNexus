@@ -16,12 +16,14 @@
  * 모양으로 보인다.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, BookOpen, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { DeclaredCardDialog } from '@/modules/fitting/DeclaredCardDialog'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
+import { RunPicker } from '@/modules/fitting/RunPicker'
+import type { RunChoice } from '@/modules/fitting/RunPicker'
 import type {
   Fit,
   FitPreview,
@@ -75,6 +77,12 @@ export function FittingPanel({ materialId }: Props) {
   const [group, setGroup] = useState<GroupKey | null>(null)
   const [preview, setPreview] = useState<FitPreview | null>(null)
   const [chosen, setChosen] = useState<string | null>(null)
+  /**
+   * 이 카드에 쓸 시험. **`null` 이면 채택된 전부** — 「고르지 않았다」와
+   * 「전부 골랐다」를 같게 둔다. 그래야 요청에 목록이 안 실리고, 안 골랐다는
+   * 사실이 카드 근거에도 그대로 남는다.
+   */
+  const [usedRuns, setUsedRuns] = useState<string[] | null>(null)
   // **눈으로 보고 정하는 값들이다.** 저장 모달에 있었더니 숫자를 타이핑하고
   // 저장 버튼을 누른 뒤에야 결과를 봤다 — 194 MPa 가 갈리는 결정을 눈 감고
   // 내리는 셈이었다. 여기로 올려 그래프와 함께 움직이게 한다.
@@ -108,7 +116,15 @@ export function FittingPanel({ materialId }: Props) {
     setGroup(null)
     setPreview(null)
     setChosen(null)
+    setUsedRuns(null)
   }, [materialId])
+
+  // **묶음이 바뀌면 고른 시험도 버린다.** 남겨 두면 다른 묶음의 id 를 보내게
+  // 되고, 서버가 「이 묶음에 채택돼 있지 않다」 로 막는다 — 사람은 왜 막혔는지
+  // 알 수 없다.
+  useEffect(() => {
+    setUsedRuns(null)
+  }, [group?.test_type_key, group?.orientation])
 
   useEffect(() => {
     if (!group && groups.length > 0) setGroup(groups[0])
@@ -128,6 +144,9 @@ export function FittingPanel({ materialId }: Props) {
         orientation: target.orientation,
         // 비우면 등록된 식 전부를 견준다.
         families: [],
+        // **저장하고 나서야 알면 늦다.** 뺀 것과 안 뺀 것의 적합이 어떻게
+        // 다른지 눈으로 보고 정해야 한다.
+        test_run_ids: usedRuns,
         extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
         // 셋을 함께 줘야 혼합 곡선이 후보에 하나 더 붙는다.
         blend_primary: blendWith && chosen ? chosen : null,
@@ -154,7 +173,32 @@ export function FittingPanel({ materialId }: Props) {
     const timer = setTimeout(() => void run(group, true), 350)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extrapolate, blendWith, blendWeight, chosen])
+  }, [extrapolate, blendWith, blendWeight, chosen, usedRuns])
+
+  /**
+   * 고른 묶음의 시험들. **이상치 후보에 표를 달아 둔다** — 통계 화면과 같은
+   * 규칙으로, 표시만 하고 버리지는 않는다.
+   */
+  const runChoices: RunChoice[] = useMemo(() => {
+    const found = (stats.data?.groups ?? []).find(
+      (item) =>
+        item.test_type_key === group?.test_type_key &&
+        item.orientation === group?.orientation
+    )
+    if (!found) return []
+    const flagged = new Map<string, string[]>()
+    for (const scalar of found.scalars ?? []) {
+      for (const outlier of scalar.outliers ?? []) {
+        const at = String(outlier.test_run_id)
+        flagged.set(at, [...(flagged.get(at) ?? []), scalar.label])
+      }
+    }
+    return (found.test_run_ids ?? []).map((id, at) => ({
+      id: String(id),
+      name: found.record_names?.[at] ?? String(id),
+      flags: flagged.get(String(id)) ?? [],
+    }))
+  }, [stats.data, group?.test_type_key, group?.orientation])
 
   // 묶음도 없고 카드도 없다 — 무엇을 하라고 할지가 갈리는 자리다.
   const nothing = !stats.loading && groups.length === 0 && cardRows.length === 0
@@ -255,6 +299,12 @@ export function FittingPanel({ materialId }: Props) {
         </p>
       )}
 
+      {groups.length > 0 && runChoices.length > 1 && (
+        <div className="mb-4">
+          <RunPicker runs={runChoices} used={usedRuns} onChange={setUsedRuns} />
+        </div>
+      )}
+
       {preview && (
         <FitComparison
           extrapolate={extrapolate}
@@ -289,6 +339,7 @@ export function FittingPanel({ materialId }: Props) {
           materialId={materialId}
           group={group}
           family={chosen}
+          testRunIds={usedRuns}
           elastic={preview?.elastic ?? []}
           onClose={() => setSaving(false)}
           onSaved={() => {
@@ -747,6 +798,7 @@ function SaveDialog({
   materialId,
   group,
   family,
+  testRunIds,
   elastic,
   onClose,
   onSaved,
@@ -763,6 +815,8 @@ function SaveDialog({
   candidates: Fit[]
   open: boolean
   materialId: string
+  /** 이 카드에 쓸 시험. **`null` 이면 채택된 전부.** */
+  testRunIds: string[] | null
   group: GroupKey
   family: string | null
   /** 비워 두면 카드에 들어갈 값들. **적합 응답이 준 그대로다.** */
@@ -804,6 +858,8 @@ function SaveDialog({
         orientation: group.orientation,
         label,
         family,
+        // 비우면 채택된 전부. 뺀 것이 있으면 그 사실이 카드 근거에 남는다.
+        test_run_ids: testRunIds,
         // **빈칸은 보내지 않는다.** 0.3 으로 채우면 그것이 측정값인지 기본값인지
         // 나중에 알 수 없다.
         poisson_ratio: poisson === '' ? null : Number(poisson),

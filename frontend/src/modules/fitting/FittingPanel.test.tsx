@@ -94,6 +94,10 @@ beforeEach(() => {
         test_type_label: '인장',
         orientation: 'MD',
         sample_count: 3,
+        // **실제 응답과 같은 칸을 둔다.** 빠뜨리면 화면이 그 칸을 읽다 죽는
+        // 것을 시험이 못 잡는다 — 실제로 그렇게 놓쳤다.
+        test_run_ids: ['r-1', 'r-2', 'r-3'],
+        record_names: ['SECC__01__MD_01__TEN_01', 'SECC__02', 'SECC__03'],
         scalars: [],
         curve: null,
         notes: [],

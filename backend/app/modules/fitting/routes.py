@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -571,6 +571,42 @@ def _inherit_poisson(material: Material, override: float | None) -> Inherited:
     )
 
 
+def _chosen(
+    group: statistics_services.Group, wanted: list[uuid.UUID] | None
+) -> statistics_services.Group:
+    """고른 시험만 남긴 묶음. `wanted` 가 비면 그대로 돌려준다.
+
+    **모르는 id 는 조용히 넘기지 않는다.** 열 건 중 둘을 빼려고 id 를 적었는데
+    하나가 오타면, 말없이 아홉 건으로 카드가 만들어진다 — 그 카드는 자기가
+    아홉 건짜리인 줄 알고 근거까지 그렇게 적는다.
+    """
+    if wanted is None:
+        return group
+    if not wanted:
+        raise AppError("MNX-FITTING-0021", "쓸 시험을 하나도 고르지 않았습니다.", status=422)
+
+    have = {member.run.id: member for member in group.members}
+    missing = [str(one) for one in wanted if one not in have]
+    if missing:
+        raise AppError(
+            "MNX-FITTING-0022",
+            "고른 시험 중 이 묶음에 채택돼 있지 않은 것이 있습니다: " + ", ".join(missing),
+            status=422,
+        )
+
+    # **적은 순서가 아니라 원래 순서를 지킨다.** 근거에 적히는 이름 차례가
+    # 화면에 보인 차례와 다르면, 같은 카드인지 눈으로 확인할 수 없다.
+    picked = [member for member in group.members if member.run.id in set(wanted)]
+    dropped = len(group.members) - len(picked)
+    return replace(
+        group,
+        members=picked,
+        # 채택은 됐지만 이번 카드에서 뺀 것도 「빠진 수」에 함께 센다 — 화면이
+        # n 이 왜 그 수인지 말할 수 있어야 한다.
+        skipped_unadopted=group.skipped_unadopted + dropped,
+    )
+
+
 def _representative(
     db: Session,
     user: User,
@@ -578,6 +614,7 @@ def _representative(
     test_type_key: str,
     orientation: str,
     family: fitting.Family | None = None,
+    test_run_ids: list[uuid.UUID] | None = None,
 ) -> tuple[statistics_services.Group, np.ndarray, np.ndarray, list[str]]:
     """대표 곡선에서 **그 식이 쓰는 축**을 꺼낸다.
 
@@ -611,9 +648,19 @@ def _representative(
             status=422,
         )
 
+    total = len(group.members)
+    group = _chosen(group, test_run_ids)
     x_column = family.x_column if family else FIT_X
     y_column = family.y_column if family else FIT_Y
     curve, notes = statistics_services.curve_table(db, group, x=x_column, y=y_column)
+    if len(group.members) != total:
+        # **뺐다는 사실이 카드에 남아야 한다.** 표본 수만 적으면 「원래 8건이었나
+        # 둘을 뺐나」 를 나중에 아무도 답할 수 없다.
+        notes = [
+            f"채택된 {total}건 중 {len(group.members)}건만 썼습니다"
+            f" ({total - len(group.members)}건 뺌).",
+            *notes,
+        ]
     if curve is None:
         raise AppError(
             "MNX-FITTING-0003",
@@ -729,7 +776,13 @@ def preview(
     for axes in dict.fromkeys((item.x_column, item.y_column) for item in chosen):
         same = [item for item in chosen if (item.x_column, item.y_column) == axes]
         found, x, y, axis_notes = _representative(
-            db, user, payload.material_id, payload.test_type_key, payload.orientation, same[0]
+            db,
+            user,
+            payload.material_id,
+            payload.test_type_key,
+            payload.orientation,
+            same[0],
+            payload.test_run_ids,
         )
         if group is None:
             # **점은 첫 축의 것이다.** 축이 섞이면 아래에서 그 사실을 말한다 —
@@ -876,7 +929,13 @@ def create_card(
         raise NotFound("MNX-FITTING-0013", f"모르는 적합식입니다: {payload.family}")
 
     group, strain, stress, notes = _representative(
-        db, user, payload.material_id, payload.test_type_key, payload.orientation, spec
+        db,
+        user,
+        payload.material_id,
+        payload.test_type_key,
+        payload.orientation,
+        spec,
+        payload.test_run_ids,
     )
 
     fitted: dict[str, Any] = {}

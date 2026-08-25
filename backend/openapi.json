@@ -3151,6 +3151,21 @@
             "title": "Orientation",
             "type": "string"
           },
+          "test_run_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Run Ids"
+          },
           "test_type_key": {
             "title": "Test Type Key",
             "type": "string"
@@ -6236,6 +6251,21 @@
               }
             ],
             "title": "Poisson Ratio"
+          },
+          "test_run_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Run Ids"
           },
           "test_type_key": {
             "title": "Test Type Key",

@@ -2338,3 +2338,128 @@ class Test네킹을_안_자르면:
         ).json()
         notes = " ".join(card["source"]["notes"])
         assert "네킹을 안 자른" not in notes, notes
+
+
+class Test쓸_시험_고르기:
+    """*"이상치 둘 빼고 8건으로 뽑은 것과 10건으로 뽑은 것을 둘 다 카드로"* —
+    실사용에서 나온 물음이다.
+
+    지금까지는 그 결정을 적을 자리가 없어서 **시험의 채택을 푸는 수밖에**
+    없었다. 그러면 통계 화면과 나중에 만들 카드까지 전부 따라 바뀌어서, 두 장을
+    나란히 두고 견줄 수가 없다.
+    """
+
+    def _runs(
+        self, client: TestClient, headers: dict[str, str], material_id: str
+    ) -> list[str]:
+        body = client.get(f"/api/statistics/materials/{material_id}", headers=headers).json()
+        group = next(
+            item
+            for item in body["groups"]
+            if item["test_type_key"] == "tensile" and item["orientation"] == "MD"
+        )
+        return [str(one) for one in group["test_run_ids"]]
+
+    def _card(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        material_id: str,
+        label: str,
+        run_ids: list[str] | None = None,
+    ) -> Any:
+        body: dict[str, Any] = {
+            "material_id": material_id,
+            "test_type_key": "tensile",
+            "orientation": "MD",
+            "label": label,
+        }
+        if run_ids is not None:
+            body["test_run_ids"] = run_ids
+        return client.post("/api/fitting/cards", json=body, headers=headers)
+
+    def test_안_고르면_채택된_전부를_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**전과 같이 동작한다.** 고르는 칸은 더한 것이지 바꾼 것이 아니다."""
+        made = self._card(client, admin_headers, ready["id"], "전부")
+        assert made.status_code == 201, made.text
+        assert made.json()["source"]["sample_count"] == 3
+
+    def test_고른_것만_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        runs = self._runs(client, admin_headers, ready["id"])
+        assert len(runs) == 3
+
+        made = self._card(client, admin_headers, ready["id"], "둘만", runs[:2])
+        assert made.status_code == 201, made.text
+        source = made.json()["source"]
+        assert source["sample_count"] == 2
+        assert set(source["test_run_ids"]) == set(runs[:2])
+
+    def test_두_장을_나란히_둘_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**이 기능의 요점이다.** 8건짜리와 10건짜리가 각자의 근거를 들고
+        같은 재료 밑에 함께 산다."""
+        runs = self._runs(client, admin_headers, ready["id"])
+        whole = self._card(client, admin_headers, ready["id"], "3건").json()
+        part = self._card(client, admin_headers, ready["id"], "2건", runs[:2]).json()
+
+        assert whole["id"] != part["id"]
+        assert whole["source"]["sample_count"] == 3
+        assert part["source"]["sample_count"] == 2
+
+        listed = client.get(
+            f"/api/fitting/cards?material_id={ready['id']}", headers=admin_headers
+        ).json()
+        assert {item["id"] for item in listed["items"]} >= {whole["id"], part["id"]}
+
+    def test_뺐다는_사실을_근거에_남긴다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**표본 수만 적으면** 「원래 2건이었나 하나를 뺐나」 를 나중에 아무도
+        답할 수 없다."""
+        runs = self._runs(client, admin_headers, ready["id"])
+        made = self._card(client, admin_headers, ready["id"], "둘만", runs[:2]).json()
+        joined = " ".join(made["source"]["notes"])
+        assert "3건 중 2건" in joined, joined
+
+    def test_모르는_시험을_적으면_막는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**조용히 넘기지 않는다.** 열 건 중 둘을 빼려다 하나가 오타면, 말없이
+        아홉 건짜리 카드가 만들어지고 그 카드는 자기가 아홉 건짜리인 줄 안다."""
+        runs = self._runs(client, admin_headers, ready["id"])
+        ghost = "00000000-0000-0000-0000-000000000000"
+        blocked = self._card(client, admin_headers, ready["id"], "오타", [runs[0], ghost])
+        assert blocked.status_code == 422
+        assert blocked.json()["error"]["code"] == "MNX-FITTING-0022"
+
+    def test_하나도_안_고르면_막는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        blocked = self._card(client, admin_headers, ready["id"], "빈 것", [])
+        assert blocked.status_code == 422
+        assert blocked.json()["error"]["code"] == "MNX-FITTING-0021"
+
+    def test_미리보기도_같은_것을_본다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**저장하고 나서야 알면 늦다.** 뺀 것과 안 뺀 것의 적합이 어떻게
+        다른지 눈으로 보고 정해야 한다."""
+        runs = self._runs(client, admin_headers, ready["id"])
+        seen = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "families": ["swift"],
+                "test_run_ids": runs[:2],
+            },
+            headers=admin_headers,
+        )
+        assert seen.status_code == 200, seen.text
+        assert seen.json()["sample_count"] == 2

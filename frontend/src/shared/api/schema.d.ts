@@ -4183,6 +4183,8 @@ export interface components {
             material_id: string;
             /** Orientation */
             orientation: string;
+            /** Test Run Ids */
+            test_run_ids?: string[] | null;
             /** Test Type Key */
             test_type_key: string;
         };
@@ -5341,6 +5343,8 @@ export interface components {
             orientation: string;
             /** Poisson Ratio */
             poisson_ratio?: number | null;
+            /** Test Run Ids */
+            test_run_ids?: string[] | null;
             /** Test Type Key */
             test_type_key: string;
         };

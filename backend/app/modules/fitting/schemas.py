@@ -68,6 +68,17 @@ class FitPreviewRequest(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    test_run_ids: list[uuid.UUID] | None = None
+    """**이 시험들만 쓴다.** 비우면 채택된 것 전부.
+
+    이상치 후보를 빼고 다시 뽑아 보는 것이 실무의 정상 작업인데, 지금까지는 그
+    결정을 적을 자리가 없어서 **시험의 채택을 푸는 수밖에** 없었다. 그러면
+    통계 화면과 나중에 만들 카드까지 전부 따라 바뀌어서, 「10건짜리」와 「8건
+    짜리」를 나란히 두고 견줄 수가 없다.
+
+    카드는 자기가 무엇으로 나왔는지 이미 들고 있다(`source.test_run_ids`) —
+    그러니 고를 수만 있으면 두 장이 각자의 근거를 갖는다.
+    """
     families: list[str] = []
     """비우면 등록된 식 전부를 견준다."""
     extrapolate_to: float | None = Field(default=None, gt=0, le=10.0)
@@ -116,6 +127,17 @@ class PropertyCardSaveRequest(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    test_run_ids: list[uuid.UUID] | None = None
+    """**이 시험들만 쓴다.** 비우면 채택된 것 전부.
+
+    이상치 후보를 빼고 다시 뽑아 보는 것이 실무의 정상 작업인데, 지금까지는 그
+    결정을 적을 자리가 없어서 **시험의 채택을 푸는 수밖에** 없었다. 그러면
+    통계 화면과 나중에 만들 카드까지 전부 따라 바뀌어서, 「10건짜리」와 「8건
+    짜리」를 나란히 두고 견줄 수가 없다.
+
+    카드는 자기가 무엇으로 나왔는지 이미 들고 있다(`source.test_run_ids`) —
+    그러니 고를 수만 있으면 두 장이 각자의 근거를 갖는다.
+    """
     label: str = Field(min_length=1, max_length=120)
     family: str | None = None
     """비우면 표만 저장한다 — 식이 안 맞는 재료에서는 표가 더 정확하다."""
