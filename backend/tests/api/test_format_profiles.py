@@ -1192,3 +1192,195 @@ class Test종류가_틀린_파일:
         ).json()
         assert "형식 프로파일을" in detail["parse_error"]
         assert "시험 종류가 잘못" not in detail["parse_error"]
+
+
+class Test시험_종류_바로잡기:
+    """올릴 때 종류를 잘못 고른 시험. **지우고 다시 올리지 않아도 되게.**
+
+    파일은 이미 올라와 있고 시편 연결도 끝났다 — 틀린 것은 종류 하나다.
+    """
+
+    def _wrong(
+        self, client: TestClient, headers: dict[str, str], specimen_id: str
+    ) -> dict[str, Any]:
+        """인장 파일을 DMA 종류로 올린다 — 실제로 난 일이다."""
+        made = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen_id, "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("Example.tra", (FIXTURES / "Example.tra").read_bytes())},
+            headers=headers,
+        )
+        assert made.status_code == 202, made.text
+        return dict(made.json())
+
+    def test_종류를_바꾸면_이름도_바뀐다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**종류는 이름의 한 칸이다**(ADR 0004)."""
+        del dma, tensile
+        run = self._wrong(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "failed"
+
+        fixed = client.post(
+            f"/api/test-runs/{run['id']}/test-type",
+            json={"test_type_key": "tensile"},
+            headers=admin_headers,
+        )
+        assert fixed.status_code == 202, fixed.text
+        assert fixed.json()["record_name"] != run["record_name"]
+        assert "TEN" in fixed.json()["record_name"]
+
+        # 그리고 이제 읽힌다 — 그게 이 기능의 요점이다.
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+
+    def test_새_종류_안에서_다시_채번한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**회차는 종류별이다.** 옛 번호를 들고 가면 새 종류에서 이미 쓰인
+        번호와 부딪힌다 — 같은 이름이 둘 생긴다."""
+        del dma, tensile
+        # 이 시편에 인장 1회차가 이미 있다.
+        first = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example.tra", (FIXTURES / "Example.tra").read_bytes())},
+            headers=admin_headers,
+        )
+        assert first.status_code == 202, first.text
+        assert first.json()["record_name"].endswith("TEN_01")
+
+        # 잘못 올린 것은 DMA 1회차다 — 옛 번호를 들고 가면 TEN_01 이 둘이 된다.
+        wrong = self._wrong(client, admin_headers, specimen["id"])
+        assert wrong["record_name"].endswith("_01")
+        assert services.parse_run(db, uuid.UUID(wrong["id"])) == "failed"
+
+        fixed = client.post(
+            f"/api/test-runs/{wrong['id']}/test-type",
+            json={"test_type_key": "tensile"},
+            headers=admin_headers,
+        )
+        assert fixed.status_code == 202, fixed.text
+        assert fixed.json()["record_name"].endswith("TEN_02"), fixed.json()["record_name"]
+        assert fixed.json()["record_name"] != first.json()["record_name"]
+
+    def test_읽힌_시험은_막는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**말없이 지워 주지 않는다.** 곡선과 결과가 무엇의 것인지 알 수 없게
+        되는데, 그 사람은 무엇이 사라졌는지 모른 채 새 이름을 얻는다."""
+        del dma
+        del tensile
+        made = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example.tra", (FIXTURES / "Example.tra").read_bytes())},
+            headers=admin_headers,
+        )
+        assert services.parse_run(db, uuid.UUID(made.json()["id"])) == "parsed"
+
+        blocked = client.post(
+            f"/api/test-runs/{made.json()['id']}/test-type",
+            json={"test_type_key": "dma_sweep"},
+            headers=admin_headers,
+        )
+        assert blocked.status_code == 409
+        assert blocked.json()["error"]["code"] == "MNX-TESTS-0023"
+        # 이름은 그대로여야 한다 — 막았으면 아무것도 안 바뀌어야 한다.
+        after = client.get(f"/api/test-runs/{made.json()['id']}", headers=admin_headers).json()
+        assert after["record_name"] == made.json()["record_name"]
+
+    def test_새_종류에_없는_조건은_버리고_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**조용히 버리지 않는다.** 사람이 적은 값이고, 없어진 것을 나중에
+        결과에서 알면 그때는 되돌릴 수 없다."""
+        del dma, tensile
+        made = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "tensile",
+                # 인장에만 있는 칸이다 — DMA 로 바꾸면 버려진다.
+                "conditions": '{"temperature": 23}',
+                "condition_units": '{"temperature": "degC"}',
+            },
+            files={"file": ("mystery.xyz", b"who knows what this is")},
+            headers=admin_headers,
+        )
+        assert made.status_code == 202, made.text
+        assert services.parse_run(db, uuid.UUID(made.json()["id"])) == "failed"
+
+        fixed = client.post(
+            f"/api/test-runs/{made.json()['id']}/test-type",
+            json={"test_type_key": "dma_sweep"},
+            headers=admin_headers,
+        )
+        assert fixed.status_code == 202, fixed.text
+        assert fixed.json()["dropped_conditions"] == ["temperature"]
+        assert "조건 1칸" in fixed.json()["message"]
+
+    def test_같은_종류로는_안_바꾼다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        del dma
+        run = self._wrong(client, admin_headers, specimen["id"])
+        blocked = client.post(
+            f"/api/test-runs/{run['id']}/test-type",
+            json={"test_type_key": "dma_sweep"},
+            headers=admin_headers,
+        )
+        assert blocked.status_code == 422
+        assert blocked.json()["error"]["code"] == "MNX-TESTS-0024"
+
+    def test_옛_종류의_형식_고정을_푼다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**고정은 옛 종류의 것이다.** 그대로 두면 새 종류로 못 읽는다."""
+        del dma, tensile
+        run = self._wrong(client, admin_headers, specimen["id"])
+        client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": "ta_dma850"},
+            headers=admin_headers,
+        )
+        client.post(
+            f"/api/test-runs/{run['id']}/test-type",
+            json={"test_type_key": "tensile"},
+            headers=admin_headers,
+        )
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["parse_profile_key"] is None

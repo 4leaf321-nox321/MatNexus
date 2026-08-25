@@ -62,6 +62,15 @@ export default function TestRunDetailPage() {
   const [action, setAction] = useState<Error | null>(null)
   const [removing, setRemoving] = useState(false)
   /** 이 시험 종류로 쓸 수 있는 형식들. **키를 외워서 치게 할 수는 없다.** */
+  /**
+   * 종류를 바꿀 수 있나. **아직 아무것도 안 나온 시험만** — 곡선이나 처리
+   * 결과가 있으면 그것들이 무엇의 결과인지 알 수 없게 된다.
+   *
+   * 서버가 최종 판정을 한다(409). 여기서 감추는 것은 **눌러도 막히는 것을
+   * 보여 주지 않으려는 것**뿐이다.
+   */
+  const retypable = (run.data?.curves?.length ?? 0) === 0 && !run.data?.adopted_result_id
+
   const formats = useResource(
     () => testsApi.formats(run.data?.test_type_key ?? undefined),
     [run.data?.test_type_key]
@@ -186,6 +195,23 @@ export default function TestRunDetailPage() {
    * `profileKey` 를 안 주면 **지금 정해진 대로** 읽는다 — 고정을 골라 뒀으면
    * 그것이 이어진다. `null` 이면 고정을 풀고 자동으로 되돌린다.
    */
+  /**
+   * 종류를 바로잡는다. **아직 아무것도 안 나온 시험만** — 서버가 막는다.
+   *
+   * 이름이 바뀌므로 목록을 다시 읽는다. 바뀐 이름을 말해 주지 않으면, 사람은
+   * 자기가 보던 시험을 목록에서 못 찾는다.
+   */
+  async function retype(testTypeKey: string) {
+    setAction(null)
+    try {
+      const done = await testsApi.retype(id, testTypeKey)
+      setNotice(done.message)
+      run.reload()
+    } catch (caught) {
+      setAction(caught instanceof Error ? caught : new Error('종류를 바꾸지 못했습니다.'))
+    }
+  }
+
   async function reparse(profileKey?: string | null) {
     setAction(null)
     try {
@@ -292,6 +318,30 @@ export default function TestRunDetailPage() {
                     <DropdownMenuItem onSelect={() => void reparse(null)}>
                       고정 풀고 자동으로
                     </DropdownMenuItem>
+                  </>
+                )}
+                {/* **형식이 아니라 종류가 틀린 경우가 있다.** 인장 파일을 DMA
+                    로 올린 것은 어떤 형식으로도 안 읽힌다 — 그때 지우고 다시
+                    올리게 하면 파일과 시편 연결을 처음부터 다시 한다. */}
+                {retypable && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs font-normal">
+                      시험 종류를 바로잡기 (이름도 바뀝니다)
+                    </DropdownMenuLabel>
+                    {(types.data ?? [])
+                      .filter((one) => one.key !== item?.test_type_key)
+                      .map((one) => (
+                        <DropdownMenuItem
+                          key={one.key}
+                          onSelect={() => void retype(one.key)}
+                        >
+                          {one.label}
+                          <span className="text-muted-foreground ml-auto text-xs">
+                            {one.abbr}
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
                   </>
                 )}
               </DropdownMenuContent>

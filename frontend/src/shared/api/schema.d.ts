@@ -1994,6 +1994,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-runs/{run_id}/test-type": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retype
+         * @description 올릴 때 종류를 잘못 고른 시험을 바로잡는다.
+         *
+         *     ## 왜 아무 때나 못 바꾸는가
+         *
+         *     시험 종류는 **이름의 한 칸**이고(ADR 0004), 회차도 종류별로 매긴다. 그것만
+         *     이면 다시 지으면 되는데, 종류가 바뀌면 **이미 나온 것들이 전부 뜻을 잃는다**.
+         *
+         *       * 곡선은 옛 종류의 채널로 읽힌 것이다.
+         *       * 처리 결과는 그 채널을 입력으로 삼았고 **불변**이다 — 고쳐 끼울 수 없다.
+         *       * 조건값은 옛 종류의 칸에 맞춰 단위까지 정규화돼 있다.
+         *
+         *     그래서 **아직 아무것도 안 나온 시험만** 바꾼다. 곡선도 처리 결과도 없고
+         *     채택도 안 된 것 — 올리자마자 읽기에 실패한 시험이 정확히 그 상태다.
+         *
+         *     이미 읽힌 시험을 바꾸려면 지우고 다시 올리는 편이 낫다. 여기서 곡선과
+         *     결과를 말없이 지워 주면, 그 사람은 **무엇이 사라졌는지 모른 채** 새 이름을
+         *     얻는다.
+         */
+        post: operations["retype_api_test_runs__run_id__test_type_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-types": {
         parameters: {
             query?: never;
@@ -5608,6 +5644,25 @@ export interface components {
             x: string;
             /** Y */
             y: string;
+        };
+        /** RetypeOut */
+        RetypeOut: {
+            /** Dropped Conditions */
+            dropped_conditions: string[];
+            /** Message */
+            message: string;
+            /** Record Name */
+            record_name: string;
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /**
+         * RetypeRequest
+         * @description 시험 종류를 바꾼다. **아직 아무것도 안 나온 시험만.**
+         */
+        RetypeRequest: {
+            /** Test Type Key */
+            test_type_key: string;
         };
         /** RunBulkUpdateOut */
         RunBulkUpdateOut: {
@@ -10778,6 +10833,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retype_api_test_runs__run_id__test_type_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetypeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetypeOut"];
                 };
             };
             /** @description Validation Error */

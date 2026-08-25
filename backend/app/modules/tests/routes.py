@@ -26,6 +26,7 @@ from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests import formats, importing, services
 from app.modules.tests.models import (
+    Curve,
     FormatProfile,
     TestChannel,
     TestConditionField,
@@ -45,6 +46,8 @@ from app.modules.tests.schemas import (
     ParserOut,
     ReparseOut,
     ReparseRequest,
+    RetypeOut,
+    RetypeRequest,
     RunBulkUpdateOut,
     RunBulkUpdateRequest,
     RunDeleteOut,
@@ -1118,6 +1121,112 @@ def download_source(
         filestore.resolve(run.source_path),
         filename=run.source_filename or "source.dat",
         media_type="application/octet-stream",
+    )
+
+
+@runs_router.post("/{run_id}/test-type", response_model=RetypeOut, status_code=202)
+def retype(
+    run_id: uuid.UUID,
+    payload: RetypeRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RetypeOut:
+    """올릴 때 종류를 잘못 고른 시험을 바로잡는다.
+
+    ## 왜 아무 때나 못 바꾸는가
+
+    시험 종류는 **이름의 한 칸**이고(ADR 0004), 회차도 종류별로 매긴다. 그것만
+    이면 다시 지으면 되는데, 종류가 바뀌면 **이미 나온 것들이 전부 뜻을 잃는다**.
+
+      * 곡선은 옛 종류의 채널로 읽힌 것이다.
+      * 처리 결과는 그 채널을 입력으로 삼았고 **불변**이다 — 고쳐 끼울 수 없다.
+      * 조건값은 옛 종류의 칸에 맞춰 단위까지 정규화돼 있다.
+
+    그래서 **아직 아무것도 안 나온 시험만** 바꾼다. 곡선도 처리 결과도 없고
+    채택도 안 된 것 — 올리자마자 읽기에 실패한 시험이 정확히 그 상태다.
+
+    이미 읽힌 시험을 바꾸려면 지우고 다시 올리는 편이 낫다. 여기서 곡선과
+    결과를 말없이 지워 주면, 그 사람은 **무엇이 사라졌는지 모른 채** 새 이름을
+    얻는다.
+    """
+    run = services.get_run(db, user, run_id)
+
+    made = db.scalar(
+        select(func.count()).select_from(Curve).where(Curve.test_run_id == run.id)
+    )
+    results = db.scalar(
+        select(func.count())
+        .select_from(ProcessingResult)
+        .where(ProcessingResult.test_run_id == run.id)
+    )
+    if made or results or run.adopted_result_id is not None:
+        raise AppError(
+            "MNX-TESTS-0023",
+            f"이미 읽힌 시험입니다(곡선 {made or 0}개 · 처리 결과 {results or 0}건). "
+            "종류를 바꾸면 그것들이 무엇의 결과인지 알 수 없게 됩니다 — "
+            "지우고 올바른 종류로 다시 올리세요.",
+            status=409,
+        )
+
+    fresh = services.get_test_type(db, payload.test_type_key)
+    if fresh.id == run.test_type_id:
+        raise AppError("MNX-TESTS-0024", "이미 그 종류입니다.", status=422)
+
+    specimen = db.get(Specimen, run.specimen_id)
+    if specimen is None:
+        raise NotFound("MNX-TESTS-0025", "시편을 찾을 수 없습니다.")
+
+    before = run.record_name
+    # **새 종류 안에서 다시 채번한다.** 회차는 종류별이라, 옛 번호를 들고 가면
+    # 새 종류에서 이미 쓰인 번호와 부딪힌다.
+    run.seq_no = services.next_run_seq(db, specimen.id, fresh.id)
+    run.test_type_id = fresh.id
+    run.record_name = naming.test_run_name(
+        specimen=specimen.record_name, type_abbr=fresh.abbr, seq_no=run.seq_no
+    )
+
+    # 조건은 **새 종류에도 있는 칸만** 남긴다. 옛 칸의 값을 들고 있으면 화면이
+    # 그리지도 못하면서 저장돼 있게 된다.
+    keep = {
+        key
+        for key in db.scalars(
+            select(TestConditionField.key).where(TestConditionField.test_type_id == fresh.id)
+        )
+    }
+    dropped = sorted(key for key in run.conditions if key not in keep)
+    run.conditions = {key: value for key, value in run.conditions.items() if key in keep}
+    run.input_units = {key: value for key, value in run.input_units.items() if key in keep}
+
+    # 읽을 형식 고정은 **옛 종류의 것이다.** 그대로 두면 새 종류로 못 읽는다.
+    run.parse_profile_id = None
+    run.status = "uploaded"
+    run.parse_error = None
+
+    audit.record(
+        db,
+        action=audit.TEST_RUN_UPDATED,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={
+            "test_type": {"before": before, "after": run.record_name},
+            "dropped_conditions": {"before": dropped, "after": []},
+        },
+    )
+    queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})
+    db.commit()
+
+    return RetypeOut(
+        record_name=run.record_name,
+        test_type_key=fresh.key,
+        dropped_conditions=dropped,
+        message=(
+            f"'{fresh.label}' 로 바꾸고 다시 읽기를 큐에 넣었습니다. "
+            f"이름이 '{before}' 에서 '{run.record_name}' 으로 바뀌었습니다."
+            + (f" 조건 {len(dropped)}칸은 새 종류에 없어 버렸습니다." if dropped else "")
+        ),
     )
 
 

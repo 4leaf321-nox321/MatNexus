@@ -293,6 +293,22 @@ class CurvePointsOut(BaseModel):
     points: list[tuple[float, float]]
 
 
+class RetypeRequest(BaseModel):
+    """시험 종류를 바꾼다. **아직 아무것도 안 나온 시험만.**"""
+
+    test_type_key: str
+
+
+class RetypeOut(BaseModel):
+    record_name: str
+    """새 이름. 종류가 이름의 한 칸이라 함께 바뀐다(ADR 0004)."""
+    test_type_key: str
+    dropped_conditions: list[str]
+    """새 종류에 없어서 버린 조건 칸. **조용히 버리지 않는다** — 사람이 적은
+    값이고, 없어진 것을 나중에 결과에서 알면 그때는 되돌릴 수 없다."""
+    message: str
+
+
 class ReparseRequest(BaseModel):
     """무엇으로 읽을까.
 

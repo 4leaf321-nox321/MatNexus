@@ -62,6 +62,7 @@ export type BulkUpdateField =
 export type BulkUpdateResult = components['schemas']['RunBulkUpdateOut']
 
 export type ReparseResult = components['schemas']['ReparseOut']
+export type RetypeResult = components['schemas']['RetypeOut']
 
 export interface RunQuery extends Record<string, unknown> {
   /** 부서 slug. 좁히기만 한다 — 권한을 넓히지 않는다. */
@@ -231,6 +232,15 @@ export const testsApi = {
    * 안 보낸 것과 비운 것을 구별하지 않으면 **그냥 다시 읽을 때마다 고정이
    * 풀린다** — 사람은 골라 뒀는데 다음 사람이 누르는 순간 자동으로 돌아간다.
    */
+  /**
+   * 올릴 때 잘못 고른 **시험 종류를 바로잡는다.** 이름도 함께 바뀐다.
+   *
+   * 아직 아무것도 안 나온 시험만 된다 — 곡선도 처리 결과도 없는 것. 이미
+   * 읽힌 시험은 서버가 막는다(409).
+   */
+  retype: (id: string, testTypeKey: string) =>
+    api.post<RetypeResult>(`/test-runs/${id}/test-type`, { test_type_key: testTypeKey }),
+
   reparse: (id: string, profileKey?: string | null) =>
     api.post<ReparseResult>(
       `/test-runs/${id}/reparse`,
