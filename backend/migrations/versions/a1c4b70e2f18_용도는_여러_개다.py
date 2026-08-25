@@ -36,7 +36,10 @@ def upgrade() -> None:
     op.create_table(
         "material_uses",
         sa.Column(
-            "id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column(
             "material_id",
@@ -53,7 +56,9 @@ def upgrade() -> None:
         ),
         sa.Column("value", sa.String(length=100), nullable=False),
         sa.Column("position", sa.Integer(), nullable=False, server_default="0"),
-        sa.UniqueConstraint("material_id", "axis", "term_id", name="uq_material_uses_axis_term"),
+        sa.UniqueConstraint(
+            "material_id", "axis", "term_id", name="uq_material_uses_axis_term"
+        ),
     )
     op.create_index("ix_material_uses_material_id", "material_uses", ["material_id"])
     op.create_index("ix_material_uses_axis", "material_uses", ["axis"])
@@ -103,7 +108,11 @@ def downgrade() -> None:
             sa.Column(term_column, postgresql.UUID(as_uuid=True), nullable=True),
         )
         op.create_foreign_key(
-            f"fk_materials_{term_column}", "materials", "vocabulary_terms", [term_column], ["id"]
+            f"fk_materials_{term_column}",
+            "materials",
+            "vocabulary_terms",
+            [term_column],
+            ["id"],
         )
         op.create_index(f"ix_materials_{term_column}", "materials", [term_column])
         op.execute(

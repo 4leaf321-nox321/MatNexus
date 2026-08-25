@@ -605,6 +605,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         tested_at=run.tested_at,
         operator=run.operator,
         instrument=run.instrument,
+        division=run.division,
         source_filename=run.source_filename,
         source_bytes=run.source_bytes,
         source_sha256=run.source_sha256,
@@ -741,6 +742,7 @@ def upload_test_run(
     tested_at: datetime | None = Form(default=None),
     operator: str | None = Form(default=None),
     instrument: str | None = Form(default=None),
+    division: str | None = Form(default=None),
     note: str | None = Form(default=None),
     file: UploadFile = File(...),
     user: User = Depends(current_user),
@@ -784,7 +786,7 @@ def upload_test_run(
         db,
         run,
         vocabulary_services.TEST_RUN_BINDINGS,
-        {"instrument": instrument},
+        {"instrument": instrument, "division": division},
         created_by_id=user.id,
     )
     db.add(run)
@@ -838,6 +840,7 @@ def list_runs(
     test_type_key: str | None = Query(default=None),
     orientation: str | None = Query(default=None),
     registered_by: str | None = Query(default=None),
+    division: str | None = Query(default=None),
     q: str | None = Query(default=None),
     adopted: bool | None = Query(
         default=None, description="채택된 처리 결과가 있는가 — 없는 것만 보려면 false"
@@ -898,6 +901,8 @@ def list_runs(
                 select(User.id).where(User.display_name == registered_by)
             )
         )
+    if division:
+        query = query.where(TestRun.division == division)
     if q and (text := q.strip()):
         like = f"%{text}%"
         query = query.where(
@@ -964,6 +969,11 @@ def run_facets(
         for key, count in tally(base.c.registered_by_id)
         if key is not None and key in names
     ]
+    divisions = [
+        RunFacetOut(key=str(value), label=str(value), count=count)
+        for value, count in tally(base.c.division)
+        if value
+    ]
     # 방향은 시편에 있다 — 시험에서 바로 못 센다.
     directions = [
         RunFacetOut(key=str(value), label=str(value), count=int(count))
@@ -983,6 +993,7 @@ def run_facets(
         test_types=sorted(kinds, key=lambda one: one.label),
         orientations=sorted(directions, key=lambda one: one.label),
         registrants=sorted(people, key=lambda one: one.label),
+        divisions=sorted(divisions, key=lambda one: one.label),
         statuses=sorted(statuses, key=lambda one: one.key),
     )
 

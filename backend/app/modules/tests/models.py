@@ -269,6 +269,20 @@ class TestRun(Base):
     """장비 기준정보(ADR 0010). 같은 장비를 'Zwick Z100'·'zwick z100' 으로 적으면
     장비별 비교가 갈린다."""
 
+    division: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    division_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True, nullable=True
+    )
+    """**어느 사업부가 등록한 시험인가.** 기준정보를 거친다(ADR 0010).
+
+    부서(`workspace_id`)와 다르다. 부서는 **누가 볼 수 있는가**를 정하는 권한의
+    축이고, 이것은 **누가 낸 데이터인가**를 적는 이름표다. 한 부서 계정으로 여러
+    사업부의 판을 올리는 일이 실제로 있고, 그때 부서로는 그 둘을 못 가른다.
+
+    자유 문자열로 두면 `전장`·`전장사업부`·`전장 사업부` 가 갈려서 「사업부별로
+    몇 건」이 답이 셋 나온다 — 축을 둔 이유 그대로다.
+    """
+
     # --- 원본 파일 ---------------------------------------------------------
     # 원본은 항상 그대로 보관한다. 파서를 고쳐 다시 돌릴 수 있어야 하고, 장비가
     # 바뀌어 형식이 달라졌을 때 무엇이 왔었는지 확인할 수 있어야 한다.

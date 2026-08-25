@@ -56,6 +56,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
   const [conditions, setConditions] = useState<Record<string, string>>({})
   const [operator, setOperator] = useState('')
   const [instrument, setInstrument] = useState('')
+  const [division, setDivision] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
   const [picked, setPicked] = useState<Specimen | null>(null)
@@ -103,6 +104,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
         conditionUnits: conditionUnits(selected.conditions),
         operator: operator || undefined,
         instrument: instrument || undefined,
+        division: division || undefined,
       })
       onDone()
     } catch (caught) {
@@ -225,6 +227,16 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
           label="장비 (선택)"
           value={instrument}
           onChange={setInstrument}
+        />
+
+        {/* **사업부는 부서와 다르다.** 부서는 누가 볼 수 있는가를 정하고,
+            사업부는 누가 낸 데이터인가를 적는다 — 한 부서 계정으로 여러
+            사업부의 판을 올리는 일이 있고, 그때 부서로는 둘을 못 가른다. */}
+        <VocabularyField
+          slug="division"
+          label="사업부 (선택)"
+          value={division}
+          onChange={setDivision}
         />
 
         <ErrorNotice error={error} />

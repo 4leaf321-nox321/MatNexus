@@ -404,7 +404,10 @@ SAMPLE_BINDINGS = (
     Binding("sales_type", "sales_type", "sales_type_term_id"),
 )
 SPECIMEN_BINDINGS = (Binding("specimen_standard", "standard", "standard_term_id"),)
-TEST_RUN_BINDINGS = (Binding("instrument", "instrument", "instrument_term_id"),)
+TEST_RUN_BINDINGS = (
+    Binding("instrument", "instrument", "instrument_term_id"),
+    Binding("division", "division", "division_term_id"),
+)
 
 
 def apply_bindings(

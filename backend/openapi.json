@@ -535,6 +535,17 @@
             "title": "Conditions",
             "type": "string"
           },
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
           "file": {
             "contentMediaType": "application/octet-stream",
             "title": "File",
@@ -6838,6 +6849,13 @@
       "RunFacetsOut": {
         "description": "무엇으로 거를 수 있나. **지금 걸린 필터를 안 본다.**\n\n「무엇이 있나」를 답하는 자리다 — 필터를 걸 때마다 다른 축의 숫자가 같이\n줄면, 필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.",
         "properties": {
+          "divisions": {
+            "items": {
+              "$ref": "#/components/schemas/RunFacetOut"
+            },
+            "title": "Divisions",
+            "type": "array"
+          },
           "orientations": {
             "items": {
               "$ref": "#/components/schemas/RunFacetOut"
@@ -6871,6 +6889,7 @@
           "test_types",
           "orientations",
           "registrants",
+          "divisions",
           "statuses"
         ],
         "title": "RunFacetsOut",
@@ -9512,6 +9531,17 @@
             "title": "Curves",
             "type": "array"
           },
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -9810,6 +9840,17 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
           },
           "id": {
             "format": "uuid",
@@ -16007,6 +16048,22 @@
                 }
               ],
               "title": "Registered By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "division",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Division"
             }
           },
           {

@@ -128,6 +128,7 @@ class RunFacetsOut(BaseModel):
     test_types: list[RunFacetOut]
     orientations: list[RunFacetOut]
     registrants: list[RunFacetOut]
+    divisions: list[RunFacetOut]
     statuses: list[RunFacetOut]
 
 
@@ -161,6 +162,8 @@ class TestRunOut(BaseModel):
     tested_at: datetime | None
     operator: str | None
     instrument: str | None
+    division: str | None = None
+    """어느 사업부가 낸 시험인가. 부서(권한)와 다른 축이다."""
 
     registered_by: str | None = None
     """올린 사람. **목록에서 보여야 한다** — 파일이 이상할 때 물어볼 데가

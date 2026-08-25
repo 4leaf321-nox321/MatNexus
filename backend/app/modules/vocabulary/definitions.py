@@ -49,6 +49,10 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     # 환봉이라 직경이 필요하고 `JIS 5호` 는 평판이라 필요 없다.
     ("specimen_standard", "시편 규격", "open", 40, "specimen_category", "parent"),
     ("instrument", "장비", "open", 50, None, None),
+    # **시험을 낸 사업부.** 부서(workspace)와 다르다 — 부서는 누가 볼 수 있는가를
+    # 정하고, 이것은 누가 낸 데이터인가를 적는다. 한 부서 계정으로 여러 사업부의
+    # 판을 올리는 일이 있고, 그때 부서로는 둘을 못 가른다.
+    ("division", "사업부", "open", 45, None, None),
     # **가장 큰 축이고 이득도 가장 크다.** 지금은 SECC/secc/S.E.C.C 가 서로
     # 다른 재료 셋을 만든다. 다만 Grade 는 재료 이름을 만드는 값이라(ADR 0004)
     # 값 이름을 고치면 재료·시료·시편·시험 이름이 전부 따라 바뀐다.

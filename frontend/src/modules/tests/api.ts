@@ -89,6 +89,8 @@ export interface UploadInput {
   conditionUnits?: Record<string, string>
   operator?: string
   instrument?: string
+  /** 어느 사업부가 낸 시험인가. 부서(권한)와 다른 축이다. */
+  division?: string
   note?: string
 }
 
@@ -228,6 +230,7 @@ export const testsApi = {
     conditionUnits,
     operator,
     instrument,
+    division,
     note,
   }: UploadInput) => {
     const form = new FormData()
@@ -237,6 +240,7 @@ export const testsApi = {
     form.set('condition_units', JSON.stringify(conditionUnits ?? {}))
     if (operator) form.set('operator', operator)
     if (instrument) form.set('instrument', instrument)
+    if (division) form.set('division', division)
     if (note) form.set('note', note)
     form.set('file', file)
     return api.postForm<TestRun>('/test-runs', form)

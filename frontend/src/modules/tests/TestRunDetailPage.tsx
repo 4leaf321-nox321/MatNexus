@@ -579,6 +579,7 @@ function ConditionBlock({
     ['시험일시', item.tested_at ? new Date(item.tested_at).toLocaleString('ko-KR') : ''],
     ['시험자', item.operator ?? ''],
     ['장비', item.instrument ?? ''],
+    ['사업부', item.division ?? ''],
   ]
   const filledMeta = meta.filter(([, value]) => value !== '')
   if (filled.length === 0 && filledMeta.length === 0 && !item.specimen_standard) return null

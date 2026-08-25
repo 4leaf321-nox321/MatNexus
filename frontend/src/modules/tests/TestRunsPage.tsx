@@ -358,6 +358,16 @@ export default function TestRunsPage() {
               <TableHead>처리</TableHead>
               <TableHead className="text-right">행</TableHead>
               <TableHead>
+                {/* **부서와 다른 축이다.** 부서는 누가 볼 수 있는가를 정하고,
+                    사업부는 누가 낸 데이터인가를 적는다. */}
+                <ColumnFilter
+                  label="사업부"
+                  rows={facets.data?.divisions ?? []}
+                  current={filters.division}
+                  onPick={(value) => narrow('division', value)}
+                />
+              </TableHead>
+              <TableHead>
                 <ColumnFilter
                   label="등록한 사람"
                   rows={facets.data?.registrants ?? []}
@@ -429,6 +439,9 @@ export default function TestRunsPage() {
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {run.row_count?.toLocaleString('ko-KR') ?? '—'}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {run.division ?? '—'}
                 </TableCell>
                 {/* **파일이 이상할 때 물어볼 데가 여기다.** 전에는 상세를
                     열어야 알 수 있었고, 20건이 이상하면 20번 열어야 했다. */}

@@ -69,14 +69,18 @@ def _upload(
     content: bytes | None = None,
     filename: str = "Example.tra",
     conditions: str = "{}",
+    division: str | None = None,
 ) -> Any:
+    data = {
+        "specimen_id": specimen_id,
+        "test_type": "tensile",
+        "conditions": conditions,
+    }
+    if division is not None:
+        data["division"] = division
     return client.post(
         "/api/test-runs",
-        data={
-            "specimen_id": specimen_id,
-            "test_type": "tensile",
-            "conditions": conditions,
-        },
+        data=data,
         files={"file": (filename, content if content is not None else TRA.read_bytes())},
         headers=headers,
     )
@@ -797,3 +801,115 @@ class Test목록_거르기와_여러_건_삭제:
         ).json()
         assert done["deleted"] == len(ids)
         assert done["blocked"] == [ghost]
+
+
+class Test사업부:
+    """어느 사업부가 낸 시험인가 — **부서와 다른 축이다.**
+
+    부서(`workspace`)는 누가 볼 수 있는가를 정하는 권한의 축이고, 사업부는
+    누가 낸 데이터인가를 적는 이름표다. 한 부서 계정으로 여러 사업부의 판을
+    올리는 일이 있고, 그때 부서로는 그 둘을 못 가른다.
+    """
+
+    def test_기준정보에_축이_있다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**목록을 기준정보가 관리한다.** 자유 문자열이면 `전장`·`전장사업부`·
+        `전장 사업부` 가 갈려서 「사업부별로 몇 건」에 답이 셋 나온다."""
+        axes = {
+            item["slug"]: item
+            for item in client.get("/api/vocabularies", headers=admin_headers).json()
+        }
+        assert "division" in axes, "사업부 축이 없다"
+        assert axes["division"]["label"] == "사업부"
+        # 부서가 스스로 늘린다 — 관리자가 미리 다 적어 둘 수 있는 목록이 아니고,
+        # 못 고르면 사람은 비워 두거나 메모에 적는다.
+        assert axes["division"]["entry_policy"] == "open"
+
+    def test_올릴_때_적고_목록에서_읽는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        del tensile
+        made = _upload(client, admin_headers, specimen["id"], division="전장  ")
+        assert made.status_code == 202, made.text
+        # 가운데·양끝 공백이 정리된 값이 들어간다(기준정보를 거친다).
+        assert made.json()["division"] == "전장"
+
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        assert listed["items"][0]["division"] == "전장"
+
+    def test_표기가_갈려도_한_값이다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """이 축을 둔 이유 전부다."""
+        del tensile
+        for spelling in ("전장", "전장 ", " 전장"):
+            assert (
+                _upload(client, admin_headers, specimen["id"], division=spelling).status_code
+                == 202
+            )
+
+        found = client.get(
+            "/api/vocabularies/division/terms", params={"q": "전장"}, headers=admin_headers
+        ).json()["items"]
+        assert len(found) == 1, f"표기가 갈려 값이 여러 개 생겼다: {found}"
+        assert found[0]["usage_count"] == 3
+
+    def test_사업부로_거른다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이
+        없는 시험이 된다."""
+        del tensile
+        _upload(client, admin_headers, specimen["id"], division="전장")
+        _upload(client, admin_headers, specimen["id"], division="차체")
+
+        got = client.get("/api/test-runs?division=전장", headers=admin_headers).json()
+        assert got["total"] == 1
+        assert got["items"][0]["division"] == "전장"
+
+        none = client.get("/api/test-runs?division=없는사업부", headers=admin_headers).json()
+        assert none["total"] == 0
+
+    def test_거를_수_있는_것과_그_수를_준다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """화면이 한 쪽에서 세면 필터 옆의 숫자가 거짓말을 한다."""
+        del tensile
+        _upload(client, admin_headers, specimen["id"], division="전장")
+        _upload(client, admin_headers, specimen["id"], division="전장")
+        _upload(client, admin_headers, specimen["id"])  # 안 적은 것
+
+        body = client.get("/api/test-runs/facets", headers=admin_headers).json()
+        divisions = {row["key"]: row["count"] for row in body["divisions"]}
+        assert divisions == {"전장": 2}, "안 적은 것이 빈 이름으로 실렸다"
+
+    def test_안_적어도_올라간다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**모르는 것을 지어내지 않는다.** 전에 올린 시험은 사업부가 비어 있고
+        그것이 맞다 — 필수로 만들면 그 시험들을 아무도 못 고친다."""
+        del tensile
+        made = _upload(client, admin_headers, specimen["id"])
+        assert made.status_code == 202, made.text
+        assert made.json()["division"] is None

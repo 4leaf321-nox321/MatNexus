@@ -3128,6 +3128,8 @@ export interface components {
              * @default {}
              */
             conditions: string;
+            /** Division */
+            division?: string | null;
             /** File */
             file: string;
             /** Instrument */
@@ -5570,6 +5572,8 @@ export interface components {
          *     줄면, 필터를 풀기 전에는 그 축에 무엇이 있는지 알 수 없다.
          */
         RunFacetsOut: {
+            /** Divisions */
+            divisions: components["schemas"]["RunFacetOut"][];
             /** Orientations */
             orientations: components["schemas"]["RunFacetOut"][];
             /** Registrants */
@@ -6567,6 +6571,8 @@ export interface components {
             created_at: string;
             /** Curves */
             curves: components["schemas"]["CurveOut"][];
+            /** Division */
+            division?: string | null;
             /**
              * Id
              * Format: uuid
@@ -6648,6 +6654,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Division */
+            division?: string | null;
             /**
              * Id
              * Format: uuid
@@ -10166,6 +10174,7 @@ export interface operations {
                 test_type_key?: string | null;
                 orientation?: string | null;
                 registered_by?: string | null;
+                division?: string | null;
                 q?: string | null;
                 /** @description 채택된 처리 결과가 있는가 — 없는 것만 보려면 false */
                 adopted?: boolean | null;
