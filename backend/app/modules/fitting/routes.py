@@ -168,8 +168,18 @@ class Inherited:
 
 
 def _samples_of(db: Session, group: statistics_services.Group) -> list[Sample]:
+    """묶음에 든 시료들. **지운 것은 뺀다.**
+
+    시편이 남아 있으면 시료를 못 지우므로 지금은 여기로 지운 시료가 들어올 길이
+    없다. 그래도 거른다 — 그 전제가 깨지는 날(시편까지 지우고 시료를 지우는
+    경로가 생기는 날) 이 함수는 조용히 틀린 밀도를 내놓는다.
+    """
     ids = {member.specimen.sample_id for member in group.members}
-    return list(db.scalars(select(Sample).where(Sample.id.in_(ids)))) if ids else []
+    if not ids:
+        return []
+    return list(
+        db.scalars(select(Sample).where(Sample.id.in_(ids), Sample.deleted_at.is_(None)))
+    )
 
 
 def _inherit_density(
@@ -281,7 +291,7 @@ def _thermal_block(material: Material) -> dict[str, Any]:
     적으면 나머지 둘이 그 온도의 값인 것처럼 보인다.
     """
     values: dict[str, Any] = {}
-    temperatures: set[float] = set()
+    temperatures: set[float | None] = set()
     for key, item in THERMAL_ITEMS.items():
         found = _declared(material, item)
         if found.value is None:
@@ -294,13 +304,19 @@ def _thermal_block(material: Material) -> dict[str, Any]:
         row = _declared_row(material, item) or {}
         if row.get("reference"):
             values[f"{key}_reference"] = str(row["reference"])
-        # **첫 점의 온도만 본다.** 온도를 타는 물성은 표로 나가고, 그 표가
-        # 자기 온도를 들고 있다 — 기준 온도는 「이 값들이 어느 온도의 것인가」에
-        # 답하는 자리라 표가 있으면 뜻이 없다.
+        # **물성마다 자기 온도를 든다.** 한 통에 모아 두면 「비열을 잰 온도」가
+        # 열팽창의 기준 온도로 나가는 일이 생긴다 — 실제로 그랬다(§10.5).
         points = _declared_points(row)
         if len(points) == 1 and isinstance(points[0].get("temperature_k"), (int, float)):
+            values[f"{key}_temperature"] = float(points[0]["temperature_k"])
             temperatures.add(float(points[0]["temperature_k"]))
-    if values and len(temperatures) == 1:
+        else:
+            # 표인 물성은 온도를 하나로 말할 수 없다. **그것을 셈에 넣지 않으면**
+            # 나머지 둘이 우연히 같을 때 「전부 그 온도」로 읽힌다.
+            temperatures.add(None)
+
+    # 블록 전체의 기준 온도. **전부 한 점이고 그 온도가 같을 때만** 뜻이 있다.
+    if values and len(temperatures) == 1 and None not in temperatures:
         values["reference_temperature"] = next(iter(temperatures))
     return values
 
@@ -377,7 +393,15 @@ def _declared_blocks(
     stated = _declared(material, "탄성계수")
     stated_row = _declared_row(material, "탄성계수")
     poisson = _inherit_poisson(material, poisson_override)
-    samples = list(db.scalars(select(Sample).where(Sample.material_id == material.id)))
+    # **지운 시료는 안 본다.** 밀도를 잘못 적어 지운 시료의 값이 카드에
+    # 「실측」으로 박히면, 지운 그 값으로 해석을 돌리게 된다.
+    samples = list(
+        db.scalars(
+            select(Sample).where(
+                Sample.material_id == material.id, Sample.deleted_at.is_(None)
+            )
+        )
+    )
     density = _inherit_density(material, samples, density_override)
 
     elastic: dict[str, Any] = {
@@ -1421,7 +1445,18 @@ def list_cards(
     if owner == GLOBAL_OWNER:
         query = query.where(Material.owner_workspace_id.is_(None))
     elif owner:
-        query = query.where(Material.owner_workspace_id == uuid.UUID(owner))
+        # **손으로 고친 URL 이 500 을 내면 안 된다.** `uuid.UUID` 는 아무 문자열에나
+        # ValueError 를 던지는데, 그것이 그대로 올라가면 사람은 "서버가 고장났다" 로
+        # 읽는다 — 실제로는 필터 값이 틀린 것이다(낡은 북마크가 그렇게 된다).
+        try:
+            owner_id = uuid.UUID(owner)
+        except ValueError as caught:
+            raise AppError(
+                "MNX-FITTING-0018",
+                f"부서 값이 '{owner}' 입니다 — 부서 id 이거나 '{GLOBAL_OWNER}' 여야 합니다.",
+                status=422,
+            ) from caught
+        query = query.where(Material.owner_workspace_id == owner_id)
     if q and (text := q.strip()):
         like = f"%{text}%"
         query = query.where(
@@ -1596,7 +1631,12 @@ def export_card(
         content=rendered.text,
         media_type=target.media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{deck.name}.{target.extension}"'
+            # **형식마다 이름이 달라야 한다.** 한 카드가 `/MAT/LAW36` 과
+            # `/HEAT/MAT` 을 함께 내는데 둘 다 `.rad` 라, 이름이 같으면 받는
+            # 쪽에 `(1)` 이 붙고 어느 쪽이 열인지 알 수 없게 된다.
+            "Content-Disposition": (
+                f'attachment; filename="{deck.name}{target.suffix}.{target.extension}"'
+            )
         },
     )
 

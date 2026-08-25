@@ -2025,3 +2025,205 @@ class Test온도표:
             headers=admin_headers,
         )
         assert refused.status_code == 422, refused.text
+
+
+class Test되짚어_찾은_것:
+    """전체 훑기에서 나온 것들(2026-08-25). **넷 다 재현해서 고쳤다.**
+
+    공통점이 있다: 넷 중 셋이 *"덱은 멀쩡히 돌고 값만 틀리는"* 종류다 —
+    이 저장소가 가장 경계하는 실패이고, 시험이 없으면 아무도 모른다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _axis(self, db: Session) -> None:
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        db.commit()
+
+    def test_ZERO_는_열팽창_자신의_온도에서만_나온다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**`ZERO` 는 열변형이 0 이 되는 온도다.** 비열을 잰 온도와 아무 관계가
+        없는데, 온도를 한 통에 모아 두었더니 그것이 `ZERO` 로 나갔다.
+
+        열팽창이 표면 어디서 변형이 0 인지 **표가 말해 주지 않는다** — 안 적으면
+        Abaqus 가 해석의 초기 온도를 쓰고, 그것이 맞는 기본값이다.
+        """
+        declare(
+            client,
+            admin_headers,
+            material["id"],
+            [
+                {
+                    "item": "열팽창계수",
+                    "points": [
+                        {"value": 1.17e-05, "temperature_k": 293.15},
+                        {"value": 1.55e-05, "temperature_k": 873.15},
+                    ],
+                    "input_unit": "1/K",
+                    "source": "standard",
+                    "reference": "A",
+                },
+                {
+                    "item": "비열",
+                    "points": [{"value": 500, "temperature_k": 400.0}],
+                    "input_unit": "J/(kg.K)",
+                    "source": "standard",
+                    "reference": "B",
+                },
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": material["id"], "label": "ZERO"},
+            headers=admin_headers,
+        ).json()
+        thermal = values(card, "thermal")
+        # 비열의 400 K 가 기준 온도로 새어 나오면 안 된다.
+        assert "reference_temperature" not in thermal
+        assert "thermal_expansion_temperature" not in thermal
+
+        text = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+        ).text
+        assert "ZERO" not in text, text[: text.find("*PLASTIC")]
+
+    def test_열팽창이_한_점이면_그_온도가_ZERO_다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """반대쪽도 지킨다 — 열팽창 자신의 온도는 **써야 한다.**"""
+        declare(
+            client,
+            admin_headers,
+            material["id"],
+            [
+                {
+                    "item": "열팽창계수",
+                    "points": [{"value": 1.17e-05, "temperature_k": 293.15}],
+                    "input_unit": "1/K",
+                    "source": "standard",
+                    "reference": "A",
+                },
+                {
+                    "item": "비열",
+                    "points": [{"value": 500, "temperature_k": 400.0}],
+                    "input_unit": "J/(kg.K)",
+                    "source": "standard",
+                    "reference": "B",
+                },
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": material["id"], "label": "ZERO2", "poisson_ratio": 0.3},
+            headers=admin_headers,
+        ).json()
+        assert values(card, "thermal")["thermal_expansion_temperature"] == pytest.approx(
+            293.15
+        )
+        # 비열의 400 K 는 새어 나오지 않는다 — 온도가 갈리므로 기준 온도는 없다.
+        assert "reference_temperature" not in values(card, "thermal")
+
+    def test_지운_시료의_밀도는_안_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**밀도를 잘못 적어 지운 시료의 값이 「실측」으로 카드에 박혔다.**
+        지운 그 값으로 해석을 돌리게 된다."""
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"lot_no": "BAD", "density": 7000.0, "density_unit": "kg/m3"},
+            headers=admin_headers,
+        ).json()
+        gone = client.delete(f"/api/samples/{sample['id']}", headers=admin_headers)
+        assert gone.status_code == 204, gone.text
+
+        declare(
+            client,
+            admin_headers,
+            material["id"],
+            [
+                {
+                    "item": "탄성계수",
+                    "points": [{"value": 206}],
+                    "input_unit": "GPa",
+                    "source": "literature",
+                    "reference": "A",
+                }
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": material["id"], "label": "지운 시료"},
+            headers=admin_headers,
+        ).json()
+        assert "density" not in values(card, "elastic")
+
+    def test_부서_값이_이상하면_422_다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**손으로 고친 URL 이 500 을 내면 안 된다.** 사람은 「서버가
+        고장났다」로 읽는데 실제로는 필터 값이 틀린 것이다(낡은 북마크)."""
+        refused = client.get("/api/fitting/cards?owner=abc", headers=admin_headers)
+        assert refused.status_code == 422, refused.text
+        assert "부서 값" in refused.json()["error"]["message"]
+
+        # 전역은 그대로 돈다.
+        fine = client.get("/api/fitting/cards?owner=global", headers=admin_headers)
+        assert fine.status_code == 200, fine.text
+
+    def test_두_OpenRadioss_덱의_파일_이름이_다르다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """한 카드가 `/MAT/LAW36` 과 `/HEAT/MAT` 을 함께 내는데 둘 다 `.rad` 라,
+        이름이 같으면 받는 쪽에 `(1)` 이 붙고 **어느 쪽이 열인지 알 수 없다.**"""
+        declare(
+            client,
+            admin_headers,
+            ready["id"],
+            [
+                {
+                    "item": "비열",
+                    "points": [{"value": 462}],
+                    "input_unit": "J/(kg.K)",
+                    "source": "standard",
+                    "reference": "A",
+                },
+                {
+                    "item": "열전도도",
+                    "points": [{"value": 45}],
+                    "input_unit": "W/(m.K)",
+                    "source": "standard",
+                    "reference": "A",
+                },
+            ],
+        )
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "두 덱",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        assert {"openradioss", "openradioss_thermal"} <= set(card["available_formats"])
+
+        names = {}
+        for form in ("openradioss", "openradioss_thermal"):
+            got = client.get(
+                f"/api/fitting/cards/{card['id']}/export?format={form}", headers=admin_headers
+            )
+            assert got.status_code == 200, got.text
+            names[form] = got.headers["content-disposition"]
+        assert names["openradioss"] != names["openradioss_thermal"], names
+        assert "_thermal.rad" in names["openradioss_thermal"]

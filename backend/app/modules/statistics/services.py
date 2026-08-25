@@ -79,6 +79,9 @@ def groups_for_material(
             Sample.material_id == material.id,
             TestRun.deleted_at.is_(None),
             Specimen.deleted_at.is_(None),
+            # 시료도 본다. 시편이 남아 있으면 시료를 못 지우므로 지금은 걸릴
+            # 일이 없지만, **그 전제가 깨지면 지운 로트가 통계에 섞인다.**
+            Sample.deleted_at.is_(None),
         )
     ).all()
 

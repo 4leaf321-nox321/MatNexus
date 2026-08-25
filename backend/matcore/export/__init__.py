@@ -339,6 +339,14 @@ class Renderer:
     extension: str
     describe: str
     render: Callable[[Deck], Rendered]
+    suffix: str = ""
+    """파일 이름 뒤에 붙는 꼬리. **같은 확장자를 내는 형식끼리 구별한다.**
+
+    한 카드가 `/MAT/LAW36`(역학)과 `/HEAT/MAT`(열)을 함께 낼 수 있는데, 둘 다
+    `.rad` 라 이름이 같으면 받는 쪽에 `SECC_MD.rad` 와 `SECC_MD (1).rad` 가
+    생긴다 — **어느 쪽이 열인지 알 수 없고, 덮어쓰면 하나를 잃는다.**
+
+    `(확장자, 꼬리)` 짝은 형식마다 달라야 한다. 시험이 그것을 지킨다."""
     keywords: tuple[str, ...] = ()
     """이 형식이면 반드시 들어 있어야 하는 문자열. 쓴 뒤 확인한다 — 키워드가
     빠진 파일은 솔버가 오류 없이 무시하기도 한다."""
@@ -355,6 +363,7 @@ def register_renderer(
     label: str,
     extension: str,
     describe: str,
+    suffix: str = "",
     keywords: tuple[str, ...] = (),
     needs: tuple[Need, ...] = (),
     media_type: str = "text/plain; charset=utf-8",
@@ -372,6 +381,7 @@ def register_renderer(
                 label=label,
                 extension=extension,
                 describe=describe,
+                suffix=suffix,
                 render=fn,
                 keywords=keywords,
                 needs=needs,
@@ -503,7 +513,14 @@ def _thermal_lines(deck: Deck) -> list[str]:
     if not deck.has("thermal"):
         return []
     lines: list[str] = []
-    zero = deck.number("thermal", "reference_temperature")
+    # **열팽창 자신의 온도다.** 블록의 기준 온도를 쓰면 「비열을 잰 온도」가
+    # `ZERO` 로 나가는 일이 생긴다 — `ZERO` 는 열변형이 0 이 되는 온도이고
+    # 다른 물성의 측정 온도와 아무 관계가 없다.
+    #
+    # 표로 적힌 열팽창에는 `ZERO` 를 안 붙인다. 표는 「이 온도에서 α 가 얼마」를
+    # 말할 뿐 **어디서 변형이 0 인지는 말하지 않는다.** 안 적으면 Abaqus 가
+    # 해석의 초기 온도를 쓴다 — 그것이 맞는 기본값이다.
+    zero = deck.number("thermal", "thermal_expansion_temperature")
     rows = deck.rows("thermal")
     for key, keyword, unit in THERMAL_KEYWORDS:
         # **표가 있으면 표가 이긴다.** 값은 첫 줄의 것이므로 둘 다 내면 같은
@@ -599,6 +616,7 @@ def render_abaqus(deck: Deck) -> Rendered:
     key="abaqus_viscoelastic",
     label="Abaqus (점탄성)",
     extension="inp",
+    suffix="_viscoelastic",
     describe=("*ELASTIC + *VISCOELASTIC, TIME=PRONY — 선형 점탄성. 기준 온도 하나에서 유효."),
     keywords=("*MATERIAL", "*ELASTIC", "*VISCOELASTIC"),
     needs=(
@@ -731,6 +749,7 @@ INCOMPRESSIBLE_D = 0.0
     key="abaqus_hyperelastic",
     label="Abaqus (초탄성)",
     extension="inp",
+    suffix="_hyperelastic",
     describe=(
         "*HYPERELASTIC — 고무 초탄성. 공칭 응력 기준이고 D=0(완전 비압축)이라 "
         "하이브리드 요소가 필요하다."
@@ -915,6 +934,7 @@ def _linear_in_temperature(points: list[tuple[float, float]]) -> tuple[float, fl
     key="openradioss_thermal",
     label="OpenRadioss (열물성)",
     extension="rad",
+    suffix="_thermal",
     describe=(
         "/HEAT/MAT — 열해석용 재료. 체적 열용량(RHOCP(밀도 곱하기 비열))과 전도도를 받는다. "
         "전도도는 표가 아니라 `AS + BS·T` 두 계수다."
@@ -1040,6 +1060,15 @@ def render_json(deck: Deck) -> Rendered:
     import json
 
     from matcore import cards
+
+    # **여기서도 부른다.** 이 렌더러는 블록 선언에서 이름과 단위를 가져오는데,
+    # 아무도 부르지 않은 상태로 들어오면 선언이 비어 `values` 만 남는다 — 그러면
+    # 파일이 "스스로 설명한다" 는 약속을 조용히 어긴다.
+    #
+    # 실제로 그랬다: 시험을 파일 단위로 돌리면 실패하고 디렉터리로 돌리면
+    # 통과했다(다른 시험이 먼저 불러 줬다). `load_builtin` 은 여러 번 불러도
+    # 되므로 부르는 쪽마다 부른다.
+    cards.load_builtin()
 
     blocks: dict[str, Any] = {}
     for key, payload in deck.blocks.items():

@@ -280,8 +280,16 @@ class Test열물성:
         해석의 초기 온도를 쓴다 — 그것이 맞는 기본값이다."""
         text = export.render("abaqus", thermal_deck(thermal_expansion=1.17e-05)).text
         assert "ZERO" not in text
-        with_zero = export.render(
+        # **열팽창 자신의 온도에서만 온다.** 블록의 기준 온도를 쓰면 「비열을
+        # 잰 온도」가 ZERO 로 나가는 일이 생긴다 — 실제로 그랬다(v1.80.0).
+        elsewhere = export.render(
             "abaqus", thermal_deck(thermal_expansion=1.17e-05, reference_temperature=293.15)
+        ).text
+        assert "ZERO" not in elsewhere
+
+        with_zero = export.render(
+            "abaqus",
+            thermal_deck(thermal_expansion=1.17e-05, thermal_expansion_temperature=293.15),
         ).text
         assert f"*EXPANSION, TYPE=ISO, ZERO={293.15:.12E}" in with_zero
 
@@ -531,11 +539,11 @@ class TestOpenRadioss열물성:
     def test_고정_20칸을_지킨다(self) -> None:
         """**칸이 어긋나면 다른 필드로 읽힌다.** 솔버는 오류를 안 낸다."""
         text = export.render("openradioss_thermal", heat_deck(values=BASE)).text
-        row = [
+        row = next(
             line
             for line in text.splitlines()
             if line and not line.startswith(("#", "/")) and "E+" in line
-        ][0]
+        )
         assert len(row) == 80, f"{len(row)}칸: {row!r}"
 
     def test_소성_덱과_따로다(self) -> None:
@@ -544,3 +552,26 @@ class TestOpenRadioss열물성:
         text = export.render("openradioss_thermal", heat_deck(values=BASE)).text
         assert "/MAT/LAW36" not in text
         assert text.rstrip().endswith("/END")
+
+
+def test_형식마다_파일_이름이_다르다() -> None:
+    """**같은 확장자를 내는 형식끼리 이름이 겹치면 안 된다.**
+
+    한 카드가 `/MAT/LAW36`(역학)과 `/HEAT/MAT`(열)을 함께 내는데 둘 다 `.rad`
+    다. 이름이 같으면 받는 쪽에 `SECC_MD.rad` 와 `SECC_MD (1).rad` 가 생기고,
+    **어느 쪽이 열인지 알 수 없다.** 덮어쓰면 하나를 잃는다.
+
+    실제로 그랬다 — `/HEAT/MAT` 을 붙인 v1.79.0 에서 처음 닿았다(§10.5).
+    """
+    from matcore import cards
+
+    cards.load_builtin()
+    seen: dict[tuple[str, str], str] = {}
+    for renderer in export.list_renderers():
+        key = (renderer.extension, renderer.suffix)
+        assert key not in seen, (
+            f"'{renderer.key}' 와 '{seen[key]}' 가 같은 파일 이름을 냅니다"
+            f"(<카드이름>{renderer.suffix}.{renderer.extension}). "
+            f"`suffix` 로 갈라 주세요 — 받는 쪽이 어느 쪽인지 알 방법이 없습니다."
+        )
+        seen[key] = renderer.key
