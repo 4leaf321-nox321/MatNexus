@@ -72,14 +72,20 @@ export const SOURCE_LABEL: Record<string, string> = Object.fromEntries(
   SOURCES.map((item) => [item.value, item.label])
 )
 
-/** 편집 중인 한 줄. **값은 문자열로 든다** — 지우는 중인 칸이 0 이 되면 안 된다. */
+/** 온도 하나에서의 값 하나. **문자열로 든다** — 지우는 중인 칸이 0 이 되면 안 된다. */
+interface Point {
+  value: string
+  /** 섭씨. **상온을 298 로 적는 사람은 없다** — 보낼 때 K 로 바꾼다. */
+  temperature: string
+}
+
+/** 편집 중인 한 줄. */
 interface Draft {
   item: string
-  value: string
+  points: Point[]
   input_unit: string
   source: string
   reference: string
-  temperature: string
   note: string
 }
 
@@ -88,11 +94,13 @@ function toDraft(row: DeclaredProperty): Draft {
   // 화면이 나눗셈을 하면 그 규칙이 서버와 갈라질 자리가 하나 더 생긴다.
   return {
     item: row.item,
-    value: String(Number(row.value.toPrecision(12))),
+    points: row.points.map((point) => ({
+      value: String(Number(point.value.toPrecision(12))),
+      temperature: point.temperature_k == null ? '' : String(point.temperature_k - 273.15),
+    })),
     input_unit: row.input_unit,
     source: row.source,
     reference: row.reference,
-    temperature: row.temperature_k == null ? '' : String(row.temperature_k - 273.15),
     note: row.note ?? '',
   }
 }
@@ -140,14 +148,30 @@ export function DeclaredPropertiesCard({
       ...current,
       {
         item: item.item,
-        value: '',
+        points: [{ value: '', temperature: '' }],
         input_unit: item.si_unit,
         source: 'literature',
         reference: '',
-        temperature: '',
         note: '',
       },
     ])
+  }
+
+  /** 한 줄의 점 하나를 고친다. */
+  function editPoint(at: number, index: number, patch: Partial<Point>) {
+    setDirty(true)
+    setRows((current) =>
+      current.map((row, position) =>
+        position === at
+          ? {
+              ...row,
+              points: row.points.map((point, spot) =>
+                spot === index ? { ...point, ...patch } : point
+              ),
+            }
+          : row
+      )
+    )
   }
 
   async function save() {
@@ -157,13 +181,16 @@ export function DeclaredPropertiesCard({
       await onSave(
         rows.map((row) => ({
           item: row.item,
-          value: Number(row.value),
+          points: row.points.map((point) => ({
+            value: Number(point.value),
+            // 화면은 ℃ 로 받고 서버에는 K 로 보낸다 — 상온을 298 로 적는
+            // 사람은 없다.
+            temperature_k:
+              point.temperature === '' ? null : Number(point.temperature) + 273.15,
+          })),
           input_unit: row.input_unit,
           source: row.source,
           reference: row.reference,
-          // 화면은 ℃ 로 받고 서버에는 K 로 보낸다 — 상온을 298 로 적는
-          // 사람은 없다.
-          temperature_k: row.temperature === '' ? null : Number(row.temperature) + 273.15,
           note: row.note || null,
         }))
       )
@@ -250,18 +277,6 @@ export function DeclaredPropertiesCard({
                 </div>
               </div>
 
-              <div className="col-span-5 sm:col-span-2">
-                <Label htmlFor={`${row.item}-value`} className="text-muted-foreground mb-1 text-[11px]">
-                  값
-                </Label>
-                <Input
-                  id={`${row.item}-value`}
-                  value={row.value}
-                  inputMode="decimal"
-                  onChange={(event) => edit(index, { value: event.target.value })}
-                />
-              </div>
-
               <div className="col-span-7 sm:col-span-2">
                 <Label htmlFor={`${row.item}-unit`} className="text-muted-foreground mb-1 text-[11px]">
                   단위
@@ -306,22 +321,6 @@ export function DeclaredPropertiesCard({
                 </Select>
               </div>
 
-              <div className="col-span-6 sm:col-span-2">
-                <Label
-                  htmlFor={`${row.item}-temperature`}
-                  className="text-muted-foreground mb-1 text-[11px]"
-                >
-                  잰 온도 (℃)
-                </Label>
-                <Input
-                  id={`${row.item}-temperature`}
-                  value={row.temperature}
-                  inputMode="decimal"
-                  placeholder="비우면 상온"
-                  onChange={(event) => edit(index, { temperature: event.target.value })}
-                />
-              </div>
-
               <div className="col-span-12 flex justify-end sm:col-span-1">
                 <Button
                   size="icon"
@@ -334,6 +333,100 @@ export function DeclaredPropertiesCard({
                 >
                   <Trash2 className="size-4" />
                 </Button>
+              </div>
+
+              {/* **한 줄이 표를 든다.** 강판 탄성계수는 상온 206 GPa 가
+                  400 °C 에서 170 GPa 쯤으로 떨어지고, 열간 성형·용접·화재
+                  해석은 그 곡선이 필요하다. 그렇다고 줄을 여럿 두면 카드가 어느
+                  것을 쓸지 못 정한다 — 항목은 하나이고 그 하나가 온도에 따라
+                  변할 뿐이다. */}
+              <div className="col-span-12">
+                <Label className="text-muted-foreground mb-1 text-[11px]">
+                  값 {row.points.length > 1 && `(온도 ${row.points.length}점)`}
+                </Label>
+                <div className="space-y-1">
+                  {row.points.map((point, spot) => (
+                    <div key={spot} className="flex items-center gap-2">
+                      <Input
+                        aria-label={
+                          row.points.length > 1 ? `${row.item} 값 ${spot + 1}` : `${row.item} 값`
+                        }
+                        className="w-40"
+                        value={point.value}
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          editPoint(index, spot, { value: event.target.value })
+                        }
+                      />
+                      <span className="text-muted-foreground text-xs">{row.input_unit}</span>
+                      <span className="text-muted-foreground text-xs">@</span>
+                      <Input
+                        aria-label={
+                          row.points.length > 1
+                            ? `${row.item} 온도 ${spot + 1}`
+                            : `${row.item} 온도`
+                        }
+                        className="w-32"
+                        value={point.temperature}
+                        inputMode="decimal"
+                        placeholder={row.points.length > 1 ? '필수' : '비우면 상온'}
+                        onChange={(event) =>
+                          editPoint(index, spot, { temperature: event.target.value })
+                        }
+                      />
+                      <span className="text-muted-foreground text-xs">℃</span>
+                      {row.points.length > 1 && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          title={`${spot + 1}번째 온도를 지웁니다`}
+                          onClick={() => {
+                            setDirty(true)
+                            setRows((current) =>
+                              current.map((one, position) =>
+                                position === index
+                                  ? {
+                                      ...one,
+                                      points: one.points.filter((_, at) => at !== spot),
+                                    }
+                                  : one
+                              )
+                            )
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="mt-1 h-7 px-2 text-[11px]"
+                  onClick={() => {
+                    setDirty(true)
+                    setRows((current) =>
+                      current.map((one, position) =>
+                        position === index
+                          ? { ...one, points: [...one.points, { value: '', temperature: '' }] }
+                          : one
+                      )
+                    )
+                  }}
+                >
+                  <Plus className="size-3.5" />
+                  온도 추가
+                </Button>
+                {row.points.length > 1 && (
+                  // **온도 없는 점이 섞이면 서버가 거절한다.** 누르기 전에
+                  // 알려 주는 편이 낫다.
+                  <p className="text-muted-foreground mt-1 text-[11px]">
+                    값이 여럿이면 각각 어느 온도의 것인지 적어야 합니다. 표 밖에서는 솔버가
+                    끝값을 유지합니다.
+                  </p>
+                )}
               </div>
 
               <div className="col-span-12">

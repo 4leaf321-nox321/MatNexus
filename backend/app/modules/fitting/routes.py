@@ -220,17 +220,40 @@ def _declared(material: Material, item: str) -> Inherited:
         return Inherited(None, "missing", f"재료에 '{item}' 이 없습니다.")
     where = str(row.get("source") or "declared")
     reference = str(row.get("reference") or "").strip()
+    points = _declared_points(row)
+    # **대푯값은 첫 점이다.** 온도를 안 타는 값이면 그것뿐이고, 표라면 가장 낮은
+    # 온도(대개 상온)다 — 표 자체는 블록의 `rows` 로 따로 실린다.
+    spread = (
+        f" (온도 {len(points)}점: "
+        f"{_celsius(points[0]['temperature_k'])}~{_celsius(points[-1]['temperature_k'])})"
+        if len(points) > 1
+        else ""
+    )
     return Inherited(
-        float(row["value_si"]),
+        float(points[0]["value_si"]),
         f"declared:{where}",
-        f"사람이 적은 값입니다 — {reference or '근거 문서 없음'}.",
+        f"사람이 적은 값입니다 — {reference or '근거 문서 없음'}.{spread}",
     )
 
 
+def _celsius(kelvin: float | None) -> str:
+    """섭씨로 적는다. **상온을 298 로 적는 사람은 없다.**"""
+    return "?" if kelvin is None else f"{kelvin - 273.15:.4g}°C"
+
+
+def _declared_points(row: dict[str, Any]) -> list[dict[str, Any]]:
+    """한 줄이 든 온도-값 점들. 값이 숫자가 아닌 점은 없는 것으로 본다."""
+    return [
+        point
+        for point in (row.get("points") or [])
+        if isinstance(point, dict) and isinstance(point.get("value_si"), (int, float))
+    ]
+
+
 def _declared_row(material: Material, item: str) -> dict[str, Any] | None:
-    """선언 물성 한 줄. 값이 숫자가 아니면 없는 것으로 본다."""
+    """선언 물성 한 줄. 쓸 수 있는 점이 없으면 없는 것으로 본다."""
     for row in material.declared_properties or []:
-        if str(row.get("item")) == item and isinstance(row.get("value_si"), (int, float)):
+        if str(row.get("item")) == item and _declared_points(row):
             return dict(row)
     return None
 
@@ -271,11 +294,58 @@ def _thermal_block(material: Material) -> dict[str, Any]:
         row = _declared_row(material, item) or {}
         if row.get("reference"):
             values[f"{key}_reference"] = str(row["reference"])
-        if isinstance(row.get("temperature_k"), (int, float)):
-            temperatures.add(float(row["temperature_k"]))
+        # **첫 점의 온도만 본다.** 온도를 타는 물성은 표로 나가고, 그 표가
+        # 자기 온도를 들고 있다 — 기준 온도는 「이 값들이 어느 온도의 것인가」에
+        # 답하는 자리라 표가 있으면 뜻이 없다.
+        points = _declared_points(row)
+        if len(points) == 1 and isinstance(points[0].get("temperature_k"), (int, float)):
+            temperatures.add(float(points[0]["temperature_k"]))
     if values and len(temperatures) == 1:
         values["reference_temperature"] = next(iter(temperatures))
     return values
+
+
+#: 온도에 따라 변하는 물성의 격자. `{블록 열 이름: 물성 항목 이름}`.
+#:
+#: **`*ELASTIC` 은 한 줄에 `(E, ν, T)` 를 받는다** — 둘이 한 표에 올라야 한다.
+#: **푸아송비는 여기 없다.** 선언 물성 항목이 아니라 재료 컬럼에서 오므로
+#: `constants` 로 들어간다 — 온도를 타게 하려면 그 항목을 축에 먼저 넣어야 한다.
+ELASTIC_COLUMNS = {"youngs_modulus": "탄성계수"}
+
+#: 열물성은 **키워드가 셋으로 갈리므로** 각자 자기 표를 갖는다. 그래도 한 격자에
+#: 모아 두는 이유는 카드가 표 하나로 읽히는 편이 낫기 때문이고, 렌더러가 값이
+#: 있는 온도만 그 키워드에 싣는다.
+THERMAL_COLUMNS = {key: label for key, label in THERMAL_ITEMS.items()}
+
+
+def _constants(values: dict[str, Any]) -> dict[str, float]:
+    """온도를 안 타는 값들 — 표의 모든 줄에 같이 실린다.
+
+    **푸아송비와 밀도가 그렇다.** 선언 물성이 아니라 재료 컬럼이나 측정에서
+    오는데, 표에 안 실으면 `*ELASTIC` 이 줄을 못 만든다 — 한 줄에 `(E, ν, T)`
+    가 다 있어야 하기 때문이다.
+    """
+    return {
+        key: float(values[key])
+        for key in ("poisson_ratio", "density")
+        if isinstance(values.get(key), (int, float))
+    }
+
+
+def _temperature_aware(
+    block: str, values: dict[str, Any], rows: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """블록 하나. **표는 온도를 탈 때만 붙는다.**
+
+    한 온도짜리에 표를 붙이면 솔버가 「이 온도에서만 유효」로 읽고, 그 밖에서
+    외삽 규칙이 달라진다 — 상수인 재료가 갑자기 온도 의존이 된다.
+    """
+    if not values:
+        return {}
+    payload: dict[str, Any] = {"values": values}
+    if len(rows) > 1:
+        payload["rows"] = rows
+    return {block: payload}
 
 
 def _visible_material(db: Session, user: User, material_id: uuid.UUID) -> Material:
@@ -354,6 +424,55 @@ def _declared_blocks(
         if one.value is not None
     ]
     return elastic, thermal, found
+
+
+def _declared_table(
+    material: Material,
+    columns: dict[str, str],
+    *,
+    constants: dict[str, float] | None = None,
+) -> list[dict[str, Any]]:
+    """여러 물성을 온도 격자에 올린 표. `columns` 는 `{블록 열: 물성 항목}`.
+
+    온도를 **합집합으로 모으고 값이 없는 칸은 비워 둔다.** 0 으로 채우면 비열
+    0 인 재료가 되고, 빼 버리면 그 온도가 통째로 사라진다.
+
+    ## 점이 하나면 상수다
+
+    모든 줄에 같은 값을 쓴다. **지어내는 것이 아니라 명시된 모형 가정**이고,
+    빼 두면 솔버가 그 온도에서 그 값을 모른다. `constants` 도 같은 자리다 —
+    선언 물성이 아니라 재료 컬럼이나 측정에서 온 값들이다(푸아송비·밀도).
+
+    ## 격자가 어긋나는지는 여기서 안 본다
+
+    `*ELASTIC` 은 한 줄에 `(E, ν, T)` 를 받으므로 둘이 같은 온도에 있어야
+    하지만, `*EXPANSION` 은 자기 표를 따로 갖는다 — **블록마다 다르다.** 그
+    판단은 그 키워드를 아는 렌더러가 한다(`_elastic_lines`).
+    """
+    grids: dict[str, dict[float, float]] = {}
+    singles: dict[str, float] = dict(constants or {})
+    for column, item in columns.items():
+        points = _declared_points(_declared_row(material, item) or {})
+        if not points:
+            continue
+        if len(points) == 1:
+            singles[column] = float(points[0]["value_si"])
+            continue
+        grids[column] = {
+            float(point["temperature_k"]): float(point["value_si"]) for point in points
+        }
+
+    if not grids:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for temperature in sorted({one for found in grids.values() for one in found}):
+        row: dict[str, Any] = {"temperature": temperature, **singles}
+        for column, found in grids.items():
+            if temperature in found:
+                row[column] = found[temperature]
+        rows.append(row)
+    return rows
 
 
 def _thermal_notes(material: Material, thermal: dict[str, Any]) -> list[str]:
@@ -800,6 +919,7 @@ def create_card(
     poisson = _inherit_poisson(group.material, payload.poisson_ratio)
     density = _inherit_density(group.material, samples, payload.density)
     thermal = _thermal_block(group.material)
+    thermal_rows = _declared_table(group.material, THERMAL_COLUMNS)
     inherited_notes = [
         # 잰 값이면 처리 결과가 근거를 들고 있다. 적은 값일 때만 적는다 —
         # **어느 문서에서 왔는지가 카드에 없으면 되짚을 수 없다.**
@@ -886,6 +1006,12 @@ def create_card(
         ),
     }
 
+    # 온도를 타면 표가 붙는다. **격자가 어긋나면 여기서 멈춘다** — 조용히 한쪽을
+    # 버리면 덱은 나가고 재료만 딴판이 된다.
+    elastic_rows = _declared_table(
+        group.material, ELASTIC_COLUMNS, constants=_constants(elastic)
+    )
+
     item = PropertyCard(
         material_id=group.material.id,
         test_type_id=group.test_type.id,
@@ -904,8 +1030,8 @@ def create_card(
             "runtime": runtime.manifest(),
         },
         blocks={
-            **({"elastic": {"values": elastic}} if elastic else {}),
-            **({"thermal": {"values": thermal}} if thermal else {}),
+            **_temperature_aware("elastic", elastic, elastic_rows),
+            **_temperature_aware("thermal", thermal, thermal_rows),
             **({spec.block: fitted} if spec is not None and fitted else {}),
             # **소성 표는 금속 카드의 것이다.** 고무는 공칭 축에 맞췄고, 그 점을
             # `*PLASTIC` 자리에 넣으면 덱은 돌고 재료만 딴판이 된다.
@@ -981,6 +1107,8 @@ def create_declared_card(
     elastic, thermal, found = _declared_blocks(
         db, material, payload.poisson_ratio, payload.density
     )
+    elastic_rows = _declared_table(material, ELASTIC_COLUMNS, constants=_constants(elastic))
+    thermal_rows = _declared_table(material, THERMAL_COLUMNS)
 
     if not elastic and not thermal:
         raise AppError(
@@ -1011,8 +1139,8 @@ def create_declared_card(
             "runtime": runtime.manifest(),
         },
         blocks={
-            **({"elastic": {"values": elastic}} if elastic else {}),
-            **({"thermal": {"values": thermal}} if thermal else {}),
+            **_temperature_aware("elastic", elastic, elastic_rows),
+            **_temperature_aware("thermal", thermal, thermal_rows),
         },
         point_count=0,
         note=payload.note,

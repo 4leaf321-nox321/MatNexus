@@ -68,6 +68,18 @@ THERMAL = register_block(
                 ),
             ),
         ),
+        rows=(
+            Produced(key="temperature", label="온도", si_unit="K", help=None),
+            Produced(key="thermal_expansion", label="열팽창계수", si_unit="1/K", help=None),
+            Produced(key="specific_heat", label="비열", si_unit="J/(kg.K)", help=None),
+            Produced(
+                key="thermal_conductivity", label="열전도도", si_unit="W/(m.K)", help=None
+            ),
+        ),
+        # 열물성은 **키워드가 셋으로 갈리므로 각자 자기 표를 갖는다.** 한 줄에
+        # 셋이 다 있을 필요가 없다 — 열팽창만 온도를 타고 나머지는 상수인 것이
+        # 흔하다. 빈 칸은 그 온도에 그 값이 없다는 뜻이고, 렌더러는 값이 있는
+        # 온도만 그 키워드의 표에 싣는다.
         order=15,
     )
 )

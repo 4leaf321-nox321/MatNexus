@@ -613,7 +613,7 @@ class Test선언물성:
                 "declared_properties": [
                     {
                         "item": "탄성계수",
-                        "value": 206,
+                        "points": [{"value": 206}],
                         "input_unit": "GPa",
                         "source": "literature",
                         "reference": "KS D 3512 표 3",
@@ -624,7 +624,7 @@ class Test선언물성:
         )
         assert saved.status_code == 200, saved.text
         row = saved.json()["declared_properties"][0]
-        assert row["value_si"] == pytest.approx(206e9)
+        assert row["points"][0]["value_si"] == pytest.approx(206e9)
         # **적은 단위를 그대로 돌려준다.** 2.06e11 로 보이면 자기가 적은 값인지
         # 알기 어렵다.
         assert row["input_unit"] == "GPa"
@@ -645,7 +645,7 @@ class Test선언물성:
                 "declared_properties": [
                     {
                         "item": "비열",
-                        "value": 45,
+                        "points": [{"value": 45}],
                         "input_unit": "W/(m.K)",
                         "source": "literature",
                         "reference": "ASM Handbook",
@@ -666,7 +666,7 @@ class Test선언물성:
         for missing in ("source", "reference"):
             row = {
                 "item": "탄성계수",
-                "value": 206,
+                "points": [{"value": 206}],
                 "input_unit": "GPa",
                 "source": "literature",
                 "reference": "KS D 3512",
@@ -689,7 +689,7 @@ class Test선언물성:
                 "declared_properties": [
                     {
                         "item": "자기저항",
-                        "value": 295,
+                        "points": [{"value": 295}],
                         "input_unit": "MPa",
                         "source": "datasheet",
                         "reference": "MTC-2024-0812",
@@ -717,7 +717,7 @@ class Test선언물성:
                 "declared_properties": [
                     {
                         "item": "항복강도",
-                        "value": 295,
+                        "points": [{"value": 295}],
                         "input_unit": "MPa",
                         "source": "datasheet",
                         "reference": "MTC-2024-0812",
@@ -737,14 +737,19 @@ class Test선언물성:
         여기서 안 하면 나중에 조용히 하나가 이긴다."""
         row = {
             "item": "탄성계수",
-            "value": 206,
+            "points": [{"value": 206}],
             "input_unit": "GPa",
             "source": "literature",
             "reference": "A",
         }
         refused = client.patch(
             f"/api/materials/{material['id']}",
-            json={"declared_properties": [row, {**row, "value": 200, "reference": "B"}]},
+            json={
+                "declared_properties": [
+                    row,
+                    {**row, "points": [{"value": 200}], "reference": "B"},
+                ]
+            },
             headers=admin_headers,
         )
         assert refused.status_code == 422
@@ -761,14 +766,14 @@ class Test선언물성:
                 "declared_properties": [
                     {
                         "item": "열팽창계수",
-                        "value": 1.17e-5,
+                        "points": [{"value": 1.17e-5}],
                         "input_unit": "1/K",
                         "source": "standard",
                         "reference": "KS",
                     },
                     {
                         "item": "탄성계수",
-                        "value": 206,
+                        "points": [{"value": 206}],
                         "input_unit": "GPa",
                         "source": "literature",
                         "reference": "ASM",
@@ -837,7 +842,7 @@ class Test밀시트값:
 
     MILL: ClassVar[dict[str, Any]] = {
         "item": "항복강도",
-        "value": 295,
+        "points": [{"value": 295}],
         "input_unit": "MPa",
         "source": "datasheet",
         "reference": "MTC-2024-0812",
@@ -853,9 +858,9 @@ class Test밀시트값:
         )
         assert saved.status_code == 200, saved.text
         row = saved.json()["declared_properties"][0]
-        assert row["value_si"] == pytest.approx(295e6)
+        assert row["points"][0]["value_si"] == pytest.approx(295e6)
         # 적은 단위를 그대로 돌려준다 — 2.95e8 로 보이면 자기가 적은 값인지 모른다.
-        assert row["value"] == pytest.approx(295)
+        assert row["points"][0]["value"] == pytest.approx(295)
         assert row["input_unit"] == "MPa"
 
     def test_재료_물성은_시료에_못_적는다(
@@ -868,7 +873,7 @@ class Test밀시트값:
                 "declared_properties": [
                     {
                         "item": "탄성계수",
-                        "value": 206,
+                        "points": [{"value": 206}],
                         "input_unit": "GPa",
                         "source": "literature",
                         "reference": "ASM",
@@ -960,7 +965,7 @@ class Test밀시트값:
                 "declared_properties": [
                     {
                         "item": "인장강도",
-                        "value": 400,
+                        "points": [{"value": 400}],
                         "input_unit": "MPa",
                         "source": "datasheet",
                         "reference": "MTC-2024-0812",
@@ -1002,7 +1007,7 @@ class Test밀시트값:
                 "declared_properties": [
                     {
                         "item": "연신율",
-                        "value": 32,
+                        "points": [{"value": 32}],
                         "input_unit": "%",
                         "source": "datasheet",
                         "reference": "MTC-2024-0812",

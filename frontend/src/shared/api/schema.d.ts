@@ -3440,9 +3440,28 @@ export interface components {
             /** Poisson Ratio */
             poisson_ratio?: number | null;
         };
+        /** DeclaredPointIn */
+        DeclaredPointIn: {
+            /** Temperature K */
+            temperature_k?: number | null;
+            /** Value */
+            value: number;
+        };
+        /**
+         * DeclaredPointOut
+         * @description 온도 하나에서의 값 하나.
+         */
+        DeclaredPointOut: {
+            /** Temperature K */
+            temperature_k?: number | null;
+            /** Value */
+            value: number;
+            /** Value Si */
+            value_si: number;
+        };
         /**
          * DeclaredPropertyIn
-         * @description 넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다.
+         * @description 넣을 때. 값은 `input_unit` 단위이고 서버가 SI 로 바꾼다.
          */
         DeclaredPropertyIn: {
             /** Input Unit */
@@ -3451,18 +3470,21 @@ export interface components {
             item: string;
             /** Note */
             note?: string | null;
+            /** Points */
+            points: components["schemas"]["DeclaredPointIn"][];
             /** Reference */
             reference: string;
             /** Source */
             source: string;
-            /** Temperature K */
-            temperature_k?: number | null;
-            /** Value */
-            value: number;
         };
         /**
          * DeclaredPropertyOut
          * @description 시험이 주지 않아 사람이 적은 물성 한 줄.
+         *
+         *     **한 줄이 표를 든다.** 강판 탄성계수는 상온 206 GPa 가 400 °C 에서 170 GPa
+         *     쯤으로 떨어지고, 열간 성형·용접·화재 해석은 그 곡선이 필요하다. 그렇다고
+         *     줄을 여럿 두면 카드가 어느 것을 쓸지 못 정한다 — **항목은 하나이고 그 하나가
+         *     온도에 따라 변할 뿐**이므로 줄 안에 점을 넣는다.
          */
         DeclaredPropertyOut: {
             /** Input Unit */
@@ -3471,16 +3493,12 @@ export interface components {
             item: string;
             /** Note */
             note?: string | null;
+            /** Points */
+            points: components["schemas"]["DeclaredPointOut"][];
             /** Reference */
             reference: string;
             /** Source */
             source: string;
-            /** Temperature K */
-            temperature_k?: number | null;
-            /** Value */
-            value: number;
-            /** Value Si */
-            value_si: number;
         };
         /** DeleteAccountRequest */
         DeleteAccountRequest: {

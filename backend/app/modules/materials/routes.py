@@ -24,6 +24,7 @@ from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
     ClassificationOut,
+    DeclaredPointOut,
     DeclaredPropertyOut,
     MaterialCreateRequest,
     MaterialOut,
@@ -94,14 +95,38 @@ def _material_out(
         density_unit=density_unit,
         poisson_ratio=material.poisson_ratio,
         declared_properties=[
-            DeclaredPropertyOut(**row, value=units.from_si(row["value_si"], row["input_unit"]))
-            for row in (material.declared_properties or [])
+            _declared_out(row) for row in (material.declared_properties or [])
         ],
         note=material.note,
         legacy_id=material.legacy_id,
         sample_count=sample_count,
         created_at=material.created_at,
         updated_at=material.updated_at,
+    )
+
+
+def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
+    """저장된 한 줄을 응답 모양으로.
+
+    **되돌리는 환산도 서버가 한다.** 화면이 나눗셈을 하면 그 규칙이 두 곳에
+    생기고(ADR 0004), 갈라진 쪽이 화면이면 사람은 자기가 적은 값과 다른 숫자를
+    보면서 그것이 저장된 값이라고 믿는다.
+    """
+    symbol = str(row["input_unit"])
+    return DeclaredPropertyOut(
+        item=str(row["item"]),
+        points=[
+            DeclaredPointOut(
+                temperature_k=point.get("temperature_k"),
+                value_si=float(point["value_si"]),
+                value=units.from_si(point["value_si"], symbol),
+            )
+            for point in row["points"]
+        ],
+        input_unit=symbol,
+        source=str(row["source"]),
+        reference=str(row["reference"]),
+        note=row.get("note"),
     )
 
 
@@ -166,10 +191,7 @@ def _sample_out(
         production_date=sample.production_date,
         density=services.from_si(sample.density_si, unit),
         density_unit=unit,
-        declared_properties=[
-            DeclaredPropertyOut(**row, value=units.from_si(row["value_si"], row["input_unit"]))
-            for row in (sample.declared_properties or [])
-        ],
+        declared_properties=[_declared_out(row) for row in (sample.declared_properties or [])],
         note=sample.note,
         specimen_count=specimen_count,
         created_at=sample.created_at,
@@ -927,7 +949,13 @@ def mill_check(
         key = str(spec.get("measured_key") or "")
         found = measured.get(key) or []
         mean = sum(found) / len(found) if found else None
-        stated = float(row["value_si"])
+        # **첫 점과 견준다.** 밀시트는 대개 상온 한 점이고, 여러 온도를 적어
+        # 두었다면 우리가 잰 온도와 짝지을 방법이 없다 — 그 짝짓기는 시험
+        # 조건까지 봐야 하는 다른 일이다.
+        points = row.get("points") or []
+        if not points:
+            continue
+        stated = float(points[0]["value_si"])
         out.append(
             MillCheckRowOut(
                 item=str(row["item"]),

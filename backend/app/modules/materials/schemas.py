@@ -19,11 +19,12 @@ DENSITY_UNIT = "kg/m3"
 # --- 재료 -------------------------------------------------------------------
 
 
-class DeclaredPropertyOut(BaseModel):
-    """시험이 주지 않아 사람이 적은 물성 한 줄."""
+class DeclaredPointOut(BaseModel):
+    """온도 하나에서의 값 하나."""
 
-    item: str
-    """기준정보 `property_item` 축의 값. 항목 목록을 **부서가 정한다**(D7)."""
+    temperature_k: float | None = None
+    """이 값이 유효한 온도. **점이 하나면 비어 있을 수 있다** — 그때는 온도를
+    안 타는 값이거나 상온값이라는 뜻이다."""
     value_si: float
     """**언제나 정본 SI.** 사람이 GPa 로 적어도 저장은 Pa 다."""
     value: float
@@ -32,30 +33,50 @@ class DeclaredPropertyOut(BaseModel):
     **환산을 화면에서 안 한다.** 규칙이 두 곳에 있으면 언젠가 갈라지고
     (ADR 0004), 갈라진 쪽이 화면이면 사람은 자기가 적은 값과 다른 숫자를
     보면서 그것이 저장된 값이라고 믿는다."""
+
+
+class DeclaredPropertyOut(BaseModel):
+    """시험이 주지 않아 사람이 적은 물성 한 줄.
+
+    **한 줄이 표를 든다.** 강판 탄성계수는 상온 206 GPa 가 400 °C 에서 170 GPa
+    쯤으로 떨어지고, 열간 성형·용접·화재 해석은 그 곡선이 필요하다. 그렇다고
+    줄을 여럿 두면 카드가 어느 것을 쓸지 못 정한다 — **항목은 하나이고 그 하나가
+    온도에 따라 변할 뿐**이므로 줄 안에 점을 넣는다.
+    """
+
+    item: str
+    """기준정보 `property_item` 축의 값. 항목 목록을 **부서가 정한다**(D7)."""
+    points: list[DeclaredPointOut]
+    """온도-값 점들. **온도 오름차순이고 비지 않는다.**"""
     input_unit: str
     """사람이 적은 단위. 화면이 그대로 되돌려 보여 준다 — 206 GPa 를 넣었는데
-    2.06e11 Pa 로 보이면 자기가 적은 값인지 알기 어렵다."""
+    2.06e11 Pa 로 보이면 자기가 적은 값인지 알기 어렵다.
+
+    **점마다 두지 않는다.** 한 물성을 GPa 와 MPa 로 섞어 적을 이유가 없고,
+    섞을 수 있게 두면 표를 읽는 사람이 열마다 단위를 확인해야 한다."""
     source: str
     """`literature` · `standard` · `datasheet` · `estimate`. **필수다** — 값만
     있고 어디서 왔는지 모르면 그 값으로 돌린 해석의 근거를 되짚을 수 없다."""
     reference: str
     """어느 문서인가. `'문헌'` 만으로는 어느 핸드북 몇 판인지 알 수 없다."""
-    temperature_k: float | None = None
-    """잰 온도. 비면 상온으로 본다. **지금은 값 하나에 온도 하나**이고, 나중에
-    온도-값 표로 자라도 옛 값이 살아남는다."""
     note: str | None = None
 
 
+class DeclaredPointIn(BaseModel):
+    temperature_k: float | None = None
+    value: float
+
+
 class DeclaredPropertyIn(BaseModel):
-    """넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다."""
+    """넣을 때. 값은 `input_unit` 단위이고 서버가 SI 로 바꾼다."""
 
     item: str
-    value: float
+    points: list[DeclaredPointIn]
+    """**비면 거절한다.** 값 없는 항목은 「이 물성이 있다」고 말하는 거짓말이다."""
     input_unit: str | None = None
     """비우면 그 항목의 정본 SI 단위로 본다."""
     source: str
     reference: str
-    temperature_k: float | None = None
     note: str | None = None
 
 

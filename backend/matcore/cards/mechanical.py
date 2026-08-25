@@ -39,6 +39,22 @@ ELASTIC = register_block(
                 help="동적 해석에 필요하다. 시료의 실측값이 있으면 그것을 쓴다.",
             ),
         ),
+        rows=(
+            Produced(
+                key="temperature",
+                label="온도",
+                si_unit="K",
+                help="이 줄의 값들이 유효한 온도.",
+            ),
+            Produced(key="youngs_modulus", label="탄성계수", si_unit="Pa", help=None),
+            Produced(key="poisson_ratio", label="푸아송비", si_unit="1", help=None),
+        ),
+        # 표가 있으면 **온도에 따라 변한다는 뜻**이다. 강판 탄성계수는 상온
+        # 206 GPa 가 400 °C 에서 170 GPa 쯤으로 떨어지고, 열간 성형·용접·화재
+        # 해석은 그 곡선이 필요하다.
+        #
+        # **`values` 는 그때도 남는다** — 첫 줄(가장 낮은 온도)의 값이다. 표를
+        # 못 먹는 형식이 그것을 쓰고, 목록이 대푯값 하나를 보일 때도 쓴다.
         order=10,
     )
 )

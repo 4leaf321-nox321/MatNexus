@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -305,3 +305,115 @@ class Test열물성:
             name="X", solver_id=1, blocks={"thermal": {"values": {"specific_heat": 462.0}}}
         )
         assert export.missing_for(alone, "abaqus")
+
+
+def temperature_deck(
+    elastic_rows: list[dict[str, Any]] | None = None,
+    thermal_rows: list[dict[str, Any]] | None = None,
+) -> export.Deck:
+    """온도 표를 든 덱."""
+    base = deck()
+    blocks = dict(base.blocks)
+    if elastic_rows is not None:
+        blocks["elastic"] = {**blocks["elastic"], "rows": elastic_rows}
+    if thermal_rows is not None:
+        blocks["thermal"] = {
+            "values": {"thermal_expansion": thermal_rows[0]["thermal_expansion"]},
+            "rows": thermal_rows,
+        }
+    return export.Deck(
+        name=base.name, solver_id=base.solver_id, blocks=blocks, provenance=base.provenance
+    )
+
+
+class Test온도의존:
+    """**강판 탄성계수는 상온 206 GPa 가 400 °C 에서 170 GPa 쯤으로 떨어진다.**
+
+    열간 성형·용접·화재 해석은 그 곡선이 필요하다. 값 하나로는 그 해석이 통째로
+    막힌다.
+    """
+
+    ROWS: ClassVar[list[dict[str, Any]]] = [
+        {"temperature": 293.15, "youngs_modulus": 206e9, "poisson_ratio": 0.30},
+        {"temperature": 473.15, "youngs_modulus": 195e9, "poisson_ratio": 0.31},
+        {"temperature": 673.15, "youngs_modulus": 170e9, "poisson_ratio": 0.32},
+    ]
+
+    def test_온도_열이_붙는다(self) -> None:
+        text = export.render("abaqus", temperature_deck(elastic_rows=self.ROWS)).text
+        body = text[text.index("*ELASTIC") :]
+        assert f"{206e9:.12E}, {0.30:.12E}, {293.15:.12E}" in body
+        assert f"{170e9:.12E}, {0.32:.12E}, {673.15:.12E}" in body
+
+    def test_한_온도짜리에는_온도_열을_안_붙인다(self) -> None:
+        """**붙이면 솔버가 「이 온도에서만 유효」로 읽는다.** 표 밖에서 외삽
+        규칙이 달라지고, 상수인 재료가 갑자기 온도 의존이 된다."""
+        text = export.render("abaqus", temperature_deck(elastic_rows=self.ROWS[:1])).text
+        line = text[text.index("*ELASTIC") :].splitlines()[1]
+        assert line.count(",") == 1, line
+
+        # 표가 아예 없을 때도 같다.
+        plain = export.render("abaqus", CARD).text
+        assert plain[plain.index("*ELASTIC") :].splitlines()[1].count(",") == 1
+
+    def test_표_밖에서_끝값이_유지된다고_적는다(self) -> None:
+        """**덱만 받은 사람은 어디까지가 적힌 것인지 알 수 없다.** 400 °C 까지
+        적고 800 °C 해석을 돌리면 재료가 그 온도에서도 170 GPa 인 셈이 된다."""
+        text = export.render("abaqus", temperature_deck(elastic_rows=self.ROWS)).text
+        assert "끝값이 유지됩니다" in text
+        assert "293.15~673.15" in text
+
+    def test_빈_칸이_있으면_거절한다(self) -> None:
+        """**줄을 조용히 버리지 않는다.** `*ELASTIC` 은 한 줄에 `(E, ν, T)` 를
+        받으므로 하나라도 비면 그 온도를 낼 수 없는데, 그냥 빼면 덱은 나가고 그
+        구간에서 솔버가 이웃 온도의 값을 쓴다 — 오류 없이 다른 재료가 된다."""
+        holed = [
+            {"temperature": 293.15, "youngs_modulus": 206e9, "poisson_ratio": 0.30},
+            {"temperature": 673.15, "youngs_modulus": 170e9},  # 푸아송비가 없다
+        ]
+        with pytest.raises(export.ExportError) as caught:
+            export.render("abaqus", temperature_deck(elastic_rows=holed))
+        assert "빈 칸" in str(caught.value)
+        assert "poisson_ratio" in str(caught.value)
+
+    def test_열물성도_표로_나간다(self) -> None:
+        rows = [
+            {"temperature": 293.15, "thermal_expansion": 1.17e-05},
+            {"temperature": 673.15, "thermal_expansion": 1.42e-05},
+        ]
+        text = export.render("abaqus", temperature_deck(thermal_rows=rows)).text
+        body = text[text.index("*EXPANSION") :]
+        assert f"{1.17e-05:.12E}, {293.15:.12E}" in body
+        assert f"{1.42e-05:.12E}, {673.15:.12E}" in body
+
+    def test_표가_있으면_값을_두_번_안_낸다(self) -> None:
+        """**같은 물성이 두 번 실리면 솔버가 뒤엣것으로 덮거나 거절한다.**"""
+        rows = [
+            {"temperature": 293.15, "thermal_expansion": 1.17e-05},
+            {"temperature": 673.15, "thermal_expansion": 1.42e-05},
+        ]
+        text = export.render("abaqus", temperature_deck(thermal_rows=rows)).text
+        assert text.count("*EXPANSION") == 1
+        # **`*EXPANSION` 구간만 센다.** 뒤에 오는 `*PLASTIC` 표까지 세면
+        # 시험이 무엇을 보는지 흐려진다.
+        body = text[text.index("*EXPANSION") :]
+        numbers = []
+        for line in body.splitlines()[1:]:
+            if line.startswith("**"):
+                continue
+            if line.startswith("*"):
+                break
+            numbers.append(line)
+        assert len(numbers) == 2, numbers
+
+    def test_열이_빠진_줄은_그_키워드에_안_실린다(self) -> None:
+        """열팽창만 온도를 타고 비열은 상수인 것이 흔하다. 빈 칸을 0 으로
+        채우면 **비열 0 인 재료**가 된다."""
+        rows = [
+            {"temperature": 293.15, "thermal_expansion": 1.17e-05, "specific_heat": 462.0},
+            {"temperature": 673.15, "thermal_expansion": 1.42e-05},
+        ]
+        text = export.render("abaqus", temperature_deck(thermal_rows=rows)).text
+        heat = text[text.index("*SPECIFIC HEAT") :]
+        assert f"{462.0:.12E}," in heat
+        assert "0.000000000000E+00" not in heat.splitlines()[1]

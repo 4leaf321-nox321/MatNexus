@@ -64,9 +64,8 @@ function panel(rows: unknown[] = [], onSave = vi.fn().mockResolvedValue(undefine
 
 const DECLARED_E = {
   item: '탄성계수',
-  value_si: 206e9,
   // **되돌린 값도 서버가 준다.** 화면이 나눗셈을 하면 그 규칙이 두 곳에 생긴다.
-  value: 206,
+  points: [{ value_si: 206e9, value: 206, temperature_k: null }],
   input_unit: 'GPa',
   source: 'literature',
   reference: 'KS D 3512 표 3',
@@ -90,7 +89,14 @@ describe('선언 물성 편집', () => {
   it('차원이 맞는 단위만 고르게 한다', async () => {
     // **비열 자리에 W/(m.K) 를 넣으면 값은 멀쩡한데 뜻이 다르다.** 서버도
     // 막지만, 고를 수 있게 두면 사람이 저장을 눌러 보고서야 안다.
-    panel([{ ...DECLARED_E, item: '비열', value_si: 462, value: 462, input_unit: 'J/(kg.K)' }])
+    panel([
+      {
+        ...DECLARED_E,
+        item: '비열',
+        points: [{ value_si: 462, value: 462, temperature_k: null }],
+        input_unit: 'J/(kg.K)',
+      },
+    ])
     await waitFor(() => expect(screen.getByDisplayValue('462')).toBeInTheDocument())
     await userEvent.click(screen.getByLabelText('단위'))
     // 목록이 실제로 열린 것을 먼저 확인한다 — 안 열린 채로 「없다」를 보면
@@ -133,24 +139,72 @@ describe('선언 물성 편집', () => {
     // `206 GPa` 를 보내고 서버가 SI 로 바꾼다.
     const onSave = panel([DECLARED_E])
     await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
-    await userEvent.clear(screen.getByLabelText('값'))
-    await userEvent.type(screen.getByLabelText('값'), '210')
+    await userEvent.clear(screen.getByLabelText('탄성계수 값'))
+    await userEvent.type(screen.getByLabelText('탄성계수 값'), '210')
     await userEvent.click(screen.getByRole('button', { name: '저장' }))
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect((onSave.mock.calls[0][0] as unknown[])[0]).toMatchObject({
       item: '탄성계수',
-      value: 210,
+      points: [{ value: 210 }],
       input_unit: 'GPa',
     })
+  })
+
+  it('온도를 더해 표로 만든다', async () => {
+    // **강판 탄성계수는 상온 206 GPa 가 400 °C 에서 170 GPa 쯤으로 떨어진다.**
+    // 열간 성형·용접·화재 해석은 그 곡선이 필요하다.
+    const onSave = panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText('탄성계수 온도'), '20')
+    await userEvent.click(screen.getByRole('button', { name: '온도 추가' }))
+
+    await userEvent.type(await screen.findByLabelText('탄성계수 값 2'), '170')
+    await userEvent.type(screen.getByLabelText('탄성계수 온도 2'), '400')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect((onSave.mock.calls[0][0] as unknown[])[0]).toMatchObject({
+      points: [
+        { value: 206, temperature_k: 293.15 },
+        { value: 170, temperature_k: 673.15 },
+      ],
+    })
+  })
+
+  it('점이 하나면 온도를 지우는 버튼이 없다', async () => {
+    // **마지막 점까지 지우면 값 없는 항목이 된다** — 그것은 「이 물성이 있다」고
+    // 말하는 거짓말이다. 줄 자체를 지우는 길은 따로 있다.
+    panel([DECLARED_E])
+    await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
+    expect(
+      screen.queryByRole('button', { name: /번째 온도를 지웁니다/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it('여럿이면 온도가 필수라고 미리 말한다', async () => {
+    // 서버도 거절하지만, **누르기 전에 알려 주는 편이 낫다.**
+    panel([
+      {
+        ...DECLARED_E,
+        points: [
+          { value_si: 206e9, value: 206, temperature_k: 293.15 },
+          { value_si: 170e9, value: 170, temperature_k: 673.15 },
+        ],
+      },
+    ])
+    expect(await screen.findByText(/각각 어느 온도의 것인지/)).toBeInTheDocument()
+    expect(screen.getByText(/끝값을 유지/)).toBeInTheDocument()
   })
 
   it('잰 온도는 ℃ 로 받아 K 로 보낸다', async () => {
     // **상온을 298 로 적는 사람은 없다.**
     const onSave = panel([DECLARED_E])
     await waitFor(() => expect(screen.getByDisplayValue('206')).toBeInTheDocument())
-    await userEvent.type(screen.getByLabelText('잰 온도 (℃)'), '20')
+    await userEvent.type(screen.getByLabelText('탄성계수 온도'), '20')
     await userEvent.click(screen.getByRole('button', { name: '저장' }))
     await waitFor(() => expect(onSave).toHaveBeenCalled())
-    expect((onSave.mock.calls[0][0] as unknown[])[0]).toMatchObject({ temperature_k: 293.15 })
+    expect((onSave.mock.calls[0][0] as unknown[])[0]).toMatchObject({
+      points: [{ temperature_k: 293.15 }],
+    })
   })
 })

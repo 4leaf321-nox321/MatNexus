@@ -1305,7 +1305,7 @@ class Test선언물성이_덱까지:
             [
                 {
                     "item": "탄성계수",
-                    "value": 1.0,
+                    "points": [{"value": 1.0}],
                     "input_unit": "GPa",
                     "source": "estimate",
                     "reference": "일부러 틀린 값",
@@ -1336,19 +1336,17 @@ class Test선언물성이_덱까지:
             [
                 {
                     "item": "열팽창계수",
-                    "value": 1.17e-05,
+                    "points": [{"value": 1.17e-05, "temperature_k": 293.15}],
                     "input_unit": "1/K",
                     "source": "standard",
                     "reference": "ASM Handbook Vol.1",
-                    "temperature_k": 293.15,
                 },
                 {
                     "item": "비열",
-                    "value": 462,
+                    "points": [{"value": 462, "temperature_k": 293.15}],
                     "input_unit": "J/(kg.K)",
                     "source": "standard",
                     "reference": "ASM Handbook Vol.1",
-                    "temperature_k": 293.15,
                 },
             ],
         )
@@ -1388,19 +1386,17 @@ class Test선언물성이_덱까지:
             [
                 {
                     "item": "비열",
-                    "value": 462,
+                    "points": [{"value": 462, "temperature_k": 293.15}],
                     "input_unit": "J/(kg.K)",
                     "source": "standard",
                     "reference": "A",
-                    "temperature_k": 293.15,
                 },
                 {
                     "item": "열전도도",
-                    "value": 45,
+                    "points": [{"value": 45, "temperature_k": 373.15}],
                     "input_unit": "W/(m.K)",
                     "source": "standard",
                     "reference": "A",
-                    "temperature_k": 373.15,
                 },
             ],
         )
@@ -1428,7 +1424,7 @@ class Test선언물성이_덱까지:
             [
                 {
                     "item": "열전도도",
-                    "value": 45,
+                    "points": [{"value": 45}],
                     "input_unit": "W/(m.K)",
                     "source": "literature",
                     "reference": "ASM Handbook Vol.1 p.123",
@@ -1488,14 +1484,14 @@ class Test시험_없이_카드:
             [
                 {
                     "item": "탄성계수",
-                    "value": 206,
+                    "points": [{"value": 206}],
                     "input_unit": "GPa",
                     "source": "literature",
                     "reference": "ASM Handbook Vol.1 p.12",
                 },
                 {
                     "item": "열전도도",
-                    "value": 45,
+                    "points": [{"value": 45}],
                     "input_unit": "W/(m.K)",
                     "source": "literature",
                     "reference": "ASM Handbook Vol.1 p.12",
@@ -1791,3 +1787,241 @@ class Test카드_목록:
         body = client.get("/api/fitting/cards/facets", headers=admin_headers).json()
         assert {row["key"]: row["count"] for row in body["test_types"]}["tensile"] == 3
         assert {row["key"] for row in body["statuses"]} == {"draft", "published"}
+
+
+class Test온도표:
+    """**한 줄이 표를 든다** — 항목은 하나이고 그 하나가 온도에 따라 변한다.
+
+    강판 탄성계수는 상온 206 GPa 가 400 °C 에서 170 GPa 쯤으로 떨어지고, 열간
+    성형·용접·화재 해석은 그 곡선이 필요하다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _axis(self, db: Session) -> None:
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        db.commit()
+
+    def _card(
+        self, client: TestClient, headers: dict[str, str], material_id: str
+    ) -> dict[str, Any]:
+        made = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": material_id, "label": "온도표"},
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        card: dict[str, Any] = made.json()
+        return card
+
+    def test_카드에_표가_실린다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        declare(
+            client,
+            admin_headers,
+            material["id"],
+            [
+                {
+                    "item": "탄성계수",
+                    "points": [
+                        {"value": 206, "temperature_k": 293.15},
+                        {"value": 170, "temperature_k": 673.15},
+                    ],
+                    "input_unit": "GPa",
+                    "source": "standard",
+                    "reference": "EN 1993-1-2 표 3.1",
+                },
+                {
+                    "item": "전단탄성계수",
+                    "points": [{"value": 79, "temperature_k": 293.15}],
+                    "input_unit": "GPa",
+                    "source": "standard",
+                    "reference": "EN 1993-1-2 표 3.1",
+                },
+            ],
+        )
+        card = self._card(client, admin_headers, material["id"])
+        rows = card["blocks"]["elastic"]["rows"]
+        assert [row["temperature"] for row in rows] == [293.15, 673.15]
+        assert rows[0]["youngs_modulus"] == pytest.approx(206e9)
+        assert rows[1]["youngs_modulus"] == pytest.approx(170e9)
+        # **대푯값은 남는다.** 표를 못 먹는 형식이 그것을 쓴다.
+        assert values(card, "elastic")["youngs_modulus"] == pytest.approx(206e9)
+
+    def test_한_점짜리는_모든_온도에_같은_값으로_편다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**지어내는 것이 아니라 명시된 모형 가정이다**(상수). 빼 두면 솔버가
+        그 온도에서 푸아송비를 모른다."""
+        client.patch(
+            f"/api/materials/{material['id']}",
+            json={"poisson_ratio": 0.3},
+            headers=admin_headers,
+        )
+        declare(
+            client,
+            admin_headers,
+            material["id"],
+            [
+                {
+                    "item": "탄성계수",
+                    "points": [
+                        {"value": 206, "temperature_k": 293.15},
+                        {"value": 170, "temperature_k": 673.15},
+                    ],
+                    "input_unit": "GPa",
+                    "source": "standard",
+                    "reference": "EN 1993-1-2",
+                }
+            ],
+        )
+        card = self._card(client, admin_headers, material["id"])
+        text = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=json", headers=admin_headers
+        ).text
+        assert "206000000000" in text and "170000000000" in text
+
+    def test_열물성은_서로_다른_온도여도_된다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**키워드가 갈리므로 각자 자기 표를 갖는다.** 열팽창을 두 온도에서,
+        비열을 세 온도에서 적어도 아무 문제가 없다 — 같은 격자를 강제하면 실제로
+        그렇게 적힌 핸드북을 못 넣는다."""
+        declare(
+            client,
+            admin_headers,
+            material["id"],
+            [
+                {
+                    "item": "열팽창계수",
+                    "points": [
+                        {"value": 1.17e-05, "temperature_k": 293.15},
+                        {"value": 1.42e-05, "temperature_k": 773.15},
+                    ],
+                    "input_unit": "1/K",
+                    "source": "standard",
+                    "reference": "A",
+                },
+                {
+                    "item": "비열",
+                    "points": [
+                        {"value": 462, "temperature_k": 293.15},
+                        {"value": 550, "temperature_k": 673.15},
+                    ],
+                    "input_unit": "J/(kg.K)",
+                    "source": "standard",
+                    "reference": "B",
+                },
+            ],
+        )
+        card = self._card(client, admin_headers, material["id"])
+        rows = card["blocks"]["thermal"]["rows"]
+        # 온도는 합집합, 값이 없는 칸은 **비어 있다** — 0 으로 채우면 비열 0 인
+        # 재료가 된다.
+        assert [row["temperature"] for row in rows] == [293.15, 673.15, 773.15]
+        assert "specific_heat" not in rows[2]
+        assert "thermal_expansion" not in rows[1]
+
+    def test_점이_여럿이면_온도가_전부_있어야_한다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """온도 없는 점이 섞이면 **그 값이 어느 온도에서 유효한지 알 방법이
+        없다.** 상온으로 치는 것은 지어내는 일이다."""
+        refused = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "points": [{"value": 206}, {"value": 170, "temperature_k": 673.15}],
+                        "input_unit": "GPa",
+                        "source": "standard",
+                        "reference": "A",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert "온도 없는 값" in refused.json()["error"]["message"]
+
+    def test_같은_온도를_두_번_못_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """**솔버는 둘 중 하나를 조용히 고른다.** 어느 쪽인지 우리가 정해 두어야
+        한다."""
+        refused = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "points": [
+                            {"value": 206, "temperature_k": 293.15},
+                            {"value": 200, "temperature_k": 293.15},
+                        ],
+                        "input_unit": "GPa",
+                        "source": "standard",
+                        "reference": "A",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert "같은 온도가 두 번" in refused.json()["error"]["message"]
+
+    def test_온도순으로_고쳐_담는다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """뒤섞인 채로 솔버에 나가면 **Abaqus 가 조용히 이상한 보간을 한다** —
+        오류를 내지 않고 결과만 틀린다."""
+        saved = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "points": [
+                            {"value": 170, "temperature_k": 673.15},
+                            {"value": 206, "temperature_k": 293.15},
+                        ],
+                        "input_unit": "GPa",
+                        "source": "standard",
+                        "reference": "A",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        points = saved.json()["declared_properties"][0]["points"]
+        assert [point["temperature_k"] for point in points] == [293.15, 673.15]
+
+    def test_값이_없으면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        refused = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "points": [],
+                        "input_unit": "GPa",
+                        "source": "standard",
+                        "reference": "A",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text

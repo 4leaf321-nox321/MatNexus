@@ -439,6 +439,53 @@ THERMAL_KEYWORDS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def _elastic_lines(deck: Deck, youngs: float | None, poisson: float | None) -> list[str]:
+    """`*ELASTIC` — 한 줄이거나 온도별 표.
+
+    **온도 열은 표가 있을 때만 붙인다.** 한 온도짜리에 붙이면 솔버가 「이
+    온도에서만 유효」로 읽고, 그 밖에서 외삽 규칙이 달라진다 — 상수인 재료가
+    갑자기 온도 의존이 된다.
+    """
+    assert youngs is not None and poisson is not None
+    needed = ("temperature", "youngs_modulus", "poisson_ratio")
+    given = deck.rows("elastic")
+    rows = [
+        row for row in given if all(isinstance(row.get(key), (int, float)) for key in needed)
+    ]
+    # **줄을 조용히 버리지 않는다.** `*ELASTIC` 은 한 줄에 `(E, ν, T)` 를 받으므로
+    # 하나라도 비면 그 온도를 낼 수 없는데, 그냥 빼면 덱은 나가고 그 구간에서
+    # 솔버가 이웃 온도의 값을 쓴다 — 오류 없이 다른 재료가 된다.
+    if len(rows) < len(given):
+        holes = sorted(
+            {
+                key
+                for row in given
+                for key in needed
+                if not isinstance(row.get(key), (int, float))
+            }
+        )
+        raise ExportError(
+            f"온도별 탄성 표에 빈 칸이 있습니다({', '.join(holes)}). *ELASTIC 은 한 줄에 "
+            f"탄성계수·푸아송비·온도가 다 있어야 합니다 — 빈 칸을 이웃 값으로 메우는 "
+            f"것은 값을 지어내는 일이라 하지 않습니다."
+        )
+    if len(rows) < 2:
+        return ["*ELASTIC, TYPE=ISOTROPIC", f"{_free(youngs)}, {_free(poisson)}"]
+
+    lines = [
+        f"** ELASTIC: 온도 {len(rows)}점 "
+        f"({float(rows[0]['temperature']):.5g}~{float(rows[-1]['temperature']):.5g} K). "
+        f"표 밖에서는 끝값이 유지됩니다.",
+        "*ELASTIC, TYPE=ISOTROPIC",
+    ]
+    lines.extend(
+        f"{_free(float(row['youngs_modulus']))}, {_free(float(row['poisson_ratio']))}, "
+        f"{_free(float(row['temperature']))}"
+        for row in rows
+    )
+    return lines
+
+
 def _thermal_lines(deck: Deck) -> list[str]:
     """열물성 키워드. 블록이 없으면 **한 줄도 안 낸다.**
 
@@ -457,9 +504,18 @@ def _thermal_lines(deck: Deck) -> list[str]:
         return []
     lines: list[str] = []
     zero = deck.number("thermal", "reference_temperature")
+    rows = deck.rows("thermal")
     for key, keyword, unit in THERMAL_KEYWORDS:
+        # **표가 있으면 표가 이긴다.** 값은 첫 줄의 것이므로 둘 다 내면 같은
+        # 물성이 두 번 실린다.
+        table = [
+            (float(row["temperature"]), float(row[key]))
+            for row in rows
+            if isinstance(row.get(key), (int, float))
+            and isinstance(row.get("temperature"), (int, float))
+        ]
         value = deck.number("thermal", key)
-        if value is None:
+        if not table and value is None:
             continue
         source = deck.values("thermal").get(f"{key}_source")
         # **잰 값인지 적은 값인지 덱에서 보인다.** 덱만 받은 사람이 이 숫자의
@@ -468,8 +524,21 @@ def _thermal_lines(deck: Deck) -> list[str]:
         head = keyword
         if key == "thermal_expansion" and zero is not None:
             head = f"{keyword}, ZERO={_free(zero)}"
-        lines.append(head)
-        lines.append(f"{_free(value)},")
+        if len(table) > 1:
+            # **온도가 표에 있으면 그 사실을 적는다.** 표 밖에서 솔버는 끝값을
+            # 붙드는데, 덱만 받은 사람은 어디까지가 적힌 것인지 알 수 없다.
+            lines.append(
+                f"** {key}: 표 밖에서는 끝값이 유지됩니다 "
+                f"({table[0][0]:.5g}~{table[-1][0]:.5g} K 가 적힌 구간)"
+            )
+            lines.append(head)
+            lines.extend(f"{_free(one)}, {_free(temperature)}" for temperature, one in table)
+        else:
+            # 표가 없으면 값 하나. 둘 다 없으면 위에서 이미 건너뛰었다.
+            only = table[0][1] if table else value
+            assert only is not None
+            lines.append(head)
+            lines.append(f"{_free(only)},")
     return lines
 
 
@@ -515,9 +584,7 @@ def render_abaqus(deck: Deck) -> Rendered:
     if density is not None:
         lines.append("*DENSITY")
         lines.append(f"{_free(density)},")
-    lines.append("*ELASTIC, TYPE=ISOTROPIC")
-    assert youngs is not None and poisson is not None
-    lines.append(f"{_free(youngs)}, {_free(poisson)}")
+    lines.extend(_elastic_lines(deck, youngs, poisson))
     # EXTRAPOLATION=CONSTANT — 표 밖에서 응력을 일정하게 둔다. 기본값(오류 중단)
     # 보다 낫다고 볼 수도 있지만, 여기서는 **적합 구간 밖을 외삽하지 않는다** 는
     # 이 프로젝트의 태도와 같은 말이다: 모르는 구간에서 값을 지어내지 않는다.

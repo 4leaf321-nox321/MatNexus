@@ -98,6 +98,55 @@ def catalog(db: Session, *, level: str | None = None) -> dict[str, dict[str, Any
     return found
 
 
+def _points(given: list[Any], *, name: str, symbol: str) -> list[dict[str, Any]]:
+    """온도-값 점들을 검사해 저장할 모양으로.
+
+    **온도 오름차순으로 고정한다.** 뒤섞인 채로 솔버에 나가면 Abaqus 가 조용히
+    이상한 보간을 한다 — 오류를 내지 않고, 결과만 틀린다.
+    """
+    made: list[dict[str, Any]] = []
+    for point in given:
+        if not isinstance(point, dict):
+            raise AppError("MNX-MATERIALS-0024", f"'{name}' 의 값이 잘못됐습니다.", status=422)
+        raw = point.get("value")
+        if not isinstance(raw, (int, float)):
+            raise AppError(
+                "MNX-MATERIALS-0024", f"'{name}' 의 값이 숫자가 아닙니다.", status=422
+            )
+        temperature = point.get("temperature_k")
+        made.append(
+            {
+                "temperature_k": float(temperature)
+                if isinstance(temperature, (int, float))
+                else None,
+                "value_si": units.to_si(raw, symbol),
+            }
+        )
+
+    if len(made) == 1:
+        return made
+
+    # **점이 둘 이상이면 온도가 전부 있어야 한다.** 하나라도 비면 그 값이 어느
+    # 온도의 것인지 알 수 없고, 그것을 상온으로 치는 것은 지어내는 일이다.
+    if any(point["temperature_k"] is None for point in made):
+        raise AppError(
+            "MNX-MATERIALS-0026",
+            f"'{name}' 에 온도 없는 값이 섞여 있습니다. 값이 여럿이면 각각 어느 "
+            f"온도의 것인지 적어야 합니다 — 안 그러면 그 값이 어느 온도에서 유효한지 "
+            f"알 방법이 없습니다.",
+            status=422,
+        )
+    temperatures = [point["temperature_k"] for point in made]
+    if len(set(temperatures)) != len(temperatures):
+        raise AppError(
+            "MNX-MATERIALS-0026",
+            f"'{name}' 에 같은 온도가 두 번 있습니다. 솔버는 둘 중 하나를 조용히 "
+            f"고릅니다 — 어느 쪽인지 우리가 정해 두어야 합니다.",
+            status=422,
+        )
+    return sorted(made, key=lambda point: point["temperature_k"])
+
+
 def check(
     db: Session, rows: list[dict[str, Any]], *, level: str = DEFAULT_LEVEL
 ) -> list[dict[str, Any]]:
@@ -113,6 +162,16 @@ def check(
 
     **한 항목을 두 번 넣지 못한다.** 탄성계수가 두 줄이면 카드가 어느 것을 쓸지
     정할 수 없고, 그 판단을 여기서 안 하면 나중에 조용히 하나가 이긴다.
+
+    ## 한 줄이 표를 든다
+
+    강판 탄성계수는 상온 206 GPa 가 400 °C 에서 170 GPa 쯤으로 떨어진다. 그렇다고
+    줄을 여럿 두면 위의 규칙이 깨진다 — **항목은 하나이고 그 하나가 온도에 따라
+    변할 뿐**이므로 줄 안에 점을 넣는다(`points`).
+
+    점이 둘 이상이면 **온도가 전부 있어야 하고 서로 달라야 한다.** 온도 없는
+    점이 섞이면 그 값이 어느 온도의 것인지 알 수 없고, 온도가 겹치면 솔버가
+    둘 중 하나를 조용히 고른다.
     """
     known = catalog(db, level=level)
     if not known:
@@ -183,10 +242,13 @@ def check(
                 status=422,
             )
 
-        raw = row.get("value")
-        if not isinstance(raw, (int, float)):
+        given = row.get("points")
+        if not isinstance(given, list) or not given:
             raise AppError(
-                "MNX-MATERIALS-0024", f"'{name}' 의 값이 숫자가 아닙니다.", status=422
+                "MNX-MATERIALS-0024",
+                f"'{name}' 에 값이 없습니다. 값 없는 항목은 「이 물성이 있다」고 "
+                f"말하는 거짓말이 됩니다.",
+                status=422,
             )
         symbol = str(row.get("input_unit") or spec["si_unit"])
         try:
@@ -203,17 +265,14 @@ def check(
                 status=422,
             )
 
-        temperature = row.get("temperature_k")
+        points = _points(given, name=name, symbol=symbol)
         out.append(
             {
                 "item": name,
-                "value_si": units.to_si(raw, symbol),
+                "points": points,
                 "input_unit": symbol,
                 "source": source,
                 "reference": reference,
-                "temperature_k": float(temperature)
-                if isinstance(temperature, (int, float))
-                else None,
                 "note": clean(str(row.get("note") or "")),
             }
         )
