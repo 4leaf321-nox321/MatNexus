@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -62,7 +63,34 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture
-def backup(tmp_path: Path) -> Iterator[Path]:
+def ascii_tmp() -> Iterator[Path]:
+    """**ASCII 경로**의 임시 폴더.
+
+    `tmp_path` 를 안 쓴다. pytest 는 시험 이름으로 폴더 이름을 만드는데 이
+    저장소의 시험 이름은 한글이고, 그 경로를 `pg_dump.exe` 에 넘기면 **콘솔
+    코드페이지가 한국어가 아닌 기계에서 물음표로 바뀌어** 파일을 못 연다.
+
+    실측(2026-08-25): 로컬(CP949)에서는 3건 다 통과하고 CI 러너에서만 깨졌다.
+    `.../test_??_??_???_????0/backup/db.dump: No such file or directory`.
+
+    한글 이름 자체는 그대로 둔다 — 시험이 무엇을 지키는지 한국어로 읽히는 것이
+    이 저장소의 규율이다. **새어 나가면 안 되는 것은 경로다.**
+    """
+    made = Path(tempfile.mkdtemp(prefix="matnexus_restore_"))
+    # **되돌아가는 것을 여기서 막는다.** `tmp_path` 로 바꾸면 로컬(CP949)에서는
+    # 통과하고 CI 에서만 깨진다 — 고친 사람이 그 사실을 볼 수 없는 자리다.
+    assert str(made).isascii(), (
+        f"임시 경로에 ASCII 밖 글자가 있습니다: {made}. 네이티브 pg_dump 가 "
+        f"콘솔 코드페이지에 따라 이 경로를 못 엽니다."
+    )
+    try:
+        yield made
+    finally:
+        shutil.rmtree(made, ignore_errors=True)
+
+
+@pytest.fixture
+def backup(ascii_tmp: Path) -> Iterator[Path]:
     """작은 DB 하나를 만들어 백업한 모양으로 담는다.
 
     **개발 DB 를 안 쓴다.** 15MB 를 덤프하면 시험이 느려지고, 무엇보다 이
@@ -88,7 +116,7 @@ def backup(tmp_path: Path) -> Iterator[Path]:
             conn.execute(text("insert into curves values (1, 'b/one.parquet')"))
         engine.dispose()
 
-        target = tmp_path / "backup"
+        target = ascii_tmp / "backup"
         (target / "filestore" / "a").mkdir(parents=True)
         (target / "filestore" / "b").mkdir(parents=True)
         for relative in ("a/one.tra", "a/two.tra", "b/one.parquet"):
@@ -172,10 +200,10 @@ def spare() -> Iterator[str]:
     admin.dispose()
 
 
-def test_넣은_것이_그대로_돌아온다(backup: Path, spare: str, tmp_path: Path) -> None:
+def test_넣은_것이_그대로_돌아온다(backup: Path, spare: str, ascii_tmp: Path) -> None:
     """**행 수만 보지 않는다.** 표가 만들어졌는데 내용이 비면 행 수는 0 으로
     맞을 수 있다 — 실제로 담긴 경로까지 대조한다."""
-    app = tmp_path / "app"
+    app = ascii_tmp / "app"
     done = _restore(backup, spare, app=app)
     assert done.returncode == 0, _text(done)
 
@@ -194,7 +222,7 @@ def test_넣은_것이_그대로_돌아온다(backup: Path, spare: str, tmp_path
     assert (app.parent / f"{app.name}_data" / "filestore" / "a" / "one.tra").exists()
 
 
-def test_시점이_어긋나면_멈춘다(backup: Path, spare: str, tmp_path: Path) -> None:
+def test_시점이_어긋나면_멈춘다(backup: Path, spare: str, ascii_tmp: Path) -> None:
     """**여기가 이 스크립트가 있는 이유다.**
 
     DB 는 온전한데 파일이 빠진 백업을 준다. 그대로 통과시키면 앱은 멀쩡히
@@ -202,7 +230,7 @@ def test_시점이_어긋나면_멈춘다(backup: Path, spare: str, tmp_path: Pa
     """
     (backup / "filestore" / "a" / "two.tra").unlink()
 
-    done = _restore(backup, spare, app=tmp_path / "app")
+    done = _restore(backup, spare, app=ascii_tmp / "app")
     output = _text(done)
     assert done.returncode != 0, f"빠진 파일을 그냥 지났습니다:\n{output}"
     assert "시점이 어긋났습니다" in output, output
@@ -210,17 +238,17 @@ def test_시점이_어긋나면_멈춘다(backup: Path, spare: str, tmp_path: Pa
     assert "1 개가 없습니다" in output, output
 
 
-def test_있는_DB_를_말없이_덮지_않는다(backup: Path, spare: str, tmp_path: Path) -> None:
+def test_있는_DB_를_말없이_덮지_않는다(backup: Path, spare: str, ascii_tmp: Path) -> None:
     """복구는 대개 "옛 상태를 옆에 띄워 보는" 일이다. 살아 있는 DB 를 실수로
     덮으면 되돌릴 데가 없다."""
-    first = _restore(backup, spare, app=tmp_path / "app")
+    first = _restore(backup, spare, app=ascii_tmp / "app")
     assert first.returncode == 0
 
-    again = _restore(backup, spare, app=tmp_path / "app")
+    again = _restore(backup, spare, app=ascii_tmp / "app")
     output = _text(again)
     assert again.returncode != 0, f"있는 DB 를 덮었습니다:\n{output}"
     assert "이미 있습니다" in output, output
 
     # -Force 면 덮되, 무엇을 지우는지 먼저 적는다.
-    forced = _restore(backup, spare, app=tmp_path / "app", force=True)
+    forced = _restore(backup, spare, app=ascii_tmp / "app", force=True)
     assert forced.returncode == 0, _text(forced)
