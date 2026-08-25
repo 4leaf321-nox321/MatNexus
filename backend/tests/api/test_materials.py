@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -835,7 +835,7 @@ class Test밀시트값:
         created: dict[str, Any] = made.json()
         return created
 
-    MILL = {
+    MILL: ClassVar[dict[str, Any]] = {
         "item": "항복강도",
         "value": 295,
         "input_unit": "MPa",

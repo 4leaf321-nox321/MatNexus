@@ -10,7 +10,8 @@
     backend\packages\    wheel 번들 — 서버는 --no-index 로 여기서만 설치한다
     frontend\dist\       빌드된 SPA. 백엔드가 같은 프로세스에서 서빙한다
     run_server.ps1       기동
-    deploy.ps1 / rollback.ps1 / venv_sync.ps1 / install.ps1 / precheck.ps1 / backup.ps1
+    deploy.ps1 / rollback.ps1 / venv_sync.ps1 / install.ps1 / precheck.ps1 /
+    backup.ps1 / restore.ps1
     배포.md              초기 배포·업데이트 배포 절차
     BUILD_INFO.txt       wheel 을 만든 파이썬 마이너 버전
 
@@ -106,6 +107,7 @@ Copy-Item -Force .\scripts\deploy\rollback.ps1 .\deploy\rollback.ps1
 Copy-Item -Force .\scripts\deploy\install.ps1 .\deploy\install.ps1
 Copy-Item -Force .\scripts\deploy\precheck.ps1 .\deploy\precheck.ps1
 Copy-Item -Force .\scripts\deploy\backup.ps1 .\deploy\backup.ps1
+Copy-Item -Force .\scripts\deploy\restore.ps1 .\deploy\restore.ps1
 
 # 배포 문서도 함께 넣는다. 폐쇄망 서버는 zip 하나만 받으므로, 문서가 저장소에만
 # 있으면 **정작 설치하는 자리에서 볼 수 없다.**

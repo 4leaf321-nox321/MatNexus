@@ -113,6 +113,9 @@ cd C:\Server\tools\MatNexus
 .\backup.ps1   -AppPath 'C:\Server\MatNexus' -BackupRoot 'D:\backup\matnexus'
 .\deploy.ps1   -AppPath 'C:\Server\MatNexus'
 .\rollback.ps1 -AppPath 'C:\Server\MatNexus'
+
+# 백업이 살아 있는지 확인 — 옆에 띄워 보기만 한다 (지금 DB 를 안 건드린다)
+.\restore.ps1  -BackupPath 'D:\backup\matnexus\20260825-020000' -DbName matnexus_restore_check
 ```
 
 ### 백업
@@ -123,6 +126,30 @@ cd C:\Server\tools\MatNexus
 
 **한 번은 실제로 복구해 보라** — 받아만 두고 복구해 본 적 없는 백업은 백업이 아니다.
 65도 RA도 이 절차 자체가 없었다. 정기 실행은 작업 스케줄러에 등록한다.
+
+### 복구
+
+`restore.ps1` 이 되돌리고 **되돌아왔는지 검사한다.**
+
+```powershell
+# ① 확인만 — 새 DB 로 되돌려 본다. 지금 DB 도 파일스토어도 안 건드린다
+.\restore.ps1 -BackupPath 'D:\backup\matnexus\<시각>' -DbName matnexus_restore_check
+
+# ② 실제 복구 — 앱을 먼저 중지한다
+.\restore.ps1 -BackupPath 'D:\backup\matnexus\<시각>' -DbName matnexus `
+              -AppPath 'C:\Server\MatNexus' -Force
+```
+
+- **있는 DB 를 말없이 덮지 않는다.** 이름이 이미 있으면 멈춘다 — 복구는 대개
+  "옛 상태를 옆에 띄워 보는" 일이고, 그때 살아 있는 DB 를 덮으면 되돌릴 데가 없다.
+  정말 덮으려면 `-Force`
+- **시점이 어긋나면 멈춘다.** 복구 뒤 DB 가 가리키는 파일이 실제로 있는지 세고,
+  하나라도 없으면 몇 개인지 말한다. 그냥 지나가면 앱은 멀쩡히 뜨고 **그 곡선을
+  열 때만 터진다**
+- `-AppPath` 를 안 주면 DB 만 되돌린다(확인용). 끝나면 그 DB 는 지워도 된다
+
+CI 가 매번 왕복을 돈다(`tests/architecture/test_restore_roundtrip.py`) — 넣은 것이
+그대로 돌아오는지, 파일이 빠졌을 때 멈추는지, 있는 DB 를 덮지 않는지.
 
 ### 관리자 계정
 
