@@ -32,7 +32,7 @@ export function TestTypeListPanel({
 }) {
   return (
     <LeftPanel label="시험 종류">
-      <aside className="bg-background flex h-full w-56 flex-col border-r">
+      <aside className="bg-background flex h-full w-60 flex-col border-r">
         <div className="min-h-0 flex-1 overflow-auto py-1">
           {types.map((type) => {
             const here = type.key === current
@@ -42,7 +42,7 @@ export function TestTypeListPanel({
                 type="button"
                 aria-current={here ? 'true' : undefined}
                 onClick={() => onPick(type.key)}
-                className={`block w-full px-3 py-2 text-left text-xs ${
+                className={`block w-full px-3 py-2 text-left text-sm ${
                   here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
                 }`}
               >
@@ -58,16 +58,16 @@ export function TestTypeListPanel({
                     />
                   )}
                   {!type.is_active && (
-                    <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">
+                    <Badge variant="outline" className="ml-auto shrink-0 text-[11px]">
                       중단
                     </Badge>
                   )}
                 </div>
-                <div className="text-muted-foreground mt-0.5 truncate font-mono text-[11px]">
+                <div className="text-muted-foreground mt-0.5 truncate font-mono text-xs">
                   {type.key}
                 </div>
                 {/* 채널·조건 수. **고르기 전에 규모를 안다.** */}
-                <div className="text-muted-foreground mt-0.5 text-[11px]">
+                <div className="text-muted-foreground mt-0.5 text-xs">
                   채널 {type.channels.length} · 조건 {type.conditions.length}
                   {type.run_count > 0 && ` · 시험 ${type.run_count}`}
                 </div>
@@ -76,7 +76,7 @@ export function TestTypeListPanel({
           })}
 
           {types.length === 0 && (
-            <p className="text-muted-foreground p-3 text-xs">정의된 종류가 없습니다.</p>
+            <p className="text-muted-foreground p-3 text-sm">정의된 종류가 없습니다.</p>
           )}
         </div>
       </aside>

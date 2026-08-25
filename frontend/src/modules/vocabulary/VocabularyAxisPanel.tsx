@@ -38,7 +38,7 @@ export function VocabularyAxisPanel({
 }) {
   return (
     <LeftPanel label="기준정보 축">
-      <aside className="bg-background flex h-full w-56 flex-col border-r">
+      <aside className="bg-background flex h-full w-60 flex-col border-r">
         <div className="min-h-0 flex-1 overflow-auto py-1">
           {axes.map((axis) => {
             const here = axis.slug === current
@@ -49,7 +49,7 @@ export function VocabularyAxisPanel({
                 type="button"
                 aria-current={here ? 'true' : undefined}
                 onClick={() => onPick(axis.slug)}
-                className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs ${
+                className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm ${
                   here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
                 }`}
                 // 들여쓰기로 부모-자식을 그린다. 유틸리티 클래스로는 단계를

@@ -88,7 +88,7 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="이름 · 별칭 · Grade"
-              className="h-8 pl-7 text-xs"
+              className="h-8 pl-7 text-sm"
               aria-label="재료 찾기"
             />
           </div>
@@ -122,13 +122,13 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
                 key={material.id}
                 to={`/materials/${material.id}`}
                 aria-current={here ? 'page' : undefined}
-                className={`block border-b px-3 py-2 text-xs ${
+                className={`block border-b px-3 py-2 text-sm ${
                   here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
                 }`}
               >
                 <div className="truncate">{material.record_name}</div>
                 {material.alias && (
-                  <div className="text-muted-foreground truncate text-[11px]">
+                  <div className="text-muted-foreground truncate text-xs">
                     {material.alias}
                   </div>
                 )}
@@ -137,14 +137,14 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
           })}
 
           {!loading && rows.length === 0 && (
-            <p className="text-muted-foreground p-3 text-xs">찾는 재료가 없습니다.</p>
+            <p className="text-muted-foreground p-3 text-sm">찾는 재료가 없습니다.</p>
           )}
         </div>
 
         {/* **잘렸으면 잘렸다고 말한다.** 표시도 없이 앞 50개만 보이면 뒤엣것은
             없는 재료처럼 보이고, 사람은 그 사실을 알 방법이 없다. */}
         {total > rows.length && (
-          <p className="text-muted-foreground border-t px-3 py-2 text-[11px]">
+          <p className="text-muted-foreground border-t px-3 py-2 text-xs">
             {total}개 중 {rows.length}개. 찾기로 좁히세요.
           </p>
         )}

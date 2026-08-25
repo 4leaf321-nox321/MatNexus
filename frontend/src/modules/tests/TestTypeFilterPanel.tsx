@@ -120,7 +120,7 @@ export function TestTypeFilterPanel<Row extends HasTestType & HasOwner>({
 
   return (
     <LeftPanel label={label}>
-      <aside className="bg-background flex h-full w-56 flex-col border-r">
+      <aside className="bg-background flex h-full w-60 flex-col border-r">
         {/* **맨 위다.** 목록 아래에 두면 축이 길어질수록 멀어지고, 스크롤을
             내려야 보인다 — 목록의 모양을 바꾸는 단추가 그 목록에 가려지면 안 된다.
 
@@ -132,7 +132,7 @@ export function TestTypeFilterPanel<Row extends HasTestType & HasOwner>({
             variant="ghost"
             size="sm"
             aria-pressed={split}
-            className="text-muted-foreground h-7 shrink-0 justify-start rounded-none border-b px-3 text-xs"
+            className="text-muted-foreground h-7 shrink-0 justify-start rounded-none border-b px-3 text-sm"
             onClick={() => setSplit(!split)}
           >
             <Building2 className="size-3.5" />
@@ -159,12 +159,12 @@ export function TestTypeFilterPanel<Row extends HasTestType & HasOwner>({
 
           {/* **비어 있으면 왜 비었는지 말한다.** 빈 옆패널은 고장으로 보인다. */}
           {rows.length === 0 && (
-            <p className="text-muted-foreground p-3 text-xs">아직 등록된 것이 없습니다.</p>
+            <p className="text-muted-foreground p-3 text-sm">아직 등록된 것이 없습니다.</p>
           )}
 
           {split && owners.length > 0 && (
             <>
-              <p className="text-muted-foreground mt-3 px-3 py-1 text-[11px] font-medium">
+              <p className="text-muted-foreground mt-3 px-3 py-1 text-xs font-medium">
                 부서
               </p>
               <Row
@@ -208,7 +208,7 @@ function Row({
       type="button"
       aria-current={here ? 'true' : undefined}
       onClick={onClick}
-      className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs ${
+      className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm ${
         here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
       }`}
     >

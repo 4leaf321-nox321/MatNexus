@@ -271,3 +271,43 @@ describe('본문 폭', () => {
     expect(shell).toMatch(/max-w-\[1600px\]/)
   })
 })
+
+
+/**
+ * 옆패널 글자 — **사이드바보다 작으면 안 된다.**
+ *
+ * 사이드바 항목은 `text-sm` 인데 바로 옆 목록이 `text-xs` 였다. 같은 층위의
+ * 목록이 사이드바보다 작으면 읽는 사람은 그것을 부속물로 본다 — 실제로는 그
+ * 화면에서 **무엇을 볼지 고르는 자리**다. 실사용에서 "글자크기가 너무 작다" 가
+ * 나왔다.
+ *
+ * 참고: ReportArchive 는 사이드바 항목과 그 옆 목록이 둘 다 `text-sm` 이다.
+ *
+ * ## 무엇을 「고르는 줄」로 보는가
+ *
+ * `aria-current` 를 단 것. 그 속성이 곧 "지금 이것을 보고 있다" 는 뜻이라,
+ * 고르는 줄에만 붙는다 — 처음에는 여백(`px-`·`py-`)으로 짚으려 했는데 이름표와
+ * 작은 버튼까지 잡혔다. **곁줄과 이름표는 작아도 된다.**
+ */
+describe('옆패널 글자', () => {
+  it('고르는 줄이 사이드바보다 작지 않다', () => {
+    const offenders: string[] = []
+    for (const file of walk(MODULES)) {
+      const source = readFileSync(file, 'utf-8')
+      if (!source.includes('<LeftPanel')) continue
+      const rel = path.relative(MODULES, file)
+      // `aria-current` 부터 그 요소가 닫히기까지에서 크기 클래스를 본다.
+      for (const match of source.matchAll(/aria-current[\s\S]{0,600}?\n\s*>/g)) {
+        const found = match[0].match(/\btext-(xs|sm|base|\[\d+px\])\b/)
+        if (found && found[1] !== 'sm' && found[1] !== 'base') {
+          offenders.push(`${rel}: text-${found[1]}`)
+        }
+      }
+    }
+    expect(
+      offenders,
+      '옆패널에서 고르는 줄(aria-current)은 text-sm 입니다 — 사이드바 항목과 ' +
+        '같은 크기여야 합니다. 곁줄과 이름표는 text-xs 로 두세요.'
+    ).toEqual([])
+  })
+})

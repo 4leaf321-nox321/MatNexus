@@ -67,14 +67,14 @@ function Section({
   const total = rows.reduce((sum, row) => sum + row.count, 0)
   return (
     <div className="border-b py-1">
-      <p className="text-muted-foreground px-3 pt-1 pb-0.5 text-[11px] font-medium">{title}</p>
+      <p className="text-muted-foreground px-3 pt-1 pb-0.5 text-xs font-medium">{title}</p>
       {/* **「전체」가 첫 줄이다.** 고른 것을 푸는 길이 없으면 새로고침으로
           푸는 사람이 생긴다. */}
       <button
         type="button"
         aria-current={current === null ? 'true' : undefined}
         onClick={() => onPick(null)}
-        className={`flex w-full items-center gap-1 px-3 py-1 text-left text-xs ${
+        className={`flex w-full items-center gap-1 px-3 py-1 text-left text-sm ${
           current === null ? 'bg-muted font-medium' : 'hover:bg-muted/50'
         }`}
       >
@@ -89,7 +89,7 @@ function Section({
             type="button"
             aria-current={here ? 'true' : undefined}
             onClick={() => onPick(row.key)}
-            className={`flex w-full items-center gap-1 px-3 py-1 text-left text-xs ${
+            className={`flex w-full items-center gap-1 px-3 py-1 text-left text-sm ${
               here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
             }`}
           >
@@ -129,14 +129,14 @@ export function CardFilterPanel({
 
   return (
     <LeftPanel label="카드 거르기">
-      <aside className="bg-background flex h-full w-56 flex-col border-r">
+      <aside className="bg-background flex h-full w-60 flex-col border-r">
         {/* **맨 위다.** 목록을 가르는 스위치라 목록 사이에 두면 못 찾는다. */}
         <div className="flex items-center justify-between gap-1 border-b px-3 py-2">
-          <span className="text-muted-foreground text-[11px]">부서로 나누기</span>
+          <span className="text-muted-foreground text-xs">부서로 나누기</span>
           <Button
             size="sm"
             variant={split ? 'default' : 'outline'}
-            className="h-6 px-2 text-[11px]"
+            className="h-6 px-2 text-xs"
             aria-pressed={split}
             onClick={() => setSplit(!split)}
           >
@@ -168,19 +168,19 @@ export function CardFilterPanel({
         </div>
 
         {facets && facets.statuses.length === 0 && (
-          <p className="text-muted-foreground p-3 text-xs">아직 만든 카드가 없습니다.</p>
+          <p className="text-muted-foreground p-3 text-sm">아직 만든 카드가 없습니다.</p>
         )}
 
         {/* 걸린 것을 한눈에. **어디에 걸었는지 모르면 목록이 왜 짧은지 모른다.** */}
         {(status || testType || owner) && (
           <div className="flex items-center gap-1 border-t px-3 py-2">
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge variant="secondary" className="text-[11px]">
               필터 {[status, testType, owner].filter(Boolean).length}
             </Badge>
             <Button
               size="sm"
               variant="ghost"
-              className="ml-auto h-6 px-2 text-[11px]"
+              className="ml-auto h-6 px-2 text-xs"
               onClick={() => {
                 onPickStatus(null)
                 onPickTestType(null)
