@@ -609,11 +609,22 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     # 맞는 프로파일이 있으면 그것을 쓴다. 없을 때만 코드 플러그인으로 내려간다.
     reader = _pick_reader(db, test_type, run, data)
     if reader is None:
+        # **막다른 길을 가리키지 않는다.** 다른 종류가 읽을 수 있는 파일이면
+        # 프로파일을 만들어도 영영 안 읽힌다 — 틀린 것은 시험 종류다.
+        elsewhere = _who_could_read(db, run, data)
         return _fail(
             db,
             run,
-            f"'{test_type.label}' 을 읽을 방법이 없습니다. 형식 프로파일을 만들거나 "
-            f"파서를 등록하세요.",
+            (
+                f"'{test_type.label}' 을 읽을 방법이 없습니다. 다만 이 파일은 "
+                f"{elsewhere} 이 읽는 형식으로 보입니다 — **시험 종류가 잘못 "
+                f"지정된 것 같습니다.** 지우고 그 종류로 다시 올리세요."
+            )
+            if elsewhere
+            else (
+                f"'{test_type.label}' 을 읽을 방법이 없습니다. 형식 프로파일을 "
+                f"만들거나 파서를 등록하세요."
+            ),
         )
     how, source = reader
 
@@ -665,6 +676,64 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
         len(parsed.warnings),
     )
     return "parsed"
+
+
+def _who_could_read(db: Session, run: TestRun, data: bytes) -> str | None:
+    """이 파일을 **다른 시험 종류**가 읽을 수 있나. 읽을 수 있으면 그 이름.
+
+    ## 왜 필요한가
+
+    「읽을 방법이 없습니다. 형식 프로파일을 만들거나 파서를 등록하세요」 는
+    **막다른 길을 가리킬 때가 있다.** 실제로 인장 `.tra` 파일이 DMA 종류로
+    올라온 일이 있었는데, 그 안내를 따라 프로파일을 만들어도 영영 안 읽힌다 —
+    그 파일은 이미 읽을 줄 아는 파서가 있고, 틀린 것은 시험 종류였다.
+
+    시스템은 그것을 알 수 있다. 알면서 안 말하면 사람은 없는 문제를 풀게 된다.
+    """
+    filename = run.source_filename or ""
+    try:
+        structure = readers.sniff(data)
+    except readers.ReadError:
+        structure = None
+
+    if structure is not None:
+        rows = db.scalars(
+            select(FormatProfile, TestType)
+            .join(TestType, TestType.id == FormatProfile.test_type_id)
+            .where(
+                FormatProfile.test_type_id != run.test_type_id,
+                FormatProfile.is_active.is_(True),
+                or_(
+                    FormatProfile.owner_workspace_id.is_(None),
+                    FormatProfile.owner_workspace_id == run.workspace_id,
+                ),
+            )
+        )
+        for profile in rows:
+            if profiles.matches(profile.definition, filename=filename, structure=structure):
+                kind = db.get(TestType, profile.test_type_id)
+                return f"'{kind.label if kind else '?'}' (형식 {profile.key})"
+
+    # 파서는 확장자로 본다 — 지문까지 재려면 전부 돌려 봐야 하고, 그 비용을
+    # 오류 안내에 쓸 이유는 없다.
+    suffix = filename[filename.rfind(".") :].lower() if "." in filename else ""
+    if suffix:
+        parsers.load_builtin()
+        for kind in db.scalars(
+            select(TestType).where(
+                TestType.id != run.test_type_id,
+                TestType.parser_key.is_not(None),
+                TestType.is_active.is_(True),
+            )
+        ):
+            try:
+                plugin = registry.get(kind.parser_key or "")
+            except KeyError:
+                continue
+            declared = [str(one).lower() for one in plugin.meta.get("extensions", ())]
+            if suffix in declared:
+                return f"'{kind.label}' (파서 {kind.parser_key})"
+    return None
 
 
 def _pick_reader(

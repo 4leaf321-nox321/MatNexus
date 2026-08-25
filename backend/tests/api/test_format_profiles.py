@@ -1121,3 +1121,74 @@ class Test읽을_형식_고르기:
             "/api/formats", params={"test_type": "dma_sweep"}, headers=admin_headers
         ).json()
         assert [item["key"] for item in found] == ["ta_dma850"]
+
+
+class Test종류가_틀린_파일:
+    """**막다른 길을 가리키지 않는다.**
+
+    인장 `.tra` 가 DMA 종류로 올라온 일이 있었다. 그때 안내는 「형식 프로파일을
+    만들거나 파서를 등록하세요」 였는데, 그 말을 따라 프로파일을 만들어도 영영
+    안 읽힌다 — 그 파일은 이미 읽을 줄 아는 파서가 있고 틀린 것은 종류였다.
+    """
+
+    def test_다른_종류가_읽을_수_있으면_그렇게_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        del dma, tensile
+        # 인장 파일을 DMA 종류로 올린다 — 실제로 난 일이다.
+        made = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": "{}",
+            },
+            files={"file": ("Example.tra", (FIXTURES / "Example.tra").read_bytes())},
+            headers=admin_headers,
+        )
+        assert made.status_code == 202, made.text
+
+        assert services.parse_run(db, uuid.UUID(made.json()["id"])) == "failed"
+        detail = client.get(
+            f"/api/test-runs/{made.json()['id']}", headers=admin_headers
+        ).json()
+        message = detail["parse_error"]
+        # **무엇이 틀렸는지·무엇을 하면 되는지가 다 들어 있어야 한다.**
+        assert "인장시험" in message, message
+        assert "zwick_tra" in message, message
+        assert "시험 종류" in message, message
+
+    def test_아무도_못_읽으면_전과_같이_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**없는 단서를 지어내지 않는다.** 정말 읽을 방법이 없으면 프로파일을
+        만들라는 안내가 맞다."""
+        del dma
+        made = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": "{}",
+            },
+            files={"file": ("mystery.xyz", b"who knows what this is")},
+            headers=admin_headers,
+        )
+        assert made.status_code == 202, made.text
+        assert services.parse_run(db, uuid.UUID(made.json()["id"])) == "failed"
+        detail = client.get(
+            f"/api/test-runs/{made.json()['id']}", headers=admin_headers
+        ).json()
+        assert "형식 프로파일을" in detail["parse_error"]
+        assert "시험 종류가 잘못" not in detail["parse_error"]
