@@ -67,28 +67,30 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const pinned = usePinnedLayout(children)
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          // **키가 화면을 넘으면 스크롤한다.** 안 넣으면 내용이 길어질 때
-          // 모달이 화면 밖으로 자라고, **아래쪽 버튼을 누를 방법이 사라진다** —
-          // 기준정보에서 값을 여러 개 적으면 '추가' 버튼이 그렇게 됐다.
+          // **키가 화면을 넘으면 가운데만 굴린다.** 안 넣으면 모달이 화면
+          // 밖으로 자라고 **아래쪽 버튼을 누를 방법이 사라진다** — 기준정보에서
+          // 값을 여러 개 적으면 '추가' 버튼이 그렇게 됐다.
+          //
+          // 바깥을 통째로 굴리지 않는다. 그러면 **확인·취소가 내용과 함께
+          // 위로 사라진다** — 누르려면 끝까지 굴려야 하고, 긴 모달일수록
+          // 그 거리가 멀다. 머리글과 바닥글은 붙박이고 가운데만 움직인다.
           //
           // 여기(프리미티브)에 두는 이유: 모달마다 적게 하면 새 모달을 만들
           // 때마다 잊는다. 실제로 21개 중 13개가 빠져 있었고, 빠진 것은
           // **내용이 길어지기 전까지 안 보인다.**
-          //
-          // `cn` 이 tailwind-merge 라 개별 모달이 자기 값으로 덮을 수 있다 —
-          // 안쪽에 자기 스크롤 영역을 둔 모달이 그렇게 한다.
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-hidden rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
       >
-        {children}
+        {pinned}
         {showCloseButton && (
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
@@ -104,6 +106,43 @@ function DialogContent({
         )}
       </DialogPrimitive.Content>
     </DialogPortal>
+  )
+}
+
+/**
+ * 머리글·바닥글은 붙박이로 두고 **가운데만 굴린다.**
+ *
+ * ## 왜 감싸 주는가 — 각 모달이 적게 하지 않고
+ *
+ * 굴릴 영역을 모달마다 손으로 감싸게 하면 **새 모달을 만들 때마다 잊는다.**
+ * 스크롤 자체가 그렇게 빠져 있었다(21개 중 13개). 같은 실수를 한 겹 안쪽에서
+ * 되풀이할 이유가 없다.
+ *
+ * ## 바닥글이 없으면 아무 일도 안 한다
+ *
+ * `DialogFooter` 를 안 쓰는 모달이 둘 있다. 그런 모달은 내용 전체가 굴러가고,
+ * 그것은 이 함수가 없을 때와 같다 — **못 쓰게 만들지 않는다.**
+ */
+function usePinnedLayout(children: React.ReactNode): React.ReactNode {
+  const items = React.Children.toArray(children)
+  const head = items.filter(
+    (one) => React.isValidElement(one) && one.type === DialogHeader
+  )
+  const foot = items.filter(
+    (one) => React.isValidElement(one) && one.type === DialogFooter
+  )
+  const body = items.filter((one) => !head.includes(one) && !foot.includes(one))
+
+  return (
+    <>
+      {head}
+      {/* `-mx-4 px-4` 는 굴리는 영역이 모달의 좌우 여백까지 쓰게 한다 —
+          안 그러면 스크롤바가 안쪽으로 들어와 내용과 겹쳐 보인다. */}
+      <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4">
+        {body}
+      </div>
+      {foot}
+    </>
   )
 }
 

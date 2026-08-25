@@ -113,7 +113,7 @@ export function SummaryImportDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3 overflow-hidden">
+      <DialogContent className="max-w-4xl gap-3">
         <DialogHeader>
           <DialogTitle>표로 {testTypeLabel} 넣기</DialogTitle>
           <DialogDescription>
@@ -157,7 +157,7 @@ export function SummaryImportDialog({
           </span>
         </label>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div>
           <PasteGrid columns={columns} rows={rows} onRows={setRows} required="시편" />
         </div>
 
