@@ -7,9 +7,11 @@
 
 import { NavLink } from 'react-router-dom'
 
+import { UNKNOWN_VERSION, systemApi } from '@/shared/api/system'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { cn } from '@/shared/lib/utils'
 import { itemHref, visibleGroups } from '@/shared/layout/navigation'
+import { useResource } from '@/shared/hooks/useResource'
 
 interface SidebarProps {
   collapsed: boolean
@@ -19,6 +21,10 @@ interface SidebarProps {
 
 function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapsed'>) {
   const { user } = useAuth()
+  // **서버가 정본이다.** 번들에 박으면 그것은 빌드된 버전이지 지금 도는 서버가
+  // 아니다 — 배포가 반쯤 끝난 상태에서 둘이 갈리고, 그때 화면이 거짓말을 한다.
+  const health = useResource(() => systemApi.health(), [])
+  const release = health.data?.version
   // **볼 수 있는 것만 보여 준다.** 눌러야 403 을 아는 메뉴는 "할 수 있는 일" 을
   // 알려 주지 못한다. 권한은 서버가 판정한다 — 여기는 표시일 뿐이다.
   const groups = visibleGroups({
@@ -28,9 +34,18 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
 
   return (
     <div className="flex h-full w-60 flex-col">
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <span className="text-base font-semibold tracking-tight">MatNexus</span>
-        <span className="text-muted-foreground text-xs">물성 관리</span>
+      <div className="flex h-14 shrink-0 flex-col justify-center border-b px-4">
+        <span className="text-base leading-tight font-semibold tracking-tight">MatNexus</span>
+        <span className="text-muted-foreground text-xs leading-tight">
+          물성 관리
+          {/* **못 찾았으면 안 적는다.** `unknown` 을 그대로 띄우면 버전 자리에
+              고장난 것처럼 보이는데, 실제로는 개발 경로에서 돈다는 뜻이다. */}
+          {release && release !== UNKNOWN_VERSION && (
+            <span className="ml-1.5 font-mono" title="지금 도는 서버의 버전입니다">
+              {release}
+            </span>
+          )}
+        </span>
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
