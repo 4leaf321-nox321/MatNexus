@@ -40,8 +40,8 @@ import {
   isReference,
   isUsed,
   processingApi,
-  referenceFor,
   referenceLabel,
+  referencesFor,
 } from '@/modules/processing/api'
 import type {
   ProcessingPreview,
@@ -625,7 +625,12 @@ export function ProcessingPanel({
       {/* **순서도와 단계가 한 칸이다.** 나눠 두면 같은 목록이 두 칸에 있게
           되고, 가운데만 세로로 길어져 곡선 쪽이 텅 빈다. */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
-        <div className="space-y-2">
+        {/* **순서도가 길어져도 곡선과 위 단추가 안 밀린다.**
+            전에는 페이지 전체가 늘어나서, 단계를 스무 개쯤 켜면 그래프를 보려고
+            위로 다시 굴려야 했다 — 고치는 자리와 결과를 보는 자리가 한 화면에
+            있어야 「고쳐 보고 다시 본다」가 된다.
+            좁은 화면(lg 미만)에서는 한 칸으로 쌓이므로 그대로 둔다. */}
+        <div className="flex flex-col gap-2 lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)]">
           {/* **막지 않는다. 미리 말할 뿐이다.** 공칭까지만 필요한 작업도 정상이다.
               다만 그 사실을 CAE 카드 탭에서 알게 되면 20건을 다시 처리해야 한다 —
               결과는 불변이라 열을 나중에 덧붙일 수 없다. */}
@@ -642,8 +647,10 @@ export function ProcessingPanel({
             </div>
           )}
 
-          <div className="divide-y overflow-hidden rounded-md border">
-            <div className="bg-muted/40 flex items-center gap-2 px-2 py-1">
+          <div className="flex min-h-0 flex-1 flex-col divide-y overflow-hidden rounded-md border">
+            {/* 머리글은 붙박이다 — 「모두 펴기」가 목록과 함께 사라지면
+                스무 줄을 굴려 내려가서 눌러야 한다. */}
+            <div className="bg-muted/40 flex shrink-0 items-center gap-2 px-2 py-1">
               <p className="text-muted-foreground text-xs">
                 위에서 아래로 흐릅니다. <b>켠 것만 돕니다.</b>
               </p>
@@ -665,6 +672,7 @@ export function ProcessingPanel({
               )}
             </div>
 
+            <div className="min-h-0 flex-1 divide-y overflow-y-auto">
             {rows.map((row) => {
               if (row.kind === 'available') {
                 const blockers = ifAdded(row.plugin.id)
@@ -874,6 +882,7 @@ export function ProcessingPanel({
                 </div>
               )
             })}
+            </div>
           </div>
 
           {/* 손으로 위아래로 옮기면 권장 순서와 어긋날 수 있다. 막지 않는다 —
@@ -1192,10 +1201,12 @@ function ParamField({
   }
 
   /**
-   * 이 칸에 이어 붙일 값. **이름으로 찾는다** — 화면에 목록을 박아 두면 규격에
-   * 칸을 더할 때마다 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
+   * 이 칸에 이어 붙일 수 있는 값들. **이름이 맞는 것이 맨 앞이다.**
+   *
+   * 하나뿐이면 단추 하나, 여럿이면 목록을 낸다 — 고를 것이 없는데 목록을 내면
+   * 누르는 수만 는다.
    */
-  const reference = referenceFor(param, inputs)
+  const candidates = referencesFor(param, inputs)
 
   /** 이어 붙인 값이 지금 얼마인가. **몇인지 모르면 고칠지 말지를 못 정한다.** */
   const linked = referenced ? (inputs.get(String(value).slice(1)) ?? null) : null
@@ -1223,10 +1234,14 @@ function ParamField({
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground flex items-center gap-1 text-xs">
               <Link2 className="size-3" />
+              {/* **자동이라는 것을 말한다.** 「쓴다」만으로는 지금 숫자를 한 번
+                  베낀 것인지, 돌릴 때마다 다시 가져오는 것인지 알 수 없다 —
+                  그 둘은 곡선을 다시 처리했을 때 갈린다. */}
+              앞 단계의{' '}
               <b className="text-foreground">
                 {referenceLabel(String(value), inputs)}
               </b>
-              를 씁니다
+              를 자동으로 가져옵니다
               {/* **규격의 공칭과 그 시편의 실측은 뜻이 조금 다르다.** 얼마인지
                   보여 주지 않으면 고칠지 말지를 판단할 수 없다. */}
               {linkedShown && <b className="text-foreground"> · 지금 {linkedShown}</b>}
@@ -1235,10 +1250,10 @@ function ParamField({
               size="sm"
               variant="outline"
               className="ml-auto h-7 shrink-0 text-xs"
-              title="이어 붙인 값을 지금 값 그대로 옮겨 담습니다. 그 뒤로는 원본이 바뀌어도 안 따라옵니다."
+              title="지금 값을 그대로 옮겨 담고 자동 연결을 끊습니다. 그 뒤로는 곡선을 다시 처리해도 이 숫자가 그대로 남습니다."
               onClick={() => onChange(linked ? linked.value : (param.default ?? null))}
             >
-              값 고쳐 쓰기
+              숫자로 고정
             </Button>
           </div>
         ) : (
@@ -1263,19 +1278,51 @@ function ParamField({
               onBlur={() => setDraft(null)}
               aria-label={param.label}
             />
-            {reference && (
+            {candidates.length === 1 && (
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 shrink-0 text-xs"
-                title={`${reference.label} 을 그때그때 가져다 씁니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`}
-                onClick={() => onChange(`@${reference.key}`)}
+                title={`${candidates[0].label} 을 돌릴 때마다 다시 가져옵니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`}
+                onClick={() => onChange(`@${candidates[0].key}`)}
               >
-                {/* 이름만 적으면 라벨처럼 보인다. **누르는 것**임을 동사로 말한다.
-                    값을 함께 보여 준다 — 무엇이 들어오는지 누르기 전에 안다. */}
+                {/* **자동이라는 것이 이름에 있어야 한다.** 「쓰기」만으로는
+                    지금 숫자를 베끼는 것인지 이어 두는 것인지 알 수 없다. */}
                 <Link2 className="size-3" />
-                {reference.label} 쓰기
+                자동 연결 · {candidates[0].label}
               </Button>
+            )}
+            {candidates.length > 1 && (
+              /* **여럿일 때만 목록이다.** 줄마다 이름과 지금 값을 적는다 —
+                 전에는 버튼 이름이 전부 '참조' 라, 잘못 누르면 게이지 길이
+                 자리에 두께가 들어가고 변형률이 조용히 50배 틀렸다. */
+              <Select value="" onValueChange={(key) => onChange(`@${key}`)}>
+                <SelectTrigger size="sm" className="h-7 w-44 shrink-0 text-xs">
+                  <Link2 className="size-3" />
+                  <SelectValue placeholder="자동 연결" />
+                </SelectTrigger>
+                <SelectContent>
+                  {candidates.map((one, at) => (
+                    <SelectItem key={one.key} value={one.key}>
+                      <span className="flex items-center gap-2">
+                        {one.label}
+                        <span className="text-muted-foreground text-xs">
+                          {Number(
+                            toDisplay(one.value, one.si_unit, one.dimension).toPrecision(6)
+                          )}
+                          {display(one.si_unit, one.dimension).unit
+                            ? ` ${display(one.si_unit, one.dimension).unit}`
+                            : ''}
+                        </span>
+                        {/* **무엇이 권장인지 순서만으로는 안 보인다.** */}
+                        {at === 0 && (
+                          <span className="text-muted-foreground text-xs">· 이름이 맞음</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
         )}

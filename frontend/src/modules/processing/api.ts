@@ -86,6 +86,42 @@ export function referenceFor(
   return available.get(`${FROM_SPECIMEN}${wanted}`) ?? available.get(wanted) ?? null
 }
 
+/**
+ * 이 칸에 이어 붙일 수 있는 값들. **이름이 맞는 것이 맨 앞이다.**
+ *
+ * ## 왜 여럿을 내는가 — 한 번 되돌렸던 자리다
+ *
+ * 처음에는 **단위만** 보고 후보를 냈다. '게이지 길이' 칸에 게이지 길이·폭·두께
+ * 셋이 붙었고 버튼 이름이 전부 '참조' 라, 잘못 누르면 **변형률이 조용히 50배
+ * 틀렸다.** 그래서 이름이 맞는 하나로 좁혔다.
+ *
+ * 그런데 그러면 **고를 수가 없다.** 같은 뜻의 값이 여럿일 때(시편 실측과 규격
+ * 공칭처럼) 화면이 하나를 골라 버리고, 사람은 다른 것을 쓸 길이 없다.
+ *
+ * 지금은 여럿을 내되 **그때 실패한 두 가지를 고쳤다.**
+ *
+ *   이름이 맞는 것이 맨 앞이다   무엇이 권장인지 순서로 말한다
+ *   줄마다 이름과 지금 값을 적는다  '참조' 셋이 아니라 「폭 · 12.5 mm」다
+ *
+ * 후보가 하나뿐이면 화면은 지금처럼 단추 하나만 낸다 — 고를 것이 없는데 목록을
+ * 내면 누르는 수만 는다.
+ */
+export function referencesFor(
+  param: Pick<StepParam, 'name' | 'links_to' | 'unit' | 'dimension'>,
+  available: Map<string, ProcessingScalar>
+): ProcessingScalar[] {
+  const best = referenceFor(param, available)
+  if (!param.unit) return best ? [best] : []
+  // **뜻이 같은 것만 후보다.** 단위가 다르면 애초에 그 자리에 못 들어간다.
+  const alike = [...available.values()].filter(
+    (one) =>
+      one.key !== best?.key &&
+      one.si_unit === param.unit &&
+      (param.dimension ?? one.dimension ?? null) === (one.dimension ?? null)
+  )
+  return best ? [best, ...alike] : alike
+}
+
 /** `@specimen_gauge_length` 같은 원문을 사람이 읽는 이름으로. */
 export function referenceLabel(raw: string, available?: Map<string, ProcessingScalar>): string {
   const name = raw.startsWith(REFERENCE_PREFIX) ? raw.slice(1) : raw

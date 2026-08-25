@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { isReference, isUsed, referenceFor, referenceLabel } from '@/modules/processing/api'
+import { isReference, isUsed, referenceFor, referenceLabel, referencesFor } from '@/modules/processing/api'
 import type { ProcessingScalar } from '@/modules/processing/api'
 
 const scalar = (key: string, label: string, si_unit = 'm'): ProcessingScalar =>
@@ -111,5 +111,58 @@ describe('안 쓰는 칸', () => {
   it('조건이 없는 칸은 늘 쓰인다', () => {
     expect(isUsed({}, {})).toBe(true)
     expect(isUsed({ when: null }, { method: 'manual' })).toBe(true)
+  })
+})
+
+describe('후보가 여럿일 때', () => {
+  // **한 번 되돌렸던 자리다.** 처음에는 단위만 보고 후보를 냈고, '게이지 길이'
+  // 칸에 게이지 길이·폭·두께 셋이 붙었다 — 버튼 이름이 전부 '참조' 라 잘못
+  // 누르면 변형률이 조용히 50배 틀렸다. 지금은 여럿을 내되 이름이 맞는 것이
+  // 맨 앞이고, 화면이 줄마다 이름과 지금 값을 적는다.
+  const lengths = new Map([
+    ['specimen_gauge_length', scalar('specimen_gauge_length', '시편 게이지 길이')],
+    ['specimen_width', scalar('specimen_width', '시편 폭')],
+    ['specimen_thickness', scalar('specimen_thickness', '시편 두께')],
+  ])
+
+  it('이름이 맞는 것이 맨 앞이다', () => {
+    const found = referencesFor(
+      { name: 'gauge_length', links_to: null, unit: 'm', dimension: null },
+      lengths
+    )
+    expect(found[0].key).toBe('specimen_gauge_length')
+    expect(found.map((one) => one.key)).toHaveLength(3)
+  })
+
+  it('뜻이 다른 것은 후보가 아니다', () => {
+    // 단면적은 단위가 다르다 — 애초에 그 자리에 못 들어간다.
+    const mixed = new Map([
+      ...lengths,
+      ['specimen_area', scalar('specimen_area', '시편 초기 단면적', 'm2')],
+    ])
+    const found = referencesFor(
+      { name: 'gauge_length', links_to: null, unit: 'm', dimension: null },
+      mixed
+    )
+    expect(found.map((one) => one.key)).not.toContain('specimen_area')
+  })
+
+  it('단위가 없는 칸은 이름이 맞는 하나만 낸다', () => {
+    // **`manual_index` 가 그렇다.** 단위로 좁힐 수 없으니 여럿을 내면 아무
+    // 값이나 붙을 수 있다.
+    const carried = new Map([
+      ['necking_candidate_index', scalar('necking_candidate_index', '네킹 후보 위치')],
+      ['proof_strain', scalar('proof_strain', '항복 변형률')],
+    ])
+    const found = referencesFor(
+      {
+        name: 'manual_index',
+        links_to: 'necking_candidate_index',
+        unit: null,
+        dimension: null,
+      },
+      carried
+    )
+    expect(found.map((one) => one.key)).toEqual(['necking_candidate_index'])
   })
 })

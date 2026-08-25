@@ -111,9 +111,9 @@ function panel() {
   )
 }
 
-/** 묶음이 뜨면 「경화식 견주기」를 눌러 미리보기를 받는다. **자동으로 안 돈다.** */
+/** 묶음이 뜨면 「경화식 맞춰 보기」를 눌러 미리보기를 받는다. **자동으로 안 돈다.** */
 async function compare() {
-  await userEvent.click(await screen.findByRole('button', { name: /경화식 견주기/ }))
+  await userEvent.click(await screen.findByRole('button', { name: /경화식 맞춰 보기/ }))
   await waitFor(() => expect(preview).toHaveBeenCalled())
 }
 
@@ -122,9 +122,9 @@ describe('늘리기 칸', () => {
     preview.mockResolvedValue(body([fit()]))
     panel()
     await compare()
-    const input = await screen.findByLabelText(/늘려서 보기/)
+    const input = await screen.findByLabelText(/시험 구간 밖까지 늘리기/)
     expect(input).toBeEnabled()
-    expect(screen.getByText(/늘려서 보기 \(진소성변형률\)/)).toBeInTheDocument()
+    expect(screen.getByText(/시험 구간 밖까지 늘리기 \(진소성변형률\)/)).toBeInTheDocument()
   })
 
   it('초탄성에서는 잠기고 이유를 말한다', async () => {
@@ -142,7 +142,7 @@ describe('늘리기 칸', () => {
     )
     panel()
     await compare()
-    const input = await screen.findByLabelText(/늘려서 보기/)
+    const input = await screen.findByLabelText(/시험 구간 밖까지 늘리기/)
     expect(input).toBeDisabled()
     expect(screen.getByText(/소성 표를 만드는 식이 아닙니다/)).toBeInTheDocument()
   })
@@ -162,8 +162,8 @@ describe('늘리기 칸', () => {
     )
     panel()
     await compare()
-    expect(await screen.findByText(/늘려서 보기 \(공칭 변형률\)/)).toBeInTheDocument()
-    expect(screen.queryByText(/늘려서 보기 \(진소성변형률\)/)).not.toBeInTheDocument()
+    expect(await screen.findByText(/시험 구간 밖까지 늘리기 \(공칭 변형률\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/시험 구간 밖까지 늘리기 \(진소성변형률\)/)).not.toBeInTheDocument()
   })
 
   it('식을 안 고르면 잠기고 그 이유를 말한다', async () => {
@@ -172,7 +172,7 @@ describe('늘리기 칸', () => {
     panel()
     await compare()
     await userEvent.click(await screen.findByRole('button', { name: /식 없이 표만/ }))
-    expect(await screen.findByLabelText(/늘려서 보기/)).toBeDisabled()
+    expect(await screen.findByLabelText(/시험 구간 밖까지 늘리기/)).toBeDisabled()
     expect(screen.getByText(/식을 골라야 늘릴 수 있습니다/)).toBeInTheDocument()
   })
 })

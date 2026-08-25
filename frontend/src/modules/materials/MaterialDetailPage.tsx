@@ -42,6 +42,7 @@ import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
 import { MillSheetDialog } from '@/modules/materials/MillSheetDialog'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
+import { CreatedOn } from '@/shared/components/CreatedOn'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -96,6 +97,7 @@ export default function MaterialDetailPage() {
       <PageHeader
         title={item?.record_name ?? '재료'}
         description={item?.alias ?? undefined}
+        created={item?.created_at}
         actions={
           <div className="flex gap-2">
             {/* **돌아갈 길이 없었다.** 브라우저 뒤로 가기가 유일한 길이었는데,
@@ -368,6 +370,8 @@ function SampleRow({
           {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
           <span className="font-mono text-xs">{sample.record_name}</span>
           {sample.lot_no && <Badge variant="outline">로트 {sample.lot_no}</Badge>}
+          {/* **언제 들어온 로트인가.** 로트를 견줄 때 늘 따라 붙는 물음이다. */}
+          <CreatedOn at={sample.created_at} />
           {/* **접힌 줄이 상태를 말한다.** 펼치지 않고도 "시험이 몇 건이고 몇 건이
               채택됐나" 가 보여야, 물성 탭의 n 이 왜 그 수인지 여기서 설명된다. */}
           <span className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
@@ -599,6 +603,7 @@ function SpecimenRow({
           )}
           <Badge variant="secondary">{specimen.orientation}</Badge>
           <span className="font-mono text-xs">{specimen.record_name}</span>
+          <CreatedOn at={specimen.created_at} />
           {/* **규격이 치수를 정한다.** 치수 옆에 붙여야 그 관계가 보이고, 다른
               규격끼리 연신율을 견주고 있는지도 여기서 걸린다. */}
           {specimen.standard && (

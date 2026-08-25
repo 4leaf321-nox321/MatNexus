@@ -193,6 +193,7 @@ export default function TestRunDetailPage() {
         description={
           item ? `${item.test_type_label} · ${item.material_name ?? ''}` : undefined
         }
+        created={item?.created_at}
         back={
           // 재료가 시편·시험 목록을 갖고 있는 화면이다 — 여기 들어온 사람은
           // 대개 거기서 왔고, 아니어도 거기로 가는 것이 맞다.

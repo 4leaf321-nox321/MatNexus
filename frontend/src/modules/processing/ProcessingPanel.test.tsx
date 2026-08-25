@@ -572,9 +572,9 @@ describe('시편 값 이어 붙이기', () => {
     await clickStep(user, '공칭 응력-변형률')
     await clickStep(user, '공칭 응력-변형률') // 켠 줄을 한 번 더 누르면 칸이 펴진다
 
-    expect(await screen.findByRole('button', { name: /시편 게이지 길이 쓰기/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ })).toBeInTheDocument()
     // 이 시험에는 단면적이 안 왔다.
-    expect(screen.queryByRole('button', { name: /단면적 쓰기/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /자동 연결 · .*단면적/ })).not.toBeInTheDocument()
   })
 
   it('이어 붙이면 그 값이 몇인지 보여 준다', async () => {
@@ -584,7 +584,7 @@ describe('시편 값 이어 붙이기', () => {
     show()
     await clickStep(user, '공칭 응력-변형률')
     await clickStep(user, '공칭 응력-변형률')
-    await user.click(await screen.findByRole('button', { name: /시편 게이지 길이 쓰기/ }))
+    await user.click(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ }))
 
     expect(await screen.findByText(/지금 50 mm/)).toBeInTheDocument()
   })
@@ -596,8 +596,8 @@ describe('시편 값 이어 붙이기', () => {
     show()
     await clickStep(user, '공칭 응력-변형률')
     await clickStep(user, '공칭 응력-변형률')
-    await user.click(await screen.findByRole('button', { name: /시편 게이지 길이 쓰기/ }))
-    await user.click(await screen.findByRole('button', { name: '값 고쳐 쓰기' }))
+    await user.click(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ }))
+    await user.click(await screen.findByRole('button', { name: '숫자로 고정' }))
 
     // 잇기 전 기본값(빈 칸)이 아니라 **이어 붙었던 값**이 남는다.
     expect(await screen.findByLabelText<HTMLInputElement>('게이지 길이')).toHaveValue('50')

@@ -31,6 +31,7 @@ import type {
 import { statisticsApi } from '@/modules/statistics/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { ApiError } from '@/shared/api/client'
+import { CreatedOn } from '@/shared/components/CreatedOn'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -196,8 +197,13 @@ export function FittingPanel({ materialId }: Props) {
       />
 
       {groups.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">묶음</span>
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          {/* **「묶음」만으로는 무엇을 고르는지 알 수 없다.** 재료의 어느
+              시험·어느 방향을 볼지 고르는 자리이고, 그 안의 채택된 곡선들이
+              평균 나서 대표 곡선이 된다. */}
+          <span className="text-sm font-medium" title="시험 종류 · 방향으로 묶습니다. n 은 평균 낸 시편 수입니다.">
+            대표 곡선 고르기
+          </span>
           {groups.map((item) => {
             const key = `${item.test_type_key}-${item.orientation}`
             const active =
@@ -226,11 +232,24 @@ export function FittingPanel({ materialId }: Props) {
             disabled={!group || busy}
             onClick={() => group && run(group)}
           >
-            {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. 이 버튼이
-                하는 일은 여러 식을 같은 곡선에 맞춰 **나란히 놓는 것**이다. */}
-            {busy ? '맞춰 보는 중…' : '경화식 견주기'}
+            {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. '견주기'
+                는 무엇과 무엇을 견주는지가 안 보였다 — 이 버튼이 하는 일은
+                **여러 경화식을 같은 곡선에 맞춰 나란히 놓고, 시험 구간 밖을
+                얼마나 늘릴지 정하게 하는 것**이다. 저장은 아직 아니다. */}
+            {busy ? '맞춰 보는 중…' : '경화식 맞춰 보기'}
           </Button>
         </div>
+      )}
+
+      {groups.length > 0 && (
+        // **한 줄로 무엇을 하는 자리인지 말한다.** 단추 이름만으로는 담기지
+        // 않는다 — 맞추는 것과 늘리는 것이 한 화면에서 일어난다.
+        <p className="text-muted-foreground mb-4 text-xs">
+          여러 <b>경화식</b>(Voce · Swift · Hockett-Sherby …)을 같은 곡선에 맞춰{' '}
+          <b>나란히 놓습니다.</b> 측정 구간에서는 거의 겹치는 식들이 그 밖에서 크게
+          갈리므로, <b>해석에 필요한 변형률까지 얼마나 늘릴지</b>를 그림을 보고 정합니다.
+          누른다고 저장되지 않습니다.
+        </p>
       )}
 
       {preview && (
@@ -349,7 +368,9 @@ function FitComparison({
             {/* **축 이름을 하드코딩하지 않는다.** 고무는 공칭 변형률이고, 여기에
                 "진소성변형률" 이라고 붙으면 그것은 거짓말이다. 식이 자기 축을
                 선언하므로(ADR 0013) 그것을 그대로 쓴다. */}
-            <Label htmlFor="extrapolate">늘려서 보기 ({axisLabel})</Label>
+            <Label htmlFor="extrapolate" title="시험이 준 구간 밖까지 식으로 그려 봅니다. 저장하면 그 구간이 소성 표에 들어갑니다.">
+              시험 구간 밖까지 늘리기 ({axisLabel})
+            </Label>
             <Input
               id="extrapolate"
               inputMode="decimal"
@@ -633,6 +654,9 @@ function CardList({
           />
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{card.label}</span>
+            {/* **이 카드가 언제 것인가.** 같은 재료에 카드가 쌓이면 그 물음이
+                먼저 온다 — 어느 것이 최신인지 이름만으로는 안 보인다. */}
+            <CreatedOn at={card.created_at} label="만듦" />
             <Badge
               variant={
                 card.status === 'published'

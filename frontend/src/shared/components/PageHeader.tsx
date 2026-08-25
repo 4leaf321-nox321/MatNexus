@@ -20,9 +20,32 @@ interface PageHeaderProps {
    * 따라가므로 어떤 경로로 들어왔든 같은 곳으로 간다.
    */
   back?: { to: string; label: string }
+  /**
+   * 이 데이터가 **언제 생겼는가.** ISO 문자열을 그대로 넘긴다.
+   *
+   * 제목 옆에 둔다. 아래 표 어딘가에 적어 두면 **찾아야 보이고**, 찾지 않으면
+   * 「이게 언제 것인가」를 모른 채로 값을 읽게 된다 — 물성은 그 물음이 늘 따라
+   * 붙는다(어느 로트인가, 언제 잰 것인가).
+   *
+   * 절대 시각으로 적는다. 「3일 전」은 읽는 시점에 따라 달라져서, 화면을 캡처해
+   * 주고받는 순간 뜻을 잃는다.
+   */
+  created?: string | null
 }
 
-export function PageHeader({ title, description, actions, back }: PageHeaderProps) {
+/** `2026-08-25` 로. **시각까지 적지 않는다** — 제목 줄이 길어지고, 날짜면 족하다. */
+function shownDate(raw: string): string {
+  const when = new Date(raw)
+  return Number.isNaN(when.getTime()) ? raw : when.toLocaleDateString('ko-KR')
+}
+
+export function PageHeader({
+  title,
+  description,
+  actions,
+  back,
+  created,
+}: PageHeaderProps) {
   return (
     <div className="mb-6">
       {back && (
@@ -36,7 +59,17 @@ export function PageHeader({ title, description, actions, back }: PageHeaderProp
       )}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+            {created && (
+              <span
+                className="text-muted-foreground text-xs"
+                title="이 데이터가 만들어진 날"
+              >
+                {shownDate(created)} 등록
+              </span>
+            )}
+          </div>
           {description && <p className="text-muted-foreground mt-1 text-sm">{description}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
