@@ -1704,6 +1704,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-runs/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Update Runs
+         * @description 고른 시험의 **칸 하나**를 같은 값으로 맞춘다.
+         *
+         *     ## 왜 아무 칸이나 못 고치는가
+         *
+         *     고칠 수 있는 칸은 `EDITABLE_FIELDS` 가 정한다. 시편·재료·시험 종류는 이름을
+         *     만드는 값이라(ADR 0004) 바꾸면 `record_name` 과 그 아래가 흔들리고, 상태·채택
+         *     결과는 처리 파이프라인이 쓰는 값이라 손으로 옮기면 **「읽힌 적 없는데
+         *     처리됨」 같은 상태**가 만들어진다. 조건값은 단위가 딸려 있어서 한 값만 갈아
+         *     끼우면 단위 기록과 어긋난다.
+         *
+         *     남는 것은 올릴 때 사람이 적는 메타데이터뿐이다. 그걸 나중에 고치는 길이
+         *     지금까지 아예 없어서, 사업부를 빠뜨리면 다시 올리는 수밖에 없었다.
+         *
+         *     ## 왜 건마다 기록을 남기는가
+         *
+         *     한 번에 스무 건을 바꾸는 일이라 **누가 무엇을 어떻게 바꿨는지**가 남지
+         *     않으면 나중에 「이 값이 왜 이래」 에 답할 수 없다. 지우기와 같은 이유다.
+         */
+        post: operations["bulk_update_runs_api_test_runs_bulk_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs/delete": {
         parameters: {
             query?: never;
@@ -5526,6 +5562,33 @@ export interface components {
             x: string;
             /** Y */
             y: string;
+        };
+        /** RunBulkUpdateOut */
+        RunBulkUpdateOut: {
+            /** Blocked */
+            blocked: string[];
+            /** Unchanged */
+            unchanged: number;
+            /** Updated */
+            updated: number;
+        };
+        /**
+         * RunBulkUpdateRequest
+         * @description 고른 시험의 **칸 하나**를 같은 값으로 맞춘다.
+         *
+         *     한 번에 한 칸이다. 여러 칸을 함께 받으면 「안 보낸 것」과 「비운 것」을
+         *     구별할 수 없고, 화면도 「무엇을 바꾸는 중인가」를 말하기 어려워진다.
+         */
+        RunBulkUpdateRequest: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "division" | "instrument" | "operator" | "tested_at" | "note";
+            /** Run Ids */
+            run_ids: string[];
+            /** Value */
+            value?: string | null;
         };
         /**
          * RunDeleteOut
@@ -10227,6 +10290,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_update_runs_api_test_runs_bulk_update_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunBulkUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunBulkUpdateOut"];
                 };
             };
             /** @description Validation Error */

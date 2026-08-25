@@ -44,6 +44,8 @@ from app.modules.tests.schemas import (
     InstrumentDimensionsOut,
     ParserOut,
     ReparseOut,
+    RunBulkUpdateOut,
+    RunBulkUpdateRequest,
     RunDeleteOut,
     RunDeleteRequest,
     RunFacetOut,
@@ -1101,6 +1103,101 @@ def reparse(
     queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})
     db.commit()
     return ReparseOut(status="queued", message="다시 읽기를 큐에 넣었습니다.")
+
+
+def _plain(value: object) -> object:
+    """감사 로그에 실을 수 있는 값으로. 날짜는 문자열이어야 JSON 이 된다."""
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+@runs_router.post("/bulk-update", response_model=RunBulkUpdateOut)
+def bulk_update_runs(
+    payload: RunBulkUpdateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RunBulkUpdateOut:
+    """고른 시험의 **칸 하나**를 같은 값으로 맞춘다.
+
+    ## 왜 아무 칸이나 못 고치는가
+
+    고칠 수 있는 칸은 `EDITABLE_FIELDS` 가 정한다. 시편·재료·시험 종류는 이름을
+    만드는 값이라(ADR 0004) 바꾸면 `record_name` 과 그 아래가 흔들리고, 상태·채택
+    결과는 처리 파이프라인이 쓰는 값이라 손으로 옮기면 **「읽힌 적 없는데
+    처리됨」 같은 상태**가 만들어진다. 조건값은 단위가 딸려 있어서 한 값만 갈아
+    끼우면 단위 기록과 어긋난다.
+
+    남는 것은 올릴 때 사람이 적는 메타데이터뿐이다. 그걸 나중에 고치는 길이
+    지금까지 아예 없어서, 사업부를 빠뜨리면 다시 올리는 수밖에 없었다.
+
+    ## 왜 건마다 기록을 남기는가
+
+    한 번에 스무 건을 바꾸는 일이라 **누가 무엇을 어떻게 바꿨는지**가 남지
+    않으면 나중에 「이 값이 왜 이래」 에 답할 수 없다. 지우기와 같은 이유다.
+    """
+    field = payload.field
+    raw = (payload.value or "").strip() or None
+
+    # **날짜는 미리 판정한다.** 열 건을 고치다 열한 번째에서 형식이 틀렸다고
+    # 멈추면 앞의 열 건만 바뀐 상태가 남는다. 값이 하나뿐인 요청이니 손대기
+    # 전에 걸러야 맞다.
+    when: datetime | None = None
+    if field == "tested_at" and raw is not None:
+        try:
+            when = datetime.fromisoformat(raw)
+        except ValueError as exc:
+            raise AppError(
+                "MNX-TESTS-0021",
+                f"시험일 형식이 아닙니다: {raw}",
+                status=422,
+            ) from exc
+
+    updated = 0
+    unchanged = 0
+    blocked: list[str] = []
+
+    for run_id in payload.run_ids:
+        try:
+            run = services.get_run(db, user, run_id)
+        except AppError:
+            # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
+            blocked.append(str(run_id))
+            continue
+
+        before = getattr(run, field)
+        if field in ("division", "instrument"):
+            # 기준정보를 거친다(ADR 0010). `usage_count` 도 여기서 옮겨진다 —
+            # 옛 값은 하나 줄고 새 값은 하나 는다.
+            vocabulary_services.apply_bindings(
+                db,
+                run,
+                vocabulary_services.TEST_RUN_BINDINGS,
+                {field: raw},
+                created_by_id=user.id,
+            )
+        elif field == "tested_at":
+            run.tested_at = when
+        else:
+            setattr(run, field, raw)
+
+        after = getattr(run, field)
+        if before == after:
+            unchanged += 1
+            continue
+
+        audit.record(
+            db,
+            action=audit.TEST_RUN_UPDATED,
+            actor=user,
+            target_table="test_runs",
+            target_id=run.id,
+            target_label=run.record_name,
+            workspace_id=run.workspace_id,
+            changes={field: {"before": _plain(before), "after": _plain(after)}},
+        )
+        updated += 1
+
+    db.commit()
+    return RunBulkUpdateOut(updated=updated, unchanged=unchanged, blocked=blocked)
 
 
 @runs_router.post("/delete", response_model=RunDeleteOut)

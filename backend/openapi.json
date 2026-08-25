@@ -6782,6 +6782,75 @@
         "title": "ResultCurveOut",
         "type": "object"
       },
+      "RunBulkUpdateOut": {
+        "properties": {
+          "blocked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated",
+          "unchanged",
+          "blocked"
+        ],
+        "title": "RunBulkUpdateOut",
+        "type": "object"
+      },
+      "RunBulkUpdateRequest": {
+        "description": "고른 시험의 **칸 하나**를 같은 값으로 맞춘다.\n\n한 번에 한 칸이다. 여러 칸을 함께 받으면 「안 보낸 것」과 「비운 것」을\n구별할 수 없고, 화면도 「무엇을 바꾸는 중인가」를 말하기 어려워진다.",
+        "properties": {
+          "field": {
+            "enum": [
+              "division",
+              "instrument",
+              "operator",
+              "tested_at",
+              "note"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Run Ids",
+            "type": "array"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "run_ids",
+          "field"
+        ],
+        "title": "RunBulkUpdateRequest",
+        "type": "object"
+      },
       "RunDeleteOut": {
         "description": "무엇이 지워졌고 무엇이 안 지워졌나.\n\n**한 건이 막혔다고 나머지를 되돌리지 않는다.** 20건을 골라 지우는데 하나가\n권한 밖이라 전부 실패하면, 사람은 어느 것이 문제인지 모른 채 다시 골라야\n한다. 대신 **안 지워진 것을 이름과 이유로 돌려준다.**",
         "properties": {
@@ -6812,6 +6881,8 @@
               "format": "uuid",
               "type": "string"
             },
+            "maxItems": 500,
+            "minItems": 1,
             "title": "Run Ids",
             "type": "array"
           }
@@ -16192,6 +16263,48 @@
           }
         },
         "summary": "Upload Test Run",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/test-runs/bulk-update": {
+      "post": {
+        "description": "고른 시험의 **칸 하나**를 같은 값으로 맞춘다.\n\n## 왜 아무 칸이나 못 고치는가\n\n고칠 수 있는 칸은 `EDITABLE_FIELDS` 가 정한다. 시편·재료·시험 종류는 이름을\n만드는 값이라(ADR 0004) 바꾸면 `record_name` 과 그 아래가 흔들리고, 상태·채택\n결과는 처리 파이프라인이 쓰는 값이라 손으로 옮기면 **「읽힌 적 없는데\n처리됨」 같은 상태**가 만들어진다. 조건값은 단위가 딸려 있어서 한 값만 갈아\n끼우면 단위 기록과 어긋난다.\n\n남는 것은 올릴 때 사람이 적는 메타데이터뿐이다. 그걸 나중에 고치는 길이\n지금까지 아예 없어서, 사업부를 빠뜨리면 다시 올리는 수밖에 없었다.\n\n## 왜 건마다 기록을 남기는가\n\n한 번에 스무 건을 바꾸는 일이라 **누가 무엇을 어떻게 바꿨는지**가 남지\n않으면 나중에 「이 값이 왜 이래」 에 답할 수 없다. 지우기와 같은 이유다.",
+        "operationId": "bulk_update_runs_api_test_runs_bulk_update_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunBulkUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunBulkUpdateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Update Runs",
         "tags": [
           "tests"
         ]

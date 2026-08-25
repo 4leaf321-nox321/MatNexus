@@ -101,6 +101,11 @@ interface Row {
    */
   /** 시편 규격. 장비 파일에 없어 사람이 넣어야 하고, 대개 한 배치가 같다. */
   standard: string
+  /**
+   * 어느 사업부가 낸 시험인가. 장비 파일에 없고 **대개 한 배치가 같다** —
+   * 그래서 옆에서 일괄로 넣고 다른 줄만 골라 다시 넣는다.
+   */
+  division: string
   thickness: string
   width: string
   gauge: string
@@ -179,6 +184,7 @@ export default function BatchUploadPage() {
       sampleId: null,
       specimen: null,
       standard: '',
+      division: '',
       thickness: '',
       width: '',
       gauge: '',
@@ -320,6 +326,7 @@ export default function BatchUploadPage() {
           file: row.file,
           conditions: numericConditions(row.typeKey as string, conditions, availableTypes),
           conditionUnits: conditionUnits(definition?.conditions ?? []),
+          division: row.division || undefined,
         })
         patch(row.key, { status: 'done', selected: false, runId: created.id })
       } catch (caught) {
@@ -561,6 +568,17 @@ export default function BatchUploadPage() {
             </div>
 
             <div className="space-y-1">
+              {/* **사업부도 대개 한 배치가 같다.** 기준정보를 거치므로 여기서
+                  한 글자 틀려도 새 값이 생기지 않는다. */}
+              <VocabularyField
+                slug="division"
+                label="사업부 일괄 지정"
+                value=""
+                onChange={(next) => assignSelected({ division: next })}
+              />
+            </div>
+
+            <div className="space-y-1">
               <Label className="text-muted-foreground text-xs">
                 시편 치수 일괄 지정 (mm)
               </Label>
@@ -643,6 +661,7 @@ export default function BatchUploadPage() {
                   <TableHead className="w-32">시료</TableHead>
                   <TableHead className="w-36">시편</TableHead>
                   <TableHead className="w-56">치수 (두께·폭·게이지, mm)</TableHead>
+                  <TableHead className="w-24">사업부</TableHead>
                   <TableHead className="w-44">상태</TableHead>
                 </TableRow>
               </TableHeader>
@@ -784,6 +803,13 @@ export default function BatchUploadPage() {
                           />
                         ))}
                       </div>
+                    </TableCell>
+
+                    {/* 옆에서 일괄로 넣은 값이 줄마다 보인다 — 안 보이면
+                        「넣었나」 를 확인할 데가 없다. 다른 줄만 고치려면 그
+                        줄을 골라 다시 일괄 지정한다(규격·치수와 같은 방식). */}
+                    <TableCell className="text-muted-foreground text-xs">
+                      {row.division || '—'}
                     </TableCell>
 
                     <TableCell>

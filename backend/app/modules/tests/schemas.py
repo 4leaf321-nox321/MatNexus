@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -88,10 +88,53 @@ class TestTypeOut(BaseModel):
 # --- 시험 -------------------------------------------------------------------
 
 
+#: 한 번에 다룰 수 있는 시험 수. **서버가 강제한다** — 화면이 200건까지만
+#: 고른다고 요청도 그렇다는 보장은 없다.
+MAX_RUNS = 500
+
+#: 여럿을 한 번에 고칠 수 있는 칸. **여기 없는 것은 일부러 없다.**
+#:
+#: 시편·재료·시험 종류는 이름을 만드는 값이라(ADR 0004) 바꾸면 `record_name` 과
+#: 그 아래가 흔들린다. 상태·채택 결과는 처리 파이프라인이 쓰는 값이라 손으로
+#: 옮기면 「읽힌 적 없는데 처리됨」 같은 상태가 만들어진다. 조건값은 단위가 딸려
+#: 있어서 한 값만 갈아 끼우면 단위 기록과 어긋난다.
+#:
+#: 남는 것은 **올릴 때 사람이 적는 메타데이터**뿐이고, 그것이 이 목록이다.
+EDITABLE_FIELDS: dict[str, str] = {
+    "division": "사업부",
+    "instrument": "장비",
+    "operator": "시험자",
+    "tested_at": "시험일",
+    "note": "메모",
+}
+
+
 class RunDeleteRequest(BaseModel):
     """여러 건을 한 번에 지운다."""
 
-    run_ids: list[uuid.UUID]
+    run_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_RUNS)
+
+
+class RunBulkUpdateRequest(BaseModel):
+    """고른 시험의 **칸 하나**를 같은 값으로 맞춘다.
+
+    한 번에 한 칸이다. 여러 칸을 함께 받으면 「안 보낸 것」과 「비운 것」을
+    구별할 수 없고, 화면도 「무엇을 바꾸는 중인가」를 말하기 어려워진다.
+    """
+
+    run_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_RUNS)
+    field: Literal["division", "instrument", "operator", "tested_at", "note"]
+    value: str | None = None
+    """비우면 그 칸을 지운다. **빈 문자열과 `null` 을 같게 본다** — 화면의 빈
+    칸이 둘 중 어느 것으로 오는지에 뜻이 달라지면 안 된다."""
+
+
+class RunBulkUpdateOut(BaseModel):
+    updated: int
+    unchanged: int
+    """이미 그 값이던 것. **조용히 성공으로 세지 않는다** — 20건을 골랐는데
+    「17건 바꿨습니다」 가 나오면 나머지 셋이 왜 빠졌는지 알 수 있어야 한다."""
+    blocked: list[str]
 
 
 class RunDeleteOut(BaseModel):

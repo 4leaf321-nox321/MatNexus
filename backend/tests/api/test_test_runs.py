@@ -913,3 +913,147 @@ class Test사업부:
         made = _upload(client, admin_headers, specimen["id"])
         assert made.status_code == 202, made.text
         assert made.json()["division"] is None
+
+
+class Test여러_건_한꺼번에_고치기:
+    """*"선택한 시험에 속성 하나를 한 번에 적용"* — 실사용에서 나왔다.
+
+    올릴 때 사업부를 빠뜨리면 지금까지는 **다시 올리는 수밖에** 없었다.
+    """
+
+    @pytest.fixture
+    def three(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> list[str]:
+        del tensile
+        made = []
+        for _ in range(3):
+            response = _upload(client, admin_headers, specimen["id"])
+            assert response.status_code == 202, response.text
+            made.append(response.json()["id"])
+        return made
+
+    def _apply(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        ids: list[str],
+        field: str,
+        value: str | None,
+    ) -> Any:
+        return client.post(
+            "/api/test-runs/bulk-update",
+            json={"run_ids": ids, "field": field, "value": value},
+            headers=headers,
+        )
+
+    def test_사업부를_한_번에_맞춘다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        done = self._apply(client, admin_headers, three, "division", "전장")
+        assert done.status_code == 200, done.text
+        assert done.json() == {"updated": 3, "unchanged": 0, "blocked": []}
+
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        assert {row["division"] for row in listed["items"]} == {"전장"}
+
+    def test_기준정보를_거친다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """**표기가 갈리면 안 된다.** 한 번에 스무 건을 바꾸는 자리라 오타의
+        파급이 크다 — 자유 문자열이면 여기서 한 글자 틀릴 때 스무 건이 새 값을
+        가리킨다."""
+        self._apply(client, admin_headers, three, "division", "전장  ")
+
+        found = client.get(
+            "/api/vocabularies/division/terms", params={"q": "전장"}, headers=admin_headers
+        ).json()["items"]
+        assert [item["value"] for item in found] == ["전장"]
+        assert found[0]["usage_count"] == 3
+
+    def test_옮겨_가면_옛_값의_쓰는_곳이_준다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """안 줄이면 피커에 「쓰이지 않는 값」 이 남고 관리 화면이 거짓말을 한다."""
+        self._apply(client, admin_headers, three, "division", "전장")
+        self._apply(client, admin_headers, three, "division", "차체")
+
+        counts = {
+            item["value"]: item["usage_count"]
+            for item in client.get(
+                "/api/vocabularies/division/terms",
+                params={"include_hidden": "true"},
+                headers=admin_headers,
+            ).json()["items"]
+        }
+        assert counts["전장"] == 0
+        assert counts["차체"] == 3
+
+    def test_비우면_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        self._apply(client, admin_headers, three, "division", "전장")
+        done = self._apply(client, admin_headers, three, "division", "")
+        assert done.json()["updated"] == 3
+
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        assert {row["division"] for row in listed["items"]} == {None}
+
+    def test_이미_그_값이면_안_센다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """**조용히 성공으로 세지 않는다.** 20건을 골랐는데 「17건 바꿨습니다」
+        가 나오면 나머지 셋이 왜 빠졌는지 알 수 있어야 한다."""
+        self._apply(client, admin_headers, three, "operator", "박")
+        again = self._apply(client, admin_headers, three, "operator", "박").json()
+        assert again == {"updated": 0, "unchanged": 3, "blocked": []}
+
+    def test_못_고친_것을_이름으로_돌려준다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        ghost = "00000000-0000-0000-0000-000000000000"
+        done = self._apply(client, admin_headers, [*three, ghost], "operator", "박").json()
+        assert done["updated"] == 3
+        assert done["blocked"] == [ghost]
+
+    def test_날짜는_손대기_전에_판정한다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """**열 건을 고치다 열한 번째에서 멈추면** 앞의 열 건만 바뀐 상태가
+        남는다. 값이 하나뿐인 요청이니 손대기 전에 걸러야 맞다."""
+        bad = self._apply(client, admin_headers, three, "tested_at", "어제")
+        assert bad.status_code == 422
+        assert bad.json()["error"]["code"] == "MNX-TESTS-0021"
+
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        assert all(row["tested_at"] is None for row in listed["items"]), "일부만 바뀌었다"
+
+        good = self._apply(client, admin_headers, three, "tested_at", "2026-08-20")
+        assert good.status_code == 200, good.text
+        assert good.json()["updated"] == 3
+
+    def test_위험한_칸은_아예_못_받는다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """이름을 만드는 값과 파이프라인이 쓰는 값. **막는 것이 아니라 받지
+        않는다** — 스키마에서 걸러야 새 칸이 실수로 열리지 않는다."""
+        for field in ("status", "specimen_id", "test_type_id", "record_name", "conditions"):
+            response = self._apply(client, admin_headers, three, field, "아무거나")
+            assert response.status_code == 422, f"{field} 가 통과했다"
+
+    def test_바꾼_것을_기록에_남긴다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """한 번에 스무 건을 바꾸는 일이라, 남지 않으면 나중에 「이 값이 왜
+        이래」 에 답할 수 없다."""
+        self._apply(client, admin_headers, three, "division", "전장")
+
+        entries = client.get(
+            "/api/audit", params={"action": "test_run.updated"}, headers=admin_headers
+        ).json()
+        assert len(entries) == 3
+        assert entries[0]["changes"]["division"]["after"] == "전장"

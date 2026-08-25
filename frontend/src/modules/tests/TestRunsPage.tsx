@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
@@ -24,6 +24,7 @@ import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { BulkEditDialog } from '@/modules/tests/BulkEditDialog'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -168,6 +169,7 @@ export default function TestRunsPage() {
   const pending = rows.some((run) => isPending(run.status))
 
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [editing, setEditing] = useState(false)
   const [batching, setBatching] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -239,6 +241,12 @@ export default function TestRunsPage() {
               <Layers className="size-4" />
               레시피 적용
             </Button>
+            {/* **올릴 때 빠뜨린 것을 나중에 채운다.** 지금까지는 사업부를
+                빠뜨리면 다시 올리는 수밖에 없었다. */}
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <PencilLine className="size-4" />
+              일괄 수정
+            </Button>
             {/* **여러 건을 한 번에 지운다.** 한 건씩 열어 지우는 것은 일이
                 아니다 — 잘못 올린 배치는 통째로 잘못 올라온다. */}
             <Button size="sm" variant="destructive" onClick={() => setRemoving(true)}>
@@ -248,6 +256,18 @@ export default function TestRunsPage() {
           </div>
         </div>
       )}
+
+      <BulkEditDialog
+        open={editing}
+        runIds={[...picked]}
+        onClose={() => setEditing(false)}
+        onDone={() => {
+          runs.reload()
+          // 사업부를 바꾸면 거를 수 있는 목록도 바뀐다 — 안 다시 읽으면 방금
+          // 넣은 값으로 거를 수 없다.
+          facets.reload()
+        }}
+      />
 
       <ConfirmDialog
         open={removing}

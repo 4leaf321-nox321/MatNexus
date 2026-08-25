@@ -56,6 +56,11 @@ export interface ProfileDefinition {
   metadata?: string[]
 }
 
+/** 여럿을 한 번에 고칠 수 있는 칸. **서버의 `EDITABLE_FIELDS` 가 정본이다.** */
+export type BulkUpdateField =
+  components['schemas']['RunBulkUpdateRequest']['field']
+export type BulkUpdateResult = components['schemas']['RunBulkUpdateOut']
+
 export interface RunQuery extends Record<string, unknown> {
   /** 부서 slug. 좁히기만 한다 — 권한을 넓히지 않는다. */
   workspace?: string
@@ -185,6 +190,20 @@ export const testsApi = {
    */
   removeMany: (runIds: string[]) =>
     api.post<RunDeleteResult>('/test-runs/delete', { run_ids: runIds }),
+
+  /**
+   * 고른 시험의 **칸 하나**를 같은 값으로 맞춘다.
+   *
+   * 고칠 수 있는 칸은 서버가 정한다 — 이름을 만드는 값과 처리 흐름이 쓰는
+   * 값은 아예 안 받는다.
+   */
+  bulkUpdate: (runIds: string[], field: BulkUpdateField, value: string) =>
+    api.post<BulkUpdateResult>('/test-runs/bulk-update', {
+      run_ids: runIds,
+      field,
+      // 빈 칸은 「지운다」 는 뜻이다. 서버가 빈 문자열과 null 을 같게 본다.
+      value: value.trim() || null,
+    }),
 
   /** 무엇으로 거를 수 있고 각각 몇 건인가. **화면이 한 쪽에서 세지 않는다.** */
   runFacets: (workspace?: string) =>
