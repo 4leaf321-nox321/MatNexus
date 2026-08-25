@@ -33,6 +33,7 @@ from app.modules.statistics.schemas import (
     EnsembleSaveRequest,
     GroupOut,
     MaterialStatisticsOut,
+    MemberCurveOut,
     ObservationOut,
     OutlierOut,
     OverviewOut,
@@ -121,7 +122,23 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
             )
             for row in scalars
         ],
-        curve=CurveStatsOut(**curve) if curve else None,
+        curve=(
+            CurveStatsOut(
+                **curve,
+                # **대표만 그리면 그것이 적절한지 알 수 없다.** 축은 대표 곡선의
+                # 것을 그대로 쓴다 — 다른 축을 겹쳐 놓으면 그림이 거짓말을 한다.
+                members=[
+                    MemberCurveOut(
+                        test_run_id=run.id, record_name=run.record_name, points=points
+                    )
+                    for run, points in services.member_curves(
+                        db, group, x=curve["x"], y=curve["y"]
+                    )
+                ],
+            )
+            if curve
+            else None
+        ),
         notes=notes,
     )
 

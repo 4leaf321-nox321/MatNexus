@@ -3698,6 +3698,11 @@ export interface components {
                 number,
                 number
             ][];
+            /**
+             * Members
+             * @default []
+             */
+            members: components["schemas"]["app__modules__statistics__schemas__MemberCurveOut"][];
             /** Sd */
             sd: [
                 number,
@@ -4155,7 +4160,7 @@ export interface components {
              * Members
              * @default []
              */
-            members: components["schemas"]["MemberCurveOut"][];
+            members: components["schemas"]["app__modules__fitting__schemas__MemberCurveOut"][];
             /** Notes */
             notes: string[];
             /** Sample Count */
@@ -4646,28 +4651,6 @@ export interface components {
              * @default member
              */
             role: string;
-        };
-        /**
-         * MemberCurveOut
-         * @description 시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**
-         *
-         *     대표만 보여 주면 그것이 적절한지 알 방법이 없다 — 셋이 겹쳐 있는데 하나가
-         *     딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 평균값
-         *     하나로는 같아 보인다.
-         */
-        MemberCurveOut: {
-            /** Points */
-            points: [
-                number,
-                number
-            ][];
-            /** Record Name */
-            record_name: string;
-            /**
-             * Test Run Id
-             * Format: uuid
-             */
-            test_run_id: string;
         };
         /** MemberOut */
         MemberOut: {
@@ -7269,6 +7252,50 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
+        };
+        /**
+         * MemberCurveOut
+         * @description 시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**
+         *
+         *     대표만 보여 주면 그것이 적절한지 알 방법이 없다 — 셋이 겹쳐 있는데 하나가
+         *     딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 평균값
+         *     하나로는 같아 보인다.
+         */
+        app__modules__fitting__schemas__MemberCurveOut: {
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /** Record Name */
+            record_name: string;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /**
+         * MemberCurveOut
+         * @description 시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**
+         *
+         *     평균만 보여 주면 그것이 적절한지 알 방법이 없다 — 열 개가 겹쳐 있어서
+         *     평균이 그 자리인 것과, 하나가 딴 데로 가서 끌려간 것이 **평균선 하나로는
+         *     똑같이 생겼다.**
+         */
+        app__modules__statistics__schemas__MemberCurveOut: {
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /** Record Name */
+            record_name: string;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
         };
     };
     responses: never;

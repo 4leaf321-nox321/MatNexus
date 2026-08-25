@@ -260,9 +260,11 @@ export function CurveChart({
               .map((p, i) => `${i === 0 ? 'M' : 'L'}${scale.toX(p[0])},${scale.toY(p[1])}`)
               .join(' ')}
             fill="none"
-            className="stroke-muted-foreground"
-            strokeWidth={1}
-            opacity={0.3}
+            // **흐리되 보여야 한다.** 30% 회색 1px 로 뒀더니 대표선 아래에서
+            // 사실상 안 보였고, 그러면 이 선을 그리는 뜻이 없다.
+            className="stroke-sky-600 dark:stroke-sky-400"
+            strokeWidth={1.1}
+            opacity={0.45}
           >
             <title>{one.label}</title>
           </path>

@@ -43,6 +43,20 @@ class ScalarStatsOut(BaseModel):
     outliers: list[OutlierOut]
 
 
+class MemberCurveOut(BaseModel):
+    """시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**
+
+    평균만 보여 주면 그것이 적절한지 알 방법이 없다 — 열 개가 겹쳐 있어서
+    평균이 그 자리인 것과, 하나가 딴 데로 가서 끌려간 것이 **평균선 하나로는
+    똑같이 생겼다.**
+    """
+
+    test_run_id: uuid.UUID
+    record_name: str
+    points: list[tuple[float, float]]
+    """그리기 좋게 솎은 점. **줄였다는 것은 화면이 말한다.**"""
+
+
 class CurveStatsOut(BaseModel):
     x: str
     y: str
@@ -51,6 +65,9 @@ class CurveStatsOut(BaseModel):
     sd: list[tuple[float, float]]
     count: list[tuple[float, float]]
     """점마다 몇 개로 냈는지. 공통 구간 밖은 애초에 계산하지 않는다."""
+    members: list[MemberCurveOut] = []
+    """대표를 만든 시편들의 원곡선. **같은 축이다** — 축이 섞이면 겹쳐 놓은
+    그림이 거짓말을 한다."""
 
 
 class GroupOut(BaseModel):

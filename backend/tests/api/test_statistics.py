@@ -536,3 +536,44 @@ class Test요약:
         ).json()
         body = client.get("/api/statistics/overview", headers=admin_headers).json()
         assert body["material_count"] == listed["total"]
+
+
+class Test대표_뒤에_깔리는_원곡선:
+    """**평균만 보여 주면 그것이 적절한지 알 방법이 없다.**
+
+    열 개가 겹쳐 있어서 평균이 그 자리인 것과, 하나가 딴 데로 가서 끌려간 것이
+    평균선 하나로는 똑같이 생겼다.
+    """
+
+    @pytest.fixture
+    def three(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> dict[str, Any]:
+        for _ in range(3):
+            _adopt(
+                client, admin_headers, _run(client, admin_headers, db, material["id"], "MD")
+            )
+        groups = client.get(
+            f"/api/statistics/materials/{material['id']}", headers=admin_headers
+        ).json()["groups"]
+        return dict(groups[0])
+
+    def test_대표_곡선과_같은_축으로_온다(self, three: dict[str, Any]) -> None:
+        curve = three["curve"]
+        assert curve, three["notes"]
+        assert len(curve["members"]) == three["sample_count"]
+        for member in curve["members"]:
+            assert member["record_name"]
+            assert len(member["points"]) >= 2
+            # **그리기 좋게 솎는다.** 한 곡선이 수천 점이고 시편이 열이면
+            # 차트가 버벅인다.
+            assert len(member["points"]) <= 300
+
+    def test_대표를_만든_시편들이_그대로_온다(self, three: dict[str, Any]) -> None:
+        """뒤에 깔린 곡선이 평균에 안 들어간 것이면, 그림이 거짓말을 한다."""
+        names = {member["record_name"] for member in three["curve"]["members"]}
+        assert names == set(three["record_names"])

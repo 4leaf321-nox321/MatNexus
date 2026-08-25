@@ -252,6 +252,16 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
     ])
 
   const points = shown((mode === 'mean' ? curve.mean : curve.median) as [number, number][])
+  /**
+   * 대표를 만든 **시편별 원곡선**. 뒤에 흐리게 깔린다.
+   *
+   * 평균선 하나로는 「열 개가 겹쳐 있다」와 「하나가 딴 데로 가서 평균이
+   * 끌려갔다」가 똑같이 생겼다 — 그 둘을 가르는 것이 이 그림의 목적이다.
+   */
+  const raw = (curve.members ?? []).map((member) => ({
+    label: member.record_name,
+    points: shown(member.points as [number, number][]),
+  }))
   // **1개면 평균도 중앙값도 그 곡선이다.** 고를 것이 없는데 버튼을 두면 눌러
   // 보고 아무것도 안 변하는 것을 확인하게 된다 — 그건 고장으로 읽힌다.
   const single = group.sample_count === 1
@@ -276,10 +286,16 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
           ))}
         <span className="text-muted-foreground ml-auto text-xs">
           {curve.mean.length}점 · 시편 {group.sample_count}개
+          {raw.length > 1 && (
+            // **줄였다는 것은 화면이 말한다.** 뒤에 깔린 선이 원본 그대로인 줄
+            // 알면, 뾰족한 데가 없는 것을 데이터의 성질로 읽는다.
+            <> · 뒤의 흐린 선 {raw.length}개가 시편별 원곡선(솎음)</>
+          )}
         </span>
       </div>
       <CurveChart
         points={points}
+        background={raw}
         xLabel={curve.x}
         yLabel={curve.y}
         height={280}
