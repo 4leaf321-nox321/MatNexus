@@ -13,12 +13,16 @@
  * 그래서 필드를 값으로 만든다. 여기 한 줄을 더하면 두 창에 동시에 생긴다.
  */
 
+import { display } from '@/shared/units'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 
 /** 시료 폼의 상태. **문자열로 들고 있는다** — `Number('0.')` 이 0 이 되어
  *  소수점을 찍는 순간 지워진다. */
+/** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
+const DENSITY_SYMBOL = display('kg/m3').unit
+
 export interface SampleForm {
   lot_no: string
   alias: string
@@ -66,7 +70,7 @@ const FIELDS: { key: keyof SampleForm; label: string; type?: string; placeholder
   { key: 'alias', label: '별칭' },
   // 제조사·유통사·주 벤더·판매유형은 여기 없다 — 기준정보 피커로 따로 그린다.
   { key: 'production_date', label: '생산일', type: 'date' },
-  { key: 'density', label: '밀도 (kg/m³, 이 로트 실측)', placeholder: '7850' },
+  { key: 'density', label: `밀도 (${DENSITY_SYMBOL}, 이 로트 실측)`, placeholder: '7.85e-9' },
 ]
 
 //: 기준정보를 거치는 칸. **유통사와 주 벤더가 같은 축을 본다** — 같은 회사가 로트에

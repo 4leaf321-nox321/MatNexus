@@ -49,7 +49,7 @@ from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestType
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, pagination, permissions
+from app.shared import audit, display, pagination, permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
 from app.shared.pagination import Page
@@ -196,21 +196,23 @@ def _inherit_density(
     measured = {s.density_si for s in samples if s.density_si is not None}
     if len(measured) == 1:
         value = next(iter(measured))
-        return Inherited(value, "sample", f"시료에서 잰 값입니다 ({value:.4g} kg/m³).")
+        return Inherited(
+            value, "sample", f"시료에서 잰 값입니다 ({display.density_text(value)})."
+        )
     if len(measured) > 1:
         # **말없이 하나 고르지 않는다.** 어느 로트의 값을 썼는지 모르는 카드는
         # 근거가 없는 것과 같다.
-        joined = ", ".join(f"{v:.4g}" for v in sorted(measured))
+        joined = ", ".join(display.density_text(v) for v in sorted(measured))
         return Inherited(
             None,
             "conflict",
-            f"시료마다 밀도가 다릅니다({joined} kg/m³) — 쓸 값을 직접 넣으세요.",
+            f"시료마다 밀도가 다릅니다({joined}) — 쓸 값을 직접 넣으세요.",
         )
     if material.density_si is not None:
         return Inherited(
             material.density_si,
             "material",
-            f"재료의 공칭값입니다 ({material.density_si:.4g} kg/m³).",
+            f"재료의 공칭값입니다 ({display.density_text(material.density_si)}).",
         )
     return Inherited(None, "missing", "재료에도 시료에도 밀도가 없습니다.")
 

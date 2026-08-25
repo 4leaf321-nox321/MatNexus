@@ -62,7 +62,7 @@ from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, specimen_size
+from app.shared import audit, display, specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -853,11 +853,11 @@ def property_sources(
             "ok",
         )
     elif len(lot) > 1:
-        joined = ", ".join(f"{v:.4g}" for v in sorted(lot))
+        joined = ", ".join(display.density_text(v) for v in sorted(lot))
         value, level, origin, status = (
             None,
             "sample",
-            f"시료마다 다릅니다({joined} kg/m³) — 카드에서 쓸 값을 직접 넣어야 합니다.",
+            f"시료마다 다릅니다({joined}) — 카드에서 쓸 값을 직접 넣어야 합니다.",
             "conflict",
         )
     elif material.density_si is not None:

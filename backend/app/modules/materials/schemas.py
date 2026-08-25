@@ -12,10 +12,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-#: 화면이 기본으로 쓰는 단위. 저장은 SI 로 하되 주고받는 것은 이쪽이다.
-LENGTH_UNIT = "mm"
-DENSITY_UNIT = "kg/m3"
-
+#: 화면이 기본으로 쓰는 단위. **정본은 `app/shared/display`** 다 — 재료 모듈과
+#: 적합 모듈이 같은 값을 보여 줘야 해서 모듈 밖에 둔다. 여기서는 이름만 다시
+#: 내보낸다(이 이름으로 읽는 자리가 여럿이라).
+from app.shared.display import DENSITY_UNIT as DENSITY_UNIT
+from app.shared.display import LENGTH_UNIT as LENGTH_UNIT
 
 MAX_BULK = 200
 """한 번에 받는 줄 수의 상한.

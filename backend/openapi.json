@@ -792,7 +792,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "kg/m3",
+            "default": "tonne/mm3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -990,7 +990,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "kg/m3",
+            "default": "tonne/mm3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -3918,7 +3918,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "kg/m3",
+            "default": "tonne/mm3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -4123,7 +4123,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "kg/m3",
+            "default": "tonne/mm3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -6923,7 +6923,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "kg/m3",
+            "default": "tonne/mm3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -7068,7 +7068,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "kg/m3",
+            "default": "tonne/mm3",
             "title": "Density Unit",
             "type": "string"
           },

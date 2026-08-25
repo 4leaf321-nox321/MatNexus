@@ -3215,7 +3215,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default kg/m3
+             * @default tonne/mm3
              */
             density_unit: string;
             /** Details */
@@ -3280,7 +3280,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default kg/m3
+             * @default tonne/mm3
              */
             density_unit: string;
             /** Distributor */
@@ -4445,7 +4445,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default kg/m3
+             * @default tonne/mm3
              */
             density_unit: string;
             /** Details */
@@ -4506,7 +4506,7 @@ export interface components {
             density: number | null;
             /**
              * Density Unit
-             * @default kg/m3
+             * @default tonne/mm3
              */
             density_unit: string;
             /** Details */
@@ -5587,7 +5587,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default kg/m3
+             * @default tonne/mm3
              */
             density_unit: string;
             /** Distributor */
@@ -5630,7 +5630,7 @@ export interface components {
             density: number | null;
             /**
              * Density Unit
-             * @default kg/m3
+             * @default tonne/mm3
              */
             density_unit: string;
             /** Distributor */

@@ -68,7 +68,8 @@ const PREVIEW = {
       label: '밀도',
       value: 7900,
       source: 'sample',
-      detail: '시료에서 잰 값입니다 (7900 kg/m³).',
+      // 서버가 실제로 내는 문장이다(`app/shared/display.density_text`).
+      detail: '시료에서 잰 값입니다 (7.9e-09 tonne/mm3).',
     },
   ],
 }

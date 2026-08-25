@@ -45,7 +45,11 @@ const BY_SI: Record<string, Display> = {
   s: { unit: 's', factor: 1, offset: 0 },
   'm/s': { unit: 'mm/min', factor: 60000, offset: 0 },
   '1/s': { unit: '1/s', factor: 1, offset: 0 },
-  'kg/m3': { unit: 'kg/m³', factor: 1, offset: 0 },
+  // **CAE 단위계(mm·N·tonne)에 맞춘다**(v1.88.0). 7850 이 7.85e-9 로 보이는
+  // 것이 낯설지만, 이 값을 그대로 덱에 적는 사람들의 단위다 — 화면에서 옮겨
+  // 적을 때 1e-12 를 손으로 곱하던 것이 사고의 자리였다.
+  // 저장은 그대로 SI(kg/m³)다. 여기는 보여 주는 단위만 정한다.
+  'kg/m3': { unit: 'tonne/mm³', factor: 1e-12, offset: 0 },
   '1': { unit: '', factor: 1, offset: 0 },
 }
 
@@ -61,7 +65,11 @@ const BY_SI: Record<string, Display> = {
  * 사람에게 보여 줄 때는 뜻이 다르다.
  */
 const BY_DIMENSION: Record<string, Display> = {
-  strain: { unit: '%', factor: 100, offset: 0 },
+  // **한때 `%` 였다**(v1.88.0 에 무차원으로). 변형률을 2% 로 읽는 것은 시험
+  // 성적서의 관습이고, 이 시스템이 값을 넘겨 주는 곳은 솔버 입력이다 —
+  // 거기서는 0.02 다. 화면과 덱이 다른 숫자를 보이면 옮겨 적을 때 100배가
+  // 난다. 차원 별칭 자체는 남긴다: 뜻이 다르다는 사실은 그대로다.
+  strain: { unit: '', factor: 1, offset: 0 },
 }
 
 export function display(
@@ -224,7 +232,7 @@ export const UNITS_BY_DIMENSION: Record<string, string[]> = {
   thermal_conductivity: ['W/(m.K)', 'W/mK'],
   compliance: ['1/Pa', '1/MPa'],
   mass: ['kg', 'g', 'tonne'],
-  density: ['kg/m3', 'g/cm3', 'tonne/mm3'],
+  density: ['tonne/mm3', 'kg/m3', 'g/cm3'],
   angle: ['rad', 'deg'],
   dimensionless: ['1'],
 }

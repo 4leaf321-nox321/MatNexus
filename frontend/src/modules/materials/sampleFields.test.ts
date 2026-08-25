@@ -47,17 +47,17 @@ describe('시료 폼', () => {
   })
 
   it('빈 칸은 null 로, 밀도는 숫자로, 단위는 언제나 붙여 보낸다', () => {
-    const payload = samplePayload({ ...EMPTY_SAMPLE, lot_no: 'L1', density: '7850' }, 'kg/m3')
+    const payload = samplePayload({ ...EMPTY_SAMPLE, lot_no: 'L1', density: '7850' }, 'tonne/mm3')
     expect(payload.lot_no).toBe('L1')
     expect(payload.manufacturer).toBeNull()
     expect(payload.density).toBe(7850)
     // **단위를 생략할 수 있게 두면** 이 값이 kg/m³ 였는지 tonne/mm³ 였는지
     // 나중에 아무도 답할 수 없다.
-    expect(payload.density_unit).toBe('kg/m3')
+    expect(payload.density_unit).toBe('tonne/mm3')
   })
 
   it('밀도가 비면 null 이다 — 0 이 아니다', () => {
     // 0 을 보내면 "쟀는데 0" 이 된다. 안 잰 것과 다르다.
-    expect(samplePayload(EMPTY_SAMPLE, 'kg/m3').density).toBeNull()
+    expect(samplePayload(EMPTY_SAMPLE, 'tonne/mm3').density).toBeNull()
   })
 })

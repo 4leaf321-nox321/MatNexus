@@ -9,6 +9,7 @@
  * 다른 화면에 다녀와야 했다. **파일이 오는 순간이 그 셋을 처음 아는 순간이다.**
  */
 
+import { display } from '@/shared/units'
 import { useEffect, useState } from 'react'
 
 import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
@@ -40,6 +41,9 @@ const EMPTY = {
   poisson_ratio: '',
   alias: '',
 }
+
+/** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
+const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function NewMaterialDialog({
   open,
@@ -175,8 +179,8 @@ export function NewMaterialDialog({
             onChange={(next) => setForm((current) => ({ ...current, applied_part: next }))}
           />
           <div className="space-y-1.5">
-            <Label htmlFor="density">밀도 (kg/m³, 선택)</Label>
-            <Input id="density" type="number" step="1" placeholder="7850" {...field('density')} />
+            <Label htmlFor="density">밀도 ({DENSITY_SYMBOL}, 선택)</Label>
+            <Input id="density" type="number" step="1" placeholder="7.85e-9" {...field('density')} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="poisson">푸아송비 (선택)</Label>

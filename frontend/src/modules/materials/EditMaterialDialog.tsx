@@ -13,6 +13,7 @@
  * 그때마다 하위가 흔들리면 안 되기 때문이다.
  */
 
+import { display } from '@/shared/units'
 import { useEffect, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 
@@ -56,6 +57,9 @@ function initial(material: Material) {
     note: material.note ?? '',
   }
 }
+
+/** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
+const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
   const [form, setForm] = useState(() => initial(material))
@@ -205,11 +209,11 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
           <p className="mb-2 text-sm font-medium">CAE 물성</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-density">밀도 (kg/m³, 공칭)</Label>
+              <Label htmlFor="edit-density">밀도 ({DENSITY_SYMBOL}, 공칭)</Label>
               <Input
                 id="edit-density"
                 inputMode="decimal"
-                placeholder="7850"
+                placeholder="7.85e-9"
                 {...field('density')}
               />
               <p className="text-muted-foreground text-xs">

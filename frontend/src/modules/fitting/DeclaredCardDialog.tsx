@@ -32,7 +32,10 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { useResource } from '@/shared/hooks/useResource'
-import { formatScalar } from '@/shared/units'
+import { display, formatScalar } from '@/shared/units'
+
+/** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
+const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function DeclaredCardDialog({
   materialId,
@@ -169,7 +172,7 @@ export function DeclaredCardDialog({
           </div>
           <div>
             <Label htmlFor="declared-density" className="mb-1">
-              밀도 (kg/m³)
+              밀도 ({DENSITY_SYMBOL})
             </Label>
             <Input
               id="declared-density"

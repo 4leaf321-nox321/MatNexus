@@ -35,7 +35,11 @@
  */
 
 import { DENSITY_UNIT, LENGTH_UNIT, ORIENTATIONS } from '@/modules/materials/api'
+import { display } from '@/shared/units'
 import type { BulkRequest } from '@/modules/materials/api'
+
+/** 밀도를 보여 줄 기호. 보내는 것은 `DENSITY_UNIT`(위첨자 없는 표기)다. */
+const DENSITY_SYMBOL = display('kg/m3').unit
 
 export type Group = 'material' | 'sample' | 'specimen'
 
@@ -171,9 +175,9 @@ export const COLUMNS: Column[] = [
     field: 'density',
     group: 'material',
     label: '밀도',
-    hint: 'kg/m³',
+    hint: DENSITY_SYMBOL,
     kind: 'number',
-    placeholder: '7850',
+    placeholder: '7.85e-9',
     width: 'w-24',
   },
   {
@@ -254,7 +258,7 @@ export const COLUMNS: Column[] = [
     field: 'density',
     group: 'sample',
     label: '시료 밀도',
-    hint: 'kg/m³',
+    hint: DENSITY_SYMBOL,
     kind: 'number',
     width: 'w-24',
   },

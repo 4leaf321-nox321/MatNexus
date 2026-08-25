@@ -13,6 +13,7 @@
  * 채우면 그것이 측정값인지 덱만 봐서는 알 수 없다.
  */
 
+import { display } from '@/shared/units'
 import { useState } from 'react'
 
 import { fittingApi } from '@/modules/fitting/api'
@@ -29,6 +30,9 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+
+/** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
+const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function ViscoelasticCardDialog({
   fit,
@@ -103,7 +107,7 @@ export function ViscoelasticCardDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="vc-density">밀도 (kg/m³)</Label>
+              <Label htmlFor="vc-density">밀도 ({DENSITY_SYMBOL})</Label>
               <Input
                 id="vc-density"
                 value={density}

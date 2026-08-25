@@ -61,7 +61,15 @@ export type PropertyItem = components['schemas']['PropertyItemOut']
 export const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
 
 export const LENGTH_UNIT = 'mm'
-export const DENSITY_UNIT = 'kg/m3'
+/**
+ * 밀도를 **화면에서 받아 서버로 보내는** 단위(v1.88.0 에 `kg/m3` 에서 옮김).
+ *
+ * 위첨자 없는 표기다 — 서버의 `matcore/units` 표가 아는 기호가 `tonne/mm3` 다.
+ * 사람에게 보일 기호는 `shared/units` 의 표가 정한다(`tonne/mm³`). 라벨에
+ * 손으로 적지 않는다: 두 곳에 적으면 하나만 바뀌고, 그때 화면은 kg/m³ 라고
+ * 적힌 칸에 tonne/mm³ 값을 받는다.
+ */
+export const DENSITY_UNIT = 'tonne/mm3'
 
 export interface MaterialQuery {
   q?: string

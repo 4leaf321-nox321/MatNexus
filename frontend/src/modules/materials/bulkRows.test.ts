@@ -308,8 +308,8 @@ describe('보내는 값', () => {
     ])
     const material = tree.materials[0]
     expect(material.spec_thickness_unit).toBe('mm')
-    expect(material.density_unit).toBe('kg/m3')
-    expect(material.samples?.[0].density_unit).toBe('kg/m3')
+    expect(material.density_unit).toBe('tonne/mm3')
+    expect(material.samples?.[0].density_unit).toBe('tonne/mm3')
     expect(material.samples?.[0].specimens?.[0].length_unit).toBe('mm')
   })
 

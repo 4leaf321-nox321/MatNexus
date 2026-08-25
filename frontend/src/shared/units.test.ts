@@ -23,20 +23,29 @@ describe('저장 단위와 표시 단위', () => {
 })
 
 describe('변형률과 tan δ', () => {
-  it('변형률은 %로 보여 준다', () => {
-    expect(display('1', 'strain')).toEqual({ unit: '%', factor: 100, offset: 0 })
-    expect(toDisplay(0.02, '1', 'strain')).toBeCloseTo(2)
+  it('변형률은 무차원으로 보여 준다', () => {
+    // **v1.88.0 에 `%` 에서 옮겼다.** 이 시스템이 값을 넘겨 주는 곳은 솔버
+    // 입력이고 거기서는 0.02 다. 화면과 덱이 다른 숫자를 보이면 옮겨 적을 때
+    // 100배가 난다.
+    expect(display('1', 'strain')).toEqual({ unit: '', factor: 1, offset: 0 })
+    expect(toDisplay(0.02, '1', 'strain')).toBeCloseTo(0.02)
   })
 
-  it('tan δ 는 비율 그대로 둔다', () => {
-    // **단위만 보면 못 가른다.** 둘 다 저장 단위가 `1` 이다. 차원이 유일한 단서고,
-    // `strain` 을 `dimensionless` 의 별칭으로 남겨 둔 이유가 이것이다.
+  it('tan δ 도 비율 그대로다', () => {
     expect(display('1', 'dimensionless')).toEqual({ unit: '', factor: 1, offset: 0 })
     expect(toDisplay(0.02, '1', 'dimensionless')).toBeCloseTo(0.02)
   })
 
+  it('변형률은 표에 **적혀 있어서** 무차원이다', () => {
+    // 대충 넘어가서 무차원인 것과 다르다. `BY_SI['1']` 을 누가 바꾸면 변형률도
+    // 따라 움직이는데, 그건 두 결정이 하나로 묶인 것이다 — 항목을 명시해 두면
+    // 그때 여기가 깨진다.
+    expect(display('1', 'strain')).not.toBe(display('1'))
+    expect(display('1', 'strain')).toEqual(display('1'))
+  })
+
   it('축 라벨에도 반영된다', () => {
-    expect(axisLabel('변형률', '1', 'strain')).toBe('변형률 (%)')
+    expect(axisLabel('변형률', '1', 'strain')).toBe('변형률')
     expect(axisLabel('손실계수', '1', 'dimensionless')).toBe('손실계수')
   })
 })
@@ -94,18 +103,18 @@ describe('처리 입력 칸의 단위', () => {
     expect(display('m2')).toEqual({ unit: 'mm²', factor: 1e6, offset: 0 })
   })
 
-  it('탄성 구간과 오프셋은 % 로 받는다', () => {
-    // 규격이 "0.2% 오프셋" 이라고 적는다. 저장 단위는 둘 다 `1` 이라 단위만으로는
-    // 가를 수 없고, 차원이 있어야 한다.
-    expect(display('1', 'strain')).toEqual({ unit: '%', factor: 100, offset: 0 })
+  it('탄성 구간과 오프셋도 무차원으로 받는다', () => {
+    // 규격은 "0.2% 오프셋" 이라고 적지만, 칸에 적는 것도 덱에 나가는 것도
+    // 0.002 다. 화면이 둘 사이에서 100 을 곱했다 나눴다 하지 않는다.
+    expect(display('1', 'strain')).toEqual({ unit: '', factor: 1, offset: 0 })
     expect(display('1')).toEqual({ unit: '', factor: 1, offset: 0 })
   })
 
-  it('50 mm 는 0.05 m 로, 0.2 % 는 0.002 로 되돌아간다', () => {
+  it('50 mm 는 0.05 m 로, 0.002 는 0.002 로 되돌아간다', () => {
     const length = display('m')
     expect(50 / length.factor).toBeCloseTo(0.05, 12)
     const strain = display('1', 'strain')
-    expect(0.2 / strain.factor).toBeCloseTo(0.002, 12)
+    expect(0.002 / strain.factor).toBeCloseTo(0.002, 12)
   })
 })
 
@@ -159,10 +168,15 @@ describe('스칼라 표시 — 환산이 한 곳에만 있어야 한다', () => 
     expect(formatScalar(1.212e-5, 'm2')).toBe('12.12 mm²')
   })
 
-  it('변형률은 %, 개수는 그대로', () => {
-    // 항복 변형률 0.0686 과 네킹 후보 위치 14 는 저장 단위가 둘 다 `1` 이다.
-    // 차원이 없으면 화면이 둘을 같게 다룬다.
-    expect(formatScalar(0.0686479, '1', 'strain')).toBe('6.8648 %')
+  it('변형률도 개수도 그대로 적는다', () => {
+    expect(formatScalar(0.0686479, '1', 'strain')).toBe('0.068648')
     expect(formatScalar(14, '1')).toBe('14')
+  })
+
+  it('밀도는 CAE 단위로 적는다', () => {
+    // 저장은 SI(kg/m³)다. 화면만 옮긴다 — 이 값을 그대로 덱에 적는 사람들의
+    // 단위이고, 손으로 1e-12 를 곱하던 것이 사고의 자리였다.
+    expect(formatValue(7850, null, 'kg/m3')).toBe('7.850e-9 tonne/mm³')
+    expect(fromDisplay(toDisplay(7850, 'kg/m3'), 'kg/m3')).toBeCloseTo(7850, 6)
   })
 })

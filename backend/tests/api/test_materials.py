@@ -115,7 +115,24 @@ class TestUnits:
         assert stored.spec_thickness_m == 0.00045  # 저장은 SI
         # 밀도도 입력 단위를 함께 적는다 — 값만 저장하면 나중에 kg/m³ 인지
         # tonne/mm³ 인지 알 수 없다(기존 앱이 후자로 저장해 겪은 일이다).
-        assert stored.input_units == {"spec_thickness": "mm", "density": "kg/m3"}
+        assert stored.input_units == {"spec_thickness": "mm", "density": "tonne/mm3"}
+
+    def test_밀도는_CAE_단위로_주고받고_SI_로_저장한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """화면이 `7.85e-9` 을 받고 DB 는 `7850` 을 갖는다(v1.88.0).
+
+        **바뀐 것은 사람이 보는 단위뿐이다.** 저장까지 솔버 단위로 옮기면 다른
+        솔버를 붙일 때 어디서 변환이 일어났는지 추적할 수 없다 — `matcore/units`
+        첫 문단이 기존 앱에서 겪은 일로 적어 둔 것이다.
+        """
+        material = _create_material(client, admin_headers, density=7.85e-9)
+        assert material["density_unit"] == "tonne/mm3"
+        assert material["density"] == pytest.approx(7.85e-9)
+
+        stored = db.scalar(select(Material).where(Material.id == material["id"]))
+        assert stored is not None
+        assert stored.density_si == pytest.approx(7850.0)
 
     def test_모르는_단위는_거절한다(
         self, client: TestClient, admin_headers: dict[str, str]

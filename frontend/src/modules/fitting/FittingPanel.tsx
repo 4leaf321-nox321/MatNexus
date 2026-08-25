@@ -47,7 +47,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { CardBlocks } from '@/modules/fitting/CardBlocks'
 import { useResource } from '@/shared/hooks/useResource'
-import { formatScalar, toDisplay } from '@/shared/units'
+import { display, formatScalar, toDisplay } from '@/shared/units'
 
 /** 이 이상 어긋나면 눈에 띄게 한다. 커널이 같은 값에서 경고를 단다. */
 const NOTABLE_RMSE = 0.05
@@ -62,6 +62,9 @@ interface GroupKey {
   orientation: string
   sample_count: number
 }
+
+/** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
+const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function FittingPanel({ materialId }: Props) {
   const stats = useResource(() => statisticsApi.forMaterial(materialId), [materialId])
@@ -856,7 +859,7 @@ function SaveDialog({
               <InheritNote row={inherited('poisson_ratio')} overridden={poisson !== ''} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="density">밀도 (kg/m³)</Label>
+              <Label htmlFor="density">밀도 ({DENSITY_SYMBOL})</Label>
               <Input
                 id="density"
                 inputMode="decimal"
