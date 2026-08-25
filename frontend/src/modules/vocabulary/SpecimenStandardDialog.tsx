@@ -210,7 +210,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{term.value} — 치수</DialogTitle>
           <DialogDescription>

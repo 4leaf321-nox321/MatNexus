@@ -206,7 +206,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
 
           `max-w-6xl`(1152px)은 본문 폭(1600px)보다 좁다 — 모달이 화면을 통째로
           덮으면 뒤가 안 보여 어디서 열었는지 잃는다. */}
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
+      <DialogContent className="sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{creating ? '시험 종류 만들기' : `${type?.label} 편집`}</DialogTitle>
           <DialogDescription>

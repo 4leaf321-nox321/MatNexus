@@ -163,7 +163,7 @@ export function SpecimenFieldsDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {term.value} — {editsBase ? '기본 치수 칸' : '이 규격만의 칸'}

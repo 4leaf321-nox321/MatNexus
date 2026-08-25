@@ -113,7 +113,7 @@ export function SummaryImportDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3">
+      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3 overflow-hidden">
         <DialogHeader>
           <DialogTitle>표로 {testTypeLabel} 넣기</DialogTitle>
           <DialogDescription>

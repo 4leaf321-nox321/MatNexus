@@ -73,7 +73,17 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // **키가 화면을 넘으면 스크롤한다.** 안 넣으면 내용이 길어질 때
+          // 모달이 화면 밖으로 자라고, **아래쪽 버튼을 누를 방법이 사라진다** —
+          // 기준정보에서 값을 여러 개 적으면 '추가' 버튼이 그렇게 됐다.
+          //
+          // 여기(프리미티브)에 두는 이유: 모달마다 적게 하면 새 모달을 만들
+          // 때마다 잊는다. 실제로 21개 중 13개가 빠져 있었고, 빠진 것은
+          // **내용이 길어지기 전까지 안 보인다.**
+          //
+          // `cn` 이 tailwind-merge 라 개별 모달이 자기 값으로 덮을 수 있다 —
+          // 안쪽에 자기 스크롤 영역을 둔 모달이 그렇게 한다.
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

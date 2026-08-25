@@ -141,7 +141,7 @@ export function StandardCatalogDialog({
     <Dialog open onOpenChange={onClose}>
       {/* **버튼이 스크롤 아래로 내려가면 안 된다.** 창 전체를 굴리면 고른 뒤
           가져오기를 찾으러 다시 내려가야 한다 — 목록만 구르고 머리와 발은 붙박이다. */}
-      <DialogContent className="flex max-h-[85vh] flex-col gap-3 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[85vh] flex-col gap-3 overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>표준 규격 가져오기</DialogTitle>
           <DialogDescription>
