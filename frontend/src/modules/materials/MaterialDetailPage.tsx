@@ -65,6 +65,19 @@ interface ExpandCommand {
   at: number
 }
 
+/**
+ * 누가 등록했나. **이름만 적으면 무엇인지 모른다** — 로트번호나 시험자처럼
+ * 읽히므로 「올린 사람」 을 붙인다.
+ */
+function Registrant({ name }: { name?: string | null }) {
+  if (!name) return null
+  return (
+    <span className="text-muted-foreground text-xs whitespace-nowrap" title="올린 사람">
+      {name} 올림
+    </span>
+  )
+}
+
 export default function MaterialDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -397,6 +410,9 @@ function SampleRow({
           {sample.lot_no && <Badge variant="outline">로트 {sample.lot_no}</Badge>}
           {/* **언제 들어온 로트인가.** 로트를 견줄 때 늘 따라 붙는 물음이다. */}
           <CreatedOn at={sample.created_at} />
+          {/* **로트가 이상할 때 물어볼 데가 여기다.** 전에는 시험에만 있어서,
+              시료를 보고 있으면서 누가 넣었는지 알 방법이 없었다. */}
+          <Registrant name={sample.registered_by} />
           {/* **접힌 줄이 상태를 말한다.** 펼치지 않고도 "시험이 몇 건이고 몇 건이
               채택됐나" 가 보여야, 물성 탭의 n 이 왜 그 수인지 여기서 설명된다. */}
           <span className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
@@ -666,6 +682,7 @@ function SpecimenRow({
           <Badge variant="secondary">{specimen.orientation}</Badge>
           <span className="font-mono text-xs">{specimen.record_name}</span>
           <CreatedOn at={specimen.created_at} />
+          <Registrant name={specimen.registered_by} />
           {/* **규격이 치수를 정한다.** 치수 옆에 붙여야 그 관계가 보이고, 다른
               규격끼리 연신율을 견주고 있는지도 여기서 걸린다. */}
           {specimen.standard && (

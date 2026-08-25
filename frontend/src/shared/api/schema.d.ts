@@ -5729,6 +5729,8 @@ export interface components {
             production_date: string | null;
             /** Record Name */
             record_name: string;
+            /** Registered By */
+            registered_by?: string | null;
             /** Sales Type */
             sales_type: string | null;
             /** Seq No */
@@ -6016,6 +6018,8 @@ export interface components {
             orientation: string;
             /** Record Name */
             record_name: string;
+            /** Registered By */
+            registered_by?: string | null;
             /**
              * Sample Id
              * Format: uuid
@@ -6863,6 +6867,8 @@ export interface components {
             owner_workspace_slug: string | null;
             /** Parser Key */
             parser_key: string | null;
+            /** Profile Extensions */
+            profile_extensions?: string[];
             /** Revision */
             revision: number;
             /** Run Count */

@@ -7228,6 +7228,17 @@
             "title": "Record Name",
             "type": "string"
           },
+          "registered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered By"
+          },
           "sales_type": {
             "anyOf": [
               {
@@ -8024,6 +8035,17 @@
           "record_name": {
             "title": "Record Name",
             "type": "string"
+          },
+          "registered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered By"
           },
           "sample_id": {
             "format": "uuid",
@@ -10447,6 +10469,13 @@
               }
             ],
             "title": "Parser Key"
+          },
+          "profile_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Profile Extensions",
+            "type": "array"
           },
           "revision": {
             "title": "Revision",

@@ -920,3 +920,35 @@ class Test부서가장비를붙인다:
         assert run is not None
         # 전역(ta_dma850, priority 10)보다 부서 것(priority 1)이 이긴다.
         assert run.parser_version == "profile:dept_dma"
+
+
+class Test받는_확장자:
+    """**화면이 「무엇을 받는가」 를 말할 수 있어야 한다.**
+
+    일괄 등록 화면이 파서가 선언한 확장자만 적어서 `.tra` 만 지원하는 것처럼
+    보였다 — 실제로는 프로파일이 `.csv`·`.mtet` 도 읽는다.
+    """
+
+    def test_프로파일의_확장자가_종류에_실린다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        del dma
+        types = {
+            item["key"]: item
+            for item in client.get("/api/test-types", headers=admin_headers).json()
+        }
+        assert types["dma_sweep"]["profile_extensions"] == [".csv"]
+
+    def test_파서_확장자와_섞지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """프로파일은 **내용을 보고** 정한다. 확장자가 같아도 헤더가 안 맞으면
+        안 읽히므로, 이 목록으로 종류를 찍으면 안 된다 — 그래서 칸을 나눈다."""
+        del dma
+        types = {
+            item["key"]: item
+            for item in client.get("/api/test-types", headers=admin_headers).json()
+        }
+        # DMA 종류는 파서가 없다 — 파서 쪽 목록은 비어 있어야 한다.
+        assert types["dma_sweep"]["extensions"] == []
+        assert types["dma_sweep"]["profile_extensions"] == [".csv"]

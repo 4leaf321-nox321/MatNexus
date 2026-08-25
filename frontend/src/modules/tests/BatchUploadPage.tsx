@@ -151,6 +151,23 @@ export default function BatchUploadPage() {
   // `?? []` 를 그대로 두면 매 렌더마다 새 배열이라 아래 훅들이 계속 돈다.
   const availableTypes = useMemo(() => types.data ?? [], [types.data])
 
+  /** 확장자만 보고 종류가 정해지는 것 — 파서가 선언한 것들. */
+  const byExtension = useMemo(
+    () => [...new Set(availableTypes.flatMap((one) => one.extensions))].sort(),
+    [availableTypes]
+  )
+  /**
+   * 파일 형식(프로파일)이 받는 것. **따로 적는다** — 확장자가 같아도 헤더가
+   * 안 맞으면 안 읽히므로 「이것만 넣으면 된다」 는 뜻이 아니다.
+   */
+  const byProfile = useMemo(
+    () =>
+      [...new Set(availableTypes.flatMap((one) => one.profile_extensions ?? []))]
+        .filter((one) => !byExtension.includes(one))
+        .sort(),
+    [availableTypes, byExtension]
+  )
+
   /**
    * 한 번이라도 고른 재료를 들고 있는다. 줄에 이름을 보여 주려면 id 만으로는
    * 안 되고, 목록은 검색에 따라 바뀌므로 거기서 다시 찾을 수도 없다.
@@ -438,9 +455,23 @@ export default function BatchUploadPage() {
           }}
         />
         {availableTypes.length > 0 && (
-          <p className="text-muted-foreground mt-3 text-xs">
-            자동 인식: {availableTypes.flatMap((t) => t.extensions).join(' · ') || '없음'}
-          </p>
+          // **「자동 인식: .tra」 만 적어 두면 그것만 받는 것처럼 보인다.**
+          // 실제로는 파일 형식(프로파일)이 `.csv`·`.mtet` 도 읽고, 그것들은
+          // 확장자가 아니라 **헤더의 열 이름**으로 알아본다. 그리고 어느
+          // 파일이든 종류만 고르면 올라간다 — 셋을 다 말한다.
+          <div className="text-muted-foreground mt-3 space-y-0.5 text-xs">
+            <p>
+              확장자로 바로 알아보는 것:{' '}
+              <b>{byExtension.join(' · ') || '없음'}</b>
+            </p>
+            <p>
+              내용을 보고 알아보는 것: <b>{byProfile.join(' · ') || '없음'}</b> — 파일
+              형식에 등록된 규칙이 헤더를 보고 정합니다.
+            </p>
+            <p>
+              못 알아봐도 됩니다. <b>줄에서 종류를 직접 고르면 그대로 올라갑니다.</b>
+            </p>
+          </div>
         )}
       </div>
 

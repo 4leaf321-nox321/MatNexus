@@ -112,6 +112,30 @@ def _extensions(parser_key: str | None) -> list[str]:
     return sorted({str(item).lower() for item in declared})
 
 
+def _profile_extensions(
+    db: Session, user: User, type_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[str]]:
+    """종류별로, 그 종류를 읽는 **파일 형식**이 받는 확장자.
+
+    **가시 범위를 따른다** — 안 보이는 프로파일의 확장자를 「받는다」 고 적으면,
+    그 파일을 올린 사람은 왜 안 읽히는지 알 방법이 없다(자동 추정과 같은 판단).
+    """
+    if not type_ids:
+        return {}
+    found: dict[uuid.UUID, set[str]] = {}
+    rows = db.scalars(
+        formats.visible_profiles(db, user).where(
+            FormatProfile.is_active.is_(True),
+            FormatProfile.test_type_id.in_(type_ids),
+        )
+    )
+    for profile in rows:
+        match = profile.definition.get("match") or {}
+        for item in match.get("extensions", ()):
+            found.setdefault(profile.test_type_id, set()).add(str(item).lower())
+    return {type_id: sorted(values) for type_id, values in found.items()}
+
+
 def _run_counts(db: Session, type_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     """종류별 시험 수. 소프트 삭제도 센다 — 되살릴 수 있는 데이터의 해석을
     바꾸면 안 된다."""
@@ -454,6 +478,8 @@ def list_test_types(
 
     fallback = get_settings().max_upload_bytes
     counts = _run_counts(db, ids)
+    # **한 번에 긁는다.** 종류마다 물으면 목록 하나에 쿼리가 종류 수만큼 붙는다.
+    profile_suffixes = _profile_extensions(db, user, ids)
     # 소유 부서를 한 번에 긁는다. 종류마다 `db.get` 하면 목록 하나에 쿼리가
     # 종류 수만큼 붙는다(CLAUDE.md: N+1 은 명시적 join 으로 막는다).
     owner_ids = {t.owner_workspace_id for t in types if t.owner_workspace_id}
@@ -479,6 +505,7 @@ def list_test_types(
             description=t.description,
             parser_key=t.parser_key,
             extensions=_extensions(t.parser_key),
+            profile_extensions=profile_suffixes.get(t.id, []),
             is_active=t.is_active,
             max_upload_bytes=t.max_upload_bytes,
             max_upload_bytes_effective=t.max_upload_bytes or fallback,

@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -348,6 +349,24 @@ def release_uses(db: Session, material: Material) -> None:
     """
     for row in db.scalars(select(MaterialUse).where(MaterialUse.material_id == material.id)):
         vocabulary_services.bump_usage(db, row.term_id, -1)
+
+
+def registrant_names(rows: Sequence[Any], db: Session) -> dict[uuid.UUID | None, str]:
+    """등록한 사람의 이름을 **한 번에** 읽는다.
+
+    줄마다 `db.get(User, ...)` 하면 시편 20개짜리 화면에 쿼리가 20개 붙는다.
+    """
+    ids = {row.registered_by_id for row in rows if row.registered_by_id}
+    if not ids:
+        return {}
+    # 열쇠를 `None` 까지 받는 형태로 둔다 — 부르는 쪽이 매번 `if` 를 쓰면
+    # 어딘가 한 곳이 빠지고, 그 자리만 조용히 이름이 안 나온다.
+    found: dict[uuid.UUID | None, str] = {}
+    for user_id, name in db.execute(
+        select(User.id, User.display_name).where(User.id.in_(ids))
+    ).all():
+        found[user_id] = name
+    return found
 
 
 # --- 개수 (N+1 방지) --------------------------------------------------------

@@ -208,6 +208,7 @@ def _sample_out(
     specimen_count: int,
     workspace_name: str | None,
     runs: RunTally = (0, 0, 0),
+    registered_by: str | None = None,
 ) -> SampleOut:
     unit = sample.input_units.get("density", DENSITY_UNIT)
     return SampleOut(
@@ -220,6 +221,7 @@ def _sample_out(
         workspace_name=workspace_name,
         seq_no=sample.seq_no,
         record_name=sample.record_name,
+        registered_by=registered_by,
         alias=sample.alias,
         lot_no=sample.lot_no,
         manufacturer=sample.manufacturer,
@@ -260,6 +262,7 @@ def _specimen_out(
     *,
     runs: RunTally = (0, 0, 0),
     sizes: specimen_size.Sizes | None = None,
+    registered_by: str | None = None,
 ) -> SpecimenOut:
     unit = specimen.input_units.get("length", LENGTH_UNIT)
     return SpecimenOut(
@@ -272,6 +275,7 @@ def _specimen_out(
         seq_no=specimen.seq_no,
         orientation=specimen.orientation,
         record_name=specimen.record_name,
+        registered_by=registered_by,
         standard=specimen.standard,
         thickness=services.from_si(specimen.thickness_m, unit),
         width=services.from_si(specimen.width_m, unit),
@@ -1068,6 +1072,8 @@ def list_samples(
     )
     counts = services.specimen_counts(db, [s.id for s in rows])
     names = services.workspace_names(db, [s.workspace_id for s in rows])
+    # **한 번에 읽는다** — 줄마다 물으면 시료 20개짜리 화면에 쿼리가 20개 붙는다.
+    people = services.registrant_names(rows, db)
     tallies = _run_tallies(
         db, group_by=Specimen.sample_id, ids=[s.id for s in rows], join_specimen=True
     )
@@ -1076,6 +1082,7 @@ def list_samples(
             s,
             specimen_count=counts.get(s.id, 0),
             workspace_name=names.get(s.workspace_id),
+            registered_by=people.get(s.registered_by_id),
             runs=tallies.get(s.id, (0, 0, 0)),
         )
         for s in rows
@@ -1131,7 +1138,12 @@ def create_sample(
     workspace = services.resolve_workspace(db, user, payload.workspace_slug)
     sample = _make_sample(db, user, material, payload, workspace=workspace)
     db.commit()
-    return _sample_out(sample, specimen_count=0, workspace_name=workspace.name)
+    return _sample_out(
+        sample,
+        specimen_count=0,
+        workspace_name=workspace.name,
+        registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
+    )
 
 
 def _get_sample(db: Session, user: User, sample_id: uuid.UUID) -> Sample:
@@ -1238,6 +1250,7 @@ def get_sample(
         sample,
         specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
         workspace_name=names.get(sample.workspace_id),
+        registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
     )
 
 
@@ -1285,6 +1298,7 @@ def update_sample(
         sample,
         specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
         workspace_name=names.get(sample.workspace_id),
+        registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
     )
 
 
@@ -1333,8 +1347,14 @@ def list_specimens(
     # **규격별로 한 번에 읽는다.** 시편마다 읽으면 N+1 이고, 한 시료의 시편은
     # 대개 같은 규격이라 한 벌만 읽으면 된다.
     sizes = specimen_size.sizes_for(db, rows)
+    people = services.registrant_names(rows, db)
     return [
-        _specimen_out(item, runs=tallies.get(item.id, (0, 0, 0)), sizes=sizes.get(item.id))
+        _specimen_out(
+            item,
+            runs=tallies.get(item.id, (0, 0, 0)),
+            sizes=sizes.get(item.id),
+            registered_by=people.get(item.registered_by_id),
+        )
         for item in rows
     ]
 
@@ -1403,7 +1423,10 @@ def create_specimen(
         db.rollback()
         raise
     db.commit()
-    return _specimen_out(specimen)
+    return _specimen_out(
+        specimen,
+        registered_by=services.registrant_names([specimen], db).get(specimen.registered_by_id),
+    )
 
 
 def _get_specimen(db: Session, user: User, specimen_id: uuid.UUID) -> Specimen:
@@ -1422,7 +1445,11 @@ def get_specimen(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> SpecimenOut:
-    return _specimen_out(_get_specimen(db, user, specimen_id))
+    one = _get_specimen(db, user, specimen_id)
+    return _specimen_out(
+        one,
+        registered_by=services.registrant_names([one], db).get(one.registered_by_id),
+    )
 
 
 @specimens_router.patch("/{specimen_id}", response_model=SpecimenOut)
@@ -1451,7 +1478,10 @@ def update_specimen(
     specimen.input_units = {**specimen.input_units, "length": unit}
 
     db.commit()
-    return _specimen_out(specimen)
+    return _specimen_out(
+        specimen,
+        registered_by=services.registrant_names([specimen], db).get(specimen.registered_by_id),
+    )
 
 
 @specimens_router.get("/{specimen_id}/dimensions", response_model=SpecimenSizesOut)

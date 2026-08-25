@@ -1500,3 +1500,67 @@ class Test여러_개_한꺼번에_지우기:
         ).json()
         assert body["deleted"] == 0
         assert body["blocked"][0]["id"] == ghost
+
+
+class Test등록한_사람:
+    """시료·시편도 **누가 넣었는지** 말한다.
+
+    전에는 시험에만 있었다. 시료의 로트가 이상하거나 시편 치수가 의심스러울 때
+    물어볼 데가 없었고, 상세를 열어도 알 수 없었다.
+    """
+
+    def test_시료_목록이_등록한_사람을_싣는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material = _create_material(client, admin_headers)
+        made = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["registered_by"]
+
+        listed = client.get(
+            f"/api/materials/{material['id']}/samples", headers=admin_headers
+        ).json()
+        assert listed[0]["registered_by"] == made.json()["registered_by"]
+
+    def test_시편_목록이_등록한_사람을_싣는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        made = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["registered_by"]
+
+        listed = client.get(
+            f"/api/samples/{sample['id']}/specimens", headers=admin_headers
+        ).json()
+        assert listed[0]["registered_by"] == made.json()["registered_by"]
+
+    def test_한_건짜리_조회에도_실린다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """목록에만 있으면 상세를 열었을 때 사라진다."""
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+
+        assert client.get(f"/api/samples/{sample['id']}", headers=admin_headers).json()[
+            "registered_by"
+        ]
+        assert client.get(f"/api/specimens/{specimen['id']}", headers=admin_headers).json()[
+            "registered_by"
+        ]

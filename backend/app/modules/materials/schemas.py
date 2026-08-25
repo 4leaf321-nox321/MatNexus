@@ -269,6 +269,9 @@ class SampleOut(BaseModel):
     workspace_name: str | None
     seq_no: int
     record_name: str
+    registered_by: str | None = None
+    """누가 등록했나. **이상한 값이 보일 때 물어볼 데가 여기다** —
+    전에는 시험에만 있었고, 시료·시편은 상세를 열어도 알 수 없었다."""
     alias: str | None
 
     lot_no: str | None
@@ -378,6 +381,9 @@ class SpecimenOut(BaseModel):
     seq_no: int
     orientation: str
     record_name: str
+    registered_by: str | None = None
+    """누가 등록했나. **이상한 값이 보일 때 물어볼 데가 여기다** —
+    전에는 시험에만 있었고, 시료·시편은 상세를 열어도 알 수 없었다."""
 
     standard: str | None
     """시편 규격. **자를 때 정해지고 아래 치수를 정하는 쪽이다.**
