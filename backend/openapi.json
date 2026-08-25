@@ -3046,6 +3046,14 @@
             "title": "Fits",
             "type": "array"
           },
+          "members": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MemberCurveOut"
+            },
+            "title": "Members",
+            "type": "array"
+          },
           "notes": {
             "items": {
               "type": "string"
@@ -4494,6 +4502,44 @@
           "email"
         ],
         "title": "MemberAddRequest",
+        "type": "object"
+      },
+      "MemberCurveOut": {
+        "description": "시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**\n\n대표만 보여 주면 그것이 적절한지 알 방법이 없다 — 셋이 겹쳐 있는데 하나가\n딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 평균값\n하나로는 같아 보인다.",
+        "properties": {
+          "points": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_run_id",
+          "record_name",
+          "points"
+        ],
+        "title": "MemberCurveOut",
         "type": "object"
       },
       "MemberOut": {

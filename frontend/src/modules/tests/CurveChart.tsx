@@ -49,6 +49,17 @@ export interface CurveChartProps {
    * 시험이고 어디부터가 식의 주장인지 구별할 방법이 없다.
    */
   marker?: { x: number; label: string }
+  /**
+   * 뒤에 **흐리게** 깔 선들. 대표 곡선을 만든 원곡선들이 여기 온다.
+   *
+   * **평균만 보여 주면 그것이 적절한지 알 방법이 없다.** 셋이 겹쳐 있는데
+   * 하나가 딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 —
+   * 평균선 하나로는 두 경우가 똑같이 생겼다.
+   *
+   * 축 범위에 함께 넣는다. 안 넣으면 판 밖으로 나간 곡선이 잘려 보이고,
+   * **잘린 그림은 흩어짐을 실제보다 작아 보이게 한다.**
+   */
+  background?: { points: [number, number][]; label: string }[]
 }
 
 const PAD = { top: 16, right: 20, bottom: 44, left: 68 }
@@ -85,6 +96,7 @@ export function CurveChart({
   yLabel,
   height = 380,
   overlay,
+  background,
   pointsLabel,
   logX = false,
   logY = false,
@@ -96,7 +108,11 @@ export function CurveChart({
     if (points.length === 0) return null
     // 겹쳐 그리는 선도 축 범위에 넣는다. 안 넣으면 적합 곡선이 판을 벗어나
     // 잘려 보이고, 잘린 그림으로는 잘 맞는지 알 수 없다.
-    const all = overlay ? [...points, ...overlay.points] : points
+    const all = [
+      ...points,
+      ...(overlay?.points ?? []),
+      ...(background ?? []).flatMap((one) => one.points),
+    ]
     // 로그 축이면 **자리 계산만** log10 으로 한다. 원래 값은 그대로 두고 눈금
     // 라벨에서 되돌린다 — 툴팁이 log 값을 보여 주면 아무도 못 읽는다.
     const tx = (value: number) => (logX ? Math.log10(Math.max(value, Number.MIN_VALUE)) : value)
@@ -126,7 +142,7 @@ export function CurveChart({
       plotWidth,
       plotHeight,
     }
-  }, [points, overlay, height, logX, logY])
+  }, [points, overlay, background, height, logX, logY])
 
   if (!scale) {
     return (
@@ -234,6 +250,23 @@ export function CurveChart({
             </text>
           </g>
         )}
+
+        {/* **대표선보다 먼저 그린다.** SVG 는 나중에 그린 것이 위에 온다 —
+            뒤에 두면 원곡선들이 대표를 덮는다. */}
+        {(background ?? []).map((one) => (
+          <path
+            key={one.label}
+            d={one.points
+              .map((p, i) => `${i === 0 ? 'M' : 'L'}${scale.toX(p[0])},${scale.toY(p[1])}`)
+              .join(' ')}
+            fill="none"
+            className="stroke-muted-foreground"
+            strokeWidth={1}
+            opacity={0.3}
+          >
+            <title>{one.label}</title>
+          </path>
+        ))}
 
         <path d={path} fill="none" className="stroke-primary" strokeWidth={1.75} />
 

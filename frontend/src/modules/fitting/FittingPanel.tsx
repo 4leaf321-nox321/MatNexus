@@ -68,6 +68,31 @@ interface GroupKey {
 /** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
 const DENSITY_SYMBOL = display('kg/m3').unit
 
+/**
+ * 몇 번째 일인가. **차례가 화면에 없으면 사람은 위에서부터 누른다** — 실제로
+ * 「쓸 시험」 을 고른 뒤 바로 위의 「적어 둔 값으로」 를 눌렀다.
+ */
+function Step({
+  n,
+  label,
+  hint,
+  className,
+}: {
+  n: number
+  label: string
+  hint?: string
+  className?: string
+}) {
+  return (
+    <span className={`flex items-center gap-1.5 ${className ?? ''}`} title={hint}>
+      <span className="bg-muted text-muted-foreground flex size-5 items-center justify-center rounded-full text-[11px] tabular-nums">
+        {n}
+      </span>
+      <span className="text-sm font-medium">{label}</span>
+    </span>
+  )
+}
+
 export function FittingPanel({ materialId }: Props) {
   const stats = useResource(() => statisticsApi.forMaterial(materialId), [materialId])
   // **재료 상세는 그 재료의 카드만 본다.** 쪽으로 오지만 한 재료의 카드가
@@ -222,35 +247,12 @@ export function FittingPanel({ materialId }: Props) {
         </div>
       )}
 
-      {/* **시험이 없어도 길이 있다.** 묶음 줄 안에 두면 시험이 하나도 없는
-          재료에서는 그 줄 자체가 안 떠서, 정작 이 버튼이 가장 필요한 자리에서
-          사라진다(ADR 0016). */}
-      <div className="mb-4 flex items-center gap-2">
-        <Button size="sm" variant="outline" onClick={() => setDeclaring(true)}>
-          <BookOpen className="size-4" />
-          적어 둔 값으로 카드 만들기
-        </Button>
-        <span className="text-muted-foreground text-xs">
-          시험에서 나온 값이 하나도 안 들어갑니다 — 재료의 <b>물성</b> 탭에 적은 값만
-          싣습니다.
-        </span>
-      </div>
-
-      <DeclaredCardDialog
-        materialId={materialId}
-        open={declaring}
-        onClose={() => setDeclaring(false)}
-        onSaved={() => void cards.reload()}
-      />
-
       {groups.length > 0 && (
         <div className="mb-1 flex flex-wrap items-center gap-2">
           {/* **「묶음」만으로는 무엇을 고르는지 알 수 없다.** 재료의 어느
               시험·어느 방향을 볼지 고르는 자리이고, 그 안의 채택된 곡선들이
               평균 나서 대표 곡선이 된다. */}
-          <span className="text-sm font-medium" title="시험 종류 · 방향으로 묶습니다. n 은 평균 낸 시편 수입니다.">
-            대표 곡선 고르기
-          </span>
+          <Step n={1} label="무엇으로" hint="시험 종류 · 방향으로 묶습니다. n 은 평균 낸 시편 수입니다." />
           {groups.map((item) => {
             const key = `${item.test_type_key}-${item.orientation}`
             const active =
@@ -272,36 +274,46 @@ export function FittingPanel({ materialId }: Props) {
               </Button>
             )
           })}
-          <Button
-            size="sm"
-            variant="secondary"
-            className="ml-auto"
-            disabled={!group || busy}
-            onClick={() => group && run(group)}
-          >
-            {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. '견주기'
-                는 무엇과 무엇을 견주는지가 안 보였다 — 이 버튼이 하는 일은
-                **여러 경화식을 같은 곡선에 맞춰 나란히 놓고, 시험 구간 밖을
-                얼마나 늘릴지 정하게 하는 것**이다. 저장은 아직 아니다. */}
-            {busy ? '맞춰 보는 중…' : '경화식 맞춰 보기'}
-          </Button>
+        </div>
+      )}
+
+      {/* **차례가 일의 차례와 같아야 한다.** 전에는 「맞춰 보기」 단추가 쓸
+          시험을 고르는 자리보다 위에 있었다 — 고르기 전에 누르라고 놓인 셈이다.
+          그리고 시험과 상관없는 「적어 둔 값으로」 가 맨 위에 있어서 그것이
+          1단계처럼 읽혔다. */}
+      {groups.length > 0 && runChoices.length > 1 && (
+        <div className="mt-3">
+          <Step n={2} label="어느 시험으로" className="mb-1" />
+          <RunPicker runs={runChoices} used={usedRuns} onChange={setUsedRuns} />
         </div>
       )}
 
       {groups.length > 0 && (
-        // **한 줄로 무엇을 하는 자리인지 말한다.** 단추 이름만으로는 담기지
-        // 않는다 — 맞추는 것과 늘리는 것이 한 화면에서 일어난다.
-        <p className="text-muted-foreground mb-4 text-xs">
-          여러 <b>경화식</b>(Voce · Swift · Hockett-Sherby …)을 같은 곡선에 맞춰{' '}
-          <b>나란히 놓습니다.</b> 측정 구간에서는 거의 겹치는 식들이 그 밖에서 크게
-          갈리므로, <b>해석에 필요한 변형률까지 얼마나 늘릴지</b>를 그림을 보고 정합니다.
-          누른다고 저장되지 않습니다.
-        </p>
-      )}
-
-      {groups.length > 0 && runChoices.length > 1 && (
-        <div className="mb-4">
-          <RunPicker runs={runChoices} used={usedRuns} onChange={setUsedRuns} />
+        <div className="mt-3 mb-4">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <Step n={3} label="어느 식에 맞출까" />
+            <Button
+              size="sm"
+              variant="secondary"
+              className="ml-auto"
+              disabled={!group || busy}
+              onClick={() => group && run(group)}
+            >
+              {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. '견주기'
+                  는 무엇과 무엇을 견주는지가 안 보였다 — 이 버튼이 하는 일은
+                  **여러 경화식을 같은 곡선에 맞춰 나란히 놓고, 시험 구간 밖을
+                  얼마나 늘릴지 정하게 하는 것**이다. 저장은 아직 아니다. */}
+              {busy ? '맞춰 보는 중…' : '경화식 맞춰 보기'}
+            </Button>
+          </div>
+          {/* **한 줄로 무엇을 하는 자리인지 말한다.** 단추 이름만으로는 담기지
+              않는다 — 맞추는 것과 늘리는 것이 한 화면에서 일어난다. */}
+          <p className="text-muted-foreground text-xs">
+            여러 <b>경화식</b>(Voce · Swift · Hockett-Sherby …)을 같은 곡선에 맞춰{' '}
+            <b>나란히 놓습니다.</b> 측정 구간에서는 거의 겹치는 식들이 그 밖에서 크게
+            갈리므로, <b>해석에 필요한 변형률까지 얼마나 늘릴지</b>를 그림을 보고
+            정합니다. 누른다고 저장되지 않습니다.
+          </p>
         </div>
       )}
 
@@ -319,6 +331,32 @@ export function FittingPanel({ materialId }: Props) {
           onSave={() => setSaving(true)}
         />
       )}
+
+      {/* **다른 길이다.** 시험에서 나온 값이 하나도 안 들어가므로 위 흐름과
+          섞으면 안 된다 — 맨 위에 두었더니 「쓸 시험」 을 고른 사람이 그 다음
+          단추로 이것을 눌렀다.
+
+          그래도 **시험이 없으면 이것이 유일한 길**이라(ADR 0016) 그때는 위로
+          올린다. 묶음 줄 안에 두면 그 줄 자체가 안 떠서 사라진다. */}
+      <div className={groups.length === 0 ? 'mb-4' : 'mt-6 border-t pt-4'}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setDeclaring(true)}>
+            <BookOpen className="size-4" />
+            적어 둔 값으로 카드 만들기
+          </Button>
+          <span className="text-muted-foreground text-xs">
+            <b>위 흐름과 다른 길입니다.</b> 시험에서 나온 값이 하나도 안 들어갑니다 —
+            재료의 <b>물성</b> 탭에 적은 값만 싣습니다.
+          </span>
+        </div>
+      </div>
+
+      <DeclaredCardDialog
+        materialId={materialId}
+        open={declaring}
+        onClose={() => setDeclaring(false)}
+        onSaved={() => void cards.reload()}
+      />
 
       {!nothing && (
         <CardList
@@ -397,10 +435,28 @@ function FitComparison({
   const shown = (points: [number, number][]): [number, number][] =>
     points.map(([x, y]) => [toDisplay(x, '1', 'strain'), toDisplay(y, 'Pa')])
 
+  /**
+   * 대표 곡선을 만든 **원곡선들**. 뒤에 흐리게 깔린다.
+   *
+   * 평균선 하나로는 「셋이 겹쳐 있다」와 「하나가 딴 데로 가서 평균이 끌려갔다」
+   * 가 똑같이 생겼다 — 그 둘을 가르는 것이 이 그림의 목적이다.
+   */
+  const raw = (preview.members ?? []).map((member) => ({
+    label: member.record_name,
+    points: shown(member.points as [number, number][]),
+  }))
+
   return (
     <div className="mb-6 rounded-md border">
       <header className="flex flex-wrap items-center gap-2 border-b p-3">
         <h3 className="font-medium">경화식 후보</h3>
+        {raw.length > 1 && (
+          // **줄였다는 것은 화면이 말한다.** 뒤에 깔린 선이 원본 그대로인 줄
+          // 알면, 뾰족한 데가 없는 것을 데이터의 성질로 읽는다.
+          <span className="text-muted-foreground ml-auto text-xs">
+            뒤의 흐린 선 {raw.length}개가 <b>시편별 원곡선</b>입니다 — 그리기 좋게 솎았습니다.
+          </span>
+        )}
         <span className="text-muted-foreground text-sm">
           {/* 1개짜리를 '대표 곡선' 이라 쓰면 여러 시편의 평균으로 읽힌다. */}
           {preview.sample_count === 1
@@ -541,6 +597,7 @@ function FitComparison({
           <>
             <CurveChart
               points={shown(preview.source_points as [number, number][])}
+              background={raw}
               pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
               xLabel={xLabel}
               yLabel={yLabel}
@@ -558,6 +615,7 @@ function FitComparison({
           <>
             <CurveChart
               points={shown(preview.source_points as [number, number][])}
+              background={raw}
               overlay={{
                 points: shown(fit.curve as [number, number][]),
                 label: `${fit.label} 적합`,

@@ -115,3 +115,66 @@ describe('CurveChart 경계선', () => {
     expect(container.querySelectorAll('line[stroke-dasharray]')).toHaveLength(0)
   })
 })
+
+describe('뒤에 깔리는 원곡선', () => {
+  it('대표선보다 먼저 그린다', () => {
+    // **SVG 는 나중에 그린 것이 위에 온다.** 뒤에 두면 원곡선들이 대표를 덮고,
+    // 그러면 무엇이 대표인지 그림에서 알 수 없다.
+    const { container } = render(
+      <CurveChart
+        points={[
+          [0, 0],
+          [1, 100],
+        ]}
+        background={[
+          {
+            label: '시편 1',
+            points: [
+              [0, 0],
+              [1, 90],
+            ],
+          },
+        ]}
+        xLabel="변형률"
+        yLabel="응력"
+      />
+    )
+    const paths = [...container.querySelectorAll('path')]
+    const faint = paths.findIndex((one) => one.querySelector('title')?.textContent === '시편 1')
+    const main = paths.findIndex((one) => one.classList.contains('stroke-primary'))
+    expect(faint).toBeGreaterThanOrEqual(0)
+    expect(faint).toBeLessThan(main)
+  })
+
+  it('축 범위에 함께 넣는다', () => {
+    // **잘린 그림은 흩어짐을 실제보다 작아 보이게 한다.** 판 밖으로 나간
+    // 곡선이 잘려 보이면, 그것이 얼마나 벗어났는지 알 수 없다.
+    const { container } = render(
+      <CurveChart
+        points={[
+          [0, 0],
+          [1, 100],
+        ]}
+        background={[
+          {
+            label: '멀리 간 시편',
+            points: [
+              [0, 0],
+              [1, 400],
+            ],
+          },
+        ]}
+        xLabel="변형률"
+        yLabel="응력"
+      />
+    )
+    expect(container.textContent).toContain('400')
+  })
+
+  it('없으면 아무것도 안 그린다', () => {
+    const { container } = render(
+      <CurveChart points={[[0, 0], [1, 100]]} xLabel="x" yLabel="y" />
+    )
+    expect(container.querySelector('path title')).toBeNull()
+  })
+})

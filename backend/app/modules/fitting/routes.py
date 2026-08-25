@@ -38,6 +38,7 @@ from app.modules.fitting.schemas import (
     FitPreviewRequest,
     FittedParameterOut,
     InheritedValueOut,
+    MemberCurveOut,
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
@@ -808,6 +809,16 @@ def preview(
 
     results.sort(key=lambda item: item.relative_rmse)
     assert group is not None
+    # **첫 축의 것만 낸다.** 점(`source_points`)이 첫 축의 것이므로 뒤에 깔리는
+    # 곡선도 같은 축이어야 한다 — 축이 섞이면 겹쳐 놓은 그림이 거짓말을 한다.
+    # 이름을 `first` 로 두면 위 혼합 코드의 `first`(적합 결과)에 겹친다.
+    axis_family = chosen[0]
+    drawn_members = [
+        MemberCurveOut(test_run_id=run.id, record_name=run.record_name, points=points)
+        for run, points in statistics_services.member_curves(
+            db, group, x=axis_family.x_column, y=axis_family.y_column
+        )
+    ]
     axis_pairs = {(item.x_column, item.y_column) for item in chosen}
     if len(axis_pairs) > 1:
         notes.append(
@@ -829,6 +840,7 @@ def preview(
     samples = _samples_of(db, group)
     return FitPreviewOut(
         source_points=[(float(x), float(y)) for x, y in zip(strain, stress, strict=True)],
+        members=drawn_members,
         sample_count=len(group.members),
         fits=[_fit_out(item, extrapolate_to=payload.extrapolate_to) for item in drawn],
         elastic=[

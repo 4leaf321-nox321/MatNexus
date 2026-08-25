@@ -113,9 +113,25 @@ class InheritedValueOut(BaseModel):
     detail: str | None
 
 
+class MemberCurveOut(BaseModel):
+    """시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**
+
+    대표만 보여 주면 그것이 적절한지 알 방법이 없다 — 셋이 겹쳐 있는데 하나가
+    딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 평균값
+    하나로는 같아 보인다.
+    """
+
+    test_run_id: uuid.UUID
+    record_name: str
+    points: list[tuple[float, float]]
+    """그리기 좋게 솎은 점. **줄였다는 것은 화면이 말한다.**"""
+
+
 class FitPreviewOut(BaseModel):
     source_points: list[tuple[float, float]]
     """적합에 쓴 점(소성변형률, 진응력). 대표 곡선에서 왔다."""
+    members: list[MemberCurveOut] = []
+    """대표를 만든 시편들의 원곡선. 같은 축이다."""
     sample_count: int
     fits: list[FitOut]
     elastic: list[InheritedValueOut] = []

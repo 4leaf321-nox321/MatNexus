@@ -290,6 +290,38 @@ def sample_warnings(db: Session, group: Group) -> list[str]:
     return notes
 
 
+def member_curves(
+    db: Session, group: Group, *, x: str, y: str, max_points: int = 300
+) -> list[tuple[TestRun, list[tuple[float, float]]]]:
+    """묶음의 **시편별 원곡선**. 대표 곡선 뒤에 흐리게 깔려고 쓴다.
+
+    ## 왜 필요한가
+
+    대표 곡선만 보여 주면 그것이 적절한지 알 방법이 없다. 세 개가 겹쳐 있는데
+    하나가 딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 —
+    **평균값 하나로는 같아 보인다.**
+
+    ## 왜 솎는가
+
+    한 곡선이 수천 점이고 시편이 열이면 차트가 버벅인다. LTTB 로 줄인다 —
+    일정 간격으로 솎으면 항복점처럼 국소적으로 꺾이는 데가 사라지는데, 그
+    지점이 사람이 곡선을 보는 이유다(`matcore.curves.downsample`).
+
+    **줄였다는 것은 화면이 말한다.** 여기서는 그리기 위한 값만 만든다.
+    """
+    found: list[tuple[TestRun, list[tuple[float, float]]]] = []
+    for member in group.members:
+        raw = curves.read_columns(filestore.read_bytes(member.result.storage_path))
+        if x not in raw or y not in raw:
+            # 축이 없는 시편은 **건너뛴다.** 대표 곡선 쪽이 이미 그 사실을
+            # 이유로 말하고 있고, 여기서 또 막으면 그림이 통째로 안 뜬다.
+            continue
+        points = curves.downsample(raw[x], raw[y], max_points=max_points)
+        if points:
+            found.append((member.run, points))
+    return found
+
+
 def curve_table(
     db: Session, group: Group, *, x: str, y: str
 ) -> tuple[dict[str, Any] | None, list[str]]:

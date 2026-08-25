@@ -4151,6 +4151,11 @@ export interface components {
             elastic: components["schemas"]["InheritedValueOut"][];
             /** Fits */
             fits: components["schemas"]["FitOut"][];
+            /**
+             * Members
+             * @default []
+             */
+            members: components["schemas"]["MemberCurveOut"][];
             /** Notes */
             notes: string[];
             /** Sample Count */
@@ -4641,6 +4646,28 @@ export interface components {
              * @default member
              */
             role: string;
+        };
+        /**
+         * MemberCurveOut
+         * @description 시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**
+         *
+         *     대표만 보여 주면 그것이 적절한지 알 방법이 없다 — 셋이 겹쳐 있는데 하나가
+         *     딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 평균값
+         *     하나로는 같아 보인다.
+         */
+        MemberCurveOut: {
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /** Record Name */
+            record_name: string;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
         };
         /** MemberOut */
         MemberOut: {

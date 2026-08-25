@@ -2444,6 +2444,49 @@ class Test쓸_시험_고르기:
         assert blocked.status_code == 422
         assert blocked.json()["error"]["code"] == "MNX-FITTING-0021"
 
+    def test_대표_곡선_뒤에_원곡선이_함께_온다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**대표만 보여 주면 그것이 적절한지 알 방법이 없다.** 셋이 겹쳐 있는데
+        하나가 딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지
+        평균값 하나로는 같아 보인다."""
+        seen = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "families": ["swift"],
+            },
+            headers=admin_headers,
+        ).json()
+
+        assert len(seen["members"]) == 3
+        for member in seen["members"]:
+            assert member["record_name"]
+            assert len(member["points"]) >= 2
+            # **그리기 좋게 솎는다.** 한 곡선이 수천 점이고 시편이 열이면
+            # 차트가 버벅인다.
+            assert len(member["points"]) <= 300
+
+    def test_고른_시험의_곡선만_깔린다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """뺀 시편의 곡선이 뒤에 남아 있으면, 그것이 평균에 들어갔다고 읽힌다."""
+        runs = self._runs(client, admin_headers, ready["id"])
+        seen = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "families": ["swift"],
+                "test_run_ids": runs[:2],
+            },
+            headers=admin_headers,
+        ).json()
+        assert {str(one["test_run_id"]) for one in seen["members"]} == set(runs[:2])
+
     def test_미리보기도_같은_것을_본다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
     ) -> None:
