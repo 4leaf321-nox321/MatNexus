@@ -119,3 +119,63 @@ def test_환산을_화면에서_손으로_하지_않는다() -> None:
                 if mark in code:
                     found.append(f"{path.relative_to(SRC)}:{number} — {mark}")
     assert not found, "화면에서 단위를 손으로 환산하고 있습니다:\n" + "\n".join(found)
+
+
+def test_모든_차원이_표시_단위를_갖는다() -> None:
+    """차원마다 **보여 줄 단위를 정해 둔다.**
+
+    안 적어도 화면은 SI 를 그대로 그린다(`display` 가 되돌린다). 그래서
+    「정해서 SI 로 둔 것」과 「빠뜨린 것」이 코드에서 같아 보인다 — 길이가
+    그랬다. mm 로 정해 두고도 여러 화면이 m 를 보이고 있었는데, 표만 봐서는
+    그것이 결정인지 누락인지 알 수 없었다.
+
+    새 차원을 서버에 더하면 여기서 걸린다. 그때 할 일은 `BY_SI` 에 한 줄
+    적는 것이다 — SI 를 그대로 쓰기로 정했더라도 **적는다.**
+    """
+    text = UNITS_TS.read_text(encoding="utf-8")
+    block = re.search(r"const BY_SI: Record<string, Display> = \{(.*?)\n\}", text, re.DOTALL)
+    assert block, "BY_SI 를 찾지 못했습니다."
+    listed = {
+        symbol
+        for symbol in re.findall(r"^\s+'?([A-Za-z0-9_/().]+)'?:\s*\{", block.group(1), re.M)
+    }
+
+    missing = sorted(
+        f"{dimension} ({si})" for dimension, si in units.SI_UNITS.items() if si not in listed
+    )
+    assert not missing, (
+        "이 차원들은 화면에 보일 단위가 안 정해져 있습니다 — SI 를 그대로 "
+        f"쓰기로 했더라도 `BY_SI` 에 적으세요: {missing}"
+    )
+
+
+def test_서버가_문장에_쓰는_단위가_화면과_같다() -> None:
+    """서버도 문장을 만든다 — 「시료마다 밀도가 다릅니다(7.85e-09 tonne/mm3)」.
+
+    그 문장의 단위가 화면 표와 갈라지면 **같은 값이 두 자리에서 다른 숫자로**
+    적힌다. 밀도는 10¹² 배 차이라 눈으로 걸러지지도 않는다.
+
+    기호 표기는 일부러 다르다 — 서버는 값과 함께 API 를 오가는 기호
+    (`tonne/mm3`)를, 화면은 사람이 읽는 기호(`tonne/mm³`)를 쓴다. 그래서
+    위첨자만 지우고 견준다.
+    """
+    from app.shared import display as server
+
+    text = UNITS_TS.read_text(encoding="utf-8")
+    block = re.search(r"const BY_SI: Record<string, Display> = \{(.*?)\n\}", text, re.DOTALL)
+    assert block
+    shown = dict(
+        re.findall(r"^\s+'?([A-Za-z0-9_/().]+)'?:\s*\{ unit: '([^']*)'", block.group(1), re.M)
+    )
+
+    def plain(symbol: str) -> str:
+        return symbol.replace("³", "3").replace("²", "2")
+
+    assert plain(shown["m"]) == server.LENGTH_UNIT, (
+        f"화면은 길이를 {shown['m']!r} 로 보이는데 서버 문장은 "
+        f"{server.LENGTH_UNIT!r} 로 적습니다."
+    )
+    assert plain(shown["kg/m3"]) == server.DENSITY_UNIT, (
+        f"화면은 밀도를 {shown['kg/m3']!r} 로 보이는데 서버 문장은 "
+        f"{server.DENSITY_UNIT!r} 로 적습니다."
+    )

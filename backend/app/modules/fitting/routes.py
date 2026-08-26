@@ -250,8 +250,13 @@ def _declared(material: Material, item: str) -> Inherited:
 
 
 def _celsius(kelvin: float | None) -> str:
-    """섭씨로 적는다. **상온을 298 로 적는 사람은 없다.**"""
-    return "?" if kelvin is None else f"{kelvin - 273.15:.4g}°C"
+    """섭씨로 적는다. **상온을 298 로 적는 사람은 없다.**
+
+    환산은 `shared/display` 를 거친다. `- 273.15` 를 손으로 적으면 표 바깥에
+    정본이 하나 더 생기고, 표를 바꾼 날 이 자리만 옛 값을 낸다 — 화면 쪽에서
+    같은 부류를 다섯 군데 걷어냈다.
+    """
+    return "?" if kelvin is None else display.quantity(kelvin, "degC")
 
 
 def _declared_points(row: dict[str, Any]) -> list[dict[str, Any]]:

@@ -51,6 +51,31 @@ const BY_SI: Record<string, Display> = {
   // 저장은 그대로 SI(kg/m³)다. 여기는 보여 주는 단위만 정한다.
   'kg/m3': { unit: 'tonne/mm³', factor: 1e-12, offset: 0 },
   '1': { unit: '', factor: 1, offset: 0 },
+
+  // ── 아래는 **SI 가 곧 실무 단위**인 것들 ───────────────────────────────
+  //
+  // 표에 안 적어도 화면은 SI 를 그대로 그린다(`display` 의 되돌림). 그런데
+  // 그러면 「정해서 SI 로 둔 것」과 「빠뜨린 것」이 코드에서 같아 보인다.
+  // 길이가 그랬다 — mm 로 정해 두고도 여러 화면이 SI 를 보이고 있었는데,
+  // 표만 봐서는 그것이 결정인지 누락인지 알 수 없었다. **적어 둔다.**
+  'rad/s': { unit: 'rad/s', factor: 1, offset: 0 },
+  // 열팽창계수. 규격서·핸드북이 `1/K` 로 적는다.
+  '1/K': { unit: '1/K', factor: 1, offset: 0 },
+  // 비열·열전도도. 폴리머 자료가 `kJ/(kg.K)` 로도 오지만 규격서는 SI 다.
+  'J/(kg.K)': { unit: 'J/(kg.K)', factor: 1, offset: 0 },
+  'W/(m.K)': { unit: 'W/(m.K)', factor: 1, offset: 0 },
+
+  // ── 아래는 **SI 가 실무 단위가 아니어서** 옮기는 것들 ─────────────────
+  //
+  // 컴플라이언스는 응력의 역수다. 응력을 MPa 로 보이면서 이쪽만 `1/Pa` 로
+  // 두면 같은 물리량의 짝이 화면에서 10⁶ 배 다른 자릿수로 나온다 —
+  // `5e-11 1/Pa` 과 `5e-5 1/MPa`. 고르는 목록에는 진작 `1/MPa` 가 있었는데
+  // 보여 주는 쪽만 안 따라왔다.
+  '1/Pa': { unit: '1/MPa', factor: 1e6, offset: 0 },
+  // 질량. **tonne 이 아니다** — 밀도는 CAE 단위계로 보이지만, 질량이 실제로
+  // 쓰이는 자리는 DMA 시료량이고 그것은 10 mg 쯤이다. tonne 으로 적으면
+  // `1e-11` 이 된다. 덱에 들어가는 값이 아니라 사람이 저울에서 읽는 값이다.
+  kg: { unit: 'g', factor: 1000, offset: 0 },
 }
 
 /**
@@ -230,7 +255,7 @@ export const UNITS_BY_DIMENSION: Record<string, string[]> = {
   // 자료에서 흔하다.
   specific_heat: ['J/(kg.K)', 'J/kgK', 'kJ/(kg.K)'],
   thermal_conductivity: ['W/(m.K)', 'W/mK'],
-  compliance: ['1/Pa', '1/MPa'],
+  compliance: ['1/MPa', '1/Pa'],
   mass: ['kg', 'g', 'tonne'],
   density: ['tonne/mm3', 'kg/m3', 'g/cm3'],
   angle: ['rad', 'deg'],
