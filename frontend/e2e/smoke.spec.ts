@@ -266,8 +266,13 @@ test('덱을 뽑는 길이 열려 있다', async ({ page }) => {
   // **`count()` 는 기다리지 않는다.** 처음에 이 줄을 바로 세었더니 목록이
   // 도착하기 전에 0 을 읽고 「카드가 없다」 가지로 빠졌다 — 실제로는 11장이
   // 있었다. 먼저 **둘 중 하나가 뜰 때까지** 기다린다.
+  //
+  // **양쪽 다 하나로 좁힌다.** `/없습니다/` 를 넓게 잡았더니 CI 의 빈 DB 에서
+  // 두 군데에 걸려 strict mode 로 멈췄다 — 개발 DB 에는 카드가 있어서 그
+  // 가지를 한 번도 안 지났고, 그래서 로컬에서는 안 드러났다.
   const cards = page.getByRole('button', { name: '내보내기' })
-  await expect(cards.first().or(page.getByText(/없습니다/))).toBeVisible()
+  const empty = page.getByText('조건에 맞는 카드가 없습니다.', { exact: false }).first()
+  await expect(cards.first().or(empty)).toBeVisible()
 
   // **카드가 0장인 것이 정상이다** — 갓 설치한 서버가 그렇고, 카드는 사람이
   // 만든다. 그때 이 시험이 볼 것은 없다.

@@ -41,12 +41,69 @@ BASE: dict[str, Any] = {
 }
 
 
-class Test옛_정의는_안_바뀐다:
-    def test_선언이_없으면_비어_있다(self) -> None:
-        """**하위 호환.** 기존 프로파일에 이 자리가 없으면 전과 똑같아야 한다."""
-        parsed = profiles.apply(LEGACY_TENSILE_DEFINITION, WITH_UNITS.read_bytes())
+class Test선언이_없으면:
+    """**하위 호환.** 이 자리가 없는 프로파일은 전과 똑같이 동작해야 한다.
+
+    전에는 이것을 `LEGACY_TENSILE_DEFINITION` 으로 확인했는데, 그 정의에
+    `record` 를 더하면서 **전제가 사라졌다** — 「선언이 없을 때」 를 보려면
+    선언이 없는 정의로 봐야 한다. CI 가 그것을 잡았다.
+    """
+
+    def bare(self) -> dict[str, Any]:
+        """옛 정의 그대로에서 **새 자리만 뺀 것.**"""
+        return {
+            key: value
+            for key, value in LEGACY_TENSILE_DEFINITION.items()
+            if key not in ("record", "identity", "conditions")
+        }
+
+    def test_아무것도_안_채운다(self) -> None:
+        parsed = profiles.apply(self.bare(), WITH_UNITS.read_bytes())
         assert parsed.record == {}
         assert parsed.identity == {}
+        assert parsed.conditions == {}
+
+    def test_곡선과_요약값은_그대로다(self) -> None:
+        """새 자리를 더한 것이 **원래 하던 일**을 흔들면 안 된다."""
+        parsed = profiles.apply(self.bare(), WITH_UNITS.read_bytes())
+        assert {channel.key for channel in parsed.curves[0].channels} == {
+            "displacement",
+            "force",
+            "specimen_width",
+        }
+        assert any(value.key == "legacy_tensile_strength" for value in parsed.summary)
+
+
+class Test옛_앱_프로파일이_제자리로_보낸다:
+    """다섯이 전부 원문 보관에 있었다 — 보관은 글자로만 남아 비교도 통계도
+    안 되는데, 그 값들이 갈 제자리가 이미 있었다."""
+
+    def parsed(self) -> Any:
+        return profiles.apply(LEGACY_TENSILE_DEFINITION, WITH_UNITS.read_bytes())
+
+    def test_시험_기록을_채운다(self) -> None:
+        assert self.parsed().record == {
+            "operator": "홍길동",
+            "instrument": "Zwick Z100",
+            # 옛 앱은 `2024-03-11 09:20:00` 으로 적는다. 형식을 선언해 뒀다.
+            "tested_at": "2024-03-11T09:20:00",
+        }
+
+    def test_시험_조건을_채운다(self) -> None:
+        """인장 종류가 `sensor_type`·`testing_group` 을 선언하고 있다."""
+        assert self.parsed().conditions == {
+            "sensor_type": "makroXtens",
+            "testing_group": "판재 인장",
+        }
+
+    def test_시편을_짚어_준다(self) -> None:
+        assert self.parsed().identity == {"specimen_seq_no": "1"}
+
+    def test_원문도_남는다(self) -> None:
+        """자리를 옮겼다고 **파일에 뭐라고 적혀 있었는지**를 잃으면 안 된다."""
+        metadata = self.parsed().metadata
+        assert metadata["operator"] == "홍길동"
+        assert metadata["rundate"] == "2024-03-11 09:20:00"
 
 
 class Test시험_칸:
