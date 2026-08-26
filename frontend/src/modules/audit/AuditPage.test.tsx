@@ -8,7 +8,7 @@
  *   지워진 계정을 짚는다      id 는 비고 이름만 남는다 — 그 사실이 보여야 한다
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AuditPage from '@/modules/audit/AuditPage'
@@ -59,8 +59,10 @@ describe('변경 이력', () => {
 
   it('바뀐 것을 전후로 보인다', async () => {
     render(<AuditPage />)
-    await waitFor(() => expect(list).toHaveBeenCalled())
-    expect(screen.getByText('draft')).toBeInTheDocument()
+    // **화면을 기다린다.** 전에는 `list` 가 불렸는지만 기다렸는데, 불린 것과
+    // 응답이 온 것과 React 가 다시 그린 것은 서로 다른 순간이다 - 머신이
+    // 바쁘면 그 사이가 벌어져 아직 안 그려진 화면에 대고 검사하게 된다.
+    expect(await screen.findByText('draft')).toBeInTheDocument()
     expect(screen.getByText('published')).toBeInTheDocument()
   })
 
@@ -74,7 +76,9 @@ describe('변경 이력', () => {
   it('고치는 단추가 없다', async () => {
     // **고칠 수 있으면 감사가 아니다.**
     render(<AuditPage />)
-    await waitFor(() => expect(list).toHaveBeenCalled())
+    // **없는 것을 검사할 때가 더 위험하다.** 안 그려진 화면에서는 무엇이든
+    // 없으므로, 기다리지 않으면 **틀린 이유로 통과한다.**
+    await screen.findByText('물성 카드 확정')
     for (const name of [/만들기/, /추가/, /고치기/, /지우기/, /삭제/]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
