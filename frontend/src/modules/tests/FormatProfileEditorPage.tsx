@@ -34,6 +34,7 @@ import {
   Check,
   CheckCircle2,
   FileUp,
+  History,
   PlayCircle,
   Save,
   TriangleAlert,
@@ -73,16 +74,32 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { toChannelKey } from '@/modules/tests/keys'
-import { DIMENSIONS, SI_BY_DIMENSION } from '@/shared/units'
+import { TablePreviewRows } from '@/modules/tests/TablePreviewRows'
+import type { ProfileDraft } from '@/modules/tests/profileDraft'
+import { forgetDraft, readDraft, since, writeDraft } from '@/modules/tests/profileDraft'
+import type { ColumnRule } from '@/modules/tests/profileColumns'
+import {
+  EMPTY_RULE,
+  readColumnRules,
+  unitBlocking,
+  unitNote,
+  unitState,
+  writeColumnRules,
+} from '@/modules/tests/profileColumns'
+import { DIMENSIONS, SI_BY_DIMENSION, UNITS_BY_DIMENSION } from '@/shared/units'
 import { useResource } from '@/shared/hooks/useResource'
 
 /** 메타 한 줄을 어떻게 할지. 기계는 못 가르는 판단이다 — `.tra` 의 요약부는
  *  구조적으로 메타와 똑같이 생겼는데, 하나는 **시험 결과**이고 하나는 **입력**이다. */
-type MetaRole = 'keep' | 'specimen' | 'summary' | 'drop'
+type MetaRole = 'keep' | 'specimen' | 'summary' | 'record' | 'identity' | 'drop'
 
 interface MetaRule {
   role: MetaRole
   target: string
+  /** 날짜 형식. `record` 의 시험일에만 쓴다 — 안 적으면 ISO 만 읽는다.
+   *  `05/06/2020` 은 6월 5일일 수도 5월 6일일 수도 있고 **둘 다 그럴듯해서**
+   *  잘못 읽어도 화면에 티가 안 난다. 그래서 짐작하지 않는다. */
+  format: string
   /** 시편 치수에만 쓴다. **단위가 열 이름 안에만 있는 파일**이 있어서다 —
    *  `Specimen thickness a0 (mm)` 옆의 값은 `0.986` 뿐이다. 비워 두면 값에
    *  붙어 온 단위를 쓴다(`50.0 mm`). 둘 다 없으면 치수가 안 채워진다. */
@@ -98,20 +115,41 @@ const SPECIMEN_KEYS = [
   'specimen_diameter',
 ]
 
-/** 시편 치수에 흔한 단위. **강제하지 않는다** — 표(`shared/units.ts`)가 아는
- *  것이면 무엇이든 된다. */
-const SPECIMEN_UNITS = ['mm', 'm', 'cm', 'in']
-
 const META_ROLE_LABEL: Record<MetaRole, string> = {
   keep: '그대로 보관',
   specimen: '시편 치수',
   summary: '요약값(시험 결과)',
+  record: '시험 칸에 채움',
+  identity: '어느 재료·시료·시편인지',
   drop: '버림',
+}
+
+/** 파일이 **채울 수 있는** 시험 칸. 정본은 서버의 `RECORD_FIELDS` 다 —
+ *  `tests/architecture` 가 두 표가 갈리지 않았는지 검사한다. */
+const RECORD_FIELD_LABEL: Record<string, string> = {
+  division: '사업부',
+  instrument: '장비',
+  operator: '시험자',
+  tested_at: '시험일',
+}
+
+/** 파일이 **짚어 줄 수 있는** 식별자. 정본은 서버의 `IDENTITY_FIELDS` 다. */
+const IDENTITY_FIELD_LABEL: Record<string, string> = {
+  material_grade: '재료 코드',
+  sample_lot_no: '로트',
+  specimen_orientation: '방향',
+  specimen_seq_no: '시편 번호',
 }
 
 /** 채널 드롭다운의 특수 항목. 채널 키와 겹치지 않게 접두어를 붙인다. */
 const NEW_CHANNEL = '__new__'
 const NEW_TYPE = '__new__'
+const SKIP_COLUMN = '__skip__'
+
+/** 단위 후보는 **표에서 읽는다**(AGENTS: 단위·기호를 손으로 적지 않는다).
+ *  차원을 아는 열은 그 차원의 것만, 모르면 전부 — 사람이 표에 없는 표기를
+ *  쳐도 막지는 않는다. 서버가 별칭까지 알아보기 때문이다(`Mpa`·`sec`). */
+const ALL_UNITS = [...new Set(Object.values(UNITS_BY_DIMENSION).flat())]
 
 /**
  * 이 화면에서 함께 만들 채널. **아직 저장되지 않았다.**
@@ -167,13 +205,19 @@ export default function FormatProfileEditorPage() {
   const [tableMode, setTableMode] = useState<'first' | 'all'>('first')
   const [include, setInclude] = useState('')
   const [derived, setDerived] = useState('')
-  const [columnMap, setColumnMap] = useState<Record<string, string>>({})
+  const [columnMap, setColumnMap] = useState<Record<string, ColumnRule>>({})
   const [metaMap, setMetaMap] = useState<Record<string, MetaRule>>({})
   const [drafts, setDrafts] = useState<DraftChannel[]>([])
   const [newType, setNewType] = useState<{ key: string; label: string; abbr: string } | null>(
     null
   )
 
+  /** 어느 표를 펼쳐 보고 있나. **한 번에 하나만** — 여섯 벌을 다 펼치면
+   *  ④ 열 매핑이 화면 밖으로 밀린다. */
+  /** 이 브라우저에 남아 있는 임시본. **말없이 채우지 않는다** — 사람이 누른다. */
+  const [draft, setDraft] = useState<ProfileDraft | null>(null)
+  const [draftSaved, setDraftSaved] = useState<string | null>(null)
+  const [openTable, setOpenTable] = useState<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<StructurePreview | null>(null)
   const [tried, setTried] = useState<ProfileTry | null>(null)
@@ -185,6 +229,52 @@ export default function FormatProfileEditorPage() {
   useEffect(() => {
     setTried(null)
   }, [extensions, headerAny, metaAny, headerRows, tableMode, include, derived, columnMap, metaMap])
+
+  /** 들어올 때 한 번만 본다. **말없이 채우지 않는다** — 있다는 것만 알린다. */
+  useEffect(() => {
+    setDraft(readDraft(routeKey))
+  }, [routeKey])
+
+  /**
+   * 고칠 때마다 적어 둔다.
+   *
+   * 명시적 버튼만 두면 **누르지 않은 사람은 여전히 잃는다** — 그리고 잃는
+   * 순간은 대개 예상 못 한 순간이다(새로고침·뒤로가기). 그래서 자동으로 적고,
+   * 버리는 것만 사람이 정한다.
+   *
+   * 빈 화면은 안 적는다. 안 그러면 목록에서 「만들기」 를 눌렀다 나가기만 해도
+   * 다음번에 「복원할까요」 가 뜬다.
+   */
+  useEffect(() => {
+    const touched =
+      Object.keys(columnMap).length > 0 ||
+      Object.keys(metaMap).length > 0 ||
+      extensions.length > 0 ||
+      headerAny.length > 0 ||
+      metaAny.length > 0 ||
+      Boolean(form.key || form.label)
+    if (!touched) return
+    const at = new Date().toISOString()
+    setDraftSaved(writeDraft(routeKey, draftState(), file?.name ?? null, at) ? at : null)
+    // 화면 상태 전체가 바뀔 때마다 적는다. `draftState` 는 그 상태를 읽기만 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    form,
+    owner,
+    extensions,
+    headerAny,
+    metaAny,
+    headerRows,
+    tableMode,
+    include,
+    derived,
+    columnMap,
+    metaMap,
+    drafts,
+    newType,
+    file,
+    routeKey,
+  ])
 
   // 저장된 프로파일을 화면 상태로 편다. JSON 을 그대로 보여 주지 않는 이유:
   // 손으로 고치게 하면 결국 "JSON 을 아는 사람만 장비를 붙일 수 있다" 가 된다.
@@ -208,30 +298,45 @@ export default function FormatProfileEditorPage() {
     setTableMode(definition.tables?.mode === 'all' ? 'all' : 'first')
     setInclude(definition.tables?.include ?? '')
     setDerived(definition.tables?.derived ?? '')
-    setColumnMap(
-      Object.fromEntries(
-        Object.entries(definition.columns ?? {}).map(([name, rule]) => [name, rule.channel])
-      )
-    )
+    // **단위와 `skip` 까지 읽는다.** 채널만 읽던 때는 열고 저장만 눌러도
+    // 그 둘이 사라졌다(`profileColumns.ts` 머리말).
+    setColumnMap(readColumnRules(definition.columns))
     setMetaMap({
       ...Object.fromEntries(
         Object.entries(definition.specimen ?? {}).map(([name, rule]) => [
           name,
           typeof rule === 'string'
-            ? { role: 'specimen' as const, target: rule, unit: '' }
-            : { role: 'specimen' as const, target: rule.key, unit: rule.unit ?? '' },
+            ? { role: 'specimen' as const, target: rule, unit: '', format: '' }
+            : { role: 'specimen' as const, target: rule.key, unit: rule.unit ?? '', format: '' },
         ])
       ),
       ...Object.fromEntries(
         Object.entries(definition.summary ?? {}).map(([name, rule]) => [
           name,
-          { role: 'summary' as const, target: rule.key, unit: '' },
+          { role: 'summary' as const, target: rule.key, unit: rule.unit ?? '', format: '' },
+        ])
+      ),
+      ...Object.fromEntries(
+        Object.entries(definition.record ?? {}).map(([name, rule]) => [
+          name,
+          {
+            role: 'record' as const,
+            target: rule.field,
+            unit: '',
+            format: rule.format ?? '',
+          },
+        ])
+      ),
+      ...Object.fromEntries(
+        Object.entries(definition.identity ?? {}).map(([name, rule]) => [
+          name,
+          { role: 'identity' as const, target: rule.field, unit: '', format: '' },
         ])
       ),
       ...Object.fromEntries(
         (definition.metadata ?? []).map((name) => [
           name,
-          { role: 'keep' as const, target: '', unit: '' },
+          { role: 'keep' as const, target: '', unit: '', format: '' },
         ])
       ),
     })
@@ -291,22 +396,41 @@ export default function FormatProfileEditorPage() {
   /** 매핑해야 할 열. 고른 표들의 헤더 합집합 — `[step]` 마다 열 구성이 다른
    *  장비가 실재하므로(TA DMA850) 첫 표만 보면 안 된다. */
   const columns = useMemo(() => {
-    type Info = { unit: string; sample: string; dimension: string | null }
+    type Info = {
+      /** 파일에 적힌 그대로. 단위 줄이 아예 없으면 `undefined` — **빈 칸과 다르다.** */
+      raw: string | undefined
+      /** 서버가 알아본 정본 심볼. 모르면 `null`. 표를 화면에 복제하지 않는다. */
+      symbol: string | null | undefined
+      sample: string
+      dimension: string | null
+      inFile: boolean
+    }
     const seen = new Map<string, Info>()
     for (const table of selectedTables) {
+      const hasUnitRow = table.units.length > 0
       table.header.forEach((name, index) => {
         if (seen.has(name)) return
         seen.set(name, {
-          unit: table.units[index] ?? '',
+          raw: hasUnitRow ? (table.units[index] ?? '') : undefined,
+          symbol: hasUnitRow ? table.unit_symbols[index] : undefined,
           sample: table.sample_rows[0]?.[index] ?? '',
           // 차원은 **서버가 알려 준다.** 단위 표를 여기에 복제하면 갈라진다.
           dimension: table.dimensions[index] ?? null,
+          inFile: true,
         })
       })
     }
     // 저장된 프로파일에만 있고 이 파일에는 없는 열도 지우지 않고 보여 준다.
     for (const name of Object.keys(columnMap)) {
-      if (!seen.has(name)) seen.set(name, { unit: '', sample: '', dimension: null })
+      if (!seen.has(name)) {
+        seen.set(name, {
+          raw: undefined,
+          symbol: undefined,
+          sample: '',
+          dimension: null,
+          inFile: false,
+        })
+      }
     }
     return [...seen.entries()].map(([name, info]) => ({ name, ...info }))
   }, [selectedTables, columnMap])
@@ -317,8 +441,23 @@ export default function FormatProfileEditorPage() {
     return [...rows.entries()]
   }, [preview, metaMap])
 
+  /** 채널로 정했는데 단위를 알 수 없는 열. **저장하면 등록이 실패한다.** */
+  const unitGaps = columns.filter((column) => {
+    const rule = columnMap[column.name]
+    if (!rule) return false
+    return unitBlocking(
+      unitState({
+        unit: rule.unit,
+        raw: column.raw,
+        symbol: column.symbol,
+        inFile: column.inFile,
+      }),
+      rule
+    )
+  })
+
   const hasFingerprint = extensions.length > 0 || headerAny.length > 0 || metaAny.length > 0
-  const mapped = Object.values(columnMap).filter(Boolean).length
+  const mapped = Object.values(columnMap).filter((rule) => rule.channel).length
 
   /**
    * 저장하려면 갖춰야 할 것. **비활성 버튼 옆에 이유가 없으면 고장으로 보인다.**
@@ -337,6 +476,16 @@ export default function FormatProfileEditorPage() {
     { ok: typeReady, label: newType ? '새 시험 종류 (키·이름·약어)' : '시험 종류', where: '④' },
     { ok: mapped > 0, label: '열 매핑 한 개 이상', where: '④' },
     {
+      // **저장 전에 말한다.** 안 그러면 저장은 되고 등록에서 실패하는데, 그
+      // 실패는 파일을 올린 다음에야 보이고 원인은 이 화면에 있다.
+      ok: unitGaps.length === 0,
+      label:
+        unitGaps.length === 0
+          ? '채널로 정한 열의 단위'
+          : `채널로 정한 열의 단위 (${unitGaps.length}개 빠짐)`,
+      where: '④',
+    },
+    {
       ok: drafts.every((draft) => draft.key && draft.label),
       label: '새 채널의 키·이름',
       where: '④',
@@ -351,6 +500,21 @@ export default function FormatProfileEditorPage() {
     { ok: file === null || tried !== null, label: '적용해 보기', where: '오른쪽' },
   ]
   const remaining = checklist.filter((item) => !item.ok)
+
+  /**
+   * 이 열의 단위 후보를 어느 목록에서 고를까.
+   *
+   * 채널을 정했으면 **그 채널의 차원**으로 좁힌다 — 힘 칸에 `MPa` 후보를 띄우면
+   * 고르게 되고, 그러면 서버가 거절한다. 아직 안 정했으면 전부 보인다.
+   */
+  function unitListFor(name: string): string {
+    const key = columnMap[name]?.channel
+    if (!key) return 'all'
+    const channel =
+      (testType?.channels ?? []).find((item) => item.key === key)?.dimension ??
+      drafts.find((draft) => draft.key === key)?.dimension
+    return channel && UNITS_BY_DIMENSION[channel] ? channel : 'all'
+  }
 
   /** 고를 수 있는 채널 = 시험 종류의 것 + 이 화면에서 만들 것. */
   const channelOptions = [
@@ -390,14 +554,21 @@ export default function FormatProfileEditorPage() {
         from: column.name,
       },
     ])
-    setColumnMap((current) => ({ ...current, [column.name]: key }))
+    setColumnMap((current) => ({
+      ...current,
+      // **단위는 그대로 둔다.** 채널을 바꾼다고 사람이 적은 단위가 사라지면 안 된다.
+      [column.name]: { ...(current[column.name] ?? EMPTY_RULE), channel: key, skip: false },
+    }))
   }
 
   function dropDraft(key: string) {
     setDrafts((current) => current.filter((draft) => draft.key !== key))
     setColumnMap((current) =>
       Object.fromEntries(
-        Object.entries(current).map(([name, value]) => [name, value === key ? '' : value])
+        Object.entries(current).map(([name, rule]) => [
+          name,
+          rule.channel === key ? { ...rule, channel: '' } : rule,
+        ])
       )
     )
   }
@@ -413,9 +584,9 @@ export default function FormatProfileEditorPage() {
       if (before && after && before.key !== after.key) {
         setColumnMap((mapping) =>
           Object.fromEntries(
-            Object.entries(mapping).map(([name, value]) => [
+            Object.entries(mapping).map(([name, rule]) => [
               name,
-              value === before.key ? after.key : value,
+              rule.channel === before.key ? { ...rule, channel: after.key } : rule,
             ])
           )
         )
@@ -424,20 +595,68 @@ export default function FormatProfileEditorPage() {
     })
   }
 
-  function definition(): ProfileDefinition {
-    const columnRules: ProfileDefinition['columns'] = {}
-    for (const [name, channel] of Object.entries(columnMap)) {
-      if (channel) columnRules[name] = { channel }
+  /** 임시본에 담을 것 = **사람이 정한 것 전부.** 파일에서 온 것은 안 담는다. */
+  function draftState(): Record<string, unknown> {
+    return {
+      form,
+      owner,
+      extensions,
+      headerAny,
+      metaAny,
+      headerRows,
+      tableMode,
+      include,
+      derived,
+      columnMap,
+      metaMap,
+      drafts,
+      newType,
     }
+  }
+
+  /** 임시본을 화면에 편다. 없는 칸은 지금 값을 그대로 둔다 — 옛 임시본이
+   *  새로 생긴 칸을 지우면 안 된다. */
+  function applyDraft(saved: ProfileDraft) {
+    const state = saved.state as Partial<ReturnType<typeof draftState>>
+    if (state.form) setForm(state.form as typeof form)
+    if (state.owner !== undefined) setOwner(state.owner as string | null)
+    if (state.extensions) setExtensions(state.extensions as string[])
+    if (state.headerAny) setHeaderAny(state.headerAny as string[])
+    if (state.metaAny) setMetaAny(state.metaAny as string[])
+    if (state.headerRows) setHeaderRows(state.headerRows as number)
+    if (state.tableMode) setTableMode(state.tableMode as 'first' | 'all')
+    if (state.include !== undefined) setInclude(state.include as string)
+    if (state.derived !== undefined) setDerived(state.derived as string)
+    if (state.columnMap) setColumnMap(state.columnMap as Record<string, ColumnRule>)
+    if (state.metaMap) setMetaMap(state.metaMap as Record<string, MetaRule>)
+    if (state.drafts) setDrafts(state.drafts as DraftChannel[])
+    if (state.newType !== undefined)
+      setNewType(state.newType as { key: string; label: string; abbr: string } | null)
+    setDraft(null)
+  }
+
+  function definition(): ProfileDefinition {
+    const columnRules = writeColumnRules(columnMap)
     const specimen: NonNullable<ProfileDefinition['specimen']> = {}
-    const summary: Record<string, { key: string }> = {}
+    const summary: Record<string, { key: string; unit?: string }> = {}
+    const record: NonNullable<ProfileDefinition['record']> = {}
+    const identity: NonNullable<ProfileDefinition['identity']> = {}
     const metadata: string[] = []
     for (const [name, rule] of Object.entries(metaMap)) {
+      if (rule.role === 'record' && rule.target) {
+        record[name] = rule.format ? { field: rule.target, format: rule.format } : { field: rule.target }
+        continue
+      }
+      if (rule.role === 'identity' && rule.target) {
+        identity[name] = { field: rule.target }
+        continue
+      }
       // 단위를 안 적었으면 글자로 둔다 — 옛 정의와 같은 모양이라 쓸데없는
       // 리비전이 안 생긴다.
       if (rule.role === 'specimen' && rule.target)
         specimen[name] = rule.unit ? { key: rule.target, unit: rule.unit } : rule.target
-      else if (rule.role === 'summary' && rule.target) summary[name] = { key: rule.target }
+      else if (rule.role === 'summary' && rule.target)
+        summary[name] = rule.unit ? { key: rule.target, unit: rule.unit } : { key: rule.target }
       else if (rule.role === 'keep') metadata.push(name)
     }
     return {
@@ -455,6 +674,10 @@ export default function FormatProfileEditorPage() {
       columns: columnRules,
       ...(Object.keys(specimen).length ? { specimen } : {}),
       ...(Object.keys(summary).length ? { summary } : {}),
+      // 비면 키를 아예 안 넣는다 — 옛 프로파일을 열었다 저장만 해도 정의가
+      // 한 줄씩 늘면 진짜 변경이 diff 에서 파묻힌다.
+      ...(Object.keys(record).length ? { record } : {}),
+      ...(Object.keys(identity).length ? { identity } : {}),
       metadata,
     }
   }
@@ -523,6 +746,9 @@ export default function FormatProfileEditorPage() {
         await testsApi.createFormat({ ...payload, key: form.key, owner_workspace_slug: owner })
       }
       else await testsApi.updateFormat(form.key, payload)
+      // 저장됐으면 임시본은 뜻이 없다. 남겨 두면 다음에 열 때 「복원할까요」 가
+      // 뜨고, 그건 이미 저장된 것보다 오래된 것이다.
+      forgetDraft(routeKey)
       navigate('/settings/formats')
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
@@ -623,6 +849,42 @@ export default function FormatProfileEditorPage() {
 
       <ErrorNotice error={types.error ?? existing.error ?? error} className="mb-4" />
 
+      {/* **말없이 채우지 않는다.** 어제 만들다 만 것 위에 오늘 새로 만들려던
+          사람이 그 사실을 모른 채 저장하면 안 된다. */}
+      {draft && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3 text-sm">
+          <History className="size-4 shrink-0" />
+          <span>
+            만들다 만 것이 이 브라우저에 남아 있습니다
+            <span className="text-muted-foreground"> · {since(draft.at, Date.now())}</span>
+            {draft.fileName && (
+              <span className="text-muted-foreground"> · {draft.fileName} 을 보며</span>
+            )}
+          </span>
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => applyDraft(draft)}>
+              이어서 하기
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                forgetDraft(routeKey)
+                setDraft(null)
+              }}
+            >
+              버리기
+            </Button>
+          </div>
+          {draft.fileName && (
+            <p className="text-muted-foreground w-full text-xs">
+              파일은 담을 수 없어 이름만 적어 두었습니다. 이어서 한 뒤{' '}
+              <b>{draft.fileName}</b> 을 다시 놓으면 적용해 보기가 됩니다.
+            </p>
+          )}
+        </div>
+      )}
+
       {!creating && !existing.loading && existing.data === null && (
         <Warning text={`'${routeKey}' 프로파일이 없습니다. 지워졌거나 주소가 틀렸습니다.`} />
       )}
@@ -672,6 +934,14 @@ export default function FormatProfileEditorPage() {
             title="무엇으로 이 형식을 알아볼까"
             hint="확장자만으로는 못 가릅니다 — .csv 는 어느 장비나 씁니다. 헤더의 열 이름이 장비를 가장 잘 나타냅니다."
           >
+            {/* **규칙을 한 번만, 세 칸보다 위에 적는다.** 라벨이 「…가 있으면」
+                이던 때는 조건이 라벨에 녹아 있었는데, 그 문법이 칸마다 달라서
+                셋의 관계(칸끼리 AND · 칸 안에서 OR)는 어디에도 없었다. */}
+            <p className="text-muted-foreground mb-3 text-xs">
+              <b>적은 칸끼리는 모두 맞아야</b> 합니다. <b>한 칸에 여럿 적으면 그중 하나만</b>{' '}
+              맞으면 됩니다.
+            </p>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <TokenField
                 label="확장자"
@@ -680,44 +950,29 @@ export default function FormatProfileEditorPage() {
                 onChange={setExtensions}
               />
               <TokenField
-                label="메타 키가 있으면"
+                label="메타 키 지정"
                 placeholder="Instrument name"
                 values={metaAny}
                 onChange={setMetaAny}
-                options={preview?.meta.map(([key]) => key) ?? []}
+                picks={preview?.meta.map(([key]) => key) ?? []}
               />
             </div>
 
             <div className="mt-3">
-              <Label className="text-xs">헤더에 이 열 이름이 있으면</Label>
-              <p className="text-muted-foreground mb-2 text-xs">
-                하나만 맞아도 이 프로파일로 봅니다. 그 장비에만 있는 이름을 고르세요.
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {[...new Set((preview?.tables ?? []).flatMap((table) => table.header))]
-                  .filter(Boolean)
-                  .map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      className={`rounded-md border px-2 py-1 text-xs ${
-                        headerAny.includes(name) ? 'bg-primary text-primary-foreground' : ''
-                      }`}
-                      onClick={() =>
-                        setHeaderAny((current) =>
-                          current.includes(name)
-                            ? current.filter((item) => item !== name)
-                            : [...current, name]
-                        )
-                      }
-                    >
-                      {name}
-                    </button>
-                  ))}
-                {!preview && (
-                  <span className="text-muted-foreground text-xs">파일을 먼저 놓으세요.</span>
+              {/* 전에는 이 칸이 **칩 전용**이었다. 그래서 파일을 안 놓고 편집을
+                  열면 저장된 헤더 지문이 화면에서 사라졌고, 그대로 저장하면
+                  지문이 날아갔다. 입력칸을 정본으로 두고 칩은 거드는 것으로. */}
+              <TokenField
+                label="헤더 열 이름 지정"
+                placeholder="Storage modulus"
+                values={headerAny}
+                onChange={setHeaderAny}
+                picks={[...new Set((preview?.tables ?? []).flatMap((table) => table.header))].filter(
+                  Boolean
                 )}
-              </div>
+                hint="그 장비에만 있는 이름을 고르세요."
+                emptyHint={preview ? undefined : '파일을 놓으면 이 파일의 열 이름을 눌러 고를 수 있습니다.'}
+              />
               {headerAny.length === 0 && metaAny.length === 0 && (
                 <p className="text-muted-foreground mt-2 text-xs">
                   헤더나 메타 지문 없이 확장자만 쓰면 <b>같은 확장자의 모든 파일</b>이 이
@@ -737,6 +992,45 @@ export default function FormatProfileEditorPage() {
             title="어느 표를 읽을까"
             hint="한 파일에 표가 여럿인 장비가 있습니다. TA DMA850 은 [step] 마다 별개 측정이라 이어 붙이면 서로 다른 온도의 곡선이 한 줄이 됩니다."
           >
+            {/* **뜻을 항상 적어 둔다.** 전에는 「측정」·「처리결과」 라는 말이
+                라벨과 배지로만 나왔고, 그 뜻은 규칙이 안 맞아 건너뛴 표가 있을
+                때만 뜨는 안내 한 줄에 반쯤 들어 있었다 — 규칙을 다 맞추면
+                설명이 사라졌다. */}
+            <div className="mb-3 space-y-1.5 rounded-md border border-dashed p-3 text-xs">
+              <p className="flex items-start gap-2">
+                <Badge variant="secondary" className="shrink-0">
+                  측정
+                </Badge>
+                <span>
+                  장비가 <b>실제로 재서</b> 남긴 표. 처리(공칭 변환·마스터커브·경화식)의{' '}
+                  <b>원본</b>이 됩니다.
+                </span>
+              </p>
+              <p className="flex items-start gap-2">
+                <Badge variant="outline" className="shrink-0">
+                  처리결과
+                </Badge>
+                <span>
+                  장비 소프트웨어가 <b>이미 계산해 낸</b> 표(TTS 마스터 곡선·이동인자).
+                  곡선으로 <b>보관은 하되 처리의 입력으로는 쓰지 않습니다</b> — 마스터커브에
+                  또 마스터커브를 씌우게 됩니다.
+                </span>
+              </p>
+              <p className="flex items-start gap-2">
+                <Badge variant="outline" className="text-muted-foreground shrink-0 opacity-60">
+                  건너뜀
+                </Badge>
+                <span>
+                  아예 안 읽습니다. 버려졌다는 사실은 등록할 때 <b>경고로 남습니다</b>.
+                </span>
+              </p>
+              <p className="text-muted-foreground">
+                예: TA DMA850 파일 하나에 <code>Temperature Sweep - 2…7</code> 여섯 벌(측정)과{' '}
+                <code>TTS - master curve</code>(처리결과)가 함께 들어 있습니다. 버리지도 섞지도
+                않으려고 갈라 둡니다.
+              </p>
+            </div>
+
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-40 space-y-1.5">
                 <Label className="text-xs">범위</Label>
@@ -778,19 +1072,41 @@ export default function FormatProfileEditorPage() {
             {preview && (
               <div className="mt-3 space-y-1">
                 {classified.map(({ table, kind }) => (
-                  <div
-                    key={table.index}
-                    className={`flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${
-                      kind ? '' : 'opacity-40'
-                    }`}
-                  >
-                    <Badge variant={kind === 'measured' ? 'secondary' : 'outline'}>
-                      {kind === 'measured' ? '측정' : kind === 'derived' ? '처리결과' : '건너뜀'}
-                    </Badge>
-                    <span className="font-medium">{table.name ?? `표 ${table.index + 1}`}</span>
-                    <span className="text-muted-foreground">
-                      {table.row_count}행 × {table.column_count}열 · {table.first_line}줄부터
-                    </span>
+                  <div key={table.index}>
+                    <button
+                      type="button"
+                      className={`hover:bg-muted/50 flex w-full items-center gap-2 rounded-md border px-2 py-1 text-left text-xs ${
+                        kind ? '' : 'opacity-40'
+                      }`}
+                      onClick={() =>
+                        setOpenTable((current) =>
+                          current === table.index ? null : table.index
+                        )
+                      }
+                    >
+                      <Badge variant={kind === 'measured' ? 'secondary' : 'outline'}>
+                        {kind === 'measured' ? '측정' : kind === 'derived' ? '처리결과' : '건너뜀'}
+                      </Badge>
+                      <span className="font-medium">{table.name ?? `표 ${table.index + 1}`}</span>
+                      <span className="text-muted-foreground">
+                        {table.row_count}행 × {table.column_count}열
+                      </span>
+                      {/* **열 이름이 표를 가른다.** 이름이 비슷한 표가 여섯 벌
+                          들어오는 파일에서, `[step]` 마다 열 구성이 다르다. */}
+                      <span className="text-muted-foreground min-w-0 flex-1 truncate">
+                        {table.header.filter(Boolean).slice(0, 3).join(' · ')}
+                        {table.header.filter(Boolean).length > 3 &&
+                          ` 외 ${table.header.filter(Boolean).length - 3}개`}
+                      </span>
+                      <span className="text-muted-foreground shrink-0">
+                        {openTable === table.index ? '접기' : '내용 보기'}
+                      </span>
+                    </button>
+                    {openTable === table.index && (
+                      <div className="mt-1 mb-2">
+                        <TablePreviewRows table={table} />
+                      </div>
+                    )}
                   </div>
                 ))}
                 {classified.some((row) => row.kind === null) && (
@@ -817,8 +1133,15 @@ export default function FormatProfileEditorPage() {
                   value={newType ? NEW_TYPE : form.test_type_key}
                   onValueChange={(value) => {
                     // 종류가 바뀌면 이전 채널 키는 그 종류에 없다.
+                    // 채널만 지운다. **단위와 `skip` 은 종류와 무관하다** —
+                    // 그것까지 지우면 열 20개짜리 장비에서 다시 다 적어야 한다.
                     setColumnMap((current) =>
-                      Object.fromEntries(Object.keys(current).map((name) => [name, '']))
+                      Object.fromEntries(
+                        Object.entries(current).map(([name, rule]) => [
+                          name,
+                          { ...rule, channel: '' },
+                        ])
+                      )
                     )
                     setDrafts([])
                     if (value === NEW_TYPE) {
@@ -875,13 +1198,17 @@ export default function FormatProfileEditorPage() {
                   size="sm"
                   variant="secondary"
                   onClick={() =>
-                    setColumnMap((current) => ({
-                      ...current,
-                      ...autoMap(
+                    setColumnMap((current) => {
+                      const hit = autoMap(
                         columns.map((column) => column.name),
                         testType
-                      ),
-                    }))
+                      )
+                      const next = { ...current }
+                      for (const [name, channel] of Object.entries(hit)) {
+                        next[name] = { ...(next[name] ?? EMPTY_RULE), channel }
+                      }
+                      return next
+                    })
                   }
                 >
                   이름이 비슷한 것끼리 채우기
@@ -896,7 +1223,7 @@ export default function FormatProfileEditorPage() {
                   variant="secondary"
                   onClick={() => {
                     for (const column of columns) {
-                      if (columnMap[column.name]) continue
+                      if (columnMap[column.name]?.channel) continue
                       addDraft(column)
                     }
                   }}
@@ -968,24 +1295,49 @@ export default function FormatProfileEditorPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>파일의 열 이름</TableHead>
-                    <TableHead>단위</TableHead>
+                    <TableHead>파일이 준 단위</TableHead>
                     <TableHead>첫 값</TableHead>
                     <TableHead className="w-56">우리 채널</TableHead>
+                    <TableHead className="w-32">단위 지정</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {columns.map((column) => (
                     <TableRow key={column.name}>
                       <TableCell className="text-sm">{column.name || '(이름 없음)'}</TableCell>
-                      <TableCell className="text-muted-foreground font-mono text-xs">
-                        {column.unit || '—'}
+                      <TableCell className="font-mono text-xs">
+                        {(() => {
+                          const rule = columnMap[column.name] ?? EMPTY_RULE
+                          const state = unitState({
+                            unit: rule.unit,
+                            raw: column.raw,
+                            symbol: column.symbol,
+                            inFile: column.inFile,
+                          })
+                          const note = unitNote(state, column.raw ?? '', column.symbol)
+                          return (
+                            <span
+                              className={
+                                note.tone === 'warn'
+                                  ? 'text-amber-700 dark:text-amber-500'
+                                  : 'text-muted-foreground'
+                              }
+                            >
+                              {note.text}
+                            </span>
+                          )
+                        })()}
                       </TableCell>
                       <TableCell className="text-muted-foreground font-mono text-xs">
                         {column.sample || '—'}
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={columnMap[column.name] || 'none'}
+                          value={
+                            columnMap[column.name]?.skip
+                              ? SKIP_COLUMN
+                              : columnMap[column.name]?.channel || 'none'
+                          }
                           onValueChange={(value) => {
                             if (value === NEW_CHANNEL) {
                               addDraft(column)
@@ -993,7 +1345,11 @@ export default function FormatProfileEditorPage() {
                             }
                             setColumnMap((current) => ({
                               ...current,
-                              [column.name]: value === 'none' ? '' : value,
+                              [column.name]: {
+                                ...(current[column.name] ?? EMPTY_RULE),
+                                channel: value === 'none' || value === SKIP_COLUMN ? '' : value,
+                                skip: value === SKIP_COLUMN,
+                              },
                             }))
                           }}
                         >
@@ -1002,6 +1358,7 @@ export default function FormatProfileEditorPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">— 안 정함</SelectItem>
+                            <SelectItem value={SKIP_COLUMN}>× 아예 안 읽음</SelectItem>
                             {channelOptions.map((channel) => (
                               <SelectItem key={channel.key} value={channel.key}>
                                 {channel.label}
@@ -1015,6 +1372,29 @@ export default function FormatProfileEditorPage() {
                             )}
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        {/* **여기가 없어서 JSON 을 못 읽었다.** 파일에 단위 줄이
+                            없으면(JSON) 프로파일이 단위를 말해 주는 수밖에 없다.
+                            비워 두면 파일이 준 것을 쓴다 — 미리 채우지 않는 이유는
+                            `profileColumns.ts` 머리말에 있다. */}
+                        <Input
+                          className="h-8 w-28 font-mono text-xs"
+                          list={`units-${unitListFor(column.name)}`}
+                          placeholder={columnMap[column.name]?.skip ? '—' : '파일대로'}
+                          disabled={columnMap[column.name]?.skip}
+                          title="비우면 파일이 준 단위를 씁니다. 파일에 단위가 없으면(JSON) 여기 적어야 등록됩니다. 무차원은 1 입니다."
+                          value={columnMap[column.name]?.unit ?? ''}
+                          onChange={(event) =>
+                            setColumnMap((current) => ({
+                              ...current,
+                              [column.name]: {
+                                ...(current[column.name] ?? EMPTY_RULE),
+                                unit: event.target.value.trim(),
+                              },
+                            }))
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1102,6 +1482,16 @@ export default function FormatProfileEditorPage() {
                 못 잡습니다.
               </p>
               <p>
+                <b>JSON 파일에는 단위 줄이 없습니다.</b> 그때는 <b>단위 지정</b> 칸에 적어야
+                읽힙니다 — 비워 두면 파일이 준 것을 쓰는데, 줄 자체가 없으니 아무것도 못
+                받습니다. 무차원은 빈 칸이 아니라 <code>1</code> 입니다.
+              </p>
+              <p>
+                <b>단위 지정은 파일을 이깁니다.</b> 그래서 파일이 준 값을 미리 채워 두지
+                않습니다 — 같은 열이 파일에 따라 단위를 달고도 안 달고도 옵니다(실측 55회
+                대 33회). 한 파일에서 본 것을 굳히면 다음 파일이 조용히 잘못 읽힙니다.
+              </p>
+              <p>
                 열 이름이 <code>modulus</code>·<code>frequency</code>처럼 잘려 보이면 헤더가
                 여러 줄인 파일입니다. <b>헤더 줄 수</b>를 늘려 보세요.
               </p>
@@ -1114,6 +1504,19 @@ export default function FormatProfileEditorPage() {
             title="표 앞의 키-값을 어떻게 할까"
             hint="기계는 못 가릅니다. '최대하중 3466 N' 은 시험 결과이고 '두께 0.989 mm' 는 입력인데, 파일에서는 똑같이 생겼습니다."
           >
+            <div className="text-muted-foreground mb-3 space-y-1 text-xs">
+              <p>
+                <b>시험 칸에 채움</b> — 시험일·시험자·장비·사업부를 파일에서 채웁니다.{' '}
+                <b>빈 칸일 때만</b> 들어갑니다. 사람이 적은 값을 파일이 조용히 바꾸면 어느
+                것이 맞는지 알 수 없고, 다시 읽을 때마다 되돌아갑니다.
+              </p>
+              <p>
+                <b>어느 재료·시료·시편인지</b> — 파일이 말하는 재료 코드·로트·방향·시편
+                번호를 <b>짚어만 둡니다.</b> 자동으로 붙이지 않습니다 — 시험은 만들 때 그
+                시편에 매달리므로, 잘못 붙으면 칸을 고쳐 되돌릴 수 없습니다. 일괄 등록과
+                이관 스크립트가 이것을 읽어 짝을 찾아 줍니다.
+              </p>
+            </div>
             {metaRows.length === 0 ? (
               <p className="text-muted-foreground rounded-md border py-6 text-center text-xs">
                 파일을 놓으면 메타가 나옵니다.
@@ -1121,7 +1524,7 @@ export default function FormatProfileEditorPage() {
             ) : (
               <div className="space-y-1">
                 {metaRows.map(([name, value]) => {
-                  const rule = metaMap[name] ?? { role: 'keep' as MetaRole, target: '', unit: '' }
+                  const rule = metaMap[name] ?? { role: 'keep' as MetaRole, target: '', unit: '', format: '' }
                   return (
                     <div
                       key={name}
@@ -1172,6 +1575,50 @@ export default function FormatProfileEditorPage() {
                           }
                         />
                       )}
+                      {/* 시험 칸과 식별자는 **고르는 것**이다. 자유 입력으로 두면
+                          오타 하나가 조용히 아무것도 안 하는 규칙이 된다. */}
+                      {(rule.role === 'record' || rule.role === 'identity') && (
+                        <Select
+                          value={rule.target || 'none'}
+                          onValueChange={(value) =>
+                            setMetaMap((current) => ({
+                              ...current,
+                              [name]: { ...rule, target: value === 'none' ? '' : value },
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-48">
+                            <SelectValue placeholder="어느 칸" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">— 고르세요</SelectItem>
+                            {Object.entries(
+                              rule.role === 'record' ? RECORD_FIELD_LABEL : IDENTITY_FIELD_LABEL
+                            ).map(([field, label]) => (
+                              <SelectItem key={field} value={field}>
+                                {label}
+                                <span className="text-muted-foreground ml-2 font-mono text-xs">
+                                  {field}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {rule.role === 'record' && rule.target === 'tested_at' && (
+                        <Input
+                          className="h-8 w-40 font-mono text-xs"
+                          placeholder="%Y-%m-%d %H:%M"
+                          title="비우면 ISO(2024-03-11T09:00) 만 읽습니다. 05/06/2020 같은 값은 6월 5일인지 5월 6일인지 기계가 정하면 안 되므로, 형식을 적지 않으면 비워 둡니다."
+                          value={rule.format}
+                          onChange={(event) =>
+                            setMetaMap((current) => ({
+                              ...current,
+                              [name]: { ...rule, format: event.target.value },
+                            }))
+                          }
+                        />
+                      )}
                       {rule.role === 'specimen' && (
                         <Input
                           className="h-8 w-24 font-mono text-xs"
@@ -1194,13 +1641,29 @@ export default function FormatProfileEditorPage() {
                     </div>
                   )
                 })}
+                {/* 단위 후보. 차원마다 하나씩 두고 열이 자기 것을 가리킨다. */}
+                <datalist id="units-all">
+                  {ALL_UNITS.map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+                {Object.entries(UNITS_BY_DIMENSION).map(([dimension, list]) => (
+                  <datalist key={dimension} id={`units-${dimension}`}>
+                    {list.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                ))}
                 <datalist id="specimen-keys">
                   {SPECIMEN_KEYS.map((item) => (
                     <option key={item} value={item} />
                   ))}
                 </datalist>
                 <datalist id="specimen-units">
-                  {SPECIMEN_UNITS.map((item) => (
+                  {/* **표에서 읽는다.** 손으로 적었더니 `in` 이 들어 있었는데
+                      `matcore.units` 에 없는 표기라, 고르면 치수가 조용히 안
+                      채워졌다. */}
+                  {UNITS_BY_DIMENSION.length.map((item) => (
                     <option key={item} value={item} />
                   ))}
                 </datalist>
@@ -1331,6 +1794,14 @@ export default function FormatProfileEditorPage() {
               {busy === 'save' ? '저장하는 중…' : '저장'}
             </Button>
 
+            {/* 자동으로 적고 있다는 사실을 말한다. 안 말하면 사람은 새로고침을
+                피하려고 애쓰거나, 반대로 잃고 나서야 안다. */}
+            <p className="text-muted-foreground mt-2 text-xs">
+              {draftSaved
+                ? `고칠 때마다 이 브라우저에 임시로 적어 둡니다 (${since(draftSaved, Date.now())}).`
+                : '이 브라우저에 임시 저장을 할 수 없습니다 — 창을 닫으면 사라집니다.'}
+            </p>
+
             <ul className="mt-3 space-y-1">
               {checklist.map((item) => (
                 <li
@@ -1419,12 +1890,20 @@ export default function FormatProfileEditorPage() {
                 <p className="flex items-center gap-1.5 text-sm">
                   <CheckCircle2 className="size-4 text-emerald-600" />
                   곡선 {tried.curves.length}벌
+                  {/* ③ 에서 정한 구분이 **실제로 그렇게 적용됐는지** 여기서 확인한다. */}
+                  {tried.curves.some((curve) => curve.kind === 'derived') &&
+                    ` (측정 ${tried.curves.filter((c) => c.kind !== 'derived').length} · 처리결과 ${
+                      tried.curves.filter((c) => c.kind === 'derived').length
+                    })`}
                   {tried.summary.length > 0 && ` · 요약값 ${tried.summary.length}개`}
                 </p>
 
                 {tried.curves.map((curve) => (
                   <div key={curve.key} className="rounded-md border">
                     <div className="flex flex-wrap items-center gap-1.5 border-b px-2 py-1.5 text-xs">
+                      <Badge variant={curve.kind === 'derived' ? 'outline' : 'secondary'}>
+                        {curve.kind === 'derived' ? '처리결과' : '측정'}
+                      </Badge>
                       <span className="font-medium">{curve.label ?? curve.key}</span>
                       <span className="text-muted-foreground">{curve.row_count}행</span>
                     </div>
@@ -1517,27 +1996,35 @@ function Warning({ text }: { text: string }) {
   )
 }
 
-/** 쉼표·공백으로 여러 값을 받는 칸. */
+/**
+ * 쉼표로 여러 값을 받는 칸. 파일이 후보를 알려 주면 **눌러서** 고를 수도 있다.
+ *
+ * 입력칸이 정본이고 칩은 거드는 것이다. 반대로 두었더니(칩 전용) 파일을 안 놓고
+ * 편집을 열면 저장된 지문이 화면에서 사라졌고, 그대로 저장하면 날아갔다.
+ */
 function TokenField({
   label,
   placeholder,
   values,
   onChange,
-  options,
+  picks,
+  hint,
+  emptyHint,
 }: {
   label: string
   placeholder: string
   values: string[]
   onChange: (next: string[]) => void
-  options?: string[]
+  picks?: string[]
+  hint?: string
+  emptyHint?: string
 }) {
-  const id = `token-${label}`
   return (
     <div className="space-y-1.5">
       <Label className="text-xs">{label}</Label>
+      {hint && <p className="text-muted-foreground text-xs">{hint}</p>}
       <Input
         className="h-8 font-mono text-xs"
-        list={options?.length ? id : undefined}
         placeholder={placeholder}
         value={values.join(', ')}
         onChange={(event) =>
@@ -1549,12 +2036,29 @@ function TokenField({
           )
         }
       />
-      {options?.length ? (
-        <datalist id={id}>
-          {options.map((item) => (
-            <option key={item} value={item} />
+      {picks?.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {picks.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={`rounded-md border px-2 py-1 text-xs ${
+                values.includes(item) ? 'bg-primary text-primary-foreground' : ''
+              }`}
+              onClick={() =>
+                onChange(
+                  values.includes(item)
+                    ? values.filter((one) => one !== item)
+                    : [...values, item]
+                )
+              }
+            >
+              {item}
+            </button>
           ))}
-        </datalist>
+        </div>
+      ) : emptyHint ? (
+        <p className="text-muted-foreground text-xs">{emptyHint}</p>
       ) : null}
     </div>
   )

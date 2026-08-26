@@ -20,11 +20,18 @@
 나서 그것을 알면 되돌릴 방법이 없다 — 처리 결과는 불변이고, 지우는 스크립트는
 언젠가 잘못된 것을 지운다.
 
-## 식별자는 프로파일이 읽은 메타에서 온다
+## 식별자는 **프로파일이** 안다
 
 파일의 열 이름을 이 스크립트가 또 알면, 형식이 조금 달라질 때마다 **두 군데**를
-고쳐야 한다. 그래서 프로파일이 읽어 준 메타 키를 쓴다. 키 이름이 다르면
-`--material-key` 따위로 바꾼다 — 파일을 고치지 않는다.
+고쳐야 하고 한쪽만 고쳐지는 날이 온다. 그래서 프로파일의 `identity` 선언을
+먼저 본다 — 편집 화면의 ⑤ 에서 「어느 재료·시료·시편인지」 로 정하는 그것이다.
+
+찾는 순서는 넷이고, 앞엣것이 이긴다.
+
+    ① 프로파일의 `identity` 선언
+    ② `--material-key` 따위로 준 메타 키   ← 막다른 곳에서 빠져나올 문
+    ③ 흔한 이름(`material_code`·`lot_no`·`specimen_no`·`orientation`)
+    ④ `--name-pattern` 으로 파일 이름에서
 
 ## 파일 안에 없으면 파일 **이름**에서 뽑는다
 
@@ -211,10 +218,22 @@ def _read(
         return row
 
     meta = parsed.metadata
-    row.grade = str(meta.get(keys["material"], "")).strip()
-    row.lot = str(meta.get(keys["lot"], "")).strip()
-    row.orientation = str(meta.get(keys["orientation"], "")).strip().upper()
-    raw_seq = str(meta.get(keys["seq"], "")).strip()
+    told = parsed.identity  # 프로파일이 선언한 것. 이것이 먼저다.
+
+    def pick(field: str, given: str | None, fallback: str) -> str:
+        # ① 사람이 준 키가 이긴다 — 프로파일이 틀렸을 때 빠져나올 문이다.
+        if given:
+            return str(meta.get(given, "")).strip()
+        # ② 프로파일이 선언한 것.
+        if told.get(field):
+            return str(told[field]).strip()
+        # ③ 흔한 이름.
+        return str(meta.get(fallback, "")).strip()
+
+    row.grade = pick("material_grade", keys["material"], "material_code")
+    row.lot = pick("sample_lot_no", keys["lot"], "lot_no")
+    row.orientation = pick("specimen_orientation", keys["orientation"], "orientation").upper()
+    raw_seq = pick("specimen_seq_no", keys["seq"], "specimen_no")
     row.seq = int(raw_seq) if raw_seq.isdigit() else None
     row.dimensions = instrument_dimensions(meta)
     row.points = len(parsed.curves[0].channels[0].values) if parsed.curves else 0
@@ -236,20 +255,24 @@ def _read(
     missing = [
         name
         for name, value in (
-            (keys["material"], row.grade),
-            (keys["lot"], row.lot),
-            (keys["orientation"], row.orientation),
+            ("재료 코드", row.grade),
+            ("로트", row.lot),
+            ("방향", row.orientation),
         )
         if not value
     ]
     if row.seq is None:
-        missing.append(keys["seq"])
+        missing.append("시편 번호")
     if missing and pattern is None:
         missing.append("— 파일 이름에서 뽑으려면 --name-pattern 을 주세요")
     if missing:
         # **지어내지 않는다.** 시편 번호를 파일 순서로 매기면, 폴더에 파일이
         # 하나 더 들어온 날 번호가 통째로 밀린다.
-        row.problem = f"메타에 없습니다: {', '.join(missing)}. 있는 키: {sorted(meta)[:12]}"
+        row.problem = (
+            f"어디서 읽을지 모릅니다: {', '.join(missing)}. "
+            f"프로파일 ⑤ 에서 「어느 재료·시료·시편인지」 로 정하거나 "
+            f"--material-key 따위로 주세요. 있는 키: {sorted(meta)[:12]}"
+        )
     elif not row.dimensions:
         # 오류는 아니지만 처리 1단계가 여기서 멈춘다. 미리 말한다.
         row.problem = (
@@ -467,10 +490,12 @@ def main() -> None:
     parser.add_argument("--thickness", type=float, default=None, help="공칭 두께(mm)")
     parser.add_argument("--division", default="", help="사업부")
     parser.add_argument("--note", default="옛 데이터 이관", help="재료·시험 메모")
-    parser.add_argument("--material-key", default="material_code")
-    parser.add_argument("--lot-key", default="lot_no")
-    parser.add_argument("--seq-key", default="specimen_no")
-    parser.add_argument("--orientation-key", default="orientation")
+    # **기본을 비워 둔다.** 값이 있으면 "사람이 일부러 정했다" 는 뜻이고, 그때만
+    # 프로파일보다 먼저 이긴다. 기본값을 박아 두면 그 구별이 사라진다.
+    parser.add_argument("--material-key", default=None, help="프로파일 선언을 덮어쓴다")
+    parser.add_argument("--lot-key", default=None)
+    parser.add_argument("--seq-key", default=None)
+    parser.add_argument("--orientation-key", default=None)
     parser.add_argument(
         "--name-pattern",
         default=None,

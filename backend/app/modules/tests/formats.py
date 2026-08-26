@@ -28,6 +28,8 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.tests.models import FormatProfile, TestType
 from app.modules.tests.schemas import (
+    IDENTITY_FIELDS,
+    RECORD_FIELDS,
     FormatProfileCreateRequest,
     FormatProfileOut,
     FormatProfileSaveRequest,
@@ -209,6 +211,7 @@ def try_profile(
                 key=curve.key,
                 label=curve.label,
                 row_count=len(curve.channels[0].values) if curve.channels else 0,
+                kind=curve.kind,
                 channels=[
                     TriedChannelOut(
                         key=channel.key,
@@ -235,6 +238,8 @@ def try_profile(
         ],
         metadata=parsed.metadata,
         warnings=list(parsed.warnings),
+        record=parsed.record,
+        identity=parsed.identity,
     )
 
 
@@ -354,3 +359,60 @@ def _validate(definition: dict[str, Any]) -> None:
         )
     if not definition.get("columns"):
         raise AppError("MNX-TESTS-0026", "열 매핑이 비어 있습니다.", status=422)
+
+    _check_units(definition)
+    _check_fields(definition, "record", RECORD_FIELDS, "MNX-TESTS-0034")
+    _check_fields(definition, "identity", IDENTITY_FIELDS, "MNX-TESTS-0035")
+
+
+def _check_units(definition: dict[str, Any]) -> None:
+    """선언한 단위를 **저장할 때** 본다.
+
+    안 보면 저장은 되고 등록에서 실패한다. 그 실패는 파일을 올린 다음에야
+    보이고 원인은 이 화면에 있으므로, 사람은 두 화면을 왕복하며 짐작하게 된다.
+    """
+    bad: list[str] = []
+    for where in ("columns", "summary", "specimen"):
+        for name, rule in (definition.get(where) or {}).items():
+            if not isinstance(rule, dict):
+                continue
+            raw = rule.get("unit")
+            if raw and profiles.unit_symbol(str(raw)) is None:
+                bad.append(f"'{name}' 의 {raw!r}")
+    if bad:
+        raise AppError(
+            "MNX-TESTS-0026",
+            f"모르는 단위 표기입니다 — {' / '.join(bad)}. 무차원은 1 로 적습니다.",
+            status=422,
+        )
+
+
+def _check_fields(
+    definition: dict[str, Any], where: str, allowed: dict[str, str], code: str
+) -> None:
+    """`record` · `identity` 가 **있는 칸만** 가리키는지.
+
+    오타 하나가 조용히 아무것도 안 하는 규칙이 되면, 사람은 "왜 안 채워지지" 를
+    파일 쪽에서 찾는다. 그리고 **한 칸을 둘이 가리키면** 어느 쪽이 이길지는
+    dict 순서가 정하는데, 그건 사람이 정한 것이 아니다.
+    """
+    seen: dict[str, str] = {}
+    for label, rule in (definition.get(where) or {}).items():
+        if not isinstance(rule, dict):
+            continue
+        field = str(rule.get("field") or "")
+        if field not in allowed:
+            raise AppError(
+                code,
+                f"'{label}' 이 가리키는 칸 {field!r} 이 없습니다. "
+                f"쓸 수 있는 칸: {', '.join(allowed)}",
+                status=422,
+            )
+        if field in seen:
+            raise AppError(
+                code,
+                f"'{seen[field]}' 와 '{label}' 이 같은 칸({allowed[field]})을 "
+                f"가리킵니다. 어느 쪽을 쓸지 기계가 정하면 안 됩니다.",
+                status=422,
+            )
+        seen[field] = label

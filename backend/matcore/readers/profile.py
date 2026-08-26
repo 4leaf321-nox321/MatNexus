@@ -22,8 +22,14 @@
       "specimen":{"Thickness": "specimen_thickness",              # 값에 단위가 붙어 올 때
                   "Thickness (mm)": {"key": "specimen_thickness", "unit": "mm"}},
                                                                  # 단위가 이름에만 있을 때
-      "metadata":["Operator", "Instrument name", "rundate"]
+      "metadata":["Operator", "Instrument name", "rundate"],
+      "record":  {"Operator": {"field": "operator"},          # 시험 기록의 칸에 채운다
+                  "rundate":  {"field": "tested_at", "format": "%Y-%m-%d"}},
+      "identity":{"material_code": {"field": "material_grade"}}  # 어느 재료의 것인지 짚는다
     }
+
+`record` 와 `identity` 는 **이름표만 붙인다.** 어느 컬럼인지, 채워도 되는지는
+이 층이 모른다 — 그 판단은 DB 를 아는 쪽에 있다.
 """
 
 from __future__ import annotations
@@ -144,6 +150,8 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
             f" — {' / '.join(dict.fromkeys(errors))}"
         )
     summary, metadata = _build_meta(profile, structure, warnings)
+    record = _build_labels(profile.get("record"), structure, warnings, dates=True)
+    identity = _build_labels(profile.get("identity"), structure, warnings, dates=False)
 
     return ParsedTest(
         curves=tuple(curves),
@@ -151,6 +159,8 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
         summary=tuple(summary),
         metadata=metadata,
         warnings=tuple(warnings),
+        record=record,
+        identity=identity,
     )
 
 
@@ -357,6 +367,69 @@ def _build_meta(
         )
 
     return summary, metadata
+
+
+def _build_labels(
+    rules: Any,
+    structure: TabularFile,
+    warnings: list[str],
+    *,
+    dates: bool,
+) -> dict[str, str]:
+    """`record` · `identity` 를 만든다 — **메타 라벨을 칸 이름으로 옮긴다.**
+
+    ## 원문을 가져가지 않는다
+
+    여기서 고른 라벨도 `metadata` 에 그대로 남는다(`_build_meta` 가 따로 돈다).
+    가져가 버리면 "파일에는 뭐라고 적혀 있었나" 에 못 답하게 되는데, 그건 원본
+    보관의 뜻을 반쯤 없앤다.
+
+    ## 빈 값은 "안 적었다" 다
+
+    `""` · `Unknown` · `-` 는 값이 아니다. 그대로 넣으면 시험자가 `Unknown` 인
+    기록이 생기고, 그 뒤로는 그 칸이 비어 있었다는 사실을 알 수 없다.
+
+    ## 날짜를 짐작하지 않는다
+
+    `05/06/2020` 은 6월 5일일 수도 5월 6일일 수도 있다. **둘 다 그럴듯해서**
+    화면 어디에도 티가 안 난다. 그래서 ISO 로 읽히지 않으면 프로파일이 형식을
+    선언했을 때만 읽고, 아니면 경고를 남기고 **안 넣는다.**
+    """
+    if not isinstance(rules, dict) or not rules:
+        return {}
+
+    values = dict(structure.meta)
+    out: dict[str, str] = {}
+    for label, rule in rules.items():
+        if not isinstance(rule, dict):
+            continue
+        field_name = str(rule.get("field") or "").strip()
+        if not field_name:
+            continue
+        raw = str(values.get(label, "")).strip()
+        if not raw or raw.lower() in UNKNOWN_TEXTS:
+            continue
+        if dates and rule.get("format"):
+            parsed = _as_iso(raw, str(rule["format"]))
+            if parsed is None:
+                warnings.append(
+                    f"'{label}' 의 {raw!r} 를 날짜 형식 {rule['format']!r} 로 못 읽어 "
+                    f"비워 둡니다."
+                )
+                continue
+            raw = parsed
+        out[field_name] = raw
+    return out
+
+
+def _as_iso(raw: str, pattern: str) -> str | None:
+    """장비가 적은 날짜를 ISO 로. 못 읽으면 None — **짐작하지 않는다.**"""
+    from datetime import datetime
+
+    try:
+        return datetime.strptime(raw, pattern).isoformat()
+    except ValueError:
+        return None
 
 
 def _specimen_target(label: str, rule: Any) -> tuple[str, str]:

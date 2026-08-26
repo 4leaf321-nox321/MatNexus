@@ -25,6 +25,7 @@ from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
 from app.modules.tests.models import Curve, TestRun, TestType
+from app.modules.vocabulary.models import Vocabulary
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -287,6 +288,110 @@ class TestTryBeforeSave:
         )
         assert response.status_code == 422
         assert "지문" in response.json()["error"]["message"]
+
+    def test_모르는_단위를_적으면_저장을_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """**저장할 때 본다.** 안 보면 저장은 되고 등록에서 실패하는데, 그
+        실패는 파일을 올린 다음에야 보이고 원인은 편집 화면에 있다 — 사람은
+        두 화면을 왕복하며 짐작하게 된다."""
+        bad = {**DMA_PROFILE, "columns": {"A": {"channel": "a", "unit": "mmm"}}}
+        response = client.post(
+            "/api/formats",
+            json={
+                "key": "bad_unit",
+                "label": "모르는 단위",
+                "test_type_key": "dma_sweep",
+                "definition": bad,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        message = response.json()["error"]["message"]
+        assert "'A'" in message and "mmm" in message
+
+    def test_아는_단위는_통과한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """무차원은 빈 칸이 아니라 `1` 이다. 서버는 별칭(`Mpa`)도 알아본다."""
+        good = {
+            **DMA_PROFILE,
+            "columns": {
+                "Angular frequency": {"channel": "angular_frequency", "unit": "rad/s"},
+                "Tan(delta)": {"channel": "tan_delta", "unit": "1"},
+            },
+        }
+        response = client.post(
+            "/api/formats",
+            json={
+                "key": "good_unit",
+                "label": "단위 지정",
+                "test_type_key": "dma_sweep",
+                "definition": good,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 201
+
+    def test_없는_칸을_가리키면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """오타 하나가 조용히 아무것도 안 하는 규칙이 되면, 사람은 "왜 안
+        채워지지" 를 파일 쪽에서 찾는다."""
+        response = client.post(
+            "/api/formats",
+            json={
+                "key": "bad_field",
+                "label": "없는 칸",
+                "test_type_key": "dma_sweep",
+                "definition": {**DMA_PROFILE, "record": {"Operator": {"field": "seq_no"}}},
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        message = response.json()["error"]["message"]
+        assert "seq_no" in message and "operator" in message  # 쓸 수 있는 칸을 알려 준다
+
+    def test_한_칸을_둘이_가리키면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """어느 쪽이 이길지는 dict 순서가 정하는데, 그건 사람이 정한 것이 아니다."""
+        response = client.post(
+            "/api/formats",
+            json={
+                "key": "two_fields",
+                "label": "둘이 하나를",
+                "test_type_key": "dma_sweep",
+                "definition": {
+                    **DMA_PROFILE,
+                    "record": {
+                        "Operator": {"field": "operator"},
+                        "Instrument name": {"field": "operator"},
+                    },
+                },
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert "시험자" in response.json()["error"]["message"]
+
+    def test_시도가_채울_값을_미리_보여_준다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """저장하고 나서 아는 것과 저장 전에 아는 것은 다르다."""
+        rule = {
+            **DMA_PROFILE,
+            "record": {"Operator": {"field": "operator"}},
+            "identity": {"Sample name": {"field": "material_grade"}},
+        }
+        tried = client.post(
+            "/api/formats/try",
+            data={"definition": json.dumps(rule)},
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert tried["record"].get("operator")
+        assert tried["identity"].get("material_grade")
 
 
 class TestDetect:
@@ -1384,3 +1489,128 @@ class Test시험_종류_바로잡기:
         )
         detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
         assert detail["parse_profile_key"] is None
+
+
+class Test파일이_시험_칸을_채운다:
+    """*"시험데이터나 그 상위의 시료·시편·재료 데이터와 매칭시키는 기능은 없어?"*
+    — 실사용에서 나왔다.
+
+    답은 갈라진다. **시험 칸은 채우고, 식별자는 짚기만 한다.** 시험자를 잘못
+    채우면 고치면 되지만, 곡선이 남의 재료에 붙으면 그 시험은 만들 때 그 시편
+    id 에 묶여 있어 칸을 고쳐 되돌릴 수 없다.
+    """
+
+    @pytest.fixture
+    def told(self, client: TestClient, admin_headers: dict[str, str], dma: None) -> None:
+        del dma
+        rule = {
+            **DMA_PROFILE,
+            "record": {
+                "Operator": {"field": "operator"},
+                "Instrument name": {"field": "instrument"},
+            },
+        }
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": "dma_record",
+                "label": "칸을 채우는 DMA",
+                "test_type_key": "dma_sweep",
+                "definition": rule,
+                "priority": 90,  # 기본 프로파일보다 먼저 잡히게
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+    def test_빈_칸을_채운다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        del told
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["operator"]
+        assert detail["instrument"]
+
+    def test_사람이_적은_값을_파일이_안_덮는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**다시 읽기가 있다.** 덮어쓰면 사람이 고쳐 놓은 장비 이름이 다시
+        읽을 때마다 파일 값으로 되돌아간다."""
+        del told
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": "{}",
+                "operator": "내가 적은 사람",
+            },
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run = response.json()
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["operator"] == "내가 적은 사람"
+        # 비어 있던 칸은 채워진다 — 안 채우면 이 기능이 아무것도 안 하는 것이다.
+        assert detail["instrument"]
+
+    def test_선언이_없으면_아무것도_안_채운다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**하위 호환.** 기존 프로파일에 이 자리가 없으면 전과 똑같아야 한다."""
+        del dma
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert not detail["operator"]
+        assert not detail["instrument"]
+
+    def test_기준정보가_막혀도_곡선은_들어온다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """채우기는 **거들기이지 읽기가 아니다.**
+
+        장비 축을 닫아 두면 `resolve_or_create` 가 `AppError` 를 낸다. 그것을
+        그냥 두면 파싱 실패가 되어 **파일은 멀쩡히 읽혔는데 곡선까지 통째로
+        잃는다.** 그 값을 못 넣었다는 말만 남기고 넘어가야 한다.
+        """
+        del told
+        # 장비 축을 닫는다. 화면에서 여는 길은 없고 기준정보 설계가 정한다.
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "instrument"))
+        assert axis is not None
+        axis.entry_policy = "closed"
+        db.commit()
+
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["curves"], "곡선을 잃으면 안 된다"
+        assert not detail["instrument"]
+        # 무슨 일이 있었는지 남긴다 — 조용히 비면 사람이 원인을 못 찾는다.
+        # `_warnings` 는 상세 응답에서 `warnings` 로 갈라 나온다.
+        assert "장비" in " ".join(detail["warnings"])

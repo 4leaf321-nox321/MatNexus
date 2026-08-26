@@ -5236,8 +5236,22 @@ export interface components {
         ProfileTryOut: {
             /** Curves */
             curves: components["schemas"]["TriedCurveOut"][];
+            /**
+             * Identity
+             * @default {}
+             */
+            identity: {
+                [key: string]: string;
+            };
             /** Metadata */
             metadata: {
+                [key: string]: string;
+            };
+            /**
+             * Record
+             * @default {}
+             */
+            record: {
                 [key: string]: string;
             };
             /** Summary */
@@ -7033,6 +7047,11 @@ export interface components {
             channels: components["schemas"]["TriedChannelOut"][];
             /** Key */
             key: string;
+            /**
+             * Kind
+             * @default measured
+             */
+            kind: string;
             /** Label */
             label: string | null;
             /** Row Count */

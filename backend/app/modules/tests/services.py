@@ -32,11 +32,17 @@ from app.modules.tests.models import (
     TestSummary,
     TestType,
 )
+from app.modules.tests.schemas import RECORD_FIELDS
+from app.modules.vocabulary import services as vocabulary_services
 from app.shared import audit, filestore, permissions
 from app.shared.errors import AppError, NotFound
 from matcore import curves, parsers, readers, registry, units
 from matcore.parsers import ParsedTest, ParseError
 from matcore.readers import profile as profiles
+
+#: 기준정보를 거쳐 들어가는 칸(ADR 0010). 문자열을 그대로 박으면 'Zwick Z100' 과
+#: 'zwick z100' 이 갈려 장비별 비교가 무의미해진다.
+_RECORD_BOUND = {"instrument", "division"}
 
 logger = logging.getLogger(__name__)
 
@@ -658,14 +664,16 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     _store_summary(db, run, parsed)
 
     run.source_metadata = dict(parsed.metadata)
+    filled = _apply_record(db, run, parsed)
     run.parser_version = how[:80]
     run.status = "parsed"
     run.parse_error = None
-    if parsed.warnings:
+    notes = [*parsed.warnings, *filled]
+    if notes:
         # 경고는 실패가 아니지만 사라지면 안 된다. 상세 화면이 그대로 보여 준다.
         run.source_metadata = {
             **run.source_metadata,
-            "_warnings": " / ".join(parsed.warnings),
+            "_warnings": " / ".join(notes),
         }
     db.commit()
     logger.info(
@@ -676,6 +684,62 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
         len(parsed.warnings),
     )
     return "parsed"
+
+
+def _apply_record(db: Session, run: TestRun, parsed: ParsedTest) -> list[str]:
+    """파일이 말한 값을 시험 칸에 채운다. **빈 칸만.** 남긴 말을 돌려준다.
+
+    ## 왜 빈 칸만인가
+
+    사람이 올릴 때 적은 값을 파일이 조용히 바꾸면 어느 것이 맞는지 알 수 없다.
+    그리고 **다시 읽기**가 있다 — 덮어쓰면, 사람이 고쳐 놓은 장비 이름이 다시
+    읽을 때마다 파일 값으로 되돌아간다. 시편 치수를 채우는 자리와 같은 판단이다
+    (`apply_instrument_dimensions` 의 `overwrite`).
+
+    ## 곡선을 잃지 않는다
+
+    기준정보 축이 `closed` 면 `resolve_or_create` 가 `AppError` 를 낸다. 그것을
+    그냥 두면 `parse_run` 의 바깥 `except` 가 잡아 **파싱 실패**로 만든다 —
+    파일은 멀쩡히 읽혔는데 곡선까지 통째로 잃는다. 채우기는 거들기이지 읽기가
+    아니므로, 실패해도 **말만 남기고 넘어간다.**
+    """
+    if not parsed.record:
+        return []
+
+    said: list[str] = []
+    plain: dict[str, str | None] = {}
+    for field, raw in parsed.record.items():
+        if field not in RECORD_FIELDS:
+            continue
+        if getattr(run, field, None):
+            continue  # 사람이 이미 적었다. 건드리지 않는다.
+        if field == "tested_at":
+            try:
+                run.tested_at = datetime.fromisoformat(raw)
+            except ValueError:
+                said.append(f"파일의 시험일 {raw!r} 를 못 읽어 비워 둡니다.")
+            continue
+        if field in _RECORD_BOUND:
+            plain[field] = raw
+            continue
+        setattr(run, field, raw)
+
+    if plain:
+        try:
+            vocabulary_services.apply_bindings(
+                db,
+                run,
+                vocabulary_services.TEST_RUN_BINDINGS,
+                plain,
+                created_by_id=run.registered_by_id,
+            )
+        except AppError as error:
+            # 기준정보가 닫혀 있다. **곡선은 지킨다.**
+            said.append(
+                f"파일이 말한 {'·'.join(RECORD_FIELDS[key] for key in plain)} 를 "
+                f"기준정보에 넣지 못했습니다: {error.message}"
+            )
+    return said
 
 
 def _who_could_read(db: Session, run: TestRun, data: bytes) -> str | None:

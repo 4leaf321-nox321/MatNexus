@@ -5822,11 +5822,27 @@
             "title": "Curves",
             "type": "array"
           },
+          "identity": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Identity",
+            "type": "object"
+          },
           "metadata": {
             "additionalProperties": {
               "type": "string"
             },
             "title": "Metadata",
+            "type": "object"
+          },
+          "record": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Record",
             "type": "object"
           },
           "summary": {
@@ -10805,6 +10821,11 @@
           },
           "key": {
             "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "default": "measured",
+            "title": "Kind",
             "type": "string"
           },
           "label": {

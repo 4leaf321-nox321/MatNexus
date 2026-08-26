@@ -119,6 +119,26 @@ EDITABLE_FIELDS: dict[str, str] = {
     "note": "메모",
 }
 
+#: 프로파일이 **파일 메타에서 채울 수 있는** 시험 칸.
+#:
+#: 「사람이 손으로 옮겨도 되는 칸」 과 같은 목록이다 — 되돌릴 수 있는 값들이라는
+#: 뜻이 같기 때문이다. `note` 만 뺀다: 메모는 사람이 쓰는 자리이고, 파일이 거기에
+#: 무언가 적으면 사람이 쓴 것과 구별이 안 된다.
+RECORD_FIELDS: dict[str, str] = {
+    key: label for key, label in EDITABLE_FIELDS.items() if key != "note"
+}
+
+#: 프로파일이 **짚어 줄 수 있는** 식별자. 채우지는 않는다.
+#:
+#: 시험은 생성 시점에 시편 id 에 매달린다. 잘못 짚은 것을 나중에 칸을 고쳐
+#: 되돌릴 수 없으므로, 이쪽은 기계가 고르지 않고 사람에게 보여 주기만 한다.
+IDENTITY_FIELDS: dict[str, str] = {
+    "material_grade": "재료 코드",
+    "sample_lot_no": "로트",
+    "specimen_orientation": "방향",
+    "specimen_seq_no": "시편 번호",
+}
+
 
 class RunDeleteRequest(BaseModel):
     """여러 건을 한 번에 지운다."""
@@ -591,6 +611,13 @@ class TriedCurveOut(BaseModel):
     key: str
     label: str | None
     row_count: int
+    kind: str = "measured"
+    """측정인가, 장비가 계산해 준 것인가.
+
+    **표 선택 규칙이 실제로 그렇게 적용됐는지 확인하는 자리다.** 화면에서
+    `derived` 정규식을 쳐 놓고도, 그것이 맞았는지는 저장하고 등록해 봐야 알
+    수 있었다 — 틀리면 처리가 마스터커브에 또 마스터커브를 씌운다."""
+
     channels: list[TriedChannelOut]
 
 
@@ -612,6 +639,10 @@ class ProfileTryOut(BaseModel):
     summary: list[TriedSummaryOut]
     metadata: dict[str, str]
     warnings: list[str]
+    record: dict[str, str] = {}
+    """시험 칸에 **채워질** 값들. 빈 칸일 때만 들어간다."""
+    identity: dict[str, str] = {}
+    """이 파일이 어느 재료·시료·시편의 것인지 **짚어 주는** 값들. 채우지는 않는다."""
 
 
 class InstrumentDimensionOut(BaseModel):

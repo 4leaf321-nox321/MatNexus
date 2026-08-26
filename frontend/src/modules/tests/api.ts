@@ -50,13 +50,29 @@ export interface ProfileDefinition {
     /** **장비가 계산해 준 표**(TTS 마스터 곡선 등). 버리지도 섞지도 않는다. */
     derived?: string
   }
-  columns: Record<string, { channel: string; unit?: string }>
+  /** 열 규칙. **셋이 한 벌이다.**
+   *
+   *  `channel` 은 없을 수 있다 — 저장된 정의에 `{"skip": true}` 만 든 규칙이
+   *  있다(옛 앱 파일의 행 번호 열). `string` 이라고 단언해 두었더니 불러오기가
+   *  그 `undefined` 를 그대로 읽어 규칙을 통째로 잃었다.
+   *
+   *  `unit` 은 **파일이 준 단위를 이긴다**(`profile.py`). 그래서 파일에서 본
+   *  값을 여기에 미리 굳히지 않는다 — 같은 열이 파일에 따라 단위를 달고도
+   *  안 달고도 온다. */
+  columns: Record<string, { channel?: string; unit?: string; skip?: boolean }>
   summary?: Record<string, { key: string; unit?: string }>
   /** 시편 치수. 글자면 키만 정한 것이고(값에 단위가 붙어 오는 파일),
    *  dict 면 단위까지 정한 것이다 — **단위가 열 이름 안에만 있는 파일**이 있다
    *  (`Specimen thickness a0 (mm)` 옆의 값은 `0.986` 뿐이다). 단위를 안 적으면
    *  치수가 조용히 안 채워진다. */
   specimen?: Record<string, string | { key: string; unit?: string }>
+  /** 이 메타를 **시험 기록의 칸에 채운다.** 빈 칸일 때만 들어간다.
+   *  칸 이름의 정본은 서버의 `RECORD_FIELDS` 다. */
+  record?: Record<string, { field: string; format?: string }>
+  /** 이 메타가 **어느 재료·시료·시편의 것인지** 짚는다. 채우지는 않는다 —
+   *  잘못 붙은 곡선은 칸을 고쳐 되돌릴 수 없다.
+   *  칸 이름의 정본은 서버의 `IDENTITY_FIELDS` 다. */
+  identity?: Record<string, { field: string }>
   metadata?: string[]
 }
 

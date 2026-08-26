@@ -86,6 +86,24 @@ class ParsedTest:
     """곡선이 여럿일 때. 비어 있으면 `channels` 하나를 `raw` 로 본다."""
     warnings: tuple[str, ...] = ()
     """읽기는 했지만 이상한 것. 실패시키기에는 과하고 묻기에는 아까운 것들."""
+    record: dict[str, str] = field(default_factory=dict)
+    """시험 기록의 **칸에 채울 값들.** 키는 앱이 정한 칸 이름.
+
+    `metadata` 와 무엇이 다른가: `metadata` 는 파일에 적힌 그대로의 보관이고,
+    이쪽은 "이 값을 시험의 어느 칸에 넣어라" 는 **지시**다. 프로파일이 그
+    연결을 선언하고, 여기는 그 결과만 담는다.
+
+    **여기서도 DB 는 모른다.** `operator` 가 무슨 컬럼인지 이 층은 모른다 —
+    `summary` 의 `tensile_strength` 가 무엇인지 모르는 것과 같다."""
+    identity: dict[str, str] = field(default_factory=dict)
+    """이 파일이 **어느 재료·시료·시편의 것인지** 가리키는 값들.
+
+    파싱 때는 못 쓴다 — 시험은 이미 시편에 매달려 있다. **짚어 주기만 한다.**
+    일괄 등록과 이관 스크립트가 이것을 읽어 사람에게 보여 주거나 짝을 찾는다.
+
+    채우는 것과 갈라 둔 이유는 되돌릴 수 있는 실수와 없는 실수의 차이다.
+    시험자를 잘못 채우면 고치면 되지만, 곡선이 남의 재료에 붙으면 그 시험은
+    생성 시점에 그 시편 id 에 묶여 있어 칸을 고쳐 되돌릴 수 없다."""
 
     @property
     def all_curves(self) -> tuple[CurveData, ...]:

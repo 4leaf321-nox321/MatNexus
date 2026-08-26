@@ -26,6 +26,14 @@ assert _spec is not None and _spec.loader is not None
 import_legacy = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(import_legacy)
 
+#: 아무것도 안 준 상태 — 프로파일이나 흔한 이름에 맡긴다.
+EMPTY_KEYS: dict[str, str | None] = {
+    "material": None,
+    "lot": None,
+    "seq": None,
+    "orientation": None,
+}
+
 KEYS = {
     "material": "material_code",
     "lot": "lot_no",
@@ -101,8 +109,53 @@ class Test안_읽히면_말한다:
         하면 사람이 파일을 열어 키 이름을 손으로 찾는다."""
         row = read(make(tmp_path, lot_no=None, orientation=None))
         assert not row.ok
-        assert "lot_no" in row.problem and "orientation" in row.problem
+        assert "로트" in row.problem and "방향" in row.problem
         assert "material_code" in row.problem  # 있는 키 목록
+        assert "어느 재료·시료·시편인지" in row.problem  # 어디서 고치는지
+
+    def test_프로파일이_선언하면_그것으로_읽는다(self, tmp_path: Path) -> None:
+        """식별자 키의 지식은 **프로파일에 있다.** 스크립트가 또 알면 형식이
+        조금 달라질 때 두 군데를 고쳐야 하고, 한쪽만 고쳐지는 날이 온다."""
+        told = {**PROFILE}
+        told["metadata"] = ["code", "lot", "no", "dir"]
+        told["identity"] = {
+            "code": {"field": "material_grade"},
+            "lot": {"field": "sample_lot_no"},
+            "no": {"field": "specimen_seq_no"},
+            "dir": {"field": "specimen_orientation"},
+        }
+        path = make(
+            tmp_path,
+            material_code=None,
+            lot_no=None,
+            specimen_no=None,
+            orientation=None,
+            code="SPCC",
+            lot="LOT-Z",
+            no="7",
+            dir="td",
+        )
+        row = import_legacy._read(path, told, EMPTY_KEYS, None)
+        assert row.ok, row.problem
+        assert (row.grade, row.lot, row.orientation, row.seq) == ("SPCC", "LOT-Z", "TD", 7)
+
+    def test_명령줄이_프로파일을_이긴다(self, tmp_path: Path) -> None:
+        """프로파일이 틀렸을 때 빠져나올 문. 없으면 프로파일을 고칠 권한이
+        없는 사람은 이관을 못 한다."""
+        told = {**PROFILE}
+        told["metadata"] = [
+            "material_code",
+            "other_code",
+            "lot_no",
+            "specimen_no",
+            "orientation",
+        ]
+        told["identity"] = {"other_code": {"field": "material_grade"}}
+        path = make(tmp_path, other_code="틀린값")
+        row = import_legacy._read(
+            path, told, {**EMPTY_KEYS, "material": "material_code"}, None
+        )
+        assert row.grade == "SECC"
 
     def test_시편_번호를_지어내지_않는다(self, tmp_path: Path) -> None:
         """파일 순서로 번호를 매기면, 폴더에 파일이 하나 더 들어온 날 번호가
