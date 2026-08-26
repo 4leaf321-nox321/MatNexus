@@ -81,6 +81,8 @@ import type { ColumnRule } from '@/modules/tests/profileColumns'
 import {
   EMPTY_RULE,
   readColumnRules,
+  suggestUnits,
+  unitHint,
   unitBlocking,
   unitNote,
   unitState,
@@ -521,7 +523,10 @@ export default function FormatProfileEditorPage() {
     ...(testType?.channels ?? []).map((channel) => ({
       key: channel.key,
       label: channel.label,
-      hint: `${channel.key} · ${channel.si_unit}`,
+      // **둘 다 적는다.** 저장 단위만 보이면 '거리의 기본 단위가 m' 으로 읽히고,
+      // 바로 옆 「단위 지정」 칸에 그 m 을 적게 된다 — 그러면 mm 로 적힌 파일이
+      // 1000배로 읽히는데 숫자는 그럴듯하다.
+      hint: unitHint(channel.si_unit, channel.dimension),
       draft: false,
     })),
     ...drafts.map((draft) => ({
@@ -1383,7 +1388,7 @@ export default function FormatProfileEditorPage() {
                           list={`units-${unitListFor(column.name)}`}
                           placeholder={columnMap[column.name]?.skip ? '—' : '파일대로'}
                           disabled={columnMap[column.name]?.skip}
-                          title="비우면 파일이 준 단위를 씁니다. 파일에 단위가 없으면(JSON) 여기 적어야 등록됩니다. 무차원은 1 입니다."
+                          title="**파일에 적힌 단위**를 적습니다 — 저장 단위가 아닙니다. 비우면 파일이 준 것을 씁니다. 파일에 단위가 없으면(JSON) 여기 적어야 등록됩니다. 무차원은 1 입니다."
                           value={columnMap[column.name]?.unit ?? ''}
                           onChange={(event) =>
                             setColumnMap((current) => ({
@@ -1480,6 +1485,12 @@ export default function FormatProfileEditorPage() {
                 단위면 등록이 실패합니다 — 원값을 SI 인 척 저장하면 201242 MPa 가 201242 Pa
                 가 되어 10<sup>6</sup>배 틀리는데, 숫자는 멀쩡해 보이고 뜻만 바뀌어 아무도
                 못 잡습니다.
+              </p>
+              <p>
+                <b>단위 지정 칸에는 「파일에 적힌 단위」를 적습니다.</b> 저장 단위가 아닙니다
+                — 변위가 <code>mm</code> 로 적힌 파일이면 <code>mm</code> 입니다. 저장은
+                시스템이 SI(<code>m</code>)로 바꾸고, 화면에서는 다시 <code>mm</code> 로
+                되돌려 보여 줍니다. 채널 옆의 <code>저장 m · 화면 mm</code> 은 그 뜻입니다.
               </p>
               <p>
                 <b>JSON 파일에는 단위 줄이 없습니다.</b> 그때는 <b>단위 지정</b> 칸에 적어야
@@ -1647,9 +1658,9 @@ export default function FormatProfileEditorPage() {
                     <option key={item} value={item} />
                   ))}
                 </datalist>
-                {Object.entries(UNITS_BY_DIMENSION).map(([dimension, list]) => (
+                {Object.keys(UNITS_BY_DIMENSION).map((dimension) => (
                   <datalist key={dimension} id={`units-${dimension}`}>
-                    {list.map((item) => (
+                    {suggestUnits(dimension).map((item) => (
                       <option key={item} value={item} />
                     ))}
                   </datalist>
@@ -1663,7 +1674,7 @@ export default function FormatProfileEditorPage() {
                   {/* **표에서 읽는다.** 손으로 적었더니 `in` 이 들어 있었는데
                       `matcore.units` 에 없는 표기라, 고르면 치수가 조용히 안
                       채워졌다. */}
-                  {UNITS_BY_DIMENSION.length.map((item) => (
+                  {suggestUnits('length').map((item) => (
                     <option key={item} value={item} />
                   ))}
                 </datalist>

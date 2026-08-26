@@ -154,6 +154,27 @@ describe('지문 구역', () => {
   })
 })
 
+describe('단위', () => {
+  it('채널 옆에 저장 단위와 화면 단위를 함께 적는다', async () => {
+    // **저장 단위만 보이면 「거리의 기본 단위가 m」 으로 읽힌다.** 그리고 바로
+    // 옆 「단위 지정」 칸에 그 m 을 적게 되는데, mm 로 적힌 파일이 그러면
+    // 1000배로 읽히고 숫자는 그럴듯하다.
+    open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+    await userEvent.click(screen.getAllByRole('combobox')[0])
+    // 여러 열이 같은 채널을 가리킬 수 있어 여러 번 나온다.
+    expect((await screen.findAllByText('저장 m · 화면 mm')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('displacement · m')).not.toBeInTheDocument()
+  })
+
+  it('단위 지정 칸이 무엇을 받는지 화면이 말한다', async () => {
+    open()
+    expect(
+      await screen.findByText(/단위 지정 칸에는 「파일에 적힌 단위」를 적습니다/)
+    ).toBeInTheDocument()
+  })
+})
+
 describe('표 선택', () => {
   it('측정과 처리결과의 뜻이 항상 보인다', async () => {
     // 전에는 규칙이 안 맞아 건너뛴 표가 있을 때만 설명이 떴다 — 규칙을 다

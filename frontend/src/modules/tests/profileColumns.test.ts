@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest'
 import type { ProfileDefinition } from '@/modules/tests/api'
 import {
   readColumnRules,
+  suggestUnits,
   unitBlocking,
+  unitHint,
   unitState,
   writeColumnRules,
 } from '@/modules/tests/profileColumns'
@@ -113,5 +115,45 @@ describe('저장 전에 막을 것', () => {
 
   it('이 파일에 없는 열은 안 막는다', () => {
     expect(unitBlocking('unjudged', { channel: 'force', unit: '', skip: false })).toBe(false)
+  })
+})
+
+describe('어느 단위를 말하는가', () => {
+  it('저장 단위만 보이면 안 된다', () => {
+    // **사용자가 그것을 「거리의 기본 단위」 로 읽었다.** 그리고 바로 옆
+    // 「단위 지정」 칸에 그 m 을 적으면, mm 로 적힌 파일이 1000배로 읽힌다 —
+    // 숫자는 그럴듯하고 축 이름도 맞아서 아무도 안 걸린다.
+    expect(unitHint('m', 'length')).toBe('저장 m · 화면 mm')
+    expect(unitHint('Pa', 'stress')).toBe('저장 Pa · 화면 MPa')
+    expect(unitHint('K', 'temperature')).toBe('저장 K · 화면 °C')
+  })
+
+  it('둘이 같으면 한 번만 적는다', () => {
+    // `저장 N · 화면 N` 은 읽는 사람의 시간만 쓴다.
+    expect(unitHint('N', 'force')).toBe('저장 N')
+  })
+
+  it('변형률은 차원으로 갈린다', () => {
+    // 저장 단위가 `1` 로 같아도 변형률과 tan δ 는 보이는 것이 다르다.
+    expect(unitHint('1', 'strain')).toBe('저장 1')
+  })
+})
+
+describe('단위 후보 순서', () => {
+  it('실무 단위를 먼저 보인다', () => {
+    // 표는 SI 를 먼저 적어 두는데, 그러면 길이 후보 맨 위가 `m` 이다.
+    // 장비 파일은 거의 mm 이고, 시편 두께에 m 을 고르면 1.02 m 짜리 시편이
+    // 만들어진다 — 「10m 일 리 없다」 는 검사를 그대로 통과한다.
+    expect(suggestUnits('length')[0]).toBe('mm')
+    expect(suggestUnits('stress')[0]).toBe('MPa')
+  })
+
+  it('후보를 잃지 않는다', () => {
+    // 순서만 바꾼다. 하나라도 빠지면 그 단위를 쓰던 장비가 막힌다.
+    expect([...suggestUnits('length')].sort()).toEqual(['cm', 'm', 'mm', 'um'])
+  })
+
+  it('모르는 차원이면 빈 목록이다', () => {
+    expect(suggestUnits('없는차원')).toEqual([])
   })
 })

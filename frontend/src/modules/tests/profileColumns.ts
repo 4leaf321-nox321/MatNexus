@@ -38,6 +38,7 @@
  */
 
 import type { ProfileDefinition } from '@/modules/tests/api'
+import { SI_BY_DIMENSION, UNITS_BY_DIMENSION, display } from '@/shared/units'
 
 /** 열 하나를 어떻게 읽을지. **셋이 한 벌이다** — 하나만 왕복시키면 나머지가 사라진다. */
 export interface ColumnRule {
@@ -147,4 +148,35 @@ export function unitNote(state: UnitState, raw: string, symbol: string | null | 
     case 'unjudged':
       return { text: '이 파일에 없는 열', tone: 'muted' as const }
   }
+}
+
+/**
+ * 채널의 단위를 한 줄로. **저장과 표시를 함께 적는다.**
+ *
+ * 「시험종류 정의」 화면은 두 칸(`저장 단위` · `표시`)으로 갈라 보여 주는데
+ * 프로파일 편집기는 저장 단위 하나만 보였다. 그래서 `변위 · m` 으로 읽혔고,
+ * 그 옆에 「단위 지정」 칸이 생기면서 **거기 적을 값처럼** 보이게 됐다.
+ *
+ * 적어야 할 것은 그 반대다 — **파일에 적힌 단위**다. m 을 적으면 mm 로 적힌
+ * 파일이 1000배로 읽히는데, 숫자는 그럴듯하고 축 이름도 맞아서 안 걸린다.
+ */
+export function unitHint(siUnit: string, dimension?: string | null): string {
+  const shown = display(siUnit, dimension).unit
+  return shown && shown !== siUnit ? `저장 ${siUnit} · 화면 ${shown}` : `저장 ${siUnit}`
+}
+
+/**
+ * 단위 후보를 **실무 단위부터** 보인다.
+ *
+ * 표(`UNITS_BY_DIMENSION`)는 SI 를 먼저 적어 두는데, 그러면 길이 후보가
+ * `m, mm, cm, um` 순으로 떠서 맨 위의 `m` 이 눈에 먼저 든다. 장비 파일은
+ * 거의 mm 이고, 시편 두께에 m 을 고르면 `1.02 m` 짜리 시편이 만들어진다 —
+ * 「10m 일 리 없다」 는 검사(`curvedata._as_metres`)를 그대로 통과한다.
+ *
+ * **표 자체는 안 건드린다** — 다른 화면이 같은 표를 쓴다.
+ */
+export function suggestUnits(dimension: string): string[] {
+  const list = UNITS_BY_DIMENSION[dimension] ?? []
+  const shown = display(SI_BY_DIMENSION[dimension], dimension).unit
+  return [...list.filter((unit) => unit === shown), ...list.filter((unit) => unit !== shown)]
 }
