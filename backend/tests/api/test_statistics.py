@@ -200,6 +200,12 @@ class Test통계값:
         assert three["curve"]["x"] == "strain_engineering"
         assert len(three["curve"]["mean"]) == len(three["curve"]["median"])
         assert len(three["curve"]["sd"]) == len(three["curve"]["mean"])
+        # **축의 단위를 함께 보낸다.** 안 보내면 화면이 채널 이름 앞글자로
+        # 짐작한다 — `stress*` 면 Pa, 나머지는 무차원. 그러면 변위가 m 그대로
+        # 나오고 축에는 단위가 아예 안 붙는다.
+        units = three["curve"]["units"]
+        assert units[three["curve"]["x"]]
+        assert units[three["curve"]["y"]] == "Pa"
 
 
 class Test저장:
@@ -320,6 +326,9 @@ class Test적은_표본:
         curve = group["curve"]
         assert curve is not None, "1건이어도 곡선은 나와야 한다"
         assert curve["mean"] == curve["median"], "한 점의 평균도 중앙값도 그 점이다"
+        # 시편 1개 가지도 같은 것을 보내야 한다 — 여기만 빠지면 그 화면에서만
+        # 축 단위가 사라지고, 그 사실은 시편이 하나일 때만 드러난다.
+        assert curve["units"][curve["y"]] == "Pa"
         # **흩어짐은 내지 않는다.** 0 을 넣으면 "여러 번 재서 같았다" 로 읽힌다.
         assert curve["sd"] == []
         assert all(count == 1.0 for _, count in curve["count"])

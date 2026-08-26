@@ -338,7 +338,9 @@ def curve_table(
         # **흩어짐은 내지 않는다**(`sd` 가 빈다). 0 을 넣으면 "여러 번 재서
         # 같았다" 로 읽힌다.
         member = group.members[0]
-        raw = curves.read_columns(filestore.read_bytes(member.result.storage_path))
+        data = filestore.read_bytes(member.result.storage_path)
+        raw = curves.read_columns(data)
+        one_units = curves.read_units(data)
         if x not in raw or y not in raw:
             return None, [
                 f"'{member.run.record_name}' 에서 채택된 처리 결과에 '{x}' 또는 "
@@ -354,6 +356,10 @@ def curve_table(
             {
                 "x": x,
                 "y": y,
+                # **단위를 함께 보낸다.** 안 보내면 화면이 채널 이름 앞글자로
+                # 짐작한다 — `stress*` 면 Pa, 나머지는 무차원. 그러면 변위가
+                # m 그대로 나오고 축에는 단위가 아예 안 붙는다.
+                "units": {key: one_units.get(key, "1") for key in (x, y)},
                 "mean": points,
                 "median": points,
                 "sd": [],
@@ -367,8 +373,13 @@ def curve_table(
 
     grids: list[np.ndarray] = []
     values: list[np.ndarray] = []
+    units: dict[str, str] = {}
     for member in group.members:
-        raw = curves.read_columns(filestore.read_bytes(member.result.storage_path))
+        data = filestore.read_bytes(member.result.storage_path)
+        raw = curves.read_columns(data)
+        # 첫 시편의 것을 쓴다. 축이 같아야 대표 곡선이 나오므로 단위도 같다 —
+        # 다르면 `curve_stats` 가 그 전에 멈춘다.
+        units = units or curves.read_units(data)
         if x not in raw or y not in raw:
             return None, [
                 f"'{member.run.record_name}' 에서 채택된 처리 결과에 '{x}' 또는 "
@@ -393,6 +404,7 @@ def curve_table(
         {
             "x": x,
             "y": y,
+            "units": {key: units.get(key, "1") for key in (x, y)},
             "mean": stats.mean_curve,
             "median": stats.median_curve,
             "sd": [(point.x, point.y.sample_sd) for point in stats.points],

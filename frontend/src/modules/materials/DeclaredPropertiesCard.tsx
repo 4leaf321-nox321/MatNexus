@@ -45,6 +45,7 @@ import type {
   PropertyItem,
 } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { fromDisplay, toDisplay } from '@/shared/units'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
@@ -111,7 +112,12 @@ function toDraft(row: DeclaredProperty): Draft {
     item: row.item,
     points: row.points.map((point) => ({
       value: String(Number(point.value.toPrecision(12))),
-      temperature: point.temperature_k == null ? '' : String(point.temperature_k - 273.15),
+      // **환산은 표가 한다.** `- 273.15` 를 손으로 적으면 표 바깥에 정본이
+      // 하나 더 생기고, 표를 바꾼 날 이 자리만 옛 값을 낸다.
+      temperature:
+        point.temperature_k == null
+          ? ''
+          : String(Number(toDisplay(point.temperature_k, 'K', 'temperature').toPrecision(10))),
     })),
     measure: row.scale ?? row.input_unit ?? '',
     isScale: row.scale != null,
@@ -204,7 +210,9 @@ export function DeclaredPropertiesCard({
             // 화면은 ℃ 로 받고 서버에는 K 로 보낸다 — 상온을 298 로 적는
             // 사람은 없다.
             temperature_k:
-              point.temperature === '' ? null : Number(point.temperature) + 273.15,
+              point.temperature === ''
+                ? null
+                : fromDisplay(Number(point.temperature), 'K', 'temperature'),
           })),
           // **어느 칸으로 보낼지는 줄 자신이 안다.** 항목 목록을 여기서
           // 다시 뒤지면, 목록이 도착하기 전에 저장을 누른 사람이 척도를 단위

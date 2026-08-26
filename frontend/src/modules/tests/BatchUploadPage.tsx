@@ -36,7 +36,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { materialsApi } from '@/modules/materials/api'
+import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
 import { MaterialPicker } from '@/modules/materials/MaterialPicker'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
@@ -611,7 +611,7 @@ export default function BatchUploadPage() {
 
             <div className="space-y-1">
               <Label className="text-muted-foreground text-xs">
-                시편 치수 일괄 지정 (mm)
+                시편 치수 일괄 지정 ({LENGTH_UNIT})
               </Label>
               <div className="flex gap-1">
                 {(

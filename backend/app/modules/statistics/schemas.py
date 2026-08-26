@@ -60,6 +60,12 @@ class MemberCurveOut(BaseModel):
 class CurveStatsOut(BaseModel):
     x: str
     y: str
+    units: dict[str, str] = {}
+    """축의 **저장 단위**. 화면이 표시 단위로 되돌릴 때 쓴다.
+
+    안 보내던 동안 화면이 채널 이름 앞글자로 짐작했다 — `stress*` 면 Pa,
+    나머지는 전부 무차원. 그래서 변위가 m 그대로 나오고, 축에는 단위가 아예
+    안 붙었다. 처리 결과(`ProcessingResultOut.units`)와 같은 모양이다."""
     mean: list[tuple[float, float]]
     median: list[tuple[float, float]]
     sd: list[tuple[float, float]]

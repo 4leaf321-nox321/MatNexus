@@ -75,3 +75,47 @@ def test_고를_수_있는_단위가_모두_서버_표에_있다() -> None:
             if symbol not in units.UNITS:
                 unknown.append(f"{dimension}:{symbol}")
     assert not unknown, f"서버 단위 표에 없는 단위를 고르게 두고 있습니다: {unknown}"
+
+
+#: 환산을 손으로 적은 자리를 찾는 지문.
+#:
+#: **이 부류가 반복됐다.** `formatScalar` 의 머리말이 「같은 코드가 세 번
+#: 복제돼 있었다」 고 적어 두고 그것을 모았는데, 그 뒤로도 두 곳이 더 나왔다 —
+#: 점탄성 패널(`kelvin - 273.15`·`value / 1e6`)과 시편 편집(`area * 1e6`).
+#: 모으는 것만으로는 안 되고, **새로 생기는 것을 막아야** 한다.
+#:
+#: 왜 위험한가: 표 바깥에 환산이 하나라도 남으면 표를 바꾼 날 그 자리만 옛
+#: 값을 낸다. 그리고 그 화면은 오류를 내지 않는다 — 숫자가 그럴듯하게 틀린다.
+_HANDMADE = (
+    "273.15",  # K ↔ °C
+    "/ 1e6",  # Pa → MPa
+    "/ 1e9",  # Pa → GPa
+    "* 1e6",  # m² → mm²
+    "* 1e-12",  # kg/m³ → tonne/mm³
+    "* 1e12",
+)
+
+SRC = Path(__file__).resolve().parents[3] / "frontend" / "src"
+
+
+def test_환산을_화면에서_손으로_하지_않는다() -> None:
+    """정본은 `shared/units.ts` 하나다(ADR 0004).
+
+    여기 걸렸다면 고칠 방법은 그 파일의 `toDisplay`·`fromDisplay`·`formatScalar`
+    를 쓰는 것이다. 표에 없는 환산이 필요하면 **표에 더한다.**
+    """
+    found: list[str] = []
+    for path in SRC.rglob("*.ts*"):
+        if path.name.endswith(".test.ts") or path.name.endswith(".test.tsx"):
+            continue
+        if path.resolve() == UNITS_TS.resolve():
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.strip()
+            # 주석은 뺀다 — 왜 그렇게 하지 않는지 적어 둔 자리가 있다.
+            if code.startswith(("//", "*", "/*")):
+                continue
+            for mark in _HANDMADE:
+                if mark in code:
+                    found.append(f"{path.relative_to(SRC)}:{number} — {mark}")
+    assert not found, "화면에서 단위를 손으로 환산하고 있습니다:\n" + "\n".join(found)

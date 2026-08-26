@@ -1946,6 +1946,14 @@
             "title": "Sd",
             "type": "array"
           },
+          "units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Units",
+            "type": "object"
+          },
           "x": {
             "title": "X",
             "type": "string"

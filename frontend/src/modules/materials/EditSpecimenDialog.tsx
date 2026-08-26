@@ -47,7 +47,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import { display, fromDisplay, toDisplay } from '@/shared/units'
+import { display, formatScalar, fromDisplay, toDisplay } from '@/shared/units'
 
 interface Props {
   specimen: Specimen
@@ -227,7 +227,9 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
                 (sizes.area_problem ?? '단면적을 낼 수 없습니다.')
               ) : (
                 <>
-                  단면적 <b>{(sizes.area * 1e6).toPrecision(4)} mm²</b>
+                  {/* 환산도 단위 기호도 표에서 읽는다 — `× 1e6` 과 `mm²` 를
+                      손으로 적으면 표 바깥에 정본이 하나 더 생긴다. */}
+                  단면적 <b>{formatScalar(sizes.area, 'm2')}</b>
                   {sizes.cross_section_label && ` · ${sizes.cross_section_label}`} — 하중을 이 값으로
                   나눠 응력을 만듭니다.
                 </>

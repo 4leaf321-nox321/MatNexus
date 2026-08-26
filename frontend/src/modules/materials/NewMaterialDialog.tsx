@@ -160,7 +160,7 @@ export function NewMaterialDialog({
             <Input id="details" placeholder="MDOI (같은 규격 구분용)" {...field('details')} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="thickness">스펙 두께 (mm)</Label>
+            <Label htmlFor="thickness">스펙 두께 ({LENGTH_UNIT})</Label>
             <Input id="thickness" type="number" step="0.01" placeholder="1.0" {...field('spec_thickness')} />
           </div>
           <div className="space-y-1.5">

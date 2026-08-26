@@ -3756,6 +3756,13 @@ export interface components {
                 number,
                 number
             ][];
+            /**
+             * Units
+             * @default {}
+             */
+            units: {
+                [key: string]: string;
+            };
             /** X */
             x: string;
             /** Y */

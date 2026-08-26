@@ -38,7 +38,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
-import { formatScalar, toDisplay } from '@/shared/units'
+import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 
 /** 이 이상이면 흩어짐이 크다고 눈에 띄게 한다. **버리거나 고치지는 않는다.** */
 const NOTABLE_CV = 0.05
@@ -243,7 +243,14 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
   if (!curve) return null
 
   // 표시 단위로 맞춘다. 축만 바꾸고 점을 안 바꾸면 1000배 어긋난다.
-  const unitOf = (name: string) => (name.startsWith('stress') ? 'Pa' : '1')
+  //
+  // **단위는 서버가 준다.** 전에는 채널 이름 앞글자로 짐작했다 —
+  // `stress*` 면 Pa, 나머지는 전부 무차원. 그래서 변위·온도가 있는 묶음에서
+  // m 와 K 가 그대로 나왔고, 축에는 단위가 아예 안 붙었다.
+  //
+  // 차원은 이름으로 남긴다 — 변형률과 tan δ 는 저장 단위가 둘 다 `1` 이라
+  // 단위만으로는 못 가른다(`shared/units.ts` 의 `BY_DIMENSION`).
+  const unitOf = (name: string) => curve.units?.[name] ?? '1'
   const dimensionOf = (name: string) => (name.startsWith('strain') ? 'strain' : null)
   const shown = (points: [number, number][]): [number, number][] =>
     points.map(([x, y]) => [
@@ -296,8 +303,10 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
       <CurveChart
         points={points}
         background={raw}
-        xLabel={curve.x}
-        yLabel={curve.y}
+        // **축에 단위를 붙인다.** 채널 키만 있으면 `stress_true` 가 Pa 인지
+        // MPa 인지 화면 어디에도 없다.
+        xLabel={axisLabel(curve.x, unitOf(curve.x), dimensionOf(curve.x))}
+        yLabel={axisLabel(curve.y, unitOf(curve.y), dimensionOf(curve.y))}
         height={280}
       />
       <p className="text-muted-foreground mt-2 text-xs">

@@ -49,7 +49,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { CardBlocks } from '@/modules/fitting/CardBlocks'
 import { useResource } from '@/shared/hooks/useResource'
-import { display, formatScalar, toDisplay } from '@/shared/units'
+import { axisLabel, display, formatScalar, toDisplay } from '@/shared/units'
 
 /** 이 이상 어긋나면 눈에 띄게 한다. 커널이 같은 값에서 경고를 단다. */
 const NOTABLE_RMSE = 0.05
@@ -421,10 +421,14 @@ function FitComparison({
   // **축 이름을 화면이 정하지 않는다.** 금속은 진응력·진소성변형률에, 고무는
   // 공칭에 맞춘다 — 그래프 축이 "진소성변형률" 이라고 붙으면 그것은 거짓말이고,
   // 그 거짓말은 화면에서만 보인다. 식 없이 표만 쓸 때는 소성 표라서 금속 축이다.
-  const xLabel = `${fit?.x_label ?? '진소성변형률'} (%)`
-  const yLabel = `${fit?.y_label ?? '진응력'} (MPa)`
+  //
+  // **단위는 표에서 읽는다.** 손으로 적었더니 `(%)` 가 남았다 — v1.88.0 에
+  // 변형률 표시가 %에서 무차원으로 바뀌면서 값은 0.02 가 됐는데 축은 계속
+  // `(%)` 라고 적고 있었다. 0.02 를 0.02% 로 읽으면 100배다.
+  const xLabel = axisLabel(fit?.x_label ?? '진소성변형률', '1', 'strain')
+  const yLabel = axisLabel(fit?.y_label ?? '진응력', 'Pa')
   // 늘리기 칸에 붙일 축 이름. 그래프 축과 달리 단위 접미사가 없다.
-  const axisLabel = fit?.x_label ?? '진소성변형률'
+  const stretchAxis = fit?.x_label ?? '진소성변형률'
   // **늘릴 수 있는 식인가.** 늘리는 것은 소성 표를 만드는 일이라 `hardening`
   // 에서만 뜻이 있다. 서버도 같은 이유로 저장을 거절하므로(MNX-FITTING-0014)
   // 여기서 안 잠그면 **보여 준 것을 저장 못 하는** 상태가 된다.
@@ -479,7 +483,7 @@ function FitComparison({
                 "진소성변형률" 이라고 붙으면 그것은 거짓말이다. 식이 자기 축을
                 선언하므로(ADR 0013) 그것을 그대로 쓴다. */}
             <Label htmlFor="extrapolate" title="시험이 준 구간 밖까지 식으로 그려 봅니다. 저장하면 그 구간이 소성 표에 들어갑니다.">
-              시험 구간 밖까지 늘리기 ({axisLabel})
+              시험 구간 밖까지 늘리기 ({stretchAxis})
             </Label>
             <Input
               id="extrapolate"

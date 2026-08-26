@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { formatScalar } from '@/shared/units'
 import { useResource } from '@/shared/hooks/useResource'
 
 /** 맞춘 값이 관측값과 이만큼 벌어지면 눈에 띄게 표시한다(로그 자릿수). */
@@ -52,16 +53,21 @@ const METHODS = [
 
 type Method = (typeof METHODS)[number]['key']
 
+/**
+ * 온도·탄성률을 사람이 읽는 글자로. **환산은 표가 한다.**
+ *
+ * 전에는 이 파일이 `kelvin - 273.15` 와 `value / 1e6` 을 손으로 적고 있었다.
+ * `formatScalar` 의 머리말이 「같은 코드가 세 번 복제돼 있었다」 고 적어 두고
+ * 그것을 모았는데, **여기가 네 번째였다** — 모으는 자리에 안 들어와 있었다.
+ *
+ * 표 바깥에 환산이 하나라도 남으면 표를 바꾼 날 그 자리만 옛 값을 낸다.
+ */
 function celsius(kelvin: number): string {
-  return `${(kelvin - 273.15).toFixed(1)} °C`
+  return formatScalar(kelvin, 'K', 'temperature')
 }
 
 function si(value: number): string {
-  if (!Number.isFinite(value)) return '—'
-  const magnitude = Math.abs(value)
-  if (magnitude >= 1e9) return `${(value / 1e9).toPrecision(4)} GPa`
-  if (magnitude >= 1e6) return `${(value / 1e6).toPrecision(4)} MPa`
-  return `${value.toPrecision(4)} Pa`
+  return Number.isFinite(value) ? formatScalar(value, 'Pa') : '—'
 }
 
 export function ViscoelasticPanel({ testRunId }: { testRunId: string }) {

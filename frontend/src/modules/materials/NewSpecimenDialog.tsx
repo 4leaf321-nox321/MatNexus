@@ -109,15 +109,15 @@ export function NewSpecimenDialog({
 
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="thickness">실측 두께 (mm)</Label>
+            <Label htmlFor="thickness">실측 두께 ({LENGTH_UNIT})</Label>
             <Input id="thickness" type="number" step="0.01" {...field('thickness')} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="width">실측 폭 (mm)</Label>
+            <Label htmlFor="width">실측 폭 ({LENGTH_UNIT})</Label>
             <Input id="width" type="number" step="0.01" {...field('width')} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="gauge">게이지 길이 (mm)</Label>
+            <Label htmlFor="gauge">게이지 길이 ({LENGTH_UNIT})</Label>
             <Input id="gauge" type="number" step="0.1" {...field('gauge_length')} />
           </div>
         </div>

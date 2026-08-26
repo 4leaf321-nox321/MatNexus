@@ -174,7 +174,7 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
             <Input id="edit-details" placeholder="같은 규격 구분용" {...field('details')} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="edit-thickness">스펙 두께 (mm)</Label>
+            <Label htmlFor="edit-thickness">스펙 두께 ({LENGTH_UNIT})</Label>
             <Input id="edit-thickness" inputMode="decimal" {...field('spec_thickness')} />
           </div>
           <div className="space-y-1.5">

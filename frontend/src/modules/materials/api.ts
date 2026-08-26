@@ -2,6 +2,7 @@
 
 import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
+import { display } from '@/shared/units'
 
 export type Material = components['schemas']['MaterialOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
@@ -60,7 +61,18 @@ export type PropertyItem = components['schemas']['PropertyItemOut']
  */
 export const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
 
-export const LENGTH_UNIT = 'mm'
+/**
+ * 길이를 **화면에서 받아 서버로 보내는** 단위.
+ *
+ * 표(`shared/units`)에서 읽는다 — 사람은 표시 단위로 치고, 우리는 그것을
+ * 그대로 보내면서 단위 이름을 함께 적는다(서버가 SI 로 바꾼다).
+ *
+ * `'mm'` 이라고 박아 두었더니 **라벨을 손으로 적는 자리가 생겼다** — 실측
+ * 두께 (mm)·스펙 두께 (mm)·시편 치수 일괄 지정 (mm) 넷이 그랬다. 표를 바꾸면
+ * 그 라벨들은 옛 단위를 적은 채 새 값을 받는다. 밀도 쪽 주석이 같은 함정을
+ * 이미 적어 두고 있었다.
+ */
+export const LENGTH_UNIT = display('m').unit
 /**
  * 밀도를 **화면에서 받아 서버로 보내는** 단위(v1.88.0 에 `kg/m3` 에서 옮김).
  *
