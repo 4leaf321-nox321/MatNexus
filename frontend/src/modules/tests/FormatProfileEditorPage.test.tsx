@@ -178,6 +178,49 @@ describe('메타 기본값', () => {
   })
 })
 
+describe('메타 역할 고르기', () => {
+  it('갈 곳을 안 정하면 저장을 막는다', async () => {
+    // **고르고 나서 아무 일도 안 일어나는 것**이 이 화면에서 제일 헷갈리는
+    // 자리였다. `definition()` 은 대상이 있을 때만 담고, 안 담기면 보관
+    // 목록에도 안 들어가므로 그 값은 **조용히 사라진다.**
+    open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+    expect(screen.getByRole('button', { name: /^저장$/ })).not.toBeDisabled()
+
+    // 「Operator」 는 저장본에서 그대로 보관이다. 결과값으로 바꾸되 키는 안 적는다.
+    const roles = screen.getAllByRole('combobox')
+    const meta = roles[roles.length - 1]
+    await userEvent.click(meta)
+    // Radix 는 접근성용 숨은 항목을 함께 그린다. 실제 항목은 `option` 역할을
+    // 가진 쪽이고, 숨은 쪽은 `pointer-events: none` 이라 누를 수 없다.
+    await userEvent.click(await screen.findByRole('option', { name: /시험 결과값/ }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^저장$/ })).toBeDisabled()
+    )
+    expect(screen.getByText(/갈 곳을 정하세요/)).toBeInTheDocument()
+  })
+
+  it('어디로 가는지 목록에 적어 둔다', async () => {
+    // 이름만으로는 결과값·기록·조건이 뭉쳐 읽힌다 — 셋 다 시험에 붙지만
+    // 자리가 다르다.
+    open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+    const roles = screen.getAllByRole('combobox')
+    await userEvent.click(roles[roles.length - 1])
+
+    expect((await screen.findAllByText('시험에 남긴다')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('저장하지 않는다').length).toBeGreaterThan(0)
+    for (const said of [
+      /우리가 계산한 값과 나란히 비교됩니다/,
+      /시험 종류가 선언한 조건 칸/,
+      /아무 데도 저장하지 않습니다/,
+    ]) {
+      expect(screen.getAllByText(said).length).toBeGreaterThan(0)
+    }
+  })
+})
+
 describe('지문 구역', () => {
   it('메타 키 칸의 이름이 「메타 키 지정」 이다', async () => {
     open()

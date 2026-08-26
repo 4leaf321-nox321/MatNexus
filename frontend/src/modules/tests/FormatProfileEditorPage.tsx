@@ -61,7 +61,9 @@ import { Label } from '@/shared/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
@@ -124,15 +126,52 @@ const SPECIMEN_KEYS = [
   'specimen_diameter',
 ]
 
-const META_ROLE_LABEL: Record<MetaRole, string> = {
-  keep: '그대로 보관',
-  specimen: '시편 치수',
-  summary: '요약값(시험 결과)',
-  record: '시험 칸에 채움',
-  condition: '시험 조건에 채움',
-  identity: '어느 재료·시료·시편인지',
-  drop: '버림',
+/**
+ * 역할의 이름과 **그 값이 어디로 가는지.**
+ *
+ * 이름이 「무엇을 하겠다」만 말하고 **어디에 저장되는지**를 안 말해서 고르기가
+ * 어려웠다 — 실사용에서 *"고르는게 너무 헷갈린다"* 가 나왔다. 특히 이 셋이
+ * 서로 뭉쳐 보였다:
+ *
+ *   시험 결과값   `TestSummary` 행     ← 시험이 **낸 결과**
+ *   시험 기록     `TestRun` 의 컬럼     ← 어느 종류든 같다 (누가·언제·무슨 장비)
+ *   시험 조건     `TestRun.conditions` ← 종류마다 다르다 (온도·속도·예하중)
+ *
+ * 가르는 물음은 하나다 — **「시험을 다시 하면 이 값이 달라지나?」**
+ * 달라지면 결과이고, 안 달라지면 신원이나 설정이다.
+ */
+const META_ROLE: Record<MetaRole, { label: string; where: string }> = {
+  keep: { label: '원문 그대로 보관', where: '시험의 원본 메타에 글자 그대로' },
+  summary: {
+    label: '시험 결과값',
+    where: '요약값 표에 숫자+단위로 — 우리가 계산한 값과 나란히 비교됩니다',
+  },
+  record: { label: '시험 기록', where: '시험의 시험일·시험자·장비·사업부 칸' },
+  condition: {
+    label: '시험 조건',
+    where: '시험 종류가 선언한 조건 칸 (온도·속도·예하중…)',
+  },
+  specimen: {
+    label: '시편 치수',
+    where: '시편의 치수 — 「장비 치수 채우기」를 눌러야 들어갑니다',
+  },
+  identity: {
+    label: '재료·시료·시편 짚기',
+    where: '아무 데도 저장하지 않습니다 — 일괄 등록과 이관이 짝을 찾을 때만 씁니다',
+  },
+  drop: { label: '버림', where: '남기지 않습니다' },
 }
+
+/** 고르는 목록의 묶음. **어디로 가느냐**로 나눈다 — 여섯이 한 줄로 늘어서
+ *  있으면 성격이 다른 것들이 나란히 보여 뭉쳐 읽힌다. */
+/** 대상을 정해야 뜻이 있는 역할. 안 정하면 그 값은 아무 데도 안 간다. */
+const NEEDS_TARGET: MetaRole[] = ['summary', 'record', 'condition', 'specimen', 'identity']
+
+const META_ROLE_GROUPS: { title: string; roles: MetaRole[] }[] = [
+  { title: '시험에 남긴다', roles: ['keep', 'summary', 'record', 'condition'] },
+  { title: '시편에 남긴다', roles: ['specimen'] },
+  { title: '저장하지 않는다', roles: ['identity', 'drop'] },
+]
 
 /** 파일이 **채울 수 있는** 시험 칸. 정본은 서버의 `RECORD_FIELDS` 다 —
  *  `tests/architecture` 가 두 표가 갈리지 않았는지 검사한다. */
@@ -508,6 +547,18 @@ export default function FormatProfileEditorPage() {
     return found?.dimension && UNITS_BY_DIMENSION[found.dimension] ? found.dimension : 'all'
   }
 
+  /**
+   * 역할은 골랐는데 **어디에 넣을지 안 정한** 줄. 그대로 저장하면 그 값은
+   * 조용히 사라진다.
+   *
+   * `definition()` 이 `rule.target` 이 있을 때만 담기 때문이다 — 안 담기면
+   * 보관 목록에도 안 들어가므로 아무 데도 안 남는다. **고르고 나서 아무 일도
+   * 안 일어나는 것**이 이 화면에서 제일 헷갈리는 자리였다.
+   */
+  const metaGaps = Object.entries(metaMap).filter(
+    ([, rule]) => NEEDS_TARGET.includes(rule.role) && !rule.target
+  )
+
   /** 채널로 정했는데 단위를 알 수 없는 열. **저장하면 등록이 실패한다.** */
   const unitGaps = columns.filter((column) => {
     const rule = columnMap[column.name]
@@ -542,6 +593,15 @@ export default function FormatProfileEditorPage() {
     { ok: hasFingerprint, label: '지문 — 확장자·헤더·메타 중 하나', where: '②' },
     { ok: typeReady, label: newType ? '새 시험 종류 (키·이름·약어)' : '시험 종류', where: '④' },
     { ok: mapped > 0, label: '열 매핑 한 개 이상', where: '④' },
+    {
+      // **고르기만 하면 아무 일도 안 일어난다.** 그 값은 조용히 사라진다.
+      ok: metaGaps.length === 0,
+      label:
+        metaGaps.length === 0
+          ? '메타의 갈 곳'
+          : `메타의 갈 곳 (${metaGaps.map(([name]) => name).join(', ')})`,
+      where: '⑤',
+    },
     {
       // **저장 전에 말한다.** 안 그러면 저장은 되고 등록에서 실패하는데, 그
       // 실패는 파일을 올린 다음에야 보이고 원인은 이 화면에 있다.
@@ -1648,11 +1708,23 @@ export default function FormatProfileEditorPage() {
                         <SelectTrigger className="h-8 w-40">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
-                          {(Object.keys(META_ROLE_LABEL) as MetaRole[]).map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {META_ROLE_LABEL[role]}
-                            </SelectItem>
+                        <SelectContent className="max-w-[28rem]">
+                          {META_ROLE_GROUPS.map((group) => (
+                            <SelectGroup key={group.title}>
+                              <SelectLabel className="text-muted-foreground text-xs">
+                                {group.title}
+                              </SelectLabel>
+                              {group.roles.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                  {META_ROLE[role].label}
+                                  {/* **어디로 가는지 옆에 적는다.** 이름만으로는
+                                      결과값·기록·조건이 뭉쳐 읽힌다. */}
+                                  <span className="text-muted-foreground ml-2 text-xs">
+                                    {META_ROLE[role].where}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1706,6 +1778,11 @@ export default function FormatProfileEditorPage() {
                       )}
                       {/* 파일에 적힌 단위. 정의가 `m/s` 인데 파일이 `mm/min` 이면
                           안 적었을 때 6만 배 어긋난다. */}
+                      {NEEDS_TARGET.includes(rule.role) && !rule.target && (
+                        <span className="text-xs text-amber-700 dark:text-amber-500">
+                          갈 곳을 정하세요 — 안 정하면 이 값은 안 남습니다
+                        </span>
+                      )}
                       {rule.role === 'condition' && (
                         <Input
                           className="h-8 w-28 font-mono text-xs"
