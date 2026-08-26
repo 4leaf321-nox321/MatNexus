@@ -35,8 +35,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
+
+from matcore.export import systems as systems  # 재수출 — 앱이 key 로 고른다
+from matcore.export.systems import SI, UnitSystem
+from matcore.export.systems import SYSTEMS as SYSTEMS  # 재수출 — 앱이 목록을 보여 준다
 
 #: 표의 최소·최대 점 수. 2점이면 직선 하나이고, 5000점이 넘으면 솔버가 읽다
 #: 지친다(65도 같은 상한).
@@ -110,6 +114,13 @@ class Deck:
     provenance: tuple[str, ...] = ()
     """어디서 나온 값인지. **카드 주석으로 들어간다** — 덱만 받은 사람이 되짚을
     수 있어야 한다."""
+    units: UnitSystem = SI
+    """이 덱의 숫자가 **어느 단위계인가.**
+
+    `render` 가 환산한 뒤 이 값을 세워서 렌더러에 넘긴다. 렌더러는 여기를 읽어
+    선언 줄을 쓴다 — 기호를 손으로 적으면 값과 선언이 갈라지는 날이 온다.
+
+    기본이 SI 인 이유: 고르지 않으면 전과 같은 것이 나가야 한다."""
 
     def has(self, block: str) -> bool:
         return bool(self.blocks.get(block))
@@ -438,7 +449,11 @@ def _header(deck: Deck, comment: str) -> list[str]:
     **덱만 받은 사람이 되짚을 수 있어야 한다.** 파일이 메일로 돌아다니는 동안
     이 주석이 유일한 출처 표시다.
     """
-    return [f"{comment} {line}" for line in ("MatNexus 물성 카드", *deck.provenance)]
+    # **안 바꾼 값이 있으면 여기서 말한다.** `to_system` 이 남긴 것이고,
+    # 조용히 남는 것과 적혀서 남는 것은 다르다.
+    said = deck.blocks.get("_units")
+    left = list(said.get("notes", [])) if isinstance(said, Mapping) else []
+    return [f"{comment} {line}" for line in ("MatNexus 물성 카드", *deck.provenance, *left)]
 
 
 #: `*EXPANSION` 등이 받는 값 ↔ 블록 키. 값이 하나인 키워드들이라 표가 아니다.
@@ -537,7 +552,15 @@ def _thermal_lines(deck: Deck) -> list[str]:
         source = deck.values("thermal").get(f"{key}_source")
         # **잰 값인지 적은 값인지 덱에서 보인다.** 덱만 받은 사람이 이 숫자의
         # 무게를 알 수 있어야 한다.
-        lines.append(f"** {key}: {unit}, source={source or 'unknown'}")
+        # **덱의 계로 적는다.** SI 기호를 박아 두면 값은 mJ/(tonne·K) 인데
+        # 주석은 J/(kg·K) 라고 말한다 — 받는 사람은 주석을 믿는다.
+        try:
+            shown = deck.units.symbol(unit)
+        except KeyError as error:  # pragma: no cover - to_system 이 먼저 막는다
+            raise ExportError(
+                f"{deck.units.label} 에 '{unit}' 의 기호가 없습니다({key})."
+            ) from error
+        lines.append(f"** {key}: {shown}, source={source or 'unknown'}")
         head = keyword
         if key == "thermal_expansion" and zero is not None:
             head = f"{keyword}, ZERO={_free(zero)}"
@@ -563,7 +586,7 @@ def _thermal_lines(deck: Deck) -> list[str]:
     key="abaqus",
     label="Abaqus",
     extension="inp",
-    describe="*MATERIAL / *ELASTIC / *PLASTIC — 표 형식 소성. 단위는 SI(kg·m·s·Pa).",
+    describe="*MATERIAL / *ELASTIC / *PLASTIC — 표 형식 소성. 단위는 덱 머리에 적힌다.",
     keywords=("*MATERIAL", "*ELASTIC", "*PLASTIC"),
     needs=(
         Need("elastic", values=("youngs_modulus", "poisson_ratio")),
@@ -588,7 +611,7 @@ def render_abaqus(deck: Deck) -> Rendered:
     points, notes = prepare(deck.pairs("table", "plastic_strain", "true_stress"))
 
     lines = _header(deck, "**")
-    lines.append("** Consistent units: kg, m, s, Pa")
+    lines.append(f"** Consistent units: {deck.units.declaration}")
     if density is None:
         # *DENSITY 는 Abaqus 에서 선택이다. 빼되 **왜 뺐는지 적는다** — 동적
         # 해석을 돌리려던 사람이 덱만 보고 알 수 있어야 한다.
@@ -672,7 +695,7 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
 
     notes: list[str] = []
     lines = _header(deck, "**")
-    lines.append("** Consistent units: kg, m, s, Pa")
+    lines.append(f"** Consistent units: {deck.units.declaration}")
     lines.append("** ELASTIC = instantaneous (t=0) moduli — Abaqus reads it that way")
     lines.append("**          when *VISCOELASTIC is present.")
     if reference is not None:
@@ -802,7 +825,7 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
 
     notes: list[str] = []
     lines = _header(deck, "**")
-    lines.append("** Consistent units: kg, m, s, Pa")
+    lines.append(f"** Consistent units: {deck.units.declaration}")
     lines.append("** Nominal (engineering) stress-strain basis — not true stress.")
     # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
     lines.append("** D = 0 : fully incompressible — requires hybrid elements (e.g. C3D8H).")
@@ -852,7 +875,7 @@ def render_openradioss(deck: Deck) -> Rendered:
     lines = ["#RADIOSS STARTER", *_header(deck, "#")]
     # **단위를 선언한다.** Abaqus 와 달리 이 솔버는 단위 블록이 있어서 값이 아니라
     # 선언으로 맞출 수 있다.
-    lines.extend(["/UNIT/1", "MNX_SI_KG_M_S", f"{'kg':<20}{'m':<20}s"])
+    lines.extend(_unit_block(deck))
     lines.append(f"/MAT/LAW36/{deck.solver_id}/1")
     lines.append(deck.name)
     lines.append(f"#{'RHO_I':>19}")
@@ -984,7 +1007,7 @@ def render_openradioss_thermal(deck: Deck) -> Rendered:
 
     notes: list[str] = []
     lines = ["#RADIOSS STARTER", *_header(deck, "#")]
-    lines.extend(["/UNIT/1", "MNX_SI_KG_M_S", f"{'kg':<20}{'m':<20}s"])
+    lines.extend(_unit_block(deck))
 
     # RHOCP(밀도 곱하기 비열). **비열이 온도를 타면 첫 점을 쓴다** — 이 필드는 상수 하나다.
     volumetric = density * heats[0][1]
@@ -1095,7 +1118,14 @@ def render_json(deck: Deck) -> Rendered:
     body: dict[str, Any] = {
         "schema": "matnexus.property-card/2",
         "name": deck.name,
-        "units": {"length": "m", "mass": "kg", "time": "s", "stress": "Pa"},
+        # **덱의 계를 적는다.** 박아 두면 값은 바뀌는데 선언이 안 바뀐다.
+        "units": {
+            "length": deck.units.length,
+            "mass": deck.units.mass,
+            "time": deck.units.time,
+            "stress": deck.units.symbol("Pa"),
+            "system": deck.units.key,
+        },
         "blocks": blocks,
         "provenance": list(deck.provenance),
     }
@@ -1104,11 +1134,135 @@ def render_json(deck: Deck) -> Rendered:
     return Rendered(text=json.dumps(body, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
 
 
-def render(format_key: str, deck: Deck) -> Rendered:
+def _unit_block(deck: Deck) -> list[str]:
+    """OpenRadioss `/UNIT/1`. **덱이 자기 단위계를 말한다.**
+
+    전에는 `MNX_SI_KG_M_S` 가 박혀 있었다. 단위계를 고를 수 있게 되는 순간 그
+    이름은 거짓말이 된다 — 그리고 그 거짓말은 **솔버가 그대로 믿는다.**
+    """
+    system = deck.units
+    name = f"MNX_{system.mass}_{system.length}_{system.time}".upper()
+    return ["/UNIT/1", name, f"{system.mass:<20}{system.length:<20}{system.time}"]
+
+
+def block_spec(key: str) -> Any:
+    """등록된 블록 선언. 없으면 `None` — 확장이 안 붙은 상태도 있다.
+
+    `cards` 를 늦게 부른다. 이 패키지가 위에서 부르면 순환이 된다(265줄이 같다).
+    """
+    from matcore import cards
+
+    try:
+        return cards.block(key)
+    except KeyError:
+        return None
+
+
+def _unit_of(spec: Any, key: str, row: Mapping[str, Any] | None) -> str | None:
+    """이 값이 무슨 물리량인가. **행이 자기 단위를 들면 그것이 이긴다.**
+
+    경화식 파라미터는 식마다 단위가 다르다 — Voce 의 `b` 는 무차원이고 `q` 는
+    Pa 다. 열 선언 하나로는 못 적어서, 행에 `si_unit` 을 실어 보낸다
+    (`matcore/cards/__init__.py` 머리말).
+    """
+    if row is not None:
+        told = row.get("si_unit")
+        if isinstance(told, str) and told:
+            return told
+    if spec is None:
+        return None
+    for item in (*spec.produces, *spec.rows):
+        if item.key == key:
+            found = item.si_unit
+            return str(found) if isinstance(found, str) else None
+    return None
+
+
+def to_system(deck: Deck, system: UnitSystem) -> Deck:
+    """덱의 숫자를 그 단위계로 옮긴다. **렌더러는 이 일을 모른다.**
+
+    렌더러마다 환산하게 두면 새 렌더러가 붙을 때마다 빠뜨릴 자리가 생기고,
+    빠뜨린 렌더러는 **오류 없이** SI 를 그 계의 기호로 적어 내보낸다. 확장이
+    등록한 렌더러(`register_renderer`)도 고칠 필요가 없어야 한다.
+
+    ## 선언된 것만 바꾸고, 나머지는 **말한다**
+
+    처음에는 단위를 모르는 숫자를 만나면 멈추게 했다. 실제 카드가 바로 걸렸다 —
+    경화식 블록은 `values` 가 **열려 있다.** 식마다 다른 파라미터가 들어오므로
+    (`**extras`) 선언에 다 적을 수가 없다. 그리고 그 블록은 애초에 덱에 안
+    실린다(`matcore/cards/mechanical.py`).
+
+    그래서 규칙을 바꿨다. 선언된 값은 바꾸고, **선언 안 된 숫자는 그대로 두되
+    이름을 돌려준다.** 부르는 쪽이 그것을 덱 주석에 적는다 — 조용히 남는 것과
+    적혀서 남는 것은 다르다.
+
+    **선언은 됐는데 이 계에 기호가 없으면** 그때는 멈춘다. 그건 표의 구멍이지
+    데이터의 성질이 아니다.
+    """
+    if system is SI:
+        # 인수가 전부 1 이라 결과는 같지만, 굳이 새 dict 를 만들지 않는다.
+        return replace(deck, units=SI)
+
+    untouched: list[str] = []
+
+    def moved(value: Any, si_unit: str | None, where: str) -> Any:
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            return value
+        if si_unit is None:
+            # 뜻을 모르는 숫자다. 바꾸지 않고 **이름을 남긴다.**
+            untouched.append(where)
+            return value
+        try:
+            return system.convert(float(value), si_unit)
+        except KeyError as error:
+            raise ExportError(
+                f"{system.label} 에는 '{si_unit}' 을 쓸 기호가 정해져 있지 "
+                f"않습니다('{where}'). `matcore/export/systems.py` 에 적거나 "
+                f"SI 로 내보내세요."
+            ) from error
+
+    blocks: dict[str, Any] = {}
+    for name, payload in deck.blocks.items():
+        if not isinstance(payload, Mapping):
+            blocks[name] = payload
+            continue
+        spec = block_spec(name)
+        moved_values = {
+            key: moved(value, _unit_of(spec, key, None), f"{name}.{key}")
+            for key, value in (payload.get("values") or {}).items()
+        }
+        moved_rows = [
+            {
+                key: moved(value, _unit_of(spec, key, row), f"{name}[].{key}")
+                for key, value in row.items()
+            }
+            for row in (payload.get("rows") or [])
+            if isinstance(row, Mapping)
+        ]
+        blocks[name] = {
+            **payload,
+            **({"values": moved_values} if "values" in payload else {}),
+            **({"rows": moved_rows} if "rows" in payload else {}),
+        }
+    if untouched:
+        # **조용히 남기지 않는다.** 덱 주석에 그대로 들어간다.
+        blocks = {
+            **blocks,
+            "_units": {
+                "notes": [f"단위가 선언돼 있지 않아 SI 로 남긴 값: {', '.join(untouched)}"]
+            },
+        }
+    return replace(deck, blocks=blocks, units=system)
+
+
+def render(format_key: str, deck: Deck, system: UnitSystem = SI) -> Rendered:
     """덱을 솔버 텍스트로 만든다.
 
     **쓰고 나서 다시 읽는다.** 키워드가 빠진 파일은 솔버가 오류 없이 무시하기도
     한다 — 그러면 해석은 도는데 재료가 안 들어간 채로 돈다.
+
+    `system` 은 **여기서 한 번** 적용된다(`to_system`). 렌더러는 이미 그 계로
+    바뀐 덱을 받고, 선언 줄만 `deck.units` 에서 읽는다.
     """
     target = renderer(format_key)
 
@@ -1123,7 +1277,7 @@ def render(format_key: str, deck: Deck) -> Rendered:
             f"기본값으로 채워 내보내면 그것이 측정값인지 덱만 봐서는 알 수 없습니다."
         )
 
-    result = target.render(deck)
+    result = target.render(to_system(deck, system))
     absent = [word for word in target.keywords if word not in result.text]
     if absent:
         raise ExportError(

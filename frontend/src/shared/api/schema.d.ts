@@ -569,6 +569,15 @@ export interface paths {
          *     **초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의
          *     실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면
          *     카드 안에 그렇게 적어 둔다.
+         *
+         *     ## 단위계를 고른다
+         *
+         *     판재 CAE 는 관행이 mm·N·tonne 이고 화면도 그 단위계다. SI 덱만 내면
+         *     해석자가 매번 손으로 환산하게 되는데, **그 손이 바로 사고의 자리**다.
+         *
+         *     고른 계는 덱 머리와 **파일 이름에** 들어간다. 두 계가 한 폴더에 섞이면
+         *     어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
+         *     생긴다.
          */
         get: operations["export_card_api_fitting_cards__card_id__export_get"];
         put?: never;
@@ -665,6 +674,29 @@ export interface paths {
          *     비슷한 두 식이 그 밖에서 갈리고, 어디까지 쓸 것인지는 해석하는 사람이 안다.
          */
         post: operations["preview_api_fitting_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/unit-systems": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Unit Systems
+         * @description 덱을 쓸 수 있는 단위계. **화면이 목록을 손으로 적지 않게 한다.**
+         *
+         *     적어 두면 계를 하나 더할 때 화면이 뒤처지고, 그때 사람은 그 계로 못 낸다는
+         *     것을 목록에 없다는 사실로만 안다 — 오류가 아니라 부재라서 원인을 못 찾는다.
+         */
+        get: operations["list_unit_systems_api_fitting_unit_systems_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7088,6 +7120,24 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /**
+         * UnitSystemOut
+         * @description 덱을 쓸 수 있는 단위계 하나.
+         *
+         *     **고른 계는 덱 머리와 파일 이름에 들어간다.** 두 계가 한 폴더에 섞이면
+         *     어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
+         *     생긴다 — 단위계가 섞인 덱은 조용히 1000배 틀린 답을 낸다.
+         */
+        UnitSystemOut: {
+            /** Declaration */
+            declaration: string;
+            /** Is Default */
+            is_default: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
         /** UnitsOut */
         UnitsOut: {
             /** Dimensions */
@@ -8368,6 +8418,8 @@ export interface operations {
         parameters: {
             query?: {
                 format?: string;
+                /** @description 덱의 단위계. 기본은 SI. */
+                units?: string;
             };
             header?: never;
             path: {
@@ -8508,6 +8560,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_unit_systems_api_fitting_unit_systems_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitSystemOut"][];
                 };
             };
         };

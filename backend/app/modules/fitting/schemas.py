@@ -199,6 +199,22 @@ class ExportFormatOut(BaseModel):
     내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
 
 
+class UnitSystemOut(BaseModel):
+    """덱을 쓸 수 있는 단위계 하나.
+
+    **고른 계는 덱 머리와 파일 이름에 들어간다.** 두 계가 한 폴더에 섞이면
+    어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
+    생긴다 — 단위계가 섞인 덱은 조용히 1000배 틀린 답을 낸다.
+    """
+
+    key: str
+    label: str
+    declaration: str
+    """덱 머리에 그대로 들어가는 줄. `tonne, mm, s, MPa`."""
+    is_default: bool
+    """고르지 않으면 이것으로 나간다."""
+
+
 class CardValueOut(BaseModel):
     """카드에 담기는 값 하나의 이름과 뜻. **화면이 이것만으로 칸을 그린다.**
 

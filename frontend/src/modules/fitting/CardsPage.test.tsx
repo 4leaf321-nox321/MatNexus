@@ -28,6 +28,11 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     cards: (...args: unknown[]) => cards(...args),
     cardFacets: () => cardFacets(),
     formats: () => formats(),
+    // 내보내기 메뉴가 단위계 목록을 읽는다 — **화면이 적어 두지 않는다.**
+    unitSystems: () =>
+      Promise.resolve([
+        { key: 'si', label: 'SI', declaration: 'kg, m, s, Pa', is_default: true },
+      ]),
   },
 }))
 

@@ -16,6 +16,8 @@ export type FitPreviewRequest = components['schemas']['FitPreviewRequest']
 export type InheritedValue = components['schemas']['InheritedValueOut']
 export type FittedParameter = components['schemas']['FittedParameterOut']
 export type PropertyCard = components['schemas']['PropertyCardOut']
+/** 덱을 쓸 단위계. **목록은 서버가 준다** — 화면이 적어 두면 계가 늘 때 뒤처진다. */
+export type UnitSystem = components['schemas']['UnitSystemOut']
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']
 type PropertyCardUpdate = components['schemas']['PropertyCardUpdateRequest']
 export type ExportFormat = components['schemas']['ExportFormatOut']
@@ -156,10 +158,20 @@ export const fittingApi = {
    * `<a href>` 로는 안 된다 — access 토큰이 메모리에만 있어 브라우저가 스스로
    * 여는 링크에는 실리지 않고, 401 이 새 탭에서 나므로 화면에 아무 표시도 안 뜬다.
    */
-  download: (id: string, format: ExportFormat, label: string) =>
+  unitSystems: () => api.get<UnitSystem[]>('/fitting/unit-systems'),
+
+  /**
+   * 덱을 내려받는다. **파일 이름에 단위계를 적는다.**
+   *
+   * 두 계가 한 폴더에 섞이면 어느 쪽이 어느 계인지 파일을 열어야 알게 되고,
+   * 그때 안 열어 보는 사람이 생긴다 — 단위계가 섞인 덱은 조용히 1000배 틀린
+   * 답을 낸다. 서버도 같은 이름을 붙이지만 이 함수가 이름을 정하므로 여기서도
+   * 적어야 한다.
+   */
+  download: (id: string, format: ExportFormat, label: string, system: UnitSystem) =>
     downloadFile(
-      `/fitting/cards/${id}/export?format=${format.key}`,
-      `${filename(label)}.${format.extension}`
+      `/fitting/cards/${id}/export?format=${format.key}&units=${system.key}`,
+      `${filename(label)}_${system.key}.${format.extension}`
     ),
 }
 

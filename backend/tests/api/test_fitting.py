@@ -468,6 +468,65 @@ class Test내보내기:
         assert "시편 3개" in text
         assert "적합 구간" in text
 
+    def test_단위계를_고를_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """판재 CAE 는 관행이 mm·N·tonne 이다. SI 덱만 내면 해석자가 매번 손으로
+        환산하게 되는데, **그 손이 바로 사고의 자리**다."""
+        si = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=si",
+            headers=admin_headers,
+        )
+        mm = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=mm_n_tonne",
+            headers=admin_headers,
+        )
+        assert si.status_code == 200 and mm.status_code == 200, mm.text
+        assert "kg, m, s, Pa" in si.text
+        assert "tonne, mm, s, MPa" in mm.text
+        assert si.text != mm.text, "값이 안 바뀌었습니다"
+        # **파일 이름에 계가 들어간다.** 두 계가 한 폴더에 섞이면 어느 쪽이
+        # 어느 계인지 파일을 열어야 알게 된다.
+        assert "_si." in si.headers["content-disposition"]
+        assert "_mm_n_tonne." in mm.headers["content-disposition"]
+
+    def test_안_고르면_SI_다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """**전과 같은 것이 나가야 한다.** 기본이 바뀌면 어제 받은 덱과 오늘
+        받은 덱이 다른 계인데 이름도 같다."""
+        plain = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+        )
+        told = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=si",
+            headers=admin_headers,
+        )
+        assert plain.text == told.text
+
+    def test_모르는_단위계는_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """조용히 SI 로 떨어지면 안 된다 — 사람은 자기가 고른 계로 받았다고
+        믿고, 그 믿음은 덱을 열어도 안 깨진다(숫자가 그럴듯하다)."""
+        response = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=mks",
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert "mm_n_tonne" in response.json()["error"]["message"]
+
+    def test_쓸_수_있는_단위계를_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """화면이 목록을 손으로 적으면 계가 늘 때 뒤처지고, 그때 사람은 그
+        계로 못 낸다는 것을 **목록에 없다는 사실로만** 안다."""
+        rows = client.get("/api/fitting/unit-systems", headers=admin_headers).json()
+        by_key = {row["key"]: row for row in rows}
+        assert {"si", "mm_n_tonne"} <= set(by_key)
+        assert by_key["si"]["is_default"] is True
+        assert by_key["mm_n_tonne"]["declaration"] == "tonne, mm, s, MPa"
+
     def test_초안이면_덱에_그렇게_적는다(
         self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
     ) -> None:
@@ -2227,7 +2286,8 @@ class Test되짚어_찾은_것:
             assert got.status_code == 200, got.text
             names[form] = got.headers["content-disposition"]
         assert names["openradioss"] != names["openradioss_thermal"], names
-        assert "_thermal.rad" in names["openradioss_thermal"]
+        # 이름에 형식과 **단위계**가 함께 들어간다(v1.110.0).
+        assert "_thermal_si.rad" in names["openradioss_thermal"]
 
 
 class Test네킹을_안_자르면:

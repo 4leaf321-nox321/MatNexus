@@ -10950,6 +10950,35 @@
         "title": "UnitOut",
         "type": "object"
       },
+      "UnitSystemOut": {
+        "description": "덱을 쓸 수 있는 단위계 하나.\n\n**고른 계는 덱 머리와 파일 이름에 들어간다.** 두 계가 한 폴더에 섞이면\n어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이\n생긴다 — 단위계가 섞인 덱은 조용히 1000배 틀린 답을 낸다.",
+        "properties": {
+          "declaration": {
+            "title": "Declaration",
+            "type": "string"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "declaration",
+          "is_default"
+        ],
+        "title": "UnitSystemOut",
+        "type": "object"
+      },
       "UnitsOut": {
         "properties": {
           "dimensions": {
@@ -13223,7 +13252,7 @@
     },
     "/api/fitting/cards/{card_id}/export": {
       "get": {
-        "description": "솔버 카드를 텍스트로 만든다.\n\n**초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의\n실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면\n카드 안에 그렇게 적어 둔다.",
+        "description": "솔버 카드를 텍스트로 만든다.\n\n**초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의\n실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면\n카드 안에 그렇게 적어 둔다.\n\n## 단위계를 고른다\n\n판재 CAE 는 관행이 mm·N·tonne 이고 화면도 그 단위계다. SI 덱만 내면\n해석자가 매번 손으로 환산하게 되는데, **그 손이 바로 사고의 자리**다.\n\n고른 계는 덱 머리와 **파일 이름에** 들어간다. 두 계가 한 폴더에 섞이면\n어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이\n생긴다.",
         "operationId": "export_card_api_fitting_cards__card_id__export_get",
         "parameters": [
           {
@@ -13243,6 +13272,18 @@
             "schema": {
               "default": "json",
               "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "description": "덱의 단위계. 기본은 SI.",
+            "in": "query",
+            "name": "units",
+            "required": false,
+            "schema": {
+              "default": "si",
+              "description": "덱의 단위계. 기본은 SI.",
+              "title": "Units",
               "type": "string"
             }
           }
@@ -13435,6 +13476,32 @@
           }
         },
         "summary": "Preview",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/unit-systems": {
+      "get": {
+        "description": "덱을 쓸 수 있는 단위계. **화면이 목록을 손으로 적지 않게 한다.**\n\n적어 두면 계를 하나 더할 때 화면이 뒤처지고, 그때 사람은 그 계로 못 낸다는\n것을 목록에 없다는 사실로만 안다 — 오류가 아니라 부재라서 원인을 못 찾는다.",
+        "operationId": "list_unit_systems_api_fitting_unit_systems_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnitSystemOut"
+                  },
+                  "title": "Response List Unit Systems Api Fitting Unit Systems Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Unit Systems",
         "tags": [
           "fitting"
         ]

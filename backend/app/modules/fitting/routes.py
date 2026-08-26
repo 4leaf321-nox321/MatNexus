@@ -42,6 +42,7 @@ from app.modules.fitting.schemas import (
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
+    UnitSystemOut,
     ViscoelasticCardSaveRequest,
 )
 from app.modules.materials import declared
@@ -1624,6 +1625,25 @@ def _visible_card(db: Session, user: User, card_id: uuid.UUID) -> PropertyCard:
     return item
 
 
+@router.get("/unit-systems", response_model=list[UnitSystemOut])
+def list_unit_systems(user: User = Depends(current_user)) -> list[UnitSystemOut]:
+    """덱을 쓸 수 있는 단위계. **화면이 목록을 손으로 적지 않게 한다.**
+
+    적어 두면 계를 하나 더할 때 화면이 뒤처지고, 그때 사람은 그 계로 못 낸다는
+    것을 목록에 없다는 사실로만 안다 — 오류가 아니라 부재라서 원인을 못 찾는다.
+    """
+    del user
+    return [
+        UnitSystemOut(
+            key=item.key,
+            label=item.label,
+            declaration=item.declaration,
+            is_default=item is export.systems.SI,
+        )
+        for item in export.SYSTEMS
+    ]
+
+
 @router.get("/formats", response_model=list[ExportFormatOut])
 def list_formats(user: User = Depends(current_user)) -> list[ExportFormatOut]:
     """내보낼 수 있는 솔버. **화면이 이 응답만으로 목록을 그린다.**"""
@@ -1643,6 +1663,7 @@ def list_formats(user: User = Depends(current_user)) -> list[ExportFormatOut]:
 def export_card(
     card_id: uuid.UUID,
     format: str = Query(default="json"),
+    units: str = Query(default="si", description="덱의 단위계. 기본은 SI."),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -1651,6 +1672,15 @@ def export_card(
     **초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의
     실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면
     카드 안에 그렇게 적어 둔다.
+
+    ## 단위계를 고른다
+
+    판재 CAE 는 관행이 mm·N·tonne 이고 화면도 그 단위계다. SI 덱만 내면
+    해석자가 매번 손으로 환산하게 되는데, **그 손이 바로 사고의 자리**다.
+
+    고른 계는 덱 머리와 **파일 이름에** 들어간다. 두 계가 한 폴더에 섞이면
+    어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
+    생긴다.
     """
     item = _visible_card(db, user, card_id)
     material = db.get(Material, item.material_id)
@@ -1751,7 +1781,16 @@ def export_card(
 
     deck = _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
     try:
-        rendered = export.render(format, deck)
+        system = export.systems.get(units)
+    except KeyError as exc:
+        known = ", ".join(one.key for one in export.SYSTEMS)
+        raise AppError(
+            "MNX-FITTING-0023",
+            f"모르는 단위계입니다: {units!r}. 쓸 수 있는 것: {known}",
+            status=422,
+        ) from exc
+    try:
+        rendered = export.render(format, deck, system)
         target = export.renderer(format)
     except export.ExportError as exc:
         raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
@@ -1764,7 +1803,8 @@ def export_card(
             # `/HEAT/MAT` 을 함께 내는데 둘 다 `.rad` 라, 이름이 같으면 받는
             # 쪽에 `(1)` 이 붙고 어느 쪽이 열인지 알 수 없게 된다.
             "Content-Disposition": (
-                f'attachment; filename="{deck.name}{target.suffix}.{target.extension}"'
+                f'attachment; filename="{deck.name}{target.suffix}'
+                f'_{system.key}.{target.extension}"'
             )
         },
     )

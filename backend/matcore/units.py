@@ -123,8 +123,17 @@ UNITS: dict[str, Unit] = {
         # 실무 표기. `J/kgK` 는 규격서에서 흔하고 `kJ/(kg.K)` 는 폴리머 자료에서 흔하다.
         _u("J/kgK", "specific_heat", "1"),
         _u("kJ/(kg.K)", "specific_heat", "1000"),
+        # **mm·N·tonne 계의 비열.** 그 계에서 에너지는 mJ, 질량은 tonne 이다.
+        # 1 J/(kg·K) = 1e3 mJ / (1e-3 tonne · K) = 1e6 mJ/(tonne·K).
+        # 덱을 그 단위계로 내보낼 때만 쓰인다(`matcore/export/systems.py`).
+        _u("mJ/(tonne.K)", "specific_heat", "0.000001"),
         _u("W/(m.K)", "thermal_conductivity", "1"),
         _u("W/mK", "thermal_conductivity", "1"),
+        # **mm·N·tonne 계의 열전도도.** 그 계에서 일률은 mW, 길이는 mm 이라
+        # 1 W/(m·K) = 1e3 mW / (1e3 mm · K) = 1 mW/(mm·K) — **인수가 1 이다.**
+        # 값이 같아도 기호는 달라야 한다. 덱에 `W/(m.K)` 라고 적어 두면 받는
+        # 사람이 그 덱을 SI 로 읽는다.
+        _u("mW/(mm.K)", "thermal_conductivity", "1"),
         _u("kg/m3", "density", "1"),
         _u("g/cm3", "density", "1000"),
         # 기존 앱이 쓰던 단위. 흡수 경로에서 그대로 들어온다.
