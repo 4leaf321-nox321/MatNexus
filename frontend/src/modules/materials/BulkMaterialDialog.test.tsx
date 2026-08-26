@@ -97,6 +97,22 @@ describe('여러 개 등록', () => {
     expect(notice).toHaveTextContent('적용 제품')
   })
 
+  it('클립보드가 막히면 손으로 가져갈 칸을 낸다', async () => {
+    // 사내에서 개발 서버를 IP(`http://`)로 열면 브라우저가 클립보드를 안 준다.
+    // **「복사하지 못했습니다」 만 띄우면 그 사람은 표를 통째로 다시 적는다** —
+    // 칸이 입력란이라 끌어서 고를 수도 없다.
+    document.execCommand = vi.fn(() => false)
+    Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true })
+    open()
+    material(1, 'SECC')
+
+    fireEvent.click(screen.getByRole('button', { name: /표 복사/ }))
+    const box = (await screen.findByLabelText('표 글자')) as HTMLTextAreaElement
+    expect(box.value).toContain('SECC')
+    // 머리글도 함께 있어야 붙여 넣은 쪽에서 열을 셀 수 있다.
+    expect(box.value).toContain('Grade')
+  })
+
   it('분류를 위 줄에서 이어받는다', async () => {
     // Grade 열에만 붙여 넣는 것이 실제 작업이다. 줄마다 다시 적게 하면
     // 오타 하나가 분류를 갈라 놓는다.

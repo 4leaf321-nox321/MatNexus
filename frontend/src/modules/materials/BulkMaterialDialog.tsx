@@ -174,6 +174,13 @@ export function BulkMaterialDialog({
   const [result, setResult] = useState<BulkResult | null>(null)
   /** 복사 직후 잠깐 바뀌는 표시. **아무 반응이 없으면 됐는지 알 수 없다.** */
   const [copied, setCopied] = useState(false)
+  /**
+   * 클립보드가 막혔을 때 손으로 가져갈 글자.
+   *
+   * 사내에서 개발 서버를 IP(`http://`)로 열면 브라우저가 클립보드를 안 준다.
+   * 그때 **아무것도 못 하게 두지 않는다.**
+   */
+  const [fallback, setFallback] = useState<string | null>(null)
   const first = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -182,6 +189,7 @@ export function BulkMaterialDialog({
     setError(null)
     setResult(null)
     setCopied(false)
+    setFallback(null)
     // 열자마자 첫 칸에 적을 수 있어야 한다 — 붙여 넣기가 이 창의 주된 쓰임이다.
     setTimeout(() => first.current?.focus(), 0)
   }, [open])
@@ -206,13 +214,15 @@ export function BulkMaterialDialog({
   const ready = filled > 0 && bad === 0 && filled <= MAX_ROWS && !busy
 
   async function copyTable() {
-    const done = await copyText(toTsv(rows, visible))
-    if (!done) {
-      setError(new Error('복사하지 못했습니다. 표를 직접 끌어 골라 복사하세요.'))
+    const text = toTsv(rows, visible)
+    if (await copyText(text)) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
       return
     }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+    // **막혀도 손으로 가져갈 길은 남긴다.** 「복사하지 못했습니다」 만 띄우면
+    // 그 사람은 표를 통째로 다시 적는다 — 칸이 입력란이라 끌어서 고를 수도 없다.
+    setFallback(text)
   }
 
   function edit(at: number, key: string, value: string) {
@@ -303,6 +313,22 @@ export function BulkMaterialDialog({
             처럼 <b>세미콜론(;)</b>으로 나누세요. 쉼표와 탭은 붙여 넣기가 칸을 가르는 데
             쓰므로 값 안에는 넣을 수 없습니다.
           </p>
+        )}
+
+        {fallback !== null && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">
+            <p className="mb-1.5 text-xs">
+              브라우저가 클립보드를 막았습니다(<b>주소가 https 가 아닐 때</b> 그렇습니다).
+              아래 칸에서 <b>Ctrl+A · Ctrl+C</b> 로 가져가세요.
+            </p>
+            <textarea
+              readOnly
+              aria-label="표 글자"
+              className="h-24 w-full resize-none rounded border bg-transparent p-2 font-mono text-xs"
+              value={fallback}
+              ref={(node) => node?.select()}
+            />
+          </div>
         )}
 
         <div className="rounded-md border">
