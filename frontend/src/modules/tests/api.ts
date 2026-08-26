@@ -73,6 +73,15 @@ export interface ProfileDefinition {
    *  잘못 붙은 곡선은 칸을 고쳐 되돌릴 수 없다.
    *  칸 이름의 정본은 서버의 `IDENTITY_FIELDS` 다. */
   identity?: Record<string, { field: string }>
+  /** 이 메타를 **시험 조건**에 채운다. 빈 칸일 때만.
+   *
+   *  칸 이름은 **시험 종류가 선언한다**(`TestType.conditions`) — 인장은 속도·
+   *  예하중이고 DMA 는 진폭이라 고정 목록이 없다.
+   *
+   *  `unit` 은 **파일에 적힌 단위**다. 안 적으면 값에 붙어 온 것을 쓰고, 그것도
+   *  없으면 정의의 SI 로 해석된다 — 정의가 `m/s` 인데 파일이 `mm/min` 이면
+   *  6만 배 어긋나므로 적어 두는 편이 안전하다. */
+  conditions?: Record<string, { field: string; unit?: string }>
   metadata?: string[]
 }
 

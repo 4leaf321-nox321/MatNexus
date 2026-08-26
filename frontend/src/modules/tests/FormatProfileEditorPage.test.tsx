@@ -138,6 +138,46 @@ describe('저장된 프로파일을 열었을 때', () => {
   })
 })
 
+describe('메타 기본값', () => {
+  it('손대지 않은 줄도 「그대로 보관」으로 저장된다', async () => {
+    // **화면이 거짓말을 하고 있었다.** 손대지 않은 줄을 「그대로 보관」이라고
+    // 그려 놓고, 저장은 손댄 줄만 순회해서 정의에 안 담았다 — 읽는 쪽은 그것을
+    // 「하나도 안 남기기로 정했음」 으로 읽는다. 즉 보관이라 하고 전부 버렸다.
+    previewFormat.mockResolvedValue({
+      filename: 'a.tra',
+      encoding: 'utf-8',
+      delimiter: ',',
+      line_count: 20,
+      meta: [
+        ['Instrument name', 'Zwick Z100'],
+        ['Operator', '홍길동'],
+      ],
+      tables: [],
+      warnings: [],
+      matched_profile: null,
+    })
+    const { container } = open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement
+    await userEvent.upload(input, new File(['x'], 'a.tra', { type: 'text/plain' }))
+    await waitFor(() => expect(previewFormat).toHaveBeenCalled())
+    // 메타 지문 칩과 ⑤ 의 줄에 같은 글자가 있다 — 여럿이어도 된다.
+    await waitFor(() => expect(screen.getAllByText('Instrument name').length).toBeGreaterThan(0))
+
+    // 파일을 놓았으면 **적용해 봐야** 저장이 열린다 — 자동 감지는 틀린다.
+    await userEvent.click(screen.getByRole('button', { name: /이 파일에 적용해 보기/ }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^저장$/ })).not.toBeDisabled()
+    )
+    await userEvent.click(screen.getByRole('button', { name: /^저장$/ }))
+    await waitFor(() => expect(updateFormat).toHaveBeenCalled())
+    const call = updateFormat.mock.calls[0] as unknown as [string, { definition: object }]
+    const sent = call[1].definition as { metadata?: string[] }
+    expect(sent.metadata).toEqual(expect.arrayContaining(['Instrument name', 'Operator']))
+  })
+})
+
 describe('지문 구역', () => {
   it('메타 키 칸의 이름이 「메타 키 지정」 이다', async () => {
     open()

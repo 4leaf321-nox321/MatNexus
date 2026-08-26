@@ -151,6 +151,52 @@ class Test키를_만들_때:
         assert sorted(parsed.metadata.values()) == ["나중", "먼저"]
 
 
+class Test시험_조건:
+    """시험 조건은 **시험 종류마다 다르다** — 인장은 속도·예하중이고 DMA 는
+    진폭이다. 그래서 이 층은 무엇이 유효한지 모르고, 원문을 그대로 넘긴다.
+    """
+
+    def test_값과_단위를_함께_낸다(self) -> None:
+        """단위를 안 보내면 읽는 쪽이 정의의 SI 로 본다. 정의가 `m/s` 인데
+        파일이 `mm/min` 이면 **6만 배**이고 숫자는 그럴듯하다."""
+        rule = {**BASE, "conditions": {"속도": {"field": "speed_elastic", "unit": "mm/min"}}}
+        parsed = profiles.apply(rule, made(속도="5"))
+        assert parsed.conditions == {"speed_elastic": "5"}
+        assert parsed.condition_units == {"speed_elastic": "mm/min"}
+
+    def test_값에_붙어_온_단위를_읽는다(self) -> None:
+        """`5 mm/min` 처럼 한 칸에 붙여 주는 장비가 실재한다."""
+        rule = {**BASE, "conditions": {"속도": {"field": "speed_elastic"}}}
+        parsed = profiles.apply(rule, made(속도="5 mm/min"))
+        assert parsed.conditions == {"speed_elastic": "5"}
+        assert parsed.condition_units == {"speed_elastic": "mm/min"}
+
+    def test_프로파일이_적은_단위가_이긴다(self) -> None:
+        """소프트웨어 설정이 바뀌어 표기가 달라진 파일이 올 수 있다. 그때
+        사람이 프로파일에서 못 바로잡으면 고칠 자리가 없다."""
+        rule = {**BASE, "conditions": {"속도": {"field": "speed_elastic", "unit": "mm/s"}}}
+        parsed = profiles.apply(rule, made(속도="5 mm/min"))
+        assert parsed.conditions == {"speed_elastic": "5"}
+        assert parsed.condition_units == {"speed_elastic": "mm/s"}
+
+    def test_단위가_없으면_안_보낸다(self) -> None:
+        """글자 조건(센서 종류)에는 단위가 없다. 억지로 넣으면 검증이 막는다."""
+        rule = {**BASE, "conditions": {"센서": {"field": "sensor_type"}}}
+        parsed = profiles.apply(rule, made(센서="makroXtens"))
+        assert parsed.conditions == {"sensor_type": "makroXtens"}
+        assert parsed.condition_units == {}
+
+    def test_빈_값은_안_보낸다(self) -> None:
+        rule = {**BASE, "conditions": {"속도": {"field": "speed_elastic"}}}
+        assert profiles.apply(rule, made(속도="Unknown")).conditions == {}
+
+    def test_선언이_없으면_비어_있다(self) -> None:
+        """**하위 호환.** 기존 프로파일은 이 자리가 없다."""
+        parsed = profiles.apply(BASE, made(속도="5"))
+        assert parsed.conditions == {}
+        assert parsed.condition_units == {}
+
+
 class Test식별자:
     def test_짚어_주기만_한다(self) -> None:
         rule = {

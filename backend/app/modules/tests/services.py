@@ -665,6 +665,7 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
 
     run.source_metadata = dict(parsed.metadata)
     filled = _apply_record(db, run, parsed)
+    filled += _apply_conditions(db, run, test_type, parsed)
     run.parser_version = how[:80]
     run.status = "parsed"
     run.parse_error = None
@@ -740,6 +741,62 @@ def _apply_record(db: Session, run: TestRun, parsed: ParsedTest) -> list[str]:
                 f"기준정보에 넣지 못했습니다: {error.message}"
             )
     return said
+
+
+def _apply_conditions(
+    db: Session, run: TestRun, test_type: TestType, parsed: ParsedTest
+) -> list[str]:
+    """파일이 말한 **시험 조건**을 채운다. 빈 칸만. 남긴 말을 돌려준다.
+
+    ## 폼과 같은 길을 탄다
+
+    `normalize_conditions` 는 화면에서 올릴 때 쓰는 그 함수다. 여기서 다른 길을
+    내면 검증이 둘로 갈리고, 그러면 **폼으로는 막히는 값이 파일로는 들어온다.**
+    단위 차원 검사(길이 자리에 시간 단위)도 그 함수가 한다.
+
+    ## 빈 칸만 채운다
+
+    사람이 올릴 때 적은 조건을 파일이 조용히 바꾸면 어느 것이 맞는지 알 수 없다.
+    그리고 다시 읽기가 있다 — 덮어쓰면 고쳐 놓은 값이 매번 되돌아간다.
+    시험 칸(`_apply_record`)과 같은 판단이다.
+
+    ## 곡선을 잃지 않는다
+
+    파일의 조건 값이 정의와 안 맞으면(모르는 단위·목록에 없는 선택지)
+    `normalize_conditions` 가 `AppError` 를 낸다. 그것을 그냥 두면 파싱 실패가
+    되어 **파일은 멀쩡히 읽혔는데 곡선까지 통째로 잃는다.** 채우기는 거들기이지
+    읽기가 아니므로, 실패해도 말만 남기고 넘어간다.
+    """
+    if not parsed.conditions:
+        return []
+
+    already = dict(run.conditions or {})
+    fresh = {
+        key: value
+        for key, value in parsed.conditions.items()
+        if already.get(key) in (None, "")
+    }
+    if not fresh:
+        return []
+
+    try:
+        # **이미 있는 것과 함께 넘긴다.** 새 것만 넘기면 이미 적힌 조건이
+        # 「안 보낸 것」이 되어 통째로 지워진다.
+        values, units = normalize_conditions(
+            db,
+            test_type,
+            {**already, **fresh},
+            {**(run.input_units or {}), **parsed.condition_units},
+        )
+    except AppError as error:
+        return [
+            f"파일이 말한 시험 조건({', '.join(sorted(fresh))})을 "
+            f"넣지 못했습니다: {error.message}"
+        ]
+
+    run.conditions = values
+    run.input_units = units
+    return []
 
 
 def _who_could_read(db: Session, run: TestRun, data: bytes) -> str | None:

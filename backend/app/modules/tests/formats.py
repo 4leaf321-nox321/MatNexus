@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.tests import services
 from app.modules.tests.models import FormatProfile, TestType
 from app.modules.tests.schemas import (
     IDENTITY_FIELDS,
@@ -240,6 +241,8 @@ def try_profile(
         warnings=list(parsed.warnings),
         record=parsed.record,
         identity=parsed.identity,
+        conditions=parsed.conditions,
+        condition_units=parsed.condition_units,
     )
 
 
@@ -280,12 +283,13 @@ def create_profile(
     )
     if duplicate:
         raise Conflict("MNX-TESTS-0024", f"이미 있는 프로파일입니다: {payload.key}")
-    _validate(payload.definition)
+    test_type = _resolve_type(db, payload.test_type_key)
+    _validate(payload.definition, db, test_type)
     item = FormatProfile(
         key=payload.key,
         label=payload.label,
         description=payload.description,
-        test_type_id=_resolve_type(db, payload.test_type_key).id,
+        test_type_id=test_type.id,
         owner_workspace_id=owner_id,
         definition=payload.definition,
         priority=payload.priority,
@@ -315,10 +319,11 @@ def update_profile(
     if item is None:
         raise NotFound("MNX-TESTS-0025", f"프로파일을 찾을 수 없습니다: {key}")
     _require_edit(db, user, item)
-    _validate(payload.definition)
+    test_type = _resolve_type(db, payload.test_type_key)
+    _validate(payload.definition, db, test_type)
     item.label = payload.label
     item.description = payload.description
-    item.test_type_id = _resolve_type(db, payload.test_type_key).id
+    item.test_type_id = test_type.id
     # 소유는 여기서 안 바꾼다. 전역 승격은 성격이 다른 결정이라 별도 경로다.
     item.definition = payload.definition
     item.priority = payload.priority
@@ -343,7 +348,7 @@ def delete_profile(
     return Response(status_code=204)
 
 
-def _validate(definition: dict[str, Any]) -> None:
+def _validate(definition: dict[str, Any], db: Session, test_type: TestType) -> None:
     """지문이 없으면 거절한다.
 
     지문 없는 프로파일은 **모든 파일에 맞는다.** 그러면 다른 장비 파일까지
@@ -363,6 +368,14 @@ def _validate(definition: dict[str, Any]) -> None:
     _check_units(definition)
     _check_fields(definition, "record", RECORD_FIELDS, "MNX-TESTS-0034")
     _check_fields(definition, "identity", IDENTITY_FIELDS, "MNX-TESTS-0035")
+    # **조건은 시험 종류마다 다르다.** 인장은 속도·예하중이고 DMA 는 진폭이다 —
+    # 고정 목록으로 못 검사한다.
+    _check_fields(
+        definition,
+        "conditions",
+        {field.key: field.label for field in services.condition_fields(db, test_type.id)},
+        "MNX-TESTS-0036",
+    )
 
 
 def _check_units(definition: dict[str, Any]) -> None:

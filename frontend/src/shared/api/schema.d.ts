@@ -5273,6 +5273,20 @@ export interface components {
          *     저장하고 나서 틀린 것을 아는 것과, 저장 전에 아는 것은 다르다.
          */
         ProfileTryOut: {
+            /**
+             * Condition Units
+             * @default {}
+             */
+            condition_units: {
+                [key: string]: string;
+            };
+            /**
+             * Conditions
+             * @default {}
+             */
+            conditions: {
+                [key: string]: string;
+            };
             /** Curves */
             curves: components["schemas"]["TriedCurveOut"][];
             /**

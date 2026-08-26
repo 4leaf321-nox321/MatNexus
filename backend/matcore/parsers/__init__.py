@@ -95,6 +95,22 @@ class ParsedTest:
 
     **여기서도 DB 는 모른다.** `operator` 가 무슨 컬럼인지 이 층은 모른다 —
     `summary` 의 `tensile_strength` 가 무엇인지 모르는 것과 같다."""
+    conditions: dict[str, str] = field(default_factory=dict)
+    """**시험 조건**에 채울 값들. 키는 시험 종류가 선언한 조건 칸 이름.
+
+    `record` 와 갈라 둔 이유: 시험 칸(`operator`·`instrument`)은 어느 종류나
+    같지만, 조건은 **시험 종류마다 다르다.** 인장은 속도·예하중이고 DMA 는
+    진폭·주파수다. 그래서 무엇이 유효한지는 이 층이 모른다 — 정의를 아는
+    쪽이 판정한다.
+
+    값은 파일 원문 그대로다. SI 변환은 앱이 한다 — 폼으로 들어온 조건과
+    **같은 함수**를 타야 한다(`normalize_conditions`)."""
+    condition_units: dict[str, str] = field(default_factory=dict)
+    """그 값이 **무슨 단위로 적혀 있었나.** 조건 칸 이름 → 단위 기호.
+
+    안 보내면 앱이 정의의 `si_unit` 으로 해석한다. 실제로 그래서 사고가 났다 —
+    정의가 `m/s` 인데 파일은 `mm/min` 이라 **6만 배** 어긋난 값이 저장됐고,
+    숫자가 그럴듯해 화면 어디에도 티가 안 났다(`normalize_conditions` 머리말)."""
     identity: dict[str, str] = field(default_factory=dict)
     """이 파일이 **어느 재료·시료·시편의 것인지** 가리키는 값들.
 

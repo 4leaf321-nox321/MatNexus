@@ -5823,6 +5823,22 @@
       "ProfileTryOut": {
         "description": "프로파일을 저장하기 전에 그 파일에 적용해 본 결과.\n\n저장하고 나서 틀린 것을 아는 것과, 저장 전에 아는 것은 다르다.",
         "properties": {
+          "condition_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Condition Units",
+            "type": "object"
+          },
+          "conditions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Conditions",
+            "type": "object"
+          },
           "curves": {
             "items": {
               "$ref": "#/components/schemas/TriedCurveOut"

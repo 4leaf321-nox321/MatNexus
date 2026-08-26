@@ -122,7 +122,27 @@ DMA_TYPE: dict[str, Any] = {
             "is_required": False,
         },
     ],
-    "conditions": [],
+    # **실제 정의와 같게 둔다**(`definitions.py`). 비워 두었더니 「파일이 조건을
+    # 채운다」를 시험할 수가 없었다 — 채울 칸이 없는 종류였다.
+    "conditions": [
+        {
+            "key": "reference_temperature",
+            "label": "기준 온도",
+            "value_type": "number",
+            "dimension": "temperature",
+            "si_unit": "K",
+            "is_required": False,
+        },
+        {
+            "key": "preload",
+            "label": "예하중",
+            "value_type": "number",
+            "dimension": "force",
+            "si_unit": "N",
+            "is_required": False,
+        },
+        {"key": "clamp", "label": "지그", "value_type": "text", "is_required": False},
+    ],
 }
 
 
@@ -1489,6 +1509,148 @@ class Test시험_종류_바로잡기:
         )
         detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
         assert detail["parse_profile_key"] is None
+
+
+class Test파일이_시험_조건을_채운다:
+    """*"시험 종류에서 정해 놓은 칸에 연결해서 넣는 것도 가능한가"* — 실사용에서
+    나왔다.
+
+    채널은 표의 **열**이라 값 하나가 못 간다. 갈 곳은 시험 종류가 선언한
+    **조건**이다 — 인장은 속도·예하중, DMA 는 기준 온도·지그. 그 자리가 비어
+    있었다.
+    """
+
+    @pytest.fixture
+    def told(self, client: TestClient, admin_headers: dict[str, str], dma: None) -> None:
+        del dma
+        rule = {
+            **DMA_PROFILE,
+            # `Geometry name` 은 글자 조건, `Test1` 은 숫자 조건에 넣어 본다.
+            "conditions": {
+                "Geometry name": {"field": "clamp"},
+                "Test1": {"field": "preload", "unit": "kN"},
+            },
+        }
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": "dma_conditions",
+                "label": "조건을 채우는 DMA",
+                "test_type_key": "dma_sweep",
+                "definition": rule,
+                "priority": 90,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+    def test_선언된_조건을_채운다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        del told
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["conditions"]["clamp"] == "3 Point Bending Clamp"
+        # 1 kN → 1000 N. **파일의 단위로 읽고 SI 로 저장한다.**
+        assert detail["conditions"]["preload"] == pytest.approx(1000.0)
+        # **무엇으로 입력했는지 남긴다**(ADR 0004). 폼으로 온 조건과 같다.
+        saved = db.get(TestRun, uuid.UUID(run["id"]))
+        assert saved is not None
+        assert saved.input_units["preload"] == "kN"
+
+    def test_사람이_적은_조건을_안_덮는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """다시 읽기가 있다. 덮어쓰면 고쳐 놓은 값이 매번 되돌아간다."""
+        del told
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": json.dumps({"clamp": "내가 적은 지그"}),
+            },
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run = response.json()
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["conditions"]["clamp"] == "내가 적은 지그"
+        # 비어 있던 칸은 채워진다 — 안 채우면 이 기능이 아무것도 안 하는 것이다.
+        assert detail["conditions"]["preload"] == pytest.approx(1000.0)
+
+    def test_조건이_안_맞아도_곡선은_들어온다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """**채우기는 거들기이지 읽기가 아니다.** 파일의 값이 정의와 안 맞으면
+        (모르는 단위·목록에 없는 선택지) 그냥 두면 파싱 실패가 되어 파일은
+        멀쩡히 읽혔는데 곡선까지 통째로 잃는다."""
+        del dma
+        bad = {
+            **DMA_PROFILE,
+            # 힘 자리에 길이 단위. `normalize_conditions` 가 차원으로 막는다.
+            "conditions": {"Test1": {"field": "preload", "unit": "mm"}},
+        }
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": "dma_bad_unit",
+                "label": "차원이 틀린 조건",
+                "test_type_key": "dma_sweep",
+                "definition": bad,
+                "priority": 95,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["curves"], "곡선을 잃으면 안 된다"
+        assert "preload" not in (detail["conditions"] or {})
+        assert "시험 조건" in " ".join(detail["warnings"])
+
+    def test_없는_조건을_가리키면_저장을_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """조건은 **시험 종류마다 다르다.** 고정 목록으로는 못 검사한다."""
+        del dma
+        response = client.post(
+            "/api/formats",
+            json={
+                "key": "dma_no_field",
+                "label": "없는 조건",
+                "test_type_key": "dma_sweep",
+                "definition": {
+                    **DMA_PROFILE,
+                    # `speed_elastic` 은 인장의 조건이지 DMA 의 것이 아니다.
+                    "conditions": {"Test1": {"field": "speed_elastic"}},
+                },
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        message = response.json()["error"]["message"]
+        assert "speed_elastic" in message and "clamp" in message
 
 
 class Test파일이_시험_칸을_채운다:

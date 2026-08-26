@@ -643,6 +643,10 @@ class ProfileTryOut(BaseModel):
     """시험 칸에 **채워질** 값들. 빈 칸일 때만 들어간다."""
     identity: dict[str, str] = {}
     """이 파일이 어느 재료·시료·시편의 것인지 **짚어 주는** 값들. 채우지는 않는다."""
+    conditions: dict[str, str] = {}
+    """시험 조건에 **채워질** 값들. 파일 원문 그대로다 — SI 변환은 저장할 때 한다."""
+    condition_units: dict[str, str] = {}
+    """그 값이 무슨 단위로 적혀 있었나. 안 보내면 정의의 SI 로 해석된다."""
 
 
 class InstrumentDimensionOut(BaseModel):

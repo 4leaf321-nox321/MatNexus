@@ -93,7 +93,14 @@ import { useResource } from '@/shared/hooks/useResource'
 
 /** 메타 한 줄을 어떻게 할지. 기계는 못 가르는 판단이다 — `.tra` 의 요약부는
  *  구조적으로 메타와 똑같이 생겼는데, 하나는 **시험 결과**이고 하나는 **입력**이다. */
-type MetaRole = 'keep' | 'specimen' | 'summary' | 'record' | 'identity' | 'drop'
+type MetaRole =
+  | 'keep'
+  | 'specimen'
+  | 'summary'
+  | 'record'
+  | 'condition'
+  | 'identity'
+  | 'drop'
 
 interface MetaRule {
   role: MetaRole
@@ -122,6 +129,7 @@ const META_ROLE_LABEL: Record<MetaRole, string> = {
   specimen: '시편 치수',
   summary: '요약값(시험 결과)',
   record: '시험 칸에 채움',
+  condition: '시험 조건에 채움',
   identity: '어느 재료·시료·시편인지',
   drop: '버림',
 }
@@ -330,6 +338,17 @@ export default function FormatProfileEditorPage() {
         ])
       ),
       ...Object.fromEntries(
+        Object.entries(definition.conditions ?? {}).map(([name, rule]) => [
+          name,
+          {
+            role: 'condition' as const,
+            target: rule.field,
+            unit: rule.unit ?? '',
+            format: '',
+          },
+        ])
+      ),
+      ...Object.fromEntries(
         Object.entries(definition.identity ?? {}).map(([name, rule]) => [
           name,
           { role: 'identity' as const, target: rule.field, unit: '', format: '' },
@@ -442,6 +461,52 @@ export default function FormatProfileEditorPage() {
     for (const name of Object.keys(metaMap)) if (!rows.has(name)) rows.set(name, '')
     return [...rows.entries()]
   }, [preview, metaMap])
+
+  /**
+   * 파일에서 새로 나온 메타 줄을 **기본값으로 실제로 채운다.**
+   *
+   * 전에는 화면만 「그대로 보관」이라고 그렸다(`metaMap[name] ?? {role:'keep'}`).
+   * 저장은 `metaMap` 을 순회하므로, **손대지 않은 줄은 정의에 안 들어갔다** —
+   * 그러면 읽는 쪽은 그것을 「하나도 안 남기기로 정했음」 으로 읽는다.
+   *
+   * 즉 화면은 보관이라 하고 실제로는 전부 버렸다. 말과 동작을 맞춘다.
+   *
+   * **버리는 쪽을 기본으로 두지 않는 이유:** 버린 것은 되돌릴 수 없다. 원본
+   * 파일은 남지만 다시 읽어야 하고, 그건 이미 채택된 처리 결과를 흔든다.
+   * 보관은 싸고, 나중에 「이 파일에 뭐라고 적혀 있었지」 에 답할 수 있다.
+   */
+  useEffect(() => {
+    const found = preview?.meta.map(([key]) => key) ?? []
+    if (found.length === 0) return
+    setMetaMap((current) => {
+      const missing = found.filter((name) => !(name in current))
+      if (missing.length === 0) return current
+      return {
+        ...current,
+        ...Object.fromEntries(
+          missing.map((name) => [name, { role: 'keep' as MetaRole, target: '', unit: '', format: '' }])
+        ),
+      }
+    })
+  }, [preview])
+
+  /**
+   * 이 역할이 고를 수 있는 칸들. **조건만 시험 종류에서 온다.**
+   *
+   * 시험 칸과 식별자는 어느 종류나 같아서 표로 적어 둘 수 있지만, 조건은
+   * 종류마다 다르다 — 인장은 속도·예하중이고 DMA 는 진폭이다.
+   */
+  function conditionOptions(role: MetaRole, type: TestType | null): [string, string][] {
+    if (role === 'record') return Object.entries(RECORD_FIELD_LABEL)
+    if (role === 'identity') return Object.entries(IDENTITY_FIELD_LABEL)
+    return (type?.conditions ?? []).map((field) => [field.key, field.label])
+  }
+
+  /** 그 조건의 차원. 단위 후보를 그 차원으로 좁힌다. */
+  function conditionDimension(field: string, type: TestType | null): string {
+    const found = (type?.conditions ?? []).find((one) => one.key === field)
+    return found?.dimension && UNITS_BY_DIMENSION[found.dimension] ? found.dimension : 'all'
+  }
 
   /** 채널로 정했는데 단위를 알 수 없는 열. **저장하면 등록이 실패한다.** */
   const unitGaps = columns.filter((column) => {
@@ -646,6 +711,7 @@ export default function FormatProfileEditorPage() {
     const summary: Record<string, { key: string; unit?: string }> = {}
     const record: NonNullable<ProfileDefinition['record']> = {}
     const identity: NonNullable<ProfileDefinition['identity']> = {}
+    const conditions: NonNullable<ProfileDefinition['conditions']> = {}
     const metadata: string[] = []
     for (const [name, rule] of Object.entries(metaMap)) {
       if (rule.role === 'record' && rule.target) {
@@ -654,6 +720,12 @@ export default function FormatProfileEditorPage() {
       }
       if (rule.role === 'identity' && rule.target) {
         identity[name] = { field: rule.target }
+        continue
+      }
+      if (rule.role === 'condition' && rule.target) {
+        conditions[name] = rule.unit
+          ? { field: rule.target, unit: rule.unit }
+          : { field: rule.target }
         continue
       }
       // 단위를 안 적었으면 글자로 둔다 — 옛 정의와 같은 모양이라 쓸데없는
@@ -683,6 +755,7 @@ export default function FormatProfileEditorPage() {
       // 한 줄씩 늘면 진짜 변경이 diff 에서 파묻힌다.
       ...(Object.keys(record).length ? { record } : {}),
       ...(Object.keys(identity).length ? { identity } : {}),
+      ...(Object.keys(conditions).length ? { conditions } : {}),
       metadata,
     }
   }
@@ -1522,10 +1595,23 @@ export default function FormatProfileEditorPage() {
                 것이 맞는지 알 수 없고, 다시 읽을 때마다 되돌아갑니다.
               </p>
               <p>
+                <b>시험 조건에 채움</b> — 시험 온도·속도·예하중처럼{' '}
+                <b>시험 종류가 선언한 조건</b>을 파일에서 채웁니다. 여기도 빈 칸일 때만
+                들어갑니다. <b>단위를 꼭 적으세요</b> — 정의가 <code>m/s</code> 인데 파일이{' '}
+                <code>mm/min</code> 이면, 안 적었을 때 6만 배 어긋난 값이 저장되고 숫자는
+                그럴듯해 보입니다.
+              </p>
+              <p>
                 <b>어느 재료·시료·시편인지</b> — 파일이 말하는 재료 코드·로트·방향·시편
                 번호를 <b>짚어만 둡니다.</b> 자동으로 붙이지 않습니다 — 시험은 만들 때 그
                 시편에 매달리므로, 잘못 붙으면 칸을 고쳐 되돌릴 수 없습니다. 일괄 등록과
                 이관 스크립트가 이것을 읽어 짝을 찾아 줍니다.
+              </p>
+              <p>
+                <b>그대로 보관</b>이 기본입니다. 버린 것은 되돌릴 수 없고, 보관은 싸고,
+                나중에 <b>「이 파일에 뭐라고 적혀 있었지」</b>에 답할 수 있습니다. 숫자로
+                비교하거나 통계를 낼 값이면 <b>요약값</b>으로 올리세요 — 보관은 글자로만
+                남아 평균에 안 잡힙니다.
               </p>
             </div>
             {metaRows.length === 0 ? (
@@ -1588,7 +1674,9 @@ export default function FormatProfileEditorPage() {
                       )}
                       {/* 시험 칸과 식별자는 **고르는 것**이다. 자유 입력으로 두면
                           오타 하나가 조용히 아무것도 안 하는 규칙이 된다. */}
-                      {(rule.role === 'record' || rule.role === 'identity') && (
+                      {(rule.role === 'record' ||
+                        rule.role === 'identity' ||
+                        rule.role === 'condition') && (
                         <Select
                           value={rule.target || 'none'}
                           onValueChange={(value) =>
@@ -1603,9 +1691,9 @@ export default function FormatProfileEditorPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">— 고르세요</SelectItem>
-                            {Object.entries(
-                              rule.role === 'record' ? RECORD_FIELD_LABEL : IDENTITY_FIELD_LABEL
-                            ).map(([field, label]) => (
+                            {/* **조건은 시험 종류가 선언한다.** 인장은 속도·예하중,
+                                DMA 는 진폭 — 화면이 목록을 적어 둘 수 없다. */}
+                            {conditionOptions(rule.role, testType).map(([field, label]) => (
                               <SelectItem key={field} value={field}>
                                 {label}
                                 <span className="text-muted-foreground ml-2 font-mono text-xs">
@@ -1615,6 +1703,23 @@ export default function FormatProfileEditorPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                      )}
+                      {/* 파일에 적힌 단위. 정의가 `m/s` 인데 파일이 `mm/min` 이면
+                          안 적었을 때 6만 배 어긋난다. */}
+                      {rule.role === 'condition' && (
+                        <Input
+                          className="h-8 w-28 font-mono text-xs"
+                          list={`units-${conditionDimension(rule.target, testType)}`}
+                          placeholder="파일의 단위"
+                          title="파일에 적힌 단위입니다. 비우면 값에 붙어 온 것을 쓰고, 그것도 없으면 정의의 저장 단위로 봅니다."
+                          value={rule.unit}
+                          onChange={(event) =>
+                            setMetaMap((current) => ({
+                              ...current,
+                              [name]: { ...rule, unit: event.target.value.trim() },
+                            }))
+                          }
+                        />
                       )}
                       {rule.role === 'record' && rule.target === 'tested_at' && (
                         <Input
@@ -1949,6 +2054,25 @@ export default function FormatProfileEditorPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {Object.keys(tried.conditions ?? {}).length > 0 && (
+                  <div className="rounded-md border p-2">
+                    <p className="mb-1 text-xs font-medium">채워질 시험 조건</p>
+                    <div className="space-y-0.5 text-xs">
+                      {Object.entries(tried.conditions ?? {}).map(([field, value]) => (
+                        <div key={field} className="flex justify-between gap-2">
+                          <span className="truncate font-mono">{field}</span>
+                          <span className="shrink-0 font-mono">
+                            {value} {tried.condition_units?.[field] ?? ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      빈 칸일 때만 들어갑니다. 저장은 SI 로 바뀝니다.
+                    </p>
                   </div>
                 )}
 

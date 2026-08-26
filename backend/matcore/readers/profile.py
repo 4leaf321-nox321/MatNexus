@@ -25,7 +25,9 @@
       "metadata":["Operator", "Instrument name", "rundate"],
       "record":  {"Operator": {"field": "operator"},          # 시험 기록의 칸에 채운다
                   "rundate":  {"field": "tested_at", "format": "%Y-%m-%d"}},
-      "identity":{"material_code": {"field": "material_grade"}}  # 어느 재료의 것인지 짚는다
+      "identity":{"material_code": {"field": "material_grade"}}, # 어느 재료의 것인지 짚는다
+      "conditions":{"Test speed": {"field": "speed_elastic",     # 시험 조건에 채운다
+                                   "unit": "mm/min"}}
     }
 
 `record` 와 `identity` 는 **이름표만 붙인다.** 어느 컬럼인지, 채워도 되는지는
@@ -161,6 +163,7 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
     summary, metadata = _build_meta(profile, structure, warnings)
     record = _build_labels(profile.get("record"), structure, warnings, dates=True)
     identity = _build_labels(profile.get("identity"), structure, warnings, dates=False)
+    values, given_units = _build_conditions(profile.get("conditions"), structure)
     _keep_sources(profile, structure, metadata)
 
     return ParsedTest(
@@ -171,6 +174,8 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
         warnings=tuple(warnings),
         record=record,
         identity=identity,
+        conditions=values,
+        condition_units=given_units,
     )
 
 
@@ -390,6 +395,63 @@ def _free_key(taken: Mapping[str, str], want: str) -> str:
         if candidate not in taken:
             return candidate
     return f"{want}_{len(taken)}"
+
+
+def _build_conditions(
+    rules: Any, structure: TabularFile
+) -> tuple[dict[str, str], dict[str, str]]:
+    """`conditions` — **시험 조건에 채울 값과 그 단위.**
+
+    ## 왜 값과 단위를 함께 내나
+
+    안 보내면 읽는 쪽이 정의의 `si_unit` 으로 해석한다. 실제로 그래서 사고가
+    났다 — 정의가 `m/s` 인데 화면은 `mm/min` 으로 라벨을 붙여 놓고 값은 그대로
+    보냈고, 서버가 10 을 10 m/s 로 저장했는데 뜻한 것은 10 mm/min 이었다.
+    **6만 배**이고 숫자는 그럴듯하다.
+
+    파일도 같은 함정에 있다. `.tra` 의 속도 칸은 `mm/min` 인데 정의는 `m/s` 다.
+
+    ## 단위를 어디서 가져오나 — 셋, 앞엣것이 이긴다
+
+        ① 프로파일이 적은 것        {"field": "speed_elastic", "unit": "mm/min"}
+        ② 값에 붙어 온 것            "5 mm/min"
+        ③ 없음 → 읽는 쪽이 정의의 SI 로 본다 (폼이 단위를 안 줄 때와 같다)
+
+    ## 여기서 변환하지 않는다
+
+    조건이 무엇인지는 **시험 종류가 선언한다** — 인장은 속도·예하중이고 DMA 는
+    진폭이다. 이 층은 그 정의를 모른다. 원문을 그대로 넘기고, 검증과 SI 변환은
+    폼으로 들어온 조건과 **같은 함수**가 한다.
+    """
+    if not isinstance(rules, dict) or not rules:
+        return {}, {}
+
+    found = dict(structure.meta)
+    values: dict[str, str] = {}
+    units: dict[str, str] = {}
+    for label, rule in rules.items():
+        if not isinstance(rule, dict):
+            continue
+        field_name = str(rule.get("field") or "").strip()
+        if not field_name:
+            continue
+        raw = str(found.get(label, "")).strip()
+        if not raw or raw.lower() in UNKNOWN_TEXTS:
+            continue
+
+        told = str(rule.get("unit") or "").strip()
+        text, inline = _split_value_unit(raw)
+        if told:
+            # 프로파일이 적은 것이 이긴다. 값에 붙어 온 것은 떼어 낸다 —
+            # `"5 mm/min"` 을 통째로 넘기면 숫자로 못 읽는다.
+            values[field_name] = text if inline else raw
+            units[field_name] = told
+        elif inline:
+            values[field_name] = text
+            units[field_name] = inline
+        else:
+            values[field_name] = raw
+    return values, units
 
 
 def _keep_sources(
