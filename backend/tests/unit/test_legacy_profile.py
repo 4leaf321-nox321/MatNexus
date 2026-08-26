@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from app.modules.tests.legacy_profiles import LEGACY_TENSILE_DEFINITION
+from app.shared.curvedata import instrument_dimensions
 from matcore.parsers import Channel, ParseError, SummaryValue
 from matcore.readers import profile as profiles
 from matcore.readers import sniff
@@ -100,6 +101,41 @@ class Test시편치수:
         parsed = profiles.apply(LEGACY_TENSILE_DEFINITION, WITH_UNITS.read_bytes())
         assert parsed.metadata["specimen_thickness"] == "0.986"
         assert parsed.metadata["specimen_width"] == "12.473"
+
+    def test_치수가_시편까지_닿는다(self) -> None:
+        """**여기까지 봐야 한다.** 전에는 위 시험 하나뿐이었고, 메타에 값이
+        들어간 것만 확인했다. 그래서 그 값이 시편으로 못 가는 것을 못 잡았다 —
+        읽는 쪽은 숫자만 있고 단위를 모르면 포기하는데(`_as_metres`), 이 파일은
+        단위를 **열 이름 안에**만 갖고 있다.
+
+        증상이 조용하다: 치수가 안 채워져도 오류가 없고, 세 단계 뒤 처리
+        1단계의 `@specimen_area` 가 "그 값이 없습니다" 로 멈춘다.
+        """
+        parsed = profiles.apply(LEGACY_TENSILE_DEFINITION, WITH_UNITS.read_bytes())
+        found = instrument_dimensions(parsed.metadata)
+        assert found["thickness"] == pytest.approx(0.000986)
+        assert found["width"] == pytest.approx(0.012473)
+
+    def test_단위를_안_적으면_안_채운다(self) -> None:
+        """**mm 라고 가정하지 않는다.** m 로 적은 파일에서 1000배 틀린 시편이
+        만들어지고, 그 뒤 응력이 통째로 어긋나는데 숫자는 그럴듯해 보인다."""
+        bare = {**LEGACY_TENSILE_DEFINITION}
+        bare["specimen"] = {"Specimen thickness a0 (mm)": "specimen_thickness"}
+        parsed = profiles.apply(bare, WITH_UNITS.read_bytes())
+        assert parsed.metadata["specimen_thickness"] == "0.986"
+        assert "thickness" not in instrument_dimensions(parsed.metadata)
+
+    def test_파일에_붙어_온_단위가_선언을_이긴다(self) -> None:
+        """선언은 힌트이고 **파일이 증거다.** 값에 단위가 붙어 오는 장비가 있다
+        (TA DMA850 의 `50.0 mm`) — 그때 프로파일의 선언이 이기면, 소프트웨어
+        설정을 바꿔 단위가 달라진 파일을 옛 단위로 읽는다."""
+        told = {**LEGACY_TENSILE_DEFINITION}
+        told["specimen"] = {
+            "Specimen thickness a0 (mm)": {"key": "specimen_thickness", "unit": "m"}
+        }
+        parsed = profiles.apply(told, WITH_UNITS.read_bytes())
+        # 파일은 `"0.986"` 하나뿐이라 선언(m)이 쓰인다.
+        assert instrument_dimensions(parsed.metadata)["thickness"] == pytest.approx(0.986)
 
 
 class Test껍데기파일:

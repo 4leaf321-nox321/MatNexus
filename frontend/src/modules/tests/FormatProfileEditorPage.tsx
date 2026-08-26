@@ -83,6 +83,10 @@ type MetaRole = 'keep' | 'specimen' | 'summary' | 'drop'
 interface MetaRule {
   role: MetaRole
   target: string
+  /** 시편 치수에만 쓴다. **단위가 열 이름 안에만 있는 파일**이 있어서다 —
+   *  `Specimen thickness a0 (mm)` 옆의 값은 `0.986` 뿐이다. 비워 두면 값에
+   *  붙어 온 단위를 쓴다(`50.0 mm`). 둘 다 없으면 치수가 안 채워진다. */
+  unit: string
 }
 
 /** 시편 치수로 자주 쓰는 키. 강제하지는 않는다 — 장비가 무엇을 주는지는 다양하다. */
@@ -93,6 +97,10 @@ const SPECIMEN_KEYS = [
   'specimen_number',
   'specimen_diameter',
 ]
+
+/** 시편 치수에 흔한 단위. **강제하지 않는다** — 표(`shared/units.ts`)가 아는
+ *  것이면 무엇이든 된다. */
+const SPECIMEN_UNITS = ['mm', 'm', 'cm', 'in']
 
 const META_ROLE_LABEL: Record<MetaRole, string> = {
   keep: '그대로 보관',
@@ -207,19 +215,24 @@ export default function FormatProfileEditorPage() {
     )
     setMetaMap({
       ...Object.fromEntries(
-        Object.entries(definition.specimen ?? {}).map(([name, target]) => [
+        Object.entries(definition.specimen ?? {}).map(([name, rule]) => [
           name,
-          { role: 'specimen' as const, target },
+          typeof rule === 'string'
+            ? { role: 'specimen' as const, target: rule, unit: '' }
+            : { role: 'specimen' as const, target: rule.key, unit: rule.unit ?? '' },
         ])
       ),
       ...Object.fromEntries(
         Object.entries(definition.summary ?? {}).map(([name, rule]) => [
           name,
-          { role: 'summary' as const, target: rule.key },
+          { role: 'summary' as const, target: rule.key, unit: '' },
         ])
       ),
       ...Object.fromEntries(
-        (definition.metadata ?? []).map((name) => [name, { role: 'keep' as const, target: '' }])
+        (definition.metadata ?? []).map((name) => [
+          name,
+          { role: 'keep' as const, target: '', unit: '' },
+        ])
       ),
     })
   }, [existing.data])
@@ -416,11 +429,14 @@ export default function FormatProfileEditorPage() {
     for (const [name, channel] of Object.entries(columnMap)) {
       if (channel) columnRules[name] = { channel }
     }
-    const specimen: Record<string, string> = {}
+    const specimen: NonNullable<ProfileDefinition['specimen']> = {}
     const summary: Record<string, { key: string }> = {}
     const metadata: string[] = []
     for (const [name, rule] of Object.entries(metaMap)) {
-      if (rule.role === 'specimen' && rule.target) specimen[name] = rule.target
+      // 단위를 안 적었으면 글자로 둔다 — 옛 정의와 같은 모양이라 쓸데없는
+      // 리비전이 안 생긴다.
+      if (rule.role === 'specimen' && rule.target)
+        specimen[name] = rule.unit ? { key: rule.target, unit: rule.unit } : rule.target
       else if (rule.role === 'summary' && rule.target) summary[name] = { key: rule.target }
       else if (rule.role === 'keep') metadata.push(name)
     }
@@ -1105,7 +1121,7 @@ export default function FormatProfileEditorPage() {
             ) : (
               <div className="space-y-1">
                 {metaRows.map(([name, value]) => {
-                  const rule = metaMap[name] ?? { role: 'keep' as MetaRole, target: '' }
+                  const rule = metaMap[name] ?? { role: 'keep' as MetaRole, target: '', unit: '' }
                   return (
                     <div
                       key={name}
@@ -1156,11 +1172,35 @@ export default function FormatProfileEditorPage() {
                           }
                         />
                       )}
+                      {rule.role === 'specimen' && (
+                        <Input
+                          className="h-8 w-24 font-mono text-xs"
+                          list="specimen-units"
+                          placeholder="단위"
+                          title={
+                            '값에 단위가 붙어 오면(`50.0 mm`) 비워 두세요. ' +
+                            '단위가 열 이름에만 있으면(`두께 (mm)`) 여기 적어야 ' +
+                            '시편 치수가 채워집니다.'
+                          }
+                          value={rule.unit}
+                          onChange={(event) =>
+                            setMetaMap((current) => ({
+                              ...current,
+                              [name]: { ...rule, unit: event.target.value },
+                            }))
+                          }
+                        />
+                      )}
                     </div>
                   )
                 })}
                 <datalist id="specimen-keys">
                   {SPECIMEN_KEYS.map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+                <datalist id="specimen-units">
+                  {SPECIMEN_UNITS.map((item) => (
                     <option key={item} value={item} />
                   ))}
                 </datalist>

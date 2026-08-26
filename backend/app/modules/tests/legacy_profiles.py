@@ -23,6 +23,18 @@ DMA 는 읽히기는 하지만 담을 시험 종류가 없다 — 정의만 있�
 같은 열이 파일에 따라 단위를 달고도(55회) 안 달고도(33회) 온다. **둘 다 적는다.**
 하나만 적으면 나머지 33개가 "단위를 알 수 없는 열" 로 등록을 거부당한다.
 
+## 고친 것 — 시편 치수가 안 채워졌다 (2026-08-26)
+
+처음에는 `"Specimen thickness a0 (mm)": "specimen_thickness"` 로 **키만** 적었다.
+그러면 메타에 `specimen_thickness = "0.986"` 이 들어가는데, 읽는 쪽은 숫자만
+있고 단위를 모르면 포기한다(`app/shared/curvedata.py` 의 `_as_metres` — mm 라고
+가정하면 m 로 적은 파일에서 1000배 틀린 시편이 만들어진다). 그래서 **치수가
+하나도 안 채워졌고 오류도 안 났다.** 처리 1단계의 `@specimen_area` 가 그제서야
+"그 값이 없습니다" 로 멈춘다 — 원인에서 세 단계 떨어진 자리다.
+
+`.tra` 는 단위를 별도 칸으로 주고 DMA CSV 는 값에 붙여 주므로(`50.0 mm`) 둘 다
+멀쩡했다. **이 파일만 단위가 이름에 있었다.**
+
 ## 검증
 
 실파일 107개에 돌렸다 — 데이터가 든 88개 전부 경고 없이 채널 3개로 읽혔고,
@@ -84,9 +96,12 @@ LEGACY_TENSILE_DEFINITION: dict[str, Any] = {
     },
     # 시편 치수는 **시험이 아니라 시편의 것**이다(ADR 0004). `a0`·`b0` 를 쓴다 —
     # 시험 조건에 적힌 값이 아니라 그 시험이 실제로 쓴 값이다.
+    # **단위를 프로파일이 적는다.** 이 파일은 단위를 열 이름 안에만 갖고 있고
+    # (`(mm)`), 값 옆에는 `0.986` 뿐이다. 안 적으면 시편 치수가 조용히 안
+    # 채워진다 — 실측으로 그랬다(아래 "고친 것" 참고).
     "specimen": {
-        "Specimen thickness a0 (mm)": "specimen_thickness",
-        "Specimen width b0 (mm)": "specimen_width",
+        "Specimen thickness a0 (mm)": {"key": "specimen_thickness", "unit": "mm"},
+        "Specimen width b0 (mm)": {"key": "specimen_width", "unit": "mm"},
     },
     "metadata": [
         "rundate",

@@ -19,7 +19,9 @@
                   "derived": "^TTS"},                # 장비가 계산해 준 것
       "columns": {"Angular frequency": {"channel": "angular_frequency"}},
       "summary": {"Force maximum": {"key": "tensile_strength"}},
-      "specimen":{"Thickness": "specimen_thickness"},
+      "specimen":{"Thickness": "specimen_thickness",              # 값에 단위가 붙어 올 때
+                  "Thickness (mm)": {"key": "specimen_thickness", "unit": "mm"}},
+                                                                 # 단위가 이름에만 있을 때
       "metadata":["Operator", "Instrument name", "rundate"]
     }
 """
@@ -301,7 +303,19 @@ def _build_meta(
 
     for label, raw in structure.meta:
         if label in specimen_rules:
-            metadata[str(specimen_rules[label])] = raw
+            key, unit = _specimen_target(label, specimen_rules[label])
+            metadata[key] = raw
+            if unit:
+                # **단위를 함께 남긴다.** 값만 남기면 시편 치수를 못 채운다 —
+                # 읽는 쪽(`app/shared/curvedata.py`)은 숫자만 있고 단위를
+                # 모르면 포기한다. mm 라고 가정하면 m 로 적은 파일에서 1000배
+                # 틀린 시편이 만들어지고, 그 뒤 응력이 통째로 어긋나는데
+                # 숫자는 그럴듯해서 화면 어디에도 티가 안 난다.
+                #
+                # `<키>_unit` 은 `.tra` 파서가 이미 쓰는 이름이다. 값에 단위가
+                # 붙어 온 파일(`"50.0 mm"`)은 그쪽이 이긴다 — 선언은 힌트이고
+                # 파일이 증거다.
+                metadata[f"{key}_unit"] = unit
             continue
 
         rule = summary_rules.get(label)
@@ -343,6 +357,29 @@ def _build_meta(
         )
 
     return summary, metadata
+
+
+def _specimen_target(label: str, rule: Any) -> tuple[str, str]:
+    """시편 치수 규칙 하나를 (저장할 키, 단위) 로.
+
+    두 모양을 받는다. 글자 하나면 키만 정한 것이고(값에 단위가 붙어 오는 파일),
+    dict 면 단위까지 정한 것이다.
+
+        "Thickness":      "specimen_thickness"                       # "0.989 mm"
+        "Thickness (mm)": {"key": "specimen_thickness", "unit": "mm"} # "0.989"
+
+    **뒤엣것이 필요한 이유:** 단위를 **열 이름 안에**만 갖고 오는 파일이 있다.
+    옛 앱(`MaterialAppVer2`)의 `.mtet` 이 그렇다 — `Specimen thickness a0 (mm)`
+    옆의 값은 `0.986` 뿐이다. 이름에서 단위를 자동으로 떼지 않는 이유는
+    `readers/json_tables.py` 에 적었다(`Tan(delta)`).
+
+    실측으로 드러났다: 기본 프로파일이 이 규칙으로 읽은 `.mtet` 은 시편 치수를
+    **하나도 못 채웠다.** 오류도 안 났다 — 치수가 조용히 비고, 처리 1단계의
+    `@specimen_area` 가 그제서야 "그 값이 없습니다" 로 멈춘다.
+    """
+    if isinstance(rule, dict):
+        return str(rule.get("key") or slug(label)), str(rule.get("unit") or "")
+    return str(rule), ""
 
 
 def _split_value_unit(raw: str) -> tuple[str, str]:

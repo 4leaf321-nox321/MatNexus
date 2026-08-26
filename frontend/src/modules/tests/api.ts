@@ -52,7 +52,11 @@ export interface ProfileDefinition {
   }
   columns: Record<string, { channel: string; unit?: string }>
   summary?: Record<string, { key: string; unit?: string }>
-  specimen?: Record<string, string>
+  /** 시편 치수. 글자면 키만 정한 것이고(값에 단위가 붙어 오는 파일),
+   *  dict 면 단위까지 정한 것이다 — **단위가 열 이름 안에만 있는 파일**이 있다
+   *  (`Specimen thickness a0 (mm)` 옆의 값은 `0.986` 뿐이다). 단위를 안 적으면
+   *  치수가 조용히 안 채워진다. */
+  specimen?: Record<string, string | { key: string; unit?: string }>
   metadata?: string[]
 }
 
