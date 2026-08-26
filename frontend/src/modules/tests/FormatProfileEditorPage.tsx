@@ -973,7 +973,11 @@ export default function FormatProfileEditorPage() {
     // 열 매핑을 고치는 동안 적용 결과가 화면 밖으로 나가고, 결과를 보려고
     // 내리면 이번엔 고칠 곳이 사라진다. 좁은 화면에서는 그냥 한 줄로 쌓인다 —
     // 칸을 둘로 나눌 폭이 없는데 높이까지 나누면 양쪽 다 못 읽는다.
-    <div className="mx-auto flex max-w-7xl flex-col lg:h-full">
+    // **폭을 넓게 쓴다.** ⑤ 의 한 줄에 칸이 여섯까지 들어가고(라벨·값·역할·
+    // 대상·단위·형식), `max-w-7xl` 에서는 줄바꿈이 나면서 칸끼리 겹쳐 보였다.
+    // 글이 긴 문단은 안쪽에서 따로 좁힌다 — 넓은 화면에서 한 줄이 너무 길면
+    // 읽기 나쁘다.
+    <div className="mx-auto flex w-full max-w-[112rem] flex-col lg:h-full">
       <PageHeader
         title={creating ? '형식 프로파일 만들기' : `${form.label || routeKey} 편집`}
         description="장비 파일을 놓으면 구조는 자동으로 읽습니다. 사람이 정하는 것은 '이 열이 무엇인가' 하나뿐입니다 — 코드도 배포도 필요 없습니다."
@@ -1028,7 +1032,7 @@ export default function FormatProfileEditorPage() {
       )}
 
       {/* 왼쪽은 정하는 곳, 오른쪽은 보는 곳. 각자 스크롤한다. */}
-      <div className="grid gap-6 pb-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_400px] lg:pb-0">
+      <div className="grid gap-6 pb-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_460px] lg:pb-0">
         <div className="min-w-0 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-6">
           {/* ① 파일 ───────────────────────────────────────────── */}
           <Section
@@ -1134,7 +1138,7 @@ export default function FormatProfileEditorPage() {
                 라벨과 배지로만 나왔고, 그 뜻은 규칙이 안 맞아 건너뛴 표가 있을
                 때만 뜨는 안내 한 줄에 반쯤 들어 있었다 — 규칙을 다 맞추면
                 설명이 사라졌다. */}
-            <div className="mb-3 space-y-1.5 rounded-md border border-dashed p-3 text-xs">
+            <div className="mb-3 max-w-4xl space-y-1.5 rounded-md border border-dashed p-3 text-xs">
               <p className="flex items-start gap-2">
                 <Badge variant="secondary" className="shrink-0">
                   측정
@@ -1607,7 +1611,7 @@ export default function FormatProfileEditorPage() {
               </div>
             )}
 
-            <div className="text-muted-foreground mt-2 space-y-1 text-xs">
+            <div className="text-muted-foreground mt-2 max-w-prose space-y-1 text-xs">
               <p>
                 안 정한 열도 <b>버려지지 않습니다</b> — 열 이름을 그대로 키로 삼아 곡선에
                 들어갑니다. 다만 정의된 채널이 아니므로 워크벤치나 통계에서는 잡히지
@@ -1648,7 +1652,7 @@ export default function FormatProfileEditorPage() {
             title="표 앞의 키-값을 어떻게 할까"
             hint="기계는 못 가릅니다. '최대하중 3466 N' 은 시험 결과이고 '두께 0.989 mm' 는 입력인데, 파일에서는 똑같이 생겼습니다."
           >
-            <div className="text-muted-foreground mb-3 space-y-1 text-xs">
+            <div className="text-muted-foreground mb-3 max-w-prose space-y-1 text-xs">
               <p>
                 <b>시험 칸에 채움</b> — 시험일·시험자·장비·사업부를 파일에서 채웁니다.{' '}
                 <b>빈 칸일 때만</b> 들어갑니다. 사람이 적은 값을 파일이 조용히 바꾸면 어느
@@ -1687,11 +1691,16 @@ export default function FormatProfileEditorPage() {
                       key={name}
                       className="flex flex-wrap items-center gap-2 rounded-md border p-2"
                     >
-                      <span className="w-40 truncate text-xs font-medium" title={name}>
+                      {/* 이름과 값은 **줄어들 수 있게** 둔다 — 고정 폭으로 두면
+                          좁은 화면에서 뒤의 칸들을 밀어내 겹쳐 보인다. */}
+                      <span
+                        className="min-w-32 flex-1 basis-48 truncate text-xs font-medium"
+                        title={name}
+                      >
                         {name}
                       </span>
                       <span
-                        className="text-muted-foreground w-36 truncate font-mono text-xs"
+                        className="text-muted-foreground min-w-24 flex-1 basis-40 truncate font-mono text-xs"
                         title={value}
                       >
                         {value || '—'}
@@ -1705,10 +1714,16 @@ export default function FormatProfileEditorPage() {
                           }))
                         }
                       >
+                        {/* **트리거에는 이름만.** 기본 `SelectValue` 는 고른
+                            항목의 자식을 그대로 그려서 설명까지 딸려 들어갔고,
+                            `시편의 치수 — 「장비 치…` 로 잘렸다. */}
                         <SelectTrigger className="h-8 w-40">
-                          <SelectValue />
+                          <SelectValue>{META_ROLE[rule.role].label}</SelectValue>
                         </SelectTrigger>
-                        <SelectContent className="max-w-[28rem]">
+                        {/* **설명이 길어서 넓게 연다.** 트리거 폭에 맞추면
+                            「우리가 계산한 값과 나란히 비교됩니다」 가 세 줄로
+                            접혀 목록이 읽히지 않는다. */}
+                        <SelectContent className="w-[36rem] max-w-[92vw]">
                           {META_ROLE_GROUPS.map((group) => (
                             <SelectGroup key={group.title}>
                               <SelectLabel className="text-muted-foreground text-xs">
@@ -1716,11 +1731,13 @@ export default function FormatProfileEditorPage() {
                               </SelectLabel>
                               {group.roles.map((role) => (
                                 <SelectItem key={role} value={role}>
-                                  {META_ROLE[role].label}
-                                  {/* **어디로 가는지 옆에 적는다.** 이름만으로는
-                                      결과값·기록·조건이 뭉쳐 읽힌다. */}
-                                  <span className="text-muted-foreground ml-2 text-xs">
-                                    {META_ROLE[role].where}
+                                  {/* 이름은 한 줄, **어디로 가는지는 그 아래.**
+                                      옆에 붙이면 이름이 밀려 정렬이 깨진다. */}
+                                  <span className="flex flex-col gap-0.5 py-0.5">
+                                    <span>{META_ROLE[role].label}</span>
+                                    <span className="text-muted-foreground text-xs leading-snug">
+                                      {META_ROLE[role].where}
+                                    </span>
                                   </span>
                                 </SelectItem>
                               ))}
@@ -1759,7 +1776,11 @@ export default function FormatProfileEditorPage() {
                           }
                         >
                           <SelectTrigger className="h-8 w-48">
-                            <SelectValue placeholder="어느 칸" />
+                            <SelectValue placeholder="어느 칸">
+                              {conditionOptions(rule.role, testType).find(
+                                ([field]) => field === rule.target
+                              )?.[1] ?? undefined}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">— 고르세요</SelectItem>
@@ -2192,7 +2213,9 @@ function Section({
           <span className="text-muted-foreground">{step}</span>
           {title}
         </h2>
-        {hint && <p className="text-muted-foreground mt-0.5 text-xs">{hint}</p>}
+        {/* **긴 줄은 좁힌다.** 페이지를 넓히고 나니 안내 한 줄이 화면 끝까지
+            늘어나 눈이 되돌아올 자리를 잃었다. */}
+        {hint && <p className="text-muted-foreground mt-0.5 max-w-prose text-xs">{hint}</p>}
       </header>
       <div className="p-4">{children}</div>
     </section>

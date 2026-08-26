@@ -3,9 +3,14 @@
     "": {},
     "Test Condition": {
       "Specimen Number": "1",
+      "Specimen Standard": "KS B 0801 5호",
+      "Sensor Type": "makroXtens",
+      "Testing Group": "판재 인장",
       "Instrument name": "Zwick Z100",
       "Specimen Real Thickness (mm)": "0.986",
-      "Specimen Real Width (mm)": "12.473"
+      "Specimen Real Width (mm)": "12.473",
+      "rundate": "2024-03-11 09:20:00",
+      "Operator": "홍길동"
     },
     "Test Result": {
       "Force maximum (MPa)": "282.128",
@@ -14,10 +19,34 @@
       "Specimen thickness a0 (mm)": "0.986",
       "Specimen width b0 (mm)": "12.473",
       "Tensile Test Raw Data": {
-        "#": ["1", "2", "3", "4", "5"],
-        "Standard extensometer (mm)": ["0.0000", "0.0099", "0.0210", "0.0299", "0.0402"],
-        "Standard load cell (N)": ["19.4642", "26.7450", "33.8830", "41.0021", "48.2213"],
-        "Specimen width (mm)": ["12.473", "12.473", "12.473", "12.473", "12.473"]
+        "#": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "Standard extensometer (mm)": [
+          "0.0000",
+          "0.0099",
+          "0.0210",
+          "0.0299",
+          "0.0402"
+        ],
+        "Standard load cell (N)": [
+          "19.4642",
+          "26.7450",
+          "33.8830",
+          "41.0021",
+          "48.2213"
+        ],
+        "Specimen width (mm)": [
+          "12.473",
+          "12.473",
+          "12.473",
+          "12.473",
+          "12.473"
+        ]
       }
     },
     "Data Information": {

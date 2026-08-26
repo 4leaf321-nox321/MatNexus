@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Lock, Plus, Trash2 } from 'lucide-react'
+import { Lock, Plus, Rows3, Trash2 } from 'lucide-react'
 
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { testsApi } from '@/modules/tests/api'
@@ -43,6 +43,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
+import { BulkRowsDialog } from '@/modules/tests/BulkRowsDialog'
+import type { ParsedRow } from '@/modules/tests/typeRows'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface ChannelRow {
@@ -99,6 +101,8 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
   })
   const [channels, setChannels] = useState<ChannelRow[]>([])
   const [conditions, setConditions] = useState<ConditionRow[]>([])
+  /** 여러 개 넣기 모달을 어느 목록에 열었나. */
+  const [bulk, setBulk] = useState<BulkKind>(null)
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -346,6 +350,43 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
           </p>
         </div>
 
+        {/* **두 목록이 같은 모달을 쓴다.** 각자 만들면 한쪽만 고쳐지는 날이 온다. */}
+        <BulkRowsDialog
+          kind={bulk ?? 'channel'}
+          open={bulk !== null}
+          taken={(bulk === 'condition' ? conditions : channels).map((row) => row.key)}
+          onClose={() => setBulk(null)}
+          onAdd={(added: ParsedRow[]) => {
+            if (bulk === 'condition') {
+              setConditions((current) => [
+                ...current,
+                ...added.map((row) => ({
+                  key: row.key,
+                  label: row.label,
+                  value_type: row.value_type,
+                  dimension: row.dimension,
+                  si_unit: row.si_unit,
+                  is_required: row.is_required,
+                  // **새 줄이다.** 잠금은 이미 저장돼 있던 줄에만 걸린다.
+                  existing: false,
+                })),
+              ])
+              return
+            }
+            setChannels((current) => [
+              ...current,
+              ...added.map((row) => ({
+                key: row.key,
+                label: row.label,
+                dimension: row.dimension ?? 'length',
+                si_unit: row.si_unit ?? '1',
+                is_required: row.is_required,
+                existing: false,
+              })),
+            ])
+          }}
+        />
+
         <RowEditor
           title="채널 (곡선의 열)"
           hint="파일에서 읽어 곡선으로 만들 열입니다. 저장은 SI 단위로 합니다."
@@ -374,6 +415,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
               )
             )
           }
+          onBulk={() => setBulk('channel')}
         />
 
         <RowEditor
@@ -396,6 +438,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
               },
             ])
           }
+          onBulk={() => setBulk('condition')}
           onRemove={(index) =>
             setConditions((current) => current.filter((_, position) => position !== index))
           }
@@ -434,6 +477,9 @@ interface RowLike {
   existing: boolean
 }
 
+/** 여러 개 넣기 모달을 어느 목록에 열었나. */
+type BulkKind = 'channel' | 'condition' | null
+
 function RowEditor({
   title,
   hint,
@@ -441,6 +487,7 @@ function RowEditor({
   locked,
   withValueType,
   onAdd,
+  onBulk,
   onRemove,
   onChange,
 }: {
@@ -450,6 +497,8 @@ function RowEditor({
   locked: boolean
   withValueType?: boolean
   onAdd: () => void
+  /** 여러 개 넣기. 안 주면 그 단추를 안 그린다. */
+  onBulk?: () => void
   onRemove: (index: number) => void
   onChange: (index: number, change: Record<string, unknown>) => void
 }) {
@@ -460,10 +509,20 @@ function RowEditor({
           <Label>{title}</Label>
           <p className="text-muted-foreground text-xs">{hint}</p>
         </div>
-        <Button size="sm" variant="secondary" onClick={onAdd}>
-          <Plus className="size-3.5" />
-          추가
-        </Button>
+        <div className="flex gap-1">
+          {/* **여러 개가 기본이 아니다.** 한두 개를 더할 때 모달을 여는 것은
+              번거롭다. 다만 아홉 개를 하나씩 만들게 두지도 않는다. */}
+          {onBulk && (
+            <Button size="sm" variant="outline" onClick={onBulk}>
+              <Rows3 className="size-3.5" />
+              여러 개 넣기
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={onAdd}>
+            <Plus className="size-3.5" />
+            추가
+          </Button>
+        </div>
       </div>
 
       {rows.length === 0 && (

@@ -103,14 +103,34 @@ LEGACY_TENSILE_DEFINITION: dict[str, Any] = {
         "Specimen thickness a0 (mm)": {"key": "specimen_thickness", "unit": "mm"},
         "Specimen width b0 (mm)": {"key": "specimen_width", "unit": "mm"},
     },
+    # **시험이 낸 결과가 아닌 것은 결과 자리에 두지 않는다.**
+    #
+    # 처음에는 아래 다섯이 전부 `metadata`(원문 보관)에 있었다. 보관은 글자로만
+    # 남아서 **비교도 통계도 안 되고**, 무엇보다 그 값들이 갈 **제자리가 이미
+    # 있었다** — 시험 종류가 `sensor_type`·`testing_group` 을 조건으로 선언하고
+    # 있고, 시험 기록에는 시험일·시험자·장비 칸이 있다.
+    #
+    # 자리가 맞으면 따라오는 것들: 조건은 정의가 검증하고(모르는 값은 거절),
+    # 장비는 기준정보로 묶이며(`Zwick Z100` 과 `zwick z100` 이 안 갈린다),
+    # 시험일로 거를 수 있다.
+    "record": {
+        "Operator": {"field": "operator"},
+        "Instrument name": {"field": "instrument"},
+        # 옛 앱은 `2024-03-11 09:20:00` 으로 적는다. **형식을 선언한다** —
+        # 안 적으면 ISO 만 읽고 나머지는 비워 둔다(짐작하지 않는다).
+        "rundate": {"field": "tested_at", "format": "%Y-%m-%d %H:%M:%S"},
+    },
+    "conditions": {
+        # 둘 다 글자 조건이라 단위가 없다.
+        "Sensor Type": {"field": "sensor_type"},
+        "Testing Group": {"field": "testing_group"},
+    },
+    # **짚어만 둔다.** 시험은 만들 때 시편에 매달리므로 자동으로 안 붙인다.
+    "identity": {"Specimen Number": {"field": "specimen_seq_no"}},
+    # 남는 것은 **정말 기록일 뿐인 것들**이다. 시편 규격은 시편의 것이지만
+    # 프로파일에 그 자리가 없어서(치수가 아니다) 보관으로 둔다.
     "metadata": [
-        "rundate",
-        "Instrument name",
-        "Operator",
-        "Specimen Number",
         "Specimen Standard",
-        "Sensor Type",
-        "Testing Group",
         "Technical Data Record Name",
         "Tensile Data ID",
     ],
