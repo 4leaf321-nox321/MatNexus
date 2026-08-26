@@ -62,6 +62,39 @@ class Test시험_칸:
         parsed = profiles.apply(rule, made(작업자="홍길동"))
         assert "홍길동" in parsed.metadata.values()
 
+    def test_보관_목록이_있어도_원문이_남는다(self) -> None:
+        """**여기가 빠져 있었다.** 위 시험은 보관 목록이 **아예 없는**
+        프로파일로 확인한 것이라 조건이 달랐다 — 화면으로 만든 프로파일은
+        목록을 항상 적는다(비어 있더라도). 그때 `record` 가 읽은 라벨은 목록에
+        안 들어가므로 원문이 사라졌다.
+
+        시험일에서 특히 나쁘다. 형식이 안 맞아 못 읽으면 칸도 비고 원문도 없어서
+        **파일에 무엇이 적혀 있었는지 알 방법이 아예 사라진다.**
+        """
+        rule = {
+            **BASE,
+            "metadata": [],  # 화면이 「전부 버림」으로 만든 모양
+            "record": {"작업자": {"field": "operator"}},
+            "identity": {"재료": {"field": "material_grade"}},
+        }
+        parsed = profiles.apply(rule, made(작업자="홍길동", 재료="SECC"))
+        assert parsed.metadata.get("작업자") == "홍길동"
+        assert parsed.metadata.get("재료") == "SECC"
+        # 채우는 일은 그대로 된다.
+        assert parsed.record == {"operator": "홍길동"}
+
+    def test_못_읽은_날짜도_원문은_남는다(self) -> None:
+        """칸은 비워 두더라도 **파일에 뭐라고 적혀 있었는지는 남아야** 사람이
+        형식을 고칠 수 있다."""
+        rule = {
+            **BASE,
+            "metadata": [],
+            "record": {"일자": {"field": "tested_at", "format": "%Y-%m-%d"}},
+        }
+        parsed = profiles.apply(rule, made(일자="05/06/2020"))
+        assert "tested_at" not in parsed.record
+        assert parsed.metadata.get("일자") == "05/06/2020"
+
     def test_빈_값은_안_적은_것이다(self) -> None:
         """`Unknown` 을 그대로 넣으면 시험자가 `Unknown` 인 기록이 생기고, 그
         뒤로는 그 칸이 비어 있었다는 사실을 알 수 없다."""
@@ -91,6 +124,31 @@ class Test날짜:
         parsed = profiles.apply(rule, made(일자="05/06/2020"))
         assert "tested_at" not in parsed.record
         assert any("일자" in warning for warning in parsed.warnings)
+
+
+class Test키를_만들_때:
+    def test_한글_라벨을_지우지_않는다(self) -> None:
+        """전에는 한글이 통째로 지워져 전부 `unnamed` 이 됐고, **두 개가 있으면
+        하나가 조용히 덮였다.** 국산 장비와 사내 내보내기는 라벨이 한글이다."""
+        rule = {**BASE, "metadata": ["작업자", "재료"]}
+        parsed = profiles.apply(rule, made(작업자="홍길동", 재료="SECC"))
+        assert parsed.metadata["작업자"] == "홍길동"
+        assert parsed.metadata["재료"] == "SECC"
+
+    def test_영문_라벨은_전과_같다(self) -> None:
+        """바꾼 것이 옛 프로파일의 키를 흔들면 안 된다 — 저장된
+        `source_metadata` 를 읽는 화면이 못 찾게 된다."""
+        rule = {**BASE, "metadata": ["Instrument name", "Tan(delta)"]}
+        parsed = profiles.apply(rule, made(**{"Instrument name": "Z100", "Tan(delta)": "0.1"}))
+        assert parsed.metadata["instrument_name"] == "Z100"
+        assert parsed.metadata["tan_delta"] == "0.1"
+
+    def test_겹치면_덮지_않는다(self) -> None:
+        """다르게 적힌 두 라벨이 같은 키로 줄어들 수 있다(`A-1` 과 `A 1`).
+        그때 조용히 하나를 잃으면, 잃었다는 사실조차 알 수 없다."""
+        rule = {**BASE, "metadata": ["A-1", "A 1"]}
+        parsed = profiles.apply(rule, made(**{"A-1": "먼저", "A 1": "나중"}))
+        assert sorted(parsed.metadata.values()) == ["나중", "먼저"]
 
 
 class Test식별자:

@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from matcore import units
@@ -57,7 +58,15 @@ UNIT_ALIASES = {
 #: 값 없음을 뜻하는 문자열. 숫자 칸에 그대로 들어온다.
 UNKNOWN_TEXTS = {"unknown", "n/a", "na", "-", ""}
 
-_SLUG = re.compile(r"[^0-9a-z]+")
+#: 키로 쓸 수 없는 글자. **한글은 남긴다.**
+#:
+#: 전에는 `[^0-9a-z]+` 였다. 그러면 한글 라벨이 통째로 지워져 전부 `unnamed` 이
+#: 되고, **두 개가 있으면 하나가 조용히 덮인다** — `작업자` 와 `재료` 를 함께
+#: 보관하면 나중에 넣은 것만 남았다. 국산 장비와 사내 내보내기는 라벨이 한글이다.
+#:
+#: `\w` 는 유니코드라 한글·숫자·밑줄을 남긴다. 영문 라벨의 결과는 전과 같다 —
+#: `Instrument name` → `instrument_name`, `Tan(delta)` → `tan_delta`, `#` → `unnamed`.
+_SLUG = re.compile(r"[^\w]+", re.UNICODE)
 
 
 def slug(text: str) -> str:
@@ -152,6 +161,7 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
     summary, metadata = _build_meta(profile, structure, warnings)
     record = _build_labels(profile.get("record"), structure, warnings, dates=True)
     identity = _build_labels(profile.get("identity"), structure, warnings, dates=False)
+    _keep_sources(profile, structure, metadata)
 
     return ParsedTest(
         curves=tuple(curves),
@@ -331,7 +341,9 @@ def _build_meta(
         rule = summary_rules.get(label)
         if rule is None:
             if keep_meta is None or label in keep_meta:
-                metadata[slug(label)] = raw
+                # **겹치면 덮지 않는다.** 다르게 적힌 두 라벨이 같은 키로
+                # 줄어들 수 있고(`A-1` 과 `A 1`), 그때 조용히 하나를 잃는다.
+                metadata[_free_key(metadata, slug(label))] = raw
             continue
 
         key = str(rule.get("key") or slug(label))
@@ -367,6 +379,59 @@ def _build_meta(
         )
 
     return summary, metadata
+
+
+def _free_key(taken: Mapping[str, str], want: str) -> str:
+    """안 쓰인 키. 겹치면 번호를 붙인다 — **조용히 덮지 않는다.**"""
+    if want not in taken:
+        return want
+    for number in range(2, 100):
+        candidate = f"{want}_{number}"
+        if candidate not in taken:
+            return candidate
+    return f"{want}_{len(taken)}"
+
+
+def _keep_sources(
+    profile: dict[str, Any], structure: TabularFile, metadata: dict[str, str]
+) -> None:
+    """`record`·`identity` 가 읽은 라벨의 **원문을 남긴다.**
+
+    ## 왜 따로 하나
+
+    보관 목록(`metadata`)은 ⑤ 에서 「그대로 보관」으로 고른 것만 담는다. 그런데
+    「시험 칸에 채움」·「어느 재료·시료·시편인지」로 고른 라벨은 그 목록에 안
+    들어가므로, 그대로 두면 **원문이 사라진다.**
+
+    실측으로 드러났다. `Operator` 를 시험 칸에 채우게 하면 시험자 칸은 채워지는데
+    `source_metadata` 에 `홍길동` 이 없었다. 시험은 통과했는데, 그 시험이 보관
+    목록이 **아예 없는** 프로파일로 확인한 것이었다 — 화면으로 만든 프로파일은
+    목록을 항상 적으므로 조건이 달랐다.
+
+    ## 왜 남겨야 하나
+
+    「파일에는 뭐라고 적혀 있었나」 에 답할 수 있어야 한다. 특히 시험일이 그렇다 —
+    날짜 형식이 안 맞아 못 읽으면 칸도 비고 원문도 없어서, **파일에 무엇이 적혀
+    있었는지 알 방법이 아예 사라진다.**
+
+    보관 목록에서 「버림」으로 고른 것과 부딪히지 않는다. 사람이 그 라벨에 준
+    역할은 「버림」이 아니라 「채움」이다 — 원문을 지우겠다고 말한 적이 없다.
+    """
+    labels: set[str] = set()
+    for where in ("record", "identity"):
+        rules = profile.get(where)
+        if isinstance(rules, dict):
+            labels |= {str(label) for label in rules}
+    if not labels:
+        return
+
+    for label, raw in structure.meta:
+        if label not in labels:
+            continue
+        key = slug(label)
+        # 이미 다른 역할이 담아 뒀으면 덮지 않는다.
+        if key not in metadata:
+            metadata[key] = raw
 
 
 def _build_labels(

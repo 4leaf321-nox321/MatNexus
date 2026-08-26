@@ -77,7 +77,13 @@ export function ExportMenu({
                   system?.key === one.key ? 'bg-primary text-primary-foreground' : ''
                 }`}
                 onClick={(event) => {
-                  // 메뉴를 닫지 않는다 — 계를 고른 다음에 형식을 고른다.
+                  // **메뉴가 닫히면 안 된다** — 계를 고른 다음에 형식을 고르는
+                  // 순서라, 닫히면 다시 열어야 하고 그때 계가 초기화되면 사람은
+                  // 자기가 고른 줄 알고 SI 를 받는다.
+                  //
+                  // Radix 는 `DropdownMenuItem` 의 select 에서 닫는다. 이 단추는
+                  // `DropdownMenuLabel` 안이라 원래 안 닫히지만, 그 사실에
+                  // 기대지 않는다 — 이 한 줄은 값이 없고 위험도 없다.
                   event.preventDefault()
                   setChosen(one.key)
                 }}

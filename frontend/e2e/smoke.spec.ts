@@ -246,3 +246,47 @@ test('읽지 못한 파일은 이유를 보여 준다', async ({ page }) => {
   // 목록 화면이 뜨는 것까지만 본다 — 실패한 시험이 있으면 상태로 보인다.
   await expect(page.getByRole('heading', { name: /시험/ })).toBeVisible()
 })
+
+test('덱을 뽑는 길이 열려 있다', async ({ page }) => {
+  // **여기가 아니면 아무도 안 본다.** 단위계를 고를 수 있게 만들어 놓고,
+  // jsdom 시험은 「메뉴가 안 닫히는가」 를 못 잡았다 — 사보타주를 걸어도
+  // 통과했다. 그 성질은 진짜 브라우저만 볼 수 있다.
+  //
+  // 값의 정확성은 pytest 가 본다(두 계로 낸 덱의 숫자까지 실측했다). 여기서
+  // 보는 것은 **사람이 그 계를 고를 수 있는가** 하나다.
+  await page.goto('/')
+  await page.getByLabel('아이디').fill(EMAIL)
+  await page.getByLabel('비밀번호').fill(PASSWORD)
+  await page.getByRole('button', { name: '로그인' }).click()
+  await expect(page.getByRole('banner')).toBeVisible()
+
+  await page.goto('/cards')
+  await expect(page.getByRole('heading', { name: '물성 카드' })).toBeVisible()
+
+  // **`count()` 는 기다리지 않는다.** 처음에 이 줄을 바로 세었더니 목록이
+  // 도착하기 전에 0 을 읽고 「카드가 없다」 가지로 빠졌다 — 실제로는 11장이
+  // 있었다. 먼저 **둘 중 하나가 뜰 때까지** 기다린다.
+  const cards = page.getByRole('button', { name: '내보내기' })
+  await expect(cards.first().or(page.getByText(/없습니다/))).toBeVisible()
+
+  // **카드가 0장인 것이 정상이다** — 갓 설치한 서버가 그렇고, 카드는 사람이
+  // 만든다. 그때 이 시험이 볼 것은 없다.
+  if ((await cards.count()) === 0) return
+
+  await cards.first().click()
+  await expect(page.getByText('덱의 단위계')).toBeVisible()
+  // 덱에 그대로 적힐 줄. 기본은 SI 다.
+  await expect(page.getByText('kg, m, s, Pa')).toBeVisible()
+
+  await page.getByRole('button', { name: /mm · N · tonne/ }).click()
+  // **고르고 나서도 메뉴가 열려 있어야 한다** — 여기가 jsdom 이 못 보던 자리다.
+  await expect(page.getByText('덱의 단위계')).toBeVisible()
+  await expect(page.getByText('tonne, mm, s, MPa')).toBeVisible()
+
+  // 고른 계로 실제로 받아진다. 파일 이름에 계가 들어간다.
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('menuitem', { name: /Abaqus/ }).first().click(),
+  ])
+  expect(download.suggestedFilename()).toContain('mm_n_tonne')
+})
