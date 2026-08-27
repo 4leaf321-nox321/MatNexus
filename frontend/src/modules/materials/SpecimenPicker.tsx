@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Plus } from 'lucide-react'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
@@ -40,6 +41,9 @@ import {
 interface Props {
   onChange: (specimen: Specimen | null) => void
 }
+
+/** 목록 안의 「새로 만들기」 줄. 진짜 id 와 안 겹치게 접두어를 둔다. */
+const NEW = '__new__'
 
 export function SpecimenPicker({ onChange }: Props) {
   const [picked, setPicked] = useState<Material | null>(null)
@@ -82,7 +86,13 @@ export function SpecimenPicker({ onChange }: Props) {
       .specimens(sampleId)
       .then((rows) => {
         setSpecimens(rows)
-        if (rows.length === 1) onChange(rows[0])
+        // **말없이 고르지 않는다.** 시편이 하나뿐이면 그것을 골라 주고 있었는데,
+        // 그래서 **둘째 파일이 자동으로 첫 시편에 붙었다** — 실사용에서 나왔다
+        // ("감각적으로 새 시료를 넣어서 만들지 않고 올리게 된다"). 시편을 잘못
+        // 짚으면 되돌릴 수 없다(시험은 만들 때 그 시편 id 에 묶인다).
+        //
+        // 흔한 일은 「같은 시료, 새 시편」 이다 — 판 하나에서 시편을 여러 장 뜬다.
+        // 그래서 고르는 것을 사람이 하게 두고, 새로 만들기를 목록 안에 둔다.
       })
       .catch(() => setSpecimens([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,11 +119,25 @@ export function SpecimenPicker({ onChange }: Props) {
 
       <div className="space-y-1">
         <Label className="text-muted-foreground text-xs">시료</Label>
-        <Select value={sampleId} onValueChange={setSampleId} disabled={samples.length === 0}>
-          <SelectTrigger>
+        <Select
+          value={sampleId}
+          onValueChange={(next) => (next === NEW ? setMaking('sample') : setSampleId(next))}
+          disabled={!materialId}
+        >
+          {/* **이름을 준다.** 보이는 글자는 고른 값뿐이라, 이름이 없으면 두
+              드롭다운이 화면 낭독기에서 구별되지 않는다. */}
+          <SelectTrigger aria-label="시료">
             <SelectValue placeholder={materialId ? '고르세요' : '재료 먼저'} />
           </SelectTrigger>
           <SelectContent>
+            {/* **목록 안에 둔다.** 밑에 작은 링크로 두었더니 사람이 못 보고
+                지나쳐서, 새 판이 왔는데도 옛 시료에 붙이게 됐다. 기준정보
+                피커가 「새로 추가」 를 목록에 두는 것과 같은 방식이다. */}
+            <SelectItem value={NEW}>
+              <span className="flex items-center gap-1.5">
+                <Plus className="size-3.5 opacity-60" />새 시료 만들기
+              </span>
+            </SelectItem>
             {samples.map((sample) => (
               <SelectItem key={sample.id} value={sample.id}>
                 {String(sample.seq_no).padStart(2, '0')}
@@ -122,38 +146,42 @@ export function SpecimenPicker({ onChange }: Props) {
             ))}
           </SelectContent>
         </Select>
-        <Adder
-          label="새 시료"
-          disabled={!materialId}
-          why="재료를 먼저 고르세요"
-          onClick={() => setMaking('sample')}
-        />
       </div>
 
       <div className="space-y-1">
         <Label className="text-muted-foreground text-xs">시편</Label>
         <Select
           value=""
-          onValueChange={(id) => onChange(specimens.find((s) => s.id === id) ?? null)}
-          disabled={specimens.length === 0}
+          onValueChange={(id) =>
+            id === NEW
+              ? setMaking('specimen')
+              : onChange(specimens.find((s) => s.id === id) ?? null)
+          }
+          disabled={!sampleId}
         >
-          <SelectTrigger>
+          <SelectTrigger aria-label="시편">
             <SelectValue placeholder={sampleId ? '고르세요' : '시료 먼저'} />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value={NEW}>
+              <span className="flex items-center gap-1.5">
+                <Plus className="size-3.5 opacity-60" />새 시편 만들기
+              </span>
+            </SelectItem>
             {specimens.map((specimen) => (
               <SelectItem key={specimen.id} value={specimen.id}>
                 {specimen.orientation} {String(specimen.seq_no).padStart(2, '0')}
+                {/* **이미 시험이 붙은 시편인지 보인다.** 파괴 시험은 시편 하나에
+                    한 번이라, 여기 숫자가 있으면 대개 새 시편을 뜰 자리다. */}
+                {specimen.test_run_count > 0 && (
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    시험 {specimen.test_run_count}건
+                  </span>
+                )}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Adder
-          label="새 시편"
-          disabled={!sampleId}
-          why="시료를 먼저 고르세요"
-          onClick={() => setMaking('specimen')}
-        />
       </div>
 
       {/* **여기서 만들 수 있다고 말한다.** 예전에는 "재료 상세에서 먼저 만드세요"

@@ -85,6 +85,12 @@ beforeEach(() => {
   specimens.mockResolvedValue([])
 })
 
+/** 드롭다운을 열고 「새로 만들기」 줄을 누른다. */
+async function openList(label: string, name: RegExp) {
+  await userEvent.click(await screen.findByRole('combobox', { name: label }))
+  await userEvent.click(await screen.findByRole('option', { name }))
+}
+
 async function pickMaterial() {
   await userEvent.click(screen.getByRole('button', { name: '재료 고르기' }))
   await waitFor(() => expect(samples).toHaveBeenCalled())
@@ -108,7 +114,7 @@ describe('시편 고르기', () => {
   it('만든 시료를 곧바로 고른다', async () => {
     render(<SpecimenPicker onChange={vi.fn()} />)
     await pickMaterial()
-    await userEvent.click(screen.getByRole('button', { name: /\+ 새 시료/ }))
+    await openList('시료', /새 시료 만들기/)
     await userEvent.click(await screen.findByRole('button', { name: '시료 만들기' }))
     await waitFor(() => expect(specimens).toHaveBeenCalledWith('s9'))
   })
@@ -119,23 +125,45 @@ describe('시편 고르기', () => {
     samples.mockResolvedValue([{ id: 's1', seq_no: 1, lot_no: null, material_id: 'm1' }])
     render(<SpecimenPicker onChange={onChange} />)
     await pickMaterial()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /\+ 새 시편/ })).toBeEnabled()
-    )
-    await userEvent.click(screen.getByRole('button', { name: /\+ 새 시편/ }))
+    // 시료가 하나면 그것은 골라 준다 — 시편만 사람이 고른다.
+    await waitFor(() => expect(specimens).toHaveBeenCalled())
+    await openList('시편', /새 시편 만들기/)
     await userEvent.click(await screen.findByRole('button', { name: '시편 만들기' }))
     expect(onChange).toHaveBeenCalledWith({ id: 'p9', orientation: 'MD', seq_no: 9 })
   })
 
-  it('앞 단계를 안 골랐으면 잠그고 이유를 말한다', async () => {
-    // **흐리기만 하면 고장으로 보인다.**
+  it('앞 단계를 안 골랐으면 잠근다', async () => {
+    // **만들기가 목록 안으로 들어갔다**(v1.118.0). 밑에 작은 링크로 두었더니
+    // 사람이 못 보고 지나쳐서, 새 판이 왔는데도 옛 시료에 붙이게 됐다.
     render(<SpecimenPicker onChange={vi.fn()} />)
-    const sample = screen.getByRole('button', { name: /\+ 새 시료/ })
-    expect(sample).toBeDisabled()
-    expect(sample).toHaveAttribute('title', '재료를 먼저 고르세요')
-    const specimen = screen.getByRole('button', { name: /\+ 새 시편/ })
-    expect(specimen).toBeDisabled()
-    expect(specimen).toHaveAttribute('title', '시료를 먼저 고르세요')
+    expect(screen.getByRole('combobox', { name: /시료/ })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: /시편/ })).toBeDisabled()
+  })
+
+  it('말없이 시편을 고르지 않는다', async () => {
+    // **여기가 이 변경의 요점이다.** 시편이 하나뿐이면 그것을 골라 주고 있었는데,
+    // 그래서 둘째 파일이 자동으로 첫 시편에 붙었다 — 실사용에서 나왔다.
+    //
+    // 시편을 잘못 짚으면 되돌릴 수 없다. 시험은 만들 때 그 시편 id 에 묶인다.
+    const onChange = vi.fn()
+    samples.mockResolvedValue([{ id: 's1', seq_no: 1, lot_no: 'L1', material_id: 'm1' }])
+    specimens.mockResolvedValue([
+      { id: 'p1', orientation: 'MD', seq_no: 1, test_run_count: 1 },
+    ])
+    render(<SpecimenPicker onChange={onChange} />)
+    await pickMaterial()
+    await waitFor(() => expect(specimens).toHaveBeenCalled())
+
+    expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }))
+  })
+
+  it('목록 안에서 새로 만든다', async () => {
+    samples.mockResolvedValue([{ id: 's1', seq_no: 1, lot_no: 'L1', material_id: 'm1' }])
+    render(<SpecimenPicker onChange={vi.fn()} />)
+    await pickMaterial()
+
+    await userEvent.click(await screen.findByRole('combobox', { name: /시료/ }))
+    expect(await screen.findByRole('option', { name: /새 시료 만들기/ })).toBeInTheDocument()
   })
 
   it('비었을 때 다른 화면으로 보내지 않는다', async () => {
