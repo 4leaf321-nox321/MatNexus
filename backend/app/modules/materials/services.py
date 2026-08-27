@@ -153,8 +153,21 @@ def name_taken(
     record_name: str,
     exclude_id: uuid.UUID | None = None,
 ) -> bool:
+    """이 이름이 이미 쓰이고 있나. **지운 것은 안 센다**(2026-08-28).
+
+    전에는 셌다. 소프트 삭제라 행은 남는데 목록에서는 사라지므로, 지운 이름으로
+    다시 만들려 하면 「이미 있습니다」 가 나오면서 **화면 어디에도 그 재료가
+    없었다.** 같은 파일의 `find_by_name` 은 지운 것을 걸렀으니 **둘이 어긋나
+    있었다** — 찾을 때는 없고 만들 때는 있는 이름.
+
+    이관에서 그대로 터졌다: 금속 재료를 한 번 지운 뒤로 그 아래가 통째로 안
+    들어갔다. DB 제약도 같은 자리를 막고 있었으므로 부분 인덱스로 함께 고쳤다
+    (`models.Material.__table_args__`).
+    """
     query = (
-        select(func.count()).select_from(Material).where(Material.record_name == record_name)
+        select(func.count())
+        .select_from(Material)
+        .where(Material.record_name == record_name, Material.deleted_at.is_(None))
     )
     query = (
         query.where(Material.owner_workspace_id.is_(None))
@@ -172,8 +185,11 @@ def find_by_name(
     """이름으로 살아 있는 재료 하나를 찾는다.
 
     여러 개를 한꺼번에 넣을 때 쓴다 — 같은 재료 아래에 시료를 여러 벌 넣으려면
-    **두 번째 줄부터는 만드는 것이 아니라 찾는 것**이어야 한다. `name_taken` 은
-    지운 것까지 세지만(이름은 계속 잡아 둔다) 여기서는 살아 있는 것만 본다.
+    **두 번째 줄부터는 만드는 것이 아니라 찾는 것**이어야 한다.
+
+    **`name_taken` 과 같은 것을 본다**(2026-08-28). 전에는 그쪽이 지운 행까지
+    세서 둘이 어긋나 있었다 — 여기서는 없고 저기서는 있는 이름이 생겼고, 그것이
+    지운 이름을 영영 못 쓰게 만들었다.
     """
     query = select(Material).where(
         Material.record_name == record_name, Material.deleted_at.is_(None)

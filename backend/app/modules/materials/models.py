@@ -37,6 +37,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -61,13 +62,29 @@ class Material(Base):
 
     __tablename__ = "materials"
     __table_args__ = (
-        UniqueConstraint(
+        # **지운 행은 이름을 잡아 두지 않는다**(부분 인덱스, 2026-08-28).
+        #
+        # 전에는 그냥 유니크 제약이라 **지워진 행까지 셌다.** 소프트 삭제라
+        # 행은 남는데 목록에서는 사라지므로, 지운 이름으로 다시 만들려 하면
+        # 「이미 있습니다」 가 나오면서 **화면 어디에도 그 재료가 없었다.**
+        # 복구 기능도 없어 빠져나갈 길이 아예 없었다.
+        #
+        # 이관에서 그대로 터졌다 — 이관은 한 번에 안 끝나고 이름 규칙을 고쳐
+        # 다시 돌리는 일인데, 잘못 들어간 것을 지우고 다시 돌리면 그 재료 아래가
+        # 통째로 안 들어간다(금속 계열 전부가 그렇게 막혔다).
+        #
+        # **채번은 그대로 둔다.** `next_sample_seq` 는 지운 번호를 여전히 재사용
+        # 하지 않는다 — 자동으로 붙이는 이름이 옛 문서의 것과 겹치면 안 된다.
+        # 여기서 푸는 것은 **사람이나 파일이 이름을 지정했을 때**뿐이다.
+        Index(
+            "uq_materials_scope_record_name",
             "owner_workspace_id",
             "record_name",
-            name="uq_materials_scope_record_name",
+            unique=True,
             # PG15+. 없으면 NULL != NULL 이라 **전역 재료끼리 같은 이름이 허용된다**
-            # — 유니크 제약을 두는 이유가 바로 사라진다. 서버는 17.5.
+            # — 유니크를 두는 이유가 바로 사라진다. 서버는 17.5.
             postgresql_nulls_not_distinct=True,
+            postgresql_where=text("deleted_at IS NULL"),
         ),
         # **검색용 trigram 인덱스.** `ILIKE '%낱말%'` 은 B-tree 를 못 탄다 —
         # 앞의 와일드카드 때문에 어느 접두사부터 볼지 정할 수가 없다.
@@ -280,7 +297,14 @@ class Sample(Base):
     __table_args__ = (
         # 재료 안에서 채번한다. 워크스페이스별로 채번하면 전역 재료 밑에서
         # 서로 다른 부서의 시료가 같은 이름을 갖는다.
-        UniqueConstraint("material_id", "seq_no", name="uq_samples_material_seq_no"),
+        # **지운 행은 번호를 잡아 두지 않는다** — 재료와 같은 이유다(Material 참고).
+        Index(
+            "uq_samples_material_seq_no",
+            "material_id",
+            "seq_no",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -390,8 +414,14 @@ class Specimen(Base):
 
     __tablename__ = "specimens"
     __table_args__ = (
-        UniqueConstraint(
-            "sample_id", "orientation", "seq_no", name="uq_specimens_sample_dir_seq_no"
+        # **지운 행은 자리를 잡아 두지 않는다** — 재료와 같은 이유다(Material 참고).
+        Index(
+            "uq_specimens_sample_dir_seq_no",
+            "sample_id",
+            "orientation",
+            "seq_no",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
         ),
     )
 

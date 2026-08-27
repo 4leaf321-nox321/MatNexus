@@ -2129,3 +2129,96 @@ class Test등록한_사람:
         assert client.get(f"/api/specimens/{specimen['id']}", headers=admin_headers).json()[
             "registered_by"
         ]
+
+
+class Test지운_이름을_다시_쓴다:
+    """**지우고 다시 만드는 길이 아예 막혀 있었다** (2026-08-28).
+
+    삭제는 소프트라 행이 남는데, 유니크 제약도 `name_taken` 도 그 행을 셌다.
+    그래서 목록에는 없는 이름이 「이미 있습니다」 로 막혔고, 복구 기능이 없어
+    화면에서 빠져나갈 길이 없었다.
+
+    이관에서 그대로 터졌다 — 잘못 들어간 것을 지우고 다시 돌리면 그 재료 아래가
+    통째로 안 들어간다. 금속 계열 전부가 그렇게 막혔다.
+
+    **되돌릴 수 없는 자리라 사보타주 등급이 높다**(AGENTS: 삭제·병합). 그래서
+    세 계층을 다 문다 — 재료 하나만 고치고 시료·시편을 빠뜨리면, 같은 벽이 한
+    단계 아래에서 그대로 나온다.
+    """
+
+    def test_재료_이름을_다시_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        first = _create_material(client, admin_headers)
+        assert (
+            client.delete(f"/api/materials/{first['id']}", headers=admin_headers).status_code
+            == 204
+        )
+
+        again = client.post("/api/materials", json=SECC, headers=admin_headers)
+        assert again.status_code == 201, again.text
+        assert again.json()["record_name"] == first["record_name"]
+        assert again.json()["id"] != first["id"]
+
+    def test_같은_이름이_둘_살아_있지는_않다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**푼 것은 지운 자리뿐이다.** 살아 있는 것끼리는 여전히 막아야 한다 —
+        안 막으면 유니크를 두는 이유가 통째로 사라진다."""
+        _create_material(client, admin_headers)
+        again = client.post("/api/materials", json=SECC, headers=admin_headers)
+        assert again.status_code == 409, again.text
+
+    def test_시료를_지워도_다음_시료가_만들어진다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**시료는 번호를 받지 않는다** — `SampleCreateRequest` 에 `seq_no` 가
+        없고 언제나 `next_sample_seq` 가 매긴다. 그래서 지운 번호를 다시 달라고
+        할 길이 API 에 없다.
+
+        부분 인덱스는 그래도 함께 걸어 둔다. 셋이 같은 모양의 결함이었고, 번호를
+        받게 되는 날 이 자리만 옛 규칙으로 남으면 그때 같은 벽을 다시 만난다.
+        """
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        assert (
+            client.delete(f"/api/samples/{sample['id']}", headers=admin_headers).status_code
+            == 204
+        )
+
+        again = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        )
+        assert again.status_code == 201, again.text
+        # 지운 번호는 재사용하지 않는다 — 옛 문서에 적힌 이름이 다른 것을
+        # 가리키면 안 된다(`next_sample_seq` 의 판단을 그대로 둔다).
+        assert again.json()["seq_no"] == sample["seq_no"] + 1
+
+    def test_시편_자리를_다시_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "seq_no": 1},
+            headers=admin_headers,
+        ).json()
+        assert (
+            client.delete(
+                f"/api/specimens/{specimen['id']}", headers=admin_headers
+            ).status_code
+            == 204
+        )
+
+        again = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "seq_no": 1},
+            headers=admin_headers,
+        )
+        assert again.status_code == 201, again.text
+        assert again.json()["seq_no"] == 1
