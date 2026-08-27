@@ -64,4 +64,13 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+
+# **워커 4개로 나눠 돈다** — 순차 186초가 102초다(2026-08-27 실측, 1,309건).
+#
+# `auto` 를 안 쓴다. 이 개발기는 32코어라 워커가 32개 뜨는데, 워커마다 엔진 풀을
+# 지므로 PostgreSQL 의 `max_connections=100` 을 넘어 **연결 실패로 죽고 오히려
+# 272초**가 됐다. 워커를 늘려도 6개에서 98초로 평평해진다 — 병목이 코어가 아니라
+# DB 하나이기 때문이다. CI 러너는 4코어이므로 두 곳에서 같은 값이 맞다.
+#
+# 워커마다 DB 를 나눈다(`conftest._test_url`). 안 나누면 서로의 테이블을 비운다.
+addopts = "-q -n 4"

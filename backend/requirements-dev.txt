@@ -2,4 +2,6 @@
 httpx==0.28.1
 mypy==2.3.0
 pytest==9.1.1
+# 스위트를 워커 4개로 나눈다(186초 → 102초). 근거는 pyproject 의 addopts 주석.
+pytest-xdist==3.8.0
 ruff==0.16.3

@@ -40,21 +40,41 @@ from app.modules.vocabulary.definitions import ensure_builtin_vocabularies
 
 
 def _test_url() -> str:
-    """`<개발DB>_test`.
+    """`<개발DB>_test`, 워커면 `<개발DB>_test_gw0`.
 
-    **병렬(`pytest -n`)은 안 쓴다 — 필요가 없어졌다.**
+    ## 병렬을 다시 켰다 (2026-08-27)
 
-    한때 32코어에서 470초를 369초로 줄이려고 넣었다가 `InsufficientPrivilege`
-    ("파일을 만들 수 없음")가 12번 나서 접었다. 그때는 **병렬이 원인이라고 적었는데
-    틀렸다** — 원인은 아래의 `TRUNCATE` 였다. 워커 32개가 각자 72번씩 파일을 만들고
-    지우니 Windows 가 못 버틴 것이다.
+    **전에 접은 판단은 스위트가 72초일 때 내린 것이다.** 그때는 "병렬로 얻을 것이
+    의존성 하나와 워커별 DB 를 지는 값보다 작다" 가 맞았다. 시험이 1,309건이 되어
+    **186초**가 되자 그 저울이 뒤집혔다 — 워커 4개로 **102초**다.
 
-    `DELETE` 로 바꾸고 시험의 bcrypt 라운드를 낮추니 스위트가 **72초**다. 병렬로
-    얻을 것이 의존성 하나와 워커별 DB 를 지는 값보다 작다.
+    처음 `-n auto` 로 재 봤을 때는 **272초로 더 느려지고 죽었다.** 이 개발기가
+    32코어라 워커가 32개 뜨는데, 워커마다 엔진 풀을 지므로 PostgreSQL 의
+    `max_connections=100` 을 넘긴다. 실패 문구는 「최대 연결 수 초과」 이지
+    교착이 아니다 — **원인을 「병렬은 위험하다」 로 적으면 또 틀리게 된다.**
+
+    워커를 늘려도 6개에서 98초로 평평해진다. 병목이 코어가 아니라 **DB 하나**다.
+
+    ## 왜 워커마다 DB 를 나누나
+
+    아래 정리가 매 테스트 뒤 테이블을 비운다. 나누지 않으면 워커들이 **서로의
+    데이터를 지우면서** 돈다 — 그때 나는 실패는 무작위이고 재현이 안 된다.
+
+    파일스토어는 이미 나뉘어 있다(`_isolated_filestore` 가 `tmp_path_factory` 를
+    쓰고, xdist 는 워커마다 다른 임시 폴더를 준다).
+
+    ## 그래도 스위트를 둘 동시에 돌리지는 않는다
+
+    워커별로 나눈 것은 **한 실행 안에서**다. `pytest` 를 두 번 띄우면 둘 다
+    `_gw0` 을 쓰므로 전과 똑같이 서로를 지운다.
     """
     url = make_url(get_settings().database_url)
+    # **워커마다 다른 DB.** `pytest -n` 이면 `PYTEST_XDIST_WORKER` 가 `gw0`·`gw1`
+    # 로 온다. 안 나누면 워커들이 같은 테이블을 비우며 서로를 지운다.
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    name = f"{url.database}_test" + (f"_{worker}" if worker else "")
     # str(URL) 은 비밀번호를 '***' 로 마스킹한다. 그대로 쓰면 인증에 실패한다.
-    return url.set(database=f"{url.database}_test").render_as_string(hide_password=False)
+    return url.set(database=name).render_as_string(hide_password=False)
 
 
 def _ensure_database(url_str: str) -> None:
