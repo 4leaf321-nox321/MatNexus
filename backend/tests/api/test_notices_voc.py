@@ -140,3 +140,118 @@ def test_member_cannot_reply(
         f"/api/voc/{item_id}/reply", json={"reply": "내가 답한다"}, headers=headers
     )
     assert response.status_code == 403
+
+
+# --- 고치기와 지우기 -----------------------------------------------------------
+#
+# **낸 사람은 답변 전까지, 관리자는 언제나.** 답변이 달린 뒤에 본문이 바뀌면
+# 답변이 딴 소리가 된다 — 읽는 사람은 관리자가 엉뚱한 답을 한 것으로 본다.
+
+
+def _voc(client: TestClient, headers: dict[str, str], title: str = "느려요") -> str:
+    made = client.post(
+        "/api/voc", json={"title": title, "body": "목록이 느립니다"}, headers=headers
+    )
+    assert made.status_code == 201, made.text
+    return str(made.json()["id"])
+
+
+def test_낸_사람이_자기_것을_고친다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    headers = member_headers(client, db, workspace)
+    item_id = _voc(client, headers)
+
+    fixed = client.patch(
+        f"/api/voc/{item_id}", json={"title": "목록이 느려요"}, headers=headers
+    )
+    assert fixed.status_code == 200, fixed.text
+    body = fixed.json()
+    assert body["title"] == "목록이 느려요"
+    # **안 보낸 칸은 안 건드린다.** 제목만 고치는 요청이 본문을 지우면 안 된다.
+    assert body["body"] == "목록이 느립니다"
+
+
+def test_답변이_달리면_낸_사람은_못_고친다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    headers = member_headers(client, db, workspace)
+    item_id = _voc(client, headers)
+    client.post(
+        f"/api/voc/{item_id}/reply",
+        json={"reply": "고쳤습니다", "status": "resolved"},
+        headers=admin_headers,
+    )
+
+    denied = client.patch(f"/api/voc/{item_id}", json={"title": "딴 얘기"}, headers=headers)
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "MNX-VOC-0004"
+
+    # **관리자는 언제나 된다.** 답변을 단 사람이 오타를 고치는 자리다.
+    allowed = client.patch(
+        f"/api/voc/{item_id}", json={"title": "목록 지연"}, headers=admin_headers
+    )
+    assert allowed.status_code == 200
+
+
+def test_남이_낸_것은_못_고치고_못_지운다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    """목록에서도 안 보이지만, 거기서만 막으면 주소를 아는 사람이 고칠 수 있다."""
+    item_id = _voc(client, admin_headers, title="관리자가 낸 것")
+    headers = member_headers(client, db, workspace)
+
+    assert (
+        client.patch(f"/api/voc/{item_id}", json={"title": "x"}, headers=headers).json()[
+            "error"
+        ]["code"]
+        == "MNX-VOC-0003"
+    )
+    assert client.delete(f"/api/voc/{item_id}", headers=headers).status_code == 403
+
+
+def test_voc_를_지우면_목록에서_사라진다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    headers = member_headers(client, db, workspace)
+    item_id = _voc(client, headers)
+
+    assert client.delete(f"/api/voc/{item_id}", headers=headers).status_code == 204
+    assert client.get("/api/voc", headers=headers).json() == []
+    # 두 번 지우면 없는 것이다 — 화면이 새로고침 전에 한 번 더 누를 수 있다.
+    assert client.delete(f"/api/voc/{item_id}", headers=headers).status_code == 404
+
+
+def test_공지를_지우면_읽음_기록도_함께_간다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    """`notice_reads` 가 CASCADE 다. 안 지워지면 지운 공지를 가리키는 행이 남는다."""
+    from app.modules.notices.models import NoticeRead
+
+    notice_id = client.post(
+        "/api/notices",
+        json={"title": "점검", "body": "토요일", "is_published": True, "is_popup": True},
+        headers=admin_headers,
+    ).json()["id"]
+    headers = member_headers(client, db, workspace)
+    client.post(f"/api/notices/{notice_id}/read", headers=headers)
+    assert db.query(NoticeRead).count() == 1
+
+    assert client.delete(f"/api/notices/{notice_id}", headers=admin_headers).status_code == 204
+    assert client.get("/api/notices", headers=headers).json() == []
+    db.expire_all()
+    assert db.query(NoticeRead).count() == 0
+
+
+def test_공지는_시스템_관리자만_지운다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    notice_id = client.post(
+        "/api/notices",
+        json={"title": "점검", "body": "토요일", "is_published": True},
+        headers=admin_headers,
+    ).json()["id"]
+    headers = member_headers(client, db, workspace)
+
+    assert client.delete(f"/api/notices/{notice_id}", headers=headers).status_code == 403
+    assert client.delete(f"/api/notices/{notice_id}", headers=admin_headers).status_code == 204

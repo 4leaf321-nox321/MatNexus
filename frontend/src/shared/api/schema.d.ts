@@ -1240,7 +1240,15 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Notice
+         * @description **행을 없앤다.** 읽음 기록은 FK 가 CASCADE 로 함께 지운다.
+         *
+         *     「내리기」 와 다른 일이다 — 잘못 올린 것을 잠깐 감추려면 발행을 끄면 되고
+         *     (`PATCH is_published`), 그때 내용과 발행 시각은 남는다. 삭제는 그 공지가
+         *     있었다는 사실까지 없애는 것이라 화면이 먼저 묻는다.
+         */
+        delete: operations["delete_notice_api_notices__notice_id__delete"];
         options?: never;
         head?: never;
         /** Update Notice */
@@ -2411,6 +2419,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/voc/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Item
+         * @description **행을 없앤다.** 딸린 것이 없어 남길 것도 없다 — 화면이 먼저 묻는다.
+         */
+        delete: operations["delete_item_api_voc__item_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Item */
+        patch: operations["update_item_api_voc__item_id__patch"];
         trace?: never;
     };
     "/api/voc/{item_id}/reply": {
@@ -7520,6 +7549,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Mine */
+            is_mine: boolean;
             /** Page Path */
             page_path: string | null;
             /** Replied At */
@@ -7540,6 +7571,20 @@ export interface components {
              * @default resolved
              */
             status: string;
+        };
+        /**
+         * VocUpdateRequest
+         * @description 낸 것을 고친다. **안 보낸 칸은 안 건드린다.**
+         *
+         *     셋 다 실어 보내게 하면 화면이 한 칸만 고칠 때도 나머지를 다시 실어야 하고,
+         *     그 사이에 남이 고친 값이 있으면 그것이 되돌아간다. `None` 은 「안 보냄」 이다 —
+         *     제목·본문은 `min_length=1` 이라 「비웠다」 는 애초에 못 보낸다.
+         */
+        VocUpdateRequest: {
+            /** Body */
+            body?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** VocabularyOut */
         VocabularyOut: {
@@ -9744,6 +9789,35 @@ export interface operations {
             };
         };
     };
+    delete_notice_api_notices__notice_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_notice_api_notices__notice_id__patch: {
         parameters: {
             query?: never;
@@ -11815,6 +11889,70 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_item_api_voc__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_item_api_voc__item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VocUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

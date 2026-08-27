@@ -11533,6 +11533,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_mine": {
+            "title": "Is Mine",
+            "type": "boolean"
+          },
           "page_path": {
             "anyOf": [
               {
@@ -11584,6 +11588,7 @@
           "page_path",
           "created_at",
           "created_by",
+          "is_mine",
           "reply",
           "replied_at"
         ],
@@ -11607,6 +11612,38 @@
           "reply"
         ],
         "title": "VocReplyRequest",
+        "type": "object"
+      },
+      "VocUpdateRequest": {
+        "description": "낸 것을 고친다. **안 보낸 칸은 안 건드린다.**\n\n셋 다 실어 보내게 하면 화면이 한 칸만 고칠 때도 나머지를 다시 실어야 하고,\n그 사이에 남이 고친 값이 있으면 그것이 되돌아간다. `None` 은 「안 보냄」 이다 —\n제목·본문은 `min_length=1` 이라 「비웠다」 는 애초에 못 보낸다.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "VocUpdateRequest",
         "type": "object"
       },
       "VocabularyOut": {
@@ -15058,6 +15095,41 @@
       }
     },
     "/api/notices/{notice_id}": {
+      "delete": {
+        "description": "**행을 없앤다.** 읽음 기록은 FK 가 CASCADE 로 함께 지운다.\n\n「내리기」 와 다른 일이다 — 잘못 올린 것을 잠깐 감추려면 발행을 끄면 되고\n(`PATCH is_published`), 그때 내용과 발행 시각은 남는다. 삭제는 그 공지가\n있었다는 사실까지 없애는 것이라 화면이 먼저 묻는다.",
+        "operationId": "delete_notice_api_notices__notice_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Notice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Notice",
+        "tags": [
+          "notices"
+        ]
+      },
       "patch": {
         "operationId": "update_notice_api_notices__notice_id__patch",
         "parameters": [
@@ -18331,6 +18403,94 @@
           }
         },
         "summary": "Create Item",
+        "tags": [
+          "voc"
+        ]
+      }
+    },
+    "/api/voc/{item_id}": {
+      "delete": {
+        "description": "**행을 없앤다.** 딸린 것이 없어 남길 것도 없다 — 화면이 먼저 묻는다.",
+        "operationId": "delete_item_api_voc__item_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Item",
+        "tags": [
+          "voc"
+        ]
+      },
+      "patch": {
+        "operationId": "update_item_api_voc__item_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VocUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VocOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Item",
         "tags": [
           "voc"
         ]

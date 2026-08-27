@@ -5,11 +5,13 @@
  * 이 화면에서 바로 쓰고 발행할 수 있어야 한다.
  */
 
-import { useState } from 'react'
-import { Megaphone, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Megaphone, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { noticesApi } from '@/modules/notices/api'
+import type { Notice } from '@/modules/notices/api'
 import { useAuth } from '@/shared/auth/AuthContext'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -30,6 +32,11 @@ export default function NoticesPage() {
   const { user } = useAuth()
   const notices = useResource(() => noticesApi.list(), [])
   const [writing, setWriting] = useState(false)
+  /** 고치는 중인 공지. `null` 이면 새로 쓰는 것이다. */
+  const [editing, setEditing] = useState<Notice | null>(null)
+  const [deleting, setDeleting] = useState<Notice | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
 
   const rows = notices.data ?? []
 
@@ -48,7 +55,7 @@ export default function NoticesPage() {
         }
       />
 
-      <ErrorNotice error={notices.error} className="mb-4" />
+      <ErrorNotice error={error ?? notices.error} className="mb-4" />
 
       {!notices.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
@@ -68,6 +75,31 @@ export default function NoticesPage() {
                 </Badge>
               )}
               {notice.is_popup && <Badge variant="outline">팝업</Badge>}
+
+              {/* **오른쪽 끝에 붙인다.** 제목 옆에 두면 배지와 섞여, 읽으러 온
+                  사람에게도 고치는 단추가 먼저 눈에 든다. */}
+              {user?.is_system_admin && (
+                <div className="ml-auto flex shrink-0 gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7"
+                    aria-label={`${notice.title} 고치기`}
+                    onClick={() => setEditing(notice)}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7"
+                    aria-label={`${notice.title} 삭제`}
+                    onClick={() => setDeleting(notice)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              )}
             </div>
             <p className="text-muted-foreground text-sm whitespace-pre-wrap">{notice.body}</p>
             <p className="text-muted-foreground mt-2 text-xs">
@@ -77,44 +109,111 @@ export default function NoticesPage() {
         ))}
       </ul>
 
-      <WriteDialog
-        open={writing}
-        onClose={() => setWriting(false)}
+      <NoticeDialog
+        open={writing || editing !== null}
+        notice={editing}
+        onClose={() => {
+          setWriting(false)
+          setEditing(null)
+        }}
         onDone={() => {
           setWriting(false)
+          setEditing(null)
           notices.reload()
+        }}
+      />
+
+      {/* **「내리기」 를 함께 말한다.** 잘못 올린 것을 잠깐 감추는 것과 아예
+          없애는 것은 다른 일인데, 사람은 그 자리에서 삭제부터 누른다. */}
+      <ConfirmDialog
+        open={deleting !== null}
+        title="공지를 지웁니다"
+        busy={busy}
+        body={
+          <>
+            <b>{deleting?.title}</b> 과 그 읽음 기록이 사라집니다.
+            <p className="text-muted-foreground mt-2">
+              잠깐 감추려는 것이면 지우지 말고 <b>고치기에서 발행을 끄세요</b> — 내용과
+              발행 시각이 남습니다.
+            </p>
+          </>
+        }
+        onClose={() => setDeleting(null)}
+        onConfirm={async () => {
+          if (!deleting) return
+          setBusy(true)
+          setError(null)
+          try {
+            await noticesApi.remove(deleting.id)
+            setDeleting(null)
+            notices.reload()
+          } catch (caught) {
+            setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+          } finally {
+            setBusy(false)
+          }
         }}
       />
     </div>
   )
 }
 
-function WriteDialog({
+/**
+ * 새로 쓰기와 고치기를 **한 창이 한다.**
+ *
+ * 둘로 나누면 칸이 두 벌이 되고, 「팝업으로 띄우기」 같은 칸을 하나에만 더하는
+ * 날이 온다 — 그러면 고칠 때만 못 켜는 것이 생긴다.
+ *
+ * 고칠 때만 「발행」 을 보여 준다. 새로 쓰는 창에서는 단추가 곧 발행이라 칸이
+ * 겹치고, **잘못 올린 것을 내리는 일**은 고치는 자리에서만 생긴다.
+ */
+function NoticeDialog({
   open,
+  notice,
   onClose,
   onDone,
 }: {
   open: boolean
+  /** `null` 이면 새로 쓰는 것이다. */
+  notice: Notice | null
   onClose: () => void
   onDone: () => void
 }) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [isPopup, setIsPopup] = useState(false)
+  const [isPublished, setIsPublished] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+
+  // **열릴 때마다 그 공지의 값으로 되돌린다.** 안 그러면 하나를 고치다 닫고
+  // 다른 것을 열었을 때 앞엣것의 글이 남아 있고, 그대로 저장하면 덮인다.
+  useEffect(() => {
+    if (!open) return
+    setTitle(notice?.title ?? '')
+    setBody(notice?.body ?? '')
+    setIsPopup(notice?.is_popup ?? false)
+    setIsPublished(notice?.is_published ?? true)
+    setError(null)
+  }, [open, notice])
 
   async function submit() {
     setBusy(true)
     setError(null)
     try {
-      await noticesApi.create({ title, body, is_popup: isPopup, is_published: true })
-      setTitle('')
-      setBody('')
-      setIsPopup(false)
+      if (notice) {
+        await noticesApi.update(notice.id, {
+          title,
+          body,
+          is_popup: isPopup,
+          is_published: isPublished,
+        })
+      } else {
+        await noticesApi.create({ title, body, is_popup: isPopup, is_published: true })
+      }
       onDone()
     } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error('작성에 실패했습니다.'))
+      setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
     } finally {
       setBusy(false)
     }
@@ -124,8 +223,12 @@ function WriteDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>공지 작성</DialogTitle>
-          <DialogDescription>발행하면 모든 사용자에게 보입니다.</DialogDescription>
+          <DialogTitle>{notice ? '공지 고치기' : '공지 작성'}</DialogTitle>
+          <DialogDescription>
+            {notice
+              ? '이미 읽은 사람에게도 바뀐 내용이 보입니다.'
+              : '발행하면 모든 사용자에게 보입니다.'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -157,6 +260,25 @@ function WriteDialog({
           </label>
           {/* 전부 팝업이면 아무도 읽지 않는다. */}
           <p className="text-muted-foreground text-xs">중요한 공지에만 켜세요.</p>
+
+          {/* **지우는 대신 내리는 길.** 발행을 끄면 남에게 안 보이고 내용과
+              발행 시각은 남는다 — 다시 켜도 「언제 알려졌는가」 를 잃지 않는다. */}
+          {notice && (
+            <>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={isPublished}
+                  onChange={(event) => setIsPublished(event.target.checked)}
+                />
+                발행
+              </label>
+              <p className="text-muted-foreground text-xs">
+                끄면 초안으로 내려가 남에게 안 보입니다. 내용과 처음 발행한 시각은
+                남습니다.
+              </p>
+            </>
+          )}
         </div>
 
         <ErrorNotice error={error} />
@@ -165,8 +287,8 @@ function WriteDialog({
           <Button variant="outline" onClick={onClose}>
             취소
           </Button>
-          <Button disabled={busy || !title || !body} onClick={submit}>
-            발행
+          <Button disabled={busy || !title || !body} onClick={() => void submit()}>
+            {notice ? '저장' : '발행'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -116,6 +116,25 @@ def update_notice(
     return _out(notice, read=False)
 
 
+@router.delete("/{notice_id}", status_code=204)
+def delete_notice(
+    notice_id: uuid.UUID,
+    _: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    """**행을 없앤다.** 읽음 기록은 FK 가 CASCADE 로 함께 지운다.
+
+    「내리기」 와 다른 일이다 — 잘못 올린 것을 잠깐 감추려면 발행을 끄면 되고
+    (`PATCH is_published`), 그때 내용과 발행 시각은 남는다. 삭제는 그 공지가
+    있었다는 사실까지 없애는 것이라 화면이 먼저 묻는다.
+    """
+    notice = db.get(Notice, notice_id)
+    if notice is None:
+        raise NotFound("MNX-NOTICES-0001", "공지를 찾을 수 없습니다.")
+    db.delete(notice)
+    db.commit()
+
+
 @router.post("/{notice_id}/read", status_code=204)
 def mark_read(
     notice_id: uuid.UUID,
