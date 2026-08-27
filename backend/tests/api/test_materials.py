@@ -701,9 +701,7 @@ class Test여럿을_한꺼번에_사슬로:
             stored = db.get(Material, uuid.UUID(material["id"]))
             assert stored is not None and stored.deleted_at is not None
 
-    def test_끄면_전과_같다(
-        self, client: TestClient, admin_headers: dict[str, str]
-    ) -> None:
+    def test_끄면_전과_같다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
         """**기본은 안 지우는 쪽이다.** 목록에서 고르고 지우기를 누르는 것이
         갑자기 트리를 날리는 뜻이 되면 안 된다."""
         one = self.tree(client, admin_headers, "EEE", specimens=1)

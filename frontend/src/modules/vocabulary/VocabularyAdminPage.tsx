@@ -885,7 +885,7 @@ function RenameDialog({
  * 할 수 있는 일은 셋뿐이다 — 별칭으로 잇거나, 부모를 정하거나, 다른 값에 합치거나.
  * 화면을 나누면 무엇을 골라야 하는지가 흐려진다.
  */
-function TermDetailDialog({
+export function TermDetailDialog({
   slug,
   parentSlug,
   term,
@@ -901,6 +901,9 @@ function TermDetailDialog({
   const [alias, setAlias] = useState('')
   const [parent, setParent] = useState(term.parent_value ?? '')
   const [failure, setFailure] = useState<string | null>(null)
+  /** 합칠 대상. **비어 있으면 아무 일도 안 한다** — 실수로 눌리는 자리다. */
+  const [into, setInto] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const aliases = useResource(() => vocabularyApi.aliases(slug, term.id), [slug, term.id])
 
   async function guarded(action: () => Promise<unknown>) {
@@ -912,6 +915,34 @@ function TermDetailDialog({
     } catch (error) {
       setFailure(error instanceof ApiError ? error.message : '실패했습니다.')
     }
+  }
+
+  /**
+   * 이 값을 다른 값에 합친다.
+   *
+   * **닮은 쌍만으로는 모자랐다.** 「합칠 만한 값」 패널은 표기가 닮은 것을 찾아
+   * 주는데, `POSCO` 와 `포스코` 처럼 **글자가 전혀 안 닮은 같은 것**은 못 찾는다.
+   * 그런 쌍은 따로 등록된 채로 남고, 화면에서 합칠 길이 없었다.
+   *
+   * 지우기로는 못 푼다 — 쓰는 곳이 있으면 서버가 막고(그게 맞다), 막히면서
+   * "감추기나 병합을 쓰세요" 라고 말하는데 그 병합이 이 창에 없었다.
+   */
+  async function mergeInto() {
+    if (!into || into === term.value) return
+    await guarded(async () => {
+      // **id 로 부른다.** 피커는 표기를 주는데 서버는 id 를 받는다.
+      const page = await vocabularyApi.search(slug, into, {
+        limit: 20,
+        includeHidden: true,
+      })
+      const found = page.items.find((one) => one.value === into && one.id !== term.id)
+      if (!found) {
+        setFailure(`'${into}' 를 못 찾았습니다.`)
+        return
+      }
+      await vocabularyApi.merge(slug, term.id, found.id)
+      onClose()
+    })
   }
 
   return (
@@ -1001,6 +1032,56 @@ function TermDetailDialog({
               </li>
             ))}
           </ul>
+        </div>
+
+        {/* **닮은 쌍만으로는 모자랐다.** 「합칠 만한 값」 패널은 표기가 닮은
+            것을 찾아 주는데, `POSCO` 와 `포스코` 처럼 글자가 전혀 안 닮은 같은
+            것은 못 찾는다. 그런 쌍은 따로 등록된 채로 남았고, 화면에서 합칠
+            길이 없었다 — 지우기는 쓰는 곳이 있으면 막히고(그게 맞다), 막히면서
+            "병합을 쓰세요" 라고 말하는데 그 병합이 이 창에 없었다. */}
+        <div className="space-y-1.5 border-t pt-3">
+          <VocabularyField
+            slug={slug}
+            label="다른 값에 합치기"
+            value={into}
+            // **새로 만들지 못하게 둔다.** 여기는 정리하는 자리다 — 합치려다
+            // 값을 하나 더 만드는 것은 정반대의 일이다.
+            allowCreate={false}
+            onChange={(next) => {
+              setInto(next)
+              setConfirming(false)
+            }}
+          />
+          <p className="text-muted-foreground text-xs">
+            이 값을 쓰는 <b>{term.usage_count}곳</b>이 고른 값으로 옮겨지고,{' '}
+            <b>'{term.value}'</b> 는 <b>별칭으로 남습니다</b> — 다음에 누가 옛 표기를
+            쳐도 자동으로 흡수됩니다.
+          </p>
+          {into !== '' && into === term.value && (
+            <p className="text-xs text-amber-700 dark:text-amber-500">
+              자기 자신입니다. 다른 값을 고르세요.
+            </p>
+          )}
+          {into !== '' && into !== term.value && (
+            <div className="flex items-center gap-2">
+              {/* **한 번 더 묻는다.** 되돌릴 수 없고, 옮겨지는 것이 참조 전부다. */}
+              {confirming ? (
+                <>
+                  <Button size="sm" variant="destructive" onClick={() => void mergeInto()}>
+                    '{term.value}' 를 '{into}' 로 합칩니다
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+                    취소
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
+                  <GitMerge className="size-3.5" />
+                  합치기
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {failure && <p className="text-destructive text-sm">{failure}</p>}
