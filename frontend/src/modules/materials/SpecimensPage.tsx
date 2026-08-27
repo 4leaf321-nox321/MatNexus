@@ -30,7 +30,7 @@ import { FlaskConical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { ORIENTATIONS, materialsApi } from '@/modules/materials/api'
-import { ColumnFilter } from '@/shared/components/ColumnFilter'
+import { ColumnFilter, ColumnLabel, FILTER_HEAD } from '@/shared/components/ColumnFilter'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -135,11 +135,14 @@ export default function SpecimensPage() {
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
-            <TableRow>
+            {/* **머리 띠를 본문과 가른다.** 거르는 칸이 들어가 두 층이 되면서
+                띠가 두꺼워졌는데, 배경이 없으면 첫 줄이 머리인지 자료인지
+                한눈에 안 갈린다. */}
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
               {/* **열마다 그 열을 거른다.** 서버가 거르므로 다음 쪽까지 걸러진다 —
                   화면에서 거르면 이 쪽에 실린 것만 걸러지고, 사람은 그것을
                   「없다」 로 읽는다. */}
-              <TableHead className="min-w-[10rem]">
+              <TableHead className={`min-w-[10rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="재료"
                   value={material}
@@ -147,10 +150,10 @@ export default function SpecimensPage() {
                   placeholder="SECC"
                 />
               </TableHead>
-              <TableHead className="min-w-[8rem]">
+              <TableHead className={`min-w-[8rem] ${FILTER_HEAD}`}>
                 <ColumnFilter label="로트" value={lot} onChange={setLot} placeholder="L-9" />
               </TableHead>
-              <TableHead className="min-w-[11rem]">
+              <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="시편"
                   value={name}
@@ -158,7 +161,7 @@ export default function SpecimensPage() {
                   placeholder="이름 · 규격"
                 />
               </TableHead>
-              <TableHead className="w-24">
+              <TableHead className={`w-24 ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="방향"
                   value={orientation}
@@ -166,7 +169,7 @@ export default function SpecimensPage() {
                   options={ORIENTATIONS}
                 />
               </TableHead>
-              <TableHead className="min-w-[11rem]">
+              <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="규격"
                   value={standard}
@@ -177,8 +180,12 @@ export default function SpecimensPage() {
               {/* 치수와 시험 수는 **서버가 거르는 축이 아니다.** 거르는 칸을
                   두면 눌러도 아무 일이 안 일어나거나, 이 쪽에 실린 것만 걸러
                   거짓말을 한다. */}
-              <TableHead className="min-w-[10rem] text-xs font-medium">치수</TableHead>
-              <TableHead className="text-right text-xs font-medium">시험</TableHead>
+              <TableHead className={`min-w-[10rem] ${FILTER_HEAD}`}>
+                <ColumnLabel>치수</ColumnLabel>
+              </TableHead>
+              <TableHead className={`text-right ${FILTER_HEAD}`}>
+                <ColumnLabel align="right">시험</ColumnLabel>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

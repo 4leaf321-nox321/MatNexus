@@ -28,7 +28,7 @@ import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { ColumnFilter } from '@/shared/components/ColumnFilter'
+import { ColumnFilter, ColumnLabel, FILTER_HEAD } from '@/shared/components/ColumnFilter'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -331,9 +331,15 @@ export default function MaterialsPage() {
         <>
           <Table>
             <TableHeader>
-              <TableRow>
+              {/* **머리 띠를 본문과 가른다.** 거르는 칸이 들어가 두 층이 되면서
+                  띠가 두꺼워졌는데, 배경이 없으면 첫 줄이 머리인지 자료인지
+                  한눈에 안 갈린다. */}
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
                 {/* **20건을 하나씩 여는 것은 일이 아니다.** 골라서 한 번에 지운다. */}
-                <TableHead className="w-8">
+                <TableHead className={`w-8 ${FILTER_HEAD}`}>
+                  {/* 거르는 칸들과 **같은 높이에 선다.** 위에 붙으면 머리 띠에서
+                      혼자 떠 보인다. */}
+                  <div className="flex h-[3.25rem] items-end pb-2">
                   <input
                     type="checkbox"
                     aria-label="전부 선택"
@@ -349,11 +355,12 @@ export default function MaterialsPage() {
                       )
                     }
                   />
+                  </div>
                 </TableHead>
                 {/* **열마다 그 열을 거른다.** 서버가 거르므로 다음 쪽까지
                     걸러진다 — 화면에서 거르면 이 쪽에 실린 것만 걸러지고,
                     사람은 그것을 「없다」 로 읽는다. */}
-                <TableHead className="min-w-[11rem]">
+                <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="이름"
                     value={name}
@@ -364,7 +371,7 @@ export default function MaterialsPage() {
                     placeholder="SECC"
                   />
                 </TableHead>
-                <TableHead className="min-w-[9rem]">
+                <TableHead className={`min-w-[9rem] ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="별칭"
                     value={alias}
@@ -377,7 +384,7 @@ export default function MaterialsPage() {
                 {/* **분류를 두 열로 나눴다.** 한 칸에 `Metal / Steel` 로 붙어
                     있으면 거르는 칸도 하나여야 하는데, 둘은 따로 고르는 축이다
                     (Family 를 바꾸면 Category 후보가 달라진다). */}
-                <TableHead className="w-32">
+                <TableHead className={`w-32 ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="Family"
                     value={family}
@@ -392,7 +399,7 @@ export default function MaterialsPage() {
                     }}
                   />
                 </TableHead>
-                <TableHead className="w-32">
+                <TableHead className={`w-32 ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="Category"
                     value={category}
@@ -405,9 +412,13 @@ export default function MaterialsPage() {
                 </TableHead>
                 {/* 두께·시료 수는 **서버가 거르는 축이 아니다.** 거르는 칸을
                     두면 이 쪽에 실린 것만 걸러 거짓말을 한다. */}
-                <TableHead className="text-right text-xs font-medium">두께</TableHead>
-                <TableHead className="text-right text-xs font-medium">시료</TableHead>
-                <TableHead className="w-28">
+                <TableHead className={`text-right ${FILTER_HEAD}`}>
+                  <ColumnLabel align="right">두께</ColumnLabel>
+                </TableHead>
+                <TableHead className={`text-right ${FILTER_HEAD}`}>
+                  <ColumnLabel align="right">시료</ColumnLabel>
+                </TableHead>
+                <TableHead className={`w-28 ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="소속"
                     value={scope}
