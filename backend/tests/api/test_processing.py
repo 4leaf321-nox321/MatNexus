@@ -636,13 +636,36 @@ class Test배치:
     def test_상한을_서버가_강제한다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:
+        """**화면이 막아 준다고 요청도 막힌다는 보장은 없다.**
+
+        100 이었다. 옛 DB 이관에서 걸렸다 — 한 재료의 시편이 수백 장이고, 그것을
+        열 번에 나눠 거는 것은 「나머지에 같은 것을 건다」 는 이 기능의 뜻을 반쯤
+        없앤다. 실측(건당 30ms)이 1000 을 받쳐 준다 — 30초쯤이다.
+        """
         response = client.post(
             "/api/processing/batch",
-            json={"test_run_ids": [run_id] * 101, "steps": STEPS},
+            json={"test_run_ids": [run_id] * 1001, "steps": STEPS},
             headers=admin_headers,
         )
         assert response.status_code == 422, response.text
         assert "나눠서" in response.json()["error"]["message"]
+        # **몇 건까지인지 말한다.** 「너무 많습니다」 만 오면 몇 개씩 나눌지 모른다.
+        assert "1000" in response.json()["error"]["message"]
+
+    def test_상한_안이면_받는다(
+        self, client: TestClient, admin_headers: dict[str, str], three_runs: list[str]
+    ) -> None:
+        """**막는 것이 목적이 아니다.** 상한을 올려 놓고 실제로 안 받으면 뜻이 없다."""
+        response = client.post(
+            "/api/processing/batch",
+            json={
+                "test_run_ids": three_runs,
+                "steps": [{"plugin": "tensile.strength", "options": {}}],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["requested"] == 3
 
     def test_한_건_저장과_배치가_같은_값을_낸다(
         self, client: TestClient, admin_headers: dict[str, str], three_runs: list[str]
