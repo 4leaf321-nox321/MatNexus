@@ -5778,6 +5778,17 @@
             "title": "Si Unit",
             "type": "string"
           },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "value": {
             "title": "Value",
             "type": "number"

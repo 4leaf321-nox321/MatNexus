@@ -207,6 +207,10 @@ class Test미리보기:
         specimen.gauge_length_m = 0.05
         specimen.width_m = 12.12e-3
         specimen.thickness_m = 1.0e-3
+        # **이 시험이 잰 값을 비운다.** 파싱이 파일의 `a0`·`b0` 를 시험에 담으므로
+        # (v1.118.0), 안 비우면 여기서 보려는 「시편 값으로 돈다」 가 성립하지 않는다 —
+        # 그건 다른 시험이 본다(`test_specimen_dimensions.py`).
+        run.dimensions = {}
         db.commit()
 
         body = client.post(
@@ -755,11 +759,18 @@ class Test들어오는값:
     """
 
     def test_시편_치수를_돌리기_전에_알려_준다(
-        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
     ) -> None:
         run = client.get(f"/api/test-runs/{run_id}", headers=admin_headers)
         assert run.status_code == 200, run.text
         specimen_id = run.json()["specimen_id"]
+
+        # **이 시험이 잰 값을 비운다.** 파싱이 파일의 `a0`·`b0` 를 시험에 담으므로
+        # (v1.118.0), 안 비우면 「값이 아예 없을 때」 를 만들 수 없다.
+        stored = db.get(TestRun, uuid.UUID(run_id))
+        assert stored is not None
+        stored.dimensions = {}
+        db.commit()
 
         # 치수가 없으면 넣어 줄 것도 없다 — **0 으로 채우지 않는다.**
         empty = client.get(

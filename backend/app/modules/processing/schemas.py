@@ -90,6 +90,11 @@ class ProcessingScalarOut(BaseModel):
     si_unit: str
     dimension: str | None = None
     """단위만으로 못 가르는 것을 가른다 — 변형률은 %, 개수는 그대로."""
+    source: str | None = None
+    """`run` 이 시험이 잰 값 · `measured` 시편에 적힌 값 · `nominal` 규격 공칭.
+
+    **값이 세 곳에 살 수 있다.** 어느 것을 썼는지 안 보이면 사람이 "어느 게
+    맞느냐" 에 답할 수 없다. 단면적처럼 계산된 값은 비어 있다."""
 
 
 class ProcessingStageOut(BaseModel):

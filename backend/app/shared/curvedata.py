@@ -98,6 +98,9 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     3개뿐이라 처리가 첫 단계에서 막히던 문제가 여기서 풀린다. 잰 값이 있으면
     그것이 이긴다.
 
+    **읽는 순서는 셋이다** — 이 시험이 잰 값 → 시편에 적힌 값 → 규격 공칭.
+    치수는 그 시험에서 잰 값이라 앞엣것이 이긴다(`specimen_size.sizes_of`).
+
     **없는 값은 넘기지 않는다.** 0 이나 기본값으로 채우면 응력이 조용히 틀린다 —
     단면적이 잘못되면 자릿수가 통째로 어긋나는데 숫자는 그럴듯해 보인다. 없으면
     `@specimen_area` 참조가 "그 값이 없습니다" 로 실패하고, 그게 맞다.
@@ -106,7 +109,9 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     if specimen is None:
         return []
 
-    sizes = specimen_size.sizes_of(db, specimen)
+    # **이 시험이 잰 값이 먼저다.** 같은 시편에 시험이 여럿이면 시편 한 벌을
+    # 나눠 쓰게 되는데, 치수는 그 시험에서 잰 값이다(실사용에서 나왔다).
+    sizes = specimen_size.sizes_of(db, specimen, run.dimensions or {})
     given: list[processing.Scalar] = [
         processing.Scalar(
             f"specimen_{item.key}", f"시편 {item.label}", item.value, item.si_unit
@@ -116,10 +121,30 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
 
     # 단면적은 **규격이 고른 식**으로 낸다 — 평판은 폭 곱하기 두께, 환봉은
     # π(직경/2)². 식을 안 골랐으면 옛 규칙(폭·두께)으로 되돌아간다.
-    area = specimen_size.area_of(db, specimen)
+    area = specimen_size.area_of(db, specimen, run.dimensions or {})
     if area:
         given.append(processing.Scalar("specimen_area", "시편 초기 단면적", area, "m2"))
     return given
+
+
+def specimen_sources(db: Session, run: TestRun) -> dict[str, str]:
+    """`specimen_scalars` 가 낸 값이 **어디서 왔는가.** 키는 같은 이름이다.
+
+    `matcore.processing.Scalar` 에 넣지 않는다 — 그 층은 계산만 알아야 하고,
+    출처는 화면이 사람에게 설명하려고 쓰는 값이다.
+
+        run       이 시험이 잰 값 (그 파일의 a0·b0)
+        measured  시편에 적힌 값
+        nominal   규격이 정한 공칭
+
+    **왜 보여 줘야 하나:** 치수가 세 곳에 살 수 있게 되면서 "어느 게 맞느냐" 를
+    묻게 됐다. 답이 안 보이면 그 자리가 조용히 틀리는 자리가 된다.
+    """
+    specimen = db.get(Specimen, run.specimen_id)
+    if specimen is None:
+        return {}
+    sizes = specimen_size.sizes_of(db, specimen, run.dimensions or {})
+    return {f"specimen_{item.key}": item.source for item in sizes.items}
 
 
 # --- 장비가 준 시편 치수 ------------------------------------------------------

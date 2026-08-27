@@ -1511,22 +1511,6 @@ def cleanup(
 # --- 장비가 준 시편 치수 ------------------------------------------------------
 
 
-def _dimension_fields(db: Session, specimen: Specimen | None) -> list[specimen_size.Field]:
-    """이 시편이 가질 수 있는 치수 칸. **규격이 정한다.**
-
-    전에는 두께·폭·게이지 셋이 코드에 박혀 있었다. 그래서 환봉 파일이 준 직경은
-    갈 곳이 없었고, 파일에 있는 값을 두고도 사람이 자를 대고 다시 쟀다.
-    """
-    if specimen is None:
-        return []
-    fields = [
-        item for item in specimen_size.sizes_of(db, specimen).fields if item.kind == "number"
-    ]
-    # **규격을 아직 안 붙인 시편이 많다.** 칸이 하나도 없으면 파일에 값이 있어도
-    # 채울 자리가 없어진다 — 되던 길이 사라지면 안 된다.
-    return fields or specimen_size.legacy_fields()
-
-
 @runs_router.get("/{run_id}/instrument-dimensions", response_model=InstrumentDimensionsOut)
 def instrument_dimensions(
     run_id: uuid.UUID,
@@ -1540,7 +1524,7 @@ def instrument_dimensions(
     """
     run = permissions.get_run(db, user, run_id)
     specimen = db.get(Specimen, run.specimen_id)
-    fields = _dimension_fields(db, specimen)
+    fields = specimen_size.dimension_fields(db, specimen)
     found = curvedata.instrument_dimensions(run.source_metadata, fields)
     measured = dict((specimen.dimensions if specimen else None) or {})
     for key, column in specimen_size.LEGACY_COLUMNS.items():
@@ -1585,7 +1569,7 @@ def apply_instrument_dimensions(
     """
     run = permissions.get_run(db, user, run_id)
     specimen = permissions.visible_specimen(db, user, run.specimen_id)
-    fields = _dimension_fields(db, specimen)
+    fields = specimen_size.dimension_fields(db, specimen)
     found = curvedata.instrument_dimensions(run.source_metadata, fields)
     if not found:
         raise AppError(

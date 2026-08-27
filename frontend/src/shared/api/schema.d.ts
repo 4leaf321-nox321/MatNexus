@@ -5362,6 +5362,8 @@ export interface components {
             label: string;
             /** Si Unit */
             si_unit: string;
+            /** Source */
+            source?: string | null;
             /** Value */
             value: number;
         };

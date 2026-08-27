@@ -553,6 +553,7 @@ describe('시편 값 이어 붙이기', () => {
       value: 0.05,
       si_unit: 'm',
       dimension: null,
+      source: 'run',
     },
   ]
 
@@ -587,6 +588,30 @@ describe('시편 값 이어 붙이기', () => {
     await user.click(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ }))
 
     expect(await screen.findByText(/지금 50 mm/)).toBeInTheDocument()
+  })
+
+  it('그 값이 어디서 왔는지 말한다', async () => {
+    // **치수는 세 곳에 살 수 있다** — 이 시험이 잰 값 · 시편에 적힌 값 · 규격
+    // 공칭(v1.118.0). 안 보이면 사람이 "어느 게 맞느냐" 에 답할 수 없고, 그러면
+    // 그 자리가 조용히 틀리는 자리가 된다.
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ }))
+
+    expect(await screen.findByText(/이 시험이 잰 값/)).toBeInTheDocument()
+  })
+
+  it('시편에서 온 값이면 그렇게 말한다', async () => {
+    inputs.mockResolvedValue([{ ...GIVEN[0], source: 'measured' }])
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ }))
+
+    expect(await screen.findByText(/시편에 적힌 값/)).toBeInTheDocument()
   })
 
   it('이어 붙인 값을 그 자리에서 고칠 수 있다', async () => {

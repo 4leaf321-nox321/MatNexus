@@ -14,13 +14,18 @@
 from __future__ import annotations
 
 import math
+import uuid
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.modules.materials.models import Specimen
+from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.models import TestRun
 from app.modules.vocabulary.definitions import (
     ensure_builtin_axis_fields,
     ensure_builtin_specimen_categories,
@@ -266,6 +271,145 @@ class TestValues:
         payload = dimensions_of(client, admin_headers, specimen["id"])
         left = field_named(payload, "diameter")
         assert left is not None and left["measured"] == pytest.approx(0.0125)
+
+
+class Test시험이_자기_치수를_든다:
+    """*"시편 하나에 여러 시험으로 넣으니까, 그 시험은 다 같은 두께, 폭을 가지게
+    되어 버린다"* — 실사용에서 나왔다.
+
+    치수는 **그 시험에서 잰 값**이다. 장비 파일마다 `a0`·`b0` 가 들어 있는데
+    시편 행 한 곳에만 자리가 있었다.
+
+    엔티티를 합치지는 않았다 — 비파괴 시험은 한 시편으로 여러 번 재고(DMA
+    주파수 스윕 + 온도 스윕), 통계는 **시편 n개의 흩어짐**을 본다(ADR 0008).
+    시험=시편이면 스윕 둘이 시편 둘로 세어져 n 이 부푼다.
+    """
+
+    def upload(
+        self, client: TestClient, headers: dict[str, str], db: Session, specimen_id: str
+    ) -> dict[str, Any]:
+        tra = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+        made = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen_id, "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example.tra", tra.read_bytes())},
+            headers=headers,
+        )
+        assert made.status_code == 202, made.text
+        run_id = made.json()["id"]
+        assert test_services.parse_run(db, uuid.UUID(run_id)) == "parsed"
+        return {"id": run_id}
+
+    def test_파싱이_그_시험에_담는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**물어보지 않는다.** 시편에 쓸 때는 사람이 재어 넣은 값을 덮는 일이라
+        물어봐야 했지만, 여기는 그 시험의 자기 값이라 덮을 남의 값이 없다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        specimen = make_specimen(client, admin_headers)
+        run = self.upload(client, admin_headers, db, specimen["id"])
+
+        stored = db.get(TestRun, uuid.UUID(run["id"]))
+        assert stored is not None
+        # `.tra` 가 들고 온 값: a0 = 0.986 mm, b0 = 12.473 mm
+        assert stored.dimensions["thickness"] == pytest.approx(0.000986)
+        assert stored.dimensions["width"] == pytest.approx(0.012473)
+
+    def test_시편에_적힌_값보다_먼저다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**여기가 이 변경의 요점이다.** 시편에 공칭이 적혀 있어도, 그 시험은
+        자기 파일이 잰 값으로 계산해야 한다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        specimen = make_specimen(client, admin_headers)
+        client.put(
+            f"/api/specimens/{specimen['id']}/dimensions",
+            json={"dimensions": {"thickness": 0.001, "width": 0.0125}},
+            headers=admin_headers,
+        )
+        run = self.upload(client, admin_headers, db, specimen["id"])
+
+        inputs = client.get(
+            f"/api/processing/inputs?test_run_id={run['id']}", headers=admin_headers
+        ).json()
+        thickness = next(one for one in inputs if one["key"] == "specimen_thickness")
+        assert thickness["value"] == pytest.approx(0.000986)
+        # **어디서 왔는지 말한다.** 값이 세 곳에 살 수 있으므로, 출처가 안 보이면
+        # 사람이 "어느 게 맞느냐" 에 답할 수 없다.
+        assert thickness["source"] == "run"
+
+        # 단면적도 그 값으로 난다 — 0.986 곱하기 12.473 이지 1.0 곱하기 12.5 가 아니다.
+        area = next(one for one in inputs if one["key"] == "specimen_area")
+        assert area["value"] == pytest.approx(0.000986 * 0.012473, rel=1e-6)
+
+    def test_시험에_없으면_시편_값을_쓴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**되던 길이 사라지면 안 된다.** 파일이 치수를 안 주는 장비가 있다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        specimen = make_specimen(client, admin_headers)
+        client.put(
+            f"/api/specimens/{specimen['id']}/dimensions",
+            json={"dimensions": {"thickness": 0.001, "width": 0.0125}},
+            headers=admin_headers,
+        )
+        run = self.upload(client, admin_headers, db, specimen["id"])
+        stored = db.get(TestRun, uuid.UUID(run["id"]))
+        assert stored is not None
+        stored.dimensions = {}
+        db.commit()
+
+        inputs = client.get(
+            f"/api/processing/inputs?test_run_id={run['id']}", headers=admin_headers
+        ).json()
+        thickness = next(one for one in inputs if one["key"] == "specimen_thickness")
+        assert thickness["value"] == pytest.approx(0.001)
+        assert thickness["source"] == "measured"
+
+    def test_한_시편의_두_시험이_서로_다른_치수를_쓴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**이것이 못 되던 일이다.** 전에는 시편 한 벌을 나눠 썼다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        specimen = make_specimen(client, admin_headers)
+        first = self.upload(client, admin_headers, db, specimen["id"])
+        second = self.upload(client, admin_headers, db, specimen["id"])
+
+        # 둘째 시험만 다른 값을 쟀다고 하자 (같은 시편을 다시 잰 경우).
+        stored = db.get(TestRun, uuid.UUID(second["id"]))
+        assert stored is not None
+        stored.dimensions = {**stored.dimensions, "thickness": 0.00099}
+        db.commit()
+
+        def thickness_of(run_id: str) -> float:
+            inputs = client.get(
+                f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+            ).json()
+            found = next(one for one in inputs if one["key"] == "specimen_thickness")
+            value: float = found["value"]
+            return value
+
+        assert thickness_of(first["id"]) == pytest.approx(0.000986)
+        assert thickness_of(second["id"]) == pytest.approx(0.00099)
+
+    def test_시편_화면은_시험_값에_안_물든다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """시편 치수 화면은 **그 시편에 적힌 값**을 보여 준다. 시험이 잰 값이
+        거기 섞이면, 사람이 시편에 적은 것과 화면이 다르게 된다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        specimen = make_specimen(client, admin_headers)
+        self.upload(client, admin_headers, db, specimen["id"])
+
+        # DB 로 본다 — 규격을 안 붙인 시편은 화면에 칸 목록이 안 나온다.
+        stored = db.get(Specimen, uuid.UUID(specimen["id"]))
+        assert stored is not None
+        assert not stored.dimensions, "파싱이 시편을 건드렸다"
 
 
 class TestArea:

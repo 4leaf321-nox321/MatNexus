@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -241,13 +242,16 @@ def _stage_out(stage: processing.Stage) -> ProcessingStageOut:
     )
 
 
-def _scalar_out(scalar: processing.Scalar) -> ProcessingScalarOut:
+def _scalar_out(
+    scalar: processing.Scalar, sources: Mapping[str, str] | None = None
+) -> ProcessingScalarOut:
     return ProcessingScalarOut(
         key=scalar.key,
         label=scalar.label,
         value=scalar.value,
         si_unit=scalar.si_unit,
         dimension=scalar.dimension,
+        source=(sources or {}).get(scalar.key),
     )
 
 
@@ -281,7 +285,8 @@ def list_inputs(
     돌려 보기 전에 답해야 하므로 파이프라인을 돌리지 않는다.
     """
     run = get_run(db, user, test_run_id)
-    return [_scalar_out(item) for item in curvedata.specimen_scalars(db, run)]
+    sources = curvedata.specimen_sources(db, run)
+    return [_scalar_out(item, sources) for item in curvedata.specimen_scalars(db, run)]
 
 
 @router.post("/preview", response_model=ProcessingPreviewOut)

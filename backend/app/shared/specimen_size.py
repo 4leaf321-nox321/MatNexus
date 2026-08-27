@@ -29,7 +29,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -95,7 +95,10 @@ class Size:
     label: str
     si_unit: str
     value: float
-    #: `measured` 사람이 잰 것 · `nominal` 규격이 정한 것
+    #: `run` 이 시험이 잰 것 · `measured` 시편에 적힌 것 · `nominal` 규격이 정한 것
+    #:
+    #: 셋을 가르는 이유는 **어느 것을 썼는지 화면이 말해야** 하기 때문이다. 값이
+    #: 세 곳에 살 수 있으므로, 출처가 안 보이면 "어느 게 맞느냐" 에 답할 수 없다.
     source: str
 
 
@@ -112,6 +115,8 @@ class Sizes:
     nominal: dict[str, float]
     #: 이 시편에서 실제로 잰 값. 옛 고정 컬럼도 여기 섞인다.
     measured: dict[str, float]
+    #: **이 시험이** 잰 값. 시험 없이 부르면 비어 있다.
+    from_run: dict[str, float]
     #: 규격 값(`ASTM E8 R1`). 없으면 규격을 안 정한 시편이다.
     standard: str | None
     #: 이 규격이 요구하는 비율 조건. **어겨도 막지 않는다** — 보이게만 한다.
@@ -143,12 +148,30 @@ def standard_of(db: Session, specimen: Specimen) -> VocabularyTerm | None:
     return db.get(VocabularyTerm, specimen.standard_term_id)
 
 
-def sizes_of(db: Session, specimen: Specimen) -> Sizes:
-    """이 시편의 실효 치수. **잰 값이 이기고, 빈 칸은 규격에서 온다.**"""
-    return sizes_for(db, [specimen])[specimen.id]
+def sizes_of(
+    db: Session, specimen: Specimen, run_measured: Mapping[str, float] | None = None
+) -> Sizes:
+    """이 시편의 실효 치수. **앞엣것이 이긴다.**
+
+        ① 이 시험이 잰 값   `run_measured` (그 시험 파일이 들고 온 것)
+        ② 시편에 적힌 값     `specimen.dimensions`
+        ③ 규격이 정한 공칭   규격 값의 속성
+
+    ①이 있는 이유는 실사용에서 나왔다 — *"시편 하나에 여러 시험으로 넣으니까,
+    그 시험은 다 같은 두께, 폭을 가지게 되어 버린다"*. 치수는 그 시험에서 잰
+    값인데 시편 한 곳에만 자리가 있었다.
+
+    **`run_measured` 를 안 주면 전과 똑같다.** 시편 화면처럼 시험이 없는 자리가
+    있다.
+    """
+    return sizes_for(db, [specimen], {specimen.id: run_measured or {}})[specimen.id]
 
 
-def sizes_for(db: Session, specimens: Sequence[Specimen]) -> dict[uuid.UUID, Sizes]:
+def sizes_for(
+    db: Session,
+    specimens: Sequence[Specimen],
+    run_measured: Mapping[uuid.UUID, Mapping[str, float]] | None = None,
+) -> dict[uuid.UUID, Sizes]:
     """여러 시편의 실효 치수를 **한 번에** 읽는다.
 
     **목록에서 시편마다 읽으면 N+1 이다.** 시편 하나의 치수를 알려면 규격 값과
@@ -183,11 +206,13 @@ def sizes_for(db: Session, specimens: Sequence[Specimen]) -> dict[uuid.UUID, Siz
                 },
             )
 
+    told = run_measured or {}
     return {
         specimen.id: _sizes(
             specimen,
             standards.get(specimen.standard_term_id) if specimen.standard_term_id else None,
             *schema.get(specimen.standard_term_id or uuid.UUID(int=0), ((), {})),
+            told.get(specimen.id) or {},
         )
         for specimen in specimens
     }
@@ -198,7 +223,9 @@ def _sizes(
     standard: VocabularyTerm | None,
     fields: tuple[Field, ...],
     nominal: dict[str, float],
+    run_measured: Mapping[str, float] | None = None,
 ) -> Sizes:
+    from_run = {key: float(value) for key, value in (run_measured or {}).items()}
     measured = {key: float(value) for key, value in (specimen.dimensions or {}).items()}
     # **옛 컬럼도 실측이다.** 아직 그쪽으로만 채워진 시편이 있다(ADR 0010 Expand).
     for key, column in LEGACY_COLUMNS.items():
@@ -211,9 +238,14 @@ def _sizes(
     known = {item.key: item for item in fields}
     items: list[Size] = []
     # 규격이 정한 칸 순서를 따른다 — 화면이 그 순서로 그린다.
-    for key in [*known, *(k for k in measured if k not in known)]:
+    extra = [k for k in (*from_run, *measured) if k not in known]
+    for key in [*known, *dict.fromkeys(extra)]:
         field = known.get(key)
-        if key in measured:
+        # **이 시험이 잰 것이 먼저다.** 같은 시편으로 여러 번 재면 값이 다를 수
+        # 있고, 그때 맞는 것은 그 시험이 잰 값이다.
+        if key in from_run:
+            value, source = from_run[key], "run"
+        elif key in measured:
             value, source = measured[key], "measured"
         elif key in nominal:
             value, source = nominal[key], "nominal"
@@ -245,6 +277,7 @@ def _sizes(
         fields=fields,
         nominal=nominal,
         measured=measured,
+        from_run=from_run,
         standard=standard.value if standard else None,
     )
 
@@ -261,13 +294,19 @@ class Area:
     problem: str | None
 
 
-def area_detail(db: Session, specimen: Specimen) -> Area:
+def area_detail(
+    db: Session, specimen: Specimen, run_measured: Mapping[str, float] | None = None
+) -> Area:
     """초기 단면적과 못 낸 이유. **어림값을 만들지 않는다.**
 
     단면적이 틀리면 응력이 자릿수째로 어긋나는데 숫자는 그럴듯해 보인다 —
     없으면 `@specimen_area` 참조가 실패하고 그게 맞다.
+
+    **`run_measured` 를 받는다.** 안 받으면 치수는 그 시험 값으로 나오는데
+    단면적만 시편 값으로 나서, 응력이 두 근거에서 온 값으로 계산된다 — 시험이
+    그것을 잡았다(두께 0.986 인데 면적은 1.0 곱하기 12.5).
     """
-    sizes = sizes_of(db, specimen)
+    sizes = sizes_of(db, specimen, run_measured)
     if sizes.cross_section:
         try:
             return Area(specimen_kit.area(sizes.cross_section, sizes.values()), None)
@@ -287,6 +326,25 @@ def area_detail(db: Session, specimen: Specimen) -> Area:
     )
 
 
-def area_of(db: Session, specimen: Specimen) -> float | None:
+def area_of(
+    db: Session, specimen: Specimen, run_measured: Mapping[str, float] | None = None
+) -> float | None:
     """초기 단면적(m²). 낼 수 없으면 `None`."""
-    return area_detail(db, specimen).value
+    return area_detail(db, specimen, run_measured).value
+
+
+def dimension_fields(db: Session, specimen: Specimen | None) -> list[Field]:
+    """이 시편이 가질 수 있는 치수 칸. **규격이 정한다.**
+
+    전에는 두께·폭·게이지 셋이 코드에 박혀 있었다. 그래서 환봉 파일이 준 직경은
+    갈 곳이 없었고, 파일에 있는 값을 두고도 사람이 자를 대고 다시 쟀다.
+
+    라우트에 있던 것을 여기로 옮겼다 — 파싱(서비스)도 같은 목록이 필요한데,
+    모듈끼리 직접 부르지 않기 때문이다(AGENTS: 로직 공유는 `shared` 를 거친다).
+    """
+    if specimen is None:
+        return []
+    fields = [item for item in sizes_of(db, specimen).fields if item.kind == "number"]
+    # **규격을 아직 안 붙인 시편이 많다.** 칸이 하나도 없으면 파일에 값이 있어도
+    # 채울 자리가 없어진다 — 되던 길이 사라지면 안 된다.
+    return fields or legacy_fields()

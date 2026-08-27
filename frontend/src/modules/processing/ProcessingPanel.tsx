@@ -128,6 +128,25 @@ interface Props {
  * Tg 는 여기서 안 켠다. 정의가 셋인데 어느 것을 쓸지는 규격과 재료가 정하고,
  * 우리가 하나를 골라 두면 그것이 기본값처럼 굳는다.
  */
+/**
+ * 이어 붙인 값이 **어디서 왔는가.**
+ *
+ * 치수는 세 곳에 살 수 있다 — 이 시험이 잰 값 · 시편에 적힌 값 · 규격 공칭.
+ * 안 보이면 사람이 "어느 게 맞느냐" 에 답할 수 없고, 그러면 그 자리가 조용히
+ * 틀린다. 정본은 서버의 `Size.source` 다.
+ */
+const SOURCE_LABEL: Record<string, string> = {
+  run: '이 시험이 잰 값',
+  measured: '시편에 적힌 값',
+  nominal: '규격 공칭',
+}
+
+const SOURCE_HELP: Record<string, string> = {
+  run: '이 시험의 장비 파일이 들고 온 값입니다. 같은 시편이라도 시험마다 다를 수 있어 이 값이 먼저입니다.',
+  measured: '시편 기록에 적힌 값입니다. 이 시험 파일에 치수가 없어서 여기서 왔습니다.',
+  nominal: '시편 규격이 정한 공칭입니다. 시험에도 시편에도 잰 값이 없어서 여기서 왔습니다.',
+}
+
 const DMA_STARTER: RecipeStep[] = [
   { plugin: 'dma.derived', options: {} },
   { plugin: 'curve.sort_unique', options: { x: 'temperature', duplicate_policy: 'mean' } },
@@ -1290,6 +1309,15 @@ function ParamField({
               {/* **규격의 공칭과 그 시편의 실측은 뜻이 조금 다르다.** 얼마인지
                   보여 주지 않으면 고칠지 말지를 판단할 수 없다. */}
               {linkedShown && <b className="text-foreground"> · 지금 {linkedShown}</b>}
+              {/* **어디서 온 값인가.** 치수가 세 곳에 살 수 있게 되면서(v1.118.0)
+                  "어느 게 맞느냐" 를 묻게 됐다. 답이 안 보이면 그 자리가 조용히
+                  틀리는 자리가 된다. */}
+              {linked?.source && SOURCE_LABEL[linked.source] && (
+                <span className="text-muted-foreground" title={SOURCE_HELP[linked.source]}>
+                  {' '}
+                  ({SOURCE_LABEL[linked.source]})
+                </span>
+              )}
             </span>
             <Button
               size="sm"

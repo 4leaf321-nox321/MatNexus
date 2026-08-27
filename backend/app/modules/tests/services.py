@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.modules.accounts.models import User
+from app.modules.materials.models import Specimen
 from app.modules.tests.models import (
     Curve,
     FormatProfile,
@@ -34,7 +35,7 @@ from app.modules.tests.models import (
 )
 from app.modules.tests.schemas import RECORD_FIELDS
 from app.modules.vocabulary import services as vocabulary_services
-from app.shared import audit, filestore, permissions
+from app.shared import audit, curvedata, filestore, permissions, specimen_size
 from app.shared.errors import AppError, NotFound
 from matcore import curves, parsers, readers, registry, units
 from matcore.parsers import ParsedTest, ParseError
@@ -664,6 +665,7 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     _store_summary(db, run, parsed)
 
     run.source_metadata = dict(parsed.metadata)
+    _apply_dimensions(db, run, parsed)
     filled = _apply_record(db, run, parsed)
     filled += _apply_conditions(db, run, test_type, parsed)
     run.parser_version = how[:80]
@@ -685,6 +687,33 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
         len(parsed.warnings),
     )
     return "parsed"
+
+
+def _apply_dimensions(db: Session, run: TestRun, parsed: ParsedTest) -> None:
+    """파일이 들고 온 시편 치수를 **이 시험에** 담는다.
+
+    ## 왜 시편이 아니라 여기인가
+
+    실사용에서 나왔다 — *"시편 하나에 여러 시험으로 넣으니까, 그 시험은 다 같은
+    두께, 폭을 가지게 되어 버린다"*. 치수는 **그 시험에서 잰 값**이다.
+
+    전에는 사람이 「장비 치수 채우기」 를 눌러야 시편에 들어갔고, 그것도 **빈
+    칸만** 채웠다. 그래서 두 번째 파일이 들고 온 값은 갈 자리가 아예 없었다.
+
+    ## 여기는 물어보지 않는다
+
+    시편에 쓸 때는 물어봐야 했다 — 사람이 재어 넣은 값을 파일이 조용히 바꾸는
+    일이라서다. 여기는 **그 시험의 자기 값**이라 덮을 남의 값이 없다.
+
+    시편 쪽 「채우기」 는 그대로 둔다. 시험이 없는 시편도 치수를 가져야 하고,
+    사람이 규격 공칭을 적어 두는 자리도 거기다.
+    """
+    specimen = db.get(Specimen, run.specimen_id)
+    found = curvedata.instrument_dimensions(
+        parsed.metadata, specimen_size.dimension_fields(db, specimen)
+    )
+    if found:
+        run.dimensions = found
 
 
 def _apply_record(db: Session, run: TestRun, parsed: ParsedTest) -> list[str]:
