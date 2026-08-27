@@ -210,7 +210,12 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      {/* **한 줄이 여섯 칸인 자리가 있다.** 「비율 조건」 은 분자·분모·최소·최대·
+          이유·빼기로 한 줄인데, 기본 폭(512px)에서는 그 줄이 두세 줄로 접혀 한
+          조건이 어디서 끝나는지 안 보였다. 치수 칸 라벨도 기호와 단위를 달고
+          있어 접혔다. 프리미티브가 적어 둔 기준을 따른다 — 「3열이나 표는 `2xl`
+          이상」(`shared/components/ui/dialog.tsx`). */}
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{term.value} — 치수</DialogTitle>
           <DialogDescription>
@@ -240,7 +245,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
             {rows.map((field) => {
               const shown = display(field.si_unit, field.dimension)
               return (
-                <div key={field.key} className="grid grid-cols-[10rem_1fr] items-start gap-2">
+                <div key={field.key} className="grid grid-cols-[13rem_1fr] items-start gap-2">
                   <Label className="pt-1.5 text-xs">
                     {field.label}
                     {/* **도면은 글자로 적혀 있다.** 시편을 발주할 때 사람이 보는
