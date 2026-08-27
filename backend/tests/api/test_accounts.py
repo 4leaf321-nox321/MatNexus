@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -205,3 +208,121 @@ def test_pending_list_shows_applicants(
     pending = client.get("/api/accounts?status=pending", headers=admin_headers)
     assert pending.status_code == 200
     assert {row["email"] for row in pending.json()} == {"hong", "kim"}
+
+
+# --- 대표 소속 ----------------------------------------------------------------
+#
+# **로그인해서 처음 서는 자리다.** 이 값이 없으면 `memberships[0]`, 즉 이름 순
+# 첫 부서로 떨어진다 — 부서 하나뿐인 사람에게는 맞지만 여러 부서에 든 사람은
+# 매번 엉뚱한 곳에 서게 된다. 그 순서를 정하는 것은 사람이지 가나다순이 아니다.
+
+
+def _second_workspace(db: Session):  # type: ignore[no-untyped-def]
+    from app.modules.workspaces.models import Workspace
+
+    item = Workspace(slug="polymer", name="고분자팀")
+    db.add(item)
+    db.commit()
+    return item
+
+
+def test_대표_소속을_바꾸면_로그인이_그리로_선다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    account_id = signup(client).json()["id"]
+    client.post(
+        f"/api/accounts/{account_id}/approve", json={"role": "member"}, headers=admin_headers
+    )
+    second = _second_workspace(db)
+    client.post(
+        f"/api/workspaces/{second.slug}/members",
+        json={"email": SIGNUP["email"], "role": "member"},
+        headers=admin_headers,
+    )
+
+    changed = client.post(
+        f"/api/accounts/{account_id}/home-workspace",
+        json={"workspace_slug": "polymer"},
+        headers=admin_headers,
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["home_workspace_slug"] == "polymer"
+
+    # **화면이 이 값으로 첫 부서를 고른다.** 응답에만 있고 로그인이 안 보면
+    # 관리자가 정한 것이 아무 일도 안 한다.
+    login = client.post(
+        "/api/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
+    )
+    assert login.status_code == 200
+    assert login.json()["user"]["home_workspace_slug"] == "polymer"
+
+
+def test_멤버가_아닌_부서는_대표_소속이_못_된다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """주면 그 사람은 자기가 못 보는 부서에 서고, 목록이 비어 보인다 —
+    데이터가 없는 것과 구별이 안 된다."""
+    account_id = signup(client).json()["id"]
+    client.post(
+        f"/api/accounts/{account_id}/approve", json={"role": "member"}, headers=admin_headers
+    )
+    _second_workspace(db)
+
+    denied = client.post(
+        f"/api/accounts/{account_id}/home-workspace",
+        json={"workspace_slug": "polymer"},
+        headers=admin_headers,
+    )
+    assert denied.status_code == 400
+    assert denied.json()["error"]["code"] == "MNX-ACCOUNTS-0014"
+
+    db.expire_all()
+    user = db.scalar(select(User).where(User.email == SIGNUP["email"]))
+    assert user is not None
+    assert user.home_workspace_id is not None  # 원래 것이 그대로다
+
+
+def test_없는_부서와_없는_계정을_가른다(  # type: ignore[no-untyped-def]
+    client: TestClient, admin_headers: dict[str, str], workspace
+) -> None:
+    """404 하나로 뭉치면 관리자는 무엇을 고쳐야 하는지 모른다."""
+    account_id = signup(client).json()["id"]
+    client.post(
+        f"/api/accounts/{account_id}/approve", json={"role": "member"}, headers=admin_headers
+    )
+
+    ghost_workspace = client.post(
+        f"/api/accounts/{account_id}/home-workspace",
+        json={"workspace_slug": "ghost"},
+        headers=admin_headers,
+    )
+    assert ghost_workspace.json()["error"]["code"] == "MNX-ACCOUNTS-0001"
+
+    ghost_account = client.post(
+        f"/api/accounts/{uuid.uuid4()}/home-workspace",
+        json={"workspace_slug": "metal"},
+        headers=admin_headers,
+    )
+    assert ghost_account.json()["error"]["code"] == "MNX-ACCOUNTS-0003"
+
+
+def test_대표_소속은_시스템_관리자만_정한다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """자기 자리를 자기가 옮기는 것은 다른 기능이다 — 여기는 관리 화면이고,
+    열어 두면 부서 배정이 승인 절차를 우회한다."""
+    account_id = signup(client).json()["id"]
+    client.post(
+        f"/api/accounts/{account_id}/approve", json={"role": "member"}, headers=admin_headers
+    )
+    login = client.post(
+        "/api/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    denied = client.post(
+        f"/api/accounts/{account_id}/home-workspace",
+        json={"workspace_slug": "metal"},
+        headers=headers,
+    )
+    assert denied.status_code == 403

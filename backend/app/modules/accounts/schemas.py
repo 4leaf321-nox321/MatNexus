@@ -60,6 +60,17 @@ class CreateAccountRequest(BaseModel):
     is_system_admin: bool = False
 
 
+class HomeWorkspaceRequest(BaseModel):
+    """대표 소속을 정한다.
+
+    **비우는 길은 두지 않는다.** 대표 소속이 없으면 로그인이 `memberships[0]`,
+    즉 이름 순 첫 부서로 떨어지는데 그것은 사람이 정한 값이 아니다. 지우고 싶은
+    상황은 실제로는 "다른 부서로 옮긴다" 이므로 그때도 새 값을 준다.
+    """
+
+    workspace_slug: str = Field(min_length=1, max_length=50)
+
+
 class ReferenceOut(BaseModel):
     """이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다."""
 

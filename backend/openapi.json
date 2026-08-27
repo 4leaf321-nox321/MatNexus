@@ -3657,6 +3657,22 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HomeWorkspaceRequest": {
+        "description": "대표 소속을 정한다.\n\n**비우는 길은 두지 않는다.** 대표 소속이 없으면 로그인이 `memberships[0]`,\n즉 이름 순 첫 부서로 떨어지는데 그것은 사람이 정한 값이 아니다. 지우고 싶은\n상황은 실제로는 \"다른 부서로 옮긴다\" 이므로 그때도 새 값을 준다.",
+        "properties": {
+          "workspace_slug": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Workspace Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_slug"
+        ],
+        "title": "HomeWorkspaceRequest",
+        "type": "object"
+      },
       "IncompleteOut": {
         "properties": {
           "age_hours": {
@@ -12359,6 +12375,60 @@
           }
         },
         "summary": "Dependents",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/home-workspace": {
+      "post": {
+        "description": "대표 소속 — 이 사람이 로그인해서 처음 서는 부서.",
+        "operationId": "set_home_workspace_api_accounts__account_id__home_workspace_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomeWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Home Workspace",
         "tags": [
           "accounts"
         ]

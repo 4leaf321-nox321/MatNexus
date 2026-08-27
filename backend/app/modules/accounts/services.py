@@ -325,6 +325,69 @@ def set_status(db: Session, *, user_id: uuid.UUID, status: str, actor: User) -> 
     return user
 
 
+def set_home_workspace(
+    db: Session, *, user_id: uuid.UUID, workspace_slug: str, actor: User
+) -> User:
+    """대표 소속을 정한다 — **로그인해서 처음 서는 자리**다.
+
+    이 값이 없으면 로그인이 `memberships[0]`, 즉 **이름 순 첫 부서**로 떨어진다.
+    부서 하나뿐인 사람에게는 그것이 맞지만, 시스템 관리자처럼 여러 부서에 든
+    사람은 매번 엉뚱한 곳에 서고 부서를 손으로 바꿔야 했다. 그 순서를 정하는
+    것은 사람이지 이름 가나다순이 아니다.
+
+    **멤버가 아닌 부서는 못 준다.** 주면 그 사람은 로그인해서 자기가 못 보는
+    부서에 서고, 목록이 비어 보인다 — 데이터가 없는 것과 구별이 안 된다.
+    멤버십을 만드는 것은 부서 멤버 화면의 일이고, 여기서 겸하면 "대표 소속을
+    정했더니 없던 권한이 생겼다" 가 된다.
+
+    이 규칙은 반대쪽에도 이미 있다 — 멤버에서 빼면 대표 소속이 남은 부서로
+    옮겨진다(`workspaces/services.py`). 한쪽만 있으면 그 사이가 어긋난다.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFound("MNX-ACCOUNTS-0003", "계정을 찾을 수 없습니다.")
+
+    workspace = _workspace_by_slug(db, workspace_slug)
+
+    member = db.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace.id,
+            WorkspaceMember.user_id == user.id,
+        )
+    )
+    if member is None:
+        raise AppError(
+            "MNX-ACCOUNTS-0014",
+            f"{workspace.name} 의 멤버가 아닙니다. 부서 멤버로 먼저 넣으세요.",
+            status=400,
+        )
+
+    before = db.get(Workspace, user.home_workspace_id) if user.home_workspace_id else None
+    if before is not None and before.id == workspace.id:
+        return user
+
+    user.home_workspace_id = workspace.id
+    # **로그인해서 서는 자리가 바뀐다.** 본인은 다음 로그인에서야 알게 되므로,
+    # "왜 다른 부서에 서 있죠" 를 설명할 근거가 남아 있어야 한다.
+    audit.record(
+        db,
+        action=audit.ACCOUNT_HOME_CHANGED,
+        actor=actor,
+        target_table="users",
+        target_id=user.id,
+        target_label=user.display_name or user.email,
+        workspace_id=workspace.id,
+        changes={
+            "home_workspace": {
+                "before": before.slug if before else None,
+                "after": workspace.slug,
+            }
+        },
+    )
+    db.commit()
+    return user
+
+
 def delete_account(
     db: Session, *, user_id: uuid.UUID, actor: User, transfer_to_id: uuid.UUID | None
 ) -> list[Reference]:

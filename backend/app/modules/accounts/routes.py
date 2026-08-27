@@ -21,6 +21,7 @@ from app.modules.accounts.schemas import (
     CreateAccountRequest,
     DeleteAccountRequest,
     DeleteAccountResponse,
+    HomeWorkspaceRequest,
     ReferenceOut,
     RejectRequest,
     SignupRequest,
@@ -121,6 +122,20 @@ def activate(
     db: Session = Depends(get_db),
 ) -> AccountOut:
     user = services.set_status(db, user_id=account_id, status="active", actor=admin)
+    return services.account_out(db, user)
+
+
+@router.post("/{account_id}/home-workspace", response_model=AccountOut)
+def set_home_workspace(
+    account_id: uuid.UUID,
+    payload: HomeWorkspaceRequest,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> AccountOut:
+    """대표 소속 — 이 사람이 로그인해서 처음 서는 부서."""
+    user = services.set_home_workspace(
+        db, user_id=account_id, workspace_slug=payload.workspace_slug, actor=admin
+    )
     return services.account_out(db, user)
 
 

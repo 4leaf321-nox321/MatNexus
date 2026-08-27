@@ -116,6 +116,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{account_id}/home-workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Home Workspace
+         * @description 대표 소속 — 이 사람이 로그인해서 처음 서는 부서.
+         */
+        post: operations["set_home_workspace_api_accounts__account_id__home_workspace_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{account_id}/reject": {
         parameters: {
             query?: never;
@@ -4576,6 +4596,18 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * HomeWorkspaceRequest
+         * @description 대표 소속을 정한다.
+         *
+         *     **비우는 길은 두지 않는다.** 대표 소속이 없으면 로그인이 `memberships[0]`,
+         *     즉 이름 순 첫 부서로 떨어지는데 그것은 사람이 정한 값이 아니다. 지우고 싶은
+         *     상황은 실제로는 "다른 부서로 옮긴다" 이므로 그때도 새 값을 준다.
+         */
+        HomeWorkspaceRequest: {
+            /** Workspace Slug */
+            workspace_slug: string;
+        };
         /** IncompleteOut */
         IncompleteOut: {
             /** Age Hours */
@@ -7912,6 +7944,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReferenceOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_home_workspace_api_accounts__account_id__home_workspace_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomeWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountOut"];
                 };
             };
             /** @description Validation Error */

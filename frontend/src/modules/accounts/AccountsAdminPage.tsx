@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 
 import { DeleteAccountDialog } from '@/modules/accounts/DeleteAccountDialog'
+import { HomeWorkspaceDialog } from '@/modules/accounts/HomeWorkspaceDialog'
 import { accountsApi } from '@/modules/accounts/api'
 import type { Account, AccountStatus } from '@/modules/accounts/api'
 import { workspacesApi } from '@/modules/workspaces/api'
@@ -74,6 +75,7 @@ export default function AccountsAdminPage() {
   const [rejecting, setRejecting] = useState<Account | null>(null)
   const [deleting, setDeleting] = useState<Account | null>(null)
   const [creating, setCreating] = useState(false)
+  const [homing, setHoming] = useState<Account | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const accounts = useResource(
@@ -96,6 +98,10 @@ export default function AccountsAdminPage() {
   }
 
   const rows = accounts.data ?? []
+  const options = workspaces.data ?? []
+  /** slug 를 사람이 읽는 이름으로. 못 찾으면 slug 그대로 — 감추지 않는다. */
+  const nameOf = (slug: string) =>
+    options.find((item) => item.slug === slug)?.name ?? slug
 
   return (
     <div>
@@ -171,10 +177,12 @@ export default function AccountsAdminPage() {
                     <p className="text-muted-foreground mt-1 text-xs">{account.decision_note}</p>
                   )}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {account.status === 'pending'
-                    ? (account.requested_workspace_slug ?? '—')
-                    : (account.memberships.join(', ') || '—')}
+                <TableCell className="text-sm">
+                  <WorkspaceCell
+                    account={account}
+                    nameOf={nameOf}
+                    onEdit={() => setHoming(account)}
+                  />
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-1">
@@ -288,6 +296,19 @@ export default function AccountsAdminPage() {
         }}
       />
 
+      {homing && (
+        <HomeWorkspaceDialog
+          account={homing}
+          workspaces={options}
+          onClose={() => setHoming(null)}
+          onSaved={(message) => {
+            setHoming(null)
+            setNotice(message)
+            accounts.reload()
+          }}
+        />
+      )}
+
       <CreateAccountDialog
         open={creating}
         workspaces={(workspaces.data ?? []).map((w) => ({ slug: w.slug, name: w.name }))}
@@ -310,6 +331,64 @@ export default function AccountsAdminPage() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * 부서 칸 — **대표 소속 하나만 쓰고 나머지는 센다.**
+ *
+ * 전에는 멤버십을 전부 `, ` 로 이어 붙였다. 시스템 관리자는 모든 부서에 들어
+ * 있어서 그 한 칸이 표를 화면 밖으로 밀었고, 「비밀번호 재설정」 을 누르려면
+ * 가로로 굴려야 했다 — 실사용에서 그렇게 걸렸다.
+ *
+ * 이름을 자르지 않고 **개수로 접는다.** `금속재료팀, 고분자팀, 품질보증팀…`
+ * 처럼 자르면 잘린 자리에 무엇이 더 있는지 셀 수가 없다. 전부는 `title` 로
+ * 남긴다 — 세어 보는 일은 드물고, 그때는 마우스를 올리면 된다.
+ */
+function WorkspaceCell({
+  account,
+  nameOf,
+  onEdit,
+}: {
+  account: Account
+  nameOf: (slug: string) => string
+  onEdit: () => void
+}) {
+  // 승인 전에는 멤버십이 없다. 보여 줄 것은 **신청한 부서**뿐이고, 대표 소속은
+  // 승인이 정한다 — 여기서 고르게 하면 승인 화면이 둘이 된다.
+  if (account.status === 'pending') {
+    return (
+      <span className="text-muted-foreground">
+        {account.requested_workspace_slug ? nameOf(account.requested_workspace_slug) : '—'}
+      </span>
+    )
+  }
+
+  if (account.memberships.length === 0) {
+    return <span className="text-muted-foreground">—</span>
+  }
+
+  const others = account.memberships.filter((slug) => slug !== account.home_workspace_slug)
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-auto max-w-[13rem] justify-start gap-1.5 px-1.5 py-1 font-normal"
+      title={account.memberships.map(nameOf).join('\n')}
+      onClick={onEdit}
+    >
+      <span className="truncate">
+        {account.home_workspace_slug ? (
+          nameOf(account.home_workspace_slug)
+        ) : (
+          <span className="text-muted-foreground">대표 소속 없음</span>
+        )}
+      </span>
+      {others.length > 0 && (
+        <span className="text-muted-foreground shrink-0 text-xs">외 {others.length}</span>
+      )}
+    </Button>
   )
 }
 

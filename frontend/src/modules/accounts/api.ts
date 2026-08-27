@@ -37,6 +37,13 @@ export const accountsApi = {
   suspend: (id: string) => api.post<Account>(`/accounts/${id}/suspend`),
   activate: (id: string) => api.post<Account>(`/accounts/${id}/activate`),
 
+  /** 대표 소속 — 이 사람이 로그인해서 처음 서는 부서.
+   *
+   *  멤버가 아닌 부서는 서버가 막는다. 멤버십을 만드는 것은 부서 멤버 화면의
+   *  일이라, 여기서 겸하면 "대표 소속을 정했더니 없던 권한이 생겼다" 가 된다. */
+  setHomeWorkspace: (id: string, workspaceSlug: string) =>
+    api.post<Account>(`/accounts/${id}/home-workspace`, { workspace_slug: workspaceSlug }),
+
   resetPassword: (id: string) => api.post<TemporaryPassword>(`/accounts/${id}/reset-password`),
 
   /** 삭제 전 미리보기 — 무엇이 딸려 있는지 보고 결정한다. */
