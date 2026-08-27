@@ -11,11 +11,22 @@
  * 그래서 여기서는 **켜고 끄면서** 잠금과 목록이 따라오는지 본다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { configure, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
+
+/**
+ * **기다리는 시간을 늘린다.** 기본은 1초인데, 이 파일은 무거운 패널을 서른 번
+ * 넘게 그리고 그때마다 목록·레시피·들어오는 값을 받는다. 전체 스위트를 돌릴
+ * 때(다른 파일과 함께) 1초를 넘겨 **간헐적으로 실패했다** — 두 번 물렸고, 혼자
+ * 돌리면 늘 통과했다.
+ *
+ * 논리 문제를 덮는 것이 아니다. 늦게 오는 것을 기다리는 시간이지, 안 오는 것을
+ * 기다리는 시간이 아니다 — 안 오면 5초 뒤에도 실패한다.
+ */
+configure({ asyncUtilTimeout: 5000 })
 import {
   RightPanelHost,
   RightPanelProvider,
@@ -600,9 +611,28 @@ describe('시편 값 이어 붙이기', () => {
     ])
     show()
     // 단계를 하나도 안 켰는데도 보인다.
-    expect(await screen.findByText('이 시험이 갖고 도는 값')).toBeInTheDocument()
+    expect(await screen.findByText(/시편 규격이 정한 칸/)).toBeInTheDocument()
     expect(screen.getByText(/0.986 mm/)).toBeInTheDocument()
     expect(screen.getByText(/이 시험이 잰 값/)).toBeInTheDocument()
+  })
+
+  it('치수와 조건을 나눠 보인다', async () => {
+    // **선언한 곳이 다르다** — 치수는 시편 규격이, 조건은 시험 종류가 정한다.
+    // 한 줄에 섞으면 사람은 둘을 같은 자리에서 정하는 줄 안다(실사용에서 나왔다).
+    inputs.mockResolvedValue([
+      { ...GIVEN[0], key: 'specimen_thickness', label: '시편 두께', value: 0.000986 },
+      {
+        key: 'condition_preload',
+        label: '예하중',
+        value: 20,
+        si_unit: 'N',
+        dimension: null,
+        source: 'condition',
+      },
+    ])
+    show()
+    expect(await screen.findByText(/시편 규격이 정한 칸/)).toBeInTheDocument()
+    expect(screen.getByText(/시험 종류가 정한 칸/)).toBeInTheDocument()
   })
 
   it('그 값이 어디서 왔는지 말한다', async () => {

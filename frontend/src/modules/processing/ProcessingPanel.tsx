@@ -139,6 +139,7 @@ const SOURCE_LABEL: Record<string, string> = {
   run: '이 시험이 잰 값',
   measured: '시편에 적힌 값',
   nominal: '규격 공칭',
+  // 조건은 제목이 이미 「시험 종류가 정한 칸」 이라 줄마다 또 적지 않는다.
 }
 
 const SOURCE_HELP: Record<string, string> = {
@@ -560,28 +561,46 @@ export function ProcessingPanel({
        * 시편에 적힌 값 · 규격 공칭) 어느 것을 썼는지 안 보이면 사람이 "어느 게
        * 맞느냐" 에 답할 수 없다. */}
       {given.data && given.data.length > 0 && (
-        <div className="mb-3 rounded-md border px-3 py-2">
-          <p className="text-muted-foreground mb-1.5 text-xs">이 시험이 갖고 도는 값</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {given.data.map((item) => (
-              <span key={item.key} className="text-sm">
-                <span className="text-muted-foreground text-xs">{item.label}</span>{' '}
-                <b className="font-mono">
-                  {formatScalar(item.value, item.si_unit, item.dimension)}
-                </b>
-                {item.source && SOURCE_LABEL[item.source] && (
-                  <span
-                    className={`ml-1 text-xs ${
-                      item.source === 'run' ? 'text-foreground' : 'text-muted-foreground'
-                    }`}
-                    title={SOURCE_HELP[item.source]}
-                  >
-                    ({SOURCE_LABEL[item.source]})
-                  </span>
-                )}
-              </span>
-            ))}
-          </div>
+        <div className="mb-3 space-y-2 rounded-md border px-3 py-2">
+          {/* **선언한 곳이 다르면 나눠 보인다.** 치수는 시편 규격이, 조건은
+              시험 종류가 선언한다 — 한 줄에 섞으면 사람은 둘을 같은 자리에서
+              정하는 줄 안다(실사용에서 나왔다). */}
+          {(
+            [
+              ['시편 치수', '시편 규격이 정한 칸', (one: ProcessingScalar) => !one.key.startsWith('condition_')],
+              ['시험 조건', '시험 종류가 정한 칸', (one: ProcessingScalar) => one.key.startsWith('condition_')],
+            ] as const
+          ).map(([title, whose, keep]) => {
+            const rows = (given.data ?? []).filter(keep)
+            if (rows.length === 0) return null
+            return (
+              <div key={title}>
+                <p className="text-muted-foreground mb-1 text-xs">
+                  {title} <span className="opacity-70">— {whose}</span>
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {rows.map((item) => (
+                    <span key={item.key} className="text-sm">
+                      <span className="text-muted-foreground text-xs">{item.label}</span>{' '}
+                      <b className="font-mono">
+                        {formatScalar(item.value, item.si_unit, item.dimension)}
+                      </b>
+                      {item.source && SOURCE_LABEL[item.source] && (
+                        <span
+                          className={`ml-1 text-xs ${
+                            item.source === 'run' ? 'text-foreground' : 'text-muted-foreground'
+                          }`}
+                          title={SOURCE_HELP[item.source]}
+                        >
+                          ({SOURCE_LABEL[item.source]})
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 

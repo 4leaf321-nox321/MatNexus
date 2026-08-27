@@ -1536,6 +1536,13 @@ def instrument_dimensions(
     # **찾은 것만 주지 않는다.** 화면이 "이건 파일에 없어서 직접 넣어야 한다" 를
     # 말하려면 없는 것도 알아야 한다. 찾은 것만 주면 화면은 빈 목록을 보고
     # "파일에 치수가 아예 없다" 로 잘못 읽는다.
+    # **그래서 이 시험은 얼마로 도는가.** 파일 값과 시편 값만 주면 셋 중 어느
+    # 것이 이겼는지 화면이 알 수 없다 — 치수는 세 곳에 살 수 있다(v1.118.0).
+    effective = (
+        specimen_size.sizes_of(db, specimen, run.dimensions or {}) if specimen else None
+    )
+    sizes = {item.key: item for item in (effective.items if effective else ())}
+
     return InstrumentDimensionsOut(
         specimen_id=run.specimen_id,
         items=[
@@ -1545,6 +1552,8 @@ def instrument_dimensions(
                 symbol=item.symbol,
                 value_m=found.get(item.key),
                 current_m=measured.get(item.key),
+                run_m=sizes[item.key].value if item.key in sizes else None,
+                source=sizes[item.key].source if item.key in sizes else None,
             )
             for item in fields
         ],

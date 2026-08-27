@@ -127,6 +127,61 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     return given
 
 
+def condition_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
+    """이 시험의 **조건**을 파이프라인이 `@` 로 참조할 수 있게 넘긴다.
+
+    ## 왜 필요했나
+
+    실사용에서 나왔다 — *"거긴 시험 종류에서 정의하잖아? 그럼 거기서 정의된 걸
+    처리에서 받아가서 정의하도록 해야 하는데, 그게 지금은 안 돼"*.
+
+    맞는 지적이다. 시험 종류가 조건을 선언하고(속도·온도·예하중), 업로드가 그
+    값을 받아 SI 로 담는데, **처리는 그것을 볼 길이 없었다.** 시편 치수만
+    넘어가고 있었다.
+
+    처리에는 조건을 써야 하는 자리가 실제로 있다 — 변형률 속도로 나누는 보정,
+    온도에 따른 시프트, 예하중 빼기. 그때마다 사람이 숫자를 손으로 옮겨 적으면,
+    그 숫자는 **조건이 고쳐져도 안 따라간다.**
+
+    ## 숫자만 넘긴다
+
+    `sensor_type` 같은 글자 조건은 계산에 못 쓴다. 넘기면 `@sensor_type` 이
+    이어 붙는 자리에 뜨는데, 고르고 나면 파이프라인이 "숫자가 아닙니다" 로
+    멈춘다 — 고를 수 있는데 못 쓰는 것이 가장 나쁘다.
+
+    ## 이름에 접두어를 둔다
+
+    `condition_` 을 붙인다. 조건 키는 시험 종류가 정하므로 채널 이름과 겹칠 수
+    있고(둘 다 `temperature` 를 쓸 수 있다), 겹치면 어느 것이 이어졌는지 알 수
+    없게 된다.
+    """
+    from app.modules.tests.models import TestConditionField
+
+    fields = list(
+        db.scalars(
+            select(TestConditionField)
+            .where(TestConditionField.test_type_id == run.test_type_id)
+            .order_by(TestConditionField.sort_order)
+        )
+    )
+    given: list[processing.Scalar] = []
+    for field in fields:
+        if field.value_type != "number":
+            continue
+        value = (run.conditions or {}).get(field.key)
+        if not isinstance(value, int | float):
+            continue
+        given.append(
+            processing.Scalar(
+                f"condition_{field.key}",
+                field.label,
+                float(value),
+                field.si_unit or "1",
+            )
+        )
+    return given
+
+
 def specimen_sources(db: Session, run: TestRun) -> dict[str, str]:
     """`specimen_scalars` 가 낸 값이 **어디서 왔는가.** 키는 같은 이름이다.
 

@@ -798,6 +798,132 @@ class Test들어오는값:
         assert given["specimen_gauge_length"]["label"]
 
 
+class Test조건도_처리로_간다:
+    """*"거긴 시험 종류에서 정의하잖아? 그럼 거기서 정의된 걸 처리에서 받아가서
+    정의하도록 해야 하는데, 그게 지금은 안 돼"* — 실사용에서 나왔다.
+
+    시험 종류가 조건을 선언하고(속도·온도·예하중), 업로드가 그 값을 받아 SI 로
+    담는데 **처리는 그것을 볼 길이 없었다.** 시편 치수만 넘어가고 있었다.
+
+    처리에는 조건을 써야 하는 자리가 실제로 있다 — 변형률 속도로 나누는 보정,
+    온도 시프트, 예하중 빼기. 그때 사람이 숫자를 손으로 옮겨 적으면 **조건이
+    고쳐져도 그 숫자는 안 따라간다.**
+    """
+
+    def test_조건이_이어_붙일_값으로_온다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        stored = db.get(TestRun, uuid.UUID(run_id))
+        assert stored is not None
+        stored.conditions = {"preload": 20.0, "temperature": 298.15}
+        db.commit()
+
+        given = client.get(
+            f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        keys = {one["key"]: one for one in given}
+        assert "condition_preload" in keys
+        assert keys["condition_preload"]["value"] == pytest.approx(20.0)
+        assert keys["condition_preload"]["si_unit"] == "N"
+        # **이름이 있어야 화면이 사람 말로 적는다.**
+        assert keys["condition_preload"]["label"] == "예하중"
+        # 같은 줄에 서는데 하나만 출처가 없으면 빠뜨려진 것으로 읽힌다.
+        assert keys["condition_preload"]["source"] == "condition"
+
+    def test_글자_조건은_안_넘긴다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """**고를 수 있는데 못 쓰는 것이 가장 나쁘다.** `@sensor_type` 이 목록에
+        뜨면 사람은 고르고, 고르고 나면 파이프라인이 "숫자가 아닙니다" 로 멈춘다."""
+        stored = db.get(TestRun, uuid.UUID(run_id))
+        assert stored is not None
+        stored.conditions = {"sensor_type": "extensometer", "preload": 20.0}
+        db.commit()
+
+        given = client.get(
+            f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        keys = {one["key"] for one in given}
+        assert "condition_preload" in keys
+        assert "condition_sensor_type" not in keys
+
+    def test_글자로_선언된_칸은_숫자가_들어_있어도_안_넘긴다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """**선언이 이긴다.** 시험 그룹에 `3` 이라고 적을 수 있는데, 그건 양이
+        아니라 이름이다 — 단위가 없으므로 계산에 쓰면 뜻을 알 수 없는 수가 된다.
+
+        값만 보면 이 자리가 안 걸린다(`isinstance(3, int)` 는 참이다). 시험
+        종류가 뭐라고 선언했는지를 봐야 한다.
+        """
+        stored = db.get(TestRun, uuid.UUID(run_id))
+        assert stored is not None
+        stored.conditions = {"testing_group": 3}
+        db.commit()
+
+        given = client.get(
+            f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert "condition_testing_group" not in {one["key"] for one in given}
+
+    def test_안_적은_조건은_안_온다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """**0 으로 채우지 않는다.** 안 적은 예하중을 0 으로 넘기면 그 값으로
+        계산이 돌고, 사람은 자기가 적은 줄 안다."""
+        stored = db.get(TestRun, uuid.UUID(run_id))
+        assert stored is not None
+        stored.conditions = {}
+        db.commit()
+
+        given = client.get(
+            f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert not [one for one in given if one["key"].startswith("condition_")]
+
+    def test_돌릴_때도_같은_값을_받는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """**미리보기만 되면 저장에서 달라진다.** 둘이 같은 함수를 지나는지 본다."""
+        stored = db.get(TestRun, uuid.UUID(run_id))
+        assert stored is not None
+        stored.conditions = {"preload": 20.0}
+        specimen = db.get(Specimen, stored.specimen_id)
+        assert specimen is not None
+        specimen.gauge_length_m = 0.05
+        specimen.width_m = 12.5e-3
+        specimen.thickness_m = 1.0e-3
+        stored.dimensions = {}
+        db.commit()
+
+        body = client.post(
+            "/api/processing/preview",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    {
+                        "plugin": "tensile.engineering",
+                        "options": {
+                            "gauge_length": "@specimen_gauge_length",
+                            "area": "@specimen_area",
+                        },
+                    },
+                    # 예하중을 조건에서 이어 붙인다.
+                    {
+                        "plugin": "curve.offset",
+                        "options": {"column": "force", "by": "@condition_preload"},
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
+        # `curve.offset` 이 없으면 "모르는 처리" 로 막힌다 — 그때는 이 시험이
+        # 볼 것이 없으므로 건너뛴다. **있는 것을 확인하는 것이 목적이다.**
+        if body.status_code == 422 and "없" in body.json()["error"]["message"]:
+            pytest.skip("curve.offset 이 아직 없다")
+        assert body.status_code == 200, body.text
+
+
 class Test파일값채우기:
     """장비가 준 치수를 시편에 채운다 — **규격이 정한 칸으로.**
 

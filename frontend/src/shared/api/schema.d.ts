@@ -4651,6 +4651,10 @@ export interface components {
             field: string;
             /** Label */
             label: string;
+            /** Run M */
+            run_m?: number | null;
+            /** Source */
+            source?: string | null;
             /** Symbol */
             symbol?: string | null;
             /** Value M */

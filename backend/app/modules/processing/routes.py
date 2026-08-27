@@ -133,7 +133,13 @@ def _run_pipeline(
     frame, curve = curvedata.load_frame(db, run, curve_key)
     try:
         result = processing.apply(
-            _steps(steps), frame, given=curvedata.specimen_scalars(db, run)
+            _steps(steps),
+            frame,
+            # 시편 치수 + **시험 조건**. 둘 다 바깥에서 들어오는 값이다.
+            given=[
+                *curvedata.specimen_scalars(db, run),
+                *curvedata.condition_scalars(db, run),
+            ],
         )
     except processing.ProcessingError as exc:
         # **처리 실패는 사용자 오류다.** 500 으로 내면 로그를 뒤져야 알 수 있고,
@@ -285,8 +291,17 @@ def list_inputs(
     돌려 보기 전에 답해야 하므로 파이프라인을 돌리지 않는다.
     """
     run = get_run(db, user, test_run_id)
-    sources = curvedata.specimen_sources(db, run)
-    return [_scalar_out(item, sources) for item in curvedata.specimen_scalars(db, run)]
+    conditions = curvedata.condition_scalars(db, run)
+    # **조건도 어디서 왔는지 말한다.** 같은 줄에 서는데 하나만 출처가 없으면
+    # 사람은 그것이 빠뜨려진 것인지 다른 것인지 알 수 없다.
+    sources = {
+        **curvedata.specimen_sources(db, run),
+        **{item.key: "condition" for item in conditions},
+    }
+    return [
+        _scalar_out(item, sources)
+        for item in (*curvedata.specimen_scalars(db, run), *conditions)
+    ]
 
 
 @router.post("/preview", response_model=ProcessingPreviewOut)

@@ -691,6 +691,13 @@ export default function TestRunDetailPage() {
  * 비어 있으면 통째로 감춘다. 값이 하나도 없는 표는 화면만 차지하고, "이 시험은
  * 조건을 안 적었다" 는 사실은 빈 표보다 없는 것이 더 분명하다.
  */
+/** 치수가 **어디서 왔는가.** 정본은 서버의 `Size.source` 다. */
+const DIMENSION_SOURCE: Record<string, string> = {
+  run: '이 시험이 잰 값',
+  measured: '시편에 적힌 값',
+  nominal: '규격 공칭',
+}
+
 function ConditionBlock({
   item,
   fields,
@@ -698,6 +705,20 @@ function ConditionBlock({
   item: TestRunDetail
   fields: TestConditionField[]
 }) {
+  /**
+   * 이 시험이 쓰는 시편 치수.
+   *
+   * 실사용에서 나왔다 — *"시험에서 잰 두께, 폭은 어디서 확인할 수 있어?"*.
+   * 값은 파싱이 시험에 담고 있었지만(v1.118.0) 볼 데가 처리 화면뿐이었고,
+   * 원본 메타에는 `specimen_thickness_a0 / 0.986` 같은 **원시 글자**로만 있었다.
+   *
+   * 여기 두는 이유는 「시편 규격」 이 여기 있는 이유와 같다 — 곡선을 보는
+   * 자리에서 "이게 어떤 시편이었나" 를 알아야 한다. 그리고 치수는 이제 **그
+   * 시험의 값**이라 조건과 나란히 서는 것이 맞다.
+   */
+  const dimensions = useResource(() => testsApi.instrumentDimensions(item.id), [item.id])
+  const sized = (dimensions.data?.items ?? []).filter((one) => one.run_m != null)
+
   const filled = fields.filter((field) => item.conditions[field.key] != null)
   const meta: [string, string][] = [
     ['시험일시', item.tested_at ? new Date(item.tested_at).toLocaleString('ko-KR') : ''],
@@ -706,7 +727,13 @@ function ConditionBlock({
     ['사업부', item.division ?? ''],
   ]
   const filledMeta = meta.filter(([, value]) => value !== '')
-  if (filled.length === 0 && filledMeta.length === 0 && !item.specimen_standard) return null
+  if (
+    filled.length === 0 &&
+    filledMeta.length === 0 &&
+    sized.length === 0 &&
+    !item.specimen_standard
+  )
+    return null
 
   return (
     <section className="mb-6 rounded-md border p-4">
@@ -748,6 +775,52 @@ function ConditionBlock({
           </div>
         ))}
       </dl>
+
+      {/* **조건과 섞지 않는다.**
+       *
+       * 실사용에서 나왔다 — *"시험 조건이면 시험종류 정의에서 정의해서 넣어야
+       * 하는 거 아냐?"*. 맞다. 위 표의 계약은 **시험 종류가 선언한 것**인데,
+       * 두께·폭은 **시편 규격**이 선언한다(ADR 0010 — 평판은 폭·두께, 환봉은
+       * 직경). 선언한 곳이 다르므로 같은 표에 섞으면 사람은 두께도 시험 종류에서
+       * 정하는 줄 안다.
+       *
+       * 선언을 시험 종류로 옮기지는 않는다. 그러면 같은 것을 규격도 정하고 시험
+       * 종류도 정하게 되고, 둘이 어긋날 때 답이 없다 — `grade` 를 「재료 속성」
+       * 에서 뺀 것과 같은 이유다. 기하는 규격이 정하는 것이 맞다.
+       *
+       * 그래도 **같은 자리에 붙여 둔다.** 곡선을 보는 사람에게는 "이 시험이
+       * 무엇으로 돌았나" 가 한 덩어리다. */}
+      {sized.length > 0 && (
+        <div className="mt-4 border-t pt-3">
+          <h3 className="text-muted-foreground mb-2 text-xs">
+            이 시험이 쓴 시편 치수 <span className="opacity-70">— 시편 규격이 정한 칸</span>
+          </h3>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+            {sized.map((one) => (
+              <div key={one.field}>
+                <dt className="text-muted-foreground text-xs">
+                  {one.label}
+                  {one.symbol && <span className="ml-1 opacity-60">{one.symbol}</span>}
+                </dt>
+                <dd className="tabular-nums">
+                  {formatValue(one.run_m ?? 0, null, 'm', 'length')}
+                  {one.source && DIMENSION_SOURCE[one.source] && (
+                    <span
+                      className={`ml-1 text-xs ${
+                        one.source === 'run'
+                          ? 'text-muted-foreground'
+                          : 'text-amber-700 dark:text-amber-500'
+                      }`}
+                    >
+                      ({DIMENSION_SOURCE[one.source]})
+                    </span>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
     </section>
   )
 }

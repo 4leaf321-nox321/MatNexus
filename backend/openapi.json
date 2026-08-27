@@ -3766,6 +3766,28 @@
             "title": "Label",
             "type": "string"
           },
+          "run_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run M"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "symbol": {
             "anyOf": [
               {

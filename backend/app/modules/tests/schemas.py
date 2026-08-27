@@ -711,6 +711,14 @@ class InstrumentDimensionOut(BaseModel):
     사실을 말해야 한다."""
     current_m: float | None
     """시편에 이미 있는 값. 있으면 덮어쓰기가 된다 — 화면이 그 사실을 보여야 한다."""
+    run_m: float | None = None
+    """**이 시험이 쓰는 값**과 그 출처. 파싱이 파일 값을 여기 담는다(v1.118.0).
+
+    `value_m`(파일이 준 것)와 대개 같지만, 사람이 이 시험만 고쳤으면 다르다.
+    화면이 "그래서 이 시험은 얼마로 도는가" 에 답하려면 이 값이 필요하다 —
+    파일 값과 시편 값만으로는 셋 중 어느 것이 이겼는지 알 수 없다."""
+    source: str | None = None
+    """`run` 이 시험이 잰 값 · `measured` 시편에 적힌 값 · `nominal` 규격 공칭."""
 
 
 class InstrumentDimensionsOut(BaseModel):
