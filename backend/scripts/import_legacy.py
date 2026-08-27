@@ -74,7 +74,6 @@ import re
 import sys
 import time
 import uuid
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -178,6 +177,9 @@ class Row:
         self.specimen_props: dict[str, str] = {}
         self.points: int = 0
         self.problem: str | None = None
+        #: 막지는 않지만 말해야 하는 것. **치수가 파일에 없는 것이 그렇다** —
+        #: 시편 규격이 치수를 갖고 있으면 그것으로 돌기 때문이다(v1.119.0).
+        self.notes: list[str] = []
 
     @property
     def ok(self) -> bool:
@@ -226,7 +228,7 @@ def _read(
     pattern: re.Pattern[str] | None = None,
 ) -> Row:
     """파일 하나를 프로파일로 읽어 식별자와 치수를 뽑는다. **여기서 안 만든다.**"""
-    from app.shared.curvedata import instrument_dimensions
+    from app.shared.curvedata import DIMENSION_ALIASES, instrument_dimensions
 
     row = Row(path)
     data = path.read_bytes()
@@ -318,13 +320,49 @@ def _read(
         or _numeric_problem("시료", row.sample, row.sample_units)
     ):
         row.problem = said
-    elif not row.dimensions:
-        # 오류는 아니지만 처리 1단계가 여기서 멈춘다. 미리 말한다.
-        row.problem = (
-            "시편 치수를 못 읽었습니다. 프로파일의 시편 규칙에 **단위**를 적었는지 "
-            "보세요 — 값에 단위가 안 붙어 오는 파일은 단위를 선언해야 합니다."
-        )
+    if not row.dimensions:
+        # **막지 않는다.** 치수는 세 곳에서 올 수 있다(v1.119.0) — 이 파일이 잰
+        # 값 · 시편에 적힌 값 · **시편 규격이 정한 공칭**. 파일에 없다고 이관을
+        # 세우면, 규격만 붙이면 될 일에 사람이 없는 값을 찾아 헤매게 된다.
+        #
+        # 그렇다고 조용히 넘어가지도 않는다. 규격에도 없으면 처리 1단계가
+        # `@specimen_area` 에서 멈춘다 — 그때 원인을 여기서 찾게 하면 늦다.
+        row.notes.append(_dimension_note(definition, sorted(DIMENSION_ALIASES)))
     return row
+
+
+def _dimension_note(definition: dict[str, Any], looked: list[str]) -> str:
+    """치수를 왜 못 읽었는지. **단위 탓만 하지 않는다.**
+
+    전에는 「프로파일의 시편 규칙에 단위를 적었는지 보세요」 한 줄이었다. 그런데
+    단위를 제대로 적어도 안 읽히는 자리가 있다 — **이관이 찾는 이름이 셋뿐**이다
+    (`thickness`·`width`·`gauge_length`, 별칭 포함). 시편이 아직 없어서 그
+    규격이 어떤 칸을 갖는지 알 수 없기 때문이다.
+
+    그래서 규칙이 **무슨 키를 만들었는지**와 **무엇을 찾는지**를 나란히 적는다.
+    어긋난 것이 눈에 보이면 고칠 수 있다.
+    """
+    made = sorted(
+        {
+            _specimen_key(label, rule)
+            for label, rule in (definition.get("specimen") or {}).items()
+        }
+    )
+    return (
+        "파일에서 시편 치수를 못 읽었습니다. "
+        f"프로파일의 시편 규칙이 만드는 키: {made or '(없음)'} · "
+        f"이관이 찾는 이름: {looked}(별칭 포함). "
+        "이름이 다르면 단위를 적어도 못 찾습니다. "
+        "시편 규격이 치수를 갖고 있으면 그것으로 돕니다 — 둘 다 없으면 처리 "
+        "1단계가 '@specimen_area' 에서 멈춥니다."
+    )
+
+
+def _specimen_key(label: str, rule: Any) -> str:
+    """시편 규칙 하나가 만드는 키. 글자면 그것이고, dict 면 `key` 다."""
+    if isinstance(rule, dict):
+        return str(rule.get("key") or label)
+    return str(rule)
 
 
 def _said(values: dict[str, str], units: dict[str, str]) -> str:
@@ -385,17 +423,49 @@ def _preview(
 
         # **겹치는 자리를 먼저 말한다.** 같은 시편에 파일이 둘이면 시험이 둘
         # 붙는다. 그게 맞을 때도 있지만(재시험), 대개는 번호가 틀린 것이다.
-        double = [key for key, n in Counter(row.where for row in good).items() if n > 1]
+        #
+        # **어느 파일들이 뭉쳤는지 적는다.** 자리 이름만 적으면 사람은 "번호는
+        # 다를 텐데 왜?" 에서 멈춘다 — 파일 이름을 나란히 놓아야 무엇이 같은
+        # 번호로 읽혔는지 보인다(실사용에서 그렇게 막혔다).
+        by_place: dict[str, list[Row]] = {}
+        for row in good:
+            by_place.setdefault(row.where, []).append(row)
+        double = {key: kin for key, kin in by_place.items() if len(kin) > 1}
         if double:
             print(f"\n같은 시편에 파일이 둘 이상 ({len(double)}자리) — 재시험이 맞습니까?")
-            for key in double[:10]:
-                print(f"  {key}")
+            for key, kin in list(double.items())[:5]:
+                print(f"  {key}  ← 파일 {len(kin)}개")
+                for row in kin[:4]:
+                    print(f"      {row.path.name}")
+                if len(kin) > 4:
+                    print(f"      … {len(kin) - 4}개 더")
+            if len(double) > 5:
+                print(f"  … {len(double) - 5}자리 더")
+            # **어디서 읽은 번호인지 짚는다.** 프로파일 ⑤ 의 「시편 번호」 가
+            # 시험 회차나 늘 같은 값을 가리키면 전부 한 자리로 뭉친다.
+            print(
+                "  → 번호가 다를 텐데 뭉쳤다면, 프로파일 ⑤ 의 「시편 번호」 가 "
+                "가리키는 키를 보세요. 그 키의 값이 파일마다 같으면 이렇게 됩니다."
+            )
 
         thin = [row for row in good if "gauge_length" not in row.dimensions]
         if thin:
-            print(f"\n게이지 길이가 없는 파일 {len(thin)}개 — 처리가 여기서 멈춥니다.")
+            # **막지 않는다.** 게이지 길이는 시험기 설정값이라 파일에 안 적히는
+            # 것이 보통이고, 시편 규격이 갖고 있으면 그것으로 돈다(v1.119.0).
+            print(
+                f"\n게이지 길이가 파일에 없는 것 {len(thin)}개 — 규격에 있으면 그것을 씁니다."
+            )
             for row in thin[:5]:
                 print(f"  {row.path.name}")
+
+        # **참고를 묻어 두지 않는다.** 막지는 않지만 나중에 처리에서 걸릴 것들이다.
+        noted = [row for row in good if row.notes]
+        if noted:
+            print(f"\n참고 {len(noted)}개 — 넣기는 합니다")
+            # 같은 사연이 수백 번 반복된다. 한 번만 적고 몇 개인지 센다.
+            for said in dict.fromkeys(note for row in noted for note in row.notes):
+                count = sum(1 for row in noted if said in row.notes)
+                print(f"  ({count}개) {said}")
 
     if bad:
         print(f"\n문제 {len(bad)}개")
@@ -403,6 +473,14 @@ def _preview(
             print(f"  {row.path.name}\n    {row.problem}")
 
     print("\n--apply 를 주면 실제로 넣습니다. 지금은 아무것도 안 만들었습니다.")
+    if bad:
+        # **읽힌 것이 훨씬 많을 때 이 말이 필요하다.** 514개 중 96개가 막는데
+        # 기본이 전부-아니면-전무라, 그것을 모르면 사람은 96개를 다 고칠 때까지
+        # 아무것도 못 넣는 줄 안다.
+        print(
+            f"기본은 **하나라도 문제면 아무것도 안 넣습니다.** "
+            f"읽힌 {len(good)}개만 넣으려면 --skip-bad 를 함께 주세요."
+        )
     return 0 if good else 1
 
 
@@ -645,6 +723,41 @@ def _load(
     return 0 if done or skipped else 1
 
 
+def _gate(rows: list[Row], *, skip_bad: bool) -> list[Row]:
+    """문제 있는 줄을 만났을 때 **멈출 것인가 거를 것인가.**
+
+    기본은 멈춘다. 절반만 들어간 이관은 무엇이 들어갔는지 사람이 손으로 세어야
+    하고, 그 세는 일이 또 틀린다.
+
+    다만 **514개짜리 실데이터에서는 이것이 시작을 막는다.** 옛 DB 에는 영영 못
+    고칠 줄이 섞여 있다(재료 코드가 아예 없는 행). 그때 100%를 요구하면
+    아무것도 못 넣는다.
+
+    그래서 빠져나갈 문을 낸다 — 다만 **기본은 아니다.** 그리고 건너뛴 파일을
+    전부 적는다: 「손으로 세지 않게」 하려고 막았던 것이므로, 문을 열려면 그
+    목록이 함께 나와야 한다.
+    """
+    bad = [row for row in rows if not row.ok]
+    if not bad:
+        return rows
+    if not skip_bad:
+        raise SystemExit(
+            f"문제가 {len(bad)}개 있습니다. 미리 보기로 먼저 보세요 "
+            f"(--apply 없이). 첫 번째: {bad[0].path.name} — {bad[0].problem}"
+            f"\n읽힌 것만 넣으려면 --skip-bad 를 함께 주세요 "
+            f"(건너뛴 {len(bad)}개를 이름으로 적어 줍니다)."
+        )
+    print(f"\n건너뜁니다 — {len(bad)}개")
+    for row in bad:
+        print(f"  {row.path.name}")
+        print(f"      {row.problem}")
+    print(
+        f"\n**이 {len(bad)}개는 안 들어갑니다.** 고친 뒤 다시 돌리면 됩니다 — "
+        f"이미 들어간 것은 내용 해시로 걸러집니다."
+    )
+    return [row for row in rows if row.ok]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", type=Path, required=True, help="옛 파일이 있는 폴더")
@@ -652,6 +765,11 @@ def main() -> None:
     parser.add_argument("--profile", default="legacy_mtet", help="읽을 형식의 key")
     parser.add_argument("--glob", default="*", help="폴더에서 고를 파일")
     parser.add_argument("--apply", action="store_true", help="실제로 넣는다")
+    parser.add_argument(
+        "--skip-bad",
+        action="store_true",
+        help="읽힌 것만 넣고 문제 있는 줄은 건너뛴다 (건너뛴 파일 이름을 전부 적는다)",
+    )
     # **기본을 비워 둔다.** 값이 있으면 "사람이 일부러 정했다" 는 뜻이고, 그때만
     # 파일보다 먼저다. 기본값을 박아 두면 그 구별이 사라져 **파일이 절대 못
     # 이긴다** — 프로파일에 `material` 을 적어 놔도 아무 일이 안 일어난다.
@@ -692,14 +810,7 @@ def main() -> None:
     if not args.apply:
         raise SystemExit(_preview(rows, args.family, args.category, args.thickness))
 
-    bad = [row for row in rows if not row.ok]
-    if bad:
-        # **하나라도 틀리면 시작하지 않는다.** 절반만 들어간 이관은 무엇이
-        # 들어갔는지 사람이 손으로 세어야 하고, 그 세는 일이 또 틀린다.
-        raise SystemExit(
-            f"문제가 {len(bad)}개 있습니다. 미리 보기로 먼저 보세요 "
-            f"(--apply 없이). 첫 번째: {bad[0].path.name} — {bad[0].problem}"
-        )
+    rows = _gate(rows, skip_bad=args.skip_bad)
 
     app = create_app()
     _as(app, args.email)

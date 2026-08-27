@@ -204,13 +204,71 @@ class Test빈_칸을_막지_않는다:
         assert not row.ok
         assert row.seq is None
 
-    def test_치수가_없으면_미리_말한다(self, tmp_path: Path) -> None:
-        """오류는 아니다. 하지만 처리 1단계의 `@specimen_area` 가 거기서
-        멈추므로, 200개를 넣고 나서 알면 늦다."""
+    def test_치수가_없으면_막지_말고_말한다(self, tmp_path: Path) -> None:
+        """**막지 않는다.** 치수는 세 곳에서 올 수 있다(v1.119.0) — 이 파일이 잰
+        값 · 시편에 적힌 값 · **시편 규격이 정한 공칭**. 파일에 없다고 이관을
+        세우면, 규격만 붙이면 될 일에 사람이 없는 값을 찾아 헤매게 된다.
+
+        그렇다고 조용히 넘어가지도 않는다. 규격에도 없으면 처리 1단계가
+        `@specimen_area` 에서 멈추는데, 그때 원인을 여기서 찾게 하면 늦다.
+        """
         bare = {**PROFILE, "specimen": {}}
         row = import_legacy._read(make(tmp_path), bare, KEYS, None)
-        assert not row.ok
-        assert "단위" in row.problem
+        assert row.ok, row.problem
+        assert row.notes
+
+    def test_단위_탓만_하지_않는다(self, tmp_path: Path) -> None:
+        """**단위를 제대로 적어도 안 읽히는 자리가 있다.** 이관이 찾는 이름은
+        셋뿐이라(시편이 아직 없어 규격의 칸을 모른다), 규칙의 키가 그 이름이
+        아니면 단위와 상관없이 못 찾는다 — 실사용에서 그렇게 걸렸다."""
+        odd = {**PROFILE, "specimen": {"thickness_mm": {"key": "코일두께", "unit": "mm"}}}
+        row = import_legacy._read(make(tmp_path), odd, KEYS, None)
+        assert row.ok, row.problem
+        said = row.notes[0]
+        # 규칙이 만든 키와, 이관이 찾는 이름을 나란히 보여 준다.
+        assert "코일두께" in said
+        assert "thickness" in said and "gauge_length" in said
+
+
+class Test문제_있는_줄을_만났을_때:
+    """*"514개 중 418개 읽힘으로 되어 있는데, 이대로 apply 하면 418개는
+    들어가는 거야?"* — 실사용에서 나왔다. **안 들어갔다.**
+
+    기본이 전부-아니면-전무인 것은 맞는 판단이다 — 절반만 들어간 이관은 무엇이
+    들어갔는지 사람이 손으로 세어야 하고, 그 세는 일이 또 틀린다.
+
+    다만 514개짜리 실데이터에서는 그것이 **시작을 막는다.** 옛 DB 에는 영영 못
+    고칠 줄이 섞여 있다. 그래서 빠져나갈 문을 내되 기본은 아니게 두고, 건너뛴
+    파일을 전부 적는다.
+    """
+
+    def rows(self, tmp_path: Path) -> list[Any]:
+        good = read(make(tmp_path, name="good.json"))
+        bad = read(make(tmp_path, name="bad.json", material_code=None))
+        assert good.ok and not bad.ok
+        return [good, bad]
+
+    def test_기본은_하나라도_문제면_멈춘다(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit) as caught:
+            import_legacy._gate(self.rows(tmp_path), skip_bad=False)
+        # **빠져나갈 길을 알려 준다.** 「문제가 있습니다」 만 하면 사람은 96개를
+        # 다 고칠 때까지 아무것도 못 넣는 줄 안다.
+        assert "--skip-bad" in str(caught.value)
+
+    def test_켜면_읽힌_것만_넣는다(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        left = import_legacy._gate(self.rows(tmp_path), skip_bad=True)
+        assert [row.path.name for row in left] == ["good.json"]
+        # **건너뛴 것을 이름으로 적는다.** 「손으로 세지 않게」 하려고 막았던
+        # 것이므로, 문을 열려면 그 목록이 함께 나와야 한다.
+        said = capsys.readouterr().out
+        assert "bad.json" in said
+        assert "재료 코드" in said  # 왜 건너뛰었는지도
+
+    def test_문제가_없으면_그대로_돌려준다(self, tmp_path: Path) -> None:
+        rows = [read(make(tmp_path, name="a.json"))]
+        assert import_legacy._gate(rows, skip_bad=False) == rows
 
 
 class Test재료와_시료_속성:
