@@ -218,6 +218,59 @@ describe('나무로 묶기', () => {
   })
 })
 
+describe('같은 것을 다시 적어도 하나다', () => {
+  /**
+   * *"시료, 시편까지 적긴 했는데... 하나 시료 안에 여러 시편이 있는 상황이야"* —
+   * 실사용에서 나왔다.
+   *
+   * 「빈 칸은 위와 같다」 만으로는 모자랐다. **DB 를 뽑아 오면 모든 칸이 매 줄에
+   * 차 있다** — 그게 덤프의 생김새다. 그때 줄마다 새 재료를 만들어서, 시편
+   * 3장짜리 시료 하나가 **재료 3개·시료 3개·시편 3개**가 됐다.
+   */
+  it('재료를 매 줄에 다 적어도 하나다', () => {
+    const tree = group([
+      row({ ...SECC, 'sample.lot_no': 'L-1', 'specimen.orientation': 'MD' }),
+      row({ ...SECC, 'sample.lot_no': 'L-1', 'specimen.orientation': 'MD' }),
+      row({ ...SECC, 'sample.lot_no': 'L-1', 'specimen.orientation': 'MD' }),
+    ])
+    expect(tree.materials).toHaveLength(1)
+    expect(tree.materials[0].samples).toHaveLength(1)
+    expect((tree.materials[0].samples as { specimens: unknown[] }[])[0].specimens).toHaveLength(3)
+  })
+
+  it('사이에 다른 재료가 껴 있어도 앞엣것을 찾아간다', () => {
+    // **바로 위만 보지 않는다.** 옛 DB 는 정렬이 우리 기준과 다르다.
+    const tree = group([
+      row({ ...SECC, 'specimen.orientation': 'MD' }),
+      row({ ...SECC, 'material.grade': 'SGCC', 'specimen.orientation': 'MD' }),
+      row({ ...SECC, 'specimen.orientation': 'TD' }),
+    ])
+    expect(tree.materials).toHaveLength(2)
+    const first = tree.materials[0].samples as { specimens: unknown[] }[]
+    expect(first[0].specimens).toHaveLength(2)
+  })
+
+  it('두께가 다르면 다른 재료다', () => {
+    // **이름을 만드는 값이 다르면 다른 재료다**(ADR 0004) — `SECC_MDOI_1.0` 과
+    // `SECC_MDOI_1.2` 는 서로 다른 규격이다.
+    const tree = group([
+      row({ ...SECC, 'specimen.orientation': 'MD' }),
+      row({ ...SECC, 'material.spec_thickness': '1.2', 'specimen.orientation': 'MD' }),
+    ])
+    expect(tree.materials).toHaveLength(2)
+  })
+
+  it('로트를 안 적은 시료 둘은 안 합친다', () => {
+    // **서로 다른 시료일 수 있다.** 합치면 사람이 적은 것과 다른 결과가 된다.
+    const tree = group([
+      row({ ...SECC, 'sample.manufacturer': '포스코', 'specimen.orientation': 'MD' }),
+      row({ ...SECC, 'sample.manufacturer': '현대', 'specimen.orientation': 'MD' }),
+    ])
+    expect(tree.materials).toHaveLength(1)
+    expect(tree.materials[0].samples).toHaveLength(2)
+  })
+})
+
 describe('흠 짚기', () => {
   it('빈 줄은 짚지 않는다', () => {
     // 빈 줄을 그려 두는 것이 이 표의 방식이다. 그것을 흠이라 하면 늘 빨갛다.

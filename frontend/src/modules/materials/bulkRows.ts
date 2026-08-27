@@ -658,13 +658,33 @@ export interface Tally {
   implied: number
 }
 
+/** 이 재료 마디의 **정체**. 이름을 만드는 값들이다(ADR 0004). */
+function materialKey(node: MaterialNode): string {
+  return [node.family, node.category, node.grade, node.details ?? '', node.spec_thickness ?? '']
+    .map((one) => String(one ?? '').trim().toLowerCase())
+    .join(' ')
+}
+
 /**
  * 평평한 표를 요청 본문으로 묶는다 — **「빈 칸은 위와 같다」가 사는 유일한 곳.**
  *
  * 서버가 이 규칙을 다시 해석하게 하면 규칙이 두 곳에 살고, 언젠가 갈라진다.
+ *
+ * ## 같은 것을 다시 적어도 하나다
+ *
+ * 「빈 칸은 위와 같다」 만으로는 모자랐다. **DB 를 뽑아 오면 모든 칸이 매 줄에
+ * 차 있다** — 그게 덤프의 생김새다. 그때 이 함수가 줄마다 새 재료를 만들어서,
+ * 시편 3장짜리 시료 하나가 **재료 3개·시료 3개·시편 3개**가 됐다(실사용에서
+ * 나왔다).
+ *
+ * 그래서 **내용이 같으면 앞엣것에 붙인다.** 빈 칸을 세는 대신 정체를 본다.
+ *
+ * 시료는 **로트가 있을 때만** 그렇게 묶는다. 로트를 안 적은 시료 둘은 서로
+ * 다른 시료일 수 있고, 그것을 합치면 사람이 적은 것과 다른 결과가 된다.
  */
 export function group(rows: Row[], visible: Column[] = COLUMNS): BulkRequest {
   const materials: MaterialNode[] = []
+  const seen = new Map<string, MaterialNode>()
   let material: MaterialNode | null = null
   let sample: SampleNode | null = null
 
@@ -672,16 +692,40 @@ export function group(rows: Row[], visible: Column[] = COLUMNS): BulkRequest {
     if (isEmpty(row, visible)) continue
 
     if (has(row, 'material', visible)) {
-      material = materialNode(row, at, visible)
-      materials.push(material)
-      sample = null
+      const made = materialNode(row, at, visible)
+      const key = materialKey(made)
+      const already = seen.get(key)
+      if (already) {
+        // 같은 재료를 다시 적었다. 새로 만들지 않고 그쪽에 붙인다.
+        material = already
+        // **그 재료의 마지막 시료를 이어받는다.** 여기서 `null` 로 두면, 시료를
+        // 안 적은 줄이 시료를 새로 만든다 — 사이에 다른 재료가 껴 있었다는
+        // 이유만으로 시료가 갈라지는 셈이다.
+        const kin = already.samples as SampleNode[]
+        sample = kin.length > 0 ? kin[kin.length - 1] : null
+      } else {
+        material = made
+        materials.push(made)
+        seen.set(key, made)
+        sample = null
+      }
     }
     if (material === null) continue // 붙일 재료가 없다 — `problems` 가 짚는다
 
     const samples = material.samples as SampleNode[]
     if (has(row, 'sample', visible)) {
-      sample = sampleNode(row, at, visible)
-      samples.push(sample)
+      const made = sampleNode(row, at, visible)
+      const lot = String(made.lot_no ?? '').trim()
+      // **로트가 있을 때만 묶는다.** 로트를 안 적은 시료 둘은 서로 다를 수 있다.
+      const already = lot
+        ? samples.find((one) => String(one.lot_no ?? '').trim() === lot)
+        : undefined
+      if (already) {
+        sample = already
+      } else {
+        sample = made
+        samples.push(made)
+      }
     }
 
     if (!has(row, 'specimen', visible)) continue
