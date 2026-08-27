@@ -100,7 +100,7 @@ export const router = createBrowserRouter([
           { path: 'cards', element: <CardsPage /> },
           { path: 'materials/:id', element: <MaterialDetailPage /> },
           { path: 'test-runs/:id', element: <TestRunDetailPage /> },
-          { path: 'compare', ...stub('곡선 비교', 'Phase 3') },
+          { path: 'compare', ...stub('물성 분석', 'Phase 3') },
 
           // 내 활동
           { path: 'personal', ...stub('내 작업함', 'Phase 1') },
