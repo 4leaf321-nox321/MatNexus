@@ -236,6 +236,27 @@ const SAMPLE_FIELD_LABEL: Record<string, string> = {
   density: '밀도',
 }
 
+/**
+ * 이 역할에서 **일부러 뺀 열쇠**와 그 이름.
+ *
+ * 열쇠는 「채우는 값」 이 아니라 「고르는 값」 이다 — 이관은 파일이 `SPCC` 라고
+ * 하면 그 grade 인 재료를 찾고, 없으면 그 이름으로 만든다. 여기에 또 두면 같은
+ * 값을 두 군데서 정하게 되고, 둘이 어긋날 때 어느 쪽이 이겨야 하는지 답이 없다.
+ *
+ * 게다가 grade 는 **재료 이름의 일부**다(ADR 0004). 이미 있는 재료의 grade 를
+ * 파일이 덮으면 그건 값 채우기가 아니라 이름 바꾸기이고, 그러면 그 아래 시료·
+ * 시편·시험 이름이 전부 다시 계산된다. 시험 파일 하나가 할 일이 아니다.
+ */
+const KEY_ELSEWHERE: Partial<Record<MetaRole, string>> = {
+  material: '재료 코드(grade)',
+  sample: '로트(lot_no)',
+}
+
+/** 반대 방향. 「짚기」 목록에서 두께를 찾는 사람도 같은 자리에서 막힌다. */
+const PROPS_ELSEWHERE: Partial<Record<MetaRole, string>> = {
+  identity: '두께·밀도·제조사 같은 속성',
+}
+
 /** 단위를 **선언해야** 하는 칸. 안 적으면 이관이 mm · tonne/mm3 로 읽는다 —
  *  m 로 적어 온 파일에서 그것은 1000배이고 숫자는 그럴듯하다. */
 const NEEDS_UNIT = new Set(['spec_thickness', 'density'])
@@ -1878,6 +1899,26 @@ export default function FormatProfileEditorPage() {
                                 </span>
                               </SelectItem>
                             ))}
+                            {/* **여기서 찾는 사람이 있다.** 「재료 속성」 을 열어
+                                재료 코드를 찾는 것은 자연스러운 행동인데, 없으면
+                                없는 줄 알게 된다 — 실사용에서 그렇게 걸렸다.
+                                열쇠는 위 목적지에 있고, 두 군데 두면 같은 값을
+                                두 곳에서 정하게 되어 어긋날 때 답이 없다. */}
+                            {KEY_ELSEWHERE[rule.role] && (
+                              <p className="text-muted-foreground border-t px-2 py-1.5 text-xs">
+                                {KEY_ELSEWHERE[rule.role]} 는 여기 없습니다 —{' '}
+                                <b>「재료·시료·시편 짚기」</b> 에서 정합니다. 그것이
+                                <b>어느 것인가</b> 를 정하는 열쇠라서, 여기서 또
+                                정하면 두 곳이 어긋납니다.
+                              </p>
+                            )}
+                            {PROPS_ELSEWHERE[rule.role] && (
+                              <p className="text-muted-foreground border-t px-2 py-1.5 text-xs">
+                                {PROPS_ELSEWHERE[rule.role]} 는 여기 없습니다 —{' '}
+                                <b>「재료 속성」·「시료 속성」</b> 에서 정합니다.
+                                여기는 <b>어느 것인가</b> 만 짚습니다.
+                              </p>
+                            )}
                           </SelectContent>
                         </Select>
                       )}
