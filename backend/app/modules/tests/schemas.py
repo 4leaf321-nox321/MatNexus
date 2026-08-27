@@ -128,6 +128,46 @@ RECORD_FIELDS: dict[str, str] = {
     key: label for key, label in EDITABLE_FIELDS.items() if key != "note"
 }
 
+#: 프로파일이 **이관에서** 재료에 적을 수 있는 칸.
+#:
+#: ## 업로드는 이것을 안 쓴다
+#:
+#: 다른 DB 에서 통째로 넘어온 파일에는 재료의 두께·밀도·푸아송비까지 들어 있다.
+#: 그런데 **시험 하나가 재료를 고치면 안 된다** — 재료 아래 시험이 100건이면 같은
+#: 칸이 100번 덮어써지고, 그중 하나만 옛 값이어도 카드와 덱이 조용히 바뀐다.
+#: 시편 치수는 시험 하나가 시편 하나를 보므로 「빈 칸만 채운다」로 막을 수 있었지만,
+#: 재료는 그렇게 못 막는다.
+#:
+#: **이관은 다른 이야기다.** 한 번 하는 일이고 그때는 파일이 원천이다. 그래서
+#: `IDENTITY_FIELDS` 와 같은 자리에 둔다 — 선언하고, 미리보기가 보여 주고, 실제로
+#: 쓰는 것은 이관 경로뿐이다.
+#:
+#: `grade` 는 없다 — 그건 **어느 재료인가**를 정하는 열쇠라 `identity` 쪽이다.
+#: `note` 도 없다: 메모는 사람이 쓰는 자리이고, 파일이 거기에 적으면 사람이 쓴
+#: 것과 구별이 안 된다(`RECORD_FIELDS` 와 같은 이유).
+MATERIAL_FIELDS: dict[str, str] = {
+    "family": "계열",
+    "category": "분류",
+    "details": "세부",
+    "alias": "별명",
+    "spec_thickness": "공칭두께",
+    "density": "밀도",
+    "poisson_ratio": "푸아송비",
+}
+
+#: 프로파일이 **이관에서** 시료에 적을 수 있는 칸. 쓰이는 자리는 재료와 같다.
+#:
+#: `lot_no` 는 없다 — 그것도 열쇠다.
+SAMPLE_FIELDS: dict[str, str] = {
+    "alias": "별명",
+    "manufacturer": "제조사",
+    "distributor": "유통사",
+    "primary_vendor": "주판매처",
+    "sales_type": "판매유형",
+    "production_date": "생산일",
+    "density": "밀도",
+}
+
 #: 프로파일이 **짚어 줄 수 있는** 식별자. 채우지는 않는다.
 #:
 #: 시험은 생성 시점에 시편 id 에 매달린다. 잘못 짚은 것을 나중에 칸을 고쳐
@@ -647,6 +687,13 @@ class ProfileTryOut(BaseModel):
     """시험 조건에 **채워질** 값들. 파일 원문 그대로다 — SI 변환은 저장할 때 한다."""
     condition_units: dict[str, str] = {}
     """그 값이 무슨 단위로 적혀 있었나. 안 보내면 정의의 SI 로 해석된다."""
+    material: dict[str, str] = {}
+    """파일이 재료에 대해 적어 온 값들. **업로드는 안 쓴다** — 이관 경로만 쓴다."""
+    material_units: dict[str, str] = {}
+    """그 값의 단위. JSON 에는 단위 줄이 없으므로 프로파일이 선언해야 한다."""
+    sample: dict[str, str] = {}
+    """파일이 시료에 대해 적어 온 값들. 쓰이는 자리는 재료와 같다."""
+    sample_units: dict[str, str] = {}
 
 
 class InstrumentDimensionOut(BaseModel):

@@ -102,6 +102,8 @@ type MetaRole =
   | 'record'
   | 'condition'
   | 'identity'
+  | 'material'
+  | 'sample'
   | 'drop'
 
 interface MetaRule {
@@ -159,18 +161,38 @@ const META_ROLE: Record<MetaRole, { label: string; where: string }> = {
     label: '재료·시료·시편 짚기',
     where: '아무 데도 저장하지 않습니다 — 일괄 등록과 이관이 짝을 찾을 때만 씁니다',
   },
+  material: {
+    label: '재료 속성 (이관 전용)',
+    where: '올릴 때는 안 씁니다 — 이관 스크립트가 재료를 만들 때만 씁니다',
+  },
+  sample: {
+    label: '시료 속성 (이관 전용)',
+    where: '올릴 때는 안 씁니다 — 이관 스크립트가 시료를 만들 때만 씁니다',
+  },
   drop: { label: '버림', where: '남기지 않습니다' },
 }
 
 /** 고르는 목록의 묶음. **어디로 가느냐**로 나눈다 — 여섯이 한 줄로 늘어서
  *  있으면 성격이 다른 것들이 나란히 보여 뭉쳐 읽힌다. */
 /** 대상을 정해야 뜻이 있는 역할. 안 정하면 그 값은 아무 데도 안 간다. */
-const NEEDS_TARGET: MetaRole[] = ['summary', 'record', 'condition', 'specimen', 'identity']
+const NEEDS_TARGET: MetaRole[] = [
+  'summary',
+  'record',
+  'condition',
+  'specimen',
+  'identity',
+  'material',
+  'sample',
+]
 
 const META_ROLE_GROUPS: { title: string; roles: MetaRole[] }[] = [
   { title: '시험에 남긴다', roles: ['keep', 'summary', 'record', 'condition'] },
   { title: '시편에 남긴다', roles: ['specimen'] },
-  { title: '저장하지 않는다', roles: ['identity', 'drop'] },
+  // **올릴 때는 안 쓰는 것들.** 시험 하나가 재료를 고치면 그 아래 시험 100건이
+  // 저마다 한 번씩 덮어쓴다 — 시편은 시험 하나가 하나를 보므로 「빈 칸만 채운다」
+  // 로 막을 수 있었지만 재료는 그렇게 못 막는다. 이관은 한 번 하는 일이라 다르다.
+  { title: '이관할 때만 쓴다', roles: ['identity', 'material', 'sample'] },
+  { title: '저장하지 않는다', roles: ['drop'] },
 ]
 
 /** 파일이 **채울 수 있는** 시험 칸. 정본은 서버의 `RECORD_FIELDS` 다 —
@@ -189,6 +211,34 @@ const IDENTITY_FIELD_LABEL: Record<string, string> = {
   specimen_orientation: '방향',
   specimen_seq_no: '시편 번호',
 }
+
+/** 이관이 **재료를 만들 때** 적을 수 있는 칸. 정본은 서버의 `MATERIAL_FIELDS` 다.
+ *
+ *  `grade` 는 없다 — 그건 「어느 재료인가」 를 정하는 열쇠라 위쪽이다. */
+const MATERIAL_FIELD_LABEL: Record<string, string> = {
+  family: '계열',
+  category: '분류',
+  details: '세부',
+  alias: '별명',
+  spec_thickness: '공칭두께',
+  density: '밀도',
+  poisson_ratio: '푸아송비',
+}
+
+/** 이관이 **시료를 만들 때** 적을 수 있는 칸. 정본은 서버의 `SAMPLE_FIELDS` 다. */
+const SAMPLE_FIELD_LABEL: Record<string, string> = {
+  alias: '별명',
+  manufacturer: '제조사',
+  distributor: '유통사',
+  primary_vendor: '주판매처',
+  sales_type: '판매유형',
+  production_date: '생산일',
+  density: '밀도',
+}
+
+/** 단위를 **선언해야** 하는 칸. 안 적으면 이관이 mm · tonne/mm3 로 읽는다 —
+ *  m 로 적어 온 파일에서 그것은 1000배이고 숫자는 그럴듯하다. */
+const NEEDS_UNIT = new Set(['spec_thickness', 'density'])
 
 /** 채널 드롭다운의 특수 항목. 채널 키와 겹치지 않게 접두어를 붙인다. */
 const NEW_CHANNEL = '__new__'
@@ -393,6 +443,21 @@ export default function FormatProfileEditorPage() {
           { role: 'identity' as const, target: rule.field, unit: '', format: '' },
         ])
       ),
+      // **단위와 날짜 형식을 함께 읽는다.** 하나라도 빠뜨리면 열고 저장만 눌러도
+      // 그것이 사라진다 — 열 매핑이 정확히 그렇게 무너졌었다.
+      ...Object.fromEntries(
+        (['material', 'sample'] as const).flatMap((where) =>
+          Object.entries(definition[where] ?? {}).map(([name, rule]) => [
+            name,
+            {
+              role: where,
+              target: rule.field,
+              unit: rule.unit ?? '',
+              format: rule.format ?? '',
+            },
+          ])
+        )
+      ),
       ...Object.fromEntries(
         (definition.metadata ?? []).map((name) => [
           name,
@@ -538,6 +603,8 @@ export default function FormatProfileEditorPage() {
   function conditionOptions(role: MetaRole, type: TestType | null): [string, string][] {
     if (role === 'record') return Object.entries(RECORD_FIELD_LABEL)
     if (role === 'identity') return Object.entries(IDENTITY_FIELD_LABEL)
+    if (role === 'material') return Object.entries(MATERIAL_FIELD_LABEL)
+    if (role === 'sample') return Object.entries(SAMPLE_FIELD_LABEL)
     return (type?.conditions ?? []).map((field) => [field.key, field.label])
   }
 
@@ -772,6 +839,8 @@ export default function FormatProfileEditorPage() {
     const record: NonNullable<ProfileDefinition['record']> = {}
     const identity: NonNullable<ProfileDefinition['identity']> = {}
     const conditions: NonNullable<ProfileDefinition['conditions']> = {}
+    const material: NonNullable<ProfileDefinition['material']> = {}
+    const sample: NonNullable<ProfileDefinition['sample']> = {}
     const metadata: string[] = []
     for (const [name, rule] of Object.entries(metaMap)) {
       if (rule.role === 'record' && rule.target) {
@@ -780,6 +849,17 @@ export default function FormatProfileEditorPage() {
       }
       if (rule.role === 'identity' && rule.target) {
         identity[name] = { field: rule.target }
+        continue
+      }
+      if ((rule.role === 'material' || rule.role === 'sample') && rule.target) {
+        // 단위와 날짜 형식을 **적었을 때만** 넣는다 — 빈 값을 적으면 옛 정의와
+        // 모양이 달라져 쓸데없는 리비전이 생긴다.
+        const into = rule.role === 'material' ? material : sample
+        into[name] = {
+          field: rule.target,
+          ...(rule.unit ? { unit: rule.unit } : {}),
+          ...(rule.format ? { format: rule.format } : {}),
+        }
         continue
       }
       if (rule.role === 'condition' && rule.target) {
@@ -816,6 +896,8 @@ export default function FormatProfileEditorPage() {
       ...(Object.keys(record).length ? { record } : {}),
       ...(Object.keys(identity).length ? { identity } : {}),
       ...(Object.keys(conditions).length ? { conditions } : {}),
+      ...(Object.keys(material).length ? { material } : {}),
+      ...(Object.keys(sample).length ? { sample } : {}),
       metadata,
     }
   }
@@ -1765,7 +1847,9 @@ export default function FormatProfileEditorPage() {
                           오타 하나가 조용히 아무것도 안 하는 규칙이 된다. */}
                       {(rule.role === 'record' ||
                         rule.role === 'identity' ||
-                        rule.role === 'condition') && (
+                        rule.role === 'condition' ||
+                        rule.role === 'material' ||
+                        rule.role === 'sample') && (
                         <Select
                           value={rule.target || 'none'}
                           onValueChange={(value) =>
@@ -1815,6 +1899,45 @@ export default function FormatProfileEditorPage() {
                             setMetaMap((current) => ({
                               ...current,
                               [name]: { ...rule, unit: event.target.value.trim() },
+                            }))
+                          }
+                        />
+                      )}
+                      {(rule.role === 'material' || rule.role === 'sample') &&
+                        NEEDS_UNIT.has(rule.target) && (
+                          <>
+                            <Input
+                              className="h-8 w-28 font-mono text-xs"
+                              list={`units-${rule.target === 'density' ? 'density' : 'length'}`}
+                              placeholder="파일의 단위"
+                              title="이 칸은 단위를 적어야 합니다. 안 적으면 이관이 mm · tonne/mm3 로 읽습니다 — m 로 적어 온 파일에서 그것은 1000배입니다."
+                              value={rule.unit}
+                              onChange={(event) =>
+                                setMetaMap((current) => ({
+                                  ...current,
+                                  [name]: { ...rule, unit: event.target.value.trim() },
+                                }))
+                              }
+                            />
+                            {/* **여기서 말한다.** 이관 당일에 알면 그때는 파일
+                                수백 개를 앞에 두고 있다. */}
+                            {!rule.unit && (
+                              <span className="text-xs text-amber-700 dark:text-amber-500">
+                                단위를 적으세요 — 안 적으면 이관이 막습니다
+                              </span>
+                            )}
+                          </>
+                        )}
+                      {rule.role === 'sample' && rule.target === 'production_date' && (
+                        <Input
+                          className="h-8 w-40 font-mono text-xs"
+                          placeholder="%Y-%m-%d"
+                          title="비우면 ISO 만 읽습니다. 05/06/2020 같은 값은 6월 5일인지 5월 6일인지 기계가 정하면 안 되므로, 형식을 적지 않으면 비워 둡니다."
+                          value={rule.format}
+                          onChange={(event) =>
+                            setMetaMap((current) => ({
+                              ...current,
+                              [name]: { ...rule, format: event.target.value },
                             }))
                           }
                         />

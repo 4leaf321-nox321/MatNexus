@@ -72,6 +72,7 @@ import argparse
 import hashlib
 import re
 import sys
+import time
 import uuid
 from collections import Counter
 from pathlib import Path
@@ -137,6 +138,25 @@ STEPS: list[dict[str, Any]] = [
 ]
 
 
+#: 이 칸들은 **단위를 선언해야** 받는다. 안 그러면 API 기본값(mm · tonne/mm3)
+#: 으로 조용히 읽히는데, m 로 적어 온 파일에서 그것은 1000배다.
+#:
+#: `poisson_ratio` 는 없다 — 비율이라 단위가 없다.
+NEEDS_UNIT = {"spec_thickness", "density"}
+
+
+def _numeric_problem(where: str, values: dict[str, str], units: dict[str, str]) -> str | None:
+    """단위를 안 적은 숫자 칸이 있으면 그 사연. 없으면 `None`."""
+    naked = sorted(key for key in values if key in NEEDS_UNIT and not units.get(key))
+    if not naked:
+        return None
+    return (
+        f"{where}의 {', '.join(naked)} 에 단위가 없습니다. "
+        f"프로파일에서 그 칸의 단위를 적으세요 — 안 적으면 mm · tonne/mm3 로 "
+        f"읽힙니다."
+    )
+
+
 class Row:
     """파일 하나에서 읽어 낸 것. **아직 아무것도 안 만들었다.**"""
 
@@ -147,6 +167,13 @@ class Row:
         self.orientation: str = ""
         self.seq: int | None = None
         self.dimensions: dict[str, float] = {}
+        #: 파일이 **재료·시료에 대해** 적어 온 값과 그 단위. 프로파일의 `material`·
+        #: `sample` 선언이 낸다. 업로드 경로는 이것을 안 읽는다 — 시험 하나가
+        #: 재료를 고치면 그 아래 시험 100건이 저마다 한 번씩 덮어쓴다.
+        self.material: dict[str, str] = {}
+        self.material_units: dict[str, str] = {}
+        self.sample: dict[str, str] = {}
+        self.sample_units: dict[str, str] = {}
         self.points: int = 0
         self.problem: str | None = None
 
@@ -236,6 +263,8 @@ def _read(
     raw_seq = pick("specimen_seq_no", keys["seq"], "specimen_no")
     row.seq = int(raw_seq) if raw_seq.isdigit() else None
     row.dimensions = instrument_dimensions(meta)
+    row.material, row.material_units = dict(parsed.material), dict(parsed.material_units)
+    row.sample, row.sample_units = dict(parsed.sample), dict(parsed.sample_units)
     row.points = len(parsed.curves[0].channels[0].values) if parsed.curves else 0
 
     if pattern is not None:
@@ -273,6 +302,11 @@ def _read(
             f"프로파일 ⑤ 에서 「어느 재료·시료·시편인지」 로 정하거나 "
             f"--material-key 따위로 주세요. 있는 키: {sorted(meta)[:12]}"
         )
+    elif said := (
+        _numeric_problem("재료", row.material, row.material_units)
+        or _numeric_problem("시료", row.sample, row.sample_units)
+    ):
+        row.problem = said
     elif not row.dimensions:
         # 오류는 아니지만 처리 1단계가 여기서 멈춘다. 미리 말한다.
         row.problem = (
@@ -282,7 +316,17 @@ def _read(
     return row
 
 
-def _preview(rows: list[Row], material: str, category: str, thickness: float | None) -> int:
+def _said(values: dict[str, str], units: dict[str, str]) -> str:
+    """`spec_thickness 1.2 mm · density 7.85e-9 tonne/mm3` — 사람이 읽을 한 줄."""
+    return " · ".join(
+        f"{key} {raw}" + (f" {units[key]}" if units.get(key) else "")
+        for key, raw in sorted(values.items())
+    )
+
+
+def _preview(
+    rows: list[Row], material: str | None, category: str | None, thickness: float | None
+) -> int:
     good = [row for row in rows if row.ok]
     bad = [row for row in rows if not row.ok]
 
@@ -291,17 +335,42 @@ def _preview(rows: list[Row], material: str, category: str, thickness: float | N
     if good:
         grades = sorted({row.grade for row in good})
         lots = sorted({(row.grade, row.lot) for row in good})
-        print(
-            f"만들거나 다시 쓸 재료 {len(grades)}개  ({material} / {category}"
-            + (f" / {thickness}mm" if thickness else "")
-            + ")"
+        told = " / ".join(
+            part
+            for part in (material, category, f"{thickness}mm" if thickness else None)
+            if part
         )
+        print(
+            f"만들거나 다시 쓸 재료 {len(grades)}개"
+            + (f"  (사람이 정한 것: {told} — 파일보다 먼저다)" if told else "")
+        )
+        # **파일이 무엇을 갖고 왔는지 보여 준다.** 이관 당일에 알면 늦다.
         for grade in grades:
-            print(f"  {grade}")
+            first = next(row for row in good if row.grade == grade)
+            said = _said(first.material, first.material_units)
+            print(f"  {grade}" + (f"\n      파일: {said}" if said else ""))
+
         print(f"\n시료(로트) {len(lots)}개")
         for grade, lot in lots:
-            count = sum(1 for row in good if row.grade == grade and row.lot == lot)
-            print(f"  {grade} / {lot} — 시편 {count}개")
+            kin = [row for row in good if row.grade == grade and row.lot == lot]
+            said = _said(kin[0].sample, kin[0].sample_units)
+            print(
+                f"  {grade} / {lot} — 시편 {len(kin)}개"
+                + (f"\n      파일: {said}" if said else "")
+            )
+
+        # **재료 하나에 파일이 서로 다른 값을 적어 오면 말한다.** 먼저 만나는
+        # 파일이 이기는데, 그건 폴더의 파일 순서가 정하는 것이지 사람이 정한
+        # 것이 아니다. 그리고 이관은 되돌릴 수 없다.
+        for grade in grades:
+            seen = {
+                _said(row.material, row.material_units) for row in good if row.grade == grade
+            } - {""}
+            if len(seen) > 1:
+                print(f"\n재료 {grade} 에 파일마다 다른 값이 적혀 있습니다 ({len(seen)}가지)")
+                for one in sorted(seen)[:4]:
+                    print(f"  {one}")
+                print("  → 먼저 만나는 파일이 이깁니다. --family 따위로 못 박으세요.")
 
         # **겹치는 자리를 먼저 말한다.** 같은 시편에 파일이 둘이면 시험이 둘
         # 붙는다. 그게 맞을 때도 있지만(재시험), 대개는 번호가 틀린 것이다.
@@ -326,12 +395,84 @@ def _preview(rows: list[Row], material: str, category: str, thickness: float | N
     return 0 if good else 1
 
 
+#: 값과 짝이 되는 단위 칸의 이름. API 가 `<칸>_unit` 으로 받는다.
+UNIT_FIELD = {"spec_thickness": "spec_thickness_unit", "density": "density_unit"}
+
+#: 파일이 준 것을 숫자로 읽어야 하는 칸.
+AS_NUMBER = {"spec_thickness", "density", "poisson_ratio"}
+
+
+def _body(
+    values: dict[str, str], units: dict[str, str], given: dict[str, Any], note: str
+) -> dict[str, Any]:
+    """파일이 준 것 + 사람이 준 것 → API 몸통. **사람이 준 것이 먼저다.**
+
+    파일이 이기게 하면 프로파일이 틀렸을 때 빠져나올 문이 없다. `--material-key`
+    를 기본값 없이 둔 것과 같은 판단이다 — 값이 있으면 "사람이 일부러 정했다" 는
+    뜻이고, 그때만 파일보다 먼저다.
+
+    **단위는 값과 함께 간다.** 값만 보내고 단위를 안 보내면 API 가 기본값(mm ·
+    tonne/mm3)으로 읽는다 — 그래서 `_numeric_problem` 이 먼저 막는다.
+    """
+    body: dict[str, Any] = {"note": note}
+    for key, raw in values.items():
+        text = raw.strip()
+        if not text:
+            continue
+        if key in AS_NUMBER:
+            try:
+                body[key] = float(text)
+            except ValueError:
+                # **지어내지 않는다.** 숫자가 아니면 그 칸만 빼고 나머지는 넣는다.
+                continue
+        else:
+            body[key] = text
+        if key in UNIT_FIELD and units.get(key):
+            body[UNIT_FIELD[key]] = units[key]
+    # 사람이 준 것으로 덮는다. `None` 은 "안 줬다" 이므로 파일 것을 살린다.
+    body.update({key: value for key, value in given.items() if value is not None})
+    return body
+
+
+def _parse(client: TestClient, run_id: str) -> str:
+    """이 시험을 읽는다. **워커가 먼저 집어 갔으면 그것을 기다린다.**
+
+    스크립트는 일부러 제 손으로 읽는다 — 실패가 그 자리에서 보여야 하고, 다음
+    단계(치수·처리·채택)가 읽힌 뒤에 와야 하기 때문이다. 그런데 올리기는 큐에도
+    넣으므로, **워커가 떠 있으면 둘이 같은 시험을 동시에 읽는다.**
+
+    실측(2026-08-27): 셋을 넣다가 둘째에서 터졌다.
+
+        PermissionError: [WinError 32] 다른 프로세스가 파일을 사용 중 ...
+        .../curves/raw.parquet.part
+
+    이관은 되돌릴 수 없다. 중간에 터지면 재료 하나는 만들어졌고 시험은 반만
+    들어간 상태로 남는다. 그래서 **진 쪽이 이긴 쪽을 기다린다** — 누가 읽었든
+    끝 상태는 같다.
+
+    미리 기다리지 않고 먼저 해 보는 이유는, 워커가 없는 것이 보통이기 때문이다.
+    파일이 수백 개일 때 매번 대기 시간을 먹으면 그것만으로 이관이 하루가 된다.
+    """
+    try:
+        with SessionLocal() as db:
+            return test_services.parse_run(db, uuid.UUID(run_id))
+    except Exception as caught:  # 워커가 같은 파일을 쥐고 있다
+        print(f"  워커가 먼저 읽고 있습니다 — 기다립니다 ({type(caught).__name__})")
+
+    for _ in range(60):
+        state = str(client.get(f"/api/test-runs/{run_id}").json().get("status") or "")
+        if state in ("parsed", "failed"):
+            return state
+        time.sleep(1)
+    return "timeout"
+
+
 def _load(
     client: TestClient,
     rows: list[Row],
     *,
-    family: str,
-    category: str,
+    family: str | None,
+    category: str | None,
     details: str,
     thickness: float | None,
     division: str,
@@ -353,17 +494,24 @@ def _load(
                 materials[row.grade] = hit[0]["id"]
                 print(f"재료: {hit[0]['record_name']} (있던 것)")
             else:
-                made = client.post(
-                    "/api/materials",
-                    json={
+                body = _body(
+                    row.material,
+                    row.material_units,
+                    {
                         "family": family,
                         "category": category,
-                        "grade": row.grade,
-                        **({"details": details} if details else {}),
-                        **({"spec_thickness": thickness} if thickness else {}),
-                        "note": note,
+                        "details": details or None,
+                        "spec_thickness": thickness,
                     },
+                    note,
                 )
+                body["grade"] = row.grade  # 열쇠다. 파일도 사람도 못 덮는다.
+                # **계열·분류는 필수다.** 파일에도 없고 사람도 안 줬으면 여기서
+                # 정한다 — 값을 안 넣고 보내면 422 로 막히고, 그 사연은 이관
+                # 당일에 파일 수백 개를 앞에 두고 읽게 된다.
+                body.setdefault("family", "Metal")
+                body.setdefault("category", "Steel")
+                made = client.post("/api/materials", json=body)
                 if made.status_code != 201:
                     print(f"  재료 실패 {row.grade}: {made.text[:200]}")
                     continue
@@ -379,10 +527,9 @@ def _load(
             if hit:
                 samples[lot_key] = hit[0]["id"]
             else:
-                made = client.post(
-                    f"/api/materials/{material_id}/samples",
-                    json={"lot_no": row.lot, "note": note},
-                )
+                body = _body(row.sample, row.sample_units, {}, note)
+                body["lot_no"] = row.lot  # 열쇠다.
+                made = client.post(f"/api/materials/{material_id}/samples", json=body)
                 if made.status_code != 201:
                     print(f"  시료 실패 {row.lot}: {made.text[:200]}")
                     continue
@@ -449,8 +596,7 @@ def _load(
         # **읽을 형식을 고정한다.** 자동 선택은 지문이 겹치면 엉뚱한 것을 고른다 —
         # 이관은 무엇으로 읽을지 이미 정해 놓고 시작하는 일이다.
         client.post(f"/api/test-runs/{run_id}/reparse", json={"profile_key": profile_key})
-        with SessionLocal() as db:
-            state = test_services.parse_run(db, uuid.UUID(run_id))
+        state = _parse(client, run_id)
         if state != "parsed":
             detail = client.get(f"/api/test-runs/{run_id}").json()
             print(f"  파싱 실패 {row.path.name}: {detail.get('parse_error', state)}")
@@ -484,8 +630,12 @@ def main() -> None:
     parser.add_argument("--profile", default="legacy_mtet", help="읽을 형식의 key")
     parser.add_argument("--glob", default="*", help="폴더에서 고를 파일")
     parser.add_argument("--apply", action="store_true", help="실제로 넣는다")
-    parser.add_argument("--family", default="Metal")
-    parser.add_argument("--category", default="Steel")
+    # **기본을 비워 둔다.** 값이 있으면 "사람이 일부러 정했다" 는 뜻이고, 그때만
+    # 파일보다 먼저다. 기본값을 박아 두면 그 구별이 사라져 **파일이 절대 못
+    # 이긴다** — 프로파일에 `material` 을 적어 놔도 아무 일이 안 일어난다.
+    # 둘 다 없으면 `_load` 가 Metal/Steel 로 만든다(전과 같다).
+    parser.add_argument("--family", default=None, help="파일보다 먼저다. 기본 Metal")
+    parser.add_argument("--category", default=None, help="파일보다 먼저다. 기본 Steel")
     parser.add_argument("--details", default="", help="재료 이름에 붙는 세부(예: LEGACY)")
     parser.add_argument("--thickness", type=float, default=None, help="공칭 두께(mm)")
     parser.add_argument("--division", default="", help="사업부")

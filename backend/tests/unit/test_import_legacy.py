@@ -174,6 +174,103 @@ class Test안_읽히면_말한다:
         assert "단위" in row.problem
 
 
+class Test재료와_시료_속성:
+    """**다른 DB 에서 통째로 넘어온 파일**이 재료·시료 속성까지 갖고 온다.
+
+    업로드 경로는 이것을 안 읽는다 — 재료 아래 시험이 100건이면 같은 칸이
+    100번 덮어써진다. 이관은 한 번 하는 일이고, 그때는 파일이 원천이다.
+    """
+
+    def profile(self) -> dict[str, Any]:
+        return {
+            **PROFILE,
+            "material": {
+                "thickness_spec_mm": {"field": "spec_thickness", "unit": "mm"},
+                "density": {"field": "density", "unit": "tonne/mm3"},
+                "maker_family": {"field": "family"},
+            },
+            "sample": {"maker": {"field": "manufacturer"}},
+        }
+
+    def read(self, path: Path) -> Any:
+        return import_legacy._read(path, self.profile(), KEYS, None)
+
+    def test_값과_단위를_함께_들고_온다(self, tmp_path: Path) -> None:
+        row = self.read(
+            make(
+                tmp_path,
+                thickness_spec_mm=1.0,
+                density=7.85e-9,
+                maker_family="Metal",
+                maker="포스코",
+            )
+        )
+        assert row.ok, row.problem
+        assert row.material["spec_thickness"] == "1.0"
+        assert row.material_units["spec_thickness"] == "mm"
+        assert row.material["family"] == "Metal"
+        assert row.sample["manufacturer"] == "포스코"
+
+    def test_단위_없는_숫자를_막는다(self, tmp_path: Path) -> None:
+        """**안 막으면 API 기본값(mm · tonne/mm3)으로 조용히 읽힌다.**
+
+        m 로 적어 온 파일에서 그것은 1000배이고, 숫자는 그럴듯하다.
+        """
+        profile = self.profile()
+        del profile["material"]["thickness_spec_mm"]["unit"]
+        row = import_legacy._read(make(tmp_path, thickness_spec_mm=0.001), profile, KEYS, None)
+        assert not row.ok
+        assert "단위가 없습니다" in (row.problem or "")
+        assert "spec_thickness" in (row.problem or "")
+
+    def test_푸아송비는_단위를_안_찾는다(self, tmp_path: Path) -> None:
+        """비율이라 단위가 없다. 억지로 요구하면 단위 칸이 생긴다."""
+        profile = self.profile()
+        profile["material"]["nu"] = {"field": "poisson_ratio"}
+        row = import_legacy._read(make(tmp_path, nu=0.3), profile, KEYS, None)
+        assert row.ok, row.problem
+        assert row.material["poisson_ratio"] == "0.3"
+
+
+class Test몸통을_만든다:
+    """`_body` — 파일이 준 것과 사람이 준 것을 합친다."""
+
+    def test_사람이_준_것이_먼저다(self) -> None:
+        """파일이 이기면 프로파일이 틀렸을 때 빠져나올 문이 없다."""
+        body = import_legacy._body(
+            {"family": "Metal", "spec_thickness": "1.0"},
+            {"spec_thickness": "mm"},
+            {"family": "Polymer", "category": None, "spec_thickness": None},
+            "메모",
+        )
+        assert body["family"] == "Polymer"
+        # **`None` 은 "안 줬다" 다.** 파일 것을 살려야 한다 — 안 그러면 CLI 에
+        # 기본값이 없다는 사실이 오히려 파일을 지운다.
+        assert body["spec_thickness"] == 1.0
+        assert body["spec_thickness_unit"] == "mm"
+        assert "category" not in body
+
+    def test_숫자로_읽는다(self) -> None:
+        body = import_legacy._body(
+            {"density": "7.85e-9", "poisson_ratio": "0.3", "manufacturer": "포스코"},
+            {"density": "tonne/mm3"},
+            {},
+            "",
+        )
+        assert body["density"] == pytest.approx(7.85e-9)
+        assert body["density_unit"] == "tonne/mm3"
+        assert body["poisson_ratio"] == pytest.approx(0.3)
+        assert body["manufacturer"] == "포스코"
+
+    def test_숫자가_아니면_그_칸만_뺀다(self) -> None:
+        """**지어내지 않는다.** 한 칸이 이상하다고 나머지를 버리지도 않는다."""
+        body = import_legacy._body(
+            {"spec_thickness": "약 1.0", "family": "Metal"}, {"spec_thickness": "mm"}, {}, ""
+        )
+        assert "spec_thickness" not in body
+        assert body["family"] == "Metal"
+
+
 class Test이름에서_뽑기:
     """옛 앱의 `.mtet` 에는 재료 코드도 로트도 방향도 없다 — 파일 이름에 있다."""
 

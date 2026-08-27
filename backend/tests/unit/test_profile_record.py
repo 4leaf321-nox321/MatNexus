@@ -54,7 +54,7 @@ class Test선언이_없으면:
         return {
             key: value
             for key, value in LEGACY_TENSILE_DEFINITION.items()
-            if key not in ("record", "identity", "conditions")
+            if key not in ("record", "identity", "conditions", "material", "sample")
         }
 
     def test_아무것도_안_채운다(self) -> None:
@@ -62,6 +62,8 @@ class Test선언이_없으면:
         assert parsed.record == {}
         assert parsed.identity == {}
         assert parsed.conditions == {}
+        assert parsed.material == {}
+        assert parsed.sample == {}
 
     def test_곡선과_요약값은_그대로다(self) -> None:
         """새 자리를 더한 것이 **원래 하던 일**을 흔들면 안 된다."""
@@ -161,6 +163,98 @@ class Test시험_칸:
         }
         parsed = profiles.apply(rule, made(작업자="Unknown", 장비="  "))
         assert parsed.record == {}
+
+
+class Test재료와_시료:
+    """**다른 DB 에서 통째로 넘어온 파일**을 위한 자리.
+
+    재료의 두께·밀도·푸아송비, 시료의 제조사·생산일까지 한 파일에 들어 있는
+    경우가 있다. 그런데 **업로드가 이것을 쓰면 안 된다** — 재료 아래 시험이
+    100건이면 같은 칸이 100번 덮어써지고, 그중 하나만 옛 값이어도 카드와 덱이
+    조용히 바뀐다. 시편 치수는 시험 하나가 시편 하나를 보므로 「빈 칸만 채운다」
+    로 막을 수 있었지만 재료는 그렇게 못 막는다.
+
+    그래서 `identity` 와 같은 자리에 둔다 — **읽어서 넘기기만** 하고, 실제로
+    쓰는 것은 이관 경로뿐이다.
+    """
+
+    def profile(self) -> dict[str, Any]:
+        return {
+            **BASE,
+            "material": {
+                "Thickness": {"field": "spec_thickness", "unit": "mm"},
+                "Density": {"field": "density", "unit": "tonne/mm3"},
+                "Poisson": {"field": "poisson_ratio"},
+                "Family": {"field": "family"},
+            },
+            "sample": {
+                "Maker": {"field": "manufacturer"},
+                "Made on": {"field": "production_date", "format": "%Y/%m/%d"},
+            },
+        }
+
+    def test_값과_단위를_함께_낸다(self) -> None:
+        parsed = profiles.apply(
+            self.profile(),
+            made(
+                Thickness="1.2",
+                Density="7.85e-9",
+                Poisson="0.3",
+                Family="Metal",
+                Maker="포스코",
+            ),
+        )
+        assert parsed.material == {
+            "spec_thickness": "1.2",
+            "density": "7.85e-9",
+            "poisson_ratio": "0.3",
+            "family": "Metal",
+        }
+        # **단위가 값과 함께 가야 한다.** JSON 에는 단위 줄이 아예 없어서, 안
+        # 보내면 읽는 쪽이 기본값(mm · tonne/mm3)으로 본다.
+        assert parsed.material_units == {
+            "spec_thickness": "mm",
+            "density": "tonne/mm3",
+        }
+        assert parsed.sample == {"manufacturer": "포스코"}
+
+    def test_값에_붙어_온_단위도_받는다(self) -> None:
+        """`"1.2 mm"` 처럼 한 칸에 붙어 오는 파일이 있다. 조건과 같은 규칙이다."""
+        profile = self.profile()
+        del profile["material"]["Thickness"]["unit"]
+        parsed = profiles.apply(profile, made(Thickness="1.2 mm"))
+        assert parsed.material == {"spec_thickness": "1.2"}
+        assert parsed.material_units == {"spec_thickness": "mm"}
+
+    def test_프로파일이_적은_단위가_이긴다(self) -> None:
+        parsed = profiles.apply(self.profile(), made(Thickness="0.0012 m"))
+        assert parsed.material_units["spec_thickness"] == "mm"
+        # **붙어 온 단위를 떼어 낸다.** 통째로 넘기면 숫자로 못 읽는다.
+        assert parsed.material["spec_thickness"] == "0.0012"
+
+    def test_생산일을_짐작하지_않는다(self) -> None:
+        """`05/06/2020` 은 6월 5일일 수도 5월 6일일 수도 있다. **둘 다
+        그럴듯해서** 화면 어디에도 티가 안 난다."""
+        parsed = profiles.apply(self.profile(), made(**{"Made on": "2020/06/05"}))
+        assert parsed.sample["production_date"].startswith("2020-06-05")
+
+        parsed = profiles.apply(self.profile(), made(**{"Made on": "05-06-2020"}))
+        assert "production_date" not in parsed.sample
+        assert any("날짜 형식" in said for said in parsed.warnings)
+
+    def test_원문도_남는다(self) -> None:
+        """「파일에는 뭐라고 적혀 있었나」 에 답할 수 있어야 한다."""
+        parsed = profiles.apply(self.profile(), made(Thickness="1.2", Maker="포스코"))
+        # 보관 키는 라벨의 슬러그다 — `_keep_sources` 가 그렇게 담는다.
+        assert parsed.metadata["thickness"] == "1.2"
+        assert parsed.metadata["maker"] == "포스코"
+
+    def test_빈_값은_안_적은_것이다(self) -> None:
+        parsed = profiles.apply(
+            self.profile(), made(Thickness="", Density="Unknown", Maker="-")
+        )
+        assert parsed.material == {}
+        assert parsed.sample == {}
 
 
 class Test날짜:

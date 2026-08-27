@@ -30,7 +30,9 @@ from app.modules.tests import services
 from app.modules.tests.models import FormatProfile, TestType
 from app.modules.tests.schemas import (
     IDENTITY_FIELDS,
+    MATERIAL_FIELDS,
     RECORD_FIELDS,
+    SAMPLE_FIELDS,
     FormatProfileCreateRequest,
     FormatProfileOut,
     FormatProfileSaveRequest,
@@ -42,6 +44,7 @@ from app.modules.tests.schemas import (
     TriedSummaryOut,
 )
 from app.modules.workspaces.models import Workspace
+from app.shared import dependents
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import (
@@ -241,6 +244,10 @@ def try_profile(
         warnings=list(parsed.warnings),
         record=parsed.record,
         identity=parsed.identity,
+        material=parsed.material,
+        material_units=parsed.material_units,
+        sample=parsed.sample,
+        sample_units=parsed.sample_units,
         conditions=parsed.conditions,
         condition_units=parsed.condition_units,
     )
@@ -343,6 +350,23 @@ def delete_profile(
     if item is None:
         raise NotFound("MNX-TESTS-0025", f"프로파일을 찾을 수 없습니다: {key}")
     _require_edit(db, user, item)
+
+    # **매달린 것이 있으면 막는다.** 안 막으면 FK 가 막고, 그건 500 이 된다 —
+    # 사람은 "서버 오류가 발생했습니다" 만 보고 무엇이 걸렸는지 알 수 없다.
+    # 실측(2026-08-27): 그 형식으로 읽은 시험이 하나 있으니 그대로 500 이었다.
+    #
+    # 시험 종류 삭제는 이미 같은 것을 한다(`services.delete_definition`) —
+    # 프로파일만 빠져 있었다.
+    stuck = dependents.blocking(
+        dependents.references_to(db, table="format_profiles", pk=item.id)
+    )
+    if stuck:
+        raise AppError(
+            "MNX-TESTS-0039",
+            f"이 형식에 매달린 것이 있어 지울 수 없습니다 — {dependents.describe(stuck)}. "
+            f"더 쓰지 않으려면 '중단' 으로 바꾸세요.",
+            status=409,
+        )
     db.delete(item)
     db.commit()
     return Response(status_code=204)
@@ -368,6 +392,10 @@ def _validate(definition: dict[str, Any], db: Session, test_type: TestType) -> N
     _check_units(definition)
     _check_fields(definition, "record", RECORD_FIELDS, "MNX-TESTS-0034")
     _check_fields(definition, "identity", IDENTITY_FIELDS, "MNX-TESTS-0035")
+    # 재료·시료는 이관 경로만 읽는다. 그래도 **저장할 때** 검사한다 — 오타를 이관
+    # 당일에 알면 그때는 파일 수백 개를 앞에 두고 있다.
+    _check_fields(definition, "material", MATERIAL_FIELDS, "MNX-TESTS-0037")
+    _check_fields(definition, "sample", SAMPLE_FIELDS, "MNX-TESTS-0038")
     # **조건은 시험 종류마다 다르다.** 인장은 속도·예하중이고 DMA 는 진폭이다 —
     # 고정 목록으로 못 검사한다.
     _check_fields(
@@ -385,7 +413,7 @@ def _check_units(definition: dict[str, Any]) -> None:
     보이고 원인은 이 화면에 있으므로, 사람은 두 화면을 왕복하며 짐작하게 된다.
     """
     bad: list[str] = []
-    for where in ("columns", "summary", "specimen"):
+    for where in ("columns", "summary", "specimen", "conditions", "material", "sample"):
         for name, rule in (definition.get(where) or {}).items():
             if not isinstance(rule, dict):
                 continue

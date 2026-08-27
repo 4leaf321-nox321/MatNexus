@@ -40,6 +40,16 @@ const SAVED = {
     specimen: {
       'Specimen thickness a0 (mm)': { key: 'specimen_thickness', unit: 'mm' },
     },
+    // **이관 전용 자리.** 올릴 때는 안 쓰지만 정의에는 산다 — 열고 저장만
+    // 눌러도 사라지면, 그 사실을 이관 당일에야 알게 된다.
+    material: {
+      'Spec thickness (mm)': { field: 'spec_thickness', unit: 'mm' },
+      'Material family': { field: 'family' },
+    },
+    sample: {
+      Maker: { field: 'manufacturer' },
+      'Made on': { field: 'production_date', format: '%Y/%m/%d' },
+    },
     metadata: ['Operator'],
   },
 }
@@ -128,6 +138,10 @@ describe('저장된 프로파일을 열었을 때', () => {
     expect(sent.columns).toEqual(SAVED.definition.columns)
     expect(sent.summary).toEqual(SAVED.definition.summary)
     expect(sent.specimen).toEqual(SAVED.definition.specimen)
+    // **단위와 날짜 형식까지 그대로다.** 열 매핑이 정확히 이 자리에서 무너졌다 —
+    // 불러오기가 `field` 만 읽으면 `unit` 과 `format` 이 조용히 사라진다.
+    expect(sent.material).toEqual(SAVED.definition.material)
+    expect(sent.sample).toEqual(SAVED.definition.sample)
   })
 
   it('파일을 안 놓아도 저장된 헤더 지문이 보인다', async () => {

@@ -5854,6 +5854,22 @@
             "title": "Identity",
             "type": "object"
           },
+          "material": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Material",
+            "type": "object"
+          },
+          "material_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Material Units",
+            "type": "object"
+          },
           "metadata": {
             "additionalProperties": {
               "type": "string"
@@ -5867,6 +5883,22 @@
             },
             "default": {},
             "title": "Record",
+            "type": "object"
+          },
+          "sample": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Sample",
+            "type": "object"
+          },
+          "sample_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Sample Units",
             "type": "object"
           },
           "summary": {

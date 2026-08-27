@@ -24,7 +24,7 @@ from app.modules.auth import security
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
-from app.modules.tests.models import Curve, TestRun, TestType
+from app.modules.tests.models import Curve, FormatProfile, TestRun, TestType
 from app.modules.vocabulary.models import Vocabulary
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 
@@ -412,6 +412,126 @@ class TestTryBeforeSave:
         ).json()
         assert tried["record"].get("operator")
         assert tried["identity"].get("material_grade")
+
+    def test_매달린_시험이_있으면_지우지_못한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**실측으로 걸렸다**(2026-08-27).
+
+        그 형식으로 읽은 시험이 하나 있는 채로 지우면 FK 가 막고, 그것이 그대로
+        500 이 됐다 — 사람은 "서버 오류가 발생했습니다" 만 보고 무엇이 걸렸는지
+        알 수 없다. 시험 종류 삭제는 이미 같은 것을 막고 있었다.
+        """
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": "to_delete",
+                "label": "지울 것",
+                "test_type_key": "dma_sweep",
+                "definition": DMA_PROFILE,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+        # 아무것도 안 매달렸으면 지워진다 — 막는 것이 목적이 아니다.
+        assert (
+            client.delete("/api/formats/to_delete", headers=admin_headers).status_code == 204
+        )
+
+        client.post(
+            "/api/formats",
+            json={
+                "key": "to_delete",
+                "label": "지울 것",
+                "test_type_key": "dma_sweep",
+                "definition": DMA_PROFILE,
+            },
+            headers=admin_headers,
+        )
+        # **참조를 직접 만든다.** `reparse` 는 큐에만 넣고 실제로 잇는 것은
+        # 워커인데, 시험에는 워커가 없다. 여기서 볼 것은 "참조가 있을 때 어떻게
+        # 되는가" 이므로 참조를 만드는 방법은 상관없다.
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        profile = db.scalar(select(FormatProfile).where(FormatProfile.key == "to_delete"))
+        assert profile is not None
+        stored = db.scalar(select(TestRun).where(TestRun.id == uuid.UUID(run["id"])))
+        assert stored is not None
+        stored.parse_profile_id = profile.id
+        db.commit()
+
+        response = client.delete("/api/formats/to_delete", headers=admin_headers)
+        assert response.status_code == 409, response.text
+        message = response.json()["error"]["message"]
+        # **무엇이 걸렸는지 말한다.** 개수만 주면 어디를 치울지 모른다.
+        assert "시험" in message or "test_runs" in message
+
+    def test_재료_시료도_없는_칸을_가리키면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """이관 경로만 읽는 자리지만 **저장할 때** 본다.
+
+        오타를 이관 당일에 알면, 그때는 파일 수백 개를 앞에 두고 있다.
+        """
+        for where, wrong in (("material", "grade"), ("sample", "lot_no")):
+            response = client.post(
+                "/api/formats",
+                json={
+                    "key": f"bad_{where}",
+                    "label": "없는 칸",
+                    "test_type_key": "dma_sweep",
+                    "definition": {**DMA_PROFILE, where: {"Operator": {"field": wrong}}},
+                },
+                headers=admin_headers,
+            )
+            assert response.status_code == 422, where
+            # **열쇠는 여기 없다.** grade·lot_no 는 「어느 재료인가」 를 정하는
+            # 것이라 `identity` 쪽이고, 여기에 두면 시험이 재료를 옮겨 버린다.
+            assert wrong in response.json()["error"]["message"]
+
+    def test_재료_시료의_모르는_단위를_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """JSON 에는 단위 줄이 없다. 프로파일이 적은 것이 유일한 근거다."""
+        response = client.post(
+            "/api/formats",
+            json={
+                "key": "bad_material_unit",
+                "label": "모르는 단위",
+                "test_type_key": "dma_sweep",
+                "definition": {
+                    **DMA_PROFILE,
+                    "material": {"T": {"field": "spec_thickness", "unit": "inch"}},
+                },
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert "inch" in response.json()["error"]["message"]
+
+    def test_시도가_재료_시료를_미리_보여_준다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """**업로드는 이 값을 안 쓴다.** 그래서 미리보기가 유일하게 보이는
+        자리다 — 여기서 안 보여 주면 이관을 돌리기 전까지 확인할 방법이 없다."""
+        rule = {
+            **DMA_PROFILE,
+            "material": {"Sample name": {"field": "details"}},
+            "sample": {"Operator": {"field": "manufacturer"}},
+        }
+        tried = client.post(
+            "/api/formats/try",
+            data={"definition": json.dumps(rule)},
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert tried["material"].get("details")
+        assert tried["sample"].get("manufacturer")
 
 
 class TestDetect:

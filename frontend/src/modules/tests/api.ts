@@ -82,6 +82,19 @@ export interface ProfileDefinition {
    *  없으면 정의의 SI 로 해석된다 — 정의가 `m/s` 인데 파일이 `mm/min` 이면
    *  6만 배 어긋나므로 적어 두는 편이 안전하다. */
   conditions?: Record<string, { field: string; unit?: string }>
+  /** 이 메타를 **이관이 재료를 만들 때** 적는다. 올릴 때는 안 쓴다.
+   *
+   *  올릴 때도 쓰면 재료 아래 시험 100건이 같은 칸을 저마다 한 번씩 덮어쓰고,
+   *  그중 하나만 옛 값이어도 카드와 덱이 조용히 바뀐다. 시편 치수는 시험 하나가
+   *  시편 하나를 보므로 「빈 칸만 채운다」 로 막을 수 있었지만 재료는 못 막는다.
+   *
+   *  `unit` 은 **두께·밀도에 반드시 적는다** — 안 적으면 이관이 mm · tonne/mm3
+   *  로 읽고, m 로 적어 온 파일에서 그것은 1000배다.
+   *  칸 이름의 정본은 서버의 `MATERIAL_FIELDS` 다. */
+  material?: Record<string, { field: string; unit?: string; format?: string }>
+  /** 이 메타를 **이관이 시료를 만들 때** 적는다. 쓰이는 자리는 재료와 같다.
+   *  칸 이름의 정본은 서버의 `SAMPLE_FIELDS` 다. */
+  sample?: Record<string, { field: string; unit?: string; format?: string }>
   metadata?: string[]
 }
 

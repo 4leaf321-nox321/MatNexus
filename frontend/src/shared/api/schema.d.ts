@@ -5296,6 +5296,20 @@ export interface components {
             identity: {
                 [key: string]: string;
             };
+            /**
+             * Material
+             * @default {}
+             */
+            material: {
+                [key: string]: string;
+            };
+            /**
+             * Material Units
+             * @default {}
+             */
+            material_units: {
+                [key: string]: string;
+            };
             /** Metadata */
             metadata: {
                 [key: string]: string;
@@ -5305,6 +5319,20 @@ export interface components {
              * @default {}
              */
             record: {
+                [key: string]: string;
+            };
+            /**
+             * Sample
+             * @default {}
+             */
+            sample: {
+                [key: string]: string;
+            };
+            /**
+             * Sample Units
+             * @default {}
+             */
+            sample_units: {
                 [key: string]: string;
             };
             /** Summary */

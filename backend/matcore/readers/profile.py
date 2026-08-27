@@ -163,7 +163,17 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
     summary, metadata = _build_meta(profile, structure, warnings)
     record = _build_labels(profile.get("record"), structure, warnings, dates=True)
     identity = _build_labels(profile.get("identity"), structure, warnings, dates=False)
-    values, given_units = _build_conditions(profile.get("conditions"), structure)
+    values, given_units = _build_fields(
+        profile.get("conditions"), structure, warnings, dates=False
+    )
+    # **재료·시료는 이관 경로만 쓴다.** 여기서는 읽어서 넘기기만 한다 — 시험
+    # 하나가 재료를 고치면, 그 아래 시험 100건이 저마다 한 번씩 덮어쓴다.
+    material, material_units = _build_fields(
+        profile.get("material"), structure, warnings, dates=True
+    )
+    sample, sample_units = _build_fields(
+        profile.get("sample"), structure, warnings, dates=True
+    )
     _keep_sources(profile, structure, metadata)
 
     return ParsedTest(
@@ -176,6 +186,10 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
         identity=identity,
         conditions=values,
         condition_units=given_units,
+        material=material,
+        material_units=material_units,
+        sample=sample,
+        sample_units=sample_units,
     )
 
 
@@ -397,10 +411,15 @@ def _free_key(taken: Mapping[str, str], want: str) -> str:
     return f"{want}_{len(taken)}"
 
 
-def _build_conditions(
-    rules: Any, structure: TabularFile
+def _build_fields(
+    rules: Any, structure: TabularFile, warnings: list[str], *, dates: bool
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """`conditions` — **시험 조건에 채울 값과 그 단위.**
+    """`conditions` · `material` · `sample` — **채울 값과 그 단위.**
+
+    셋이 같은 함수인 이유는 셋이 같은 문제를 갖기 때문이다 — 파일이 준 숫자를
+    어느 단위로 읽을지 이 층은 모른다. 시험 조건이 무엇인지는 시험 종류가 알고,
+    재료 두께가 어느 칸인지는 재료 모듈이 안다. 여기는 **원문과 단위를 짝지어
+    넘기기만** 한다.
 
     ## 왜 값과 단위를 함께 내나
 
@@ -439,6 +458,18 @@ def _build_conditions(
         if not raw or raw.lower() in UNKNOWN_TEXTS:
             continue
 
+        if dates and rule.get("format"):
+            # 날짜는 단위가 없다. 못 읽으면 **안 넣는다** — `_build_labels` 와 같다.
+            parsed = _as_iso(raw, str(rule["format"]))
+            if parsed is None:
+                warnings.append(
+                    f"'{label}' 의 {raw!r} 를 날짜 형식 {rule['format']!r} 로 못 읽어 "
+                    f"비워 둡니다."
+                )
+                continue
+            values[field_name] = parsed
+            continue
+
         told = str(rule.get("unit") or "").strip()
         text, inline = _split_value_unit(raw)
         if told:
@@ -457,7 +488,7 @@ def _build_conditions(
 def _keep_sources(
     profile: dict[str, Any], structure: TabularFile, metadata: dict[str, str]
 ) -> None:
-    """`record`·`identity` 가 읽은 라벨의 **원문을 남긴다.**
+    """`record`·`identity`·`material`·`sample` 이 읽은 라벨의 **원문을 남긴다.**
 
     ## 왜 따로 하나
 
@@ -480,7 +511,7 @@ def _keep_sources(
     역할은 「버림」이 아니라 「채움」이다 — 원문을 지우겠다고 말한 적이 없다.
     """
     labels: set[str] = set()
-    for where in ("record", "identity"):
+    for where in ("record", "identity", "material", "sample"):
         rules = profile.get(where)
         if isinstance(rules, dict):
             labels |= {str(label) for label in rules}
