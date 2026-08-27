@@ -294,9 +294,13 @@ describe('임시 저장', () => {
     )
     open()
 
-    expect(await screen.findByText(/만들다 만 것이 이 브라우저에 남아 있습니다/)).toBeInTheDocument()
-    // 아직 안 채웠다 — 사람이 누르기 전까지는 저장된 것이 보여야 한다.
-    expect(screen.getByDisplayValue('옛 앱 인장 결과')).toBeInTheDocument()
+    // **불러오기가 끝나기를 먼저 기다린다.** 배너는 localStorage 라 바로 뜨고
+    // 이름은 API 라 나중에 온다 — 배너를 기준으로 삼으면 느린 기계에서 폼이
+    // 아직 빈 채로 다음 줄을 읽는다. CI 에서 그렇게 걸렸다(v1.116.0). 목을
+    // 400ms 늦추면 이 자리에서 그대로 재현된다.
+    expect(await screen.findByDisplayValue('옛 앱 인장 결과')).toBeInTheDocument()
+    // 그러고도 배너는 떠 있고 **말없이 채우지는 않았다** — 이것이 요점이다.
+    expect(screen.getByText(/만들다 만 것이 이 브라우저에 남아 있습니다/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: '이어서 하기' }))
     expect(await screen.findByDisplayValue('되살린 이름')).toBeInTheDocument()
