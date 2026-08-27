@@ -16,6 +16,8 @@ export type MaterialDeleteResult = components['schemas']['MaterialDeleteOut']
  *  세면 사람이 본 숫자와 실제로 지워지는 것이 어긋난다. */
 export type DeletePlan = components['schemas']['DeletePlanOut']
 export type CascadeDeleteResult = components['schemas']['CascadeDeleteOut']
+/** 고른 것들을 합쳐 무엇이 사라지는가. **못 지우는 것은 낱개로** 온다. */
+export type BulkDeletePlan = components['schemas']['BulkDeletePlanOut']
 export type BulkRequest = components['schemas']['BulkRequest']
 /** 무엇이 만들어졌고 어느 줄이 막혔는가. */
 export type BulkResult = components['schemas']['BulkOut']
@@ -124,8 +126,19 @@ export const materialsApi = {
    * 고른 것을 한 번에 지운다. **하나가 막혀도 나머지는 지운다** — 막힌 것은
    * 이유와 함께 돌아온다(권한 · 시료가 남음).
    */
-  removeMany: (materialIds: string[]) =>
-    api.post<MaterialDeleteResult>('/materials/delete', { material_ids: materialIds }),
+  removeMany: (
+    materialIds: string[],
+    options: { cascade?: boolean; includeTestRuns?: boolean } = {}
+  ) =>
+    api.post<MaterialDeleteResult>('/materials/delete', {
+      material_ids: materialIds,
+      cascade: options.cascade ?? false,
+      include_test_runs: options.includeTestRuns ?? false,
+    }),
+
+  /** 고른 것들을 아래까지 지우면 **모두 합쳐** 무엇이 사라지는가. */
+  bulkDeletePlan: (materialIds: string[]) =>
+    api.post<BulkDeletePlan>('/materials/delete-plan', { material_ids: materialIds }),
 
   /** 지우기 전에 **무엇이 함께 사라지는지.** 세는 곳은 서버 하나다. */
   deletePlan: (materialId: string) =>

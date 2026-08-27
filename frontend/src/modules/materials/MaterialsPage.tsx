@@ -8,10 +8,21 @@
  */
 
 import { useState } from 'react'
-import { Boxes, ChevronLeft, ChevronRight, Globe2, Plus, Search, Trash2, X } from 'lucide-react'
+import {
+  Boxes,
+  ChevronLeft,
+  ChevronRight,
+  Globe2,
+  Plus,
+  Search,
+  Trash2,
+  TriangleAlert,
+  X,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
+import type { BulkDeletePlan } from '@/modules/materials/api'
 import { categoriesOf, familiesOf } from '@/modules/materials/classification'
 import { BulkMaterialDialog } from '@/modules/materials/BulkMaterialDialog'
 import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
@@ -53,6 +64,12 @@ export default function MaterialsPage() {
   const [category, setCategory] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [removing, setRemoving] = useState(false)
+  // 아래(시료·시편·시험)까지 함께 지울지. **기본은 안 지우는 쪽이다** — 고르고
+  // 지우기를 누르는 것이 갑자기 트리를 날리는 뜻이 되면 안 된다.
+  const [cascade, setCascade] = useState(false)
+  const [withRuns, setWithRuns] = useState(false)
+  const [plan, setPlan] = useState<BulkDeletePlan | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Error | null>(null)
   const all = size === 'all'
@@ -77,11 +94,15 @@ export default function MaterialsPage() {
   async function removePicked() {
     setBusy(true)
     setFailure(null)
+    setNotice(null)
     try {
-      const done = await materialsApi.removeMany([...picked])
+      const done = await materialsApi.removeMany([...picked], {
+        cascade,
+        includeTestRuns: withRuns,
+      })
       if (done.blocked.length > 0) {
-        // **조용히 세지 않는다.** 막히는 이유가 둘이라(권한 · 시료가 남음)
-        // 개수만 말하면 무엇을 해야 하는지 알 수 없다.
+        // **조용히 세지 않는다.** 막히는 이유가 셋이라(권한 · 시료가 남음 ·
+        // 시험이 매달림) 개수만 말하면 무엇을 해야 하는지 알 수 없다.
         setFailure(
           new Error(
             `${done.deleted}건을 지웠습니다. 남은 것: ` +
@@ -89,6 +110,15 @@ export default function MaterialsPage() {
                 .map((item) => `${item.name ?? item.id} (${item.reason})`)
                 .join(' · ')
           )
+        )
+      } else if (done.samples + done.specimens + done.test_runs > 0) {
+        // **딸려 간 것을 말한다.** "2건 지웠습니다" 만 뜨면 사람은 시편 여섯이
+        // 함께 사라진 것을 모른다.
+        setNotice(
+          `재료 ${done.deleted}건과 함께 시료 ${done.samples}건 · 시편 ` +
+            `${done.specimens}건` +
+            (done.test_runs > 0 ? ` · 시험 ${done.test_runs}건` : '') +
+            `을 지웠습니다.`
         )
       }
       setPicked(new Set())
@@ -199,13 +229,31 @@ export default function MaterialsPage() {
 
       <ErrorNotice error={materials.error} className="mb-4" />
       <ErrorNotice error={failure} className="mb-4" />
+      {notice && (
+        <p className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm">{notice}</p>
+      )}
 
       {picked.size > 0 && (
         <div className="bg-muted/40 mb-3 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2">
           <span className="text-sm">
             <b>{picked.size}건</b> 선택
           </span>
-          <Button size="sm" variant="destructive" onClick={() => setRemoving(true)}>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => {
+              // **열 때마다 다시 센다.** 숫자는 서버가 낸다 — 화면이 나름대로
+              // 세면 사람이 본 것과 실제로 지워지는 것이 어긋난다.
+              setRemoving(true)
+              setCascade(false)
+              setWithRuns(false)
+              setPlan(null)
+              void materialsApi
+                .bulkDeletePlan([...picked])
+                .then(setPlan)
+                .catch(() => setPlan(null))
+            }}
+          >
             <Trash2 className="size-3.5" />
             지우기
           </Button>
@@ -222,17 +270,73 @@ export default function MaterialsPage() {
         body={
           <>
             <p>
-              고른 <b>{picked.size}건</b>이 목록에서 사라집니다. <b>시료가 남아 있는 재료는
-              지워지지 않고</b> 이유와 함께 돌아옵니다 — 아래까지 통째로 지우려면 그
-              재료를 열어 <b>삭제</b>를 누르세요.
+              고른 <b>{picked.size}건</b>이 목록에서 사라집니다.
+              {!cascade && (
+                <>
+                  {' '}
+                  <b>시료가 남아 있는 재료는 지워지지 않고</b> 이유와 함께 돌아옵니다.
+                </>
+              )}
             </p>
-            <ul className="text-muted-foreground mt-2 max-h-32 space-y-0.5 overflow-y-auto font-mono text-xs">
+            <ul className="text-muted-foreground mt-2 max-h-24 space-y-0.5 overflow-y-auto font-mono text-xs">
               {rows
                 .filter((material) => picked.has(material.id))
                 .map((material) => (
                   <li key={material.id}>{material.record_name}</li>
                 ))}
             </ul>
+
+            {/* **아래까지 지우는 것은 켜야 한다.** 고르고 지우기를 누르는 것이
+                갑자기 트리를 날리는 뜻이 되면 안 된다. */}
+            <label className="mt-3 flex items-start gap-2 rounded-md border p-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={cascade}
+                onChange={(event) => {
+                  setCascade(event.target.checked)
+                  if (!event.target.checked) setWithRuns(false)
+                }}
+              />
+              <span>
+                <span className="font-medium">아래까지 함께 지웁니다</span>
+                <span className="text-muted-foreground mt-0.5 block text-xs">
+                  {plan === null
+                    ? '세는 중…'
+                    : `시료 ${plan.samples}건 · 시편 ${plan.specimens}건` +
+                      (plan.test_runs > 0 ? ` · 시험 ${plan.test_runs}건` : '')}
+                </span>
+              </span>
+            </label>
+
+            {/* 시료·시편은 이름표에 가깝지만 **시험은 잰 값이다.** 한 칸으로
+                묶으면 「시료 정리하려다 측정 데이터를 날렸다」 가 난다. */}
+            {cascade && plan !== null && plan.test_runs > 0 && (
+              <label className="mt-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={withRuns}
+                  onChange={(event) => setWithRuns(event.target.checked)}
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <TriangleAlert className="size-3.5" />
+                    시험 {plan.test_runs}건도 함께 지웁니다
+                  </span>
+                  <span className="text-muted-foreground mt-0.5 block text-xs">
+                    측정한 곡선과 처리 결과가 사라집니다. 안 켜면 시험을 문 재료만
+                    이유와 함께 돌아옵니다.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {plan !== null && plan.blocked.length > 0 && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+                {plan.blocked.length}건은 권한이 없어 지울 수 없습니다.
+              </p>
+            )}
           </>
         }
         confirmLabel="지우기"

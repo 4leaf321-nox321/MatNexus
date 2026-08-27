@@ -223,6 +223,14 @@ class MaterialUpdateRequest(BaseModel):
 
 class MaterialDeleteRequest(BaseModel):
     material_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_BULK)
+    #: 아래(시료·시편·시험)까지 함께 지운다. **끄면 전과 같다** — 시료가 남아
+    #: 있는 재료는 이유와 함께 돌아온다.
+    cascade: bool = False
+    #: 시험까지. `cascade` 없이 켜는 것은 뜻이 없다.
+    #:
+    #: **따로 받는 이유**: 시료·시편은 이름표에 가깝지만 시험은 잰 값이다 —
+    #: 곡선과 처리 결과가 거기 매달려 있다.
+    include_test_runs: bool = False
 
 
 class MaterialBlockedOut(BaseModel):
@@ -240,6 +248,25 @@ class MaterialBlockedOut(BaseModel):
 
 class MaterialDeleteOut(BaseModel):
     deleted: int
+    blocked: list[MaterialBlockedOut]
+    #: 아래까지 지웠으면 딸려 간 것들. `cascade` 가 아니면 전부 0이다.
+    samples: int = 0
+    specimens: int = 0
+    test_runs: int = 0
+
+
+class BulkDeletePlanOut(BaseModel):
+    """고른 것들을 지우면 **모두 합쳐** 무엇이 사라지는가.
+
+    하나씩 세어 보여 주지 않는 이유는, 200건을 고른 화면에서 200줄을 읽는 사람은
+    없기 때문이다. 대신 **못 지우는 것은 낱개로** 말한다 — 그건 사람이 손을 써야
+    하는 자리다.
+    """
+
+    materials: int
+    samples: int
+    specimens: int
+    test_runs: int
     blocked: list[MaterialBlockedOut]
 
 

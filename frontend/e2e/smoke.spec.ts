@@ -295,3 +295,62 @@ test('덱을 뽑는 길이 열려 있다', async ({ page }) => {
   ])
   expect(download.suggestedFilename()).toContain('mm_n_tonne')
 })
+
+test('긴 이름을 골라도 피커가 사이드바를 안 넘는다', async ({ page }) => {
+  /**
+   * **jsdom 이 원리상 못 보는 자리다.** 레이아웃 엔진이 없어서 폭도 좌표도 없다.
+   *
+   * 실사용에서 나왔다 — 재료 상세의 왼쪽 목록 패널(`w-64`)에서 Category 를 긴
+   * 이름으로 고르면 트리거가 패널 밖으로 밀려 나갔다. 원인은 `Button` 기본
+   * 클래스의 `shrink-0` 이라 `min-w-0` 만으로는 안 줄었다(실측: 256px 자리에
+   * 293px 버튼).
+   */
+  const LONG = `초장문분류${RUN_ID}세부구분아연도금합금화처리재`
+
+  await page.goto('/')
+  await page.getByLabel('아이디').fill(EMAIL)
+  await page.getByLabel('비밀번호').fill(PASSWORD)
+  await page.getByRole('button', { name: '로그인' }).click()
+  await expect(page.getByRole('banner')).toBeVisible()
+
+  // 재료는 API 로 만든다 — 여기서 볼 것은 등록 폼이 아니라 **폭**이다.
+  //
+  // **토큰을 따로 받는다.** 앱은 access 토큰을 메모리에만 두므로(XSS 방어,
+  // `shared/api/client.ts`) `page.request` 가 화면의 토큰을 물려받지 못한다.
+  const signed = await page.request.post('/api/auth/login', {
+    data: { email: EMAIL, password: PASSWORD },
+  })
+  expect(signed.ok()).toBe(true)
+  const token = (await signed.json()).access_token
+
+  const made = await page.request.post('/api/materials', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      family: 'Metal',
+      category: LONG,
+      grade: `LONG${RUN_ID}`,
+      details: '폭점검',
+      spec_thickness: 1.0,
+      spec_thickness_unit: 'mm',
+    },
+  })
+  expect(made.ok(), await made.text()).toBe(true)
+  const material = await made.json()
+
+  await page.goto(`/materials/${material.id}`)
+  // 이 피커를 품은 `aside` 가 재료 목록 패널이다(첫 `aside` 는 앱 내비게이션).
+  const panel = page.locator('aside').filter({ has: page.getByRole('button', { name: /^Category:/ }) })
+  await expect(panel).toBeVisible()
+
+  const trigger = page.getByRole('button', { name: /^Category:/ }).first()
+  await trigger.click()
+  await page.getByRole('button', { name: new RegExp(`^초장문분류${RUN_ID}`) }).first().click()
+  await expect(page.getByRole('button', { name: `Category: ${LONG}` })).toBeVisible()
+
+  const inside = await panel.boundingBox()
+  const box = await trigger.boundingBox()
+  expect(inside).not.toBeNull()
+  expect(box).not.toBeNull()
+  // **1px 은 봐 준다** — 테두리 반올림이다.
+  expect(box!.x + box!.width).toBeLessThanOrEqual(inside!.x + inside!.width + 1)
+})

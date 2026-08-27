@@ -968,6 +968,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/delete-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Delete Plan
+         * @description 고른 것들을 아래까지 지우면 **모두 합쳐** 무엇이 사라지는가.
+         *
+         *     낱개로 세어 보여 주지 않는다 — 200건을 고른 화면에서 200줄을 읽는 사람은
+         *     없다. 대신 **못 지우는 것(권한)은 낱개로** 말한다. 그건 사람이 손을 써야
+         *     하는 자리이고, 개수만 주면 무엇을 해야 할지 알 수 없다.
+         */
+        post: operations["bulk_delete_plan_api_materials_delete_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/preview-name": {
         parameters: {
             query?: never;
@@ -3360,6 +3384,26 @@ export interface components {
             /** Items */
             items: components["schemas"]["BulkDeleteItemOut"][];
         };
+        /**
+         * BulkDeletePlanOut
+         * @description 고른 것들을 지우면 **모두 합쳐** 무엇이 사라지는가.
+         *
+         *     하나씩 세어 보여 주지 않는 이유는, 200건을 고른 화면에서 200줄을 읽는 사람은
+         *     없기 때문이다. 대신 **못 지우는 것은 낱개로** 말한다 — 그건 사람이 손을 써야
+         *     하는 자리다.
+         */
+        BulkDeletePlanOut: {
+            /** Blocked */
+            blocked: components["schemas"]["MaterialBlockedOut"][];
+            /** Materials */
+            materials: number;
+            /** Samples */
+            samples: number;
+            /** Specimens */
+            specimens: number;
+            /** Test Runs */
+            test_runs: number;
+        };
         /** BulkDeleteRequest */
         BulkDeleteRequest: {
             /** Ids */
@@ -4723,9 +4767,34 @@ export interface components {
             blocked: components["schemas"]["MaterialBlockedOut"][];
             /** Deleted */
             deleted: number;
+            /**
+             * Samples
+             * @default 0
+             */
+            samples: number;
+            /**
+             * Specimens
+             * @default 0
+             */
+            specimens: number;
+            /**
+             * Test Runs
+             * @default 0
+             */
+            test_runs: number;
         };
         /** MaterialDeleteRequest */
         MaterialDeleteRequest: {
+            /**
+             * Cascade
+             * @default false
+             */
+            cascade: boolean;
+            /**
+             * Include Test Runs
+             * @default false
+             */
+            include_test_runs: boolean;
             /** Material Ids */
             material_ids: string[];
         };
@@ -9159,6 +9228,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaterialDeleteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_delete_plan_api_materials_delete_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkDeletePlanOut"];
                 };
             };
             /** @description Validation Error */

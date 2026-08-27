@@ -148,8 +148,11 @@ export function OptionPicker({
   }
 
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-muted-foreground text-xs">{label}</span>
+    // **`min-w-0` 이 있어야 좁은 데서 줄어든다.** flex·grid 칸의 기본
+    // `min-width` 는 `auto` 라, 안의 글자가 길면 칸이 트랙을 넘어 부모 밖으로
+    // 밀려 나간다 — 사이드바(`w-64`)에서 그렇게 걸렸다.
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="text-muted-foreground shrink-0 text-xs">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           {/* **이름에 어느 칸인지가 들어가야 한다.** 보이는 글자는 고른 값뿐이라,
@@ -159,16 +162,24 @@ export function OptionPicker({
           <Button
             size="sm"
             variant="outline"
-            className="h-7 gap-1 text-xs"
+            // **`shrink` 를 되돌려 준다.** `Button` 기본 클래스에 `shrink-0` 이
+            // 박혀 있어서, `min-w-0` 만으로는 안 줄어든다 — 실측으로 확인했다
+            // (사이드바 256px 안에서 버튼이 293px 였다).
+            className="h-7 min-w-0 shrink gap-1 text-xs"
             aria-label={`${label}: ${value || anyLabel}`}
           >
-            {/* **고른 값이 트리거에 보인다.** 열어 봐야 아는 필터는 필터가 아니다. */}
-            {value || anyLabel}
-            <ChevronsUpDown className="size-3 opacity-50" />
+            {/* **고른 값이 트리거에 보인다.** 열어 봐야 아는 필터는 필터가 아니다.
+                다만 **자른다** — 버튼은 `whitespace-nowrap` 이라 긴 값이 그대로
+                폭이 되고, 좁은 자리(사이드바 `w-64`)에서는 부모를 넘어간다.
+                실사용에서 나왔다. */}
+            <span className="truncate">{value || anyLabel}</span>
+            <ChevronsUpDown className="size-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent className="w-72 p-0" align="start">
+        {/* **트리거보다 넓어도 된다** — 포털로 떠서 위에 그려진다. 다만 좁은
+            화면에서 화면 밖으로 나가지는 않게 상한을 둔다. */}
+        <PopoverContent className="w-72 max-w-[calc(100vw-2rem)] p-0" align="start">
           <div className="relative border-b">
             <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
             <Input
@@ -260,7 +271,9 @@ function Row({
     >
       <Check className={`size-3.5 shrink-0 ${selected ? '' : 'invisible'}`} />
       <span className="flex-1 truncate">{label}</span>
-      {count != null && <span className="text-muted-foreground tabular-nums">{count}</span>}
+      {count != null && (
+        <span className="text-muted-foreground shrink-0 tabular-nums">{count}</span>
+      )}
     </button>
   )
 }

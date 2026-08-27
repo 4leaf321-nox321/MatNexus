@@ -12,6 +12,7 @@ import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -22,7 +23,7 @@ from app.modules.materials.models import USE_AXES, Material, MaterialUse, Sample
 from app.modules.tests.models import TestRun, TestType
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
-from app.shared import permissions, vocabulary_hooks
+from app.shared import audit, permissions, vocabulary_hooks
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from matcore import naming, units
 
@@ -490,6 +491,75 @@ def deletable_tree(
 def delete_plan(db: Session, material: Material) -> DeletePlan:
     """지우기 전에 보여 줄 숫자."""
     samples, specimens, runs = deletable_tree(db, material)
+    return DeletePlan(samples=len(samples), specimens=len(specimens), test_runs=len(runs))
+
+
+def delete_tree(db: Session, material: Material, *, actor: User, now: datetime) -> DeletePlan:
+    """재료를 **아래까지** 지운다 — 시험 → 시편 → 시료 → 재료 순서로.
+
+    **커밋은 부르는 쪽이 한다.** 여럿을 한 번에 지우는 길과 하나씩 지우는 길이
+    같은 코드를 지나야 하는데, 앞엣것은 다 지운 뒤 한 번만 커밋한다.
+
+    ## 왜 아래에서 위로 가나
+
+    위에서부터 지우면 중간에 실패했을 때 **부모는 사라지고 자식이 남는다** —
+    그 자식은 화면 어디에서도 닿을 수 없다.
+
+    ## 시험 허락은 여기서 안 본다
+
+    부르는 쪽이 본다. 이 함수는 "지운다" 는 결정이 이미 내려진 뒤에 불린다 —
+    허락을 여기서도 보면 두 군데가 되고, 그때 한쪽만 고쳐진다.
+    """
+    samples, specimens, runs = deletable_tree(db, material)
+
+    for run in runs:
+        run.deleted_at = now
+        vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
+        # **건마다 남긴다.** 되돌리려면 먼저 무엇이 지워졌는지 알아야 하고,
+        # 파일 정리 잡이 나중에 파일을 치우면 그때는 정말로 되돌릴 수 없다.
+        audit.record(
+            db,
+            action=audit.TEST_RUN_DELETED,
+            actor=actor,
+            target_table="test_runs",
+            target_id=run.id,
+            target_label=run.source_filename or str(run.id),
+            workspace_id=run.workspace_id,
+            changes={"deleted_at": {"after": now.isoformat()}},
+        )
+    for specimen in specimens:
+        specimen.deleted_at = now
+        vocabulary_services.release_bindings(
+            db, specimen, vocabulary_services.SPECIMEN_BINDINGS
+        )
+    for sample in samples:
+        sample.deleted_at = now
+        vocabulary_services.release_bindings(db, sample, vocabulary_services.SAMPLE_BINDINGS)
+
+    material.deleted_at = now
+    vocabulary_services.release_bindings(db, material, vocabulary_services.MATERIAL_BINDINGS)
+    release_uses(db, material)
+    audit.record(
+        db,
+        action=audit.MATERIAL_DELETED,
+        actor=actor,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        workspace_id=material.owner_workspace_id,
+        # **무엇이 딸려 갔는지 함께 남긴다.** 개수가 없으면 감사 기록만 보고는
+        # "재료 하나를 지웠다" 와 "트리를 통째로 지웠다" 를 구별할 수 없다.
+        changes={
+            "deleted_at": {"after": now.isoformat()},
+            "cascade": {
+                "after": {
+                    "samples": len(samples),
+                    "specimens": len(specimens),
+                    "test_runs": len(runs),
+                }
+            },
+        },
+    )
     return DeletePlan(samples=len(samples), specimens=len(specimens), test_runs=len(runs))
 
 

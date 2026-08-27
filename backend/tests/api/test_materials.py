@@ -636,6 +636,147 @@ class Test사슬_삭제:
         )
 
 
+class Test여럿을_한꺼번에_사슬로:
+    """목록 화면에서 고른 것들을 아래까지 통째로.
+
+    상세 화면만 고치면 **목록은 여전히 막다른 길**이다 — 이관을 다시 돌릴 때는
+    재료를 여러 개 지운다.
+    """
+
+    def tree(
+        self, client: TestClient, headers: dict[str, str], grade: str, specimens: int = 2
+    ) -> dict[str, Any]:
+        material = _create_material(client, headers, grade=grade)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        for _ in range(specimens):
+            client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD"},
+                headers=headers,
+            )
+        return material
+
+    def test_고른_것을_합쳐_센다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**낱개로 안 보여 준다.** 200건을 고른 화면에서 200줄을 읽는 사람은 없다."""
+        one = self.tree(client, admin_headers, "AAA", specimens=2)
+        two = self.tree(client, admin_headers, "BBB", specimens=3)
+        plan = client.post(
+            "/api/materials/delete-plan",
+            json={"material_ids": [one["id"], two["id"]]},
+            headers=admin_headers,
+        )
+        assert plan.status_code == 200, plan.text
+        body = plan.json()
+        assert (body["materials"], body["samples"], body["specimens"]) == (2, 2, 5)
+        assert body["blocked"] == []
+
+    def test_켜면_아래까지_지운다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        one = self.tree(client, admin_headers, "CCC", specimens=2)
+        two = self.tree(client, admin_headers, "DDD", specimens=1)
+        gone = client.post(
+            "/api/materials/delete",
+            json={
+                "material_ids": [one["id"], two["id"]],
+                "cascade": True,
+                "include_test_runs": False,
+            },
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        body = gone.json()
+        assert body["deleted"] == 2
+        assert body["blocked"] == []
+        # **딸려 간 것을 돌려준다.** 개수가 없으면 화면이 "2건 지웠습니다" 만
+        # 말하게 되고, 사람은 시편 셋이 함께 사라진 것을 모른다.
+        assert (body["samples"], body["specimens"]) == (2, 3)
+
+        db.expire_all()
+        for material in (one, two):
+            stored = db.get(Material, uuid.UUID(material["id"]))
+            assert stored is not None and stored.deleted_at is not None
+
+    def test_끄면_전과_같다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**기본은 안 지우는 쪽이다.** 목록에서 고르고 지우기를 누르는 것이
+        갑자기 트리를 날리는 뜻이 되면 안 된다."""
+        one = self.tree(client, admin_headers, "EEE", specimens=1)
+        gone = client.post(
+            "/api/materials/delete",
+            json={"material_ids": [one["id"]]},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        assert gone.json()["deleted"] == 0
+        assert "시료" in gone.json()["blocked"][0]["reason"]
+        assert gone.json()["samples"] == 0
+
+    def test_시험을_문_것만_막는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**하나 때문에 나머지를 못 지우게 하지 않는다.** 200건 중 하나가 시험을
+        물고 있다고 199건을 막으면, 사람은 어느 것이 문제인지 모른 채 다시 고른다."""
+        from app.modules.tests.definitions import ensure_builtin_test_types
+
+        ensure_builtin_test_types(db)
+        db.commit()
+
+        plain = self.tree(client, admin_headers, "FFF", specimens=1)
+        withrun = self.tree(client, admin_headers, "GGG", specimens=1)
+        sample = client.get(
+            f"/api/materials/{withrun['id']}/samples", headers=admin_headers
+        ).json()[0]
+        specimen = client.get(
+            f"/api/samples/{sample['id']}/specimens", headers=admin_headers
+        ).json()[0]
+        tra = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+        client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "tensile",
+                "conditions": "{}",
+            },
+            files={"file": ("Example.tra", tra.read_bytes())},
+            headers=admin_headers,
+        )
+
+        gone = client.post(
+            "/api/materials/delete",
+            json={
+                "material_ids": [plain["id"], withrun["id"]],
+                "cascade": True,
+                "include_test_runs": False,
+            },
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        body = gone.json()
+        assert body["deleted"] == 1
+        assert len(body["blocked"]) == 1
+        assert body["blocked"][0]["name"] == withrun["record_name"]
+        assert "시험" in body["blocked"][0]["reason"]
+
+        # 켜면 그것도 지워진다.
+        again = client.post(
+            "/api/materials/delete",
+            json={
+                "material_ids": [withrun["id"]],
+                "cascade": True,
+                "include_test_runs": True,
+            },
+            headers=admin_headers,
+        )
+        assert again.json()["deleted"] == 1
+        assert again.json()["test_runs"] == 1
+
+
 class TestListing:
     def test_상한을_서버가_강제한다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -1744,7 +1885,10 @@ class Test여러_개_한꺼번에_지우기:
             headers=admin_headers,
         )
         assert done.status_code == 200, done.text
-        assert done.json() == {"deleted": 2, "blocked": []}
+        # **통째로 비교하지 않는다.** 응답에 칸이 늘 때마다 이 시험이 깨지는데,
+        # 여기서 보는 것은 「둘을 지웠고 막힌 것이 없다」 이다.
+        assert done.json()["deleted"] == 2
+        assert done.json()["blocked"] == []
         assert client.get("/api/materials", headers=admin_headers).json()["total"] == 0
 
     def test_시료가_남은_것은_이유와_함께_돌려준다(

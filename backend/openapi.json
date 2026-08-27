@@ -694,6 +694,43 @@
         "title": "BulkDeleteOut",
         "type": "object"
       },
+      "BulkDeletePlanOut": {
+        "description": "고른 것들을 지우면 **모두 합쳐** 무엇이 사라지는가.\n\n하나씩 세어 보여 주지 않는 이유는, 200건을 고른 화면에서 200줄을 읽는 사람은\n없기 때문이다. 대신 **못 지우는 것은 낱개로** 말한다 — 그건 사람이 손을 써야\n하는 자리다.",
+        "properties": {
+          "blocked": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialBlockedOut"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "materials": {
+            "title": "Materials",
+            "type": "integer"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "materials",
+          "samples",
+          "specimens",
+          "test_runs",
+          "blocked"
+        ],
+        "title": "BulkDeletePlanOut",
+        "type": "object"
+      },
       "BulkDeleteRequest": {
         "properties": {
           "ids": {
@@ -4135,6 +4172,21 @@
           "deleted": {
             "title": "Deleted",
             "type": "integer"
+          },
+          "samples": {
+            "default": 0,
+            "title": "Samples",
+            "type": "integer"
+          },
+          "specimens": {
+            "default": 0,
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "test_runs": {
+            "default": 0,
+            "title": "Test Runs",
+            "type": "integer"
           }
         },
         "required": [
@@ -4146,6 +4198,16 @@
       },
       "MaterialDeleteRequest": {
         "properties": {
+          "cascade": {
+            "default": false,
+            "title": "Cascade",
+            "type": "boolean"
+          },
+          "include_test_runs": {
+            "default": false,
+            "title": "Include Test Runs",
+            "type": "boolean"
+          },
           "material_ids": {
             "items": {
               "format": "uuid",
@@ -14273,6 +14335,48 @@
           }
         },
         "summary": "Delete Materials",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/delete-plan": {
+      "post": {
+        "description": "고른 것들을 아래까지 지우면 **모두 합쳐** 무엇이 사라지는가.\n\n낱개로 세어 보여 주지 않는다 — 200건을 고른 화면에서 200줄을 읽는 사람은\n없다. 대신 **못 지우는 것(권한)은 낱개로** 말한다. 그건 사람이 손을 써야\n하는 자리이고, 개수만 주면 무엇을 해야 할지 알 수 없다.",
+        "operationId": "bulk_delete_plan_api_materials_delete_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkDeletePlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Delete Plan",
         "tags": [
           "materials"
         ]

@@ -25,6 +25,7 @@ from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
     BulkBlockedOut,
+    BulkDeletePlanOut,
     BulkMadeOut,
     BulkMaterialRequest,
     BulkOut,
@@ -589,6 +590,38 @@ def create_material(
     )
 
 
+@router.post("/delete-plan", response_model=BulkDeletePlanOut)
+def bulk_delete_plan(
+    payload: MaterialDeleteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BulkDeletePlanOut:
+    """고른 것들을 아래까지 지우면 **모두 합쳐** 무엇이 사라지는가.
+
+    낱개로 세어 보여 주지 않는다 — 200건을 고른 화면에서 200줄을 읽는 사람은
+    없다. 대신 **못 지우는 것(권한)은 낱개로** 말한다. 그건 사람이 손을 써야
+    하는 자리이고, 개수만 주면 무엇을 해야 할지 알 수 없다.
+    """
+    totals = {"samples": 0, "specimens": 0, "test_runs": 0}
+    blocked: list[MaterialBlockedOut] = []
+    counted = 0
+
+    for material_id in payload.material_ids:
+        try:
+            material = services.get_material(db, user, material_id)
+            services.require_writable(db, user, material)
+        except AppError as exc:
+            blocked.append(MaterialBlockedOut(id=material_id, name=None, reason=exc.message))
+            continue
+        plan = services.delete_plan(db, material)
+        totals["samples"] += plan.samples
+        totals["specimens"] += plan.specimens
+        totals["test_runs"] += plan.test_runs
+        counted += 1
+
+    return BulkDeletePlanOut(materials=counted, blocked=blocked, **totals)
+
+
 @router.post("/delete", response_model=MaterialDeleteOut)
 def delete_materials(
     payload: MaterialDeleteRequest,
@@ -607,6 +640,8 @@ def delete_materials(
     counts = services.sample_counts(db, payload.material_ids)
     deleted = 0
     blocked: list[MaterialBlockedOut] = []
+    tally = {"samples": 0, "specimens": 0, "test_runs": 0}
+    now = _now()
 
     for material_id in payload.material_ids:
         try:
@@ -617,36 +652,56 @@ def delete_materials(
             blocked.append(MaterialBlockedOut(id=material_id, name=None, reason=exc.message))
             continue
 
-        remaining = counts.get(material.id, 0)
-        if remaining:
-            blocked.append(
-                MaterialBlockedOut(
-                    id=material.id,
-                    name=material.record_name,
-                    reason=f"시료 {remaining}건이 남아 있습니다",
+        if not payload.cascade:
+            remaining = counts.get(material.id, 0)
+            if remaining:
+                blocked.append(
+                    MaterialBlockedOut(
+                        id=material.id,
+                        name=material.record_name,
+                        reason=f"시료 {remaining}건이 남아 있습니다",
+                    )
                 )
-            )
-            continue
+                continue
+        elif not payload.include_test_runs:
+            # **시험은 따로 허락을 받는다.** 하나라도 시험을 물고 있으면 그 하나만
+            # 막는다 — 200건 중 하나 때문에 199건을 못 지우게 하지 않는다.
+            waiting = services.delete_plan(db, material)
+            if waiting.test_runs:
+                blocked.append(
+                    MaterialBlockedOut(
+                        id=material.id,
+                        name=material.record_name,
+                        reason=f"시험 {waiting.test_runs}건이 매달려 있습니다",
+                    )
+                )
+                continue
 
-        material.deleted_at = _now()
-        vocabulary_services.release_bindings(
-            db, material, vocabulary_services.MATERIAL_BINDINGS
-        )
-        services.release_uses(db, material)
-        audit.record(
-            db,
-            action=audit.MATERIAL_DELETED,
-            actor=user,
-            target_table="materials",
-            target_id=material.id,
-            target_label=material.record_name,
-            workspace_id=material.owner_workspace_id,
-            changes={"deleted_at": {"after": material.deleted_at.isoformat()}},
-        )
+        if payload.cascade:
+            done = services.delete_tree(db, material, actor=user, now=now)
+            tally["samples"] += done.samples
+            tally["specimens"] += done.specimens
+            tally["test_runs"] += done.test_runs
+        else:
+            material.deleted_at = now
+            vocabulary_services.release_bindings(
+                db, material, vocabulary_services.MATERIAL_BINDINGS
+            )
+            services.release_uses(db, material)
+            audit.record(
+                db,
+                action=audit.MATERIAL_DELETED,
+                actor=user,
+                target_table="materials",
+                target_id=material.id,
+                target_label=material.record_name,
+                workspace_id=material.owner_workspace_id,
+                changes={"deleted_at": {"after": now.isoformat()}},
+            )
         deleted += 1
 
     db.commit()
-    return MaterialDeleteOut(deleted=deleted, blocked=blocked)
+    return MaterialDeleteOut(deleted=deleted, blocked=blocked, **tally)
 
 
 def _skipped(material: BulkMaterialRequest, why: str) -> list[BulkBlockedOut]:
@@ -1122,71 +1177,22 @@ def delete_material_cascade(
     material = services.get_material(db, user, material_id)
     services.require_writable(db, user, material)
 
-    samples, specimens, runs = services.deletable_tree(db, material)
-    if runs and not payload.include_test_runs:
+    # **허락을 먼저 본다.** 지우기 시작한 뒤에 막으면 절반만 지워진 트리가 남는다.
+    waiting = services.delete_plan(db, material)
+    if waiting.test_runs and not payload.include_test_runs:
         raise Conflict(
             "MNX-MATERIALS-0029",
-            f"시험 {len(runs)}건이 함께 지워집니다 — 곡선과 처리 결과가 거기 "
+            f"시험 {waiting.test_runs}건이 함께 지워집니다 — 곡선과 처리 결과가 거기 "
             f"매달려 있습니다. 그래도 지우려면 시험까지 지우기를 함께 켜세요.",
         )
 
-    now = _now()
-    # ── 시험 ──────────────────────────────────────────────────────────
-    for run in runs:
-        run.deleted_at = now
-        vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
-        # **건마다 남긴다.** 되돌리려면 먼저 무엇이 지워졌는지 알아야 하고,
-        # 파일 정리 잡이 나중에 파일을 치우면 그때는 정말로 되돌릴 수 없다.
-        audit.record(
-            db,
-            action=audit.TEST_RUN_DELETED,
-            actor=user,
-            target_table="test_runs",
-            target_id=run.id,
-            target_label=run.source_filename or str(run.id),
-            workspace_id=run.workspace_id,
-            changes={"deleted_at": {"after": now.isoformat()}},
-        )
-    # ── 시편 · 시료 ───────────────────────────────────────────────────
-    for specimen in specimens:
-        specimen.deleted_at = now
-        vocabulary_services.release_bindings(
-            db, specimen, vocabulary_services.SPECIMEN_BINDINGS
-        )
-    for sample in samples:
-        sample.deleted_at = now
-        vocabulary_services.release_bindings(db, sample, vocabulary_services.SAMPLE_BINDINGS)
-    # ── 재료 ──────────────────────────────────────────────────────────
-    material.deleted_at = now
-    vocabulary_services.release_bindings(db, material, vocabulary_services.MATERIAL_BINDINGS)
-    services.release_uses(db, material)
-    audit.record(
-        db,
-        action=audit.MATERIAL_DELETED,
-        actor=user,
-        target_table="materials",
-        target_id=material.id,
-        target_label=material.record_name,
-        workspace_id=material.owner_workspace_id,
-        # **무엇이 딸려 갔는지 함께 남긴다.** 개수가 없으면 감사 기록만 보고는
-        # "재료 하나를 지웠다" 와 "트리를 통째로 지웠다" 를 구별할 수 없다.
-        changes={
-            "deleted_at": {"after": now.isoformat()},
-            "cascade": {
-                "after": {
-                    "samples": len(samples),
-                    "specimens": len(specimens),
-                    "test_runs": len(runs),
-                }
-            },
-        },
-    )
+    done = services.delete_tree(db, material, actor=user, now=_now())
     db.commit()
     return CascadeDeleteOut(
         material_name=material.record_name,
-        samples=len(samples),
-        specimens=len(specimens),
-        test_runs=len(runs),
+        samples=done.samples,
+        specimens=done.specimens,
+        test_runs=done.test_runs,
     )
 
 
