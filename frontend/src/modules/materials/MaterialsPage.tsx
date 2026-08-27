@@ -17,7 +17,6 @@ import {
   Search,
   Trash2,
   TriangleAlert,
-  X,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -29,7 +28,7 @@ import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { OptionPicker } from '@/shared/components/OptionPicker'
+import { ColumnFilter } from '@/shared/components/ColumnFilter'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -62,6 +61,10 @@ export default function MaterialsPage() {
   const [offset, setOffset] = useState(0)
   const [family, setFamily] = useState('')
   const [category, setCategory] = useState('')
+  // 열 머리에서 거르는 것들. `q` 와 달리 **그 열만** 본다.
+  const [name, setName] = useState('')
+  const [alias, setAlias] = useState('')
+  const [scope, setScope] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [removing, setRemoving] = useState(false)
   // 아래(시료·시편·시험)까지 함께 지울지. **기본은 안 지우는 쪽이다** — 고르고
@@ -81,14 +84,23 @@ export default function MaterialsPage() {
   const families = familiesOf(rowsOf)
   const categories = categoriesOf(rowsOf, family)
 
+  const filters = {
+    q: applied,
+    name,
+    alias,
+    family,
+    category,
+    scope: (scope || undefined) as 'mine' | 'global' | undefined,
+  }
+
   const materials = useResource(
     () =>
       all
         ? fetchAll((limit, from) =>
-            materialsApi.list({ q: applied, family, category, limit, offset: from })
+            materialsApi.list({ ...filters, limit, offset: from })
           )
-        : materialsApi.list({ q: applied, family, category, limit: size, offset }),
-    [applied, family, category, size, offset, all]
+        : materialsApi.list({ ...filters, limit: size, offset }),
+    [applied, name, alias, family, category, scope, size, offset, all]
   )
 
   async function removePicked() {
@@ -182,50 +194,12 @@ export default function MaterialsPage() {
         </Button>
       </form>
 
-      {/* **분류는 눌러서 거른다.** 검색어에 'Metal' 을 치면 Grade·Details 에
-          그 글자가 든 재료까지 걸린다 — 부분 일치라서 그렇다. 분류는 정확히
-          일치로 좁혀야 "Metal 인 것만" 이 성립한다. */}
-      {families.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <OptionPicker
-            label="Family"
-            value={family}
-            options={families}
-            onChange={(next) => {
-              setFamily(next)
-              // Family 를 바꾸면 이전 Category 가 그 안에 없을 수 있다. 남겨 두면
-              // 조용히 0건이 되고, 사람은 재료가 없는 줄 안다.
-              setCategory('')
-              setOffset(0)
-              setPicked(new Set())
-            }}
-          />
-          <OptionPicker
-            label="Category"
-            value={category}
-            options={categories}
-            onChange={(next) => {
-              setCategory(next)
-              setOffset(0)
-            }}
-          />
-          {(family || category) && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => {
-                setFamily('')
-                setCategory('')
-                setOffset(0)
-              }}
-            >
-              <X className="size-3.5" />
-              필터 해제
-            </Button>
-          )}
-        </div>
-      )}
+      {/* **분류 피커를 표 위에서 걷어냈다**(v1.128.0). 어느 상자가 어느 열을
+          거르는지 글자로 적어 둬야 알 수 있었고(`Family`·`Category`), 열이 늘 때마다
+          그 줄이 길어졌다. 열 머리에 붙으면 그 설명이 필요 없다 — 칸이 곧 그 열이다.
+
+          위의 찾기 상자는 남긴다. 그건 **여러 열을 한꺼번에** 뒤지는 자리라
+          열 하나에 매달 수 없다. */}
 
       <ErrorNotice error={materials.error} className="mb-4" />
       <ErrorNotice error={failure} className="mb-4" />
@@ -376,12 +350,74 @@ export default function MaterialsPage() {
                     }
                   />
                 </TableHead>
-                <TableHead>이름</TableHead>
-                <TableHead>별칭</TableHead>
-                <TableHead>분류</TableHead>
-                <TableHead className="text-right">두께</TableHead>
-                <TableHead className="text-right">시료</TableHead>
-                <TableHead>소속</TableHead>
+                {/* **열마다 그 열을 거른다.** 서버가 거르므로 다음 쪽까지
+                    걸러진다 — 화면에서 거르면 이 쪽에 실린 것만 걸러지고,
+                    사람은 그것을 「없다」 로 읽는다. */}
+                <TableHead className="min-w-[11rem]">
+                  <ColumnFilter
+                    label="이름"
+                    value={name}
+                    onChange={(next) => {
+                      setName(next)
+                      setOffset(0)
+                    }}
+                    placeholder="SECC"
+                  />
+                </TableHead>
+                <TableHead className="min-w-[9rem]">
+                  <ColumnFilter
+                    label="별칭"
+                    value={alias}
+                    onChange={(next) => {
+                      setAlias(next)
+                      setOffset(0)
+                    }}
+                  />
+                </TableHead>
+                {/* **분류를 두 열로 나눴다.** 한 칸에 `Metal / Steel` 로 붙어
+                    있으면 거르는 칸도 하나여야 하는데, 둘은 따로 고르는 축이다
+                    (Family 를 바꾸면 Category 후보가 달라진다). */}
+                <TableHead className="w-32">
+                  <ColumnFilter
+                    label="Family"
+                    value={family}
+                    options={families}
+                    onChange={(next) => {
+                      setFamily(next)
+                      // Family 를 바꾸면 이전 Category 가 그 안에 없을 수 있다.
+                      // 남겨 두면 조용히 0건이 되고, 사람은 재료가 없는 줄 안다.
+                      setCategory('')
+                      setOffset(0)
+                      setPicked(new Set())
+                    }}
+                  />
+                </TableHead>
+                <TableHead className="w-32">
+                  <ColumnFilter
+                    label="Category"
+                    value={category}
+                    options={categories}
+                    onChange={(next) => {
+                      setCategory(next)
+                      setOffset(0)
+                    }}
+                  />
+                </TableHead>
+                {/* 두께·시료 수는 **서버가 거르는 축이 아니다.** 거르는 칸을
+                    두면 이 쪽에 실린 것만 걸러 거짓말을 한다. */}
+                <TableHead className="text-right text-xs font-medium">두께</TableHead>
+                <TableHead className="text-right text-xs font-medium">시료</TableHead>
+                <TableHead className="w-28">
+                  <ColumnFilter
+                    label="소속"
+                    value={scope}
+                    options={['global', 'mine']}
+                    onChange={(next) => {
+                      setScope(next)
+                      setOffset(0)
+                    }}
+                  />
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -414,7 +450,10 @@ export default function MaterialsPage() {
                     {material.alias ?? '—'}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {material.family} / {material.category}
+                    {material.family}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {material.category}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {material.spec_thickness == null

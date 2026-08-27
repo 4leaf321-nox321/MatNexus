@@ -94,6 +94,10 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '카탈로그',
     items: [
       { label: '재료', icon: Boxes, to: '/materials' },
+      // **규격으로 찾는 자리다.** 규격·방향·치수는 시편에 붙는데(ADR 0010)
+      // 시편은 재료를 거쳐야만 닿을 수 있었다 — 그래서 규격으로는 아무것도
+      // 못 찾았다. 카드가 `/cards` 를 얻은 것과 같은 이유다.
+      { label: '시편', icon: ListTree, to: '/specimens' },
       // **재료를 거치지 않고 카드를 찾는다.** 재료 상세의 'CAE 카드' 탭은 그
       // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
       { label: '물성 카드', icon: FileDown, to: '/cards' },

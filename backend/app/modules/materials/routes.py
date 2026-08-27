@@ -54,6 +54,7 @@ from app.modules.materials.schemas import (
     SpecimenBriefSizeOut,
     SpecimenCreateRequest,
     SpecimenOut,
+    SpecimenRowOut,
     SpecimenSizeOut,
     SpecimenSizesOut,
     SpecimenSizesRequest,
@@ -454,6 +455,8 @@ def list_materials(
         default=None,
         description="이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
     ),
+    name: str | None = Query(default=None, description="이름만 부분 일치"),
+    alias: str | None = Query(default=None, description="별칭만 부분 일치"),
     family: str | None = None,
     category: str | None = None,
     scope: str = Query(default="all", pattern="^(all|mine|global)$"),
@@ -465,6 +468,13 @@ def list_materials(
     query = services.visible_materials(db, user)
     for condition in _search_terms(db, q):
         query = query.where(condition)
+    # **열 머리의 거르기.** `q` 는 여러 칸을 한꺼번에 뒤지는데(이름·별칭·분류),
+    # 열 머리에서 거를 때는 **그 열만** 봐야 한다 — 「이름」 칸에 친 글자가 별칭에
+    # 걸려 나오면 그 칸이 무엇을 거르는지 알 수 없게 된다.
+    if name:
+        query = query.where(Material.record_name.ilike(f"%{name}%"))
+    if alias:
+        query = query.where(Material.alias.ilike(f"%{alias}%"))
     # **없는 값으로 거르면 0건이어야 한다.** `== None` 으로 두면 그 축이 비어 있는
     # 재료가 전부 걸린다 — 조용히 틀리는 쪽이다.
     for value, slug, column in (
@@ -1592,6 +1602,117 @@ def _get_specimen(db: Session, user: User, specimen_id: uuid.UUID) -> Specimen:
         raise NotFound("MNX-MATERIALS-0003", "시편을 찾을 수 없습니다.")
     _get_sample(db, user, specimen.sample_id)  # 가시 범위 확인
     return specimen
+
+
+# --- 시편 평면 목록 ------------------------------------------------------------
+#
+# **재료를 거치지 않고 시편을 찾는다.** 지금까지 시편은 중첩 경로로만 닿았다
+# (`/materials/{id}/samples` → `/samples/{id}/specimens`) — 재료를 먼저 골라야
+# 시편이 보였다. 그래서 「ASTM E8/E8M 박판형 시편 전부」 처럼 **시편을 가로지르는**
+# 물음에 답할 자리가 없었다. 규격은 시편에 붙는데(ADR 0010) 시편을 가로질러 보는
+# 화면이 없으면 규격으로는 아무것도 못 찾는다.
+#
+# 물성 카드가 같은 이유로 `/cards` 를 얻었다 — "그 카드가 어느 재료였더라" 에
+# 답할 데가 없었다.
+#
+# **고정 경로는 `/{specimen_id}` 보다 위에 둔다.** 아래 두면 FastAPI 가 빈 경로를
+# 시편 id 로 읽는다.
+
+
+#: 시편에서 글자로 뒤지는 칸. 재료의 `_SEARCH_TEXT` 와 같은 자리다.
+_SPECIMEN_TEXT = (Specimen.record_name, Specimen.standard)
+
+
+@specimens_router.get("", response_model=Page[SpecimenRowOut])
+def list_all_specimens(
+    q: str | None = Query(default=None, description="시편 이름·규격 부분 일치"),
+    material: str | None = Query(default=None, description="재료 이름 부분 일치"),
+    lot: str | None = Query(default=None, description="로트 부분 일치"),
+    orientation: str | None = Query(default=None, description="방향. 정확히 맞아야 한다"),
+    standard: str | None = Query(default=None, description="시편 규격 부분 일치"),
+    limit: int | None = Query(default=None, le=1000),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Page[SpecimenRowOut]:
+    """시편을 **재료를 거치지 않고** 찾는다.
+
+    ## 걸러지는 범위는 재료와 같다
+
+    시편은 재료를 따라간다 — 전역 재료 밑에는 여러 부서의 시료가 매달리므로,
+    시편만 따로 부서로 가두면 재료 화면에서는 보이는 것이 여기서는 안 보인다.
+    그래서 `visible_materials` 를 그대로 타고 내려온다.
+
+    ## 방향만 정확히 맞춘다
+
+    나머지는 부분 일치인데 방향은 아니다. `MD`·`TD`·`DD`·`NA` 넷뿐이라 부분
+    일치로 두면 `D` 가 셋을 함께 물어 거른 뜻이 사라진다.
+    """
+    # **명시적 join 이다.** 시편마다 시료·재료를 물으면 N+1 이고, 그건 이 화면이
+    # 느려지는 첫 번째 이유가 된다.
+    query = (
+        select(Specimen, Sample, Material)
+        .join(Sample, Specimen.sample_id == Sample.id)
+        .join(Material, Sample.material_id == Material.id)
+        .where(
+            Specimen.deleted_at.is_(None),
+            Sample.deleted_at.is_(None),
+            Material.id.in_(select(services.visible_materials(db, user).subquery().c.id)),
+        )
+    )
+
+    for word in (q or "").split():
+        query = query.where(or_(*[column.ilike(f"%{word}%") for column in _SPECIMEN_TEXT]))
+    if material:
+        query = query.where(Material.record_name.ilike(f"%{material}%"))
+    if lot:
+        query = query.where(Sample.lot_no.ilike(f"%{lot}%"))
+    if standard:
+        query = query.where(Specimen.standard.ilike(f"%{standard}%"))
+    if orientation:
+        query = query.where(Specimen.orientation == orientation)
+
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    size = clamp_limit(limit)
+    rows = list(
+        db.execute(
+            query.order_by(Material.record_name, Sample.seq_no, Specimen.record_name)
+            .limit(size)
+            .offset(offset)
+        )
+    )
+
+    specimens = [row[0] for row in rows]
+    # 치수는 **규격별로 한 번에** 읽는다(`sizes_for`). 시편마다 읽으면 N+1 이다.
+    sizes = specimen_size.sizes_for(db, specimens)
+    tallies = _run_tallies(
+        db,
+        group_by=TestRun.specimen_id,
+        ids=[one.id for one in specimens],
+        join_specimen=False,
+    )
+    people = services.registrant_names(specimens, db)
+
+    return Page(
+        items=[
+            SpecimenRowOut(
+                **_specimen_out(
+                    specimen,
+                    runs=tallies.get(specimen.id, (0, 0, 0)),
+                    sizes=sizes.get(specimen.id),
+                    registered_by=people.get(specimen.registered_by_id),
+                ).model_dump(),
+                material_id=material_row.id,
+                material_name=material_row.record_name,
+                lot_no=sample_row.lot_no,
+                sample_name=sample_row.record_name,
+            )
+            for specimen, sample_row, material_row in rows
+        ],
+        total=int(total),
+        limit=size,
+        offset=offset,
+    )
 
 
 @specimens_router.get("/{specimen_id}", response_model=SpecimenOut)

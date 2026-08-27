@@ -480,6 +480,23 @@ class SpecimenOut(BaseModel):
     한 번에 세어 넣는다 — 시편마다 물으면 N+1 이다."""
 
 
+class SpecimenRowOut(SpecimenOut):
+    """평면 목록의 한 줄 — **시편에 재료·시료를 얹은 것.**
+
+    시편만으로는 표가 안 읽힌다. `SECC__01_MD_01` 이 어느 재료의 것인지 이름에
+    묻혀 있어서, 사람은 그 규칙을 외우고 있어야 한다.
+
+    **상속으로 얹는다.** 시편이 가진 것(규격·치수·시험 수)을 다시 적으면 두 벌이
+    되고, 시편에 칸이 하나 늘 때 한쪽만 고쳐진다.
+    """
+
+    material_id: uuid.UUID
+    material_name: str
+    lot_no: str | None
+    """시료의 로트. **번호가 아니라 로트다** — 사람이 기억하는 것은 이쪽이다."""
+    sample_name: str
+
+
 class SpecimenSizeOut(BaseModel):
     """시편 치수 칸 하나 — **잰 값과 규격값을 나란히 낸다.**
 

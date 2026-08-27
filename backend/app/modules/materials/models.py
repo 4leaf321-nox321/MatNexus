@@ -305,6 +305,22 @@ class Sample(Base):
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
         ),
+        # **부분 일치 검색용 trigram.** `ILIKE '%낱말%'` 은 B-tree 를 못 탄다 —
+        # 앞의 와일드카드 때문에 어느 접두사부터 볼지 정할 수가 없다. 재료가 이미
+        # 같은 이유로 넷을 갖고 있고, 시편 표에 열별 거르기가 생기면서 여기도
+        # 같은 자리가 됐다(v1.128.0).
+        Index(
+            "ix_samples_record_name_trgm",
+            "record_name",
+            postgresql_using="gin",
+            postgresql_ops={"record_name": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_samples_lot_no_trgm",
+            "lot_no",
+            postgresql_using="gin",
+            postgresql_ops={"lot_no": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -422,6 +438,24 @@ class Specimen(Base):
             "seq_no",
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
+        ),
+        # **부분 일치 검색용 trigram.** `ILIKE '%낱말%'` 은 B-tree 를 못 탄다 —
+        # 앞의 와일드카드 때문에 어느 접두사부터 볼지 정할 수가 없다. 재료가 이미
+        # 같은 이유로 넷을 갖고 있고, 시편 표에 열별 거르기가 생기면서 여기도
+        # 같은 자리가 됐다(v1.128.0).
+        Index(
+            "ix_specimens_record_name_trgm",
+            "record_name",
+            postgresql_using="gin",
+            postgresql_ops={"record_name": "gin_trgm_ops"},
+        ),
+        # 규격이 특히 이 표의 열쇠다 — 「E8 박판형 시편 전부」 가 이 화면을 만든
+        # 물음이었다.
+        Index(
+            "ix_specimens_standard_trgm",
+            "standard",
+            postgresql_using="gin",
+            postgresql_ops={"standard": "gin_trgm_ops"},
         ),
     )
 

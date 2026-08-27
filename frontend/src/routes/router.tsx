@@ -15,6 +15,7 @@ import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
 import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
+import SpecimensPage from '@/modules/materials/SpecimensPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
 import TestRunsPage from '@/modules/tests/TestRunsPage'
@@ -96,6 +97,8 @@ export const router = createBrowserRouter([
 
           // 카탈로그 (전사)
           { path: 'materials', element: <MaterialsPage /> },
+          // **재료를 거치지 않고 시편을 찾는다.** `/cards` 가 있는 이유와 같다.
+          { path: 'specimens', element: <SpecimensPage /> },
           // **재료를 거치지 않고 카드를 찾는 자리.** 재료 상세의 'CAE 카드'
           // 탭은 그 재료의 것만 본다.
           { path: 'cards', element: <CardsPage /> },

@@ -1643,6 +1643,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/specimens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List All Specimens
+         * @description 시편을 **재료를 거치지 않고** 찾는다.
+         *
+         *     ## 걸러지는 범위는 재료와 같다
+         *
+         *     시편은 재료를 따라간다 — 전역 재료 밑에는 여러 부서의 시료가 매달리므로,
+         *     시편만 따로 부서로 가두면 재료 화면에서는 보이는 것이 여기서는 안 보인다.
+         *     그래서 `visible_materials` 를 그대로 타고 내려온다.
+         *
+         *     ## 방향만 정확히 맞춘다
+         *
+         *     나머지는 부분 일치인데 방향은 아니다. `MD`·`TD`·`DD`·`NA` 넷뿐이라 부분
+         *     일치로 두면 `D` 가 셋을 함께 물어 거른 뜻이 사라진다.
+         */
+        get: operations["list_all_specimens_api_specimens_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/specimens/{specimen_id}": {
         parameters: {
             query?: never;
@@ -5327,6 +5358,17 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[SpecimenRowOut] */
+        Page_SpecimenRowOut_: {
+            /** Items */
+            items: components["schemas"]["SpecimenRowOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** Page[TermOut] */
         Page_TermOut_: {
             /** Items */
@@ -6548,6 +6590,92 @@ export interface components {
              * Format: uuid
              */
             sample_id: string;
+            /** Seq No */
+            seq_no: number;
+            /**
+             * Sizes
+             * @default []
+             */
+            sizes: components["schemas"]["SpecimenBriefSizeOut"][];
+            /** Standard */
+            standard: string | null;
+            /**
+             * Test Run Count
+             * @default 0
+             */
+            test_run_count: number;
+            /** Thickness */
+            thickness: number | null;
+            /** Width */
+            width: number | null;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * SpecimenRowOut
+         * @description 평면 목록의 한 줄 — **시편에 재료·시료를 얹은 것.**
+         *
+         *     시편만으로는 표가 안 읽힌다. `SECC__01_MD_01` 이 어느 재료의 것인지 이름에
+         *     묻혀 있어서, 사람은 그 규칙을 외우고 있어야 한다.
+         *
+         *     **상속으로 얹는다.** 시편이 가진 것(규격·치수·시험 수)을 다시 적으면 두 벌이
+         *     되고, 시편에 칸이 하나 늘 때 한쪽만 고쳐진다.
+         */
+        SpecimenRowOut: {
+            /**
+             * Adopted Count
+             * @default 0
+             */
+            adopted_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
+            /** Gauge Length */
+            gauge_length: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Length Unit
+             * @default mm
+             */
+            length_unit: string;
+            /** Lot No */
+            lot_no: string | null;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Note */
+            note: string | null;
+            /** Orientation */
+            orientation: string;
+            /** Record Name */
+            record_name: string;
+            /** Registered By */
+            registered_by?: string | null;
+            /**
+             * Sample Id
+             * Format: uuid
+             */
+            sample_id: string;
+            /** Sample Name */
+            sample_name: string;
             /** Seq No */
             seq_no: number;
             /**
@@ -9347,6 +9475,10 @@ export interface operations {
             query?: {
                 /** @description 이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND */
                 q?: string | null;
+                /** @description 이름만 부분 일치 */
+                name?: string | null;
+                /** @description 별칭만 부분 일치 */
+                alias?: string | null;
                 family?: string | null;
                 category?: string | null;
                 scope?: string;
@@ -10720,6 +10852,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_all_specimens_api_specimens_get: {
+        parameters: {
+            query?: {
+                /** @description 시편 이름·규격 부분 일치 */
+                q?: string | null;
+                /** @description 재료 이름 부분 일치 */
+                material?: string | null;
+                /** @description 로트 부분 일치 */
+                lot?: string | null;
+                /** @description 방향. 정확히 맞아야 한다 */
+                orientation?: string | null;
+                /** @description 시편 규격 부분 일치 */
+                standard?: string | null;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SpecimenRowOut_"];
                 };
             };
             /** @description Validation Error */

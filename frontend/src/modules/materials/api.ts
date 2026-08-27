@@ -8,6 +8,9 @@ export type Material = components['schemas']['MaterialOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
 export type Sample = components['schemas']['SampleOut']
 export type Specimen = components['schemas']['SpecimenOut']
+/** 평면 목록의 한 줄 — 시편에 재료·시료를 얹은 것. */
+export type SpecimenRow = components['schemas']['SpecimenRowOut']
+export type SpecimenRowPage = components['schemas']['Page_SpecimenRowOut_']
 /** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
 export type SpecimenUpdated = components['schemas']['SpecimenUpdateOut']
 export type NamePreview = components['schemas']['NamePreviewOut']
@@ -93,6 +96,10 @@ export const DENSITY_UNIT = 'tonne/mm3'
 
 export interface MaterialQuery {
   q?: string
+  /** **열 머리에서 거를 때 쓴다.** `q` 는 이름·별칭·분류를 한꺼번에 뒤지는데,
+   *  「이름」 칸에 친 글자가 별칭에 걸려 나오면 그 칸이 무엇을 거르는지 알 수 없다. */
+  name?: string
+  alias?: string
   /** 분류로 좁힌다. 서버가 정확히 일치로 거른다. */
   family?: string
   category?: string
@@ -101,7 +108,19 @@ export interface MaterialQuery {
   offset?: number
 }
 
-function search(query: MaterialQuery): string {
+/** 시편 평면 목록의 거르기. **재료를 거치지 않고** 시편을 찾는다. */
+export interface SpecimenQuery {
+  q?: string
+  material?: string
+  lot?: string
+  /** 방향만 정확히 맞춘다 — 넷뿐이라 부분 일치면 `D` 가 셋을 함께 문다. */
+  orientation?: string
+  standard?: string
+  limit?: number
+  offset?: number
+}
+
+function search(query: MaterialQuery | SpecimenQuery): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== '') params.set(key, String(value))
@@ -112,6 +131,17 @@ function search(query: MaterialQuery): string {
 
 export const materialsApi = {
   list: (query: MaterialQuery = {}) => api.get<MaterialPage>(`/materials${search(query)}`),
+
+  /**
+   * 시편을 **재료를 거치지 않고** 찾는다.
+   *
+   * 지금까지 시편은 중첩 경로로만 닿았다 — 재료를 먼저 골라야 보였다. 그래서
+   * 「ASTM E8/E8M 박판형 시편 전부」 처럼 시편을 가로지르는 물음에 답할 자리가
+   * 없었다. 규격은 시편에 붙는데(ADR 0010) 가로지를 길이 없으면 규격으로는
+   * 아무것도 못 찾는다.
+   */
+  specimenRows: (query: SpecimenQuery = {}) =>
+    api.get<SpecimenRowPage>(`/specimens${search(query)}`),
 
   /**
    * 실제로 쓰이고 있는 분류 조합. **고정 목록을 화면에 박지 않는다** — 부서가

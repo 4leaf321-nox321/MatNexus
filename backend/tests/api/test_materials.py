@@ -2222,3 +2222,108 @@ class Test지운_이름을_다시_쓴다:
         )
         assert again.status_code == 201, again.text
         assert again.json()["seq_no"] == 1
+
+
+class Test시편을_가로질러_찾는다:
+    """**재료를 거치지 않고 시편을 찾는다.**
+
+    시편은 중첩 경로로만 닿았다 — 재료를 고르고 시료를 골라야 보였다. 그래서
+    「ASTM E8/E8M 박판형 시편 전부」 처럼 시편을 가로지르는 물음에 답할 자리가
+    없었다. 규격은 시편에 붙는데(ADR 0010) 가로지를 길이 없으면 규격으로는
+    아무것도 못 찾는다.
+    """
+
+    def _two(self, client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+        material = _create_material(client, headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"lot_no": "L-9"},
+            headers=headers,
+        ).json()
+        md = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "seq_no": 1, "standard": "ASTM E8/E8M 박판형"},
+            headers=headers,
+        )
+        assert md.status_code == 201, md.text
+        td = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "TD", "seq_no": 1, "standard": "ASTM D638 Type I"},
+            headers=headers,
+        )
+        assert td.status_code == 201, td.text
+        return {"material": material, "sample": sample, "md": md.json(), "td": td.json()}
+
+    def test_재료와_로트를_함께_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """시편 이름만으로는 표가 안 읽힌다 — 어느 재료의 것인지 이름 규칙에
+        묻혀 있어서 사람이 그 규칙을 외우고 있어야 한다."""
+        made = self._two(client, admin_headers)
+        body = client.get("/api/specimens", headers=admin_headers).json()
+
+        row = next(one for one in body["items"] if one["id"] == made["md"]["id"])
+        assert row["material_name"] == made["material"]["record_name"]
+        assert row["lot_no"] == "L-9"
+
+    def test_규격으로_좁힌다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        """**이 화면을 만든 물음이다.** 부분 일치라 판까지 안 적어도 걸린다."""
+        made = self._two(client, admin_headers)
+        body = client.get("/api/specimens?standard=E8", headers=admin_headers).json()
+
+        ids = {one["id"] for one in body["items"]}
+        assert made["md"]["id"] in ids
+        assert made["td"]["id"] not in ids
+
+    def test_방향은_정확히_맞춘다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """넷뿐이라(`MD`·`TD`·`DD`·`NA`) 부분 일치로 두면 `D` 가 셋을 함께 물어
+        거른 뜻이 사라진다."""
+        made = self._two(client, admin_headers)
+        body = client.get("/api/specimens?orientation=TD", headers=admin_headers).json()
+
+        ids = {one["id"] for one in body["items"]}
+        assert made["td"]["id"] in ids
+        assert made["md"]["id"] not in ids
+
+        loose = client.get("/api/specimens?orientation=D", headers=admin_headers).json()
+        assert not {one["id"] for one in loose["items"]} & {
+            made["md"]["id"],
+            made["td"]["id"],
+        }
+
+    def test_지운_것은_안_나온다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**소프트 삭제라 행이 남는다.** 안 거르면 지운 시편이 표에 앉는다."""
+        made = self._two(client, admin_headers)
+        client.delete(f"/api/specimens/{made['md']['id']}", headers=admin_headers)
+
+        body = client.get("/api/specimens", headers=admin_headers).json()
+        assert made["md"]["id"] not in {one["id"] for one in body["items"]}
+
+
+class Test열_머리에서_거른다:
+    """`q` 는 여러 칸을 한꺼번에 뒤지는데, 열 머리에서 거를 때는 **그 열만** 봐야
+    한다 — 「이름」 칸에 친 글자가 별칭에 걸려 나오면 그 칸이 무엇을 거르는지 알
+    수 없다."""
+
+    def test_이름_칸은_별칭을_안_본다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material = _create_material(client, admin_headers, alias="도어 이너")
+        # 별칭에만 있는 글자.
+        body = client.get("/api/materials?name=도어", headers=admin_headers).json()
+        assert material["id"] not in {one["id"] for one in body["items"]}
+
+        # 같은 글자를 `q` 로 치면 걸린다 — 그쪽은 여러 칸을 함께 본다.
+        wide = client.get("/api/materials?q=도어", headers=admin_headers).json()
+        assert material["id"] in {one["id"] for one in wide["items"]}
+
+    def test_별칭_칸은_별칭만_본다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material = _create_material(client, admin_headers, alias="도어 이너")
+        body = client.get("/api/materials?alias=도어", headers=admin_headers).json()
+        assert material["id"] in {one["id"] for one in body["items"]}

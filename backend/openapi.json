@@ -5343,6 +5343,37 @@
         "title": "Page[PropertyCardOut]",
         "type": "object"
       },
+      "Page_SpecimenRowOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpecimenRowOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[SpecimenRowOut]",
+        "type": "object"
+      },
       "Page_TermOut_": {
         "properties": {
           "items": {
@@ -8504,6 +8535,181 @@
           "created_at"
         ],
         "title": "SpecimenOut",
+        "type": "object"
+      },
+      "SpecimenRowOut": {
+        "description": "평면 목록의 한 줄 — **시편에 재료·시료를 얹은 것.**\n\n시편만으로는 표가 안 읽힌다. `SECC__01_MD_01` 이 어느 재료의 것인지 이름에\n묻혀 있어서, 사람은 그 규칙을 외우고 있어야 한다.\n\n**상속으로 얹는다.** 시편이 가진 것(규격·치수·시험 수)을 다시 적으면 두 벌이\n되고, 시편에 칸이 하나 늘 때 한쪽만 고쳐진다.",
+        "properties": {
+          "adopted_count": {
+            "default": 0,
+            "title": "Adopted Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failed_count": {
+            "default": 0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "gauge_length": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gauge Length"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "length_unit": {
+            "default": "mm",
+            "title": "Length Unit",
+            "type": "string"
+          },
+          "lot_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot No"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "orientation": {
+            "title": "Orientation",
+            "type": "string"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "registered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered By"
+          },
+          "sample_id": {
+            "format": "uuid",
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "sample_name": {
+            "title": "Sample Name",
+            "type": "string"
+          },
+          "seq_no": {
+            "title": "Seq No",
+            "type": "integer"
+          },
+          "sizes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpecimenBriefSizeOut"
+            },
+            "title": "Sizes",
+            "type": "array"
+          },
+          "standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          },
+          "test_run_count": {
+            "default": 0,
+            "title": "Test Run Count",
+            "type": "integer"
+          },
+          "thickness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thickness"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sample_id",
+          "workspace_id",
+          "seq_no",
+          "orientation",
+          "record_name",
+          "standard",
+          "thickness",
+          "width",
+          "gauge_length",
+          "note",
+          "created_at",
+          "material_id",
+          "material_name",
+          "lot_no",
+          "sample_name"
+        ],
+        "title": "SpecimenRowOut",
         "type": "object"
       },
       "SpecimenSizeOut": {
@@ -14372,6 +14578,42 @@
             }
           },
           {
+            "description": "이름만 부분 일치",
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이름만 부분 일치",
+              "title": "Name"
+            }
+          },
+          {
+            "description": "별칭만 부분 일치",
+            "in": "query",
+            "name": "alias",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "별칭만 부분 일치",
+              "title": "Alias"
+            }
+          },
+          {
             "in": "query",
             "name": "family",
             "required": false,
@@ -16409,6 +16651,158 @@
           }
         },
         "summary": "Create Specimen",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/specimens": {
+      "get": {
+        "description": "시편을 **재료를 거치지 않고** 찾는다.\n\n## 걸러지는 범위는 재료와 같다\n\n시편은 재료를 따라간다 — 전역 재료 밑에는 여러 부서의 시료가 매달리므로,\n시편만 따로 부서로 가두면 재료 화면에서는 보이는 것이 여기서는 안 보인다.\n그래서 `visible_materials` 를 그대로 타고 내려온다.\n\n## 방향만 정확히 맞춘다\n\n나머지는 부분 일치인데 방향은 아니다. `MD`·`TD`·`DD`·`NA` 넷뿐이라 부분\n일치로 두면 `D` 가 셋을 함께 물어 거른 뜻이 사라진다.",
+        "operationId": "list_all_specimens_api_specimens_get",
+        "parameters": [
+          {
+            "description": "시편 이름·규격 부분 일치",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "시편 이름·규격 부분 일치",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "재료 이름 부분 일치",
+            "in": "query",
+            "name": "material",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "재료 이름 부분 일치",
+              "title": "Material"
+            }
+          },
+          {
+            "description": "로트 부분 일치",
+            "in": "query",
+            "name": "lot",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "로트 부분 일치",
+              "title": "Lot"
+            }
+          },
+          {
+            "description": "방향. 정확히 맞아야 한다",
+            "in": "query",
+            "name": "orientation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "방향. 정확히 맞아야 한다",
+              "title": "Orientation"
+            }
+          },
+          {
+            "description": "시편 규격 부분 일치",
+            "in": "query",
+            "name": "standard",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "시편 규격 부분 일치",
+              "title": "Standard"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_SpecimenRowOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List All Specimens",
         "tags": [
           "materials"
         ]
