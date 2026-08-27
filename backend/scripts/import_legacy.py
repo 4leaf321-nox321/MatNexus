@@ -185,7 +185,8 @@ class Row:
 
     @property
     def where(self) -> str:
-        return f"{self.grade} / {self.lot} / {self.orientation}{self.seq}"
+        # 로트가 비어 있으면 그렇게 보인다 — `SECC /  / MD1` 은 읽을 수 없다.
+        return f"{self.grade} / {self.lot or '(로트 없음)'} / {self.orientation}{self.seq}"
 
 
 def _as(app: Any, email: str) -> uuid.UUID:
@@ -284,22 +285,29 @@ def _read(
         if row.seq is None and (parts.get("seq") or "").strip().isdigit():
             row.seq = int(parts["seq"])
 
-    missing = [
-        name
-        for name, value in (
-            ("재료 코드", row.grade),
-            ("로트", row.lot),
-            ("방향", row.orientation),
-        )
-        if not value
-    ]
+    # **비어도 되는 것과 없으면 안 되는 것을 가른다.**
+    #
+    # 옛 DB 에는 원래 빈 칸이 있다 — 로트를 안 적은 시료, 방향을 안 적은 시편.
+    # 그것을 「어디서 읽을지 모릅니다」 로 막으면 이관이 통째로 서고, 사람은
+    # **없는 값을 지어내서 채우게 된다.** 그게 훨씬 나쁘다.
+    #
+    #   로트   `Sample.lot_no` 가 NULL 을 받는다. 시료는 **번호로 식별**된다
+    #          (`재료__01`) — 로트는 이름표이지 열쇠가 아니다.
+    #   방향   `NA` 가 그러라고 있는 값이다(`ORIENTATIONS`). 화면의 일괄 등록도
+    #          빈 방향을 `NA` 로 읽는다(`bulkRows.specimenNode`) — 두 길이 같은
+    #          규칙을 써야 한다.
+    if not row.orientation:
+        row.orientation = "NA"
+
+    missing = [name for name, value in (("재료 코드", row.grade),) if not value]
     if row.seq is None:
         missing.append("시편 번호")
     if missing and pattern is None:
         missing.append("— 파일 이름에서 뽑으려면 --name-pattern 을 주세요")
     if missing:
         # **지어내지 않는다.** 시편 번호를 파일 순서로 매기면, 폴더에 파일이
-        # 하나 더 들어온 날 번호가 통째로 밀린다.
+        # 하나 더 들어온 날 번호가 통째로 밀린다. 재료 코드는 이름을 만드는
+        # 값이라 없으면 재료를 찾을 수도 만들 수도 없다.
         row.problem = (
             f"어디서 읽을지 모릅니다: {', '.join(missing)}. "
             f"프로파일 ⑤ 에서 「어느 재료·시료·시편인지」 로 정하거나 "
@@ -530,18 +538,24 @@ def _load(
         material_id = materials[row.grade]
 
         # ── 시료 ──────────────────────────────────────────────────────
-        lot_key = (row.grade, row.lot)
+        #
+        # **빈 로트는 `None` 이다.** 옛 DB 에는 로트를 안 적은 시료가 있고, 그때
+        # 서버는 `lot_no = NULL` 로 담는다. 여기서 `""` 로 견주면 다음에 다시
+        # 돌릴 때 못 찾아서 **같은 시료가 또 생긴다** — 그러면 시편이 갈라지고
+        # 통계가 두 묶음으로 센다.
+        lot = row.lot or None
+        lot_key = (row.grade, lot or "")
         if lot_key not in samples:
             pool = client.get(f"/api/materials/{material_id}/samples").json()
-            hit = [one for one in pool if one["lot_no"] == row.lot]
+            hit = [one for one in pool if (one["lot_no"] or None) == lot]
             if hit:
                 samples[lot_key] = hit[0]["id"]
             else:
                 body = _body(row.sample, row.sample_units, {}, note)
-                body["lot_no"] = row.lot  # 열쇠다.
+                body["lot_no"] = lot  # 열쇠다.
                 made = client.post(f"/api/materials/{material_id}/samples", json=body)
                 if made.status_code != 201:
-                    print(f"  시료 실패 {row.lot}: {made.text[:200]}")
+                    print(f"  시료 실패 {lot or '(로트 없음)'}: {made.text[:200]}")
                     continue
                 samples[lot_key] = made.json()["id"]
         sample_id = samples[lot_key]

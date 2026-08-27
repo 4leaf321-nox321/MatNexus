@@ -107,11 +107,50 @@ class Test안_읽히면_말한다:
     def test_식별자가_없으면_있는_키를_알려_준다(self, tmp_path: Path) -> None:
         """**무엇으로 고쳐야 하는지**까지 말해야 쓸모가 있다. 「없습니다」 만
         하면 사람이 파일을 열어 키 이름을 손으로 찾는다."""
-        row = read(make(tmp_path, lot_no=None, orientation=None))
+        row = read(make(tmp_path, material_code=None))
         assert not row.ok
-        assert "로트" in row.problem and "방향" in row.problem
-        assert "material_code" in row.problem  # 있는 키 목록
+        assert "재료 코드" in row.problem
+        # 있는 키 목록. `material_code` 를 뺀 파일이라 그것은 목록에 없다 —
+        # 그 자리에 **파일에 실제로 있는** 키가 보여야 고칠 수 있다.
+        assert "lot_no" in row.problem
         assert "어느 재료·시료·시편인지" in row.problem  # 어디서 고치는지
+
+
+class Test빈_칸을_막지_않는다:
+    """*"이게 원래 빈 데이터도 있어서 그런 거 같아"* — 실사용에서 나왔다.
+
+    옛 DB 에는 **원래 빈 칸이 있다.** 그것을 「어디서 읽을지 모릅니다」 로 막으면
+    이관이 통째로 서고(한 줄이라도 문제면 시작하지 않는다), 사람은 **없는 값을
+    지어내서 채우게 된다.** 그게 훨씬 나쁘다.
+    """
+
+    def test_로트가_비어도_읽는다(self, tmp_path: Path) -> None:
+        """`Sample.lot_no` 는 NULL 을 받는다. 시료는 **번호로 식별**된다
+        (`재료__01`) — 로트는 이름표이지 열쇠가 아니다."""
+        row = read(make(tmp_path, lot_no=None))
+        assert row.ok, row.problem
+        assert row.lot == ""
+
+    def test_방향이_비면_NA_다(self, tmp_path: Path) -> None:
+        """**`NA` 가 그러라고 있는 값이다**(`ORIENTATIONS`). 화면의 일괄 등록도
+        빈 방향을 `NA` 로 읽는다 — 두 길이 같은 규칙을 써야 한다."""
+        row = read(make(tmp_path, orientation=None))
+        assert row.ok, row.problem
+        assert row.orientation == "NA"
+
+    def test_재료_코드가_없으면_여전히_막는다(self, tmp_path: Path) -> None:
+        """**이건 지어낼 수 없다.** 재료 이름을 만드는 값이라, 없으면 재료를
+        찾을 수도 만들 수도 없다."""
+        row = read(make(tmp_path, material_code=None))
+        assert not row.ok
+        assert "재료 코드" in row.problem
+
+    def test_시편_번호가_없으면_여전히_막는다(self, tmp_path: Path) -> None:
+        """파일 순서로 매기면 폴더에 파일이 하나 더 들어온 날 번호가 통째로
+        밀리고, 그러면 다시 돌릴 때 같은 파일이 다른 시편에 붙는다."""
+        row = read(make(tmp_path, specimen_no=None))
+        assert not row.ok
+        assert "시편 번호" in row.problem
 
     def test_프로파일이_선언하면_그것으로_읽는다(self, tmp_path: Path) -> None:
         """식별자 키의 지식은 **프로파일에 있다.** 스크립트가 또 알면 형식이
