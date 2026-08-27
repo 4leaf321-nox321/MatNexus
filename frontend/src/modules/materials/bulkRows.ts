@@ -343,7 +343,7 @@ export type Row = Record<string, string>
 export const EMPTY_ROWS = 5
 
 /** 서버가 한 번에 받는 줄 수. 넘으면 서버가 422 로 막는다. */
-export const MAX_ROWS = 200
+export const MAX_ROWS = 2000
 
 export function blankRow(): Row {
   return Object.fromEntries(COLUMNS.map((column) => [column.key, '']))

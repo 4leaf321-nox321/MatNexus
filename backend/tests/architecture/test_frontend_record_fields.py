@@ -22,6 +22,7 @@ from app.modules.tests.schemas import (
     MATERIAL_FIELDS,
     RECORD_FIELDS,
     SAMPLE_FIELDS,
+    SPECIMEN_FIELDS,
 )
 
 EDITOR = (
@@ -59,6 +60,10 @@ def test_재료_속성_목록이_서버와_같다() -> None:
 
 def test_시료_속성_목록이_서버와_같다() -> None:
     assert _table("SAMPLE_FIELD_LABEL") == SAMPLE_FIELDS
+
+
+def test_시편_속성_목록이_서버와_같다() -> None:
+    assert _table("SPECIMEN_FIELD_LABEL") == SPECIMEN_FIELDS
 
 
 def test_메모는_파일이_못_채운다() -> None:

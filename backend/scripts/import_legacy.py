@@ -174,6 +174,8 @@ class Row:
         self.material_units: dict[str, str] = {}
         self.sample: dict[str, str] = {}
         self.sample_units: dict[str, str] = {}
+        #: 시편의 **성질**(규격·메모). 치수와 다르다 — 그쪽은 잰 값이다.
+        self.specimen_props: dict[str, str] = {}
         self.points: int = 0
         self.problem: str | None = None
 
@@ -265,6 +267,7 @@ def _read(
     row.dimensions = instrument_dimensions(meta)
     row.material, row.material_units = dict(parsed.material), dict(parsed.material_units)
     row.sample, row.sample_units = dict(parsed.sample), dict(parsed.sample_units)
+    row.specimen_props = dict(parsed.specimen_props)
     row.points = len(parsed.curves[0].channels[0].values) if parsed.curves else 0
 
     if pattern is not None:
@@ -401,6 +404,10 @@ UNIT_FIELD = {"spec_thickness": "spec_thickness_unit", "density": "density_unit"
 #: 파일이 준 것을 숫자로 읽어야 하는 칸.
 AS_NUMBER = {"spec_thickness", "density", "poisson_ratio"}
 
+#: **목록으로 보내야 하는 칸.** 옛 DB 는 「적용 제품」 을 한 칸에 하나만 갖고
+#: 있는 경우가 흔하다. API 는 목록을 받으므로 한 개짜리 목록으로 감싼다.
+AS_LIST = {"applied_products", "applied_parts"}
+
 
 def _body(
     values: dict[str, str], units: dict[str, str], given: dict[str, Any], note: str
@@ -418,6 +425,9 @@ def _body(
     for key, raw in values.items():
         text = raw.strip()
         if not text:
+            continue
+        if key in AS_LIST:
+            body[key] = [text]
             continue
         if key in AS_NUMBER:
             try:
@@ -547,14 +557,12 @@ def _load(
             if hit:
                 specimens[row.where] = hit[0]["id"]
             else:
-                made = client.post(
-                    f"/api/samples/{sample_id}/specimens",
-                    json={
-                        "orientation": row.orientation,
-                        "seq_no": row.seq,
-                        "note": note,
-                    },
-                )
+                # **규격을 붙인다.** 규격이 치수 칸을 정하므로(ADR 0010), 안
+                # 붙이면 그 시편은 치수를 받을 자리조차 없다.
+                body = _body(row.specimen_props, {}, {}, note)
+                body["orientation"] = row.orientation  # 열쇠다.
+                body["seq_no"] = row.seq
+                made = client.post(f"/api/samples/{sample_id}/specimens", json=body)
                 if made.status_code != 201:
                     print(f"  시편 실패 {row.where}: {made.text[:200]}")
                     continue

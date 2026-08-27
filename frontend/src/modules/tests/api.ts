@@ -95,6 +95,11 @@ export interface ProfileDefinition {
   /** 이 메타를 **이관이 시료를 만들 때** 적는다. 쓰이는 자리는 재료와 같다.
    *  칸 이름의 정본은 서버의 `SAMPLE_FIELDS` 다. */
   sample?: Record<string, { field: string; unit?: string; format?: string }>
+  /** 이 메타를 **이관이 시편을 만들 때** 적는다 — 규격·메모.
+   *
+   *  치수(`specimen`)와 다르다. 그쪽은 이 시험이 **잰 값**이고 이쪽은 그 시편의
+   *  **성질**이다. 규격이 특히 중요하다 — 규격이 치수 칸을 정한다(ADR 0010). */
+  specimen_props?: Record<string, { field: string }>
   metadata?: string[]
 }
 

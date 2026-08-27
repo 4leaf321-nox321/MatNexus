@@ -753,7 +753,9 @@ def create_bulk(
                 elif not item.samples:
                     raise Conflict(
                         "MNX-MATERIALS-0004",
-                        f"같은 이름의 재료가 이미 있습니다: {record_name}",
+                        f"같은 이름의 재료가 이미 있습니다: {record_name}. "
+                        f"그 재료에 시료·시편을 더하려면 **같은 줄에 시료·시편을 "
+                        f"함께 적으세요** — 그러면 있는 재료를 그대로 씁니다.",
                     )
                 else:
                     services.require_writable(db, user, material)

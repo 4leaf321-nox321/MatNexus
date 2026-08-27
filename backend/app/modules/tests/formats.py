@@ -33,6 +33,7 @@ from app.modules.tests.schemas import (
     MATERIAL_FIELDS,
     RECORD_FIELDS,
     SAMPLE_FIELDS,
+    SPECIMEN_FIELDS,
     FormatProfileCreateRequest,
     FormatProfileOut,
     FormatProfileSaveRequest,
@@ -244,6 +245,7 @@ def try_profile(
         warnings=list(parsed.warnings),
         record=parsed.record,
         identity=parsed.identity,
+        specimen_props=parsed.specimen_props,
         material=parsed.material,
         material_units=parsed.material_units,
         sample=parsed.sample,
@@ -396,6 +398,7 @@ def _validate(definition: dict[str, Any], db: Session, test_type: TestType) -> N
     # 당일에 알면 그때는 파일 수백 개를 앞에 두고 있다.
     _check_fields(definition, "material", MATERIAL_FIELDS, "MNX-TESTS-0037")
     _check_fields(definition, "sample", SAMPLE_FIELDS, "MNX-TESTS-0038")
+    _check_fields(definition, "specimen_props", SPECIMEN_FIELDS, "MNX-TESTS-0040")
     # **조건은 시험 종류마다 다르다.** 인장은 속도·예하중이고 DMA 는 진폭이다 —
     # 고정 목록으로 못 검사한다.
     _check_fields(
@@ -413,7 +416,15 @@ def _check_units(definition: dict[str, Any]) -> None:
     보이고 원인은 이 화면에 있으므로, 사람은 두 화면을 왕복하며 짐작하게 된다.
     """
     bad: list[str] = []
-    for where in ("columns", "summary", "specimen", "conditions", "material", "sample"):
+    for where in (
+        "columns",
+        "summary",
+        "specimen",
+        "conditions",
+        "material",
+        "sample",
+        "specimen_props",
+    ):
         for name, rule in (definition.get(where) or {}).items():
             if not isinstance(rule, dict):
                 continue

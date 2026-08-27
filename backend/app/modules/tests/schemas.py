@@ -153,6 +153,10 @@ MATERIAL_FIELDS: dict[str, str] = {
     "spec_thickness": "공칭두께",
     "density": "밀도",
     "poisson_ratio": "푸아송비",
+    # **목록이지만 한 줄에 하나씩 붙인다.** 옛 DB 에는 「적용 제품」 칸이 하나뿐인
+    # 경우가 흔하고, 여럿이면 프로파일에 규칙을 여럿 두면 된다.
+    "applied_products": "적용 제품",
+    "applied_parts": "적용 부위",
 }
 
 #: 프로파일이 **이관에서** 시료에 적을 수 있는 칸. 쓰이는 자리는 재료와 같다.
@@ -166,6 +170,17 @@ SAMPLE_FIELDS: dict[str, str] = {
     "sales_type": "판매유형",
     "production_date": "생산일",
     "density": "밀도",
+}
+
+#: 프로파일이 **이관에서** 시편에 적을 수 있는 칸.
+#:
+#: 규격이 특히 중요하다 — **규격이 치수 칸을 정한다**(ADR 0010). 이관에서 규격을
+#: 못 붙이면 그 시편은 칸이 없어서 치수를 받을 자리도 없다.
+#:
+#: 방향·번호는 없다 — 그건 **어느 시편인가**를 정하는 열쇠라 `IDENTITY_FIELDS` 다.
+SPECIMEN_FIELDS: dict[str, str] = {
+    "standard": "시편 규격",
+    "note": "메모",
 }
 
 #: 프로파일이 **짚어 줄 수 있는** 식별자. 채우지는 않는다.
@@ -694,6 +709,8 @@ class ProfileTryOut(BaseModel):
     sample: dict[str, str] = {}
     """파일이 시료에 대해 적어 온 값들. 쓰이는 자리는 재료와 같다."""
     sample_units: dict[str, str] = {}
+    specimen_props: dict[str, str] = {}
+    """파일이 시편에 대해 적어 온 것 — 규격·메모. 이관 경로만 쓴다."""
 
 
 class InstrumentDimensionOut(BaseModel):

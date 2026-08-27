@@ -533,6 +533,58 @@ class TestTryBeforeSave:
         assert tried["material"].get("details")
         assert tried["sample"].get("manufacturer")
 
+    def test_시편_규격도_붙일_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """**규격이 치수 칸을 정한다**(ADR 0010). 이관에서 규격을 못 붙이면 그
+        시편은 치수를 받을 자리조차 없다 — 실사용에서 걸렸다."""
+        rule = {**DMA_PROFILE, "specimen_props": {"Sample name": {"field": "standard"}}}
+        tried = client.post(
+            "/api/formats/try",
+            data={"definition": json.dumps(rule)},
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert tried["specimen_props"].get("standard")
+
+    def test_시편_속성에_방향은_없다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """방향·번호는 **어느 시편인가**를 정하는 열쇠라 짚기 쪽이다. 두 곳에
+        두면 어긋날 때 답이 없다."""
+        response = client.post(
+            "/api/formats",
+            json={
+                "key": "bad_specimen_props",
+                "label": "방향",
+                "test_type_key": "dma_sweep",
+                "definition": {
+                    **DMA_PROFILE,
+                    "specimen_props": {"Operator": {"field": "orientation"}},
+                },
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert "orientation" in response.json()["error"]["message"]
+
+    def test_적용_제품과_부위를_붙일_수_있다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """옛 DB 는 「적용 제품」 을 갖고 있다. 붙일 자리가 없으면 그 값은 이관에서
+        통째로 사라진다."""
+        rule = {
+            **DMA_PROFILE,
+            "material": {"Sample name": {"field": "applied_products"}},
+        }
+        tried = client.post(
+            "/api/formats/try",
+            data={"definition": json.dumps(rule)},
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert tried["material"].get("applied_products")
+
 
 class TestDetect:
     """**고르는 일을 없앤다.** 종류가 늘수록 매번 드롭다운에서 찾는 비용이 커지는데,

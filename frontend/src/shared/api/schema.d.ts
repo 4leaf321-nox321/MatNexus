@@ -5588,6 +5588,13 @@ export interface components {
             sample_units: {
                 [key: string]: string;
             };
+            /**
+             * Specimen Props
+             * @default {}
+             */
+            specimen_props: {
+                [key: string]: string;
+            };
             /** Summary */
             summary: components["schemas"]["TriedSummaryOut"][];
             /** Warnings */

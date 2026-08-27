@@ -1865,9 +1865,12 @@ class Test여러_개_한꺼번에:
         _create_material(client, admin_headers)
         body = _bulk(client, admin_headers, [{**SECC, "row": 3}])
         assert body["materials"] == 0
-        assert body["blocked"] == [
-            {"row": 3, "reason": "같은 이름의 재료가 이미 있습니다: SECC_MDOI_1.0"}
-        ]
+        assert body["blocked"][0]["row"] == 3
+        reason = body["blocked"][0]["reason"]
+        assert "같은 이름의 재료가 이미 있습니다: SECC_MDOI_1.0" in reason
+        # **길을 알려 준다.** 이관에서 걸렸다 — 있는 재료에 시료·시편을 더하려는
+        # 사람이 "추가가 안 된다" 로 읽고 멈췄다.
+        assert "시료·시편을 함께 적으세요" in reason
 
     def test_막힌_줄만_빼고_나머지는_만든다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -1978,7 +1981,7 @@ class Test여러_개_한꺼번에:
         """화면이 200줄까지만 그린다고 요청도 200줄이라는 보장은 없다."""
         rows = [
             {"family": "Metal", "category": "Steel", "grade": f"S{index}", "row": index}
-            for index in range(201)
+            for index in range(2001)
         ]
         response = client.post(
             "/api/materials/bulk", json={"materials": rows}, headers=admin_headers
@@ -1987,7 +1990,9 @@ class Test여러_개_한꺼번에:
         # **직접 쓴 검증기가 붙인 말이 그대로 와야 한다.** 「값이 올바르지
         # 않습니다」만 오면 무엇이 한도인지 알 수 없고, 전에는 이 자리에서
         # 직렬화가 터져 500 이 나갔다.
-        assert "최대 200개" in response.json()["error"]["message"]
+        # **상한을 2000 으로 올렸다**(v1.120.0) — 옛 DB 이관에서 200 에 걸렸고,
+        # 시편이 수백 장인 판을 한 번에 넣는 것이 정상이다.
+        assert "최대 2000개" in response.json()["error"]["message"]
 
     def test_시편까지_세어_상한을_넘기지_못한다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -2000,7 +2005,7 @@ class Test여러_개_한꺼번에:
                     {
                         **SECC,
                         "samples": [
-                            {"specimens": [{"orientation": "MD"} for _ in range(300)]}
+                            {"specimens": [{"orientation": "MD"} for _ in range(2100)]}
                         ],
                     }
                 ]

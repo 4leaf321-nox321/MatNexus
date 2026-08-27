@@ -50,6 +50,9 @@ const SAVED = {
       Maker: { field: 'manufacturer' },
       'Made on': { field: 'production_date', format: '%Y/%m/%d' },
     },
+    // 규격은 그 시편의 **치수 칸을 정한다**(ADR 0010) — 왕복에서 잃으면 이관
+    // 당일에 시편들이 치수를 받을 자리 없이 만들어진다.
+    specimen_props: { 'Specimen Standard': { field: 'standard' } },
     metadata: ['Operator'],
   },
 }
@@ -87,7 +90,30 @@ const TYPE = {
       sort_order: 10,
     },
   ],
-  conditions: [],
+  conditions: [
+    {
+      key: 'preload',
+      label: '예하중',
+      value_type: 'number',
+      dimension: 'force',
+      si_unit: 'N',
+      choices: null,
+      is_required: false,
+      sort_order: 0,
+    },
+    // **글자 조건.** 단위가 없다 — 화면이 단위 칸을 띄우면 사람은 무언가 적어야
+    // 하는 줄 알고 멈춘다(실사용에서 나왔다).
+    {
+      key: 'testing_group',
+      label: '시험 그룹',
+      value_type: 'text',
+      dimension: null,
+      si_unit: null,
+      choices: null,
+      is_required: false,
+      sort_order: 1,
+    },
+  ],
 }
 
 vi.mock('@/modules/tests/api', async (importOriginal) => ({
@@ -142,6 +168,7 @@ describe('저장된 프로파일을 열었을 때', () => {
     // 불러오기가 `field` 만 읽으면 `unit` 과 `format` 이 조용히 사라진다.
     expect(sent.material).toEqual(SAVED.definition.material)
     expect(sent.sample).toEqual(SAVED.definition.sample)
+    expect(sent.specimen_props).toEqual(SAVED.definition.specimen_props)
   })
 
   it('파일을 안 놓아도 저장된 헤더 지문이 보인다', async () => {
@@ -330,5 +357,45 @@ describe('임시 저장', () => {
     expect(
       screen.queryByText(/만들다 만 것이 이 브라우저에 남아 있습니다/)
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('시험 조건의 단위 칸', () => {
+  /**
+   * *"시험 조건-시험 그룹을 선택했을 때도 단위가 나와. 여긴 단위 없는 건데"* —
+   * 실사용에서 나왔다.
+   *
+   * 숫자 조건에만 단위가 있다. 무엇이 숫자인지는 **시험 종류가 선언한다** —
+   * 화면이 짐작하면 종류를 고칠 때마다 어긋난다.
+   */
+  async function pickCondition(target: string) {
+    const user = userEvent.setup()
+    open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+
+    // ⑤ 의 마지막 줄이 「Operator」 다(저장본의 보관 목록). 역할을 조건으로 바꾼다.
+    const roles = screen.getAllByRole('combobox')
+    await user.click(roles[roles.length - 1])
+    await user.click(await screen.findByRole('option', { name: /시험 조건/ }))
+
+    // 역할을 고르면 그 옆에 「어느 칸」 드롭다운이 생긴다 — 그것이 마지막이다.
+    const after = screen.getAllByRole('combobox')
+    await user.click(after[after.length - 1])
+    const baseline = screen.queryAllByPlaceholderText('파일의 단위').length
+    await user.click(await screen.findByRole('option', { name: new RegExp(target) }))
+    return baseline
+  }
+
+  /** 저장본의 재료 규칙도 같은 자리표를 쓴다 — 늘어난 개수로 본다. */
+  const units = () => screen.queryAllByPlaceholderText('파일의 단위').length
+
+  it('숫자 조건에는 단위 칸이 뜬다', async () => {
+    const before = await pickCondition('예하중')
+    expect(units()).toBe(before + 1)
+  })
+
+  it('글자 조건에는 안 뜬다', async () => {
+    const before = await pickCondition('시험 그룹')
+    expect(units()).toBe(before)
   })
 })

@@ -148,6 +148,14 @@ class ParsedTest:
     sample_units: dict[str, str] = field(default_factory=dict)
     """그 값이 무슨 단위로 적혀 있었나. 시료 칸 이름 → 단위 기호."""
 
+    specimen_props: dict[str, str] = field(default_factory=dict)
+    """파일이 **시편에 대해** 적어 온 값들 — 규격·메모.
+
+    치수(`instrument_dimensions` 가 읽는 것)와 다르다. 그쪽은 이 시험이 **잰
+    값**이고 이쪽은 그 시편의 **성질**이다. 규격이 특히 중요하다 — 규격이 치수
+    칸을 정하므로(ADR 0010), 이관에서 규격을 못 붙이면 그 시편은 치수를 받을
+    자리조차 없다."""
+
     @property
     def all_curves(self) -> tuple[CurveData, ...]:
         """저장할 곡선들. 단일 곡선 파서와 다중 곡선 파서를 같은 모양으로 본다."""

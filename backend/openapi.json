@@ -991,7 +991,7 @@
             "items": {
               "$ref": "#/components/schemas/BulkMaterialRequest"
             },
-            "maxItems": 200,
+            "maxItems": 2000,
             "minItems": 1,
             "title": "Materials",
             "type": "array"
@@ -4251,7 +4251,7 @@
               "format": "uuid",
               "type": "string"
             },
-            "maxItems": 200,
+            "maxItems": 2000,
             "minItems": 1,
             "title": "Material Ids",
             "type": "array"
@@ -6080,6 +6080,14 @@
             },
             "default": {},
             "title": "Sample Units",
+            "type": "object"
+          },
+          "specimen_props": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Specimen Props",
             "type": "object"
           },
           "summary": {

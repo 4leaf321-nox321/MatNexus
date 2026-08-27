@@ -104,6 +104,7 @@ type MetaRole =
   | 'identity'
   | 'material'
   | 'sample'
+  | 'specimen_props'
   | 'drop'
 
 interface MetaRule {
@@ -154,8 +155,12 @@ const META_ROLE: Record<MetaRole, { label: string; where: string }> = {
     where: '시험 종류가 선언한 조건 칸 (온도·속도·예하중…)',
   },
   specimen: {
-    label: '시편 치수',
-    where: '시편의 치수 — 「장비 치수 채우기」를 눌러야 들어갑니다',
+    label: '이 시험이 잰 시편 치수',
+    // **라벨이 낡아 있었다.** 치수가 시험으로 내려오면서(v1.119.0) 파싱이
+    // 자동으로 그 시험에 담는다 — 「채우기」 를 누를 필요가 없어졌다. 그런데
+    // 이름이 「시편 치수」 라, 사람은 이것이 시편 행에 들어가는 줄 알고 "시험
+    // 안에 만들기로 한 것은 어디 있나" 를 찾게 됐다(실사용에서 나왔다).
+    where: '그 시험의 두께·폭·게이지 — 응력이 이 값으로 계산됩니다',
   },
   identity: {
     label: '재료·시료·시편 짚기',
@@ -168,6 +173,12 @@ const META_ROLE: Record<MetaRole, { label: string; where: string }> = {
   sample: {
     label: '시료 속성 (이관 전용)',
     where: '올릴 때는 안 씁니다 — 이관 스크립트가 시료를 만들 때만 씁니다',
+  },
+  specimen_props: {
+    label: '시편 속성 (이관 전용)',
+    // **규격이 특히 중요하다.** 규격이 치수 칸을 정하므로(ADR 0010), 이관에서
+    // 규격을 못 붙이면 그 시편은 치수를 받을 자리조차 없다.
+    where: '시편 규격·메모 — 규격은 그 시편의 치수 칸을 정합니다',
   },
   drop: { label: '버림', where: '남기지 않습니다' },
 }
@@ -183,6 +194,7 @@ const NEEDS_TARGET: MetaRole[] = [
   'identity',
   'material',
   'sample',
+  'specimen_props',
 ]
 
 const META_ROLE_GROUPS: { title: string; roles: MetaRole[] }[] = [
@@ -191,7 +203,7 @@ const META_ROLE_GROUPS: { title: string; roles: MetaRole[] }[] = [
   // **올릴 때는 안 쓰는 것들.** 시험 하나가 재료를 고치면 그 아래 시험 100건이
   // 저마다 한 번씩 덮어쓴다 — 시편은 시험 하나가 하나를 보므로 「빈 칸만 채운다」
   // 로 막을 수 있었지만 재료는 그렇게 못 막는다. 이관은 한 번 하는 일이라 다르다.
-  { title: '이관할 때만 쓴다', roles: ['identity', 'material', 'sample'] },
+  { title: '이관할 때만 쓴다', roles: ['identity', 'material', 'sample', 'specimen_props'] },
   { title: '저장하지 않는다', roles: ['drop'] },
 ]
 
@@ -223,6 +235,8 @@ const MATERIAL_FIELD_LABEL: Record<string, string> = {
   spec_thickness: '공칭두께',
   density: '밀도',
   poisson_ratio: '푸아송비',
+  applied_products: '적용 제품',
+  applied_parts: '적용 부위',
 }
 
 /** 이관이 **시료를 만들 때** 적을 수 있는 칸. 정본은 서버의 `SAMPLE_FIELDS` 다. */
@@ -250,11 +264,20 @@ const SAMPLE_FIELD_LABEL: Record<string, string> = {
 const KEY_ELSEWHERE: Partial<Record<MetaRole, string>> = {
   material: '재료 코드(grade)',
   sample: '로트(lot_no)',
+  specimen_props: '방향·시편 번호',
 }
 
 /** 반대 방향. 「짚기」 목록에서 두께를 찾는 사람도 같은 자리에서 막힌다. */
 const PROPS_ELSEWHERE: Partial<Record<MetaRole, string>> = {
   identity: '두께·밀도·제조사 같은 속성',
+}
+
+/** 이관이 **시편을 만들 때** 적을 수 있는 칸. 정본은 서버의 `SPECIMEN_FIELDS` 다.
+ *
+ *  방향·번호는 없다 — 그건 「어느 시편인가」 를 정하는 열쇠라 짚기 쪽이다. */
+const SPECIMEN_FIELD_LABEL: Record<string, string> = {
+  standard: '시편 규격',
+  note: '메모',
 }
 
 /** 단위를 **선언해야** 하는 칸. 안 적으면 이관이 mm · tonne/mm3 로 읽는다 —
@@ -467,14 +490,16 @@ export default function FormatProfileEditorPage() {
       // **단위와 날짜 형식을 함께 읽는다.** 하나라도 빠뜨리면 열고 저장만 눌러도
       // 그것이 사라진다 — 열 매핑이 정확히 그렇게 무너졌었다.
       ...Object.fromEntries(
-        (['material', 'sample'] as const).flatMap((where) =>
-          Object.entries(definition[where] ?? {}).map(([name, rule]) => [
+        (['material', 'sample', 'specimen_props'] as const).flatMap((where) =>
+          Object.entries(definition[where] ?? {}).map(([name, rule]): [string, MetaRule] => [
             name,
             {
               role: where,
               target: rule.field,
-              unit: rule.unit ?? '',
-              format: rule.format ?? '',
+              // 시편 속성(규격·메모)에는 단위도 날짜 형식도 없다 — 그 자리에는
+              // 칸 자체가 안 뜬다. 있는 것만 읽는다.
+              unit: String((rule as { unit?: string }).unit ?? ''),
+              format: String((rule as { format?: string }).format ?? ''),
             },
           ])
         )
@@ -626,7 +651,14 @@ export default function FormatProfileEditorPage() {
     if (role === 'identity') return Object.entries(IDENTITY_FIELD_LABEL)
     if (role === 'material') return Object.entries(MATERIAL_FIELD_LABEL)
     if (role === 'sample') return Object.entries(SAMPLE_FIELD_LABEL)
+    if (role === 'specimen_props') return Object.entries(SPECIMEN_FIELD_LABEL)
     return (type?.conditions ?? []).map((field) => [field.key, field.label])
+  }
+
+  /** 숫자 조건인가. **글자 조건에는 단위가 없다** — 시험 종류가 선언한다. */
+  function isNumberCondition(field: string, type: TestType | null): boolean {
+    const found = (type?.conditions ?? []).find((one) => one.key === field)
+    return found ? found.value_type === 'number' : false
   }
 
   /** 그 조건의 차원. 단위 후보를 그 차원으로 좁힌다. */
@@ -862,6 +894,7 @@ export default function FormatProfileEditorPage() {
     const conditions: NonNullable<ProfileDefinition['conditions']> = {}
     const material: NonNullable<ProfileDefinition['material']> = {}
     const sample: NonNullable<ProfileDefinition['sample']> = {}
+    const specimenProps: NonNullable<ProfileDefinition['specimen_props']> = {}
     const metadata: string[] = []
     for (const [name, rule] of Object.entries(metaMap)) {
       if (rule.role === 'record' && rule.target) {
@@ -870,6 +903,10 @@ export default function FormatProfileEditorPage() {
       }
       if (rule.role === 'identity' && rule.target) {
         identity[name] = { field: rule.target }
+        continue
+      }
+      if (rule.role === 'specimen_props' && rule.target) {
+        specimenProps[name] = { field: rule.target }
         continue
       }
       if ((rule.role === 'material' || rule.role === 'sample') && rule.target) {
@@ -919,6 +956,7 @@ export default function FormatProfileEditorPage() {
       ...(Object.keys(conditions).length ? { conditions } : {}),
       ...(Object.keys(material).length ? { material } : {}),
       ...(Object.keys(sample).length ? { sample } : {}),
+      ...(Object.keys(specimenProps).length ? { specimen_props: specimenProps } : {}),
       metadata,
     }
   }
@@ -1929,7 +1967,11 @@ export default function FormatProfileEditorPage() {
                           갈 곳을 정하세요 — 안 정하면 이 값은 안 남습니다
                         </span>
                       )}
-                      {rule.role === 'condition' && (
+                      {/* **숫자 조건에만 단위가 있다.** 시험 그룹·센서 종류
+                          같은 글자 조건에 단위 칸이 뜨면, 사람은 무언가 적어야
+                          하는 줄 알고 멈춘다(실사용에서 나왔다). 무엇인지는
+                          시험 종류가 선언한다. */}
+                      {rule.role === 'condition' && isNumberCondition(rule.target, testType) && (
                         <Input
                           className="h-8 w-28 font-mono text-xs"
                           list={`units-${conditionDimension(rule.target, testType)}`}

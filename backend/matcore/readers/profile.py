@@ -174,6 +174,11 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
     sample, sample_units = _build_fields(
         profile.get("sample"), structure, warnings, dates=True
     )
+    # **시편의 속성**이다. 치수(`specimen`)와 다르다 — 그쪽은 잰 값이고 이쪽은
+    # 규격·메모다. 규격은 특히 중요하다: 규격이 치수 칸을 정한다(ADR 0010).
+    specimen_props, _ = _build_fields(
+        profile.get("specimen_props"), structure, warnings, dates=False
+    )
     _keep_sources(profile, structure, metadata)
 
     return ParsedTest(
@@ -190,6 +195,7 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
         material_units=material_units,
         sample=sample,
         sample_units=sample_units,
+        specimen_props=specimen_props,
     )
 
 
