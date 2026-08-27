@@ -552,6 +552,64 @@ class Test재샘플:
         assert result.frame.length() == 51
         assert result.frame.columns["strain_engineering"][0] == pytest.approx(0.0)
 
+    def test_0_에서_시작하는_요청이_반올림에_막히지_않는다(self) -> None:
+        """**전체 흐름 점검에서 걸렸다**(2026-08-27).
+
+        화면이 채워 주는 표준 레시피는 `start: 0` 을 적는다 — 「0 부터」 라는
+        뜻이고, **모든 시편이 같은 격자를 쓰게** 하려는 것이다. 그런데 실제
+        `.tra` 의 첫 변형률은 `2.92968e-09` 이지 정확히 0 이 아니라서, 화면이
+        권하는 그 구성이 실파일에서 422 로 막혔다.
+        """
+        first = 2.92968e-09
+        x = np.linspace(first, 0.4, 50)
+        frame = Frame(
+            {"strain_engineering": x, "stress_engineering": x * 2.0e9},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        result = processing.apply(
+            [Step("curve.resample", {"x": "strain_engineering", "count": 11, "start": 0.0})],
+            frame,
+        )
+        # **격자는 요청한 대로다.** 관측 안으로 당기면 시편마다 시작점이 달라져
+        # 통계가 대표 곡선을 못 낸다 — `start: 0` 을 못 박는 이유가 그것이다.
+        assert result.frame.columns["strain_engineering"][0] == pytest.approx(0.0)
+
+    def test_봐_준_것을_조용히_넘기지_않는다(self) -> None:
+        """조용히 넘어가면 「외삽하지 않는다」 가 언제 지켜졌는지 알 수 없다."""
+        x = np.linspace(2.92968e-09, 0.4, 50)
+        frame = Frame(
+            {"strain_engineering": x, "stress_engineering": x * 2.0e9},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        result = processing.apply(
+            [Step("curve.resample", {"x": "strain_engineering", "count": 11, "start": 0.0})],
+            frame,
+        )
+        assert any("끝자락의 반올림" in said for said in result.notes)
+
+    def test_잡음을_넘어서면_그대로_거절한다(self) -> None:
+        """봐 주는 폭은 **관측 폭에 견준 잡음 수준**이어야 한다.
+
+        실측된 잡음은 관측 폭의 `7.3e-09` 다. 여기서 쓰는 틈은 그 **세 자릿수
+        위인 `1e-5`** 이고, 그래도 막혀야 한다 — 안 막히면 「측정 안 한 구간을
+        만들어 내지 않는다」 가 반올림 봐 주기라는 이름으로 헐거워진다.
+        """
+        x = np.linspace(0.4 * 1e-5, 0.4, 50)
+        frame = Frame(
+            {"strain_engineering": x, "stress_engineering": x * 2.0e9},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="측정하지 않은 구간"):
+            processing.apply(
+                [
+                    Step(
+                        "curve.resample",
+                        {"x": "strain_engineering", "count": 11, "start": 0.0},
+                    )
+                ],
+                frame,
+            )
+
 
 class Test단위:
     def test_변형률이_퍼센트면_거절한다(self) -> None:

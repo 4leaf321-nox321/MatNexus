@@ -163,6 +163,17 @@ def crop(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
 
 
+#: 요청 구간이 관측 범위를 벗어나도 봐 주는 폭. **관측 폭에 대한 비율이다.**
+#:
+#: 절대값으로 두면 변형률(0~0.4)과 응력(0~5e8)에서 뜻이 전혀 달라진다.
+#:
+#: 실측(2026-08-27): `.tra` 의 첫 변형률이 `2.92968e-09`, 관측 폭이 `0.400074` 라
+#: 비율이 `7.3e-9` 다. 1e-6 은 그보다 두 자릿수 넉넉하면서, 변형률로 치면
+#: `4e-7`(0.00004%)이라 어떤 장비의 분해능보다도 작다. 사람이 다른 구간을 적은
+#: 경우(예: 0 을 요청했는데 데이터가 0.05 부터)는 비율이 0.1 대라 한참 걸린다.
+RANGE_SLACK = 1e-6
+
+
 @register(
     id="curve.resample",
     kind="processing",
@@ -187,6 +198,22 @@ def resample(frame: Frame, options: dict[str, Any]) -> StepResult:
     **외삽하지 않는다.** 요청 구간이 관측 범위를 벗어나면 거절한다 — `np.interp`
     는 범위 밖에서 끝점 값을 그대로 물려 주는데, 그것은 "측정하지 않은 구간에
     측정값이 있는" 그림이 된다.
+
+    ## 다만 끝자락의 잡음까지 거절하지는 않는다
+
+    실측으로 걸렸다(2026-08-27, 전체 흐름 점검). 화면이 채워 주는 표준 레시피는
+    `start: 0` 을 적는다 — 「0 부터」 라는 뜻이다. 그런데 실제 `.tra` 의 첫
+    변형률은 `2.92968e-09` 이지 정확히 0 이 아니다. 그래서 **화면이 권하는 그
+    구성이 실파일에서 422 로 막혔다.**
+
+    3e-9 는 외삽이 아니라 **0 의 반올림**이다. 그것까지 거절하면 사람은 관측
+    최솟값을 손으로 옮겨 적게 되는데, 그 값은 시편마다 다르므로 결국 **시편마다
+    다른 레시피**가 만들어진다 — 그러면 통계가 격자를 못 맞춘다.
+
+    그래서 **관측 폭에 견주어 잡음 수준일 때만** 요청한 구간을 그대로 받는다.
+    구간을 관측 안으로 **당기지는 않는다** — 당기면 시편마다 시작점이 달라져
+    격자가 어긋난다. 봐 줬다는 사실은 노트에 적는다. 잡음 수준을 넘으면 전과
+    같이 거절한다.
     """
     x_key = str(options.get("x") or "")
     if not x_key:
@@ -200,11 +227,33 @@ def resample(frame: Frame, options: dict[str, Any]) -> StepResult:
     lo, hi = float(np.min(x)), float(np.max(x))
     start = option_float(options, "start", lo)
     end = option_float(options, "end", hi)
-    if start < lo or end > hi:
+
+    # **관측 폭에 견준다.** 절대값으로 두면 변형률(0~0.4)과 응력(0~5e8)에서 뜻이
+    # 전혀 달라진다.
+    span = hi - lo
+    slack = abs(span) * RANGE_SLACK
+    if start < lo - slack or end > hi + slack:
         raise ProcessingError(
             f"[{start:.6g}, {end:.6g}] 는 관측 범위 [{lo:.6g}, {hi:.6g}] 를 벗어납니다. "
             f"측정하지 않은 구간의 값을 만들어 내지 않습니다."
         )
+
+    # **당기지 않는다.** 관측 범위 안으로 당기면 시편마다 시작점이 달라지고,
+    # 그러면 여러 시편의 격자가 어긋나 통계가 대표 곡선을 못 낸다 — `start: 0`
+    # 을 못 박는 이유가 바로 **모든 시편이 같은 격자를 쓰게** 하려는 것이다.
+    #
+    # 요청한 격자를 그대로 쓴다. 끝자락 한 점의 값은 `np.interp` 가 관측
+    # 끝값으로 채우는데, 벗어난 폭이 잡음 수준일 때만 여기까지 오므로 그
+    # 값은 실제로 잰 값과 구별되지 않는다.
+    said: list[str] = []
+    if start < lo or end > hi:
+        # **조용히 넘어가지 않는다.** 봐 준 사실이 어딘가에 남아야 한다.
+        said.append(
+            f"요청한 [{start:.6g}, {end:.6g}] 가 관측 범위 [{lo:.6g}, {hi:.6g}] 를 "
+            f"아주 조금(관측 폭의 {max(lo - start, end - hi) / abs(span or 1):.1e}) "
+            f"벗어나지만 끝자락의 반올림이라 그대로 씁니다."
+        )
+
     if start >= end:
         raise ProcessingError(f"시작({start})이 끝({end}) 이상입니다.")
 
@@ -213,10 +262,8 @@ def resample(frame: Frame, options: dict[str, Any]) -> StepResult:
         key: (grid if key == x_key else np.interp(grid, x, value))
         for key, value in frame.columns.items()
     }
-    return StepResult(
-        Frame(resampled, dict(frame.units)),
-        notes=(f"'{x_key}' [{start:.6g}, {end:.6g}] 를 {count}점 균등 격자로 보간했습니다.",),
-    )
+    said.append(f"'{x_key}' [{start:.6g}, {end:.6g}] 를 {count}점 균등 격자로 보간했습니다.")
+    return StepResult(Frame(resampled, dict(frame.units)), notes=tuple(said))
 
 
 @register(
