@@ -274,6 +274,61 @@ def next_sample_seq(db: Session, material_id: uuid.UUID) -> int:
     return (highest or 0) + 1
 
 
+def change_orientation(db: Session, specimen: Specimen, orientation: str) -> str:
+    """시편의 방향을 바꾸고 **이름을 다시 만든다.** 무슨 일이 일어났는지 돌려준다.
+
+    ## 왜 그냥 칸 하나 고치는 일이 아닌가
+
+    방향은 **이름과 번호의 일부**다. `..._MD_03` 이고, 번호는 방향마다 따로
+    매긴다(`uq_specimens_sample_dir_seq_no`). 그래서 `MD_03` 을 TD 로 옮기면
+    TD 에 이미 03 이 있을 수 있다.
+
+    **번호를 옮겨 가는 방향에서 새로 받는다.** 03 을 우겨 넣으려다 부딪히는
+    것보다, 그 방향의 다음 번호를 받는 편이 사람이 예상하는 결과에 가깝다 —
+    시편 번호는 「그 방향에서 몇 번째로 자른 것인가」이기 때문이다.
+
+    ## 왜 자를 수 있게 두나
+
+    자를 때 정해지는 값이라 만들 때 정하면 그만인 것 같지만, **잘못 고른 것을
+    되돌릴 길이 없었다.** 지우고 다시 만들면 그 시편의 시험이 함께 사라진다.
+
+    이름이 참조 키가 아니라서 다시 계산해 덮으면 그만이다 — 그게 ADR 0004 의
+    결론이고, 재료 이름 바꾸기가 이미 같은 일을 한다.
+    """
+    if orientation == specimen.orientation:
+        return ""
+    was = specimen.record_name
+    sample = db.get(Sample, specimen.sample_id)
+    if sample is None:
+        raise NotFound("MNX-MATERIALS-0002", "시료를 찾을 수 없습니다.")
+
+    specimen.orientation = orientation
+    specimen.seq_no = next_specimen_seq(db, specimen.sample_id, orientation)
+    specimen.record_name = naming.specimen_name(
+        sample=sample.record_name, orientation=orientation, seq_no=specimen.seq_no
+    )
+
+    # **시험 이름까지 내려간다.** 여기서 멈추면 시험만 옛 방향을 달고 있다 —
+    # 재료 이름 바꾸기가 정확히 그 자리에서 한 번 걸렸다(`rename_descendants`).
+    runs = list(db.scalars(select(TestRun).where(TestRun.specimen_id == specimen.id)))
+    if runs:
+        abbrs = {
+            row.id: row.abbr
+            for row in db.scalars(
+                select(TestType).where(TestType.id.in_({run.test_type_id for run in runs}))
+            )
+        }
+        for run in runs:
+            run.record_name = naming.test_run_name(
+                specimen=specimen.record_name,
+                type_abbr=abbrs.get(run.test_type_id, "?"),
+                seq_no=run.seq_no,
+            )
+    return f"{was} → {specimen.record_name}" + (
+        f" (시험 {len(runs)}건도 함께)" if runs else ""
+    )
+
+
 def next_specimen_seq(db: Session, sample_id: uuid.UUID, orientation: str) -> int:
     highest = db.scalar(
         select(func.max(Specimen.seq_no)).where(

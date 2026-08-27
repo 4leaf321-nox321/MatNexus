@@ -775,6 +775,143 @@ class Test여럿을_한꺼번에_사슬로:
         assert again.json()["test_runs"] == 1
 
 
+class Test방향_바꾸기:
+    """*"시편 수정에도 안 보여"* — 실사용에서 나왔다.
+
+    방향은 자를 때 정해지는 값이라 만들 때 정하면 그만인 것 같지만, **잘못 고른
+    것을 되돌릴 길이 없었다** — 지우고 다시 만들면 그 시편의 시험이 함께
+    사라진다.
+
+    칸 하나를 고치는 일이 아니다. 방향은 **이름과 번호의 일부**다
+    (`..._MD_03`, `(sample, orientation, seq_no)` 유니크).
+    """
+
+    def tree(self, client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+        material = _create_material(client, headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        return {"material": material, "sample": sample}
+
+    def add(
+        self, client: TestClient, headers: dict[str, str], sample_id: str, orientation: str
+    ) -> dict[str, Any]:
+        made = client.post(
+            f"/api/samples/{sample_id}/specimens",
+            json={"orientation": orientation},
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        out: dict[str, Any] = made.json()
+        return out
+
+    def test_바꾸면_이름이_따라온다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        tree = self.tree(client, admin_headers)
+        specimen = self.add(client, admin_headers, tree["sample"]["id"], "MD")
+        assert specimen["record_name"].endswith("__MD_01")
+
+        changed = client.patch(
+            f"/api/specimens/{specimen['id']}",
+            json={"orientation": "TD"},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["specimen"]["record_name"].endswith("__TD_01")
+        # **무슨 일이 일어났는지 말한다.** 방향만 골랐는데 번호까지 달라지는 것은
+        # 사람이 예상 못 하는 일이다.
+        assert "→" in changed.json()["renamed"]
+
+    def test_번호는_옮겨_가는_방향에서_새로_받는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**03 을 우겨 넣지 않는다.** TD 에 이미 03 이 있을 수 있고, 시편 번호는
+        「그 방향에서 몇 번째로 자른 것인가」 이다."""
+        tree = self.tree(client, admin_headers)
+        sample_id = tree["sample"]["id"]
+        for _ in range(3):
+            self.add(client, admin_headers, sample_id, "TD")
+        mover = self.add(client, admin_headers, sample_id, "MD")
+        assert mover["record_name"].endswith("__MD_01")
+
+        changed = client.patch(
+            f"/api/specimens/{mover['id']}",
+            json={"orientation": "TD"},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+        # TD 에 01·02·03 이 있으므로 04 를 받는다.
+        assert changed.json()["specimen"]["record_name"].endswith("__TD_04")
+
+    def test_시험_이름까지_내려간다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**여기서 멈추면 시험만 옛 방향을 달고 있다.** 재료 이름 바꾸기가
+        정확히 그 자리에서 한 번 걸렸다."""
+        from app.modules.tests.definitions import ensure_builtin_test_types
+
+        ensure_builtin_test_types(db)
+        db.commit()
+
+        tree = self.tree(client, admin_headers)
+        specimen = self.add(client, admin_headers, tree["sample"]["id"], "MD")
+        tra = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+        run = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "tensile",
+                "conditions": "{}",
+            },
+            files={"file": ("Example.tra", tra.read_bytes())},
+            headers=admin_headers,
+        )
+        assert run.status_code == 202, run.text
+        assert "__MD_01__TEN_01" in run.json()["record_name"]
+
+        changed = client.patch(
+            f"/api/specimens/{specimen['id']}",
+            json={"orientation": "TD"},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+        assert "시험 1건" in changed.json()["renamed"]
+
+        db.expire_all()
+        after = client.get(f"/api/test-runs/{run.json()['id']}", headers=admin_headers)
+        assert "__TD_01__TEN_01" in after.json()["record_name"]
+
+    def test_모르는_방향은_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        tree = self.tree(client, admin_headers)
+        specimen = self.add(client, admin_headers, tree["sample"]["id"], "MD")
+        response = client.patch(
+            f"/api/specimens/{specimen['id']}",
+            json={"orientation": "ZZ"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert "MD" in response.json()["error"]["message"]
+
+    def test_같은_방향이면_아무것도_안_한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**번호를 괜히 올리지 않는다.** 다른 칸을 고치면서 방향을 그대로 보내는
+        것은 흔한 일이고, 그때마다 번호가 밀리면 안 된다."""
+        tree = self.tree(client, admin_headers)
+        specimen = self.add(client, admin_headers, tree["sample"]["id"], "MD")
+        changed = client.patch(
+            f"/api/specimens/{specimen['id']}",
+            json={"orientation": "MD", "note": "메모만"},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["specimen"]["record_name"].endswith("__MD_01")
+        assert changed.json()["renamed"] is None
+
+
 class TestListing:
     def test_상한을_서버가_강제한다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -967,7 +1104,9 @@ class Test시편규격:
             json={"standard": "JIS 5호"},
             headers=admin_headers,
         )
-        assert changed.json()["standard"] == "JIS 5호"
+        # 응답이 `{specimen, renamed}` 로 감싸졌다 — 방향을 바꾸면 이름이
+        # 다시 매겨지는데, 그 사실을 돌려줄 자리가 필요했다(v1.120.0).
+        assert changed.json()["specimen"]["standard"] == "JIS 5호"
 
     def test_시험_조건에는_더_이상_없다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session

@@ -8687,6 +8687,30 @@
         "title": "SpecimenSizesRequest",
         "type": "object"
       },
+      "SpecimenUpdateOut": {
+        "description": "고친 시편과 **이름이 어떻게 바뀌었는지.**\n\n이름이 바뀌는 것은 사람이 예상 못 하는 일이라(방향만 골랐는데 번호까지\n달라진다) 조용히 하면 안 된다.",
+        "properties": {
+          "renamed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renamed"
+          },
+          "specimen": {
+            "$ref": "#/components/schemas/SpecimenOut"
+          }
+        },
+        "required": [
+          "specimen"
+        ],
+        "title": "SpecimenUpdateOut",
+        "type": "object"
+      },
       "SpecimenUpdateRequest": {
         "properties": {
           "gauge_length": {
@@ -8722,6 +8746,18 @@
               }
             ],
             "title": "Note"
+          },
+          "orientation": {
+            "anyOf": [
+              {
+                "maxLength": 10,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientation"
           },
           "standard": {
             "anyOf": [
@@ -16351,6 +16387,7 @@
         ]
       },
       "patch": {
+        "description": "시편을 고친다.\n\n**방향을 바꾸면 이름과 번호가 다시 매겨진다.** 그 사실을 `renamed` 로\n돌려준다 — 방향만 골랐는데 번호까지 달라지는 것은 사람이 예상 못 하는\n일이라 조용히 하면 안 된다.",
         "operationId": "update_specimen_api_specimens__specimen_id__patch",
         "parameters": [
           {
@@ -16379,7 +16416,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SpecimenOut"
+                  "$ref": "#/components/schemas/SpecimenUpdateOut"
                 }
               }
             },

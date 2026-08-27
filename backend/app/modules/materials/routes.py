@@ -57,6 +57,7 @@ from app.modules.materials.schemas import (
     SpecimenSizeOut,
     SpecimenSizesOut,
     SpecimenSizesRequest,
+    SpecimenUpdateOut,
     SpecimenUpdateRequest,
     SpecimenWarningOut,
     ValueSourceOut,
@@ -1604,13 +1605,19 @@ def get_specimen(
     )
 
 
-@specimens_router.patch("/{specimen_id}", response_model=SpecimenOut)
+@specimens_router.patch("/{specimen_id}", response_model=SpecimenUpdateOut)
 def update_specimen(
     specimen_id: uuid.UUID,
     payload: SpecimenUpdateRequest,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> SpecimenOut:
+) -> SpecimenUpdateOut:
+    """시편을 고친다.
+
+    **방향을 바꾸면 이름과 번호가 다시 매겨진다.** 그 사실을 `renamed` 로
+    돌려준다 — 방향만 골랐는데 번호까지 달라지는 것은 사람이 예상 못 하는
+    일이라 조용히 하면 안 된다.
+    """
     specimen = _get_specimen(db, user, specimen_id)
     data = payload.model_dump(exclude_unset=True)
     unit = data.get("length_unit") or specimen.input_units.get("length", LENGTH_UNIT)
@@ -1628,15 +1635,33 @@ def update_specimen(
             )
     if "note" in data:
         specimen.note = data["note"]
+
+    # **방향은 이름과 번호를 바꾼다.** 칸 하나가 아니라서 따로 다룬다.
+    renamed = ""
+    if data.get("orientation"):
+        want = str(data["orientation"]).upper()
+        if want not in ORIENTATIONS:
+            raise AppError(
+                "MNX-MATERIALS-0030",
+                f"방향은 {', '.join(ORIENTATIONS)} 중 하나여야 합니다.",
+                status=422,
+            )
+        renamed = services.change_orientation(db, specimen, want)
+
     vocabulary_services.apply_bindings(
         db, specimen, vocabulary_services.SPECIMEN_BINDINGS, data, created_by_id=user.id
     )
     specimen.input_units = {**specimen.input_units, "length": unit}
 
     db.commit()
-    return _specimen_out(
-        specimen,
-        registered_by=services.registrant_names([specimen], db).get(specimen.registered_by_id),
+    return SpecimenUpdateOut(
+        specimen=_specimen_out(
+            specimen,
+            registered_by=services.registrant_names([specimen], db).get(
+                specimen.registered_by_id
+            ),
+        ),
+        renamed=renamed or None,
     )
 
 

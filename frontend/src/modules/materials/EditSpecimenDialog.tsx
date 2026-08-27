@@ -31,11 +31,10 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
-import { materialsApi } from '@/modules/materials/api'
+import { ORIENTATIONS, materialsApi } from '@/modules/materials/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { Specimen, SpecimenSize, SpecimenSizes } from '@/modules/materials/api'
 import { ApiError } from '@/shared/api/client'
-import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -65,6 +64,8 @@ function shownValue(value: number | null | undefined, field: SpecimenSize): stri
 export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) {
   const [standard, setStandard] = useState(specimen.standard ?? '')
   const [note, setNote] = useState(specimen.note ?? '')
+  /** 방향. **바꾸면 이름과 번호가 다시 매겨진다** — 저장 전에 그렇게 말한다. */
+  const [orientation, setOrientation] = useState(specimen.orientation)
   const [sizes, setSizes] = useState<SpecimenSizes | null>(null)
   /** 잰 값만 들고 있다. 문자열인 이유는 `Number('0.')` 이 소수점을 지우기 때문. */
   const [measured, setMeasured] = useState<Record<string, string>>({})
@@ -75,6 +76,7 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
     if (!open) return
     setStandard(specimen.standard ?? '')
     setNote(specimen.note ?? '')
+    setOrientation(specimen.orientation)
     setFailure(null)
     let alive = true
     materialsApi
@@ -106,6 +108,7 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
       await materialsApi.updateSpecimen(specimen.id, {
         standard: standard === '' ? null : standard,
         note: note === '' ? null : note,
+        orientation,
       })
 
       const values: Record<string, number> = {}
@@ -131,16 +134,41 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            시편 수정
-            <Badge variant="secondary">{specimen.orientation}</Badge>
-          </DialogTitle>
+          <DialogTitle>시편 수정</DialogTitle>
           <DialogDescription className="font-mono text-xs">
             {specimen.record_name}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-3">
+          {/* **전에는 못 바꿨다.** 뱃지로 보여 주기만 했고 서버도 안 받았다 —
+              잘못 고른 것을 되돌리려면 지우고 다시 만드는 수밖에 없었고, 그러면
+              그 시편의 시험이 함께 사라진다(실사용에서 나왔다). */}
+          <div className="space-y-1.5">
+            <Label>방향</Label>
+            <div className="flex gap-2">
+              {ORIENTATIONS.map((value) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={orientation === value ? 'default' : 'outline'}
+                  onClick={() => setOrientation(value)}
+                >
+                  {value}
+                </Button>
+              ))}
+            </div>
+            {/* **저장 전에 말한다.** 방향만 골랐는데 번호까지 달라지는 것은
+                사람이 예상 못 하는 일이다. */}
+            {orientation !== specimen.orientation && (
+              <p className="text-xs text-amber-700 dark:text-amber-500">
+                저장하면 <b>이름과 번호가 다시 매겨집니다</b> — 번호는 {orientation}{' '}
+                에서 새로 받고, 이 시편의 <b>시험 이름도 함께</b> 바뀝니다.
+              </p>
+            )}
+          </div>
+
           <VocabularyField
             slug="specimen_standard"
             label="시편 규격"

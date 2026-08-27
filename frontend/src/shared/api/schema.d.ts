@@ -1658,7 +1658,14 @@ export interface paths {
         delete: operations["delete_specimen_api_specimens__specimen_id__delete"];
         options?: never;
         head?: never;
-        /** Update Specimen */
+        /**
+         * Update Specimen
+         * @description 시편을 고친다.
+         *
+         *     **방향을 바꾸면 이름과 번호가 다시 매겨진다.** 그 사실을 `renamed` 로
+         *     돌려준다 — 방향만 골랐는데 번호까지 달라지는 것은 사람이 예상 못 하는
+         *     일이라 조용히 하면 안 된다.
+         */
         patch: operations["update_specimen_api_specimens__specimen_id__patch"];
         trace?: never;
     };
@@ -6553,6 +6560,18 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /**
+         * SpecimenUpdateOut
+         * @description 고친 시편과 **이름이 어떻게 바뀌었는지.**
+         *
+         *     이름이 바뀌는 것은 사람이 예상 못 하는 일이라(방향만 골랐는데 번호까지
+         *     달라진다) 조용히 하면 안 된다.
+         */
+        SpecimenUpdateOut: {
+            /** Renamed */
+            renamed?: string | null;
+            specimen: components["schemas"]["SpecimenOut"];
+        };
         /** SpecimenUpdateRequest */
         SpecimenUpdateRequest: {
             /** Gauge Length */
@@ -6561,6 +6580,8 @@ export interface components {
             length_unit?: string | null;
             /** Note */
             note?: string | null;
+            /** Orientation */
+            orientation?: string | null;
             /** Standard */
             standard?: string | null;
             /** Thickness */
@@ -10675,7 +10696,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SpecimenOut"];
+                    "application/json": components["schemas"]["SpecimenUpdateOut"];
                 };
             };
             /** @description Validation Error */

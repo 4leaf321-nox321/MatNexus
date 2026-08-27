@@ -174,3 +174,42 @@ describe('시편 치수', () => {
     await waitFor(() => expect(saveDimensions).toHaveBeenCalled())
   })
 })
+
+describe('방향 바꾸기', () => {
+  /**
+   * *"시편 수정에도 안 보여"* — 실사용에서 나왔다.
+   *
+   * 전에는 뱃지로 보여 주기만 했고 서버도 안 받았다. 잘못 고른 것을 되돌리려면
+   * 지우고 다시 만드는 수밖에 없었고, 그러면 그 시편의 **시험이 함께 사라진다**.
+   */
+  it('고를 수 있다', async () => {
+    show()
+    expect(await screen.findByRole('button', { name: 'TD' })).toBeInTheDocument()
+  })
+
+  it('바꾸면 이름이 다시 매겨진다고 미리 말한다', async () => {
+    // **방향만 골랐는데 번호까지 달라지는 것**은 사람이 예상 못 하는 일이다.
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: 'TD' }))
+    expect(await screen.findByText(/이름과 번호가 다시 매겨집니다/)).toBeInTheDocument()
+    expect(screen.getByText(/시험 이름도 함께/)).toBeInTheDocument()
+  })
+
+  it('안 바꾸면 아무 말도 안 한다', async () => {
+    show()
+    await screen.findByRole('button', { name: 'TD' })
+    expect(screen.queryByText(/이름과 번호가 다시 매겨집니다/)).not.toBeInTheDocument()
+  })
+
+  it('고른 방향이 서버로 간다', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: 'TD' }))
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(updateSpecimen).toHaveBeenCalled())
+    const body = updateSpecimen.mock.calls[0][1] as Record<string, unknown>
+    expect(body.orientation).toBe('TD')
+  })
+})

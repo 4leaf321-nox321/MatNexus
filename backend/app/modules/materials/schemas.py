@@ -570,12 +570,32 @@ class SpecimenCreateRequest(BaseModel):
 
 
 class SpecimenUpdateRequest(BaseModel):
+    orientation: str | None = Field(default=None, max_length=10)
+    """**바꾸면 이름과 번호가 다시 매겨진다.**
+
+    방향은 자를 때 정해지는 값이라 만들 때 정하면 그만인 것 같지만, 잘못 고른
+    것을 되돌릴 길이 없었다 — 지우고 다시 만들면 그 시편의 시험이 함께 사라진다.
+
+    번호는 **옮겨 가는 방향에서 새로 받는다.** `MD_03` 을 TD 로 옮길 때 TD 에
+    이미 03 이 있을 수 있고, 시편 번호는 「그 방향에서 몇 번째로 자른 것인가」
+    이기 때문이다."""
     standard: str | None = Field(default=None, max_length=100)
     thickness: float | None = Field(default=None, gt=0)
     width: float | None = Field(default=None, gt=0)
     gauge_length: float | None = Field(default=None, gt=0)
     length_unit: str | None = None
     note: str | None = None
+
+
+class SpecimenUpdateOut(BaseModel):
+    """고친 시편과 **이름이 어떻게 바뀌었는지.**
+
+    이름이 바뀌는 것은 사람이 예상 못 하는 일이라(방향만 골랐는데 번호까지
+    달라진다) 조용히 하면 안 된다."""
+
+    specimen: SpecimenOut
+    renamed: str | None = None
+    """`SECC_..._MD_03 → SECC_..._TD_05 (시험 2건도 함께)`. 안 바뀌었으면 비어 있다."""
 
 
 class ValueSourceOut(BaseModel):

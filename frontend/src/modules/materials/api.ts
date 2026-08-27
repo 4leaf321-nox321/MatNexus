@@ -8,6 +8,8 @@ export type Material = components['schemas']['MaterialOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
 export type Sample = components['schemas']['SampleOut']
 export type Specimen = components['schemas']['SpecimenOut']
+/** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
+export type SpecimenUpdated = components['schemas']['SpecimenUpdateOut']
 export type NamePreview = components['schemas']['NamePreviewOut']
 export type Classification = components['schemas']['ClassificationOut']
 /** 못 지운 것과 그 이유. */
@@ -206,9 +208,15 @@ export const materialsApi = {
   specimens: (sampleId: string) => api.get<Specimen[]>(`/samples/${sampleId}/specimens`),
   createSpecimen: (sampleId: string, payload: SpecimenCreate) =>
     api.post<Specimen>(`/samples/${sampleId}/specimens`, payload),
-  /** 시편 속성 수정 — 치수·메모. 방향과 번호는 이름을 만드는 값이라 안 바꾼다. */
+  /**
+   * 시편 속성 수정 — 치수·메모·**방향**.
+   *
+   * 방향을 바꾸면 **이름과 번호가 다시 매겨진다**(`renamed` 에 그 사실이 온다).
+   * 전에는 아예 못 바꿨는데, 잘못 고른 것을 되돌릴 길이 없었다 — 지우고 다시
+   * 만들면 그 시편의 시험이 함께 사라진다.
+   */
   updateSpecimen: (id: string, payload: SpecimenUpdate) =>
-    api.patch<Specimen>(`/specimens/${id}`, payload),
+    api.patch<SpecimenUpdated>(`/specimens/${id}`, payload),
 
   /**
    * 이 시편이 가질 수 있는 치수 칸과 지금 값. 규격이 정한다.
