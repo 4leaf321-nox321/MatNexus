@@ -185,17 +185,29 @@ const META_ROLE: Record<MetaRole, { label: string; where: string }> = {
 
 /** 고르는 목록의 묶음. **어디로 가느냐**로 나눈다 — 여섯이 한 줄로 늘어서
  *  있으면 성격이 다른 것들이 나란히 보여 뭉쳐 읽힌다. */
-/** 대상을 정해야 뜻이 있는 역할. 안 정하면 그 값은 아무 데도 안 간다. */
-const NEEDS_TARGET: MetaRole[] = [
-  'summary',
+/**
+ * 대상을 **목록에서 고르는** 역할. 자유 입력으로 두면 오타 하나가 조용히
+ * 아무것도 안 하는 규칙이 된다.
+ *
+ * **이 목록이 곧 고르는 칸을 그리는 조건이다.** 전에는 같은 목록이 세 곳에
+ * 흩어져 있었고(여기 · `conditionOptions` · 화면의 `||` 사슬), `specimen_props`
+ * 가 앞의 둘에만 들어가 **화면이 「갈 곳을 정하세요」 라고 하면서 정할 수단을
+ * 안 주는** 상태가 됐다(실사용 2026-08-28). 그래서 이관에서 시편 규격이 통째로
+ * 비었고, 규격이 치수 칸을 정하므로(ADR 0010) 그 시편들은 치수를 받을 자리조차
+ * 없었다.
+ */
+const PICKS_TARGET: MetaRole[] = [
   'record',
-  'condition',
-  'specimen',
   'identity',
+  'condition',
   'material',
   'sample',
   'specimen_props',
 ]
+
+/** 대상을 정해야 뜻이 있는 역할. 안 정하면 그 값은 아무 데도 안 간다.
+ *  고르는 것 + 자유 입력 둘(`specimen`·`summary`) 이다. */
+const NEEDS_TARGET: MetaRole[] = [...PICKS_TARGET, 'specimen', 'summary']
 
 const META_ROLE_GROUPS: { title: string; roles: MetaRole[] }[] = [
   { title: '시험에 남긴다', roles: ['keep', 'summary', 'record', 'condition'] },
@@ -1902,13 +1914,10 @@ export default function FormatProfileEditorPage() {
                           }
                         />
                       )}
-                      {/* 시험 칸과 식별자는 **고르는 것**이다. 자유 입력으로 두면
-                          오타 하나가 조용히 아무것도 안 하는 규칙이 된다. */}
-                      {(rule.role === 'record' ||
-                        rule.role === 'identity' ||
-                        rule.role === 'condition' ||
-                        rule.role === 'material' ||
-                        rule.role === 'sample') && (
+                      {/* 시험 칸과 식별자는 **고르는 것**이다. 목록은
+                          `PICKS_TARGET` 하나가 정한다 — `||` 사슬로 적어 두면
+                          역할을 늘릴 때 한 곳이 빠지고, 실제로 그렇게 빠졌다. */}
+                      {PICKS_TARGET.includes(rule.role) && (
                         <Select
                           value={rule.target || 'none'}
                           onValueChange={(value) =>

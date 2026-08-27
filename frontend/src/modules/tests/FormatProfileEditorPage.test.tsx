@@ -242,6 +242,39 @@ describe('메타 역할 고르기', () => {
     expect(screen.getByText(/갈 곳을 정하세요/)).toBeInTheDocument()
   })
 
+  it('갈 곳을 정하라고 했으면 정할 수단을 준다', async () => {
+    /**
+     * **말만 하고 수단을 안 준 자리가 실제로 있었다**(2026-08-28).
+     *
+     * 「시편 속성」 은 `NEEDS_TARGET` 에 있어서 경고는 떴는데, 고르는 칸을
+     * 그리는 조건에서 빠져 있어 **고를 수가 없었다.** 그래서 사람이 「원문
+     * 그대로 보관」 으로 넘겼고, 이관에서 시편 규격이 통째로 비었다 — 규격이
+     * 치수 칸을 정하므로(ADR 0010) 그 시편들은 치수를 받을 자리조차 없었다.
+     *
+     * 역할 하나만 보지 않는다. **경고를 내는 역할이면 무엇이든** 고를 것이
+     * 함께 나와야 같은 부류가 다시 안 생긴다.
+     */
+    open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+    const roles = screen.getAllByRole('combobox')
+    const meta = roles[roles.length - 1]
+
+    await userEvent.click(meta)
+    await userEvent.click(await screen.findByRole('option', { name: /시편 속성/ }))
+
+    // 경고가 떴다면 — 고르는 칸도 함께 떠 있어야 한다.
+    expect(screen.getByText(/갈 곳을 정하세요/)).toBeInTheDocument()
+    // 고르는 칸은 역할 칸 **바로 뒤**에 그려진다. 이 화면에는 콤보가 여럿이라
+    // (채널·시험 종류…) 「meta 가 아닌 것」 으로 집으면 엉뚱한 것을 집는다.
+    const after = screen.getAllByRole('combobox')
+    const picker = after[after.indexOf(meta) + 1]
+    expect(picker).toBeDefined()
+
+    await userEvent.click(picker)
+    // 규격이 그중 제일 중요하다 — 이것이 그 시편의 치수 칸을 정한다.
+    expect(await screen.findByRole('option', { name: /시편 규격/ })).toBeInTheDocument()
+  })
+
   it('어디로 가는지 목록에 적어 둔다', async () => {
     // 이름만으로는 결과값·기록·조건이 뭉쳐 읽힌다 — 셋 다 시험에 붙지만
     // 자리가 다르다.

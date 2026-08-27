@@ -391,3 +391,68 @@ class Test이름에서_뽑기:
         row = read(make(tmp_path, name="아무이름.json", lot_no=None), self.PATTERN)
         assert not row.ok
         assert "이름 규칙" in row.problem
+
+
+class Test있던_시편의_빈_칸:
+    """**다시 돌려도 안 붙던 자리.**
+
+    시편은 「있으면 쓰고 없으면 만든다」 인데 규격은 **만들 때만** 붙었다. 그래서
+    프로파일이 규격을 안 보내던 동안 들어간 시편은 규격이 빈 채 남고, 프로파일을
+    고쳐 다시 돌려도 `hit` 으로 걸려 그대로였다(실사용 2026-08-28).
+
+    시편이 수백 장이면 화면에서 하나씩 고치는 것은 길이 아니다 — 다시 돌리는
+    것이 유일한 길이고, 그 길이 막혀 있었다.
+    """
+
+    class _Client:
+        """`patch` 만 받는 가짜. 무엇을 어디로 보냈는지 적어 둔다."""
+
+        def __init__(self, status: int = 200) -> None:
+            self.status = status
+            self.sent: list[tuple[str, dict[str, Any]]] = []
+
+        def patch(self, url: str, json: dict[str, Any]) -> Any:
+            self.sent.append((url, json))
+            return type("R", (), {"status_code": self.status, "text": "안 됨"})()
+
+    def test_빈_칸을_채운다(self) -> None:
+        client = self._Client()
+        import_legacy._fill_specimen(
+            client,
+            {"id": "s1", "record_name": "SECC__01_MD_01", "standard": None},
+            {"standard": "ASTM E8 R1"},
+        )
+        assert client.sent == [("/api/specimens/s1", {"standard": "ASTM E8 R1"})]
+
+    def test_사람이_적은_것을_덮지_않는다(self) -> None:
+        """**되돌릴 수 없다.** 규격을 덮으면 그 시편의 치수 칸이 통째로
+        바뀐다(ADR 0010)."""
+        client = self._Client()
+        import_legacy._fill_specimen(
+            client,
+            {"id": "s1", "record_name": "x", "standard": "ISO 527-2 1BA"},
+            {"standard": "ASTM E8 R1"},
+        )
+        assert client.sent == []
+
+    def test_보낼_것이_없으면_안_부른다(self) -> None:
+        """파일이 빈 글자만 주는 일이 있다. 그걸로 요청을 날리면 **빈 값으로
+        덮어쓰는** 셈이 된다."""
+        client = self._Client()
+        import_legacy._fill_specimen(
+            client,
+            {"id": "s1", "record_name": "x", "standard": None},
+            {"standard": "   "},
+        )
+        assert client.sent == []
+
+    def test_실패해도_멈추지_않는다(self) -> None:
+        """규격은 나중에도 붙일 수 있지만, 여기서 터지면 그 시험이 통째로
+        안 들어간다."""
+        client = self._Client(status=422)
+        import_legacy._fill_specimen(
+            client,
+            {"id": "s1", "record_name": "x", "standard": None},
+            {"standard": "ASTM E8 R1"},
+        )
+        assert len(client.sent) == 1  # 불렀고, 예외는 안 났다

@@ -530,6 +530,48 @@ def _body(
     return body
 
 
+def _fill_specimen(
+    client: TestClient, specimen: dict[str, Any], props: dict[str, str]
+) -> None:
+    """있던 시편의 **빈 칸만** 파일 값으로 채운다.
+
+    ## 왜 필요한가 — 다시 돌려도 안 붙었다
+
+    시편은 「있으면 쓰고 없으면 만든다」 인데, **규격은 만들 때만** 붙고 있었다.
+    그래서 프로파일이 규격을 안 보내던 동안 들어간 시편들은 규격이 빈 채로 남고,
+    프로파일을 고쳐 **다시 돌려도 그 시편은 `hit` 으로 걸려 그대로**였다
+    (실사용 2026-08-28).
+
+    고칠 길이 화면밖에 없었는데, 시편이 수백 장이면 그것은 길이 아니다.
+
+    ## 빈 칸만 채운다
+
+    사람이 이미 골라 넣은 규격을 파일이 조용히 바꾸면 어느 것이 맞는지 알 수
+    없다. 장비 치수를 시편에 채울 때와 같은 규칙이다
+    (`apply_instrument_dimensions` 의 `overwrite`).
+
+    **덮어쓰기는 안 연다.** 이관은 되돌릴 수 없고, 규격을 덮어쓰면 그 시편의
+    치수 칸이 통째로 바뀐다(ADR 0010) — 되돌릴 수 없는 것에 자동 덮어쓰기를
+    붙이지 않는다.
+    """
+    fill = {
+        key: value.strip()
+        for key, value in props.items()
+        if value.strip() and not specimen.get(key)
+    }
+    if not fill:
+        return
+    name = specimen.get("record_name") or specimen["id"]
+    done = client.patch(f"/api/specimens/{specimen['id']}", json=fill)
+    if done.status_code != 200:
+        # **막지 않는다.** 곡선은 멀쩡히 들어가야 한다 — 규격은 나중에도 붙일
+        # 수 있지만, 여기서 멈추면 그 시험이 통째로 안 들어간다.
+        print(f"  시편 채우기 실패 {name}: {done.text[:160]}")
+        return
+    said = ", ".join(f"{key}={value}" for key, value in fill.items())
+    print(f"  시편 {name} 빈 칸 채움 — {said}")
+
+
 def _parse(client: TestClient, run_id: str) -> str:
     """이 시험을 읽는다. **워커가 먼저 집어 갔으면 그것을 기다린다.**
 
@@ -648,6 +690,7 @@ def _load(
             ]
             if hit:
                 specimens[row.where] = hit[0]["id"]
+                _fill_specimen(client, hit[0], row.specimen_props)
             else:
                 # **규격을 붙인다.** 규격이 치수 칸을 정하므로(ADR 0010), 안
                 # 붙이면 그 시편은 치수를 받을 자리조차 없다.
