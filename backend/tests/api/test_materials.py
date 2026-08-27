@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import Material
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests.definitions import ensure_builtin_test_types
 
 #: 인장 한 벌 — 밀시트 대조가 「우리가 잰 값」을 어디서 얻는지 보이려고 쓴다.
@@ -278,7 +278,6 @@ class TestHierarchy:
 
         줄마다 물으면 N+1 이므로 목록이 한 번에 세어 준다.
         """
-        import uuid as uuid_module
 
         from app.modules.tests import services as test_services
         from app.modules.tests.definitions import ensure_builtin_test_types
@@ -315,7 +314,7 @@ class TestHierarchy:
             for _ in range(2)
         ]
         # 하나는 읽히고 채택까지, 하나는 읽다 실패한 상태로 둔다.
-        assert test_services.parse_run(db, uuid_module.UUID(runs[0]["id"])) == "parsed"
+        assert test_services.parse_run(db, uuid.UUID(runs[0]["id"])) == "parsed"
         stored = client.post(
             "/api/processing/results",
             json={
@@ -330,7 +329,7 @@ class TestHierarchy:
             headers=admin_headers,
         ).json()
         client.post(f"/api/processing/results/{stored['id']}/adopt", headers=admin_headers)
-        failed = db.get(TestRun, uuid_module.UUID(runs[1]["id"]))
+        failed = db.get(TestRun, uuid.UUID(runs[1]["id"]))
         assert failed is not None
         failed.status = "failed"
         db.commit()
@@ -419,6 +418,221 @@ class TestDeletion:
         assert (
             client.get(f"/api/materials/{material['id']}", headers=admin_headers).status_code
             == 404
+        )
+
+
+class Test사슬_삭제:
+    """*"재료를 삭제할 때 하위 시료/시편이 있으면 삭제 안 되는 문제가 있다"* —
+    실사용에서 나왔다.
+
+    `DELETE /materials/{id}` 가 막는 것은 맞다. 재료 하나를 지우는 뜻으로 누른
+    버튼이 시험 200건을 함께 지우면 안 된다. 그런데 그러면 **정리할 방법이 아예
+    없다** — 시편을 하나씩, 시료를 하나씩 지워 올라가야 하고, 이관을 다시 돌릴
+    때마다 그 일을 한다.
+    """
+
+    def tree(
+        self, client: TestClient, headers: dict[str, str], specimens: int = 2
+    ) -> dict[str, Any]:
+        material = _create_material(client, headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        made = [
+            client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD"},
+                headers=headers,
+            ).json()
+            for _ in range(specimens)
+        ]
+        return {"material": material, "sample": sample, "specimens": made}
+
+    def test_무엇이_사라지는지_먼저_말한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**화면이 세지 않게 한다.** 화면이 나름대로 세면 사람이 본 숫자와 실제로
+        지워지는 것이 어긋나고, 그러면 그 「예」 는 다른 것에 대한 대답이 된다."""
+        tree = self.tree(client, admin_headers, specimens=3)
+        plan = client.get(
+            f"/api/materials/{tree['material']['id']}/delete-plan", headers=admin_headers
+        )
+        assert plan.status_code == 200, plan.text
+        assert plan.json() == {
+            "material_name": tree["material"]["record_name"],
+            "samples": 1,
+            "specimens": 3,
+            "test_runs": 0,
+        }
+
+    def test_아래까지_통째로_지운다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        tree = self.tree(client, admin_headers)
+        material_id = tree["material"]["id"]
+
+        gone = client.post(
+            f"/api/materials/{material_id}/delete-cascade",
+            json={"include_test_runs": False},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        assert gone.json()["samples"] == 1
+        assert gone.json()["specimens"] == 2
+
+        # **셋 다 닿을 수 없어야 한다.** 재료만 사라지고 시편이 남으면 그 시편은
+        # 화면 어디에서도 못 보는 채로 이름만 붙들고 있다.
+        assert (
+            client.get(f"/api/materials/{material_id}", headers=admin_headers).status_code
+            == 404
+        )
+        assert (
+            client.get(
+                f"/api/samples/{tree['sample']['id']}", headers=admin_headers
+            ).status_code
+            == 404
+        )
+        # **DB 로 본다.** `GET /specimens/{id}` 는 부모(시료)가 지워져도 404 라,
+        # 시편 행이 그대로 살아 있어도 화면에서는 구별이 안 된다 — 사보타주로
+        # 확인했다(시편을 안 지우게 해도 시험이 통과했다).
+        db.expire_all()
+        for one in tree["specimens"]:
+            stored = db.get(Specimen, uuid.UUID(one["id"]))
+            assert stored is not None
+            assert stored.deleted_at is not None, "시편 행이 안 지워졌다"
+        gone_sample = db.get(Sample, uuid.UUID(tree["sample"]["id"]))
+        assert gone_sample is not None
+        assert gone_sample.deleted_at is not None, "시료 행이 안 지워졌다"
+
+    def test_시험은_따로_허락을_받는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """시료·시편은 이름표에 가깝지만 **시험은 잰 값이다** — 곡선과 처리 결과가
+        거기 매달려 있다. 한 칸으로 묶으면 「시료 정리하려다 측정 데이터를
+        날렸다」 가 난다."""
+        from app.modules.tests.definitions import ensure_builtin_test_types
+
+        ensure_builtin_test_types(db)
+        db.commit()
+
+        tree = self.tree(client, admin_headers, specimens=1)
+        material_id = tree["material"]["id"]
+        tra = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+        run = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": tree["specimens"][0]["id"],
+                "test_type": "tensile",
+                "conditions": "{}",
+            },
+            files={"file": ("Example.tra", tra.read_bytes())},
+            headers=admin_headers,
+        )
+        assert run.status_code == 202, run.text
+
+        plan = client.get(
+            f"/api/materials/{material_id}/delete-plan", headers=admin_headers
+        ).json()
+        assert plan["test_runs"] == 1
+
+        # 안 켜면 막고, **몇 건인지 말한다.**
+        blocked = client.post(
+            f"/api/materials/{material_id}/delete-cascade",
+            json={"include_test_runs": False},
+            headers=admin_headers,
+        )
+        assert blocked.status_code == 409
+        assert blocked.json()["error"]["code"] == "MNX-MATERIALS-0029"
+        assert "1건" in blocked.json()["error"]["message"]
+
+        # 막혔으면 **아무것도 안 지워져 있어야 한다.** 절반만 지워진 트리는
+        # 화면에서 닿을 수 없다.
+        assert (
+            client.get(f"/api/materials/{material_id}", headers=admin_headers).status_code
+            == 200
+        )
+
+        gone = client.post(
+            f"/api/materials/{material_id}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        assert gone.json()["test_runs"] == 1
+        assert (
+            client.get(f"/api/test-runs/{run.json()['id']}", headers=admin_headers).status_code
+            == 404
+        )
+
+    def test_빈_재료도_지워진다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**막는 것이 목적이 아니다.** 아무것도 안 달렸으면 그냥 지워진다."""
+        material = _create_material(client, admin_headers)
+        gone = client.post(
+            f"/api/materials/{material['id']}/delete-cascade",
+            json={"include_test_runs": False},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        assert gone.json()["samples"] == 0
+
+    def test_남의_부서_것은_못_지운다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**새 문이 권한 검사를 우회하면 안 된다.** 통째로 지우는 길일수록 그렇다 —
+        하나 뚫리면 사라지는 것이 재료 하나가 아니라 트리 전체다."""
+        tree = self.tree(client, admin_headers, specimens=1)
+
+        client.post(
+            "/api/workspaces",
+            json={"name": "남의 부서", "slug": "other-dept"},
+            headers=admin_headers,
+        )
+        made = client.post(
+            "/api/accounts",
+            json={
+                "email": "other@example.com",
+                "display_name": "남",
+                "workspace_slug": "other-dept",
+                "role": "member",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code in (200, 201), made.text
+        token = client.post(
+            "/api/auth/login",
+            json={"email": "other@example.com", "password": made.json()["temporary_password"]},
+        ).json()["access_token"]
+
+        response = client.post(
+            f"/api/materials/{tree['material']['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code in (403, 404), response.text
+
+        # **여기까지는 「안 보인다」 일 뿐이다.** 전역 재료는 누구에게나 보이고
+        # 관리자만 고칠 수 있다 — `require_writable` 이 실제로 걸리는 자리는
+        # 그쪽이다. 사보타주로 확인했다(권한 검사를 빼도 위 단언은 통과했다).
+        stored = db.get(Material, uuid.UUID(tree["material"]["id"]))
+        assert stored is not None
+        stored.owner_workspace_id = None
+        db.commit()
+
+        as_global = client.post(
+            f"/api/materials/{tree['material']['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert as_global.status_code == 403, as_global.text
+
+        # **막혔으면 그대로 있어야 한다.**
+        assert (
+            client.get(
+                f"/api/materials/{tree['material']['id']}", headers=admin_headers
+            ).status_code
+            == 200
         )
 
 

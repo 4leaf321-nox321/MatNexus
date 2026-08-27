@@ -1039,6 +1039,69 @@ export interface paths {
         patch: operations["update_material_api_materials__material_id__patch"];
         trace?: never;
     };
+    "/api/materials/{material_id}/delete-cascade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Material Cascade
+         * @description 재료를 **아래까지 통째로** 지운다 — 시험 → 시편 → 시료 → 재료 순서로.
+         *
+         *     ## 왜 따로 두나
+         *
+         *     `DELETE /materials/{id}` 는 시료가 남아 있으면 막는다. 그게 맞다 — 재료 하나를
+         *     지우는 뜻으로 누른 버튼이 시험 200건을 함께 지우면 안 된다. 그런데 그러면
+         *     **정리할 방법이 아예 없다.** 시편을 하나씩, 시료를 하나씩 지워 올라가야 하는데
+         *     이관을 다시 돌릴 때마다 그 일을 한다.
+         *
+         *     그래서 「통째로」 를 **다른 문**으로 낸다. 실수로 눌리지 않고, 무엇이 사라지는지
+         *     먼저 보고 나서 부르게 한다(`GET /delete-plan`).
+         *
+         *     ## 왜 시험만 따로 허락을 받나
+         *
+         *     시료·시편은 이름표에 가깝지만 **시험은 잰 값이다** — 곡선과 처리 결과가 거기
+         *     매달려 있다. 한 칸으로 묶으면 「시료 정리하려다 측정 데이터를 날렸다」 가 난다.
+         *
+         *     ## 순서
+         *
+         *     아래에서 위로 간다. 위에서부터 지우면 중간에 실패했을 때 **부모는 사라지고
+         *     자식은 남는다** — 그 자식은 화면 어디에서도 닿을 수 없게 된다.
+         */
+        post: operations["delete_material_cascade_api_materials__material_id__delete_cascade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/delete-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delete Plan
+         * @description 지우기 전에 **무엇이 함께 사라지는지** 보여 준다.
+         *
+         *     화면이 세지 않게 서버가 낸다. 화면이 나름대로 세면 사람이 본 숫자와 실제로
+         *     지워지는 것이 어긋나고, 그러면 그 「예」 는 다른 것에 대한 대답이 된다.
+         */
+        get: operations["delete_plan_api_materials__material_id__delete_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{material_id}/property-sources": {
         parameters: {
             query?: never;
@@ -3579,6 +3642,36 @@ export interface components {
             /** Si Unit */
             si_unit: string;
         };
+        /**
+         * CascadeDeleteOut
+         * @description 실제로 지운 것. **요청한 것이 아니라 지운 것을 돌려준다** — 사이에
+         *     누가 시편을 하나 더 넣었으면 숫자가 다르고, 그 사실이 보여야 한다.
+         */
+        CascadeDeleteOut: {
+            /** Material Name */
+            material_name: string;
+            /** Samples */
+            samples: number;
+            /** Specimens */
+            specimens: number;
+            /** Test Runs */
+            test_runs: number;
+        };
+        /**
+         * CascadeDeleteRequest
+         * @description 재료를 아래까지 통째로 지운다.
+         *
+         *     **시험은 따로 허락을 받는다.** 시료·시편은 이름표에 가깝지만 시험은 잰
+         *     값이다 — 곡선과 처리 결과가 거기 매달려 있다. 한 칸으로 묶어 두면 「시료
+         *     정리하려다 측정 데이터를 날렸다」 가 난다.
+         */
+        CascadeDeleteRequest: {
+            /**
+             * Include Test Runs
+             * @default false
+             */
+            include_test_runs: boolean;
+        };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
             /** Current Password */
@@ -3919,6 +4012,23 @@ export interface components {
         DeleteAccountResponse: {
             /** Transferred */
             transferred: components["schemas"]["ReferenceOut"][];
+        };
+        /**
+         * DeletePlanOut
+         * @description 이 재료를 지우면 **무엇이 함께 사라지는가.**
+         *
+         *     화면이 세지 않게 하려고 서버가 낸다 — 화면이 나름대로 세면 사람이 본 숫자와
+         *     실제로 지워지는 것이 어긋나고, 그러면 그 「예」 는 다른 것에 대한 대답이 된다.
+         */
+        DeletePlanOut: {
+            /** Material Name */
+            material_name: string;
+            /** Samples */
+            samples: number;
+            /** Specimens */
+            specimens: number;
+            /** Test Runs */
+            test_runs: number;
         };
         /**
          * DetectOut
@@ -9210,6 +9320,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_material_cascade_api_materials__material_id__delete_cascade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CascadeDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CascadeDeleteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_plan_api_materials__material_id__delete_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletePlanOut"];
                 };
             };
             /** @description Validation Error */

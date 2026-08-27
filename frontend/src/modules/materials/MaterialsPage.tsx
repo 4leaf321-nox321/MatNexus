@@ -223,7 +223,8 @@ export default function MaterialsPage() {
           <>
             <p>
               고른 <b>{picked.size}건</b>이 목록에서 사라집니다. <b>시료가 남아 있는 재료는
-              지워지지 않고</b> 이유와 함께 돌아옵니다.
+              지워지지 않고</b> 이유와 함께 돌아옵니다 — 아래까지 통째로 지우려면 그
+              재료를 열어 <b>삭제</b>를 누르세요.
             </p>
             <ul className="text-muted-foreground mt-2 max-h-32 space-y-0.5 overflow-y-auto font-mono text-xs">
               {rows

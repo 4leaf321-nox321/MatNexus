@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
+import { DeleteMaterialDialog } from '@/modules/materials/DeleteMaterialDialog'
 import { materialsApi } from '@/modules/materials/api'
 import type { Sample, Specimen } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
@@ -86,21 +87,10 @@ export default function MaterialDetailPage() {
   const [addingSample, setAddingSample] = useState(false)
   const [sources, setSources] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [deleteError, setDeleteError] = useState<Error | null>(null)
+  const [removing, setRemoving] = useState(false)
   const [expand, setExpand] = useState<ExpandCommand | null>(null)
 
   const item = material.data
-
-  async function removeMaterial() {
-    setDeleteError(null)
-    try {
-      await materialsApi.remove(id)
-      navigate('/materials')
-    } catch (caught) {
-      // 서버가 "시료 N건이 남아 있어 지울 수 없습니다" 를 이유와 함께 준다.
-      setDeleteError(caught instanceof Error ? caught : new Error('삭제에 실패했습니다.'))
-    }
-  }
 
   return (
     <div>
@@ -133,7 +123,10 @@ export default function MaterialDetailPage() {
               <Pencil className="size-4" />
               수정
             </Button>
-            <Button variant="outline" onClick={removeMaterial}>
+            {/* **확인이 없었다.** 누르면 바로 지우려 들었고, 시료가 남아 있으면
+                그제서야 실패 이유가 떴다 — 그리고 거기서 할 수 있는 일이 없었다.
+                이제 무엇이 함께 사라지는지 먼저 보여 준다. */}
+            <Button variant="outline" onClick={() => setRemoving(true)} disabled={!item}>
               삭제
             </Button>
           </div>
@@ -148,7 +141,17 @@ export default function MaterialDetailPage() {
         />
       )}
 
-      <ErrorNotice error={material.error ?? deleteError} className="mb-4" />
+      <ErrorNotice error={material.error} className="mb-4" />
+
+      {item && (
+        <DeleteMaterialDialog
+          materialId={item.id}
+          materialName={item.record_name}
+          open={removing}
+          onClose={() => setRemoving(false)}
+          onDeleted={() => navigate('/materials')}
+        />
+      )}
 
       {item && (
         <dl className="mb-8 grid grid-cols-2 gap-x-6 gap-y-3 rounded-md border p-4 text-sm sm:grid-cols-4">

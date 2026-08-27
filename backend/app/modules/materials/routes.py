@@ -29,9 +29,12 @@ from app.modules.materials.schemas import (
     BulkMaterialRequest,
     BulkOut,
     BulkRequest,
+    CascadeDeleteOut,
+    CascadeDeleteRequest,
     ClassificationOut,
     DeclaredPointOut,
     DeclaredPropertyOut,
+    DeletePlanOut,
     MaterialBlockedOut,
     MaterialCreateRequest,
     MaterialDeleteOut,
@@ -1064,6 +1067,127 @@ def delete_material(
     )
     db.commit()
     return Response(status_code=204)
+
+
+@router.get("/{material_id}/delete-plan", response_model=DeletePlanOut)
+def delete_plan(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeletePlanOut:
+    """지우기 전에 **무엇이 함께 사라지는지** 보여 준다.
+
+    화면이 세지 않게 서버가 낸다. 화면이 나름대로 세면 사람이 본 숫자와 실제로
+    지워지는 것이 어긋나고, 그러면 그 「예」 는 다른 것에 대한 대답이 된다.
+    """
+    material = services.get_material(db, user, material_id)
+    plan = services.delete_plan(db, material)
+    return DeletePlanOut(
+        material_name=material.record_name,
+        samples=plan.samples,
+        specimens=plan.specimens,
+        test_runs=plan.test_runs,
+    )
+
+
+@router.post("/{material_id}/delete-cascade", response_model=CascadeDeleteOut)
+def delete_material_cascade(
+    material_id: uuid.UUID,
+    payload: CascadeDeleteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CascadeDeleteOut:
+    """재료를 **아래까지 통째로** 지운다 — 시험 → 시편 → 시료 → 재료 순서로.
+
+    ## 왜 따로 두나
+
+    `DELETE /materials/{id}` 는 시료가 남아 있으면 막는다. 그게 맞다 — 재료 하나를
+    지우는 뜻으로 누른 버튼이 시험 200건을 함께 지우면 안 된다. 그런데 그러면
+    **정리할 방법이 아예 없다.** 시편을 하나씩, 시료를 하나씩 지워 올라가야 하는데
+    이관을 다시 돌릴 때마다 그 일을 한다.
+
+    그래서 「통째로」 를 **다른 문**으로 낸다. 실수로 눌리지 않고, 무엇이 사라지는지
+    먼저 보고 나서 부르게 한다(`GET /delete-plan`).
+
+    ## 왜 시험만 따로 허락을 받나
+
+    시료·시편은 이름표에 가깝지만 **시험은 잰 값이다** — 곡선과 처리 결과가 거기
+    매달려 있다. 한 칸으로 묶으면 「시료 정리하려다 측정 데이터를 날렸다」 가 난다.
+
+    ## 순서
+
+    아래에서 위로 간다. 위에서부터 지우면 중간에 실패했을 때 **부모는 사라지고
+    자식은 남는다** — 그 자식은 화면 어디에서도 닿을 수 없게 된다.
+    """
+    material = services.get_material(db, user, material_id)
+    services.require_writable(db, user, material)
+
+    samples, specimens, runs = services.deletable_tree(db, material)
+    if runs and not payload.include_test_runs:
+        raise Conflict(
+            "MNX-MATERIALS-0029",
+            f"시험 {len(runs)}건이 함께 지워집니다 — 곡선과 처리 결과가 거기 "
+            f"매달려 있습니다. 그래도 지우려면 시험까지 지우기를 함께 켜세요.",
+        )
+
+    now = _now()
+    # ── 시험 ──────────────────────────────────────────────────────────
+    for run in runs:
+        run.deleted_at = now
+        vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
+        # **건마다 남긴다.** 되돌리려면 먼저 무엇이 지워졌는지 알아야 하고,
+        # 파일 정리 잡이 나중에 파일을 치우면 그때는 정말로 되돌릴 수 없다.
+        audit.record(
+            db,
+            action=audit.TEST_RUN_DELETED,
+            actor=user,
+            target_table="test_runs",
+            target_id=run.id,
+            target_label=run.source_filename or str(run.id),
+            workspace_id=run.workspace_id,
+            changes={"deleted_at": {"after": now.isoformat()}},
+        )
+    # ── 시편 · 시료 ───────────────────────────────────────────────────
+    for specimen in specimens:
+        specimen.deleted_at = now
+        vocabulary_services.release_bindings(
+            db, specimen, vocabulary_services.SPECIMEN_BINDINGS
+        )
+    for sample in samples:
+        sample.deleted_at = now
+        vocabulary_services.release_bindings(db, sample, vocabulary_services.SAMPLE_BINDINGS)
+    # ── 재료 ──────────────────────────────────────────────────────────
+    material.deleted_at = now
+    vocabulary_services.release_bindings(db, material, vocabulary_services.MATERIAL_BINDINGS)
+    services.release_uses(db, material)
+    audit.record(
+        db,
+        action=audit.MATERIAL_DELETED,
+        actor=user,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        workspace_id=material.owner_workspace_id,
+        # **무엇이 딸려 갔는지 함께 남긴다.** 개수가 없으면 감사 기록만 보고는
+        # "재료 하나를 지웠다" 와 "트리를 통째로 지웠다" 를 구별할 수 없다.
+        changes={
+            "deleted_at": {"after": now.isoformat()},
+            "cascade": {
+                "after": {
+                    "samples": len(samples),
+                    "specimens": len(specimens),
+                    "test_runs": len(runs),
+                }
+            },
+        },
+    )
+    db.commit()
+    return CascadeDeleteOut(
+        material_name=material.record_name,
+        samples=len(samples),
+        specimens=len(specimens),
+        test_runs=len(runs),
+    )
 
 
 # --- 시료 -------------------------------------------------------------------

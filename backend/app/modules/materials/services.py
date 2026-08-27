@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import func, select
@@ -415,6 +416,81 @@ def specimen_counts(db: Session, sample_ids: Sequence[uuid.UUID]) -> dict[uuid.U
         .group_by(Specimen.sample_id)
     )
     return {sample_id: count for sample_id, count in rows}
+
+
+# --- 사슬 삭제 --------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DeletePlan:
+    """이 재료를 지우면 **무엇이 함께 사라지는가.**
+
+    화면이 세지 않게 하려고 서버가 낸다 — 화면이 자기 나름대로 세면 사람이 본
+    숫자와 실제로 지워지는 것이 어긋난다. 그리고 이 숫자는 사람이 「예」 를 누를
+    근거이므로, 어긋나면 그 「예」 는 다른 것에 대한 대답이 된다.
+    """
+
+    samples: int
+    specimens: int
+    test_runs: int
+
+    @property
+    def empty(self) -> bool:
+        return not (self.samples or self.specimens or self.test_runs)
+
+    @property
+    def said(self) -> str:
+        """사람이 읽는 한 줄. 0인 층은 뺀다."""
+        parts = [
+            f"{label} {count}건"
+            for label, count in (
+                ("시료", self.samples),
+                ("시편", self.specimens),
+                ("시험", self.test_runs),
+            )
+            if count
+        ]
+        return " · ".join(parts) or "없음"
+
+
+def deletable_tree(
+    db: Session, material: Material
+) -> tuple[list[Sample], list[Specimen], list[TestRun]]:
+    """이 재료에 매달린 **살아 있는** 행들. 지워진 것은 다시 안 지운다."""
+    samples = list(
+        db.scalars(
+            select(Sample).where(
+                Sample.material_id == material.id, Sample.deleted_at.is_(None)
+            )
+        )
+    )
+    if not samples:
+        return [], [], []
+    sample_ids = [one.id for one in samples]
+    specimens = list(
+        db.scalars(
+            select(Specimen).where(
+                Specimen.sample_id.in_(sample_ids), Specimen.deleted_at.is_(None)
+            )
+        )
+    )
+    if not specimens:
+        return samples, [], []
+    specimen_ids = [one.id for one in specimens]
+    runs = list(
+        db.scalars(
+            select(TestRun).where(
+                TestRun.specimen_id.in_(specimen_ids), TestRun.deleted_at.is_(None)
+            )
+        )
+    )
+    return samples, specimens, runs
+
+
+def delete_plan(db: Session, material: Material) -> DeletePlan:
+    """지우기 전에 보여 줄 숫자."""
+    samples, specimens, runs = deletable_tree(db, material)
+    return DeletePlan(samples=len(samples), specimens=len(specimens), test_runs=len(runs))
 
 
 def workspace_names(db: Session, ids: Sequence[uuid.UUID | None]) -> dict[uuid.UUID, str]:

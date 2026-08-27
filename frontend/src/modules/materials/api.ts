@@ -12,6 +12,10 @@ export type NamePreview = components['schemas']['NamePreviewOut']
 export type Classification = components['schemas']['ClassificationOut']
 /** 못 지운 것과 그 이유. */
 export type MaterialDeleteResult = components['schemas']['MaterialDeleteOut']
+/** 이 재료를 지우면 무엇이 함께 사라지는가. **서버가 센다** — 화면이 나름대로
+ *  세면 사람이 본 숫자와 실제로 지워지는 것이 어긋난다. */
+export type DeletePlan = components['schemas']['DeletePlanOut']
+export type CascadeDeleteResult = components['schemas']['CascadeDeleteOut']
 export type BulkRequest = components['schemas']['BulkRequest']
 /** 무엇이 만들어졌고 어느 줄이 막혔는가. */
 export type BulkResult = components['schemas']['BulkOut']
@@ -122,6 +126,21 @@ export const materialsApi = {
    */
   removeMany: (materialIds: string[]) =>
     api.post<MaterialDeleteResult>('/materials/delete', { material_ids: materialIds }),
+
+  /** 지우기 전에 **무엇이 함께 사라지는지.** 세는 곳은 서버 하나다. */
+  deletePlan: (materialId: string) =>
+    api.get<DeletePlan>(`/materials/${materialId}/delete-plan`),
+
+  /**
+   * 아래까지 통째로 — 시험 → 시편 → 시료 → 재료 순서로.
+   *
+   * **시험은 따로 허락을 받는다.** 시료·시편은 이름표에 가깝지만 시험은 잰
+   * 값이다 — 곡선과 처리 결과가 거기 매달려 있다.
+   */
+  removeCascade: (materialId: string, includeTestRuns: boolean) =>
+    api.post<CascadeDeleteResult>(`/materials/${materialId}/delete-cascade`, {
+      include_test_runs: includeTestRuns,
+    }),
 
   /**
    * 재료·시료·시편을 한 번에. 본문은 **나무**다 — 화면의 평평한 표를

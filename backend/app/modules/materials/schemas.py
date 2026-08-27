@@ -243,6 +243,40 @@ class MaterialDeleteOut(BaseModel):
     blocked: list[MaterialBlockedOut]
 
 
+class DeletePlanOut(BaseModel):
+    """이 재료를 지우면 **무엇이 함께 사라지는가.**
+
+    화면이 세지 않게 하려고 서버가 낸다 — 화면이 나름대로 세면 사람이 본 숫자와
+    실제로 지워지는 것이 어긋나고, 그러면 그 「예」 는 다른 것에 대한 대답이 된다.
+    """
+
+    material_name: str
+    samples: int
+    specimens: int
+    test_runs: int
+
+
+class CascadeDeleteRequest(BaseModel):
+    """재료를 아래까지 통째로 지운다.
+
+    **시험은 따로 허락을 받는다.** 시료·시편은 이름표에 가깝지만 시험은 잰
+    값이다 — 곡선과 처리 결과가 거기 매달려 있다. 한 칸으로 묶어 두면 「시료
+    정리하려다 측정 데이터를 날렸다」 가 난다.
+    """
+
+    include_test_runs: bool = False
+
+
+class CascadeDeleteOut(BaseModel):
+    """실제로 지운 것. **요청한 것이 아니라 지운 것을 돌려준다** — 사이에
+    누가 시편을 하나 더 넣었으면 숫자가 다르고, 그 사실이 보여야 한다."""
+
+    material_name: str
+    samples: int
+    specimens: int
+    test_runs: int
+
+
 class NamePreviewRequest(BaseModel):
     """등록 폼이 입력 중에 부르는 것. 서버가 이름을 만드는 유일한 곳이므로,
     화면이 같은 규칙을 다시 구현하지 않게 한다."""
