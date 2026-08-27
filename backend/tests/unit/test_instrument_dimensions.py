@@ -98,3 +98,22 @@ class TestRefusals:
             {"d0": "12500 mm"}, [field("diameter", "직경", symbol="d0")]
         )
         assert found == {}
+
+    def test_길이가_아닌_단위를_포기한다(self) -> None:
+        """**실측으로 걸린 것과 같은 구멍이다**(2026-08-27, 전체 흐름 점검).
+
+        `kg` 은 아는 단위라 환산이 무사히 끝나고, 그 `1.2` 가 「10m 일 리 없다」
+        검사까지 통과해 **두께 1.2 m 짜리 시편**이 된다. 프로파일은 열마다
+        단위를 지정할 수 있으므로 한 글자 오타면 나는 일이다.
+        """
+        found = curvedata.instrument_dimensions(
+            {"a0": "1.2 kg"}, [field("thickness", "두께", symbol="a0")]
+        )
+        assert found == {}
+
+    def test_단위_힌트가_길이가_아니어도_포기한다(self) -> None:
+        """숫자만 적힌 칸은 힌트를 쓴다 — 그 힌트도 같은 검사를 받아야 한다."""
+        found = curvedata.instrument_dimensions(
+            {"a0": "1.2", "a0_unit": "kg"}, [field("thickness", "두께", symbol="a0")]
+        )
+        assert found == {}

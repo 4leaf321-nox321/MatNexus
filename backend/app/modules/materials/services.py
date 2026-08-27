@@ -30,22 +30,45 @@ logger = logging.getLogger(__name__)
 # --- 단위 -------------------------------------------------------------------
 
 
-def to_si(value: float | None, unit: str, *, field: str) -> float | None:
-    """사람 단위 → 저장 단위. 모르는 단위는 **거부한다.**
+def to_si(value: float | None, unit: str, *, field: str, dimension: str) -> float | None:
+    """사람 단위 → 저장 단위. 모르는 단위도, **차원이 다른 단위도** 거부한다.
 
     조용히 계수 1로 통과시키면 잘못된 값이 SI 인 척 저장되고, 나중에 어느 행이
     틀렸는지 알아낼 방법이 없다.
+
+    ## 차원을 왜 받는가
+
+    실측으로 걸렸다(2026-08-27, 전체 흐름 점검). 두께 자리에 `kg` 을 보냈더니
+    **201 로 통과했다.** `kg` 은 아는 단위라 `UnknownUnit` 이 안 나고, 환산은
+    질량 자리에서 무사히 끝나며, 그 결과가 `spec_thickness_m` 에 들어간다 —
+    `1 kg` 이 **두께 1 m(=1000 mm)** 짜리 재료가 됐다. 화면에도 DB 에도 이상한
+    데가 없고, 나중에 그 재료로 뽑은 덱이 조용히 틀린다.
+
+    그래서 `dimension` 은 **기본값이 없다.** 새 칸을 붙이는 사람이 무엇을
+    기대하는지 적지 않고는 이 함수를 못 부른다 — 시험 조건 쪽은 이미 같은
+    검사를 하고 있었고(`tests/services.py`), 여기만 빠져 있었다.
     """
-    if value is None:
-        return None
+    # **값보다 단위를 먼저 본다.** 값이 비어 있어도 단위는 `input_units` 에
+    # 그대로 저장된다. 거기 엉뚱한 단위가 앉으면, 나중에 값을 채우려는 순간
+    # 막히는데 그 사람은 자기가 방금 적은 것만 보고 있어 이유를 알 수 없다.
     try:
-        return units.to_si(value, unit)
+        found = units.unit_of(unit)
     except units.UnknownUnit as exc:
         raise AppError(
             "MNX-MATERIALS-0005",
             f"{field} 의 단위를 알 수 없습니다: {exc.symbol}",
             status=422,
         ) from exc
+    if not units.same_dimension(found.dimension, dimension):
+        raise AppError(
+            "MNX-MATERIALS-0028",
+            f"{field} 는 {dimension} 인데 {unit} 은 {found.dimension} 입니다. "
+            f"쓸 수 있는 단위: {', '.join(units.units_for(dimension))}",
+            status=422,
+        )
+    if value is None:
+        return None
+    return units.to_si(value, unit)
 
 
 def from_si(value: float | None, unit: str) -> float | None:

@@ -150,6 +150,11 @@ def _as_metres(raw: object, unit_hint: str | None) -> float | None:
     **단위를 못 찾으면 포기한다.** 숫자만 있고 단위를 모를 때 mm 라고 가정하면,
     m 로 적힌 파일에서 1000배 틀린 시편이 만들어진다 — 그 뒤 응력이 통째로
     어긋나는데 숫자는 그럴듯하다.
+
+    **길이가 아닌 단위도 포기한다.** 파일이 `"1.2 kg"` 이라고 적어 오면 `kg` 은
+    아는 단위라 환산이 무사히 끝나고, 그 1.2 가 아래 범위 검사까지 통과해
+    **두께 1.2 m 짜리 시편**이 된다. 프로파일은 열마다 단위를 지정할 수 있으므로
+    이것은 가정이 아니라 한 글자 오타면 나는 일이다.
     """
     if raw is None:
         return None
@@ -165,11 +170,14 @@ def _as_metres(raw: object, unit_hint: str | None) -> float | None:
     except ValueError:
         return None
     try:
-        metres = units.to_si(value, symbol)
+        found = units.unit_of(symbol)
     except units.UnknownUnit:
         return None
+    if not units.same_dimension(found.dimension, "length"):
+        return None
+    metres = units.to_si(value, symbol)
     if not (0 < metres < 10):
-        # 시편이 10m 일 리 없다. 단위를 잘못 읽었다는 신호다.
+        # 길이는 맞는데 자릿수가 틀린 경우 — 시편이 10m 일 리 없다.
         return None
     return metres
 

@@ -146,6 +146,71 @@ class TestUnits:
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "MNX-MATERIALS-0005"
 
+    def test_차원이_다른_단위를_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**실측으로 걸렸다**(2026-08-27, 전체 흐름 점검).
+
+        두께 자리에 `kg` 을 보냈더니 201 로 통과했다. `kg` 은 아는 단위라
+        `UnknownUnit` 이 안 나고, 환산이 질량 자리에서 무사히 끝나며, 그 결과가
+        `spec_thickness_m` 에 들어간다 — **`1 kg` 이 두께 1 m(=1000 mm) 짜리
+        재료**가 됐다. 화면에도 DB 에도 이상한 데가 없어서, 그 재료로 뽑은 덱이
+        조용히 틀린다.
+        """
+        response = client.post(
+            "/api/materials",
+            json={**SECC, "spec_thickness_unit": "kg"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        error = response.json()["error"]
+        assert error["code"] == "MNX-MATERIALS-0028"
+        # 무엇이 어긋났는지와 **무엇을 쓰면 되는지**를 함께 말한다.
+        assert "mass" in error["message"] and "mm" in error["message"]
+
+    def test_밀도_자리의_길이_단위도_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """두께만 막고 밀도를 놓치면 같은 일이 옆 칸에서 난다."""
+        response = client.post(
+            "/api/materials",
+            json={**SECC, "density_unit": "mm"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-MATERIALS-0028"
+
+    def test_고칠_때도_막는다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        """만들 때만 막으면 PATCH 로 같은 값이 들어간다 — 실제로 그 길이 있다."""
+        material = _create_material(client, admin_headers)
+        response = client.patch(
+            f"/api/materials/{material['id']}",
+            json={"spec_thickness": 1.0, "spec_thickness_unit": "kg"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-MATERIALS-0028"
+
+    def test_시편_치수도_같은_검사를_받는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """재료만 막고 시편을 놓치면 같은 일이 한 층 아래에서 난다.
+
+        시편 치수는 **응력의 분모**다 — 두께·폭이 틀리면 곡선 전체가 틀린 배로
+        나오고, 그 곡선이 카드가 되어 솔버까지 간다.
+        """
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        response = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "thickness": 1.0, "length_unit": "kg"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-MATERIALS-0028"
+
 
 class TestHierarchy:
     def test_계층_이름이_이어진다(

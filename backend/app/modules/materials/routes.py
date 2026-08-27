@@ -303,7 +303,10 @@ def preview_name(
     갈라지고, 그때 화면이 보여 준 이름과 저장된 이름이 달라진다.
     """
     thickness_m = services.to_si(
-        payload.spec_thickness, payload.spec_thickness_unit, field="두께"
+        payload.spec_thickness,
+        payload.spec_thickness_unit,
+        field="두께",
+        dimension="length",
     )
     record_name = services.material_record_name(
         grade=payload.grade, details=payload.details, spec_thickness_m=thickness_m
@@ -506,7 +509,10 @@ def _record_name(payload: MaterialCreateRequest) -> str:
         grade=payload.grade,
         details=payload.details,
         spec_thickness_m=services.to_si(
-            payload.spec_thickness, payload.spec_thickness_unit, field="두께"
+            payload.spec_thickness,
+            payload.spec_thickness_unit,
+            field="두께",
+            dimension="length",
         ),
     )
 
@@ -529,9 +535,14 @@ def _make_material(
         alias=payload.alias,
         details=payload.details,
         spec_thickness_m=services.to_si(
-            payload.spec_thickness, payload.spec_thickness_unit, field="두께"
+            payload.spec_thickness,
+            payload.spec_thickness_unit,
+            field="두께",
+            dimension="length",
         ),
-        density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
+        density_si=services.to_si(
+            payload.density, payload.density_unit, field="밀도", dimension="density"
+        ),
         poisson_ratio=payload.poisson_ratio,
         input_units={
             "spec_thickness": payload.spec_thickness_unit,
@@ -967,7 +978,7 @@ def update_material(
             if "density" in data
             else services.from_si(material.density_si, unit)
         )
-        material.density_si = services.to_si(value, unit, field="밀도")
+        material.density_si = services.to_si(value, unit, field="밀도", dimension="density")
         material.input_units = {**material.input_units, "density": unit}
 
     if "spec_thickness" in data or "spec_thickness_unit" in data:
@@ -979,7 +990,9 @@ def update_material(
             if "spec_thickness" in data
             else services.from_si(material.spec_thickness_m, unit)
         )
-        material.spec_thickness_m = services.to_si(value, unit, field="두께")
+        material.spec_thickness_m = services.to_si(
+            value, unit, field="두께", dimension="length"
+        )
         material.input_units = {**material.input_units, "spec_thickness": unit}
 
     for field, axis in (("applied_products", "product"), ("applied_parts", "part")):
@@ -1108,7 +1121,9 @@ def _make_sample(
         lot_no=payload.lot_no,
         # 기준정보를 거치는 값들은 아래 `apply_bindings` 가 넣는다.
         production_date=payload.production_date,
-        density_si=services.to_si(payload.density, payload.density_unit, field="밀도"),
+        density_si=services.to_si(
+            payload.density, payload.density_unit, field="밀도", dimension="density"
+        ),
         input_units={"density": payload.density_unit},
         note=payload.note,
         registered_by_id=user.id,
@@ -1289,7 +1304,7 @@ def update_sample(
         value = (
             data["density"] if "density" in data else services.from_si(sample.density_si, unit)
         )
-        sample.density_si = services.to_si(value, unit, field="밀도")
+        sample.density_si = services.to_si(value, unit, field="밀도", dimension="density")
         sample.input_units = {**sample.input_units, "density": unit}
 
     db.commit()
@@ -1381,10 +1396,17 @@ def _make_specimen(
         record_name=naming.specimen_name(
             sample=sample.record_name, orientation=orientation, seq_no=seq_no
         ),
-        thickness_m=services.to_si(payload.thickness, payload.length_unit, field="두께"),
-        width_m=services.to_si(payload.width, payload.length_unit, field="폭"),
+        thickness_m=services.to_si(
+            payload.thickness, payload.length_unit, field="두께", dimension="length"
+        ),
+        width_m=services.to_si(
+            payload.width, payload.length_unit, field="폭", dimension="length"
+        ),
         gauge_length_m=services.to_si(
-            payload.gauge_length, payload.length_unit, field="게이지 길이"
+            payload.gauge_length,
+            payload.length_unit,
+            field="게이지 길이",
+            dimension="length",
         ),
         input_units={"length": payload.length_unit},
         note=payload.note,
@@ -1469,7 +1491,11 @@ def update_specimen(
         ("gauge_length", "gauge_length_m"),
     ):
         if field in data:
-            setattr(specimen, column, services.to_si(data[field], unit, field=field))
+            setattr(
+                specimen,
+                column,
+                services.to_si(data[field], unit, field=field, dimension="length"),
+            )
     if "note" in data:
         specimen.note = data["note"]
     vocabulary_services.apply_bindings(
