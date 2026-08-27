@@ -88,7 +88,18 @@ if ($LASTEXITCODE -ne 0) { Write-Error "pip wheel 실패 (exit $LASTEXITCODE)"; 
 
 $wheels = Get-ChildItem -Path $wheelDir -Filter '*.whl' -ErrorAction SilentlyContinue
 # 가상환경을 만들 수 없는 번들을 출하하느니 빌드를 실패시킨다.
-foreach ($mod in @('fastapi', 'uvicorn', 'sqlalchemy', 'alembic', 'psycopg', 'bcrypt', 'pyjwt')) {
+#
+# **httpx 가 여기 있는 이유는 앱이 아니라 스크립트 때문이다.** 이관·데모 스크립트는
+# `fastapi.testclient.TestClient` 로 운영과 같은 길을 태우는데, 그것이 httpx 를
+# 요구한다. httpx 가 개발 전용 의존성에 있던 동안 앱은 멀쩡히 떴고 **운영서버에서
+# 이관만 못 돌았다**(2026-08-28, 실측):
+#
+#     RuntimeError: The starlette.testclient module requires the httpx2 package
+#
+# 문구가 `httpx2` 라 새 패키지를 찾게 되는데, starlette 1.6 은 httpx2 가 없으면
+# **httpx 로 되돌아간다**(경고만 낸다). 개발이 httpx 로 돌고 있으므로 운영도 같은
+# 것으로 돌린다 — httpx2 로 넘어가는 것은 스위트 전체가 걸린 별도 결정이다.
+foreach ($mod in @('fastapi', 'uvicorn', 'sqlalchemy', 'alembic', 'psycopg', 'bcrypt', 'pyjwt', 'httpx')) {
     $needle = ($mod -replace '_', '-')
     if (-not ($wheels | Where-Object { ($_.Name -replace '_', '-') -like "$needle-*" })) {
         Write-Error "packages 에 '$mod' wheel 이 없습니다."

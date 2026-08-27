@@ -1,5 +1,4 @@
 # 개발·검증 전용. 배포 패키지에는 들어가지 않는다 (wheel 번들은 requirements.txt만 본다).
-httpx==0.28.1
 mypy==2.3.0
 pytest==9.1.1
 # 스위트를 워커 4개로 나눈다(186초 → 102초). 근거는 pyproject 의 addopts 주석.
