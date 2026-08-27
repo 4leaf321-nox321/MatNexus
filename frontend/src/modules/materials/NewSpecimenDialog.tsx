@@ -97,9 +97,8 @@ export function NewSpecimenDialog({
           </div>
         </div>
 
-        {/* **규격이 치수를 정한다.** 그래서 치수 위에 둔다 — 아래 세 칸이
-            어디서 나온 값인지가 이 한 줄이다. 장비 파일에는 없어서 사람이
-            넣어야 하는 값이기도 하다. */}
+        {/* **규격이 치수를 정한다.** 시편을 만들 때 사람이 할 일은 이것 하나다 —
+            치수는 규격에서 오고, 시험마다 잰 값은 그 파일에서 온다. */}
         <VocabularyField
           slug="specimen_standard"
           label="시편 규격"
@@ -107,20 +106,45 @@ export function NewSpecimenDialog({
           onChange={(next) => setForm((current) => ({ ...current, standard: next }))}
         />
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="thickness">실측 두께 ({LENGTH_UNIT})</Label>
-            <Input id="thickness" type="number" step="0.01" {...field('thickness')} />
+        {/* **치수를 여기서 안 묻는다.**
+         *
+         * 실사용에서 나왔다 — *"시편 추가에 왜 실측 추가가 나오지? 시편의 값은
+         * 규격의 값으로 하고, 시험에다 두께·폭 같은 걸 넣기로 한 거 아니었어?"*.
+         * 맞다. 읽는 순서가 셋이다(v1.118.0):
+         *
+         *     ① 이 시험이 잰 값     장비 파일의 `a0`·`b0` — 파싱이 담는다
+         *     ② 시편에 적힌 값       여기
+         *     ③ 규격이 정한 공칭     위에서 고른 규격
+         *
+         * 그러니 시편을 만들 때 할 일은 **규격을 고르는 것**이고, 치수는 대개
+         * 적을 일이 없다. 앞에 내놓으면 사람은 적어야 하는 줄 알고, 그때 적은
+         * 값이 규격 공칭과 어긋나면 어느 것이 맞는지 알 수 없게 된다.
+         *
+         * 그래도 자리는 남긴다 — 치수를 안 주는 장비가 있고, 그 시편만 규격과
+         * 다르게 잘린 경우도 있다. 접어 두고 **왜 여는지**를 적는다. */}
+        <details className="rounded-md border px-3 py-2">
+          <summary className="text-muted-foreground cursor-pointer text-xs">
+            이 시편이 규격과 다르면 적으세요 (보통은 비웁니다)
+          </summary>
+          <p className="text-muted-foreground mt-1.5 text-xs">
+            비우면 <b>위에서 고른 규격의 값</b>을 씁니다. 시험 파일이 잰 값이 있으면
+            그 시험은 <b>그 값</b>으로 돕니다 — 여기 적은 것보다 먼저입니다.
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="thickness">두께 ({LENGTH_UNIT})</Label>
+              <Input id="thickness" type="number" step="0.01" {...field('thickness')} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="width">폭 ({LENGTH_UNIT})</Label>
+              <Input id="width" type="number" step="0.01" {...field('width')} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="gauge">게이지 길이 ({LENGTH_UNIT})</Label>
+              <Input id="gauge" type="number" step="0.1" {...field('gauge_length')} />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="width">실측 폭 ({LENGTH_UNIT})</Label>
-            <Input id="width" type="number" step="0.01" {...field('width')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="gauge">게이지 길이 ({LENGTH_UNIT})</Label>
-            <Input id="gauge" type="number" step="0.1" {...field('gauge_length')} />
-          </div>
-        </div>
+        </details>
 
         <ErrorNotice error={error} />
 

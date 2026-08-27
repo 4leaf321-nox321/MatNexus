@@ -549,6 +549,42 @@ export function ProcessingPanel({
 
       <ErrorNotice error={catalog.error ?? error} className="mb-3" />
 
+      {/* **이 시험이 무엇을 갖고 도는지 보인다.**
+       *
+       * 실사용에서 나왔다 — *"시험에서 나온 두께 같은 값은 처리에서 어디서 보고
+       * 써? 안 보이는데?"*. 값은 서버가 이미 보내고 있었지만(`/processing/inputs`)
+       * **이어 붙인 칸 안에서만** 보였다. 인장 표준 레시피가 잇는 것은 단면적과
+       * 게이지라, 두께·폭은 어디에도 안 떴다.
+       *
+       * 출처를 함께 적는다. 치수는 세 곳에 살 수 있으므로(이 시험이 잰 값 ·
+       * 시편에 적힌 값 · 규격 공칭) 어느 것을 썼는지 안 보이면 사람이 "어느 게
+       * 맞느냐" 에 답할 수 없다. */}
+      {given.data && given.data.length > 0 && (
+        <div className="mb-3 rounded-md border px-3 py-2">
+          <p className="text-muted-foreground mb-1.5 text-xs">이 시험이 갖고 도는 값</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {given.data.map((item) => (
+              <span key={item.key} className="text-sm">
+                <span className="text-muted-foreground text-xs">{item.label}</span>{' '}
+                <b className="font-mono">
+                  {formatScalar(item.value, item.si_unit, item.dimension)}
+                </b>
+                {item.source && SOURCE_LABEL[item.source] && (
+                  <span
+                    className={`ml-1 text-xs ${
+                      item.source === 'run' ? 'text-foreground' : 'text-muted-foreground'
+                    }`}
+                    title={SOURCE_HELP[item.source]}
+                  >
+                    ({SOURCE_LABEL[item.source]})
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* **막다른 길을 만들지 않는다.** 일괄 등록으로 만든 시편은 치수가 비어
           있는 것이 정상이라 이 실패는 자주 난다. 서버 메시지는 "시편 기록을
           확인하세요" 인데, 이 화면에서 갈 곳이 없으면 사람은 멈춘다. */}

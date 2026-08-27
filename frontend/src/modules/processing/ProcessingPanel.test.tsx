@@ -590,6 +590,21 @@ describe('시편 값 이어 붙이기', () => {
     expect(await screen.findByText(/지금 50 mm/)).toBeInTheDocument()
   })
 
+  it('이어 붙이지 않아도 갖고 도는 값이 보인다', async () => {
+    // **실사용에서 나왔다** — *"시험에서 나온 두께 같은 값은 처리에서 어디서 보고
+    // 써? 안 보이는데?"*. 값은 서버가 이미 보내고 있었는데 **이어 붙인 칸
+    // 안에서만** 보였다. 인장 표준 레시피가 잇는 것은 단면적과 게이지라,
+    // 두께·폭은 어디에도 안 떴다.
+    inputs.mockResolvedValue([
+      { ...GIVEN[0], key: 'specimen_thickness', label: '시편 두께', value: 0.000986 },
+    ])
+    show()
+    // 단계를 하나도 안 켰는데도 보인다.
+    expect(await screen.findByText('이 시험이 갖고 도는 값')).toBeInTheDocument()
+    expect(screen.getByText(/0.986 mm/)).toBeInTheDocument()
+    expect(screen.getByText(/이 시험이 잰 값/)).toBeInTheDocument()
+  })
+
   it('그 값이 어디서 왔는지 말한다', async () => {
     // **치수는 세 곳에 살 수 있다** — 이 시험이 잰 값 · 시편에 적힌 값 · 규격
     // 공칭(v1.118.0). 안 보이면 사람이 "어느 게 맞느냐" 에 답할 수 없고, 그러면
@@ -600,7 +615,10 @@ describe('시편 값 이어 붙이기', () => {
     await clickStep(user, '공칭 응력-변형률')
     await user.click(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ }))
 
-    expect(await screen.findByText(/이 시험이 잰 값/)).toBeInTheDocument()
+    // **이어 붙인 자리 안에서 본다.** 같은 글자가 위쪽 「갖고 도는 값」 에도
+    // 있어서, 화면 전체에서 찾으면 둘이 잡힌다.
+    const shown = await screen.findByText(/지금 50 mm/)
+    expect(shown.parentElement).toHaveTextContent('이 시험이 잰 값')
   })
 
   it('시편에서 온 값이면 그렇게 말한다', async () => {
@@ -611,7 +629,8 @@ describe('시편 값 이어 붙이기', () => {
     await clickStep(user, '공칭 응력-변형률')
     await user.click(await screen.findByRole('button', { name: /자동 연결 · 시편 게이지 길이/ }))
 
-    expect(await screen.findByText(/시편에 적힌 값/)).toBeInTheDocument()
+    const shown = await screen.findByText(/지금 50 mm/)
+    expect(shown.parentElement).toHaveTextContent('시편에 적힌 값')
   })
 
   it('이어 붙인 값을 그 자리에서 고칠 수 있다', async () => {
