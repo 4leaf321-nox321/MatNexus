@@ -25,8 +25,14 @@ import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
  *
  * 논리 문제를 덮는 것이 아니다. 늦게 오는 것을 기다리는 시간이지, 안 오는 것을
  * 기다리는 시간이 아니다 — 안 오면 5초 뒤에도 실패한다.
+ *
+ * **시험 자체의 예산도 함께 늘린다.** 대기만 5초로 늘렸더니 `waitFor` 가 5초를
+ * 다 쓰는 순간 vitest 기본 예산(5초)을 넘겨 「Test timed out」 이 났다 — 실패가
+ * 「무엇을 못 찾았는지」 에서 「시간이 다 됐다」 로 바뀌어 **원인이 오히려 덜
+ * 보이게** 됐다. 대기보다 넉넉해야 한다.
  */
 configure({ asyncUtilTimeout: 5000 })
+vi.setConfig({ testTimeout: 20000 })
 import {
   RightPanelHost,
   RightPanelProvider,
