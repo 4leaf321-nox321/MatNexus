@@ -52,6 +52,28 @@ describe('사이드바 머리글', () => {
     expect(screen.queryByText('unknown')).not.toBeInTheDocument()
   })
 
+  it('서버가 이 빌드와 다른 버전이면 그 사실을 말한다', async () => {
+    /**
+     * **이게 없어서 하루를 날렸다**(2026-08-28). 개발과 운영이 같은 포트를 써서
+     * 프론트가 옛 서버(v1.115.0)에 붙어 있었는데, 화면은 「존재하지 않는
+     * 엔드포인트」 만 말했다. 버전은 이미 여기 떠 있었지만 **같은지 다른지를
+     * 안 말해서** 아무도 못 봤다.
+     */
+    health.mockResolvedValue({ status: 'ok', version: 'v1.115.0' })
+    sidebar()
+    expect(await screen.findByText('v1.115.0')).toBeInTheDocument()
+    expect(screen.getByText(`≠ ${__APP_VERSION__}`)).toBeInTheDocument()
+  })
+
+  it('같은 버전이면 조용하다', async () => {
+    // **늘 경고하면 아무도 안 본다.** 맞을 때는 아무 말도 안 해야 다를 때가
+    // 눈에 들어온다.
+    health.mockResolvedValue({ status: 'ok', version: __APP_VERSION__ })
+    sidebar()
+    expect(await screen.findByText(__APP_VERSION__)).toBeInTheDocument()
+    expect(screen.queryByText(/≠/)).not.toBeInTheDocument()
+  })
+
   it('서버가 안 답해도 머리글은 뜬다', async () => {
     // 버전 하나 때문에 사이드바가 통째로 비면 안 된다.
     health.mockRejectedValue(new Error('끊김'))

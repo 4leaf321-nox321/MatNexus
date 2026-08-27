@@ -25,6 +25,14 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
   // 아니다 — 배포가 반쯤 끝난 상태에서 둘이 갈리고, 그때 화면이 거짓말을 한다.
   const health = useResource(() => systemApi.health(), [])
   const release = health.data?.version
+  // 서버가 이 빌드와 다른 버전인가. **개발에서만 본다** — 배포에서는 백엔드
+  // 한 프로세스가 SPA 까지 서빙하므로 둘이 다를 수가 없고, 그 자리에 경고가
+  // 뜨면 그것 자체가 거짓말이다.
+  const stale =
+    import.meta.env.DEV &&
+    !!release &&
+    release !== UNKNOWN_VERSION &&
+    release !== __APP_VERSION__
   // **볼 수 있는 것만 보여 준다.** 눌러야 403 을 아는 메뉴는 "할 수 있는 일" 을
   // 알려 주지 못한다. 권한은 서버가 판정한다 — 여기는 표시일 뿐이다.
   const groups = visibleGroups({
@@ -41,8 +49,26 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
           {/* **못 찾았으면 안 적는다.** `unknown` 을 그대로 띄우면 버전 자리에
               고장난 것처럼 보이는데, 실제로는 개발 경로에서 돈다는 뜻이다. */}
           {release && release !== UNKNOWN_VERSION && (
-            <span className="ml-1.5 font-mono" title="지금 도는 서버의 버전입니다">
-              {release}
+            <span
+              className={cn('ml-1.5 font-mono', stale && 'font-semibold text-amber-600')}
+              title={
+                stale
+                  ? `이 화면은 ${__APP_VERSION__} 인데 서버는 ${release} 입니다. ` +
+                    '다른 서버에 붙어 있을 수 있습니다.'
+                  : '지금 도는 서버의 버전입니다'
+              }
+            >
+              {/* **버전 글자는 제 노드에 둔다.** 배지를 형제로 붙이면 바깥
+                  span 의 글자가 `v1.73.0≠ v1.130.0` 으로 이어져, 버전만으로는
+                  찾을 수 없게 된다(시험이 그것을 잡았다). */}
+              <span>{release}</span>
+              {/* **다르면 말한다.** 개발과 운영이 같은 포트를 쓰던 동안, 프론트가
+                  옛 서버(v1.115.0)에 붙어 있는데도 아무 데도 티가 안 났다 —
+                  화면은 「존재하지 않는 엔드포인트」 만 말했고, 그것만 보고는
+                  코드가 틀린 것인지 서버가 옛것인지 가를 수 없었다(2026-08-28).
+                  버전이 이미 여기 떠 있었는데도 **같은지 다른지를 안 말해서**
+                  아무도 못 봤다. */}
+              {stale && <span className="ml-1">≠ {__APP_VERSION__}</span>}
             </span>
           )}
         </span>
