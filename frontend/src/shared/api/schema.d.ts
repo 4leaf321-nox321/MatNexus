@@ -2298,6 +2298,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Trash
+         * @description 지운 것. **최근에 지운 것부터.**
+         *
+         *     줄마다 「되살리면 무엇이 함께 오는가」 와 「왜 못 되살리는가」 를 함께 낸다 —
+         *     화면이 그것을 스스로 세게 하면 사람이 본 숫자와 실제가 어긋난다.
+         */
+        get: operations["list_trash_api_trash_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trash/{kind}/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Purge
+         * @description 영영 지운다. **되돌릴 수 없다.**
+         *
+         *     `confirm=true` 를 받아야 지운다. 창에서 한 번 물었더라도 서버가 다시 받는
+         *     이유는, 이 길이 API 로도 열려 있기 때문이다 — 스크립트가 실수로 부르면 그
+         *     데이터는 돌아오지 않는다.
+         */
+        delete: operations["purge_api_trash__kind___item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trash/{kind}/{item_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore
+         * @description 되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부.
+         */
+        post: operations["restore_api_trash__kind___item_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/units": {
         parameters: {
             query?: never;
@@ -7381,6 +7448,50 @@ export interface components {
              */
             sort_order: number;
         };
+        /**
+         * TrashDoneOut
+         * @description 되살렸거나 영영 지운 결과.
+         */
+        TrashDoneOut: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Name */
+            name: string;
+            /** Said */
+            said: string;
+        };
+        /**
+         * TrashItemOut
+         * @description 지운 것 한 줄.
+         */
+        TrashItemOut: {
+            /** Below */
+            below: {
+                [key: string]: number;
+            };
+            /** Blocked */
+            blocked: string | null;
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Kind Label */
+            kind_label: string;
+            /** Name */
+            name: string;
+            /** Workspace Id */
+            workspace_id: string | null;
+        };
         /** TriedChannelOut */
         TriedChannelOut: {
             /** First */
@@ -11643,6 +11754,104 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_trash_api_trash_get: {
+        parameters: {
+            query?: {
+                kind?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_api_trash__kind___item_id__delete: {
+        parameters: {
+            query?: {
+                confirm?: boolean;
+            };
+            header?: never;
+            path: {
+                kind: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashDoneOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_api_trash__kind___item_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashDoneOut"];
+                };
             };
             /** @description Validation Error */
             422: {

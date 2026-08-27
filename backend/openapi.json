@@ -11025,6 +11025,102 @@
         "title": "TestTypeUpdateRequest",
         "type": "object"
       },
+      "TrashDoneOut": {
+        "description": "되살렸거나 영영 지운 결과.",
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "said": {
+            "title": "Said",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "counts",
+          "said"
+        ],
+        "title": "TrashDoneOut",
+        "type": "object"
+      },
+      "TrashItemOut": {
+        "description": "지운 것 한 줄.",
+        "properties": {
+          "below": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Below",
+            "type": "object"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "deleted_at": {
+            "format": "date-time",
+            "title": "Deleted At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "kind",
+          "kind_label",
+          "id",
+          "name",
+          "deleted_at",
+          "workspace_id",
+          "below",
+          "blocked"
+        ],
+        "title": "TrashItemOut",
+        "type": "object"
+      },
       "TriedChannelOut": {
         "properties": {
           "first": {
@@ -18036,6 +18132,192 @@
         "summary": "Update Test Type",
         "tags": [
           "tests"
+        ]
+      }
+    },
+    "/api/trash": {
+      "get": {
+        "description": "지운 것. **최근에 지운 것부터.**\n\n줄마다 「되살리면 무엇이 함께 오는가」 와 「왜 못 되살리는가」 를 함께 낸다 —\n화면이 그것을 스스로 세게 하면 사람이 본 숫자와 실제가 어긋난다.",
+        "operationId": "list_trash_api_trash_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TrashItemOut"
+                  },
+                  "title": "Response List Trash Api Trash Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Trash",
+        "tags": [
+          "trash"
+        ]
+      }
+    },
+    "/api/trash/{kind}/{item_id}": {
+      "delete": {
+        "description": "영영 지운다. **되돌릴 수 없다.**\n\n`confirm=true` 를 받아야 지운다. 창에서 한 번 물었더라도 서버가 다시 받는\n이유는, 이 길이 API 로도 열려 있기 때문이다 — 스크립트가 실수로 부르면 그\n데이터는 돌아오지 않는다.",
+        "operationId": "purge_api_trash__kind___item_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confirm",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Confirm",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashDoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge",
+        "tags": [
+          "trash"
+        ]
+      }
+    },
+    "/api/trash/{kind}/{item_id}/restore": {
+      "post": {
+        "description": "되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부.",
+        "operationId": "restore_api_trash__kind___item_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashDoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore",
+        "tags": [
+          "trash"
         ]
       }
     },

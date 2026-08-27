@@ -53,6 +53,7 @@ const NoticesPage = lazy(() => import('@/modules/notices/NoticesPage'))
 const RecipesPage = lazy(() => import('@/modules/processing/RecipesPage'))
 const SignupPage = lazy(() => import('@/modules/auth/SignupPage'))
 const StoragePage = lazy(() => import('@/modules/tests/StoragePage'))
+const TrashPage = lazy(() => import('@/modules/trash/TrashPage'))
 const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
 const UnitsPage = lazy(() => import('@/modules/units/UnitsPage'))
 const VocabularyAdminPage = lazy(
@@ -133,6 +134,7 @@ export const router = createBrowserRouter([
           { path: 'admin/units', element: <UnitsPage /> },
           { path: 'admin/vocabulary', element: <VocabularyAdminPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
+          { path: 'admin/trash', element: <TrashPage /> },
           { path: 'admin/connectors', ...stub('장비 커넥터', 'Phase 6') },
           { path: 'server', ...stub('서버', 'Phase 1') },
 

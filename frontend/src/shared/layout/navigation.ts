@@ -28,6 +28,7 @@ import {
   Server,
   SlidersHorizontal,
   Tags,
+  Trash2,
   User,
   UserCog,
   Users,
@@ -179,6 +180,15 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { label: '장비 커넥터', icon: Plug, to: '/admin/connectors', audience: 'system_admin' },
       { label: '저장소 정리', icon: HardDrive, to: '/admin/storage', audience: 'system_admin' },
+      {
+        // **지운 것이 어디로 갔는지 볼 자리.** 삭제가 소프트라 행은 남는데
+        // 볼 데가 없어서, 지운 재료가 이름을 붙들고 있는 것을 아무도 설명할
+        // 수 없었다(2026-08-28 이관 사고).
+        label: '휴지통',
+        icon: Trash2,
+        to: '/admin/trash',
+        audience: 'system_admin',
+      },
       { label: '서버', icon: Server, to: '/server', audience: 'system_admin' },
     ],
   },
