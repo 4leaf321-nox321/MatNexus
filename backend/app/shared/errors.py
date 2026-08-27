@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.shared.request_context import get_request_id
 
@@ -157,6 +158,17 @@ def _body(code: str, message: str, details: dict[str, Any] | None = None) -> dic
     }
 
 
+#: 프레임워크가 내는 오류의 우리말. **영어 한 줄은 사람에게 아무것도 안 알려 준다.**
+#:
+#: 405 가 여기 있는 이유가 특히 중요하다. SPA 폴백(`main.py` 의 `spa`)이 모든
+#: 경로를 GET 으로 잡고 있어서, **`/api` 아래에 없는 주소를 POST·PATCH·DELETE 로
+#: 부르면 404 가 아니라 405 가 나온다.** 즉 이 문구를 실제로 보게 되는 사람은
+#: 대개 "서버에 그 기능이 아직 없다" 를 겪는 중이다 — 그것을 말해 준다.
+_HTTP_MESSAGES = {
+    405: "이 주소는 그 방식의 요청을 받지 않습니다. 서버가 옛 버전일 수 있습니다.",
+}
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
@@ -182,6 +194,40 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=422,
             content=_body("MNX-COMMON-0422", describe_validation(errors), {"errors": errors}),
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        """프레임워크가 내는 오류도 **같은 봉투에 담는다**(ADR 0001).
+
+        **실사용에서 걸렸다.** 서버에 없는 메서드를 부르면 Starlette 이
+        `{"detail": "Method Not Allowed"}` 를 그대로 냈다. 프론트의 오류 파서는
+        봉투를 기대해 `body.error.message` 를 읽으므로, **오류를 읽다가 오류가
+        났다** — 화면에는 원인 대신 `Cannot read properties of undefined
+        (reading 'message')` 가 떴다. 그러면 사람은 삭제가 왜 안 됐는지가 아니라
+        프론트가 깨졌다고 읽는다.
+
+        `raise HTTPException` 은 이 저장소 코드에 한 줄도 없다(AGENTS.md 가
+        `AppError` 를 쓰라고 한다). 여기 오는 것은 전부 프레임워크가 낸 것 —
+        405, 라우팅 단계의 404 같은 것들이다.
+
+        **헤더는 그대로 넘긴다.** 405 는 `Allow` 를 달고 오는데, 그것을 떨어뜨리면
+        어떤 메서드가 되는지 알 방법이 없어진다.
+        """
+        detail = exc.detail if isinstance(exc.detail, str) and exc.detail else ""
+        message = _HTTP_MESSAGES.get(exc.status_code) or detail or "요청을 처리할 수 없습니다."
+        log = logger.warning if exc.status_code < 500 else logger.error
+        log(
+            "%s %s -> %s http: %s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            message,
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_body(f"MNX-COMMON-{exc.status_code:04d}", message),
+            headers=exc.headers,
         )
 
     @app.exception_handler(Exception)

@@ -54,20 +54,49 @@ export const session = {
   },
 }
 
+/** 봉투인가. **모양을 확인하고 나서 읽는다**(ADR 0001 의 오류 규약). */
+function isEnvelope(value: unknown): value is ApiErrorBody {
+  const error = (value as ApiErrorBody | null)?.error
+  return typeof error?.code === 'string' && typeof error?.message === 'string'
+}
+
+/**
+ * 서버가 봉투 대신 무언가를 말했다면 **그 말을 살린다.**
+ *
+ * FastAPI·Starlette 은 `{"detail": "..."}` 로 낸다. 그것을 버리고 "예상하지 못한
+ * 응답" 만 띄우면 무엇이 잘못됐는지가 통째로 사라진다.
+ */
+function said(value: unknown): string {
+  const detail = (value as { detail?: unknown } | null)?.detail
+  return typeof detail === 'string' && detail ? ` — ${detail}` : ''
+}
+
+/**
+ * 오류 응답을 `ApiError` 로. **여기서 오류가 나면 안 된다.**
+ *
+ * **실사용에서 걸렸다.** 서버가 봉투가 아닌 JSON(`{"detail": ...}`)을 내자
+ * `body.error.message` 가 터졌고, 화면에는 원인 대신
+ * `Cannot read properties of undefined (reading 'message')` 가 떴다 — 사람은
+ * 요청이 왜 실패했는지가 아니라 **프론트가 깨졌다**고 읽는다.
+ *
+ * 전에도 이 자리는 "규약 밖이면 그 사실을 드러낸다" 고 적어 두었는데, 막고 있던
+ * 것은 **JSON 이 아닌 경우뿐**이었다. 파싱은 되는데 모양이 다른 쪽이 남아 있었고,
+ * 실제로 온 것은 그쪽이다.
+ */
 async function parseError(response: Response): Promise<ApiError> {
-  let body: ApiErrorBody
+  let parsed: unknown = null
   try {
-    body = (await response.json()) as ApiErrorBody
+    parsed = await response.json()
   } catch {
-    // 오류 응답이 JSON이 아니면 규약 밖이다 — 그 사실 자체를 드러낸다.
-    body = {
-      error: {
-        code: 'MNX-CLIENT-0001',
-        message: `서버가 예상하지 못한 응답을 보냈습니다 (HTTP ${response.status})`,
-      },
-    }
+    // JSON 도 아니다 — HTML 오류 페이지나 빈 본문.
   }
-  return new ApiError(response.status, body)
+  if (isEnvelope(parsed)) return new ApiError(response.status, parsed)
+  return new ApiError(response.status, {
+    error: {
+      code: 'MNX-CLIENT-0001',
+      message: `서버가 예상하지 못한 응답을 보냈습니다 (HTTP ${response.status})${said(parsed)}`,
+    },
+  })
 }
 
 async function send(path: string, init?: RequestInit): Promise<Response> {
