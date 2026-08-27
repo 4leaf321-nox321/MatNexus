@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
@@ -113,6 +113,8 @@ function ColumnFilter({
 
 export default function TestRunsPage() {
   const { slug } = useParams<{ slug?: string }>()
+  // 지금 이 목록의 주소. 상세로 넘겨 「뒤로」 가 여기로 돌아오게 한다.
+  const { pathname } = useLocation()
   const [uploading, setUploading] = useState(false)
   // 사이드바가 '부서' 라고 말하는 화면이므로 그 부서 것만 보여 준다.
   const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
@@ -418,7 +420,14 @@ export default function TestRunsPage() {
                   />
                 </TableCell>
                 <TableCell className="font-mono text-xs">
-                  <Link to={`/test-runs/${run.id}`} className="hover:text-primary hover:underline">
+                  {/* **어디서 왔는지 함께 넘긴다.** 상세의 「뒤로」 가 늘 재료
+                      화면으로 갔는데, 목록에서 들어온 사람은 목록으로 돌아가려
+                      한다 — 20건을 훑는 중이면 재료로 튕기는 순간 자리를 잃는다. */}
+                  <Link
+                    to={`/test-runs/${run.id}`}
+                    state={{ from: { to: pathname, label: '시험 데이터' } }}
+                    className="hover:text-primary hover:underline"
+                  >
                     {run.record_name}
                   </Link>
                   {run.warnings.length > 0 && (

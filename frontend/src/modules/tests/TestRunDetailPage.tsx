@@ -12,7 +12,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, Download, RefreshCw, Trash2 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+
+import { backTarget } from '@/modules/tests/backTarget'
+import type { BackTarget } from '@/modules/tests/backTarget'
 
 import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
 import { ResultsPanel } from '@/modules/processing/ResultsPanel'
@@ -56,6 +59,10 @@ import { useResource } from '@/shared/hooks/useResource'
 export default function TestRunDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // **목록이 넘겨 준 「왔던 자리」.** 없으면(주소를 직접 쳤거나 재료에서 왔다)
+  // 아래에서 재료로 돌린다. 화면이 스스로 추측하지 않는다 — 시험 목록의 주소는
+  // 부서 슬러그를 알아야 만들 수 있는데, 여기는 그것을 모른다.
+  const from = (useLocation().state as { from?: BackTarget } | null)?.from
   const run = useResource(() => testsApi.run(id), [id])
   const types = useResource(() => testsApi.types(), [])
   const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
@@ -258,15 +265,9 @@ export default function TestRunDetailPage() {
           item ? `${item.test_type_label} · ${item.material_name ?? ''}` : undefined
         }
         created={item?.created_at}
-        back={
-          // 재료가 시편·시험 목록을 갖고 있는 화면이다 — 여기 들어온 사람은
-          // 대개 거기서 왔고, 아니어도 거기로 가는 것이 맞다.
-          item?.material_id
-            ? { to: `/materials/${item.material_id}`, label: item.material_name ?? '재료' }
-            : // 시험 목록은 부서 스코프(`/w/:slug/tests`)라 여기서는 주소를 만들 수
-              // 없다. 재료 카탈로그는 전사 화면이라 언제나 갈 수 있다.
-              { to: '/materials', label: '재료 목록' }
-        }
+        // **왔던 자리로 돌려보낸다.** 규칙은 `backTarget` 이 갖는다 — 화면에
+        // 박아 두면 시험할 데가 없다.
+        back={backTarget(from, item ?? null)}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={download} disabled={!item}>

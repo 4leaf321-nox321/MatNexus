@@ -8134,6 +8134,80 @@
         "title": "SpecimenBriefSizeOut",
         "type": "object"
       },
+      "SpecimenBulkUpdateOut": {
+        "properties": {
+          "blocked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "renamed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Renamed",
+            "type": "array"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated",
+          "unchanged",
+          "blocked",
+          "renamed"
+        ],
+        "title": "SpecimenBulkUpdateOut",
+        "type": "object"
+      },
+      "SpecimenBulkUpdateRequest": {
+        "description": "고른 시편의 **칸 하나**를 같은 값으로 맞춘다.\n\n한 번에 한 칸이다. 여러 칸을 함께 받으면 「안 보낸 것」과 「비운 것」을\n구별할 수 없고, 화면도 「무엇을 바꾸는 중인가」를 말하기 어려워진다.\n\n## 왜 이 둘뿐인가\n\n**규격**은 그 시편의 치수 칸을 정한다(ADR 0010). 이관에서 규격이 빈 시편이\n무더기로 생겼고, 그때 고칠 길이 시편을 하나씩 여는 것뿐이었다 — 수백 장이면\n그것은 길이 아니다.\n\n**방향**은 잘못 고른 것을 되돌릴 자리가 필요하다. 지우고 다시 만들면 그\n시편의 시험이 함께 사라진다.\n\n치수는 여기 없다. 시편마다 **잰 값**이라 같은 값으로 맞추는 것 자체가 틀렸다.",
+        "properties": {
+          "field": {
+            "enum": [
+              "orientation",
+              "standard"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "specimen_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Specimen Ids",
+            "type": "array"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "specimen_ids",
+          "field"
+        ],
+        "title": "SpecimenBulkUpdateRequest",
+        "type": "object"
+      },
       "SpecimenCreateRequest": {
         "properties": {
           "gauge_length": {
@@ -16803,6 +16877,48 @@
           }
         },
         "summary": "List All Specimens",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/specimens/bulk-update": {
+      "post": {
+        "description": "고른 시편의 **칸 하나**를 같은 값으로 맞춘다.\n\n## 왜 이 길이 필요한가\n\n이관에서 규격이 빈 시편이 무더기로 생겼다(2026-08-28). 규격은 그 시편의\n치수 칸을 정하므로(ADR 0010) 비어 있으면 치수를 받을 자리조차 없는데,\n고칠 길이 **시편을 하나씩 여는 것뿐**이었다. 수백 장이면 그것은 길이 아니다.\n\n## 한 건이 막혀도 나머지는 간다\n\n권한 밖이거나 사라진 시편이 섞여 있어도 전부 되돌리지 않는다 — 그러면 사람은\n어느 것이 문제인지 모른 채 다시 골라야 한다. **안 된 것을 이름으로 돌려준다**\n(지우기·시험 일괄 수정과 같은 규칙).\n\n## 방향은 이름과 번호를 바꾼다\n\n칸 하나를 갈아 끼우는 일이 아니다. `services.change_orientation` 이 옮겨 가는\n방향에서 번호를 새로 받고 시험 이름까지 따라가게 한다 — 한 건 수정이 하는\n것과 **같은 함수**다. 여기서 다시 구현하면 두 길이 갈라진다.",
+        "operationId": "bulk_update_specimens_api_specimens_bulk_update_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecimenBulkUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecimenBulkUpdateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Update Specimens",
         "tags": [
           "materials"
         ]

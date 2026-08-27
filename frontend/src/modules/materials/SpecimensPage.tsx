@@ -26,10 +26,11 @@
  */
 
 import { useEffect, useState } from 'react'
-import { FlaskConical } from 'lucide-react'
+import { FlaskConical, PencilLine } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { ORIENTATIONS, materialsApi } from '@/modules/materials/api'
+import { BulkSpecimenDialog } from '@/modules/materials/BulkSpecimenDialog'
 import {
   ColumnFilter,
   ColumnLabel,
@@ -81,11 +82,16 @@ export default function SpecimensPage() {
   const [orientation, setOrientation] = useState('')
   const [standard, setStandard] = useState('')
   const [offset, setOffset] = useState(0)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [editing, setEditing] = useState(false)
 
   // **거르면 첫 쪽으로 돌아간다.** 3쪽을 보다 거르면 걸러진 결과의 3쪽이 나오는데,
   // 그게 비어 있으면 사람은 "없다" 로 읽는다.
   useEffect(() => {
     setOffset(0)
+    // **선택도 함께 푼다.** 걸러서 안 보이게 된 줄이 골라진 채 남으면, 「12건에
+    // 걸기」 가 화면에 없는 것까지 건드린다.
+    setPicked(new Set())
   }, [material, lot, name, orientation, standard])
 
   const page = useResource(
@@ -137,6 +143,39 @@ export default function SpecimensPage() {
         )}
       </div>
 
+      {picked.size > 0 && (
+        <div className="bg-muted/40 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2">
+          <span className="text-sm">
+            <b>{picked.size}건</b> 선택
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => setPicked(new Set())}
+          >
+            선택 해제
+          </Button>
+          {/* **이관에서 규격이 빈 시편이 무더기로 생겼다.** 그때 고칠 길이
+              하나씩 여는 것뿐이었다 — 수백 장이면 그것은 길이 아니다. */}
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            <PencilLine className="size-4" />
+            일괄 수정
+          </Button>
+        </div>
+      )}
+
+      <BulkSpecimenDialog
+        open={editing}
+        specimenIds={[...picked]}
+        onClose={() => {
+          setEditing(false)
+          // **선택은 닫을 때 푼다.** 걸자마자 풀면 창이 「0건」 으로 바뀐다.
+          setPicked(new Set())
+        }}
+        onDone={() => page.reload()}
+      />
+
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
@@ -147,6 +186,24 @@ export default function SpecimensPage() {
               {/* **열마다 그 열을 거른다.** 서버가 거르므로 다음 쪽까지 걸러진다 —
                   화면에서 거르면 이 쪽에 실린 것만 걸러지고, 사람은 그것을
                   「없다」 로 읽는다. */}
+              {/* **수백 장을 하나씩 여는 것은 일이 아니다.** 골라서 한 번에 맞춘다. */}
+              <TableHead className={`w-8 ${FILTER_HEAD}`}>
+                <div className="flex h-[3.25rem] items-end pb-2">
+                  <input
+                    type="checkbox"
+                    aria-label="이 쪽 전부 선택"
+                    checked={picked.size > 0 && picked.size === rows.length}
+                    ref={(node) => {
+                      if (node) node.indeterminate = picked.size > 0 && picked.size < rows.length
+                    }}
+                    onChange={(event) =>
+                      setPicked(
+                        event.target.checked ? new Set(rows.map((row) => row.id)) : new Set()
+                      )
+                    }
+                  />
+                </div>
+              </TableHead>
               <TableHead className={`min-w-[10rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="재료"
@@ -196,6 +253,21 @@ export default function SpecimensPage() {
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.id}>
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    aria-label={`${row.record_name} 선택`}
+                    checked={picked.has(row.id)}
+                    onChange={(event) =>
+                      setPicked((current) => {
+                        const next = new Set(current)
+                        if (event.target.checked) next.add(row.id)
+                        else next.delete(row.id)
+                        return next
+                      })
+                    }
+                  />
+                </TableCell>
                 <TableCell className="font-mono text-xs">
                   <Link
                     to={`/materials/${row.material_id}`}

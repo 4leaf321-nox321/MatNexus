@@ -14,13 +14,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SpecimensPage from '@/modules/materials/SpecimensPage'
 
 const specimenRows = vi.fn()
+const bulkUpdateSpecimens = vi.fn()
 
 vi.mock('@/modules/materials/api', async () => {
   const actual =
     await vi.importActual<typeof import('@/modules/materials/api')>('@/modules/materials/api')
   return {
     ...actual,
-    materialsApi: { specimenRows: (...args: unknown[]) => specimenRows(...args) },
+    materialsApi: {
+      specimenRows: (...args: unknown[]) => specimenRows(...args),
+      bulkUpdateSpecimens: (...args: unknown[]) => bulkUpdateSpecimens(...args),
+    },
   }
 })
 
@@ -63,7 +67,14 @@ function open() {
 
 beforeEach(() => {
   specimenRows.mockReset()
+  bulkUpdateSpecimens.mockReset()
   specimenRows.mockResolvedValue(page())
+  bulkUpdateSpecimens.mockResolvedValue({
+    updated: 1,
+    unchanged: 0,
+    blocked: [],
+    renamed: [],
+  })
 })
 
 describe('시편 표', () => {
@@ -127,6 +138,46 @@ describe('열 머리에서 거른다', () => {
     await userEvent.type(screen.getByLabelText('로트 로 거르기'), 'L')
     await waitFor(() =>
       expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }))
+    )
+  })
+})
+
+
+describe('일괄 수정', () => {
+  it('고르기 전에는 단추가 없다', async () => {
+    // 아무것도 안 고른 채로 열리면 「0건에 걸기」 가 된다.
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+    expect(screen.queryByRole('button', { name: '일괄 수정' })).not.toBeInTheDocument()
+  })
+
+  it('고른 시편에만 건다', async () => {
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByLabelText('SECC_MDOI_1.0__01_MD_01 선택'))
+    await userEvent.click(screen.getByRole('button', { name: '일괄 수정' }))
+    await screen.findByRole('dialog')
+
+    await userEvent.click(screen.getByRole('button', { name: /1건에 걸기/ }))
+    await waitFor(() =>
+      expect(bulkUpdateSpecimens).toHaveBeenCalledWith(['sp1'], 'standard', null)
+    )
+  })
+
+  it('거르면 선택이 풀린다', async () => {
+    /**
+     * **걸러서 안 보이게 된 줄이 골라진 채 남으면** 「12건에 걸기」 가 화면에
+     * 없는 것까지 건드린다.
+     */
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+    await userEvent.click(screen.getByLabelText('SECC_MDOI_1.0__01_MD_01 선택'))
+    expect(screen.getByRole('button', { name: '일괄 수정' })).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('로트 로 거르기'), 'L')
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '일괄 수정' })).not.toBeInTheDocument()
     )
   })
 })

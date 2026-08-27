@@ -1674,6 +1674,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/specimens/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Update Specimens
+         * @description 고른 시편의 **칸 하나**를 같은 값으로 맞춘다.
+         *
+         *     ## 왜 이 길이 필요한가
+         *
+         *     이관에서 규격이 빈 시편이 무더기로 생겼다(2026-08-28). 규격은 그 시편의
+         *     치수 칸을 정하므로(ADR 0010) 비어 있으면 치수를 받을 자리조차 없는데,
+         *     고칠 길이 **시편을 하나씩 여는 것뿐**이었다. 수백 장이면 그것은 길이 아니다.
+         *
+         *     ## 한 건이 막혀도 나머지는 간다
+         *
+         *     권한 밖이거나 사라진 시편이 섞여 있어도 전부 되돌리지 않는다 — 그러면 사람은
+         *     어느 것이 문제인지 모른 채 다시 골라야 한다. **안 된 것을 이름으로 돌려준다**
+         *     (지우기·시험 일괄 수정과 같은 규칙).
+         *
+         *     ## 방향은 이름과 번호를 바꾼다
+         *
+         *     칸 하나를 갈아 끼우는 일이 아니다. `services.change_orientation` 이 옮겨 가는
+         *     방향에서 번호를 새로 받고 시험 이름까지 따라가게 한다 — 한 건 수정이 하는
+         *     것과 **같은 함수**다. 여기서 다시 구현하면 두 길이 갈라진다.
+         */
+        post: operations["bulk_update_specimens_api_specimens_bulk_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/specimens/{specimen_id}": {
         parameters: {
             query?: never;
@@ -6431,6 +6469,46 @@ export interface components {
             /** Value */
             value: number;
         };
+        /** SpecimenBulkUpdateOut */
+        SpecimenBulkUpdateOut: {
+            /** Blocked */
+            blocked: string[];
+            /** Renamed */
+            renamed: string[];
+            /** Unchanged */
+            unchanged: number;
+            /** Updated */
+            updated: number;
+        };
+        /**
+         * SpecimenBulkUpdateRequest
+         * @description 고른 시편의 **칸 하나**를 같은 값으로 맞춘다.
+         *
+         *     한 번에 한 칸이다. 여러 칸을 함께 받으면 「안 보낸 것」과 「비운 것」을
+         *     구별할 수 없고, 화면도 「무엇을 바꾸는 중인가」를 말하기 어려워진다.
+         *
+         *     ## 왜 이 둘뿐인가
+         *
+         *     **규격**은 그 시편의 치수 칸을 정한다(ADR 0010). 이관에서 규격이 빈 시편이
+         *     무더기로 생겼고, 그때 고칠 길이 시편을 하나씩 여는 것뿐이었다 — 수백 장이면
+         *     그것은 길이 아니다.
+         *
+         *     **방향**은 잘못 고른 것을 되돌릴 자리가 필요하다. 지우고 다시 만들면 그
+         *     시편의 시험이 함께 사라진다.
+         *
+         *     치수는 여기 없다. 시편마다 **잰 값**이라 같은 값으로 맞추는 것 자체가 틀렸다.
+         */
+        SpecimenBulkUpdateRequest: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "orientation" | "standard";
+            /** Specimen Ids */
+            specimen_ids: string[];
+            /** Value */
+            value?: string | null;
+        };
         /** SpecimenCreateRequest */
         SpecimenCreateRequest: {
             /** Gauge Length */
@@ -10894,6 +10972,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_SpecimenRowOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_update_specimens_api_specimens_bulk_update_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenBulkUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenBulkUpdateOut"];
                 };
             };
             /** @description Validation Error */

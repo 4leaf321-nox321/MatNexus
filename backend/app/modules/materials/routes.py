@@ -52,6 +52,8 @@ from app.modules.materials.schemas import (
     SampleOut,
     SampleUpdateRequest,
     SpecimenBriefSizeOut,
+    SpecimenBulkUpdateOut,
+    SpecimenBulkUpdateRequest,
     SpecimenCreateRequest,
     SpecimenOut,
     SpecimenRowOut,
@@ -1712,6 +1714,99 @@ def list_all_specimens(
         total=int(total),
         limit=size,
         offset=offset,
+    )
+
+
+@specimens_router.post("/bulk-update", response_model=SpecimenBulkUpdateOut)
+def bulk_update_specimens(
+    payload: SpecimenBulkUpdateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SpecimenBulkUpdateOut:
+    """고른 시편의 **칸 하나**를 같은 값으로 맞춘다.
+
+    ## 왜 이 길이 필요한가
+
+    이관에서 규격이 빈 시편이 무더기로 생겼다(2026-08-28). 규격은 그 시편의
+    치수 칸을 정하므로(ADR 0010) 비어 있으면 치수를 받을 자리조차 없는데,
+    고칠 길이 **시편을 하나씩 여는 것뿐**이었다. 수백 장이면 그것은 길이 아니다.
+
+    ## 한 건이 막혀도 나머지는 간다
+
+    권한 밖이거나 사라진 시편이 섞여 있어도 전부 되돌리지 않는다 — 그러면 사람은
+    어느 것이 문제인지 모른 채 다시 골라야 한다. **안 된 것을 이름으로 돌려준다**
+    (지우기·시험 일괄 수정과 같은 규칙).
+
+    ## 방향은 이름과 번호를 바꾼다
+
+    칸 하나를 갈아 끼우는 일이 아니다. `services.change_orientation` 이 옮겨 가는
+    방향에서 번호를 새로 받고 시험 이름까지 따라가게 한다 — 한 건 수정이 하는
+    것과 **같은 함수**다. 여기서 다시 구현하면 두 길이 갈라진다.
+    """
+    field = payload.field
+    raw = (payload.value or "").strip() or None
+
+    # **방향은 미리 판정한다.** 열 건을 고치다 열한 번째에서 틀렸다고 멈추면
+    # 앞의 열 건만 바뀐 상태가 남는다. 값이 하나뿐인 요청이니 손대기 전에 거른다.
+    if field == "orientation":
+        if raw is None:
+            raise AppError(
+                "MNX-MATERIALS-0031",
+                "방향은 비울 수 없습니다. 시편 이름의 한 칸입니다.",
+                status=422,
+            )
+        raw = raw.upper()
+        if raw not in ORIENTATIONS:
+            raise AppError(
+                "MNX-MATERIALS-0030",
+                f"방향은 {', '.join(ORIENTATIONS)} 중 하나여야 합니다.",
+                status=422,
+            )
+
+    updated = 0
+    unchanged = 0
+    blocked: list[str] = []
+    renamed: list[str] = []
+
+    for specimen_id in payload.specimen_ids:
+        try:
+            specimen = _get_specimen(db, user, specimen_id)
+        except AppError:
+            # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
+            blocked.append(str(specimen_id))
+            continue
+
+        before = getattr(specimen, field)
+        if before == raw:
+            unchanged += 1
+            continue
+
+        if field == "orientation":
+            assert raw is not None  # 위에서 걸렀다
+            said = services.change_orientation(db, specimen, raw)
+            if said:
+                renamed.append(said)
+            # **건마다 흘려보낸다.** 번호는 `max(seq_no) + 1` 로 받는데, 앞 건이
+            # 아직 DB 에 안 갔으면 그 질의가 못 본다 — 셋을 한 번에 옮기면 셋이
+            # 같은 번호를 받고 커밋에서 유니크가 터진다(실측 2026-08-28).
+            #
+            # 한 건 수정에서는 안 났다. 그쪽은 한 번 바꾸고 바로 커밋한다.
+            db.flush()
+        else:
+            # 규격은 기준정보를 거친다(ADR 0010). `usage_count` 도 여기서
+            # 옮겨진다 — 옛 값은 하나 줄고 새 값은 하나 는다.
+            vocabulary_services.apply_bindings(
+                db,
+                specimen,
+                vocabulary_services.SPECIMEN_BINDINGS,
+                {field: raw},
+                created_by_id=user.id,
+            )
+        updated += 1
+
+    db.commit()
+    return SpecimenBulkUpdateOut(
+        updated=updated, unchanged=unchanged, blocked=blocked, renamed=renamed
     )
 
 

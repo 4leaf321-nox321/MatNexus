@@ -11,6 +11,9 @@ export type Specimen = components['schemas']['SpecimenOut']
 /** 평면 목록의 한 줄 — 시편에 재료·시료를 얹은 것. */
 export type SpecimenRow = components['schemas']['SpecimenRowOut']
 export type SpecimenRowPage = components['schemas']['Page_SpecimenRowOut_']
+export type SpecimenBulkField =
+  components['schemas']['SpecimenBulkUpdateRequest']['field']
+export type SpecimenBulkResult = components['schemas']['SpecimenBulkUpdateOut']
 /** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
 export type SpecimenUpdated = components['schemas']['SpecimenUpdateOut']
 export type NamePreview = components['schemas']['NamePreviewOut']
@@ -142,6 +145,19 @@ export const materialsApi = {
    */
   specimenRows: (query: SpecimenQuery = {}) =>
     api.get<SpecimenRowPage>(`/specimens${search(query)}`),
+
+  /**
+   * 고른 시편의 **칸 하나**를 같은 값으로 맞춘다.
+   *
+   * 이관에서 규격이 빈 시편이 무더기로 생겼는데, 고칠 길이 시편을 하나씩 여는
+   * 것뿐이었다 — 수백 장이면 그것은 길이 아니다.
+   */
+  bulkUpdateSpecimens: (ids: string[], field: SpecimenBulkField, value: string | null) =>
+    api.post<SpecimenBulkResult>('/specimens/bulk-update', {
+      specimen_ids: ids,
+      field,
+      value,
+    }),
 
   /**
    * 실제로 쓰이고 있는 분류 조합. **고정 목록을 화면에 박지 않는다** — 부서가

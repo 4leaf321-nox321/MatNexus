@@ -480,6 +480,50 @@ class SpecimenOut(BaseModel):
     한 번에 세어 넣는다 — 시편마다 물으면 N+1 이다."""
 
 
+#: 한 번에 고칠 수 있는 시편 수. 시편은 한 시료에 수백 장이 정상이라
+#: 넉넉히 둔다 — 열 번에 나눠 거는 것은 「한 번에 맞춘다」 의 뜻을 반쯤 없앤다.
+MAX_SPECIMENS = 1000
+
+
+class SpecimenBulkUpdateRequest(BaseModel):
+    """고른 시편의 **칸 하나**를 같은 값으로 맞춘다.
+
+    한 번에 한 칸이다. 여러 칸을 함께 받으면 「안 보낸 것」과 「비운 것」을
+    구별할 수 없고, 화면도 「무엇을 바꾸는 중인가」를 말하기 어려워진다.
+
+    ## 왜 이 둘뿐인가
+
+    **규격**은 그 시편의 치수 칸을 정한다(ADR 0010). 이관에서 규격이 빈 시편이
+    무더기로 생겼고, 그때 고칠 길이 시편을 하나씩 여는 것뿐이었다 — 수백 장이면
+    그것은 길이 아니다.
+
+    **방향**은 잘못 고른 것을 되돌릴 자리가 필요하다. 지우고 다시 만들면 그
+    시편의 시험이 함께 사라진다.
+
+    치수는 여기 없다. 시편마다 **잰 값**이라 같은 값으로 맞추는 것 자체가 틀렸다.
+    """
+
+    specimen_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_SPECIMENS)
+    field: Literal["orientation", "standard"]
+    value: str | None = None
+    """비우면 그 칸을 지운다. **빈 문자열과 `null` 을 같게 본다.**
+
+    다만 방향은 못 비운다 — 이름의 한 칸이라 빈 방향인 시편은 있을 수 없다."""
+
+
+class SpecimenBulkUpdateOut(BaseModel):
+    updated: int
+    unchanged: int
+    """이미 그 값이던 것. **조용히 성공으로 세지 않는다** — 20건을 골랐는데
+    「17건 바꿨습니다」 가 나오면 나머지 셋이 왜 빠졌는지 알 수 있어야 한다."""
+    blocked: list[str]
+    renamed: list[str]
+    """방향이 바뀌어 **이름과 번호가 다시 매겨진** 것. `A → B` 꼴이다.
+
+    방향만 골랐는데 번호까지 달라지는 것은 사람이 예상 못 하는 일이라 조용히
+    하면 안 된다(한 건 수정이 `renamed` 를 주는 것과 같은 이유)."""
+
+
 class SpecimenRowOut(SpecimenOut):
     """평면 목록의 한 줄 — **시편에 재료·시료를 얹은 것.**
 

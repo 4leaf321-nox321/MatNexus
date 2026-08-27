@@ -2327,3 +2327,144 @@ class Test열_머리에서_거른다:
         material = _create_material(client, admin_headers, alias="도어 이너")
         body = client.get("/api/materials?alias=도어", headers=admin_headers).json()
         assert material["id"] in {one["id"] for one in body["items"]}
+
+
+class Test시편_일괄_수정:
+    """수백 장을 하나씩 여는 것은 길이 아니다.
+
+    이관에서 규격이 빈 시편이 무더기로 생겼고(2026-08-28), 그때 고칠 길이 시편을
+    하나씩 여는 것뿐이었다. 규격은 그 시편의 치수 칸을 정하므로(ADR 0010) 비어
+    있으면 치수를 받을 자리조차 없다.
+
+    **방향은 이름과 번호를 바꾼다.** 되돌릴 수 없는 쪽에 가까워 무는 자리를
+    거기 둔다 — 「바뀐다」 보다 **「무엇으로 바뀌었는지 말한다」** 가 요점이다.
+    """
+
+    def _three(self, client: TestClient, headers: dict[str, str]) -> list[dict[str, Any]]:
+        material = _create_material(client, headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        made = []
+        for seq in (1, 2, 3):
+            one = client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD", "seq_no": seq},
+                headers=headers,
+            )
+            assert one.status_code == 201, one.text
+            made.append(one.json())
+        return made
+
+    def test_규격을_한_번에_붙인다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        made = self._three(client, admin_headers)
+        done = client.post(
+            "/api/specimens/bulk-update",
+            json={
+                "specimen_ids": [one["id"] for one in made],
+                "field": "standard",
+                "value": "ASTM E8/E8M 박판형",
+            },
+            headers=admin_headers,
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["updated"] == 3
+
+        for one in made:
+            got = client.get(f"/api/specimens/{one['id']}", headers=admin_headers).json()
+            assert got["standard"] == "ASTM E8/E8M 박판형"
+
+    def test_이미_그_값이면_바꾼_것으로_안_센다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**조용히 성공으로 세지 않는다.** 20건을 골랐는데 「17건 바꿨습니다」 가
+        나오면 나머지 셋이 왜 빠졌는지 알 수 있어야 한다."""
+        made = self._three(client, admin_headers)
+        body = {
+            "specimen_ids": [one["id"] for one in made],
+            "field": "standard",
+            "value": "ASTM D638 Type I",
+        }
+        client.post("/api/specimens/bulk-update", json=body, headers=admin_headers)
+        again = client.post(
+            "/api/specimens/bulk-update", json=body, headers=admin_headers
+        ).json()
+        assert again["updated"] == 0
+        assert again["unchanged"] == 3
+
+    def test_방향을_바꾸면_이름이_바뀐_것을_말한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """방향만 골랐는데 번호까지 달라지는 것은 사람이 예상 못 하는 일이라
+        조용히 하면 안 된다."""
+        made = self._three(client, admin_headers)
+        done = client.post(
+            "/api/specimens/bulk-update",
+            json={
+                "specimen_ids": [one["id"] for one in made],
+                "field": "orientation",
+                "value": "TD",
+            },
+            headers=admin_headers,
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["updated"] == 3
+        assert len(done.json()["renamed"]) == 3
+
+        moved = client.get(f"/api/specimens/{made[0]['id']}", headers=admin_headers).json()
+        assert moved["orientation"] == "TD"
+        # **번호는 옮겨 가는 방향에서 새로 받는다** — MD 의 번호를 들고 가지 않는다.
+        assert "TD" in moved["record_name"]
+
+    def test_방향은_못_비운다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        """이름의 한 칸이라 빈 방향인 시편은 있을 수 없다."""
+        made = self._three(client, admin_headers)
+        done = client.post(
+            "/api/specimens/bulk-update",
+            json={
+                "specimen_ids": [one["id"] for one in made],
+                "field": "orientation",
+                "value": "",
+            },
+            headers=admin_headers,
+        )
+        assert done.status_code == 422, done.text
+
+    def test_모르는_방향은_손대기_전에_막는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**열 건을 고치다 열한 번째에서 멈추면** 앞의 열 건만 바뀐 상태가
+        남는다. 값이 하나뿐인 요청이니 손대기 전에 걸러야 맞다."""
+        made = self._three(client, admin_headers)
+        done = client.post(
+            "/api/specimens/bulk-update",
+            json={
+                "specimen_ids": [one["id"] for one in made],
+                "field": "orientation",
+                "value": "XX",
+            },
+            headers=admin_headers,
+        )
+        assert done.status_code == 422, done.text
+
+        # 하나도 안 바뀌었어야 한다.
+        for one in made:
+            got = client.get(f"/api/specimens/{one['id']}", headers=admin_headers).json()
+            assert got["orientation"] == "MD"
+
+    def test_치수는_못_고친다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        """**시편마다 잰 값이다.** 같은 값으로 맞추는 것 자체가 틀렸다 — 열어
+        두면 스무 장이 같은 두께를 갖고, 그 뒤 응력이 통째로 어긋난다."""
+        made = self._three(client, admin_headers)
+        done = client.post(
+            "/api/specimens/bulk-update",
+            json={
+                "specimen_ids": [one["id"] for one in made],
+                "field": "thickness",
+                "value": "0.8",
+            },
+            headers=admin_headers,
+        )
+        assert done.status_code == 422, done.text
