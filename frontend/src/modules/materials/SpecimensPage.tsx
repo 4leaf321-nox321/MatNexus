@@ -30,7 +30,12 @@ import { FlaskConical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { ORIENTATIONS, materialsApi } from '@/modules/materials/api'
-import { ColumnFilter, ColumnLabel, FILTER_HEAD } from '@/shared/components/ColumnFilter'
+import {
+  ColumnFilter,
+  ColumnLabel,
+  FILTER_HEAD,
+  FILTER_ROW,
+} from '@/shared/components/ColumnFilter'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -138,7 +143,7 @@ export default function SpecimensPage() {
             {/* **머리 띠를 본문과 가른다.** 거르는 칸이 들어가 두 층이 되면서
                 띠가 두꺼워졌는데, 배경이 없으면 첫 줄이 머리인지 자료인지
                 한눈에 안 갈린다. */}
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <TableRow className={FILTER_ROW}>
               {/* **열마다 그 열을 거른다.** 서버가 거르므로 다음 쪽까지 걸러진다 —
                   화면에서 거르면 이 쪽에 실린 것만 걸러지고, 사람은 그것을
                   「없다」 로 읽는다. */}

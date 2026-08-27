@@ -29,10 +29,18 @@
 import { Search, X } from 'lucide-react'
 
 /**
- * 거르는 칸이 든 머리칸에 붙인다. **높이를 풀고 아래를 맞춘다** —
- * `TableHead` 기본은 `h-10` 이라 두 층이 안 들어간다.
+ * 거르는 칸이 든 머리칸에 붙인다.
+ *
+ * **높이를 푼다** — `TableHead` 기본은 `h-10` 이라 두 층이 안 들어간다.
+ *
+ * **세로 선을 긋는다.** 배경만으로 띠를 갈랐더니 칸끼리 경계가 없어서, 거르는
+ * 상자 여덟이 한 줄에 늘어선 것처럼 보였다 — 어느 상자가 어느 열의 것인지
+ * 다시 세어 봐야 했다. 선이 있으면 상자와 열이 같은 칸 안에 있다는 것이 보인다.
  */
-export const FILTER_HEAD = 'h-auto py-2.5 align-bottom'
+export const FILTER_HEAD = 'h-auto border-r py-2.5 align-bottom last:border-r-0'
+
+/** 머리 띠 자체. 배경 + **아래를 굵게** — 첫 줄이 머리인지 자료인지 갈린다. */
+export const FILTER_ROW = 'bg-muted/40 hover:bg-muted/40 border-b-2'
 
 /** 거르지 않는 열의 이름. **같은 리듬으로 선다** — 한 줄만 위로 떠 있으면
  *  머리 띠가 들쭉날쭉해 보인다. */
@@ -72,12 +80,13 @@ export function ColumnFilter({
 }) {
   const on = value !== ''
 
-  // 켜졌을 때만 테두리가 진해진다. 꺼져 있을 때를 흐리게 두는 이유는, 열이
-  // 여덟이면 진한 테두리 여덟 개가 표보다 먼저 눈에 들어오기 때문이다.
+  // **쉬는 상태에도 테두리가 있다.** 흐리게 뒀더니 「거를 수 있는 칸」 으로
+  // 안 읽혔다 — 상자인지 그냥 글자인지가 눈에 안 들어온다. 켜지면 색이
+  // 바뀌고, 그 차이는 이름 옆의 점이 함께 말한다.
   const field =
     'h-8 w-full rounded-md border bg-background text-xs transition-colors ' +
     'focus-visible:ring-ring/40 focus-visible:border-ring focus-visible:ring-2 focus-visible:outline-none ' +
-    (on ? 'border-primary/50 bg-primary/[0.04]' : 'border-input/60 hover:border-input')
+    (on ? 'border-primary/60 bg-primary/[0.04]' : 'border-input hover:border-foreground/30')
 
   return (
     <div className={`flex flex-col gap-1.5 ${align === 'right' ? 'items-end' : ''}`}>

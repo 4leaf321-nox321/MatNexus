@@ -28,7 +28,12 @@ import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { ColumnFilter, ColumnLabel, FILTER_HEAD } from '@/shared/components/ColumnFilter'
+import {
+  ColumnFilter,
+  ColumnLabel,
+  FILTER_HEAD,
+  FILTER_ROW,
+} from '@/shared/components/ColumnFilter'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -334,7 +339,7 @@ export default function MaterialsPage() {
               {/* **머리 띠를 본문과 가른다.** 거르는 칸이 들어가 두 층이 되면서
                   띠가 두꺼워졌는데, 배경이 없으면 첫 줄이 머리인지 자료인지
                   한눈에 안 갈린다. */}
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableRow className={FILTER_ROW}>
                 {/* **20건을 하나씩 여는 것은 일이 아니다.** 골라서 한 번에 지운다. */}
                 <TableHead className={`w-8 ${FILTER_HEAD}`}>
                   {/* 거르는 칸들과 **같은 높이에 선다.** 위에 붙으면 머리 띠에서
