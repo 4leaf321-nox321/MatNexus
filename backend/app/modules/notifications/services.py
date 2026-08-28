@@ -20,6 +20,7 @@ from app.modules.notifications.models import (
     NotificationRule,
     NotificationRuleState,
 )
+from app.shared import permissions
 
 
 def _now() -> datetime:
@@ -123,6 +124,9 @@ def ensure_rules(db: Session, user: User) -> None:
     wanted = ["account.decided"]
     if user.is_system_admin:
         wanted.append("account.signup")
+    # 장비 커넥터가 시편을 못 정한 파일은 **부서 관리자**가 붙인다(ADR 0021).
+    if user.is_system_admin or permissions.is_any_manager(db, user):
+        wanted.append("pipelines.needs_specimen")
 
     for event_kind in wanted:
         exists = db.scalar(

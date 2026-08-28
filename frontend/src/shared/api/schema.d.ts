@@ -1404,6 +1404,156 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/pipelines/connectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Connectors */
+        get: operations["list_connectors_api_pipelines_connectors_get"];
+        put?: never;
+        /**
+         * Create Connector
+         * @description 장비 PC 하나를 등록한다. 같은 호스트면 기존 것을 돌려준다(201 그대로).
+         */
+        post: operations["create_connector_api_pipelines_connectors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/connectors/{connector_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Connector */
+        patch: operations["update_connector_api_pipelines_connectors__connector_id__patch"];
+        trace?: never;
+    };
+    "/api/pipelines/connectors/{connector_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Heartbeat */
+        post: operations["post_heartbeat_api_pipelines_connectors__connector_id__heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Inbox */
+        get: operations["list_inbox_api_pipelines_inbox_get"];
+        put?: never;
+        /**
+         * Upload Inbox
+         * @description 원본을 받아 수집함에 넣고 202 를 준다 — 파싱은 워커가 한다.
+         */
+        post: operations["upload_inbox_api_pipelines_inbox_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/inbox/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Item */
+        get: operations["get_item_api_pipelines_inbox__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/inbox/{item_id}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign Item
+         * @description 사람이 시편을 붙인다 → 시험이 된다.
+         */
+        post: operations["assign_item_api_pipelines_inbox__item_id__assign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/inbox/{item_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard Item */
+        post: operations["discard_item_api_pipelines_inbox__item_id__discard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/inbox/{item_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Item
+         * @description 프로파일을 고친 뒤 다시 파싱.
+         */
+        post: operations["retry_item_api_pipelines_inbox__item_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/batch": {
         parameters: {
             query?: never;
@@ -3437,6 +3587,19 @@ export interface components {
             /** Workspace Slug */
             workspace_slug?: string | null;
         };
+        /** AssignIn */
+        AssignIn: {
+            /**
+             * Specimen Id
+             * Format: uuid
+             */
+            specimen_id: string;
+            /**
+             * Test Type
+             * @description 비우면 감지된 것
+             */
+            test_type?: string | null;
+        };
         /** AuditEntryOut */
         AuditEntryOut: {
             /** Action */
@@ -3572,6 +3735,32 @@ export interface components {
             definition: string;
             /** File */
             file: string;
+        };
+        /** Body_upload_inbox_api_pipelines_inbox_post */
+        Body_upload_inbox_api_pipelines_inbox_post: {
+            /** Client Path */
+            client_path: string;
+            /** Client Sha256 */
+            client_sha256: string;
+            /**
+             * Connector Id
+             * Format: uuid
+             */
+            connector_id: string;
+            /** File */
+            file: string;
+            /**
+             * Hints
+             * @default {}
+             */
+            hints: string;
+            /**
+             * Mtime
+             * Format: date-time
+             */
+            mtime: string;
+            /** Source Key */
+            source_key: string;
         };
         /** Body_upload_test_run_api_test_runs_post */
         Body_upload_test_run_api_test_runs_post: {
@@ -3892,6 +4081,22 @@ export interface components {
             /** Skipped */
             skipped: number;
         };
+        /** CandidateOut */
+        CandidateOut: {
+            /** Material Name */
+            material_name: string;
+            /** Reason */
+            reason: string;
+            /** Sample Name */
+            sample_name: string;
+            /**
+             * Specimen Id
+             * Format: uuid
+             */
+            specimen_id: string;
+            /** Specimen Name */
+            specimen_name: string;
+        };
         /**
          * CardFacetOut
          * @description 거를 수 있는 값 하나와 **그것이 몇 장인가.**
@@ -4059,6 +4264,71 @@ export interface components {
             sort_order: number;
             /** Value Type */
             value_type: string;
+        };
+        /** ConnectorCreate */
+        ConnectorCreate: {
+            /** Hostname */
+            hostname: string;
+            /** Name */
+            name: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /** ConnectorOut */
+        ConnectorOut: {
+            /** App Version */
+            app_version: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Id */
+            created_by_id: string | null;
+            /** Failed */
+            failed: number;
+            /** Hostname */
+            hostname: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Name */
+            name: string;
+            /** Next Run At */
+            next_run_at: string | null;
+            /** Pending */
+            pending: number;
+            /**
+             * Waiting
+             * @default 0
+             */
+            waiting: number;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Workspace Name */
+            workspace_name?: string | null;
+        };
+        /**
+         * ConnectorUpdate
+         * @description 「안 보낸 것」 과 「비운 것」 을 구별한다 — 없는 키는 그대로 둔다.
+         */
+        ConnectorUpdate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
         };
         /**
          * CreateAccountRequest
@@ -4363,6 +4633,11 @@ export interface components {
             si_unit: string;
             /** Units */
             units: components["schemas"]["UnitOut"][];
+        };
+        /** DiscardIn */
+        DiscardIn: {
+            /** Reason */
+            reason: string;
         };
         /**
          * DismissRequest
@@ -4938,6 +5213,36 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HeartbeatIn */
+        HeartbeatIn: {
+            /** App Version */
+            app_version: string;
+            /** Next Run At */
+            next_run_at: string | null;
+            /** Sources */
+            sources: components["schemas"]["HeartbeatSource"][];
+        };
+        /** HeartbeatOut */
+        HeartbeatOut: {
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
+            /** Upload Limit Bytes */
+            upload_limit_bytes: number;
+        };
+        /** HeartbeatSource */
+        HeartbeatSource: {
+            /** Failed */
+            failed: number;
+            /** Key */
+            key: string;
+            /** Last Sent At */
+            last_sent_at: string | null;
+            /** Pending */
+            pending: number;
+        };
         /**
          * HomeWorkspaceRequest
          * @description 대표 소속을 정한다.
@@ -4949,6 +5254,127 @@ export interface components {
         HomeWorkspaceRequest: {
             /** Workspace Slug */
             workspace_slug: string;
+        };
+        /** InboxItemDetail */
+        InboxItemDetail: {
+            /**
+             * Candidate Count
+             * @default 0
+             */
+            candidate_count: number;
+            /** Candidates */
+            candidates: components["schemas"]["CandidateOut"][];
+            /** Client Path */
+            client_path: string;
+            /**
+             * Connector Id
+             * Format: uuid
+             */
+            connector_id: string;
+            /** Connector Name */
+            connector_name?: string | null;
+            /** Discard Reason */
+            discard_reason?: string | null;
+            /** Error */
+            error: string | null;
+            /** Filename */
+            filename: string;
+            /** Hints */
+            hints: {
+                [key: string]: string;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mtime
+             * Format: date-time
+             */
+            mtime: string;
+            /** Profile Key */
+            profile_key: string | null;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+            /** Source Key */
+            source_key: string;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+            /** Test Run Id */
+            test_run_id: string | null;
+            /** Test Run Name */
+            test_run_name?: string | null;
+            /** Test Type Key */
+            test_type_key: string | null;
+            /** Test Type Label */
+            test_type_label?: string | null;
+        };
+        /** InboxItemOut */
+        InboxItemOut: {
+            /**
+             * Candidate Count
+             * @default 0
+             */
+            candidate_count: number;
+            /**
+             * Connector Id
+             * Format: uuid
+             */
+            connector_id: string;
+            /** Connector Name */
+            connector_name?: string | null;
+            /** Error */
+            error: string | null;
+            /** Filename */
+            filename: string;
+            /** Hints */
+            hints: {
+                [key: string]: string;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Profile Key */
+            profile_key: string | null;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+            /** Source Key */
+            source_key: string;
+            /** Status */
+            status: string;
+            /** Test Run Id */
+            test_run_id: string | null;
+            /** Test Run Name */
+            test_run_name?: string | null;
+            /** Test Type Key */
+            test_type_key: string | null;
+            /** Test Type Label */
+            test_type_label?: string | null;
         };
         /** IncompleteOut */
         IncompleteOut: {
@@ -5543,6 +5969,17 @@ export interface components {
             test_types: components["schemas"]["TallyOut"][];
             /** Waiting To Process */
             waiting_to_process: number;
+        };
+        /** Page[InboxItemOut] */
+        Page_InboxItemOut_: {
+            /** Items */
+            items: components["schemas"]["InboxItemOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /** Page[MaterialOut] */
         Page_MaterialOut_: {
@@ -10595,6 +11032,326 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_connectors_api_pipelines_connectors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorOut"][];
+                };
+            };
+        };
+    };
+    create_connector_api_pipelines_connectors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectorCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_connector_api_pipelines_connectors__connector_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectorUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_heartbeat_api_pipelines_connectors__connector_id__heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeartbeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inbox_api_pipelines_inbox_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                connector_id?: string | null;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_InboxItemOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_inbox_api_pipelines_inbox_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_inbox_api_pipelines_inbox_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_item_api_pipelines_inbox__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxItemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_item_api_pipelines_inbox__item_id__assign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxItemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_item_api_pipelines_inbox__item_id__discard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscardIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_item_api_pipelines_inbox__item_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxItemOut"];
                 };
             };
             /** @description Validation Error */

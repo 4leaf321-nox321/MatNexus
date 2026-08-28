@@ -23,6 +23,7 @@ from app.modules.notifications.models import (
     NotificationRule,
     NotificationRuleState,
 )
+from app.modules.pipelines.models import PipelineConnector, PipelineInboxItem
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import (
@@ -53,6 +54,8 @@ __all__ = [
     "NotificationRule",
     "NotificationRuleState",
     "PersonalAccessToken",
+    "PipelineConnector",
+    "PipelineInboxItem",
     "ProcessingRecipe",
     "ProcessingResult",
     "PropertyCard",

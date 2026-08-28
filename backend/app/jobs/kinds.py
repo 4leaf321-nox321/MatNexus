@@ -36,3 +36,9 @@ TESTS_CLEANUP_STORAGE = "tests.cleanup_storage"
 #: 문자열 컬럼과 기준정보가 같은 말을 하는지 본다(ADR 0010 Contract). **주기 작업이다**
 #: — 사람이 누를 때만 도는 점검으로는 "한 릴리스 동안 0" 을 답할 수 없다.
 VOCABULARY_CHECK_DRIFT = "vocabulary.check_drift"
+
+#: 장비 커넥터가 넣은 파일 읽기 — payload: item_id
+#:
+#: 반입 요청은 파일만 받고 끝낸다(업로드와 같은 이유). 워커가 종류를 감지하고
+#: 읽어서 시편 후보를 찾고, 하나면 시험을 만들고 아니면 사람을 기다린다.
+PIPELINES_PARSE_INBOX = "pipelines.parse_inbox"

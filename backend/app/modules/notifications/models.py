@@ -27,7 +27,8 @@ from app.database import Base
 #: 알림을 만드는 사건.
 #:   account.signup   가입 신청이 들어왔다        → 시스템 관리자에게
 #:   account.decided  내 신청이 승인/거절됐다      → 신청자에게
-EVENT_KINDS = ("account.signup", "account.decided")
+#:   pipelines.needs_specimen  장비에서 온 파일에 시편을 못 붙였다 → 부서 관리자에게
+EVENT_KINDS = ("account.signup", "account.decided", "pipelines.needs_specimen")
 
 CHANNELS = ("inapp",)  # 'email' 은 SMTP 가 열리면 추가한다
 
