@@ -27,10 +27,11 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
+from sqlalchemy import select  # noqa: E402
+
 import app.all_models  # noqa: E402,F401
 from app.database import SessionLocal  # noqa: E402
 from app.modules.materials.models import Material  # noqa: E402
-from sqlalchemy import select  # noqa: E402
 
 #: 항목 → (재료군, 값 범위 SI, 사람이 적는 단위). 물리적으로 그럴듯한 범위를 쓴다 —
 #: 화면을 보는 사람이 「이 값이 말이 되나」 를 먼저 묻기 때문이다.

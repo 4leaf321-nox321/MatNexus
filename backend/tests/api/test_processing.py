@@ -750,7 +750,14 @@ class Test저장된_결과의_곡선:
     ) -> None:
         steps = [
             *STEPS,
-            {"plugin": "tensile.elastic_modulus", "options": {"maximum_strain": 0.05}},
+            # **직접 입력이다.** `Example.tra` 는 18점 발췌본이라 탄성 창을 0.05 까지
+            # 넓혀야 점이 차는데, 그 구간은 항복 뒤까지 걸쳐 직선이 아니다(R²≈0.9) —
+            # 그래서 값을 안 낸다. 이 시험은 **진응력 축으로 그려지는가**를 보는
+            # 것이므로 아는 값을 넣고 그 뒤를 본다.
+            {
+                "plugin": "tensile.elastic_modulus",
+                "options": {"method": "manual", "manual_modulus": 200e9},
+            },
             {
                 "plugin": "tensile.true_plastic",
                 "options": {"youngs_modulus": "@youngs_modulus"},

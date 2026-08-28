@@ -44,6 +44,17 @@ from matcore.processing import (
 #: 2점을 지나는 직선은 언제나 R²=1 이라 **R² 로는 이것을 못 막는다.** 점 수로 막는다.
 MIN_TRUSTWORTHY_POINTS = 5
 
+#: 그 구간이 직선이었다고 할 수 있는 최소 R². **이보다 낮으면 값을 안 낸다.**
+#:
+#: 점 수만으로는 절반만 막힌다 — 성긴 곡선에서 점을 채우려고 창을 [0, 0.05] 로
+#: 넓히면 5점은 들어오지만 그 구간은 **항복 한참 뒤까지** 걸친다. 실측(2026-08-29):
+#: 창 [0.001, 0.05] 로 E=1.83 GPa (R²=0.899), 창 [0, 0.05] 로 3.69 GPa (R²=0.473).
+#: 같은 데이터의 조밀한 곡선은 좁은 창에서 201 GPa (R²=1.000) 를 낸다.
+#:
+#: 0.98 로 둔 이유: 관측된 좋은 적합은 0.993~1.000, 나쁜 것은 0.90 이하로 뚜렷이
+#: 갈렸다. 진짜로 직선이 아닌 재료는 **「직접 입력」** 으로 빠져나간다.
+MIN_TRUSTWORTHY_R_SQUARED = 0.98
+
 #: 이 모듈이 만들어 내는 열 이름. 뒤 단계와 화면이 이 이름으로 찾는다.
 STRAIN = "strain_engineering"
 STRESS = "stress_engineering"
@@ -404,7 +415,10 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
             key="elastic_r_squared",
             label="탄성 구간 R²",
             si_unit="1",
-            help="그 구간이 실제로 직선이었는가. 점이 5개 미만이면 내지 않습니다.",
+            help=(
+                "그 구간이 실제로 직선이었는가. **0.98 미만이면 탄성계수를 내지 "
+                "않습니다** — 직선이 아닌 구간의 기울기는 탄성계수가 아닙니다."
+            ),
         ),
         Produced(
             key="elastic_point_count",
@@ -480,20 +494,43 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     #
     # 단계는 실패시키지 않는다 — 인장강도·연신율은 멀쩡히 나온 것이고, 그것까지
     # 잃으면 사람이 「점이 모자란 것」 을 고치는 대신 이 단계를 빼 버린다.
-    too_few = method != "manual" and count < MIN_TRUSTWORTHY_POINTS
-    if too_few:
-        return StepResult(
-            frame,
-            notes=(
-                f"변형률 [{low:.6g}, {high:.6g}] 구간에 {count}점밖에 없어 "
-                f"**탄성계수를 내지 않았습니다.** {MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 "
-                f"— {count}점을 지나는 직선은 거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. "
-                f"구간을 넓히거나, 더 조밀한 곡선을 쓰거나, 값을 아는 경우 방법을 "
-                f"「직접 입력」 으로 바꾸세요. 관측 범위는 "
-                f"[{float(strain.min()):.6g}, {float(strain.max()):.6g}] 입니다.",
-            ),
-            scalars=(Scalar("elastic_point_count", "탄성 구간 점 수", float(count), "1"),),
+    if method != "manual":
+        window = f"변형률 [{low:.6g}, {high:.6g}] 구간"
+        observed = (
+            f"관측 범위는 [{float(strain.min()):.6g}, {float(strain.max()):.6g}] 입니다."
         )
+        refused = None
+        if count < MIN_TRUSTWORTHY_POINTS:
+            refused = (
+                f"{window}에 {count}점밖에 없어 **탄성계수를 내지 않았습니다.** "
+                f"{MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 — {count}점을 지나는 직선은 "
+                f"거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. 구간을 넓히거나, 더 "
+                f"조밀한 곡선을 쓰거나, 값을 아는 경우 방법을 「직접 입력」 으로 바꾸세요. "
+                f"{observed}"
+            )
+        elif math.isfinite(r_squared) and r_squared < MIN_TRUSTWORTHY_R_SQUARED:
+            # **점을 채우려고 창을 넓힌 경우가 여기 걸린다.** 5점은 들어왔는데 그
+            # 구간이 항복 뒤까지 걸쳐 직선이 아니다 — 기울기는 나오지만 그것은
+            # 탄성계수가 아니다.
+            refused = (
+                f"{window}의 {count}점이 직선이 아닙니다(R²={r_squared:.4f}) — "
+                f"**탄성계수를 내지 않았습니다.** 기울기 {modulus / 1e9:.4g} GPa 는 나왔지만 "
+                f"그 구간이 직선이 아니면 그것은 탄성계수가 아닙니다. 구간이 항복 뒤까지 "
+                f"걸쳤거나 초기 토우가 섞였는지 보고 창을 좁히세요. 값을 아는 경우 방법을 "
+                f"「직접 입력」 으로 바꾸세요. {observed}"
+            )
+        if refused is not None:
+            # **인장강도·연신율은 멀쩡히 나온 것이다.** 단계를 실패시키면 사람이
+            # 원인을 고치는 대신 이 단계를 빼 버린다.
+            #
+            # 남기는 것은 **거절의 근거**뿐이다. 점이 모자라 거절했으면 R² 는 안
+            # 남긴다 — 2점의 R²=1 이 화면에 뜨면 「완벽한데 왜 값이 없지」 가 된다.
+            scalars = [Scalar("elastic_point_count", "탄성 구간 점 수", float(count), "1")]
+            if count >= MIN_TRUSTWORTHY_POINTS and math.isfinite(r_squared):
+                scalars.append(
+                    Scalar("elastic_r_squared", "탄성 구간 R²", float(r_squared), "1")
+                )
+            return StepResult(frame, notes=(refused,), scalars=tuple(scalars))
 
     scalars = [
         Scalar("youngs_modulus", "탄성계수", float(modulus), "Pa"),
@@ -513,11 +550,12 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         )
     )
     notes = [note]
-    if math.isfinite(r_squared) and r_squared < 0.99:
-        # **경고이지 실패가 아니다.** 재료에 따라 진짜로 직선이 아닐 수 있다.
+    if math.isfinite(r_squared) and r_squared < 0.995:
+        # **경고이지 실패가 아니다.** 0.98 미만은 위에서 이미 막았다 — 여기는 그
+        # 문턱을 넘었지만 완전하지는 않은 자리로, 토우가 조금 섞였을 때 걸린다.
         notes.append(
-            f"R² 가 {r_squared:.4f} 로 낮습니다 — 구간이 항복 뒤까지 걸쳐 있거나 "
-            f"초기 토우(시편 물림) 구간이 섞였는지 확인하세요."
+            f"R² 가 {r_squared:.4f} 입니다 — 초기 토우(시편 물림)가 조금 섞였는지 "
+            f"확인하세요. 토우 보정 단계를 앞에 두면 좋아집니다."
         )
     return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
 

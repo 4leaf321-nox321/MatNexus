@@ -340,27 +340,36 @@ ELASTIC_WINDOW = {"minimum_strain": 0.001, "maximum_strain": 0.002}
 class Test토우보정:
     """**토우가 망치는 것은 탄성계수다.**
 
-    이 클래스가 보이려는 것은 보정이 "돌아간다" 가 아니라 **안 하면 무슨 값이
-    나오는가** 다.
+    이 클래스가 보이려는 것은 보정이 "돌아간다" 가 아니라 **안 하면 무슨 일이
+    나는가** 다.
 
     처음에는 항복강도가 크게 틀릴 것으로 보고 그렇게 단언했는데, 재 보니
     0.3% 였다 — 경화가 거의 평탄해서(2 GPa) 교점의 응력이 항복 근처에 붙박인다.
-    **주장을 실측에 맞췄다.** 대신 탄성계수는 두 배 틀린다.
+    **주장을 실측에 맞췄다.** 대신 탄성계수는 두 배 틀렸다(99.5 GPa, 참값 200).
+
+    **v1.160.0 부터는 그 두 배 틀린 값이 아예 안 나온다.** 토우가 섞인 구간은
+    직선이 아니라서(R²=0.797) 거절된다 — 「그럴듯해 보이는 100 GPa」 가 알루미늄
+    이라고 하면 넘어가던 자리를, 이제는 멈춰서 토우를 가리킨다.
     """
 
-    def test_보정_안_하면_탄성계수가_반토막_난다(self) -> None:
-        """먼저 피해를 보인다. 탄성을 재는 창이 토우 안에 걸린다."""
+    def test_보정_안_하면_탄성계수를_아예_못_낸다(self) -> None:
+        """먼저 피해를 보인다. 탄성을 재는 창이 토우 안에 걸린다.
+
+        **값이 안 나오는 것이 나은 결과다.** 전에는 99.5 GPa 가 나왔고, 그것은
+        알루미늄이라고 하면 넘어가는 수다 — 틀렸다는 신호가 R² 에만 있었다.
+        """
         result = processing.apply(
             [Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW))],
             synthetic_with_toe(),
         )
-        modulus = scalar(result, "youngs_modulus")
-        assert modulus < E_TRUE * 0.75, (
-            f"토우가 섞였는데 탄성계수가 {modulus / 1e9:.4g} GPa 로 멀쩡하다 — "
-            f"이 시험이 재는 피해가 재현되지 않았다."
-        )
-        # **그럴듯해 보이는 것이 문제다.** 100 GPa 는 알루미늄이라고 하면 넘어간다.
-        assert modulus > 50e9
+        keys = {item.key for item in result.scalars}
+        assert "youngs_modulus" not in keys
+        # **거절의 근거가 값으로 남는다.** 직선이 아니라서 막은 것이므로 R² 를 남긴다.
+        assert scalar(result, "elastic_r_squared") < 0.98
+        note = " ".join(result.notes)
+        assert "탄성계수를 내지 않았습니다" in note
+        # **무엇을 하라고까지 말한다.** 「값이 없다」 만으로는 고칠 데를 모른다.
+        assert "토우" in note
 
     def test_보정하면_아는_답이_돌아온다(self) -> None:
         result = processing.apply(
@@ -380,24 +389,41 @@ class Test토우보정:
         expected = E_TRUE * (YIELD_TRUE / (E_TRUE - HARDENING))
         assert scalar(result, "proof_stress") == pytest.approx(expected, rel=2e-3)
 
-    def test_항복강도는_경화가_평탄하면_덜_틀린다(self) -> None:
-        """**재 보고 적는다.** 이 곡선에서 얼마나 틀리는지를 숫자로 박아 둔다.
+    def test_보정_안_하면_뒤_단계가_멈춘다(self) -> None:
+        """**조용한 0.3% 오차가 시끄러운 정지로 바뀌었다.**
 
-        경화가 가파른 재료에서는 이 값이 커진다. 그때 이 시험이 깨지면 그건 결함이
-        아니라 **다른 곡선을 넣었다**는 뜻이다.
+        전에는 보정 없이도 항복강도가 나왔고 정답과 0.3% 밖에 안 달랐다(경화가
+        평탄해서 교점이 항복 근처에 붙박인다). 그럴듯해서 아무도 안 봤다.
+
+        이제 탄성계수가 안 나오므로 `@youngs_modulus` 를 쓰는 뒤 단계가 멈춘다.
+        **값이 조금 틀린 것보다 멈추는 편이 낫다** — 멈추면 토우 보정을 넣게 된다.
         """
+        with pytest.raises(ProcessingError) as caught:
+            processing.apply(
+                [
+                    Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW)),
+                    Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
+                ],
+                synthetic_with_toe(),
+            )
+        assert "@youngs_modulus" in str(caught.value)
+
+    def test_보정하고_나면_항복강도가_정답에_붙는다(self) -> None:
+        """**재 보고 적는다.** 보정을 넣으면 그 뒤가 다 맞는다 — 위 시험이 「멈춘다」
+        만 말하고 끝나면, 멈추는 것이 옳았는지 알 수 없다."""
         result = processing.apply(
             [
+                Step(
+                    "tensile.toe_compensation",
+                    {"minimum_strain": 0.002, "maximum_strain": 0.003},
+                ),
                 Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW)),
                 Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
             ],
             synthetic_with_toe(),
         )
         exact = E_TRUE * (YIELD_TRUE / (E_TRUE - HARDENING))
-        wrong = scalar(result, "proof_stress")
-        assert abs(wrong - exact) / exact < 0.02, (
-            f"항복강도가 {wrong / 1e6:.4g} MPa, 정답 {exact / 1e6:.4g} MPa"
-        )
+        assert scalar(result, "proof_stress") == pytest.approx(exact, rel=2e-3)
 
     def test_응력은_안_건드린다(self) -> None:
         """장비 컴플라이언스를 추정하지 않는다는 뜻이다."""
