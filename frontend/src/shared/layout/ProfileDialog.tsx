@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
 import { ApiError, api } from '@/shared/api/client'
+import { AccessTokens } from '@/shared/components/AccessTokens'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -105,6 +106,13 @@ export function ProfileDialog({ open, email, displayName, onClose, onSaved }: Pr
             </Button>
           </DialogFooter>
         </form>
+
+        {/* **장비가 들어오는 열쇠.** 장비 PC 의 수집 에이전트가 이 토큰으로 온다.
+            발급은 여기서, 어느 부서에 붙었는지는 장비 커넥터 화면에서 본다. */}
+        <section className="mt-4 border-t pt-4">
+          <h3 className="mb-2 text-sm font-semibold">액세스 토큰</h3>
+          <AccessTokens />
+        </section>
       </DialogContent>
     </Dialog>
   )

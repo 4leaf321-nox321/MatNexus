@@ -21,6 +21,8 @@ import { Link, useParams } from 'react-router-dom'
 import { materialsApi } from '@/modules/materials/api'
 import { RUN_STATUS_LABEL, testsApi } from '@/modules/tests/api'
 import { useAuth } from '@/shared/auth/AuthContext'
+import { workspacesApi } from '@/modules/workspaces/api'
+import { CopyId } from '@/shared/components/CopyId'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Skeleton } from '@/shared/components/ui/skeleton'
@@ -104,6 +106,9 @@ export default function WorkspaceHomePage() {
   const materials = useResource(() => materialsApi.list({ limit: 1 }), [])
   // **세는 일은 서버가 한다.** 재료 94개를 세려고 94행을 받을 이유가 없다.
   const summary = useResource(() => statisticsApi.overview(), [])
+  // 부서 id — 장비 커넥터 마법사가 요구한다. 멤버십에는 slug 만 있어서 따로 읽는다.
+  const details = useResource(() => workspacesApi.list(), [])
+  const workspaceId = details.data?.find((row) => row.slug === workspaceSlug)?.id
 
   const rows = recent.data?.items ?? []
   const loading = recent.loading || waiting.loading || failed.loading || materials.loading
@@ -120,6 +125,11 @@ export default function WorkspaceHomePage() {
           시험 파일이 물성이 되고, 물성이 솔버 카드가 됩니다.{' '}
           <strong>아래 순서대로 갑니다.</strong>
         </p>
+        {workspaceId && (
+          <p className="text-muted-foreground mt-1 text-xs">
+            부서 ID <CopyId value={workspaceId} label="부서 ID" />
+          </p>
+        )}
       </div>
 
       <ErrorNotice error={recent.error ?? materials.error ?? summary.error} />

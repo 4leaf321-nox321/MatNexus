@@ -38,6 +38,7 @@ import { Link } from 'react-router-dom'
 import { workspacesApi } from '@/modules/workspaces/api'
 import type { Reference, Workspace } from '@/modules/workspaces/api'
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
+import { CopyId } from '@/shared/components/CopyId'
 import { WorkspaceTree } from '@/modules/workspaces/WorkspaceTree'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -154,6 +155,8 @@ export default function WorkspacesAdminPage() {
                 {workspace.name}
               </span>
               <span className="text-muted-foreground font-mono text-xs">{workspace.slug}</span>
+              {/* 장비 커넥터 마법사가 부서 id 를 요구한다 — 손으로 옮겨 적지 않게. */}
+              <CopyId value={workspace.id} label="부서 ID" />
               <Badge variant="outline" className="gap-1">
                 <Users className="size-3" />
                 {workspace.member_count}
