@@ -16,6 +16,12 @@ from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.fitting.models import PropertyCard
 from app.modules.grouping.models import GroupResult
+from app.modules.guide.models import (
+    GuideAsset,
+    GuideDocument,
+    GuideRevision,
+    GuideSection,
+)
 from app.modules.materials.models import Material, MaterialUse, Sample, Specimen
 from app.modules.notices.models import Notice, NoticeRead
 from app.modules.notifications.models import (
@@ -45,6 +51,10 @@ __all__ = [
     "EnsembleResult",
     "FormatProfile",
     "GroupResult",
+    "GuideAsset",
+    "GuideDocument",
+    "GuideRevision",
+    "GuideSection",
     "Job",
     "Material",
     "MaterialUse",

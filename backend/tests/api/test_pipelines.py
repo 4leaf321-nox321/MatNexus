@@ -410,7 +410,9 @@ class Test사람이_정한다:
         specimen: dict[str, Any],
         tensile: None,
     ) -> dict[str, Any]:
-        received = _send(client, pat, connector["id"], hints='{"specimen": "1"}').json()
+        received: dict[str, Any] = _send(
+            client, pat, connector["id"], hints='{"specimen": "1"}'
+        ).json()
         _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
         return received
 

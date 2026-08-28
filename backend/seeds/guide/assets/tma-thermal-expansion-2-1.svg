@@ -1,0 +1,62 @@
+<svg viewBox="0 0 800 240" role="img" aria-label="팽창 프로브, 침투 프로브, 3점 굽힘 프로브, 인장 프로브 네 가지 TMA 측정 모드의 모식도">
+        <defs>
+          <marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"></path>
+          </marker>
+        </defs>
+        <g stroke="currentColor" stroke-opacity=".4" stroke-width="1.4">
+          <line x1="40" y1="176" x2="160" y2="176"></line><line x1="240" y1="176" x2="360" y2="176"></line>
+          <line x1="440" y1="176" x2="560" y2="176"></line><line x1="640" y1="176" x2="760" y2="176"></line>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".22" stroke-width="1">
+          <line x1="48" y1="176" x2="40" y2="186"></line><line x1="72" y1="176" x2="64" y2="186"></line>
+          <line x1="96" y1="176" x2="88" y2="186"></line><line x1="120" y1="176" x2="112" y2="186"></line>
+          <line x1="144" y1="176" x2="136" y2="186"></line>
+          <line x1="248" y1="176" x2="240" y2="186"></line><line x1="272" y1="176" x2="264" y2="186"></line>
+          <line x1="296" y1="176" x2="288" y2="186"></line><line x1="320" y1="176" x2="312" y2="186"></line>
+          <line x1="344" y1="176" x2="336" y2="186"></line>
+          <line x1="448" y1="176" x2="440" y2="186"></line><line x1="472" y1="176" x2="464" y2="186"></line>
+          <line x1="496" y1="176" x2="488" y2="186"></line><line x1="520" y1="176" x2="512" y2="186"></line>
+          <line x1="544" y1="176" x2="536" y2="186"></line>
+          <line x1="648" y1="176" x2="640" y2="186"></line><line x1="672" y1="176" x2="664" y2="186"></line>
+          <line x1="696" y1="176" x2="688" y2="186"></line><line x1="720" y1="176" x2="712" y2="186"></line>
+          <line x1="744" y1="176" x2="736" y2="186"></line>
+        </g>
+
+        <g stroke="currentColor" fill="none" stroke-width="1.6" stroke-opacity=".85">
+          <rect x="72" y="128" width="56" height="48" rx="1"></rect>
+          <path d="M100,62 V124 M74,124 H126"></path>
+          <rect x="272" y="128" width="56" height="48" rx="1"></rect>
+          <path d="M300,62 V136 M294,136 H306"></path>
+          <path d="M462,150 H538" stroke-width="4" stroke-opacity=".55"></path>
+          <path d="M470,176 L478,158 L462,158 Z" fill="currentColor" fill-opacity=".35" stroke="none"></path>
+          <path d="M530,176 L538,158 L522,158 Z" fill="currentColor" fill-opacity=".35" stroke="none"></path>
+          <path d="M500,62 V146 M492,146 H508"></path>
+          <rect x="694" y="88" width="12" height="76" rx="1"></rect>
+          <rect x="686" y="76" width="28" height="14" rx="1"></rect>
+          <rect x="686" y="162" width="28" height="14" rx="1"></rect>
+          <path d="M700,74 V58"></path>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".65" stroke-width="1.4" marker-end="url(#pa)">
+          <line x1="100" y1="58" x2="100" y2="40"></line>
+          <line x1="300" y1="44" x2="300" y2="60"></line>
+          <line x1="500" y1="44" x2="500" y2="60"></line>
+          <line x1="700" y1="54" x2="700" y2="36"></line>
+        </g>
+
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" fill="currentColor" text-anchor="middle">
+          <text x="100" y="212">팽창 (expansion)</text>
+          <text x="300" y="212">침투 (penetration)</text>
+          <text x="500" y="212">3점 굽힘</text>
+          <text x="700" y="212">인장 (film · fiber)</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".6" text-anchor="middle">
+          <text x="100" y="230">CTE · Tg</text>
+          <text x="300" y="230">연화점 · 침투온도</text>
+          <text x="500" y="230">연화 · 상대 강성</text>
+          <text x="700" y="230">필름 Tg · 수축</text>
+        </g>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor" fill-opacity=".55">
+          <text x="130" y="46">ΔL</text>
+        </g>
+      </svg>

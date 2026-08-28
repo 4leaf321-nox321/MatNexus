@@ -32,11 +32,11 @@ import {
   User,
   UserCog,
   Users,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 /** 부서 모델이 없는 동안 쓰는 임시 slug. Phase 1에서 실제 소속 부서로 대체된다. */
-export const DEFAULT_WORKSPACE = "default";
+export const DEFAULT_WORKSPACE = 'default'
 
 /**
  * 누구에게 보이는가.
@@ -48,39 +48,35 @@ export const DEFAULT_WORKSPACE = "default";
  * 이것은 **표시**일 뿐 권한이 아니다. 권한은 서버가 판정한다 — 사이드바를 고쳐
  * 우회할 수 있으면 그건 애초에 보안이 아니다.
  */
-export type NavAudience = "everyone" | "manager" | "system_admin";
+export type NavAudience = 'everyone' | 'manager' | 'system_admin'
 
 export interface NavItem {
-  label: string;
-  icon: LucideIcon;
+  label: string
+  icon: LucideIcon
   /** 고정 경로 */
-  to?: string;
+  to?: string
   /** 부서 스코프 경로 */
-  resolve?: (slug: string) => string;
+  resolve?: (slug: string) => string
   /** NavLink 의 end 옵션 (부모 경로가 자식에도 활성화되지 않게) */
-  end?: boolean;
+  end?: boolean
   /** 기본은 `everyone`. */
-  audience?: NavAudience;
+  audience?: NavAudience
 }
 
 export interface NavGroup {
-  title: string;
-  items: NavItem[];
+  title: string
+  items: NavItem[]
   /** 그룹 전체가 안 보이는 조건. 항목이 하나도 안 보이면 제목도 지운다. */
-  audience?: NavAudience;
+  audience?: NavAudience
 }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     // **작업하는 곳.** 여러 시험을 한 줄기로 미는 자리다.
-    title: "부서",
+    title: '부서',
     items: [
-      { label: "홈", icon: Home, resolve: (s) => `/w/${s}`, end: true },
-      {
-        label: "시험 데이터",
-        icon: FlaskConical,
-        resolve: (s) => `/w/${s}/tests`,
-      },
+      { label: '홈', icon: Home, resolve: (s) => `/w/${s}`, end: true },
+      { label: '시험 데이터', icon: FlaskConical, resolve: (s) => `/w/${s}/tests` },
       // 워크벤치 5탭이 `시험 선택 → 레시피 적용 → 앙상블 → 피팅 → 솔버 카드` 다.
       //
       // **'통계'와 '내보내기'를 여기서 뺐다.** 계획서 §5 에는 셋이 나란히 있었는데,
@@ -90,49 +86,45 @@ export const NAV_GROUPS: NavGroup[] = [
       //
       // 자리를 나누는 기준은 **작업이냐 열람이냐** 다. 여러 시험을 골라 미는
       // 것은 워크벤치, "이 재료의 물성이 얼마인가" 는 재료 상세다.
-      {
-        label: "워크벤치",
-        icon: SlidersHorizontal,
-        resolve: (s) => `/w/${s}/workbench`,
-      },
+      { label: '워크벤치', icon: SlidersHorizontal, resolve: (s) => `/w/${s}/workbench` },
     ],
   },
   {
     // **결과를 보는 곳.** 재료 상세가 개요·물성·CAE 카드를 탭으로 갖는다.
-    title: "카탈로그",
+    title: '카탈로그',
     items: [
-      { label: "재료", icon: Boxes, to: "/materials" },
+      { label: '재료', icon: Boxes, to: '/materials' },
       // **규격으로 찾는 자리다.** 규격·방향·치수는 시편에 붙는데(ADR 0010)
       // 시편은 재료를 거쳐야만 닿을 수 있었다 — 그래서 규격으로는 아무것도
       // 못 찾았다. 카드가 `/cards` 를 얻은 것과 같은 이유다.
-      { label: "시편", icon: ListTree, to: "/specimens" },
+      { label: '시편', icon: ListTree, to: '/specimens' },
       // **재료를 거치지 않고 카드를 찾는다.** 재료 상세의 'CAE 카드' 탭은 그
       // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
-      { label: "물성 카드", icon: FileDown, to: "/cards" },
-      { label: "물성 분석", icon: GitCompare, to: "/compare" },
+      { label: '물성 카드', icon: FileDown, to: '/cards' },
+      { label: '물성 분석', icon: GitCompare, to: '/compare' },
     ],
   },
   {
-    title: "내 활동",
+    title: '내 활동',
     items: [
-      { label: "내 작업함", icon: User, to: "/personal" },
-      { label: "알림", icon: Bell, to: "/notifications" },
+      { label: '내 작업함', icon: User, to: '/personal' },
+      { label: '알림', icon: Bell, to: '/notifications' },
     ],
   },
   {
-    title: "공통",
+    title: '공통',
     items: [
-      { label: "공지", icon: Megaphone, to: "/notices" },
-      { label: "VOC", icon: MessageSquare, to: "/voc" },
-      { label: "가이드", icon: BookOpen, to: "/guide" },
+      { label: '공지', icon: Megaphone, to: '/notices' },
+      { label: 'VOC', icon: MessageSquare, to: '/voc' },
+      { label: '가이드', icon: BookOpen, to: '/guide' },
     ],
   },
   {
     // **부서 관리자가 하는 일.** 형식 프로파일이 부서 소유가 되면서 이 그룹이
     // 필요해졌다 — 장비를 붙이는 것은 사업부의 일이지 시스템 관리자의 일이
     // 아니다. '관리' 에 두면 부서 사람은 자기 일이 아니라고 읽는다.
-    title: "부서 설정",
-    audience: "manager",
+    title: '부서 설정',
+    audience: 'manager',
     items: [
       {
         // **시험 종류도 여기다.** '관리' 에 두었더니 부서 관리자가 새 장비를
@@ -141,127 +133,100 @@ export const NAV_GROUPS: NavGroup[] = [
         //
         // 채널 키가 전사 자산인 것은 그대로다. 그것은 메뉴가 아니라 **서버의
         // 검사**가 지킨다 — 같은 이름은 같은 차원·단위여야 한다.
-        label: "시험 종류",
+        label: '시험 종류',
         icon: ListTree,
-        to: "/settings/test-types",
-        audience: "manager",
+        to: '/settings/test-types',
+        audience: 'manager',
       },
-      {
-        label: "파일 형식",
-        icon: FileCode2,
-        to: "/settings/formats",
-        audience: "manager",
-      },
+      { label: '파일 형식', icon: FileCode2, to: '/settings/formats', audience: 'manager' },
       {
         // **장비 PC 가 보낸 파일이 어디까지 왔는지.** 시편을 못 정한 파일을 붙이는
         // 것은 부서 관리자의 일이다 — 재료·프로파일을 만드는 역할과 같다.
-        label: "장비 커넥터",
+        label: '장비 커넥터',
         icon: Plug,
-        to: "/settings/connectors",
-        audience: "manager",
+        to: '/settings/connectors',
+        audience: 'manager',
       },
       {
         // **만들 수만 있고 볼 수 없으면 자산이 아니다.** 레시피는 처리 탭에서
         // 만들고 목록에서 거는데, 무엇이 저장돼 있는지 보는 자리가 없었다.
-        label: "처리 레시피",
+        label: '처리 레시피',
         icon: FlaskConical,
-        to: "/settings/recipes",
-        audience: "manager",
+        to: '/settings/recipes',
+        audience: 'manager',
       },
       {
         // **기록만 쌓이고 볼 자리가 없으면 자산이 아니다.** 레시피·프로파일에서
         // 같은 판단을 했다. 여기에는 만들기·고치기·지우기가 없다 — 고칠 수
         // 있으면 감사가 아니다.
-        label: "변경 이력",
+        label: '변경 이력',
         icon: ScrollText,
-        to: "/settings/audit",
-        audience: "manager",
+        to: '/settings/audit',
+        audience: 'manager',
       },
-      {
-        label: "부서 멤버",
-        icon: Users,
-        resolve: (s) => `/w/${s}/members`,
-        audience: "manager",
-      },
+      { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members`, audience: 'manager' },
     ],
   },
   {
-    title: "관리",
-    audience: "system_admin",
+    title: '관리',
+    audience: 'system_admin',
     items: [
-      {
-        label: "계정",
-        icon: UserCog,
-        to: "/admin/accounts",
-        audience: "system_admin",
-      },
-      {
-        label: "부서",
-        icon: Building2,
-        to: "/admin/workspaces",
-        audience: "system_admin",
-      },
+      { label: '계정', icon: UserCog, to: '/admin/accounts', audience: 'system_admin' },
+      { label: '부서', icon: Building2, to: '/admin/workspaces', audience: 'system_admin' },
       {
         // **읽기 전용이다.** 환산 계수는 이미 저장된 숫자의 뜻이라 화면에서
         // 못 고친다. 그래도 목록에 두는 이유는, 무엇을 받아 무엇으로 저장하는지가
         // 코드 안에만 있으면 "kgf 를 받나" 를 답할 방법이 없기 때문이다.
-        label: "단위",
+        label: '단위',
         icon: Ruler,
-        to: "/admin/units",
-        audience: "system_admin",
+        to: '/admin/units',
+        audience: 'system_admin',
       },
       {
         // **기준정보를 켜 두고 고칠 데가 없으면 절반만 한 것이다.** 오타가 값이
         // 되면 그것을 고르는 다음 사람이 생기고, 오염이 자기 강화된다.
-        label: "기준정보",
+        label: '기준정보',
         icon: Tags,
-        to: "/admin/vocabulary",
-        audience: "system_admin",
+        to: '/admin/vocabulary',
+        audience: 'system_admin',
       },
-      {
-        label: "저장소 정리",
-        icon: HardDrive,
-        to: "/admin/storage",
-        audience: "system_admin",
-      },
+      { label: '저장소 정리', icon: HardDrive, to: '/admin/storage', audience: 'system_admin' },
       {
         // **지운 것이 어디로 갔는지 볼 자리.** 삭제가 소프트라 행은 남는데
         // 볼 데가 없어서, 지운 재료가 이름을 붙들고 있는 것을 아무도 설명할
         // 수 없었다(2026-08-28 이관 사고).
-        label: "휴지통",
+        label: '휴지통',
         icon: Trash2,
-        to: "/admin/trash",
-        audience: "system_admin",
+        to: '/admin/trash',
+        audience: 'system_admin',
       },
-      { label: "서버", icon: Server, to: "/server", audience: "system_admin" },
+      { label: '서버', icon: Server, to: '/server', audience: 'system_admin' },
     ],
   },
-];
+]
 
 export function itemHref(item: NavItem, slug: string): string {
-  return item.to ?? item.resolve?.(slug) ?? "/";
+  return item.to ?? item.resolve?.(slug) ?? '/'
 }
+
 
 /** 이 사람에게 보이는가. 서버가 최종 판정을 한다 — 여기는 표시일 뿐이다. */
 export function canSee(
   audience: NavAudience | undefined,
-  viewer: { isSystemAdmin: boolean; isAnyManager: boolean },
+  viewer: { isSystemAdmin: boolean; isAnyManager: boolean }
 ): boolean {
-  if (audience === "system_admin") return viewer.isSystemAdmin;
-  if (audience === "manager")
-    return viewer.isSystemAdmin || viewer.isAnyManager;
-  return true;
+  if (audience === 'system_admin') return viewer.isSystemAdmin
+  if (audience === 'manager') return viewer.isSystemAdmin || viewer.isAnyManager
+  return true
 }
 
 /** 볼 수 있는 것만 남긴 메뉴. 빈 그룹은 제목까지 지운다. */
 export function visibleGroups(viewer: {
-  isSystemAdmin: boolean;
-  isAnyManager: boolean;
+  isSystemAdmin: boolean
+  isAnyManager: boolean
 }): NavGroup[] {
   return NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) => canSee(item.audience, viewer)),
-  })).filter(
-    (group) => canSee(group.audience, viewer) && group.items.length > 0,
-  );
+  })).filter((group) => canSee(group.audience, viewer) && group.items.length > 0)
 }

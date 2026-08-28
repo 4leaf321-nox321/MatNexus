@@ -1,0 +1,45 @@
+<svg viewBox="0 0 800 250" role="img" aria-label="판재 인장 시편의 형상과 표점거리 평행부 폭 치수 및 신율계 또는 DIC 측정 영역">
+        <defs>
+          <marker id="dm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".65"></path>
+          </marker>
+        </defs>
+        <g stroke="currentColor" fill="none" stroke-width="1.7" stroke-opacity=".8">
+          <path d="M50,60 H200 C225,60 225,80 250,80 H550 C575,80 575,60 600,60 H750"></path>
+          <path d="M50,140 H200 C225,140 225,120 250,120 H550 C575,120 575,140 600,140 H750"></path>
+          <path d="M50,60 V140"></path><path d="M750,60 V140"></path>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".28" stroke-width="1">
+          <line x1="60" y1="60" x2="50" y2="70"></line><line x1="80" y1="60" x2="50" y2="90"></line>
+          <line x1="100" y1="60" x2="50" y2="110"></line><line x1="120" y1="60" x2="50" y2="130"></line>
+          <line x1="140" y1="60" x2="60" y2="140"></line><line x1="160" y1="60" x2="80" y2="140"></line>
+          <line x1="740" y1="60" x2="750" y2="70"></line><line x1="720" y1="60" x2="750" y2="90"></line>
+          <line x1="700" y1="60" x2="750" y2="110"></line><line x1="680" y1="60" x2="750" y2="130"></line>
+          <line x1="660" y1="60" x2="740" y2="140"></line><line x1="640" y1="60" x2="720" y2="140"></line>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".55" stroke-width="1.2">
+          <path d="M300,44 V36 H500 V44" fill="none"></path>
+          <line x1="400" y1="36" x2="400" y2="28"></line>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".55" stroke-width="1.2" marker-start="url(#dm)" marker-end="url(#dm)">
+          <line x1="300" y1="172" x2="500" y2="172"></line>
+          <line x1="250" y1="200" x2="550" y2="200"></line>
+          <line x1="520" y1="82" x2="520" y2="118"></line>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".22" stroke-width="1">
+          <line x1="300" y1="122" x2="300" y2="176"></line><line x1="500" y1="122" x2="500" y2="176"></line>
+          <line x1="250" y1="122" x2="250" y2="204"></line><line x1="550" y1="122" x2="550" y2="204"></line>
+        </g>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" fill="currentColor">
+          <text x="400" y="168" text-anchor="middle">L₀</text>
+          <text x="400" y="196" text-anchor="middle">Lc</text>
+          <text x="532" y="104">b₀</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">
+          <text x="400" y="22" text-anchor="middle">신율계 / DIC 관심영역 — 변형률은 반드시 여기서</text>
+          <text x="105" y="168" text-anchor="middle">그립부</text>
+          <text x="695" y="168" text-anchor="middle">그립부</text>
+          <text x="400" y="218" text-anchor="middle">표점거리 L₀ (예: 50 또는 80 mm) · 평행부 Lc · 폭 b₀ · 두께 a₀</text>
+          <text x="400" y="238" text-anchor="middle">파단이 L₀ 바깥에서 일어나면 그 시험은 무효</text>
+        </g>
+      </svg>

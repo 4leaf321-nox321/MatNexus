@@ -889,6 +889,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/guide/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Asset
+         * @description 그림을 올린다 — 편집기에 붙여 넣는 순간 부른다. 본문에는 주소만 들어간다.
+         */
+        post: operations["upload_asset_api_guide_assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Asset */
+        get: operations["get_asset_api_guide_assets__asset_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Documents
+         * @description 목차 전부 — 문서와 절 제목. 본문은 안 실린다(절을 열 때 읽는다).
+         */
+        get: operations["list_documents_api_guide_documents_get"];
+        put?: never;
+        /** Create Document */
+        post: operations["create_document_api_guide_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/documents/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document */
+        get: operations["get_document_api_guide_documents__key__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Document
+         * @description 소프트 삭제. 절과 리비전은 남는다 — 되살릴 수 있어야 한다.
+         */
+        delete: operations["delete_document_api_guide_documents__key__delete"];
+        options?: never;
+        head?: never;
+        /** Update Document */
+        patch: operations["update_document_api_guide_documents__key__patch"];
+        trace?: never;
+    };
+    "/api/guide/documents/{key}/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Section */
+        post: operations["create_section_api_guide_documents__key__sections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Revisions
+         * @description 검토 대기열. 검토자가 본다 — 초안을 낸 사람은 자기 절에서 본다.
+         */
+        get: operations["list_revisions_api_guide_revisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/revisions/{revision_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Revision */
+        post: operations["approve_revision_api_guide_revisions__revision_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/revisions/{revision_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Revision */
+        post: operations["reject_revision_api_guide_revisions__revision_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search */
+        get: operations["search_api_guide_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guide/sections/{section_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Section */
+        get: operations["get_section_api_guide_sections__section_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Section */
+        delete: operations["delete_section_api_guide_sections__section_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Section */
+        patch: operations["update_section_api_guide_sections__section_id__patch"];
+        trace?: never;
+    };
+    "/api/guide/sections/{section_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Section Revisions */
+        get: operations["list_section_revisions_api_guide_sections__section_id__revisions_get"];
+        put?: never;
+        /**
+         * Submit Revision
+         * @description 초안을 낸다 — 누구나. 검토자는 `publish` 로 바로 승인할 수 있다.
+         */
+        post: operations["submit_revision_api_guide_sections__section_id__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -3587,6 +3795,22 @@ export interface components {
             /** Workspace Slug */
             workspace_slug?: string | null;
         };
+        /** AssetOut */
+        AssetOut: {
+            /** Content Type */
+            content_type: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size */
+            size: number;
+            /** Url */
+            url: string;
+        };
         /** AssignIn */
         AssignIn: {
             /**
@@ -3733,6 +3957,11 @@ export interface components {
              * @description 프로파일 JSON
              */
             definition: string;
+            /** File */
+            file: string;
+        };
+        /** Body_upload_asset_api_guide_assets_post */
+        Body_upload_asset_api_guide_assets_post: {
             /** File */
             file: string;
         };
@@ -4733,6 +4962,69 @@ export interface components {
             si_unit: string;
             /** Test Type Key */
             test_type_key: string;
+        };
+        /** DocumentCreate */
+        DocumentCreate: {
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+            /** Topic */
+            topic?: string | null;
+        };
+        /** DocumentOut */
+        DocumentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Position */
+            position: number;
+            /** Sections */
+            sections: components["schemas"]["SectionBrief"][];
+            /** Source Filename */
+            source_filename: string | null;
+            /** Summary */
+            summary: string | null;
+            /** Title */
+            title: string;
+            /** Topic */
+            topic: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * DocumentUpdate
+         * @description 「안 보낸 것」 과 「비운 것」 을 구별한다.
+         */
+        DocumentUpdate: {
+            /** Kind */
+            kind?: string | null;
+            /** Position */
+            position?: number | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Topic */
+            topic?: string | null;
         };
         /**
          * DriftOut
@@ -6088,6 +6380,16 @@ export interface components {
             /** Revoked At */
             revoked_at: string | null;
         };
+        /** Person */
+        Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** ProcessingPreviewOut */
         ProcessingPreviewOut: {
             /** Columns */
@@ -6773,6 +7075,65 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /** ReviewIn */
+        ReviewIn: {
+            /** Note */
+            note?: string | null;
+        };
+        /** RevisionCreate */
+        RevisionCreate: {
+            /** Body */
+            body: {
+                [key: string]: unknown;
+            };
+            /** Note */
+            note?: string | null;
+            /**
+             * Publish
+             * @default false
+             */
+            publish: boolean;
+        };
+        /** RevisionOut */
+        RevisionOut: {
+            author: components["schemas"]["Person"] | null;
+            /** Body */
+            body: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Document Key */
+            document_key: string;
+            /** Document Title */
+            document_title: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note: string | null;
+            /** Review Note */
+            review_note: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            reviewed_by: components["schemas"]["Person"] | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Key */
+            section_key: string;
+            /** Section Title */
+            section_title: string;
+            /** Status */
+            status: string;
+        };
         /** RunBulkUpdateOut */
         RunBulkUpdateOut: {
             /** Blocked */
@@ -7019,6 +7380,117 @@ export interface components {
             sample_sd: number | null;
             /** Si Unit */
             si_unit: string;
+        };
+        /** SearchHit */
+        SearchHit: {
+            /** Document Key */
+            document_key: string;
+            /** Document Title */
+            document_title: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Key */
+            section_key: string;
+            /** Section Title */
+            section_title: string;
+            /** Snippet */
+            snippet: string;
+            /** Topic */
+            topic: string | null;
+        };
+        /** SectionBrief */
+        SectionBrief: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+            /** Position */
+            position: number;
+            /** Revision No */
+            revision_no: number;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SectionCreate */
+        SectionCreate: {
+            /** Body */
+            body?: {
+                [key: string]: unknown;
+            } | null;
+            /** Key */
+            key: string;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+            /** Title */
+            title: string;
+        };
+        /** SectionOut */
+        SectionOut: {
+            /** Body */
+            body: {
+                [key: string]: unknown;
+            };
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Key */
+            document_key: string;
+            /** Document Title */
+            document_title: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+            /** Position */
+            position: number;
+            /** Revision No */
+            revision_no: number;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            updated_by?: components["schemas"]["Person"] | null;
+        };
+        /** SectionUpdate */
+        SectionUpdate: {
+            /** Position */
+            position?: number | null;
+            /** Title */
+            title?: string | null;
         };
         /** ShiftOut */
         ShiftOut: {
@@ -10156,6 +10628,548 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GroupResultOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_asset_api_guide_assets_post: {
+        parameters: {
+            query?: {
+                document_key?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_asset_api_guide_assets_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_asset_api_guide_assets__asset_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_documents_api_guide_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"][];
+                };
+            };
+        };
+    };
+    create_document_api_guide_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_api_guide_documents__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_api_guide_documents__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_document_api_guide_documents__key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_section_api_guide_documents__key__sections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_revisions_api_guide_revisions_get: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_revision_api_guide_revisions__revision_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                revision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_revision_api_guide_revisions__revision_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                revision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_guide_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchHit"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_section_api_guide_sections__section_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_section_api_guide_sections__section_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_section_api_guide_sections__section_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_section_revisions_api_guide_sections__section_id__revisions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_revision_api_guide_sections__section_id__revisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevisionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"];
                 };
             };
             /** @description Validation Error */

@@ -1,0 +1,54 @@
+<svg viewBox="0 0 660 664" role="img" aria-label="시험 계획에서 인장 시험, 진응력 변환, 경화곡선 외삽과 역해석, 물성 카드, 검증으로 이어지는 여섯 단계 파이프라인과 검증 실패 시 외삽으로 되돌아가는 순환">
+        <defs>
+          <marker id="tw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+        <g fill="none" stroke="currentColor" stroke-opacity=".38">
+          <rect x="155" y="14" width="330" height="60" rx="3"></rect>
+          <rect x="155" y="128" width="330" height="60" rx="3"></rect>
+          <rect x="155" y="242" width="330" height="60" rx="3"></rect>
+          <rect x="155" y="356" width="330" height="60" rx="3"></rect>
+          <rect x="155" y="470" width="330" height="60" rx="3"></rect>
+          <rect x="155" y="584" width="330" height="60" rx="3"></rect>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".55" stroke-width="1.4" marker-end="url(#tw)">
+          <line x1="320" y1="78" x2="320" y2="124"></line>
+          <line x1="320" y1="192" x2="320" y2="238"></line>
+          <line x1="320" y1="306" x2="320" y2="352"></line>
+          <line x1="320" y1="420" x2="320" y2="466"></line>
+          <line x1="320" y1="534" x2="320" y2="580"></line>
+        </g>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor" fill-opacity=".55" text-anchor="end">
+          <text x="140" y="49">01</text><text x="140" y="163">02</text><text x="140" y="277">03</text>
+          <text x="140" y="391">04</text><text x="140" y="505">05</text><text x="140" y="619">06</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="14.5" font-weight="500" fill="currentColor">
+          <text x="176" y="42">시편 · 시험 계획</text>
+          <text x="176" y="156">인장 시험</text>
+          <text x="176" y="270">진응력 변환</text>
+          <text x="176" y="384">외삽 · 역해석</text>
+          <text x="176" y="498">물성 카드 작성</text>
+          <text x="176" y="612">검증</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".6">
+          <text x="176" y="62">규격 · 시편 형상 · 변형률 측정 방식</text>
+          <text x="176" y="176">속도 · 온도 · 방향별 반복</text>
+          <text x="176" y="290">네킹 전 구간만 — 정직한 변환</text>
+          <text x="176" y="404">큰 변형률까지 연장 — 여기부터 가정</text>
+          <text x="176" y="518">경화곡선 · 속도 · 이방성 · 파단</text>
+          <text x="176" y="632">단일 요소 · 시편 모델 · 부품 상관</text>
+        </g>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor" fill-opacity=".62">
+          <text x="336" y="105">신율계 / DIC 확정</text>
+          <text x="336" y="219">F–ΔL,  ε(DIC)</text>
+          <text x="336" y="333">s–e  →  σ–ε_p</text>
+          <text x="336" y="447">σ(ε_p) ~ ε_p = 1</text>
+          <text x="336" y="561">.inp / .k / .dat</text>
+        </g>
+        <path d="M155,614 C 96,614 96,366 155,366" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#tw)"></path>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".55" text-anchor="end">
+          <text x="86" y="494">하중–변위</text>
+          <text x="86" y="510">안 맞으면</text>
+        </g>
+      </svg>

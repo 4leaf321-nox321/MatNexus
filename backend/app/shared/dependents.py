@@ -39,6 +39,10 @@ TABLE_LABELS: dict[str, str] = {
     "test_summaries": "시험 요약값",
     "pipeline_connectors": "장비 커넥터",
     "pipeline_inbox_items": "수집함 항목",
+    "guide_documents": "가이드 문서",
+    "guide_sections": "가이드 절",
+    "guide_revisions": "가이드 리비전",
+    "guide_assets": "가이드 그림",
 }
 
 #: FK 로 표현되지 않는 참조를 보탤 자리.
