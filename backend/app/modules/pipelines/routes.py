@@ -47,6 +47,9 @@ from app.modules.pipelines.schemas import (
     Hints,
     InboxItemDetail,
     InboxItemOut,
+    ReferenceTree,
+    ResolveIn,
+    ResolveOut,
 )
 from app.modules.tests.models import TestType
 from app.modules.workspaces.models import Workspace, WorkspaceMember
@@ -187,6 +190,34 @@ def _require_member(db: Session, user: User, workspace_id: uuid.UUID) -> Workspa
     ):
         raise Forbidden("MNX-PIPE-0005", "이 부서의 구성원이 아닙니다.")
     return workspace
+
+
+# --- 규칙 편집기가 묻는다 ----------------------------------------------------------
+
+
+@router.post("/resolve", response_model=ResolveOut)
+def resolve_hints(
+    body: ResolveIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ResolveOut:
+    """힌트 → 「붙나 / 왜 안 붙나」. 워커와 같은 함수. 아무것도 만들지 않는다."""
+    _require_member(db, user, body.workspace_id)
+    results = services.resolve(
+        db, workspace_id=body.workspace_id, hints=[h.compact() for h in body.hints]
+    )
+    return ResolveOut.model_validate({"results": results})
+
+
+@router.get("/reference", response_model=ReferenceTree)
+def reference(
+    workspace_id: uuid.UUID = Query(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ReferenceTree:
+    """재료 → 시료 → 시편 이름 트리. 규칙 편집기의 참조 패널. 이름만, 편집 안 함."""
+    _require_member(db, user, workspace_id)
+    return ReferenceTree.model_validate(services.reference_tree(db, workspace_id=workspace_id))
 
 
 # --- 수집함 ---------------------------------------------------------------------

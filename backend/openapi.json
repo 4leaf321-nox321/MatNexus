@@ -4551,6 +4551,90 @@
         "title": "HeartbeatSource",
         "type": "object"
       },
+      "Hints": {
+        "description": "에이전트가 파일 이름에서 뽑은 **힌트.** 확정이 아니다.",
+        "properties": {
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
+          "lot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot"
+          },
+          "material_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Code"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "orientation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientation"
+          },
+          "specimen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tested At"
+          }
+        },
+        "title": "Hints",
+        "type": "object"
+      },
       "HomeWorkspaceRequest": {
         "description": "대표 소속을 정한다.\n\n**비우는 길은 두지 않는다.** 대표 소속이 없으면 로그인이 `memberships[0]`,\n즉 이름 순 첫 부서로 떨어지는데 그것은 사람이 정한 값이 아니다. 지우고 싶은\n상황은 실제로는 \"다른 부서로 옮긴다\" 이므로 그때도 새 값을 준다.",
         "properties": {
@@ -8273,6 +8357,53 @@
         "title": "RecipeUpdateRequest",
         "type": "object"
       },
+      "ReferenceMaterial": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSample"
+            },
+            "title": "Samples",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "grade",
+          "aliases",
+          "samples"
+        ],
+        "title": "ReferenceMaterial",
+        "type": "object"
+      },
       "ReferenceOut": {
         "description": "이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다.",
         "properties": {
@@ -8317,6 +8448,106 @@
           "blocks_delete"
         ],
         "title": "ReferenceOut",
+        "type": "object"
+      },
+      "ReferenceSample": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lot": {
+            "title": "Lot",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "seq_no": {
+            "title": "Seq No",
+            "type": "integer"
+          },
+          "specimens": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSpecimen"
+            },
+            "title": "Specimens",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "lot",
+          "seq_no",
+          "specimens"
+        ],
+        "title": "ReferenceSample",
+        "type": "object"
+      },
+      "ReferenceSpecimen": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "orientation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientation"
+          },
+          "seq_no": {
+            "title": "Seq No",
+            "type": "integer"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short",
+          "orientation",
+          "seq_no"
+        ],
+        "title": "ReferenceSpecimen",
+        "type": "object"
+      },
+      "ReferenceTree": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceMaterial"
+            },
+            "title": "Materials",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generated_at",
+          "materials"
+        ],
+        "title": "ReferenceTree",
         "type": "object"
       },
       "RejectRequest": {
@@ -8379,6 +8610,86 @@
           }
         },
         "title": "ReparseRequest",
+        "type": "object"
+      },
+      "ResolveIn": {
+        "properties": {
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/Hints"
+            },
+            "maxItems": 50,
+            "title": "Hints",
+            "type": "array"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "hints"
+        ],
+        "title": "ResolveIn",
+        "type": "object"
+      },
+      "ResolveOut": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ResolveResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "ResolveOut",
+        "type": "object"
+      },
+      "ResolveResult": {
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ResolveResult",
         "type": "object"
       },
       "ResultCurveOut": {
@@ -18981,6 +19292,92 @@
           }
         },
         "summary": "Retry Item",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/api/pipelines/reference": {
+      "get": {
+        "description": "재료 → 시료 → 시편 이름 트리. 규칙 편집기의 참조 패널. 이름만, 편집 안 함.",
+        "operationId": "reference_api_pipelines_reference_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceTree"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reference",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/api/pipelines/resolve": {
+      "post": {
+        "description": "힌트 → 「붙나 / 왜 안 붙나」. 워커와 같은 함수. 아무것도 만들지 않는다.",
+        "operationId": "resolve_hints_api_pipelines_resolve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Hints",
         "tags": [
           "pipelines"
         ]

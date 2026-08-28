@@ -500,6 +500,72 @@ class Test사람이_정한다:
         assert detail["candidates"] == []
 
 
+class Test규칙_편집기가_묻는다:
+    def test_대조는_워커와_같은_판정을_준다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        workspace: Any,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**여기서 「붙는다」 고 한 것이 반입 뒤에 실제로 붙어야 한다** — 같은 함수다."""
+        sample_id = specimen["sample_id"]
+        client.post(
+            f"/api/samples/{sample_id}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        )
+        response = client.post(
+            "/api/pipelines/resolve",
+            json={
+                "workspace_id": str(workspace.id),
+                "hints": [
+                    {"material_code": "SECC", "specimen": "MD_01"},
+                    {"material_code": "SECC", "orientation": "MD"},
+                    {"material_code": "SECC", "lot": "LOT-A"},
+                    {},
+                ],
+            },
+            headers=pat,
+        )
+        assert response.status_code == 200, response.text
+        results = response.json()["results"]
+        assert [r["outcome"] for r in results] == ["unique", "multiple", "none", "none"]
+        assert results[0]["candidate"]["specimen_name"] == specimen["record_name"]
+        assert len(results[1]["candidates"]) == 2
+        assert "LOT-A" in results[2]["reason"]
+        assert "재료 코드" in results[3]["reason"]
+
+    def test_쉰_개를_넘으면_거절한다(
+        self, client: TestClient, pat: dict[str, str], workspace: Any
+    ) -> None:
+        response = client.post(
+            "/api/pipelines/resolve",
+            json={"workspace_id": str(workspace.id), "hints": [{}] * 51},
+            headers=pat,
+        )
+        assert response.status_code == 422
+
+    def test_참조_트리는_이름과_별칭을_준다(
+        self,
+        client: TestClient,
+        pat: dict[str, str],
+        workspace: Any,
+        specimen: dict[str, Any],
+    ) -> None:
+        tree = client.get(
+            f"/api/pipelines/reference?workspace_id={workspace.id}", headers=pat
+        ).json()
+        assert len(tree["materials"]) == 1
+        material = tree["materials"][0]
+        assert material["name"] == "SECC_MDOI_1.0"
+        # 워커가 `material_code` 를 맞출 때 보는 집합과 같다.
+        assert material["aliases"] == ["SECC_MDOI_1.0", "SECC"]
+        leaf = material["samples"][0]["specimens"][0]
+        assert leaf["name"] == specimen["record_name"] and leaf["short"] == "MD_01"
+
+
 def test_후보_조회는_파일이_힌트를_이긴다(
     db: Session, workspace: Any, specimen: dict[str, Any]
 ) -> None:

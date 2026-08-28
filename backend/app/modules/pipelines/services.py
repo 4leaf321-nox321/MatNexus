@@ -341,6 +341,7 @@ def find_candidates(
         db.scalars(
             select(Sample).where(
                 Sample.material_id.in_([m.id for m in materials]),
+                Sample.workspace_id == workspace_id,
                 Sample.deleted_at.is_(None),
             )
         )
@@ -368,7 +369,13 @@ def find_candidates(
     if lot:
         reasons.append(f"로트 '{lot}'")
     if specimen_name:
-        exact = [s for s in specimens if s.record_name == specimen_name]
+        # 전체 이름(`SECC_MDOI_1.0__01__MD_01`)이든 끝자리(`MD_01`)든 — 장비는 대개
+        # 끝자리만 적는다.
+        exact = [
+            s
+            for s in specimens
+            if s.record_name == specimen_name or s.record_name.endswith(f"__{specimen_name}")
+        ]
         if exact:
             specimens = exact
             reasons.append(f"시편 이름 '{specimen_name}'")
@@ -431,6 +438,122 @@ def _notify_managers(
                 "to_user_id": str(user_id),
             },
         )
+
+
+# --- 규칙 편집기가 묻는다 ----------------------------------------------------------
+
+
+def resolve(
+    db: Session, *, workspace_id: uuid.UUID, hints: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    """힌트 묶음 → 「붙나 / 왜 안 붙나」. **워커와 같은 함수**(`find_candidates`)를 부른다.
+
+    MatPylon 의 규칙 편집기가 파일 20개의 힌트를 보내 미리 본다. 여기서 「붙는다」 고
+    한 것이 반입 뒤에 실제로 붙어야 하므로 규칙을 따로 두지 않는다. 파일이 없으니
+    프로파일 `identity` 는 못 본다 — 그것은 반입 뒤 워커가 하고, 파일이 힌트를 이긴다.
+    """
+    out: list[dict[str, Any]] = []
+    for hint in hints:
+        found = find_candidates(db, workspace_id=workspace_id, identity={}, hints=hint)
+        real = [c for c in found if "specimen_id" in c]
+        if len(real) == 1:
+            out.append({"outcome": "unique", "candidate": real[0], "candidates": real})
+        elif real:
+            out.append({"outcome": "multiple", "candidates": real})
+        else:
+            out.append(
+                {
+                    "outcome": "none",
+                    "candidates": [],
+                    "reason": next(
+                        (c["reason"] for c in found if "reason" in c), "후보가 없습니다."
+                    ),
+                }
+            )
+    return out
+
+
+def material_aliases(material: Material) -> list[str]:
+    """워커가 `material_code` 를 맞출 때 보는 것과 **같은 집합**(`find_candidates`)."""
+    seen: list[str] = []
+    for one in (material.record_name, material.grade, material.alias):
+        if one and one not in seen:
+            seen.append(one)
+    return seen
+
+
+def reference_tree(db: Session, *, workspace_id: uuid.UUID) -> dict[str, Any]:
+    """재료 → 시료 → 시편 이름. 규칙 편집기의 참조 패널이 본다 — 이름만, 편집 안 함."""
+    materials = list(
+        db.scalars(
+            select(Material)
+            .where(
+                Material.deleted_at.is_(None),
+                or_(
+                    Material.owner_workspace_id.is_(None),
+                    Material.owner_workspace_id == workspace_id,
+                ),
+            )
+            .order_by(Material.record_name)
+        )
+    )
+    samples = list(
+        db.scalars(
+            select(Sample)
+            .where(
+                Sample.material_id.in_([m.id for m in materials]),
+                Sample.workspace_id == workspace_id,
+                Sample.deleted_at.is_(None),
+            )
+            .order_by(Sample.seq_no)
+        )
+    )
+    specimens = list(
+        db.scalars(
+            select(Specimen)
+            .where(
+                Specimen.sample_id.in_([s.id for s in samples]), Specimen.deleted_at.is_(None)
+            )
+            .order_by(Specimen.orientation, Specimen.seq_no)
+        )
+    )
+    by_sample: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    for specimen in specimens:
+        by_sample.setdefault(specimen.sample_id, []).append(
+            {
+                "id": str(specimen.id),
+                "name": specimen.record_name,
+                "short": specimen.record_name.rsplit("__", 1)[-1],
+                "orientation": specimen.orientation,
+                "seq_no": specimen.seq_no,
+            }
+        )
+    by_material: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    for sample in samples:
+        by_material.setdefault(sample.material_id, []).append(
+            {
+                "id": str(sample.id),
+                "name": sample.record_name,
+                "lot": sample.lot_no or "",
+                "seq_no": sample.seq_no,
+                "specimens": by_sample.get(sample.id, []),
+            }
+        )
+    return {
+        "generated_at": _now(),
+        "materials": [
+            {
+                "id": str(m.id),
+                "name": m.record_name,
+                "grade": m.grade,
+                "aliases": material_aliases(m),
+                "samples": by_material.get(m.id, []),
+            }
+            for m in materials
+            # 시료가 없는 재료는 뺀다 — 붙을 데가 없으니 참조에도 없는 편이 맞다.
+            if m.id in by_material
+        ],
+    }
 
 
 # --- 사람이 정한다 --------------------------------------------------------------

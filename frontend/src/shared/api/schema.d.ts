@@ -1762,6 +1762,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/pipelines/reference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reference
+         * @description 재료 → 시료 → 시편 이름 트리. 규칙 편집기의 참조 패널. 이름만, 편집 안 함.
+         */
+        get: operations["reference_api_pipelines_reference_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Hints
+         * @description 힌트 → 「붙나 / 왜 안 붙나」. 워커와 같은 함수. 아무것도 만들지 않는다.
+         */
+        post: operations["resolve_hints_api_pipelines_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/batch": {
         parameters: {
             query?: never;
@@ -5536,6 +5576,26 @@ export interface components {
             pending: number;
         };
         /**
+         * Hints
+         * @description 에이전트가 파일 이름에서 뽑은 **힌트.** 확정이 아니다.
+         */
+        Hints: {
+            /** Instrument */
+            instrument?: string | null;
+            /** Lot */
+            lot?: string | null;
+            /** Material Code */
+            material_code?: string | null;
+            /** Operator */
+            operator?: string | null;
+            /** Orientation */
+            orientation?: string | null;
+            /** Specimen */
+            specimen?: string | null;
+            /** Tested At */
+            tested_at?: string | null;
+        };
+        /**
          * HomeWorkspaceRequest
          * @description 대표 소속을 정한다.
          *
@@ -6974,6 +7034,22 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /** ReferenceMaterial */
+        ReferenceMaterial: {
+            /** Aliases */
+            aliases: string[];
+            /** Grade */
+            grade: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Samples */
+            samples: components["schemas"]["ReferenceSample"][];
+        };
         /**
          * ReferenceOut
          * @description 이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다.
@@ -6991,6 +7067,48 @@ export interface components {
             on_delete: string | null;
             /** Table */
             table: string;
+        };
+        /** ReferenceSample */
+        ReferenceSample: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lot */
+            lot: string;
+            /** Name */
+            name: string;
+            /** Seq No */
+            seq_no: number;
+            /** Specimens */
+            specimens: components["schemas"]["ReferenceSpecimen"][];
+        };
+        /** ReferenceSpecimen */
+        ReferenceSpecimen: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Orientation */
+            orientation: string | null;
+            /** Seq No */
+            seq_no: number;
+            /** Short */
+            short: string;
+        };
+        /** ReferenceTree */
+        ReferenceTree: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Materials */
+            materials: components["schemas"]["ReferenceMaterial"][];
         };
         /** RejectRequest */
         RejectRequest: {
@@ -7023,6 +7141,31 @@ export interface components {
         ReparseRequest: {
             /** Profile Key */
             profile_key?: string | null;
+        };
+        /** ResolveIn */
+        ResolveIn: {
+            /** Hints */
+            hints: components["schemas"]["Hints"][];
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /** ResolveOut */
+        ResolveOut: {
+            /** Results */
+            results: components["schemas"]["ResolveResult"][];
+        };
+        /** ResolveResult */
+        ResolveResult: {
+            candidate?: components["schemas"]["CandidateOut"] | null;
+            /** Candidates */
+            candidates?: components["schemas"]["CandidateOut"][];
+            /** Outcome */
+            outcome: string;
+            /** Reason */
+            reason?: string | null;
         };
         /**
          * ResultCurveOut
@@ -12366,6 +12509,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboxItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reference_api_pipelines_reference_get: {
+        parameters: {
+            query: {
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceTree"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_hints_api_pipelines_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveOut"];
                 };
             };
             /** @description Validation Error */

@@ -100,6 +100,57 @@ class CandidateOut(BaseModel):
     """어느 힌트·identity 로 맞았나. 사람이 고를 때 근거가 된다."""
 
 
+class ResolveIn(BaseModel):
+    workspace_id: uuid.UUID
+    hints: list[Hints] = Field(max_length=50)
+    """한 번에 50개까지. 화면은 20개를 보낸다."""
+
+
+class ResolveResult(BaseModel):
+    outcome: str
+    """`unique`(붙는다) · `multiple`(후보 여럿 — 수집함행) · `none`(0건)."""
+    candidate: CandidateOut | None = None
+    candidates: list[CandidateOut] = Field(default_factory=list)
+    reason: str | None = None
+    """`none` 일 때 왜. 워커가 `error` 에 적는 문구와 같다."""
+
+
+class ResolveOut(BaseModel):
+    results: list[ResolveResult]
+    """요청과 같은 순서, 같은 개수."""
+
+
+class ReferenceSpecimen(BaseModel):
+    id: uuid.UUID
+    name: str
+    short: str
+    """끝자리 — `MD_01`. 장비가 대개 이것만 적는다."""
+    orientation: str | None
+    seq_no: int
+
+
+class ReferenceSample(BaseModel):
+    id: uuid.UUID
+    name: str
+    lot: str
+    seq_no: int
+    specimens: list[ReferenceSpecimen]
+
+
+class ReferenceMaterial(BaseModel):
+    id: uuid.UUID
+    name: str
+    grade: str | None
+    aliases: list[str]
+    """워커가 `material_code` 를 맞출 때 보는 집합 — 이름·grade·별칭."""
+    samples: list[ReferenceSample]
+
+
+class ReferenceTree(BaseModel):
+    generated_at: datetime
+    materials: list[ReferenceMaterial]
+
+
 class InboxItemOut(BaseModel):
     id: uuid.UUID
     status: str
@@ -152,4 +203,11 @@ __all__ = [
     "Hints",
     "InboxItemDetail",
     "InboxItemOut",
+    "ReferenceMaterial",
+    "ReferenceSample",
+    "ReferenceSpecimen",
+    "ReferenceTree",
+    "ResolveIn",
+    "ResolveOut",
+    "ResolveResult",
 ]
