@@ -21,6 +21,8 @@ const discard = vi.fn()
 const retry = vi.fn()
 const findSpecimens = vi.fn()
 const workspaces = vi.fn()
+const approve = vi.fn()
+const approveMany = vi.fn()
 
 vi.mock('@/shared/components/AccessTokens', () => ({
   AccessTokens: () => <div>토큰 패널</div>,
@@ -41,6 +43,8 @@ vi.mock('@/modules/pipelines/api', async () => {
       retry: (...args: unknown[]) => retry(...args),
       findSpecimens: (...args: unknown[]) => findSpecimens(...args),
       workspaces: (...args: unknown[]) => workspaces(...args),
+      approve: (...args: unknown[]) => approve(...args),
+      approveMany: (...args: unknown[]) => approveMany(...args),
     },
   }
 })
@@ -134,6 +138,8 @@ beforeEach(() => {
   retry.mockResolvedValue(WAITING)
   findSpecimens.mockResolvedValue([])
   workspaces.mockResolvedValue([{ id: 'w1', slug: 'metal', name: '금속재료팀' }])
+  approve.mockResolvedValue({ ...DETAIL, status: 'registered' })
+  approveMany.mockResolvedValue({ approved: ['i1'], failed: {} })
 })
 
 describe('커넥터 탭', () => {
@@ -154,11 +160,31 @@ describe('커넥터 탭', () => {
 })
 
 describe('수집함', () => {
-  it('시편 필요가 기본이고, 후보가 여럿이면 고르라고 한다', async () => {
+  it('승인 대기가 기본 필터다 — 규칙이 맞아도 사람이 한 번 본다', async () => {
     mount()
     expect(await screen.findByText('Example.tra')).toBeInTheDocument()
-    expect(screen.getByText('후보 2개 — 골라 주세요')).toBeInTheDocument()
-    expect(inbox).toHaveBeenCalledWith(expect.objectContaining({ status: 'needs_specimen' }))
+    expect(inbox).toHaveBeenCalledWith(expect.objectContaining({ status: 'suggested' }))
+  })
+
+  it('승인 대기 항목은 승인 한 번으로 등록한다', async () => {
+    const suggested = { ...WAITING, status: 'suggested', candidate_count: 1 }
+    inbox.mockResolvedValue({ items: [suggested], total: 1, limit: 100, offset: 0 })
+    item.mockResolvedValue({ ...DETAIL, status: 'suggested', candidates: [DETAIL.candidates[0]] })
+    const user = userEvent.setup()
+    mount()
+    await user.click(await screen.findByText('Example.tra'))
+    await user.click(await screen.findByRole('button', { name: '승인 — 시험으로 등록' }))
+    await waitFor(() => expect(approve).toHaveBeenCalledWith('i1'))
+  })
+
+  it('여럿을 골라 한꺼번에 승인한다', async () => {
+    const suggested = { ...WAITING, status: 'suggested', candidate_count: 1 }
+    inbox.mockResolvedValue({ items: [suggested], total: 1, limit: 100, offset: 0 })
+    const user = userEvent.setup()
+    mount()
+    await user.click(await screen.findByLabelText('Example.tra 고르기'))
+    await user.click(screen.getByRole('button', { name: '고른 1건 승인' }))
+    await waitFor(() => expect(approveMany).toHaveBeenCalledWith(['i1']))
   })
 
   it('항목을 열면 후보를 보여 주고, 고른 것만 붙인다', async () => {

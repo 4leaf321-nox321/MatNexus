@@ -64,7 +64,9 @@ export function seenTone(lastSeen: string | null | undefined, now = Date.now()):
 function statusBadge(status: string) {
   const label = STATUS_LABELS[status as keyof typeof STATUS_LABELS] ?? status
   const tone =
-    status === 'needs_specimen'
+    status === 'suggested'
+      ? 'border-sky-500 text-sky-700'
+      : status === 'needs_specimen'
       ? 'border-amber-500 text-amber-700'
       : status === 'failed'
         ? 'border-destructive text-destructive'
@@ -100,7 +102,7 @@ export default function ConnectorsPage() {
       </Tabs>
 
       {tab === 'connectors' && <ConnectorsTab />}
-      {tab === 'inbox' && <InboxTab status="needs_specimen" onOpen={setOpen} />}
+      {tab === 'inbox' && <InboxTab status="suggested" onOpen={setOpen} />}
       {tab === 'failed' && <InboxTab status="failed" onOpen={setOpen} />}
       {tab === 'setup' && <SetupTab />}
 
@@ -168,6 +170,28 @@ function ConnectorsTab() {
   const [busy, setBusy] = useState<string | null>(null)
   const [failed, setFailed] = useState<Error | null>(null)
 
+  async function toggleAuto(row: Connector) {
+    if (
+      !row.auto_register &&
+      !window.confirm(
+        `'${row.name}' 가 후보 하나면 승인 없이 바로 시험을 만듭니다.\n` +
+          '대조 열이 한동안 전부 맞은, 규칙이 검증된 커넥터만 켜세요.'
+      )
+    ) {
+      return
+    }
+    setBusy(row.id)
+    setFailed(null)
+    try {
+      await pipelinesApi.updateConnector(row.id, { auto_register: !row.auto_register })
+      reload()
+    } catch (caught) {
+      setFailed(caught instanceof Error ? caught : new Error('알 수 없는 오류'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function toggle(row: Connector) {
     setBusy(row.id)
     setFailed(null)
@@ -203,6 +227,7 @@ function ConnectorsTab() {
                 <TableHead className="text-right">대기</TableHead>
                 <TableHead className="text-right">실패</TableHead>
                 <TableHead className="text-right">사람 대기</TableHead>
+                <TableHead>자동 등록</TableHead>
                 <TableHead>버전</TableHead>
                 <TableHead />
               </TableRow>
@@ -219,6 +244,18 @@ function ConnectorsTab() {
                   <TableCell className="text-right tabular-nums">{row.pending}</TableCell>
                   <TableCell className="text-right tabular-nums">{row.failed}</TableCell>
                   <TableCell className="text-right tabular-nums">{row.waiting ?? 0}</TableCell>
+                  <TableCell>
+                    {/* 기본은 승인 대기다. 규칙이 「틀리게 맞으면」 엉뚱한 시편에
+                        시험이 붙는다 — 대조 열이 한동안 전부 맞은 커넥터만 켠다. */}
+                    <Button
+                      size="sm"
+                      variant={row.auto_register ? 'secondary' : 'outline'}
+                      disabled={busy === row.id}
+                      onClick={() => toggleAuto(row)}
+                    >
+                      {row.auto_register ? '켜짐' : '승인 대기'}
+                    </Button>
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-xs">
                     {row.app_version ?? '—'}
                   </TableCell>
@@ -247,10 +284,43 @@ function ConnectorsTab() {
 function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => void }) {
   const [filter, setFilter] = useState(status)
   useEffect(() => setFilter(status), [status])
-  const { data, error, loading } = useResource(
+  const { data, error, loading, reload } = useResource(
     () => pipelinesApi.inbox({ status: filter, limit: 100 }),
     [filter]
   )
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  useEffect(() => setPicked(new Set()), [filter, data])
+
+  function togglePick(id: string) {
+    setPicked((now) => {
+      const next = new Set(now)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function approvePicked() {
+    setBusy(true)
+    setSaid(null)
+    try {
+      const result = await pipelinesApi.approveMany([...picked])
+      const blocked = Object.entries(result.failed)
+      setSaid(
+        `${result.approved.length}건 등록` +
+          (blocked.length ? ` · 막힘 ${blocked.length}건 — ${blocked[0][1]}` : '')
+      )
+      reload()
+    } catch (caught) {
+      setSaid(caught instanceof Error ? caught.message : '알 수 없는 오류')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pickable = filter === 'suggested'
 
   return (
     <div>
@@ -267,6 +337,25 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
         ))}
       </div>
       <ErrorNotice error={error} className="mb-3" />
+      {said && <p className="text-muted-foreground mb-2 text-sm">{said}</p>}
+      {pickable && data && data.items.length > 0 && (
+        <div className="mb-2 flex items-center gap-2">
+          <Button size="sm" disabled={busy || picked.size === 0} onClick={approvePicked}>
+            고른 {picked.size}건 승인
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              setPicked((now) =>
+                now.size === data.items.length ? new Set() : new Set(data.items.map((r) => r.id))
+              )
+            }
+          >
+            전체 고르기/해제
+          </Button>
+        </div>
+      )}
       {loading && !data && <p className="text-muted-foreground text-sm">불러오는 중…</p>}
       {data && data.items.length === 0 && (
         <p className="text-muted-foreground text-sm">
@@ -278,6 +367,7 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
           <Table>
             <TableHeader>
               <TableRow>
+                {pickable && <TableHead className="w-8" />}
                 <TableHead>받은 시각</TableHead>
                 <TableHead>파일</TableHead>
                 <TableHead>커넥터</TableHead>
@@ -289,7 +379,13 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
             </TableHeader>
             <TableBody>
               {data.items.map((row) => (
-                <InboxRow key={row.id} row={row} onOpen={onOpen} />
+                <InboxRow
+                  key={row.id}
+                  row={row}
+                  onOpen={onOpen}
+                  picked={pickable ? picked.has(row.id) : undefined}
+                  onPick={pickable ? () => togglePick(row.id) : undefined}
+                />
               ))}
             </TableBody>
           </Table>
@@ -311,9 +407,29 @@ function hintText(hints: Record<string, string | undefined>): string {
     .join(' · ')
 }
 
-function InboxRow({ row, onOpen }: { row: InboxItem; onOpen: (id: string) => void }) {
+function InboxRow({
+  row,
+  onOpen,
+  picked,
+  onPick,
+}: {
+  row: InboxItem
+  onOpen: (id: string) => void
+  picked?: boolean
+  onPick?: () => void
+}) {
   return (
     <TableRow className="cursor-pointer" onClick={() => onOpen(row.id)}>
+      {onPick !== undefined && (
+        <TableCell onClick={(event) => event.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={picked ?? false}
+            onChange={onPick}
+            aria-label={`${row.filename} 고르기`}
+          />
+        </TableCell>
+      )}
       <TableCell className="whitespace-nowrap">{stamp(row.received_at)}</TableCell>
       <TableCell className="font-medium">
         {row.test_run_name ?? row.filename}
@@ -328,9 +444,11 @@ function InboxRow({ row, onOpen }: { row: InboxItem; onOpen: (id: string) => voi
       </TableCell>
       <TableCell>{statusBadge(row.status)}</TableCell>
       <TableCell className="max-w-md text-sm">
-        {row.status === 'needs_specimen' && row.candidate_count > 1
-          ? `후보 ${row.candidate_count}개 — 골라 주세요`
-          : (row.error ?? '')}
+        {row.status === 'suggested'
+          ? '후보 1 — 승인만 남았습니다'
+          : row.status === 'needs_specimen' && row.candidate_count > 1
+            ? `후보 ${row.candidate_count}개 — 골라 주세요`
+            : (row.error ?? '')}
       </TableCell>
     </TableRow>
   )
@@ -448,7 +566,19 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
               </p>
             )}
 
-            {!done && item.candidates.length > 0 && (
+            {item.status === 'suggested' && item.candidates.length === 1 && (
+              <section className="rounded-md border border-sky-300 bg-sky-50 p-3">
+                <div className="mb-2 text-sm text-sky-900">
+                  <span className="font-medium">{item.candidates[0].specimen_name}</span> 에 붙일
+                  준비가 됐습니다 — {item.candidates[0].reason}
+                </div>
+                <Button disabled={busy} onClick={() => act(() => pipelinesApi.approve(item.id))}>
+                  승인 — 시험으로 등록
+                </Button>
+              </section>
+            )}
+
+            {!done && item.status !== 'suggested' && item.candidates.length > 0 && (
               <section>
                 <h3 className="mb-1 font-medium">후보 — 서버가 좁힌 것</h3>
                 <ul className="divide-y rounded-md border">

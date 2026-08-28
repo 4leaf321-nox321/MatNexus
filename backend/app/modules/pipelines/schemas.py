@@ -28,6 +28,7 @@ class ConnectorUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
     is_active: bool | None = None
+    auto_register: bool | None = None
 
 
 class ConnectorOut(BaseModel):
@@ -37,6 +38,8 @@ class ConnectorOut(BaseModel):
     workspace_id: uuid.UUID
     workspace_name: str | None = None
     is_active: bool
+    auto_register: bool = False
+    """후보가 하나면 승인 없이 바로 등록하나. 기본은 아니오 — 승인 대기."""
     app_version: str | None
     last_seen_at: datetime | None
     next_run_at: datetime | None
@@ -183,6 +186,17 @@ class InboxItemDetail(InboxItemOut):
 class AssignIn(BaseModel):
     specimen_id: uuid.UUID
     test_type: str | None = Field(default=None, description="비우면 감지된 것")
+
+
+class BulkApproveIn(BaseModel):
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+
+
+class BulkApproveOut(BaseModel):
+    approved: list[uuid.UUID]
+    failed: dict[str, str] = Field(default_factory=dict)
+    """항목 id → 왜 안 됐나. **부분 실패를 삼키지 않는다** — 골라 놓은 20개 중 하나가
+    그사이 버려졌어도 나머지 19개는 등록되고, 그 하나는 이유와 함께 남는다."""
 
 
 class DiscardIn(BaseModel):

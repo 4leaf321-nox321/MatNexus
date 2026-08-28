@@ -21,6 +21,7 @@ export type WorkspaceRow = components['schemas']['WorkspaceOut']
 
 /** 상태 순서. 표의 필터가 이 순서로 선다. */
 export const INBOX_STATUSES = [
+  'suggested',
   'needs_specimen',
   'failed',
   'received',
@@ -33,6 +34,7 @@ export type InboxStatus = (typeof INBOX_STATUSES)[number]
 export const STATUS_LABELS: Record<InboxStatus, string> = {
   received: '대기',
   parsed: '읽는 중',
+  suggested: '승인 대기',
   needs_specimen: '시편 필요',
   registered: '등록됨',
   failed: '실패',
@@ -57,13 +59,23 @@ function search(query: InboxQuery): string {
 
 export const pipelinesApi = {
   connectors: () => api.get<Connector[]>('/pipelines/connectors'),
-  updateConnector: (id: string, body: { name?: string; is_active?: boolean }) =>
+  updateConnector: (
+    id: string,
+    body: { name?: string; is_active?: boolean; auto_register?: boolean }
+  ) =>
     api.patch<Connector>(`/pipelines/connectors/${id}`, body),
 
   inbox: (query: InboxQuery = {}) => api.get<InboxPage>(`/pipelines/inbox${search(query)}`),
   item: (id: string) => api.get<InboxItemDetail>(`/pipelines/inbox/${id}`),
   assign: (id: string, body: { specimen_id: string; test_type?: string }) =>
     api.post<InboxItemDetail>(`/pipelines/inbox/${id}/assign`, body),
+/** 승인 — 대기 중인 항목을 제 후보로 등록한다. */
+  approve: (id: string) => api.post<InboxItemDetail>(`/pipelines/inbox/${id}/approve`, {}),
+  /** 여럿을 한꺼번에. 막힌 것은 `failed`(id → 이유)로 온다 — 삼키지 않는다. */
+  approveMany: (ids: string[]) =>
+    api.post<{ approved: string[]; failed: Record<string, string> }>('/pipelines/inbox/approve', {
+      ids,
+    }),
   discard: (id: string, reason: string) =>
     api.post<void>(`/pipelines/inbox/${id}/discard`, { reason }),
   retry: (id: string) => api.post<InboxItem>(`/pipelines/inbox/${id}/retry`, {}),

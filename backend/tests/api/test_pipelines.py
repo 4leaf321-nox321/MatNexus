@@ -305,7 +305,13 @@ class Test워커:
         tensile: None,
     ) -> None:
         """**여기가 진짜 지키는 것이다.** 원본은 한 곳에만 있어야 하고, 시험은 화면
-        업로드와 같은 파싱 길을 타야 한다."""
+        업로드와 같은 파싱 길을 타야 한다. (자동 등록을 켠 커넥터)"""
+        on = client.patch(
+            f"/api/pipelines/connectors/{connector['id']}",
+            json={"auto_register": True},
+            headers=pat,
+        )
+        assert on.status_code == 200 and on.json()["auto_register"] is True
         received = _send(client, pat, connector["id"]).json()
         _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
 
@@ -498,6 +504,89 @@ class Test사람이_정한다:
         assert detail["summary"]["row_count"] > 0
         assert detail["test_type_key"] == "tensile"
         assert detail["candidates"] == []
+
+
+class Test승인_대기:
+    def test_기본은_승인_대기다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        tensile: None,
+    ) -> None:
+        """**규칙이 틀리게 맞으면 엉뚱한 시편에 시험이 붙는다** — 그래서 기본은
+        사람이 한 번 보는 것이다."""
+        received = _send(client, pat, connector["id"]).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        item = db.get(PipelineInboxItem, uuid.UUID(received["id"]))
+        assert item is not None and item.status == "suggested"
+        assert item.test_run_id is None  # 시험은 아직 없다
+        assert item.source_path  # 원본도 아직 수집함에 있다
+        assert len(item.candidates) == 1
+
+        done = client.post(
+            f"/api/pipelines/inbox/{received['id']}/approve", headers=admin_headers
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["status"] == "registered"
+        run = db.get(TestRun, uuid.UUID(done.json()["test_run_id"]))
+        assert run is not None and run.registered_by_id is not None  # 누가 승인했는지 남는다
+
+    def test_여럿을_한꺼번에_승인하고_막힌_것은_이유와_함께(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        tensile: None,
+    ) -> None:
+        first = _send(client, pat, connector["id"]).json()
+        second = _send(client, pat, connector["id"], content=TRA.read_bytes() + b"x").json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        client.post(
+            f"/api/pipelines/inbox/{first['id']}/discard",
+            json={"reason": "버림"},
+            headers=admin_headers,
+        )
+        response = client.post(
+            "/api/pipelines/inbox/approve",
+            json={"ids": [first["id"], second["id"]]},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["approved"] == [second["id"]]
+        assert first["id"] in body["failed"]
+
+    def test_승인_대기에서_다른_시편으로_바꿔_붙일_수_있다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        tensile: None,
+    ) -> None:
+        other = client.post(
+            f"/api/samples/{specimen['sample_id']}/specimens",
+            json={"orientation": "TD"},
+            headers=admin_headers,
+        ).json()
+        received = _send(client, pat, connector["id"]).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        moved = client.post(
+            f"/api/pipelines/inbox/{received['id']}/assign",
+            json={"specimen_id": other["id"]},
+            headers=admin_headers,
+        )
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["test_run_name"].startswith(other["record_name"])
 
 
 class Test규칙_편집기가_묻는다:

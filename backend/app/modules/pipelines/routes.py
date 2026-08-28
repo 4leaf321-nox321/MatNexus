@@ -37,6 +37,8 @@ from app.modules.pipelines.schemas import (
     SHA256_PATTERN,
     SOURCE_KEY_PATTERN,
     AssignIn,
+    BulkApproveIn,
+    BulkApproveOut,
     CandidateOut,
     ConnectorCreate,
     ConnectorOut,
@@ -75,6 +77,7 @@ def _connector_out(
         workspace_id=row.workspace_id,
         workspace_name=workspace_name,
         is_active=row.is_active,
+        auto_register=row.auto_register,
         app_version=row.app_version,
         last_seen_at=row.last_seen_at,
         next_run_at=row.next_run_at,
@@ -150,6 +153,8 @@ def update_connector(
         row.name = given["name"]
     if "is_active" in given and given["is_active"] is not None:
         row.is_active = given["is_active"]
+    if "auto_register" in given and given["auto_register"] is not None:
+        row.auto_register = given["auto_register"]
     db.commit()
     names = _workspace_names(db, {row.workspace_id})
     return _connector_out(
@@ -412,6 +417,38 @@ def assign_item(
     services.register(db, item, specimen=specimen, test_type=test_type, actor=user)
     db.commit()
     return _detail(db, item)
+
+
+@router.post("/inbox/{item_id}/approve", response_model=InboxItemDetail)
+def approve_item(
+    item_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> InboxItemDetail:
+    """승인 — 대기 중인 항목을 제 후보로 등록한다."""
+    item = _get_item(db, user, item_id)
+    _manager_of_item(db, user, item)
+    services.approve_suggested(db, item, actor=user)
+    db.commit()
+    return _detail(db, item)
+
+
+@router.post("/inbox/approve", response_model=BulkApproveOut)
+def approve_items(
+    body: BulkApproveIn, user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> BulkApproveOut:
+    """여럿을 한꺼번에 승인. 하나가 막혀도 나머지는 등록된다 — 막힌 것은 이유와 함께."""
+    approved: list[uuid.UUID] = []
+    failed: dict[str, str] = {}
+    for item_id in body.ids:
+        try:
+            item = _get_item(db, user, item_id)
+            _manager_of_item(db, user, item)
+            services.approve_suggested(db, item, actor=user)
+            db.commit()
+            approved.append(item_id)
+        except AppError as error:
+            db.rollback()
+            failed[str(item_id)] = error.message
+    return BulkApproveOut(approved=approved, failed=failed)
 
 
 @router.post("/inbox/{item_id}/discard", status_code=204)

@@ -267,9 +267,19 @@ def process(db: Session, item_id: uuid.UUID) -> str:
     if len(item.candidates) == 1:
         specimen = db.get(Specimen, uuid.UUID(item.candidates[0]["specimen_id"]))
         if specimen is not None and specimen.deleted_at is None:
-            register(db, item, specimen=specimen, test_type=detected.test_type, actor=None)
+            # **기본은 승인 대기다.** 규칙이 「틀리게 맞으면」 엉뚱한 시편에 시험이
+            # 붙고, 사람은 나중에 목록을 훑을 때에야 안다. 검증된 커넥터만
+            # `auto_register` 로 바로 등록한다.
+            if connector.auto_register:
+                register(db, item, specimen=specimen, test_type=detected.test_type, actor=None)
+                db.commit()
+                return "registered"
+            item.status = "suggested"
+            item.error = None
             db.commit()
-            return "registered"
+            _notify_managers(db, connector, item)
+            db.commit()
+            return "suggested"
 
     why = next((c["reason"] for c in candidates if "specimen_id" not in c), None)
     item.status = "needs_specimen"
@@ -430,9 +440,18 @@ def _notify_managers(
             payload={
                 "event_kind": "pipelines.needs_specimen",
                 "key": f"{item.id}",
-                "title": "장비에서 온 파일에 시편을 붙여 주세요",
+                "title": (
+                    "장비에서 온 파일이 승인을 기다립니다"
+                    if item.status == "suggested"
+                    else "장비에서 온 파일에 시편을 붙여 주세요"
+                ),
                 "body": (
-                    f"{connector.name}: {item.filename} — {item.error or '후보가 여럿입니다.'}"
+                    f"{connector.name}: {item.filename} — "
+                    + (
+                        f"{item.candidates[0]['specimen_name']} 에 붙일 준비가 됐습니다."
+                        if item.status == "suggested" and item.candidates
+                        else f"{item.error or '후보가 여럿입니다.'}"
+                    )
                 ),
                 "link": "/settings/connectors?tab=inbox",
                 "to_user_id": str(user_id),
@@ -646,6 +665,22 @@ def retry(db: Session, item: PipelineInboxItem) -> None:
     item.error = None
     item.candidates = []
     queue.enqueue(db, kind=kinds.PIPELINES_PARSE_INBOX, payload={"item_id": str(item.id)})
+
+
+def approve_suggested(db: Session, item: PipelineInboxItem, *, actor: User) -> TestRun:
+    """승인 — 대기 중인 항목을 **제 후보**로 등록한다. 다른 시편에 붙이려면 assign."""
+    if item.status != "suggested" or len(item.candidates) != 1:
+        raise Conflict(
+            "MNX-PIPE-0013",
+            f"승인 대기 상태가 아닙니다({item.status}). 시편을 골라 붙여 주세요.",
+        )
+    specimen = db.get(Specimen, uuid.UUID(item.candidates[0]["specimen_id"]))
+    if specimen is None or specimen.deleted_at is not None:
+        raise Conflict("MNX-PIPE-0013", "후보 시편이 그사이 지워졌습니다. 다시 붙여 주세요.")
+    test_type = db.get(TestType, item.test_type_id) if item.test_type_id else None
+    if test_type is None:
+        raise AppError("MNX-PIPE-0012", "감지된 시험 종류가 없습니다.", status=422)
+    return register(db, item, specimen=specimen, test_type=test_type, actor=actor)
 
 
 # --- 조회 보조 ------------------------------------------------------------------

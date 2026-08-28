@@ -1688,6 +1688,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/pipelines/inbox/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Items
+         * @description 여럿을 한꺼번에 승인. 하나가 막혀도 나머지는 등록된다 — 막힌 것은 이유와 함께.
+         */
+        post: operations["approve_items_api_pipelines_inbox_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/pipelines/inbox/{item_id}": {
         parameters: {
             query?: never;
@@ -1699,6 +1719,26 @@ export interface paths {
         get: operations["get_item_api_pipelines_inbox__item_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/inbox/{item_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Item
+         * @description 승인 — 대기 중인 항목을 제 후보로 등록한다.
+         */
+        post: operations["approve_item_api_pipelines_inbox__item_id__approve_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4068,6 +4108,20 @@ export interface components {
             /** Tested At */
             tested_at?: string | null;
         };
+        /** BulkApproveIn */
+        BulkApproveIn: {
+            /** Ids */
+            ids: string[];
+        };
+        /** BulkApproveOut */
+        BulkApproveOut: {
+            /** Approved */
+            approved: string[];
+            /** Failed */
+            failed?: {
+                [key: string]: string;
+            };
+        };
         /** BulkBlockedOut */
         BulkBlockedOut: {
             /** Reason */
@@ -4551,6 +4605,11 @@ export interface components {
             /** App Version */
             app_version: string | null;
             /**
+             * Auto Register
+             * @default false
+             */
+            auto_register: boolean;
+            /**
              * Created At
              * Format: date-time
              */
@@ -4594,6 +4653,8 @@ export interface components {
          * @description 「안 보낸 것」 과 「비운 것」 을 구별한다 — 없는 키는 그대로 둔다.
          */
         ConnectorUpdate: {
+            /** Auto Register */
+            auto_register?: boolean | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Name */
@@ -12392,7 +12453,71 @@ export interface operations {
             };
         };
     };
+    approve_items_api_pipelines_inbox_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkApproveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkApproveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_item_api_pipelines_inbox__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxItemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_item_api_pipelines_inbox__item_id__approve_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -737,6 +737,49 @@
         "title": "Body_upload_test_run_api_test_runs_post",
         "type": "object"
       },
+      "BulkApproveIn": {
+        "properties": {
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "BulkApproveIn",
+        "type": "object"
+      },
+      "BulkApproveOut": {
+        "properties": {
+          "approved": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Approved",
+            "type": "array"
+          },
+          "failed": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Failed",
+            "type": "object"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "title": "BulkApproveOut",
+        "type": "object"
+      },
       "BulkBlockedOut": {
         "properties": {
           "reason": {
@@ -1946,6 +1989,11 @@
             ],
             "title": "App Version"
           },
+          "auto_register": {
+            "default": false,
+            "title": "Auto Register",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -2055,6 +2103,17 @@
         "additionalProperties": false,
         "description": "「안 보낸 것」 과 「비운 것」 을 구별한다 — 없는 키는 그대로 둔다.",
         "properties": {
+          "auto_register": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Register"
+          },
           "is_active": {
             "anyOf": [
               {
@@ -19110,6 +19169,48 @@
         ]
       }
     },
+    "/api/pipelines/inbox/approve": {
+      "post": {
+        "description": "여럿을 한꺼번에 승인. 하나가 막혀도 나머지는 등록된다 — 막힌 것은 이유와 함께.",
+        "operationId": "approve_items_api_pipelines_inbox_approve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkApproveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkApproveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Items",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
     "/api/pipelines/inbox/{item_id}": {
       "get": {
         "operationId": "get_item_api_pipelines_inbox__item_id__get",
@@ -19148,6 +19249,50 @@
           }
         },
         "summary": "Get Item",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/api/pipelines/inbox/{item_id}/approve": {
+      "post": {
+        "description": "승인 — 대기 중인 항목을 제 후보로 등록한다.",
+        "operationId": "approve_item_api_pipelines_inbox__item_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxItemDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Item",
         "tags": [
           "pipelines"
         ]

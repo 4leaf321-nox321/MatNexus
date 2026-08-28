@@ -45,6 +45,7 @@ from app.database import Base
 #: 수집함 항목의 상태.
 #:   received        저장됨, 워커 대기
 #:   parsed          파싱 성공, 후보 조회 중(짧게 지나간다)
+#:   suggested       후보가 하나 — **승인 대기.** 사람이 「승인」 을 누르면 시험이 된다
 #:   needs_specimen  후보가 0 또는 2 이상 — 사람이 붙인다
 #:   registered      시험이 됐다(`test_run_id`)
 #:   failed          파싱 실패(`error`) — 프로파일을 고치고 retry
@@ -52,6 +53,7 @@ from app.database import Base
 INBOX_STATUSES = (
     "received",
     "parsed",
+    "suggested",
     "needs_specimen",
     "registered",
     "failed",
@@ -96,6 +98,10 @@ class PipelineConnector(Base):
     name: Mapped[str] = mapped_column(String(100))
     hostname: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    auto_register: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    """후보가 하나면 승인 없이 바로 시험을 만드나. **기본은 아니오** — 규칙이 「틀리게
+    맞으면」 엉뚱한 시편에 시험이 붙고, 사람은 목록을 훑을 때에야 안다. 파일럿에서
+    대조 열이 한동안 전부 맞으면 그 커넥터만 켠다."""
 
     app_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(
