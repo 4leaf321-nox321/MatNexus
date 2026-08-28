@@ -15138,6 +15138,36 @@
             }
           },
           {
+            "description": "정렬할 열. 기본은 등록 일시",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "정렬할 열. 기본은 등록 일시",
+              "title": "Sort"
+            }
+          },
+          {
+            "description": "내림차순. 기본은 최근 등록순",
+            "in": "query",
+            "name": "desc",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "내림차순. 기본은 최근 등록순",
+              "title": "Desc",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -17233,6 +17263,36 @@
             }
           },
           {
+            "description": "정렬할 열. 기본은 등록 일시",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "정렬할 열. 기본은 등록 일시",
+              "title": "Sort"
+            }
+          },
+          {
+            "description": "내림차순. 기본은 최근 등록순",
+            "in": "query",
+            "name": "desc",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "내림차순. 기본은 최근 등록순",
+              "title": "Desc",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -18054,6 +18114,36 @@
               ],
               "description": "채택된 처리 결과가 있는가 — 없는 것만 보려면 false",
               "title": "Adopted"
+            }
+          },
+          {
+            "description": "정렬할 열. 기본은 등록 일시",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "정렬할 열. 기본은 등록 일시",
+              "title": "Sort"
+            }
+          },
+          {
+            "description": "내림차순. 기본은 최근 등록순",
+            "in": "query",
+            "name": "desc",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "내림차순. 기본은 최근 등록순",
+              "title": "Desc",
+              "type": "boolean"
             }
           },
           {

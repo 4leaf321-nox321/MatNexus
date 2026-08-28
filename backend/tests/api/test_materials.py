@@ -2468,3 +2468,88 @@ class Test시편_일괄_수정:
             headers=admin_headers,
         )
         assert done.status_code == 422, done.text
+
+
+class Test정렬:
+    """**서버가 정렬한다.** 화면에서 하면 그 쪽에 실린 것만 정렬된다 — 50건짜리
+    화면에서 「오래된 순」 을 눌렀는데 두 번째 쪽에 더 오래된 것이 있으면, 사람은
+    첫 줄을 「가장 오래된 것」 으로 읽는다.
+    """
+
+    def test_기본은_최근_등록순(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**갓 넣은 것을 찾으려고 표를 훑지 않게.** 등록 직후에 보는 일이 가장 잦다."""
+        made = [
+            _create_material(client, admin_headers, grade=f"SORT{index}") for index in range(3)
+        ]
+        body = client.get("/api/materials?q=SORT", headers=admin_headers).json()
+        got = [one["id"] for one in body["items"]]
+        assert got == [one["id"] for one in reversed(made)]
+
+    def test_이름순으로_바꾼다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        _create_material(client, admin_headers, grade="SORTB")
+        _create_material(client, admin_headers, grade="SORTA")
+        body = client.get(
+            "/api/materials?q=SORT&sort=record_name&desc=false", headers=admin_headers
+        ).json()
+        names = [one["record_name"] for one in body["items"]]
+        assert names == sorted(names)
+
+    def test_모르는_열은_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**자유 문자열을 그대로 `order_by` 에 넣으면 안 된다.** 그리고 오타가
+        조용히 기본 정렬로 떨어지면 사람은 눌렀는데 아무 일이 없다고 느낀다."""
+        response = client.get("/api/materials?sort=; DROP TABLE", headers=admin_headers)
+        assert response.status_code == 422, response.text
+        assert "정렬할 수 없습니다" in response.json()["error"]["message"]
+
+    def test_같은_값이어도_쪽이_안_겹친다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**정렬 키가 같으면 DB 는 순서를 보장하지 않는다.** 그러면 2쪽에서 봤던
+        줄이 3쪽에 또 나오고 어떤 줄은 아예 안 보인다."""
+        for index in range(5):
+            _create_material(client, admin_headers, grade=f"TIE{index}", details=None)
+        # 분류가 전부 같으니 그 열로 정렬하면 값이 다 같다.
+        first = client.get(
+            "/api/materials?q=TIE&sort=family&limit=2&offset=0", headers=admin_headers
+        ).json()
+        second = client.get(
+            "/api/materials?q=TIE&sort=family&limit=2&offset=2", headers=admin_headers
+        ).json()
+        assert not (
+            {one["id"] for one in first["items"]} & {one["id"] for one in second["items"]}
+        )
+
+
+class Test시편_정렬:
+    def test_기본은_최근_등록순(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material = _create_material(client, admin_headers, grade="SPSORT")
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        made = [
+            client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD", "seq_no": seq},
+                headers=admin_headers,
+            ).json()
+            for seq in (1, 2, 3)
+        ]
+        body = client.get("/api/specimens?material=SPSORT", headers=admin_headers).json()
+        assert [one["id"] for one in body["items"]] == [one["id"] for one in reversed(made)]
+
+    def test_join_한_열로도_정렬한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """표에 재료·로트가 보이므로 그것으로 정렬하는 것이 자연스럽다."""
+        response = client.get(
+            "/api/specimens?sort=material_name&desc=false", headers=admin_headers
+        )
+        assert response.status_code == 200, response.text

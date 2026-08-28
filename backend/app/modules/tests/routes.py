@@ -69,7 +69,15 @@ from app.modules.tests.schemas import (
 )
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, curvedata, filestore, permissions, revision, specimen_size
+from app.shared import (
+    audit,
+    curvedata,
+    filestore,
+    permissions,
+    revision,
+    sorting,
+    specimen_size,
+)
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -862,6 +870,22 @@ def upload_test_run(
 # --- 조회 -------------------------------------------------------------------
 
 
+#: 시험 목록에서 정렬할 수 있는 열. **화면이 목록을 정하지 않는다.**
+#:
+#: 시험일(`tested_at`)이 등록 일시와 따로 있는 것이 요점이다 — 옛 시험을 오늘
+#: 올리는 일이 흔하고(이관), 그때 둘은 몇 달 벌어진다. 어느 것으로 볼지는 보는
+#: 사람이 정한다.
+RUN_SORTS = {
+    "created_at": TestRun.created_at,
+    "record_name": TestRun.record_name,
+    "tested_at": TestRun.tested_at,
+    "operator": TestRun.operator,
+    "instrument": TestRun.instrument,
+    "division": TestRun.division,
+    "status": TestRun.status,
+}
+
+
 @runs_router.get("", response_model=Page[TestRunOut])
 def list_runs(
     workspace: str | None = Query(
@@ -878,6 +902,8 @@ def list_runs(
     adopted: bool | None = Query(
         default=None, description="채택된 처리 결과가 있는가 — 없는 것만 보려면 false"
     ),
+    sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
+    desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
     limit: int | None = Query(default=None, le=1000),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(current_user),
@@ -951,7 +977,19 @@ def list_runs(
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
     runs = list(
-        db.scalars(query.order_by(TestRun.created_at.desc()).limit(size).offset(offset))
+        db.scalars(
+            query.order_by(
+                *sorting.order_by(
+                    RUN_SORTS,
+                    sort=sort,
+                    desc=desc,
+                    default="created_at",
+                    tiebreaker=TestRun.id,
+                )
+            )
+            .limit(size)
+            .offset(offset)
+        )
     )
     ctx = _context(db, runs)
     return Page(

@@ -107,6 +107,9 @@ export interface MaterialQuery {
   family?: string
   category?: string
   scope?: 'all' | 'mine' | 'global'
+  /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
+  sort?: string
+  desc?: boolean
   limit?: number
   offset?: number
 }
@@ -119,6 +122,9 @@ export interface SpecimenQuery {
   /** 방향만 정확히 맞춘다 — 넷뿐이라 부분 일치면 `D` 가 셋을 함께 문다. */
   orientation?: string
   standard?: string
+  /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
+  sort?: string
+  desc?: boolean
   limit?: number
   offset?: number
 }

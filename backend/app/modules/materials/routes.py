@@ -70,7 +70,7 @@ from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, display, specimen_size
+from app.shared import audit, display, sorting, specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -345,6 +345,20 @@ _SEARCH_TEXT = (
     Material.alias,
 )
 
+#: 정렬할 수 있는 열. **화면이 목록을 정하지 않는다** — 모르는 이름은 거절한다.
+#:
+#: 두께·시료 수가 없는 이유는 거르기와 같다. 두께는 컬럼이 있어 넣었고, 시료 수는
+#: 세어야 나오는 값이라 정렬하려면 매번 집계를 걸어야 한다 — 그건 이 목록이
+#: 느려지는 첫 번째 이유가 된다.
+MATERIAL_SORTS = {
+    "created_at": Material.created_at,
+    "record_name": Material.record_name,
+    "alias": Material.alias,
+    "family": Material.family,
+    "category": Material.category,
+    "spec_thickness": Material.spec_thickness_m,
+}
+
 #: 기준정보를 거치는 검색 축과 그 FK 컬럼. **축으로 좁히는 것이 요점이다**(ADR 0010) —
 #: `materials.family` 는 5만 행인데 값은 5가지고, 기준정보 쪽 `family` 축은 5행이다.
 #: 축을 안 좁히고 기준정보 전체(23만)를 훑으면 정규화의 이득을 도로 잃는다
@@ -462,6 +476,8 @@ def list_materials(
     family: str | None = None,
     category: str | None = None,
     scope: str = Query(default="all", pattern="^(all|mine|global)$"),
+    sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
+    desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
     limit: int | None = Query(default=None, le=1000),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(current_user),
@@ -496,7 +512,21 @@ def list_materials(
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
-    rows = list(db.scalars(query.order_by(Material.record_name).limit(size).offset(offset)))
+    rows = list(
+        db.scalars(
+            query.order_by(
+                *sorting.order_by(
+                    MATERIAL_SORTS,
+                    sort=sort,
+                    desc=desc,
+                    default="created_at",
+                    tiebreaker=Material.id,
+                )
+            )
+            .limit(size)
+            .offset(offset)
+        )
+    )
 
     counts = services.sample_counts(db, [m.id for m in rows])
     names = services.workspace_names(db, [m.owner_workspace_id for m in rows])
@@ -1621,6 +1651,17 @@ def _get_specimen(db: Session, user: User, specimen_id: uuid.UUID) -> Specimen:
 # 시편 id 로 읽는다.
 
 
+#: 시편 평면 목록에서 정렬할 수 있는 열. **join 한 표의 열도 고를 수 있다** —
+#: 표에 재료·로트가 보이므로 그것으로 정렬하는 것이 자연스럽다.
+SPECIMEN_SORTS = {
+    "created_at": Specimen.created_at,
+    "material_name": Material.record_name,
+    "lot_no": Sample.lot_no,
+    "record_name": Specimen.record_name,
+    "orientation": Specimen.orientation,
+    "standard": Specimen.standard,
+}
+
 #: 시편에서 글자로 뒤지는 칸. 재료의 `_SEARCH_TEXT` 와 같은 자리다.
 _SPECIMEN_TEXT = (Specimen.record_name, Specimen.standard)
 
@@ -1632,6 +1673,8 @@ def list_all_specimens(
     lot: str | None = Query(default=None, description="로트 부분 일치"),
     orientation: str | None = Query(default=None, description="방향. 정확히 맞아야 한다"),
     standard: str | None = Query(default=None, description="시편 규격 부분 일치"),
+    sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
+    desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
     limit: int | None = Query(default=None, le=1000),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(current_user),
@@ -1678,7 +1721,15 @@ def list_all_specimens(
     size = clamp_limit(limit)
     rows = list(
         db.execute(
-            query.order_by(Material.record_name, Sample.seq_no, Specimen.record_name)
+            query.order_by(
+                *sorting.order_by(
+                    SPECIMEN_SORTS,
+                    sort=sort,
+                    desc=desc,
+                    default="created_at",
+                    tiebreaker=Specimen.id,
+                )
+            )
             .limit(size)
             .offset(offset)
         )

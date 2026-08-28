@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
@@ -23,6 +23,8 @@ import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { SortButton } from '@/shared/components/ColumnFilter'
+import type { SortHandle } from '@/shared/components/ColumnFilter'
 import { Stamp } from '@/shared/components/Stamp'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { BulkEditDialog } from '@/modules/tests/BulkEditDialog'
@@ -44,6 +46,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useSort } from '@/shared/hooks/useSort'
 
 const POLL_MS = 3000
 
@@ -60,6 +63,24 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
  * **있는데 화면 어디에도 없었고, 없다는 사실조차 안 보였다.** 목록이 조용히
  * 잘리는 것이 가장 나쁘다.
  */
+/** 이름 옆에 서는 정렬 화살표. **꺼져 있을 때도 보인다** — 안 보이면 누를 수
+ *  있는 줄인지 모르고, 그러면 정렬이 있어도 아무도 안 쓴다. */
+function SortArrow({ sort }: { sort: SortHandle }) {
+  const on = sort.active === sort.key
+  const Icon = on ? (sort.descending ? ArrowDown : ArrowUp) : ChevronsUpDown
+  return (
+    <button
+      type="button"
+      aria-label={`${sort.key} 로 정렬`}
+      aria-pressed={on}
+      className={`hover:text-foreground rounded ${on ? 'text-foreground' : 'opacity-40'}`}
+      onClick={() => sort.onSort(sort.key)}
+    >
+      <Icon className="size-3" aria-hidden />
+    </button>
+  )
+}
+
 const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 
@@ -77,14 +98,26 @@ function ColumnFilter({
   rows,
   current,
   onPick,
+  sort,
 }: {
   label: string
   rows: { key: string; label: string; count: number }[]
   current?: string
   onPick: (value: string | undefined) => void
+  /** 주면 이름 옆에 정렬 화살표가 선다. **이름을 겸하게 둘 수 없다** — 이
+   *  표의 거르기는 드롭다운이라 이름을 누르면 그것이 열린다. */
+  sort?: SortHandle
 }) {
-  if (rows.length === 0) return <>{label}</>
+  const arrow = sort ? <SortArrow sort={sort} /> : null
+  if (rows.length === 0)
+    return (
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {arrow}
+      </span>
+    )
   return (
+    <span className="inline-flex items-center gap-1">
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -109,6 +142,8 @@ function ColumnFilter({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+    {arrow}
+    </span>
   )
 }
 
@@ -124,14 +159,32 @@ export default function TestRunsPage() {
   // **거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이 없는
   // 시험이 된다 — 이 화면의 머리말이 그 이야기다.
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  // 기본은 **최근 등록순.** 전에도 그랬고, 이제 다른 열로도 바꿀 수 있다.
+  const { sort, handle } = useSort('created_at')
+
   const runs = useResource(
     () =>
       all
         ? fetchAll((limit, from) =>
-            testsApi.runs({ workspace: slug, limit, offset: from, ...filters })
+            testsApi.runs({
+              workspace: slug,
+              limit,
+              offset: from,
+              sort: sort.key,
+              desc: sort.descending,
+              ...filters,
+            })
           )
-        : testsApi.runs({ workspace: slug, limit: size, offset, ...filters }),
-    [slug, size, offset, all, filters]
+        : testsApi.runs({
+            workspace: slug,
+            limit: size,
+            offset,
+            sort: sort.key,
+            desc: sort.descending,
+            ...filters,
+          }),
+    [slug, size, offset, all, filters, sort]
   )
   // 거르기 목록은 필터와 함께 안 바뀐다 — 「무엇이 있나」를 답하는 자리다.
   const facets = useResource(() => testsApi.runFacets(slug), [slug])
@@ -171,7 +224,6 @@ export default function TestRunsPage() {
   const truncated = all && rows.length < total
   const pending = rows.some((run) => isPending(run.status))
 
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState(false)
   const [batching, setBatching] = useState(false)
   const [removing, setRemoving] = useState(false)
@@ -352,7 +404,9 @@ export default function TestRunsPage() {
                   }
                 />
               </TableHead>
-              <TableHead>이름</TableHead>
+              <TableHead>
+                <SortButton label="이름" sort={handle('record_name')} />
+              </TableHead>
               <TableHead>재료</TableHead>
               <TableHead>
                 <ColumnFilter
@@ -373,6 +427,7 @@ export default function TestRunsPage() {
               <TableHead>
                 <ColumnFilter
                   label="상태"
+                  sort={handle('status')}
                   rows={facets.data?.statuses ?? []}
                   current={filters.status}
                   onPick={(value) => narrow('status', value)}
@@ -385,6 +440,7 @@ export default function TestRunsPage() {
                     사업부는 누가 낸 데이터인가를 적는다. */}
                 <ColumnFilter
                   label="사업부"
+                  sort={handle('division')}
                   rows={facets.data?.divisions ?? []}
                   current={filters.division}
                   onPick={(value) => narrow('division', value)}
@@ -398,7 +454,9 @@ export default function TestRunsPage() {
                   onPick={(value) => narrow('registered_by', value)}
                 />
               </TableHead>
-              <TableHead>등록</TableHead>
+              <TableHead>
+                <SortButton label="등록 일시" sort={handle('created_at')} />
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

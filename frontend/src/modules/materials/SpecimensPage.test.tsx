@@ -181,3 +181,59 @@ describe('일괄 수정', () => {
     )
   })
 })
+
+
+describe('정렬', () => {
+  it('기본은 최근 등록순으로 서버에 묻는다', async () => {
+    // **목록에는 늘 순서가 있어야 한다.** 「정렬 없음」 은 DB 가 주는 대로라는
+    // 뜻이고, 그건 쪽마다 달라질 수 있어 순서가 아니다.
+    open()
+    await waitFor(() =>
+      expect(specimenRows).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'created_at', desc: true })
+      )
+    )
+  })
+
+  it('누르면 그 열로 서버에 다시 묻는다', async () => {
+    /** **화면에서 정렬하면 이 쪽에 실린 것만 정렬된다.** 거르기와 같은 거짓말이다. */
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByRole('button', { name: '규격 로 정렬' }))
+    await waitFor(() =>
+      expect(specimenRows).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'standard', desc: true })
+      )
+    )
+  })
+
+  it('같은 열을 다시 누르면 뒤집는다', async () => {
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByRole('button', { name: '규격 로 정렬' }))
+    await userEvent.click(screen.getByRole('button', { name: '규격 로 정렬' }))
+    await waitFor(() =>
+      expect(specimenRows).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'standard', desc: false })
+      )
+    )
+  })
+
+  it('새 열은 내림차순부터', async () => {
+    // 등록 일시·시험일처럼 **최근 것이 궁금한 열**이 많다. 오름차순부터 시작하면
+    // 거의 매번 두 번 눌러야 한다.
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByRole('button', { name: '규격 로 정렬' }))
+    await userEvent.click(screen.getByRole('button', { name: '규격 로 정렬' }))
+    await userEvent.click(screen.getByRole('button', { name: '로트 로 정렬' }))
+    await waitFor(() =>
+      expect(specimenRows).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'lot_no', desc: true })
+      )
+    )
+  })
+})

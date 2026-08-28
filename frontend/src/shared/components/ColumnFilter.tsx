@@ -26,7 +26,7 @@
  * 탓으로 읽는다. 이름 옆에 점을 찍어 **글자 높이에서** 보이게 한다.
  */
 
-import { Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronsUpDown, Search, X } from 'lucide-react'
 
 /**
  * 거르는 칸이 든 머리칸에 붙인다.
@@ -42,19 +42,56 @@ export const FILTER_HEAD = 'h-auto border-r py-2.5 align-bottom last:border-r-0'
 /** 머리 띠 자체. 배경 + **아래를 굵게** — 첫 줄이 머리인지 자료인지 갈린다. */
 export const FILTER_ROW = 'bg-muted/40 hover:bg-muted/40 border-b-2'
 
+/** 이 열로 정렬하는 손잡이. **서버가 정렬한다** — 화면에서 하면 이 쪽에 실린
+ *  것만 정렬되고, 사람은 첫 줄을 「가장 오래된 것」 으로 읽는다. */
+export interface SortHandle {
+  /** 서버가 아는 열 이름. 목록마다 고를 수 있는 것이 다르다. */
+  key: string
+  /** 지금 정렬 중인 열. */
+  active: string
+  descending: boolean
+  onSort: (key: string) => void
+}
+
+export function SortButton({ label, sort }: { label: string; sort: SortHandle }) {
+  const on = sort.active === sort.key
+  // **꺼져 있을 때도 화살표를 보인다.** 안 보이면 「누를 수 있는 줄」 인지 모르고,
+  // 그러면 정렬 기능이 있어도 아무도 안 쓴다. 대신 흐리게 둔다.
+  const Icon = on ? (sort.descending ? ArrowDown : ArrowUp) : ChevronsUpDown
+  return (
+    <button
+      type="button"
+      className={`hover:text-foreground -mx-1 flex items-center gap-1 rounded px-1 transition-colors ${
+        on ? 'text-foreground' : ''
+      }`}
+      aria-label={`${label} 로 정렬`}
+      aria-pressed={on}
+      onClick={() => sort.onSort(sort.key)}
+    >
+      {label}
+      <Icon className={`size-3 ${on ? '' : 'opacity-40'}`} aria-hidden />
+    </button>
+  )
+}
+
 /** 거르지 않는 열의 이름. **같은 리듬으로 선다** — 한 줄만 위로 떠 있으면
  *  머리 띠가 들쭉날쭉해 보인다. */
 export function ColumnLabel({
   children,
   align = 'left',
+  sort,
 }: {
   children: React.ReactNode
   align?: 'left' | 'right'
+  /** 주면 이름이 정렬 손잡이가 된다. */
+  sort?: SortHandle
 }) {
   return (
-    <div className={`flex h-[3.25rem] flex-col justify-end ${align === 'right' ? 'items-end' : ''}`}>
+    <div
+      className={`flex h-[3.25rem] flex-col justify-end ${align === 'right' ? 'items-end' : ''}`}
+    >
       <span className="text-muted-foreground text-[11px] font-medium tracking-wide">
-        {children}
+        {sort ? <SortButton label={String(children)} sort={sort} /> : children}
       </span>
     </div>
   )
@@ -67,10 +104,14 @@ export function ColumnFilter({
   options,
   placeholder,
   align = 'left',
+  sort,
 }: {
   label: string
   value: string
   onChange: (next: string) => void
+  /** 주면 이름이 정렬 손잡이가 된다. 거르기와 정렬은 **다른 축**이라 함께 산다 —
+   *  「MD 만 보면서 등록 일시 순으로」 가 정상 요구다. */
+  sort?: SortHandle
   /** 고를 값이 정해져 있으면 준다. 안 주면 자유 입력.
    *  **개수를 함께 받는다** — 분류 후보는 「실제로 있는 조합」 이라 개수가 붙어
    *  오고, 그 숫자가 고르기 전에 몇 건인지 말해 준다. */
@@ -91,7 +132,7 @@ export function ColumnFilter({
   return (
     <div className={`flex flex-col gap-1.5 ${align === 'right' ? 'items-end' : ''}`}>
       <span className="text-muted-foreground flex items-center gap-1 text-[11px] font-medium tracking-wide">
-        {label}
+        {sort ? <SortButton label={label} sort={sort} /> : label}
         {/* **켜진 것을 글자 높이에서 보인다.** 아래 칸의 테두리만으로는 열이
             여럿일 때 눈에 안 들어온다. */}
         {on && <span className="bg-primary size-1.5 rounded-full" aria-hidden />}

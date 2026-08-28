@@ -51,6 +51,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useSort } from '@/shared/hooks/useSort'
 import { formatScalar } from '@/shared/units'
 
 const PAGE = 50
@@ -83,6 +84,8 @@ export default function SpecimensPage() {
   const [orientation, setOrientation] = useState('')
   const [standard, setStandard] = useState('')
   const [offset, setOffset] = useState(0)
+  // 기본은 **최근 등록순.** 목록에 늘 순서가 있어야 한다.
+  const { sort, handle } = useSort('created_at')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState(false)
 
@@ -103,10 +106,12 @@ export default function SpecimensPage() {
         q: name,
         orientation,
         standard,
+        sort: sort.key,
+        desc: sort.descending,
         limit: PAGE,
         offset,
       }),
-    [material, lot, name, orientation, standard, offset]
+    [material, lot, name, orientation, standard, sort, offset]
   )
 
   const rows = page.data?.items ?? []
@@ -208,17 +213,25 @@ export default function SpecimensPage() {
               <TableHead className={`min-w-[10rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="재료"
+                  sort={handle('material_name')}
                   value={material}
                   onChange={setMaterial}
                   placeholder="SECC"
                 />
               </TableHead>
               <TableHead className={`min-w-[8rem] ${FILTER_HEAD}`}>
-                <ColumnFilter label="로트" value={lot} onChange={setLot} placeholder="L-9" />
+                <ColumnFilter
+                  label="로트"
+                  sort={handle('lot_no')}
+                  value={lot}
+                  onChange={setLot}
+                  placeholder="L-9"
+                />
               </TableHead>
               <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="시편"
+                  sort={handle('record_name')}
                   value={name}
                   onChange={setName}
                   placeholder="이름 · 규격"
@@ -227,6 +240,7 @@ export default function SpecimensPage() {
               <TableHead className={`w-24 ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="방향"
+                  sort={handle('orientation')}
                   value={orientation}
                   onChange={setOrientation}
                   options={ORIENTATIONS}
@@ -235,6 +249,7 @@ export default function SpecimensPage() {
               <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="규격"
+                  sort={handle('standard')}
                   value={standard}
                   onChange={setStandard}
                   placeholder="ASTM E8"
@@ -250,7 +265,7 @@ export default function SpecimensPage() {
                 <ColumnLabel align="right">시험</ColumnLabel>
               </TableHead>
               <TableHead className={`w-36 ${FILTER_HEAD}`}>
-                <ColumnLabel>등록 일시</ColumnLabel>
+                <ColumnLabel sort={handle('created_at')}>등록 일시</ColumnLabel>
               </TableHead>
             </TableRow>
           </TableHeader>

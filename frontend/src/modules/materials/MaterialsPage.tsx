@@ -48,6 +48,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useSort } from '@/shared/hooks/useSort'
 
 /**
  * 한 쪽에 몇 건. `'all'` 은 200건씩 이어 받아 모은다(`shared/api/paging.ts`).
@@ -71,6 +72,9 @@ export default function MaterialsPage() {
   const [name, setName] = useState('')
   const [alias, setAlias] = useState('')
   const [scope, setScope] = useState('')
+  // 기본은 **최근 등록순.** 전에는 이름순이었는데, 갓 넣은 것을 찾으려면
+  // 표를 훑어야 했다 — 등록 직후에 보는 일이 가장 잦다.
+  const { sort, handle } = useSort('created_at')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [removing, setRemoving] = useState(false)
   // 아래(시료·시편·시험)까지 함께 지울지. **기본은 안 지우는 쪽이다** — 고르고
@@ -97,6 +101,8 @@ export default function MaterialsPage() {
     family,
     category,
     scope: (scope || undefined) as 'mine' | 'global' | undefined,
+    sort: sort.key,
+    desc: sort.descending,
   }
 
   const materials = useResource(
@@ -106,7 +112,7 @@ export default function MaterialsPage() {
             materialsApi.list({ ...filters, limit, offset: from })
           )
         : materialsApi.list({ ...filters, limit: size, offset }),
-    [applied, name, alias, family, category, scope, size, offset, all]
+    [applied, name, alias, family, category, scope, sort, size, offset, all]
   )
 
   async function removePicked() {
@@ -369,6 +375,7 @@ export default function MaterialsPage() {
                 <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="이름"
+                    sort={handle('record_name')}
                     value={name}
                     onChange={(next) => {
                       setName(next)
@@ -380,6 +387,7 @@ export default function MaterialsPage() {
                 <TableHead className={`min-w-[9rem] ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="별칭"
+                    sort={handle('alias')}
                     value={alias}
                     onChange={(next) => {
                       setAlias(next)
@@ -393,6 +401,7 @@ export default function MaterialsPage() {
                 <TableHead className={`w-32 ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="Family"
+                    sort={handle('family')}
                     value={family}
                     options={families}
                     onChange={(next) => {
@@ -408,6 +417,7 @@ export default function MaterialsPage() {
                 <TableHead className={`w-32 ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="Category"
+                    sort={handle('category')}
                     value={category}
                     options={categories}
                     onChange={(next) => {
@@ -419,7 +429,9 @@ export default function MaterialsPage() {
                 {/* 두께·시료 수는 **서버가 거르는 축이 아니다.** 거르는 칸을
                     두면 이 쪽에 실린 것만 걸러 거짓말을 한다. */}
                 <TableHead className={`text-right ${FILTER_HEAD}`}>
-                  <ColumnLabel align="right">두께</ColumnLabel>
+                  <ColumnLabel align="right" sort={handle('spec_thickness')}>
+                    두께
+                  </ColumnLabel>
                 </TableHead>
                 <TableHead className={`text-right ${FILTER_HEAD}`}>
                   <ColumnLabel align="right">시료</ColumnLabel>
@@ -427,7 +439,7 @@ export default function MaterialsPage() {
                 <TableHead className={`w-36 ${FILTER_HEAD}`}>
                   {/* 서버가 거르는 축이 아니다 — 거르는 칸을 두면 이 쪽에 실린
                       것만 걸러 거짓말을 한다. */}
-                  <ColumnLabel>등록 일시</ColumnLabel>
+                  <ColumnLabel sort={handle('created_at')}>등록 일시</ColumnLabel>
                 </TableHead>
                 <TableHead className={`w-28 ${FILTER_HEAD}`}>
                   <ColumnFilter

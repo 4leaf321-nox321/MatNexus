@@ -9830,6 +9830,10 @@ export interface operations {
                 family?: string | null;
                 category?: string | null;
                 scope?: string;
+                /** @description 정렬할 열. 기본은 등록 일시 */
+                sort?: string | null;
+                /** @description 내림차순. 기본은 최근 등록순 */
+                desc?: boolean;
                 limit?: number | null;
                 offset?: number;
             };
@@ -11226,6 +11230,10 @@ export interface operations {
                 orientation?: string | null;
                 /** @description 시편 규격 부분 일치 */
                 standard?: string | null;
+                /** @description 정렬할 열. 기본은 등록 일시 */
+                sort?: string | null;
+                /** @description 내림차순. 기본은 최근 등록순 */
+                desc?: boolean;
                 limit?: number | null;
                 offset?: number;
             };
@@ -11653,6 +11661,10 @@ export interface operations {
                 q?: string | null;
                 /** @description 채택된 처리 결과가 있는가 — 없는 것만 보려면 false */
                 adopted?: boolean | null;
+                /** @description 정렬할 열. 기본은 등록 일시 */
+                sort?: string | null;
+                /** @description 내림차순. 기본은 최근 등록순 */
+                desc?: boolean;
                 limit?: number | null;
                 offset?: number;
             };
