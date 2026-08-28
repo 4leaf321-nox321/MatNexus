@@ -83,10 +83,11 @@ test('로그인부터 곡선까지', async ({ page }) => {
     // **첫 화면이 무엇을 하는 곳인지 말해야 한다.** 여기가 「구현 예정: Phase 1」
     // 공사 표지판이던 동안 "어느 화면을 어떻게 써야 하는지 모르겠다" 는 말이
     // 나왔다. 주소로 열지 않고 **로그인해서 도착한 자리**를 본다.
-    await expect(page.getByText('올린다')).toBeVisible()
-    await expect(page.getByText('처리한다')).toBeVisible()
-    await expect(page.getByText('물성을 본다')).toBeVisible()
-    await expect(page.getByText('카드를 낸다')).toBeVisible()
+    // **`exact` 를 준다.** 「처리」 는 요약 패널의 「처리 대기」 와 겹쳐 strict mode 에
+    // 걸린다 — 카드 제목만 정확히 집는다.
+    for (const step of ['업로드', '처리', '물성 조회', '카드 내보내기']) {
+      await expect(page.getByText(step, { exact: true })).toBeVisible()
+    }
   })
 
   await test.step('재료 등록', async () => {
@@ -157,7 +158,10 @@ test('로그인부터 곡선까지', async ({ page }) => {
     // 주소가 바뀌었다고 화면이 바뀐 것은 아니다. 상세 화면에만 있는 것을
     // 기다린다 — 라우트를 나눠 실으면 청크를 받는 동안 이전 화면이 남는다.
     await page.waitForURL('**/tests')
-    await page.getByRole('link', { name: new RegExp(RUN_ID) }).first().click()
+    await page
+      .getByRole('link', { name: new RegExp(RUN_ID) })
+      .first()
+      .click()
     await expect(page.getByRole('tab', { name: /원본/ })).toBeVisible({ timeout: 60_000 })
 
     // **여기가 이 테스트의 핵심이다.** 워커가 돌고, 곡선이 저장되고, 화면이 그것을
@@ -192,10 +196,7 @@ test('재료 화면이 물성을 보여 준다', async ({ page }) => {
   await expect(page.getByRole('tab', { name: '물성' })).toBeVisible()
   await page.getByRole('tab', { name: '물성' }).click()
   // 표본이 없어도 화면은 뜨고 이유를 말해야 한다.
-  await expect(page.getByRole('tab', { name: '물성' })).toHaveAttribute(
-    'data-state',
-    'active'
-  )
+  await expect(page.getByRole('tab', { name: '물성' })).toHaveAttribute('data-state', 'active')
 })
 
 test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) => {
@@ -215,10 +216,7 @@ test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) =
   // 말이 들어 있어서, 화면 전체에서 이름으로 찾으면 둘이 걸린다 — 실제로 CI 가
   // 그렇게 멈췄다. 이 시험이 보려는 것은 **사이드바로 갈 수 있는가** 이므로
   // 범위를 좁히는 것이 시험의 뜻에도 맞다.
-  await page
-    .locator('[data-app-chrome="sidebar"]')
-    .getByRole('link', { name: '파일 형식' })
-    .click()
+  await page.locator('[data-app-chrome="sidebar"]').getByRole('link', { name: '파일 형식' }).click()
   await expect(page).toHaveURL(/\/settings\/formats$/)
   await expect(page.getByRole('link', { name: '프로파일 만들기' })).toBeVisible()
 
@@ -291,7 +289,10 @@ test('덱을 뽑는 길이 열려 있다', async ({ page }) => {
   // 고른 계로 실제로 받아진다. 파일 이름에 계가 들어간다.
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('menuitem', { name: /Abaqus/ }).first().click(),
+    page
+      .getByRole('menuitem', { name: /Abaqus/ })
+      .first()
+      .click(),
   ])
   expect(download.suggestedFilename()).toContain('mm_n_tonne')
 })
@@ -339,12 +340,17 @@ test('긴 이름을 골라도 피커가 사이드바를 안 넘는다', async ({
 
   await page.goto(`/materials/${material.id}`)
   // 이 피커를 품은 `aside` 가 재료 목록 패널이다(첫 `aside` 는 앱 내비게이션).
-  const panel = page.locator('aside').filter({ has: page.getByRole('button', { name: /^Category:/ }) })
+  const panel = page
+    .locator('aside')
+    .filter({ has: page.getByRole('button', { name: /^Category:/ }) })
   await expect(panel).toBeVisible()
 
   const trigger = page.getByRole('button', { name: /^Category:/ }).first()
   await trigger.click()
-  await page.getByRole('button', { name: new RegExp(`^초장문분류${RUN_ID}`) }).first().click()
+  await page
+    .getByRole('button', { name: new RegExp(`^초장문분류${RUN_ID}`) })
+    .first()
+    .click()
   await expect(page.getByRole('button', { name: `Category: ${LONG}` })).toBeVisible()
 
   const inside = await panel.boundingBox()
