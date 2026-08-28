@@ -150,7 +150,7 @@ export default function WorkspaceHomePage() {
         <Step
           index={1}
           icon={FileUp}
-          title="올린다"
+          title="업로드"
           detail="장비 파일을 그대로 올립니다. 어떻게 읽을지는 부서가 정한 「파일 형식」이 압니다 — 손으로 옮겨 적지 않습니다."
           to={`/w/${workspaceSlug}/tests/upload`}
           action="파일 올리기"
@@ -160,7 +160,7 @@ export default function WorkspaceHomePage() {
         <Step
           index={2}
           icon={SlidersHorizontal}
-          title="처리한다"
+          title="처리"
           detail="원본 곡선을 다듬고(단위·토우 보정·평활) 어느 결과를 쓸지 채택합니다. 채택한 것만 물성으로 올라갑니다."
           to={`/w/${workspaceSlug}/tests`}
           action="시험 데이터"
@@ -174,7 +174,7 @@ export default function WorkspaceHomePage() {
         <Step
           index={3}
           icon={Layers}
-          title="물성을 본다"
+          title="물성 조회"
           detail="같은 재료·시험 종류·방향의 시편을 묶어 대표 곡선과 물성을 냅니다. 재료 상세의 「물성」 탭입니다."
           to="/materials"
           action="재료"
@@ -184,7 +184,7 @@ export default function WorkspaceHomePage() {
         <Step
           index={4}
           icon={PackageCheck}
-          title="카드를 낸다"
+          title="카드 내보내기"
           detail="재료 상세의 「CAE 카드」 탭에서 Abaqus·OpenRadioss 덱으로 내려받습니다. 무엇을 가정했는지가 덱 주석에 함께 적힙니다."
           to="/materials"
           action="재료 상세 → CAE 카드"

@@ -206,6 +206,21 @@ class DivisionTallyOut(BaseModel):
     material_count: int
 
 
+class YearTallyOut(BaseModel):
+    """한 해 · 한 사업부의 시험 수. 그래프가 그린다. 해는 시험일(없으면 등록일)."""
+
+    year: int
+    division: str
+    run_count: int
+
+
+class DivisionOverviewOut(BaseModel):
+    divisions: list[DivisionTallyOut]
+    """**순서는 서버가 정한다** — MX · VD · DA · NW · 의료기기(실사용 요청으로 고정),
+    모르는 값은 그 뒤, 「미지정」 은 맨 뒤. 화면이 다시 정렬하지 않는다."""
+    yearly: list[YearTallyOut]
+
+
 class OverviewOut(BaseModel):
     """홈에 뿌리는 요약.
 

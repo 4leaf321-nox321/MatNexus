@@ -88,16 +88,16 @@ describe('부서 홈', () => {
     answer({ recent: [RUN], total: 1 })
     show()
 
-    const steps = ['올린다', '처리한다', '물성을 본다', '카드를 낸다']
+    const steps = ['업로드', '처리', '물성 조회', '카드 내보내기']
     for (const title of steps) {
       expect(await screen.findByText(title)).toBeInTheDocument()
     }
 
     // 1·2단계는 **내 부서**로 간다. `default` 로 가면 목록이 비어 보이고,
     // 데이터가 없는 것과 구별이 안 된다.
-    const upload = (await screen.findByText('올린다')).closest('a')
+    const upload = (await screen.findByText('업로드')).closest('a')
     expect(upload).toHaveAttribute('href', '/w/metal/tests/upload')
-    expect((await screen.findByText('처리한다')).closest('a')).toHaveAttribute(
+    expect((await screen.findByText('처리')).closest('a')).toHaveAttribute(
       'href',
       '/w/metal/tests'
     )
@@ -123,7 +123,7 @@ describe('부서 홈', () => {
     answer({ recent: [RUN], total: 5, failed: 0 })
     show()
 
-    await screen.findByText('올린다')
+    await screen.findByText('업로드')
     await waitFor(() => expect(screen.queryByText(/읽지 못한 파일/)).not.toBeInTheDocument())
   })
 

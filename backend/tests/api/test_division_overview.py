@@ -82,7 +82,8 @@ def test_사업부별로_시험과_걸친_재료를_센다(
     _upload(client, admin_headers, first, "VD")  # 같은 재료를 다른 사업부도 시험한다
     _upload(client, admin_headers, second, None)  # 안 적은 것
 
-    rows = client.get("/api/statistics/divisions", headers=admin_headers).json()
+    body = client.get("/api/statistics/divisions", headers=admin_headers).json()
+    rows = body["divisions"]
     by = {row["division"]: row for row in rows}
 
     assert by["MX"]["run_count"] == 2
@@ -98,5 +99,14 @@ def test_사업부별로_시험과_걸친_재료를_센다(
     # 안 적은 것은 「미지정」 으로 **보인다.** 숨기면 채울 일이 안 보인다.
     assert by["미지정"]["run_count"] == 1
 
-    # 시험 수가 많은 순.
-    assert rows[0]["division"] == "MX"
+    # **순서는 고정이다** — MX · VD · DA · NW · 의료기기, 미지정은 맨 뒤.
+    assert [row["division"] for row in rows] == ["MX", "VD", "미지정"]
+
+    # 연간 — 그래프가 그린다. 올해 시험이니 해가 하나다.
+    yearly = body["yearly"]
+    assert {(row["division"], row["run_count"]) for row in yearly} == {
+        ("MX", 2),
+        ("VD", 1),
+        ("미지정", 1),
+    }
+    assert len({row["year"] for row in yearly}) == 1

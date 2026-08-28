@@ -5093,6 +5093,13 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /** DivisionOverviewOut */
+        DivisionOverviewOut: {
+            /** Divisions */
+            divisions: components["schemas"]["DivisionTallyOut"][];
+            /** Yearly */
+            yearly: components["schemas"]["YearTallyOut"][];
+        };
         /**
          * DivisionTallyOut
          * @description 사업부 하나의 현황 — 그 사업부의 시험이 걸친 재료·시료·시편과 시험 수.
@@ -9405,6 +9412,18 @@ export interface components {
             name?: string | null;
         };
         /**
+         * YearTallyOut
+         * @description 한 해 · 한 사업부의 시험 수. 그래프가 그린다. 해는 시험일(없으면 등록일).
+         */
+        YearTallyOut: {
+            /** Division */
+            division: string;
+            /** Run Count */
+            run_count: number;
+            /** Year */
+            year: number;
+        };
+        /**
          * MemberCurveOut
          * @description 시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**
          *
@@ -13624,7 +13643,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DivisionTallyOut"][];
+                    "application/json": components["schemas"]["DivisionOverviewOut"];
                 };
             };
         };

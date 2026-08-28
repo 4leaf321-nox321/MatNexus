@@ -29,6 +29,7 @@ from app.modules.statistics.schemas import (
     DistributableKeyOut,
     DistributionCandidateOut,
     DistributionReportOut,
+    DivisionOverviewOut,
     DivisionTallyOut,
     EnsembleResultOut,
     EnsembleSaveRequest,
@@ -40,6 +41,7 @@ from app.modules.statistics.schemas import (
     OverviewOut,
     ScalarStatsOut,
     TallyOut,
+    YearTallyOut,
 )
 from app.modules.tests.models import TestRun, TestType
 from app.shared import permissions
@@ -382,11 +384,25 @@ def _tally(rows: Sequence[Any]) -> list[TallyOut]:
     return [TallyOut(key=str(key), label=str(key), count=int(count)) for key, count in rows]
 
 
-@router.get("/divisions", response_model=list[DivisionTallyOut])
+#: 사업부 표시 순서 — 실사용 요청으로 고정(2026-08-29). 기준정보에 순서 칸이
+#: 없어서 여기 적는다. 모르는 값은 이 뒤에 이름순, 「미지정」 은 맨 뒤.
+DIVISION_ORDER = ("MX", "VD", "DA", "NW", "의료기기")
+
+
+def _division_rank(division: str) -> tuple[int, str]:
+    if division == "미지정":
+        return (len(DIVISION_ORDER) + 1, "")
+    try:
+        return (DIVISION_ORDER.index(division), "")
+    except ValueError:
+        return (len(DIVISION_ORDER), division)
+
+
+@router.get("/divisions", response_model=DivisionOverviewOut)
 def divisions(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> list[DivisionTallyOut]:
+) -> DivisionOverviewOut:
     """사업부별 현황 — 시험 수와, 그 시험이 걸친 재료·시료·시편 수.
 
     범위는 시험의 가시성 그대로(`visible_runs`) — 홈의 다른 숫자와 같은 규칙이다.
@@ -406,18 +422,37 @@ def divisions(
         .join(Sample, Sample.id == Specimen.sample_id)
         .where(TestRun.id.in_(select(runs.c.id)))
         .group_by(TestRun.division)
-        .order_by(func.count(TestRun.id).desc())
     ).all()
-    return [
-        DivisionTallyOut(
-            division=division or "미지정",
-            run_count=int(run_count),
-            specimen_count=int(specimen_count),
-            sample_count=int(sample_count),
-            material_count=int(material_count),
-        )
-        for division, run_count, specimen_count, sample_count, material_count in rows
-    ]
+    tallies = sorted(
+        (
+            DivisionTallyOut(
+                division=division or "미지정",
+                run_count=int(run_count),
+                specimen_count=int(specimen_count),
+                sample_count=int(sample_count),
+                material_count=int(material_count),
+            )
+            for division, run_count, specimen_count, sample_count, material_count in rows
+        ),
+        key=lambda one: _division_rank(one.division),
+    )
+
+    # 연간 — 해는 시험일. 옛 시험을 오늘 올리는 일이 흔해서(이관) 등록일로 세면
+    # 이관한 해에 다 몰린다. 시험일이 빈 것만 등록일로 본다.
+    year = func.extract("year", func.coalesce(TestRun.tested_at, TestRun.created_at))
+    yearly_rows = db.execute(
+        select(year, TestRun.division, func.count(TestRun.id))
+        .where(TestRun.id.in_(select(runs.c.id)))
+        .group_by(year, TestRun.division)
+    ).all()
+    yearly = sorted(
+        (
+            YearTallyOut(year=int(y), division=division or "미지정", run_count=int(count))
+            for y, division, count in yearly_rows
+        ),
+        key=lambda one: (one.year, _division_rank(one.division)),
+    )
+    return DivisionOverviewOut(divisions=tallies, yearly=yearly)
 
 
 @router.get("/overview", response_model=OverviewOut)

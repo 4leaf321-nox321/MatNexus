@@ -3165,6 +3165,30 @@
         "title": "DistributionReportOut",
         "type": "object"
       },
+      "DivisionOverviewOut": {
+        "properties": {
+          "divisions": {
+            "items": {
+              "$ref": "#/components/schemas/DivisionTallyOut"
+            },
+            "title": "Divisions",
+            "type": "array"
+          },
+          "yearly": {
+            "items": {
+              "$ref": "#/components/schemas/YearTallyOut"
+            },
+            "title": "Yearly",
+            "type": "array"
+          }
+        },
+        "required": [
+          "divisions",
+          "yearly"
+        ],
+        "title": "DivisionOverviewOut",
+        "type": "object"
+      },
       "DivisionTallyOut": {
         "description": "사업부 하나의 현황 — 그 사업부의 시험이 걸친 재료·시료·시편과 시험 수.\n\n**사업부는 시험에만 붙는다**(ADR 0010 의 축). 재료·시편에는 사업부 칸이 없다 —\n같은 재료를 두 사업부가 시험하는 것이 정상이라, 여기의 재료 수는 「그 사업부\n시험이 걸친 재료」 이고 사업부끼리 합치면 전체보다 클 수 있다.",
         "properties": {
@@ -14554,6 +14578,30 @@
         "title": "WorkspaceUpdateRequest",
         "type": "object"
       },
+      "YearTallyOut": {
+        "description": "한 해 · 한 사업부의 시험 수. 그래프가 그린다. 해는 시험일(없으면 등록일).",
+        "properties": {
+          "division": {
+            "title": "Division",
+            "type": "string"
+          },
+          "run_count": {
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "division",
+          "run_count"
+        ],
+        "title": "YearTallyOut",
+        "type": "object"
+      },
       "app__modules__fitting__schemas__MemberCurveOut": {
         "description": "시편 하나의 원곡선. **대표 곡선 뒤에 흐리게 깔린다.**\n\n대표만 보여 주면 그것이 적절한지 알 방법이 없다 — 셋이 겹쳐 있는데 하나가\n딴 데로 가서 평균이 끌려간 것인지, 애초에 흩어짐이 그만큼인지 평균값\n하나로는 같아 보인다.",
         "properties": {
@@ -20936,11 +20984,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DivisionTallyOut"
-                  },
-                  "title": "Response Divisions Api Statistics Divisions Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/DivisionOverviewOut"
                 }
               }
             },
