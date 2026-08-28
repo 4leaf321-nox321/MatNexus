@@ -57,6 +57,7 @@ const StoragePage = lazy(() => import('@/modules/tests/StoragePage'))
 const TrashPage = lazy(() => import('@/modules/trash/TrashPage'))
 const ConnectorsPage = lazy(() => import('@/modules/pipelines/ConnectorsPage'))
 const GuidePage = lazy(() => import('@/modules/guide/GuidePage'))
+const ProfilePage = lazy(() => import('@/modules/auth/ProfilePage'))
 const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
 const UnitsPage = lazy(() => import('@/modules/units/UnitsPage'))
 const VocabularyAdminPage = lazy(
@@ -111,6 +112,7 @@ export const router = createBrowserRouter([
           // 내 활동
           { path: 'personal', ...stub('내 작업함', 'Phase 1') },
           { path: 'notifications', element: <NotificationsPage /> },
+          { path: 'me', element: <ProfilePage /> },
 
           // 공통
           { path: 'notices', element: <NoticesPage /> },

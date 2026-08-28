@@ -142,9 +142,17 @@ beforeEach(() => {
   approveMany.mockResolvedValue({ approved: ['i1'], failed: {} })
 })
 
+describe('전체 탭', () => {
+  it('가장 왼쪽이고 기본이다 — 상태를 안 거르고 다 보여 준다', async () => {
+    mount('/settings/connectors')
+    expect(await screen.findByText('Example.tra')).toBeInTheDocument()
+    expect(inbox).toHaveBeenCalledWith({ limit: 100 })
+  })
+})
+
 describe('커넥터 탭', () => {
   it('마지막 보고와 대기·실패를 보여 준다', async () => {
-    mount('/settings/connectors')
+    mount('/settings/connectors?tab=connectors')
     expect(await screen.findByText('인장기-1')).toBeInTheDocument()
     expect(screen.getByText('ZWICK-PC')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()

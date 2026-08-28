@@ -49,8 +49,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
 import { stamp } from '@/shared/lib/datetime'
 
-type Tab = 'connectors' | 'inbox' | 'failed' | 'setup'
-const TABS: readonly Tab[] = ['connectors', 'inbox', 'failed', 'setup']
+type Tab = 'all' | 'connectors' | 'inbox' | 'failed' | 'setup'
+const TABS: readonly Tab[] = ['all', 'connectors', 'inbox', 'failed', 'setup']
 
 /** 마지막 보고가 얼마나 오래됐나. **하루 넘으면 빨강, 두 시간 넘으면 주황.** */
 export function seenTone(lastSeen: string | null | undefined, now = Date.now()): string {
@@ -83,7 +83,7 @@ function statusBadge(status: string) {
 export default function ConnectorsPage() {
   const [params, setParams] = useSearchParams()
   const wanted = params.get('tab')
-  const tab: Tab = TABS.includes(wanted as Tab) ? (wanted as Tab) : 'connectors'
+  const tab: Tab = TABS.includes(wanted as Tab) ? (wanted as Tab) : 'all'
   const [open, setOpen] = useState<string | null>(null)
 
   return (
@@ -94,6 +94,7 @@ export default function ConnectorsPage() {
       />
       <Tabs value={tab} onValueChange={(value) => setParams({ tab: value })} className="mb-4">
         <TabsList>
+          <TabsTrigger value="all">전체</TabsTrigger>
           <TabsTrigger value="connectors">커넥터</TabsTrigger>
           <TabsTrigger value="inbox">수집함</TabsTrigger>
           <TabsTrigger value="failed">실패</TabsTrigger>
@@ -101,6 +102,7 @@ export default function ConnectorsPage() {
         </TabsList>
       </Tabs>
 
+      {tab === 'all' && <InboxTab status="" onOpen={setOpen} />}
       {tab === 'connectors' && <ConnectorsTab />}
       {tab === 'inbox' && <InboxTab status="suggested" onOpen={setOpen} />}
       {tab === 'failed' && <InboxTab status="failed" onOpen={setOpen} />}
@@ -285,7 +287,8 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
   const [filter, setFilter] = useState(status)
   useEffect(() => setFilter(status), [status])
   const { data, error, loading, reload } = useResource(
-    () => pipelinesApi.inbox({ status: filter, limit: 100 }),
+    // 빈 필터 = 전체. 서버에 status 를 안 보낸다.
+    () => pipelinesApi.inbox({ ...(filter ? { status: filter } : {}), limit: 100 }),
     [filter]
   )
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -325,6 +328,13 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-1">
+        <Button
+          size="sm"
+          variant={filter === '' ? 'default' : 'outline'}
+          onClick={() => setFilter('')}
+        >
+          전체
+        </Button>
         {INBOX_STATUSES.map((one) => (
           <Button
             key={one}
@@ -359,7 +369,9 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
       {loading && !data && <p className="text-muted-foreground text-sm">불러오는 중…</p>}
       {data && data.items.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          「{STATUS_LABELS[filter as keyof typeof STATUS_LABELS] ?? filter}」 인 항목이 없습니다.
+          {filter
+            ? `「${STATUS_LABELS[filter as keyof typeof STATUS_LABELS] ?? filter}」 인 항목이 없습니다.`
+            : '아직 받은 파일이 없습니다.'}
         </p>
       )}
       {data && data.items.length > 0 && (

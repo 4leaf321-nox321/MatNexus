@@ -109,6 +109,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: '내 작업함', icon: User, to: '/personal' },
       { label: '알림', icon: Bell, to: '/notifications' },
+      // 팝업이었다가 화면이 됐다 — 액세스 토큰까지 붙자 팝업이 좁았다.
+      { label: '내 정보', icon: UserCog, to: '/me' },
     ],
   },
   {
