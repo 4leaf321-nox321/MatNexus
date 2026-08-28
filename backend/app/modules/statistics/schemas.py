@@ -240,18 +240,35 @@ class CompareOut(BaseModel):
 
 class DistributionGroupOut(BaseModel):
     group: str
-    spread: SpreadOut | None
-    """2건 미만이면 없다. 화면은 그때 점만 찍는다."""
+    cells: dict[str, SpreadOut | None]
+    """항목 키 → 흩어짐. **2건 미만이면 `null`** — 화면이 「상자를 못 그린다」 고 적는다.
+    항목을 여럿 고르면 열이 여럿이 된다."""
 
 
 class AnalysisDistributionOut(BaseModel):
-    scalar_key: str
-    scalar_label: str
-    si_unit: str
     group_by: str
+    selected: list[AnalysisScalarOut]
+    """고른 항목들 — **열의 차례가 이것이다.** 안 고르면 가장 많은 하나."""
     groups: list[DistributionGroupOut]
     scalars: list[AnalysisScalarOut]
     skipped_unadopted: int
+
+
+class MaterialChoiceOut(BaseModel):
+    """비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.**
+
+    전체 목록에서 고르게 하면 물성이 없는 재료를 담고 빈 줄을 본다. 무엇을 몇 건
+    갖고 있는지 함께 줘서 담기 전에 보이게 한다.
+    """
+
+    material_id: uuid.UUID
+    material_name: str
+    family: str
+    category: str
+    scalar_count: int
+    """항목 수 — 「인장강도·탄성계수 …」 몇 가지를 갖고 있나."""
+    run_count: int
+    """그 재료에서 채택된 시험 수."""
 
 
 class SpecGapOut(BaseModel):
@@ -305,12 +322,21 @@ class CoverageCellOut(BaseModel):
     run_count: int
     adopted_count: int
     """채택까지 간 수. **올리기만 한 것과 물성이 나온 것은 다르다** — 그 차이가 남은 일."""
+    material_count: int = 0
+    """그 분류에서 이 시험을 해 본 재료 수. 분류에 재료가 10개인데 1개만 쟀으면
+    「쟀다」 로 읽히면 안 된다."""
 
 
-class CoverageMaterialOut(BaseModel):
-    material_id: uuid.UUID
-    material_name: str
+class CoverageGroupOut(BaseModel):
+    """재료 분류 한 칸 — **재료가 아니라 분류가 행이다.**
+
+    재료마다 한 줄이면 94줄이 되고, 그 표에서 「무엇을 안 쟀나」 를 읽을 수 없다.
+    분류로 접으면 「Metal/Steel 은 인장은 했고 점탄성은 안 했다」 가 한 줄에 온다.
+    """
+
     family: str
+    category: str
+    material_count: int
     cells: dict[str, CoverageCellOut]
 
 
@@ -321,7 +347,7 @@ class CoverageTypeOut(BaseModel):
 
 class AnalysisCoverageOut(BaseModel):
     test_types: list[CoverageTypeOut]
-    materials: list[CoverageMaterialOut]
+    groups: list[CoverageGroupOut]
 
 
 class DivisionTallyOut(BaseModel):

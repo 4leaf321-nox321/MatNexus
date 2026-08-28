@@ -2321,9 +2321,35 @@ export interface paths {
         };
         /**
          * Analysis Distribution
-         * @description 사업부·재료군별 흩어짐. **이상치가 곧 재시험 후보다.**
+         * @description 재료군·분류별 흩어짐. **이상치가 곧 재시험 후보다.**
+         *
+         *     항목을 여럿 고르면 **열이 여럿**이 된다 — 「인장강도와 탄성계수가 같은 분류에서
+         *     어떻게 흩어지나」 를 한 표에서 본다. 사업부는 여기 없다: 흩어짐은 재료의 성질이지
+         *     누가 쟀는가의 성질이 아니다(사업부별 건수는 홈에 있다).
          */
         get: operations["analysis_distribution_api_statistics_analysis_distribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/analysis/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Materials
+         * @description 비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.**
+         *
+         *     전체 목록에서 고르게 하면 물성이 없는 재료를 담고 빈 줄을 본다.
+         */
+        get: operations["analysis_materials_api_statistics_analysis_materials_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3983,8 +4009,8 @@ export interface components {
         };
         /** AnalysisCoverageOut */
         AnalysisCoverageOut: {
-            /** Materials */
-            materials: components["schemas"]["CoverageMaterialOut"][];
+            /** Groups */
+            groups: components["schemas"]["CoverageGroupOut"][];
             /** Test Types */
             test_types: components["schemas"]["CoverageTypeOut"][];
         };
@@ -3994,14 +4020,10 @@ export interface components {
             group_by: string;
             /** Groups */
             groups: components["schemas"]["DistributionGroupOut"][];
-            /** Scalar Key */
-            scalar_key: string;
-            /** Scalar Label */
-            scalar_label: string;
             /** Scalars */
             scalars: components["schemas"]["AnalysisScalarOut"][];
-            /** Si Unit */
-            si_unit: string;
+            /** Selected */
+            selected: components["schemas"]["AnalysisScalarOut"][];
             /** Skipped Unadopted */
             skipped_unadopted: number;
         };
@@ -4903,24 +4925,32 @@ export interface components {
         CoverageCellOut: {
             /** Adopted Count */
             adopted_count: number;
+            /**
+             * Material Count
+             * @default 0
+             */
+            material_count: number;
             /** Run Count */
             run_count: number;
         };
-        /** CoverageMaterialOut */
-        CoverageMaterialOut: {
+        /**
+         * CoverageGroupOut
+         * @description 재료 분류 한 칸 — **재료가 아니라 분류가 행이다.**
+         *
+         *     재료마다 한 줄이면 94줄이 되고, 그 표에서 「무엇을 안 쟀나」 를 읽을 수 없다.
+         *     분류로 접으면 「Metal/Steel 은 인장은 했고 점탄성은 안 했다」 가 한 줄에 온다.
+         */
+        CoverageGroupOut: {
+            /** Category */
+            category: string;
             /** Cells */
             cells: {
                 [key: string]: components["schemas"]["CoverageCellOut"];
             };
             /** Family */
             family: string;
-            /**
-             * Material Id
-             * Format: uuid
-             */
-            material_id: string;
-            /** Material Name */
-            material_name: string;
+            /** Material Count */
+            material_count: number;
         };
         /** CoverageTypeOut */
         CoverageTypeOut: {
@@ -5304,9 +5334,12 @@ export interface components {
         };
         /** DistributionGroupOut */
         DistributionGroupOut: {
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["SpreadOut"] | null;
+            };
             /** Group */
             group: string;
-            spread: components["schemas"]["SpreadOut"] | null;
         };
         /**
          * DistributionReportOut
@@ -6240,6 +6273,30 @@ export interface components {
             name: string | null;
             /** Reason */
             reason: string;
+        };
+        /**
+         * MaterialChoiceOut
+         * @description 비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.**
+         *
+         *     전체 목록에서 고르게 하면 물성이 없는 재료를 담고 빈 줄을 본다. 무엇을 몇 건
+         *     갖고 있는지 함께 줘서 담기 전에 보이게 한다.
+         */
+        MaterialChoiceOut: {
+            /** Category */
+            category: string;
+            /** Family */
+            family: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Run Count */
+            run_count: number;
+            /** Scalar Count */
+            scalar_count: number;
         };
         /** MaterialCreateRequest */
         MaterialCreateRequest: {
@@ -14002,7 +14059,7 @@ export interface operations {
     analysis_distribution_api_statistics_analysis_distribution_get: {
         parameters: {
             query?: {
-                scalar?: string | null;
+                scalar?: string[];
                 group_by?: string;
             };
             header?: never;
@@ -14027,6 +14084,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_materials_api_statistics_analysis_materials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialChoiceOut"][];
                 };
             };
         };

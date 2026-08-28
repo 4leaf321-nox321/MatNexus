@@ -45,6 +45,7 @@ from app.modules.statistics.schemas import (
     EnsembleResultOut,
     EnsembleSaveRequest,
     GroupOut,
+    MaterialChoiceOut,
     MaterialStatisticsOut,
     MemberCurveOut,
     ObservationOut,
@@ -424,6 +425,18 @@ def _pick_scalar(collected: analysis.Collected, wanted: str | None) -> str | Non
     return str(catalog[0]["key"]) if catalog else None
 
 
+def _pick_scalars(collected: analysis.Collected, wanted: list[str]) -> list[AnalysisScalarOut]:
+    """고른 항목들. **차례는 목록의 차례** — 화면이 고른 순서대로 열을 세우면
+    같은 조합을 다시 골랐을 때 열이 뒤바뀐다. 안 고르면 가장 많은 하나."""
+    catalog = [
+        AnalysisScalarOut(**one) for one in analysis.scalar_catalog(collected.observations)
+    ]
+    if not catalog:
+        return []
+    picked = [one for one in catalog if one.key in set(wanted)]
+    return picked or catalog[:1]
+
+
 @router.get("/analysis/compare", response_model=CompareOut)
 def analysis_compare(
     material_ids: list[uuid.UUID] = Query(default=[]),
@@ -475,39 +488,55 @@ def analysis_compare(
     )
 
 
+@router.get("/analysis/materials", response_model=list[MaterialChoiceOut])
+def analysis_materials(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[MaterialChoiceOut]:
+    """비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.**
+
+    전체 목록에서 고르게 하면 물성이 없는 재료를 담고 빈 줄을 본다.
+    """
+    collected = analysis.collect(db, user)
+    return [
+        MaterialChoiceOut(**one) for one in analysis.material_choices(collected.observations)
+    ]
+
+
 @router.get("/analysis/distribution", response_model=AnalysisDistributionOut)
 def analysis_distribution(
-    scalar: str | None = Query(default=None),
-    group_by: str = Query(default="division", pattern="^(division|family|category)$"),
+    scalar: list[str] = Query(default=[]),
+    group_by: str = Query(default="family", pattern="^(family|category)$"),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> AnalysisDistributionOut:
-    """사업부·재료군별 흩어짐. **이상치가 곧 재시험 후보다.**"""
+    """재료군·분류별 흩어짐. **이상치가 곧 재시험 후보다.**
+
+    항목을 여럿 고르면 **열이 여럿**이 된다 — 「인장강도와 탄성계수가 같은 분류에서
+    어떻게 흩어지나」 를 한 표에서 본다. 사업부는 여기 없다: 흩어짐은 재료의 성질이지
+    누가 쟀는가의 성질이 아니다(사업부별 건수는 홈에 있다).
+    """
     collected = analysis.collect(db, user)
-    key = _pick_scalar(collected, scalar)
-    mine = [one for one in collected.observations if one.scalar_key == key]
+    picked = _pick_scalars(collected, scalar)
+    keys = [one.key for one in picked]
 
-    buckets: dict[str, list[float]] = {}
-    for one in mine:
-        bucket = {
-            "division": one.division,
-            "family": one.family,
-            "category": one.category,
-        }[group_by]
-        buckets.setdefault(bucket, []).append(one.value)
-
-    def order(name: str) -> tuple[int, str]:
-        return divisions_order.rank(name) if group_by == "division" else (0, name)
+    buckets: dict[str, dict[str, list[float]]] = {}
+    for one in collected.observations:
+        if one.scalar_key not in keys:
+            continue
+        bucket = {"family": one.family, "category": one.category}[group_by]
+        buckets.setdefault(bucket, {}).setdefault(one.scalar_key, []).append(one.value)
 
     groups = [
-        DistributionGroupOut(group=name, spread=_spread_out(analysis.spread(values)))
-        for name, values in sorted(buckets.items(), key=lambda entry: order(entry[0]))
+        DistributionGroupOut(
+            group=name,
+            cells={key: _spread_out(analysis.spread(per_key.get(key, []))) for key in keys},
+        )
+        for name, per_key in sorted(buckets.items())
     ]
     return AnalysisDistributionOut(
-        scalar_key=key or "",
-        scalar_label=mine[0].scalar_label if mine else "",
-        si_unit=mine[0].si_unit if mine else "1",
         group_by=group_by,
+        selected=picked,
         groups=groups,
         scalars=_scalars(collected),
         skipped_unadopted=collected.skipped_unadopted,

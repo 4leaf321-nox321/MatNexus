@@ -124,11 +124,11 @@
       },
       "AnalysisCoverageOut": {
         "properties": {
-          "materials": {
+          "groups": {
             "items": {
-              "$ref": "#/components/schemas/CoverageMaterialOut"
+              "$ref": "#/components/schemas/CoverageGroupOut"
             },
-            "title": "Materials",
+            "title": "Groups",
             "type": "array"
           },
           "test_types": {
@@ -141,7 +141,7 @@
         },
         "required": [
           "test_types",
-          "materials"
+          "groups"
         ],
         "title": "AnalysisCoverageOut",
         "type": "object"
@@ -159,14 +159,6 @@
             "title": "Groups",
             "type": "array"
           },
-          "scalar_key": {
-            "title": "Scalar Key",
-            "type": "string"
-          },
-          "scalar_label": {
-            "title": "Scalar Label",
-            "type": "string"
-          },
           "scalars": {
             "items": {
               "$ref": "#/components/schemas/AnalysisScalarOut"
@@ -174,9 +166,12 @@
             "title": "Scalars",
             "type": "array"
           },
-          "si_unit": {
-            "title": "Si Unit",
-            "type": "string"
+          "selected": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisScalarOut"
+            },
+            "title": "Selected",
+            "type": "array"
           },
           "skipped_unadopted": {
             "title": "Skipped Unadopted",
@@ -184,10 +179,8 @@
           }
         },
         "required": [
-          "scalar_key",
-          "scalar_label",
-          "si_unit",
           "group_by",
+          "selected",
           "groups",
           "scalars",
           "skipped_unadopted"
@@ -2444,6 +2437,11 @@
             "title": "Adopted Count",
             "type": "integer"
           },
+          "material_count": {
+            "default": 0,
+            "title": "Material Count",
+            "type": "integer"
+          },
           "run_count": {
             "title": "Run Count",
             "type": "integer"
@@ -2456,8 +2454,13 @@
         "title": "CoverageCellOut",
         "type": "object"
       },
-      "CoverageMaterialOut": {
+      "CoverageGroupOut": {
+        "description": "재료 분류 한 칸 — **재료가 아니라 분류가 행이다.**\n\n재료마다 한 줄이면 94줄이 되고, 그 표에서 「무엇을 안 쟀나」 를 읽을 수 없다.\n분류로 접으면 「Metal/Steel 은 인장은 했고 점탄성은 안 했다」 가 한 줄에 온다.",
         "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
           "cells": {
             "additionalProperties": {
               "$ref": "#/components/schemas/CoverageCellOut"
@@ -2469,23 +2472,18 @@
             "title": "Family",
             "type": "string"
           },
-          "material_id": {
-            "format": "uuid",
-            "title": "Material Id",
-            "type": "string"
-          },
-          "material_name": {
-            "title": "Material Name",
-            "type": "string"
+          "material_count": {
+            "title": "Material Count",
+            "type": "integer"
           }
         },
         "required": [
-          "material_id",
-          "material_name",
           "family",
+          "category",
+          "material_count",
           "cells"
         ],
-        "title": "CoverageMaterialOut",
+        "title": "CoverageGroupOut",
         "type": "object"
       },
       "CoverageTypeOut": {
@@ -3445,24 +3443,28 @@
       },
       "DistributionGroupOut": {
         "properties": {
+          "cells": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SpreadOut"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Cells",
+            "type": "object"
+          },
           "group": {
             "title": "Group",
             "type": "string"
-          },
-          "spread": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SpreadOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "required": [
           "group",
-          "spread"
+          "cells"
         ],
         "title": "DistributionGroupOut",
         "type": "object"
@@ -5881,6 +5883,46 @@
           "reason"
         ],
         "title": "MaterialBlockedOut",
+        "type": "object"
+      },
+      "MaterialChoiceOut": {
+        "description": "비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.**\n\n전체 목록에서 고르게 하면 물성이 없는 재료를 담고 빈 줄을 본다. 무엇을 몇 건\n갖고 있는지 함께 줘서 담기 전에 보이게 한다.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "run_count": {
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "scalar_count": {
+            "title": "Scalar Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "material_id",
+          "material_name",
+          "family",
+          "category",
+          "scalar_count",
+          "run_count"
+        ],
+        "title": "MaterialChoiceOut",
         "type": "object"
       },
       "MaterialCreateRequest": {
@@ -21631,7 +21673,7 @@
     },
     "/api/statistics/analysis/distribution": {
       "get": {
-        "description": "사업부·재료군별 흩어짐. **이상치가 곧 재시험 후보다.**",
+        "description": "재료군·분류별 흩어짐. **이상치가 곧 재시험 후보다.**\n\n항목을 여럿 고르면 **열이 여럿**이 된다 — 「인장강도와 탄성계수가 같은 분류에서\n어떻게 흩어지나」 를 한 표에서 본다. 사업부는 여기 없다: 흩어짐은 재료의 성질이지\n누가 쟀는가의 성질이 아니다(사업부별 건수는 홈에 있다).",
         "operationId": "analysis_distribution_api_statistics_analysis_distribution_get",
         "parameters": [
           {
@@ -21639,15 +21681,12 @@
             "name": "scalar",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Scalar"
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Scalar",
+              "type": "array"
             }
           },
           {
@@ -21655,8 +21694,8 @@
             "name": "group_by",
             "required": false,
             "schema": {
-              "default": "division",
-              "pattern": "^(division|family|category)$",
+              "default": "family",
+              "pattern": "^(family|category)$",
               "title": "Group By",
               "type": "string"
             }
@@ -21685,6 +21724,32 @@
           }
         },
         "summary": "Analysis Distribution",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/analysis/materials": {
+      "get": {
+        "description": "비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.**\n\n전체 목록에서 고르게 하면 물성이 없는 재료를 담고 빈 줄을 본다.",
+        "operationId": "analysis_materials_api_statistics_analysis_materials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MaterialChoiceOut"
+                  },
+                  "title": "Response Analysis Materials Api Statistics Analysis Materials Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Analysis Materials",
         "tags": [
           "statistics"
         ]

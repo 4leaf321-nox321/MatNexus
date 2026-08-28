@@ -43,6 +43,7 @@ from app.shared import permissions
 class Observation:
     """잰 값 하나 — **어느 재료의, 어느 사업부가, 언제, 무엇을.**"""
 
+    run_id: uuid.UUID
     material_id: uuid.UUID
     material_name: str
     family: str
@@ -126,6 +127,7 @@ def collect(
                 continue
             out.append(
                 Observation(
+                    run_id=run.id,
                     material_id=material.id,
                     material_name=material.record_name,
                     family=material.family,
@@ -188,6 +190,43 @@ def spread(values: Iterable[float]) -> Spread | None:
     )
 
 
+def material_choices(observations: Sequence[Observation]) -> list[dict[str, Any]]:
+    """비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.**
+
+    전체 목록에서 고르게 하면 물성이 없는 재료를 담고 빈 줄을 본다. 무엇을 몇 건
+    갖고 있는지 함께 줘서 담기 전에 보이게 한다.
+    """
+    facts: dict[uuid.UUID, dict[str, Any]] = {}
+    for one in observations:
+        entry = facts.setdefault(
+            one.material_id,
+            {
+                "material_id": one.material_id,
+                "material_name": one.material_name,
+                "family": one.family,
+                "category": one.category,
+                "scalars": set(),
+                "runs": set(),
+            },
+        )
+        entry["scalars"].add(one.scalar_key)
+        entry["runs"].add(one.run_id)
+    return sorted(
+        (
+            {
+                "material_id": one["material_id"],
+                "material_name": one["material_name"],
+                "family": one["family"],
+                "category": one["category"],
+                "scalar_count": len(one["scalars"]),
+                "run_count": len(one["runs"]),
+            }
+            for one in facts.values()
+        ),
+        key=lambda one: str(one["material_name"]),
+    )
+
+
 def scalar_catalog(observations: Sequence[Observation]) -> list[dict[str, Any]]:
     """고를 수 있는 항목 — **실제로 값이 있는 것만.**
 
@@ -213,22 +252,25 @@ def scalar_catalog(observations: Sequence[Observation]) -> list[dict[str, Any]]:
 
 
 def coverage(db: Session, user: User) -> dict[str, Any]:
-    """재료-시험종류 격자. **빈 칸이 다음에 할 시험이다.**
+    """분류(재료군-분류) x 시험종류 격자. **빈 칸이 다음에 할 시험이다.**
+
+    재료마다 한 줄이면 94줄이 되고 그 표에서는 「무엇을 안 쟀나」 가 안 읽힌다.
+    분류로 접으면 「Metal/Steel 은 인장은 했고 점탄성은 안 했다」 가 한 줄에 온다.
 
     스칼라를 안 본다 — 「쟀는가」 는 시험이 있는가지 값이 나왔는가가 아니다. 다만
-    **채택까지 간 수를 따로 센다**: 올리기만 하고 처리를 안 한 것과 물성이 나온
-    것은 다르고, 그 차이가 곧 남은 일이다.
+    **채택까지 간 수와 재료 수를 따로 센다**: 올리기만 한 것과 물성이 나온 것은
+    다르고, 분류에 재료가 10개인데 1개만 쟀으면 「쟀다」 로 읽히면 안 된다.
     """
     runs = _runs(db, user).subquery()
     rows = db.execute(
         select(
-            Material.id,
-            Material.record_name,
             Material.family,
+            Material.category,
             TestType.key,
             TestType.label,
             func.count(TestRun.id),
             func.count(TestRun.adopted_result_id),
+            func.count(func.distinct(Material.id)),
         )
         .join(Specimen, Specimen.id == TestRun.specimen_id)
         .join(Sample, Sample.id == Specimen.sample_id)
@@ -240,28 +282,47 @@ def coverage(db: Session, user: User) -> dict[str, Any]:
             Sample.deleted_at.is_(None),
             Material.deleted_at.is_(None),
         )
-        .group_by(
-            Material.id,
-            Material.record_name,
-            Material.family,
-            TestType.key,
-            TestType.label,
+        .group_by(Material.family, Material.category, TestType.key, TestType.label)
+    ).all()
+
+    # **분류의 재료 수는 시험과 무관하다.** 시험 쪽에서 세면 「시험한 재료 수」 가
+    # 되고, 그러면 0/10 인 분류가 표에서 아예 사라진다 — 그 줄이 요점인데.
+    totals = db.execute(
+        select(Material.family, Material.category, func.count(Material.id))
+        .where(
+            Material.id.in_(permissions.visible_material_ids(db, user)),
+            Material.deleted_at.is_(None),
         )
+        .group_by(Material.family, Material.category)
     ).all()
 
     types: dict[str, str] = {}
-    materials: dict[uuid.UUID, dict[str, Any]] = {}
-    for material_id, name, family, type_key, type_label, total, adopted in rows:
+    groups: dict[tuple[str, str], dict[str, Any]] = {
+        (str(family), str(category)): {
+            "family": str(family),
+            "category": str(category),
+            "material_count": int(count),
+            "cells": {},
+        }
+        for family, category, count in totals
+    }
+    for family, category, type_key, type_label, total, adopted, materials in rows:
         types[str(type_key)] = str(type_label)
-        entry = materials.setdefault(
-            material_id,
-            {"material_id": material_id, "material_name": name, "family": family, "cells": {}},
+        entry = groups.setdefault(
+            (str(family), str(category)),
+            {
+                "family": str(family),
+                "category": str(category),
+                "material_count": 0,
+                "cells": {},
+            },
         )
         entry["cells"][str(type_key)] = {
             "run_count": int(total),
             "adopted_count": int(adopted),
+            "material_count": int(materials),
         }
     return {
         "test_types": [{"key": key, "label": label} for key, label in sorted(types.items())],
-        "materials": sorted(materials.values(), key=lambda one: str(one["material_name"])),
+        "groups": sorted(groups.values(), key=lambda one: (one["family"], one["category"])),
     }

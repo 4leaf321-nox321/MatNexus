@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.processing.models import ProcessingResult
@@ -136,25 +137,71 @@ class Test비교:
 
 
 class Test분포:
-    def test_사업부별로_묶고_고정_차례로_준다(
+    def test_분류로_묶고_안_고르면_가장_많은_항목_하나(
         self, client: TestClient, admin_headers: dict[str, str], seeded: dict[str, Any]
     ) -> None:
-        body = client.get(
-            "/api/statistics/analysis/distribution?group_by=division", headers=admin_headers
-        ).json()
-        assert [one["group"] for one in body["groups"]] == ["MX", "VD"]
-        mx = body["groups"][0]["spread"]
-        assert mx["count"] == 2 and mx["median"] == pytest.approx(310.0)
-
-    def test_1건이면_상자를_안_그린다(
-        self, client: TestClient, admin_headers: dict[str, str], seeded: dict[str, Any]
-    ) -> None:
-        """2건 미만은 사분위가 없다 — 0 을 그리면 「일정하다」 로 읽힌다."""
         body = client.get(
             "/api/statistics/analysis/distribution?group_by=category", headers=admin_headers
         ).json()
+        assert [one["key"] for one in body["selected"]] == ["tensile_strength"]
         groups = {one["group"]: one for one in body["groups"]}
-        assert groups["Steel"]["spread"]["count"] == 4
+        assert groups["Steel"]["cells"]["tensile_strength"]["count"] == 4
+
+    def test_항목을_여럿_고르면_열이_여럿이다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        seeded: dict[str, Any],
+    ) -> None:
+        """「인장강도와 탄성계수가 같은 분류에서 어떻게 흩어지나」 를 한 표에서."""
+        from app.modules.processing.models import ProcessingResult
+
+        for result in db.scalars(select(ProcessingResult)):
+            result.scalars = [
+                *result.scalars,
+                {
+                    "key": "youngs_modulus",
+                    "label": "탄성계수",
+                    "value": 200.0,
+                    "si_unit": "Pa",
+                },
+            ]
+        db.commit()
+
+        body = client.get(
+            "/api/statistics/analysis/distribution"
+            "?group_by=category&scalar=tensile_strength&scalar=youngs_modulus",
+            headers=admin_headers,
+        ).json()
+        assert [one["key"] for one in body["selected"]] == [
+            "tensile_strength",
+            "youngs_modulus",
+        ]
+        cells = body["groups"][0]["cells"]
+        assert set(cells) == {"tensile_strength", "youngs_modulus"}
+
+    def test_2건_미만이면_상자가_없다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: dict[str, Any]
+    ) -> None:
+        """0 을 그리면 「일정하다」 로 읽힌다 — 없는 것과 다르다."""
+        body = client.get(
+            "/api/statistics/analysis/distribution?group_by=family", headers=admin_headers
+        ).json()
+        assert body["groups"][0]["cells"]["tensile_strength"]["count"] == 4
+
+
+class Test담을_수_있는_재료:
+    def test_채택된_물성이_있는_것만_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: dict[str, Any]
+    ) -> None:
+        """물성이 없는 재료를 담으면 빈 줄을 본다."""
+        rows = client.get("/api/statistics/analysis/materials", headers=admin_headers).json()
+        by_name = {one["material_name"]: one for one in rows}
+        first = by_name[seeded["first"]["record_name"]]
+        assert first["run_count"] == 3 and first["scalar_count"] == 1
+        # 채택 안 된 시험만 있는 재료는 목록에 없다.
+        assert by_name[seeded["second"]["record_name"]]["run_count"] == 1
 
 
 class Test사양_대비:
@@ -205,6 +252,13 @@ class Test커버리지:
         """**올리기만 한 것과 물성이 나온 것은 다르다** — 그 차이가 남은 일이다."""
         body = client.get("/api/statistics/analysis/coverage", headers=admin_headers).json()
         assert [one["key"] for one in body["test_types"]] == ["tensile"]
-        by_name = {one["material_name"]: one for one in body["materials"]}
-        spcc = by_name[seeded["second"]["record_name"]]["cells"]["tensile"]
-        assert spcc["run_count"] == 2 and spcc["adopted_count"] == 1
+        # **행은 재료가 아니라 분류다** — 94줄짜리 표에서는 「무엇을 안 쟀나」 가 안 읽힌다.
+        group = next(
+            one
+            for one in body["groups"]
+            if (one["family"], one["category"]) == ("Metal", "Steel")
+        )
+        assert group["material_count"] == 2
+        cell = group["cells"]["tensile"]
+        assert cell["run_count"] == 5 and cell["adopted_count"] == 4
+        assert cell["material_count"] == 2

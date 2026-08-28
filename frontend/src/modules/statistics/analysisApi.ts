@@ -15,9 +15,7 @@ export type SpecGap = components['schemas']['AnalysisSpecGapOut']
 export type AnalysisTrend = components['schemas']['AnalysisTrendOut']
 export type Coverage = components['schemas']['AnalysisCoverageOut']
 export type Spread = components['schemas']['SpreadOut']
-/** 비교에 더할 재료. 목록의 한 줄에서 이름만 쓴다. */
-export type MaterialChoice = components['schemas']['MaterialOut']
-type MaterialPage = components['schemas']['Page_MaterialOut_']
+export type MaterialChoice = components['schemas']['MaterialChoiceOut']
 
 export const analysisApi = {
   /** 안 고르면 빈 표. 전체를 자동으로 세우면 94개짜리 표가 나온다. */
@@ -26,11 +24,12 @@ export const analysisApi = {
     return api.get<Compare>(`/statistics/analysis/compare${query ? `?${query}` : ''}`)
   },
 
-  distribution: (scalar: string, groupBy: string) =>
+  /** 항목을 여럿 주면 **열이 여럿**이 된다. 안 주면 서버가 가장 많은 하나를 고른다. */
+  distribution: (scalars: string[], groupBy: string) =>
     api.get<AnalysisDistribution>(
-      `/statistics/analysis/distribution?group_by=${groupBy}${
-        scalar ? `&scalar=${encodeURIComponent(scalar)}` : ''
-      }`
+      `/statistics/analysis/distribution?group_by=${groupBy}${scalars
+        .map((one) => `&scalar=${encodeURIComponent(one)}`)
+        .join('')}`
     ),
 
   specGap: () => api.get<SpecGap>('/statistics/analysis/spec-gap'),
@@ -45,13 +44,8 @@ export const analysisApi = {
   coverage: () => api.get<Coverage>('/statistics/analysis/coverage'),
 
   /**
-   * 비교에 더할 재료 찾기. **재료 모듈을 직접 부르지 않는다**(모듈 경계) —
-   * 목록 주소를 여기서 안다. 두 글자 미만이면 서버에 안 묻는다.
+   * 비교에 담을 수 있는 재료 — **채택된 물성이 있는 것만.** 전체 목록에서 고르게
+   * 하면 물성이 없는 재료를 담고 빈 줄을 본다.
    */
-  findMaterials: (q: string) =>
-    q.trim().length < 1
-      ? Promise.resolve([] as MaterialChoice[])
-      : api
-          .get<MaterialPage>(`/materials?q=${encodeURIComponent(q.trim())}&limit=10`)
-          .then((page) => page.items),
+  materials: () => api.get<MaterialChoice[]>('/statistics/analysis/materials'),
 }

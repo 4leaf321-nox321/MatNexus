@@ -24,12 +24,18 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { analysisApi } from '@/modules/statistics/analysisApi'
-import type { AnalysisScalar, MaterialChoice, Spread } from '@/modules/statistics/analysisApi'
-import { colorOf } from '@/modules/statistics/divisionColors'
+import type { AnalysisScalar, Spread } from '@/modules/statistics/analysisApi'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import {
   Table,
@@ -169,10 +175,7 @@ function GroupPicker({
  */
 function CompareTab() {
   const [picked, setPicked] = useState<string[]>([])
-  const [term, setTerm] = useState('')
-  // **재료 모듈을 직접 부르지 않는다**(모듈 경계). 목록 주소를 여기서 안다 —
-  // 파이프라인의 시편 찾기와 같은 방식이다.
-  const found = useResource<MaterialChoice[]>(() => analysisApi.findMaterials(term), [term])
+  const [open, setOpen] = useState(false)
   const compare = useResource(() => analysisApi.compare(picked), [picked.join(',')])
 
   // 고른 재료들이 **함께 가진** 항목만 열로 세운다 — 한쪽에만 있는 값을 나란히
@@ -199,25 +202,16 @@ function CompareTab() {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Input
-          value={term}
-          onChange={(event) => setTerm(event.target.value)}
-          placeholder="재료 찾아 더하기"
-          aria-label="재료 찾기"
-          className="h-8 w-64"
-        />
-        {(found.data ?? []).slice(0, 6).map((one) => (
-          <Button
-            key={one.id}
-            size="sm"
-            variant="outline"
-            disabled={picked.includes(one.id)}
-            onClick={() => setPicked((now) => [...now, one.id])}
-          >
-            + {one.record_name}
-          </Button>
-        ))}
+        <Button size="sm" onClick={() => setOpen(true)}>
+          재료 고르기
+        </Button>
+        {picked.length > 0 && (
+          <span className="text-muted-foreground text-xs">{picked.length}개 담김</span>
+        )}
       </div>
+      {open && (
+        <MaterialPickerDialog picked={picked} onClose={() => setOpen(false)} onChange={setPicked} />
+      )}
 
       {picked.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-1">
@@ -243,7 +237,8 @@ function CompareTab() {
       <ErrorNotice error={compare.error} className="mb-3" />
       {picked.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          견줄 재료를 골라 주세요. 두 개부터 표가 뜻이 있습니다.
+          「재료 고르기」 를 눌러 담아 주세요 — 채택된 물성이 있는 재료만 뜹니다. 두 개부터 표가
+          뜻이 있습니다.
         </p>
       )}
       {picked.length > 0 && columns.length === 0 && !compare.loading && (
@@ -306,10 +301,180 @@ function CompareTab() {
   )
 }
 
+/**
+ * 재료 고르기 — **채택된 물성이 있는 것만 뜬다.**
+ *
+ * 자유 입력 칸이었다. 그러면 무엇을 칠 수 있는지 알 수 없고, 쳐서 찾은 재료에 물성이
+ * 없으면 담고 나서야 빈 줄을 본다. 목록으로 바꾸고 **무엇을 몇 건 갖고 있는지**
+ * 함께 보인다.
+ */
+function MaterialPickerDialog({
+  picked,
+  onClose,
+  onChange,
+}: {
+  picked: string[]
+  onClose: () => void
+  onChange: (next: string[]) => void
+}) {
+  const list = useResource(() => analysisApi.materials(), [])
+  const [term, setTerm] = useState('')
+  const rows = useMemo(() => {
+    const needle = term.trim().toLowerCase()
+    const all = list.data ?? []
+    if (!needle) return all
+    return all.filter(
+      (one) =>
+        one.material_name.toLowerCase().includes(needle) ||
+        one.family.toLowerCase().includes(needle) ||
+        one.category.toLowerCase().includes(needle)
+    )
+  }, [list.data, term])
+
+  function toggle(id: string) {
+    onChange(picked.includes(id) ? picked.filter((one) => one !== id) : [...picked, id])
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>재료 고르기</DialogTitle>
+          <DialogDescription>
+            채택된 물성이 있는 재료만 있습니다 — 물성이 없는 재료는 담아도 빈 줄입니다.
+          </DialogDescription>
+        </DialogHeader>
+        <Input
+          value={term}
+          onChange={(event) => setTerm(event.target.value)}
+          placeholder="이름·재료군·분류로 좁히기"
+          aria-label="재료 찾기"
+        />
+        <ErrorNotice error={list.error} />
+        {list.loading && !list.data && (
+          <p className="text-muted-foreground text-sm">불러오는 중…</p>
+        )}
+        {list.data && rows.length === 0 && (
+          <p className="text-muted-foreground text-sm">맞는 재료가 없습니다.</p>
+        )}
+        {rows.length > 0 && (
+          <ul className="max-h-96 divide-y overflow-y-auto rounded-md border text-sm">
+            {rows.map((one) => (
+              <li key={one.material_id}>
+                <button
+                  type="button"
+                  className="hover:bg-muted flex w-full items-center gap-2 px-3 py-2 text-left"
+                  aria-pressed={picked.includes(one.material_id)}
+                  onClick={() => toggle(one.material_id)}
+                >
+                  <input
+                    type="checkbox"
+                    readOnly
+                    checked={picked.includes(one.material_id)}
+                    tabIndex={-1}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium">{one.material_name}</span>
+                    <span className="text-muted-foreground ml-1 text-xs">
+                      {one.family} · {one.category}
+                    </span>
+                  </span>
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    항목 {one.scalar_count} · 시험 {one.run_count}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-between">
+          <Button variant="ghost" onClick={() => onChange([])} disabled={picked.length === 0}>
+            모두 빼기
+          </Button>
+          <Button onClick={onClose}>{picked.length}개 담고 닫기</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * 항목 토글 — **여럿 고르면 열이 여럿이 된다.**
+ *
+ * 드롭다운 하나로는 「인장강도와 탄성계수를 나란히」 를 못 본다. 켜고 끄는 목록으로
+ * 두되 **하나는 남긴다** — 다 끄면 빈 표가 되고 그건 고장으로 읽힌다.
+ */
+function ScalarToggles({
+  scalars,
+  picked,
+  onChange,
+}: {
+  scalars: AnalysisScalar[]
+  picked: string[]
+  onChange: (next: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  if (scalars.length === 0) return null
+  const label =
+    picked.length === 1
+      ? (scalars.find((one) => one.key === picked[0])?.label ?? '물성 항목')
+      : `물성 항목 ${picked.length}개`
+
+  return (
+    <div className="relative">
+      <Button size="sm" variant="outline" aria-expanded={open} onClick={() => setOpen((n) => !n)}>
+        {label} ▾
+      </Button>
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label="항목 목록 닫기"
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <ul className="bg-background absolute z-20 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border p-1 text-sm shadow-md">
+            {scalars.map((one) => {
+              const on = picked.includes(one.key)
+              return (
+                <li key={one.key}>
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={on}
+                    className="hover:bg-muted flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
+                    onClick={() =>
+                      onChange(
+                        on
+                          ? // **마지막 하나는 못 끈다** — 다 끄면 빈 표가 되고 그건
+                            // 고장으로 읽힌다.
+                            picked.length > 1
+                            ? picked.filter((key) => key !== one.key)
+                            : picked
+                          : [...picked, one.key]
+                      )
+                    }
+                  >
+                    <input type="checkbox" readOnly checked={on} tabIndex={-1} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{one.label}</span>
+                    <span className="text-muted-foreground text-xs">{one.count}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}
+
 // --- ② 분포 ------------------------------------------------------------------
 
+// **사업부는 없다.** 흩어짐은 재료의 성질이지 누가 쟀는가의 성질이 아니다 —
+// 사업부별 건수는 홈에 있다(실사용 요청, 2026-08-29).
 const DISTRIBUTION_GROUPS = [
-  { key: 'division', label: '사업부' },
   { key: 'family', label: '재료군' },
   { key: 'category', label: '분류' },
 ] as const
@@ -321,24 +486,36 @@ const DISTRIBUTION_GROUPS = [
  * 숫자(중앙값·n·이상치 수)를 나란히 둔다 — 사람이 옮겨 적는 것은 숫자다.
  */
 function DistributionTab() {
-  const [scalar, setScalar] = useState('')
-  const [groupBy, setGroupBy] = useState<string>('division')
-  const report = useResource(() => analysisApi.distribution(scalar, groupBy), [scalar, groupBy])
+  const [scalars, setScalars] = useState<string[]>([])
+  const [groupBy, setGroupBy] = useState<string>('family')
+  const report = useResource(
+    () => analysisApi.distribution(scalars, groupBy),
+    [scalars.join(','), groupBy]
+  )
   const data = report.data
+  const selected = data?.selected ?? []
+
+  /** 눈금은 **항목마다 따로**다 — 인장강도(수백 MPa)와 R²(0~1)를 같은 자로 재면
+   *  한쪽이 선이 된다. 열마다 그 열의 범위로 그린다. */
   const bounds = useMemo(() => {
-    const spans = (data?.groups ?? []).flatMap((one) =>
-      one.spread ? [one.spread.minimum, one.spread.maximum, ...one.spread.outliers] : []
-    )
-    return spans.length ? { low: Math.min(...spans), high: Math.max(...spans) } : null
-  }, [data])
+    const out: Record<string, { low: number; high: number }> = {}
+    for (const one of selected) {
+      const spans = (data?.groups ?? []).flatMap((group) => {
+        const cell = group.cells[one.key]
+        return cell ? [cell.minimum, cell.maximum, ...cell.outliers] : []
+      })
+      if (spans.length) out[one.key] = { low: Math.min(...spans), high: Math.max(...spans) }
+    }
+    return out
+  }, [data, selected])
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <ScalarPicker
+        <ScalarToggles
           scalars={data?.scalars ?? []}
-          value={data?.scalar_key ?? ''}
-          onChange={setScalar}
+          picked={selected.map((one) => one.key)}
+          onChange={setScalars}
         />
         <GroupPicker value={groupBy} onChange={setGroupBy} options={DISTRIBUTION_GROUPS} />
       </div>
@@ -346,66 +523,48 @@ function DistributionTab() {
       {data && data.groups.length === 0 && (
         <p className="text-muted-foreground text-sm">채택된 물성이 아직 없습니다.</p>
       )}
-      {data && data.groups.length > 0 && bounds && (
+      {data && data.groups.length > 0 && (
         <div className={`overflow-x-auto rounded-md border ${TABLE_PAD}`}>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{DISTRIBUTION_GROUPS.find((o) => o.key === groupBy)?.label}</TableHead>
-                <TableHead className="w-64 text-center">
-                  {axisLabel('흩어짐', data.si_unit)}
-                </TableHead>
-                <TableHead className="text-center">중앙값</TableHead>
-                <TableHead className="text-center">평균</TableHead>
-                <TableHead className="text-center">n</TableHead>
-                <TableHead className="text-center">이상치</TableHead>
+                {selected.map((one) => (
+                  <TableHead key={one.key} className="text-center">
+                    {axisLabel(one.label, one.si_unit)}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.groups.map((row) => (
                 <TableRow key={row.group}>
-                  <TableCell className="font-medium">
-                    <span
-                      className="mr-1.5 inline-block size-2 rounded-full align-middle"
-                      style={{
-                        backgroundColor:
-                          groupBy === 'division'
-                            ? colorOf(
-                                row.group,
-                                data.groups.map((one) => one.group)
-                              )
-                            : '#94a3b8',
-                      }}
-                    />
-                    {row.group}
-                  </TableCell>
-                  <TableCell>
-                    {row.spread ? (
-                      <BoxPlot spread={row.spread} low={bounds.low} high={bounds.high} />
-                    ) : (
-                      <span className="text-muted-foreground text-xs">
-                        2건 미만 — 상자를 그릴 수 없습니다
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center tabular-nums">
-                    {row.spread ? show(row.spread.median, data.si_unit) : '—'}
-                  </TableCell>
-                  <TableCell className="text-center tabular-nums">
-                    {row.spread ? show(row.spread.mean, data.si_unit) : '—'}
-                  </TableCell>
-                  <TableCell className="text-center tabular-nums">
-                    {row.spread?.count ?? 0}
-                  </TableCell>
-                  <TableCell className="text-center tabular-nums">
-                    {row.spread && row.spread.outliers.length > 0 ? (
-                      <Badge variant="outline" className="border-amber-500 text-amber-700">
-                        {row.spread.outliers.length}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
+                  <TableCell className="font-medium">{row.group}</TableCell>
+                  {selected.map((one) => {
+                    const cell = row.cells[one.key]
+                    const span = bounds[one.key]
+                    return (
+                      <TableCell key={one.key} className="min-w-56 text-center">
+                        {cell && span ? (
+                          <>
+                            <BoxPlot spread={cell} low={span.low} high={span.high} />
+                            <div className="text-muted-foreground mt-0.5 text-xs tabular-nums">
+                              중앙 {show(cell.median, one.si_unit)} · n={cell.count}
+                              {cell.outliers.length > 0 && (
+                                <span className="ml-1 text-amber-700">
+                                  이상치 {cell.outliers.length}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">
+                            {cell === null ? '2건 미만' : '—'}
+                          </span>
+                        )}
+                      </TableCell>
+                    )
+                  })}
                 </TableRow>
               ))}
             </TableBody>
@@ -625,14 +784,19 @@ function TrendTab() {
 
 // --- ⑤ 커버리지 ---------------------------------------------------------------
 
-/** 재료 × 시험 종류. **빈 칸이 다음에 할 시험이다.** */
+/**
+ * 재료군·분류 × 시험 종류. **빈 칸이 다음에 할 시험이다.**
+ *
+ * 재료마다 한 줄이면 94줄이 되고, 그 표에서는 「무엇을 안 쟀나」 가 안 읽힌다.
+ * 분류로 접으면 「Metal/Steel 은 인장은 했고 점탄성은 안 했다」 가 한 줄에 온다.
+ */
 function CoverageTab() {
   const report = useResource(() => analysisApi.coverage(), [])
   const data = report.data
   const [onlyGaps, setOnlyGaps] = useState(false)
 
   const rows = useMemo(() => {
-    const all = data?.materials ?? []
+    const all = data?.groups ?? []
     if (!onlyGaps) return all
     const types = data?.test_types ?? []
     return all.filter((row) => types.some((type) => !row.cells[type.key]))
@@ -649,7 +813,7 @@ function CoverageTab() {
           빈 칸 있는 것만
         </Button>
         <span className="text-muted-foreground text-xs">
-          칸의 수는 시험 건수, 괄호는 채택된 수입니다.
+          칸은 <strong>시험한 재료 수 / 그 분류의 재료 수</strong>, 괄호는 채택된 시험 수입니다.
         </span>
       </div>
       <ErrorNotice error={report.error} className="mb-3" />
@@ -661,7 +825,9 @@ function CoverageTab() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>재료</TableHead>
+                <TableHead>재료군</TableHead>
+                <TableHead>분류</TableHead>
+                <TableHead className="text-center">재료</TableHead>
                 {data.test_types.map((type) => (
                   <TableHead key={type.key} className="text-center">
                     {type.label}
@@ -671,23 +837,28 @@ function CoverageTab() {
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={row.material_id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      to={`/materials/${row.material_id}`}
-                      className="text-primary hover:underline"
-                    >
-                      {row.material_name}
-                    </Link>
-                    <span className="text-muted-foreground ml-1 text-xs">{row.family}</span>
-                  </TableCell>
+                <TableRow key={`${row.family}-${row.category}`}>
+                  <TableCell className="font-medium">{row.family}</TableCell>
+                  <TableCell>{row.category}</TableCell>
+                  <TableCell className="text-center tabular-nums">{row.material_count}</TableCell>
                   {data.test_types.map((type) => {
                     const cell = row.cells[type.key]
+                    // **몇 개 중 몇 개인가.** 분류에 재료가 10개인데 1개만 쟀으면
+                    // 「쟀다」 로 읽히면 안 된다.
+                    const partial = cell && cell.material_count < row.material_count
                     return (
                       <TableCell key={type.key} className="text-center tabular-nums">
                         {cell ? (
-                          <span className={cell.adopted_count === 0 ? 'text-amber-700' : undefined}>
-                            {cell.run_count}
+                          <span
+                            className={
+                              cell.adopted_count === 0
+                                ? 'text-amber-700'
+                                : partial
+                                  ? 'text-muted-foreground'
+                                  : undefined
+                            }
+                          >
+                            {cell.material_count}/{row.material_count}
                             <span className="text-muted-foreground text-xs">
                               {' '}
                               ({cell.adopted_count})
