@@ -1950,6 +1950,11 @@
       },
       "ConnectorCreate": {
         "properties": {
+          "auto_register": {
+            "default": false,
+            "title": "Auto Register",
+            "type": "boolean"
+          },
           "hostname": {
             "maxLength": 255,
             "minLength": 1,

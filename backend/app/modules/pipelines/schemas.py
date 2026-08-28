@@ -19,6 +19,9 @@ class ConnectorCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     hostname: str = Field(min_length=1, max_length=255)
     workspace_id: uuid.UUID
+    auto_register: bool = False
+    """후보가 하나면 승인 없이 바로 등록하나. **재등록에서는 무시된다** — 재설치가
+    안전 스위치를 말없이 뒤집으면 안 된다. 바꾸려면 PATCH 로, 화면에서 묻고 바꾼다."""
 
 
 class ConnectorUpdate(BaseModel):

@@ -527,6 +527,14 @@ class Test승인_대기:
         assert item.source_path  # 원본도 아직 수집함에 있다
         assert len(item.candidates) == 1
 
+        # **알림은 묶인다.** 파일 20개 = 알림 20개가 아니라 「승인 대기 N건」 하나.
+        notify = [
+            j.payload
+            for j in db.scalars(select(Job).where(Job.kind == kinds.NOTIFY_DELIVER))
+            if str(j.payload.get("key", "")).startswith("suggested:")
+        ]
+        assert notify and "승인 대기 1건" in str(notify[0]["body"])
+
         done = client.post(
             f"/api/pipelines/inbox/{received['id']}/approve", headers=admin_headers
         )

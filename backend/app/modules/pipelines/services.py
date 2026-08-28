@@ -56,10 +56,17 @@ def get_connector(
 
 
 def register_connector(
-    db: Session, *, user: User, workspace: Workspace, name: str, hostname: str
+    db: Session,
+    *,
+    user: User,
+    workspace: Workspace,
+    name: str,
+    hostname: str,
+    auto_register: bool = False,
 ) -> tuple[PipelineConnector, bool]:
     """같은 호스트가 있으면 **그것을 돌려준다.** 재설치 뒤 커넥터가 둘이 되면
-    관리 화면에서 어느 것이 살아 있는지 알 수 없다. 이름은 새것으로 갱신한다."""
+    관리 화면에서 어느 것이 살아 있는지 알 수 없다. 이름은 새것으로 갱신하지만
+    `auto_register` 는 안 만진다 — 재설치가 안전 스위치를 말없이 뒤집으면 안 된다."""
     existing = db.scalar(
         select(PipelineConnector).where(
             PipelineConnector.workspace_id == workspace.id,
@@ -72,7 +79,11 @@ def register_connector(
             existing.name = name
         return existing, False
     made = PipelineConnector(
-        workspace_id=workspace.id, name=name, hostname=hostname, created_by_id=user.id
+        workspace_id=workspace.id,
+        name=name,
+        hostname=hostname,
+        auto_register=auto_register,
+        created_by_id=user.id,
     )
     db.add(made)
     db.flush()
@@ -426,7 +437,26 @@ def find_candidates(
 def _notify_managers(
     db: Session, connector: PipelineConnector, item: PipelineInboxItem
 ) -> None:
-    """부서 관리자에게. 알림 모듈의 함수는 못 부르므로 큐에 직접 넣는다(`kinds`)."""
+    """부서 관리자에게. 알림 모듈의 함수는 못 부르므로 큐에 직접 넣는다(`kinds`).
+
+    **승인 대기는 묶는다.** 장비는 배치로 보낸다 — 파일 20개가 오면 알림 20개가
+    아니라 「승인 대기 N건」 하나가 가야 한다. 발화 상태의 중복 판정(`last_key`)이
+    같은 키를 한 번만 보내므로, 키를 커넥터·날짜로 묶으면 하루 한 번이 된다.
+    `needs_specimen` 은 항목마다 사연이 달라(왜 안 붙었나) 건별로 남긴다."""
+    if item.status == "suggested":
+        waiting = db.scalar(
+            select(func.count()).where(
+                PipelineInboxItem.connector_id == connector.id,
+                PipelineInboxItem.status == "suggested",
+            )
+        )
+        key = f"suggested:{connector.id}:{_now():%Y-%m-%d}"
+        title = "장비에서 온 파일이 승인을 기다립니다"
+        body = f"{connector.name}: 승인 대기 {int(waiting or 0)}건 — 수집함에서 승인해 주세요."
+    else:
+        key = f"{item.id}"
+        title = "장비에서 온 파일에 시편을 붙여 주세요"
+        body = f"{connector.name}: {item.filename} — {item.error or '후보가 여럿입니다.'}"
     managers = db.scalars(
         select(WorkspaceMember.user_id).where(
             WorkspaceMember.workspace_id == connector.workspace_id,
@@ -439,20 +469,9 @@ def _notify_managers(
             kind=kinds.NOTIFY_DELIVER,
             payload={
                 "event_kind": "pipelines.needs_specimen",
-                "key": f"{item.id}",
-                "title": (
-                    "장비에서 온 파일이 승인을 기다립니다"
-                    if item.status == "suggested"
-                    else "장비에서 온 파일에 시편을 붙여 주세요"
-                ),
-                "body": (
-                    f"{connector.name}: {item.filename} — "
-                    + (
-                        f"{item.candidates[0]['specimen_name']} 에 붙일 준비가 됐습니다."
-                        if item.status == "suggested" and item.candidates
-                        else f"{item.error or '후보가 여럿입니다.'}"
-                    )
-                ),
+                "key": key,
+                "title": title,
+                "body": body,
                 "link": "/settings/connectors?tab=inbox",
                 "to_user_id": str(user_id),
             },

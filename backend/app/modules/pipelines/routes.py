@@ -119,7 +119,12 @@ def create_connector(
     ):
         raise Forbidden("MNX-PIPE-0005", "이 부서의 구성원이 아닙니다.")
     row, _created = services.register_connector(
-        db, user=user, workspace=workspace, name=body.name, hostname=body.hostname
+        db,
+        user=user,
+        workspace=workspace,
+        name=body.name,
+        hostname=body.hostname,
+        auto_register=body.auto_register,
     )
     db.commit()
     return _connector_out(row, workspace_name=workspace.name, waiting=0)

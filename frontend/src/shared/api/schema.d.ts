@@ -4590,6 +4590,11 @@ export interface components {
         };
         /** ConnectorCreate */
         ConnectorCreate: {
+            /**
+             * Auto Register
+             * @default false
+             */
+            auto_register: boolean;
             /** Hostname */
             hostname: string;
             /** Name */
