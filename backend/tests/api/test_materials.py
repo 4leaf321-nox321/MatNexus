@@ -2553,3 +2553,52 @@ class Test시편_정렬:
             "/api/specimens?sort=material_name&desc=false", headers=admin_headers
         )
         assert response.status_code == 200, response.text
+
+
+class Test모르는_단위:
+    """**한 줄 때문에 카탈로그가 안 열리면 안 된다.**
+
+    쓰는 길은 단위를 검사하지만, DB 에 직접 넣은 값이나 표에서 빠진 단위는 그 검사를
+    안 지난다. 실측(2026-08-29): 시드 스크립트가 `W/(m·K)`(가운뎃점)를 넣었는데 표는
+    `W/(m.K)`(온점)를 안다 — 재료 **한 줄** 때문에 목록 전체가 500 이었다.
+    """
+
+    def test_모르는_단위가_있어도_목록이_열린다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        from app.modules.materials.models import Material
+
+        made = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "UNITBAD",
+                "details": "X",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        row = db.get(Material, uuid.UUID(made["id"]))
+        assert row is not None
+        # 표가 모르는 기호 — 가운뎃점.
+        row.declared_properties = [
+            {
+                "item": "열전도도",
+                "points": [{"temperature_k": 293.15, "value_si": 50.0}],
+                "input_unit": "W/(m·K)",
+                "source": "literature",
+                "reference": "손으로 넣은 값",
+            }
+        ]
+        db.commit()
+
+        listed = client.get("/api/materials", headers=admin_headers)
+        assert listed.status_code == 200, listed.text
+
+        detail = client.get(f"/api/materials/{made['id']}", headers=admin_headers).json()
+        declared = detail["declared_properties"][0]
+        # **값을 감추지 않는다** — SI 그대로 보인다.
+        assert declared["points"][0]["value"] == pytest.approx(50.0)
+        # **단위는 비운다.** SI 값에 모르는 단위를 붙여 두면 사람이 그 단위로 읽는다.
+        assert declared["input_unit"] is None

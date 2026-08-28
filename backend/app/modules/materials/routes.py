@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -76,6 +77,8 @@ from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
 from matcore import naming, units
 from matcore import specimen as specimen_kit
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/materials", tags=["materials"])
 samples_router = APIRouter(prefix="/samples", tags=["materials"])
@@ -153,8 +156,32 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
     **되돌리는 환산도 서버가 한다.** 화면이 나눗셈을 하면 그 규칙이 두 곳에
     생기고(ADR 0004), 갈라진 쪽이 화면이면 사람은 자기가 적은 값과 다른 숫자를
     보면서 그것이 저장된 값이라고 믿는다.
+
+    ## 모르는 단위를 만나도 목록은 산다
+
+    쓰는 길은 단위를 검사하지만, DB 에 직접 넣은 값이나 표에서 빠진 단위는 그
+    검사를 안 지난다. 그때 `from_si` 가 던지면 **재료 목록 전체가 500** 이 된다 —
+    실측(2026-08-29): 시드 스크립트가 `W/(m·K)`(가운뎃점)를 넣었는데 표는
+    `W/(m.K)`(온점)를 안다. 재료 한 줄 때문에 카탈로그를 못 열었다.
+
+    그럴 때는 **SI 값 그대로 보이고 단위를 비운다.** 값을 감추지 않고, 화면은
+    단위 없는 값이 이상하다는 것을 보인다.
     """
     symbol = row.get("input_unit")
+    value_unit = symbol
+    try:
+        converted = [
+            units.from_si(point["value_si"], symbol) if symbol else float(point["value_si"])
+            for point in row["points"]
+        ]
+    except units.UnknownUnit:
+        logger.warning(
+            "선언 물성 '%s' 의 단위 '%s' 를 모릅니다 — SI 값 그대로 보입니다.",
+            row.get("item"),
+            symbol,
+        )
+        converted = [float(point["value_si"]) for point in row["points"]]
+        value_unit = None
     return DeclaredPropertyOut(
         item=str(row["item"]),
         points=[
@@ -162,13 +189,13 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
                 temperature_k=point.get("temperature_k"),
                 value_si=float(point["value_si"]),
                 # **척도는 환산이 없다.** 적은 값이 곧 저장 값이다.
-                value=units.from_si(point["value_si"], symbol)
-                if symbol
-                else float(point["value_si"]),
+                value=value,
             )
-            for point in row["points"]
+            for point, value in zip(row["points"], converted, strict=True)
         ],
-        input_unit=symbol,
+        # **모르는 단위는 비운다.** 값이 SI 인데 단위가 `W/(m·K)` 라고 붙어 있으면
+        # 사람은 그 단위로 읽는다 — 비어 있는 편이 낫다.
+        input_unit=value_unit,
         scale=row.get("scale"),
         source=str(row["source"]),
         reference=str(row["reference"]),
