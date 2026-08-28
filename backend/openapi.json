@@ -3165,6 +3165,40 @@
         "title": "DistributionReportOut",
         "type": "object"
       },
+      "DivisionTallyOut": {
+        "description": "사업부 하나의 현황 — 그 사업부의 시험이 걸친 재료·시료·시편과 시험 수.\n\n**사업부는 시험에만 붙는다**(ADR 0010 의 축). 재료·시편에는 사업부 칸이 없다 —\n같은 재료를 두 사업부가 시험하는 것이 정상이라, 여기의 재료 수는 「그 사업부\n시험이 걸친 재료」 이고 사업부끼리 합치면 전체보다 클 수 있다.",
+        "properties": {
+          "division": {
+            "title": "Division",
+            "type": "string"
+          },
+          "material_count": {
+            "title": "Material Count",
+            "type": "integer"
+          },
+          "run_count": {
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "specimen_count": {
+            "title": "Specimen Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "division",
+          "run_count",
+          "specimen_count",
+          "sample_count",
+          "material_count"
+        ],
+        "title": "DivisionTallyOut",
+        "type": "object"
+      },
       "DocumentCreate": {
         "properties": {
           "key": {
@@ -20890,6 +20924,32 @@
         "summary": "Put Specimen Dimensions",
         "tags": [
           "materials"
+        ]
+      }
+    },
+    "/api/statistics/divisions": {
+      "get": {
+        "description": "사업부별 현황 — 시험 수와, 그 시험이 걸친 재료·시료·시편 수.\n\n범위는 시험의 가시성 그대로(`visible_runs`) — 홈의 다른 숫자와 같은 규칙이다.\n사업부는 시험에만 붙으므로 재료·시편은 **그 사업부 시험이 걸친 것**을 센다 —\n사업부끼리 합치면 전체보다 클 수 있다(같은 재료를 두 사업부가 시험한다).",
+        "operationId": "divisions_api_statistics_divisions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DivisionTallyOut"
+                  },
+                  "title": "Response Divisions Api Statistics Divisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Divisions",
+        "tags": [
+          "statistics"
         ]
       }
     },

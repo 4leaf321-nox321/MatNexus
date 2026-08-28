@@ -29,6 +29,7 @@ from app.modules.statistics.schemas import (
     DistributableKeyOut,
     DistributionCandidateOut,
     DistributionReportOut,
+    DivisionTallyOut,
     EnsembleResultOut,
     EnsembleSaveRequest,
     GroupOut,
@@ -379,6 +380,44 @@ def distribution_report(
 
 def _tally(rows: Sequence[Any]) -> list[TallyOut]:
     return [TallyOut(key=str(key), label=str(key), count=int(count)) for key, count in rows]
+
+
+@router.get("/divisions", response_model=list[DivisionTallyOut])
+def divisions(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[DivisionTallyOut]:
+    """사업부별 현황 — 시험 수와, 그 시험이 걸친 재료·시료·시편 수.
+
+    범위는 시험의 가시성 그대로(`visible_runs`) — 홈의 다른 숫자와 같은 규칙이다.
+    사업부는 시험에만 붙으므로 재료·시편은 **그 사업부 시험이 걸친 것**을 센다 —
+    사업부끼리 합치면 전체보다 클 수 있다(같은 재료를 두 사업부가 시험한다).
+    """
+    runs = permissions.visible_runs(db, user).subquery()
+    rows = db.execute(
+        select(
+            TestRun.division,
+            func.count(TestRun.id),
+            func.count(func.distinct(TestRun.specimen_id)),
+            func.count(func.distinct(Specimen.sample_id)),
+            func.count(func.distinct(Sample.material_id)),
+        )
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .where(TestRun.id.in_(select(runs.c.id)))
+        .group_by(TestRun.division)
+        .order_by(func.count(TestRun.id).desc())
+    ).all()
+    return [
+        DivisionTallyOut(
+            division=division or "미지정",
+            run_count=int(run_count),
+            specimen_count=int(specimen_count),
+            sample_count=int(sample_count),
+            material_count=int(material_count),
+        )
+        for division, run_count, specimen_count, sample_count, material_count in rows
+    ]
 
 
 @router.get("/overview", response_model=OverviewOut)

@@ -28,6 +28,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 import { statisticsApi } from '@/modules/statistics/api'
+import { DivisionPanel } from '@/modules/statistics/DivisionPanel'
 import { OverviewPanel } from '@/modules/statistics/OverviewPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -108,6 +109,7 @@ export default function WorkspaceHomePage() {
   const summary = useResource(() => statisticsApi.overview(), [])
   // 부서 id — 장비 커넥터 마법사가 요구한다. 멤버십에는 slug 만 있어서 따로 읽는다.
   const details = useResource(() => workspacesApi.list(), [])
+  const divisions = useResource(() => statisticsApi.divisions(), [])
   const workspaceId = details.data?.find((row) => row.slug === workspaceSlug)?.id
 
   const rows = recent.data?.items ?? []
@@ -141,6 +143,8 @@ export default function WorkspaceHomePage() {
         loading={summary.loading}
         workspaceSlug={workspaceSlug}
       />
+
+      <DivisionPanel data={divisions.data ?? null} loading={divisions.loading} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Step

@@ -190,6 +190,22 @@ class TallyOut(BaseModel):
     count: int
 
 
+class DivisionTallyOut(BaseModel):
+    """사업부 하나의 현황 — 그 사업부의 시험이 걸친 재료·시료·시편과 시험 수.
+
+    **사업부는 시험에만 붙는다**(ADR 0010 의 축). 재료·시편에는 사업부 칸이 없다 —
+    같은 재료를 두 사업부가 시험하는 것이 정상이라, 여기의 재료 수는 「그 사업부
+    시험이 걸친 재료」 이고 사업부끼리 합치면 전체보다 클 수 있다.
+    """
+
+    division: str
+    """`미지정` 은 사업부를 안 적은 시험 — 0 이 아니라면 채울 일이 남은 것이다."""
+    run_count: int
+    specimen_count: int
+    sample_count: int
+    material_count: int
+
+
 class OverviewOut(BaseModel):
     """홈에 뿌리는 요약.
 

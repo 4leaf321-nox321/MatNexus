@@ -16,6 +16,7 @@ export type CurveStats = components['schemas']['CurveStatsOut']
 export type Outlier = components['schemas']['OutlierOut']
 export type EnsembleResult = components['schemas']['EnsembleResultOut']
 export type Overview = components['schemas']['OverviewOut']
+export type DivisionTally = components['schemas']['DivisionTallyOut']
 export type DistributionReport = components['schemas']['DistributionReportOut']
 export type DistributionCandidate = components['schemas']['DistributionCandidateOut']
 export type DistributableKey = components['schemas']['DistributableKeyOut']
@@ -26,6 +27,9 @@ export const statisticsApi = {
    * 받을 이유가 없다.
    */
   overview: () => api.get<Overview>('/statistics/overview'),
+
+  /** 사업부별 현황 — 시험 수와, 그 시험이 걸친 재료·시료·시편 수. */
+  divisions: () => api.get<DivisionTally[]>('/statistics/divisions'),
 
   forMaterial: (materialId: string, threshold?: number) =>
     api.get<MaterialStatistics>(

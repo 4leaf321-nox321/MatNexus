@@ -2270,6 +2270,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statistics/divisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Divisions
+         * @description 사업부별 현황 — 시험 수와, 그 시험이 걸친 재료·시료·시편 수.
+         *
+         *     범위는 시험의 가시성 그대로(`visible_runs`) — 홈의 다른 숫자와 같은 규칙이다.
+         *     사업부는 시험에만 붙으므로 재료·시편은 **그 사업부 시험이 걸친 것**을 센다 —
+         *     사업부끼리 합치면 전체보다 클 수 있다(같은 재료를 두 사업부가 시험한다).
+         */
+        get: operations["divisions_api_statistics_divisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/statistics/ensembles": {
         parameters: {
             query?: never;
@@ -5068,6 +5092,26 @@ export interface components {
             si_unit: string;
             /** Test Type Key */
             test_type_key: string;
+        };
+        /**
+         * DivisionTallyOut
+         * @description 사업부 하나의 현황 — 그 사업부의 시험이 걸친 재료·시료·시편과 시험 수.
+         *
+         *     **사업부는 시험에만 붙는다**(ADR 0010 의 축). 재료·시편에는 사업부 칸이 없다 —
+         *     같은 재료를 두 사업부가 시험하는 것이 정상이라, 여기의 재료 수는 「그 사업부
+         *     시험이 걸친 재료」 이고 사업부끼리 합치면 전체보다 클 수 있다.
+         */
+        DivisionTallyOut: {
+            /** Division */
+            division: string;
+            /** Material Count */
+            material_count: number;
+            /** Run Count */
+            run_count: number;
+            /** Sample Count */
+            sample_count: number;
+            /** Specimen Count */
+            specimen_count: number;
         };
         /** DocumentCreate */
         DocumentCreate: {
@@ -13561,6 +13605,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    divisions_api_statistics_divisions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DivisionTallyOut"][];
                 };
             };
         };
