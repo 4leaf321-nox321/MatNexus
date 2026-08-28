@@ -67,6 +67,34 @@ def _read_points(relative: str) -> dict[str, np.ndarray]:
     }
 
 
+#: 마스터커브가 저장하는 열 이름 → 묶음 계산이 기대하는 이름.
+#:
+#: **두 이름이 다른 것이 실수가 아니다.** 저장 쪽은 화면에 그릴 채널이라
+#: `frequency`·`storage_modulus` 로 사람이 읽기 좋게 두고, 계산 쪽은 단위를
+#: 이름에 박아(`_hz`·`_pa`) 무엇이 들어오는지 못 헷갈리게 한다.
+#:
+#: 그 다리를 여기 둔다 — 어느 한쪽을 상대에 맞추면 그 이름이 그 층의 사정이
+#: 아니라 남의 사정으로 정해진다.
+_PRONY_COLUMNS = {
+    "frequency": "frequency_hz",
+    "storage_modulus": "storage_pa",
+    "loss_modulus": "loss_pa",
+}
+
+
+def _prony_columns(raw: dict[str, np.ndarray], label: str) -> dict[str, np.ndarray]:
+    found = {want: raw[have] for have, want in _PRONY_COLUMNS.items() if have in raw}
+    missing = set(_PRONY_COLUMNS.values()) - set(found)
+    if missing:
+        raise AppError(
+            "MNX-GROUPING-0006",
+            f"{label} 의 마스터커브에 손실 탄성률이 없습니다. "
+            f"저장·손실을 함께 맞춰야 계수가 나옵니다.",
+            status=422,
+        )
+    return found
+
+
 @collector("viscoelastic.prony_group")
 def _prony_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
     """마스터커브와 (있으면) 맞춰 둔 Prony 를 꺼낸다.
@@ -91,7 +119,7 @@ def _prony_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
             )
         # **다른 모듈의 `services` 를 부르지 않는다**(경계 검사). 파케이를
         # 읽는 것은 그 모듈의 로직이 아니라 저장소 인프라다 — `shared` 를 쓴다.
-        columns = _read_points(curve.storage_path)
+        columns = _prony_columns(_read_points(curve.storage_path), run.record_name)
         meta: dict[str, Any] = {}
         fit = db.scalar(
             select(PronyFit)

@@ -12,14 +12,37 @@ from pydantic import BaseModel, Field
 MAX_MEMBERS = 200
 
 
+class GroupingParamOut(BaseModel):
+    """조절하는 값 하나. **화면의 폼 필드가 여기서 생긴다.**
+
+    `dict[str, Any]` 로 두면 프론트 타입이 `{}` 가 되어 화면이 아무거나 읽는다 —
+    타입을 손으로 적지 않게 하려고 스키마를 내보내는 것인데 그러면 뜻이 없다.
+    """
+
+    name: str
+    label: str
+    type: str
+    default: Any = None
+    choices: list[str] = Field(default_factory=list)
+    help: str | None = None
+
+
+class GroupingProducedOut(BaseModel):
+    """묶음이 내는 값 하나. **단위를 함께 준다** — 라벨에 손으로 안 적는다."""
+
+    key: str
+    label: str
+    si_unit: str
+
+
 class GroupingSpecOut(BaseModel):
     """고를 수 있는 묶음 하나. **화면이 목록을 적어 두지 않게 한다.**"""
 
     id: str
     label: str
     applies_to: list[str]
-    params: list[dict[str, Any]]
-    makes_values: list[dict[str, Any]]
+    params: list[GroupingParamOut]
+    makes_values: list[GroupingProducedOut]
 
 
 class GroupCreateRequest(BaseModel):

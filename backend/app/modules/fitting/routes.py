@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -45,6 +46,7 @@ from app.modules.fitting.schemas import (
     UnitSystemOut,
     ViscoelasticCardSaveRequest,
 )
+from app.modules.grouping.models import GroupResult
 from app.modules.materials import declared
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.statistics import services as statistics_services
@@ -1301,30 +1303,28 @@ def create_declared_card(
     return _card_out(db, item)
 
 
-@router.post("/cards/viscoelastic", response_model=PropertyCardOut, status_code=201)
-def create_viscoelastic_card(
-    payload: ViscoelasticCardSaveRequest,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> PropertyCardOut:
-    """Prony 적합에서 점탄성 카드를 만든다.
+@dataclass(frozen=True)
+class _ViscoelasticSource:
+    """점탄성 카드의 근거 — **시편 하나든 묶음이든 같은 모양으로.**
 
-    **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
-    나오지만 Prony 는 마스터커브 하나에 매달려 있다. 그것을 묶음에 억지로 끼우면
-    "여러 시편의 평균" 이라는 묶음의 뜻이 무너진다 — 재료·방향은 체인을 따라간다.
-
-    시편 1건짜리 카드는 이미 허용하기로 한 것이다(`_representative` 참조). 막으면
-    사람은 시스템 밖에서 계산해 카드 없이 덱을 만들고, 그러면 근거가 아무 데도
-    안 남는다. 대신 **표본 1건이라는 사실을 카드에 박는다.**
-
-    ## `*ELASTIC` 은 순간 탄성률이다
-
-    E₀ 를 **탄성 블록에** 출처 `prony` 로 넣는다. Abaqus 는 `*VISCOELASTIC` 이
-    있을 때 `*ELASTIC` 을 순간 탄성률로 읽는데, 평형 탄성률을 넣으면 재료가
-    통째로 무르게 계산되고 **덱은 멀쩡히 돌고 결과도 그럴듯하다.**
+    두 길이 이 하나로 모이므로, 카드를 짓는 코드는 어느 쪽에서 왔는지 몰라도 된다.
     """
-    cards.load_builtin()
-    fit = db.get(PronyFit, payload.prony_fit_id)
+
+    series: prony.PronySeries
+    material: Material
+    samples: list[Sample]
+    test_type_id: uuid.UUID
+    orientation: str
+    reference_temperature_k: float
+    provenance: dict[str, Any]
+    notes: list[str]
+    extra_values: dict[str, Any]
+    curve_notes: list[str]
+
+
+def _from_prony_fit(db: Session, user: User, fit_id: uuid.UUID) -> _ViscoelasticSource:
+    """시편 하나의 적합. 재료·방향은 체인을 따라간다."""
+    fit = db.get(PronyFit, fit_id)
     if fit is None:
         raise NotFound("MNX-FITTING-0011", "Prony 적합을 찾을 수 없습니다.")
     curve = db.get(MasterCurve, fit.master_curve_id)
@@ -1337,31 +1337,172 @@ def create_viscoelastic_card(
     if specimen is None or sample is None or material is None:
         raise NotFound("MNX-FITTING-0011", "이 적합이 어느 재료의 것인지 따라갈 수 없습니다.")
 
-    series = prony.PronySeries(
-        equilibrium_pa=fit.equilibrium_pa,
-        terms=tuple(
-            prony.PronyTerm(
-                modulus_pa=float(term["modulus_pa"]),
-                relaxation_time_s=float(term["relaxation_time_s"]),
-            )
-            for term in fit.terms
+    return _ViscoelasticSource(
+        series=prony.PronySeries(
+            equilibrium_pa=fit.equilibrium_pa,
+            terms=tuple(
+                prony.PronyTerm(
+                    modulus_pa=float(term["modulus_pa"]),
+                    relaxation_time_s=float(term["relaxation_time_s"]),
+                )
+                for term in fit.terms
+            ),
+            normalized_rmse=fit.normalized_rmse,
+            bic=fit.bic,
+            at_bound=tuple(fit.at_bound),
         ),
-        normalized_rmse=fit.normalized_rmse,
-        bic=fit.bic,
-        at_bound=tuple(fit.at_bound),
+        material=material,
+        samples=[sample],
+        test_type_id=run.test_type_id,
+        orientation=specimen.orientation,
+        reference_temperature_k=curve.reference_temperature_k,
+        provenance={
+            "sample_count": 1,
+            "test_run_ids": [str(run.id)],
+            "record_names": [run.record_name],
+            "prony_fit_id": str(fit.id),
+            "master_curve_id": str(curve.id),
+        },
+        notes=[
+            f"시편 {specimen.record_name} 한 건의 마스터커브에서 만들었습니다 — "
+            f"재료의 대푯값이 아니라 그 시편의 값입니다.",
+        ],
+        extra_values={"shift_method": curve.method},
+        curve_notes=list(curve.notes),
     )
+
+
+def _from_group(db: Session, user: User, group_id: uuid.UUID) -> _ViscoelasticSource:
+    """묶음(ADR 0020). **재료는 묶음이 들고 있다.**
+
+    방향·시험 종류는 구성원에서 따라간다 — 섞여 있으면 막는다. 방향이 다른
+    시편을 한 카드에 담으면 그 카드가 어느 방향의 물성인지 말할 수 없다.
+    """
+    row = db.get(GroupResult, group_id)
+    if row is None:
+        raise NotFound("MNX-FITTING-0011", "묶음을 찾을 수 없습니다.")
+    material = db.scalar(
+        permissions.visible_materials(db, user).where(Material.id == row.material_id)
+    )
+    if material is None:
+        raise NotFound("MNX-FITTING-0011", "이 묶음의 재료를 볼 수 없습니다.")
+
+    terms = row.detail.get("terms") or []
+    if not terms:
+        raise AppError(
+            "MNX-FITTING-0012",
+            "이 묶음에는 Prony 항이 없습니다. 점탄성 카드로 만들 수 없습니다.",
+            status=422,
+        )
+
+    # **쓴 것만 따라간다.** 대표를 골랐으면 하나뿐이고, 그때 카드가 「다섯을
+    # 묶었다」 고 말하면 거짓말이 된다.
+    used = set(row.used)
+    runs = [
+        permissions.get_run(db, user, uuid.UUID(str(item["test_run_id"])))
+        for item in row.members
+        if not used or item.get("label") in used
+    ]
+    if not runs:
+        raise NotFound("MNX-FITTING-0011", "묶음의 시험을 따라갈 수 없습니다.")
+
+    specimens = [db.get(Specimen, run.specimen_id) for run in runs]
+    if any(one is None for one in specimens):
+        raise NotFound("MNX-FITTING-0011", "묶음의 시편을 따라갈 수 없습니다.")
+    orientations = {one.orientation for one in specimens if one}
+    if len(orientations) != 1:
+        raise AppError(
+            "MNX-FITTING-0013",
+            f"방향이 {len(orientations)}가지 섞여 있습니다"
+            f"({', '.join(sorted(orientations))}). 카드는 방향 하나의 물성입니다.",
+            status=422,
+        )
+    types = {run.test_type_id for run in runs}
+    if len(types) != 1:
+        raise AppError("MNX-FITTING-0013", "시험 종류가 섞여 있습니다.", status=422)
+    samples = [
+        one
+        for one in (db.get(Sample, item.sample_id) for item in specimens if item)
+        if one is not None
+    ]
+
+    method = str(row.options.get("method") or row.detail.get("method") or "")
+    return _ViscoelasticSource(
+        series=prony.PronySeries(
+            equilibrium_pa=float(row.values["equilibrium_pa"]),
+            terms=tuple(
+                prony.PronyTerm(
+                    modulus_pa=float(term["modulus_pa"]),
+                    relaxation_time_s=float(term["relaxation_time_s"]),
+                )
+                for term in terms
+            ),
+            normalized_rmse=float(row.values.get("normalized_rmse", 0.0)),
+            bic=float("nan"),
+        ),
+        material=material,
+        samples=samples,
+        test_type_id=next(iter(types)),
+        orientation=next(iter(orientations)),
+        reference_temperature_k=float(row.values["reference_temperature_k"]),
+        provenance={
+            "sample_count": len(runs),
+            "test_run_ids": [str(run.id) for run in runs],
+            "record_names": [run.record_name for run in runs],
+            "group_result_id": str(row.id),
+            "group_method": method,
+        },
+        notes=[
+            f"시편 {len(runs)}건을 '{method}' 방법으로 묶어 만들었습니다.",
+            *row.warnings,
+        ],
+        extra_values={"group_method": method},
+        curve_notes=[],
+    )
+
+
+@router.post("/cards/viscoelastic", response_model=PropertyCardOut, status_code=201)
+def create_viscoelastic_card(
+    payload: ViscoelasticCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """점탄성 카드를 만든다 — **시편 하나에서, 또는 묶음에서.**
+
+    한때 이 자리는 묶음을 아예 안 받았다. 그때 「묶음」 은 통계 묶음뿐이었고,
+    마스터커브 하나에 매달린 Prony 를 거기 끼우면 "여러 시편의 평균" 이라는 뜻이
+    무너졌기 때문이다. 이제 **점탄성에 맞는 묶음이 따로 생겨**(ADR 0020) 그 이유가
+    사라졌다 — 묶음이 재료를 들고 있고, 어떤 방법으로 묶었는지도 들고 있다.
+
+    시편 1건짜리 카드는 허용한다. 막으면 사람은 시스템 밖에서 계산해 카드 없이
+    덱을 만들고, 그러면 근거가 아무 데도 안 남는다. 대신 **표본 수를 카드에
+    박는다** — 1건인지 다섯을 묶은 것인지가 덱까지 따라가야 한다.
+
+    ## `*ELASTIC` 은 순간 탄성률이다
+
+    E₀ 를 **탄성 블록에** 출처 `prony` 로 넣는다. Abaqus 는 `*VISCOELASTIC` 이
+    있을 때 `*ELASTIC` 을 순간 탄성률로 읽는데, 평형 탄성률을 넣으면 재료가
+    통째로 무르게 계산되고 **덱은 멀쩡히 돌고 결과도 그럴듯하다.**
+    """
+    cards.load_builtin()
+    # 스키마의 `_exactly_one` 이 이미 걸렀다 — 타입 검사기에게만 말한다.
+    if payload.prony_fit_id is not None:
+        source = _from_prony_fit(db, user, payload.prony_fit_id)
+    else:
+        assert payload.group_result_id is not None
+        source = _from_group(db, user, payload.group_result_id)
+    series = source.series
     try:
         relative = series.relative_moduli
     except prony.PronyError as exc:
         raise AppError("MNX-FITTING-0012", str(exc), status=422) from exc
 
-    poisson = _inherit_poisson(material, payload.poisson_ratio)
-    density = _inherit_density(material, [sample], payload.density)
+    poisson = _inherit_poisson(source.material, payload.poisson_ratio)
+    density = _inherit_density(source.material, source.samples, payload.density)
     notes = [
-        # **1건이라는 사실이 덱까지 따라가야 한다.** 솔버 결과를 놓고 "이 물성
-        # 어디서 났나" 를 묻는 자리에서 그 오해가 제일 비싸다.
-        f"시편 {specimen.record_name} 한 건의 마스터커브에서 만들었습니다 — "
-        f"재료의 대푯값이 아니라 그 시편의 값입니다.",
+        # **표본 수가 덱까지 따라가야 한다.** 솔버 결과를 놓고 "이 물성 어디서
+        # 났나" 를 묻는 자리에서 그 오해가 제일 비싸다.
+        *source.notes,
         f"푸아송비: {poisson.detail}" if poisson.detail else "",
         f"밀도: {density.detail}" if density.detail else "",
     ]
@@ -1373,9 +1514,9 @@ def create_viscoelastic_card(
         )
 
     item = PropertyCard(
-        material_id=material.id,
-        test_type_id=run.test_type_id,
-        orientation=specimen.orientation,
+        material_id=source.material.id,
+        test_type_id=source.test_type_id,
+        orientation=source.orientation,
         label=payload.label,
         status="draft",
         # **적합을 외래키로 잡지 않는다.** 시험을 지우면 마스터커브와 적합이
@@ -1383,11 +1524,7 @@ def create_viscoelastic_card(
         # 안 된다 — 카드는 **자기 근거를 들고 있는 스냅샷**이다. 가리키던 적합이
         # 사라져도 계수·기준 온도·표본 수는 카드 안에 그대로 남는다.
         source={
-            "sample_count": 1,
-            "test_run_ids": [str(run.id)],
-            "record_names": [run.record_name],
-            "prony_fit_id": str(fit.id),
-            "master_curve_id": str(curve.id),
+            **source.provenance,
             "notes": [line for line in notes if line],
             # **카드가 자기 근거를 들고 있다** 는 원칙의 나머지 절반이다 —
             # 값이 무엇에서 나왔는지에 더해 **무엇 위에서 계산됐는지**.
@@ -1416,12 +1553,12 @@ def create_viscoelastic_card(
             },
             "viscoelastic": {
                 "values": {
-                    "equilibrium_pa": fit.equilibrium_pa,
+                    "equilibrium_pa": series.equilibrium_pa,
                     "instantaneous_pa": series.instantaneous_pa,
-                    "reference_temperature_k": curve.reference_temperature_k,
-                    "normalized_rmse": fit.normalized_rmse,
-                    "bic": fit.bic,
-                    "shift_method": curve.method,
+                    "reference_temperature_k": source.reference_temperature_k,
+                    "normalized_rmse": series.normalized_rmse,
+                    **({"bic": series.bic} if math.isfinite(series.bic) else {}),
+                    **source.extra_values,
                 },
                 "rows": [
                     {
@@ -1431,7 +1568,7 @@ def create_viscoelastic_card(
                     }
                     for term, ratio in zip(series.terms, relative, strict=True)
                 ],
-                "notes": list(curve.notes),
+                "notes": list(source.curve_notes),
             },
         },
         point_count=0,

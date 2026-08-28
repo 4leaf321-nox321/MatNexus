@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class FamilyOut(BaseModel):
@@ -346,14 +346,35 @@ class DeclaredCardSaveRequest(BaseModel):
 
 
 class ViscoelasticCardSaveRequest(BaseModel):
-    """Prony 적합에서 점탄성 카드를 만든다.
+    """점탄성 카드를 만든다 — **시편 하나에서, 또는 묶음에서.**
 
-    **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
-    나오지만 Prony 는 마스터커브 하나에 매달려 있다 — 재료·방향은 그 체인
-    (적합 → 마스터커브 → 시험 → 시편 → 시료 → 재료)에서 따라간다.
+    ## 둘 중 하나만 준다
+
+    `prony_fit_id` 는 시편 하나의 적합이고, `group_result_id` 는 여럿을 묶은
+    것이다(ADR 0020). 둘 다 주면 **어느 쪽이 카드의 근거인지 알 수 없으므로**
+    거절한다 — 나중에 「이 값이 어디서 났나」 에 답이 둘이 되면 안 된다.
+
+    한때 이 자리는 묶음을 아예 안 받았다. 그때는 「묶음」 이 통계 묶음뿐이었고,
+    마스터커브 하나에 매달린 Prony 를 거기 끼우면 "여러 시편의 평균" 이라는 뜻이
+    무너졌기 때문이다. 이제 **점탄성에 맞는 묶음이 따로 생겨** 그 이유가 사라졌다.
     """
 
-    prony_fit_id: uuid.UUID
+    prony_fit_id: uuid.UUID | None = None
+    """시편 하나의 적합. 재료·방향은 체인을 따라간다
+    (적합 → 마스터커브 → 시험 → 시편 → 시료 → 재료)."""
+    group_result_id: uuid.UUID | None = None
+    """여러 시편을 묶은 것. 재료는 묶음이 들고 있다."""
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> ViscoelasticCardSaveRequest:
+        given = [self.prony_fit_id, self.group_result_id]
+        if sum(one is not None for one in given) != 1:
+            raise ValueError(
+                "prony_fit_id 와 group_result_id 중 정확히 하나를 주세요 — "
+                "둘 다 주면 카드의 근거가 둘이 됩니다."
+            )
+        return self
+
     label: str = Field(min_length=1, max_length=120)
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
     """**DMA 는 이것을 재지 않는다.** 재료에서 물려받거나 사람이 넣는다 —

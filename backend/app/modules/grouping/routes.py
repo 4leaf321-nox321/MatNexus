@@ -19,6 +19,8 @@ from app.modules.grouping import services
 from app.modules.grouping.models import GroupResult
 from app.modules.grouping.schemas import (
     GroupCreateRequest,
+    GroupingParamOut,
+    GroupingProducedOut,
     GroupingSpecOut,
     GroupResultOut,
 )
@@ -64,18 +66,18 @@ def list_kinds(
             label=plugin.label,
             applies_to=list(plugin.applies_to),
             params=[
-                {
-                    "name": item.name,
-                    "label": item.label,
-                    "type": item.type,
-                    "default": item.default,
-                    "choices": list(item.choices),
-                    "help": item.help,
-                }
+                GroupingParamOut(
+                    name=item.name,
+                    label=item.label,
+                    type=item.type,
+                    default=item.default,
+                    choices=list(item.choices),
+                    help=item.help,
+                )
                 for item in plugin.params
             ],
             makes_values=[
-                {"key": item.key, "label": item.label, "si_unit": item.si_unit}
+                GroupingProducedOut(key=item.key, label=item.label, si_unit=item.si_unit)
                 for item in plugin.makes_values
             ],
         )

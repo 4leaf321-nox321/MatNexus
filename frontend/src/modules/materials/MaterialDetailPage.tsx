@@ -42,6 +42,7 @@ import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
 import { MillSheetDialog } from '@/modules/materials/MillSheetDialog'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
+import { GroupsPanel } from '@/modules/materials/GroupsPanel'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { CreatedOn } from '@/shared/components/CreatedOn'
@@ -225,6 +226,10 @@ export default function MaterialDetailPage() {
             />
           )}
           {id && <PropertiesPanel materialId={id} />}
+          {/* **여러 시험을 묶는 자리**(ADR 0020). 시료·시편 탭은 무엇이 있나를,
+              CAE 카드 탭은 해석에 뭘 넣나를 답한다 — 그 사이가 여기다. 제 화면을
+              따로 두면 묶는 자리가 둘이 되고, 그때 어느 쪽이 진짜인지 알 수 없다. */}
+          {id && <GroupsPanel materialId={id} />}
         </TabsContent>
 
         {/* 물성 탭이 "이 재료가 이렇게 거동한다" 를 데이터로 보인다면, 여기는

@@ -503,15 +503,16 @@ export interface paths {
         put?: never;
         /**
          * Create Viscoelastic Card
-         * @description Prony 적합에서 점탄성 카드를 만든다.
+         * @description 점탄성 카드를 만든다 — **시편 하나에서, 또는 묶음에서.**
          *
-         *     **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
-         *     나오지만 Prony 는 마스터커브 하나에 매달려 있다. 그것을 묶음에 억지로 끼우면
-         *     "여러 시편의 평균" 이라는 묶음의 뜻이 무너진다 — 재료·방향은 체인을 따라간다.
+         *     한때 이 자리는 묶음을 아예 안 받았다. 그때 「묶음」 은 통계 묶음뿐이었고,
+         *     마스터커브 하나에 매달린 Prony 를 거기 끼우면 "여러 시편의 평균" 이라는 뜻이
+         *     무너졌기 때문이다. 이제 **점탄성에 맞는 묶음이 따로 생겨**(ADR 0020) 그 이유가
+         *     사라졌다 — 묶음이 재료를 들고 있고, 어떤 방법으로 묶었는지도 들고 있다.
          *
-         *     시편 1건짜리 카드는 이미 허용하기로 한 것이다(`_representative` 참조). 막으면
-         *     사람은 시스템 밖에서 계산해 카드 없이 덱을 만들고, 그러면 근거가 아무 데도
-         *     안 남는다. 대신 **표본 1건이라는 사실을 카드에 박는다.**
+         *     시편 1건짜리 카드는 허용한다. 막으면 사람은 시스템 밖에서 계산해 카드 없이
+         *     덱을 만들고, 그러면 근거가 아무 데도 안 남는다. 대신 **표본 수를 카드에
+         *     박는다** — 1건인지 다섯을 묶은 것인지가 덱까지 따라가야 한다.
          *
          *     ## `*ELASTIC` 은 순간 탄성률이다
          *
@@ -820,6 +821,69 @@ export interface paths {
         post?: never;
         /** Delete Profile */
         delete: operations["delete_profile_api_formats__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Group
+         * @description 묶어서 행으로 남긴다.
+         */
+        post: operations["create_group_api_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups/kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Kinds
+         * @description 고를 수 있는 묶음. **레지스트리가 정한다.**
+         *
+         *     화면이 목록을 적어 두면 새 물성을 붙일 때 화면도 고쳐야 한다 — 그게 확장이
+         *     아닌 상태다(D7).
+         */
+        get: operations["list_kinds_api_groups_kinds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups/materials/{material_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List For Material
+         * @description 그 재료의 묶음. 최근 것부터.
+         */
+        get: operations["list_for_material_api_groups_materials__material_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4738,6 +4802,19 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /** GroupCreateRequest */
+        GroupCreateRequest: {
+            /** Note */
+            note?: string | null;
+            /** Options */
+            options?: {
+                [key: string]: unknown;
+            };
+            /** Plugin Id */
+            plugin_id: string;
+            /** Run Ids */
+            run_ids: string[];
+        };
         /**
          * GroupOut
          * @description 묶음 하나 — **재료 + 시험종류 + 방향.**
@@ -4762,6 +4839,99 @@ export interface components {
             test_type_key: string;
             /** Test Type Label */
             test_type_label: string;
+        };
+        /** GroupResultOut */
+        GroupResultOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Members */
+            members: {
+                [key: string]: unknown;
+            }[];
+            /** Note */
+            note: string | null;
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Plugin Id */
+            plugin_id: string;
+            /** Plugin Version */
+            plugin_version: string;
+            /** Used */
+            used: string[];
+            /** Values */
+            values: {
+                [key: string]: number;
+            };
+            /** Warnings */
+            warnings: string[];
+        };
+        /**
+         * GroupingParamOut
+         * @description 조절하는 값 하나. **화면의 폼 필드가 여기서 생긴다.**
+         *
+         *     `dict[str, Any]` 로 두면 프론트 타입이 `{}` 가 되어 화면이 아무거나 읽는다 —
+         *     타입을 손으로 적지 않게 하려고 스키마를 내보내는 것인데 그러면 뜻이 없다.
+         */
+        GroupingParamOut: {
+            /** Choices */
+            choices?: string[];
+            /** Default */
+            default?: unknown;
+            /** Help */
+            help?: string | null;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+        };
+        /**
+         * GroupingProducedOut
+         * @description 묶음이 내는 값 하나. **단위를 함께 준다** — 라벨에 손으로 안 적는다.
+         */
+        GroupingProducedOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+        };
+        /**
+         * GroupingSpecOut
+         * @description 고를 수 있는 묶음 하나. **화면이 목록을 적어 두지 않게 한다.**
+         */
+        GroupingSpecOut: {
+            /** Applies To */
+            applies_to: string[];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Makes Values */
+            makes_values: components["schemas"]["GroupingProducedOut"][];
+            /** Params */
+            params: components["schemas"]["GroupingParamOut"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -7848,26 +8018,31 @@ export interface components {
         };
         /**
          * ViscoelasticCardSaveRequest
-         * @description Prony 적합에서 점탄성 카드를 만든다.
+         * @description 점탄성 카드를 만든다 — **시편 하나에서, 또는 묶음에서.**
          *
-         *     **묶음을 받지 않는다.** 경화 카드는 재료+시험종류+방향의 대표 곡선에서
-         *     나오지만 Prony 는 마스터커브 하나에 매달려 있다 — 재료·방향은 그 체인
-         *     (적합 → 마스터커브 → 시험 → 시편 → 시료 → 재료)에서 따라간다.
+         *     ## 둘 중 하나만 준다
+         *
+         *     `prony_fit_id` 는 시편 하나의 적합이고, `group_result_id` 는 여럿을 묶은
+         *     것이다(ADR 0020). 둘 다 주면 **어느 쪽이 카드의 근거인지 알 수 없으므로**
+         *     거절한다 — 나중에 「이 값이 어디서 났나」 에 답이 둘이 되면 안 된다.
+         *
+         *     한때 이 자리는 묶음을 아예 안 받았다. 그때는 「묶음」 이 통계 묶음뿐이었고,
+         *     마스터커브 하나에 매달린 Prony 를 거기 끼우면 "여러 시편의 평균" 이라는 뜻이
+         *     무너졌기 때문이다. 이제 **점탄성에 맞는 묶음이 따로 생겨** 그 이유가 사라졌다.
          */
         ViscoelasticCardSaveRequest: {
             /** Density */
             density?: number | null;
+            /** Group Result Id */
+            group_result_id?: string | null;
             /** Label */
             label: string;
             /** Note */
             note?: string | null;
             /** Poisson Ratio */
             poisson_ratio?: number | null;
-            /**
-             * Prony Fit Id
-             * Format: uuid
-             */
-            prony_fit_id: string;
+            /** Prony Fit Id */
+            prony_fit_id?: string | null;
         };
         /** VocCreateRequest */
         VocCreateRequest: {
@@ -9450,6 +9625,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_group_api_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_kinds_api_groups_kinds_get: {
+        parameters: {
+            query?: {
+                applies_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupingSpecOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_for_material_api_groups_materials__material_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupResultOut"][];
+                };
             };
             /** @description Validation Error */
             422: {
