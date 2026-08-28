@@ -103,6 +103,12 @@ backlog 에 적고 멈춘다 — 그 파일을 다른 사람이 같은 시간에
 
 고치고 나서 이 넷을 돌린다. CI 가 같은 것을 강제한다.
 
+**마이그레이션을 만들었으면 그 자리에서 개발 DB 에 올린다**(`alembic upgrade head`).
+코드 배포 ≠ DB 반영이다 — 서버는 reload 로 새 코드를 서빙하는데 마이그레이션은
+자동이 아니라서, 새 컬럼을 읽는 API 가 500 을 낸다. 실측(2026-08-29): v1.148 코드에
+`auto_register` 마이그레이션이 안 올라가 커넥터 API 전부가 500 이었고, MatPylon
+쪽이 발견했다. 명령 사슬에 끼워 두지 말 것 — 앞 단계가 실패하면 조용히 안 돈다.
+
 ```powershell
 cd backend
 .\.venv\Scripts\ruff.exe format . ; .\.venv\Scripts\ruff.exe check .
