@@ -44,7 +44,14 @@ export function DivisionPanel({
       <h2 className="mb-2 text-sm font-semibold">사업부별 현황</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
-          <div className="overflow-x-auto rounded-md border">
+          {/* **가장자리에 숨 쉴 자리.** 공통 표는 `px-2` 라 절반 폭에 다섯 열이
+              들어가면 글자가 테두리에 붙는다. 공통 부품을 고치면 모든 표가 따라
+              움직이므로(남의 화면 포함) 여기서만 넓힌다. */}
+          <div
+            className="overflow-x-auto rounded-md border [&_td]:px-3 [&_th]:px-3
+              [&_td:first-child]:pl-4 [&_th:first-child]:pl-4
+              [&_td:last-child]:pr-4 [&_th:last-child]:pr-4"
+          >
             <Table>
               <TableHeader>
                 <TableRow>

@@ -17,7 +17,6 @@ import {
   BarChart,
   CartesianGrid,
   LabelList,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -51,8 +50,10 @@ export default function DivisionYearChart({
           <Tooltip
             formatter={(value, name) => [`${String(value)}건`, String(name)]}
             labelFormatter={(year) => `${String(year)}년`}
+            // **범례 위로 뜬다.** recharts 는 범례를 툴팁보다 뒤에 그리지 않는다 —
+            // 아래쪽 막대에 올리면 툴팁이 범례에 가렸다.
+            wrapperStyle={{ zIndex: 50 }}
           />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
           {divisions.map((division, index) => (
             <Bar
               key={division}
@@ -74,6 +75,20 @@ export default function DivisionYearChart({
           ))}
         </BarChart>
       </ResponsiveContainer>
+      {/* **범례는 직접 그린다.** recharts 3 은 Legend 의 `payload` 를 없앴고, 맡기면
+          누적 순서(아래에서 위로)로 뒤집혀 선다 — 그러면 표와 순서가 어긋나고,
+          사람은 색을 표에서 그래프로 옮겨 읽을 수 없다. */}
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        {divisions.map((division) => (
+          <span key={division} className="text-muted-foreground inline-flex items-center gap-1">
+            <span
+              className="inline-block size-2 rounded-full"
+              style={{ backgroundColor: colorOf(division, order) }}
+            />
+            {division}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
