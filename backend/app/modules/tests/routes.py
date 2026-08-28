@@ -71,6 +71,7 @@ from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
+    contention,
     curvedata,
     filestore,
     permissions,
@@ -804,34 +805,55 @@ def upload_test_run(
         db, definition, raw_conditions, given_units
     )
 
-    seq_no = services.next_run_seq(db, specimen.id, definition.id)
-    run = TestRun(
-        workspace_id=specimen.workspace_id,
-        specimen_id=specimen.id,
-        test_type_id=definition.id,
-        seq_no=seq_no,
-        record_name=naming.test_run_name(
-            specimen=specimen.record_name, type_abbr=definition.abbr, seq_no=seq_no
-        ),
-        conditions=values,
-        input_units=input_units,
-        tested_at=tested_at,
-        operator=operator,
-        note=note,
-        status="uploaded",
-        registered_by_id=user.id,
-    )
-    # 장비 기준정보(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면 장비별
-    # 비교가 무의미해진다.
-    vocabulary_services.apply_bindings(
+    def _make() -> TestRun:
+        """회차를 받아 시험을 만든다. **번호 읽기부터 flush 까지가 한 덩이다.**
+
+        둘이 같은 순간에 올리면 같은 회차를 읽고, 뒤엣것이 유니크에 부딪힌다
+        (실측 2026-08-28). 다시 할 때 **번호도 다시 읽어야** 하므로 여기 안에
+        둔다 — 바깥에서 정해 넘기면 재시도가 같은 번호로 또 부딪힌다.
+
+        일괄 등록이 이 자리를 특히 많이 지난다.
+        """
+        seq_no = services.next_run_seq(db, specimen.id, definition.id)
+        made = TestRun(
+            workspace_id=specimen.workspace_id,
+            specimen_id=specimen.id,
+            test_type_id=definition.id,
+            seq_no=seq_no,
+            record_name=naming.test_run_name(
+                specimen=specimen.record_name, type_abbr=definition.abbr, seq_no=seq_no
+            ),
+            conditions=values,
+            input_units=input_units,
+            tested_at=tested_at,
+            operator=operator,
+            note=note,
+            status="uploaded",
+            registered_by_id=user.id,
+        )
+        # 장비 기준정보(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면 장비별
+        # 비교가 무의미해진다.
+        vocabulary_services.apply_bindings(
+            db,
+            made,
+            vocabulary_services.TEST_RUN_BINDINGS,
+            {"instrument": instrument, "division": division},
+            created_by_id=user.id,
+        )
+        db.add(made)
+        db.flush()  # id 와 created_at 이 있어야 저장 경로가 정해진다
+        return made
+
+    # **파일을 저장하기 전에 부딪힌다.** 회차 충돌은 이 flush 에서 나므로,
+    # 다시 해도 저장한 파일이 남지 않는다.
+    run = contention.with_retry(
         db,
-        run,
-        vocabulary_services.TEST_RUN_BINDINGS,
-        {"instrument": instrument, "division": division},
-        created_by_id=user.id,
+        _make,
+        code="MNX-TESTS-0032",
+        message=(
+            "같은 순간에 여러 사람이 이 시편에 시험을 올리고 있습니다. 다시 시도해 주세요."
+        ),
     )
-    db.add(run)
-    db.flush()  # id 와 created_at 이 있어야 저장 경로가 정해진다
     db.refresh(run)
 
     stored = filestore.save_stream(

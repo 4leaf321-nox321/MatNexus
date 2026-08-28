@@ -70,7 +70,7 @@ from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, display, sorting, specimen_size
+from app.shared import audit, contention, display, sorting, specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -609,7 +609,17 @@ def _make_material(
         created_by_id=user.id,
     )
     db.add(material)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        # **`ensure_name_free` 를 지나왔어도 부딪힌다.** 검사와 넣기 사이에 남이
+        # 같은 이름을 넣을 수 있다 — 그때 500 을 내면 사람은 자기가 뭘 잘못했는지
+        # 알 수 없다. 이름은 사람이 정한 값이라 말없이 바꾸지 않는다.
+        db.rollback()
+        raise Conflict(
+            "MNX-MATERIALS-0004",
+            f"같은 이름의 재료가 이미 있습니다: {material.record_name}",
+        ) from exc
     # 용도는 재료의 칸이 아니라 매달린 줄이라, 재료가 id 를 받은 뒤에 붙는다.
     services.set_uses(db, material, "product", payload.applied_products, created_by_id=user.id)
     services.set_uses(db, material, "part", payload.applied_parts, created_by_id=user.id)
@@ -1324,9 +1334,23 @@ def create_sample(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> SampleOut:
-    material = services.get_material(db, user, material_id)
+    services.get_material(db, user, material_id)  # 볼 권한이 있는가
     workspace = services.resolve_workspace(db, user, payload.workspace_slug)
-    sample = _make_sample(db, user, material, payload, workspace=workspace)
+    # **둘이 같은 순간에 만들면 같은 번호를 읽는다**(실측 2026-08-28). 번호는
+    # 사람이 고른 값이 아니므로 다시 받으면 그만이다 — 되돌린 세션에서 재료를
+    # 다시 읽어야 하므로 그것까지 안에서 한다.
+    sample = contention.with_retry(
+        db,
+        lambda: _make_sample(
+            db,
+            user,
+            services.get_material(db, user, material_id),
+            payload,
+            workspace=workspace,
+        ),
+        code="MNX-MATERIALS-0032",
+        message="같은 순간에 여러 사람이 시료를 만들고 있습니다. 다시 시도해 주세요.",
+    )
     db.commit()
     return _sample_out(
         sample,
