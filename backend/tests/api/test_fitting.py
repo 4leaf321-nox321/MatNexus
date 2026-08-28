@@ -38,8 +38,15 @@ STEPS: list[dict[str, Any]] = [
     },
     {"plugin": "tensile.strength", "options": {}},
     {
+        # **직접 입력이다.** `Example.tra` 는 18점짜리 발췌본이라 탄성 창에 점이
+        # 한둘밖에 안 들어간다 — 회귀로는 값이 안 나온다(그래서 안 내도록 막았다,
+        # `MIN_TRUSTWORTHY_POINTS`). 이 파일의 시험들은 **카드·덱을 보는 것**이지
+        # 탄성계수 적합을 보는 것이 아니므로, 아는 값을 넣고 그 뒤를 시험한다.
+        #
+        # (전에는 `lower`·`upper` 를 줬는데 그런 이름의 칸이 없어 조용히 무시되고
+        # 기본 창이 쓰였다. 그러고도 값이 나왔던 것이 지금 막은 그 문제다.)
         "plugin": "tensile.elastic_modulus",
-        "options": {"method": "linear_regression", "lower": 0.0002, "upper": 0.002},
+        "options": {"method": "manual", "manual_modulus": 200e9},
     },
     {"plugin": "tensile.true_plastic", "options": {"youngs_modulus": "@youngs_modulus"}},
 ]

@@ -111,13 +111,16 @@ class Test탄성계수:
         assert scalar(result, "elastic_r_squared") < 0.99
         assert any("R²" in note for note in result.notes)
 
-    def test_점이_적으면_R제곱을_믿지_말라고_말한다(self) -> None:
-        """**실측으로 걸린 것이다.**
+    def test_점이_모자라면_탄성계수를_아예_안_낸다(self) -> None:
+        """**여기가 진짜 지키는 것이다 — 나쁜 값을 내보내지 않는다.**
 
-        18점짜리 곡선에 좁은 구간을 잡으면 2점만 걸리고, 2점을 지나는 직선은
-        언제나 R²=1 이다. 화면에 1.00000 이 찍히면 사람은 "완벽하게 맞았다" 로
-        읽는데 실제로는 "정보가 없다" 다. 실제 `.tra` 로 돌렸을 때 그렇게
-        6.9 GPa 가 R²=1 과 함께 나왔다 — 강판이면 200 GPa 여야 한다.
+        경고만 붙이고 값은 내던 때가 있었다. 그러면 그 값이 채택돼 통계·물성
+        카드·해석 덱까지 흘러가고, 경고는 처리 화면에만 남아 아무도 다시 안 본다.
+
+        실측(2026-08-29): 이관 데이터의 18점짜리 곡선에서 탄성계수 중앙값이
+        **1.83 GPa** 로 나왔다 — 강판이면 200 GPa 다. 같은 코드가 2000점짜리
+        곡선에서는 200.2 GPa 를 낸다. **R² 로는 이것을 못 막는다** — 2점을
+        지나는 직선은 언제나 R²=1 이다.
         """
         strain = np.array([0.0, 0.0008, 0.0012, 0.05])
         sparse = Frame(
@@ -133,8 +136,52 @@ class Test탄성계수:
             ],
             sparse,
         )
-        assert scalar(result, "elastic_r_squared") == pytest.approx(1.0)
-        assert any("믿을 수 없습니다" in note for note in result.notes)
+        keys = {item.key for item in result.scalars}
+        assert "youngs_modulus" not in keys
+        # 절편·R² 도 함께 사라진다 — 계수를 못 믿으면 그 둘도 못 믿는다.
+        assert "elastic_intercept" not in keys and "elastic_r_squared" not in keys
+        # **왜 없는지가 값으로 남는다.** 「값이 없다」 만으로는 고칠 데를 모른다.
+        assert scalar(result, "elastic_point_count") == pytest.approx(2.0)
+        assert any("탄성계수를 내지 않았습니다" in note for note in result.notes)
+
+    def test_단계를_실패시키지는_않는다(self) -> None:
+        """인장강도·연신율은 멀쩡히 나온 것이다 — 그것까지 잃으면 사람이 「점이
+        모자란 것」 을 고치는 대신 이 단계를 빼 버린다."""
+        strain = np.array([0.0, 0.0008, 0.0012, 0.05])
+        sparse = Frame(
+            {"strain_engineering": strain, "stress_engineering": strain * E_TRUE},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {"minimum_strain": 0.0005, "maximum_strain": 0.0015},
+                ),
+                Step("tensile.strength", {}),
+            ],
+            sparse,
+        )
+        assert scalar(result, "tensile_strength") > 0
+
+    def test_직접_입력은_점_수와_무관하다(self) -> None:
+        """**빠져나갈 문이 있어야 한다.** 값을 아는 사람이 규격서를 보고 적는
+        길까지 막으면, 점이 모자란 곡선은 영영 카드를 못 만든다."""
+        strain = np.array([0.0, 0.0008, 0.0012, 0.05])
+        sparse = Frame(
+            {"strain_engineering": strain, "stress_engineering": strain * E_TRUE},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {"method": "manual", "manual_modulus": E_TRUE},
+                )
+            ],
+            sparse,
+        )
+        assert scalar(result, "youngs_modulus") == pytest.approx(E_TRUE)
 
     def test_사실상_한_점인_구간을_막는다(self) -> None:
         """**`polyfit` 은 퇴화한 구간에도 숫자를 돌려준다.**

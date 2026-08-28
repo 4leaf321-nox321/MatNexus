@@ -34,7 +34,14 @@ from matcore.processing import (
     require_increasing,
 )
 
-#: R² 가 뜻을 갖기 시작하는 점 수. 이보다 적으면 값이 아니라 경고를 낸다.
+#: 탄성계수를 낼 수 있는 최소 점 수. **이보다 적으면 값을 안 낸다.**
+#:
+#: 경고만 붙이고 값은 내던 때가 있었다. 그 값이 채택되면 통계·물성 카드·해석 덱까지
+#: 그대로 흘러가고, 경고는 처리 화면에만 남아 아무도 다시 안 본다. 실측(2026-08-29):
+#: 이관 데이터의 18점짜리 곡선에서 탄성계수 중앙값이 **1.83 GPa** 로 나왔다 —
+#: 강판이면 200 GPa 다. 같은 코드가 2000점짜리 곡선에서는 200.2 GPa 를 낸다.
+#:
+#: 2점을 지나는 직선은 언제나 R²=1 이라 **R² 로는 이것을 못 막는다.** 점 수로 막는다.
 MIN_TRUSTWORTHY_POINTS = 5
 
 #: 이 모듈이 만들어 내는 열 이름. 뒤 단계와 화면이 이 이름으로 찾는다.
@@ -399,6 +406,15 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
             si_unit="1",
             help="그 구간이 실제로 직선이었는가. 점이 5개 미만이면 내지 않습니다.",
         ),
+        Produced(
+            key="elastic_point_count",
+            label="탄성 구간 점 수",
+            si_unit="1",
+            help=(
+                "그 구간에 실제로 있던 점의 수. **5개 미만이면 탄성계수를 내지 "
+                "않습니다** — 값이 왜 없는지 이 수가 말합니다."
+            ),
+        ),
     ),
     order=50,
     version="1",
@@ -456,12 +472,37 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"구간이 항복 뒤에 걸쳐 있거나 응력 부호가 뒤집혔을 수 있습니다."
         )
 
+    # **점이 모자라면 값을 안 낸다.** 경고만 붙이고 값은 내던 때가 있었다 — 그러면
+    # 그 값이 채택돼 통계·카드·해석 덱까지 흘러가고, 경고는 처리 화면에만 남는다.
+    #
+    # 2점을 지나는 직선은 언제나 R²=1 이라 **R² 로는 못 막는다.** 점 수로 막는다.
+    # 실측(2026-08-29): 18점 곡선에서 1.83 GPa, 같은 코드가 2000점에서 200.2 GPa.
+    #
+    # 단계는 실패시키지 않는다 — 인장강도·연신율은 멀쩡히 나온 것이고, 그것까지
+    # 잃으면 사람이 「점이 모자란 것」 을 고치는 대신 이 단계를 빼 버린다.
+    too_few = method != "manual" and count < MIN_TRUSTWORTHY_POINTS
+    if too_few:
+        return StepResult(
+            frame,
+            notes=(
+                f"변형률 [{low:.6g}, {high:.6g}] 구간에 {count}점밖에 없어 "
+                f"**탄성계수를 내지 않았습니다.** {MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 "
+                f"— {count}점을 지나는 직선은 거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. "
+                f"구간을 넓히거나, 더 조밀한 곡선을 쓰거나, 값을 아는 경우 방법을 "
+                f"「직접 입력」 으로 바꾸세요. 관측 범위는 "
+                f"[{float(strain.min()):.6g}, {float(strain.max()):.6g}] 입니다.",
+            ),
+            scalars=(Scalar("elastic_point_count", "탄성 구간 점 수", float(count), "1"),),
+        )
+
     scalars = [
         Scalar("youngs_modulus", "탄성계수", float(modulus), "Pa"),
         Scalar("elastic_intercept", "탄성 절편", float(intercept), "Pa"),
     ]
     if math.isfinite(r_squared):
         scalars.append(Scalar("elastic_r_squared", "탄성 구간 R²", float(r_squared), "1"))
+    if method != "manual":
+        scalars.append(Scalar("elastic_point_count", "탄성 구간 점 수", float(count), "1"))
 
     note = (
         f"직접 입력한 탄성계수 {modulus / 1e9:.4g} GPa"
@@ -472,19 +513,7 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         )
     )
     notes = [note]
-    if method != "manual" and count < MIN_TRUSTWORTHY_POINTS:
-        # **R² 는 점이 적으면 아무 말도 하지 않는다.** 2점을 지나는 직선은 언제나
-        # R²=1 이고, 3점도 거의 그렇다. 그런데 화면에 1.00000 이 찍히면 사람은
-        # "완벽하게 맞았다" 로 읽는다 — 실제로는 "정보가 없다" 다.
-        #
-        # 실측으로 걸렸다: 18점짜리 곡선에 [0.001, 0.004] 구간을 잡았더니 2점이
-        # 걸려 R²=1 로 6.9 GPa 가 나왔다. 강판이면 200 GPa 여야 한다.
-        notes.append(
-            f"이 구간에 {count}점밖에 없습니다 — **R² 를 믿을 수 없습니다.** "
-            f"{count}점을 지나는 직선은 거의 언제나 R²≈1 입니다. "
-            f"구간을 넓히거나 더 조밀하게 측정된 곡선을 쓰세요."
-        )
-    elif math.isfinite(r_squared) and r_squared < 0.99:
+    if math.isfinite(r_squared) and r_squared < 0.99:
         # **경고이지 실패가 아니다.** 재료에 따라 진짜로 직선이 아닐 수 있다.
         notes.append(
             f"R² 가 {r_squared:.4f} 로 낮습니다 — 구간이 항복 뒤까지 걸쳐 있거나 "
