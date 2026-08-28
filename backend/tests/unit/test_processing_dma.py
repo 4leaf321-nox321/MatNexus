@@ -194,3 +194,89 @@ class TestToShear:
                 frame(storage_modulus=[2700.0], loss_modulus=[270.0]),
                 poisson_ratio=0.5,
             )
+
+
+class Test선형점탄성_탄성률:
+    """변형률 스윕에서 E 를 뽑는다 — **인장의 탄성계수와 같은 자리.**
+
+    인장은 곡선에서 직선 구간을 찾아 기울기를, 여기는 평탄 구간을 찾아 높이를
+    낸다. 그래서 무는 자리도 같다: **어디까지를 그 구간으로 보는가.**
+    """
+
+    #: 0.1 % 부터 무너지는 합성 곡선. 평탄부 1.20 GPa.
+    STRAIN: ClassVar[list[float]] = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1.0, 3.0]
+    STORAGE: ClassVar[list[float]] = [
+        1.200e9,
+        1.199e9,
+        1.198e9,
+        1.190e9,
+        0.900e9,
+        0.400e9,
+        0.150e9,
+        0.050e9,
+    ]
+
+    def _run(self, **options: object) -> processing.PipelineResult:
+        return run(
+            "dma.lve_modulus",
+            frame(oscillation_strain=self.STRAIN, storage_modulus=self.STORAGE),
+            **options,
+        )
+
+    def test_평탄부의_높이를_낸다(self) -> None:
+        values = {one.key: one.value for one in self._run().scalars}
+        # 앞 네 점이 5 % 안에 있다 — 그 평균.
+        assert values["youngs_modulus"] == pytest.approx(1.1968e9, rel=1e-3)
+        assert values["lve_point_count"] == 4
+
+    def test_선형_한계를_함께_낸다(self) -> None:
+        """**이보다 크게 흔들면 그 값은 선형이 아니다.** 값만 주고 한계를 안
+        주면 다음 사람이 어디까지 믿을 수 있는지 모른다."""
+        values = {one.key: one.value for one in self._run().scalars}
+        assert values["lve_strain_limit"] == pytest.approx(3e-2)
+
+    def test_산출_키가_탄성_블록의_이름이다(self) -> None:
+        """**카드가 인장에서 왔는지 DMA 에서 왔는지 몰라도 되게.** 키를 따로
+        두면 블록마다 대응표를 손으로 적어야 한다."""
+        assert "youngs_modulus" in {one.key for one in self._run().scalars}
+
+    def test_중간에_무너졌다_올라온_점은_안_줍는다(self) -> None:
+        """**낮은 쪽부터 이어진 구간만 본다.** 주우면 평균이 조용히 올라가고,
+        그 값은 어떤 변형률의 것도 아니게 된다."""
+        broken = frame(
+            oscillation_strain=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1],
+            # 셋째에서 무너졌다가 넷째에서 되올라온다.
+            storage_modulus=[1.20e9, 1.19e9, 0.50e9, 1.20e9, 0.40e9],
+        )
+        outcome = processing.apply(
+            [processing.Step("dma.lve_modulus", {"minimum_points": 2})], broken
+        )
+        values = {one.key: one.value for one in outcome.scalars}
+        assert values["lve_point_count"] == 2
+
+    def test_평탄이_너무_짧으면_막는다(self) -> None:
+        """**두 점은 직선이지 평탄이 아니다.** 그 평균을 「E 를 쟀다」 고 부를 수
+        없다 — 없는 값을 만들지 않는다."""
+        steep = frame(
+            oscillation_strain=[1e-3, 1e-2, 1e-1],
+            storage_modulus=[1.20e9, 0.60e9, 0.20e9],
+        )
+        with pytest.raises(ProcessingError) as caught:
+            processing.apply([processing.Step("dma.lve_modulus", {})], steep)
+        assert "선형 구간" in str(caught.value)
+
+    def test_끝까지_평탄하면_한계를_못_봤다고_말한다(self) -> None:
+        """그 값을 「선형 한계」 라고 부르면 **잰 적 없는 것을 잰 것처럼** 말하는
+        셈이 된다."""
+        flat = frame(
+            oscillation_strain=[1e-3, 3e-3, 1e-2, 3e-2],
+            storage_modulus=[1.20e9, 1.20e9, 1.19e9, 1.19e9],
+        )
+        outcome = processing.apply([processing.Step("dma.lve_modulus", {})], flat)
+        assert any("관측하지 못했습니다" in said for said in outcome.notes)
+
+    def test_판정_폭을_넓히면_더_줍는다(self) -> None:
+        """관행값(5 %)이 모든 재료에 맞지는 않는다 — 고를 수 있어야 한다."""
+        narrow = {one.key: one.value for one in self._run(tolerance=0.05).scalars}
+        wide = {one.key: one.value for one in self._run(tolerance=0.30).scalars}
+        assert wide["lve_point_count"] > narrow["lve_point_count"]

@@ -367,3 +367,167 @@ def to_shear(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"ν 는 온도에 따라 변하고, 이방성 재료에서는 이 식이 성립하지 않습니다.",
         ),
     )
+
+
+#: 변형률 스윕이 쓰는 채널. 장비는 변형률을 %로 준다.
+STRAIN = "oscillation_strain"
+
+LVE_MODULUS = "youngs_modulus"
+LVE_LIMIT = "lve_strain_limit"
+LVE_POINTS = "lve_point_count"
+
+
+@register(
+    id="dma.lve_modulus",
+    kind="processing",
+    label="선형점탄성 탄성률 (변형률 스윕)",
+    params=(
+        ParamSpec(
+            name="strain",
+            label="변형률 열",
+            type="str",
+            role="column",
+            default=STRAIN,
+        ),
+        ParamSpec(
+            name="storage", label="저장 탄성률 열", type="str", role="column", default=STORAGE
+        ),
+        ParamSpec(
+            name="tolerance",
+            label="평탄 판정",
+            type="float",
+            default=0.05,
+            help=(
+                "가장 높은 저장 탄성률에서 이만큼 떨어지기 전까지를 선형 구간으로 "
+                "봅니다. 0.05 면 5 % — ASTM D4065 가 쓰는 관행값입니다."
+            ),
+        ),
+        ParamSpec(
+            name="minimum_points",
+            label="최소 점 수",
+            type="int",
+            default=3,
+            help="이보다 적으면 평탄이라 부르지 않습니다. 두 점은 직선이지 평탄이 아닙니다.",
+        ),
+    ),
+    applies_to=("dma_sweep",),
+    makes_values=(
+        Produced(
+            key=LVE_MODULUS,
+            label="저장 탄성률 (선형 구간)",
+            si_unit="Pa",
+            help=(
+                "선형점탄성 평탄 구간의 저장 탄성률. **탄성 블록의 E 로 그대로 "
+                "간다** — 인장의 탄성계수와 같은 자리입니다."
+            ),
+        ),
+        Produced(
+            key=LVE_LIMIT,
+            label="선형 한계 변형률",
+            si_unit="1",
+            help="평탄이 끝나는 변형률. 이보다 크게 흔들면 그 값은 선형이 아닙니다.",
+        ),
+        Produced(
+            key=LVE_POINTS,
+            label="선형 구간 점 수",
+            si_unit="1",
+            help="평탄으로 본 점의 수. 적으면 그 평균을 믿기 어렵습니다.",
+        ),
+    ),
+    order=20,
+    version="1",
+)
+def lve_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
+    """변형률 스윕에서 **선형점탄성 구간의 저장 탄성률**을 낸다.
+
+    ## 인장의 어느 자리인가
+
+    `tensile.elastic_modulus` 와 같다. 인장은 곡선에서 **직선 구간을 찾아
+    기울기**를 내고, 여기는 **평탄 구간을 찾아 높이**를 낸다 — 둘 다 "곡선에서
+    믿을 수 있는 구간을 골라 한 숫자를 뽑는" 일이다. 그래서 뒤(채택 → 시편 n개
+    평균 → 탄성 블록)가 통째로 같다.
+
+    산출 키를 `youngs_modulus` 로 둔 것도 그래서다. **탄성 블록이 받는 이름**이라
+    카드가 인장에서 온 것인지 DMA 에서 온 것인지 몰라도 된다.
+
+    ## 평탄을 어떻게 고르나
+
+    가장 높은 저장 탄성률에서 `tolerance` 만큼 떨어지기 전까지다. **낮은 변형률
+    쪽부터 이어진 구간만** 본다 — 중간에 한 번 무너졌다 올라온 점은 선형이 아니고,
+    그것을 주우면 평균이 조용히 올라간다.
+
+    ## 안 되면 막는다
+
+    평탄이 `minimum_points` 보다 짧으면 값을 내지 않는다. 두 점은 직선이지
+    평탄이 아니고, 그 평균은 「E 를 쟀다」 고 부를 수 없다 — 없는 값을 만들지
+    않는 것이 이 저장소의 규칙이다.
+    """
+    strain_key = str(options.get("strain") or STRAIN)
+    storage_key = str(options.get("storage") or STORAGE)
+    strain = frame.require(strain_key, what="변형률")
+    storage = frame.require(storage_key, what="저장 탄성률")
+
+    tolerance = option_float(options, "tolerance", 0.05)
+    if not 0 < tolerance < 1:
+        raise ProcessingError(f"평탄 판정은 0 과 1 사이여야 합니다: {tolerance}")
+    least = max(int(options.get("minimum_points") or 3), 2)
+
+    if np.any(storage <= 0):
+        raise ProcessingError("저장 탄성률에 0 이하가 있습니다. 그 점을 먼저 잘라내세요.")
+
+    # **변형률이 커지는 순서로 본다.** 파일이 그 순서라는 보장이 없다.
+    order = np.argsort(strain)
+    strain, storage = strain[order], storage[order]
+
+    plateau = float(np.max(storage))
+    floor = plateau * (1.0 - tolerance)
+
+    # **낮은 쪽부터 이어진 구간만.** 중간에 무너졌다 올라온 점을 주우면 평균이
+    # 조용히 올라간다 — 그건 선형 구간이 아니다.
+    count = 0
+    for value in storage:
+        if value < floor:
+            break
+        count += 1
+
+    if count < least:
+        raise ProcessingError(
+            f"선형 구간이 {count}점뿐입니다(최소 {least}점). 가장 낮은 변형률에서도 "
+            f"이미 무너지고 있거나, 평탄 판정({tolerance:.0%})이 너무 좁습니다."
+        )
+
+    notes: list[str] = []
+    if count == len(storage):
+        # **끝까지 평탄이면 한계를 못 봤다.** 그 값을 「선형 한계」 라고 부르면
+        # 잰 적 없는 것을 잰 것처럼 말하는 셈이다.
+        notes.append(
+            "끝까지 평탄합니다 — 선형 한계를 관측하지 못했습니다. 더 큰 변형률까지 "
+            "재야 그 값이 나옵니다."
+        )
+
+    return StepResult(
+        frame,
+        notes=tuple(notes),
+        scalars=(
+            Scalar(
+                key=LVE_MODULUS,
+                label="저장 탄성률 (선형 구간)",
+                value=float(np.mean(storage[:count])),
+                si_unit="Pa",
+                dimension="stress",
+            ),
+            Scalar(
+                key=LVE_LIMIT,
+                label="선형 한계 변형률",
+                value=float(strain[count - 1]),
+                si_unit="1",
+                dimension="strain",
+            ),
+            Scalar(
+                key=LVE_POINTS,
+                label="선형 구간 점 수",
+                value=float(count),
+                si_unit="1",
+            ),
+        ),
+    )
