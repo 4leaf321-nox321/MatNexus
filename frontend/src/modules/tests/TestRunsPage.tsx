@@ -23,6 +23,7 @@ import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { Stamp } from '@/shared/components/Stamp'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { BulkEditDialog } from '@/modules/tests/BulkEditDialog'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
@@ -477,8 +478,10 @@ export default function TestRunsPage() {
                 <TableCell className="text-muted-foreground text-sm">
                   {run.registered_by ?? '—'}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {new Date(run.created_at).toLocaleDateString('ko-KR')}
+                <TableCell>
+                  {/* **같은 날 여러 번 올린다.** 배치로 들어오면 날짜만으로는
+                      어느 것이 나중 것인지 표만 봐서는 모른다. */}
+                  <Stamp at={run.created_at} />
                 </TableCell>
               </TableRow>
             ))}

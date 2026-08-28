@@ -42,12 +42,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
-
-/** 언제 지웠나. **시각이 근거의 일부다** — 같은 날 여러 번 지우는 일이 흔하다. */
-function when(value: string): string {
-  const at = new Date(value)
-  return `${at.toLocaleDateString('ko-KR')} ${at.toLocaleTimeString('ko-KR')}`
-}
+import { stamp } from '@/shared/lib/datetime'
 
 /** `{시료: 2, 시편: 6}` → `시료 2건 · 시편 6건`. 비면 빈 글자. */
 function below(counts: Record<string, number>): string {
@@ -136,7 +131,7 @@ export default function TrashPage() {
               {rows.map((row) => (
                 <TableRow key={`${row.kind}-${row.id}`}>
                   <TableCell className="text-muted-foreground text-xs whitespace-nowrap tabular-nums">
-                    {when(row.deleted_at)}
+                    {stamp(row.deleted_at)}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{row.kind_label}</Badge>

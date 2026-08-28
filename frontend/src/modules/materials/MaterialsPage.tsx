@@ -35,6 +35,7 @@ import {
   FILTER_ROW,
 } from '@/shared/components/ColumnFilter'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { Stamp } from '@/shared/components/Stamp'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -423,6 +424,11 @@ export default function MaterialsPage() {
                 <TableHead className={`text-right ${FILTER_HEAD}`}>
                   <ColumnLabel align="right">시료</ColumnLabel>
                 </TableHead>
+                <TableHead className={`w-36 ${FILTER_HEAD}`}>
+                  {/* 서버가 거르는 축이 아니다 — 거르는 칸을 두면 이 쪽에 실린
+                      것만 걸러 거짓말을 한다. */}
+                  <ColumnLabel>등록 일시</ColumnLabel>
+                </TableHead>
                 <TableHead className={`w-28 ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="소속"
@@ -478,6 +484,9 @@ export default function MaterialsPage() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {material.sample_count}
+                  </TableCell>
+                  <TableCell>
+                    <Stamp at={material.created_at} />
                   </TableCell>
                   <TableCell>
                     {material.is_global ? (

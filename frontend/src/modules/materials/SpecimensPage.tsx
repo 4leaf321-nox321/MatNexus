@@ -39,6 +39,7 @@ import {
 } from '@/shared/components/ColumnFilter'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { Stamp } from '@/shared/components/Stamp'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -248,6 +249,9 @@ export default function SpecimensPage() {
               <TableHead className={`text-right ${FILTER_HEAD}`}>
                 <ColumnLabel align="right">시험</ColumnLabel>
               </TableHead>
+              <TableHead className={`w-36 ${FILTER_HEAD}`}>
+                <ColumnLabel>등록 일시</ColumnLabel>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -307,6 +311,9 @@ export default function SpecimensPage() {
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
+                </TableCell>
+                <TableCell>
+                  <Stamp at={row.created_at} />
                 </TableCell>
               </TableRow>
             ))}

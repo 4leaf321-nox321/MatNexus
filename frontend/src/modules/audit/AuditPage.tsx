@@ -35,12 +35,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
-
-/** 언제 일어났나. **시각이 근거의 일부**라 날짜만으로는 부족하다. */
-function when(value: string): string {
-  const at = new Date(value)
-  return `${at.toLocaleDateString('ko-KR')} ${at.toLocaleTimeString('ko-KR')}`
-}
+import { stamp } from '@/shared/lib/datetime'
 
 function Changes({ entry }: { entry: AuditEntry }) {
   const keys = Object.keys(entry.changes ?? {})
@@ -116,7 +111,7 @@ export default function AuditPage() {
               {rows.map((entry) => (
                 <TableRow key={entry.id}>
                   <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
-                    {when(entry.created_at)}
+                    {stamp(entry.created_at)}
                   </TableCell>
                   <TableCell>
                     {/* **모르는 코드도 감추지 않는다.** 모르는 일이 일어났다는
