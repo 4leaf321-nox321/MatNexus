@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { visibleGroups } from '@/shared/layout/navigation'
+import { NAV_GROUPS, visibleGroups } from '@/shared/layout/navigation'
 
 const MEMBER = { isSystemAdmin: false, isAnyManager: false }
 const MANAGER = { isSystemAdmin: false, isAnyManager: true }
@@ -90,3 +90,14 @@ describe('사이드바 메뉴', () => {
     expect(titles).toContain('부서')
   })
 })
+
+describe('미구현 표시', () => {
+  it('stub 화면만 pending 이다 — 화면이 생기면 지운다', () => {
+    const pending = NAV_GROUPS.flatMap((group) => group.items)
+      .filter((item) => item.pending)
+      .map((item) => item.label)
+    // router.tsx 의 stub() 목록과 짝이다. 화면을 만들었으면 여기서 빼야 한다.
+    expect(pending.sort()).toEqual(['내 작업함', '물성 분석', '서버', '워크벤치'])
+  })
+})
+

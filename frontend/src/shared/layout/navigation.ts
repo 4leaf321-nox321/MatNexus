@@ -61,6 +61,9 @@ export interface NavItem {
   end?: boolean
   /** 기본은 `everyone`. */
   audience?: NavAudience
+  /** 아직 화면이 없다(stub). 사이드바가 「미구현」 표를 단다 — **자리는 보이되
+   *  눌러 보고 알게 하지 않는다.** 화면이 생기면 이 표시를 지운다. */
+  pending?: boolean
 }
 
 export interface NavGroup {
@@ -86,7 +89,7 @@ export const NAV_GROUPS: NavGroup[] = [
       //
       // 자리를 나누는 기준은 **작업이냐 열람이냐** 다. 여러 시험을 골라 미는
       // 것은 워크벤치, "이 재료의 물성이 얼마인가" 는 재료 상세다.
-      { label: '워크벤치', icon: SlidersHorizontal, resolve: (s) => `/w/${s}/workbench` },
+      { label: '워크벤치', icon: SlidersHorizontal, resolve: (s) => `/w/${s}/workbench`, pending: true },
     ],
   },
   {
@@ -101,13 +104,13 @@ export const NAV_GROUPS: NavGroup[] = [
       // **재료를 거치지 않고 카드를 찾는다.** 재료 상세의 'CAE 카드' 탭은 그
       // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
       { label: '물성 카드', icon: FileDown, to: '/cards' },
-      { label: '물성 분석', icon: GitCompare, to: '/compare' },
+      { label: '물성 분석', icon: GitCompare, to: '/compare', pending: true },
     ],
   },
   {
     title: '내 활동',
     items: [
-      { label: '내 작업함', icon: User, to: '/personal' },
+      { label: '내 작업함', icon: User, to: '/personal', pending: true },
       { label: '알림', icon: Bell, to: '/notifications' },
       // 팝업이었다가 화면이 됐다 — 액세스 토큰까지 붙자 팝업이 좁았다.
       { label: '내 정보', icon: UserCog, to: '/me' },
@@ -202,7 +205,7 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/admin/trash',
         audience: 'system_admin',
       },
-      { label: '서버', icon: Server, to: '/server', audience: 'system_admin' },
+      { label: '서버', icon: Server, to: '/server', audience: 'system_admin', pending: true },
     ],
   },
 ]
