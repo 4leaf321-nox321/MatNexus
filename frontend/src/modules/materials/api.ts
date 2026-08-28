@@ -11,8 +11,7 @@ export type Specimen = components['schemas']['SpecimenOut']
 /** 평면 목록의 한 줄 — 시편에 재료·시료를 얹은 것. */
 export type SpecimenRow = components['schemas']['SpecimenRowOut']
 export type SpecimenRowPage = components['schemas']['Page_SpecimenRowOut_']
-export type SpecimenBulkField =
-  components['schemas']['SpecimenBulkUpdateRequest']['field']
+export type SpecimenBulkField = components['schemas']['SpecimenBulkUpdateRequest']['field']
 export type SpecimenBulkResult = components['schemas']['SpecimenBulkUpdateOut']
 /** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
 export type SpecimenUpdated = components['schemas']['SpecimenUpdateOut']
@@ -107,6 +106,9 @@ export interface MaterialQuery {
   family?: string
   category?: string
   scope?: 'all' | 'mine' | 'global'
+  /** 그 부서 소유만. **`scope` 로는 부족하다** — 「전역인가」 만 가르므로 부서가
+   *  여럿인 곳에서 「고분자팀 재료」 를 못 찾는다. slug 를 준다. */
+  workspace?: string
   /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
   sort?: string
   desc?: boolean
@@ -138,7 +140,14 @@ function search(query: MaterialQuery | SpecimenQuery): string {
   return text ? `?${text}` : ''
 }
 
+/** 소속 거르기에 세울 부서. **재료 모듈이 부서 목록을 직접 읽는다** — 화면이
+ *  고를 값을 만들려면 이름이 필요하고, 그 목록은 부서 모듈의 것이 아니라 서버의
+ *  것이다(모듈끼리 직접 부르지 않는다). */
+export type WorkspaceChoice = components['schemas']['WorkspaceOut']
+
 export const materialsApi = {
+  /** 소속 거르기의 선택지. 내가 볼 수 있는 부서. */
+  workspaces: () => api.get<WorkspaceChoice[]>('/workspaces'),
   list: (query: MaterialQuery = {}) => api.get<MaterialPage>(`/materials${search(query)}`),
 
   /**
@@ -172,8 +181,7 @@ export const materialsApi = {
   classifications: () => api.get<Classification[]>('/materials/classifications'),
   get: (id: string) => api.get<Material>(`/materials/${id}`),
   create: (payload: MaterialCreate) => api.post<Material>('/materials', payload),
-  update: (id: string, payload: MaterialUpdate) =>
-    api.patch<Material>(`/materials/${id}`, payload),
+  update: (id: string, payload: MaterialUpdate) => api.patch<Material>(`/materials/${id}`, payload),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),
 
   /**
@@ -195,8 +203,7 @@ export const materialsApi = {
     api.post<BulkDeletePlan>('/materials/delete-plan', { material_ids: materialIds }),
 
   /** 지우기 전에 **무엇이 함께 사라지는지.** 세는 곳은 서버 하나다. */
-  deletePlan: (materialId: string) =>
-    api.get<DeletePlan>(`/materials/${materialId}/delete-plan`),
+  deletePlan: (materialId: string) => api.get<DeletePlan>(`/materials/${materialId}/delete-plan`),
 
   /**
    * 아래까지 통째로 — 시험 → 시편 → 시료 → 재료 순서로.
@@ -233,12 +240,10 @@ export const materialsApi = {
    * 증명이 맞는지 확인할 자리가 지금까지 없었다 — 값은 문서에, 시험 결과는
    * 시스템에 따로 있었다.
    */
-  millCheck: (sampleId: string) =>
-    api.get<MillCheck>(`/samples/${sampleId}/mill-check`),
+  millCheck: (sampleId: string) => api.get<MillCheck>(`/samples/${sampleId}/mill-check`),
 
   /** 어떤 값이 어디에 적혀 있고 무엇에 쓰이는지. 화면이 이 배치를 외우지 않는다. */
-  propertySources: (id: string) =>
-    api.get<PropertySources>(`/materials/${id}/property-sources`),
+  propertySources: (id: string) => api.get<PropertySources>(`/materials/${id}/property-sources`),
 
   /** 이름을 만드는 곳은 서버 하나다 — 화면은 규칙을 다시 구현하지 않고 물어본다. */
   previewName: (payload: NamePreviewRequest) =>
@@ -253,8 +258,7 @@ export const materialsApi = {
    * 없어서 막다른 길이 됐다: 로트를 잘못 적으면 고칠 수 없고, 지우려 해도
    * 시편이 달려 있으면 서버가 막는다.
    */
-  updateSample: (id: string, payload: SampleUpdate) =>
-    api.patch<Sample>(`/samples/${id}`, payload),
+  updateSample: (id: string, payload: SampleUpdate) => api.patch<Sample>(`/samples/${id}`, payload),
   removeSample: (id: string) => api.delete<void>(`/samples/${id}`),
 
   specimens: (sampleId: string) => api.get<Specimen[]>(`/samples/${sampleId}/specimens`),

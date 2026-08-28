@@ -2270,6 +2270,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statistics/analysis/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Compare
+         * @description 재료 몇 개를 나란히. **항목이 열, 재료가 행이다.**
+         *
+         *     안 고르면 빈 표를 준다 — 전체를 자동으로 세우면 94개짜리 표가 나온다.
+         */
+        get: operations["analysis_compare_api_statistics_analysis_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/analysis/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Coverage
+         * @description 재료-시험종류 격자. **빈 칸이 다음에 할 시험이다.**
+         */
+        get: operations["analysis_coverage_api_statistics_analysis_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/analysis/distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Distribution
+         * @description 사업부·재료군별 흩어짐. **이상치가 곧 재시험 후보다.**
+         */
+        get: operations["analysis_distribution_api_statistics_analysis_distribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/analysis/spec-gap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Spec Gap
+         * @description 선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**
+         *
+         *     잇는 열쇠는 **이름**이다 — 선언은 기준정보 항목(`탄성계수`)이고 잰 값은 처리
+         *     결과의 라벨(`탄성계수`)이라 코드가 겹치지 않는다. 이름이 다르면 못 견주므로
+         *     그 항목을 `unmatched_items` 로 돌려준다 — 숨기면 「차이가 없다」 로 읽힌다.
+         */
+        get: operations["analysis_spec_gap_api_statistics_analysis_spec_gap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/analysis/trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Trend
+         * @description 해가 가며 값이 흐르는가. **해는 시험일** — 등록일로 세면 이관한 해에 몰린다.
+         */
+        get: operations["analysis_trend_api_statistics_analysis_trend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/statistics/divisions": {
         parameters: {
             query?: never;
@@ -3875,6 +3981,68 @@ export interface components {
             /** Written */
             written: string;
         };
+        /** AnalysisCoverageOut */
+        AnalysisCoverageOut: {
+            /** Materials */
+            materials: components["schemas"]["CoverageMaterialOut"][];
+            /** Test Types */
+            test_types: components["schemas"]["CoverageTypeOut"][];
+        };
+        /** AnalysisDistributionOut */
+        AnalysisDistributionOut: {
+            /** Group By */
+            group_by: string;
+            /** Groups */
+            groups: components["schemas"]["DistributionGroupOut"][];
+            /** Scalar Key */
+            scalar_key: string;
+            /** Scalar Label */
+            scalar_label: string;
+            /** Scalars */
+            scalars: components["schemas"]["AnalysisScalarOut"][];
+            /** Si Unit */
+            si_unit: string;
+            /** Skipped Unadopted */
+            skipped_unadopted: number;
+        };
+        /**
+         * AnalysisScalarOut
+         * @description 고를 수 있는 물성 항목. **실제로 값이 있는 것만** — 건수를 함께 준다.
+         */
+        AnalysisScalarOut: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+        };
+        /** AnalysisSpecGapOut */
+        AnalysisSpecGapOut: {
+            /** Rows */
+            rows: components["schemas"]["SpecGapOut"][];
+            /** Unmatched Items */
+            unmatched_items: string[];
+        };
+        /** AnalysisTrendOut */
+        AnalysisTrendOut: {
+            /** Group By */
+            group_by: string;
+            /** Scalar Key */
+            scalar_key: string;
+            /** Scalar Label */
+            scalar_label: string;
+            /** Scalars */
+            scalars: components["schemas"]["AnalysisScalarOut"][];
+            /** Series */
+            series: components["schemas"]["TrendSeriesOut"][];
+            /** Si Unit */
+            si_unit: string;
+            /** Skipped Unadopted */
+            skipped_unadopted: number;
+        };
         /**
          * AppliedDimensionsOut
          * @description 무엇을 채웠는지. **시편 전체를 돌려주지 않는다** — 이 응답이 답해야 하는
@@ -4587,6 +4755,48 @@ export interface components {
             /** Retention Days */
             retention_days?: number | null;
         };
+        /** CompareCellOut */
+        CompareCellOut: {
+            /** Count */
+            count: number;
+            /** Maximum */
+            maximum: number;
+            /** Mean */
+            mean: number;
+            /** Minimum */
+            minimum: number;
+            /** Sample Sd */
+            sample_sd: number | null;
+            /** Scalar Key */
+            scalar_key: string;
+            /** Scalar Label */
+            scalar_label: string;
+            /** Si Unit */
+            si_unit: string;
+        };
+        /** CompareMaterialOut */
+        CompareMaterialOut: {
+            /** Family */
+            family: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Scalars */
+            scalars: components["schemas"]["CompareCellOut"][];
+        };
+        /** CompareOut */
+        CompareOut: {
+            /** Materials */
+            materials: components["schemas"]["CompareMaterialOut"][];
+            /** Scalars */
+            scalars: components["schemas"]["AnalysisScalarOut"][];
+            /** Skipped Unadopted */
+            skipped_unadopted: number;
+        };
         /** ConditionInput */
         ConditionInput: {
             /** Choices */
@@ -4688,6 +4898,36 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
+        };
+        /** CoverageCellOut */
+        CoverageCellOut: {
+            /** Adopted Count */
+            adopted_count: number;
+            /** Run Count */
+            run_count: number;
+        };
+        /** CoverageMaterialOut */
+        CoverageMaterialOut: {
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["CoverageCellOut"];
+            };
+            /** Family */
+            family: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+        };
+        /** CoverageTypeOut */
+        CoverageTypeOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /**
          * CreateAccountRequest
@@ -5061,6 +5301,12 @@ export interface components {
             reason: string | null;
             /** Status */
             status: string;
+        };
+        /** DistributionGroupOut */
+        DistributionGroupOut: {
+            /** Group */
+            group: string;
+            spread: components["schemas"]["SpreadOut"] | null;
         };
         /**
          * DistributionReportOut
@@ -7779,6 +8025,35 @@ export interface components {
             workspace_slug: string;
         };
         /**
+         * SpecGapOut
+         * @description 선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**
+         */
+        SpecGapOut: {
+            /** Declared Reference */
+            declared_reference: string | null;
+            /** Declared Si */
+            declared_si: number;
+            /** Declared Source */
+            declared_source: string | null;
+            /** Gap Ratio */
+            gap_ratio: number;
+            /** Item */
+            item: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Measured Count */
+            measured_count: number;
+            /** Measured Mean */
+            measured_mean: number;
+            /** Si Unit */
+            si_unit: string;
+        };
+        /**
          * SpecimenBriefSizeOut
          * @description 목록의 접힌 줄에 적는 치수 하나.
          *
@@ -8225,6 +8500,28 @@ export interface components {
             condition: string;
             /** Help */
             help?: string | null;
+        };
+        /**
+         * SpreadOut
+         * @description 상자그림 한 칸. 2건 미만이면 상자를 못 그리므로 없다.
+         */
+        SpreadOut: {
+            /** Count */
+            count: number;
+            /** Maximum */
+            maximum: number;
+            /** Mean */
+            mean: number;
+            /** Median */
+            median: number;
+            /** Minimum */
+            minimum: number;
+            /** Outliers */
+            outliers: number[];
+            /** Q1 */
+            q1: number;
+            /** Q3 */
+            q3: number;
         };
         /**
          * StandardImportItem
@@ -9036,6 +9333,28 @@ export interface components {
             name: string;
             /** Workspace Id */
             workspace_id: string | null;
+        };
+        /** TrendPointOut */
+        TrendPointOut: {
+            /** Count */
+            count: number;
+            /** Maximum */
+            maximum: number;
+            /** Mean */
+            mean: number;
+            /** Minimum */
+            minimum: number;
+            /** Period */
+            period: string;
+        };
+        /** TrendSeriesOut */
+        TrendSeriesOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Points */
+            points: components["schemas"]["TrendPointOut"][];
         };
         /** TriedChannelOut */
         TriedChannelOut: {
@@ -11553,6 +11872,7 @@ export interface operations {
                 family?: string | null;
                 category?: string | null;
                 scope?: string;
+                workspace?: string | null;
                 /** @description 정렬할 열. 기본은 등록 일시 */
                 sort?: string | null;
                 /** @description 내림차순. 기본은 최근 등록순 */
@@ -13615,6 +13935,141 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenSizesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_compare_api_statistics_analysis_compare_get: {
+        parameters: {
+            query?: {
+                material_ids?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_coverage_api_statistics_analysis_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisCoverageOut"];
+                };
+            };
+        };
+    };
+    analysis_distribution_api_statistics_analysis_distribution_get: {
+        parameters: {
+            query?: {
+                scalar?: string | null;
+                group_by?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisDistributionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_spec_gap_api_statistics_analysis_spec_gap_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisSpecGapOut"];
+                };
+            };
+        };
+    };
+    analysis_trend_api_statistics_analysis_trend_get: {
+        parameters: {
+            query?: {
+                scalar?: string | null;
+                group_by?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisTrendOut"];
                 };
             };
             /** @description Validation Error */

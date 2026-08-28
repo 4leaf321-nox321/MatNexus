@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import asdict
+from statistics import fmean, stdev
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -22,12 +24,21 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
-from app.modules.statistics import services
+from app.modules.statistics import analysis, services
 from app.modules.statistics.models import EnsembleResult
 from app.modules.statistics.schemas import (
+    AnalysisCoverageOut,
+    AnalysisDistributionOut,
+    AnalysisScalarOut,
+    AnalysisSpecGapOut,
+    AnalysisTrendOut,
+    CompareCellOut,
+    CompareMaterialOut,
+    CompareOut,
     CurveStatsOut,
     DistributableKeyOut,
     DistributionCandidateOut,
+    DistributionGroupOut,
     DistributionReportOut,
     DivisionOverviewOut,
     DivisionTallyOut,
@@ -40,7 +51,11 @@ from app.modules.statistics.schemas import (
     OutlierOut,
     OverviewOut,
     ScalarStatsOut,
+    SpecGapOut,
+    SpreadOut,
     TallyOut,
+    TrendPointOut,
+    TrendSeriesOut,
     YearTallyOut,
 )
 from app.modules.tests.models import TestRun, TestType
@@ -383,6 +398,248 @@ def distribution_report(
 
 def _tally(rows: Sequence[Any]) -> list[TallyOut]:
     return [TallyOut(key=str(key), label=str(key), count=int(count)) for key, count in rows]
+
+
+# --- 물성 분석 -------------------------------------------------------------------
+#
+# 다섯 화면이 **같은 관측 하나**(`analysis.collect`)를 다르게 접는다. 각자 질의를
+# 쓰면 「비교의 인장강도」 와 「분포의 인장강도」 가 다른 수를 말하는 날이 온다.
+
+
+def _scalars(collected: analysis.Collected) -> list[AnalysisScalarOut]:
+    return [
+        AnalysisScalarOut(**one) for one in analysis.scalar_catalog(collected.observations)
+    ]
+
+
+def _spread_out(found: analysis.Spread | None) -> SpreadOut | None:
+    return None if found is None else SpreadOut(**asdict(found))
+
+
+def _pick_scalar(collected: analysis.Collected, wanted: str | None) -> str | None:
+    """고른 항목. 안 고르면 **가장 많은 것** — 빈 화면으로 시작하지 않는다."""
+    catalog = analysis.scalar_catalog(collected.observations)
+    if wanted and any(one["key"] == wanted for one in catalog):
+        return wanted
+    return str(catalog[0]["key"]) if catalog else None
+
+
+@router.get("/analysis/compare", response_model=CompareOut)
+def analysis_compare(
+    material_ids: list[uuid.UUID] = Query(default=[]),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CompareOut:
+    """재료 몇 개를 나란히. **항목이 열, 재료가 행이다.**
+
+    안 고르면 빈 표를 준다 — 전체를 자동으로 세우면 94개짜리 표가 나온다.
+    """
+    collected = analysis.collect(db, user, material_ids=material_ids)
+    by_material: dict[uuid.UUID, dict[str, list[analysis.Observation]]] = {}
+    names: dict[uuid.UUID, tuple[str, str]] = {}
+    for one in collected.observations:
+        names[one.material_id] = (one.material_name, one.family)
+        by_material.setdefault(one.material_id, {}).setdefault(one.scalar_key, []).append(one)
+
+    materials = []
+    for material_id, per_scalar in by_material.items():
+        name, family = names[material_id]
+        cells = []
+        for key, items in per_scalar.items():
+            values = [one.value for one in items]
+            cells.append(
+                CompareCellOut(
+                    scalar_key=key,
+                    scalar_label=items[0].scalar_label,
+                    si_unit=items[0].si_unit,
+                    count=len(values),
+                    mean=fmean(values),
+                    # **1건이면 흩어짐이 없다** — 0 은 「완벽히 일정」 으로 읽힌다.
+                    sample_sd=stdev(values) if len(values) > 1 else None,
+                    minimum=min(values),
+                    maximum=max(values),
+                )
+            )
+        materials.append(
+            CompareMaterialOut(
+                material_id=material_id,
+                material_name=name,
+                family=family,
+                scalars=sorted(cells, key=lambda one: one.scalar_label),
+            )
+        )
+    return CompareOut(
+        materials=sorted(materials, key=lambda one: one.material_name),
+        scalars=_scalars(collected),
+        skipped_unadopted=collected.skipped_unadopted,
+    )
+
+
+@router.get("/analysis/distribution", response_model=AnalysisDistributionOut)
+def analysis_distribution(
+    scalar: str | None = Query(default=None),
+    group_by: str = Query(default="division", pattern="^(division|family|category)$"),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> AnalysisDistributionOut:
+    """사업부·재료군별 흩어짐. **이상치가 곧 재시험 후보다.**"""
+    collected = analysis.collect(db, user)
+    key = _pick_scalar(collected, scalar)
+    mine = [one for one in collected.observations if one.scalar_key == key]
+
+    buckets: dict[str, list[float]] = {}
+    for one in mine:
+        bucket = {
+            "division": one.division,
+            "family": one.family,
+            "category": one.category,
+        }[group_by]
+        buckets.setdefault(bucket, []).append(one.value)
+
+    def order(name: str) -> tuple[int, str]:
+        return divisions_order.rank(name) if group_by == "division" else (0, name)
+
+    groups = [
+        DistributionGroupOut(group=name, spread=_spread_out(analysis.spread(values)))
+        for name, values in sorted(buckets.items(), key=lambda entry: order(entry[0]))
+    ]
+    return AnalysisDistributionOut(
+        scalar_key=key or "",
+        scalar_label=mine[0].scalar_label if mine else "",
+        si_unit=mine[0].si_unit if mine else "1",
+        group_by=group_by,
+        groups=groups,
+        scalars=_scalars(collected),
+        skipped_unadopted=collected.skipped_unadopted,
+    )
+
+
+@router.get("/analysis/spec-gap", response_model=AnalysisSpecGapOut)
+def analysis_spec_gap(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> AnalysisSpecGapOut:
+    """선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**
+
+    잇는 열쇠는 **이름**이다 — 선언은 기준정보 항목(`탄성계수`)이고 잰 값은 처리
+    결과의 라벨(`탄성계수`)이라 코드가 겹치지 않는다. 이름이 다르면 못 견주므로
+    그 항목을 `unmatched_items` 로 돌려준다 — 숨기면 「차이가 없다」 로 읽힌다.
+    """
+    collected = analysis.collect(db, user)
+    measured: dict[tuple[uuid.UUID, str], list[analysis.Observation]] = {}
+    for one in collected.observations:
+        measured.setdefault((one.material_id, one.scalar_label.strip()), []).append(one)
+
+    rows: list[SpecGapOut] = []
+    unmatched: set[str] = set()
+    materials = db.scalars(
+        select(Material).where(
+            Material.id.in_(permissions.visible_material_ids(db, user)),
+            Material.deleted_at.is_(None),
+        )
+    )
+    for material in materials:
+        for declared in material.declared_properties or []:
+            item = str(declared.get("item") or "").strip()
+            points = declared.get("points") or []
+            if not item or not points:
+                continue
+            # 온도가 여럿이면 **상온에 가장 가까운 점**을 견준다. 시험은 대개
+            # 상온이고, 400 도 값과 견주면 차이가 재료가 아니라 온도의 것이 된다.
+            point = min(
+                points,
+                key=lambda one: abs(float(one.get("temperature_k") or 293.15) - 293.15),
+            )
+            declared_si = point.get("value_si")
+            if not isinstance(declared_si, int | float) or declared_si == 0:
+                continue
+            items = measured.get((material.id, item))
+            if not items:
+                unmatched.add(item)
+                continue
+            values = [one.value for one in items]
+            mean = fmean(values)
+            rows.append(
+                SpecGapOut(
+                    material_id=material.id,
+                    material_name=material.record_name,
+                    item=item,
+                    declared_si=float(declared_si),
+                    declared_source=declared.get("source"),
+                    declared_reference=declared.get("reference"),
+                    measured_mean=mean,
+                    measured_count=len(values),
+                    si_unit=items[0].si_unit,
+                    gap_ratio=(mean - float(declared_si)) / float(declared_si),
+                )
+            )
+    return AnalysisSpecGapOut(
+        rows=sorted(rows, key=lambda one: -abs(one.gap_ratio)),
+        unmatched_items=sorted(unmatched),
+    )
+
+
+@router.get("/analysis/trend", response_model=AnalysisTrendOut)
+def analysis_trend(
+    scalar: str | None = Query(default=None),
+    group_by: str = Query(default="division", pattern="^(division|material|family)$"),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> AnalysisTrendOut:
+    """해가 가며 값이 흐르는가. **해는 시험일** — 등록일로 세면 이관한 해에 몰린다."""
+    collected = analysis.collect(db, user)
+    key = _pick_scalar(collected, scalar)
+    mine = [one for one in collected.observations if one.scalar_key == key]
+
+    buckets: dict[str, dict[str, list[float]]] = {}
+    for one in mine:
+        if one.tested_at is None:
+            continue
+        name = {
+            "division": one.division,
+            "material": one.material_name,
+            "family": one.family,
+        }[group_by]
+        buckets.setdefault(name, {}).setdefault(str(one.tested_at.year), []).append(one.value)
+
+    def order(name: str) -> tuple[int, str]:
+        return divisions_order.rank(name) if group_by == "division" else (0, name)
+
+    series = [
+        TrendSeriesOut(
+            key=name,
+            label=name,
+            points=[
+                TrendPointOut(
+                    period=period,
+                    count=len(values),
+                    mean=fmean(values),
+                    minimum=min(values),
+                    maximum=max(values),
+                )
+                for period, values in sorted(periods.items())
+            ],
+        )
+        for name, periods in sorted(buckets.items(), key=lambda entry: order(entry[0]))
+    ]
+    return AnalysisTrendOut(
+        scalar_key=key or "",
+        scalar_label=mine[0].scalar_label if mine else "",
+        si_unit=mine[0].si_unit if mine else "1",
+        group_by=group_by,
+        series=series,
+        scalars=_scalars(collected),
+        skipped_unadopted=collected.skipped_unadopted,
+    )
+
+
+@router.get("/analysis/coverage", response_model=AnalysisCoverageOut)
+def analysis_coverage(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> AnalysisCoverageOut:
+    """재료-시험종류 격자. **빈 칸이 다음에 할 시험이다.**"""
+    return AnalysisCoverageOut.model_validate(analysis.coverage(db, user))
 
 
 @router.get("/divisions", response_model=DivisionOverviewOut)

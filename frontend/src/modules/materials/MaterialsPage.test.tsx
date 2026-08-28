@@ -17,6 +17,7 @@ const list = vi.fn()
 const classifications = vi.fn()
 const bulkDeletePlan = vi.fn()
 const removeMany = vi.fn()
+const workspaces = vi.fn()
 
 vi.mock('@/modules/materials/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/materials/api')>()),
@@ -25,6 +26,7 @@ vi.mock('@/modules/materials/api', async (importOriginal) => ({
     classifications: () => classifications(),
     bulkDeletePlan: (...args: unknown[]) => bulkDeletePlan(...args),
     removeMany: (...args: unknown[]) => removeMany(...args),
+    workspaces: () => workspaces(),
   },
 }))
 
@@ -57,6 +59,7 @@ beforeEach(() => {
   list.mockReset()
   classifications.mockReset()
   bulkDeletePlan.mockReset()
+  workspaces.mockResolvedValue([{ id: 'w1', slug: 'metal', name: '금속재료팀' }])
   removeMany.mockReset()
   list.mockResolvedValue({
     items: [material('m1', 'SPCC_-_1.2'), material('m2', 'SGCC_-_0.8')],
@@ -142,9 +145,7 @@ describe('일괄 삭제', () => {
 
     expect(screen.queryByRole('checkbox', { name: /시험 4건도 함께/ })).not.toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: /아래까지 함께 지웁니다/ }))
-    expect(
-      await screen.findByRole('checkbox', { name: /시험 4건도 함께/ })
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('checkbox', { name: /시험 4건도 함께/ })).toBeInTheDocument()
   })
 
   it('아래까지를 끄면 시험 칸도 함께 꺼진다', async () => {

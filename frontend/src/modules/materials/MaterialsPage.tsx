@@ -71,6 +71,8 @@ export default function MaterialsPage() {
   // 열 머리에서 거르는 것들. `q` 와 달리 **그 열만** 본다.
   const [name, setName] = useState('')
   const [alias, setAlias] = useState('')
+  // **소속은 부서다.** 「전역인가 아닌가」 만 갈랐더니 부서가 여럿인 곳에서
+  // 「고분자팀 재료」 를 못 찾았다(실사용 지적). 값은 `global` 이거나 부서 slug.
   const [scope, setScope] = useState('')
   // 기본은 **최근 등록순.** 전에는 이름순이었는데, 갓 넣은 것을 찾으려면
   // 표를 훑어야 했다 — 등록 직후에 보는 일이 가장 잦다.
@@ -108,10 +110,16 @@ export default function MaterialsPage() {
     alias,
     family,
     category,
-    scope: (scope || undefined) as 'mine' | 'global' | undefined,
+    // 값이 `global` 이면 전역만, 부서 slug 면 그 부서만. 서버가 둘을 다른 칸으로
+    // 받는다 — 「전역」 은 소유가 없는 것이라 부서 목록에 낄 수 없다.
+    scope: (scope === 'global' ? 'global' : undefined) as 'global' | undefined,
+    workspace: scope && scope !== 'global' ? scope : undefined,
     sort: sort.key,
     desc: sort.descending,
   }
+
+  // 소속 거르기의 선택지. **부서 이름을 보여야** 「고분자팀 재료」 를 고를 수 있다.
+  const workspaces = useResource(() => materialsApi.workspaces(), [])
 
   const materials = useResource(
     () =>
@@ -449,7 +457,10 @@ export default function MaterialsPage() {
                     value={scope}
                     options={[
                       { value: 'global', label: '전역' },
-                      { value: 'mine', label: '내 부서' },
+                      ...(workspaces.data ?? []).map((one) => ({
+                        value: one.slug,
+                        label: one.name,
+                      })),
                     ]}
                     onChange={(next) => {
                       setScope(next)

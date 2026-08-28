@@ -89,7 +89,12 @@ export const NAV_GROUPS: NavGroup[] = [
       //
       // 자리를 나누는 기준은 **작업이냐 열람이냐** 다. 여러 시험을 골라 미는
       // 것은 워크벤치, "이 재료의 물성이 얼마인가" 는 재료 상세다.
-      { label: '워크벤치', icon: SlidersHorizontal, resolve: (s) => `/w/${s}/workbench`, pending: true },
+      {
+        label: '워크벤치',
+        icon: SlidersHorizontal,
+        resolve: (s) => `/w/${s}/workbench`,
+        pending: true,
+      },
     ],
   },
   {
@@ -104,7 +109,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // **재료를 거치지 않고 카드를 찾는다.** 재료 상세의 'CAE 카드' 탭은 그
       // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
       { label: '물성 카드', icon: FileDown, to: '/cards' },
-      { label: '물성 분석', icon: GitCompare, to: '/compare', pending: true },
+      { label: '물성 분석', icon: GitCompare, to: '/compare' },
     ],
   },
   {
@@ -213,7 +218,6 @@ export const NAV_GROUPS: NavGroup[] = [
 export function itemHref(item: NavItem, slug: string): string {
   return item.to ?? item.resolve?.(slug) ?? '/'
 }
-
 
 /** 이 사람에게 보이는가. 서버가 최종 판정을 한다 — 여기는 표시일 뿐이다. */
 export function canSee(

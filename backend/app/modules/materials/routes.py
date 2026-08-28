@@ -70,7 +70,7 @@ from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, contention, display, sorting, specimen_size
+from app.shared import audit, contention, display, permissions, sorting, specimen_size
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -476,6 +476,7 @@ def list_materials(
     family: str | None = None,
     category: str | None = None,
     scope: str = Query(default="all", pattern="^(all|mine|global)$"),
+    workspace: str | None = Query(default=None),
     sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
     desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
     limit: int | None = Query(default=None, le=1000),
@@ -509,6 +510,12 @@ def list_materials(
         query = query.where(Material.owner_workspace_id.is_(None))
     elif scope == "mine":
         query = query.where(Material.owner_workspace_id.is_not(None))
+    # **어느 부서 것인가.** `scope` 는 「전역인가 아닌가」 만 갈랐다 — 부서가 여럿인
+    # 곳에서는 그것으로 「고분자팀 재료」 를 못 찾는다. slug 로 그 부서만 남긴다.
+    if workspace:
+        query = query.where(
+            Material.owner_workspace_id == permissions.workspace_by_slug(db, workspace).id
+        )
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)

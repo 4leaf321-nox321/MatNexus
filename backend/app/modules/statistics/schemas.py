@@ -190,6 +190,140 @@ class TallyOut(BaseModel):
     count: int
 
 
+class AnalysisScalarOut(BaseModel):
+    """고를 수 있는 물성 항목. **실제로 값이 있는 것만** — 건수를 함께 준다."""
+
+    key: str
+    label: str
+    si_unit: str
+    count: int
+
+
+class SpreadOut(BaseModel):
+    """상자그림 한 칸. 2건 미만이면 상자를 못 그리므로 없다."""
+
+    count: int
+    minimum: float
+    q1: float
+    median: float
+    q3: float
+    maximum: float
+    mean: float
+    outliers: list[float]
+
+
+class CompareCellOut(BaseModel):
+    scalar_key: str
+    scalar_label: str
+    si_unit: str
+    count: int
+    mean: float
+    sample_sd: float | None
+    """흩어짐. **1건이면 없다** — 0 이 아니라 없는 것이다(ADR 0008 과 같은 규칙)."""
+    minimum: float
+    maximum: float
+
+
+class CompareMaterialOut(BaseModel):
+    material_id: uuid.UUID
+    material_name: str
+    family: str
+    scalars: list[CompareCellOut]
+
+
+class CompareOut(BaseModel):
+    materials: list[CompareMaterialOut]
+    scalars: list[AnalysisScalarOut]
+    """고른 재료들이 **함께 가진** 항목이 앞에 온다 — 비교표의 열이 된다."""
+    skipped_unadopted: int
+
+
+class DistributionGroupOut(BaseModel):
+    group: str
+    spread: SpreadOut | None
+    """2건 미만이면 없다. 화면은 그때 점만 찍는다."""
+
+
+class AnalysisDistributionOut(BaseModel):
+    scalar_key: str
+    scalar_label: str
+    si_unit: str
+    group_by: str
+    groups: list[DistributionGroupOut]
+    scalars: list[AnalysisScalarOut]
+    skipped_unadopted: int
+
+
+class SpecGapOut(BaseModel):
+    """선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**"""
+
+    material_id: uuid.UUID
+    material_name: str
+    item: str
+    declared_si: float
+    declared_source: str | None
+    declared_reference: str | None
+    measured_mean: float
+    measured_count: int
+    si_unit: str
+    gap_ratio: float
+    """(잰 값 - 선언값) / 선언값. 부호가 방향을 말한다."""
+
+
+class AnalysisSpecGapOut(BaseModel):
+    rows: list[SpecGapOut]
+    unmatched_items: list[str]
+    """선언은 있는데 잰 값이 없어 못 견준 항목. **숨기면 「없다」 로 읽힌다.**"""
+
+
+class TrendPointOut(BaseModel):
+    period: str
+    """해. 시험일 기준 — 옛 시험을 오늘 올리면 등록일은 거짓말을 한다."""
+    count: int
+    mean: float
+    minimum: float
+    maximum: float
+
+
+class TrendSeriesOut(BaseModel):
+    key: str
+    label: str
+    points: list[TrendPointOut]
+
+
+class AnalysisTrendOut(BaseModel):
+    scalar_key: str
+    scalar_label: str
+    si_unit: str
+    group_by: str
+    series: list[TrendSeriesOut]
+    scalars: list[AnalysisScalarOut]
+    skipped_unadopted: int
+
+
+class CoverageCellOut(BaseModel):
+    run_count: int
+    adopted_count: int
+    """채택까지 간 수. **올리기만 한 것과 물성이 나온 것은 다르다** — 그 차이가 남은 일."""
+
+
+class CoverageMaterialOut(BaseModel):
+    material_id: uuid.UUID
+    material_name: str
+    family: str
+    cells: dict[str, CoverageCellOut]
+
+
+class CoverageTypeOut(BaseModel):
+    key: str
+    label: str
+
+
+class AnalysisCoverageOut(BaseModel):
+    test_types: list[CoverageTypeOut]
+    materials: list[CoverageMaterialOut]
+
+
 class DivisionTallyOut(BaseModel):
     """사업부 하나의 현황 — 그 사업부의 시험이 걸친 재료·시료·시편과 시험 수.
 

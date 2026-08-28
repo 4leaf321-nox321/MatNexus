@@ -45,9 +45,7 @@ const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPag
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
 const CardsPage = lazy(() => import('@/modules/fitting/CardsPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
-const FormatProfileEditorPage = lazy(
-  () => import('@/modules/tests/FormatProfileEditorPage')
-)
+const FormatProfileEditorPage = lazy(() => import('@/modules/tests/FormatProfileEditorPage'))
 const FormatProfilesPage = lazy(() => import('@/modules/tests/FormatProfilesPage'))
 const MembersPage = lazy(() => import('@/modules/workspaces/MembersPage'))
 const NoticesPage = lazy(() => import('@/modules/notices/NoticesPage'))
@@ -58,11 +56,10 @@ const TrashPage = lazy(() => import('@/modules/trash/TrashPage'))
 const ConnectorsPage = lazy(() => import('@/modules/pipelines/ConnectorsPage'))
 const GuidePage = lazy(() => import('@/modules/guide/GuidePage'))
 const ProfilePage = lazy(() => import('@/modules/auth/ProfilePage'))
+const AnalysisPage = lazy(() => import('@/modules/statistics/AnalysisPage'))
 const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
 const UnitsPage = lazy(() => import('@/modules/units/UnitsPage'))
-const VocabularyAdminPage = lazy(
-  () => import('@/modules/vocabulary/VocabularyAdminPage')
-)
+const VocabularyAdminPage = lazy(() => import('@/modules/vocabulary/VocabularyAdminPage'))
 const VocPage = lazy(() => import('@/modules/voc/VocPage'))
 const WorkspaceHomePage = lazy(() => import('@/modules/workspaces/WorkspaceHomePage'))
 const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
@@ -107,7 +104,7 @@ export const router = createBrowserRouter([
           { path: 'cards', element: <CardsPage /> },
           { path: 'materials/:id', element: <MaterialDetailPage /> },
           { path: 'test-runs/:id', element: <TestRunDetailPage /> },
-          { path: 'compare', ...stub('물성 분석', 'Phase 3') },
+          { path: 'compare', element: <AnalysisPage /> },
 
           // 내 활동
           { path: 'personal', ...stub('내 작업함', 'Phase 1') },

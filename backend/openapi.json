@@ -122,6 +122,181 @@
         "title": "AliasOut",
         "type": "object"
       },
+      "AnalysisCoverageOut": {
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageMaterialOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "test_types": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageTypeOut"
+            },
+            "title": "Test Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "test_types",
+          "materials"
+        ],
+        "title": "AnalysisCoverageOut",
+        "type": "object"
+      },
+      "AnalysisDistributionOut": {
+        "properties": {
+          "group_by": {
+            "title": "Group By",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/DistributionGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "scalar_key": {
+            "title": "Scalar Key",
+            "type": "string"
+          },
+          "scalar_label": {
+            "title": "Scalar Label",
+            "type": "string"
+          },
+          "scalars": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisScalarOut"
+            },
+            "title": "Scalars",
+            "type": "array"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "skipped_unadopted": {
+            "title": "Skipped Unadopted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scalar_key",
+          "scalar_label",
+          "si_unit",
+          "group_by",
+          "groups",
+          "scalars",
+          "skipped_unadopted"
+        ],
+        "title": "AnalysisDistributionOut",
+        "type": "object"
+      },
+      "AnalysisScalarOut": {
+        "description": "고를 수 있는 물성 항목. **실제로 값이 있는 것만** — 건수를 함께 준다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "si_unit",
+          "count"
+        ],
+        "title": "AnalysisScalarOut",
+        "type": "object"
+      },
+      "AnalysisSpecGapOut": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SpecGapOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "unmatched_items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows",
+          "unmatched_items"
+        ],
+        "title": "AnalysisSpecGapOut",
+        "type": "object"
+      },
+      "AnalysisTrendOut": {
+        "properties": {
+          "group_by": {
+            "title": "Group By",
+            "type": "string"
+          },
+          "scalar_key": {
+            "title": "Scalar Key",
+            "type": "string"
+          },
+          "scalar_label": {
+            "title": "Scalar Label",
+            "type": "string"
+          },
+          "scalars": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisScalarOut"
+            },
+            "title": "Scalars",
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/TrendSeriesOut"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "skipped_unadopted": {
+            "title": "Skipped Unadopted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scalar_key",
+          "scalar_label",
+          "si_unit",
+          "group_by",
+          "series",
+          "scalars",
+          "skipped_unadopted"
+        ],
+        "title": "AnalysisTrendOut",
+        "type": "object"
+      },
       "AppliedDimensionsOut": {
         "description": "무엇을 채웠는지. **시편 전체를 돌려주지 않는다** — 이 응답이 답해야 하는\n질문은 \"지금 무슨 일이 일어났나\" 이고, 시편은 화면이 다시 읽으면 된다.",
         "properties": {
@@ -1871,6 +2046,122 @@
         "title": "CleanupRequest",
         "type": "object"
       },
+      "CompareCellOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": "number"
+          },
+          "mean": {
+            "title": "Mean",
+            "type": "number"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "sample_sd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Sd"
+          },
+          "scalar_key": {
+            "title": "Scalar Key",
+            "type": "string"
+          },
+          "scalar_label": {
+            "title": "Scalar Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scalar_key",
+          "scalar_label",
+          "si_unit",
+          "count",
+          "mean",
+          "sample_sd",
+          "minimum",
+          "maximum"
+        ],
+        "title": "CompareCellOut",
+        "type": "object"
+      },
+      "CompareMaterialOut": {
+        "properties": {
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "scalars": {
+            "items": {
+              "$ref": "#/components/schemas/CompareCellOut"
+            },
+            "title": "Scalars",
+            "type": "array"
+          }
+        },
+        "required": [
+          "material_id",
+          "material_name",
+          "family",
+          "scalars"
+        ],
+        "title": "CompareMaterialOut",
+        "type": "object"
+      },
+      "CompareOut": {
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/CompareMaterialOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "scalars": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisScalarOut"
+            },
+            "title": "Scalars",
+            "type": "array"
+          },
+          "skipped_unadopted": {
+            "title": "Skipped Unadopted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "materials",
+          "scalars",
+          "skipped_unadopted"
+        ],
+        "title": "CompareOut",
+        "type": "object"
+      },
       "ConditionInput": {
         "properties": {
           "choices": {
@@ -2145,6 +2436,74 @@
           }
         },
         "title": "ConnectorUpdate",
+        "type": "object"
+      },
+      "CoverageCellOut": {
+        "properties": {
+          "adopted_count": {
+            "title": "Adopted Count",
+            "type": "integer"
+          },
+          "run_count": {
+            "title": "Run Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_count",
+          "adopted_count"
+        ],
+        "title": "CoverageCellOut",
+        "type": "object"
+      },
+      "CoverageMaterialOut": {
+        "properties": {
+          "cells": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CoverageCellOut"
+            },
+            "title": "Cells",
+            "type": "object"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_id",
+          "material_name",
+          "family",
+          "cells"
+        ],
+        "title": "CoverageMaterialOut",
+        "type": "object"
+      },
+      "CoverageTypeOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "CoverageTypeOut",
         "type": "object"
       },
       "CreateAccountRequest": {
@@ -3082,6 +3441,30 @@
           "quantiles"
         ],
         "title": "DistributionCandidateOut",
+        "type": "object"
+      },
+      "DistributionGroupOut": {
+        "properties": {
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "spread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpreadOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "group",
+          "spread"
+        ],
+        "title": "DistributionGroupOut",
         "type": "object"
       },
       "DistributionReportOut": {
@@ -10225,6 +10608,80 @@
         "title": "SignupRequest",
         "type": "object"
       },
+      "SpecGapOut": {
+        "description": "선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**",
+        "properties": {
+          "declared_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Reference"
+          },
+          "declared_si": {
+            "title": "Declared Si",
+            "type": "number"
+          },
+          "declared_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Source"
+          },
+          "gap_ratio": {
+            "title": "Gap Ratio",
+            "type": "number"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "measured_count": {
+            "title": "Measured Count",
+            "type": "integer"
+          },
+          "measured_mean": {
+            "title": "Measured Mean",
+            "type": "number"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_id",
+          "material_name",
+          "item",
+          "declared_si",
+          "declared_source",
+          "declared_reference",
+          "measured_mean",
+          "measured_count",
+          "si_unit",
+          "gap_ratio"
+        ],
+        "title": "SpecGapOut",
+        "type": "object"
+      },
       "SpecimenBriefSizeOut": {
         "description": "목록의 접힌 줄에 적는 치수 하나.\n\n**이름을 함께 낸다.** 전에는 두께·폭·게이지 세 값을 `1.0 / 12.5 / 50` 처럼\n이름 없이 늘어놓았다. 칸이 규격마다 다른 지금은 자리로 외울 수가 없다 —\n환봉 규격의 첫 값은 직경이고 평판 규격의 첫 값은 폭이다.\n\n그리고 **어디서 온 값인지도 낸다.** 규격의 공칭과 사람이 잰 값을 합쳐서\n보여 주면 전부 실측으로 읽힌다.",
         "properties": {
@@ -11256,6 +11713,58 @@
           "actual"
         ],
         "title": "SpecimenWarningOut",
+        "type": "object"
+      },
+      "SpreadOut": {
+        "description": "상자그림 한 칸. 2건 미만이면 상자를 못 그리므로 없다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": "number"
+          },
+          "mean": {
+            "title": "Mean",
+            "type": "number"
+          },
+          "median": {
+            "title": "Median",
+            "type": "number"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "outliers": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Outliers",
+            "type": "array"
+          },
+          "q1": {
+            "title": "Q1",
+            "type": "number"
+          },
+          "q3": {
+            "title": "Q3",
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "minimum",
+          "q1",
+          "median",
+          "q3",
+          "maximum",
+          "mean",
+          "outliers"
+        ],
+        "title": "SpreadOut",
         "type": "object"
       },
       "StandardImportItem": {
@@ -13540,6 +14049,65 @@
           "blocked"
         ],
         "title": "TrashItemOut",
+        "type": "object"
+      },
+      "TrendPointOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": "number"
+          },
+          "mean": {
+            "title": "Mean",
+            "type": "number"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "count",
+          "mean",
+          "minimum",
+          "maximum"
+        ],
+        "title": "TrendPointOut",
+        "type": "object"
+      },
+      "TrendSeriesOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TrendPointOut"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "points"
+        ],
+        "title": "TrendSeriesOut",
         "type": "object"
       },
       "TriedChannelOut": {
@@ -17833,6 +18401,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "workspace",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace"
+            }
+          },
+          {
             "description": "정렬할 열. 기본은 등록 일시",
             "in": "query",
             "name": "sort",
@@ -20972,6 +21556,220 @@
         "summary": "Put Specimen Dimensions",
         "tags": [
           "materials"
+        ]
+      }
+    },
+    "/api/statistics/analysis/compare": {
+      "get": {
+        "description": "재료 몇 개를 나란히. **항목이 열, 재료가 행이다.**\n\n안 고르면 빈 표를 준다 — 전체를 자동으로 세우면 94개짜리 표가 나온다.",
+        "operationId": "analysis_compare_api_statistics_analysis_compare_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "material_ids",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "title": "Material Ids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analysis Compare",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/analysis/coverage": {
+      "get": {
+        "description": "재료-시험종류 격자. **빈 칸이 다음에 할 시험이다.**",
+        "operationId": "analysis_coverage_api_statistics_analysis_coverage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisCoverageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Analysis Coverage",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/analysis/distribution": {
+      "get": {
+        "description": "사업부·재료군별 흩어짐. **이상치가 곧 재시험 후보다.**",
+        "operationId": "analysis_distribution_api_statistics_analysis_distribution_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scalar",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scalar"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "default": "division",
+              "pattern": "^(division|family|category)$",
+              "title": "Group By",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisDistributionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analysis Distribution",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/analysis/spec-gap": {
+      "get": {
+        "description": "선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**\n\n잇는 열쇠는 **이름**이다 — 선언은 기준정보 항목(`탄성계수`)이고 잰 값은 처리\n결과의 라벨(`탄성계수`)이라 코드가 겹치지 않는다. 이름이 다르면 못 견주므로\n그 항목을 `unmatched_items` 로 돌려준다 — 숨기면 「차이가 없다」 로 읽힌다.",
+        "operationId": "analysis_spec_gap_api_statistics_analysis_spec_gap_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisSpecGapOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Analysis Spec Gap",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/analysis/trend": {
+      "get": {
+        "description": "해가 가며 값이 흐르는가. **해는 시험일** — 등록일로 세면 이관한 해에 몰린다.",
+        "operationId": "analysis_trend_api_statistics_analysis_trend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scalar",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scalar"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "default": "division",
+              "pattern": "^(division|material|family)$",
+              "title": "Group By",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisTrendOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analysis Trend",
+        "tags": [
+          "statistics"
         ]
       }
     },

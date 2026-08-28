@@ -97,7 +97,7 @@ describe('미구현 표시', () => {
       .filter((item) => item.pending)
       .map((item) => item.label)
     // router.tsx 의 stub() 목록과 짝이다. 화면을 만들었으면 여기서 빼야 한다.
-    expect(pending.sort()).toEqual(['내 작업함', '물성 분석', '서버', '워크벤치'])
+    expect(pending.sort()).toEqual(['내 작업함', '서버', '워크벤치'])
   })
 })
 
