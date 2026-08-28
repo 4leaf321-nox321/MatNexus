@@ -161,7 +161,15 @@ export default function TestRunsPage() {
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
   const [picked, setPicked] = useState<Set<string>>(new Set())
   // 기본은 **최근 등록순.** 전에도 그랬고, 이제 다른 열로도 바꿀 수 있다.
-  const { sort, handle } = useSort('created_at')
+  const { sort, handle } = useSort('created_at', {
+    // **이 브라우저가 기억한다.** 계정이 아니다 — 같은 PC 를 다른 사람이
+    // 쓰면 앞사람 설정이 보인다. 정렬은 데이터가 아니라 보는 방식이라
+    // 새어도 잃을 것이 없다.
+    remember: 'runs',
+    // **저장된 열이 지금도 정렬 가능한지 확인한다.** 표에서 열을 빼면
+    // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
+    allowed: ['created_at', 'record_name', 'tested_at', 'operator', 'instrument', 'division', 'status'],
+  })
 
   const runs = useResource(
     () =>

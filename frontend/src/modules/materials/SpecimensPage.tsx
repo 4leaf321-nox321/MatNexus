@@ -85,7 +85,15 @@ export default function SpecimensPage() {
   const [standard, setStandard] = useState('')
   const [offset, setOffset] = useState(0)
   // 기본은 **최근 등록순.** 목록에 늘 순서가 있어야 한다.
-  const { sort, handle } = useSort('created_at')
+  const { sort, handle } = useSort('created_at', {
+    // **이 브라우저가 기억한다.** 계정이 아니다 — 같은 PC 를 다른 사람이
+    // 쓰면 앞사람 설정이 보인다. 정렬은 데이터가 아니라 보는 방식이라
+    // 새어도 잃을 것이 없다.
+    remember: 'specimens',
+    // **저장된 열이 지금도 정렬 가능한지 확인한다.** 표에서 열을 빼면
+    // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
+    allowed: ['created_at', 'material_name', 'lot_no', 'record_name', 'orientation', 'standard'],
+  })
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState(false)
 

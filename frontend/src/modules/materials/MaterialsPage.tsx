@@ -74,7 +74,15 @@ export default function MaterialsPage() {
   const [scope, setScope] = useState('')
   // 기본은 **최근 등록순.** 전에는 이름순이었는데, 갓 넣은 것을 찾으려면
   // 표를 훑어야 했다 — 등록 직후에 보는 일이 가장 잦다.
-  const { sort, handle } = useSort('created_at')
+  const { sort, handle } = useSort('created_at', {
+    // **이 브라우저가 기억한다.** 계정이 아니다 — 같은 PC 를 다른 사람이
+    // 쓰면 앞사람 설정이 보인다. 정렬은 데이터가 아니라 보는 방식이라
+    // 새어도 잃을 것이 없다.
+    remember: 'materials',
+    // **저장된 열이 지금도 정렬 가능한지 확인한다.** 표에서 열을 빼면
+    // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
+    allowed: ['created_at', 'record_name', 'alias', 'family', 'category', 'spec_thickness'],
+  })
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [removing, setRemoving] = useState(false)
   // 아래(시료·시편·시험)까지 함께 지울지. **기본은 안 지우는 쪽이다** — 고르고

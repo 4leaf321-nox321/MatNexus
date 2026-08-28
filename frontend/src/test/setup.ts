@@ -20,9 +20,20 @@ configure({ asyncUtilTimeout: 3000 })
 
 // 테스트마다 DOM 을 비운다. 안 하면 앞 테스트가 남긴 노드를 다음 테스트가 찾아
 // **통과하지 말아야 할 것이 통과한다.**
+//
+// **저장소도 함께 비운다.** 화면이 이 브라우저에 적어 두는 것이 있고(정렬·임시
+// 저장), jsdom 은 한 파일 안에서 그것을 이어 받는다 — 앞 시험이 「규격순」 을
+// 적어 두면 다음 시험은 첫 클릭이 **뒤집기**가 되어 엉뚱한 것을 본다. 실제로
+// 그렇게 깨졌다(2026-08-28).
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  try {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  } catch {
+    // 저장소가 막힌 환경. 비울 것도 없다.
+  }
 })
 
 // jsdom 에 없는 것들. Radix 프리미티브가 이것들을 부른다 — 없으면 열리지도
