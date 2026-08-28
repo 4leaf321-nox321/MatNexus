@@ -165,9 +165,15 @@ const findStep = async (label: string) => {
 type User = ReturnType<typeof userEvent.setup>
 /** 안 켠 줄을 누르면 켜진다. 켠 줄의 이름을 누르면 그 단계의 칸이 펴진다. */
 const clickStep = async (user: User, label: string) => user.click(await findStep(label))
-/** 켠 줄을 끄는 것은 이름이 아니라 왼쪽의 동그라미다. */
+/** 켠 줄을 끄는 것은 이름이 아니라 왼쪽의 동그라미다.
+ *
+ * **`find*` 로 기다린다.** 「끄기」 동그라미는 그 단계를 켠 **뒤에** 생기는데,
+ * `getByRole` 은 기다리지 않는다 — 부하가 걸려 그 렌더가 한 틱 늦으면 「그런 단추가
+ * 없다」 로 깨진다. 실측(2026-08-29): 전체 병렬 실행에서만, 199ms 에, 타임아웃이
+ * 아니라 「요소 없음」 으로. 형제 도우미(`findStep`)는 처음부터 기다리고 있었다.
+ */
 const turnOff = async (user: User, label: string) =>
-  user.click(screen.getByRole('button', { name: new RegExp(`${label}.*끄기`) }))
+  user.click(await screen.findByRole('button', { name: new RegExp(`${label}.*끄기`) }))
 
 /** 장비가 실제로 주는 것. 응력도 변형률도 없다. */
 const SOURCE = ['displacement', 'force', 'width']
