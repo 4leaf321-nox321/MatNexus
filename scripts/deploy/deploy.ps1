@@ -213,7 +213,7 @@ $AppPath 를 옮길 수 없습니다 — 무언가 이 폴더를 잡고 있습�
 
 $detail
 
-  · 실행 중인 앱(run_server.ps1)을 중지하세요.
+  · 실행 중인 앱(run_server.ps1)과 워커(run_worker.ps1)를 중지하세요.
   · 그 폴더나 하위 폴더에 들어가 있는 탐색기·터미널 창을 닫으세요.
     (특히 <AppPath>\backend 에 머문 셸이 흔한 원인입니다)
 
@@ -410,8 +410,14 @@ if ($installed) { Write-Log ("배포한 버전: " + ($installed -replace '^versi
 
 Write-Log '배포 완료'
 Write-Host ''
-Write-Host '시작:'
+Write-Host '시작 — 창 두 개:'
 Write-Host "  cd '$AppPath'"
-Write-Host '  .\run_server.ps1'
+Write-Host '  .\run_server.ps1     # 창 1'
+Write-Host '  .\run_worker.ps1     # 창 2'
+Write-Host ''
+# **워커도 반드시 다시 띄운다.** 워커는 코드를 다시 읽지 않는다 — 옛 워커가 남아
+# 있으면 새 작업 종류를 몰라 실패로 닫는다(2026-08-28 실측: 배포 전 워커가
+# `pipelines.parse_inbox` 를 세 번 실패시켰다).
+Write-Host '  워커는 코드를 다시 읽지 않습니다. 옛 워커가 떠 있으면 새 작업 종류를 몰라 실패로 닫습니다 — 반드시 다시 띄우세요.'
 Write-Host ''
 Write-Host "직전 버전은 $prevPath 에 있습니다 (롤백: .\rollback.ps1 -AppPath '$AppPath')"
