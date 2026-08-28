@@ -12,7 +12,16 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-Kind = Literal["parser", "processing", "statistics", "fitting", "export"]
+#: 등록할 수 있는 계산의 갈래.
+#:
+#: **"grouping" 은 여러 시험을 묶어 하나를 만드는 것**이다(마스터커브·묶음
+#: Prony·S-N 곡선). 처리는 시험 하나 안에서 끝나고 통계는 값들을 평균 내는데,
+#: 그 둘 중 어느 쪽도 아닌 자리가 실제로 있었다 — 점탄성이 전용 표와 전용
+#: 라우트로 그것을 따로 만들고 있었고, 다음 물성이 오면 또 만들어야 했다.
+#:
+#: **새 등록 함수를 두지 않는다.** 확장이 부르는 창구는 넷 그대로이고(AGENTS),
+#: 묶음은 그중 `registry.register` 의 한 갈래다.
+Kind = Literal["parser", "processing", "statistics", "grouping", "fitting", "export"]
 
 
 @dataclass(frozen=True)

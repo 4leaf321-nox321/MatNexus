@@ -204,3 +204,72 @@ class Test마스터커브와이어진다:
         taus = [term.relaxation_time_s for term in found.terms]
         assert min(taus) > 0
         assert math.isfinite(found.normalized_rmse)
+
+
+class Test완화시간을_못_박기:
+    """**시편 여럿의 계수를 평균 내려면 τ 가 공통이어야 한다.**
+
+    τ 가 자유 변수이면 시편마다 다른 값으로 수렴하고 항 수도 BIC 가 따로 고른다.
+    그러면 `E₁` 끼리 평균 낸다는 말 자체가 성립하지 않는다 — 서로 다른
+    완화시간의 계수를 더하는 것이 된다.
+
+    그래서 무는 자리를 「맞는다」 보다 **「준 τ 를 그대로 돌려준다」** 에 둔다.
+    그게 평균이 뜻을 갖게 하는 조건이다.
+    """
+
+    TAUS = (1.0e-2, 1.0e0, 1.0e2)
+
+    def test_준_완화시간을_그대로_돌려준다(self) -> None:
+        """**이것이 평균의 전제다.** 하나라도 움직이면 축이 어긋난다."""
+        fit = fit_prony(FREQUENCY_HZ, STORAGE_PA, LOSS_PA, terms=3, fixed_taus_s=self.TAUS)
+        got = [term.relaxation_time_s for term in fit.terms]
+        assert got == pytest.approx(list(self.TAUS), rel=1e-12)
+
+    def test_정답_τ_를_주면_계수를_되찾는다(self) -> None:
+        """τ 를 맞게 줬으면 남은 것은 선형 문제다 — 정확히 맞아야 한다."""
+        fit = fit_prony(FREQUENCY_HZ, STORAGE_PA, LOSS_PA, terms=3, fixed_taus_s=self.TAUS)
+        assert fit.equilibrium_pa == pytest.approx(TRUE.equilibrium_pa, rel=0.02)
+        for got, want in zip(fit.terms, TRUE.terms, strict=True):
+            assert got.modulus_pa == pytest.approx(want.modulus_pa, rel=0.02)
+
+    def test_두_시편의_계수를_더할_수_있다(self) -> None:
+        """**이 시험이 요점이다.** 서로 다른 곡선을 같은 축에 올렸는지 본다 —
+        올라갔으면 항끼리 짝이 맞고, 그때만 평균이 성립한다."""
+        first = fit_prony(FREQUENCY_HZ, STORAGE_PA, LOSS_PA, terms=3, fixed_taus_s=self.TAUS)
+        second = fit_prony(
+            FREQUENCY_HZ,
+            NOISY_STORAGE_PA,
+            NOISY_LOSS_PA,
+            terms=3,
+            fixed_taus_s=self.TAUS,
+        )
+        assert [one.relaxation_time_s for one in first.terms] == [
+            one.relaxation_time_s for one in second.terms
+        ]
+
+    def test_경계_경고를_안_낸다(self) -> None:
+        """τ 를 사람이 골랐으므로 「관측 밖으로 갔다」 는 말이 뜻이 없다."""
+        fit = fit_prony(
+            FREQUENCY_HZ, STORAGE_PA, LOSS_PA, terms=3, fixed_taus_s=(1e-9, 1.0, 1e9)
+        )
+        assert fit.at_bound == ()
+
+    def test_음수_완화시간은_거절한다(self) -> None:
+        with pytest.raises(PronyError):
+            fit_prony(FREQUENCY_HZ, STORAGE_PA, LOSS_PA, terms=2, fixed_taus_s=(1.0, -1.0))
+
+    def test_빈_목록은_거절한다(self) -> None:
+        with pytest.raises(PronyError):
+            fit_prony(FREQUENCY_HZ, STORAGE_PA, LOSS_PA, terms=1, fixed_taus_s=())
+
+    def test_탄성률은_음수가_안_된다(self) -> None:
+        """닫힌 해로 풀면 음의 탄성률이 나올 수 있다. 물리적으로 없는 값이다."""
+        fit = fit_prony(
+            FREQUENCY_HZ,
+            NOISY_STORAGE_PA,
+            NOISY_LOSS_PA,
+            terms=5,
+            fixed_taus_s=(1e-4, 1e-2, 1e0, 1e2, 1e4),
+        )
+        assert fit.equilibrium_pa > 0
+        assert all(term.modulus_pa >= 0 for term in fit.terms)

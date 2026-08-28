@@ -3566,6 +3566,46 @@
         "title": "FormatProfileSaveRequest",
         "type": "object"
       },
+      "GroupCreateRequest": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "options": {
+            "additionalProperties": true,
+            "title": "Options",
+            "type": "object"
+          },
+          "plugin_id": {
+            "title": "Plugin Id",
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 2,
+            "title": "Run Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "run_ids"
+        ],
+        "title": "GroupCreateRequest",
+        "type": "object"
+      },
       "GroupOut": {
         "description": "묶음 하나 — **재료 + 시험종류 + 방향.**",
         "properties": {
@@ -3642,6 +3682,144 @@
           "notes"
         ],
         "title": "GroupOut",
+        "type": "object"
+      },
+      "GroupResultOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "options": {
+            "additionalProperties": true,
+            "title": "Options",
+            "type": "object"
+          },
+          "plugin_id": {
+            "title": "Plugin Id",
+            "type": "string"
+          },
+          "plugin_version": {
+            "title": "Plugin Version",
+            "type": "string"
+          },
+          "used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Used",
+            "type": "array"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Values",
+            "type": "object"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "material_id",
+          "plugin_id",
+          "plugin_version",
+          "options",
+          "members",
+          "used",
+          "values",
+          "detail",
+          "warnings",
+          "note",
+          "created_at"
+        ],
+        "title": "GroupResultOut",
+        "type": "object"
+      },
+      "GroupingSpecOut": {
+        "description": "고를 수 있는 묶음 하나. **화면이 목록을 적어 두지 않게 한다.**",
+        "properties": {
+          "applies_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applies To",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "makes_values": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Makes Values",
+            "type": "array"
+          },
+          "params": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Params",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "applies_to",
+          "params",
+          "makes_values"
+        ],
+        "title": "GroupingSpecOut",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -14508,6 +14686,150 @@
         "summary": "Update Profile",
         "tags": [
           "tests"
+        ]
+      }
+    },
+    "/api/groups": {
+      "post": {
+        "description": "묶어서 행으로 남긴다.",
+        "operationId": "create_group_api_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Group",
+        "tags": [
+          "grouping"
+        ]
+      }
+    },
+    "/api/groups/kinds": {
+      "get": {
+        "description": "고를 수 있는 묶음. **레지스트리가 정한다.**\n\n화면이 목록을 적어 두면 새 물성을 붙일 때 화면도 고쳐야 한다 — 그게 확장이\n아닌 상태다(D7).",
+        "operationId": "list_kinds_api_groups_kinds_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "applies_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Applies To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupingSpecOut"
+                  },
+                  "title": "Response List Kinds Api Groups Kinds Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Kinds",
+        "tags": [
+          "grouping"
+        ]
+      }
+    },
+    "/api/groups/materials/{material_id}": {
+      "get": {
+        "description": "그 재료의 묶음. 최근 것부터.",
+        "operationId": "list_for_material_api_groups_materials__material_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupResultOut"
+                  },
+                  "title": "Response List For Material Api Groups Materials  Material Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List For Material",
+        "tags": [
+          "grouping"
         ]
       }
     },

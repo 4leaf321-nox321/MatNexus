@@ -15,6 +15,7 @@ from app.modules.accounts.models import User
 from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.fitting.models import PropertyCard
+from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, MaterialUse, Sample, Specimen
 from app.modules.notices.models import Notice, NoticeRead
 from app.modules.notifications.models import (
@@ -42,6 +43,7 @@ __all__ = [
     "Curve",
     "EnsembleResult",
     "FormatProfile",
+    "GroupResult",
     "Job",
     "Material",
     "MaterialUse",

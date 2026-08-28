@@ -23,7 +23,7 @@ backlog 에 적고 멈춘다 — 그 파일을 다른 사람이 같은 시간에
 
 새 물성은 `backend/extensions/<이름>/` 하나로 끝나야 한다. 중심 코드에 이름을
 적어야만 읽히면 그것은 확장이 아니다([extensions.py](backend/matcore/extensions.py)).
-확장이 부를 수 있는 등록 함수는 넷이다 — `registry.register`(처리) ·
+확장이 부를 수 있는 등록 함수는 넷이다 — `registry.register`(처리·묶음) ·
 `cards.register_block` · `export.register_renderer` · `fitting.register_family`.
 
 **릴리스는 플랫폼 개발자만 한다.** `frontend/package.json` 의 버전을 올리는 것이

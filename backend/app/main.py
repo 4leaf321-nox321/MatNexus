@@ -22,6 +22,7 @@ from app.modules.accounts import routes as accounts_routes
 from app.modules.audit import routes as audit_routes
 from app.modules.auth import routes as auth_routes
 from app.modules.fitting import routes as fitting_routes
+from app.modules.grouping import routes as grouping_routes
 from app.modules.materials import routes as materials_routes
 from app.modules.notices import routes as notices_routes
 from app.modules.notifications import routes as notifications_routes
@@ -75,6 +76,7 @@ def _api_router() -> APIRouter:
     router.include_router(viscoelastic_routes.router)
     router.include_router(statistics_routes.router)
     router.include_router(fitting_routes.router)
+    router.include_router(grouping_routes.router)
     router.include_router(units_routes.router)
     router.include_router(vocabulary_routes.router)
     router.include_router(audit_routes.router)
