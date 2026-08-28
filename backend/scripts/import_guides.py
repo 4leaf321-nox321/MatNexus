@@ -3,6 +3,7 @@
     python scripts/import_guides.py                 # seeds/guide 전부, 있으면 건너뜀
     python scripts/import_guides.py --replace       # 있어도 덮는다(판이 하나 더 쌓인다)
     python scripts/import_guides.py --only dma-prony
+    python scripts/import_guides.py --titles-only    # 제목만 씨앗대로 (본문·리비전 안 건드림)
 
 씨앗은 `frontend/scripts/guide_seed.mjs` 가 원본 HTML 에서 만든다. 여기는 그것을
 문서·절·그림으로 넣을 뿐이다 — 변환은 편집기와 같은 코드가 해야 하므로 Node 쪽에 있다.
@@ -79,6 +80,26 @@ def _upload_assets(db: Session, document_id: Any, seed: dict[str, Any]) -> dict[
     return urls
 
 
+def sync_titles(db: Session, seed: dict[str, Any]) -> str:
+    """제목만 씨앗대로. 본문·리비전은 안 건드린다 — 제목은 가변 메타다."""
+    document = db.scalar(select(GuideDocument).where(GuideDocument.key == seed["key"]))
+    if document is None:
+        return "없음, 건너뜀"
+    document.title = seed["title"]
+    changed = 0
+    for item in seed["sections"]:
+        section = db.scalar(
+            select(GuideSection).where(
+                GuideSection.document_id == document.id, GuideSection.key == item["key"]
+            )
+        )
+        if section is not None and section.title != item["title"]:
+            section.title = item["title"]
+            changed += 1
+    db.commit()
+    return f"제목 {changed}건 갱신"
+
+
 def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
     document = db.scalar(select(GuideDocument).where(GuideDocument.key == seed["key"]))
     if document is not None and not replace:
@@ -149,6 +170,7 @@ def main() -> None:
     )
     parser.add_argument("--replace", action="store_true")
     parser.add_argument("--only", help="이 키의 문서만")
+    parser.add_argument("--titles-only", action="store_true")
     args = parser.parse_args()
 
     files = sorted(SEEDS.glob("*.json"))
@@ -160,7 +182,10 @@ def main() -> None:
     with SessionLocal() as db:
         for file in files:
             seed = json.loads(file.read_text(encoding="utf-8"))
-            print(f"{seed['key']:<40} {load(db, seed, replace=args.replace)}")
+            if args.titles_only:
+                print(f"{seed['key']:<40} {sync_titles(db, seed)}")
+            else:
+                print(f"{seed['key']:<40} {load(db, seed, replace=args.replace)}")
 
 
 if __name__ == "__main__":
