@@ -63,9 +63,7 @@ export function OverviewPanel({
             </Pending>
           )}
           {data.waiting_to_process > 0 && (
-            <Pending to={`/w/${workspaceSlug}/tests`}>
-              처리 대기 {data.waiting_to_process}
-            </Pending>
+            <Pending to={`/w/${workspaceSlug}/tests`}>처리 대기 {data.waiting_to_process}</Pending>
           )}
           {data.card_draft > 0 && (
             <Pending to="/materials">

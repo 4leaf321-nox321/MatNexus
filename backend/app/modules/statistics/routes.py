@@ -44,6 +44,7 @@ from app.modules.statistics.schemas import (
     YearTallyOut,
 )
 from app.modules.tests.models import TestRun, TestType
+from app.shared import divisions as divisions_order
 from app.shared import permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
@@ -384,20 +385,6 @@ def _tally(rows: Sequence[Any]) -> list[TallyOut]:
     return [TallyOut(key=str(key), label=str(key), count=int(count)) for key, count in rows]
 
 
-#: 사업부 표시 순서 — 실사용 요청으로 고정(2026-08-29). 기준정보에 순서 칸이
-#: 없어서 여기 적는다. 모르는 값은 이 뒤에 이름순, 「미지정」 은 맨 뒤.
-DIVISION_ORDER = ("MX", "VD", "DA", "NW", "의료기기")
-
-
-def _division_rank(division: str) -> tuple[int, str]:
-    if division == "미지정":
-        return (len(DIVISION_ORDER) + 1, "")
-    try:
-        return (DIVISION_ORDER.index(division), "")
-    except ValueError:
-        return (len(DIVISION_ORDER), division)
-
-
 @router.get("/divisions", response_model=DivisionOverviewOut)
 def divisions(
     user: User = Depends(current_user),
@@ -426,7 +413,7 @@ def divisions(
     tallies = sorted(
         (
             DivisionTallyOut(
-                division=division or "미지정",
+                division=division or divisions_order.UNSET,
                 run_count=int(run_count),
                 specimen_count=int(specimen_count),
                 sample_count=int(sample_count),
@@ -434,7 +421,7 @@ def divisions(
             )
             for division, run_count, specimen_count, sample_count, material_count in rows
         ),
-        key=lambda one: _division_rank(one.division),
+        key=lambda one: divisions_order.rank(one.division),
     )
 
     # 연간 — 해는 시험일. 옛 시험을 오늘 올리는 일이 흔해서(이관) 등록일로 세면
@@ -447,10 +434,12 @@ def divisions(
     ).all()
     yearly = sorted(
         (
-            YearTallyOut(year=int(y), division=division or "미지정", run_count=int(count))
+            YearTallyOut(
+                year=int(y), division=division or divisions_order.UNSET, run_count=int(count)
+            )
             for y, division, count in yearly_rows
         ),
-        key=lambda one: (one.year, _division_rank(one.division)),
+        key=lambda one: (one.year, divisions_order.rank(one.division)),
     )
     return DivisionOverviewOut(divisions=tallies, yearly=yearly)
 

@@ -8,6 +8,24 @@
 
 import type { DivisionOverview } from '@/modules/statistics/api'
 
+/**
+ * 사업부 차례 — **서버(`app/shared/divisions.py`)와 같은 값.**
+ *
+ * 서버가 목록을 이 차례로 주므로 화면은 대개 다시 정렬할 필요가 없다. 다만
+ * recharts 의 툴팁처럼 **우리가 순서를 못 넘기는 자리**가 있어, 거기서 쓸 차례를
+ * 여기 둔다. 두 벌이 된 것은 알고 있다 — 기준정보에 순서 칸이 생기면 둘 다 그것을
+ * 읽는다.
+ */
+export const DIVISION_ORDER = ['MX', 'VD', 'DA', 'NW', '의료기기'] as const
+export const UNSET_DIVISION = '미지정'
+
+/** 정렬 열쇠. 모르는 값은 뒤에 이름순, 「미지정」 은 맨 뒤. */
+export function divisionRank(division: string): [number, string] {
+  if (division === UNSET_DIVISION) return [DIVISION_ORDER.length + 1, '']
+  const at = DIVISION_ORDER.indexOf(division as (typeof DIVISION_ORDER)[number])
+  return at >= 0 ? [at, ''] : [DIVISION_ORDER.length, division]
+}
+
 /** 순서는 서버가 주는 순서 그대로 쓰고, 색만 여기서 돌려 쓴다. */
 const PALETTE = ['#2563eb', '#16a34a', '#f59e0b', '#9333ea', '#dc2626', '#0891b2']
 const UNSET_COLOR = '#9ca3af'

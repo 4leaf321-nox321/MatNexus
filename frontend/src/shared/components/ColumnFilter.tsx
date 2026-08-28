@@ -114,8 +114,12 @@ export function ColumnFilter({
   sort?: SortHandle
   /** 고를 값이 정해져 있으면 준다. 안 주면 자유 입력.
    *  **개수를 함께 받는다** — 분류 후보는 「실제로 있는 조합」 이라 개수가 붙어
-   *  오고, 그 숫자가 고르기 전에 몇 건인지 말해 준다. */
-  options?: readonly (string | { value: string; count?: number })[]
+   *  오고, 그 숫자가 고르기 전에 몇 건인지 말해 준다.
+   *
+   *  **`label` 은 값과 보이는 글자가 다를 때 준다.** 값이 곧 사람이 읽을 말인
+   *  자리(방향·사업부)가 대부분이라 기본은 값 그대로지만, 서버 코드값을 거르는
+   *  자리(`global`·`mine`)는 그것을 그대로 보이면 목록이 영어로 선다. */
+  options?: readonly (string | { value: string; label?: string; count?: number })[]
   placeholder?: string
   align?: 'left' | 'right'
 }) {
@@ -150,7 +154,7 @@ export function ColumnFilter({
             const item = typeof one === 'string' ? { value: one } : one
             return (
               <option key={item.value} value={item.value}>
-                {item.value}
+                {item.label ?? item.value}
                 {item.count != null ? ` (${item.count})` : ''}
               </option>
             )

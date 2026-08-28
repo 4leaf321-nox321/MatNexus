@@ -73,8 +73,8 @@ export function PropertiesPanel({ materialId }: Props) {
 
       {saved && (
         <div className="mb-4 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
-          <b>{saved}</b> 통계를 남겼습니다. 지금 표본으로 낸 값이 그대로 박혀 있어,
-          시험이 더 붙어도 그 값은 바뀌지 않습니다.
+          <b>{saved}</b> 통계를 남겼습니다. 지금 표본으로 낸 값이 그대로 박혀 있어, 시험이 더 붙어도
+          그 값은 바뀌지 않습니다.
         </div>
       )}
 
@@ -123,8 +123,7 @@ function GroupCard({
         )}
         {enough && (
           <Button size="sm" variant="outline" className="ml-auto" onClick={onSave}>
-            <Save className="size-3.5" />
-            이 통계 남기기
+            <Save className="size-3.5" />이 통계 남기기
           </Button>
         )}
       </header>
@@ -312,8 +311,8 @@ function EnsembleCurve({ group }: { group: StatisticsGroup }) {
       <p className="text-muted-foreground mt-2 text-xs">
         {single ? (
           <>
-            시편 1개의 곡선입니다 — <b>평균이 아니라 그 시편의 값</b>입니다. 이
-            곡선이 <b>피팅의 입력</b>이 되고, 카드에도 시편 1개라고 적힙니다.
+            시편 1개의 곡선입니다 — <b>평균이 아니라 그 시편의 값</b>입니다. 이 곡선이{' '}
+            <b>피팅의 입력</b>이 되고, 카드에도 시편 1개라고 적힙니다.
           </>
         ) : (
           <>

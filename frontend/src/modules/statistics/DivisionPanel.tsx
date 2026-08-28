@@ -50,16 +50,17 @@ export function DivisionPanel({
           <div
             className="overflow-x-auto rounded-md border [&_td]:px-3 [&_th]:px-3
               [&_td:first-child]:pl-4 [&_th:first-child]:pl-4
-              [&_td:last-child]:pr-4 [&_th:last-child]:pr-4"
+              [&_td:last-child]:pr-4 [&_th:last-child]:pr-4
+              [&_td]:text-center [&_th]:text-center"
           >
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>사업부</TableHead>
-                  <TableHead className="text-right">재료</TableHead>
-                  <TableHead className="text-right">시료</TableHead>
-                  <TableHead className="text-right">시편</TableHead>
-                  <TableHead className="text-right">시험</TableHead>
+                  <TableHead>재료</TableHead>
+                  <TableHead>시료</TableHead>
+                  <TableHead>시편</TableHead>
+                  <TableHead>시험</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -76,10 +77,10 @@ export function DivisionPanel({
                       />
                       {row.division}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{row.material_count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.sample_count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.specimen_count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.run_count}</TableCell>
+                    <TableCell className="tabular-nums">{row.material_count}</TableCell>
+                    <TableCell className="tabular-nums">{row.sample_count}</TableCell>
+                    <TableCell className="tabular-nums">{row.specimen_count}</TableCell>
+                    <TableCell className="tabular-nums">{row.run_count}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

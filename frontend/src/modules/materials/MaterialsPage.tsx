@@ -116,9 +116,7 @@ export default function MaterialsPage() {
   const materials = useResource(
     () =>
       all
-        ? fetchAll((limit, from) =>
-            materialsApi.list({ ...filters, limit, offset: from })
-          )
+        ? fetchAll((limit, from) => materialsApi.list({ ...filters, limit, offset: from }))
         : materialsApi.list({ ...filters, limit: size, offset }),
     [applied, name, alias, family, category, scope, sort, size, offset, all]
   )
@@ -138,9 +136,7 @@ export default function MaterialsPage() {
         setFailure(
           new Error(
             `${done.deleted}건을 지웠습니다. 남은 것: ` +
-              done.blocked
-                .map((item) => `${item.name ?? item.id} (${item.reason})`)
-                .join(' · ')
+              done.blocked.map((item) => `${item.name ?? item.id} (${item.reason})`).join(' · ')
           )
         )
       } else if (done.samples + done.specimens + done.test_runs > 0) {
@@ -223,9 +219,7 @@ export default function MaterialsPage() {
 
       <ErrorNotice error={materials.error} className="mb-4" />
       <ErrorNotice error={failure} className="mb-4" />
-      {notice && (
-        <p className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm">{notice}</p>
-      )}
+      {notice && <p className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm">{notice}</p>}
 
       {picked.size > 0 && (
         <div className="bg-muted/40 mb-3 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2">
@@ -319,8 +313,8 @@ export default function MaterialsPage() {
                     시험 {plan.test_runs}건도 함께 지웁니다
                   </span>
                   <span className="text-muted-foreground mt-0.5 block text-xs">
-                    측정한 곡선과 처리 결과가 사라집니다. 안 켜면 시험을 문 재료만
-                    이유와 함께 돌아옵니다.
+                    측정한 곡선과 처리 결과가 사라집니다. 안 켜면 시험을 문 재료만 이유와 함께
+                    돌아옵니다.
                   </span>
                 </span>
               </label>
@@ -360,21 +354,21 @@ export default function MaterialsPage() {
                   {/* 거르는 칸들과 **같은 높이에 선다.** 위에 붙으면 머리 띠에서
                       혼자 떠 보인다. */}
                   <div className="flex h-[3.25rem] items-end pb-2">
-                  <input
-                    type="checkbox"
-                    aria-label="전부 선택"
-                    checked={picked.size > 0 && picked.size === rows.length}
-                    ref={(node) => {
-                      if (node) node.indeterminate = picked.size > 0 && picked.size < rows.length
-                    }}
-                    onChange={(event) =>
-                      setPicked(
-                        event.target.checked
-                          ? new Set(rows.map((material) => material.id))
-                          : new Set()
-                      )
-                    }
-                  />
+                    <input
+                      type="checkbox"
+                      aria-label="전부 선택"
+                      checked={picked.size > 0 && picked.size === rows.length}
+                      ref={(node) => {
+                        if (node) node.indeterminate = picked.size > 0 && picked.size < rows.length
+                      }}
+                      onChange={(event) =>
+                        setPicked(
+                          event.target.checked
+                            ? new Set(rows.map((material) => material.id))
+                            : new Set()
+                        )
+                      }
+                    />
                   </div>
                 </TableHead>
                 {/* **열마다 그 열을 거른다.** 서버가 거르므로 다음 쪽까지
@@ -453,7 +447,10 @@ export default function MaterialsPage() {
                   <ColumnFilter
                     label="소속"
                     value={scope}
-                    options={['global', 'mine']}
+                    options={[
+                      { value: 'global', label: '전역' },
+                      { value: 'mine', label: '내 부서' },
+                    ]}
                     onChange={(next) => {
                       setScope(next)
                       setOffset(0)
@@ -488,12 +485,8 @@ export default function MaterialsPage() {
                       {material.record_name}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {material.alias ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {material.family}
-                  </TableCell>
+                  <TableCell className="text-muted-foreground">{material.alias ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{material.family}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {material.category}
                   </TableCell>
@@ -502,9 +495,7 @@ export default function MaterialsPage() {
                       ? '—'
                       : `${material.spec_thickness} ${material.spec_thickness_unit}`}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {material.sample_count}
-                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{material.sample_count}</TableCell>
                   <TableCell>
                     <Stamp at={material.created_at} />
                   </TableCell>
@@ -526,8 +517,7 @@ export default function MaterialsPage() {
           </Table>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
             <span className="text-muted-foreground tabular-nums">
-              {all ? `전체 ${rows.length}` : `${offset + 1}–${offset + rows.length}`} /{' '}
-              {total}건
+              {all ? `전체 ${rows.length}` : `${offset + 1}–${offset + rows.length}`} / {total}건
             </span>
 
             <div className="text-muted-foreground flex items-center gap-1">
@@ -577,8 +567,8 @@ export default function MaterialsPage() {
               되는지를 적는다. */}
           {truncated && (
             <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
-              {total}건 중 {rows.length}건까지만 한 번에 보여 줍니다 — 표가 그보다 길면
-              브라우저가 버겁습니다. 검색으로 좁히세요.
+              {total}건 중 {rows.length}건까지만 한 번에 보여 줍니다 — 표가 그보다 길면 브라우저가
+              버겁습니다. 검색으로 좁히세요.
             </p>
           )}
         </>

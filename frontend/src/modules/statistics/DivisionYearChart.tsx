@@ -24,7 +24,7 @@ import {
 } from 'recharts'
 
 import type { DivisionOverview } from '@/modules/statistics/api'
-import { colorOf, yearRows } from '@/modules/statistics/divisionColors'
+import { colorOf, divisionRank, yearRows } from '@/modules/statistics/divisionColors'
 
 export default function DivisionYearChart({
   data,
@@ -47,12 +47,34 @@ export default function DivisionYearChart({
           <CartesianGrid strokeDasharray="3 3" horizontal={false} strokeOpacity={0.4} />
           <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
           <YAxis type="category" dataKey="year" width={44} tick={{ fontSize: 12 }} />
+          {/* **툴팁 안의 차례도 맞춘다.** recharts 는 누적 순서로 담아 주는데,
+              표·범례와 다르면 같은 다섯 값이 세 가지 차례로 서게 된다.
+              `zIndex` 는 범례에 가리지 않게. */}
           <Tooltip
-            formatter={(value, name) => [`${String(value)}건`, String(name)]}
-            labelFormatter={(year) => `${String(year)}년`}
-            // **범례 위로 뜬다.** recharts 는 범례를 툴팁보다 뒤에 그리지 않는다 —
-            // 아래쪽 막대에 올리면 툴팁이 범례에 가렸다.
             wrapperStyle={{ zIndex: 50 }}
+            content={({ active, payload, label }) =>
+              active && payload?.length ? (
+                <div className="bg-background rounded-md border px-2.5 py-1.5 text-xs shadow-md">
+                  <div className="mb-1 font-medium">{String(label)}년</div>
+                  {[...payload]
+                    .sort((a, b) => {
+                      const [ai, an] = divisionRank(String(a.name))
+                      const [bi, bn] = divisionRank(String(b.name))
+                      return ai - bi || an.localeCompare(bn)
+                    })
+                    .map((one) => (
+                      <div key={String(one.name)} className="flex items-center gap-1.5">
+                        <span
+                          className="inline-block size-2 rounded-full"
+                          style={{ backgroundColor: one.color }}
+                        />
+                        <span className="text-muted-foreground">{String(one.name)}</span>
+                        <span className="ml-auto tabular-nums">{String(one.value)}건</span>
+                      </div>
+                    ))}
+                </div>
+              ) : null
+            }
           />
           {divisions.map((division, index) => (
             <Bar

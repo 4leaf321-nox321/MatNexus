@@ -10,7 +10,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { DivisionPanel } from '@/modules/statistics/DivisionPanel'
-import { yearRows } from '@/modules/statistics/divisionColors'
+import { divisionRank, yearRows } from '@/modules/statistics/divisionColors'
 import type { DivisionOverview } from '@/modules/statistics/api'
 
 const DATA: DivisionOverview = {
@@ -47,6 +47,18 @@ describe('DivisionPanel', () => {
       <DivisionPanel data={{ divisions: [], yearly: [] }} loading={false} />
     )
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('divisionRank', () => {
+  it('MX · VD · DA · NW · 의료기기 순, 모르는 값은 뒤, 미지정은 맨 뒤', () => {
+    const shuffled = ['의료기기', '미지정', 'DA', '신규사업', 'MX', 'NW', 'VD']
+    const sorted = [...shuffled].sort((a, b) => {
+      const [ai, an] = divisionRank(a)
+      const [bi, bn] = divisionRank(b)
+      return ai - bi || an.localeCompare(bn)
+    })
+    expect(sorted).toEqual(['MX', 'VD', 'DA', 'NW', '의료기기', '신규사업', '미지정'])
   })
 })
 

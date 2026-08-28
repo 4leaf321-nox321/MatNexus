@@ -79,6 +79,7 @@ from app.shared import (
     sorting,
     specimen_size,
 )
+from app.shared import divisions as divisions_order
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -1062,11 +1063,16 @@ def run_facets(
         for key, count in tally(base.c.registered_by_id)
         if key is not None and key in names
     ]
-    divisions = [
-        RunFacetOut(key=str(value), label=str(value), count=count)
-        for value, count in tally(base.c.division)
-        if value
-    ]
+    # **차례는 한 군데서 정한다.** 그룹핑이 준 순서를 그대로 쓰면 거르기 목록이
+    # 홈의 표와 다른 차례로 서고, 사람은 그것을 다른 목록으로 읽는다.
+    divisions = sorted(
+        (
+            RunFacetOut(key=str(value), label=str(value), count=count)
+            for value, count in tally(base.c.division)
+            if value
+        ),
+        key=lambda one: divisions_order.rank(one.key),
+    )
     # 방향은 시편에 있다 — 시험에서 바로 못 센다.
     directions = [
         RunFacetOut(key=str(value), label=str(value), count=int(count))

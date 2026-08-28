@@ -36,12 +36,11 @@ import {
 import { formatScalar } from '@/shared/units'
 
 /** 상태 → 사람이 읽는 말. **셋을 한 색으로 칠하지 않는다.** */
-const STATUS: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> =
-  {
-    succeeded: { label: '맞춰 봄', variant: 'default' },
-    not_eligible: { label: '표본 모자람', variant: 'secondary' },
-    failed: { label: '실패', variant: 'outline' },
-  }
+const STATUS: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
+  succeeded: { label: '맞춰 봄', variant: 'default' },
+  not_eligible: { label: '표본 모자람', variant: 'secondary' },
+  failed: { label: '실패', variant: 'outline' },
+}
 
 export function DistributionPanel({
   materialId,
@@ -125,8 +124,8 @@ export function DistributionPanel({
 
       {busy && (
         <p className="text-muted-foreground text-xs">
-          부트스트랩 999회를 도는 중입니다 — 파라미터를 데이터에서 추정했으므로
-          표준 임계값표를 쓸 수 없습니다.
+          부트스트랩 999회를 도는 중입니다 — 파라미터를 데이터에서 추정했으므로 표준 임계값표를 쓸
+          수 없습니다.
         </p>
       )}
 
@@ -169,10 +168,9 @@ export function DistributionPanel({
           </div>
 
           <p className="text-muted-foreground text-xs">
-            <b>ΔAICc</b> 는 1등과의 차이입니다 — 2 미만이면 이 데이터로는 구별되지
-            않습니다. <b>p</b> 는 <i>이 분포가 맞기는 하나</i>를 묻습니다(작으면
-            아니라는 뜻이고, 큰 p 가 맞다는 증명은 아닙니다). 둘이 다른 것을 보므로
-            함께 읽으세요.
+            <b>ΔAICc</b> 는 1등과의 차이입니다 — 2 미만이면 이 데이터로는 구별되지 않습니다.{' '}
+            <b>p</b> 는 <i>이 분포가 맞기는 하나</i>를 묻습니다(작으면 아니라는 뜻이고, 큰 p 가
+            맞다는 증명은 아닙니다). 둘이 다른 것을 보므로 함께 읽으세요.
           </p>
 
           <Observations report={report} />
