@@ -11,12 +11,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useSort } from '@/shared/hooks/useSort'
 
+/** 지금 로그인한 사람. 시험이 바꿔 가며 쓴다. */
+const account: { id?: string } = {}
+
+vi.mock('@/shared/auth/AuthContext', () => ({
+  useAuth: () => ({ user: account.id ? { id: account.id } : null }),
+}))
+
 const ALLOWED = ['created_at', 'record_name', 'standard'] as const
-const KEY = 'matnexus.sort.demo'
+const KEY = 'matnexus.sort.user-1.demo'
 
 beforeEach(() => {
   window.localStorage.clear()
   vi.restoreAllMocks()
+  account.id = 'user-1'
 })
 
 describe('누르는 규칙', () => {
@@ -107,5 +115,41 @@ describe('적힌 것을 믿지 않는다', () => {
     const { result } = renderHook(() => useSort('created_at', { remember: 'demo' }))
     act(() => result.current.handle('record_name').onSort('record_name'))
     expect(result.current.sort.key).toBe('record_name')
+  })
+})
+
+
+describe('계정마다 자리가 따로다', () => {
+  it('다른 사람이 같은 PC 를 써도 안 따라온다', () => {
+    /**
+     * **공용 PC 에서 앞사람 설정이 보이면 안 된다.** 정렬은 데이터가 아니라
+     * 보는 방식이지만, 자기가 안 누른 순서를 보는 것은 설명이 안 된다.
+     */
+    const mine = renderHook(() => useSort('created_at', { remember: 'demo' }))
+    act(() => mine.result.current.handle('record_name').onSort('record_name'))
+
+    account.id = 'user-2'
+    const theirs = renderHook(() => useSort('created_at', { remember: 'demo' }))
+    expect(theirs.result.current.sort.key).toBe('created_at')
+  })
+
+  it('계정이 늦게 풀려도 그 계정 것을 읽는다', () => {
+    /**
+     * **`user` 는 첫 렌더에서 `null` 이다** — 자리가 `anon` 이라 그대로 두면
+     * 적어 둔 값을 영영 못 읽는다.
+     */
+    window.localStorage.setItem(
+      'matnexus.sort.user-9.demo',
+      JSON.stringify({ key: 'standard', descending: false })
+    )
+    account.id = undefined
+    const { result, rerender } = renderHook(() =>
+      useSort('created_at', { remember: 'demo', allowed: ALLOWED })
+    )
+    expect(result.current.sort.key).toBe('created_at')
+
+    account.id = 'user-9'
+    rerender()
+    expect(result.current.sort).toEqual({ key: 'standard', descending: false })
   })
 })

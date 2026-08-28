@@ -16,6 +16,12 @@ import SpecimensPage from '@/modules/materials/SpecimensPage'
 const specimenRows = vi.fn()
 const bulkUpdateSpecimens = vi.fn()
 
+// **이 화면은 이제 로그인한 사람을 안다** — 정렬을 그 계정 자리에 적어 두기
+// 때문이다. 프로바이더 없이 `useAuth` 를 부르면 던지는데, 그 가드는 옳다.
+vi.mock('@/shared/auth/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'user-1' } }),
+}))
+
 vi.mock('@/modules/materials/api', async () => {
   const actual =
     await vi.importActual<typeof import('@/modules/materials/api')>('@/modules/materials/api')
