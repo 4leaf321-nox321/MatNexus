@@ -96,19 +96,54 @@ def _same_reference(members: Sequence[Member]) -> tuple[float, list[str]]:
     return float(np.mean(temperatures)), warnings
 
 
-def _tau_grid(members: Sequence[Member], terms: int) -> np.ndarray:
-    """공통 τ 격자. **모두가 관측한 구간 안에서만** 잡는다.
+def _tau_grid(members: Sequence[Member], terms: int) -> tuple[np.ndarray, str]:
+    """공통 τ 격자. **한 시편을 자유롭게 맞춰 그 τ 를 빌린다.** `(격자, 사연)`.
 
-    한 시편만 본 주파수까지 τ 를 늘리면, 나머지 시편에게는 데이터가 말해 주지
-    않는 값을 맞추라고 하는 셈이 된다.
+    ## 주파수 창에서 뽑으면 안 된다
+
+    처음에는 「모두가 관측한 구간」 을 로그 등간격으로 갈랐다. 예제로 돌려 보고
+    **조용히 틀리는 것을 잡았다**(2026-08-28):
+
+        창에서 뽑은 τ   8.0e-5 · 0.36 · 1.6e3 s   → E∞ = 0.0013 Pa
+        정답 τ          1e-2 · 1e0 · 1e2 s        → E∞ = 5.0e6 Pa
+
+    관측 창의 끝(1.6e3 s)은 **가장 낮은 주파수보다도 느린 완화**다. 그 항이
+    평형 탄성률이 할 일을 대신 해 버리고, E∞ 는 하한(1e-12)까지 밀린다. 오류는
+    안 난다 — 곡선은 그대로 지나가고 **E∞ 만 0 이 된다.** 그 값이 카드에 실리면
+    「완화가 끝나면 힘을 못 받는 재료」 가 된다.
+
+    ## 그래서 데이터에게 묻는다
+
+    사람이 하는 것과 같다 — **한 시편을 자유롭게 맞춰 보고, 그 τ 를 나머지에
+    물려 준다.** 이미 맞춰 둔 것이 있으면(`meta["prony"]`) 잔차가 가장 작은
+    것을 쓰고, 없으면 여기서 한 번 맞춘다.
     """
-    lowest = max(1.0 / float(np.max(_curve_of(item)[0]) * 2.0 * np.pi) for item in members)
-    highest = min(1.0 / float(np.min(_curve_of(item)[0]) * 2.0 * np.pi) for item in members)
-    if not 0 < lowest < highest:
+    fitted = [(item, _series_of(item)) for item in members]
+    ready = [(item, series) for item, series in fitted if series is not None]
+    # 항 수를 지정했으면 그 수와 같은 것만 빌릴 수 있다.
+    usable = [pair for pair in ready if terms <= 0 or len(pair[1].terms) == terms]
+
+    if usable:
+        best = min(usable, key=lambda pair: pair[1].normalized_rmse)
+        taus = np.asarray([term.relaxation_time_s for term in best[1].terms], dtype=float)
+        return np.sort(taus), f"{best[0].label} 의 완화시간을 공통 격자로 썼습니다."
+
+    reference = members[0]
+    one, two, three = _curve_of(reference)
+    try:
+        if terms > 0:
+            free = fit_prony(one, two, three, terms=terms)
+        else:
+            free, _ = choose_prony(one, two, three)
+    except Exception as exc:
         raise GroupError(
-            "겹치는 주파수 구간이 없습니다. 시편들이 서로 다른 범위를 재고 있습니다."
-        )
-    return np.geomspace(lowest, highest, terms)
+            f"공통 완화시간을 정하려고 {reference.label} 을 맞춰 봤는데 안 됐습니다: {exc}"
+        ) from exc
+    taus = np.asarray([term.relaxation_time_s for term in free.terms], dtype=float)
+    return (
+        np.sort(taus),
+        f"{reference.label} 을 자유롭게 맞춰 그 완화시간을 공통 격자로 썼습니다.",
+    )
 
 
 def _outcome(
@@ -283,8 +318,9 @@ def _averaged(
     members: list[Member], reference_k: float, warnings: list[str], terms: int
 ) -> GroupOutcome:
     """시편마다 맞춰 계수를 평균 낸다. **τ 를 못 박고서만 뜻이 있다.**"""
-    count = terms if terms > 0 else 4
-    taus = _tau_grid(members, count)
+    taus, said = _tau_grid(members, terms)
+    count = int(taus.size)
+    warnings.append(said)
 
     fits: list[PronySeries] = []
     used: list[str] = []
@@ -306,6 +342,16 @@ def _averaged(
 
     equilibrium = float(np.mean([one.equilibrium_pa for one in fits]))
     moduli = np.mean([[term.modulus_pa for term in one.terms] for one in fits], axis=0)
+
+    # **평형이 0 으로 무너졌으면 말한다.** 가장 긴 τ 항이 평형이 할 일을 대신
+    # 하면 이렇게 된다 — 곡선은 그대로 지나가고 E∞ 만 사라지므로, 안 짚으면
+    # 카드에 「완화가 끝나면 힘을 못 받는 재료」 가 실린다.
+    if equilibrium < float(np.sum(moduli)) * 1e-6:
+        warnings.append(
+            f"평형 탄성률이 0 에 가깝습니다({equilibrium:.3g} Pa). 가장 긴 완화시간이 "
+            f"그 자리를 대신하고 있을 수 있습니다 — 더 낮은 주파수를 재거나 항 수를 "
+            f"줄여 보세요."
+        )
     # **잔차는 평균 내지 않는다.** 시편별 적합의 잔차이지 평균 계수의 잔차가
     # 아니다 — 그 둘을 같은 칸에 담으면 「평균이 잘 맞는다」 로 읽힌다.
     worst = max(one.normalized_rmse for one in fits)
