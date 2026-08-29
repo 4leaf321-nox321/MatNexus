@@ -314,7 +314,9 @@ function ResultCurve({ resultId }: { resultId: string }) {
         points={points}
         xLabel={axisLabel(data.x, data.units[data.x])}
         yLabel={axisLabel(data.y, data.units[data.y])}
-        height={280}
+        // **2열로 가면서 세로가 남았다.** 곡선이 오른쪽 한 칸을 통째로 쓰는데
+        // 280 은 왼쪽 목록보다 훨씬 짧아, 채택 직전에 봐야 할 모양이 작게 눌린다.
+        height={420}
       />
 
       {!hasTrue && (

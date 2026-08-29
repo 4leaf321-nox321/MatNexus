@@ -260,6 +260,9 @@ export default function TestRunDetailPage() {
       />
 
       <PageHeader
+        // **이 화면은 길다.** 곡선·요약값·처리 단계·결과가 탭마다 쌓여, 아래로
+        // 내려가면 어느 시험을 보고 있었는지가 화면에서 사라진다.
+        sticky
         title={item?.record_name ?? '시험'}
         description={
           item ? `${item.test_type_label} · ${item.material_name ?? ''}` : undefined

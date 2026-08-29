@@ -4,10 +4,15 @@ import type { ReactNode } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { cn } from '@/shared/lib/utils'
+
 interface PageHeaderProps {
   title: string
   description?: string
   actions?: ReactNode
+  /** 스크롤해도 맨 위에 남는다. **긴 화면에만 켠다** — 짧은 화면에서는 얻는 것
+   *  없이 세로만 먹는다. */
+  sticky?: boolean
   /**
    * 돌아갈 곳. **브라우저 뒤로가기에 기대지 않는다.**
    *
@@ -45,9 +50,22 @@ export function PageHeader({
   actions,
   back,
   created,
+  sticky = false,
 }: PageHeaderProps) {
   return (
-    <div className="mb-6">
+    <div
+      className={cn(
+        'mb-6',
+        // **긴 화면에서 「지금 무엇을 보고 있나」 를 잃지 않게.** 스크롤을 내리면
+        // 제목·재료·시험 종류가 사라지고, 곡선만 남으면 그것이 어느 시험의
+        // 곡선인지 화면에 없다 — 되돌아가는 단추도 함께 사라진다.
+        //
+        // 스크롤 상자는 `AppShell` 의 `<main>`(`overflow-auto p-6`)이다. 음수
+        // 여백으로 그 안쪽 여백까지 덮어야 **내용이 옆으로 새어 보이지 않는다.**
+        sticky &&
+          'bg-background sticky top-0 z-20 -mx-6 -mt-6 mb-4 border-b px-6 pt-6 pb-3'
+      )}
+    >
       {back && (
         <Link
           to={back.to}
