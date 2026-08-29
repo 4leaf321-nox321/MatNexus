@@ -20,7 +20,6 @@
  * 본 것과 저장 뒤에 본 것이 같다.
  */
 
-import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import { TableKit } from '@tiptap/extension-table'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -42,6 +41,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
+import { AuthedImage } from '@/modules/guide/AuthedImage'
 import { guideApi } from '@/modules/guide/api'
 import type { Doc } from '@/modules/guide/api'
 import { Button } from '@/shared/components/ui/button'
@@ -73,7 +73,9 @@ function extensions(placeholder: string) {
       link: { openOnClick: false, autolink: true },
     }),
     TableKit.configure({ table: { resizable: false } }),
-    Image.configure({ inline: false, allowBase64: false }),
+    // **평범한 Image 가 아니다.** 본문의 주소를 그대로 `<img src>` 에 넣으면
+    // 토큰이 안 실려 401 이 난다(`AuthedImage` 의 주석).
+    AuthedImage.configure({ inline: false, allowBase64: false }),
     Placeholder.configure({ placeholder }),
   ]
 }

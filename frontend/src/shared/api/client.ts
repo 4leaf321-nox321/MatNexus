@@ -147,6 +147,31 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
+ * 토큰을 실어 받아 온다. **브라우저가 스스로 여는 요청은 이것을 못 한다.**
+ *
+ * `<a href>` · `<img src>` · `<iframe>` 처럼 브라우저가 직접 여는 주소에는
+ * Authorization 헤더가 안 실린다 — access 토큰은 메모리에만 있고 쿠키가 아니라서다
+ * (XSS 방어). 그래서 그런 자리에는 **여기서 받아 만든 blob 주소**를 넣는다.
+ *
+ * 실측(2026-08-29): 핸드북 그림 75개가 전부 안 나왔다. 본문이 `<img
+ * src="/api/guide/assets/…">` 였고 서버는 401 을 냈다. 아래 `downloadFile` 이 이미
+ * 같은 함정을 적어 두었는데, 그림을 붙일 때 그 교훈을 안 썼다.
+ */
+export async function fetchWithAuth(path: string): Promise<Response> {
+  // **`/api` 로 시작하면 이미 붙어 있는 것이다.** 본문에 저장된 그림 주소가
+  // `/api/guide/assets/<id>` 라서 그대로 넘기면 `send` 가 앞에 `/api` 를 한 번 더
+  // 붙여 `/api/api/…` 가 되고, 라우트에 안 닿아 **404** 가 난다(2026-08-29 실측 —
+  // 401 을 고치고 나니 이번엔 404 였다). 부르는 쪽이 매번 떼게 두면 잊는다.
+  const relative = path.startsWith(`${BASE}/`) ? path.slice(BASE.length) : path
+  let response = await send(relative)
+  if (response.status === 401 && !relative.startsWith('/auth/')) {
+    if (await tryRefresh()) response = await send(relative)
+    else onSessionLost?.()
+  }
+  return response
+}
+
+/**
  * 파일 내려받기. **`<a href>` 로는 안 된다.**
  *
  * access 토큰은 메모리에만 있고(XSS 방어) 쿠키가 아니므로, 브라우저가 스스로
@@ -155,11 +180,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * 일어난 것처럼 본다. 토큰을 붙여 받아 온 뒤 브라우저에 넘긴다.
  */
 export async function downloadFile(path: string, filename: string): Promise<void> {
-  let response = await send(path)
-  if (response.status === 401 && !path.startsWith('/auth/')) {
-    if (await tryRefresh()) response = await send(path)
-    else onSessionLost?.()
-  }
+  const response = await fetchWithAuth(path)
   if (!response.ok) throw await parseError(response)
 
   const url = URL.createObjectURL(await response.blob())

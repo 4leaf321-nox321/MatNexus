@@ -16,7 +16,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, api } from '@/shared/api/client'
+import { ApiError, api, fetchWithAuth } from '@/shared/api/client'
 
 function answer(status: number, body: string, type = 'application/json') {
   vi.stubGlobal(
@@ -68,5 +68,37 @@ describe('오류 파서', () => {
     // 삭제의 정상 응답이다. 여기서 JSON 을 파싱하려 들면 성공이 실패로 뒤집힌다.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })))
     await expect(api.delete('/voc/1')).resolves.toBeUndefined()
+  })
+})
+
+/**
+ * **주소를 만드는 자리.** `fetchWithAuth` 는 두 종류를 받는다 — 코드가 적는
+ * 상대경로(`/guide/documents`)와 **DB 에 저장돼 있던 절대경로**
+ * (`/api/guide/assets/<id>`). 뒤엣것을 그대로 넘기면 `/api` 가 두 번 붙는다.
+ *
+ * 실제로 그렇게 났다(2026-08-29). 핸드북 그림의 401 을 고치고 나니 이번엔 404 였고,
+ * 화면 시험은 `fetchWithAuth` 자체를 mock 해서 **버그가 사는 자리를 건너뛰고
+ * 있었다.** 그래서 여기서는 `fetch` 를 막는다 — 경계를 한 칸 아래로 내린다.
+ */
+describe('fetchWithAuth 가 만드는 주소', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  function watch() {
+    const spy = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+    vi.stubGlobal('fetch', spy)
+    return spy
+  }
+
+  it('이미 /api 로 시작하면 두 번 붙이지 않는다', async () => {
+    // 본문에 저장된 그림 주소가 이 모양이다. 두 번 붙으면 /api/api/… → 404.
+    const spy = watch()
+    await fetchWithAuth('/api/guide/assets/2f0a1b3c')
+    expect(spy.mock.calls[0][0]).toBe('/api/guide/assets/2f0a1b3c')
+  })
+
+  it('상대경로에는 붙인다', async () => {
+    const spy = watch()
+    await fetchWithAuth('/guide/documents')
+    expect(spy.mock.calls[0][0]).toBe('/api/guide/documents')
   })
 })

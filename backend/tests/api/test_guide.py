@@ -248,6 +248,31 @@ class Test그림:
         assert got.status_code == 200 and got.content == png
         assert "sandbox" in got.headers.get("content-security-policy", "")
 
+    def test_브라우저는_토큰을_못_실어서_받아_가지_못한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**이 401 이 정상이다.** 다만 화면이 그것을 알고 있어야 한다.
+
+        access 토큰은 메모리에만 있고 쿠키가 아니라서(XSS 방어) `<img src>` 에는
+        안 실린다. 그래서 본문의 주소를 그대로 `<img>` 에 넣으면 그림이 하나도 안
+        뜬다 — 실측(2026-08-29)으로 핸드북 그림 75개가 그 상태였다.
+
+        **위 시험이 그것을 못 잡았다.** `headers=admin_headers` 로 받고 있었는데
+        브라우저는 그 헤더를 안 보낸다 — 시험이 브라우저가 아닌 것을 흉내내면
+        초록인 채로 고장 난다. 여기서 「헤더 없이는 401」 을 못으로 박아 두고,
+        화면 쪽은 `GuideEditor.test.tsx` 가 「본문 주소를 그대로 안 쓴다」 를 문다.
+
+        열어 주는 쪽으로 고치지 않는다. 핸드북은 사내 자료라 아무나 주소만 알면
+        받아 갈 수 있으면 안 된다.
+        """
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+        url = client.post(
+            "/api/guide/assets",
+            files={"file": ("figure.png", png, "image/png")},
+            headers=admin_headers,
+        ).json()["url"]
+        assert client.get(url).status_code == 401
+
     def test_그림이_아니면_안_받는다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

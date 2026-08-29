@@ -150,6 +150,27 @@ const extensions = [
   Image.configure({ inline: false, allowBase64: false }),
 ]
 
+
+/**
+ * 본문에 있던 SVG 를 **혼자 설 수 있는 파일로.**
+ *
+ * HTML 안에서는 파서가 문맥으로 SVG 인 줄 알지만, 파일로 떼면 XML 로 읽힌다.
+ * 그때 두 가지가 걸린다 — 실측(2026-08-29)으로 그림 75개가 안 그려졌다:
+ *
+ *   - `xmlns` 가 없다(75/75). 없으면 브라우저가 그리기를 포기하는데 **요청은
+ *     200 이라** 네트워크 탭에 아무 표시도 없다. 그림 자리만 빈다.
+ *   - `&nbsp;` 가 섞여 있다(6/75). XML 이 이름으로 아는 것은 다섯뿐이라
+ *     (amp·lt·gt·quot·apos) 하나만 있어도 **문서 전체가 파싱 오류**가 된다.
+ *
+ * 화면(`modules/guide/assets.ts`)도 같은 것을 고친다 — 이미 DB 에 들어간 것을
+ * 되살려야 해서다. 여기서 고치는 것은 **다음에 넣는 것이 처음부터 성하도록**이다.
+ */
+function standalone(svg) {
+  const fixed = svg.replace(/&nbsp;/g, '&#160;')
+  return fixed.includes('xmlns=')
+    ? fixed
+    : fixed.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
+}
 function slug(text, fallback) {
   const cleaned = text
     .toLowerCase()
@@ -181,7 +202,7 @@ function convert(file, catalog) {
     section.find('svg').each((n, svg) => {
       const name = `${catalog.key}-${index + 1}-${n + 1}.svg`
       const alt = $(svg).attr('aria-label') || sectionTitle
-      assets.push({ name, alt, svg: $.html(svg) })
+      assets.push({ name, alt, svg: standalone($.html(svg)) })
       $(svg).replaceWith(`<img src="asset:${name}" alt="${alt.replace(/"/g, '&quot;')}">`)
     })
     // 주의·함정 상자는 인용(안내 상자)으로. 편집기가 허용하는 것이 그것이다.
