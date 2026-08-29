@@ -38,6 +38,7 @@ const REAL: Overview = {
   materials_with_card: 5,
   waiting_to_process: 71,
   parse_failed: 0,
+  inbox_waiting: 0,
 }
 
 function panel(overrides: Partial<Overview> = {}) {
@@ -121,3 +122,23 @@ describe('홈 요약', () => {
     expect(screen.queryByText('남은 일')).not.toBeInTheDocument()
   })
 })
+
+describe('붙일 파일', () => {
+  /**
+   * **수집함은 「데이터 수집 체계」 안쪽에 있어 매일 여는 자리가 아니다.** 장비는
+   * 매일 파일을 보내는데 아무도 안 열면 쌓인 줄도 모른다 — 메뉴 위치를 바꾸면
+   * 「찾기」 는 쉬워지지만 「봐야 한다」 는 신호는 안 생긴다. 홈의 남은 일 줄이
+   * 이미 그 신호를 내는 자리다.
+   */
+  it('붙일 것이 있으면 홈이 말하고 커넥터로 보낸다', () => {
+    panel({ inbox_waiting: 7 })
+    const chip = screen.getByText(/붙일 파일 7/)
+    expect(chip.closest('a')).toHaveAttribute('href', '/settings/connectors')
+  })
+
+  it('0 이면 안 보인다 — 0 을 그리면 그것도 상태처럼 읽힌다', () => {
+    panel({ inbox_waiting: 0 })
+    expect(screen.queryByText(/붙일 파일/)).not.toBeInTheDocument()
+  })
+})
+

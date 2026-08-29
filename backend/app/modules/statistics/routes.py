@@ -24,6 +24,7 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.pipelines.models import PipelineConnector, PipelineInboxItem
 from app.modules.statistics import analysis, services
 from app.modules.statistics.models import EnsembleResult
 from app.modules.statistics.schemas import (
@@ -807,4 +808,16 @@ def overview(
             )
         ),
         parse_failed=count(select(runs.c.id).where(runs.c.status == "failed")),
+        # **커넥터의 가시성을 그대로 쓴다.** 여기서 범위 규칙을 새로 만들면 홈의
+        # 숫자와 커넥터 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 수 없다.
+        inbox_waiting=count(
+            select(PipelineInboxItem.id).where(
+                PipelineInboxItem.status.in_(("needs_specimen", "suggested")),
+                PipelineInboxItem.connector_id.in_(
+                    select(PipelineConnector.id).select_from(
+                        permissions.visible_connectors(db, user).subquery()
+                    )
+                ),
+            )
+        ),
     )

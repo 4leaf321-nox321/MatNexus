@@ -207,6 +207,72 @@ class Test커넥터:
         assert response.json()["error"]["code"] == "MNX-PIPE-0001"
 
 
+class Test홈에_알린다:
+    """**수집함은 안쪽에 있어 매일 여는 자리가 아니다.** 장비는 매일 파일을 보내는데
+    아무도 안 열면 쌓인 줄도 모른다 — 메뉴 위치를 바꾸면 「찾기」 는 쉬워지지만
+    「봐야 한다」 는 신호는 안 생긴다. 홈의 남은 일 줄이 그 신호를 내는 자리다."""
+
+    def test_사람이_붙여야_하는_것을_홈이_센다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        db: Session,
+        tensile: None,
+    ) -> None:
+        """**받은 직후가 아니라 워커가 훑고 난 뒤에 센다.** 갓 들어온 파일은
+        아직 `received` 라 사람이 할 일이 없다 — 서버가 후보를 좁혀 봐야 「붙여야
+        하는가」 가 정해진다."""
+        before = client.get("/api/statistics/overview", headers=admin_headers).json()
+        _send(client, pat, connector["id"], filename="a.tra")
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        after = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert after["inbox_waiting"] == before["inbox_waiting"] + 1
+
+    def test_끝난_것은_안_센다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        db: Session,
+        tensile: None,
+    ) -> None:
+        """**버린 것까지 세면 그 수는 영영 안 줄고, 그러면 아무도 안 본다.**"""
+        item = _send(client, pat, connector["id"], filename="b.tra").json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        waiting = client.get("/api/statistics/overview", headers=admin_headers).json()[
+            "inbox_waiting"
+        ]
+        client.post(
+            f"/api/pipelines/inbox/{item['id']}/discard",
+            json={"reason": "시험 파일이 아니다"},
+            headers=admin_headers,
+        )
+        after = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert after["inbox_waiting"] == waiting - 1
+
+    def test_커넥터를_치우면_그_파일도_안_센다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        db: Session,
+        tensile: None,
+    ) -> None:
+        """**목록에서 사라진 커넥터의 파일을 홈이 세면 갈 데가 없다** — 눌러도
+        그 커넥터가 없다. 수집함 행은 남지만 세지는 않는다."""
+        _send(client, pat, connector["id"], filename="c.tra")
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        before = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert before["inbox_waiting"] > 0
+        client.delete(f"/api/pipelines/connectors/{connector['id']}", headers=admin_headers)
+        after = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert after["inbox_waiting"] == 0
+
+
 class Test커넥터_치우기:
     """**끄기와 지우기는 다르다.** 끈 것은 목록에 남아 「저건 뭐지」 를 계속 묻게
     만든다 — 바꾼 장비, 반납한 PC, 시험 삼아 붙였다 만 것이 쌓이면 살아 있는

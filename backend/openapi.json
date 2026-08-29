@@ -7333,6 +7333,10 @@
             "title": "Families",
             "type": "array"
           },
+          "inbox_waiting": {
+            "title": "Inbox Waiting",
+            "type": "integer"
+          },
           "material_count": {
             "title": "Material Count",
             "type": "integer"
@@ -7382,7 +7386,8 @@
           "card_deprecated",
           "materials_with_card",
           "waiting_to_process",
-          "parse_failed"
+          "parse_failed",
+          "inbox_waiting"
         ],
         "title": "OverviewOut",
         "type": "object"

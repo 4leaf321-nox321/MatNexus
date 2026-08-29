@@ -29,7 +29,7 @@ from app.modules.pipelines.models import (
 )
 from app.modules.tests.models import FormatProfile, TestRun, TestType
 from app.modules.workspaces.models import Workspace, WorkspaceMember
-from app.shared import audit, filestore, ingest
+from app.shared import audit, filestore, ingest, permissions
 from app.shared.errors import AppError, Conflict, NotFound
 from matcore.parsers import ParseError
 
@@ -137,11 +137,9 @@ def waiting_counts(db: Session, connector_ids: list[uuid.UUID]) -> dict[uuid.UUI
 
 
 def visible_connectors(db: Session, user: User) -> Any:
-    query = select(PipelineConnector).where(PipelineConnector.deleted_at.is_(None))
-    if not user.is_system_admin:
-        mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
-        query = query.where(PipelineConnector.workspace_id.in_(mine))
-    return query.order_by(PipelineConnector.name)
+    """**규칙은 `shared/permissions` 에 있다.** 홈 요약도 같은 것을 쓴다 — 여기에
+    두면 베껴야 하고, 베끼면 두 화면의 숫자가 갈린다. 차례만 여기서 붙인다."""
+    return permissions.visible_connectors(db, user).order_by(PipelineConnector.name)
 
 
 # --- 반입 ---------------------------------------------------------------------

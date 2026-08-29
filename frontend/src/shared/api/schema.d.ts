@@ -6837,6 +6837,8 @@ export interface components {
             card_total: number;
             /** Families */
             families: components["schemas"]["TallyOut"][];
+            /** Inbox Waiting */
+            inbox_waiting: number;
             /** Material Count */
             material_count: number;
             /** Materials With Card */

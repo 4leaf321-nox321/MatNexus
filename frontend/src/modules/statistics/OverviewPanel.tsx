@@ -53,7 +53,10 @@ export function OverviewPanel({
     <div className="space-y-3">
       {/* **막힌 것부터.** 0 이면 그 줄이 통째로 사라진다 — 0을 그리면 그것도
           상태처럼 읽히고, "지금 막힌 게 없다" 가 한눈에 안 온다. */}
-      {(data.waiting_to_process > 0 || data.parse_failed > 0 || data.card_draft > 0) && (
+      {(data.waiting_to_process > 0 ||
+        data.parse_failed > 0 ||
+        data.card_draft > 0 ||
+        data.inbox_waiting > 0) && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40">
           <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-500" />
           <span className="text-muted-foreground text-xs">남은 일</span>
@@ -61,6 +64,13 @@ export function OverviewPanel({
             <Pending to={`/w/${workspaceSlug}/tests?status=failed`}>
               읽기 실패 {data.parse_failed}
             </Pending>
+          )}
+          {/* **수집함은 안쪽에 있어 매일 여는 자리가 아니다.** 장비는 매일 파일을
+              보내는데 아무도 안 열면 쌓인 줄도 모른다 — 옆의 「처리 대기」 와 같은
+              성격이라 같은 줄에 세운다. 시편을 못 정한 것과 승인을 기다리는 것을
+              함께 센다: 둘 다 사람이 한 번 봐야 한다. */}
+          {data.inbox_waiting > 0 && (
+            <Pending to="/settings/connectors">붙일 파일 {data.inbox_waiting}</Pending>
           )}
           {data.waiting_to_process > 0 && (
             <Pending to={`/w/${workspaceSlug}/tests`}>처리 대기 {data.waiting_to_process}</Pending>

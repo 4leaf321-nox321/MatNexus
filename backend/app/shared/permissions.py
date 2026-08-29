@@ -19,6 +19,7 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.pipelines.models import PipelineConnector
 from app.modules.tests.models import TestRun
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared.errors import Forbidden, NotFound
@@ -189,6 +190,23 @@ def visible_specimen(db: Session, user: User, specimen_id: uuid.UUID) -> Specime
     if specimen is None:
         raise NotFound("MNX-MATERIALS-0003", "시편을 찾을 수 없습니다.")
     return specimen
+
+
+def visible_connectors(db: Session, user: User) -> Select[tuple[PipelineConnector]]:
+    """내가 속한 부서의 커넥터. 시스템 관리자는 전부.
+
+    **여기 있는 이유:** 커넥터 화면(`pipelines`)과 홈 요약(`statistics`)이 둘 다
+    이 규칙을 쓴다. 모듈끼리 직접 부르지 않으므로(AGENTS.md) 한쪽이 베끼면 규칙이
+    둘이 되고, 그러면 **홈의 숫자와 커넥터 화면의 숫자가 갈린다** — 그때 어느
+    쪽이 맞는지 알 방법이 없다. 재료·시험 가시성이 여기 있는 것과 같은 이유다.
+
+    지운 커넥터는 뺀다. 되살리는 길은 휴지통이다.
+    """
+    query = select(PipelineConnector).where(PipelineConnector.deleted_at.is_(None))
+    if user.is_system_admin:
+        return query
+    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+    return query.where(PipelineConnector.workspace_id.in_(mine))
 
 
 def visible_runs(db: Session, user: User) -> Select[tuple[TestRun]]:
