@@ -14,6 +14,7 @@ import { AlertTriangle, FileWarning, HardDrive, Trash2 } from 'lucide-react'
 import { testsApi } from '@/modules/tests/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { SubTabs } from '@/shared/components/SubTabs'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -58,6 +59,15 @@ export default function StoragePage() {
 
   return (
     <div>
+      {/* **저장소 정리는 서버의 한 면이다.** 「우리가 쌓은 것」 과 「드라이브에
+          남은 것」 은 같은 질문의 두 쪽인데, 메뉴에 따로 서 있으면 디스크가
+          찰 때 한쪽만 보고 「치울 게 없다」 고 결론 낸다. */}
+      <SubTabs
+        items={[
+          { to: '/server', label: '서버 정보' },
+          { to: '/admin/storage', label: '저장소 정리' },
+        ]}
+      />
       <PageHeader
         title="저장소 정리"
         description="시험 원본과 곡선 파일이 사는 곳. 주인 없는 파일은 여기서 치웁니다."
