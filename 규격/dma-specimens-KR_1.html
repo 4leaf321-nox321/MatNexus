@@ -1,0 +1,559 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DMA 시편 규격과 치수 변수</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">규격 정리 · 시편 형상</div>
+  <h1>DMA 시편<br>규격과 치수 변수</h1>
+  <p class="dek">DMA는 인장시험과 사정이 정반대입니다 — <strong>대부분의 규격이 시편 치수를 정하지 않고 장비 클램프에 맡깁니다.</strong> 어느 규격이 실제로 숫자를 주고 어느 규격이 넘기는지, 그리고 실제 시편 크기를 정하는 것이 무엇인지 정리했습니다.</p>
+  <div class="mast-meta">
+    <div><b>범위</b> ASTM D50xx · ISO 6721 전 파트 · ISO 4664 · IPC</div>
+    <div><b>핵심</b> 규격이 규정 vs 장비에 위임</div>
+    <div><b>주의</b> 원문은 유료 — 2차 출처 기반, △는 미확인</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> DMA 시편의 특수성</a>
+    <a href="#s1"><span>01</span> 여섯 가지 변형 모드</a>
+    <a href="#s2"><span>02</span> ASTM 규격</a>
+    <a href="#s3"><span>03</span> ISO 6721 시리즈</a>
+    <a href="#s4"><span>04</span> 고무 · 전자 · 복합재</a>
+    <a href="#s5"><span>05</span> 스팬과 블랭크 길이</a>
+    <a href="#s6"><span>06</span> 장비 클램프 치수</a>
+    <a href="#s7"><span>07</span> 대표 치수값</a>
+    <a href="#s8"><span>08</span> 시편을 정하는 순서</a>
+    <a href="#s9"><span>09</span> 확인하지 못한 항목</a>
+  </nav>
+</header>
+
+<main>
+<style>
+.ox table{min-width:60rem}
+.ox th.v{font-size:.68rem;line-height:1.3;white-space:normal;min-width:4.2rem;text-align:center}
+.ox td.o{text-align:center;color:var(--accent-ink);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.o em{display:block;background:none;padding:0;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.68rem;font-weight:400;color:var(--muted);letter-spacing:.01em;margin-top:1px}
+.ox td.t{text-align:center;color:var(--hot);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.t em{display:block;background:none;padding:0;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.68rem;font-weight:400;color:var(--muted);margin-top:1px}
+.ox td.x{text-align:center;color:var(--muted);opacity:.45;font-size:.95rem}
+.ox td.nm{white-space:nowrap;font-size:.82rem}
+.ox td.nm b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500;color:var(--accent-ink)}
+.ox td.nm i{font-style:normal;color:var(--muted);font-size:.92em}
+.oxleg{display:flex;flex-wrap:wrap;gap:.4rem 1.8rem;font-size:.88rem;color:var(--ink2)}
+.oxleg b{font-size:1rem}
+.oxleg .co{color:var(--accent-ink)} .oxleg .ct{color:var(--hot)} .oxleg .cx{color:var(--muted)}
+sup.fn{color:var(--hot);font-size:.72em;font-weight:600;padding-left:.15em}
+</style>
+
+<section id="s0">
+  <h2><span class="num">00 / 성격</span>DMA 시편은 규격이 아니라 클램프가 정한다</h2>
+  <p class="lede">앞서 정리한 ASTM 인장시편은 <strong>규격이 도면을 그려 줍니다</strong>. DMA는 다릅니다 — 거의 모든 ASTM DMA 시험법이 변형 모드와 <strong>형상</strong>(직사각 바, 원통, 필름)만 정하고 <strong>치수는 장비 클램프나 재료 사양에 넘깁니다.</strong> ASTM D4065는 이것을 문장으로 못 박습니다: “<em>specimen size is not fixed by this practice</em>”.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>왜 이렇게 되었나</h4>
+      <p>DMA는 <strong>탄성률 범위가 10³ – 10¹² Pa</strong>에 걸칩니다. 같은 크기 시편으로 고무와 강철을 모두 잴 수 없습니다. 부드러우면 단면을 키워 힘을 확보하고, 딱딱하면 단면을 줄여 변위를 확보해야 하므로, <strong>치수를 고정하면 측정 자체가 불가능</strong>해집니다.</p>
+    </div>
+    <div class="card">
+      <h4>그럼 무엇이 정하는가</h4>
+      <p>① 장비의 <strong>클램프 물리 치수</strong>(최대 폭·두께·자유 길이), ② 규격이 주는 <strong>비율 조건</strong>(스팬/두께, L/h 등), ③ 재료 사양서. 실무에서는 ①이 사실상 결정합니다.</p>
+    </div>
+    <div class="card">
+      <h4>숫자를 주는 규격은 소수</h4>
+      <p><strong>ISO 6721-2</strong>(비틀림 진자, 50×10×1 mm 권장), <strong>-3</strong>(굽힘 공진, 180/150 mm), <strong>-10</strong>(평행판, 지름 20–50 mm), <strong>IPC-TM-650 2.4.24.4</strong>가 실제 범위를 제시합니다. 나머지는 비율 조건이거나 위임입니다.</p>
+    </div>
+    <div class="card">
+      <h4>가장 흔한 실수</h4>
+      <p><strong>“35 mm 이중 캔틸레버”를 시편 길이로 착각하는 것.</strong> 그것은 바깥 클램프 사이 거리이고, 실제 블랭크는 물림 여유를 더해 <strong>55 mm 안팎</strong>이 필요합니다. 05절에서 그림으로 다룹니다.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 모드</span>여섯 가지 변형 모드</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 480" role="img" aria-label="이중 캔틸레버, 단일 캔틸레버, 3점 굽힘, 인장, 압축, 전단 샌드위치 여섯 가지 DMA 변형 모드" style="width:100%;height:auto;overflow:visible"><defs><marker id="dm_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="dm_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="40" y="70" width="240" height="12" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><rect x="40" y="63" width="12" height="26" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="154" y="63" width="12" height="26" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="268" y="63" width="12" height="26" fill="currentColor" fill-opacity=".45" stroke="none"/><line x1="160" y1="40" x2="160" y2="59" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><text x="170" y="48" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor" fill="#C4402B">힘</text><line x1="52" y1="104" x2="154" y2="104" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="103.0" y="98" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">L/2</text><line x1="40" y1="126" x2="280" y2="126" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="160.0" y="120" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">블랭크 길이</text><text x="290" y="80" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">두께 h</text><text x="160" y="166" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">① 이중 캔틸레버</text><text x="160" y="183" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">ASTM D5418 · 가장 널리 쓰임</text><rect x="350" y="70" width="150" height="12" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><rect x="350" y="63" width="12" height="26" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="488" y="63" width="12" height="26" fill="currentColor" fill-opacity=".45" stroke="none"/><line x1="494" y1="40" x2="494" y2="59" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><line x1="362" y1="104" x2="488" y2="104" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="425.0" y="98" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">자유 길이 L</text><text x="512" y="80" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">짧은 시편 · 저강성</text><text x="425" y="166" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">② 단일 캔틸레버</text><text x="425" y="183" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">TA 4 / 10 / 17.5 mm</text><rect x="640" y="70" width="230" height="12" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><path d="M656,83 l9,18 l-18,0 Z" fill="currentColor" fill-opacity=".28" stroke="none"/><path d="M838,83 l9,18 l-18,0 Z" fill="currentColor" fill-opacity=".28" stroke="none"/><line x1="755" y1="40" x2="755" y2="66" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><line x1="656" y1="112" x2="838" y2="112" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="747.0" y="106" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">스팬 S</text><text x="648" y="134" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">D5023: S = 16 × 두께, 오버행 ≥ 6.4 mm</text><text x="755" y="166" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">③ 3점 굽힘</text><text x="755" y="183" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">ASTM D5023 · ISO 6721-5</text><rect x="96" y="244" width="10" height="92" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><rect x="84" y="234" width="34" height="12" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="84" y="334" width="34" height="12" fill="currentColor" fill-opacity=".45" stroke="none"/><line x1="101" y1="228" x2="101" y2="208" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><line x1="101" y1="352" x2="101" y2="372" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><line x1="132" y1="246" x2="132" y2="334" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="140" y="294" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">La</text><text x="140" y="310" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">클램프 간</text><text x="101" y="400" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">④ 인장 (필름 · 섬유)</text><text x="101" y="417" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">ISO 6721-4 · ASTM D5026</text><rect x="340" y="284" width="120" height="30" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><rect x="320" y="314" width="160" height="10" fill="currentColor" fill-opacity=".28" stroke="none"/><rect x="320" y="274" width="160" height="10" fill="currentColor" fill-opacity=".28" stroke="none"/><line x1="400" y1="244" x2="400" y2="270" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><line x1="472" y1="284" x2="472" y2="314" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="480" y="303" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">h</text><line x1="340" y1="340" x2="460" y2="340" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="400.0" y="334" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">지름 D</text><text x="320" y="362" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">ISO 6721-12: h/D = 1 – 2 (권장 1)</text><text x="400" y="400" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">⑤ 압축</text><text x="400" y="417" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">ISO 6721-12 · ASTM D5024</text><rect x="686" y="250" width="18" height="80" fill="currentColor" fill-opacity=".28" stroke="none"/><rect x="656" y="260" width="30" height="60" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><rect x="704" y="260" width="30" height="60" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><rect x="642" y="250" width="14" height="80" fill="currentColor" fill-opacity=".28" stroke="none"/><rect x="734" y="250" width="14" height="80" fill="currentColor" fill-opacity=".28" stroke="none"/><line x1="695" y1="234" x2="695" y2="214" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><line x1="656" y1="344" x2="686" y2="344" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="671.0" y="338" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">L</text><line x1="760" y1="260" x2="760" y2="320" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="768" y="294" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">h</text><text x="616" y="366" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">동일 시편 2장 · ISO 6721-6: h &gt; 4L</text><text x="695" y="400" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">⑥ 전단 샌드위치</text><text x="695" y="417" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">ISO 6721-6 · 고무 · 접착제</text><line x1="40" y1="452" x2="66" y2="452" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><text x="76" y="456" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".7">가진 방향</text><rect x="180" y="446" width="22" height="10" fill="currentColor" fill-opacity=".45" stroke="none"/><text x="210" y="456" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".7">클램프 · 지그</text><rect x="330" y="446" width="22" height="10" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><text x="360" y="456" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".7">시편</text><text x="440" y="456" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".7">모드마다 측정 가능한 탄성률 범위가 다르다 — 그래서 시편 크기가 달라진다</text></svg></div>
+    <figcaption><b>모드가 곧 시편 형상입니다.</b> 어떤 모드를 쓸지는 재료의 강성이 정합니다 — 강성 플라스틱·복합재는 굽힘(①②③), 필름·섬유는 인장(④), 폼·연질은 압축(⑤), 고무·접착제는 전단(⑥). 같은 재료라도 온도 스윕 중 Tg를 지나면 강성이 3 decade 떨어지므로, <b>한 모드로 전 구간을 재기 어려운 경우</b>가 생깁니다.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>모드</th><th>적합한 탄성률</th><th>대표 규격</th><th>비고</th></tr></thead>
+    <tbody>
+      <tr><td class="k">이중 캔틸레버</td><td>중 – 고 (10⁸ – 10¹⁰ Pa)</td><td>ASTM D5418</td><td>범용 1순위. 클램프 조임이 결과에 크게 영향</td></tr>
+      <tr><td class="k">단일 캔틸레버</td><td>중 – 고</td><td>(D4065 계열)</td><td>짧은 시편 · 저강성 시료에 유리</td></tr>
+      <tr><td class="k">3점 굽힘</td><td>고 (클램핑 영향 최소)</td><td>ASTM D5023 · ISO 6721-5</td><td>클램프 압축이 없어 강성 재료에 가장 정확</td></tr>
+      <tr><td class="k">인장 (필름 · 섬유)</td><td>저 – 중</td><td>ISO 6721-4 · ASTM D5026</td><td>정적 인장력(프리로드) 관리가 핵심</td></tr>
+      <tr><td class="k">압축</td><td>저 (폼 · 연질)</td><td>ISO 6721-12 · ASTM D5024</td><td>배럴링·좌굴 방지를 위해 h/D 제한</td></tr>
+      <tr><td class="k">전단 샌드위치</td><td>저 (0.1 – 50 MPa)</td><td>ISO 6721-6</td><td>동일 시편 <b>2장</b> 필요. 고무·접착제 표준</td></tr>
+      <tr><td class="k">비틀림 (진자 · 강제)</td><td>저 – 중</td><td>ISO 6721-2 / -7 · ASTM D5279</td><td>진자식은 자유 감쇠, 강제식은 레오미터형</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / ASTM</span>규격별 치수 변수</h2>
+  <div class="oxleg">
+    <div><b class="co">○</b> 그 규격이 <b>규정함</b></div>
+    <div><b class="ct">△</b> 확인하지 못함 · 참고값 수준</div>
+    <div><b class="cx">×</b> 규정하지 않음 (장비·재료 사양에 위임)</div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격 · 모드</th>
+      <th class="v">길이</th><th class="v">폭</th><th class="v">두께</th><th class="v">직경</th>
+      <th class="v">자유길이<br>· 스팬</th><th class="v">비율<br>조건</th><th class="v">균일도<br>공차</th>
+      <th class="v">절대치수<br>규정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>D4065</b> <i>실무지침 · 7모드</i></td>
+        <td class="t">△<em>50<sup class="fn">1</sup></em></td><td class="t">△<em>9.4</em></td><td class="t">△<em>0.75</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×<sup class="fn">1</sup></td></tr>
+      <tr><td class="nm"><b>D5023</b> <i>3점 굽힘</i></td>
+        <td class="t">△<em>64 예시</em></td><td class="t">△<em>13 예시</em></td><td class="t">△<em>3 예시</em></td><td class="x">×</td>
+        <td class="o">○<em>S = 16 h</em></td><td class="o">○<em>+4/−2, 오버행</em></td><td class="x">×</td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>D5024</b> <i>압축</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="t">△</td><td class="t">△</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>D5026</b> <i>인장</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×<sup class="fn">2</sup></td></tr>
+      <tr><td class="nm"><b>D5279</b> <i>비틀림</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×<sup class="fn">2</sup></td></tr>
+      <tr><td class="nm"><b>D5418</b> <i>이중 캔틸레버</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×<sup class="fn">3</sup></td></tr>
+      <tr><td class="nm"><b>D4473</b> <i>경화 거동</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×<sup class="fn">3</sup></td></tr>
+      <tr><td class="nm"><b>E1640</b> <i>Tg 판정</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×<sup class="fn">4</sup></td></tr>
+      <tr><td class="nm"><b>D7028</b> <i>복합재 Tg · 굽힘</i></td>
+        <td class="t">△<em>50–60</em></td><td class="t">△<em>10–15</em></td><td class="t">△<em>2–4</em></td><td class="x">×</td>
+        <td class="t">△</td><td class="o">○<em>스팬/두께 &gt; 10</em></td><td class="x">×</td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>E756</b> <i>Oberst 빔 · 감쇠</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>빔 구성 4종</em></td><td class="x">×</td><td class="x">×<sup class="fn">5</sup></td></tr>
+      <tr><td class="nm"><b>D4440</b> <i>용융 유변 · 평행판</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="t">△<em>갭</em></td><td class="t">△<em>플레이트</em></td>
+        <td class="x">×</td><td class="t">△</td><td class="t">△</td><td class="t">△</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">1</sup> D4065-01 §9.2는 “<b>이 지침이 시편 크기를 고정하지 않는다</b>”고 명시하고, 편의상 0.75 × 9.4 × 50 mm를 <b>예시</b>로 듭니다. 2020년판에서도 같은 값인지는 확인하지 못했습니다. &nbsp;
+  <sup class="fn">2</sup> 시편 절(Test Specimen) 원문을 확보하지 못했습니다 — 형상(직사각)만 확인. &nbsp;
+  <sup class="fn">3</sup> <b>D4065를 참조</b>하도록 명시되어 있습니다. D5418은 사실상 “치수를 정하지 않는다”의 가장 뚜렷한 예입니다. &nbsp;
+  <sup class="fn">4</sup> E1640은 Tg 판정 <b>방법</b>이지 시편 규격이 아닙니다. &nbsp;
+  <sup class="fn">5</sup> E756은 빔 이론으로 <b>기하 의존성을 제거</b>하도록 설계되어 있어, 절대 치수를 규정할 이유가 없습니다.</p>
+
+  <div class="note">
+    <h4>보정 규격은 시편 규격이 아닙니다</h4>
+    <div class="tw"><table>
+      <thead><tr><th>규격</th><th>내용</th><th>기준 물질</th></tr></thead>
+      <tbody>
+        <tr><td class="k">E1867</td><td>DMA 온도 보정</td><td>인듐 · 주석 · 납 · 아연 융점</td></tr>
+        <tr><td class="k">E2254</td><td>저장탄성률 보정</td><td>1 – 200 GPa 기준물질</td></tr>
+        <tr><td class="k">E2425</td><td>손실탄성률 적합성</td><td>UHMW 폴리에틸렌 (21 °C)</td></tr>
+        <tr><td class="k">E3301</td><td>열지연을 이용한 온도 보정</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+    <p>다만 보정용 빔은 <strong>실제 시험 시편과 비슷한 크기</strong>여야 한다는 권고가 있습니다 — 클램프 컴플라이언스가 시편 크기에 의존하기 때문입니다.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / ISO</span>ISO 6721 시리즈</h2>
+  <p>파트 1부터 12까지 존재하며(파트 13은 없음), <strong>숫자를 실제로 주는 파트는 −2 · −3 · −10</strong>입니다. 나머지는 비율 조건이거나 위임입니다.</p>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>파트 · 모드</th>
+      <th class="v">길이</th><th class="v">폭</th><th class="v">두께</th><th class="v">직경</th>
+      <th class="v">자유길이<br>· 스팬</th><th class="v">비율<br>조건</th><th class="v">균일도<br>공차</th>
+      <th class="v">절대치수<br>규정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>−1</b> <i>일반 원칙</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>−2</b> <i>비틀림 진자</i></td>
+        <td class="o">○<em>40–120 (50)</em></td><td class="o">○<em>5–11 (10)</em></td><td class="o">○<em>0.13–2 (1)</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>기하 상사</em></td><td class="o">○<em>3 %</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>−3</b> <i>굽힘 공진</i></td>
+        <td class="o">○<em>180 / 150</em></td><td class="o">○<em>10</em></td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>L/h ≥ 50</em></td><td class="o">○<em>±0.5 / ±0.2 %</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>−4</b> <i>인장 비공진</i></td>
+        <td class="x">×</td><td class="o">○<em>b</em></td><td class="o">○<em>h</em></td><td class="x">×</td>
+        <td class="o">○<em>Lₐ 50–100+</em></td><td class="o">○<em>Lₐ &gt; 6b</em></td><td class="o">○<em>3 %</em></td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>−5</b> <i>굽힘 비공진</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="t">△</td><td class="t">△</td><td class="o">○<em>2 %</em></td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>−6</b> <i>전단 비공진</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>L</em></td><td class="x">×</td>
+        <td class="o">○<em>h</em></td><td class="o">○<em>h &gt; 4L</em></td><td class="o">○<em>3 %</em></td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>−7</b> <i>비틀림 비공진</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△</td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>−8</b> <i>파동 전파 (MHz)</i></td>
+        <td class="o">○<em>50</em></td><td class="o">○<em>20</em></td><td class="o">○<em>5</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="o">○<em>참고 치수</em></td></tr>
+      <tr><td class="nm"><b>−9</b> <i>음향 펄스 (kHz)</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>−10</b> <i>평행판 · 콘플레이트</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>갭 d 0.5–3</em></td><td class="o">○<em>D 20–50</em></td>
+        <td class="x">×</td><td class="o">○<em>D/d 10–50</em></td><td class="o">○<em>±0.01 mm</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>−11</b> <i>유리전이온도</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×<sup class="fn">6</sup></td></tr>
+      <tr><td class="nm"><b>−12</b> <i>압축 비공진</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>h/D 1–2 (1)</em></td><td class="o">○<em>0.025/100 평행도</em></td><td class="x">×</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">6</sup> ISO 6721-11은 명시적으로 “<b>시편 치수는 선택한 시험 모드에 대해 장비가 요구하는 대로</b> 한다”고 씁니다 — 위임의 가장 분명한 문장입니다. &nbsp;
+  −4의 기호는 <b>Lₐ</b> = 클램프 간 길이, <b>b</b> = 폭, <b>h</b> = 두께입니다(2008년판은 두께를 <b>d</b>로 표기). −6의 <b>L</b>은 접착면 사이 고분자 두께, <b>h</b>는 하중 방향 높이입니다.</p>
+
+  <div class="note trap">
+    <h4>규격 권장값과 장비가 충돌하는 경우</h4>
+    <p>ISO 6721-4는 클램프 간 거리를 <strong>50 – 100 mm 이상</strong> 권장합니다. 그런데 Netzsch DMA 242 E의 인장 자유 길이 최대값은 <strong>15 mm</strong>, Mettler DMA 1은 <strong>20 mm</strong>, TA는 <strong>30 mm</strong>입니다. <strong>어느 장비도 그 권장값을 만족하지 못합니다.</strong> 이런 경우 “ISO 6721-4에 따라 측정”이라고 쓰려면 실제 클램프 간 거리를 반드시 함께 보고해야 합니다.</p>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 기타</span>고무 · 전자 · 복합재</h2>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격 · 모드</th>
+      <th class="v">길이</th><th class="v">폭</th><th class="v">두께</th><th class="v">직경</th>
+      <th class="v">자유길이<br>· 스팬</th><th class="v">비율<br>조건</th><th class="v">균일도<br>공차</th>
+      <th class="v">절대치수<br>규정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>ISO 4664-1</b> <i>고무 · 전단</i></td>
+        <td class="x">×</td><td class="o">○<em>변 길이</em></td><td class="o">○<em>≤ 12 mm</em></td><td class="o">○<em>원형인 경우</em></td>
+        <td class="x">×</td><td class="o">○<em>변/직경 ≥ 4h</em></td><td class="o">○<em>±1 %</em></td><td class="x">×<sup class="fn">7</sup></td></tr>
+      <tr><td class="nm"><b>ISO 4664-1</b> <i>고무 · 압축</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>높이</em></td><td class="o">○<em>직경</em></td>
+        <td class="x">×</td><td class="o">○<em>h/d ≈ 1.5</em></td><td class="o">○<em>±1 %</em></td><td class="o">○<em>ISO 815 시편</em></td></tr>
+      <tr><td class="nm"><b>ISO 4664-2</b> <i>비틀림 진자</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△</td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>ASTM D5992</b> <i>고무 지침</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△</td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△<sup class="fn">8</sup></td></tr>
+      <tr><td class="nm"><b>IPC-TM-650 2.4.24.4</b> <i>A · 굽힘</i></td>
+        <td class="o">○<em>20–40</em></td><td class="o">○<em>8–12</em></td><td class="o">○<em>1–2</em></td><td class="x">×</td>
+        <td class="o">○</td><td class="o">○<em>L/t ≥ 10</em></td><td class="x">×</td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>IPC-TM-650 2.4.24.4</b> <i>B · 박막 인장</i></td>
+        <td class="o">○<em>15–20</em></td><td class="o">○<em>≈ 2</em></td><td class="x">×</td><td class="x">×</td>
+        <td class="o">○</td><td class="x">×</td><td class="x">×</td><td class="o">○<em>장력 10–50 g</em></td></tr>
+      <tr><td class="nm"><b>ISO 537</b> <i>비틀림 진자</i></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×<sup class="fn">9</sup></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">7</sup> ISO 4664-1:2022의 수치는 유료 구간이라 확인하지 못해, <b>선행 규격 ISO 4664:1998</b>의 값을 대체 인용했습니다. 2022년 개정에서 변형 모드와 시편 형상이 추가되었으므로 원문 확인이 필요합니다. &nbsp;
+  <sup class="fn">8</sup> D5992는 <b>지침(Guide)</b>이며, 초록은 “시편 형상과 크기 요구사항을 다룬다”고 하지만 수치를 확인하지 못했습니다. 시편 종류(이중 전단 · 비틀림 · 압축/인장)만 확인. &nbsp;
+  <sup class="fn">9</sup> <b>ISO 537은 1994년 폐지</b>되었고 ISO 6721-1 · -2 · -4 · -10으로 대체되었습니다. 신규 작업에 인용하지 마세요.</p>
+
+  <div class="note">
+    <h4>고무를 DMA로 잴 때</h4>
+    <p>고무는 <strong>전단(이중 샌드위치)이 1순위</strong>입니다 — 압축은 형상계수(bonded/free 면적비)가 겉보기 강성을 좌우해 재료 물성이 아니라 부품 물성이 되기 때문입니다. ISO 4664-1이 전단에서 <strong>변 길이 ≥ 4 × 두께</strong>를 요구하는 것도 단순 전단 상태를 확보하기 위해서입니다. DMA 문서에서 정리한 Prony 물성으로 가려면 <strong>G′ · G″(전단)</strong>가 필요하므로 이 모드가 그대로 연결됩니다.</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 함정</span>스팬과 블랭크 길이는 다르다</h2>
+  <p class="lede">장비 카탈로그의 “35 mm 이중 캔틸레버”, “17.5 mm 단일 캔틸레버”는 <strong>시편 길이가 아닙니다.</strong> 클램프 사이 거리이고, 시편은 그보다 길어야 물립니다. 이것이 DMA 시편 준비에서 가장 흔한 오류입니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 880 300" role="img" aria-label="이중 캔틸레버에서 클램프 스팬과 실제 필요한 시편 블랭크 길이의 차이" style="width:100%;height:auto;overflow:visible"><defs><marker id="dm_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="dm_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="90" y="96" width="620" height="16" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-opacity=".85" stroke-width="1.6"/><rect x="90" y="85" width="26" height="38" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="387" y="85" width="26" height="38" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="684" y="85" width="26" height="38" fill="currentColor" fill-opacity=".45" stroke="none"/><line x1="400" y1="56" x2="400" y2="80" stroke="#C4402B" stroke-width="2" marker-end="url(#dm_ah)"/><line x1="116" y1="142" x2="387" y2="142" stroke="#2F6FC4" stroke-width="1.2" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="251.5" y="136" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#2F6FC4">17.5 mm</text><line x1="413" y1="142" x2="684" y2="142" stroke="#2F6FC4" stroke-width="1.2" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="548.5" y="136" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#2F6FC4">17.5 mm</text><line x1="116" y1="172" x2="684" y2="172" stroke="#2F6FC4" stroke-width="1.2" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="400.0" y="166" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" fill="#2F6FC4">클램프 스팬 = 35 mm  (장비 사양에 적힌 값)</text><line x1="90" y1="208" x2="710" y2="208" stroke="#C4402B" stroke-width="1.2" marker-start="url(#dm_ah)" marker-end="url(#dm_ah)"/><text x="400.0" y="202" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" fill="#C4402B">실제 필요한 블랭크 길이 ≈ 55 mm</text><text x="90" y="66" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">회색 = 클램프 물림부 (각 ~10 mm)</text><text x="420" y="64" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#C4402B">가진</text><text x="712" y="108" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">폭 ≤ 15 mm</text><text x="712" y="124" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">두께 ≤ 5 mm</text><text x="40" y="274" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor" fill-opacity=".78">“35 mm 이중 캔틸레버”는 시편 길이가 아니라 <tspan font-weight="500">바깥 클램프 사이 거리</tspan>입니다 — 물림 여유를 더해 블랭크를 잘라야 합니다.</text></svg></div>
+    <figcaption><b>35 mm 스팬에 필요한 블랭크는 55 mm 안팎.</b> 양쪽 바깥 클램프와 중앙 클램프가 각각 10 mm 남짓을 물기 때문입니다. 시편을 스팬 길이로 잘라 오면 물릴 수가 없습니다.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>모드 · 스팬</th><th class="n">클램프 스팬</th><th class="n">필요 블랭크 길이</th><th>출처</th></tr></thead>
+    <tbody>
+      <tr><td class="k">이중 캔틸레버 (TA)</td><td class="n">35 mm</td><td class="n">≈ 55 mm</td><td>Penn State MCL 실무값</td></tr>
+      <tr><td class="k">단일 캔틸레버 (TA)</td><td class="n">17.5 mm</td><td class="n">≈ 30 mm</td><td>Penn State MCL 실무값</td></tr>
+      <tr><td class="k">인장 (TA)</td><td class="n">5 – 30 mm</td><td class="n">15 – 20 mm 권장</td><td>Penn State MCL</td></tr>
+      <tr><td class="k">이중 캔틸레버 (상용 랩)</td><td class="n">35 mm</td><td class="n">56 × 13 × 3 mm</td><td>Intertek 사내 표준<sup class="fn">10</sup></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">10</sup> Intertek은 <b>ASTM Type I 인장 시편 또는 ISO 다목적 시편의 중앙부를 잘라</b> 56 × 13 × 3 mm로 쓴다고 공개하고 있습니다 — 인장 시편과 DMA 시편을 한 몰딩에서 뽑는 실무적 방법입니다.</p>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 장비</span>클램프 치수가 실제 한계다</h2>
+
+  <h3>TA Instruments Q800 / Discovery DMA 850</h3>
+  <div class="tw"><table>
+    <thead><tr><th>클램프</th><th class="n">스팬 · 길이</th><th class="n">최대 폭</th><th class="n">최대 두께 · 직경</th></tr></thead>
+    <tbody>
+      <tr><td class="k">이중 캔틸레버</td><td class="n">8 / 20 / 35 mm</td><td class="n">15 mm</td><td class="n">5 mm</td></tr>
+      <tr><td class="k">단일 캔틸레버</td><td class="n">4 / 10 / 17.5 mm</td><td class="n">15 mm</td><td class="n">5 mm</td></tr>
+      <tr><td class="k">3점 굽힘</td><td class="n">5 / 10 / 15 / 20 / 50 mm</td><td class="n">15 mm</td><td class="n">7 mm</td></tr>
+      <tr><td class="k">인장 — 필름</td><td class="n">5 – 30 mm</td><td class="n">8 mm</td><td class="n">2 mm</td></tr>
+      <tr><td class="k">인장 — 섬유</td><td class="n">5 – 30 mm</td><td class="n">—</td><td class="n">≤ 0.8 mm 지름</td></tr>
+      <tr><td class="k">압축</td><td class="n">—</td><td class="n">—</td><td class="n">지름 15 / 40 mm, 두께 ≤ 10 mm</td></tr>
+      <tr><td class="k">전단 샌드위치</td><td class="n">—</td><td class="n">10 × 10 mm</td><td class="n">≤ 4 mm (<b>2장 필요</b>)</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Netzsch DMA 242 E Artemis · Mettler DMA 1</h3>
+  <div class="tw"><table>
+    <thead><tr><th>모드</th><th>Netzsch DMA 242 E</th><th>Mettler DMA 1</th></tr></thead>
+    <tbody>
+      <tr><td class="k">3점 굽힘</td><td>자유 굽힘 길이 10 – 50 mm · 폭 ≤ 12 · 높이 ≤ 5</td><td>길이 ≤ 45 mm · 폭 ≤ 13</td></tr>
+      <tr><td class="k">단일 / 이중 캔틸레버</td><td>자유 길이 1 – 20 mm · 폭 ≤ 12 · 높이 ≤ 5</td><td>단일 ≤ 17.5 mm · 이중 ≤ 35 mm · 폭 ≤ 13</td></tr>
+      <tr><td class="k">인장</td><td>자유 길이 <b>최대 15 mm</b> · 폭/두께 ≤ 6.8</td><td>길이 ≤ 20 mm · 폭 ≤ 13</td></tr>
+      <tr><td class="k">압축 · 침투</td><td>시료 영역 Ø 15 – 30 mm</td><td>지름 ≤ 10 mm · 두께 ≤ 16 mm</td></tr>
+      <tr><td class="k">전단</td><td>지름/폭 ≤ 15 mm · 두께 ≤ 6</td><td>지름 ≤ 10 mm · 두께 ≤ 12 mm</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">MTS 지그는 규격 연계형으로 3·4점 굽힘 스팬 14 – 60 mm, 3점 굽힘 30 – 100 mm, 이중 캔틸레버 시편 길이 30 – 100 mm를 제공합니다 — ASTM D5023 · D5418 · D7028 · ISO 6721-5의 요구를 이 범위로 커버합니다.</p>
+
+  <div class="note trap">
+    <h4>같은 규격, 다른 장비 → 다른 결과</h4>
+    <p>클램프 스팬이 다르면 <strong>전단 변형 기여와 클램핑 컴플라이언스</strong>가 달라져 저장탄성률 절대값이 바뀝니다. 특히 이중 캔틸레버는 <strong>클램프 조임 토크</strong>에 민감합니다. 그래서 시험 보고서에는 규격 번호만이 아니라 <strong>모드 · 스팬 · 시편 치수 · 조임 토크</strong>를 함께 적어야 재현이 가능합니다.</p>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 치수</span>대표 치수값</h2>
+
+  <h3>실제로 숫자를 주는 규격</h3>
+  <div class="tw"><table>
+    <thead><tr><th>규격 · 모드</th><th class="n">길이</th><th class="n">폭 · 직경</th><th class="n">두께 · 갭</th><th>비율 · 공차</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ISO 6721-2 <i>비틀림 진자</i></td><td class="n">40 – 120 <b>(50)</b></td><td class="n">5 – 11 <b>(10)</b></td><td class="n">0.13 – 2 <b>(1)</b></td><td>축 방향 편차 ≤ 3 %</td></tr>
+      <tr><td class="k">ISO 6721-3 <i>굽힘 공진</i></td><td class="n">180 (클램프) / 150 (자유)</td><td class="n">10</td><td class="n">강성으로 결정</td><td>L/h ≥ 50 · 단면 ±0.5 %</td></tr>
+      <tr><td class="k">ISO 6721-8 <i>파동 전파</i></td><td class="n">50</td><td class="n">20</td><td class="n">5</td><td>참고 치수</td></tr>
+      <tr><td class="k">ISO 6721-10 <i>평행판</i></td><td class="n">—</td><td class="n">지름 20 – 50</td><td class="n">갭 0.5 – 3</td><td>D/d 10 – 50 · 시료 3 – 5 g</td></tr>
+      <tr><td class="k">IPC 2.4.24.4 A <i>굽힘</i></td><td class="n">20 – 40</td><td class="n">8 – 12</td><td class="n">1 – 2</td><td>L/t ≥ 10 · 1 Hz · 2 °C/min</td></tr>
+      <tr><td class="k">IPC 2.4.24.4 B <i>박막 인장</i></td><td class="n">15 – 20</td><td class="n">≈ 2</td><td class="n">박막</td><td>장력 10 – 50 g</td></tr>
+      <tr><td class="k">ASTM D5023 <i>3점 굽힘</i></td><td class="n">64 (예시)</td><td class="n">13 (예시)</td><td class="n">3 (예시)</td><td><b>스팬 = 16 × 두께 (+4/−2)</b> · 오버행 ≥ 6.4 mm</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">단위 mm. 괄호는 권장값.</p>
+
+  <h3>비율 조건만 주는 규격</h3>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>조건</th><th>이유</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ISO 6721-4 <i>인장</i></td><td class="n">Lₐ &gt; 6b</td><td>클램프의 횡수축 구속 영향 배제</td></tr>
+      <tr><td class="k">ISO 6721-6 <i>전단</i></td><td class="n">h &gt; 4L</td><td>굽힘 성분 기여를 무시할 수준으로</td></tr>
+      <tr><td class="k">ISO 6721-12 <i>압축</i></td><td class="n">h/D = 1 – 2 (권장 1)</td><td>프리로드 하 좌굴·배럴링 방지</td></tr>
+      <tr><td class="k">ISO 6721-3 <i>굽힘 공진</i></td><td class="n">L/h ≥ 50</td><td>저장탄성률 ±5 % 정확도 확보</td></tr>
+      <tr><td class="k">ASTM D7028 <i>복합재</i></td><td class="n">스팬/두께 &gt; 10</td><td>전단 변형 기여 억제</td></tr>
+      <tr><td class="k">ISO 4664-1 <i>고무 전단</i></td><td class="n">변·직경 ≥ 4 × 두께, 두께 ≤ 12 mm</td><td>단순 전단 상태 · 균일 가황</td></tr>
+      <tr><td class="k">ISO 4664-1 <i>고무 압축</i></td><td class="n">h/d ≈ 1.5</td><td>형상계수 영향 억제</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 실무</span>시편을 정하는 순서</h2>
+  <ol class="steps">
+    <li><b>목표 탄성률 범위를 먼저 잡는다</b>
+      온도 스윕이면 <strong>가장 딱딱한 상태와 가장 무른 상태</strong>를 모두 봅니다. 고분자는 Tg를 지나며 3 decade가 떨어지므로, 유리 영역에서 힘이 포화되지 않고 고무 영역에서 변위가 분해능 아래로 떨어지지 않는 단면을 골라야 합니다.</li>
+    <li><b>모드를 고른다</b>
+      강성 재료 → 3점 굽힘 또는 이중 캔틸레버, 필름 → 인장, 폼 → 압축, 고무·접착제 → 전단. <strong>Tg 위아래에서 모드를 바꿔야 하는 경우</strong>도 있으니, 두 모드로 나눠 측정하고 겹치는 온도에서 연결하는 방법을 검토하세요.</li>
+    <li><b>장비 클램프 한계를 확인한다</b>
+      06절 표에서 그 모드의 <strong>최대 폭 · 두께 · 자유 길이</strong>를 봅니다. 여기서 이미 선택지가 크게 줄어듭니다.</li>
+    <li><b>규격의 비율 조건을 적용한다</b>
+      07절의 비율 조건으로 최종 치수를 확정합니다. 스팬을 정한 뒤 <strong>두께 = 스팬/16</strong>(D5023) 같은 식으로 역산하는 것이 실무적입니다.</li>
+    <li><b>블랭크 길이를 더한다</b>
+      05절 — <strong>스팬이 아니라 물림 여유를 더한 길이</strong>로 잘라야 합니다.</li>
+    <li><b>보고서에 전부 적는다</b>
+      규격 번호 · 판 연도 · 모드 · 스팬 · 실제 시편 치수 · 주파수 · 승온속도 · 변형률 진폭 · (해당되면) 조임 토크. <strong>이 중 하나라도 빠지면 재현이 불가능합니다.</strong></li>
+  </ol>
+
+  <div class="note">
+    <h4>DMA 문서와의 연결</h4>
+    <p>이 시리즈의 첫 문서(<b>DMA에서 Prony 카드까지</b>)에서 강조한 두 가지가 여기서 시편 선택으로 직결됩니다. ① <strong>Prony 카드는 전단 G 기준</strong>이므로 고무라면 전단 샌드위치 모드가 변환 없이 바로 이어집니다. ② <strong>선형 점탄성 영역(LVE) 확인</strong>은 시편 치수가 확정된 뒤 변형률 스윕으로 해야 하며, 시편 크기를 바꾸면 다시 확인해야 합니다.</p>
+  </div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 / 한계</span>확인하지 못한 항목</h2>
+  <div class="tw"><table>
+    <thead><tr><th>항목</th><th>상태</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ASTM D5026 · D5279</td><td>시편 절(Test Specimen) 원문 확보 실패 — 형상(직사각)만 확인</td></tr>
+      <tr><td class="k">ASTM D5992</td><td>초록이 “시편 형상·크기를 다룬다”고 하나 수치 미확인</td></tr>
+      <tr><td class="k">ASTM E756</td><td>기준 빔 공칭 치수 미확인 (수치를 제시한 출처가 다른 항목에서 오류를 보여 채택하지 않음)</td></tr>
+      <tr><td class="k">ISO 6721-5 · -7 · -9</td><td>시편 치수 절 미확인 (−5는 균일도 2 %만 확인)</td></tr>
+      <tr><td class="k">ISO 4664-1:2022 · 4664-2</td><td>유료 구간 — 1998년 선행판 값으로 대체 인용</td></tr>
+      <tr><td class="k">ASTM D4065-20</td><td>2001년판의 0.75 × 9.4 × 50 mm 예시와 Table 1이 현행판에도 유지되는지 미확인</td></tr>
+      <tr><td class="k">ISO 6721-10:2025</td><td>2015년판 값을 인용 — 콘플레이트 추가 개정에서 수치가 바뀌었을 수 있음</td></tr>
+      <tr><td class="k">ASTM D7028 치수</td><td>50–60 × 10–15 × 2–4 mm는 상용 랩 출처이며 규격 원문 값 아님</td></tr>
+      <tr><td class="k">ASTM D4440</td><td>평행판 치수를 별도 조사하지 않음 — ISO 6721-10과 유사할 것으로 추정되나 미확인</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>사용 시 권고</h4>
+    <ul class="tight">
+      <li>DMA는 <strong>규격 번호만으로 시편이 정해지지 않습니다.</strong> “ASTM D5418에 따라”라고만 적힌 사양은 실질적으로 아무것도 지정하지 않은 것입니다.</li>
+      <li>사내 표준을 만든다면 <strong>규격 + 모드 + 스팬 + 시편 치수</strong>를 한 줄로 묶어 고정하세요(예: “D5418, 이중 캔틸레버 35 mm, 55 × 13 × 3 mm”).</li>
+      <li>공급사 간 데이터를 비교할 때는 <strong>모드와 스팬이 같은지</strong>부터 확인하세요. 다르면 저장탄성률 절대값을 직접 비교할 수 없습니다.</li>
+      <li>Tg만 필요하다면 절대값 차이가 덜 중요하지만, <strong>tan δ 피크 온도도 모드와 주파수에 의존</strong>합니다 — 1 Hz 기준을 관행으로 고정해 두는 편이 안전합니다.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  DMA 시편 규격 · 치수 변수 ○/△/× 매트릭스 · 대부분의 규격이 치수를 장비 클램프에 위임합니다. △는 확인하지 못한 항목입니다.
+</footer>
+</body></html>

@@ -1,0 +1,482 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>장기수명 시험-물성 지도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">내구·수명 · 시험에서 해석까지</div>
+  <h1>장기수명<br>시험-물성 지도</h1>
+  <p class="dek">피로·크리프·노화·균열·마모 — 수명을 지배하는 시험들이 각각 무엇을 주고, 그것이 CAE의 어디로 들어가며, 어디서부터가 <strong>측정이 아니라 외삽</strong>인지를 한 장에 정리했습니다. 개별 시험을 파기 전에 전체 판을 보는 용도입니다.</p>
+  <div class="mast-meta">
+    <div><b>범위</b> 피로 · 크리프 · 노화 · 파괴역학 · 마모/부식</div>
+    <div><b>관점</b> 시험 → 물성 → CAE 반영 → 외삽 위험</div>
+    <div><b>시리즈</b> DMA · 인장 · TMA 문서의 상위 지도</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 지도 한 장</a>
+    <a href="#s1"><span>01</span> 왜 성격이 다른가</a>
+    <a href="#s2"><span>02</span> 하나의 구조, 여섯 법칙</a>
+    <a href="#s3"><span>03</span> 피로</a>
+    <a href="#s4"><span>04</span> 크리프와 응력완화</a>
+    <a href="#s5"><span>05</span> 노화와 환경 열화</a>
+    <a href="#s6"><span>06</span> 균열 진전과 접합부</a>
+    <a href="#s7"><span>07</span> 마모 · 부식 · 기타</a>
+    <a href="#s8"><span>08</span> 가속의 함정</a>
+    <a href="#s9"><span>09</span> 어디서부터 시작할 것인가</a>
+  </nav>
+</header>
+
+<main>
+<section id="s0">
+  <h2><span class="num">00 / 지도</span>한 장으로 보는 전체 판</h2>
+  <p class="lede">부품에 무엇이 작용하는가(하중·환경)에서 시작해, 그것이 어떤 손상 메커니즘을 깨우고, 그 메커니즘을 재는 시험이 무엇이며, 결과가 CAE의 <strong>어느 자리</strong>로 들어가는지 — 이 네 단계가 장기수명 물성의 전부입니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 900 560" role="img" aria-label="하중과 환경에서 손상 메커니즘을 거쳐 CAE 반영 형태로 이어지는 장기수명 물성 지도" style="width:100%;height:auto;overflow:visible"><defs><marker id="l_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="l_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="14" y="176" width="872" height="150" rx="4" fill="currentColor" fill-opacity=".035" stroke="currentColor" stroke-opacity=".3" stroke-width="1.2" stroke-dasharray="7 5"/><text x="26" y="196" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" font-weight="500" fill="currentColor" fill-opacity=".7">열화 · 노화</text><rect x="30" y="24" width="196" height="62" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="42" y="48" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">반복 하중</text><text x="42" y="66" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">진동 · 주행 · 열사이클</text><rect x="246" y="24" width="196" height="62" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="258" y="48" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">지속 하중 · 변형</text><text x="258" y="66" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">볼트 체결 · 압입 · 자중</text><rect x="462" y="24" width="196" height="62" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="474" y="48" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">온도 · 습도 · 화학</text><text x="474" y="66" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">엔진룸 · 옥외 · 세정액</text><rect x="678" y="24" width="196" height="62" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="690" y="48" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">접촉 · 상대운동</text><text x="690" y="66" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">미끄럼 · 프레팅</text><rect x="26" y="208" width="200" height="92" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="38" y="232" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">피로</text><text x="38" y="250" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">S-N (ASTM E466)</text><text x="38" y="265" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">ε-N (ASTM E606)</text><text x="38" y="280" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">순환 응력-변형률</text><rect x="242" y="208" width="200" height="92" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="254" y="232" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">크리프 · 응력완화</text><text x="254" y="250" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">장기 크리프 (ISO 899)</text><text x="254" y="265" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">압축응력완화 (ISO 3384)</text><text x="254" y="280" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">크리프 파단</text><rect x="458" y="208" width="200" height="92" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="470" y="232" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">균열 진전</text><text x="470" y="250" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">da/dN (ASTM E647)</text><text x="470" y="265" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">K_IC · J_IC</text><text x="470" y="280" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">DCB · ENF (G_IC)</text><rect x="674" y="208" width="200" height="92" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4"/><text x="686" y="232" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">마모 · 부식</text><text x="686" y="250" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">pin-on-disk</text><text x="686" y="265" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">염수분무 · 순환부식</text><text x="686" y="280" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">프레팅</text><rect x="26" y="428" width="200" height="62" rx="3" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".4"/><text x="38" y="452" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">구성방정식에 반영</text><text x="38" y="470" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">Norton · Anand · Prony</text><rect x="242" y="428" width="200" height="62" rx="3" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".4"/><text x="254" y="452" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">손상 누적 후처리</text><text x="254" y="470" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">Miner · nCode · FEMFAT</text><rect x="458" y="428" width="200" height="62" rx="3" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".4"/><text x="470" y="452" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">균열 · 계면 해석</text><text x="470" y="470" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">Paris · XFEM · CZM</text><rect x="674" y="428" width="200" height="62" rx="3" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".4"/><text x="686" y="452" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">해석 밖 허용치</text><text x="686" y="470" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".58">가속계수 · 설계 판정</text><path d="M128,86 C128,143 126,143 126,200" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M128,86 C128,143 558,143 558,200" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M344,86 C344,143 342,143 342,200" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M344,86 C344,143 558,143 558,200" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M560,86 C560,143 342,143 342,200" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M560,86 C560,143 774,143 774,200" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M776,86 C776,143 774,143 774,200" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M126,300 C126,360 342,360 342,420" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M126,300 C126,360 558,360 558,420" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M342,300 C342,360 126,360 126,420" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M558,300 C558,360 558,360 558,420" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><path d="M774,300 C774,360 774,360 774,420" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.3" marker-end="url(#l_as)"/><text x="14" y="14" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".5" letter-spacing="1.5">하중 · 환경</text><text x="14" y="406" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".5" letter-spacing="1.5">CAE 반영 형태</text></svg></div>
+    <figcaption><b>장기수명 물성 지도.</b> 아래쪽 네 칸이 결정적입니다 — 어떤 결과는 구성방정식이 되어 해석 안으로 들어가고, 어떤 결과는 해석이 끝난 뒤 후처리로만 쓰이며, 어떤 것은 아예 해석 밖 판정 기준으로 남습니다. 점선 영역의 <b>열화·노화</b>는 그 자체가 하나의 메커니즘이면서 동시에 <b>나머지 세 메커니즘의 입력 물성을 시간에 따라 바꾸는</b> 이중 역할을 합니다 — 그래서 다른 것들을 감싸고 있습니다.</figcaption>
+  </figure>
+
+  <div class="cards">
+    <div class="card">
+      <h4>① 구성방정식에 반영</h4>
+      <p>재료의 응답 자체가 바뀌므로 <strong>해석 안</strong>으로 들어갑니다. 크리프(Norton), 솔더 점소성(Anand), 점탄성(Prony)이 여기 속합니다. 해석 결과의 변형·응력이 직접 달라집니다.</p>
+    </div>
+    <div class="card">
+      <h4>② 손상 누적 후처리</h4>
+      <p>해석은 응력·변형률만 주고, <strong>수명은 그다음에</strong> 계산합니다. S-N·ε-N 곡선과 Miner 법칙을 nCode·FEMFAT·fe-safe 같은 도구가 적용합니다. 응력장이 바뀌지 않는다는 점이 ①과의 결정적 차이입니다.</p>
+    </div>
+    <div class="card">
+      <h4>③ 균열 · 계면 해석</h4>
+      <p>균열이 이미 있다고 보고 <strong>진전을 푸는</strong> 접근입니다. Paris 법칙, XFEM, VCCT, 코헤시브존(CZM). 검사 주기 산정과 접합부 파손 예측이 주 용도입니다.</p>
+    </div>
+    <div class="card">
+      <h4>④ 해석 밖 허용치</h4>
+      <p>부식·UV·화학 노출처럼 <strong>해석으로 옮기기 어려운</strong> 것들. 가속계수와 설계 판정 기준으로 남습니다. 억지로 해석에 넣기보다 시험 판정으로 관리하는 편이 정직합니다.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 성격</span>장기수명 물성은 왜 다른가</h2>
+  <p>앞선 DMA·인장·TMA 문서는 모두 <strong>구성방정식</strong> 계열이었습니다. 시험 데이터가 곧 재료의 응답 법칙이 되고, 시험 범위 안에서는 측정이 곧 답이었습니다. 장기수명 물성은 두 가지가 다릅니다.</p>
+  <ul>
+    <li><strong>시험 결과가 응답이 아니라 손상 규칙이 됩니다.</strong> S-N 곡선은 "이 응력에서 재료가 어떻게 변형하는가"가 아니라 "몇 번 만에 깨지는가"를 말합니다. 그래서 해석의 <strong>후처리</strong> 자리에 놓이는 경우가 많습니다.</li>
+    <li><strong>필요한 시간이 시험 가능한 시간보다 항상 깁니다.</strong> 10년을 보증해야 하는데 시험은 1000시간입니다. 그래서 예외 없이 <strong>가속 후 외삽</strong>이라는 구조를 갖습니다.</li>
+  </ul>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 820 380" role="img" aria-label="장기수명 시험의 시험 기간과 요구 수명 사이의 로그 격차" style="width:100%;height:auto;overflow:visible"><defs><marker id="l_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="l_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><line x1="176.0" y1="34" x2="176.0" y2="290" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="176.0" y="26" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁰</text><line x1="262.7" y1="34" x2="262.7" y2="290" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="262.7" y="26" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10¹</text><line x1="349.3" y1="34" x2="349.3" y2="290" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="349.3" y="26" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10²</text><line x1="436.0" y1="34" x2="436.0" y2="290" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="436.0" y="26" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10³</text><line x1="522.7" y1="34" x2="522.7" y2="290" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="522.7" y="26" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁴</text><line x1="609.3" y1="34" x2="609.3" y2="290" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="609.3" y="26" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁵</text><line x1="696.0" y1="34" x2="696.0" y2="290" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="696.0" y="26" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁶</text><text x="730.0" y="26" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">시간 [h]</text><text x="166" y="62" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor">플라스틱 크리프</text><line x1="176.0" y1="58" x2="436.0" y2="58" stroke="#2F6FC4" stroke-width="7" stroke-linecap="butt"/><line x1="436.0" y1="58" x2="604.4" y2="58" stroke="#C4402B" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l_ah)"/><text x="618.4" y="62" fill="#C4402B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">1.9 decade</text><text x="182.0" y="47" font-family="IBM Plex Sans KR, sans-serif" font-size="10" fill="currentColor" fill-opacity=".5">ISO 899 · 10년</text><text x="166" y="102" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor">고무 압축응력완화</text><line x1="176.0" y1="98" x2="436.0" y2="98" stroke="#2F6FC4" stroke-width="7" stroke-linecap="butt"/><line x1="436.0" y1="98" x2="619.6" y2="98" stroke="#C4402B" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l_ah)"/><text x="633.6" y="102" fill="#C4402B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">2.1 decade</text><text x="182.0" y="87" font-family="IBM Plex Sans KR, sans-serif" font-size="10" fill="currentColor" fill-opacity=".5">ISO 3384 · 15년</text><text x="166" y="142" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor">열노화 (Arrhenius)</text><line x1="176.0" y1="138" x2="436.0" y2="138" stroke="#2F6FC4" stroke-width="7" stroke-linecap="butt"/><line x1="436.0" y1="138" x2="604.4" y2="138" stroke="#C4402B" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l_ah)"/><text x="618.4" y="142" fill="#C4402B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">1.9 decade</text><text x="182.0" y="127" font-family="IBM Plex Sans KR, sans-serif" font-size="10" fill="currentColor" fill-opacity=".5">120 °C → 80 °C</text><text x="166" y="182" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor">UV 촉진 (QUV)</text><line x1="176.0" y1="178" x2="462.1" y2="178" stroke="#2F6FC4" stroke-width="7" stroke-linecap="butt"/><line x1="462.1" y1="178" x2="604.4" y2="178" stroke="#C4402B" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l_ah)"/><text x="618.4" y="182" fill="#C4402B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">1.6 decade</text><text x="182.0" y="167" font-family="IBM Plex Sans KR, sans-serif" font-size="10" fill="currentColor" fill-opacity=".5">옥외 10년</text><text x="166" y="222" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor">염수분무 부식</text><line x1="176.0" y1="218" x2="436.0" y2="218" stroke="#2F6FC4" stroke-width="7" stroke-linecap="butt"/><line x1="436.0" y1="218" x2="630.4" y2="218" stroke="#C4402B" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l_ah)"/><text x="644.4" y="222" fill="#C4402B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">2.2 decade</text><text x="182.0" y="207" font-family="IBM Plex Sans KR, sans-serif" font-size="10" fill="currentColor" fill-opacity=".5">20년</text><text x="166" y="262" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor">고주기 피로</text><line x1="176.0" y1="258" x2="301.4" y2="258" stroke="#2F6FC4" stroke-width="7" stroke-linecap="butt"/><line x1="301.4" y1="258" x2="474.8" y2="258" stroke="#C4402B" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l_ah)"/><text x="488.8" y="262" fill="#C4402B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">2.0 decade</text><text x="182.0" y="247" font-family="IBM Plex Sans KR, sans-serif" font-size="10" fill="currentColor" fill-opacity=".5">10⁷ → 10⁹ cycle</text><line x1="176" y1="310" x2="216" y2="310" stroke="#2F6FC4" stroke-width="7"/><text x="226" y="314" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">실제 시험한 구간</text><line x1="360" y1="310" x2="400" y2="310" stroke="#C4402B" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l_ah)"/><text x="410" y="314" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">외삽으로 메우는 구간</text></svg></div>
+    <figcaption><b>거의 모든 장기수명 시험이 약 2 decade를 외삽합니다.</b> 파란 막대가 실제로 관측한 구간, 붉은 점선이 모델로 메우는 구간입니다. 시험 종류가 달라도 격차의 크기가 비슷하다는 점이 중요합니다 — 이 <b>2 decade</b>가 장기수명 물성의 공통 리스크입니다.</figcaption>
+  </figure>
+
+  <div class="note">
+    <h4>그래서 판단이 두 번 필요합니다</h4>
+    <p>구성방정식 물성은 "이 데이터가 맞는가" 한 번만 물으면 됩니다. 장기수명 물성은 <strong>"이 데이터가 맞는가"와 "이 외삽이 맞는가"를 따로</strong> 물어야 합니다. 인장 문서에서 네킹 이후 외삽을 다룰 때와 같은 구조인데, 여기서는 외삽 구간이 훨씬 길고 검증이 훨씬 어렵습니다.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 공통 구조</span>하나의 형태, 여섯 개의 법칙</h2>
+  <p class="lede">피로·크리프·노화의 대표 법칙들은 서로 무관해 보이지만, <strong>전부 어떤 로그 좌표에서 직선</strong>입니다. 우연이 아니라 필연입니다 — 짧은 구간의 데이터를 길게 늘리려면 직선이어야 하기 때문입니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 880 470" role="img" aria-label="여섯 개의 장기수명 법칙이 각자의 로그 좌표에서 모두 직선이 되는 모습" style="width:100%;height:auto;overflow:visible"><defs><marker id="l_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="l_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><text x="44" y="20" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">S-N  ·  Basquin</text><text x="44" y="36" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace" fill="currentColor" fill-opacity=".6">σa = σ′f (2Nf)^b</text><rect x="58" y="44" width="208" height="132" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="58.00,34.69 61.53,35.76 65.05,36.84 68.58,37.91 72.10,38.98 75.63,40.06 79.15,41.13 82.68,42.21 86.20,43.28 89.73,44.35 93.25,45.43 96.78,46.50 100.31,47.58 103.83,48.65 107.36,49.72 110.88,50.80 114.41,51.87 117.93,52.94 121.46,54.02 124.98,55.09 128.51,56.17 132.03,57.24 135.56,58.31 139.08,59.39 142.61,60.46 146.14,61.54 149.66,62.61 153.19,63.68 156.71,64.76 160.24,65.83 163.76,66.91 167.29,67.98 170.81,69.05 174.34,70.13 177.86,71.20 181.39,72.27 184.92,73.35 188.44,74.42 191.97,75.50 195.49,76.57 199.02,77.64 202.54,78.72 206.07,79.79 209.59,80.87 213.12,81.94 216.64,83.01 220.17,84.09 223.69,85.16 227.22,86.24 230.75,87.31 234.27,88.38 237.80,89.46 241.32,90.53 244.85,91.60 248.37,92.68 251.90,93.75 255.42,94.83 258.95,95.90 262.47,96.97 266.00,98.05" fill="none" stroke="#2F6FC4" stroke-width="2.4"/><text x="266" y="192" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log Nf</text><text x="44" y="192" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log σa</text><text x="266" y="20" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".55">고주기 피로</text><text x="332" y="20" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">ε-N  ·  Coffin-Manson</text><text x="332" y="36" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace" fill="currentColor" fill-opacity=".6">Δε/2 = 탄성항 + 소성항</text><rect x="346" y="44" width="208" height="132" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="346.00,64.75 349.53,66.56 353.05,68.38 356.58,70.19 360.10,72.01 363.63,73.82 367.15,75.63 370.68,77.45 374.20,79.26 377.73,81.08 381.25,82.89 384.78,84.70 388.31,86.52 391.83,88.33 395.36,90.15 398.88,91.96 402.41,93.77 405.93,95.59 409.46,97.40 412.98,99.22 416.51,101.03 420.03,102.85 423.56,104.66 427.08,106.47 430.61,108.29 434.14,110.10 437.66,111.92 441.19,113.73 444.71,115.54 448.24,117.36 451.76,119.17 455.29,120.99 458.81,122.80 462.34,124.61 465.86,126.43 469.39,128.24 472.92,130.06 476.44,131.87 479.97,133.68 483.49,135.50 487.02,137.31 490.54,139.13 494.07,140.94 497.59,142.75 501.12,144.57 504.64,146.38 508.17,148.20 511.69,150.01 515.22,151.82 518.75,153.64 522.27,155.45 525.80,157.27 529.32,159.08 532.85,160.89 536.37,162.71 539.90,164.52 543.42,166.34 546.95,168.15 550.47,169.96 554.00,171.78" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4" stroke-dasharray="5 4"/><polyline points="346.00,112.96 349.53,113.24 353.05,113.51 356.58,113.78 360.10,114.05 363.63,114.32 367.15,114.60 370.68,114.87 374.20,115.14 377.73,115.41 381.25,115.68 384.78,115.96 388.31,116.23 391.83,116.50 395.36,116.77 398.88,117.04 402.41,117.32 405.93,117.59 409.46,117.86 412.98,118.13 416.51,118.41 420.03,118.68 423.56,118.95 427.08,119.22 430.61,119.49 434.14,119.77 437.66,120.04 441.19,120.31 444.71,120.58 448.24,120.85 451.76,121.13 455.29,121.40 458.81,121.67 462.34,121.94 465.86,122.21 469.39,122.49 472.92,122.76 476.44,123.03 479.97,123.30 483.49,123.58 487.02,123.85 490.54,124.12 494.07,124.39 497.59,124.66 501.12,124.94 504.64,125.21 508.17,125.48 511.69,125.75 515.22,126.02 518.75,126.30 522.27,126.57 525.80,126.84 529.32,127.11 532.85,127.38 536.37,127.66 539.90,127.93 543.42,128.20 546.95,128.47 550.47,128.75 554.00,129.02" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4" stroke-dasharray="5 4"/><polyline points="346.00,64.08 349.53,65.82 353.05,67.56 356.58,69.29 360.10,71.01 363.63,72.73 367.15,74.43 370.68,76.12 374.20,77.80 377.73,79.47 381.25,81.13 384.78,82.77 388.31,84.39 391.83,86.00 395.36,87.59 398.88,89.16 402.41,90.71 405.93,92.23 409.46,93.74 412.98,95.21 416.51,96.66 420.03,98.08 423.56,99.47 427.08,100.83 430.61,102.16 434.14,103.45 437.66,104.71 441.19,105.93 444.71,107.12 448.24,108.27 451.76,109.38 455.29,110.45 458.81,111.49 462.34,112.48 465.86,113.44 469.39,114.36 472.92,115.24 476.44,116.09 479.97,116.90 483.49,117.68 487.02,118.42 490.54,119.13 494.07,119.81 497.59,120.47 501.12,121.09 504.64,121.69 508.17,122.26 511.69,122.81 515.22,123.34 518.75,123.85 522.27,124.34 525.80,124.81 529.32,125.26 532.85,125.70 536.37,126.12 539.90,126.53 543.42,126.93 546.95,127.32 550.47,127.70 554.00,128.07" fill="none" stroke="#2F6FC4" stroke-width="2.4"/><text x="554" y="192" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log Nf</text><text x="332" y="192" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log Δε/2</text><text x="554" y="20" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".55">저주기 피로</text><text x="620" y="20" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">da/dN  ·  Paris</text><text x="620" y="36" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace" fill="currentColor" fill-opacity=".6">da/dN = C (ΔK)^m</text><rect x="634" y="44" width="208" height="132" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="649.48,108.56 650.37,110.77 651.25,112.35 652.14,113.54 653.03,114.47 653.91,115.21 654.80,115.82 655.69,116.31 656.57,116.72 657.46,117.05 658.35,117.32 659.23,117.55 660.12,117.73 661.01,117.87 661.89,117.98 662.78,118.06 663.67,118.11 664.55,118.14 665.44,118.15 666.33,118.14 667.21,118.12 668.10,118.07 668.99,118.02 669.88,117.95 670.76,117.87 671.65,117.77 672.54,117.67 673.42,117.56 674.31,117.44 675.20,117.31 676.08,117.17 676.97,117.03 677.86,116.87 678.74,116.72 679.63,116.55 680.52,116.38 681.40,116.21 682.29,116.03 683.18,115.84 684.06,115.65 684.95,115.45 685.84,115.26 686.72,115.05 687.61,114.85 688.50,114.64 689.38,114.42 690.27,114.21 691.16,113.99 692.04,113.76 692.93,113.54 693.82,113.31 694.70,113.08 695.59,112.84 696.48,112.61 697.36,112.37 698.25,112.13 699.14,111.88 700.02,111.64 700.91,111.39 701.80,111.14 702.68,110.89 703.57,110.64 704.46,110.38 705.34,110.13 706.23,109.87 707.12,109.61 708.01,109.35 708.89,109.08 709.78,108.82 710.67,108.55 711.55,108.29 712.44,108.02 713.33,107.75 714.21,107.48 715.10,107.21 715.99,106.93 716.87,106.66 717.76,106.38 718.65,106.10 719.53,105.83 720.42,105.55 721.31,105.27 722.19,104.99 723.08,104.70 723.97,104.42 724.85,104.14 725.74,103.85 726.63,103.56 727.51,103.28 728.40,102.99 729.29,102.70 730.17,102.41 731.06,102.12 731.95,101.83 732.83,101.54 733.72,101.24 734.61,100.95 735.49,100.65 736.38,100.36 737.27,100.06 738.15,99.76 739.04,99.46 739.93,99.17 740.81,98.87 741.70,98.56 742.59,98.26 743.47,97.96 744.36,97.66 745.25,97.35 746.14,97.05 747.02,96.74 747.91,96.44 748.80,96.13 749.68,95.82 750.57,95.51 751.46,95.20 752.34,94.89 753.23,94.58 754.12,94.26 755.00,93.95 755.89,93.64 756.78,93.32 757.66,93.00 758.55,92.69 759.44,92.37 760.32,92.05 761.21,91.73 762.10,91.40 762.98,91.08 763.87,90.76 764.76,90.43 765.64,90.11 766.53,89.78 767.42,89.45 768.30,89.12 769.19,88.79 770.08,88.46 770.96,88.12 771.85,87.79 772.74,87.45 773.62,87.11 774.51,86.77 775.40,86.43 776.28,86.09 777.17,85.74 778.06,85.40 778.94,85.05 779.83,84.70 780.72,84.35 781.60,83.99 782.49,83.64 783.38,83.28 784.26,82.92 785.15,82.56 786.04,82.19 786.93,81.82 787.81,81.45 788.70,81.08 789.59,80.71 790.47,80.33 791.36,79.95 792.25,79.56 793.13,79.17 794.02,78.78 794.91,78.38 795.79,77.98 796.68,77.58 797.57,77.17 798.45,76.76 799.34,76.34 800.23,75.92 801.11,75.49 802.00,75.06 802.89,74.62 803.77,74.17 804.66,73.72 805.55,73.26 806.43,72.79 807.32,72.31 808.21,71.83 809.09,71.33 809.98,70.82 810.87,70.31 811.75,69.78 812.64,69.24 813.53,68.68 814.41,68.11 815.30,67.52 816.19,66.91 817.07,66.28 817.96,65.63 818.85,64.95 819.73,64.24 820.62,63.50 821.51,62.72 822.39,61.89 823.28,61.02 824.17,60.08 825.06,59.07 825.94,57.97" fill="none" stroke="#2F6FC4" stroke-width="2.4"/><text x="842" y="192" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log ΔK</text><text x="620" y="192" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log da/dN</text><text x="842" y="20" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".55">균열 진전</text><text x="44" y="250" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">크리프  ·  Norton</text><text x="44" y="266" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace" fill="currentColor" fill-opacity=".6">ε̇ = A σⁿ</text><rect x="58" y="274" width="208" height="132" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="58.00,406.00 61.53,403.76 65.05,401.53 68.58,399.29 72.10,397.05 75.63,394.81 79.15,392.58 82.68,390.34 86.20,388.10 89.73,385.86 93.25,383.63 96.78,381.39 100.31,379.15 103.83,376.92 107.36,374.68 110.88,372.44 114.41,370.20 117.93,367.97 121.46,365.73 124.98,363.49 128.51,361.25 132.03,359.02 135.56,356.78 139.08,354.54 142.61,352.31 146.14,350.07 149.66,347.83 153.19,345.59 156.71,343.36 160.24,341.12 163.76,338.88 167.29,336.64 170.81,334.41 174.34,332.17 177.86,329.93 181.39,327.69 184.92,325.46 188.44,323.22 191.97,320.98 195.49,318.75 199.02,316.51 202.54,314.27 206.07,312.03 209.59,309.80 213.12,307.56 216.64,305.32 220.17,303.08 223.69,300.85 227.22,298.61 230.75,296.37 234.27,294.14 237.80,291.90 241.32,289.66 244.85,287.42 248.37,285.19 251.90,282.95 255.42,280.71 258.95,278.47 262.47,276.24 266.00,274.00" fill="none" stroke="#D07A3B" stroke-width="2.4"/><text x="266" y="422" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log σ</text><text x="44" y="422" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log ε̇</text><text x="266" y="250" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".55">정상 크리프</text><text x="332" y="250" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">노화  ·  Arrhenius</text><text x="332" y="266" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace" fill="currentColor" fill-opacity=".6">t = A exp(Ea/RT)</text><rect x="346" y="274" width="208" height="132" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="554.00,274.00 549.18,277.06 544.43,280.08 539.73,283.06 535.09,286.00 530.51,288.91 525.98,291.78 521.51,294.62 517.10,297.42 512.73,300.19 508.42,302.92 504.16,305.63 499.95,308.30 495.79,310.94 491.68,313.55 487.62,316.13 483.60,318.68 479.63,321.20 475.70,323.69 471.82,326.15 467.98,328.59 464.19,330.99 460.44,333.38 456.73,335.73 453.06,338.06 449.43,340.36 445.84,342.64 442.29,344.89 438.78,347.12 435.30,349.33 431.86,351.51 428.46,353.67 425.10,355.80 421.77,357.92 418.47,360.01 415.21,362.08 411.99,364.12 408.79,366.15 405.63,368.16 402.50,370.14 399.41,372.11 396.34,374.05 393.30,375.98 390.30,377.89 387.32,379.77 384.38,381.64 381.46,383.50 378.57,385.33 375.71,387.14 372.88,388.94 370.08,390.72 367.30,392.48 364.55,394.23 361.82,395.96 359.12,397.67 356.45,399.37 353.80,401.05 351.18,402.72 348.58,404.37 346.00,406.00" fill="none" stroke="#D07A3B" stroke-width="2.4"/><text x="554" y="422" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">1000/T [1/K]</text><text x="332" y="422" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log t</text><text x="554" y="250" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".55">열노화 수명</text><text x="620" y="250" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">크리프 파단  ·  L-M</text><text x="620" y="266" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace" fill="currentColor" fill-opacity=".6">LMP = T(C + log t)</text><rect x="634" y="274" width="208" height="132" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="634.00,274.00 637.53,276.24 641.05,278.47 644.58,280.71 648.10,282.95 651.63,285.19 655.15,287.42 658.68,289.66 662.20,291.90 665.73,294.14 669.25,296.37 672.78,298.61 676.31,300.85 679.83,303.08 683.36,305.32 686.88,307.56 690.41,309.80 693.93,312.03 697.46,314.27 700.98,316.51 704.51,318.75 708.03,320.98 711.56,323.22 715.08,325.46 718.61,327.69 722.14,329.93 725.66,332.17 729.19,334.41 732.71,336.64 736.24,338.88 739.76,341.12 743.29,343.36 746.81,345.59 750.34,347.83 753.86,350.07 757.39,352.31 760.92,354.54 764.44,356.78 767.97,359.02 771.49,361.25 775.02,363.49 778.54,365.73 782.07,367.97 785.59,370.20 789.12,372.44 792.64,374.68 796.17,376.92 799.69,379.15 803.22,381.39 806.75,383.63 810.27,385.86 813.80,388.10 817.32,390.34 820.85,392.58 824.37,394.81 827.90,397.05 831.42,399.29 834.95,401.53 838.47,403.76 842.00,406.00" fill="none" stroke="#D07A3B" stroke-width="2.4"/><text x="842" y="422" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">LMP × 10³</text><text x="620" y="422" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log σ</text><text x="842" y="250" text-anchor="end" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".55">파단 수명 마스터커브</text></svg></div>
+    <figcaption><b>같은 전략의 여섯 가지 변형.</b> 축을 로그로 잡아 직선을 만들고, 그 직선을 데이터 밖으로 연장합니다. 실무에서 다투는 것은 대부분 "기울기가 얼마인가"가 아니라 <b>"이 직선이 어디까지 직선인가"</b>입니다.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>법칙</th><th>수식</th><th>직선이 되는 좌표</th><th>연장하는 방향</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Basquin</td><td>σa = σ′f (2Nf)^b</td><td>log σ – log N</td><td>낮은 응력 · 긴 수명</td></tr>
+      <tr><td class="k">Coffin-Manson</td><td>Δε/2 = (σ′f/E)(2Nf)^b + ε′f (2Nf)^c</td><td>log Δε – log N</td><td>작은 변형률 · 긴 수명</td></tr>
+      <tr><td class="k">Paris</td><td>da/dN = C (ΔK)^m</td><td>log da/dN – log ΔK</td><td>낮은 ΔK · 느린 진전</td></tr>
+      <tr><td class="k">Norton-Bailey</td><td>ε̇ = A σⁿ tᵐ</td><td>log ε̇ – log σ</td><td>낮은 응력 · 긴 시간</td></tr>
+      <tr><td class="k">Arrhenius</td><td>t = A exp(Ea/RT)</td><td>log t – 1/T</td><td>낮은 온도 · 긴 수명</td></tr>
+      <tr><td class="k">Larson-Miller</td><td>LMP = T(C + log t)</td><td>σ – LMP</td><td>낮은 온도 · 긴 시간</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">DMA 문서의 시간–온도 중첩(WLF)도 정확히 같은 계열입니다 — 온도로 시간을 사서 로그 축을 늘리는 방법입니다.</p>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 피로</span>반복 하중</h2>
+  <p>가장 수요가 크고 도구가 가장 성숙한 분야입니다. 핵심 분기는 <strong>변형이 탄성 범위인가</strong>입니다 — 탄성이면 응력 기반(S-N), 국부 소성이 있으면 변형률 기반(ε-N)으로 가야 합니다. 대략 10⁴~10⁵ 사이클이 경계입니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>시험 (규격)</th><th>산출 물성</th><th>CAE 반영</th><th>외삽 위험</th></tr></thead>
+    <tbody>
+      <tr><td class="k">축하중 피로<br>ASTM E466 · ISO 1099</td><td>S-N 곡선, Basquin b, 피로한도</td><td>손상 누적 후처리<br>(Miner)</td><td>중 — 시험 10⁷ → 요구 10⁸·⁹ 사이클</td></tr>
+      <tr><td class="k">변형률 제어 피로<br>ASTM E606 · ISO 12106</td><td>ε-N 곡선, 순환 응력-변형률 곡선</td><td>노치부 국부 변형률 + Neuber</td><td>낮음 — 대신 시험 비용이 큼</td></tr>
+      <tr><td class="k">다축 피로</td><td>임계면 파라미터<br>(Findley · Fatemi-Socie · Dang Van)</td><td>임계면 탐색 후처리</td><td>중 — 비비례 하중에서 불확실</td></tr>
+      <tr><td class="k">용접부 피로</td><td>FAT 등급, 핫스팟·노치응력 S-N</td><td>구조응력 후처리</td><td>낮음 — IIW 등 표준 등급 존재</td></tr>
+      <tr><td class="k">랜덤 진동</td><td>PSD 기반 수명 (Dirlik)</td><td>주파수영역 수명 계산</td><td>중 — 비정상·비가우시안이면 붕괴</td></tr>
+      <tr><td class="k">고무 피로</td><td>인열에너지 T, dc/dN = A·T^F</td><td>균열성장 기반 수명</td><td>높음 — 배합·온도 의존이 큼</td></tr>
+      <tr><td class="k">솔더 열사이클<br>JEDEC JESD22</td><td>Anand 상수 + Darveaux 계수</td><td>구성방정식 + 에너지 기반 후처리</td><td>높음 — 사이클 조건 의존</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>실무에서 가장 크게 틀리는 지점</h3>
+  <ul>
+    <li><strong>순환 곡선은 정적 곡선과 다릅니다.</strong> 대부분의 금속은 반복 하중을 받으면 순환 경화 또는 연화합니다. 인장시험에서 얻은 소성곡선을 그대로 피로 해석에 쓰면 국부 변형률이 틀립니다. ε-N 시험에서는 <strong>순환 응력-변형률 곡선(Ramberg-Osgood)이 함께 나옵니다</strong> — 이게 진짜 산출물의 절반입니다.</li>
+    <li><strong>수명 산포는 물성의 일부입니다.</strong> 같은 응력에서 파단 수명이 5~10배 흩어지는 것이 정상입니다(로그정규, 표준편차 0.2~0.3 decade). 평균 S-N만 쓰면 <strong>절반의 부품이 예측보다 먼저 고장납니다.</strong> 최소 3응력 수준 × 각 5개 이상으로 P-S-N을 만들고, 설계에는 하위 신뢰구간을 쓰세요.</li>
+    <li><strong>시편과 실물은 다릅니다.</strong> 표면 조도, 크기 효과, 잔류응력, 도금·쇼트피닝이 피로한도를 쉽게 30~50% 바꿉니다. 시편 S-N에 보정계수를 곱하는 것이 표준 절차인데, <strong>이 보정이 재료 데이터 자체보다 큰 오차원</strong>인 경우가 많습니다.</li>
+    <li><strong>평균응력을 빼먹지 마세요.</strong> 조립 응력, 잔류응력, 열응력은 모두 평균응력으로 작동합니다. Haigh 선도에서 보정하지 않으면 압축 잔류응력의 이득을 통째로 놓치거나 인장 평균응력의 해악을 놓칩니다.</li>
+    <li><strong>Miner 법칙의 합은 1이 아닙니다.</strong> 실제 파손 시점의 Σn/N은 0.3~3 범위로 흩어집니다. 하중 순서 효과 때문입니다. 이 값을 1로 고정한 판정은 안전율이 아니라 가정입니다.</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 크리프</span>지속 하중과 응력완화</h2>
+  <p>같은 물리의 두 얼굴입니다. 하중을 붙잡아 두면 변형이 늘고(크리프), 변형을 붙잡아 두면 응력이 준다(응력완화). 볼트 이완, 스냅핏 헐거워짐, 개스킷 누설, 고온 부품 변형이 전부 여기 속합니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>시험 (규격)</th><th>산출 물성</th><th>CAE 반영</th><th>외삽 위험</th></tr></thead>
+    <tbody>
+      <tr><td class="k">금속 고온 크리프<br>ASTM E139</td><td>Norton-Bailey A·n·m, 1·2·3차 곡선</td><td><b>구성방정식</b><br>Abaqus <code>*CREEP</code>, Ansys <code>TB,CREEP</code></td><td>중 — 응력 지수 n이 응력대별로 변함</td></tr>
+      <tr><td class="k">크리프 파단</td><td>파단 시간, Larson-Miller 마스터커브</td><td>수명 판정 (해석 밖)</td><td>높음 — 온도 외삽이 곧 수명 외삽</td></tr>
+      <tr><td class="k">플라스틱 인장 크리프<br>ISO 899-1</td><td>등시간 응력-변형률 곡선, 크리프 모듈러스 Ec(t)</td><td>유사탄성 해석 — E 대신 Ec(t) 사용</td><td>중 — 1000 h → 10년</td></tr>
+      <tr><td class="k">고무 압축응력완화<br>ISO 3384</td><td>잔류 실링력 vs 시간·온도</td><td>씰 누설 판정 (해석 밖)</td><td>중 — Arrhenius 외삽 병용</td></tr>
+      <tr><td class="k">압축영구줄음률<br>ISO 815</td><td>영구 변형률 잔존율 CS</td><td>정성 판정</td><td>— 비교용 지표</td></tr>
+      <tr><td class="k">솔더 크리프</td><td>Anand 9개 상수</td><td><b>구성방정식</b><br><code>*MAT_ANAND</code> · <code>TB,ANAND</code></td><td>중 — 온도·변형률속도 범위 확인 필요</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>DMA 문서의 Prony와 무엇이 다른가</h3>
+  <p>물리는 같습니다 — 둘 다 시간 의존 거동입니다. 그런데 <strong>시간 스케일이 다르고, 그래서 다른 모델을 씁니다.</strong></p>
+  <ul class="tight">
+    <li><strong>Prony(점탄성)</strong>는 초~시간 영역, <strong>선형</strong>이고 완전히 회복 가능한 거동을 다룹니다. NVH·충격·진동이 대상입니다.</li>
+    <li><strong>크리프(Norton 계열)</strong>는 시간~년 영역, <strong>비선형</strong>(응력의 멱함수)이고 비가역 변형을 다룹니다. 응력이 두 배면 변형률 속도가 2ⁿ배(n = 3~7) 늘어납니다.</li>
+    <li>DMA 마스터커브를 년 단위까지 늘려서 크리프를 예측하려는 시도는 대개 실패합니다. 그 영역은 이미 선형 점탄성 가정 밖입니다.</li>
+  </ul>
+
+  <div class="note trap">
+    <h4>2차 크리프만 보면 파단을 못 잡습니다</h4>
+    <p>Norton 식은 <strong>정상(2차) 크리프</strong>의 기울기만 기술합니다. 실제 파손은 변형률 속도가 다시 치솟는 <strong>3차 크리프</strong>에서 일어나는데, 이 구간은 Norton 식에 없습니다. 변형량 판정(예: 1% 변형)만 필요하면 Norton으로 충분하지만, <strong>파단 시점</strong>이 필요하면 크리프 파단 시험과 Larson-Miller가 별도로 있어야 합니다.</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 노화</span>시간 자체가 물성을 바꾼다</h2>
+  <p class="lede">앞의 두 메커니즘은 하중이 손상을 만듭니다. 노화는 다릅니다 — <strong>가만히 두어도 재료가 변합니다.</strong> 그리고 변한 재료로 다시 피로·크리프를 겪습니다. 지도에서 노화가 다른 것들을 감싸고 있는 이유입니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>시험 (규격)</th><th>산출 물성</th><th>CAE 반영</th><th>외삽 위험</th></tr></thead>
+    <tbody>
+      <tr><td class="k">열노화 (오븐 에이징)<br>ISO 188 · UL 746B</td><td>물성 유지율 곡선 → Arrhenius Ea, RTI</td><td>EOL 물성카드 재작성</td><td><b>높음</b> — 메커니즘 전환 위험</td></tr>
+      <tr><td class="k">산화 유도 시간 OIT<br>ISO 11357-6 · ASTM D3895</td><td>OIT [min], 산화유도온도</td><td>항산화제 잔량 지표 (해석 밖)</td><td>— 상대 비교용</td></tr>
+      <tr><td class="k">습열 (85 °C / 85 %RH)<br>PCT 121 °C</td><td>가수분해에 의한 물성 저하율</td><td>EOL 물성카드</td><td>높음 — 확산·반응 결합</td></tr>
+      <tr><td class="k">촉진 내후성<br>ISO 4892 · SAE J2527</td><td>색차·광택·물성 유지율, 가속계수</td><td>해석 밖 판정</td><td><b>매우 높음</b> — 옥외 상관 필수</td></tr>
+      <tr><td class="k">환경응력균열 ESC<br>ASTM D1693 · FNCT</td><td>임계 변형률·응력, 파단 시간</td><td>설계 허용 변형률</td><td>높음 — 화학종에 민감</td></tr>
+      <tr><td class="k">오존 균열<br>ISO 1431</td><td>균열 발생 시간</td><td>배합 판정</td><td>— 합부 판정용</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>노화를 CAE로 가져오는 현실적인 방법</h3>
+  <p>노화 자체를 해석에 넣는 시도(경화도·산화도를 상태변수로 추적)는 연구 단계에서는 있지만 실무에서는 드뭅니다. 대신 <strong>물성 카드를 두 벌 만드는 것</strong>이 표준적인 절충입니다.</p>
+  <ol class="steps">
+    <li><b>BOL 물성 — 초기 상태</b>
+      새 재료로 인장·DMA·TMA를 수행해 지금까지 만든 카드들을 그대로 씁니다.</li>
+    <li><b>EOL 물성 — 수명 말기 상태</b>
+      Arrhenius로 결정한 등가 노화 조건(예: 120 °C × 1000 h ≈ 80 °C × 10년)으로 시편을 노화시킨 뒤 <strong>같은 시험을 반복</strong>합니다. 여기서 나온 값으로 두 번째 카드를 만듭니다.</li>
+    <li><b>두 카드로 각각 해석하고 나쁜 쪽을 본다</b>
+      강성이 필요한 검토(NVH, 변형)는 대개 EOL이 유리하고, 연성이 필요한 검토(충돌, 낙하)는 EOL이 불리합니다. <strong>항목마다 지배 조건이 다르므로</strong> 둘 다 돌리는 것이 안전합니다.</li>
+  </ol>
+  <p>이 방식의 장점은 정직하다는 것입니다 — 노화 모델을 해석에 숨기지 않고, 노화된 재료를 실제로 측정해서 씁니다. 비용은 <strong>시험을 두 번 하는 것</strong>입니다.</p>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 균열</span>이미 결함이 있다고 가정할 때</h2>
+  <p>피로가 "언제 균열이 생기는가"라면, 파괴역학은 <strong>"이미 있는 균열이 얼마나 빨리 자라는가"</strong>를 봅니다. 용접부·주조품·복합재·접착부처럼 초기 결함을 피할 수 없는 곳, 그리고 검사 주기를 정해야 하는 곳에서 필수입니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>시험 (규격)</th><th>산출 물성</th><th>CAE 반영</th><th>외삽 위험</th></tr></thead>
+    <tbody>
+      <tr><td class="k">파괴인성<br>ASTM E399 (K_IC)</td><td>평면변형 파괴인성 K_IC</td><td>임계 균열 크기 판정</td><td>낮음 — 단, 두께 요건 충족 필수</td></tr>
+      <tr><td class="k">탄소성 파괴인성<br>ASTM E1820</td><td>J_IC, CTOD, J-R 곡선</td><td>연성 재료의 균열 개시·성장</td><td>낮음</td></tr>
+      <tr><td class="k">피로균열 진전<br>ASTM E647</td><td>da/dN–ΔK, Paris C·m, ΔK_th, R비 영향</td><td><b>균열 해석</b><br>XFEM · NASGRO · 검사주기</td><td>중 — 임계값 근방 외삽이 민감</td></tr>
+      <tr><td class="k">모드 I 층간분리<br>ASTM D5528 (DCB)</td><td>G_IC [J/m²]</td><td><b>CZM</b> 파라미터</td><td>중 — 요소 크기 의존</td></tr>
+      <tr><td class="k">모드 II<br>ASTM D7905 (ENF)</td><td>G_IIC</td><td><b>CZM</b> 파라미터</td><td>중</td></tr>
+      <tr><td class="k">혼합 모드<br>ASTM D6671 (MMB)</td><td>혼합모드 파손 포락선 (B-K, Power law)</td><td>CZM 혼합모드 법칙</td><td>중</td></tr>
+      <tr><td class="k">응력부식균열</td><td>K_ISCC, 균열성장률</td><td>허용 응력 판정</td><td>높음 — 환경 재현이 어려움</td></tr>
+      <tr><td class="k">수소취화<br>ISO 16573 · TDS</td><td>지연파괴 임계응력, 확산계수, 트랩</td><td>확산 해석 + 임계값</td><td>높음</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>접착·복합재에서 특히 조심할 것</h3>
+  <ul class="tight">
+    <li>CZM 파라미터는 <strong>G_c 하나로 부족합니다</strong>. 최대 인장강도 T_max와 분리 변위 δ까지 세트로 필요하고, 이 셋은 서로 독립이 아닙니다. DCB에서 얻은 G_IC와 별도 시험(버트 조인트 등)에서 얻은 T_max를 조합하는 것이 일반적입니다.</li>
+    <li><strong>CZM은 요소 크기에 의존합니다.</strong> 코헤시브 존 길이(대략 E·G_c/T_max²)보다 요소가 충분히 작아야 합니다. 실무에서는 존 안에 요소 3~5개를 목표로 하고, 안 되면 T_max를 인위적으로 낮춰 존을 늘립니다 — <strong>이건 물성이 아니라 수치 기법</strong>이므로 반드시 기록하세요.</li>
+    <li>접착층 두께가 달라지면 G_c가 달라집니다. 시험 시편의 본드라인 두께를 실제 제품과 맞추세요.</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 기타</span>마모 · 부식 · 전기적 수명</h2>
+  <p>해석으로 옮기기 가장 어려운 영역입니다. 정직하게 말하면 대부분 <strong>해석 밖에서 시험 판정으로 관리</strong>됩니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>시험 (규격)</th><th>산출 물성</th><th>CAE 반영</th><th>외삽 위험</th></tr></thead>
+    <tbody>
+      <tr><td class="k">미끄럼 마모<br>ASTM G99 (pin-on-disk)</td><td>Archard 마모계수 k, 마찰계수</td><td>접촉압력×미끄럼거리 기반 마모 해석</td><td>중 — 윤활·온도 조건 의존</td></tr>
+      <tr><td class="k">프레팅 마모·피로</td><td>미세진폭 마모율, 프레팅 피로한도</td><td>접촉 해석 + 피로 후처리</td><td>높음 — 접촉 조건 재현이 어려움</td></tr>
+      <tr><td class="k">중성 염수분무<br>ASTM B117</td><td>적녹 발생 시간</td><td>해석 밖 판정</td><td><b>매우 높음</b> — 실환경 상관성이 낮기로 유명</td></tr>
+      <tr><td class="k">순환 부식<br>SAE J2334 · VDA 233-102</td><td>부식 깊이·면적</td><td>해석 밖 판정</td><td>중 — B117보다 상관성이 좋음</td></tr>
+      <tr><td class="k">전기화학 (분극 · EIS)</td><td>부식전류밀도, 임피던스</td><td>갈바닉 해석 (전위·전류장)</td><td>중</td></tr>
+      <tr><td class="k">절연 수명</td><td>V–t 곡선, 수명지수 n</td><td>해석 밖 판정</td><td>높음</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">Archard: V = k · F · s / H (V = 마모 체적, F = 수직하중, s = 미끄럼거리, H = 경도)</p>
+  <p>염수분무(B117)에 대해서는 업계에서 오랫동안 지적되어 온 문제가 있습니다 — <strong>일정 조건 노출이라 실제 부식의 건습 반복을 재현하지 못합니다.</strong> 순위 매기기용으로는 여전히 쓰이지만, 절대 수명 예측에 쓰면 안 됩니다. 자동차 업계가 순환부식 규격으로 옮겨간 이유입니다.</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 함정</span>가속시험이 배신하는 방식</h2>
+  <p class="lede">가속의 전제는 <strong>"온도(또는 하중)를 올려도 고장 메커니즘이 같다"</strong>입니다. 이 전제가 깨지면 외삽은 조용히, 그러나 크게 틀립니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 800 420" role="img" aria-label="고온 가속 데이터만으로 그은 직선이 저온에서 실제 수명을 크게 과대평가하는 모습" style="width:100%;height:auto;overflow:visible"><defs><marker id="l_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="l_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><line x1="78" y1="294.4" x2="638" y2="294.4" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="69" y="298.4" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10²</text><line x1="78" y1="243.6" x2="638" y2="243.6" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="69" y="247.6" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10³</text><line x1="78" y1="192.7" x2="638" y2="192.7" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="69" y="196.7" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁴</text><line x1="78" y1="141.9" x2="638" y2="141.9" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="69" y="145.9" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁵</text><line x1="78" y1="91.0" x2="638" y2="91.0" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="69" y="95.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁶</text><line x1="78" y1="40.2" x2="638" y2="40.2" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="69" y="44.2" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁷</text><line x1="121.3" y1="30" x2="121.3" y2="330" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="121.3" y="348" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">150</text><line x1="200.9" y1="30" x2="200.9" y2="330" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="200.9" y="348" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">130</text><line x1="288.8" y1="30" x2="288.8" y2="330" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="288.8" y="348" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">110</text><line x1="386.3" y1="30" x2="386.3" y2="330" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="386.3" y="348" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">90</text><line x1="495.2" y1="30" x2="495.2" y2="330" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="495.2" y="348" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">70</text><line x1="585.6" y1="30" x2="585.6" y2="330" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="585.6" y="348" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">55</text><rect x="78" y="30" width="560" height="300" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="91.57,314.92 617.64,64.84" fill="none" stroke="#C4402B" stroke-width="2" stroke-dasharray="7 4"/><polyline points="617.64,121.24 615.30,121.77 612.96,122.30 610.62,122.83 608.29,123.36 605.97,123.89 603.65,124.41 601.34,124.94 599.03,125.47 596.72,126.00 594.43,126.52 592.13,127.05 589.84,127.58 587.56,128.10 585.28,128.63 583.01,129.16 580.74,129.68 578.48,130.21 576.22,130.74 573.97,131.26 571.72,131.79 569.47,132.31 567.24,132.84 565.00,133.37 562.77,133.89 560.55,134.42 558.33,134.95 556.12,135.47 553.91,136.00 551.70,136.53 549.50,137.06 547.31,137.58 545.12,138.11 542.93,138.64 540.75,139.17 538.57,139.70 536.40,140.23 534.23,140.76 532.07,141.29 529.91,141.82 527.76,142.36 525.61,142.89 523.47,143.42 521.33,143.96 519.19,144.49 517.06,145.03 514.94,145.57 512.82,146.10 510.70,146.64 508.59,147.18 506.48,147.72 504.38,148.26 502.28,148.80 500.18,149.35 498.09,149.89 496.01,150.44 493.93,150.98 491.85,151.53 489.78,152.08 487.71,152.63 485.65,153.18 483.59,153.73 481.53,154.29 479.48,154.84 477.43,155.40 475.39,155.96 473.35,156.52 471.32,157.08 469.29,157.64 467.26,158.20 465.24,158.77 463.23,159.34 461.21,159.90 459.21,160.47 457.20,161.05 455.20,161.62 453.20,162.19 451.21,162.77 449.22,163.35 447.24,163.93 445.26,164.51 443.28,165.10 441.31,165.68 439.34,166.27 437.38,166.86 435.42,167.45 433.46,168.05 431.51,168.64 429.57,169.24 427.62,169.84 425.68,170.44 423.75,171.04 421.81,171.65 419.89,172.25 417.96,172.86 416.04,173.48 414.12,174.09 412.21,174.70 410.30,175.32 408.40,175.94 406.50,176.56 404.60,177.19 402.71,177.81 400.82,178.44 398.93,179.07 397.05,179.70 395.17,180.34 393.30,180.97 391.43,181.61 389.56,182.25 387.69,182.89 385.84,183.54 383.98,184.19 382.13,184.83 380.28,185.48 378.43,186.14 376.59,186.79 374.75,187.45 372.92,188.11 371.09,188.77 369.26,189.43 367.44,190.09 365.62,190.76 363.80,191.43 361.99,192.10 360.18,192.77 358.38,193.45 356.58,194.12 354.78,194.80 352.98,195.48 351.19,196.16 349.40,196.84 347.62,197.53 345.84,198.21 344.06,198.90 342.29,199.59 340.52,200.28 338.75,200.97 336.99,201.67 335.22,202.37 333.47,203.06 331.71,203.76 329.96,204.46 328.22,205.16 326.47,205.87 324.73,206.57 323.00,207.28 321.26,207.98 319.53,208.69 317.81,209.40 316.08,210.11 314.36,210.82 312.65,211.54 310.93,212.25 309.22,212.97 307.52,213.68 305.81,214.40 304.11,215.12 302.42,215.84 300.72,216.56 299.03,217.28 297.34,218.00 295.66,218.73 293.98,219.45 292.30,220.17 290.62,220.90 288.95,221.62 287.28,222.35 285.62,223.08 283.96,223.81 282.30,224.54 280.64,225.26 278.99,225.99 277.34,226.72 275.69,227.45 274.05,228.19 272.41,228.92 270.77,229.65 269.14,230.38 267.50,231.11 265.88,231.85 264.25,232.58 262.63,233.31 261.01,234.05 259.39,234.78 257.78,235.51 256.17,236.25 254.56,236.98 252.96,237.72 251.35,238.45 249.76,239.19 248.16,239.92 246.57,240.65 244.98,241.39 243.39,242.12 241.81,242.86 240.23,243.59 238.65,244.33 237.07,245.06 235.50,245.79 233.93,246.53 232.36,247.26 230.80,247.99 229.24,248.73 227.68,249.46 226.13,250.19 224.57,250.92 223.03,251.66 221.48,252.39 219.93,253.12 218.39,253.85 216.85,254.58 215.32,255.31 213.79,256.04 212.26,256.77 210.73,257.50 209.20,258.23 207.68,258.96 206.16,259.68 204.65,260.41 203.13,261.14 201.62,261.86 200.11,262.59 198.61,263.31 197.11,264.04 195.61,264.76 194.11,265.49 192.61,266.21 191.12,266.93 189.63,267.65 188.15,268.37 186.66,269.09 185.18,269.81 183.70,270.53 182.23,271.25 180.75,271.97 179.28,272.68 177.81,273.40 176.35,274.11 174.88,274.83 173.42,275.54 171.96,276.26 170.51,276.97 169.06,277.68 167.60,278.39 166.16,279.10 164.71,279.81 163.27,280.52 161.83,281.23 160.39,281.93 158.96,282.64 157.52,283.35 156.09,284.05 154.66,284.75 153.24,285.46 151.82,286.16 150.40,286.86 148.98,287.56 147.56,288.26 146.15,288.96 144.74,289.66 143.33,290.36 141.93,291.05 140.52,291.75 139.12,292.44 137.72,293.13 136.33,293.83 134.93,294.52 133.54,295.21 132.15,295.90 130.77,296.59 129.38,297.28 128.00,297.97 126.62,298.65 125.25,299.34 123.87,300.02 122.50,300.71 121.13,301.39 119.76,302.07 118.40,302.75 117.03,303.43 115.67,304.11 114.31,304.79 112.96,305.47 111.61,306.14 110.25,306.82 108.90,307.49 107.56,308.17 106.21,308.84 104.87,309.51 103.53,310.18 102.19,310.85 100.86,311.52 99.53,312.19 98.19,312.85 96.87,313.52 95.54,314.19 94.21,314.85 92.89,315.51 91.57,316.17" fill="none" stroke="#2F6FC4" stroke-width="2.8"/><circle cx="288.8" cy="221.7" r="4" fill="#2F6FC4"/><circle cx="222.0" cy="252.1" r="4" fill="#2F6FC4"/><circle cx="160.2" cy="282.1" r="4" fill="#2F6FC4"/><circle cx="121.3" cy="301.3" r="4" fill="#2F6FC4"/><line x1="554.6" y1="135.8" x2="554.6" y2="94.8" stroke="currentColor" stroke-opacity=".6" stroke-width="1.4" marker-start="url(#l_ah)" marker-end="url(#l_ah)"/><circle cx="554.6" cy="135.8" r="4.5" fill="#2F6FC4"/><circle cx="554.6" cy="94.8" r="4.5" fill="#C4402B"/><text x="566.6" y="98.8" fill="#C4402B" font-size="12" font-family="IBM Plex Mono, ui-monospace, monospace">외삽 예측 96 년</text><text x="566.6" y="139.8" fill="#2F6FC4" font-size="12" font-family="IBM Plex Mono, ui-monospace, monospace">실제 15 년</text><text x="566.6" y="119.3" font-family="IBM Plex Sans KR, sans-serif" font-size="12" fill="currentColor" fill-opacity=".75">6배 과대</text><text x="128.9" y="52" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">가속 시험 구간</text><rect x="98.9" y="30" width="213.3" height="300" fill="currentColor" fill-opacity=".05"/><text x="638.0" y="366" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">온도 [°C]  (축은 1/T)</text><text x="6" y="20" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">수명 [h]</text></svg></div>
+    <figcaption><b>메커니즘 전환.</b> 110–150 °C 구간의 가속 데이터는 훌륭한 직선을 이룹니다(활성화 에너지 122 kJ/mol). 그런데 실제 재료에는 저온에서 지배적이 되는 <b>다른 반응</b>이 하나 더 있어, 60 °C에서 실제 수명은 15년입니다. 직선 외삽은 96년 — <b>6배 과대평가</b>입니다. 데이터만 보면 아무 문제가 없어 보인다는 점이 이 함정의 본질입니다.</figcaption>
+  </figure>
+
+  <h3>메커니즘 전환을 잡아내는 법</h3>
+  <ol class="tight">
+    <li><strong>온도 수준을 최소 4개, 가능하면 사용 온도에 가깝게</strong> 잡습니다. 3점으로는 곡률이 보이지 않습니다.</li>
+    <li><strong>가장 낮은 온도 한 점은 오래 걸려도 실제로 측정</strong>하세요. 이 한 점이 직선 가정을 검증하는 유일한 근거입니다.</li>
+    <li><strong>파단면·열화 양상을 온도별로 비교</strong>합니다. 고온 시편과 저온 시편의 파괴 모드가 다르면 그 자체가 메커니즘 전환의 증거입니다.</li>
+    <li>활성화 에너지가 <strong>비물리적으로 크면</strong>(고분자 열산화에서 150 kJ/mol을 크게 넘는 등) 의심하세요. 여러 반응이 섞였거나 판정 기준이 부적절한 경우가 많습니다.</li>
+  </ol>
+
+  <h3>그 밖의 단골 함정</h3>
+  <div class="cards">
+    <div class="card">
+      <h4>로그축 착시</h4>
+      <p>로그-로그 그래프에서는 어떤 데이터든 직선처럼 보입니다. 결정계수 R²가 0.99여도 <strong>1 decade 외삽하면 오차가 곱해집니다.</strong> 피팅 품질은 외삽 신뢰도의 근거가 되지 못합니다.</p>
+    </div>
+    <div class="card">
+      <h4>판정 기준의 자의성</h4>
+      <p>"신율 50% 잔존"과 "인장강도 80% 잔존"은 서로 다른 수명과 다른 활성화 에너지를 줍니다. <strong>어떤 기준을 썼는지가 결과의 일부</strong>입니다. 가능하면 실제 파손 모드와 연결된 기준을 고르세요.</p>
+    </div>
+    <div class="card">
+      <h4>복합 열화</h4>
+      <p>실제 부품은 온도·습도·하중·자외선을 <strong>동시에</strong> 겪습니다. 각각을 따로 가속해 곱하면 상호작용을 놓칩니다. 하중을 건 채로 노화시키는 시험이 훨씬 가혹한 결과를 주는 일이 흔합니다.</p>
+    </div>
+    <div class="card">
+      <h4>산포를 평균으로 뭉개기</h4>
+      <p>수명은 본질적으로 분포입니다. 평균 수명 10년은 <strong>절반이 10년 전에 고장난다</strong>는 뜻입니다. Weibull 또는 로그정규로 분포를 잡고 B10·B1 같은 백분위로 관리하세요.</p>
+    </div>
+  </div>
+
+  <div class="note trap">
+    <h4>가속시험을 쓰는 올바른 자세</h4>
+    <p>가속시험은 <strong>"몇 년 가는가"보다 "A와 B 중 어느 쪽이 더 오래 가는가"에 훨씬 신뢰도가 높습니다.</strong> 절대 수명 예측에는 넓은 안전여유와 실사용 데이터 상관이 반드시 따라야 하고, 재료 선정·배합 비교·설계 대안 순위에는 지금 그대로 써도 좋습니다. 이 구분을 분명히 해두면 대부분의 논쟁이 사라집니다.</p>
+  </div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 / 착수</span>어디서부터 시작할 것인가</h2>
+
+  <h3>지배 메커니즘부터 고르세요</h3>
+  <div class="tw"><table>
+    <thead><tr><th>부품이 겪는 것</th><th>먼저 할 시험</th><th>그다음</th></tr></thead>
+    <tbody>
+      <tr><td>진동·주행 반복 하중, 탄성 범위</td><td>S-N (ASTM E466) 3수준 × 5개</td><td>평균응력 보정, 표면 보정계수</td></tr>
+      <tr><td>노치·구멍 주변 국부 소성</td><td>ε-N (ASTM E606) + 순환 응력-변형률</td><td>Neuber 또는 임계거리법</td></tr>
+      <tr><td>볼트 체결·압입 유지</td><td>응력완화 또는 크리프 (ISO 899)</td><td>등시간 곡선 → 유사탄성 해석</td></tr>
+      <tr><td>씰·개스킷 누설</td><td>압축응력완화 CSR (ISO 3384)</td><td>온도별 → Arrhenius 외삽</td></tr>
+      <tr><td>고온 지속 하중</td><td>크리프 (ASTM E139) + 크리프 파단</td><td>Norton 상수 → 구성방정식</td></tr>
+      <tr><td>고온·옥외 장기 노출</td><td>오븐 에이징 4온도 + 물성 재측정</td><td>EOL 물성카드 작성</td></tr>
+      <tr><td>용접·주조·접착 결함 존재</td><td>da/dN (E647) 또는 DCB (D5528)</td><td>균열 해석 · CZM</td></tr>
+      <tr><td>미끄럼·프레팅 접촉</td><td>pin-on-disk (G99)</td><td>Archard 기반 마모 해석</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>최소 세트 — 예산이 한정적일 때</h3>
+  <ul class="tight">
+    <li><strong>한 가지만 한다면</strong> 지배 메커니즘의 시험을 <strong>사용 조건에 가장 가까운 한 조건</strong>에서 오래 돌리세요. 여러 조건을 짧게 도는 것보다 낫습니다 — 외삽 거리가 줄기 때문입니다.</li>
+    <li><strong>두 가지를 한다면</strong> 위에 더해 <strong>가장 가혹한 가속 조건</strong>을 추가해 두 점으로 기울기를 잡습니다. 다만 두 점으로는 곡률(메커니즘 전환)을 못 봅니다.</li>
+    <li><strong>네 가지 이상 되면</strong> 비로소 08절의 검증이 가능해집니다. 장기수명 시험은 <strong>온도·응력 수준의 개수가 곧 신뢰도</strong>입니다.</li>
+    <li>어느 경우든 <strong>반복 시편 수</strong>를 희생하지 마세요. 수명 산포가 물성 자체보다 큰 불확실성인 경우가 많습니다.</li>
+  </ul>
+
+  <hr>
+
+  <h3>앞선 세 문서와의 연결</h3>
+  <div class="tw"><table>
+    <thead><tr><th>기존 문서</th><th>여기서 이어지는 곳</th><th>연결 고리</th></tr></thead>
+    <tbody>
+      <tr><td class="k">DMA · Prony</td><td>04 크리프 · 응력완화</td><td>같은 시간 의존 물리, 다른 시간 스케일. Prony는 초~시간, 크리프는 년</td></tr>
+      <tr><td class="k">DMA · tan δ</td><td>03 랜덤 진동 피로</td><td>감쇠가 공진 응력 진폭을 결정 → 수명을 지배</td></tr>
+      <tr><td class="k">인장 · 소성곡선</td><td>03 저주기 피로</td><td>정적 곡선 ≠ 순환 곡선. ε-N 시험에서 순환 곡선을 따로 얻어야 함</td></tr>
+      <tr><td class="k">인장 · 파단/손상</td><td>06 균열 진전</td><td>파단변형률 기반 vs 에너지(파괴역학) 기반의 두 접근</td></tr>
+      <tr><td class="k">TMA · CTE</td><td>03 솔더 열사이클</td><td>CTE 미스매치가 열사이클 변형률의 입력</td></tr>
+      <tr><td class="k">TMA · Tg</td><td>05 노화</td><td>노화로 Tg가 이동하면 사용 온도가 Tg를 넘어설 수 있음</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>규격 색인</h3>
+  <div class="tw"><table>
+    <thead><tr><th>분야</th><th>규격</th></tr></thead>
+    <tbody>
+      <tr><td>피로</td><td class="k">ASTM E466 · E606 · E739 · ISO 1099 · ISO 12106 · JEDEC JESD22-A104</td></tr>
+      <tr><td>크리프</td><td class="k">ASTM E139 · ISO 899-1/-2 · ISO 3384 · ISO 815</td></tr>
+      <tr><td>노화·환경</td><td class="k">ISO 188 · UL 746B · ISO 11357-6 · ASTM D3895 · ISO 4892 · SAE J2527 · ASTM D1693 · ISO 1431</td></tr>
+      <tr><td>파괴역학</td><td class="k">ASTM E399 · E1820 · E647 · D5528 · D7905 · D6671 · ISO 16573</td></tr>
+      <tr><td>마모·부식</td><td class="k">ASTM G99 · G77 · B117 · SAE J2334 · VDA 233-102</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">규격은 개정되므로 최신판 번호를 반드시 확인하세요. 여기 적힌 것은 분야별 대표 규격의 색인입니다.</p>
+</section>
+
+</main>
+
+<footer>
+  하중·환경 → 손상 메커니즘 → 시험 → CAE 반영 · DMA·인장·TMA 문서의 상위 지도. 그래프는 대표적인 파라미터로 직접 계산해 그렸습니다.
+</footer>
+</body></html>

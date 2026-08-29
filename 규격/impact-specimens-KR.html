@@ -1,0 +1,479 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>충격 시편 규격 — 노치가 물성을 정의한다</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">시편 규격 시리즈 · 04</div>
+  <h1>충격 시편<br>규격</h1>
+  <p class="dek">충격시험에는 다른 시험에 없는 성질이 하나 있습니다 — <strong>노치가 물성을 정의합니다.</strong> 같은 재료, 같은 시편 크기라도 루트 반경을 0.25에서 1.00 mm로 바꾸면 다른 값이 나오고, 그 값은 “재료의 물성”이 아니라 <strong>“그 노치에서의 물성”</strong>입니다. 규격서가 노치 반경에 ±0.025 mm 공차를 거는 이유입니다.</p>
+  <div class="mast-meta">
+    <div><b>범위</b> 금속(E23 · ISO 148) · 플라스틱(D256 · D6110 · ISO 179 · ISO 180) · 낙추/천공</div>
+    <div><b>핵심</b> 노치 반경 · 리거먼트 · 타격면 — 이 셋이 값을 만든다</div>
+    <div><b>주의</b> 원문 유료 — 2차 출처 기반, △는 미확인</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 노치가 물성을 정의한다</a>
+    <a href="#s1"><span>01</span> 여섯 가지 노치 프로파일</a>
+    <a href="#s2"><span>02</span> 샤르피와 아이조드</a>
+    <a href="#s3"><span>03</span> 금속 — E23 · ISO 148</a>
+    <a href="#s4"><span>04</span> 플라스틱 — D256 계열</a>
+    <a href="#s5"><span>05</span> 낙추 · 천공</a>
+    <a href="#s6"><span>06</span> 단위가 다르다</a>
+    <a href="#s7"><span>07</span> 규격 선택 가이드</a>
+    <a href="#s8"><span>08</span> 상태 변경 · 미확인</a>
+  </nav>
+</header>
+
+<main>
+<style>
+.ox table{min-width:62rem}
+.ox th.v{font-size:.68rem;line-height:1.3;white-space:normal;min-width:3.9rem;text-align:center}
+.ox td.o{text-align:center;color:var(--accent-ink);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.o em,.ox td.t em{display:block;background:none;padding:0;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.68rem;font-weight:400;color:var(--muted);letter-spacing:.01em;margin-top:1px}
+.ox td.t{text-align:center;color:var(--hot);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.x{text-align:center;color:var(--muted);opacity:.45;font-size:.95rem}
+.ox td.nm{white-space:nowrap;font-size:.82rem}
+.ox td.nm b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500;color:var(--accent-ink)}
+.ox td.nm i{font-style:normal;color:var(--muted);font-size:.92em}
+.oxleg{display:flex;flex-wrap:wrap;gap:.4rem 1.8rem;font-size:.88rem;color:var(--ink2)}
+.oxleg b{font-size:1rem}
+.oxleg .co{color:var(--accent-ink)} .oxleg .ct{color:var(--hot)} .oxleg .cx{color:var(--muted)}
+sup.fn{color:var(--hot);font-size:.72em;font-weight:600;padding-left:.15em}
+</style>
+
+<section id="s0">
+  <h2><span class="num">00 / 성격</span>노치가 물성을 정의한다</h2>
+  <p class="lede">인장시편에서 노치는 없애야 할 결함입니다. 충격시편에서 노치는 <strong>시험의 본체</strong>입니다. 충격값은 재료에서 나오는 것이 아니라 <strong>재료 + 그 노치</strong>에서 나옵니다. 그래서 이 분야의 규격서는 시편 외형보다 <strong>노치 단면 도면</strong>에 훨씬 많은 지면과 훨씬 엄격한 공차를 씁니다.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>루트 반경이 값을 바꾼다</h4>
+      <p>ISO 179-1은 같은 <code>80 × 10 × 4</code> 시편에 노치를 세 가지로 규정합니다 — <strong>A는 r 0.25, B는 r 1.00, C는 r 0.10</strong>. 재료도 시편도 같은데 값이 다릅니다. 규격이 세 개를 유지하는 이유가 바로 그것입니다: A는 표준값, <strong>B는 노치 민감도</strong>, C는 A로 안 깨지는 인성 재료용입니다. 노치 종류를 안 적은 충격값은 해석이 불가능합니다.</p>
+    </div>
+    <div class="card">
+      <h4>리거먼트가 진짜 시험 단면</h4>
+      <p>충격은 노치 아래 남은 살, 즉 <strong>리거먼트(ligament)</strong>에서 일어납니다. E23 Type A는 <code>8 ± 0.025 mm</code>, Type B·C는 <code>5 mm</code>, ISO 179 계열은 <code>8 mm</code>입니다. E23이 리거먼트에 <strong>±0.025 mm</strong>라는 인장시편에는 없는 공차를 거는 것은, 이 치수가 곧 분모이기 때문입니다.</p>
+    </div>
+    <div class="card">
+      <h4>어느 면을 때리는가</h4>
+      <p>샤르피는 <strong>노치 반대면</strong>을 때리고(3점 굽힘), 아이조드는 <strong>노치가 있는 면</strong>을 때립니다(캔틸레버). 시편이 비슷해 보여도 응력 상태가 다르므로 <strong>두 값은 서로 환산되지 않습니다</strong>. 시편을 거꾸로 물리면 그대로 오측정입니다.</p>
+    </div>
+    <div class="card">
+      <h4>장비도 물성에 들어간다</h4>
+      <p>E23은 스트라이커 반경을 <strong>2 mm와 8 mm 두 가지</strong>로 모두 허용합니다. 약 <strong>200 J 아래에서는 거의 같은 값</strong>을 주지만, 그 위에서는 <strong>8 mm 쪽이 더 높게</strong> 읽힙니다. 서브사이즈 시편에는 <strong>규격이 정한 환산식이 없습니다</strong> — 흔히 쓰는 “두께 비례” 환산은 관행일 뿐 E23 조항이 아닙니다.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 노치</span>여섯 가지 노치 프로파일</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 900 540" role="img" aria-label="샤르피 V노치 키홀 U노치와 아이조드 및 ISO 노치 A B C 를 같은 척도로 비교" style="width:100%;height:auto;overflow:visible"><defs><marker id="im_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="im_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><text x="150" y="66" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">E23 Type A · V노치</text><text x="150" y="83" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".62">45° · r 0.25 · 깊이 2</text><line x1="32" y1="118" x2="268" y2="118" stroke="currentColor" stroke-opacity=".7" stroke-width="1.7"/><rect x="32" y="118" width="236" height="146" fill="currentColor" fill-opacity=".10" stroke="none"/><path d="M124.1,118.0 L144.0,166.0 A6.5,6.5 0 0 0 156.0,166.0 L175.9,118.0" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><line x1="191.9" y1="118.0" x2="191.9" y2="170.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="197.9" y="148.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">2</text><circle cx="150" cy="163.5" r="6.5" fill="none" stroke="#D07A3B" stroke-width="1.1" stroke-dasharray="3 3"/><text x="150" y="280" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">리거먼트 8 mm · 금속 기본</text><text x="442" y="66" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">E23 Type B · 키홀</text><text x="442" y="83" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".62">슬롯 ≤1.6 · r 1 · 깊이 5</text><line x1="324" y1="118" x2="560" y2="118" stroke="currentColor" stroke-opacity=".7" stroke-width="1.7"/><rect x="324" y="118" width="236" height="146" fill="currentColor" fill-opacity=".10" stroke="none"/><path d="M421.2,118.0 L421.2,196.0 A26.0,26.0 0 1 0 462.8,196.0 L462.8,118.0" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><line x1="486.0" y1="118.0" x2="486.0" y2="248.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="492.0" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">5</text><text x="442" y="280" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">리거먼트 5 mm · 구멍 지름 미확인</text><text x="734" y="66" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">E23 Type C · U노치</text><text x="734" y="83" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".62">r 1 · 깊이 5</text><line x1="616" y1="118" x2="852" y2="118" stroke="currentColor" stroke-opacity=".7" stroke-width="1.7"/><rect x="616" y="118" width="236" height="146" fill="currentColor" fill-opacity=".10" stroke="none"/><path d="M708.0,118.0 L708.0,222.0 A26.0,26.0 0 0 0 760.0,222.0 L760.0,118.0" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><line x1="776.0" y1="118.0" x2="776.0" y2="248.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="782.0" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">5</text><text x="734" y="280" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">리거먼트 5 mm · ISO U노치와 동일</text><text x="150" y="298" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">D256 · 플라스틱 아이조드</text><text x="150" y="315" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".62">45° · r 0.25 · 깊이 2.54</text><line x1="32" y1="350" x2="268" y2="350" stroke="currentColor" stroke-opacity=".7" stroke-width="1.7"/><rect x="32" y="350" width="236" height="146" fill="currentColor" fill-opacity=".10" stroke="none"/><path d="M118.3,350.0 L144.0,412.0 A6.5,6.5 0 0 0 156.0,412.0 L181.7,350.0" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><line x1="197.7" y1="350.0" x2="197.7" y2="416.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="203.7" y="387.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">2.54</text><circle cx="150" cy="409.5" r="6.5" fill="none" stroke="#D07A3B" stroke-width="1.1" stroke-dasharray="3 3"/><text x="150" y="512" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">노치 아래 잔여 10.16 mm</text><text x="442" y="298" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">ISO 179 · 노치 B</text><text x="442" y="315" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".62">45° · r 1.00 · 깊이 2</text><line x1="324" y1="350" x2="560" y2="350" stroke="currentColor" stroke-opacity=".7" stroke-width="1.7"/><rect x="324" y="350" width="236" height="146" fill="currentColor" fill-opacity=".10" stroke="none"/><path d="M403.1,350.0 L418.0,385.9 A26.0,26.0 0 0 0 466.0,385.9 L480.9,350.0" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><line x1="496.9" y1="350.0" x2="496.9" y2="402.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="502.9" y="380.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">2</text><circle cx="442" cy="376.0" r="26.0" fill="none" stroke="#D07A3B" stroke-width="1.1" stroke-dasharray="3 3"/><text x="442" y="512" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">노치 민감도용 · 리거먼트 8 mm</text><text x="734" y="298" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">ISO 179 · 노치 C</text><text x="734" y="315" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor" fill-opacity=".62">45° · r 0.10 · 깊이 2</text><line x1="616" y1="350" x2="852" y2="350" stroke="currentColor" stroke-opacity=".7" stroke-width="1.7"/><rect x="616" y="350" width="236" height="146" fill="currentColor" fill-opacity=".10" stroke="none"/><path d="M710.7,350.0 L731.6,400.4 A2.6,2.6 0 0 0 736.4,400.4 L757.3,350.0" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><line x1="773.3" y1="350.0" x2="773.3" y2="402.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="779.3" y="380.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">2</text><circle cx="734" cy="399.4" r="2.6" fill="none" stroke="#D07A3B" stroke-width="1.1" stroke-dasharray="3 3"/><text x="734" y="512" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">A로 안 깨질 때 · 리거먼트 8 mm</text><text x="30" y="26" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">모두 같은 척도 (26 px = 1 mm) · 주황 점선은 루트 반경 · <tspan fill="#C4402B">노치 윤곽</tspan>이 곧 그 규격의 물성 정의</text></svg></div>
+    <figcaption><b>모두 같은 척도로 그렸습니다.</b> 위 줄은 금속(E23), 아래 줄은 플라스틱입니다. 주황 점선은 루트 반경 원입니다 — <b>ISO 179 노치 B는 반경 1 mm가 깊이 2 mm 안에 들어가 거의 반원</b>이 되고, 노치 C는 반경 0.10 mm로 사실상 균열에 가깝습니다. 같은 재료를 이 세 노치로 때리면 세 개의 다른 숫자가 나옵니다.</figcaption>
+  </figure>
+  <p>E23 Type B(키홀)와 Type C(U노치)는 <strong>깊이 5 mm · 리거먼트 5 mm</strong>로 같고 루트만 다릅니다. Type C는 ISO 148-1의 U노치와 동일한 형상입니다. 반면 <strong>Type A(V노치)만 리거먼트가 8 mm</strong>이므로, Type A 값과 Type B/C 값은 <strong>같은 축에 놓을 수 없습니다</strong>.</p>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 배치</span>샤르피와 아이조드</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 900 400" role="img" aria-label="샤르피는 3점 지지에서 노치 반대면을 때리고 아이조드는 캔틸레버로 노치면을 때린다" style="width:100%;height:auto;overflow:visible"><defs><marker id="im_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="im_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="130.0" y="110.0" width="220" height="40" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><path d="M226,150.0 L240,128.0 L254,150.0 Z" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><rect x="151" y="150.0" width="18" height="26" fill="currentColor" fill-opacity=".35" stroke="none"/><rect x="311" y="150.0" width="18" height="26" fill="currentColor" fill-opacity=".35" stroke="none"/><line x1="240" y1="64.0" x2="240" y2="104.0" stroke="#C4402B" stroke-width="2.2" marker-end="url(#im_ah)"/><line x1="160" y1="190.0" x2="320" y2="190.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="240" y="208.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">앤빌 스팬 40 mm</text><text x="240" y="56.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#C4402B">타격</text><text x="360" y="166.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#C4402B">노치 — 타격 반대면</text><text x="240" y="248" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">샤르피 (E23 · D6110 · ISO 179)</text><text x="240" y="267" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">55 × 10 × 10 mm (금속) · 3점 지지</text><rect x="640" y="60" width="40" height="150" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><rect x="614" y="170" width="92" height="44" fill="currentColor" fill-opacity=".35" stroke="none"/><path d="M640,152 L662,166 L640,180 Z" fill="var(--bg,#EDEFEC)" stroke="#C4402B" stroke-width="2"/><line x1="568" y1="148" x2="630" y2="148" stroke="#C4402B" stroke-width="2.2" marker-end="url(#im_ah)"/><line x1="700" y1="170" x2="700" y2="148" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#im_ah)" marker-end="url(#im_ah)"/><text x="708" y="166" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">22.0 mm</text><text x="564" y="140" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#C4402B">타격</text><text x="614" y="234" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">바이스 (고정단)</text><text x="690" y="124" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#C4402B">노치 — 타격면</text><text x="660" y="248" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13.5" font-weight="500" fill="currentColor">아이조드 (E23 Type D · D256 · ISO 180)</text><text x="660" y="267" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">캔틸레버 · 노치면을 때린다</text><text x="60" y="306" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">스트라이커 반경 — 같은 규격 안에서도 두 가지</text><path d="M60,360 L82,328 A6,6 0 0 1 98,328 L120,360 Z" fill="#2F6FC4" fill-opacity=".18" stroke="#2F6FC4" stroke-width="1.8"/><text x="134" y="350" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#2F6FC4">R 2 mm  (ISO 전통)</text><path d="M310,360 L332,328 A24,24 0 0 1 348,328 L370,360 Z" fill="#C4402B" fill-opacity=".18" stroke="#C4402B" stroke-width="1.8"/><text x="384" y="350" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#C4402B">R 8 mm  (ASTM 전통)</text><text x="600" y="336" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".72">200 J 이하에서는 두 반경이</text><text x="600" y="354" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".72">거의 같은 값을 주지만,</text><text x="600" y="372" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="#C4402B">200 J 이상에서는 8 mm 가 더 높게 읽힌다</text></svg></div>
+    <figcaption><b>왼쪽 샤르피는 양단 지지 3점 굽힘</b>이고 노치는 아래(타격 반대면)에 옵니다. <b>오른쪽 아이조드는 한쪽을 바이스로 물린 캔틸레버</b>이고 노치는 타격 쪽 면에 옵니다. 아래는 스트라이커 반경 두 가지 — 같은 규격 안에서 허용되지만 고에너지 영역에서 값이 갈립니다.</figcaption>
+  </figure>
+  <div class="note">
+    <h4>보고서에 반드시 함께 적어야 성립하는 것</h4>
+    <ul class="tight">
+      <li><strong>시험 방식</strong> — 샤르피 / 아이조드 (환산 불가)</li>
+      <li><strong>노치 종류</strong> — V · U · 키홀, 또는 ISO 179의 A · B · C</li>
+      <li><strong>시편 단면</strong> — 정규격 <code>10 × 10</code>인지 서브사이즈(<code>7.5 · 5 · 2.5</code>)인지</li>
+      <li><strong>스트라이커 반경</strong> — 2 mm 또는 8 mm</li>
+      <li><strong>시험 온도</strong> — 천이온도 곡선에서는 이것이 값 자체</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 금속</span>E23 · ISO 148 치수 변수 매트릭스</h2>
+  <div class="oxleg">
+    <div><b class="co">○</b> 규격이 <b>규정함</b> — 작은 글씨는 값(mm)</div>
+    <div><b class="ct">△</b> <b>확인하지 못함</b></div>
+    <div><b class="cx">×</b> 해당 치수 <b>없음</b></div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격 · 시편</th>
+      <th class="v">전체 길이</th><th class="v">단면 폭 × 두께</th><th class="v">노치 형상</th>
+      <th class="v">노치 각도</th><th class="v">루트 반경</th><th class="v">노치 깊이</th>
+      <th class="v">리거먼트</th><th class="v">노치 위치</th><th class="v">앤빌 스팬</th><th class="v">스트라이커 반경</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>E23 Type A</b> <i>샤르피 V</i></td>
+        <td class="o">○<em>55</em></td><td class="o">○<em>10 × 10</em></td><td class="o">○<em>V</em></td>
+        <td class="o">○<em>45° ± 1°</em></td><td class="o">○<em>0.25 ± 0.025</em></td><td class="o">○<em>2</em></td>
+        <td class="o">○<em>8 ± 0.025</em></td><td class="o">○<em>중앙</em></td><td class="o">○<em>40</em></td><td class="o">○<em>2 또는 8</em></td></tr>
+      <tr><td class="nm"><b>E23 Type B</b> <i>키홀</i></td>
+        <td class="o">○<em>55</em></td><td class="o">○<em>10 × 10</em></td><td class="o">○<em>키홀</em></td>
+        <td class="x">×</td><td class="o">○<em>1 (구멍 반경)</em></td><td class="o">○<em>5</em></td>
+        <td class="o">○<em>5</em></td><td class="o">○<em>중앙</em></td><td class="o">○<em>40</em></td><td class="o">○<em>2 또는 8</em></td></tr>
+      <tr><td class="nm"><b>E23 Type C</b> <i>U노치</i></td>
+        <td class="o">○<em>55</em></td><td class="o">○<em>10 × 10</em></td><td class="o">○<em>U</em></td>
+        <td class="x">×</td><td class="o">○<em>1</em></td><td class="o">○<em>5</em></td>
+        <td class="o">○<em>5</em></td><td class="o">○<em>중앙</em></td><td class="o">○<em>40</em></td><td class="o">○<em>2 또는 8</em></td></tr>
+      <tr><td class="nm"><b>E23 Type D</b> <i>금속 아이조드</i></td>
+        <td class="o">○<em>75</em></td><td class="o">○<em>10 × 10</em></td><td class="o">○<em>V</em></td>
+        <td class="o">○<em>45°</em></td><td class="o">○<em>0.25</em></td><td class="o">○<em>2</em></td>
+        <td class="o">○<em>8</em></td><td class="o">○<em>단부에서 28</em></td><td class="x">×<sup class="fn">1</sup></td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>E23 서브사이즈</b> <i>7.5 · 5 · 2.5</i></td>
+        <td class="o">○<em>55</em></td><td class="o">○<em>10 × 7.5 / 5 / 2.5</em></td><td class="o">○<em>V</em></td>
+        <td class="o">○<em>45°</em></td><td class="o">○<em>0.25</em></td><td class="o">○<em>2</em></td>
+        <td class="o">○<em>8</em></td><td class="o">○<em>중앙</em></td><td class="o">○<em>40</em></td><td class="o">○<em>2 또는 8</em></td></tr>
+      <tr><td class="nm"><b>ISO 148-1</b> <i>V노치</i></td>
+        <td class="o">○<em>55</em></td><td class="o">○<em>10 × 10</em></td><td class="o">○<em>V</em></td>
+        <td class="o">○<em>45° ± 2°</em><sup class="fn">2</sup></td><td class="o">○<em>0.25 ± 0.025</em></td><td class="o">○<em>2</em></td>
+        <td class="o">○<em>8 ± 0.075</em><sup class="fn">2</sup></td><td class="o">○<em>중앙</em></td><td class="o">○<em>40</em></td><td class="o">○<em>2 또는 8</em></td></tr>
+      <tr><td class="nm"><b>ISO 148-1</b> <i>U노치</i></td>
+        <td class="o">○<em>55</em></td><td class="o">○<em>10 × 10</em></td><td class="o">○<em>U</em></td>
+        <td class="x">×</td><td class="o">○<em>1</em></td><td class="o">○<em>5</em></td>
+        <td class="o">○<em>5</em></td><td class="o">○<em>중앙</em></td><td class="o">○<em>40</em></td><td class="o">○<em>2 또는 8</em></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">1</sup> 아이조드는 캔틸레버이므로 앤빌 스팬이라는 치수 자체가 없고, 대신 <b>바이스 상단에서 타격점까지의 높이</b>가 그 역할을 합니다. &nbsp;
+  <sup class="fn">2</sup> <b>E23과 ISO 148-1은 시편이 사실상 같지만 공차가 다릅니다.</b> 노치 각도 ±1°(E23) 대 ±2°(ISO), 리거먼트 ±0.025(E23) 대 ±0.075(ISO). E23으로 합격한 시편은 ISO 148-1에도 합격하지만 <b>역은 성립하지 않습니다</b>.</p>
+
+  <div class="note">
+    <h4>서브사이즈에는 규격이 정한 환산식이 없습니다</h4>
+    <p>두께 <code>7.5 · 5 · 2.5 mm</code> 시편은 E23이 명시적으로 허용하는 형상입니다. 그러나 <strong>E23에는 서브사이즈 값을 정규격 값으로 되돌리는 환산 규정이 없습니다.</strong> 흔히 쓰는 단면적 비례 환산은 사내 관행이거나 제품 규격(예: 압력용기 코드)이 별도로 정한 것이지 E23 조항이 아닙니다. CAE에 넣을 때 <strong>어느 두께에서 측정한 값인지</strong>를 반드시 물성 메타데이터로 남겨야 합니다.</p>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 플라스틱</span>D256 계열 치수 변수 매트릭스</h2>
+  <div class="oxleg">
+    <div><b class="co">○</b> 규격이 <b>규정함</b></div>
+    <div><b class="ct">△</b> <b>확인하지 못함</b></div>
+    <div><b class="cx">×</b> 해당 치수 <b>없음</b></div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격 · 방법</th>
+      <th class="v">길이</th><th class="v">폭(높이)</th><th class="v">두께</th>
+      <th class="v">노치 각도</th><th class="v">루트 반경</th><th class="v">노치 아래 잔여</th>
+      <th class="v">스팬 / 타격 높이</th><th class="v">타격면</th><th class="v">결과 단위</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>D256 Method A</b> <i>아이조드</i></td>
+        <td class="o">○<em>63.5</em></td><td class="o">○<em>12.7</em></td><td class="o">○<em>3.0 – 12.7</em></td>
+        <td class="o">○<em>45°</em></td><td class="o">○<em>0.25 ± 0.05</em></td><td class="o">○<em>10.16 ± 0.05</em></td>
+        <td class="o">○<em>바이스 위 22.00 ± 0.05</em></td><td class="o">○<em>노치면</em></td><td class="o">○<em>J/m</em></td></tr>
+      <tr><td class="nm"><b>D256 Method C</b> <i>저에너지</i></td>
+        <td class="o">○<em>63.5</em></td><td class="o">○<em>12.7</em></td><td class="o">○<em>3.0 – 12.7</em></td>
+        <td class="o">○<em>45°</em></td><td class="o">○<em>0.25 ± 0.05</em></td><td class="o">○<em>10.16 ± 0.05</em></td>
+        <td class="o">○<em>바이스 위 22.00</em></td><td class="o">○<em>노치면</em></td><td class="o">○<em>J/m (토스 보정)</em></td></tr>
+      <tr><td class="nm"><b>D4812</b> <i>무노치 아이조드</i></td>
+        <td class="o">○<em>63.5</em></td><td class="o">○<em>12.7</em></td><td class="o">○<em>3.0 – 12.7</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="o">○<em>바이스 위 22.00</em></td><td class="o">○<em>평면</em></td><td class="o">○<em>J/m</em></td></tr>
+      <tr><td class="nm"><b>D6110</b> <i>플라스틱 샤르피</i></td>
+        <td class="o">○<em>127</em></td><td class="o">○<em>12.7</em></td><td class="o">○<em>3.0 – 12.7</em></td>
+        <td class="o">○<em>45°</em></td><td class="o">○<em>0.25 ± 0.05</em></td><td class="o">○<em>10.16 ± 0.05</em></td>
+        <td class="o">○<em>스팬 101.6</em></td><td class="o">○<em>노치 반대면</em></td><td class="o">○<em>J/m</em></td></tr>
+      <tr><td class="nm"><b>ISO 179-1</b> <i>eA · eB · eC</i></td>
+        <td class="o">○<em>80</em></td><td class="o">○<em>10</em></td><td class="o">○<em>4</em></td>
+        <td class="o">○<em>45°</em></td><td class="o">○<em>A 0.25 · B 1.00 · C 0.10</em></td><td class="o">○<em>리거먼트 8</em></td>
+        <td class="o">○<em>스팬 62</em></td><td class="o">○<em>노치 반대면</em></td><td class="o">○<em>kJ/m²</em><sup class="fn">3</sup></td></tr>
+      <tr><td class="nm"><b>ISO 179-1</b> <i>eU 무노치</i></td>
+        <td class="o">○<em>80</em></td><td class="o">○<em>10</em></td><td class="o">○<em>4</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="o">○<em>스팬 62</em></td><td class="o">○<em>평면</em></td><td class="o">○<em>kJ/m²</em></td></tr>
+      <tr><td class="nm"><b>ISO 180</b> <i>아이조드 A · B · C</i></td>
+        <td class="o">○<em>80</em></td><td class="o">○<em>10</em></td><td class="o">○<em>4</em></td>
+        <td class="o">○<em>45°</em></td><td class="o">○<em>A 0.25 · B 1.00 · C 0.10</em></td><td class="o">○<em>리거먼트 8</em></td>
+        <td class="t">△</td><td class="o">○<em>노치면</em></td><td class="o">○<em>kJ/m²</em></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">3</sup> ISO 179-1의 “e”는 edgewise(모서리 방향 타격)를 뜻합니다. flatwise 타격은 <b>f</b> 접두로 구분되며 값이 다릅니다. &nbsp;
+  <b>D256의 방법 구성이 바뀌었습니다</b> — 과거의 <b>Method D(노치 반경 의존성)와 Method E(역노치)는 현행판에서 삭제</b>되었습니다. 오래된 데이터시트에 “D256 Method E”가 적혀 있다면 폐지된 방법으로 측정한 값입니다.</p>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 낙추</span>낙추 · 천공 시편</h2>
+  <p class="lede">진자 충격은 <strong>보(beam)</strong>를 때리지만, 낙추·천공 시험은 <strong>판(plate)</strong>을 때립니다. 여기서는 노치가 없는 대신 <strong>지지 개구 지름과 타격자(tup) 형상</strong>이 그 자리를 차지합니다. 복합재에서는 이 시험이 <strong>BVID(육안으로 안 보이는 손상)</strong>를 만들어 내는 공정이고, 그 다음 압축시험(CAI)의 입력이 됩니다.</p>
+  <div class="oxleg">
+    <div><b class="co">○</b> 규격이 <b>규정함</b></div>
+    <div><b class="ct">△</b> <b>확인하지 못함</b></div>
+    <div><b class="cx">×</b> 해당 치수 <b>없음</b></div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격</th>
+      <th class="v">시편 크기</th><th class="v">두께</th><th class="v">지지 개구</th>
+      <th class="v">타격자 지름</th><th class="v">타격자 형상</th><th class="v">충격 에너지</th>
+      <th class="v">낙하 높이 / 속도</th><th class="v">시험 후 절단</th><th class="v">결과량</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>D7136 / D7136M</b> <i>복합재 BVID</i></td>
+        <td class="o">○<em>150 × 100</em></td><td class="o">○<em>적층판 그대로</em></td><td class="o">○<em>125 × 75 개구</em></td>
+        <td class="o">○<em>16</em></td><td class="o">○<em>반구</em></td><td class="o">○<em>6.7 J / mm 두께</em></td>
+        <td class="o">○<em>에너지로 환산</em></td><td class="o">○<em>D7137 CAI로 이관</em></td><td class="o">○<em>손상 면적 · 함몰 깊이</em></td></tr>
+      <tr><td class="nm"><b>D5628</b> <i>FA · FB · FC · FD · FE</i></td>
+        <td class="o">○<em>기하별 규정</em></td><td class="o">○<em>보고 필수</em></td><td class="o">○<em>기하별</em></td>
+        <td class="o">○<em>기하별</em></td><td class="o">○<em>기하별<sup class="fn">4</sup></em></td><td class="o">○<em>계단식 MFE</em></td>
+        <td class="o">○<em>높이 × 질량</em></td><td class="x">×</td><td class="o">○<em>MFE (평균파손에너지)</em></td></tr>
+      <tr><td class="nm"><b>D3763</b> <i>고속 천공</i></td>
+        <td class="t">△</td><td class="o">○<em>보고 필수</em></td><td class="t">△</td>
+        <td class="o">○<em>12.7</em></td><td class="o">○<em>반구</em></td><td class="x">×</td>
+        <td class="o">○<em>일정 속도 (계장식)</em></td><td class="x">×</td><td class="o">○<em>하중–변위 전곡선</em></td></tr>
+      <tr><td class="nm"><b>D2444</b> <i>플라스틱 파이프</i></td>
+        <td class="o">○<em>파이프 절편</em></td><td class="o">○<em>제품 두께</em></td><td class="o">○<em>V형 / 평판 받침</em></td>
+        <td class="o">○<em>타격자 A · B</em></td><td class="o">○<em>A 반구 · B 원추</em></td><td class="o">○<em>계단식</em></td>
+        <td class="o">○<em>높이 × 추 질량</em></td><td class="x">×</td><td class="o">○<em>파손 에너지</em></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">4</sup> D5628의 <b>FA · FB · FC · FD · FE</b>는 시편·받침·타격자 조합을 묶은 <b>기하(geometry) 코드</b>입니다. 각 코드의 정확한 치수표는 <b>확인하지 못했습니다</b>. 데이터를 인용할 때는 반드시 기하 코드까지 함께 적어야 하며, <b>코드가 다르면 값을 비교할 수 없습니다</b>.</p>
+
+  <div class="note">
+    <h4>CAE로 넘어갈 때 — 충격값은 그대로 물성이 되지 않습니다</h4>
+    <p>샤르피/아이조드 에너지는 <strong>재료 카드에 직접 들어가는 파라미터가 아닙니다.</strong> 시뮬레이션이 요구하는 것은 파단 변형률, 파괴인성, 손상 변수이지 “J/m” 자체가 아니기 때문입니다. 실무에서 쓰이는 경로는 셋입니다.</p>
+    <ul class="tight">
+      <li><strong>선별·검증용</strong> — 후보 재료를 걸러내는 지표로만 쓰고 CAE 입력에는 쓰지 않습니다. 가장 정직한 용법입니다.</li>
+      <li><strong>역해석</strong> — 계장식(instrumented) 충격의 <strong>하중–변위 곡선</strong>을 얻어, 같은 지오메트리를 모델링하고 파단 파라미터를 역으로 맞춥니다. 이때 <strong>노치 형상까지 메시로 재현</strong>해야 합니다.</li>
+      <li><strong>파괴인성 경로</strong> — 천이온도 상하부에서 <code>K<sub>IC</sub></code> · <code>J<sub>IC</sub></code>로 상관식을 통해 넘어갑니다(E1820 계열). 상관식은 <strong>재료군 한정</strong>이며 외삽하면 안 됩니다.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 단위</span>ASTM와 ISO는 단위가 다릅니다</h2>
+  <p class="lede">이것이 실무에서 가장 자주 발생하는 사고입니다. <strong>ASTM D256/D6110은 J/m</strong>, <strong>ISO 179/180은 kJ/m²</strong>로 보고합니다. 이름은 둘 다 “충격강도”지만 <strong>나누는 대상이 다릅니다</strong>.</p>
+  <div class="eq">
+    <div>ASTM &nbsp; 충격강도 [J/m] = 흡수에너지 ÷ <b>노치부 시편 두께</b></div>
+    <div>ISO &nbsp;&nbsp; 충격강도 [kJ/m²] = 흡수에너지 ÷ (<b>리거먼트 × 두께</b>)</div>
+  </div>
+  <p>즉 ASTM는 <strong>길이</strong>로 나누고 ISO는 <strong>면적</strong>으로 나눕니다. 산술적으로는 ISO 값에 리거먼트 높이를 곱하면 ASTM 차원이 나오지만, <strong>시편과 노치와 스팬이 이미 다르기 때문에 그 곱셈은 환산이 아닙니다.</strong></p>
+  <div class="tw"><table>
+    <thead><tr><th>구분</th><th>ASTM D256 / D6110</th><th>ISO 180 / ISO 179-1</th></tr></thead>
+    <tbody>
+      <tr><td class="k">시편</td><td>63.5(아이조드) · 127(샤르피) × 12.7 × 3.0–12.7</td><td>80 × 10 × 4</td></tr>
+      <tr><td class="k">노치</td><td>r 0.25 한 종류</td><td>A 0.25 · B 1.00 · C 0.10 <b>세 종류</b></td></tr>
+      <tr><td class="k">잔여/리거먼트</td><td>노치 아래 10.16 mm</td><td>리거먼트 8 mm</td></tr>
+      <tr><td class="k">보고 단위</td><td><b>J/m</b> (두께로 나눔)</td><td><b>kJ/m²</b> (면적으로 나눔)</td></tr>
+      <tr><td class="k">샤르피 스팬</td><td>101.6 mm (D6110)</td><td>62 mm (ISO 179-1)</td></tr>
+      <tr><td class="k">시편 수</td><td>규격 조항 확인 필요</td><td>ISO 180 <b>10개</b></td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>결론 — ASTM 값과 ISO 값은 서로 환산하지 않습니다.</strong> 물성 DB에 넣을 때는 단위만이 아니라 <strong>규격명 · 방법 · 노치 종류 · 시험 온도</strong>를 한 덩어리로 저장해야 합니다.</p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 선택</span>규격 선택 가이드</h2>
+  <div class="tw"><table>
+    <thead><tr><th>목적</th><th>추천 규격</th><th>이유</th></tr></thead>
+    <tbody>
+      <tr><td class="k">강재 천이온도 곡선</td><td><b>E23 Type A</b> (또는 ISO 148-1 V)</td><td>V노치가 사실상 표준. 온도별 3개 이상 × 여러 온도로 S자 곡선을 그린다</td></tr>
+      <tr><td class="k">두께가 얇은 소재 · 실물 채취</td><td><b>E23 서브사이즈</b></td><td>정규격 10 mm를 못 뽑을 때. 단 <b>환산식이 없음</b>을 명시할 것</td></tr>
+      <tr><td class="k">주철 · 저인성 금속</td><td><b>E23 Type B · C</b></td><td>V노치로는 값이 너무 낮게 뭉친다. 리거먼트 5 mm로 분해능 확보</td></tr>
+      <tr><td class="k">플라스틱 사양서 대응(북미)</td><td><b>D256 Method A</b></td><td>데이터시트 관행. J/m</td></tr>
+      <tr><td class="k">플라스틱 사양서 대응(유럽·아시아)</td><td><b>ISO 179-1 / ISO 180</b></td><td>kJ/m². 노치 A 기본, 재료가 안 깨지면 C</td></tr>
+      <tr><td class="k">노치 민감도 평가</td><td><b>ISO 179-1 노치 A + B</b></td><td>r 0.25와 r 1.00을 <b>같은 배치에서</b> 비교 — 이것이 노치 민감도의 정의</td></tr>
+      <tr><td class="k">인성이 높아 안 깨지는 수지</td><td><b>ISO 179-1 노치 C</b> (r 0.10)</td><td>노치를 예리하게 해 파단을 유도한다</td></tr>
+      <tr><td class="k">복합재 손상허용설계</td><td><b>D7136 → D7137</b></td><td>충격 → 손상 → 잔류압축강도. 단일 시험이 아니라 <b>연결된 한 쌍</b></td></tr>
+      <tr><td class="k">플라스틱 판재 낙추</td><td><b>D5628</b> (또는 D3763)</td><td>D5628은 계단식 MFE, D3763은 계장식 하중–변위 전곡선</td></tr>
+      <tr><td class="k">CAE 파단 파라미터 역해석</td><td><b>계장식 D3763 / 계장식 샤르피</b></td><td>에너지 한 점이 아니라 <b>곡선</b>이 나와야 피팅이 가능하다</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 상태</span>상태 변경 · 확인하지 못한 항목</h2>
+  <h3>최근 개정 · 상태 변경</h3>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ASTM D256</td><td><b>Method D와 Method E 삭제.</b> 과거 데이터시트의 “역노치(Method E)” 값은 현행판에 근거가 없음</td></tr>
+      <tr><td class="k">ISO 179-1</td><td><b>2023년판이 폐지되고 2026년판으로 대체</b> — 인용 시 판 연도 확인 필수</td></tr>
+      <tr><td class="k">E23 스트라이커</td><td>2 mm · 8 mm <b>양쪽 모두 허용</b>. 약 200 J 이하에서는 거의 일치, 그 이상에서는 8 mm가 높게 읽힘 — <b>보고서에 반경을 적을 것</b></td></tr>
+      <tr><td class="k">E23 서브사이즈</td><td>형상은 허용하나 <b>정규격 환산 규정은 규격 안에 없음</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>확인하지 못한 항목</h3>
+  <div class="tw"><table>
+    <thead><tr><th>항목</th><th>상태</th></tr></thead>
+    <tbody>
+      <tr><td class="k">E23 Type B 키홀 구멍 지름</td><td>슬롯 폭 ≤1.6 mm, 노치 깊이 5 mm, 루트 반경 1 mm는 확인. <b>구멍 지름 수치 미확인</b></td></tr>
+      <tr><td class="k">E23 Type D 스트라이커</td><td>아이조드용 타격자 반경 규정 미확인</td></tr>
+      <tr><td class="k">ISO 180 타격 높이</td><td>바이스 상단에서 타격점까지의 규정 거리 미확인</td></tr>
+      <tr><td class="k">D5628 FA–FE 치수표</td><td>기하 코드 존재는 확인. <b>각 코드의 시편·받침·타격자 치수 미확인</b></td></tr>
+      <tr><td class="k">D3763 시편 크기 · 지지 개구</td><td>타격자 12.7 mm 반구는 확인, <b>시편 치수와 클램프 개구 미확인</b></td></tr>
+      <tr><td class="k">D256 시편 수 조항</td><td>ISO 180의 10개 규정은 확인. D256의 최소 시편 수 미확인</td></tr>
+      <tr><td class="k">D2444 타격자 A · B 치수</td><td>형상(반구 · 원추) 구분은 확인, <b>치수 미확인</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>정리 — 충격시험 결과를 남길 때</h4>
+    <ul class="tight">
+      <li><strong>규격 + 판 연도 + 방법</strong>(D256 A / ISO 179-1 eA 등)을 한 문자열로</li>
+      <li><strong>노치 실측</strong> — 반경과 리거먼트는 도면값이 아니라 실측값을 남기는 것이 원칙</li>
+      <li><strong>시편 단면</strong> — 서브사이즈면 두께를 반드시</li>
+      <li><strong>스트라이커 반경</strong>과 <strong>시험 온도</strong></li>
+      <li><strong>단위</strong> — J/m인지 kJ/m²인지. 이 둘을 섞으면 데이터베이스 전체가 오염됩니다</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  시편 규격 시리즈 · 04 — 충격 · ASTM E23 · D256 · D6110 · ISO 148-1 · ISO 179-1 · ISO 180 · D7136 · D5628 계열
+</footer>
+</body></html>

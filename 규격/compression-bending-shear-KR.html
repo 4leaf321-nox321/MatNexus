@@ -1,0 +1,557 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>압축 · 굽힘 · 전단 시편 규격</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">시편 규격 시리즈 · 03</div>
+  <h1>압축 · 굽힘 · 전단<br>시편 규격</h1>
+  <p class="dek">인장의 형제들입니다. 그런데 셋 다 인장과 결정적으로 다른 점이 있습니다 — <strong>시편이 아니라 지그가 형상을 지배합니다.</strong> 스팬, 노치, 클램프 간격이 물성값을 만들어 내고, 규격 선택이 결과를 바꿉니다.</p>
+  <div class="mast-meta">
+    <div><b>범위</b> 금속 · 플라스틱 · 복합재 · 세라믹 · 샌드위치</div>
+    <div><b>핵심</b> 비율 조건(L/D, L/d, 4h)이 절대치수보다 중요</div>
+    <div><b>주의</b> 원문 유료 — 2차 출처 기반, △는 미확인</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 지그가 형상을 지배한다</a>
+    <a href="#s1"><span>01</span> 여섯 가지 하중 모드</a>
+    <a href="#s2"><span>02</span> 압축</a>
+    <a href="#s3"><span>03</span> 굽힘</a>
+    <a href="#s4"><span>04</span> 전단</a>
+    <a href="#s5"><span>05</span> V노치 두 규격</a>
+    <a href="#s6"><span>06</span> 대표 치수값</a>
+    <a href="#s7"><span>07</span> 규격 선택 가이드</a>
+    <a href="#s8"><span>08</span> 상태 변경 · 미확인</a>
+  </nav>
+</header>
+
+<main>
+<style>
+.ox table{min-width:62rem}
+.ox th.v{font-size:.68rem;line-height:1.3;white-space:normal;min-width:3.9rem;text-align:center}
+.ox td.o{text-align:center;color:var(--accent-ink);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.o em,.ox td.t em{display:block;background:none;padding:0;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.68rem;font-weight:400;color:var(--muted);letter-spacing:.01em;margin-top:1px}
+.ox td.t{text-align:center;color:var(--hot);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.x{text-align:center;color:var(--muted);opacity:.45;font-size:.95rem}
+.ox td.nm{white-space:nowrap;font-size:.82rem}
+.ox td.nm b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500;color:var(--accent-ink)}
+.ox td.nm i{font-style:normal;color:var(--muted);font-size:.92em}
+.oxleg{display:flex;flex-wrap:wrap;gap:.4rem 1.8rem;font-size:.88rem;color:var(--ink2)}
+.oxleg b{font-size:1rem}
+.oxleg .co{color:var(--accent-ink)} .oxleg .ct{color:var(--hot)} .oxleg .cx{color:var(--muted)}
+sup.fn{color:var(--hot);font-size:.72em;font-weight:600;padding-left:.15em}
+</style>
+
+<section id="s0">
+  <h2><span class="num">00 / 성격</span>지그가 형상을 지배한다</h2>
+  <p class="lede">인장시편은 도면이 있으면 시험이 성립합니다. 압축·굽힘·전단은 다릅니다 — <strong>같은 시편이라도 스팬을 바꾸면 다른 값이 나오고, 노치를 바꾸면 다른 물성이 됩니다.</strong> 그래서 이 세 분야의 규격은 절대치수보다 <strong>비율 조건</strong>을 규정하는 데 지면을 씁니다.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>압축 — 좌굴이 지배</h4>
+      <p>길면 좌굴하고 짧으면 단부 마찰이 결과를 오염시킵니다. 그래서 규격은 <strong>세장비</strong>를 정합니다 — E9는 <code>L/D = 2 · 3 · 8 · 10</code> 네 등급, D695는 강도 <code>L = 2W</code> · 모듈러스 <code>세장비 11–16</code>, ISO 6721-12 계열은 <code>h/D = 1–2</code>. 복합재는 아예 <strong>지그가 시편을 붙잡습니다</strong>(D3410 전단하중, D6641 복합하중).</p>
+    </div>
+    <div class="card">
+      <h4>굽힘 — 스팬:두께가 곧 물성</h4>
+      <p>스팬이 짧으면 전단 변형이 섞이고, 길면 대변형 보정이 필요합니다. <strong>스팬:두께 비</strong>가 전부입니다 — D790 <code>16:1</code>(저전단강도 재료 <code>32·40·60</code>), D7264 <code>32:1</code>, D2344는 일부러 <code>4:1</code>로 짧게 잡아 <strong>전단 파손을 유도</strong>합니다.</p>
+    </div>
+    <div class="card">
+      <h4>전단 — 노치가 물성을 정의</h4>
+      <p>순수 전단 상태를 만들려면 응력을 강제로 몰아야 합니다. V노치의 <strong>각도 · 깊이 · 루트 반경</strong>이 그 역할을 합니다. D5379와 D7078은 <strong>각도(90°)와 반경(1.3 mm)이 같고 깊이와 폭만 다른데</strong>, 그것만으로 게이지 단면적이 2.7배 차이납니다(05절).</p>
+    </div>
+    <div class="card">
+      <h4>공통 — 접촉이 오차원</h4>
+      <p>인장은 잡아당기므로 접촉 조건이 단순하지만, 이 셋은 <strong>누르는 시험</strong>입니다. 단부 평행도, 지지대 반경, 노즈 반경, 클램프 토크가 모두 결과에 들어갑니다. 보고서에 지그 사양을 적지 않으면 재현이 불가능합니다.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 모드</span>여섯 가지 하중 모드</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 500" role="img" aria-label="압축, 3점 굽힘, 4점 굽힘, 단보 전단 네 가지 하중 모드의 시편과 지그 배치" style="width:100%;height:auto;overflow:visible"><defs><marker id="cb_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="cb_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="104" y="64" width="52" height="92" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><rect x="68" y="156" width="124" height="11" fill="currentColor" fill-opacity=".32" stroke="none"/><rect x="68" y="53" width="124" height="11" fill="currentColor" fill-opacity=".32" stroke="none"/><line x1="130" y1="18" x2="130" y2="48" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><line x1="180.0" y1="64.0" x2="180.0" y2="156.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="188.0" y="114.0" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">L</text><line x1="104.0" y1="186.0" x2="156.0" y2="186.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="130.0" y="179.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">D</text><text x="60" y="206" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">E9: L/D = 2 · 3 · 8 · 10 등급</text><text x="130" y="234" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">① 압축</text><text x="130" y="251" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">E9 · D695 · ISO 604 · D3410 · D6641</text><rect x="282" y="102" width="236" height="17" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><path d="M308,120 l10,20 l-20,0 Z" fill="currentColor" fill-opacity=".32" stroke="none"/><path d="M492,120 l10,20 l-20,0 Z" fill="currentColor" fill-opacity=".32" stroke="none"/><line x1="400" y1="64" x2="400" y2="98" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><line x1="308.0" y1="160.0" x2="492.0" y2="160.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="400.0" y="175.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">지지 스팬 L</text><line x1="534.0" y1="102.0" x2="534.0" y2="119.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="542.0" y="114.5" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">d</text><text x="282" y="206" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">D790: L/d = 16 (32 · 40 · 60 선택)</text><text x="400" y="234" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">② 3점 굽힘</text><text x="400" y="251" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">D790 · D7264 A · ISO 178 · C1161</text><rect x="582" y="102" width="236" height="17" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><path d="M608,120 l10,20 l-20,0 Z" fill="currentColor" fill-opacity=".32" stroke="none"/><path d="M792,120 l10,20 l-20,0 Z" fill="currentColor" fill-opacity=".32" stroke="none"/><line x1="654" y1="64" x2="654" y2="98" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><line x1="746" y1="64" x2="746" y2="98" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><line x1="608.0" y1="160.0" x2="792.0" y2="160.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="700.0" y="175.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">지지 스팬 L</text><line x1="654.0" y1="52.0" x2="746.0" y2="52.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="700.0" y="45.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">하중 스팬 L′</text><text x="582" y="206" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">L′ = L/2 (D7264 B) 또는 L/3 (ISO 14125 B)</text><text x="700" y="234" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">③ 4점 굽힘</text><text x="700" y="251" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">D6272 · D7264 B · ISO 14125 B · C1341</text><rect x="136" y="326" width="128" height="21" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><path d="M156,348 l9,18 l-18,0 Z" fill="currentColor" fill-opacity=".32" stroke="none"/><path d="M244,348 l9,18 l-18,0 Z" fill="currentColor" fill-opacity=".32" stroke="none"/><line x1="200" y1="290" x2="200" y2="322" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><line x1="156.0" y1="384.0" x2="244.0" y2="384.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="200.0" y="399.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">스팬 = 4h</text><line x1="136.0" y1="306.0" x2="264.0" y2="306.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="200.0" y="299.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">길이 = 6h</text><text x="286" y="342" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">폭 = 2h · 층간전단</text><text x="200" y="438" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">④ 단보 (short-beam)</text><text x="200" y="455" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">D2344 — 짧은 스팬으로 전단 파손 유도</text><rect x="490" y="292" width="140" height="88" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><rect x="474" y="284" width="30" height="104" fill="currentColor" fill-opacity=".32" stroke="none"/><rect x="616" y="284" width="30" height="104" fill="currentColor" fill-opacity=".32" stroke="none"/><line x1="489" y1="386" x2="489" y2="406" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><line x1="631" y1="286" x2="631" y2="266" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><line x1="504.0" y1="390.0" x2="616.0" y2="390.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="560.0" y="405.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">게이지 폭</text><text x="560" y="438" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">⑤ 레일 전단</text><text x="560" y="455" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">D7078 · D4255(2025 폐지) · C273</text><ellipse cx="800" cy="336" rx="66" ry="26" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><ellipse cx="800" cy="336" rx="30" ry="12" fill="none" stroke="#C4402B" stroke-width="2" stroke-dasharray="5 4"/><line x1="800" y1="272" x2="800" y2="318" stroke="#C4402B" stroke-width="2.2" marker-end="url(#cb_ah)"/><text x="840" y="302" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor" fill="#C4402B">펀치 Ø25.4</text><text x="734" y="388" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">50 mm 판 · 중앙 구멍 Ø11.1</text><text x="800" y="438" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">⑥ 펀치 전단</text><text x="800" y="455" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">D732 — 전단 면적 = 펀치 둘레 × 두께</text></svg></div>
+    <figcaption><b>붉은 화살표가 하중, 회색이 지그입니다.</b> ①은 세장비, ②③은 스팬 비, ④는 일부러 짧게 잡은 스팬, ⑤는 클램프 간 게이지 폭, ⑥은 펀치 지름이 각각 물성을 정의합니다 — <b>어느 것도 시편 단독으로는 결정되지 않습니다</b>.</figcaption>
+  </figure>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 압축</span>치수 변수 매트릭스</h2>
+  <div class="oxleg">
+    <div><b class="co">○</b> 규격이 <b>규정함</b> — 작은 글씨는 기호·값</div>
+    <div><b class="ct">△</b> <b>확인하지 못함</b></div>
+    <div><b class="cx">×</b> 해당 치수 <b>없음</b></div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격 · 시편</th>
+      <th class="v">길이</th><th class="v">폭</th><th class="v">두께 ·<br>높이</th><th class="v">직경</th>
+      <th class="v">게이지 ·<br>자유길이</th><th class="v">스팬</th><th class="v">비율<br>조건</th>
+      <th class="v">노치 ·<br>구멍</th><th class="v">탭 ·<br>지그</th><th class="v">절대치수<br>규정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>E9</b> <i>금속 원통 4등급</i></td>
+        <td class="o">○<em>25–320</em></td><td class="x">×</td><td class="x">×</td><td class="o">○<em>13–32</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>L/D 2·3·8·10</em></td><td class="x">×</td>
+        <td class="t">△<em>박판 좌굴지그</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>D695</b> <i>강성 플라스틱</i></td>
+        <td class="o">○<em>25.4 / 50.8</em></td><td class="o">○<em>12.7</em></td><td class="o">○<em>12.7</em></td><td class="o">○<em>12.7</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>L=2W · 세장 11–16</em></td><td class="x">×</td>
+        <td class="o">○<em>박판 지지지그</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>D695</b> <i>박판 &lt;3.2 웨이스트</i></td>
+        <td class="o">○<em>79.4</em></td><td class="o">○<em>19</em></td><td class="o">○<em>재료 두께</em></td><td class="x">×</td>
+        <td class="o">○<em>자유장 4.75–5</em></td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="o">○<em>지그 73 / 70</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>ISO 604</b> <i>플라스틱</i></td>
+        <td class="o">○<em>10 / 50</em></td><td class="o">○<em>10</em></td><td class="o">○<em>4</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>D3410</b> <i>복합재 · 전단하중</i></td>
+        <td class="o">○<em>140–155</em></td><td class="o">○<em>10 / 25</em><sup class="fn">1</sup></td><td class="o">○<em>±2 %</em></td><td class="x">×</td>
+        <td class="o">○<em>10–25</em></td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="o">○<em>탭 65 × 1.5 · 90°</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>D6641</b> <i>복합재 · CLC</i></td>
+        <td class="o">○<em>140</em></td><td class="o">○<em>12–13 (≤30)</em></td><td class="o">○<em>2–2.5</em></td><td class="x">×</td>
+        <td class="o">○<em>12–13</em></td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="o">○<em>CLC 블록 · 볼트 토크</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>D5467</b> <i>샌드위치 빔</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="x">×</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="t">△<em>허니콤 코어</em></td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>C365</b> <i>샌드위치 코어 평면압축</i></td>
+        <td class="o">○<em>변 길이</em></td><td class="o">○<em>변 길이</em></td><td class="o">○<em>= 코어 두께</em></td><td class="o">○<em>원형 가능</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>면적 ≥ 셀 크기별</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>625 / 2580 / 5800 mm²</em></td></tr>
+      <tr><td class="nm"><b>D1621</b> <i>경질 폼</i></td>
+        <td class="x">×</td><td class="o">○<em>단면적</em></td><td class="o">○<em>≥ 25.4</em></td><td class="o">○<em>원형 가능</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>높이 ≤ 폭</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>25.8–232 cm²</em></td></tr>
+      <tr><td class="nm"><b>C1424</b> <i>세라믹 웨이스트 원통</i></td>
+        <td class="t">△</td><td class="x">×</td><td class="x">×</td><td class="t">△</td>
+        <td class="t">△</td><td class="x">×</td><td class="o">○<em>l/r 6–12</em></td><td class="x">×</td>
+        <td class="t">△</td><td class="t">△<sup class="fn">2</sup></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">1</sup> <b>D3410은 이중 지정 규격</b>입니다 — SI 열과 인치-파운드 열이 <b>환산 관계가 아니라 독립</b>입니다. SI는 폭 10 mm, 인치-파운드는 0.5 in(12.7 mm)이며 <b>섞어 쓰면 안 됩니다</b>. 흔히 인용되는 “140 × 12.7 × 게이지 12.7”은 인치-파운드 열의 값입니다. &nbsp;
+  <sup class="fn">2</sup> C1424는 <b>웨이스트(dogbone) 원통 A · B를 권장</b>하고 <b>직선 원통은 권장하지 않습니다</b>(부속서 X2에서만 허용). 다만 A·B의 수치는 그림에만 있어 확인하지 못했습니다.</p>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 굽힘</span>치수 변수 매트릭스</h2>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격 · 시편</th>
+      <th class="v">길이</th><th class="v">폭</th><th class="v">두께 ·<br>깊이</th><th class="v">직경</th>
+      <th class="v">오버행</th><th class="v">지지<br>스팬</th><th class="v">하중<br>스팬</th>
+      <th class="v">비율<br>조건</th><th class="v">노즈 ·<br>지지 반경</th><th class="v">절대치수<br>규정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>D790</b> <i>플라스틱 3점</i></td>
+        <td class="o">○<em>127</em></td><td class="o">○<em>12.7</em></td><td class="o">○<em>3.2</em></td><td class="x">×</td>
+        <td class="o">○<em>≥10 % · ≥6.4</em></td><td class="o">○<em>50.8</em></td><td class="x">×</td>
+        <td class="o">○<em>L/d 16 (32·40·60)</em></td><td class="t">△</td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>D6272</b> <i>플라스틱 4점</i></td>
+        <td class="o">○<em>D790 준용</em></td><td class="o">○</td><td class="o">○</td><td class="x">×</td>
+        <td class="o">○</td><td class="o">○</td><td class="o">○<em>L/3 또는 L/2</em></td>
+        <td class="o">○<em>L/d</em></td><td class="t">△</td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>D7264</b> <i>복합재 A(3점)·B(4점)</i></td>
+        <td class="o">○<em>≈154 (스팬+20 %)</em></td><td class="o">○<em>13</em></td><td class="o">○<em>4</em></td><td class="x">×</td>
+        <td class="o">○<em>20 %</em></td><td class="o">○<em>128</em></td><td class="o">○<em>= L/2 (B)</em></td>
+        <td class="o">○<em>32 : 1</em><sup class="fn">3</sup></td><td class="o">○<em>R 5</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>ISO 178</b> <i>플라스틱</i></td>
+        <td class="o">○<em>80</em></td><td class="o">○<em>10</em></td><td class="o">○<em>4</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>64</em></td><td class="x">×</td>
+        <td class="o">○<em>L/h 16 : 1</em></td><td class="t">△</td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>ISO 14125</b> <i>복합재 Class I–IV</i></td>
+        <td class="o">○<em>60–100</em></td><td class="o">○<em>10 / 15</em></td><td class="o">○<em>2 / 4</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>40–81</em></td><td class="o">○<em>L/3 (Method B)</em></td>
+        <td class="o">○<em>16 – 40.5 : 1</em></td><td class="t">△</td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>C1161</b> <i>세라믹 A · B · C · D</i></td>
+        <td class="o">○<em>25 / 45 / 90</em></td><td class="o">○<em>2 / 4 / 8</em></td><td class="o">○<em>1.5 / 3 / 6</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>20 / 40 / 80</em></td><td class="o">○<em>10 / 20 / 40</em></td>
+        <td class="o">○<em>¼점 4점</em></td><td class="x">×</td><td class="o">○<em>모따기 포함</em></td></tr>
+      <tr><td class="nm"><b>C1341</b> <i>CFCC · Geom. I·IIA·IIB</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="x">×</td>
+        <td class="x">×</td><td class="t">△</td><td class="o">○<em>L/2 또는 L/3</em></td>
+        <td class="t">△<sup class="fn">4</sup></td><td class="t">△</td><td class="x">×</td></tr>
+      <tr><td class="nm"><b>C393</b> <i>샌드위치 코어 전단</i></td>
+        <td class="o">○<em>200</em></td><td class="o">○<em>75</em></td><td class="o">○<em>= 샌드위치 두께</em></td><td class="x">×</td>
+        <td class="o">○<em>스팬 + 50</em></td><td class="o">○<em>150</em></td><td class="o">○<em>0 (3점)</em></td>
+        <td class="o">○<em>폭 2–6 × 두께</em></td><td class="t">△</td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>E290</b> <i>금속 연성 굽힘</i></td>
+        <td class="t">△</td><td class="t">△</td><td class="o">○<em>제품 두께</em></td><td class="o">○<em>봉재</em></td>
+        <td class="x">×</td><td class="o">○<em>지지 간격</em></td><td class="x">×</td>
+        <td class="o">○<em>내측 굽힘 반경</em></td><td class="o">○<em>맨드릴 반경</em></td><td class="x">×<sup class="fn">5</sup></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">3</sup> <b>정정:</b> D7264의 표준 시편은 <b>두께 4 mm · 스팬 128 mm</b>입니다. 널리 인용되는 “2.4 mm · 76.8 mm”는 얇은 적층판에 32:1을 적용한 <b>파생 조합</b>이지 규격의 공칭값이 아닙니다. 또 일부 출처가 Procedure B를 40:1로 적으나 <b>두 절차 모두 32:1</b>이 표준입니다. &nbsp;
+  <sup class="fn">4</sup> C1341은 <b>의도적으로 단일 시편 크기를 정하지 않고</b> 크기와 스팬/두께 비의 범위를 허용합니다. 그 허용 범위 수치는 확인하지 못했습니다. &nbsp;
+  <sup class="fn">5</sup> E290은 치수를 <b>제품 규격에 위임</b>합니다. 현행판의 방법은 가이드 굽힘 · 세미가이드 굽힘 · 자유 굽힘 · 굽힘후 평탄화 네 가지이며, 흔히 언급되는 “랩어라운드”는 현행 범위에 없습니다.</p>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 전단</span>치수 변수 매트릭스</h2>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격 · 시편</th>
+      <th class="v">길이</th><th class="v">폭</th><th class="v">두께</th><th class="v">직경</th>
+      <th class="v">게이지 ·<br>노치 간</th><th class="v">스팬 ·<br>클램프</th><th class="v">비율<br>조건</th>
+      <th class="v">노치 각 ·<br>깊이 · r</th><th class="v">구멍 ·<br>볼트</th><th class="v">절대치수<br>규정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>D5379</b> <i>이오시페스쿠 V노치 보</i></td>
+        <td class="o">○<em>76</em></td><td class="o">○<em>19</em></td><td class="o">○<em>≤12.7</em></td><td class="x">×</td>
+        <td class="o">○<em>11.4</em></td><td class="o">○<em>비대칭 4점</em></td><td class="o">○<em>깊이비 0.200</em></td>
+        <td class="o">○<em>90° · 3.8 · r1.3</em></td><td class="x">×</td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>D7078</b> <i>V노치 레일 전단</i></td>
+        <td class="o">○<em>76 ±0.3</em></td><td class="o">○<em>56 ±0.3</em></td><td class="o">○<em>자유</em></td><td class="x">×</td>
+        <td class="o">○<em>31.0 ±0.3</em></td><td class="o">○<em>양단 25 면클램프</em></td><td class="o">○<em>깊이비 0.225</em></td>
+        <td class="o">○<em>90°±0.5 · 12.7 · r1.3</em></td><td class="x">×</td><td class="o">○<em>조도 0.8/1.6 µm</em></td></tr>
+      <tr><td class="nm"><b>D2344</b> <i>단보 층간전단</i></td>
+        <td class="o">○<em>6h</em></td><td class="o">○<em>2h</em></td><td class="o">○<em>2–6</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>4h</em></td><td class="o">○<em>스팬:두께 4 : 1</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>노즈 Ø6 · 지지 Ø3</em></td></tr>
+      <tr><td class="nm"><b>D3518</b> <i>±45° 인장 전단</i></td>
+        <td class="o">○<em>250</em></td><td class="o">○<em>25</em></td><td class="o">○</td><td class="x">×</td>
+        <td class="o">○<em>= 그립 간</em></td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<sup class="fn">6</sup></td></tr>
+      <tr><td class="nm"><b>ISO 14129</b> <i>±45° 인장 전단</i></td>
+        <td class="o">○<em>250</em></td><td class="o">○<em>25 ±0.5</em></td><td class="o">○<em>2 ±0.2</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>16 ply 이상</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>탭 0.5–2 · 90°</em></td></tr>
+      <tr><td class="nm"><b>D4255</b> <i>2·3 레일 — <b>2025 폐지</b></i></td>
+        <td class="o">○<em>152</em></td><td class="o">○<em>76 / 137</em></td><td class="o">○<em>1.3–3.3 (A)</em></td><td class="x">×</td>
+        <td class="o">○<em>레일 간</em></td><td class="o">○<em>레일</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>6 / 9 홀 · Ø12.7</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>C273</b> <i>샌드위치 코어 전단</i></td>
+        <td class="o">○<em>≥12t</em></td><td class="o">○<em>≥50</em></td><td class="o">○<em>= 코어 두께</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>L ≥ 12 × 두께</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>로딩 플레이트</em></td></tr>
+      <tr><td class="nm"><b>D732</b> <i>플라스틱 펀치 전단</i></td>
+        <td class="o">○<em>50 각/원</em></td><td class="o">○<em>50</em></td><td class="o">○<em>1.27–12.7</em></td><td class="o">○<em>50</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>중앙홀 Ø11.1 · 펀치 Ø25.4</em></td><td class="o">○</td></tr>
+      <tr><td class="nm"><b>B769</b> <i>알루미늄 이중전단</i></td>
+        <td class="t">△</td><td class="x">×</td><td class="x">×</td><td class="t">△</td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td><td class="o">○<em>블레이드 반경 ≤0.013</em></td></tr>
+      <tr><td class="nm"><b>E143</b> <i>비틀림 전단탄성률</i></td>
+        <td class="o">○<em>게이지 + 2–4 D</em></td><td class="x">×</td><td class="o">○<em>관 두께</em></td><td class="o">○<em>D · D₀ · Dᵢ</em></td>
+        <td class="o">○<em>≥ 4 D</em></td><td class="x">×</td><td class="o">○<em>게이지/직경 ≥ 4</em></td>
+        <td class="x">×</td><td class="x">×</td><td class="x">×<sup class="fn">7</sup></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">6</sup> D3518은 <b>D3039 인장 시편을 그대로 씁니다</b> — 형상을 새로 정의하지 않고 적층만 ±45°로 규정합니다. &nbsp;
+  <sup class="fn">7</sup> E143은 공칭 직경을 전혀 정하지 않고 <b>비율만</b> 규정합니다 — 게이지 길이 ≥ 4 D, 시편 전체 길이 = 게이지 + 2–4 D(중실) 또는 + 4 D 이상(관재).</p>
+
+  <div class="note trap">
+    <h4>D4255가 2025년에 폐지되었습니다</h4>
+    <p>2·3 레일 전단(D4255/D4255M)은 <strong>2025년 폐지</strong>되었고 대체 규격이 지정되지 않았습니다. 실무적으로는 <strong>D7078(V노치 레일)</strong>이 그 자리를 대신합니다. 사내 시험 규정에 D4255가 남아 있다면 갱신이 필요합니다.</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / V노치</span>같은 노치, 다른 시편</h2>
+  <p class="lede">복합재 면내 전단에서 가장 자주 마주치는 선택입니다. 두 규격은 <strong>노치 각도(90°)와 루트 반경(1.3 mm)이 완전히 같고</strong>, 폭과 노치 깊이만 다릅니다. 그런데 그 차이가 게이지 단면적을 <strong>2.7배</strong> 벌립니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 480" role="img" aria-label="이오시페스쿠 V노치 보와 V노치 레일 전단 시편의 실척 비교" style="width:100%;height:auto;overflow:visible"><defs><marker id="cb_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="cb_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><path d="M70,89.5 H172.6 L184.0,100.9 L195.4,89.5 H298.0 V146.5 H195.4 L184.0,135.1 L172.6,146.5 H70 Z" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><rect x="172.6" y="100.9" width="22.8" height="34.2" fill="#2F6FC4" fill-opacity=".18" stroke="none"/><line x1="70.0" y1="168.5" x2="298.0" y2="168.5" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="184.0" y="183.5" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">전체 길이 76</text><line x1="54.0" y1="89.5" x2="54.0" y2="146.5" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="47.0" y="122.0" text-anchor="end" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">19</text><line x1="184.0" y1="100.9" x2="184.0" y2="135.1" stroke="#2F6FC4" stroke-width="1.2" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="194.0" y="122.0" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#2F6FC4">11.4</text><text x="184" y="76" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#D07A3B">90° · 깊이 3.8 · r 1.3</text><text x="324" y="122" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">D5379 · 이오시페스쿠</text><text x="324" y="140" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">노치 깊이비 0.200 · 게이지 11.4 × 두께</text><path d="M70,224.0 H145.9 L184.0,262.1 L222.1,224.0 H298.0 V392.0 H222.1 L184.0,353.9 L145.9,392.0 H70 Z" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-opacity=".85" stroke-width="1.7"/><rect x="145.9" y="262.1" width="76.2" height="91.8" fill="#C4402B" fill-opacity=".18" stroke="none"/><line x1="70.0" y1="426.0" x2="298.0" y2="426.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="184.0" y="441.0" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">전체 길이 76</text><line x1="54.0" y1="224.0" x2="54.0" y2="392.0" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="47.0" y="312.0" text-anchor="end" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="currentColor">56</text><line x1="184.0" y1="262.1" x2="184.0" y2="353.9" stroke="#C4402B" stroke-width="1.2" marker-start="url(#cb_ah)" marker-end="url(#cb_ah)"/><text x="194.0" y="312.0" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#C4402B">31.0</text><text x="184" y="208" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11.5" fill="#D07A3B">90° · 깊이 12.7 · r 1.3</text><text x="324" y="304" font-family="IBM Plex Sans KR, sans-serif" font-size="13" font-weight="500" fill="currentColor">D7078 · V노치 레일</text><text x="324" y="322" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">노치 깊이비 0.225 · 게이지 31.0 × 두께</text><text x="324" y="342" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">양단 25 mm 를 면으로 클램프 — 탭 불필요</text><text x="324" y="364" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="#C4402B">게이지 단면적이 약 2.7배</text><text x="70" y="30" font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">같은 척도로 그림 · 노치 각도(90°)와 노치 반경(1.3 mm)은 두 규격이 동일하다</text></svg></div>
+    <figcaption><b>같은 척도로 그린 두 시편.</b> 전체 길이는 76 mm로 동일합니다. D7078은 폭이 3배 가까이 넓고 노치가 훨씬 깊어, 같은 두께에서 게이지 면적이 2.7배가 됩니다 — 그만큼 <b>더 큰 하중이 필요하고, 국부 결함의 영향은 줄어듭니다</b>.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>항목</th><th class="n">D5379 (이오시페스쿠)</th><th class="n">D7078 (V노치 레일)</th></tr></thead>
+    <tbody>
+      <tr><td>전체 길이</td><td class="n">76 mm</td><td class="n">76 ± 0.3 mm</td></tr>
+      <tr><td>전체 폭</td><td class="n">19 mm</td><td class="n"><b>56 ± 0.3 mm</b></td></tr>
+      <tr><td>노치 깊이 (한쪽)</td><td class="n">3.8 mm</td><td class="n"><b>12.7 ± 0.3 mm</b></td></tr>
+      <tr><td>노치 깊이비</td><td class="n">0.200</td><td class="n">0.225</td></tr>
+      <tr><td>노치 간 거리</td><td class="n">11.4 mm</td><td class="n"><b>31.0 ± 0.3 mm</b></td></tr>
+      <tr><td>노치 각도</td><td class="n">90°</td><td class="n">90° ± 0.5°</td></tr>
+      <tr><td>루트 반경</td><td class="n">1.3 mm</td><td class="n">1.3 ± 0.25 mm</td></tr>
+      <tr><td>하중 방식</td><td class="n">모서리 · 비대칭 4점 보</td><td class="n"><b>양단 25 mm 면 클램프</b></td></tr>
+      <tr><td>두께 제한</td><td class="n">≤ 12.7 mm (통상 2.5)</td><td class="n">그립 미끄러짐이 한계</td></tr>
+      <tr><td>탭</td><td class="n">불필요</td><td class="n">불필요</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>어느 쪽을 고를 것인가</h4>
+    <ul class="tight">
+      <li><strong>D7078</strong>이 후발 규격이고 게이지가 넓어 <strong>직조/두꺼운 적층판</strong>에 유리합니다. 면 클램프라 모서리 손상 위험도 작습니다.</li>
+      <li><strong>D5379</strong>는 시편이 작아 <strong>재료가 적을 때</strong>와 <strong>국부 물성(층간·특정 방향)</strong> 측정에 여전히 쓰입니다. 데이터 축적량도 많습니다.</li>
+      <li>두 규격의 값은 <strong>직접 비교할 수 없습니다</strong>. 데이터를 인용할 때 어느 방법인지 반드시 명시하세요.</li>
+      <li>세 번째 선택지인 <strong>±45° 인장(D3518 · ISO 14129)</strong>은 시편이 만들기 쉽지만 <strong>순수 전단이 아니라</strong> 섬유 회전과 재료 비선형이 섞입니다 — 전단 <strong>강도</strong>보다 <strong>초기 전단 탄성률</strong>에 적합합니다.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 치수</span>대표 치수값</h2>
+
+  <h3>ASTM E9 금속 압축 — 세장비 등급</h3>
+  <div class="tw"><table>
+    <thead><tr><th>등급</th><th class="n">직경</th><th class="n">길이</th><th class="n">L/D</th><th>용도</th></tr></thead>
+    <tbody>
+      <tr><td class="k">짧은 (short)</td><td class="n">13 mm</td><td class="n">25 mm</td><td class="n">2.0</td><td>압축 강도 · 베어링재</td></tr>
+      <tr><td class="k">중간 (medium)</td><td class="n">13 / 20 / 25 / 30 mm</td><td class="n">38 / 60 / 75 / 85 mm</td><td class="n">3.0</td><td>범용</td></tr>
+      <tr><td class="k">긴 (long)</td><td class="n">20 mm</td><td class="n">160 mm</td><td class="n">8.0</td><td>탄성계수 · 항복</td></tr>
+      <tr><td class="k">긴 (long)</td><td class="n">32 mm</td><td class="n">320 mm</td><td class="n">10.0</td><td>탄성계수</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>ASTM D695 / ISO 604 플라스틱 압축</h3>
+  <div class="tw"><table>
+    <thead><tr><th>목적</th><th class="n">D695 각기둥</th><th class="n">D695 원통</th><th class="n">ISO 604</th></tr></thead>
+    <tbody>
+      <tr><td>강도</td><td class="n">12.7 × 12.7 × 25.4</td><td class="n">Ø12.7 × 25.4</td><td class="n">10 × 10 × 4</td></tr>
+      <tr><td>모듈러스 · 오프셋 항복</td><td class="n">12.7 × 12.7 × 50.8</td><td class="n">Ø12.7 × 50.8</td><td class="n">50 × 10 × 4</td></tr>
+      <tr><td>소형</td><td class="n">—</td><td class="n">—</td><td class="n">6×5×3 / 35×5×3</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">단위 mm. D695는 튜브(길이 25.4, 벽 ≥1, 내경 ≥6.4, 외경 ≤50.8)와 3.2–6.4 mm 시트(12.7 × 두께 × 12.7)도 별도로 규정하고, 3.2 mm 미만 박판에는 <strong>웨이스트 시편 + 지지 지그</strong>를 씁니다. 적용 상한은 모듈러스 41 GPa입니다.</p>
+
+  <h3>ASTM C1161 세라믹 4점 굽힘</h3>
+  <div class="tw"><table>
+    <thead><tr><th>구성</th><th class="n">폭 b</th><th class="n">깊이 d</th><th class="n">최소 길이</th><th class="n">외측 스팬</th><th class="n">내측 스팬</th><th class="n">단면 공차</th></tr></thead>
+    <tbody>
+      <tr><td class="k">A</td><td class="n">2.0</td><td class="n">1.5</td><td class="n">25</td><td class="n">20</td><td class="n">10</td><td class="n">±0.05</td></tr>
+      <tr><td class="k">B <i>표준</i></td><td class="n">4.0</td><td class="n">3.0</td><td class="n">45</td><td class="n">40</td><td class="n">20</td><td class="n">±0.13</td></tr>
+      <tr><td class="k">C</td><td class="n">8.0</td><td class="n">6.0</td><td class="n">90</td><td class="n">80</td><td class="n">40</td><td class="n">±0.13</td></tr>
+      <tr><td class="k">D <i>대체</i></td><td class="n">6.35</td><td class="n">—</td><td class="n">&gt;45</td><td class="n">38.10</td><td class="n">19.05</td><td class="n">—</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">단위 mm. <strong>구성 B(3 × 4 × 45 mm, 스팬 40 mm)가 사실상 표준</strong>이고, A와 C는 각각 절반·두 배 크기입니다. 세라믹은 모서리에서 파단하므로 <strong>모따기(chamfer)</strong>가 규정되어 있습니다.</p>
+
+  <h3>ISO 14125 복합재 굽힘 — 클래스별</h3>
+  <div class="tw"><table>
+    <thead><tr><th>클래스</th><th>재료</th><th class="n">l</th><th class="n">b</th><th class="n">h</th><th class="n">L (3점)</th><th class="n">L/h</th></tr></thead>
+    <tbody>
+      <tr><td class="k">I</td><td>단섬유 열가소성</td><td class="n">80</td><td class="n">10</td><td class="n">4</td><td class="n">64</td><td class="n">16 : 1</td></tr>
+      <tr><td class="k">II</td><td>매트 · 직물 강화</td><td class="n">80</td><td class="n">15</td><td class="n">4</td><td class="n">64</td><td class="n">16 : 1</td></tr>
+      <tr><td class="k">III</td><td>유리섬유계</td><td class="n">60</td><td class="n">15</td><td class="n">2</td><td class="n">40</td><td class="n">20 : 1</td></tr>
+      <tr><td class="k">IV</td><td>탄소섬유계</td><td class="n">100</td><td class="n">15</td><td class="n">2</td><td class="n">80</td><td class="n">40 : 1</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">단위 mm. <strong>클래스는 재료가 아니라 E<sub>f1</sub>/G<sub>13</sub> 비로 결정됩니다</strong>(5–15 → III, 15–50 → IV). 전단 강성이 낮을수록 스팬을 길게 잡아 전단 변형 기여를 줄이는 구조입니다. Method B(4점)에서는 하중 스팬이 <strong>지지 스팬의 1/3</strong>로 고정됩니다.</p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 선택</span>규격 선택 가이드</h2>
+  <div class="tw"><table>
+    <thead><tr><th>상황</th><th>선택</th><th>이유</th></tr></thead>
+    <tbody>
+      <tr><td>금속 압축 탄성계수</td><td class="k">E9 긴 시편 (L/D 8–10)</td><td>짧은 시편은 단부 마찰이 결과를 오염</td></tr>
+      <tr><td>금속 압축 강도만</td><td class="k">E9 짧은 시편 (L/D 2)</td><td>좌굴 없이 최대 하중 확보</td></tr>
+      <tr><td>강성 플라스틱</td><td class="k">D695 또는 ISO 604</td><td>강도와 모듈러스에 <b>서로 다른 길이</b>를 씀</td></tr>
+      <tr><td>복합재 압축 · 얇은 적층판</td><td class="k">D6641 (CLC)</td><td>탭 없이도 가능, 지그가 단순, 시편이 짧음</td></tr>
+      <tr><td>복합재 압축 · 고강도 단방향</td><td class="k">D3410 (IITRI)</td><td>전단 도입이라 단부 파손 위험이 낮음</td></tr>
+      <tr><td>플라스틱 굽힘 · 일반</td><td class="k">D790 Procedure A</td><td>16:1, 변형률속도 0.01 /min이 기본</td></tr>
+      <tr><td>복합재 굽힘</td><td class="k">D7264 (32:1)</td><td>D790의 16:1로는 전단 변형이 섞임</td></tr>
+      <tr><td>층간 전단강도 스크리닝</td><td class="k">D2344 (단보 4:1)</td><td>빠르고 시편이 작음 — 다만 <b>설계값 아님</b></td></tr>
+      <tr><td>복합재 면내 전단 · 강도</td><td class="k">D7078</td><td>게이지가 넓어 대표성이 큼</td></tr>
+      <tr><td>복합재 면내 전단 · 소량 시료</td><td class="k">D5379</td><td>시편이 작고 데이터 축적이 많음</td></tr>
+      <tr><td>복합재 전단 탄성률만</td><td class="k">D3518 / ISO 14129</td><td>시편이 인장 쿠폰이라 제작이 쉬움</td></tr>
+      <tr><td>샌드위치 코어</td><td class="k">C365(압축) · C273(전단) · C393(빔)</td><td>코어 셀 크기가 최소 시편 크기를 정함</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap">
+    <h4>D2344 단보 강도는 설계값이 아닙니다</h4>
+    <p>규격 이름이 “short-beam <strong>strength</strong>”로 바뀐 이유가 있습니다 — 4:1 스팬에서는 전단·굽힘·국부 압축이 섞여 <strong>순수 층간 전단강도가 아닙니다</strong>. 재료 스크리닝과 공정 품질 관리에는 훌륭하지만, <strong>설계 허용치로 쓰면 안 됩니다</strong>. 층간 물성이 필요하면 파괴역학 문서의 DCB/ENF(G<sub>IC</sub>·G<sub>IIC</sub>)로 가세요.</p>
+  </div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 한계</span>상태 변경 · 확인하지 못한 항목</h2>
+
+  <h3>상태가 바뀐 규격</h3>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>변경</th></tr></thead>
+    <tbody>
+      <tr><td class="k">D4255 / D4255M</td><td><b>2025년 폐지</b> — 대체 규격 미지정. 실무상 D7078로 이행</td></tr>
+      <tr><td class="k">D5467 / D5467M</td><td><b>폐지 아님 — 활성</b>(-97, 2025년 재승인). “withdrawn”으로 잘못 알려진 경우가 많음</td></tr>
+      <tr><td class="k">C393 / C393M</td><td>제목 변경 — “Flexural Properties…” → <b>“Core Shear Properties of Sandwich Constructions by Beam Flexure”</b></td></tr>
+      <tr><td class="k">D3410 Celanese 지그</td><td>-95판 이후 <b>삭제</b>. 현행은 IITRI 사각 쐐기</td></tr>
+      <tr><td class="k">D695 / D790 / D6272 / D7264</td><td>모두 최근 개정판 존재 — 판 연도를 반드시 확인</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>확인하지 못한 항목</h3>
+  <div class="tw"><table>
+    <thead><tr><th>항목</th><th>상태</th></tr></thead>
+    <tbody>
+      <tr><td class="k">C1424 Specimen A · B</td><td>웨이스트 원통 권장 · 직선 원통 비권장은 확인. <b>수치는 그림에만 있어 미확인</b></td></tr>
+      <tr><td class="k">C1341</td><td>단일 크기를 정하지 않는 것은 확인. <b>허용 범위 수치 미확인</b></td></tr>
+      <tr><td class="k">D5467</td><td>샌드위치 빔 치수 전부 미확인</td></tr>
+      <tr><td class="k">B769</td><td>시편 직경·길이 표 미확인 (지그 블레이드 반경 ≤0.013 mm만 확인)</td></tr>
+      <tr><td class="k">C365 최대 면적</td><td>확인한 사본에 “400 mm² (16 in²)”로 산술적으로 모순되게 표기됨 — <b>≈10,000 mm²로 읽고 원문 확인 권장</b></td></tr>
+      <tr><td class="k">굽힘 노즈·지지 반경</td><td>D7264(R 5 mm) 외에는 미확인</td></tr>
+      <tr><td class="k">E290 시편 치수</td><td>제품 규격에 위임 — 규격 자체에 고정값 없음</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>보고서에 반드시 적을 것</h4>
+    <ul class="tight">
+      <li><strong>압축</strong> — 시편 치수와 <strong>세장비</strong>, 단부 평행도, 지그 종류(D3410 IITRI / D6641 CLC), 볼트 토크</li>
+      <li><strong>굽힘</strong> — <strong>지지 스팬과 스팬:두께 비</strong>, 3점/4점 구분, 4점이면 하중 스팬 비(1/2 또는 1/3), 노즈·지지 반경</li>
+      <li><strong>전단</strong> — 방법(D5379 / D7078 / D2344 / ±45°), <strong>노치 실측 치수</strong>, 클램프 조건</li>
+      <li>공통 — 규격 <strong>판 연도</strong>, 시편을 잘라낸 위치와 방향, 조건화 이력</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  압축·굽힘·전단 시편 규격 · 치수 변수 ○/△/× 매트릭스 · 원문은 유료이므로 2차 출처 기반이며 △는 확인하지 못한 항목입니다.
+</footer>
+</body></html>

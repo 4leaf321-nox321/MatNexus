@@ -1,0 +1,555 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>접착·접합 시편 규격 — 이음을 재는가 재료를 재는가</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">시편 규격 시리즈 · 08</div>
+  <h1>접착 · 접합<br>시편 규격</h1>
+  <p class="dek">여기서는 시편이 <strong>재료가 아니라 이음(joint)</strong>입니다. 겹치기 시험이 보고하는 “전단강도”는 파단하중 ÷ 공칭면적인데, 그 안의 응력장은 균일 전단과 전혀 다릅니다 — <strong>겹침을 늘리면 강도가 떨어집니다.</strong> 재료 물성은 “얼마나 많이 시험했는가”에 의존할 수 없습니다. CAE로 옮길 수 있는 값을 주는 시험은 따로 있습니다.</p>
+  <div class="mast-meta">
+    <div><b>범위</b> 겹치기 · 후피착체 · 파괴(DCB·ENF·MMB) · 필 · 임팩트 · 피로 · 베어링 · 용접부</div>
+    <div><b>핵심</b> Volkersen 전단지연 + Goland-Reissner 필링 → 이음 시험은 물성이 아니다</div>
+    <div><b>주의</b> 원문 유료 — 2차 출처 기반, △는 미확인</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 이음을 재는가 재료를 재는가</a>
+    <a href="#s1"><span>01</span> 전단지연과 필링</a>
+    <a href="#s2"><span>02</span> 겹치기 시험 매트릭스</a>
+    <a href="#s3"><span>03</span> 이음 시험 계보</a>
+    <a href="#s4"><span>04</span> 파괴 시험 — G_Ic · G_IIc</a>
+    <a href="#s5"><span>05</span> 필 · 인장 · 임팩트 · 피로</a>
+    <a href="#s6"><span>06</span> 코히시브 존 카드</a>
+    <a href="#s7"><span>07</span> 기계적 체결 · 용접부</a>
+    <a href="#s8"><span>08</span> 상태 변경 · 미확인</a>
+  </nav>
+</header>
+
+<main>
+<style>
+.ox table{min-width:62rem}
+.ox th.v{font-size:.68rem;line-height:1.3;white-space:normal;min-width:3.9rem;text-align:center}
+.ox td.o{text-align:center;color:var(--accent-ink);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.o em,.ox td.t em{display:block;background:none;padding:0;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.68rem;font-weight:400;color:var(--muted);letter-spacing:.01em;margin-top:1px}
+.ox td.t{text-align:center;color:var(--hot);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.x{text-align:center;color:var(--muted);opacity:.45;font-size:.95rem}
+.ox td.nm{white-space:nowrap;font-size:.82rem}
+.ox td.nm b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500;color:var(--accent-ink)}
+.ox td.nm i{font-style:normal;color:var(--muted);font-size:.92em}
+.oxleg{display:flex;flex-wrap:wrap;gap:.4rem 1.8rem;font-size:.88rem;color:var(--ink2)}
+.oxleg b{font-size:1rem}
+.oxleg .co{color:var(--accent-ink)} .oxleg .ct{color:var(--hot)} .oxleg .cx{color:var(--muted)}
+sup.fn{color:var(--hot);font-size:.72em;font-weight:600;padding-left:.15em}
+</style>
+
+<section id="s0">
+  <h2><span class="num">00 / 성격</span>이음을 재는가 재료를 재는가</h2>
+  <p class="lede">ASTM D1002가 보고하는 값은 <strong>파단하중 ÷ 공칭 접착면적</strong>입니다. 그 몫은 평균이고, 접착층 안의 실제 응력 상태는 균일 전단과 전혀 다릅니다. 규격 자신이 제목에서 <strong>“apparent(겉보기) shear strength”</strong>라고 쓰고, 본문에서 이 값은 “<strong>구조 이음의 설계 허용응력을 정하는 데 적합하지 않다</strong>”고 경고합니다.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>겹침을 늘려도 강도는 떨어진다</h4>
+      <p>이것 하나로 물성 자격이 박탈됩니다. <strong>재료 물성은 그 재료를 얼마나 많이 시험했는가에 의존할 수 없습니다.</strong> 겹침이 길어지면 중앙부는 사실상 하중을 받지 않으므로 강도를 더해 주지 않고, 하중/면적은 오히려 <strong>감소</strong>합니다.</p>
+    </div>
+    <div class="card">
+      <h4>피착체 강성이 답을 바꾼다</h4>
+      <p>두껍거나 강한 피착체는 축변형률 구배를 완만하게 만들어 <strong>겉보기 강도를 올립니다</strong>. D1002가 피착체를 <code>1.62 ± 0.125 mm</code>로 못 박는 이유이고, 유연한 플라스틱(D3163)·FRP(D5868) 피착체가 같은 접착제에서 체계적으로 다른 값을 주는 이유입니다.</p>
+    </div>
+    <div class="card">
+      <h4>피착체가 항복하면 천장에 부딪힌다</h4>
+      <p>D3165는 “금속 물성에 따라 <strong>항복응력을 넘지 않도록</strong> 겹침을 조정”하는 것을 명시적으로 허용합니다. 피착체가 항복하는 순간 이음의 파단하중은 접착제가 아니라 <strong>피착체가 정합니다</strong>. 겹치기 시험이 잴 수 있는 값에는 이렇게 하드한 상한이 있습니다.</p>
+    </div>
+    <div class="card">
+      <h4>규격 사회가 공식적으로 인정한 지점</h4>
+      <p><strong>ISO 17194:2022</strong>(구조용 접착제 표준 물성 데이터베이스)는 모든 기계적 항목에 대해 <strong>접착층 두께를 함께 기록할 것</strong>을 요구합니다 — ISO 4587, ISO 11343, ISO 25217 전부. 물성이 시편 구성에 딸린 값이라는 것을 규격 체계가 스스로 문서화한 것입니다.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 역학</span>Volkersen 전단지연과 Goland-Reissner 필링</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 460" role="img" aria-label="겹치기 이음의 전단응력 분포와 겹침 끝단의 필링 응력, 그리고 겹침 길이에 따른 겉보기 강도" style="width:100%;height:auto;overflow:visible"><defs><marker id="ad_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ad_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><text x="30" y="26" font-family="IBM Plex Sans KR, sans-serif" font-size="12" font-weight="500" fill="currentColor">D1002 가 보고하는 값은 <tspan font-weight="600">파단하중 ÷ 공칭 접착면적</tspan> — 그런데 실제 응력장은 <tspan fill="#C4402B">이렇게 생겼다</tspan></text><rect x="96" y="62" width="150.0" height="11.0" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="200.0" y="73.0" width="150.0" height="11.0" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="200.0" y="71.4" width="46.0" height="3.2" fill="#C4402B" fill-opacity=".55" stroke="none"/><line x1="50" y1="67.5" x2="88" y2="67.5" stroke="#C4402B" stroke-width="2.2" marker-start="url(#ad_ah)"/><line x1="358.0" y1="78.5" x2="396.0" y2="78.5" stroke="#C4402B" stroke-width="2.2" marker-end="url(#ad_ah)"/><line x1="200.0" y1="50" x2="246.0" y2="50" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#ad_ah)" marker-end="url(#ad_ah)"/><text x="223.0" y="44" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor">겹침 L</text><text x="326.0" y="83.5" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".7">하중선이 어긋나 있다 → 이음이 회전한다 → 끝단에 필링</text><rect x="96" y="156" width="400" height="200" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><line x1="96.0" y1="156" x2="96.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="96.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">-0.5</text><line x1="196.0" y1="156" x2="196.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="196.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">-0.25</text><line x1="296.0" y1="156" x2="296.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="296.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><line x1="396.0" y1="156" x2="396.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="396.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0.25</text><line x1="496.0" y1="156" x2="496.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="496.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0.5</text><line x1="96" y1="331.0" x2="496" y2="331.0" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="335.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><line x1="96" y1="289.3" x2="496" y2="289.3" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="293.3" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">1</text><line x1="96" y1="247.7" x2="496" y2="247.7" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="251.7" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">2</text><line x1="96" y1="206.0" x2="496" y2="206.0" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="210.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">3</text><line x1="96" y1="164.3" x2="496" y2="164.3" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="168.3" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">4</text><text x="496.0" y="392" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">겹침 안의 위치  ξ = x / L</text><text x="6" y="148" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">응력 / 공칭 평균전단응력</text><line x1="96" y1="289" x2="496" y2="289" stroke="currentColor" stroke-opacity=".35" stroke-width="1.1" stroke-dasharray="5 4"/><text x="100.0" y="284.3" text-anchor="start" fill="currentColor" fill-opacity=".6" font-size="10.5" font-family="IBM Plex Mono, ui-monospace, monospace">공칭 평균 = 1</text><polyline points="96.00,261.95 97.00,262.42 98.01,262.88 99.01,263.34 100.01,263.80 101.01,264.25 102.02,264.70 103.02,265.15 104.02,265.59 105.02,266.02 106.03,266.46 107.03,266.89 108.03,267.32 109.03,267.74 110.04,268.16 111.04,268.57 112.04,268.99 113.04,269.40 114.05,269.80 115.05,270.20 116.05,270.60 117.05,271.00 118.06,271.39 119.06,271.78 120.06,272.16 121.06,272.54 122.07,272.92 123.07,273.30 124.07,273.67 125.07,274.04 126.08,274.40 127.08,274.77 128.08,275.13 129.08,275.48 130.09,275.83 131.09,276.18 132.09,276.53 133.09,276.87 134.10,277.21 135.10,277.55 136.10,277.89 137.10,278.22 138.11,278.55 139.11,278.87 140.11,279.19 141.11,279.51 142.12,279.83 143.12,280.14 144.12,280.45 145.12,280.76 146.13,281.07 147.13,281.37 148.13,281.67 149.13,281.97 150.14,282.26 151.14,282.55 152.14,282.84 153.14,283.12 154.15,283.41 155.15,283.69 156.15,283.97 157.15,284.24 158.16,284.51 159.16,284.78 160.16,285.05 161.16,285.31 162.17,285.58 163.17,285.84 164.17,286.09 165.17,286.35 166.18,286.60 167.18,286.85 168.18,287.09 169.18,287.34 170.19,287.58 171.19,287.82 172.19,288.06 173.19,288.29 174.20,288.52 175.20,288.75 176.20,288.98 177.20,289.21 178.21,289.43 179.21,289.65 180.21,289.87 181.21,290.08 182.22,290.29 183.22,290.51 184.22,290.71 185.22,290.92 186.23,291.12 187.23,291.33 188.23,291.53 189.23,291.72 190.24,291.92 191.24,292.11 192.24,292.30 193.24,292.49 194.25,292.68 195.25,292.86 196.25,293.04 197.25,293.22 198.26,293.40 199.26,293.58 200.26,293.75 201.26,293.92 202.27,294.09 203.27,294.26 204.27,294.42 205.27,294.59 206.28,294.75 207.28,294.91 208.28,295.06 209.28,295.22 210.29,295.37 211.29,295.52 212.29,295.67 213.29,295.82 214.30,295.96 215.30,296.10 216.30,296.25 217.30,296.38 218.31,296.52 219.31,296.66 220.31,296.79 221.31,296.92 222.32,297.05 223.32,297.18 224.32,297.30 225.32,297.43 226.33,297.55 227.33,297.67 228.33,297.79 229.33,297.90 230.34,298.02 231.34,298.13 232.34,298.24 233.34,298.35 234.35,298.45 235.35,298.56 236.35,298.66 237.35,298.76 238.36,298.86 239.36,298.96 240.36,299.05 241.36,299.15 242.37,299.24 243.37,299.33 244.37,299.42 245.37,299.51 246.38,299.59 247.38,299.67 248.38,299.76 249.38,299.84 250.39,299.91 251.39,299.99 252.39,300.06 253.39,300.14 254.40,300.21 255.40,300.28 256.40,300.34 257.40,300.41 258.41,300.47 259.41,300.54 260.41,300.60 261.41,300.65 262.42,300.71 263.42,300.77 264.42,300.82 265.42,300.87 266.43,300.92 267.43,300.97 268.43,301.02 269.43,301.06 270.44,301.11 271.44,301.15 272.44,301.19 273.44,301.23 274.45,301.26 275.45,301.30 276.45,301.33 277.45,301.36 278.46,301.39 279.46,301.42 280.46,301.45 281.46,301.47 282.47,301.50 283.47,301.52 284.47,301.54 285.47,301.56 286.48,301.57 287.48,301.59 288.48,301.60 289.48,301.61 290.49,301.62 291.49,301.63 292.49,301.64 293.49,301.64 294.50,301.65 295.50,301.65 296.50,301.65 297.50,301.65 298.51,301.64 299.51,301.64 300.51,301.63 301.51,301.62 302.52,301.61 303.52,301.60 304.52,301.59 305.52,301.57 306.53,301.56 307.53,301.54 308.53,301.52 309.53,301.50 310.54,301.47 311.54,301.45 312.54,301.42 313.54,301.39 314.55,301.36 315.55,301.33 316.55,301.30 317.55,301.26 318.56,301.23 319.56,301.19 320.56,301.15 321.56,301.11 322.57,301.06 323.57,301.02 324.57,300.97 325.57,300.92 326.58,300.87 327.58,300.82 328.58,300.77 329.58,300.71 330.59,300.65 331.59,300.60 332.59,300.54 333.59,300.47 334.60,300.41 335.60,300.34 336.60,300.28 337.60,300.21 338.61,300.14 339.61,300.06 340.61,299.99 341.61,299.91 342.62,299.84 343.62,299.76 344.62,299.67 345.62,299.59 346.63,299.51 347.63,299.42 348.63,299.33 349.63,299.24 350.64,299.15 351.64,299.05 352.64,298.96 353.64,298.86 354.65,298.76 355.65,298.66 356.65,298.56 357.65,298.45 358.66,298.35 359.66,298.24 360.66,298.13 361.66,298.02 362.67,297.90 363.67,297.79 364.67,297.67 365.67,297.55 366.68,297.43 367.68,297.30 368.68,297.18 369.68,297.05 370.69,296.92 371.69,296.79 372.69,296.66 373.69,296.52 374.70,296.38 375.70,296.25 376.70,296.10 377.70,295.96 378.71,295.82 379.71,295.67 380.71,295.52 381.71,295.37 382.72,295.22 383.72,295.06 384.72,294.91 385.72,294.75 386.73,294.59 387.73,294.42 388.73,294.26 389.73,294.09 390.74,293.92 391.74,293.75 392.74,293.58 393.74,293.40 394.75,293.22 395.75,293.04 396.75,292.86 397.75,292.68 398.76,292.49 399.76,292.30 400.76,292.11 401.76,291.92 402.77,291.72 403.77,291.53 404.77,291.33 405.77,291.12 406.78,290.92 407.78,290.71 408.78,290.51 409.78,290.29 410.79,290.08 411.79,289.87 412.79,289.65 413.79,289.43 414.80,289.21 415.80,288.98 416.80,288.75 417.80,288.52 418.81,288.29 419.81,288.06 420.81,287.82 421.81,287.58 422.82,287.34 423.82,287.09 424.82,286.85 425.82,286.60 426.83,286.35 427.83,286.09 428.83,285.84 429.83,285.58 430.84,285.31 431.84,285.05 432.84,284.78 433.84,284.51 434.85,284.24 435.85,283.97 436.85,283.69 437.85,283.41 438.86,283.12 439.86,282.84 440.86,282.55 441.86,282.26 442.87,281.97 443.87,281.67 444.87,281.37 445.87,281.07 446.88,280.76 447.88,280.45 448.88,280.14 449.88,279.83 450.89,279.51 451.89,279.19 452.89,278.87 453.89,278.55 454.90,278.22 455.90,277.89 456.90,277.55 457.90,277.21 458.91,276.87 459.91,276.53 460.91,276.18 461.91,275.83 462.92,275.48 463.92,275.13 464.92,274.77 465.92,274.40 466.93,274.04 467.93,273.67 468.93,273.30 469.93,272.92 470.94,272.54 471.94,272.16 472.94,271.78 473.94,271.39 474.95,271.00 475.95,270.60 476.95,270.20 477.95,269.80 478.96,269.40 479.96,268.99 480.96,268.57 481.96,268.16 482.97,267.74 483.97,267.32 484.97,266.89 485.97,266.46 486.98,266.02 487.98,265.59 488.98,265.15 489.98,264.70 490.99,264.25 491.99,263.80 492.99,263.34 493.99,262.88 495.00,262.42 496.00,261.95" fill="none" stroke="#2F6FC4" stroke-width="2.2"/><text x="320.0" y="295.0" text-anchor="start" fill="#2F6FC4" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">짧은 겹침 (λ = 3)</text><polyline points="96.00,184.90 97.00,187.44 98.01,189.93 99.01,192.38 100.01,194.78 101.01,197.15 102.02,199.47 103.02,201.75 104.02,203.99 105.02,206.20 106.03,208.36 107.03,210.49 108.03,212.58 109.03,214.63 110.04,216.65 111.04,218.63 112.04,220.58 113.04,222.50 114.05,224.38 115.05,226.22 116.05,228.04 117.05,229.82 118.06,231.58 119.06,233.30 120.06,234.99 121.06,236.65 122.07,238.29 123.07,239.89 124.07,241.47 125.07,243.02 126.08,244.54 127.08,246.04 128.08,247.51 129.08,248.95 130.09,250.37 131.09,251.76 132.09,253.13 133.09,254.48 134.10,255.80 135.10,257.10 136.10,258.37 137.10,259.63 138.11,260.86 139.11,262.07 140.11,263.26 141.11,264.43 142.12,265.57 143.12,266.70 144.12,267.81 145.12,268.90 146.13,269.97 147.13,271.02 148.13,272.05 149.13,273.06 150.14,274.06 151.14,275.04 152.14,276.00 153.14,276.94 154.15,277.87 155.15,278.78 156.15,279.67 157.15,280.55 158.16,281.42 159.16,282.27 160.16,283.10 161.16,283.92 162.17,284.72 163.17,285.51 164.17,286.29 165.17,287.05 166.18,287.80 167.18,288.53 168.18,289.26 169.18,289.97 170.19,290.66 171.19,291.35 172.19,292.02 173.19,292.68 174.20,293.33 175.20,293.96 176.20,294.59 177.20,295.20 178.21,295.81 179.21,296.40 180.21,296.98 181.21,297.55 182.22,298.11 183.22,298.66 184.22,299.20 185.22,299.74 186.23,300.26 187.23,300.77 188.23,301.27 189.23,301.77 190.24,302.25 191.24,302.73 192.24,303.19 193.24,303.65 194.25,304.10 195.25,304.54 196.25,304.98 197.25,305.40 198.26,305.82 199.26,306.23 200.26,306.63 201.26,307.03 202.27,307.41 203.27,307.79 204.27,308.17 205.27,308.53 206.28,308.89 207.28,309.24 208.28,309.59 209.28,309.93 210.29,310.26 211.29,310.59 212.29,310.91 213.29,311.22 214.30,311.53 215.30,311.83 216.30,312.13 217.30,312.42 218.31,312.70 219.31,312.98 220.31,313.25 221.31,313.52 222.32,313.78 223.32,314.04 224.32,314.29 225.32,314.54 226.33,314.78 227.33,315.01 228.33,315.25 229.33,315.47 230.34,315.69 231.34,315.91 232.34,316.12 233.34,316.33 234.35,316.54 235.35,316.73 236.35,316.93 237.35,317.12 238.36,317.31 239.36,317.49 240.36,317.66 241.36,317.84 242.37,318.01 243.37,318.17 244.37,318.33 245.37,318.49 246.38,318.65 247.38,318.80 248.38,318.94 249.38,319.08 250.39,319.22 251.39,319.36 252.39,319.49 253.39,319.62 254.40,319.74 255.40,319.86 256.40,319.98 257.40,320.10 258.41,320.21 259.41,320.31 260.41,320.42 261.41,320.52 262.42,320.62 263.42,320.71 264.42,320.80 265.42,320.89 266.43,320.98 267.43,321.06 268.43,321.14 269.43,321.21 270.44,321.29 271.44,321.36 272.44,321.42 273.44,321.49 274.45,321.55 275.45,321.61 276.45,321.66 277.45,321.72 278.46,321.77 279.46,321.81 280.46,321.86 281.46,321.90 282.47,321.94 283.47,321.97 284.47,322.00 285.47,322.03 286.48,322.06 287.48,322.09 288.48,322.11 289.48,322.13 290.49,322.14 291.49,322.16 292.49,322.17 293.49,322.18 294.50,322.18 295.50,322.18 296.50,322.18 297.50,322.18 298.51,322.18 299.51,322.17 300.51,322.16 301.51,322.14 302.52,322.13 303.52,322.11 304.52,322.09 305.52,322.06 306.53,322.03 307.53,322.00 308.53,321.97 309.53,321.94 310.54,321.90 311.54,321.86 312.54,321.81 313.54,321.77 314.55,321.72 315.55,321.66 316.55,321.61 317.55,321.55 318.56,321.49 319.56,321.42 320.56,321.36 321.56,321.29 322.57,321.21 323.57,321.14 324.57,321.06 325.57,320.98 326.58,320.89 327.58,320.80 328.58,320.71 329.58,320.62 330.59,320.52 331.59,320.42 332.59,320.31 333.59,320.21 334.60,320.10 335.60,319.98 336.60,319.86 337.60,319.74 338.61,319.62 339.61,319.49 340.61,319.36 341.61,319.22 342.62,319.08 343.62,318.94 344.62,318.80 345.62,318.65 346.63,318.49 347.63,318.33 348.63,318.17 349.63,318.01 350.64,317.84 351.64,317.66 352.64,317.49 353.64,317.31 354.65,317.12 355.65,316.93 356.65,316.73 357.65,316.54 358.66,316.33 359.66,316.12 360.66,315.91 361.66,315.69 362.67,315.47 363.67,315.25 364.67,315.01 365.67,314.78 366.68,314.54 367.68,314.29 368.68,314.04 369.68,313.78 370.69,313.52 371.69,313.25 372.69,312.98 373.69,312.70 374.70,312.42 375.70,312.13 376.70,311.83 377.70,311.53 378.71,311.22 379.71,310.91 380.71,310.59 381.71,310.26 382.72,309.93 383.72,309.59 384.72,309.24 385.72,308.89 386.73,308.53 387.73,308.17 388.73,307.79 389.73,307.41 390.74,307.03 391.74,306.63 392.74,306.23 393.74,305.82 394.75,305.40 395.75,304.98 396.75,304.54 397.75,304.10 398.76,303.65 399.76,303.19 400.76,302.73 401.76,302.25 402.77,301.77 403.77,301.27 404.77,300.77 405.77,300.26 406.78,299.74 407.78,299.20 408.78,298.66 409.78,298.11 410.79,297.55 411.79,296.98 412.79,296.40 413.79,295.81 414.80,295.20 415.80,294.59 416.80,293.96 417.80,293.33 418.81,292.68 419.81,292.02 420.81,291.35 421.81,290.66 422.82,289.97 423.82,289.26 424.82,288.53 425.82,287.80 426.83,287.05 427.83,286.29 428.83,285.51 429.83,284.72 430.84,283.92 431.84,283.10 432.84,282.27 433.84,281.42 434.85,280.55 435.85,279.67 436.85,278.78 437.85,277.87 438.86,276.94 439.86,276.00 440.86,275.04 441.86,274.06 442.87,273.06 443.87,272.05 444.87,271.02 445.87,269.97 446.88,268.90 447.88,267.81 448.88,266.70 449.88,265.57 450.89,264.43 451.89,263.26 452.89,262.07 453.89,260.86 454.90,259.63 455.90,258.37 456.90,257.10 457.90,255.80 458.91,254.48 459.91,253.13 460.91,251.76 461.91,250.37 462.92,248.95 463.92,247.51 464.92,246.04 465.92,244.54 466.93,243.02 467.93,241.47 468.93,239.89 469.93,238.29 470.94,236.65 471.94,234.99 472.94,233.30 473.94,231.58 474.95,229.82 475.95,228.04 476.95,226.22 477.95,224.38 478.96,222.50 479.96,220.58 480.96,218.63 481.96,216.65 482.97,214.63 483.97,212.58 484.97,210.49 485.97,208.36 486.98,206.20 487.98,203.99 488.98,201.75 489.98,199.47 490.99,197.15 491.99,194.78 492.99,192.38 493.99,189.93 495.00,187.44 496.00,184.90" fill="none" stroke="#C4402B" stroke-width="2.2"/><text x="320.0" y="315.5" text-anchor="start" fill="#C4402B" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">긴 겹침 (λ = 7)</text><polyline points="96.00,222.67 97.00,225.64 98.01,228.59 99.01,231.52 100.01,234.42 101.01,237.28 102.02,240.12 103.02,242.92 104.02,245.68 105.02,248.40 106.03,251.09 107.03,253.73 108.03,256.34 109.03,258.89 110.04,261.41 111.04,263.88 112.04,266.30 113.04,268.68 114.05,271.01 115.05,273.29 116.05,275.53 117.05,277.71 118.06,279.85 119.06,281.94 120.06,283.98 121.06,285.97 122.07,287.92 123.07,289.81 124.07,291.66 125.07,293.45 126.08,295.20 127.08,296.91 128.08,298.56 129.08,300.17 130.09,301.73 131.09,303.24 132.09,304.71 133.09,306.14 134.10,307.52 135.10,308.86 136.10,310.15 137.10,311.40 138.11,312.61 139.11,313.78 140.11,314.91 141.11,316.00 142.12,317.05 143.12,318.06 144.12,319.03 145.12,319.97 146.13,320.87 147.13,321.73 148.13,322.56 149.13,323.36 150.14,324.12 151.14,324.86 152.14,325.56 153.14,326.23 154.15,326.87 155.15,327.48 156.15,328.06 157.15,328.62 158.16,329.15 159.16,329.65 160.16,330.13 161.16,330.58 162.17,331.01 163.17,331.42 164.17,331.80 165.17,332.16 166.18,332.51 167.18,332.83 168.18,333.13 169.18,333.41 170.19,333.68 171.19,333.92 172.19,334.15 173.19,334.37 174.20,334.56 175.20,334.75 176.20,334.91 177.20,335.07 178.21,335.21 179.21,335.33 180.21,335.45 181.21,335.55 182.22,335.64 183.22,335.72 184.22,335.79 185.22,335.85 186.23,335.91 187.23,335.95 188.23,335.98 189.23,336.01 190.24,336.02 191.24,336.03 192.24,336.03 193.24,336.03 194.25,336.02 195.25,336.00 196.25,335.98 197.25,335.96 198.26,335.92 199.26,335.89 200.26,335.85 201.26,335.80 202.27,335.75 203.27,335.70 204.27,335.64 205.27,335.59 206.28,335.52 207.28,335.46 208.28,335.39 209.28,335.33 210.29,335.26 211.29,335.18 212.29,335.11 213.29,335.03 214.30,334.96 215.30,334.88 216.30,334.80 217.30,334.72 218.31,334.65 219.31,334.57 220.31,334.49 221.31,334.41 222.32,334.33 223.32,334.24 224.32,334.16 225.32,334.08 226.33,334.00 227.33,333.93 228.33,333.85 229.33,333.77 230.34,333.69 231.34,333.61 232.34,333.54 233.34,333.46 234.35,333.39 235.35,333.31 236.35,333.24 237.35,333.17 238.36,333.10 239.36,333.03 240.36,332.96 241.36,332.89 242.37,332.83 243.37,332.76 244.37,332.70 245.37,332.64 246.38,332.58 247.38,332.52 248.38,332.46 249.38,332.40 250.39,332.34 251.39,332.29 252.39,332.23 253.39,332.18 254.40,332.13 255.40,332.08 256.40,332.03 257.40,331.99 258.41,331.94 259.41,331.89 260.41,331.85 261.41,331.81 262.42,331.77 263.42,331.73 264.42,331.69 265.42,331.65 266.43,331.62 267.43,331.58 268.43,331.55 269.43,331.51 270.44,331.48 271.44,331.45 272.44,331.42 273.44,331.39 274.45,331.37 275.45,331.34 276.45,331.31 277.45,331.29 278.46,331.27 279.46,331.24 280.46,331.22 281.46,331.20 282.47,331.18 283.47,331.16 284.47,331.14 285.47,331.12 286.48,331.11 287.48,331.09 288.48,331.08 289.48,331.06 290.49,331.05 291.49,331.03 292.49,331.02 293.49,331.01 294.50,331.00 295.50,330.99 296.50,330.99 297.50,331.00 298.51,331.01 299.51,331.02 300.51,331.03 301.51,331.05 302.52,331.06 303.52,331.08 304.52,331.09 305.52,331.11 306.53,331.12 307.53,331.14 308.53,331.16 309.53,331.18 310.54,331.20 311.54,331.22 312.54,331.24 313.54,331.27 314.55,331.29 315.55,331.31 316.55,331.34 317.55,331.37 318.56,331.39 319.56,331.42 320.56,331.45 321.56,331.48 322.57,331.51 323.57,331.55 324.57,331.58 325.57,331.62 326.58,331.65 327.58,331.69 328.58,331.73 329.58,331.77 330.59,331.81 331.59,331.85 332.59,331.89 333.59,331.94 334.60,331.99 335.60,332.03 336.60,332.08 337.60,332.13 338.61,332.18 339.61,332.23 340.61,332.29 341.61,332.34 342.62,332.40 343.62,332.46 344.62,332.52 345.62,332.58 346.63,332.64 347.63,332.70 348.63,332.76 349.63,332.83 350.64,332.89 351.64,332.96 352.64,333.03 353.64,333.10 354.65,333.17 355.65,333.24 356.65,333.31 357.65,333.39 358.66,333.46 359.66,333.54 360.66,333.61 361.66,333.69 362.67,333.77 363.67,333.85 364.67,333.93 365.67,334.00 366.68,334.08 367.68,334.16 368.68,334.24 369.68,334.33 370.69,334.41 371.69,334.49 372.69,334.57 373.69,334.65 374.70,334.72 375.70,334.80 376.70,334.88 377.70,334.96 378.71,335.03 379.71,335.11 380.71,335.18 381.71,335.26 382.72,335.33 383.72,335.39 384.72,335.46 385.72,335.52 386.73,335.59 387.73,335.64 388.73,335.70 389.73,335.75 390.74,335.80 391.74,335.85 392.74,335.89 393.74,335.92 394.75,335.96 395.75,335.98 396.75,336.00 397.75,336.02 398.76,336.03 399.76,336.03 400.76,336.03 401.76,336.02 402.77,336.01 403.77,335.98 404.77,335.95 405.77,335.91 406.78,335.85 407.78,335.79 408.78,335.72 409.78,335.64 410.79,335.55 411.79,335.45 412.79,335.33 413.79,335.21 414.80,335.07 415.80,334.91 416.80,334.75 417.80,334.56 418.81,334.37 419.81,334.15 420.81,333.92 421.81,333.68 422.82,333.41 423.82,333.13 424.82,332.83 425.82,332.51 426.83,332.16 427.83,331.80 428.83,331.42 429.83,331.01 430.84,330.58 431.84,330.13 432.84,329.65 433.84,329.15 434.85,328.62 435.85,328.06 436.85,327.48 437.85,326.87 438.86,326.23 439.86,325.56 440.86,324.86 441.86,324.12 442.87,323.36 443.87,322.56 444.87,321.73 445.87,320.87 446.88,319.97 447.88,319.03 448.88,318.06 449.88,317.05 450.89,316.00 451.89,314.91 452.89,313.78 453.89,312.61 454.90,311.40 455.90,310.15 456.90,308.86 457.90,307.52 458.91,306.14 459.91,304.71 460.91,303.24 461.91,301.73 462.92,300.17 463.92,298.56 464.92,296.91 465.92,295.20 466.93,293.45 467.93,291.66 468.93,289.81 469.93,287.92 470.94,285.97 471.94,283.98 472.94,281.94 473.94,279.85 474.95,277.71 475.95,275.53 476.95,273.29 477.95,271.01 478.96,268.68 479.96,266.30 480.96,263.88 481.96,261.41 482.97,258.89 483.97,256.34 484.97,253.73 485.97,251.09 486.98,248.40 487.98,245.68 488.98,242.92 489.98,240.12 490.99,237.28 491.99,234.42 492.99,231.52 493.99,228.59 495.00,225.64 496.00,222.67" fill="none" stroke="#D07A3B" stroke-width="1.9" stroke-dasharray="5 4"/><text x="176.0" y="348.5" text-anchor="start" fill="#D07A3B" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">필링(수직) 응력 — 끝단에서 급첨</text><text x="100.0" y="170.6" text-anchor="start" fill="#C4402B" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">Volkersen 전단지연 : 끝단이 최대, 가운데는 거의 논다</text><rect x="592" y="156" width="288" height="200" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><line x1="592.0" y1="156" x2="592.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="592.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><line x1="688.0" y1="156" x2="688.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="688.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">20</text><line x1="784.0" y1="156" x2="784.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="784.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">40</text><line x1="880.0" y1="156" x2="880.0" y2="356" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="880.0" y="374" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">60</text><line x1="592" y1="356.0" x2="880" y2="356.0" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="583" y="360.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><line x1="592" y1="269.0" x2="880" y2="269.0" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="583" y="273.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0.5</text><line x1="592" y1="182.1" x2="880" y2="182.1" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="583" y="186.1" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">1</text><text x="880.0" y="392" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">겹침 길이 L  [mm]</text><text x="592" y="146" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">겉보기 전단강도 (정규화)</text><polyline points="601.60,156.00 603.00,156.00 604.40,156.00 605.80,156.00 607.20,156.00 608.59,156.00 609.99,156.00 611.39,156.00 612.79,156.00 614.19,156.00 615.59,156.00 616.99,156.00 618.39,156.00 619.79,156.00 621.19,156.00 622.58,156.00 623.98,156.00 625.38,156.00 626.78,156.00 628.18,156.00 629.58,156.00 630.98,156.00 632.38,156.00 633.78,156.00 635.18,156.00 636.57,156.00 637.97,156.24 639.37,158.88 640.77,161.48 642.17,164.02 643.57,166.52 644.97,168.97 646.37,171.37 647.77,173.72 649.17,176.04 650.56,178.30 651.96,180.53 653.36,182.71 654.76,184.85 656.16,186.96 657.56,189.02 658.96,191.05 660.36,193.04 661.76,194.99 663.16,196.90 664.55,198.79 665.95,200.63 667.35,202.45 668.75,204.23 670.15,205.98 671.55,207.70 672.95,209.38 674.35,211.04 675.75,212.67 677.15,214.27 678.54,215.84 679.94,217.39 681.34,218.90 682.74,220.40 684.14,221.86 685.54,223.30 686.94,224.72 688.34,226.11 689.74,227.48 691.14,228.82 692.53,230.14 693.93,231.44 695.33,232.72 696.73,233.98 698.13,235.21 699.53,236.43 700.93,237.62 702.33,238.80 703.73,239.96 705.13,241.09 706.52,242.21 707.92,243.31 709.32,244.40 710.72,245.46 712.12,246.51 713.52,247.54 714.92,248.56 716.32,249.56 717.72,250.55 719.12,251.51 720.51,252.47 721.91,253.41 723.31,254.33 724.71,255.24 726.11,256.14 727.51,257.02 728.91,257.89 730.31,258.75 731.71,259.59 733.11,260.42 734.50,261.24 735.90,262.05 737.30,262.84 738.70,263.63 740.10,264.40 741.50,265.16 742.90,265.91 744.30,266.65 745.70,267.37 747.10,268.09 748.49,268.80 749.89,269.50 751.29,270.18 752.69,270.86 754.09,271.53 755.49,272.19 756.89,272.84 758.29,273.48 759.69,274.11 761.09,274.73 762.48,275.35 763.88,275.95 765.28,276.55 766.68,277.14 768.08,277.72 769.48,278.30 770.88,278.86 772.28,279.42 773.68,279.97 775.08,280.52 776.47,281.06 777.87,281.59 779.27,282.11 780.67,282.63 782.07,283.14 783.47,283.64 784.87,284.14 786.27,284.63 787.67,285.11 789.07,285.59 790.46,286.07 791.86,286.53 793.26,286.99 794.66,287.45 796.06,287.90 797.46,288.34 798.86,288.78 800.26,289.22 801.66,289.65 803.06,290.07 804.45,290.49 805.85,290.90 807.25,291.31 808.65,291.71 810.05,292.11 811.45,292.51 812.85,292.89 814.25,293.28 815.65,293.66 817.05,294.04 818.44,294.41 819.84,294.78 821.24,295.14 822.64,295.50 824.04,295.86 825.44,296.21 826.84,296.55 828.24,296.90 829.64,297.24 831.04,297.57 832.43,297.91 833.83,298.24 835.23,298.56 836.63,298.88 838.03,299.20 839.43,299.52 840.83,299.83 842.23,300.14 843.63,300.44 845.03,300.74 846.42,301.04 847.82,301.34 849.22,301.63 850.62,301.92 852.02,302.21 853.42,302.49 854.82,302.77 856.22,303.05 857.62,303.33 859.02,303.60 860.41,303.87 861.81,304.13 863.21,304.40 864.61,304.66 866.01,304.92 867.41,305.18 868.81,305.43 870.21,305.68 871.61,305.93 873.01,306.18 874.40,306.42 875.80,306.66 877.20,306.90 878.60,307.14 880.00,307.38" fill="none" stroke="#C4402B" stroke-width="2.2"/><line x1="653" y1="356" x2="653" y2="156" stroke="#D07A3B" stroke-width="1.2" stroke-dasharray="4 4"/><text x="657.3" y="178.6" text-anchor="start" fill="#D07A3B" font-size="10" font-family="IBM Plex Sans KR, sans-serif">D1002 : 12.7 mm</text><text x="688.0" y="283.0" text-anchor="start" fill="currentColor" fill-opacity=".7" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">겹침을 늘려도</text><text x="688.0" y="303.8" text-anchor="start" fill="currentColor" fill-opacity=".7" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">강도(하중/면적)는 떨어진다</text><text x="592" y="404" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#C4402B">재료 물성은 “얼마나 많이 시험했는가”에 의존할 수 없다</text><text x="592" y="424" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".66">ISO 4587 은 12.5 mm, D1002 는 12.7 mm — 호환되지 않는다</text><text x="592" y="444" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".66">그립 자유길이도 다르다 : ASTM 63 mm, ISO 50 mm</text></svg></div>
+    <figcaption>왼쪽 — 접착층 전단응력은 겹침 <b>양 끝단에서 최대</b>, 가운데에서 최소인 쌍곡코사인 분포이고, 그 위에 <b>끝단에서 급첨하는 필링(수직) 응력</b>이 겹칩니다. 접착제는 전단보다 필링에 훨씬 약하므로 <b>D1002 시편의 파단은 흔히 필링에서 시작</b>합니다. 오른쪽 — 그래서 겹침을 늘리면 하중/면적이 떨어집니다.</figcaption>
+  </figure>
+
+  <h3>(a) 전단지연 — Volkersen (1938)</h3>
+  <p>Volkersen 모형은 피착체를 축하중만 받는 봉으로, 접착층을 전단만 받는 층으로 봅니다. 하중을 받는 피착체는 그 끝에서 최대응력·반대편에서 무응력이고 다른 쪽은 정반대이므로, 두 피착체의 <strong>축변형률 차이</strong>가 겹침 양 끝에서 가장 크고 가운데에서 가장 작습니다. 접착층 전단변형률이 그 차이를 따라갑니다.</p>
+  <ul class="tight">
+    <li>최대 전단응력은 공칭 평균의 <strong>몇 배</strong>가 될 수 있습니다 — 공칭 평균은 파단을 일으킨 응력이 아닙니다.</li>
+    <li>분포를 지배하는 무차원 전단지연 파라미터는 <strong>접착제 전단탄성계수 · 접착층 두께 · 피착체 탄성계수 · 피착체 두께</strong>를 함께 담고 있습니다. 하나만 바꿔도 피크/평균 비가 바뀝니다.</li>
+  </ul>
+  <h3>(b) 편심 하중경로와 필링 — Goland &amp; Reissner (1944)</h3>
+  <p>단일 겹침 이음에서 두 하중선은 대략 <strong>(피착체 두께 + 접착층 두께)</strong>만큼 어긋나 있습니다. 하중을 받으면 이음이 <strong>회전</strong>하며 하중선을 정렬하려 하고, 그 결과 —</p>
+  <ul class="tight">
+    <li>겹침 끝단에 <strong>굽힘모멘트</strong>가 생겨 접착층에 <strong>두께방향 인장(필링/클리비지) 응력</strong>이 끝단에서 급첨합니다.</li>
+    <li>회전량이 하중에 의존하므로 문제가 <strong>기하학적 비선형</strong>이 됩니다 — Goland-Reissner의 굽힘모멘트 계수 <code>k</code>가 하중 증가에 따라 감소하는 것이 그 편심 완화를 담습니다.</li>
+    <li>회전을 바꾸는 모든 것이 답을 바꿉니다 — 피착체 두께, 피착체 항복강도, 겹침 길이, <strong>그립 자유길이</strong>, 그립 정렬, 심지어 하중속도까지.</li>
+  </ul>
+  <div class="note">
+    <h4>그래서 ASTM와 ISO가 서로 다른 숫자를 줍니다</h4>
+    <ul class="tight">
+      <li><strong>겹침</strong> — D1002 <code>12.7 ± 0.25 mm</code>, ISO 4587 <code>12.5 ± 0.25 mm</code></li>
+      <li><strong>그립 자유길이</strong> — D1002 “겹침 끝에서 조 끝까지 <strong>63 mm</strong>”, ISO 4587 “각 그립이 겹침 가장자리에서 <strong>50 ± 1 mm</strong>”</li>
+      <li>자유길이가 다르면 <strong>굽힘 컴플라이언스가 다르고</strong>, 따라서 회전량과 필링 피크가 다릅니다. <strong>두 규격의 값은 수치적으로 호환되지 않습니다.</strong></li>
+      <li><strong>접착층 두께</strong> — D1002는 목표값을 정하지 않고 <strong>0.025 mm 이내로 보고</strong>만 요구합니다. ISO 4587은 “대표값 0.2 mm”를 제시하고 <strong>캘리브레이션 와이어나 유리구슬</strong>로 제어할 수 있다고 안내합니다.</li>
+    </ul>
+  </div>
+  <div class="note">
+    <h4>그럼 D1002는 왜 쓰는가 — 정당한 용도</h4>
+    <p><strong>정당함</strong> — 표면처리 비교, 접착제 로트 QC, 경화 검증, 환경 내구성 순위 매기기. 그 피착체 재질 · 그 두께 · 그 겹침 · 그 접착층 두께 · 그 표면처리에서의 <strong>비교값</strong>입니다.</p>
+    <p><strong>정당하지 않음</strong> — FE 재료 입력, 설계 허용치, 다른 형상의 이음으로의 외삽.</p>
+    <p><strong>문제를 줄이는(없애지는 못하는) 시험들</strong> — D3165는 적층판에서 기계가공해 겹침과 접착층을 가공으로 정의하므로 산포가 줄고 끝단 효과가 다소 완화됩니다. ISO 9664는 <strong>이중 겹침</strong>을 써서 피착체 회전 자체를 상쇄합니다. 어느 쪽도 결과를 물성으로 바꾸지는 못합니다.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 겹치기</span>겹치기 시험 매트릭스</h2>
+  <div class="oxleg">
+    <div><b class="co">○</b> 규격이 <b>규정함</b></div>
+    <div><b class="ct">△</b> <b>확인하지 못함</b></div>
+    <div><b class="cx">×</b> 해당 규정 <b>없음</b></div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격</th>
+      <th class="v">피착체</th><th class="v">피착체 두께</th><th class="v">폭 × 길이</th>
+      <th class="v">겹침</th><th class="v">접착층 두께</th><th class="v">그립 조건</th><th class="v">속도</th><th class="v">시편 수</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>ASTM D1002</b> <i>단일 겹침</i></td>
+        <td class="o">○<em>금속-금속</em></td><td class="o">○<em>1.62 ± 0.125 mm</em></td><td class="o">○<em>25.4 × 101.6 mm</em><sup class="fn">1</sup></td>
+        <td class="o">○<em>12.7 ± 0.25 mm</em></td><td class="o">○<em>목표 없음 · 0.025 mm 이내 보고</em></td><td class="o">○<em>겹침 끝~조 끝 63 mm · 양단 25 mm 물림</em></td><td class="o">○<em>8.3–9.7 MPa/min ≈ 1.27 mm/min</em></td><td class="t">△<em>읽은 사본은 30개 / ≥4 이음</em></td></tr>
+      <tr><td class="nm"><b>ISO 4587:2003</b></td>
+        <td class="o">○<em>강체-강체</em></td><td class="t">△<em>Figure 1</em></td><td class="t">△<em>100 × 25 × 1.6 통용</em></td>
+        <td class="o">○<em>12.5 ± 0.25 mm</em></td><td class="o">○<em>대표 0.2 mm · 와이어/유리구슬로 제어</em></td><td class="o">○<em>각 그립이 겹침 가장자리에서 50 ± 1 mm</em></td><td class="o">○<em>65 ± 20 s 파단 · 8.3–9.8 MPa/min</em></td><td class="o">○<em>5개 미만 신뢰 금지</em></td></tr>
+      <tr><td class="nm"><b>ASTM D3165</b> <i>노치형 적층</i></td>
+        <td class="o">○<em>금속 적층</em></td><td class="o">○<em>1.62 ± 0.125 mm</em></td><td class="t">△<em>25.4 통용 · 0.25 mm 단위 측정</em></td>
+        <td class="o">○<em>12.7 ± 0.3 mm (노치 간)</em></td><td class="o">○<em>0.0127 mm 이내 보고</em></td><td class="o">○<em>노치 폭 1.6 mm · 장축 직각</em></td><td class="o">○<em>8.3–9.7 MPa/min</em></td><td class="o">○<em>20개 이상 / ≥4 이음 · 패널당 ≥5</em></td></tr>
+      <tr><td class="nm"><b>ASTM D3163</b> <i>경질 플라스틱</i></td>
+        <td class="o">○<em>경질 플라스틱</em></td><td class="t">△</td><td class="o">○<em>25.4 × 101.6 mm</em></td>
+        <td class="o">○<em>12.7 또는 25.4 mm</em></td><td class="t">△</td><td class="t">△</td><td class="o">○<em>1.3 mm/min</em></td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>ASTM D3164</b> <i>플라스틱 샌드위치</i></td>
+        <td class="o">○<em>금속 외판 + 플라스틱 인서트</em></td><td class="o">○<em>금속 1.62 mm</em></td><td class="o">○<em>폭 25.4 · 전체 177.8 mm</em></td>
+        <td class="o">○<em>12.7 mm</em></td><td class="t">△<sup class="fn">2</sup></td><td class="t">△</td><td class="t">△</td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>ASTM D5868</b> <i>FRP</i></td>
+        <td class="o">○<em>FRP-FRP / FRP-금속</em></td><td class="t">△<em>통상 4.0 mm</em></td><td class="o">○<em>25.4 × 101.6 mm</em></td>
+        <td class="t">△<em>25.4 통용</em></td><td class="t">△</td><td class="t">△</td><td class="o">○<em>13 mm/min</em><sup class="fn">3</sup></td><td class="t">△</td></tr>
+      <tr><td class="nm"><b>ASTM D5656</b> <i>후피착체</i></td>
+        <td class="o">○<em>알루미늄</em></td><td class="o">○<em>9.53 mm</em></td><td class="o">○<em>폭 25.4 mm (판 229 × 229)</em></td>
+        <td class="t">△<sup class="fn">4</sup></td><td class="o">○<em>고정 아님 — <b>측정</b>해서 계산에 넣는다</em></td><td class="o">○<em>KGR형 평균 신율계가 본드라인을 가로지른다</em></td><td class="t">△</td><td class="t">△</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">1</sup> 25.4 × 101.6 mm는 <b>시편 공급사 수준에서 확인</b>한 값이며 규격 본문 문구는 확인하지 못했습니다. 패널은 “five-finger”(146.05 × 101.6 mm) 형태로 접착한 뒤 절단합니다. MMM-A-132B용 130.2 mm 변형도 있습니다. &nbsp;
+  <sup class="fn">2</sup> 출처가 “0.354 mm (0.010 in)”로 적었는데 <b>0.010 in = 0.254 mm</b>이므로 자체 모순입니다 — 플라스틱 인서트 두께는 미확인으로 둡니다. &nbsp;
+  <sup class="fn">3</sup> <b>D5868의 13 mm/min은 D3163(1.3)·D1002(≈1.27)의 10배</b>입니다. 점탄성 접착제에서 10배 속도 차이는 값을 바꿉니다. 또 FRP는 층간에서 먼저 깨지므로 D5868의 “lap shear strength”는 접착 파괴가 아니라 <b>복합재 1층 박리</b>인 경우가 매우 많습니다. &nbsp;
+  <sup class="fn">4</sup> D5656의 겹침 길이를 규격에서 확인하지 못했습니다. 9.53 mm로 흔히 인용되나 <b>가정하지 마십시오</b>. 참고로 D5656은 개정 작업 <b>WK82028</b>이 진행 중이며, 목표가 “전단변형률 측정 실무 개선”입니다 — 신율계 안착과 접착층 두께 정규화가 알려진 약점입니다.</p>
+
+  <div class="note">
+    <h4>D5656이 유일하게 재료 데이터를 주는 이유</h4>
+    <div class="eq">
+      <div>γ = ( d_a − d_m ) / t</div>
+      <div>d_a 축변위 · d_m 피착체 변형 보정 · <b>t 접착층 두께</b></div>
+    </div>
+    <p>9.53 mm 알루미늄은 D1002의 1.62 mm보다 약 <strong>6배</strong> 두꺼워 굽힘이 억제되고, 짧은 겹침에서 전단응력이 거의 균일해집니다. KGR형 평균 신율계가 본드라인을 가로질러 피착체 변형분 <code>d_m</code>을 빼주므로 <strong>접착층만의 τ–γ 곡선</strong>이 남습니다.</p>
+    <p><strong>단, 전단변형률이 접착층 두께 t 로 정규화됩니다.</strong> 얻은 곡선은 <strong>그 본드라인 두께에서의</strong> 곡선입니다. 얇아질수록 구속이 커져 <code>τ_max</code>는 올라가고 <code>γ_f</code>는 내려갑니다. 구조의 본드라인이 시험과 다르면 그대로 옮길 수 없습니다.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 계보</span>이음 시험 계보</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 470" role="img" aria-label="겹치기, 노치형, 후피착체, 이중겹침, DCB, 필 시험의 형상 비교" style="width:100%;height:auto;overflow:visible"><defs><marker id="ad_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ad_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><text x="30" y="26" font-family="IBM Plex Sans KR, sans-serif" font-size="12" font-weight="500" fill="currentColor">각 패널 안의 피착체 두께는 <tspan font-weight="600">서로 같은 척도</tspan> (3 px = 1 mm) — D1002 의 1.62 mm 와 D5656 의 9.53 mm 대비가 이 시험들의 전부다</text><rect x="57.0" y="113.1" width="120.0" height="4.9" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="138.9" y="118.0" width="120.0" height="4.9" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="138.9" y="116.4" width="38.1" height="3.2" fill="#C4402B" fill-opacity=".55" stroke="none"/><line x1="138.9" y1="99.1" x2="177.1" y2="99.1" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#ad_ah)" marker-end="url(#ad_ah)"/><text x="158" y="88" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor">12.7</text><text x="158" y="170" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">① ASTM D1002 · 단일 겹침</text><text x="158" y="187" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">피착체 1.62 ± 0.125 mm · 금속-금속</text><text x="158" y="204" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">회전이 크다 → 끝단 필링 지배</text><rect x="357.1" y="113.1" width="120.0" height="4.9" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="438.9" y="118.0" width="120.0" height="4.9" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="438.9" y="116.4" width="38.1" height="3.2" fill="#C4402B" fill-opacity=".55" stroke="none"/><rect x="436.6" y="112.1" width="4.8" height="6.9" fill="var(--bg,#EDEFEC)"/><rect x="436.6" y="117.0" width="4.8" height="6.9" fill="var(--bg,#EDEFEC)"/><rect x="474.7" y="112.1" width="4.8" height="6.9" fill="var(--bg,#EDEFEC)"/><rect x="474.7" y="117.0" width="4.8" height="6.9" fill="var(--bg,#EDEFEC)"/><rect x="436.6" y="112.1" width="4.8" height="5.9" fill="var(--bg,#EDEFEC)" stroke="#D07A3B" stroke-width="1"/><rect x="474.7" y="118.0" width="4.8" height="5.9" fill="var(--bg,#EDEFEC)" stroke="#D07A3B" stroke-width="1"/><line x1="438.9" y1="99.1" x2="477.1" y2="99.1" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#ad_ah)" marker-end="url(#ad_ah)"/><text x="458" y="88" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor">12.7 ± 0.3</text><text x="458" y="170" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">② ASTM D3165 · 노치형 적층</text><text x="458" y="187" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">노치 폭 1.6 mm · 겹침을 기계가공으로 정의</text><text x="458" y="204" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">산포는 줄지만 여전히 이음 시험</text><rect x="674.0" y="89.4" width="102.0" height="28.6" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="740.0" y="118.0" width="102.0" height="28.6" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="740.0" y="116.4" width="36.0" height="3.2" fill="#C4402B" fill-opacity=".55" stroke="none"/><line x1="740.0" y1="75.4" x2="776.0" y2="75.4" stroke="currentColor" stroke-opacity=".55" stroke-width="1" marker-start="url(#ad_ah)" marker-end="url(#ad_ah)"/><text x="758" y="62" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor">겹침 △</text><text x="758" y="170" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">③ ASTM D5656 · 후피착체</text><text x="758" y="187" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">알루미늄 9.53 mm · 폭 25.4 mm</text><text x="758" y="204" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#2F6FC4">굽힘이 억제되어 τ–γ 곡선을 준다</text><rect x="48.0" y="325.2" width="130.0" height="9.6" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="120.5" y="311.6" width="118.0" height="9.6" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="120.5" y="338.8" width="118.0" height="9.6" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><rect x="120.5" y="321.2" width="57.5" height="4" fill="#C4402B" fill-opacity=".55" stroke="none"/><rect x="120.5" y="334.8" width="57.5" height="4" fill="#C4402B" fill-opacity=".55" stroke="none"/><line x1="10.0" y1="330" x2="40.0" y2="330" stroke="#C4402B" stroke-width="2.2" marker-start="url(#ad_ah)"/><line x1="266.0" y1="318.4" x2="296.0" y2="318.4" stroke="#C4402B" stroke-width="2.2" marker-end="url(#ad_ah)"/><line x1="266.0" y1="341.6" x2="296.0" y2="341.6" stroke="#C4402B" stroke-width="2.2" marker-end="url(#ad_ah)"/><text x="158" y="392" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">④ ISO 9664 · 이중 겹침 피로</text><text x="158" y="409" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">강 3.2 mm · 겹침 12.5 ± 0.25 mm · 폭 25</text><text x="158" y="426" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#2F6FC4">대칭이라 회전이 상쇄된다</text><path d="M363.0,326 L553.0,308 L553.0,318 L363.0,328 Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><path d="M363.0,334 L553.0,352 L553.0,342 L363.0,332 Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.4"/><line x1="403.0" y1="330" x2="553.0" y2="330" stroke="#C4402B" stroke-width="2.4"/><line x1="371.0" y1="304" x2="371.0" y2="274" stroke="#C4402B" stroke-width="2.2" marker-end="url(#ad_ah)"/><line x1="371.0" y1="356" x2="371.0" y2="386" stroke="#C4402B" stroke-width="2.2" marker-end="url(#ad_ah)"/><text x="403.0" y="320" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="#C4402B">균열 선단</text><text x="458" y="392" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">⑤ DCB / TDCB</text><text x="458" y="409" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">ISO 25217 · ASTM D3433 · D5528</text><text x="458" y="426" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#2F6FC4">G_Ic [J/m²] — 코히시브 존의 에너지</text><path d="M686,316 L762,316 L762,282" fill="none" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/><path d="M686,323 L762,323 L762,358" fill="none" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/><rect x="686" y="316" width="76" height="7" fill="#C4402B" fill-opacity=".55" stroke="none"/><line x1="762" y1="276" x2="762" y2="254" stroke="#C4402B" stroke-width="2.2" marker-end="url(#ad_ah)"/><line x1="762" y1="364" x2="762" y2="386" stroke="#C4402B" stroke-width="2.2" marker-end="url(#ad_ah)"/><text x="774" y="272" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">T-필 (D1876)</text><text x="734" y="392" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">⑥ 필 시험</text><text x="734" y="409" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">D1876 T-필 · D903 180° · D6862 90°</text><text x="734" y="426" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#C4402B">세 값은 서로 비교 불가</text><text x="60" y="452" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".66">필 속도도 규격마다 다르다 — D1876 254 mm/min, D903 152.4 mm/min · 필 결과의 대부분은 <tspan font-weight="600">피착체를 소성 굽히는 에너지</tspan>이지 접착제의 파괴에너지가 아니다</text></svg></div>
+    <figcaption>각 패널 안의 피착체 두께는 같은 척도입니다. <b>①에서 ③으로 갈수록 피착체가 두꺼워지며 회전이 억제</b>되고, 그만큼 결과가 “이음”에서 “재료”에 가까워집니다. ④는 대칭으로 회전을 상쇄하고, ⑤는 아예 <b>에너지</b>를 재며, ⑥ 필 시험은 대부분의 에너지가 <b>피착체를 소성 굽히는 데</b> 쓰입니다.</figcaption>
+  </figure>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 파괴</span>G<sub>Ic</sub> · G<sub>IIc</sub> — CAE로 옮길 수 있는 값</h2>
+  <p class="lede">이 절의 시험들이 코히시브 존 법칙의 <strong>에너지 절반</strong>을 채웁니다. 그리고 접착 분야에서 <strong>ISO 25217이 가장 엄격하게 규정된 규격</strong>입니다 — 중요한 변수를 모두 통제하기 때문입니다.</p>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격</th>
+      <th class="v">얻는 값</th><th class="v">시편 길이</th><th class="v">폭</th><th class="v">두께</th>
+      <th class="v">시작 필름</th><th class="v">접착층 / a₀</th><th class="v">속도</th><th class="v">시편 수</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>ISO 25217:2009</b> <i>DCB · TDCB</i></td>
+        <td class="o">○<em>G_Ic 개시 + R곡선</em></td><td class="t">△<em>측정·보고</em></td><td class="t">△</td><td class="t">△</td>
+        <td class="o">○<em>&lt; 13 µm · PTFE 권장</em></td><td class="o">○<em>&lt; 1 mm · 이음 내 ±20 % · 이음 간 ±20 %</em><sup class="fn">5</sup></td><td class="o">○<em>금속 0.1–0.5 · 복합재 1.0–5.0 mm/min</em></td><td class="o">○<em>최소 4 이음</em></td></tr>
+      <tr><td class="nm"><b>ASTM D3433</b> <i>금속 이음 클리비지</i></td>
+        <td class="o">○<em>G_Ic</em></td><td class="t">△</td><td class="o">○<em>25.4 mm (지그)</em></td><td class="t">△</td>
+        <td class="t">△</td><td class="t">△</td><td class="t">△</td><td class="t">△<sup class="fn">6</sup></td></tr>
+      <tr><td class="nm"><b>ASTM D5528</b> <i>복합재 모드 I DCB</i></td>
+        <td class="o">○<em>G_Ic (MBT · CC · MCC)</em></td><td class="o">○<em>≥ 125 mm</em></td><td class="o">○<em>20 – 25 mm</em></td><td class="o">○<em>3 – 5 mm · 편차 ≤ 0.1 mm</em></td>
+        <td class="o">○<em>≤ 13 µm · PTFE(≤177 °C) / 폴리이미드</em></td><td class="o">○<em>a₀ = 50 mm · 인서트 ≈63 mm</em></td><td class="o">○<em>0.5 – 5.0 mm/min</em></td><td class="o">○<em>조건당 ≥ 5</em></td></tr>
+      <tr><td class="nm"><b>ISO 15024:2023</b> <i>모드 I</i></td>
+        <td class="o">○<em>G_Ic (CBT · MCC)</em></td><td class="o">○<em>≥ 125 mm</em></td><td class="o">○<em>20 ± 0.5 (15–30 허용)</em></td><td class="o">○<em>탄소 3 · 유리 5 mm ± 0.1</em></td>
+        <td class="o">○<em>≤ 13 µm</em></td><td class="o">○<em>로드블록 길이 ≤ 15 mm</em></td><td class="o">○<em>1 – 5 mm/min</em><sup class="fn">7</sup></td><td class="o">○<em>최소 5</em></td></tr>
+      <tr><td class="nm"><b>ASTM D7905</b> <i>모드 II ENF</i></td>
+        <td class="o">○<em>G_IIc</em></td><td class="t">△</td><td class="t">△</td><td class="o">○<em>짝수 층 · 편차 ≤ 평균의 5 %</em></td>
+        <td class="o">○<em>≤ 13 µm</em></td><td class="o">○<em>반스팬 50 mm · 균열길이 20 / 30 / 40 mm</em></td><td class="o">○<em>0.5 mm/min (0–1 허용)</em></td><td class="o">○<em>조건당 ≥ 5</em></td></tr>
+      <tr><td class="nm"><b>ASTM D6671</b> <i>혼합모드 MMB</i></td>
+        <td class="o">○<em>G_c vs G_II/G_T (≈0.2–1.0)</em></td><td class="t">△</td><td class="t">△</td><td class="t">△</td>
+        <td class="o">○<em>≤ 13 µm</em></td><td class="o">○<em>모드비는 레버 길이 c 로 조절</em></td><td class="t">△</td><td class="t">△<sup class="fn">8</sup></td></tr>
+      <tr><td class="nm"><b>ASTM D3762-24</b> <i>웨지 (내구성)</i></td>
+        <td class="o">○<em>균열 진전 Δa · 응집파괴율</em></td><td class="o">○<em>152 mm</em></td><td class="o">○<em>25 mm</em></td><td class="t">△</td>
+        <td class="o">○<em>초기 박리 19 mm</em></td><td class="t">△<em>웨지 두께 미확인</em></td><td class="x">×<em>환경 노출</em></td><td class="t">△</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">5</sup> <b>이 시리즈 전체에서 가장 엄격한 본드라인 통제입니다.</b> “접착층 두께는 1 mm 미만이어야 하고, 한 이음 안에서 20 % 넘게 변해서는 안 되며, 한 이음의 평균이 다른 이음의 평균과 20 % 넘게 달라서도 안 된다.” 이 조항이 존재하는 이유는 <b>G_Ic 자체가 접착층 두께 의존</b>이기 때문입니다(소성역이 구속되면서 보통 증가했다가 감소). &nbsp;
+  <sup class="fn">6</sup> D3433은 <b>지그(폭 25.4 mm · 로딩핀 Ø6.35 mm · 클레비스 3/4-10)만 확인</b>했습니다. 시편 길이·빔 높이·테이퍼 윤곽 m·피착체 두께·접착층·시편 수·하중속도·G_Ic 식은 <b>전부 미확인</b>입니다. 널리 도는 “356 mm 길이, 12.7 mm 피착체, m = 3a²/h³ + 1/h” 수치를 규격 요구사항으로 쓰지 마십시오. &nbsp;
+  <sup class="fn">7</sup> ASTM는 0.5 mm/min부터 허용하지만 <b>ISO의 하한은 1 mm/min</b>입니다. 또 ISO 15024는 <b>섬유 종류로 두께를 고정</b>(탄소 3 · 유리 5 mm)하는 반면 D5528은 3–5 mm 범위를 허용합니다 — <b>호환되지 않습니다</b>. &nbsp;
+  <sup class="fn">8</sup> D6671은 “시편 하중에 제한을 두지 않는다”고 하므로 <b>레버의 기하 비선형</b>이 문서화된 오차원입니다. 이것이 CZM의 혼합모드 상호작용 지수에 직접 영향을 줍니다.</p>
+
+  <div class="note">
+    <h4>테이퍼(TDCB)가 존재하는 이유</h4>
+    <p>테이퍼형에서는 컴플라이언스 미분 <code>dC/da</code>가 <strong>일정</strong>해집니다. 그러면 <strong>균열 길이를 측정하지 않고 하중만으로</strong> G<sub>Ic</sub>를 계산할 수 있습니다. 균일 DCB에서는 균열 길이를 추적해야 하고, 그것이 가장 큰 오차원입니다.</p>
+  </div>
+  <div class="note">
+    <h4>어느 값이 CAE로 옮겨가는가</h4>
+    <ul class="tight">
+      <li><strong>단일방향 적층에서는 섬유 브리징이 전파 G<sub>Ic</sub>를 부풀립니다.</strong> 인서트 끝에서 나온 <strong>개시값이 이전 가능한 값</strong>이고, R곡선 평탄부는 적층 구성에 딸린 값입니다.</li>
+      <li>ISO 15024는 <strong>NL(비선형 개시점) · VIS · 5%/MAX · PROP</strong>의 평균·표준편차·변동계수를 모두 보고하게 합니다. <strong>코히시브 존 G<sub>Ic</sub>에 가장 가까운 것은 NL 점</strong>입니다.</li>
+      <li>ENF(모드 II)는 균열 성장이 불안정합니다. 광학 추적이 불가능해서 <strong>컴플라이언스 교정 절차</strong>가 존재하는 것이고, 균열면 <strong>마찰이 G<sub>IIc</sub>를 부풀립니다</strong>.</li>
+      <li>D5528 · D7905 · D6671은 원래 복합재 층간 박리용이지만, <strong>인서트를 본드라인에 넣어</strong> 접착 이음에도 그대로 씁니다. 그때는 <strong>ISO 25217의 본드라인 통제 규칙을 위에 얹으십시오</strong>.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 기타</span>필 · 인장 · 임팩트 · 피로</h2>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격</th>
+      <th class="v">얻는 값</th><th class="v">시편</th><th class="v">속도 · 조건</th>
+      <th class="v">시편 수</th><th class="v">평가 규칙</th><th class="v">시편이 값을 바꾸는 지점</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>ASTM D1876</b> <i>T-필</i></td>
+        <td class="o">○<em>N/mm (평균·최대·최소)</em></td><td class="o">○<em>폭 25 · 길이 ≥200 · 접착 ≥150 mm</em></td><td class="o">○<em>254 mm/min (분리 127)</em></td>
+        <td class="t">△</td><td class="o">○<em>≥127 mm 구간 평균 · <b>초기 피크 제외</b></em></td><td class="o">○<em>에너지 대부분이 피착체 소성굽힘</em></td></tr>
+      <tr><td class="nm"><b>ASTM D903</b> <i>180° 필</i></td>
+        <td class="o">○<em>N/mm</em></td><td class="o">○<em>25.4 × 305 mm · 유연+강체</em></td><td class="o">○<em>152.4 mm/min</em></td>
+        <td class="t">△</td><td class="t">△</td><td class="o">○<em>유연 피착체가 항복 없이 180° 접혀야 한다</em></td></tr>
+      <tr><td class="nm"><b>ASTM D6862</b> <i>90° 필</i></td>
+        <td class="o">○<em>N/mm</em></td><td class="t">△</td><td class="t">△</td>
+        <td class="t">△</td><td class="t">△</td><td class="o">○<em>규격이 “피착체 두께가 결과에 큰 영향”이라 명시 · <b>세 각도 중 가장 낮게 나옴</b></em></td></tr>
+      <tr><td class="nm"><b>ASTM D897</b> <i>버트 인장</i></td>
+        <td class="o">○<em>MPa</em></td><td class="t">△<em>지름·면적 미확인</em></td><td class="t">△</td>
+        <td class="o">○<em>10개</em></td><td class="x">×</td><td class="o">○<em>접착층 0.025 mm — 거의 정수압 구속<sup class="fn">9</sup></em></td></tr>
+      <tr><td class="nm"><b>ASTM D2094 / D2095</b> <i>바·로드 버트</i></td>
+        <td class="o">○<em>버트 인장강도</em></td><td class="o">○<em>플라스틱 127×12.7×12.7 몰드 → 38.1 mm 가공</em></td><td class="x">×</td>
+        <td class="t">△</td><td class="o">○<em>클리비지는 바만 · 비틀림전단은 로드/수정바만</em></td><td class="o">○<em>금속면 1 µm · 플라스틱면 80 µm 마감</em></td></tr>
+      <tr><td class="nm"><b>ASTM D950</b> <i>충격</i></td>
+        <td class="o">○<em>J/m² (100 J/m² 단위로 보고)</em></td><td class="o">○<em>금속 25.4×25.4 + 25.4×44.5 블록</em></td><td class="o">○<em>진자 해머 3.4 m/s</em></td>
+        <td class="o">○<em>금속 10개 · 목재 20개 이상 / ≥4 이음</em></td><td class="x">×</td><td class="o">○<em>타격점이 접착선에 “가능한 가까이” — 블록 관성이 섞인다</em></td></tr>
+      <tr><td class="nm"><b>ISO 9664:1993</b> <i>인장전단 피로</i></td>
+        <td class="o">○<em>S–N · 10⁶ 피로강도 · 정적 Z_R</em></td><td class="o">○<em>강 이중겹침 길이 ≥170 · 폭 25 ± 0.25 · 두께 3.2 · 겹침 12.5 ± 0.25</em></td><td class="o">○<em>기본 30 Hz (최대 60) · R = 0.1</em></td>
+        <td class="o">○<em>3수준 × ≥4 + 정적 Z_R ≥6</em></td><td class="o">○<em>유효 파단 10⁴ – 10⁶ 사이클</em></td><td class="o">○<em>평균응력 0.25–0.5 Z_R (통상 0.35)</em></td></tr>
+      <tr><td class="nm"><b>ISO 11343:2019</b> <i>임팩트 웨지 필</i></td>
+        <td class="o">○<em>동적 클리비지 저항 (N/mm · J)</em></td><td class="t">△<sup class="fn">10</sup></td><td class="t">△</td>
+        <td class="t">△</td><td class="t">△</td><td class="o">○<em>대칭 웨지 사용 · <b>접착층 두께 기록</b> (ISO 17194)</em></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">9</sup> 두 강체 원통 사이의 얇은 접착층은 <b>거의 정수압 구속</b> 상태입니다. 측정된 “인장강도”는 벌크 접착제 인장강도보다 훨씬 높고, <b>지름/접착층두께 비</b>에 의존합니다. 정렬이 어긋나면 굽힘이 들어와 값이 급락합니다. D897이 코히시브 법선강도 <code>T_n</code>의 공급원이 될 수 없는 이유입니다. &nbsp;
+  <sup class="fn">10</sup> ISO 11343의 시편·웨지 치수, 충격속도, 시편 수를 <b>확인하지 못했습니다</b>. 흔히 인용되는 90 × 20 mm 쿠폰 · 접착길이 30 mm · 2–3 m/s는 <b>검증되지 않았습니다</b>. 이 시험은 자동차 충돌 관련 시험이며 결과는 피착체 게이지와 접착제 속도민감성이 지배하는 <b>이음 응답</b>입니다.</p>
+  <div class="note">
+    <h4>필 시험 세 가지가 서로 비교 불가인 이유</h4>
+    <p>필 결과의 대부분은 <strong>피착체를 소성 굽히는 에너지</strong>이지 접착제 안에서 소모되는 파괴에너지가 아닙니다. 따라서 값은 <strong>피착체 두께와 항복강도에 비례하듯 움직입니다</strong>. D903(180°) · D1876(T) · D6862(90°)는 같은 접착제에서 서로 다른 값을 주며 <strong>90°가 가장 낮게 나옵니다</strong>. 게다가 D1876은 <strong>초기 피크를 제외</strong>하고 127 mm 구간 평균을 취하라고 규정하는데, 이 규칙 자체가 보고값을 크게 바꿉니다. <strong>필 값은 파괴에너지가 아닙니다.</strong></p>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 카드</span>코히시브 존 모델로 조립하기</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 430" role="img" aria-label="이중선형 응력-분리 법칙의 각 파라미터가 어느 시험에서 나오는가" style="width:100%;height:auto;overflow:visible"><defs><marker id="ad_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ad_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="96" y="66" width="380" height="250" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><text x="476.0" y="352" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">분리 δ</text><text x="6" y="58" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">트랙션 T</text><polygon points="96.00,316.00 156.80,116.00 422.80,316.00 422.80,316.00 156.80,316.00 96.00,316.00" fill="#2F6FC4" fill-opacity=".12" stroke="none"/><polyline points="96.00,316.00 156.80,116.00 422.80,316.00" fill="none" stroke="#2F6FC4" stroke-width="2.4"/><circle cx="156.8" cy="116.0" r="4.4" fill="#2F6FC4"/><line x1="96" y1="116" x2="157" y2="116" stroke="currentColor" stroke-opacity=".3" stroke-width="1" stroke-dasharray="4 3"/><text x="107.4" y="104.0" text-anchor="start" fill="#2F6FC4" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">T_max  ← D5656 τ_max (전단) · 법선은 보정</text><text x="210.0" y="248.0" text-anchor="start" fill="#D07A3B" font-size="11" font-family="IBM Plex Sans KR, sans-serif">면적 = G_c  ← ISO 25217 · D5528 · D7905</text><text x="103.6" y="284.0" text-anchor="start" fill="currentColor" fill-opacity=".65" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">기울기 K = G / 접착층 두께</text><text x="157" y="334" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor">δ₀</text><text x="423" y="334" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="currentColor">δ_f</text><text x="96" y="30" font-family="IBM Plex Sans KR, sans-serif" font-size="12" font-weight="500" fill="currentColor">δ_f = 2 G_c / T &nbsp;— 에너지와 변위 중 <tspan fill="#C4402B">하나만</tspan> 주면 된다 (둘 다 주면 카드가 모순된다)</text><text x="96" y="352" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#C4402B">법선 강도 T_n 에는 깨끗한 시험 규격이 없다</text><text x="96" y="370" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".66">D897 butt 은 접착층 0.025 mm 로 구속이 너무 심하다</text><text x="96" y="386" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".66">실무에서 T_n 은 측정이 아니라 <tspan font-weight="600">교정</tspan>된다</text><text x="96" y="406" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".66">G_c 도 τ–γ 도 <tspan font-weight="600">접착층 두께 의존</tspan> — 본드라인이 다르면 그대로 옮길 수 없다</text><text x="540" y="74" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="#2F6FC4">Abaqus</text><text x="540" y="94" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="currentColor" fill-opacity=".85">*DAMAGE INITIATION, CRITERION=QUADS</text><text x="540" y="108" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">T_n · T_s · T_t  ← D5656 + 교정</text><text x="540" y="124" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="currentColor" fill-opacity=".85">*DAMAGE EVOLUTION, TYPE=ENERGY,</text><text x="540" y="138" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">  MIXED MODE BEHAVIOR=BK, POWER=η</text><text x="540" y="154" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="currentColor" fill-opacity=".85">  G_Ic, G_IIc, G_IIIc</text><text x="540" y="168" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">← ISO 25217 · D5528 · D7905 · η ← D6671</text><text x="540" y="190" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="#C4402B">LS-DYNA</text><text x="540" y="210" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="currentColor" fill-opacity=".85">*MAT_COHESIVE_MIXED_MODE (MAT_138)</text><text x="540" y="224" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">EN · ET · GIC · GIIC</text><text x="540" y="240" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="currentColor" fill-opacity=".85">XMU · T · S · UND · UTD</text><text x="540" y="254" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">에너지와 극한변위를 둘 다 주면 모순된다</text><text x="540" y="276" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="#8E63AE">Ansys</text><text x="540" y="296" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="currentColor" fill-opacity=".85">TB,CZM   TBOPT=CBDE</text><text x="540" y="310" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">σ_max · G_cn · τ_max · G_ct · η · β · α</text><text x="540" y="326" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="currentColor" fill-opacity=".85">TBOPT=CBDD 는 분리거리로 정의</text><text x="540" y="340" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".6">혼합모드는 지수 α 의 멱함수 법칙</text><text x="540" y="368" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#C4402B">혼합모드 지수는 네 코드가 서로 다른 법칙이다</text><text x="540" y="386" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">Abaqus BK · Abaqus POWER LAW · LS-DYNA XMU · Ansys α — 숫자를 복사하지 말 것</text></svg></div>
+    <figcaption>이중선형 트랙션–분리 법칙의 <b>높이는 시험 강도에서, 면적은 파괴시험에서</b> 옵니다. <code>δ_f = 2G_c / T</code>이므로 에너지와 극한변위 중 하나만 주면 되고, 둘 다 주면 카드가 모순됩니다.</figcaption>
+  </figure>
+  <div class="tw"><table>
+    <thead><tr><th>CZM 파라미터</th><th>출처 시험</th><th>주의</th></tr></thead>
+    <tbody>
+      <tr><td class="k">전단 강성 K_s</td><td><b>D5656</b> 전단탄성계수 ÷ 접착층 두께</td><td>법선 강성 K_n 은 보통 <b>측정이 아니라 수치적 페널티</b>로 크게 잡는다</td></tr>
+      <tr><td class="k">전단 피크 트랙션 T_s / T_t</td><td><b>D5656</b> τ_max</td><td>그 본드라인 두께에서의 값</td></tr>
+      <tr><td class="k">법선 피크 트랙션 T_n</td><td><b>깨끗한 규격 없음</b></td><td>D897 은 구속이 과해 못 쓴다 → <b>교정(calibration)</b>으로 정한다</td></tr>
+      <tr><td class="k">G_Ic</td><td><b>ISO 25217</b> / D3433 (접착) · <b>D5528</b> / ISO 15024 (박리)</td><td>접착층 두께와 함께 보고. 개시값(NL)을 쓸 것</td></tr>
+      <tr><td class="k">G_IIc</td><td><b>D7905</b> ENF</td><td>균열면 마찰이 값을 부풀린다</td></tr>
+      <tr><td class="k">혼합모드 상호작용 지수</td><td><b>D6671</b> MMB</td><td>가정하지 말고 <b>피팅</b>할 것. 코드마다 법칙이 다르다</td></tr>
+    </tbody>
+  </table></div>
+
+  <pre><code>** Abaqus
+*DAMAGE INITIATION, CRITERION=QUADS
+ &lt;T_n&gt;, &lt;T_s&gt;, &lt;T_t&gt;
+*DAMAGE EVOLUTION, TYPE=ENERGY, MIXED MODE BEHAVIOR=BK, POWER=&lt;eta&gt;
+ &lt;G_Ic&gt;, &lt;G_IIc&gt;, &lt;G_IIIc&gt;
+*DAMAGE STABILIZATION
+ &lt;viscosity&gt;</code></pre>
+  <div class="note">
+    <h4>Abaqus — 규격 문서에서 확인한 것</h4>
+    <ul class="tight">
+      <li><code>TYPE=DISPLACEMENT</code>(총/소성 변위 기준) · <code>TYPE=ENERGY</code>(<strong>파괴에너지 기준 — G_Ic·G_IIc를 넣는 쪽</strong>) · <code>TYPE=HYSTERESIS ENERGY</code>(주기 하중)</li>
+      <li><code>SOFTENING=LINEAR</code>(기본) · <code>EXPONENTIAL</code> · <code>TABULAR</code> — <strong>TABULAR는 TYPE=DISPLACEMENT 와만</strong> 함께 쓸 수 있습니다</li>
+      <li><code>MIXED MODE BEHAVIOR=BK</code>(Benzeggagh-Kenane) · <code>POWER LAW</code> · <code>TABULAR</code>. <strong>이 파라미터를 생략하면 Abaqus는 손상 진전이 모드 무관이라고 가정합니다.</strong></li>
+      <li><code>POWER=</code>는 <strong>멱함수 법칙 또는 BK 기준의 지수</strong>를 넣는 자리입니다 — D6671에서 피팅한 값</li>
+      <li><strong>정정</strong>: 모드혼합 파라미터의 철자는 <code>MODE MIX RATIO</code>이며(“MODE MIXITY RATIO”가 아님), 값은 <code>ENERGY</code>(기본) · <code>ACCUMULATED ENERGY</code> · <code>TRACTION</code></li>
+      <li>손상 개시는 <strong>Maxs</strong>(세 비 중 최대) 또는 <strong>Quads</strong>(세 비의 2차 조합), 변형률판 Maxe·Quade도 존재. 다만 <code>CRITERION=QUADS</code>/<code>MAXS</code>의 <strong>키워드 토큰 철자 자체는 GUI 명칭(“Quads Damage”)으로만 확인</strong>했습니다</li>
+    </ul>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>LS-DYNA <code>*MAT_COHESIVE_MIXED_MODE</code> (MAT_138)</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Card 1</td><td><code>MID</code> · <code>RO</code> · <code>ROFLG</code>(0 체적기준 / 1 면적기준) · <code>INTFAIL</code>(요소 삭제 적분점 1–4) · <code>EN</code>(법선 강성) · <code>ET</code>(면내 강성) · <code>GIC</code> · <code>GIIC</code> [Pa·m = J/m²]</td></tr>
+      <tr><td class="k">Card 2</td><td><code>XMU</code>(혼합모드 기준 지수) · <code>T</code>(법선 피크 트랙션 · 음수면 함수 ID) · <code>S</code>(접선 피크 트랙션) · <code>UND</code>(법선 극한변위) · <code>UTD</code>(접선 극한변위)</td></tr>
+      <tr><td class="k">요소</td><td>코히시브 솔리드 <b>ELFORM 19 / 20</b> · 트랙션은 요소 중립면에 법선인 국부 z 계에서 계산</td></tr>
+      <tr><td class="k">가용성</td><td><b>V971 R3 이전에는 없음</b></td></tr>
+      <tr><td class="k">주의</td><td>에너지(GIC·GIIC)와 극한변위(UND·UTD)를 <b>둘 다 지정</b>하면 이중선형 법칙 안에서 서로 커플되어 <b>모순 카드</b>가 됩니다 — 전형적 오류</td></tr>
+      <tr><td class="k">같은 계열</td><td><code>*MAT_184</code> COHESIVE_ELASTIC · <code>*MAT_185</code> COHESIVE_TH · <code>*MAT_186</code> COHESIVE_GENERAL. 접착제 전용 속도의존 <code>*MAT_240</code>은 존재하나 상세 <b>미확인</b></td></tr>
+      <tr><td class="k">필드명</td><td>참조한 자료는 <code>TN · TT · UDN · Idel</code>로 표기 — LSTC 매뉴얼의 <code>T · S · UND · UTD · INTFAIL</code>과 같은 슬롯입니다. <code>XMU</code> 외에 별도 <code>Gamma</code> BK 지수 필드가 있는지는 <b>미확인</b></td></tr>
+    </tbody>
+  </table></div>
+  <div class="tw"><table>
+    <thead><tr><th>Ansys <code>TB,CZM</code></th><th>상수</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>TBOPT = CBDE</b><br><i>임계 파괴에너지로 정의 — 파괴시험 데이터를 쓰는 쪽</i></td>
+        <td>C1 σ_max(법선 최대 접촉응력) · <b>C2 G_cn</b>(법선 임계 파괴에너지 밀도) · C3 τ_max(접선 최대 등가응력) · <b>C4 G_ct</b>(접선 임계 파괴에너지 밀도) · C5 η(인공 감쇠) · C6 β(압축 하 접선 슬립 플래그, 0/1) · <b>C7 α</b>(혼합모드 멱함수 지수, 기본 2)</td></tr>
+      <tr><td class="k"><b>TBOPT = CBDD</b><br><i>분리 거리로 정의</i></td>
+        <td>C1 σ_max · C2 δ_n(디본딩 완료 시 접촉 갭) · C3 τ_max · C4 δ_t(디본딩 완료 시 접선 슬립) · C5 η · C6 β · C7 α</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>코드 간 경고 — 혼합모드 지수를 복사하지 마십시오</h4>
+    <p><strong>Abaqus BK</strong>, <strong>Abaqus POWER LAW</strong>, <strong>LS-DYNA XMU</strong>, <strong>Ansys α</strong>는 <strong>네 개의 서로 다른 상호작용 법칙</strong>이고 지수 정의가 다릅니다. Ansys CBDD/CBDE의 혼합모드는 <strong>지수 α의 멱함수 법칙</strong>이지 Benzeggagh-Kenane이 아닙니다. Abaqus용으로 피팅한 BK 지수를 Ansys에 그대로 넣으면 안 됩니다 — <strong>D6671 데이터로 코드마다 다시 피팅</strong>하십시오.</p>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 체결</span>기계적 체결과 용접부</h2>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>얻는 값</th><th>시편 · 조건</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>ASTM D5961</b> <i>복합재 베어링</i></td><td>극한 베어링강도 F<sup>bru</sup> · 오프셋 베어링강도 F<sup>bro</sup> · 베어링 응력–변형률 곡선</td><td>절차 <b>A</b> 이중전단 인장(단일 체결) · <b>B</b> 단일전단 인장/압축(2부재) · <b>C</b> 단일전단 인장(1부재) · <b>D</b> 이중전단 압축. 치수·구멍지름·w/D·e/D·시편 수 <b>미확인</b></td></tr>
+      <tr><td class="k"><b>ASTM D953-19</b> <i>플라스틱 핀 베어링</i></td><td>핀 베어링강도</td><td>-19 개정에서 제목이 “Bearing Strength” → <b>“Pin-Bearing Strength”</b>로 변경. 치수 전부 <b>미확인</b></td></tr>
+      <tr><td class="k"><b>ASTM E238</b> <i>금속 핀형 베어링</i></td><td>베어링 항복강도 F<sup>by</sup>(2 % 오프셋) · 극한 베어링강도 F<sup>bu</sup></td><td>구멍 가공한 평판 쿠폰 · <b>e/D 통상 1.5 또는 2.0</b> · 핀은 항상 시편보다 경함. 치수·속도·시편 수 <b>미확인</b></td></tr>
+      <tr><td class="k"><b>ISO 4136:2022</b> <i>용접 횡방향 인장</i></td><td>이음의 R_m 과 <b>파단 위치</b></td><td>폭 b₀ = <b>12 mm</b>(모재 ≤2 mm) / <b>25 mm</b>(&gt;2 mm) · 어깨폭 b₁ = b₀ + 12 mm · 어깨 R ≥ 25 mm · <b>평행부 L_c ≥ L_s + 60 mm</b>(L_s = 가공 후 용접폭), 용접축은 평행부 중앙</td></tr>
+      <tr><td class="k"><b>ISO 5173:2023</b> <i>용접 굽힘</i></td><td>표면 균열 유무</td><td>시편 유형 TFBB · TRBB · TSBB · LFBB · LRBB (+ 클래딩용 FBC · SBC · FBCB · SBCB) · 두께 t_s = <b>10 ± 0.5 mm</b>(횡방향 최대 30, 종방향 최대 10) · 폭 <b>4 t_s 이상</b> · 길이 L_t ≥ l + 2R · 모서리 라운딩 r ≤ 0.2 t_s (최대 3 mm) · <b>맨드릴 d = 4 t_s</b>(연신 ≥20 % 강·Ni합금) · 롤러 R ≥ 20 mm · 약 180°</td></tr>
+      <tr><td class="k"><b>ISO 9016:2022</b> <i>용접 충격 — 위치·방향</i></td><td>시편 자체는 <b>ISO 148을 참조</b>. 이 규격은 <b>노치를 어디에 놓는가</b>를 정한다</td><td>5문자 표기 — 1 <b>U/V</b>(노치 형상) · 2 <b>W</b>(용착금속)/<b>H</b>(HAZ) · 3 <b>S</b>(표면 평행)/<b>T</b>(두께 관통) · 4·5 거리 a/b [mm]. 예 <code>VWT 0/b</code>, <code>VHT a/b</code>. 기준선은 용착금속이면 용접 중심선, HAZ면 용융선/이음선. 시편 장축은 <b>용접선에 직각</b></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>이 절의 두 가지 교훈</h4>
+    <ul class="tight">
+      <li><strong>ISO 4136의 구조적 함정</strong> — 평행부가 용접폭보다 <strong>60 mm 이상 길도록 강제</strong>되므로 게이지 대부분이 모재입니다. 따라서 <strong>용착금속이 오버매치된 이음은 항상 모재에서 파단</strong>하고, 보고되는 값은 모재 강도입니다. 이 시험은 “이음이 모재보다 약하지 않다”를 확인하는 시험이지 용착금속 강도 시험이 아닙니다.</li>
+      <li><strong>ISO 9016은 이 시리즈 전체에서 “시편이 답을 정한다”의 가장 순수한 사례</strong>입니다 — 노치를 2 mm 옮기면 흡수에너지가 <strong>자릿수로</strong> 달라질 수 있습니다. 조립HAZ에서 세립HAZ로, 또는 모재로 넘어가기 때문입니다.</li>
+      <li><strong>베어링강도</strong>는 <code>w/D</code> · <code>e/D</code> · <strong>체결 토크</strong> · <strong>구멍 클리어런스</strong>의 함수입니다. 이 넷 없이 보고된 베어링강도는 의미가 없습니다.</li>
+      <li><strong>ISO 5173의 맨드릴 지름은 모재 연신율에 묶여 있습니다</strong> — 같은 용접이라도 모재 사양이 다르면 다른 변형률로 굽혀집니다.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 상태</span>상태 변경 · 확인하지 못한 항목</h2>
+  <h3>최근 개정 · 상태 변경</h3>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ASTM D3762</td><td><b>2019년 폐지 → 복권.</b> D3762-03(2010)이 2019년 폐지되었고, 작업항목 WK91567로 재승인되어 현행은 <b>D3762-24</b>. “D3762-03” 인용은 폐지된 문서를 인용하는 것</td></tr>
+      <tr><td class="k">ASTM D950</td><td>D950-98이 <b>2003년 폐지</b>되고 D950-03으로 대체. 현행판이 카탈로그에 있으나 <b>정확한 재승인 연도 미확인</b></td></tr>
+      <tr><td class="k">ASTM D2094 · D2095</td><td><b>둘 다 Active</b> — D2094-00(2023), D2095-96(2023). D2095는 시편 준비를 D2094에 의존</td></tr>
+      <tr><td class="k">ASTM D5656</td><td>개정 작업 <b>WK82028</b> 진행 중 — “전단변형률 측정 실무 개선”</td></tr>
+      <tr><td class="k">ASTM D953</td><td>-19 개정에서 제목 변경: “Bearing Strength” → <b>“Pin-Bearing Strength”</b></td></tr>
+      <tr><td class="k">현행판</td><td>ISO 4587:2003 · ISO 11343:<b>2019</b>(제목에 “wedge” 추가) · ISO 15024:<b>2023</b> · ISO 4136:<b>2022</b> · ISO 5173:<b>2023</b> · ISO 9016:<b>2022</b> · ISO 9664:1993(2019 재확인)</td></tr>
+      <tr><td class="k"><b>ISO 17194:2022</b></td><td>“구조용 접착제 — 표준 물성 데이터베이스”. <b>어느 시험이 어느 물성을 주는지와 함께 기록할 메타데이터를 규정</b>합니다. ISO 4587 → 겹치기 전단강도(“접착층 두께 · 피착체 재질 · 표면처리를 기록”), ISO 11343 → 동적 클리비지(“대칭 웨지 · 접착층 두께 기록”), ISO 25217 → 모드 I 파괴에너지(“접착층 두께 기록”), ISO 11339 → T-필(D1876의 ISO 대응), ISO 527-1/-2 → <b>벌크</b> 인장 E·ν, ISO 6721-4/-5 → DMA 온도별 모듈러스, ISO 868 → Shore 경도. <b>모든 기계 항목이 접착층 두께 기록을 요구합니다</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>확인하지 못한 항목</h3>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>미확인 내용</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ISO 4587</td><td>피착체 치수(Figure 1) — “100 × 25 × 1.6 mm” 통용값 미검증</td></tr>
+      <tr><td class="k">ASTM D1002</td><td>현행 2019년판의 시편 수 (읽은 사본은 30개 / ≥4 이음)</td></tr>
+      <tr><td class="k">ASTM D3163 · D3164 · D5868</td><td>피착체 두께 · 접착층 · 시편 수 · D5868 겹침 길이 · D3164 플라스틱 인서트 두께(출처 자체 모순)</td></tr>
+      <tr><td class="k">ASTM D3165</td><td>공칭 시편 폭</td></tr>
+      <tr><td class="k">ASTM D5656</td><td><b>겹침 길이</b> · 접착층 목표 · 시편 수</td></tr>
+      <tr><td class="k">ASTM D3433 <b>(큰 공백)</b></td><td>시편 치수 전부 · 테이퍼 기하 · 접착층 · 시편 수 · 하중속도 · G_Ic 식. <b>지그만 확인</b>(폭 25.4 · 핀 Ø6.35 · 3/4-10)</td></tr>
+      <tr><td class="k">ISO 25217</td><td>DCB/TDCB 공칭 B · h · l · TDCB의 m 식(미리보기에서 깨짐) · 규정 해석법(SBT/CBT/ECM 여부)</td></tr>
+      <tr><td class="k">ASTM D5528 · D7905 · D6671</td><td>D5528 로드블록/피아노힌지 치수 · D7905 전체 길이·폭 · <b>D6671 치수 전부와 레버길이–모드비 관계식</b></td></tr>
+      <tr><td class="k">ASTM D3762</td><td>피착체 두께 · 웨지 두께 · 노출 조건 · 시편 수</td></tr>
+      <tr><td class="k">ASTM D1876 · D903 · D6862</td><td>피착체 두께 · 접착/비접착 길이 · 시편 수 · D6862는 <b>전부</b></td></tr>
+      <tr><td class="k">ASTM D897 · D2094 · D2095</td><td>버트 이음 지름·접착면적 · D2094 로드 지름과 바 단면(Figs. 1–3) · 정렬 공차(Fig. 6)</td></tr>
+      <tr><td class="k">ISO 9664</td><td>알루미늄 시편 폭(출처의 “≥91 mm”가 이상함)</td></tr>
+      <tr><td class="k">ISO 11343</td><td>시편·웨지 치수 · 충격속도 · 시편 수 <b>전부</b></td></tr>
+      <tr><td class="k">ASTM D5961 · D953 · E238</td><td>시편 치수 · 구멍 지름 · w/D · e/D · 시편 수 · 하중속도</td></tr>
+      <tr><td class="k">ISO 9016</td><td>세트당 시편 수 (통상 3개는 적용규격이 정함)</td></tr>
+      <tr><td class="k">Abaqus</td><td><code>CRITERION=QUADS</code>/<code>MAXS</code>의 리터럴 토큰 철자 (GUI 명칭만 확인)</td></tr>
+      <tr><td class="k">LS-DYNA</td><td>MAT_138에 <code>XMU</code> 외 별도 <code>Gamma</code> BK 지수 필드 존재 여부 · MAT_240 상세</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>정리 — 접착 데이터를 남길 때</h4>
+    <ul class="tight">
+      <li><strong>접착층 두께</strong> — 모든 항목에. ISO 17194가 이것을 의무화한 이유가 있습니다</li>
+      <li><strong>피착체</strong> — 재질 · 두께 · <strong>표면처리</strong>. 접착 데이터에서 표면처리는 접착제만큼 중요합니다</li>
+      <li><strong>겹침 길이와 그립 자유길이</strong> — ASTM/ISO 어느 쪽 규격인지까지</li>
+      <li><strong>속도</strong> — D5868 13 mm/min vs D3163 1.3 mm/min처럼 10배 차이가 흔합니다</li>
+      <li><strong>파괴 데이터</strong> — 개시(NL)인지 전파(PROP)인지, 해석법(MBT/CC/MCC 또는 CBT/MCC)이 무엇인지</li>
+      <li><strong>CZM 카드</strong> — 어느 파라미터가 측정이고 어느 것이 교정인지 (특히 <code>T_n</code>과 법선 강성)</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  시편 규격 시리즈 · 08 — 접착·접합 · ASTM D1002 · D3165 · D5656 · D3433 · D5528 · D7905 · D6671 · D1876 · D950 · ISO 4587 · 9664 · 11343 · 25217 · 15024 · 17194 · 4136 · 5173 · 9016
+</footer>
+</body></html>

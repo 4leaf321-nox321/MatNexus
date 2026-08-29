@@ -1,0 +1,691 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>부식 시편 규격 — 면적·마감·모서리·부피가 형상을 대신한다</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">시편 규격 시리즈 · 10 (완결)</div>
+  <h1>부식<br>시편 규격</h1>
+  <p class="dek">기계시험 시편은 <strong>응력장</strong>을 정의하려고 형상을 갖습니다. 부식시험이 재는 것은 <strong>계면 반응의 단위 계면당 속도</strong>이므로, 지배 변수는 전부 계면과 그 옆 전해질의 성질입니다 — <strong>표면적 · 표면 마감 · 모서리 처리 · 용액 부피</strong>. 그래서 부식 쿠폰에는 규정 형상이 거의 없습니다. 예외는 SCC 시편인데, 거기서는 시편 형상이 <strong>기계적 구동력을 만들고 정량화</strong>하기 때문입니다.</p>
+  <div class="mast-meta">
+    <div><b>범위</b> SCC 응력부여 시편 · 균일/국부 부식 · 입계부식 · 염수분무 · 대기폭로</div>
+    <div><b>핵심</b> SCC 는 속도가 아니라 문턱값 · 공식은 평균이 아니라 극값</div>
+    <div><b>주의</b> 원문 유료 — 2차 출처 기반, △는 미확인</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 면적 · 마감 · 모서리 · 부피</a>
+    <a href="#s1"><span>01</span> SCC 응력부여 시편</a>
+    <a href="#s2"><span>02</span> 환경 규격</a>
+    <a href="#s3"><span>03</span> 균일 · 국부 부식</a>
+    <a href="#s4"><span>04</span> 입계부식</a>
+    <a href="#s5"><span>05</span> 염수분무와 대기폭로</a>
+    <a href="#s6"><span>06</span> SCC — 문턱값의 물리</a>
+    <a href="#s7"><span>07</span> CAE · 설계로 가는 길</a>
+    <a href="#s8"><span>08</span> 상태 변경 · 미확인</a>
+  </nav>
+</header>
+
+<main>
+<style>
+.ox table{min-width:62rem}
+.ox th.v{font-size:.68rem;line-height:1.3;white-space:normal;min-width:3.9rem;text-align:center}
+.ox td.o{text-align:center;color:var(--accent-ink);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.o em,.ox td.t em{display:block;background:none;padding:0;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.68rem;font-weight:400;color:var(--muted);letter-spacing:.01em;margin-top:1px}
+.ox td.t{text-align:center;color:var(--hot);font-weight:600;white-space:nowrap;font-size:.95rem}
+.ox td.x{text-align:center;color:var(--muted);opacity:.45;font-size:.95rem}
+.ox td.nm{white-space:nowrap;font-size:.82rem}
+.ox td.nm b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500;color:var(--accent-ink)}
+.ox td.nm i{font-style:normal;color:var(--muted);font-size:.92em}
+.oxleg{display:flex;flex-wrap:wrap;gap:.4rem 1.8rem;font-size:.88rem;color:var(--ink2)}
+.oxleg b{font-size:1rem}
+.oxleg .co{color:var(--accent-ink)} .oxleg .ct{color:var(--hot)} .oxleg .cx{color:var(--muted)}
+sup.fn{color:var(--hot);font-size:.72em;font-weight:600;padding-left:.15em}
+</style>
+
+<section id="s0">
+  <h2><span class="num">00 / 성격</span>면적 · 마감 · 모서리 · 부피</h2>
+  <p class="lede">기계시험 시편이 형상을 갖는 이유는 측정량이 <strong>응력장에 대한 벌크 응답</strong>이기 때문입니다. 부식시험은 범주가 다릅니다 — <strong>계면 반응의 단위 계면당 속도</strong>를 잽니다. 그래서 관련 변수가 전부 계면과 그 옆 전해질의 성질이 됩니다.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>면적은 말 그대로 식 안에 있다</h4>
+      <p><code>CR = K·W/(A·T·D)</code>이고 <code>i = I/A</code>입니다. 면적이 정규화 분모이므로 결과는 <strong>형상 무관</strong>이 되도록 설계되어 있습니다 — Ø38 mm 원판과 25 × 50 mm 사각형이 같은 mm/y 를 주어야 합니다. G30이 U벤드 치수를 “보유한 재료의 양과 형태, 응력부여 방법, 시험 용기 크기”가 정한다고 쓰는 이유입니다.</p>
+    </div>
+    <div class="card">
+      <h4>표면 마감이 반응면의 초기 상태를 정한다</h4>
+      <p>부식하는 것은 벌크 합금이 아니라 <strong>산화막과 그 아래 결함 집단</strong>입니다. 120그릿 연마는 밀스케일·열변색·냉간가공층·박힌 연마재·가공 스미어를 제거해 재현 가능한 시작 막을 만듭니다. G1 · G31(No.120) · G48(120그릿 습식) · G28(습식 No.80 / 건식 No.120) · A262 B·C·F 가 전부 이것을 못 박습니다. 공식 시험에서는 <strong>표면 상태가 합금 조성보다 큰 효과</strong>인 경우가 흔합니다.</p>
+    </div>
+    <div class="card">
+      <h4>모서리는 다른 재료다</h4>
+      <p>전단·펀칭·레이저·플라즈마 절단면은 냉간가공층, 재응고층, 열영향 조직, 표면에 수직으로 노출된 개재물 스트링거를 갖습니다. 3 mm 두께 쿠폰에서 모서리는 전체 면적의 <strong>10–20 %</strong>가 될 수 있고 질량손실 대부분을 공급할 수 있습니다. G31은 “전단면 노출을 피하라”고 하고, B117은 코팅·복합재의 <strong>절단 모서리를 보호</strong>하라고 요구합니다.</p>
+    </div>
+    <div class="card">
+      <h4>용액 부피는 반응물 재고다</h4>
+      <p>부식은 산화제(용존 O₂ · Fe³⁺ · H⁺)를 소모하고 금속 양이온을 방출해 가수분해·산성화합니다. 부피가 작으면 시험 중 전해질이 공칭 조성에서 벗어나고, 시편은 <strong>자기가 만든 용액의 부식성</strong>을 보고합니다. 그래서 명시적 비율이 있습니다 — <strong>G31 ≥ 0.20 (권장 0.40) mL/mm²</strong>, <strong>G48 ≥ 5 mL/cm²</strong>, G28은 5–20 cm² 시편에 <strong>600 mL 고정</strong>.</p>
+    </div>
+  </div>
+  <div class="note">
+    <h4>크레비스 — 화학 문제로 위장한 기하 문제</h4>
+    <p>시편이 홀더·개스킷·후크·O링·다른 시편과 닿는 곳마다 <strong>차등통기 전지</strong>가 형성되어 국부 pH가 떨어지고 염화물이 이동해 들어옵니다. G5는 “전극은 <strong>크레비스 자리 없이</strong> 마운트해야 한다”고 단정합니다. 반대로 <strong>G48은 크레비스를 아예 규정</strong>합니다 — Ø12.7 × 12.7 mm TFE 블록을 <strong>0.28 N·m 토크</strong>로 — 그것이 재려는 대상이기 때문이고, 그러면 토크값이 관리 시험 파라미터가 됩니다.</p>
+    <p><strong>규칙을 증명하는 예외</strong> — SCC 시편 규격(G30 · G38 · G39 · G49 · G168)은 <em>형상을 규정합니다</em>. 그 시험들에서는 시편 형상이 <strong>기계적 구동력을 만들고 정량화</strong>하기 때문입니다. 그 안에서도 분열이 보입니다 — G38과 G39는 기하가 계산 가능하므로 <strong>정확한 응력식</strong>을 주고, G30은 치수표만 주면서 <strong>응력을 모른다고 인정</strong>합니다.</p>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / SCC</span>응력부여 시편 계보</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 470" role="img" aria-label="유벤드 씨링 굽힘보 직접인장 예균열 이중보의 응력 부여 방식과 응력을 아는가 모르는가" style="width:100%;height:auto;overflow:visible"><defs><marker id="co_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="co_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><text x="30" y="26" font-family="IBM Plex Sans KR, sans-serif" font-size="12" font-weight="500" fill="currentColor">이 규격들이 정하는 것은 <tspan font-weight="600">기계적 구동력을 어떻게 만들고 얼마나 정확히 아는가</tspan>다 — 환경은 <tspan fill="#C4402B">별도 규격</tspan>이 정한다</text><path d="M102,166 L102,114 A38,38 0 0 1 178,114 L178,166" fill="none" stroke="currentColor" stroke-opacity=".85" stroke-width="7"/><line x1="94" y1="154" x2="186" y2="154" stroke="#D07A3B" stroke-width="2.4"/><circle cx="94" cy="154" r="4" fill="#D07A3B"/><circle cx="186" cy="154" r="4" fill="#D07A3B"/><text x="194" y="158" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">절연 볼트</text><text x="140" y="96" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="#C4402B">ε ≈ T / 2R</text><text x="140" y="196" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">① U벤드 (G30)</text><text x="140" y="213" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">L 80–510 · W 9–25 · T 0.8–13 · R 4.8–76 mm</text><text x="140" y="231" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#C4402B">응력을 모른다 — 순위만</text><path d="M400,78 A42,42 0 1 0 430,149" fill="none" stroke="currentColor" stroke-opacity=".85" stroke-width="8"/><line x1="402" y1="76" x2="434" y2="150" stroke="#D07A3B" stroke-width="2.4"/><text x="440" y="112" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">볼트</text><text x="304" y="122" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#2F6FC4">Δ = f π D² / (4 E t Z)</text><text x="400" y="196" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">② C링 (G38)</text><text x="400" y="213" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">OD ≥ 16 mm · 곡선보 계수 Z 필수</text><text x="400" y="231" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#2F6FC4">탄성한도 아래면 응력 계산 가능</text><rect x="616" y="96" width="168" height="8" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5"/><path d="M630,105 l7,14 l-14,0 Z" fill="currentColor" fill-opacity=".38" stroke="none"/><path d="M770,105 l7,14 l-14,0 Z" fill="currentColor" fill-opacity=".38" stroke="none"/><line x1="700" y1="66" x2="700" y2="92" stroke="#C4402B" stroke-width="2.2" marker-end="url(#co_ah)"/><text x="800" y="104" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">3점</text><rect x="616" y="146" width="168" height="8" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5"/><path d="M630,155 l7,14 l-14,0 Z" fill="currentColor" fill-opacity=".38" stroke="none"/><path d="M770,155 l7,14 l-14,0 Z" fill="currentColor" fill-opacity=".38" stroke="none"/><line x1="670" y1="116" x2="670" y2="142" stroke="#C4402B" stroke-width="2.2" marker-end="url(#co_ah)"/><line x1="730" y1="116" x2="730" y2="142" stroke="#C4402B" stroke-width="2.2" marker-end="url(#co_ah)"/><text x="800" y="154" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">4점</text><text x="616" y="182" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#2F6FC4">σ = 6Ety/H² (3점) · 12Ety/(3H²−4A²) (4점)</text><text x="700" y="202" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">③ 굽힘보 (G39)</text><text x="700" y="219" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">폭 25–51 · 길이 127–254 mm</text><text x="700" y="237" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#2F6FC4">4점만 균일 모멘트 · 3점은 하중점이 크레비스</text><path d="M84,311 h34 q10,0 10,-5 v-3 h24 v3 q0,5 10,5 h34 v18 h-34 q-10,0 -10,5 v3 h-24 v-3 q0,-5 -10,-5 h-34 Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5"/><line x1="40" y1="320" x2="78" y2="320" stroke="#C4402B" stroke-width="2.2" marker-start="url(#co_ah)"/><line x1="202" y1="320" x2="240" y2="320" stroke="#C4402B" stroke-width="2.2" marker-end="url(#co_ah)"/><text x="140" y="372" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">④ 직접인장 (G49)</text><text x="140" y="389" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">균일 · 단축 · 정확히 아는 응력</text><text x="140" y="407" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#2F6FC4">유일하게 진짜 임계응력 σ_th 를 준다</text><path d="M310,316 L480,298 L480,308 L310,319 Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5"/><path d="M310,324 L480,342 L480,332 L310,321 Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".85" stroke-width="1.5"/><rect x="314" y="306" width="14" height="28" fill="#D07A3B" fill-opacity=".7"/><text x="314" y="298" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">웨지/볼트</text><line x1="390" y1="320" x2="480" y2="320" stroke="#C4402B" stroke-width="2.2"/><text x="416" y="312" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10.5" fill="#C4402B">균열</text><text x="400" y="372" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">⑤ 예균열 이중보 (G168 · E1681)</text><text x="400" y="389" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">정변위 → K 감소 → 균열 정지 · 정하중 → K 증가</text><text x="400" y="407" text-anchor="middle" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#2F6FC4">K_ISCC — 개시항이 없어 가장 보수적</text><text x="612" y="256" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">⑥ 하중 이력이 결론을 바꾼다</text><text x="612" y="272" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">정변형은 균열이 자라며 하중을 흘려 <tspan font-weight="600">정지</tspan>시킨다</text><rect x="646" y="282" width="214" height="104" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><text x="860.0" y="422" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">시간 · 균열 성장</text><polyline points="646.00,308.96 648.16,308.96 650.32,308.96 652.48,308.95 654.65,308.93 656.81,308.91 658.97,308.89 661.13,308.86 663.29,308.83 665.45,308.79 667.62,308.74 669.78,308.69 671.94,308.63 674.10,308.56 676.26,308.49 678.42,308.42 680.59,308.33 682.75,308.24 684.91,308.15 687.07,308.05 689.23,307.94 691.39,307.82 693.56,307.70 695.72,307.57 697.88,307.43 700.04,307.28 702.20,307.13 704.36,306.97 706.53,306.81 708.69,306.64 710.85,306.46 713.01,306.27 715.17,306.07 717.33,305.87 719.49,305.66 721.66,305.44 723.82,305.22 725.98,304.99 728.14,304.75 730.30,304.50 732.46,304.24 734.63,303.98 736.79,303.71 738.95,303.43 741.11,303.14 743.27,302.85 745.43,302.54 747.60,302.23 749.76,301.91 751.92,301.58 754.08,301.25 756.24,300.91 758.40,300.55 760.57,300.19 762.73,299.83 764.89,299.45 767.05,299.07 769.21,298.67 771.37,298.27 773.54,297.86 775.70,297.44 777.86,297.02 780.02,296.58 782.18,296.14 784.34,295.69 786.51,295.22 788.67,294.76 790.83,294.28 792.99,293.79 795.15,293.30 797.31,292.79 799.47,292.28 801.64,291.76 803.80,291.23 805.96,290.69 808.12,290.14 810.28,289.59 812.44,289.02 814.61,288.45 816.77,287.86 818.93,287.27 821.09,286.67 823.25,286.06 825.41,285.44 827.58,284.81 829.74,284.18 831.90,283.53 834.06,282.87 836.22,282.21 838.38,281.54 840.55,280.85 842.71,280.16 844.87,279.46 847.03,278.75 849.19,278.03 851.35,277.30 853.52,276.57 855.68,275.82 857.84,275.06 860.00,274.30" fill="none" stroke="#C4402B" stroke-width="2.2"/><polyline points="646.00,308.96 648.16,309.03 650.32,309.14 652.48,309.28 654.65,309.44 656.81,309.61 658.97,309.80 661.13,310.00 663.29,310.21 665.45,310.44 667.62,310.67 669.78,310.92 671.94,311.17 674.10,311.43 676.26,311.70 678.42,311.98 680.59,312.27 682.75,312.56 684.91,312.86 687.07,313.16 689.23,313.48 691.39,313.80 693.56,314.12 695.72,314.45 697.88,314.79 700.04,315.13 702.20,315.48 704.36,315.83 706.53,316.19 708.69,316.56 710.85,316.93 713.01,317.30 715.17,317.68 717.33,318.06 719.49,318.45 721.66,318.85 723.82,319.24 725.98,319.65 728.14,320.05 730.30,320.46 732.46,320.88 734.63,321.30 736.79,321.72 738.95,322.15 741.11,322.58 743.27,323.01 745.43,323.45 747.60,323.89 749.76,324.34 751.92,324.79 754.08,325.25 756.24,325.70 758.40,326.16 760.57,326.63 762.73,327.10 764.89,327.57 767.05,328.05 769.21,328.52 771.37,329.01 773.54,329.49 775.70,329.98 777.86,330.47 780.02,330.97 782.18,331.47 784.34,331.97 786.51,332.47 788.67,332.98 790.83,333.49 792.99,334.01 795.15,334.52 797.31,335.04 799.47,335.57 801.64,336.09 803.80,336.62 805.96,337.15 808.12,337.69 810.28,338.23 812.44,338.77 814.61,339.31 816.77,339.86 818.93,340.40 821.09,340.96 823.25,341.51 825.41,342.07 827.58,342.63 829.74,343.19 831.90,343.75 834.06,344.32 836.22,344.89 838.38,345.47 840.55,346.04 842.71,346.62 844.87,347.20 847.03,347.78 849.19,348.37 851.35,348.96 853.52,349.55 855.68,350.14 857.84,350.74 860.00,351.33" fill="none" stroke="#2F6FC4" stroke-width="2.2"/><text x="658.8" y="290.5" text-anchor="start" fill="#C4402B" font-size="10" font-family="IBM Plex Sans KR, sans-serif">정하중 (G49 · TM0177 A)</text><text x="658.8" y="373.7" text-anchor="start" fill="#2F6FC4" font-size="10" font-family="IBM Plex Sans KR, sans-serif">정변형 (G38 · G39)</text><text x="612" y="444" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#C4402B">→ 정변형 임계값은 체계적으로 비보수적이다</text></svg></div>
+    <figcaption>이 규격들은 <b>기계적 구동력을 어떻게 만들고 얼마나 정확히 아는가</b>만 정하고, 환경에 대해서는 거의 말하지 않습니다. 환경은 <b>별도 규격</b>(G36 · G44 · G123 · TM0177 용액)에서 옵니다. <b>언제나 시편 규격 하나 + 환경 규격 하나를 짝지어야 합니다.</b></figcaption>
+  </figure>
+  <div class="oxleg">
+    <div><b class="co">○</b> 규격이 <b>규정함</b></div>
+    <div><b class="ct">△</b> <b>확인하지 못함</b></div>
+    <div><b class="cx">×</b> 해당 규정 <b>없음</b></div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격</th>
+      <th class="v">응력 상태</th><th class="v">시편 치수</th><th class="v">응력부여</th>
+      <th class="v">응력을 아는가</th><th class="v">하중 이력</th><th class="v">결과</th><th class="v">ISO 대응</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>ASTM G30</b> <i>U벤드</i></td>
+        <td class="o">○<em>대부분 <b>소성</b> — 가장 가혹</em></td><td class="o">○<em>L 80–510 · W 9–25 · T 0.8–13 · R 4.8–76 mm</em></td>
+        <td class="o">○<em>1단계 / 2단계 · 볼트(절연 필수) 또는 클램프</em></td><td class="x">×<sup class="fn">1</sup></td>
+        <td class="o">○<em>정변형 + 볼트 이완</em></td><td class="o">○<em>균열 유무 · 균열까지의 시간</em></td><td class="o">○<em>ISO 7539-3</em></td></tr>
+      <tr><td class="nm"><b>ASTM G38</b> <i>C링</i></td>
+        <td class="o">○<em>탄성 원주응력</em></td><td class="o">○<em><b>OD ≥ 약 16 mm</b> · 폭은 제품형태가 결정</em></td>
+        <td class="o">○<em>직경 중앙 볼트 조임 → 외면 인장 (역방향이면 내면)</em></td><td class="o">○<em>Δ = f π D²/(4 E t Z)<sup class="fn">2</sup></em></td>
+        <td class="o">○<em><b>정변형</b> — 균열 성장 시 이완</em></td><td class="o">○<em>균열까지의 시간</em></td><td class="o">○<em>ISO 7539-5</em></td></tr>
+      <tr><td class="nm"><b>ASTM G39</b> <i>굽힘보</i></td>
+        <td class="o">○<em><b>탄성한도 아래만</b></em></td><td class="o">○<em>2점 25 × 254 · T 0.8–1.8 mm (홀더 스팬 177.8–215.9) · 3·4점 W 25–51 · L 127–254 mm</em></td>
+        <td class="o">○<em>2점 · 3점 · 4점 · 이중보</em></td><td class="o">○<em>σ = 6Ety/H² (3점) · 12Ety/(3H²−4A²) (4점)</em></td>
+        <td class="o">○<em>정변형</em></td><td class="o">○<em>균열까지의 시간</em></td><td class="o">○<em>ISO 7539-2</em></td></tr>
+      <tr><td class="nm"><b>ASTM G49</b> <i>직접인장</i></td>
+        <td class="o">○<em><b>균일 · 단축</b></em></td><td class="t">△<em>E8/E8M 계열 · G49 고유 치수표 미확인<sup class="fn">3</sup></em></td>
+        <td class="o">○<em>정하중(추·레버·프루프링) · 정변형 · 연속증가</em></td><td class="o">○<em>정확히 안다</em></td>
+        <td class="o">○<em>정하중이면 <b>상승</b></em></td><td class="o">○<em><b>진짜 임계응력 σ_th</b></em></td><td class="o">○<em>ISO 7539-4</em></td></tr>
+      <tr><td class="nm"><b>ASTM G129</b> <i>저속변형률(SSRT)</i></td>
+        <td class="o">○<em>연속 증가</em></td><td class="t">△<em>평활 인장 · 피로예균열 파괴역학 시편</em></td>
+        <td class="o">○<em>환경 중에서 파단까지 인장</em></td><td class="o">○<em>불활성 기준과의 <b>비(ratio)</b></em></td>
+        <td class="o">○<em>연속 상승</em></td><td class="o">○<em>연성비 · 시간비 · 파면 SCC 비율</em></td><td class="o">○<em>ISO 7539-7<sup class="fn">4</sup></em></td></tr>
+      <tr><td class="nm"><b>ASTM G168</b> <i>예균열 이중보(DCB)</i></td>
+        <td class="o">○<em>파괴역학 — <b>성장/정지</b></em></td><td class="t">△</td>
+        <td class="o">○<em>볼트·웨지(정변위) 또는 프루프링·추(정하중)</em></td><td class="o">○<em>K</em></td>
+        <td class="o">○<em>정변위면 K 감소 → <b>정지</b></em></td><td class="o">○<em>K_ISCC · Stage II da/dt</em></td><td class="o">○<em>ISO 7539-6</em></td></tr>
+      <tr><td class="nm"><b>ASTM E1681</b> <i>환경조력균열 임계 K</i></td>
+        <td class="o">○<em>평면변형 (K_IEAC) 또는 사용두께 (K_EAC)</em></td><td class="o">○<em>피로예균열 보·CT 시편 · 소성역 &lt;&lt; 균열깊이</em></td>
+        <td class="o">○<em>정하중 또는 정변위(볼트하중 CT)</em></td><td class="o">○<em>K</em></td>
+        <td class="o">○<em>둘 다 가능</em></td><td class="o">○<em>K_IEAC / K_EAC<sup class="fn">5</sup></em></td><td class="o">○<em>ISO 7539-6 · -9</em></td></tr>
+      <tr><td class="nm"><b>ASTM G139</b> <i>파단하중법 (Al)</i></td>
+        <td class="o">○<em>단파방향(short-transverse)</em></td><td class="t">△</td>
+        <td class="o">○<em>G44 교대침지</em></td><td class="o">○<em>—</em></td>
+        <td class="o">○<em>—</em></td><td class="o">○<em><b>잔류강도</b> — 연속 변수라 통계 처리 가능<sup class="fn">6</sup></em></td><td class="x">×</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">1</sup> G30 원문 — 두께 방향 응력구배가 있고(볼록 외면 최대 인장, 내면 압축), 단부의 0에서 굽힘 정점의 최대까지 응력이 변하며, “<b>응력 조건은 보통 알려져 있지 않고 단일 시편 안에 넓은 범위의 응력이 공존한다</b>.” 결과적으로 <b>G30은 임계응력을 만들 수 없고 순위만 줍니다</b>. 동시에 여러 응력이 존재하므로 U벤드는 거의 언제나 어딘가에서 최악 응력을 찾아냅니다 — 그래서 가혹하고, 실사용에서 문제없는 합금을 탈락시킬 수 있습니다. &nbsp;
+  <sup class="fn">2</sup> Δ = OD 변화, f = 목표응력(비례한도 내), D = 평균지름 = OD − t, Z = <b>곡선보 보정계수</b>(Fig. A1.1). 최종 OD_f = OD − Δ. Z를 무시하고 직선보 공식을 쓰면 두꺼운 링에서 응력을 크게 틀립니다. &nbsp;
+  <sup class="fn">3</sup> 실무에서 흔히 인용되는 <b>Ø3.18 mm 게이지 · 항복의 50/75/90 % · 30일</b>은 G49가 아니라 NASA MSFC-STD-3029가 G49를 인용하며 규정한 값입니다. &nbsp;
+  <sup class="fn">4</sup> <b>속도 표기 주의</b> — G129-21 본문은 “<b>연신속도</b> 10⁻⁶ in./s (= 2.54 × 10⁻⁸ m/s) 위아래로 최소 한 자릿수”라고 씁니다. 널리 인용되는 <b>변형률속도 ≈ 1 × 10⁻⁶ s⁻¹</b>은 <b>ISO 7539-7</b>의 표현이며(실용 범위 10⁻³ ~ 10⁻⁷ s⁻¹), 둘을 혼동하지 마십시오. &nbsp;
+  <sup class="fn">5</sup> E1681의 핵심 경고 — 겉보기 임계값은 “<b>시험 지속시간의 함수</b>”이며, 측정값이 절대 상한이 아니라 “허용 가능한 정도로 낮은 균열성장속도”를 나타낼 수 있습니다. <b>시험 시간 없는 K_IEAC 는 물성이 아닙니다</b>. &nbsp;
+  <sup class="fn">6</sup> G47 같은 합/부 시험은 <b>중도절단(censored) 데이터</b>입니다 — 20일을 버틴 것은 전부 같은 답을 줍니다. G139는 이진값을 <b>연속적·통계처리 가능한 변수</b>로 바꿔, 작은 SCC 손상 차이를 분해하고 짧은 노출에서도 쓸 만한 데이터를 냅니다. 이 목록에서 <b>확률론적 설계에 자연스럽게 맞는 유일한 SCC 규격</b>입니다.</p>
+
+  <div class="note">
+    <h4>3점 굽힘과 4점 굽힘이 다른 답을 주는 이유</h4>
+    <p><strong>3점은 중앙 하중점의 선접촉에 응력을 집중</strong>시킵니다. 그 접촉부는 동시에 <strong>크레비스이자 프레팅 자리</strong>입니다. 그래서 균열이 재료의 약점이 아니라 <strong>하중점에서</strong> 시작합니다. <strong>4점은 안쪽 스팬 전체에 균일 모멘트(일정 응력)</strong>를 주므로, 진짜 응력 임계값을 찾으려면 4점이 맞습니다.</p>
+    <p>또 <strong>모든 굽힘 구성은 정변형</strong>이므로 균열이 자라며 하중을 흘립니다(G38과 같은 비보수성). 응력을 변위에서 유도하므로 <strong>어디서든 항복이 일어나면</strong> — 하중점 포함 — 보고된 응력이 조용히 무효가 됩니다.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 환경</span>환경 규격 — 시편 형상을 정하지 않는다</h2>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>환경</th><th>시편</th><th>주의</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>ASTM G36</b><br><i>비등 MgCl₂</i></td>
+        <td>비등점 <b>155.0 ± 1.0 °C</b>에서 끓는 MgCl₂. <b>규격은 농도가 아니라 온도로 시험을 정의</b>하고 Fig.1이 농도–비등점 관계를 줍니다(예: 약 40 % ≈ 143 °C 로 완화 가능)</td>
+        <td><b>없음</b> — “다양한 SCC 시편, 표면 마감, 응력부여 방법과 함께 쓸 수 있다”</td>
+        <td>“고온 염화물 환경에서 통상 허용 가능한 저항성을 보이는 재료도 <b>이 시험에서는 균열할 수 있다</b>.” 환경만 고정하므로 <b>두 실험실이 시편 형상과 응력 수준만 달라도 정반대 결과</b>를 보고할 수 있습니다 — 반드시 시편 규격을 함께 적으십시오</td></tr>
+      <tr><td class="k"><b>ASTM G44</b><br><i>교대침지 3.5 % NaCl</i></td>
+        <td>3.5 % NaCl, <b>1시간 주기 = 10분 침지 + 50분 공기 건조</b>, 연속 반복. 통상 20–90일</td>
+        <td><b>없음</b> — G30/G38/G39/G47/G49/G139 시편과 함께 쓰는 노출 practice</td>
+        <td><b>50분의 건조 구간이 핵심</b>입니다 — 증발로 염화물 막을 농축하고, 산소를 표면으로 밀어 넣고, 얇은 전해질층의 고효율 캐소드 조건을 만듭니다. <b>같은 용액의 연속침지보다 훨씬 가혹</b>하며, 가혹도는 그 시편이 실제로 얼마나 빨리 마르는가에 달립니다 — <b>두껍고 무거운 시편이나 가려진 면은 덜 마르고 덜 부식</b>합니다. 시편 질량·랙 간격·배수가 실변수입니다</td></tr>
+      <tr><td class="k"><b>ASTM G123</b><br><i>비등 산성화 NaCl</i></td>
+        <td><b>25 wt % NaCl 을 인산으로 pH 1.5 로 산성화</b>, 비등</td>
+        <td><b>U벤드</b>가 제안됨</td>
+        <td><b>G36 이 너무 가혹해서</b> 만들어진 규격입니다 — 화학공업에서 신뢰성 있게 쓰이는 합금이 비등 MgCl₂ 에서는 쉽게 균열합니다. 단 <b>같은 그레이드 안의 히트 간 차이는 분해하지 못합니다</b> → 그레이드 선정에는 유효, 로트 합격판정에는 무효</td></tr>
+      <tr><td class="k"><b>ASTM G47</b><br><i>2XXX · 7XXX Al</i></td>
+        <td>G44 교대침지</td>
+        <td><b>단파방향(short-transverse)</b>이 핵심</td>
+        <td>단파방향만이 7XXX SCC 감수성을 신뢰성 있게 드러냅니다 — 같은 판재의 종방향 시편은 같은 응력에서 통과할 수 있습니다. 판 두께 방향 채취 위치도 결과를 바꿉니다</td></tr>
+      <tr><td class="k"><b>NACE/AMPP<br>TM0177-2024</b><br><i>H₂S 황화물응력균열</i></td>
+        <td>용액 A ≈ <b>5 % NaCl + 0.5 % 빙초산, H₂S 포화, 약 24 °C</b>. 표준 지속 <b>720 h</b></td>
+        <td><b>A</b> 단축인장 (표준 Ø6.35 × 게이지 25.4 mm · 서브 Ø3.81 × 15.2 mm · 어깨 R ≥15, CRA 는 20 권장) · <b>B</b> 굽힘보 (4.5 × 1.5 mm, Ø0.7 mm 구멍 2개) · <b>C</b> C링 · <b>D</b> DCB (웨지, <b>14일</b>)</td>
+        <td>A·C 는 <b>720 h 무파단 최고응력</b>, B 는 <b>50 % 파손확률의 임계응력계수 S_c</b>, D 는 <b>평균 K_ISSC</b>. <b>“지속하중 장치의 약간의 하중 이완으로 시편이 파단 없이 균열할 수 있다”</b> — 분리되지 않았다고 합격이 아닙니다. <b>시험 후 육안·조직 검사가 필수</b></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>ISO 7539 파트 대응표</h4>
+    <div class="tw"><table>
+      <thead><tr><th>파트</th><th>내용</th><th>ASTM</th></tr></thead>
+      <tbody>
+        <tr><td class="k">7539-1</td><td>시험 절차 일반 지침</td><td>—</td></tr>
+        <tr><td class="k">7539-2</td><td>굽힘보 시편</td><td>G39</td></tr>
+        <tr><td class="k">7539-3</td><td>U벤드 시편</td><td>G30</td></tr>
+        <tr><td class="k">7539-4</td><td>단축인장 시편</td><td>G49</td></tr>
+        <tr><td class="k">7539-5</td><td>C링 시편</td><td>G38</td></tr>
+        <tr><td class="k">7539-6</td><td>예균열 시편 (정하중 / 정변위)</td><td>G168 · E1681</td></tr>
+        <tr><td class="k">7539-7</td><td>저속변형률 시험</td><td>G129</td></tr>
+        <tr><td class="k">7539-8</td><td><b>용접부 평가 시편</b></td><td><b>대응 없음</b></td></tr>
+        <tr><td class="k">7539-9</td><td>상승하중 · 상승변위 예균열 시편</td><td>F1624 · E1681 일부</td></tr>
+        <tr><td class="k">7539-10</td><td><b>역 U벤드(reverse U-bend)</b></td><td><b>대응 없음</b></td></tr>
+        <tr><td class="k">7539-11</td><td>수소취화·수소조력균열 저항 시험 지침</td><td>F519 · F1624 영역</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>ISO 7539-10(역 U벤드)</strong>은 ASTM에 대응이 없습니다 — 용접 후 관·파이프의 <strong>외면을 인장으로 만들어야 하는</strong> 용접부 SCC의 표준 경로입니다. <strong>7539-8(용접부)</strong>도 대응이 없으며, ASTM는 용접부를 포함한 블랭크에 G30·G38·G39를 적용하는 방식으로 처리합니다.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 균일·국부</span>질량손실과 국부 부식</h2>
+  <div class="oxleg">
+    <div><b class="co">○</b> 규격이 <b>규정함</b></div>
+    <div><b class="ct">△</b> <b>확인하지 못함</b></div>
+    <div><b class="cx">×</b> 해당 규정 <b>없음</b></div>
+  </div>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>규격</th>
+      <th class="v">얻는 값</th><th class="v">시편</th><th class="v">표면 마감</th>
+      <th class="v">용액 · 부피</th><th class="v">온도 · 시간</th><th class="v">판정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>ASTM G1</b> <i>준비·세정·평가</i></td>
+        <td class="o">○<em>세정 보정된 질량손실 · 공식계수</em></td><td class="x">×<em>치수 규정 없음</em></td>
+        <td class="o">○<em>탈지 → 산세 → 연마 → 헹굼 → 건조 → 데시케이터</em></td><td class="o">○<em>세정액 부록 (Al · Cu · Fe/강 Clarke 액 · Zn)</em></td>
+        <td class="o">○<em>세정액별</em></td><td class="o">○<em>치수 3자리 · 질량 5자리 유효숫자</em></td></tr>
+      <tr><td class="nm"><b>ASTM G31</b> <i>침지 부식</i></td>
+        <td class="o">○<em>균일 부식속도 mm/y</em></td><td class="o">○<em>권장 Ø약 38 × 두께 약 3 mm · 마운트 구멍 8–11 mm</em></td>
+        <td class="o">○<em>No.120 연마지 → 세정분말 탈지</em></td><td class="o">○<em>≥ 0.20, 권장 <b>0.40 mL/mm²</b></em></td>
+        <td class="o">○<em>시간 = 2000 / (mpy)</em></td><td class="o">○<em>CR = K·W/(A·T·D)</em></td></tr>
+      <tr><td class="nm"><b>ASTM G48</b> <i>FeCl₃ 공식·틈부식</i></td>
+        <td class="o">○<em>A·B 상대저항 · C–F <b>CPT / CCT</b></em></td><td class="o">○<em>권장 <b>25 × 50 mm</b></em></td>
+        <td class="o">○<em><b>120그릿 습식</b> (과열 방지)</em></td><td class="o">○<em>A·B 6 % FeCl₃ · C–F 6 % FeCl₃ + 1 % HCl · <b>≥5 mL/cm²</b> (표준 쿠폰 600 mL)</em></td>
+        <td class="o">○<em>A·B 22 또는 50 ± 2 °C · C–F 0–85 °C 를 <b>5 °C 간격</b> · <b>72 h</b></em></td>
+        <td class="o">○<em>깊이 <b>≥ 0.025 mm</b> 공격을 공식으로 인정</em></td></tr>
+      <tr><td class="nm"><b>ASTM G48</b> <i>크레비스 포머</i></td>
+        <td class="x">×</td><td class="o">○<em>TFE 블록 <b>Ø12.7 × 12.7 mm</b> 시편당 2개</em></td>
+        <td class="x">×</td><td class="o">○<em>O링 단면 1.75 mm</em></td>
+        <td class="o">○<em>토크 <b>0.28 N·m</b></em></td><td class="o">○<em>토크가 곧 크레비스 가혹도</em></td></tr>
+      <tr><td class="nm"><b>ASTM G5</b> <i>분극 기준시험</i></td>
+        <td class="o">○<em>장비·기법 <b>교정</b></em></td><td class="o">○<em>Type 430 (UNS S43000), 815 °C 0.5 h 소둔 · Ø9.5 봉재 길이 <b>12.7 mm</b></em></td>
+        <td class="o">○<em>크레비스 없이 마운트</em></td><td class="o">○<em>1.0 N H₂SO₄ · 무산소가스 150 cm³/min × 0.5 h 이상 탈기</em></td>
+        <td class="o">○<em>30 ± 1 °C · 주사 <b>0.6 V/h</b></em></td><td class="o">○<em>노출면적은 <b>개스킷 가림분(0.20–0.25 cm²)을 빼서 계산</b><sup class="fn">7</sup></em></td></tr>
+      <tr><td class="nm"><b>ASTM G59</b> <i>분극저항</i></td>
+        <td class="o">○<em>R_p [Ω·cm²] → i_corr → mm/y</em></td><td class="o">○<em>Type 430 · 1 cm²</em></td>
+        <td class="o">○<em>크레비스 금지</em></td><td class="o">○<em>1 N H₂SO₄ 질소탈기</em></td>
+        <td class="o">○<em>30 °C · OCP 대비 −30 ~ +30 mV, 0.6 V/h</em></td><td class="o">○<em>저전도 매질에서는 <b>IR 강하</b>로 R_p 과대·CR 과소</em></td></tr>
+      <tr><td class="nm"><b>ASTM G61</b> <i>순환동전위분극</i></td>
+        <td class="o">○<em>E_pit · E_prot · 히스테리시스</em></td><td class="t">△<sup class="fn">8</sup></td>
+        <td class="o">○<em>크레비스 금지 — 위반 시 “공식전위”가 사실은 크레비스 전위</em></td><td class="t">△</td>
+        <td class="t">△</td><td class="o">○<em>E_pit 는 <b>주사속도·면적 의존</b> — 셀 면적이 다르면 비교 불가</em></td></tr>
+      <tr><td class="nm"><b>ASTM G102</b> <i>전기화학 → 부식속도</i></td>
+        <td class="o">○<em>CR = K₁ (i_corr/ρ) EW · MR = K₂ i_corr EW</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>K₁ = 3.27 × 10⁻³ · K₂ = 8.954 × 10⁻³ · <b>i_corr = B/R_p</b><sup class="fn">9</sup></em></td></tr>
+      <tr><td class="nm"><b>ASTM G46</b> <i>공식 평가</i></td>
+        <td class="o">○<em>밀도(A) · 개구크기(B) · 깊이(C) 등급 · 공식계수</em></td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="o">○<em>극값통계 · 플로팅 위치 <b>M/(n+1)</b></em></td></tr>
+      <tr><td class="nm"><b>ISO 8407</b> <i>부식생성물 제거</i></td>
+        <td class="o">○<em>세정 보정</em></td><td class="x">×</td>
+        <td class="o">○<em>화학 · 전해 · 기계</em></td><td class="o">○<em>표 규정</em></td>
+        <td class="x">×</td><td class="o">○<em>반복세정 외삽(점 D) 또는 <b>대조시편법</b></em></td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><sup class="fn">7</sup> 흔히 인용되는 “1 cm²”는 G5의 <b>봉 시편이 아니라</b> G59·G61 실무의 평판 디스크 셀 값입니다. G5는 <b>모든 치수를 0.01 mm 까지 재고 개스킷 가림 면적을 빼서</b> 노출면적을 시편마다 계산합니다. &nbsp;
+  <sup class="fn">8</sup> G61 규격 본문이 지정하는 기준 합금·기준 전해질·온도·역주사 기준은 확인하지 못했습니다. 흔히 인용되는 3.5 % NaCl · 167 µV/s · 5 mA 역전 · 1 cm² 는 장비사 응용노트의 구현값입니다. &nbsp;
+  <sup class="fn">9</sup> <code>EW = 1/Q</code>, <code>Q = Σ(nᵢ fᵢ / Wᵢ)</code>, 1 wt % 미만 원소는 보통 제외. <b>가정 원자가 n 은 측정이 아니라 선택</b>입니다 — Fe²⁺ 대 Fe³⁺ 만으로 EW 와 CR 이 1.5배 달라집니다. B 도 타펠 기울기에서 측정하거나 정당화해야 하며, 일반값 26 mV/52 mV 를 가정하면 2–3배 틀릴 수 있습니다. 그리고 <b>전기화학 속도는 순간값</b>이고 질량손실 쿠폰은 노출 전체를 적분합니다 — 둘이 다르면 보통 쿠폰이 설계에 더 유효합니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 416" role="img" aria-label="공식깊이 극값통계 외삽과 질량손실 세정 보정" style="width:100%;height:auto;overflow:visible"><defs><marker id="co_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="co_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="92" y="66" width="340" height="250" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><line x1="92.0" y1="66" x2="92.0" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="92.0" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">1</text><line x1="173.0" y1="66" x2="173.0" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="173.0" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10</text><line x1="253.9" y1="66" x2="253.9" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="253.9" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">100</text><line x1="334.9" y1="66" x2="334.9" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="334.9" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">1000</text><line x1="415.8" y1="66" x2="415.8" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="415.8" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10000</text><line x1="92" y1="316.0" x2="432" y2="316.0" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="83" y="320.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><line x1="92" y1="267.9" x2="432" y2="267.9" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="83" y="271.9" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0.5</text><line x1="92" y1="219.8" x2="432" y2="219.8" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="83" y="223.8" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">1</text><line x1="92" y1="171.8" x2="432" y2="171.8" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="83" y="175.8" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">1.5</text><line x1="92" y1="123.7" x2="432" y2="123.7" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="83" y="127.7" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">2</text><line x1="92" y1="75.6" x2="432" y2="75.6" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="83" y="79.6" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">2.5</text><text x="432.0" y="352" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">재현기간 T = 부품면적 / 검사면적</text><text x="6" y="58" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">예상 최대 공식깊이 [mm]</text><polyline points="92.00,256.38 93.71,255.64 95.42,254.89 97.13,254.14 98.83,253.39 100.54,252.65 102.25,251.90 103.96,251.15 105.67,250.40 107.38,249.66 109.09,248.91 110.79,248.16 112.50,247.41 114.21,246.67 115.92,245.92 117.63,245.17 119.34,244.42 121.05,243.67 122.75,242.93 124.46,242.18 126.17,241.43 127.88,240.68 129.59,239.94 131.30,239.19 133.01,238.44 134.71,237.69 136.42,236.95 138.13,236.20 139.84,235.45 141.55,234.70 143.26,233.96 144.96,233.21 146.67,232.46 148.38,231.71 150.09,230.96 151.80,230.22 153.51,229.47 155.22,228.72 156.92,227.97 158.63,227.23 160.34,226.48 162.05,225.73 163.76,224.98 165.47,224.24 167.18,223.49 168.88,222.74 170.59,221.99 172.30,221.25 174.01,220.50 175.72,219.75 177.43,219.00 179.14,218.25 180.84,217.51 182.55,216.76 184.26,216.01 185.97,215.26 187.68,214.52 189.39,213.77 191.10,213.02 192.80,212.27 194.51,211.53 196.22,210.78 197.93,210.03 199.64,209.28 201.35,208.53 203.06,207.79 204.76,207.04 206.47,206.29 208.18,205.54 209.89,204.80 211.60,204.05 213.31,203.30 215.02,202.55 216.72,201.81 218.43,201.06 220.14,200.31 221.85,199.56 223.56,198.82 225.27,198.07 226.97,197.32 228.68,196.57 230.39,195.82 232.10,195.08 233.81,194.33 235.52,193.58 237.23,192.83 238.93,192.09 240.64,191.34 242.35,190.59 244.06,189.84 245.77,189.10 247.48,188.35 249.19,187.60 250.89,186.85 252.60,186.11 254.31,185.36 256.02,184.61 257.73,183.86 259.44,183.11 261.15,182.37 262.85,181.62 264.56,180.87 266.27,180.12 267.98,179.38 269.69,178.63 271.40,177.88 273.11,177.13 274.81,176.39 276.52,175.64 278.23,174.89 279.94,174.14 281.65,173.40 283.36,172.65 285.07,171.90 286.77,171.15 288.48,170.40 290.19,169.66 291.90,168.91 293.61,168.16 295.32,167.41 297.03,166.67 298.73,165.92 300.44,165.17 302.15,164.42 303.86,163.68 305.57,162.93 307.28,162.18 308.98,161.43 310.69,160.69 312.40,159.94 314.11,159.19 315.82,158.44 317.53,157.69 319.24,156.95 320.94,156.20 322.65,155.45 324.36,154.70 326.07,153.96 327.78,153.21 329.49,152.46 331.20,151.71 332.90,150.97 334.61,150.22 336.32,149.47 338.03,148.72 339.74,147.98 341.45,147.23 343.16,146.48 344.86,145.73 346.57,144.98 348.28,144.24 349.99,143.49 351.70,142.74 353.41,141.99 355.12,141.25 356.82,140.50 358.53,139.75 360.24,139.00 361.95,138.26 363.66,137.51 365.37,136.76 367.08,136.01 368.78,135.27 370.49,134.52 372.20,133.77 373.91,133.02 375.62,132.27 377.33,131.53 379.04,130.78 380.74,130.03 382.45,129.28 384.16,128.54 385.87,127.79 387.58,127.04 389.29,126.29 390.99,125.55 392.70,124.80 394.41,124.05 396.12,123.30 397.83,122.56 399.54,121.81 401.25,121.06 402.95,120.31 404.66,119.56 406.37,118.82 408.08,118.07 409.79,117.32 411.50,116.57 413.21,115.83 414.91,115.08 416.62,114.33 418.33,113.58 420.04,112.84 421.75,112.09 423.46,111.34 425.17,110.59 426.87,109.85 428.58,109.10 430.29,108.35 432.00,107.60" fill="none" stroke="#2F6FC4" stroke-width="2.2"/><polyline points="92.00,235.06 93.71,234.31 95.42,233.56 97.13,232.81 98.83,232.07 100.54,231.32 102.25,230.57 103.96,229.82 105.67,229.08 107.38,228.33 109.09,227.58 110.79,226.83 112.50,226.09 114.21,225.34 115.92,224.59 117.63,223.84 119.34,223.09 121.05,222.35 122.75,221.60 124.46,220.85 126.17,220.10 127.88,219.36 129.59,218.61 131.30,217.86 133.01,217.11 134.71,216.37 136.42,215.62 138.13,214.87 139.84,214.12 141.55,213.38 143.26,212.63 144.96,211.88 146.67,211.13 148.38,210.38 150.09,209.64 151.80,208.89 153.51,208.14 155.22,207.39 156.92,206.65 158.63,205.90 160.34,205.15 162.05,204.40 163.76,203.66 165.47,202.91 167.18,202.16 168.88,201.41 170.59,200.67 172.30,199.92 174.01,199.17 175.72,198.42 177.43,197.67 179.14,196.93 180.84,196.18 182.55,195.43 184.26,194.68 185.97,193.94 187.68,193.19 189.39,192.44 191.10,191.69 192.80,190.95 194.51,190.20 196.22,189.45 197.93,188.70 199.64,187.96 201.35,187.21 203.06,186.46 204.76,185.71 206.47,184.96 208.18,184.22 209.89,183.47 211.60,182.72 213.31,181.97 215.02,181.23 216.72,180.48 218.43,179.73 220.14,178.98 221.85,178.24 223.56,177.49 225.27,176.74 226.97,175.99 228.68,175.24 230.39,174.50 232.10,173.75 233.81,173.00 235.52,172.25 237.23,171.51 238.93,170.76 240.64,170.01 242.35,169.26 244.06,168.52 245.77,167.77 247.48,167.02 249.19,166.27 250.89,165.53 252.60,164.78 254.31,164.03 256.02,163.28 257.73,162.53 259.44,161.79 261.15,161.04 262.85,160.29 264.56,159.54 266.27,158.80 267.98,158.05 269.69,157.30 271.40,156.55 273.11,155.81 274.81,155.06 276.52,154.31 278.23,153.56 279.94,152.82 281.65,152.07 283.36,151.32 285.07,150.57 286.77,149.82 288.48,149.08 290.19,148.33 291.90,147.58 293.61,146.83 295.32,146.09 297.03,145.34 298.73,144.59 300.44,143.84 302.15,143.10 303.86,142.35 305.57,141.60 307.28,140.85 308.98,140.11 310.69,139.36 312.40,138.61 314.11,137.86 315.82,137.11 317.53,136.37 319.24,135.62 320.94,134.87 322.65,134.12 324.36,133.38 326.07,132.63 327.78,131.88 329.49,131.13 331.20,130.39 332.90,129.64 334.61,128.89 336.32,128.14 338.03,127.40 339.74,126.65 341.45,125.90 343.16,125.15 344.86,124.40 346.57,123.66 348.28,122.91 349.99,122.16 351.70,121.41 353.41,120.67 355.12,119.92 356.82,119.17 358.53,118.42 360.24,117.68 361.95,116.93 363.66,116.18 365.37,115.43 367.08,114.69 368.78,113.94 370.49,113.19 372.20,112.44 373.91,111.69 375.62,110.95 377.33,110.20 379.04,109.45 380.74,108.70 382.45,107.96 384.16,107.21 385.87,106.46 387.58,105.71 389.29,104.97 390.99,104.22 392.70,103.47 394.41,102.72 396.12,101.98 397.83,101.23 399.54,100.48 401.25,99.73 402.95,98.98 404.66,98.24 406.37,97.49 408.08,96.74 409.79,95.99 411.50,95.25 413.21,94.50 414.91,93.75 416.62,93.00 418.33,92.26 420.04,91.51 421.75,90.76 423.46,90.01 425.17,89.27 426.87,88.52 428.58,87.77 430.29,87.02 432.00,86.27" fill="none" stroke="#C4402B" stroke-width="2.2"/><text x="278.2" y="160.2" text-anchor="start" fill="#C4402B" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">검사면적이 작으면</text><text x="278.2" y="171.8" text-anchor="start" fill="#C4402B" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">같은 재료가 더 깊어 보인다</text><text x="101.7" y="267.9" text-anchor="start" fill="#2F6FC4" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">d_max ≈ μ + β ln T</text><text x="92" y="30" font-family="IBM Plex Sans KR, sans-serif" font-size="12" font-weight="500" fill="currentColor">공식은 평균이 아니라 <tspan fill="#C4402B">극값</tspan>이 설계량이다 — Gumbel 외삽 (G46)</text><text x="92" y="374" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="#C4402B">면적을 밝히지 않은 공식깊이는 사용할 수 없는 데이터다</text><text x="92" y="392" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".66">검사면적을 2배로 하면 분포 전체가 β·ln2 만큼 올라간다 · 순위 M/(n+1) 로 플로팅</text><rect x="552" y="66" width="320" height="250" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><line x1="552.0" y1="66" x2="552.0" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="552.0" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><line x1="658.7" y1="66" x2="658.7" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="658.7" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">2</text><line x1="765.3" y1="66" x2="765.3" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="765.3" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">4</text><line x1="872.0" y1="66" x2="872.0" y2="316" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="872.0" y="334" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">6</text><text x="872.0" y="352" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">세정 반복 횟수</text><text x="552" y="56" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">누적 질량손실</text><polyline points="552.00,316.00 554.39,312.68 556.79,309.36 559.18,306.04 561.58,302.73 563.97,299.41 566.37,296.09 568.76,292.77 571.16,289.45 573.55,286.13 575.95,282.81 578.34,279.50 580.73,276.18 583.13,272.86 585.52,269.54 587.92,266.22 590.31,262.90 592.71,259.58 595.10,256.27 597.50,252.95 599.89,249.63 602.29,246.31 604.68,242.99 607.07,239.67 609.47,236.35 611.86,233.04 614.26,229.72 616.65,226.40 619.05,223.08 621.44,219.76 623.84,216.44 626.23,213.13 628.63,209.81 631.02,206.49 633.41,203.17 635.81,199.85 638.20,196.53 640.60,193.21 642.99,189.90 645.39,186.58 647.78,183.26 650.18,179.94 652.57,176.62 654.97,173.30 657.36,169.98 659.76,166.67 662.15,163.35 664.54,160.03 666.94,156.71 669.33,153.39" fill="none" stroke="#2F6FC4" stroke-width="2.3"/><polyline points="669.33,153.39 673.47,152.46 677.61,151.54 681.74,150.61 685.88,149.68 690.01,148.76 694.15,147.83 698.29,146.90 702.42,145.97 706.56,145.05 710.69,144.12 714.83,143.19 718.97,142.26 723.10,141.34 727.24,140.41 731.37,139.48 735.51,138.56 739.65,137.63 743.78,136.70 747.92,135.77 752.05,134.85 756.19,133.92 760.33,132.99 764.46,132.06 768.60,131.14 772.73,130.21 776.87,129.28 781.01,128.36 785.14,127.43 789.28,126.50 793.41,125.57 797.55,124.65 801.69,123.72 805.82,122.79 809.96,121.87 814.10,120.94 818.23,120.01 822.37,119.08 826.50,118.16 830.64,117.23 834.78,116.30 838.91,115.37 843.05,114.45 847.18,113.52 851.32,112.59 855.46,111.67 859.59,110.74 863.73,109.81 867.86,108.88 872.00,107.96" fill="none" stroke="#D07A3B" stroke-width="2.3"/><polyline points="669.33,153.39 872.00,107.96" fill="none" stroke="#D07A3B" stroke-width="1.2" stroke-dasharray="4 3"/><polyline points="552.00,179.70 669.33,153.39" fill="none" stroke="#D07A3B" stroke-width="1.2" stroke-dasharray="4 3"/><circle cx="669.3" cy="153.4" r="5" fill="#C4402B"/><text x="677.3" y="163.8" text-anchor="start" fill="#C4402B" font-size="11" font-family="IBM Plex Sans KR, sans-serif">B = 참 부식 질량손실</text><text x="560.0" y="250.8" text-anchor="start" fill="#2F6FC4" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">AB : 부식생성물 제거</text><text x="712.0" y="94.3" text-anchor="start" fill="#D07A3B" font-size="10.5" font-family="IBM Plex Sans KR, sans-serif">BC : 모재를 깎기 시작</text><text x="552" y="30" font-family="IBM Plex Sans KR, sans-serif" font-size="12" font-weight="500" fill="currentColor">한 번만 세정하고 재면 <tspan fill="#C4402B">틀린다</tspan> (G1 · ISO 8407)</text><text x="552" y="374" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" fill="currentColor">CR = K · W / (A · T · D)</text><text x="552" y="392" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">mm/y → K = 8.76 × 10⁴ &nbsp;·&nbsp; mpy → K = 3.45 × 10⁶</text></svg></div>
+    <figcaption>왼쪽 — 공식은 평균이 아니라 <b>극값</b>이 설계량입니다. Gumbel 외삽에서 재현기간 <code>T = 부품면적 / 검사면적</code>이므로, <b>검사면적을 밝히지 않은 공식깊이는 쓸 수 없는 데이터</b>입니다. 오른쪽 — G1/ISO 8407의 세정 보정. 한 번만 세정하고 재면 부식량을 과대평가하고, 지나치게 세정하면 더 크게 과대평가합니다. <b>두 직선 AB(생성물 제거)와 BC(모재 침식)의 교점 B</b>가 참값입니다.</figcaption>
+  </figure>
+  <div class="note">
+    <h4>G48이 유난히 표면에 민감한 이유</h4>
+    <ul class="tight">
+      <li><strong>표면 마감이 G48의 지배 변수입니다.</strong> 120그릿 연삭면, 산세면, 전해연마면, 용접 그대로/열변색면의 CPT가 전부 다릅니다. <strong>열변색이나 잔류 산화 스케일은 측정 CPT를 수십 도 낮출 수 있습니다.</strong> G48 결과는 사실상 <strong>벌크 합금 결과가 아니라 표면 상태 결과</strong>입니다.</li>
+      <li>모서리와 절단면이 우선 개시합니다 — 용접 자격시험에서 <strong>덧살과 이면을 평활하게 갈았는지</strong>가 답을 바꿉니다.</li>
+      <li><strong>0.28 N·m 크레비스 토크는 실제 기계 파라미터</strong>입니다. 손으로 조인 밴드는 다른 CCT를 줍니다.</li>
+      <li>G48의 CPT/CCT는 <strong>염화제2철 CPT/CCT</strong>이며 서비스 온도가 아닙니다. 전기화학적으로 결정한 CPT(ASTM G150)와도 <strong>교환 불가</strong>합니다.</li>
+      <li>규격 자신의 한계 — “염화물을 포함하지 않는 환경에서의 저항성에 대해서는 아무 말도 할 수 없다.”</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 입계</span>입계부식 — 절차마다 다른 것을 본다</h2>
+  <div class="tw ox"><table>
+    <thead><tr>
+      <th>ASTM A262</th>
+      <th class="v">이름</th><th class="v">용액</th><th class="v">온도</th><th class="v">시간</th><th class="v">시편</th><th class="v">판정</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm"><b>Practice A</b></td>
+        <td class="o">○<em>옥살산 에칭</em></td><td class="o">○<em>10 % 옥살산</em></td><td class="o">○<em>50 °C 미만</em></td><td class="o">○<em><b>1.5 분</b> @ 1 A/cm²</em></td>
+        <td class="o">○<em>연마 단면</em></td><td class="o">○<em>조직을 <b>step / dual / ditch</b> 로 분류 (250–500×)</em></td></tr>
+      <tr><td class="nm"><b>Practice B</b> <i>Streicher</i></td>
+        <td class="o">○<em>황산제2철–황산</em></td><td class="o">○<em>50 % H₂SO₄ + Fe₂(SO₄)₃ 25 g/400 mL + 산 236 mL</em></td><td class="o">○<em>비등</em></td><td class="o">○<em><b>120 h</b></em></td>
+        <td class="o">○<em>총 <b>5–20 cm²</b> · 120그릿</em></td><td class="o">○<em>질량손실 → mm/월</em></td></tr>
+      <tr><td class="nm"><b>Practice C</b> <i>Huey</i></td>
+        <td class="o">○<em>질산</em></td><td class="o">○<em>65.0 ± 0.2 wt % HNO₃</em></td><td class="o">○<em>비등</em></td><td class="o">○<em><b>48 h × 5회</b> (매회 새 산)</em></td>
+        <td class="o">○<em>최대 약 100 g · 120그릿 · 산화층 제거</em></td><td class="o">○<em>질량손실을 <b>48 h 구간별로 각각</b> 보고</em></td></tr>
+      <tr><td class="nm"><b>Practice E</b> <i>Strauss</i></td>
+        <td class="o">○<em>황산구리–황산</em></td><td class="o">○<em>CuSO₄·5H₂O 100 g + H₂SO₄ 100 mL → 1000 mL · <b>구리 조각에 파묻어</b></em></td><td class="o">○<em>비등</em></td><td class="o">○<em><b>최소 15 h</b></em></td>
+        <td class="o">○<em>선·봉 = 전지름 × 75 mm · 판 = 전두께 × 9–25 × 75 mm</em></td><td class="o">○<em><b>두께와 같은 지름으로 180° 굽힘</b> 후 5–20× 로 균열 관찰 — 합/부</em></td></tr>
+      <tr><td class="nm"><b>Practice F</b></td>
+        <td class="o">○<em>Cu–CuSO₄–50 % H₂SO₄</em></td><td class="o">○<em>CuSO₄·5H₂O 72 g/400 mL + 산 236 mL + 구리편 3 × 20 × 40 mm</em></td><td class="o">○<em>비등</em></td><td class="o">○<em><b>120 h</b></em></td>
+        <td class="o">○<em>5–20 cm² · 120그릿</em></td><td class="o">○<em>질량손실 → mm/월</em></td></tr>
+      <tr><td class="nm"><b>Practice D</b></td>
+        <td class="x">×<em>10 % HNO₃ – 3 % HF</em></td><td class="x">×</td><td class="x">×</td><td class="x">×</td>
+        <td class="x">×</td><td class="x">×<em><b>폐지</b></em></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>A262의 세 가지 함정</h4>
+    <ul class="tight">
+      <li><strong>Practice A는 스크리닝 게이트지 합격시험이 아닙니다.</strong> “step” 조직이면 장시간 시험을 면제할 수 있고, “ditch”면 B·C·E·F가 필요합니다. 그리고 <strong>몰리브덴 함유 합금에서는 효과가 제한적</strong>입니다.</li>
+      <li><strong>Practice E는 이 세트에서 유일한 합/부 굽힘시험</strong>이고, <strong>굽힘 지름이 시편 두께에 묶여</strong> 있습니다 — 즉 <strong>시편 두께가 곧 부여 변형률</strong>입니다. 같은 맨드릴에 더 두꺼운 쿠폰을 쓰면 가혹도가 달라집니다.</li>
+      <li><strong>Practice C와 B는 서로 대체되지 않습니다</strong> — C는 크롬 결핍 경계와 <strong>시그마상</strong>을 함께 잡고, B는 크롬 탄화물을 겨냥합니다. 한쪽을 통과하고 다른 쪽에서 탈락할 수 있습니다. C의 산을 48 h마다 갈아야 하는 이유는 <strong>Cr⁶⁺ 축적</strong> 때문입니다.</li>
+      <li>B·F의 <strong>5–20 cm² 면적 창은 고정된 용액 부피에 묶여</strong> 있습니다 — 벗어나면 이온 부하가 달라져 비교가 무효화됩니다.</li>
+    </ul>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>ASTM G28 (Ni계)</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Method A</td><td><b>약 50 % H₂SO₄</b>(산 236 mL를 물 400 mL에) + <b>황산제2철 25 g</b>, 총 <b>600 mL</b>, 비등. <b>지속시간이 합금별</b>: N06022 · N06059 · N06455 는 <b>24 h</b>, N06007 · N06030 · N06625 · N10276 은 <b>120 h</b></td></tr>
+      <tr><td class="k">Method B</td><td>23 % H₂SO₄ + 1.2 % HCl + 1 % FeCl₃ + 1 % CuCl₂, 비등, <b>플라스크당 시편 1개</b></td></tr>
+      <tr><td class="k">시편</td><td>면적 <b>5–20 cm²</b> · 마감 <b>습식 No.80 또는 건식 No.120</b> · <b>산화 스케일 완전 제거</b> · <b>비염소계</b> 탈지제</td></tr>
+      <tr><td class="k">함정</td><td><b>비염소계 탈지 요구는 형식이 아닙니다</b> — 염소계 용제 잔류물이 염화물 없는 Method A 시험에 염화물을 들여와 <b>입계시험을 공식시험으로 바꿔 버립니다</b>. 또 <b>합금-시간 결합</b>이라 N06022 를 “안전하게” 120 h 돌리면 어떤 합격 기준과도 비교할 수 없는 숫자가 나옵니다. 부피가 600 mL 로 고정이므로 20 cm² 를 넘기면 산화제가 고갈되어 <b>측정 속도가 억제</b>됩니다</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 폭로</span>염수분무는 왜 연(年)으로 환산되지 않는가</h2>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>조건</th><th>규격이 정하지 <em>않는</em> 것</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>ASTM B117</b><br><i>염수분무 장치</i></td>
+        <td>NaCl <b>5 ± 1</b> : 물 95 (질량) · 포집액 pH <b>6.5–7.2</b> · 챔버 <b>35 ± 2 °C</b> · 시편 각도 <b>수직에서 15–30°</b> · 포집률 <b>수평 80 cm²당 1.0–2.0 mL/h</b>(16 h 이상 평균) · 포화탑 46–49 °C, 83–124 kPa · 물은 D1193 Type IV · <b>코팅재의 절단 모서리는 안정한 코팅으로 보호</b></td>
+        <td><b>시편 종류 · 노출 시간 · 해석 방법</b> — 전부 제품 사양서와 D1654 가 정합니다. 규격 자신의 문장: “<b>자연환경 성능 예측이 단독 데이터로서의 염수분무 결과와 상관된 적은 거의 없다</b>”</td></tr>
+      <tr><td class="k"><b>ASTM G85</b><br><i>변형 염수분무</i></td>
+        <td><b>A1</b> 초산 염수분무(연속) · <b>A2</b> 산성화 <b>순환</b> · <b>A3</b> SWAAT(해수 산성화, 순환) · <b>A4</b> SO₂ 염수분무(순환) · <b>A5</b> 희석 전해질 순환 안개/건조(“Prohesion”형)</td>
+        <td>“이 practice 는 특정 제품에 대한 <b>변형 종류·시편·노출 기간을 규정하지 않는다</b>.” 각 부록의 주기 시간·온도는 <b>미확인</b></td></tr>
+      <tr><td class="k"><b>ISO 9227</b><br><i>NSS · AASS · CASS</i></td>
+        <td><b>NSS</b> 50 ± 5 g/L NaCl · pH 6.5–7.2(25 ± 2 °C) · <b>35 ± 2 °C</b><br><b>AASS</b> + 빙초산 · pH 3.1–3.3 · <b>50 ± 2 °C</b><br><b>CASS</b> + <b>CuCl₂·2H₂O 0.26 ± 0.02 g/L</b> · pH 3.1–3.3 · 50 ± 2 °C</td>
+        <td>“염수분무 작용에 대한 저항성과 다른 매질에서의 부식저항 사이에 <b>직접적 관계는 거의 없다</b>.” NSS ≈ B117, AASS ≈ G85 A1, <b>CASS 는 G85 부록에 대응이 없습니다</b>(ASTM B368 이 근사). <b>물 사양·pH 측정 온도·챔버 구조가 달라 교환 불가</b></td></tr>
+      <tr><td class="k"><b>ASTM D1654</b><br><i>도장 시편 평가</i></td>
+        <td><b>스크라이브</b>: 60° 절삭선단 초경/고속도강 바이트, 표면에 <b>약 70–90°</b>로 유지, <b>모든 유기 도막을 관통</b>해 <b>균일하게 밝은 선</b>이 남아야 함. 크리피지는 <b>한쪽</b> 기준으로 mm 로 평균·최대·최소 보고</td>
+        <td><b>패널 크기 미규정</b> — 제품 사양서 몫. <b>절단 모서리는 노출하거나 왁스·테이프로 보호하되 “합의에 따른다”</b> → 모서리 처리가 협상 변수이므로 <b>마스킹한 패널과 맨 모서리 패널을 비교하면 무효</b></td></tr>
+      <tr><td class="k"><b>ASTM G50</b><br><i>대기폭로 (금속)</i></td>
+        <td><b>다년(multi-year) 노출 권장</b> · <b>계절 변동</b>을 동시 노출 또는 계절별 반복으로 처리 · <b>성능이 확립된 대조시편 필수</b> · 노출 시료는 장기 보관</td>
+        <td>패널 100 × 150 mm, 랙 30°, 지상 760 mm, 회수 1/2/4/8/16년, 기간당 3개 이상은 <b>2차 출처</b>이며 규격 본문 미확인. <b>하늘면과 지면면은 별도 평가</b> — 빗물 세척이 위쪽 생성물을 바꾼다</td></tr>
+      <tr><td class="k"><b>ASTM G7/G7M</b><br><i>자연폭로 (일반 재료)</i></td>
+        <td>랙 경사 <b>5° 또는 45°</b> 등, 적도 방향</td>
+        <td><b>맨금속 부식시험용이 아닙니다</b> — 그것은 G50 입니다. 코팅·고분자·복합재의 옥외 폭로용이며, 도장금속은 <b>G7 로 폭로하고 D1654 로 평가</b>합니다</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>B117 시간이 서비스 연수로 환산되지 않는 여섯 가지 이유</h4>
+    <ol class="steps">
+      <li><b>습건 순환이 없다.</b> B117은 35 °C 에서 표면을 계속 젖은 상태로 둡니다. 실제 대기에서 지배 변수는 <b>젖음시간(time-of-wetness)</b>이고, 손상 단계는 흔히 <b>건조 단계</b>입니다 — 증발이 염화물 막을 포화 근처까지 농축하고, 전해질층을 얇게 만들어 산소환원 효율을 자릿수로 올립니다. B117은 그 단계를 <b>한 번도 수행하지 않습니다</b>.</li>
+      <li><b>보호성 부식생성물이 생기지 않는다.</b> 연속 침수에서는 생성물이 느슨하고 비부착성입니다. 실사용의 습건 순환은 부착성 보호층을 만듭니다 — 아연의 탄산·수산화탄산염, 내후성강의 안정 녹, 알루미늄의 산화·수산화물. B117은 <b>이 재료들이 작동하는 바로 그 메커니즘을 막아 버립니다</b> — 아연·내후성강·알루미늄·마그네슘의 순위를 체계적으로 뒤집는 이유입니다.</li>
+      <li><b>염화물 플럭스가 고정되어 있고 비현실적으로 높다.</b> 해양 스플래시를 포함해 거의 어떤 자연 침적률보다 위입니다. 가속이 아니라 <b>메커니즘 지도 바깥</b>입니다.</li>
+      <li><b>CO₂ · SO₂ · NOₓ · 오존 · UV · 분진이 없다.</b> 실제 아연 대기부식은 탄산염 지배, 공업지역 강은 황산염 지배인데 B117에는 둘 다 없습니다. 그리고 <b>도막은 UV 광산화로 먼저 열화한 뒤 부식</b>하는데 B117에는 UV가 아예 없습니다 — 유기도막을 실제 고장 메커니즘으로 순위 매길 수 없습니다.</li>
+      <li><b>온·습도 순환이 없다</b> — 결로도, 도막/소지 계면의 열응력도, 동결융해도 없습니다.</li>
+      <li><b>pH가 중성 근처로 고정</b>되어 있는데, 실제 부식 셀은 국부적으로 산성화하고 실제 강우는 산성입니다.</li>
+    </ol>
+    <p><strong>결론</strong> — B117은 느린 현실이 아니라 <strong>다른 반응 경로</strong>를 다른 속도로 돌리는 것입니다. 서로 다른 두 메커니즘 사이에는 스칼라 가속계수가 존재하지 않으므로 “1000 h = 10년” 같은 단일 숫자는 <strong>차원적으로 무의미</strong>합니다. 한 도장 계에서 얻은 가속계수를 다른 계에 적용하면 자릿수로 어긋나고, <strong>순위 자체가 뒤집힐</strong> 수 있습니다.</p>
+    <p><strong>B117의 정당한 용도</strong> — 공정관리와 로트 합격. 재현성이 높고 싸고 빠르며 <strong>변화</strong>를 잘 잡습니다(불량 전처리 로트, 얇은 도막, 다공성 도금, 오염된 조). “이 배치가 승인된 배치처럼 거동한다”로는 훌륭하고, “이 부품은 12년 간다”로는 무가치합니다.</p>
+  </div>
+  <div class="note">
+    <h4>그럼 무엇이 상관되는가 — 신뢰도 오름차순</h4>
+    <ol class="steps">
+      <li><b>순환 가속시험</b> — 습건 순환·건조·오염물을 되살린 것: <b>G85 A2</b>(산성 순환) · <b>A3 SWAAT</b>(알루미늄과 자동차 Al 브레이징의 표준) · <b>A4</b>(SO₂ 순환) · <b>A5</b>(희석 전해질 순환 — 유기도막에 대한 B117의 표준 반박). ASTM G01 밖: <b>SAE J2334 · GM 9540P · ISO 11997-1/-2 · ISO 16701 · VDA 233-102</b>. 적어도 같은 메커니즘을 돌립니다.</li>
+      <li><b>순환시험 + UV</b> — 부식 사이클과 QUV/제논 사이클을 교대. 도막이 먼저 열화해야 소지가 부식하므로 유기도막에는 필수.</li>
+      <li><b>실환경 폭로</b> — 맨금속은 <b>G50</b>, 도장·비금속은 <b>G7/G7M</b>. 실제 대기 · 실제 젖음시간 · 실제 오염물.</li>
+      <li><b>현장·계 특정 상관계수</b> — <b>같은 시편</b>을 실험실 사이클과 현장 랙에 동시에 걸고 회귀. “시간 → 연수”의 유일한 방어 가능한 경로입니다. 결정적 성질 — <b>그 계수는 그것을 뽑아낸 재료 세트·도장 계·기하·사이트에서만 유효</b>합니다.</li>
+      <li><b>사이트 부식성 등급</b> — <b>ISO 9223/9224/9226</b>이 측정된 젖음시간·염화물 침적·SO₂ 침적으로 대기를 C1–CX 로 분류하고, 표준 금속의 1년차 부식속도와 장기 멱함수 외삽을 제공합니다. <b>측정된 환경 가혹도에서 설계수명을 얻는</b> 근본적으로 더 건전한 경로입니다.</li>
+    </ol>
+    <p><strong>보고 원칙</strong> — B117 결과를 수명으로 진술하지 마십시오. “적녹 발생까지 X시간” 또는 “D1654 기준 스크라이브 등급 N”으로, 노출 규격과 패널·모서리 처리를 함께 적으십시오. 연수 환산은 반드시 그 근거가 된 현장 상관을 달고 다녀야 합니다.</p>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 문턱값</span>SCC는 속도가 아니라 문턱값 문제다</h2>
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 920 434" role="img" aria-label="응력부식균열의 3단계 성장 곡선과 임계 응력확대계수" style="width:100%;height:auto;overflow:visible"><defs><marker id="co_ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="co_as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".55"/></marker></defs><rect x="96" y="62" width="400" height="280" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><line x1="96.0" y1="62" x2="96.0" y2="342" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="96.0" y="360" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace"></text><line x1="196.0" y1="62" x2="196.0" y2="342" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="196.0" y="360" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace"></text><line x1="296.0" y1="62" x2="296.0" y2="342" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="296.0" y="360" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace"></text><line x1="396.0" y1="62" x2="396.0" y2="342" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="396.0" y="360" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace"></text><line x1="496.0" y1="62" x2="496.0" y2="342" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="496.0" y="360" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace"></text><line x1="96" y1="316.5" x2="496" y2="316.5" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="320.5" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻¹¹</text><line x1="96" y1="265.6" x2="496" y2="265.6" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="269.6" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻¹⁰</text><line x1="96" y1="214.7" x2="496" y2="214.7" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="218.7" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻⁹</text><line x1="96" y1="163.8" x2="496" y2="163.8" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="167.8" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻⁸</text><line x1="96" y1="112.9" x2="496" y2="112.9" stroke="currentColor" stroke-opacity=".13" stroke-width="1"/><text x="87" y="116.9" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻⁷</text><text x="496.0" y="378" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">응력확대계수 K  →  K_IC</text><text x="6" y="54" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">균열성장속도 da/dt  [m/s]</text><polyline points="104.00,336.91 104.98,336.91 105.96,336.91 106.95,336.91 107.93,336.91 108.91,336.91 109.89,336.91 110.88,336.91 111.86,336.91 112.84,336.91 113.82,336.91 114.81,336.91 115.79,336.91 116.77,336.91 117.75,336.91 118.74,336.91 119.72,336.91 120.70,336.91 121.68,336.91 122.67,336.91 123.65,336.91 124.63,336.91 125.61,336.91 126.60,336.91 127.58,336.91 128.56,336.91 129.54,336.91 130.53,336.91 131.51,336.91 132.49,336.91 133.47,336.91 134.46,336.91 135.44,336.91 136.42,336.91 137.40,336.91 138.39,336.91 139.37,336.91 140.35,336.91 141.33,336.91 142.32,336.91 143.30,336.91 144.28,336.91 145.26,336.91 146.25,336.91 147.23,336.91 148.21,336.91 149.19,336.91 150.18,336.91 151.16,336.91 152.14,336.91 153.12,336.91 154.11,336.91 155.09,336.91 156.07,336.91 157.05,336.91 158.04,336.91 159.02,336.91 160.00,336.91 160.98,336.91 161.96,336.91 162.95,336.91 163.93,336.91 164.91,336.91 165.89,336.91 166.88,336.91 167.86,336.91 168.84,336.91 169.82,336.91 170.81,336.91 171.79,336.91 172.77,336.91 173.75,336.91 174.74,336.91 175.72,336.91 176.70,336.91 177.68,336.91 178.67,336.91 179.65,336.91 180.63,336.91 181.61,336.91 182.60,336.91 183.58,336.91 184.56,335.06 185.54,331.83 186.53,328.60 187.51,325.37 188.49,322.14 189.47,318.91 190.46,315.68 191.44,312.45 192.42,309.22 193.40,305.99 194.39,302.76 195.37,299.53 196.35,296.30 197.33,293.07 198.32,289.84 199.30,286.61 200.28,283.38 201.26,280.15 202.25,276.92 203.23,273.69 204.21,270.46 205.19,267.23 206.18,264.00 207.16,260.77 208.14,257.54 209.12,254.31 210.11,251.08 211.09,247.85 212.07,244.62 213.05,241.39 214.04,238.16 215.02,234.93 216.00,231.70 216.98,228.47 217.96,225.24 218.95,222.01 219.93,218.78 220.91,215.55 221.89,212.32 222.88,209.09 223.86,205.86 224.84,202.63 225.82,199.40 226.81,196.16 227.79,192.93 228.77,189.70 229.75,186.47 230.74,183.24 231.72,180.01 232.70,179.07 233.68,179.05 234.67,179.03 235.65,179.00 236.63,178.98 237.61,178.95 238.60,178.93 239.58,178.91 240.56,178.88 241.54,178.86 242.53,178.83 243.51,178.81 244.49,178.79 245.47,178.76 246.46,178.74 247.44,178.71 248.42,178.69 249.40,178.66 250.39,178.64 251.37,178.62 252.35,178.59 253.33,178.57 254.32,178.54 255.30,178.52 256.28,178.50 257.26,178.47 258.25,178.45 259.23,178.42 260.21,178.40 261.19,178.38 262.18,178.35 263.16,178.33 264.14,178.30 265.12,178.28 266.11,178.26 267.09,178.23 268.07,178.21 269.05,178.18 270.04,178.16 271.02,178.14 272.00,178.11 272.98,178.09 273.96,178.06 274.95,178.04 275.93,178.02 276.91,177.99 277.89,177.97 278.88,177.94 279.86,177.92 280.84,177.90 281.82,177.87 282.81,177.85 283.79,177.82 284.77,177.80 285.75,177.78 286.74,177.75 287.72,177.73 288.70,177.70 289.68,177.68 290.67,177.66 291.65,177.63 292.63,177.61 293.61,177.58 294.60,177.56 295.58,177.53 296.56,177.51 297.54,177.49 298.53,177.46 299.51,177.44 300.49,177.41 301.47,177.39 302.46,177.37 303.44,177.34 304.42,177.32 305.40,177.29 306.39,177.27 307.37,177.25 308.35,177.22 309.33,177.20 310.32,177.17 311.30,177.15 312.28,177.13 313.26,177.10 314.25,177.08 315.23,177.05 316.21,177.03 317.19,177.01 318.18,176.98 319.16,176.96 320.14,176.93 321.12,176.91 322.11,176.89 323.09,176.86 324.07,176.84 325.05,176.81 326.04,176.79 327.02,176.77 328.00,176.74 328.98,176.72 329.96,176.69 330.95,176.67 331.93,176.65 332.91,176.62 333.89,176.60 334.88,176.57 335.86,176.55 336.84,176.52 337.82,176.50 338.81,176.48 339.79,176.45 340.77,176.43 341.75,176.40 342.74,176.38 343.72,176.36 344.70,176.33 345.68,176.31 346.67,176.28 347.65,176.26 348.63,176.24 349.61,176.21 350.60,176.19 351.58,176.16 352.56,176.14 353.54,176.12 354.53,176.09 355.51,176.07 356.49,176.04 357.47,176.02 358.46,176.00 359.44,175.97 360.42,175.95 361.40,175.92 362.39,175.90 363.37,175.88 364.35,175.85 365.33,175.83 366.32,175.80 367.30,175.78 368.28,175.76 369.26,175.73 370.25,175.71 371.23,175.68 372.21,175.66 373.19,175.64 374.18,175.61 375.16,175.59 376.14,175.56 377.12,175.54 378.11,175.51 379.09,175.49 380.07,175.47 381.05,175.44 382.04,175.42 383.02,175.39 384.00,175.37 384.98,175.35 385.96,175.32 386.95,175.30 387.93,175.27 388.91,175.25 389.89,175.23 390.88,175.20 391.86,175.18 392.84,175.15 393.82,175.13 394.81,175.11 395.79,175.08 396.77,175.06 397.75,175.03 398.74,175.01 399.72,174.99 400.70,174.96 401.68,174.94 402.67,174.91 403.65,174.89 404.63,174.87 405.61,174.84 406.60,174.82 407.58,174.79 408.56,174.77 409.54,174.75 410.53,174.72 411.51,174.70 412.49,174.67 413.47,174.65 414.46,174.63 415.44,174.60 416.42,174.58 417.40,174.55 418.39,174.53 419.37,174.50 420.35,174.48 421.33,174.46 422.32,174.43 423.30,174.41 424.28,174.38 425.26,174.36 426.25,174.34 427.23,174.31 428.21,174.29 429.19,174.26 430.18,174.24 431.16,174.22 432.14,174.19 433.12,174.17 434.11,174.14 435.09,174.12 436.07,174.10 437.05,174.07 438.04,174.05 439.02,174.02 440.00,174.00 440.98,172.21 441.96,170.43 442.95,168.64 443.93,166.85 444.91,165.07 445.89,163.28 446.88,161.50 447.86,159.71 448.84,157.92 449.82,156.14 450.81,154.35 451.79,152.56 452.77,150.78 453.75,148.99 454.74,147.21 455.72,145.42 456.70,143.63 457.68,141.85 458.67,140.06 459.65,138.27 460.63,136.49 461.61,134.70 462.60,132.92 463.58,131.13 464.56,129.34 465.54,127.56 466.53,125.77 467.51,123.98 468.49,122.20 469.47,120.41 470.46,118.63 471.44,116.84 472.42,115.05 473.40,113.27 474.39,111.48 475.37,109.69 476.35,107.91 477.33,106.12 478.32,104.33 479.30,102.55 480.28,100.76 481.26,98.98 482.25,97.19 483.23,95.40 484.21,93.62 485.19,91.83 486.18,90.04 487.16,88.26 488.14,86.47 489.12,84.69 490.11,82.90 491.09,81.11 492.07,79.33 493.05,77.54 494.04,75.75 495.02,73.97 496.00,72.18" fill="none" stroke="#C4402B" stroke-width="2.4"/><line x1="184.0" y1="62" x2="184.0" y2="342" stroke="#D07A3B" stroke-width="1.2" stroke-dasharray="4 4" stroke-opacity=".6"/><line x1="440.0" y1="62" x2="440.0" y2="342" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 4" stroke-opacity=".6"/><text x="188.8" y="329.3" text-anchor="start" fill="#D07A3B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">K_ISCC (임계값)</text><text x="114.0" y="209.6" text-anchor="start" fill="#2F6FC4" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">Stage I</text><text x="296.0" y="171.5" text-anchor="start" fill="#5D6BC6" font-size="11" font-family="IBM Plex Sans KR, sans-serif">Stage II — K 에 거의 무관 (환경 수송 지배)</text><text x="448.0" y="123.1" text-anchor="start" fill="#C4402B" font-size="11" font-family="IBM Plex Mono, ui-monospace, monospace">Stage III</text><text x="96" y="30" font-family="IBM Plex Sans KR, sans-serif" font-size="12" font-weight="500" fill="currentColor">SCC 는 <tspan fill="#C4402B">속도가 아니라 문턱값</tspan> 문제다 — Stage II 평탄부가 그 이유다</text><rect x="552" y="78" width="7" height="7" fill="#C4402B"/><text x="568" y="88" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">임계값 아래</text><text x="568" y="107" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">성장이 측정 불가 수준으로 떨어진다 (10⁻¹¹–10⁻¹⁰ m/s 이하)</text><rect x="552" y="138" width="7" height="7" fill="#C4402B"/><text x="568" y="148" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">Stage II 는 평탄</text><text x="568" y="167" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">1.2 K_ISCC 를 2.4 K_ISCC 로 올려도 속도가 거의 안 변한다</text><rect x="552" y="198" width="7" height="7" fill="#C4402B"/><text x="568" y="208" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">반대로 1.05 → 0.95</text><text x="568" y="227" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">“수개월 내 관통”이 “성장 없음”으로 바뀐다</text><rect x="552" y="258" width="7" height="7" fill="#C4402B"/><text x="568" y="268" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">그래서 S–N 유사물이 없다</text><text x="568" y="287" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">K 에 대한 <tspan font-weight="600">계단함수</tspan>이지 곡선이 아니다</text><rect x="552" y="318" width="7" height="7" fill="#C4402B"/><text x="568" y="328" font-family="IBM Plex Sans KR, sans-serif" font-size="12.5" font-weight="500" fill="currentColor">시험 시간이 임계값의 일부</text><text x="568" y="347" font-family="IBM Plex Sans KR, sans-serif" font-size="10.5" fill="currentColor" fill-opacity=".62">E1681: 겉보기 임계값은 <tspan font-weight="600">시험 지속시간의 함수</tspan>다</text><text x="96" y="410" font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".7">K_ISCC 는 재료의 성질이 아니라 <tspan font-weight="600">재료–환경–온도–전위 계</tspan>의 성질이다 — 환경을 바꾸면 옮길 수 없다</text></svg></div>
+    <figcaption><b>Stage II 평탄부</b>가 이 절의 전부입니다. 균열속도가 K 에 거의 무관한 구간이 있으므로 <b>문턱값 위에서 응력과 수명 사이에 유용한 단조 관계가 없습니다</b>. 1.2 K_ISCC 를 2.4 K_ISCC 로 올려도 성장속도는 거의 그대로인데, 1.05 K_ISCC 를 0.95 K_ISCC 로 내리면 결과가 “수개월 내 관통”에서 “성장 없음”으로 바뀝니다. <b>K 에 대한 계단함수이지 곡선이 아닙니다.</b></figcaption>
+  </figure>
+  <div class="tw"><table>
+    <thead><tr><th>구간</th><th>물리</th><th>설계 의미</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>문턱값 아래</b></td><td>성장이 측정 불가 수준(대략 10⁻¹¹–10⁻¹⁰ m/s 이하)으로 떨어집니다. 이 영역에서는 <b>“성장 없음”과 “시험 수명 안에 재기엔 너무 느림”이 같은 진술</b>이 됩니다</td><td>설계 목표는 여기</td></tr>
+      <tr><td class="k"><b>Stage I</b></td><td>문턱값 <b>K_ISCC</b> 바로 위에서 da/dt 가 급상승</td><td>매우 좁은 전이 구간</td></tr>
+      <tr><td class="k"><b>Stage II</b></td><td><b>평탄부</b> — da/dt 가 K 에 거의 무관. 역학이 아니라 <b>균열선단으로의 환경 수송</b>(용액 확산, 폐색 균열 내 물질전달, 공정영역 내 수소 확산)이 지배</td><td>여기서는 <b>검사 주기</b>만 정할 수 있고 운전을 정당화할 수 없습니다</td></tr>
+      <tr><td class="k"><b>Stage III</b></td><td>K 가 K_IC 에 접근하며 가속</td><td>파괴 임박</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>그래서 이 분야에 S–N 곡선의 유사물이 없습니다</h4>
+    <p>평활 시편 쪽에도 같은 논리가 적용됩니다 — <strong>임계응력 σ_th</strong>(G49 정하중, TM0177 Method A 의 “720 h 무파단 최고응력”) 아래에서는 균열이 개시하지 않고, 위에서는 개시합니다. 그래서 <strong>1절의 합격기준이 전부 합/부</strong>인 것입니다.</p>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 설계</span>CAE와 설계로 가는 길</h2>
+
+  <h3>(a) 균일 감육 — 유일하게 깨끗하게 매핑되는 것</h3>
+  <div class="eq">
+    <div>CR = K · W / (A · T · D)</div>
+    <div>W 질량손실 [g] · A 면적 [cm²] · T 시간 [h] · D 밀도 [g/cm³]</div>
+    <div>mm/y → <b>K = 8.76 × 10⁴</b> &nbsp;·&nbsp; mpy → <b>K = 3.45 × 10⁶</b> &nbsp;·&nbsp; µm/y → 8.76 × 10⁷</div>
+    <div>g/(m²·h) → 1.00 × 10⁴ × D &nbsp;·&nbsp; mdd → 2.40 × 10⁶ × D <span class="mut">(질량손실률 출력은 밀도로 나누지 않는다)</span></div>
+  </div>
+  <p><strong>사용법</strong> — CR(mm/y) × 설계수명 = 부식여유, 벽두께에 가산. FE 에서는 두께를 줄인 셸, 시간 매개변수화된 두께, 또는 경계 연구용 두께 패밀리로 구현합니다. 단면계수·좌굴·압력경계 계산에 바로 흘러갑니다.</p>
+  <ul class="tight">
+    <li><strong>공식계수가 1에 가까워야 합니다.</strong> 가정하지 말고 G46 검사로 확인하십시오.</li>
+    <li>시험 환경이 온도·유속·통기·퇴적물까지 실사용을 대표해야 합니다.</li>
+    <li><strong>부식속도는 일반적으로 시간에 선형이 아닙니다</strong> — 대개 <code>d = A·tⁿ</code>, n &lt; 1(막이 두꺼워지며 반응이 느려짐). 100 h 쿠폰을 20년으로 선형 외삽하는 것은 탄소강에서는 보통 보수적이지만, <strong>부동태 합금에서는 짧은 시험이 도달하지 못한 잠복기 뒤에 파괴가 일어나므로 심각하게 비보수적</strong>일 수 있습니다. G31의 <strong>계획구간시험(planned interval test)</strong>과 G50의 다년 회수 일정이 바로 이것을 잡기 위해 존재합니다.</li>
+    <li>저속 재료의 짧은 시험은 <strong>칭량 오차가 지배</strong>합니다 — G31의 <code>시간 = 2000/mpy</code>가 실무 하한입니다.</li>
+    <li><strong>W 는 세정 보정</strong>이 되어 있어야 합니다(G1 반복세정 교점 B, 또는 ISO 8407 대조시편 블랭크). <strong>A 는 모서리와 구멍 모서리를 포함한 실제 젖음면적</strong>이어야 합니다.</li>
+  </ul>
+
+  <h3>(b) 국부 공격 — 평균이 아니라 통계</h3>
+  <p>파손 모드가 <strong>관통·누설·공식에서의 균열 개시</strong>일 때 평균 부식속도는 틀린 통계량입니다. 설계에 관련된 양은 <strong>부품 전체에서 가장 깊은 공식</strong>이지 쿠폰 위 평균 침투가 아닙니다.</p>
+  <ol class="steps">
+    <li>n 개 시편 각각에서 <b>최대 공식깊이</b>를 측정합니다 (G46: 단면법 · 기계가공 제거법 · 뾰족 앤빌 깊이게이지 · 50–500× 현미경 초점법).</li>
+    <li>n 개의 최대값을 오름차순으로 순위 매기고 플로팅 위치 <b>M/(n+1)</b> 을 부여합니다.</li>
+    <li><b>Gumbel(Type I 극값)</b> 분포를 적합: <code>F(d) = exp{−exp[−(d − μ)/β]}</code>.</li>
+    <li>부품으로 외삽합니다. <b>재현기간 T = A_부품 / A_검사</b>, 예상 최대 깊이 <code>d_max ≈ μ + β · ln T</code>.</li>
+    <li>노출 시간을 바꿔 반복하면 <b>극값의 성장법칙</b>을 얻습니다 — 대개 <code>d_max ∝ tⁿ</code>, n ≈ 0.3–0.8.</li>
+  </ol>
+  <div class="note">
+    <h4>여기서 모든 것을 지배하는 시편 제약</h4>
+    <ul class="tight">
+      <li>답이 <strong>검사한 면적의 함수</strong>입니다. 검사면적을 2배로 하면 Gumbel 분포 전체가 <code>β·ln2</code> 만큼 위로 올라갑니다.</li>
+      <li>따라서 서로 다른 쿠폰 면적에서 “최대 공식깊이 0.8 mm”를 보고한 두 실험실은 <strong>다른 것을 보고한 것</strong>입니다.</li>
+      <li><strong>공식깊이는 반드시 검사면적과 함께 보고</strong>하십시오. 면적 없는 공식깊이는 사용할 수 없는 데이터입니다.</li>
+      <li>외삽은 공식이 부품 전체에 걸쳐 독립·동일분포라고 가정합니다. <strong>용접선, 크레비스, 열영향부, 퇴적물, 사수(dead leg)는 이를 위반</strong>하므로 별도 집단으로 분석해야 하며, 아니면 외삽이 과소예측합니다.</li>
+      <li>출력이 가는 곳 — 잔여강도 평가(<strong>ASME B31G / modified B31G</strong> 배관, <strong>API 579-1/ASME FFS-1</strong> Level 1–3 압력설비), 파괴전누설 해석, 확률론적 신뢰도·검사주기(RBI) 모델. <strong>측정된 단일 결함을 명시적으로 모델링하는 경우가 아니면 결정론적 메시의 기하 형상으로 넣지 않습니다.</strong></li>
+    </ul>
+  </div>
+
+  <h3>(c) SCC — 무엇을 넣을 수 있고 무엇을 못 넣는가</h3>
+  <div class="tw"><table>
+    <thead><tr><th>양</th><th>출처</th><th>설계 진입 경로</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>σ_th</b> 임계응력</td><td>G49(정하중) · TM0177 A·C</td><td>FE 의 <b>지속 인장응력 최대값</b>과 비교 — <b>잔류 + 조립/볼트 예압 + 열 + 운전</b>을 모두 포함. <b>잔류응력이 대개 최대 항이면서 가장 자주 빠집니다</b></td></tr>
+      <tr><td class="k"><b>K_ISCC / K_IEAC / K_ISSC</b></td><td>E1681 · ISO 7539-6 · G168 · TM0177 D</td><td>파괴역학 허용치. 가정 또는 검출된 결함에서 K 를 계산(API 579 · BS 7910)하고 여유를 두어 <code>K &lt; K_ISCC</code></td></tr>
+      <tr><td class="k"><b>Stage II da/dt</b></td><td>G168 · E1681 · ISO 7539-6</td><td>균열이 <b>이미 존재하고</b> K 가 문턱값을 넘은 뒤의 <b>검사 주기</b>와 잔여수명</td></tr>
+      <tr><td class="k">비(ratio) 파라미터</td><td>G129 · ISO 7539-7 (단면감소율비 · 시간비)</td><td><b>재료 스크리닝 전용.</b> 절대 허용치가 아닙니다</td></tr>
+      <tr><td class="k">합/부</td><td>G30 · G36 · G38 · G39 · G47 · G123 · TM0177 A·B·C</td><td>재료·열처리 자격. 숫자가 아닙니다</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>CAE가 SCC 데이터로 <em>할 수 없는</em> 것</h4>
+    <ul class="tight">
+      <li><strong>합격과 불합격 사이를 보간할 수 없습니다.</strong> G47이 항복의 75 %에서 통과하고 90 %에서 탈락했다고 “82 %면 절반이 깨진다”가 되지 않습니다.</li>
+      <li><strong>환경을 건너 옮길 수 없습니다.</strong> K_ISCC 는 재료가 아니라 <strong>재료–환경–온도–전위 계</strong>의 성질입니다.</li>
+      <li><strong>방향을 건너 옮길 수 없습니다.</strong> Al 판재와 압연·단조강에서 단파방향과 종방향은 이 목적에서 <strong>서로 다른 재료</strong>입니다.</li>
+      <li><strong>시험 시간을 무시할 수 없습니다.</strong> E1681 — 겉보기 임계값은 <strong>시험 지속시간의 함수</strong>입니다. 100 h 시험의 K_IEAC 와 10 000 h 시험의 K_IEAC 는 같은 숫자가 아닙니다.</li>
+      <li><strong>정변형 임계값을 정하중 허용치로 쓸 수 없습니다.</strong> G38·G39 시편은 균열이 자라며 하중을 흘리고, G49 정하중과 TM0177 Method A 는 그렇지 않습니다. 정변형 임계값은 <strong>체계적으로 비보수적</strong>입니다.</li>
+      <li><strong>한 시험으로 개시와 전파를 분리할 수 없습니다.</strong> 평활 시편의 σ_th 는 표면 마감·공식·잔류응력이 지배하는 개시항을 포함하는데, 이 중 아무것도 FE 모델 안에 없습니다. 예균열 K_ISCC 는 그 항을 제거한 <strong>결함허용 설계에 방어 가능한 숫자</strong>입니다.</li>
+    </ul>
+  </div>
+  <div class="note">
+    <h4>실제로 작동하는 설계 워크플로</h4>
+    <ol class="steps">
+      <li><b>FE 로 전체 지속 인장응력장</b>을 얻습니다 — 잔류·조립 응력 포함. 비교 대상은 공칭 멤브레인 응력이 아니라 <b>자유표면의 최대 응력</b>입니다.</li>
+      <li>올바른 환경·방향에서 정하중 시험(G49 · TM0177 A)으로 얻은 <b>σ_th</b> 로 스크리닝합니다. 최대 응력이 여유를 두고 아래면 문턱값-안전입니다.</li>
+      <li>결함을 가정해야 하는 곳(용접부, 가공 결함, (b)에서 나온 기존 공식)에서는 K 를 계산해 <b>K_ISCC / K_IEAC</b> 와 비교하되 <b>시험 지속시간을 명시</b>합니다.</li>
+      <li>K 가 문턱값을 넘는 곳에서는 <b>Stage II da/dt</b> 로 <b>검사 주기</b>를 정합니다 — 운전을 정당화하는 데 쓰지 마십시오.</li>
+      <li><b>완화책은 재료 변경이 아니라 응력장 변경으로 모델에 들어갑니다</b> — 쇼트/레이저 피닝(표면 압축잔류응력), 응력제거(잔류항 제거), 그리고 음극방식·전위 제어(균열 창 밖으로 환경을 이동). 다만 <b>고강도강에서 음극방식은 메커니즘을 수소취화로 옮길 수 있습니다</b> — 같은 K-문턱값 형식이지만 전위 의존성이 반대입니다.</li>
+    </ol>
+  </div>
+
+  <h3>요약 — 각 데이터가 지지하는 것과 지지하지 않는 것</h3>
+  <div class="tw"><table>
+    <thead><tr><th>데이터</th><th>설계에 들어가는 방식</th><th>지지하지 <em>않는</em> 것</th></tr></thead>
+    <tbody>
+      <tr><td class="k">G1 · G31 질량손실 CR</td><td>두께 여유 · 단면감소 FE</td><td>관통수명 · 공식깊이 · SCC</td></tr>
+      <tr><td class="k">G102 · G59 i_corr → CR</td><td>스크리닝 · 음극방식 전류밀도 산정 · 순간속도</td><td>국부 속도 · 장기 수명</td></tr>
+      <tr><td class="k">G61 · G48 E_pit · E_prot · CPT · CCT</td><td>재료 선정 · 최고사용온도 순위</td><td>절대 서비스 온도 한계 · 공식 성장속도</td></tr>
+      <tr><td class="k">G46 공식깊이 + Gumbel</td><td>누설/파열 평가 · RBI 주기 · API 579 · B31G 입력</td><td>균일 감육 · 결정론적 단일 기하</td></tr>
+      <tr><td class="k">G30 · G36 · G38 · G39 · G47 · G123 합/부</td><td>재료·열처리 자격</td><td>어떤 수치 허용치도</td></tr>
+      <tr><td class="k">G49 · TM0177 A σ_th</td><td>SCC 응력 허용치</td><td>결함의 파괴역학 평가</td></tr>
+      <tr><td class="k">E1681 · G168 · TM0177 D K_ISCC</td><td>파괴역학 허용치 · 검사 사이징</td><td>개시 수명 · <b>시험 시간 없이의 사용</b></td></tr>
+      <tr><td class="k">G129 · ISO 7539-7 연성비</td><td>스크리닝·순위</td><td>어떤 허용치도, 어떤 수명도</td></tr>
+      <tr><td class="k">B117 시간</td><td>로트 합격 · 공정관리</td><td>연 단위 서비스 수명</td></tr>
+      <tr><td class="k">G50 · G7 실환경 폭로</td><td>부식성 등급 · 상관 앵커</td><td>빠른 답</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 상태</span>상태 변경 · 확인하지 못한 항목</h2>
+  <h3>브리핑 자체의 정정 다섯 건</h3>
+  <div class="tw"><table>
+    <thead><tr><th>흔한 오해</th><th>실제</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ASTM G168 = 상승단계하중(rising step load)</td><td><b>아닙니다.</b> G168-17 은 <b>“Making and Using Precracked Double Beam Stress Corrosion Specimens”</b>(예균열 이중보)입니다. 상승/증분 단계하중은 <b>ASTM F1624</b>이고, ISO 대응은 <b>ISO 7539-9</b>(7539-6 이 아님)입니다</td></tr>
+      <tr><td class="k">ASTM G5 = 정전위/동전위</td><td>현행 <b>G5-14(2021)</b>은 <b>“Potentiodynamic”</b>만 제목에 남았습니다 — 2014년 개정에서 “potentiostatic” 삭제</td></tr>
+      <tr><td class="k">G30 에 “3단계 응력부여”가 있다</td><td><b>없습니다.</b> 본문은 <b>1단계와 2단계</b>만 정의합니다. 3단계 <b>성형</b> 순서는 치수 예시 하나(시편 h: 맨드릴 성형 → 유압프레스 → 볼트)에만 나오는 서술이며 규격 조항이 아닙니다</td></tr>
+      <tr><td class="k">A262 Practice D</td><td><b>폐지</b>(10 % HNO₃ + 3 % HF, 70 °C). A262 는 현재 <b>A · B · C · E · F</b></td></tr>
+      <tr><td class="k">G7 로 맨금속 부식시험</td><td><b>명시적으로 제외</b>됩니다 — 맨금속은 <b>G50</b>. G7 은 비금속·도장재 옥외 폭로용입니다</td></tr>
+      <tr><td class="k">NACE TM0177</td><td>이제 <b>AMPP</b>. 현행 <b>TM0177-2024</b></td></tr>
+      <tr><td class="k">ASTM G31</td><td><b>Practice 에서 Guide 로 변경</b>(G31-21). 이 문서의 수치는 <b>G31-72(2004)</b> 본문 기준이며 G31-21 로의 승계는 미확인</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>확인하지 못한 항목</h3>
+  <div class="tw"><table>
+    <thead><tr><th>규격</th><th>미확인 내용</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ASTM G36</td><td><b>“45 % MgCl₂” 농도 수치</b> (확인된 것은 비등점 155.0 ± 1.0 °C) · 규정 노출시간 · 정량 판정기준</td></tr>
+      <tr><td class="k">ASTM G38</td><td>규정 링 폭 · 폭/두께 비 · 최대 OD</td></tr>
+      <tr><td class="k">ASTM G44</td><td>용액 온도(27 ± 1 °C) · RH(45 ± 10 %) · pH(6.8 ± 0.4)는 <b>NASA MSFC-STD-3029 가 G44 를 인용한 값</b>이며 G44 본문 미확인. 용액/면적 비와 교체 주기도 미확인</td></tr>
+      <tr><td class="k">ASTM G47</td><td>시편 지름(통상 3.175 mm) · 응력 수준(통상 최소항복의 75 %) · 노출기간(통상 20일) · 반복수(통상 10) · 합격기준 — <b>전부 미확인</b></td></tr>
+      <tr><td class="k">ASTM G49</td><td>G49 고유 시편 치수표 (Ø3.18 mm 게이지와 50/75/90 % YS 는 NASA 문서 출처)</td></tr>
+      <tr><td class="k">ASTM G61</td><td>규격이 지정하는 기준 합금 · 기준 전해질 · 온도 · 역주사 기준</td></tr>
+      <tr><td class="k">ASTM G123 · G129 · G139 · G168</td><td>G123 시험시간·정량기준 · G129 시편 치수 지침 · G139 시편 치수·응력·반복수·분포 모형 · G168 DCB 치수와 암 변위값</td></tr>
+      <tr><td class="k">ASTM G85</td><td>부록 A1–A5 의 주기 시간과 온도</td></tr>
+      <tr><td class="k">ASTM G31 · G48</td><td>G31-72 값(Ø38 × 3 mm · 0.20/0.40 mL/mm² · 120그릿 · 2000/mpy)의 <b>G31-21 승계 여부</b> · G48-11 계열 값(25 × 50 mm · 6 % FeCl₃ · 72 h · TFE 12.7 mm · 0.28 N·m · 5 mL/cm² · 0.025 mm)의 <b>G48-25 승계 여부</b></td></tr>
+      <tr><td class="k">ASTM G50</td><td>패널 100 × 150 mm · 랙 30° · 높이 760 mm · 회수 1/2/4/8/16년 · 기간당 3개 — 전부 2차 출처</td></tr>
+      <tr><td class="k">ISO 9227</td><td>포집률 · 시편 배치 각도 · 모서리 보호 요구</td></tr>
+      <tr><td class="k">AMPP TM0177</td><td>용액 B · C 조성 · 용액 A 의 초기/최종 pH · ±3 °C 공차 · Method C C링 치수 · Method D DCB 치수</td></tr>
+      <tr><td class="k">ASTM A262</td><td>Practice A 를 “4시간”으로 적은 2차 출처가 있으나 A262-15 본문의 <b>1 A/cm² × 1.5분</b>과 모순 — <b>1.5분이 맞습니다</b></td></tr>
+      <tr><td class="k">ISO 7539</td><td>각 파트의 발행연도와 대체 여부</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>정리 — 부식 데이터를 남길 때</h4>
+    <ul class="tight">
+      <li><strong>SCC</strong> — <strong>시편 규격 + 환경 규격</strong>을 반드시 짝으로. 그리고 <strong>정하중인지 정변형인지</strong>, 응력 수준, 방향(특히 단파방향), 지속시간</li>
+      <li><strong>질량손실</strong> — 세정 보정 방법(반복세정 교점 또는 대조시편), 면적 계산에 모서리·구멍을 포함했는지, 용액/면적 비</li>
+      <li><strong>공식</strong> — <strong>검사면적</strong>과 함께. 없으면 데이터가 아닙니다. 그리고 공식계수</li>
+      <li><strong>G48</strong> — 표면 상태(연삭·산세·전해연마·용접 그대로)와 크레비스 토크</li>
+      <li><strong>B117</strong> — 시간과 D1654 등급으로. <strong>연수로 환산하지 말 것</strong>, 하더라도 현장 상관을 달고</li>
+      <li><strong>임계값</strong> — K_ISCC · σ_th 는 <strong>시험 지속시간</strong>과 환경·온도·전위를 붙여야 비로소 의미가 있습니다</li>
+    </ul>
+  </div>
+
+  <div class="note">
+    <h4>시리즈를 마치며 — 열 편을 관통한 한 문장</h4>
+    <p>이 시리즈 열 편에서 반복해서 나온 것은 하나입니다 — <strong>시편은 측정의 부수 조건이 아니라 측정량의 일부</strong>입니다.</p>
+    <ul class="tight">
+      <li><strong>인장</strong>은 형상이 응력장을 정의하고, <strong>압축·굽힘·전단</strong>은 지그가 그것을 대신합니다</li>
+      <li><strong>충격</strong>은 노치가 물성을 정의하고, <strong>경도</strong>는 형상 대신 세 방향의 거리가 규정됩니다</li>
+      <li><strong>열물성</strong>은 두께가 시간상수 안에 제곱으로 들어가고, <strong>판재 성형성</strong>은 폭 시리즈가 곧 규격입니다</li>
+      <li><strong>접착</strong>은 시편이 재료가 아니라 이음이고, <strong>전기</strong>는 전극이 어떤 물성인지를 정합니다</li>
+      <li><strong>부식</strong>은 면적·마감·모서리·용액 부피가 형상을 대신합니다</li>
+    </ul>
+    <p>그래서 CAE 재료 카드에 숫자를 넣을 때 물어야 할 질문은 언제나 같습니다 — <strong>“이 값은 어떤 시편으로, 어떤 지그에서, 어떤 판정 규칙으로 나왔는가.”</strong> 그 답이 없으면 그것은 물성이 아니라 <strong>어떤 시험의 결과</strong>일 뿐입니다.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  시편 규격 시리즈 · 10 (완결) — 부식 · ASTM G1 · G5 · G28 · G30 · G31 · G36 · G38 · G39 · G44 · G46 · G47 · G48 · G49 · G50 · G59 · G61 · G85 · G102 · G123 · G129 · G139 · G168 · E1681 · A262 · B117 · D1654 · G7 · ISO 7539 · 8407 · 9227 · AMPP TM0177
+</footer>
+</body></html>

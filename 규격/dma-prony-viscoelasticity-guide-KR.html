@@ -1,0 +1,765 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DMA에서 Prony 카드까지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">점탄성 · 시험에서 해석까지</div>
+  <h1>DMA에서<br>Prony 카드까지</h1>
+  <p class="dek">고무·플라스틱·접착제처럼 “시간에 따라 성질이 변하는” 재료를 어떻게 측정하고, 그 측정값을 어떻게 solver가 읽는 물성 카드로 바꾸는지 — 실험실 벤치에서 입력 데크까지 한 줄로 이어서 설명합니다.</p>
+  <div class="mast-meta">
+    <div><b>대상</b> 고무 · 플라스틱 · 접착제/폼 · 복합재</div>
+    <div><b>솔버</b> Abaqus · LS-DYNA · Ansys APDL</div>
+    <div><b>전제</b> 선형 점탄성 (LVE)</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 전체 그림 한 장</a>
+    <a href="#s1"><span>01</span> 점탄성이란 무엇인가</a>
+    <a href="#s2"><span>02</span> DMA가 실제로 재는 값</a>
+    <a href="#s3"><span>03</span> 시험 계획과 실행</a>
+    <a href="#s4"><span>04</span> 마스터커브와 시프트 인자</a>
+    <a href="#s5"><span>05</span> Prony 시리즈</a>
+    <a href="#s6"><span>06</span> 피팅 실무</a>
+    <a href="#s7"><span>07</span> 전단·체적으로 바꾸기</a>
+    <a href="#s8"><span>08</span> 솔버별 물성 카드</a>
+    <a href="#s9"><span>09</span> 검증</a>
+    <a href="#s10"><span>10</span> 자주 틀리는 지점</a>
+  </nav>
+</header>
+
+<main>
+
+<section id="s0">
+  <h2><span class="num">00 / 전체 그림</span>한 장으로 보는 파이프라인</h2>
+  <p class="lede">DMA 시험부터 CAE 물성 카드까지는 결국 <strong>“여러 온도에서 흔들어 본 결과를 하나의 곡선으로 합치고, 그 곡선을 지수함수 몇 개의 합으로 압축한다”</strong>는 한 문장입니다. 나머지는 전부 이 문장을 정확하게 실행하기 위한 절차입니다.</p>
+  <p>중간 산출물이 무엇인지만 놓치지 않으면 길을 잃지 않습니다. 시험에서 나오는 것은 <em>E′, E″, tan δ의 (온도, 주파수) 표</em>, 그다음이 <em>마스터커브 + 시프트 인자 a_T</em>, 그다음이 <em>(gᵢ, τᵢ) 쌍</em>, 마지막이 <em>솔버 키워드</em>입니다.</p>
+
+  <figure>
+    <div class="fbox">
+      <svg viewBox="0 0 660 664" role="img" aria-label="시험 설계에서 DMA 측정, 마스터커브, Prony 피팅, 물성 카드, 검증으로 이어지는 여섯 단계 파이프라인과 검증 실패 시 피팅으로 되돌아가는 순환">
+        <defs>
+          <marker id="wf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g fill="none" stroke="currentColor" stroke-opacity=".38">
+          <rect x="155" y="14"  width="330" height="60" rx="3"/>
+          <rect x="155" y="128" width="330" height="60" rx="3"/>
+          <rect x="155" y="242" width="330" height="60" rx="3"/>
+          <rect x="155" y="356" width="330" height="60" rx="3"/>
+          <rect x="155" y="470" width="330" height="60" rx="3"/>
+          <rect x="155" y="584" width="330" height="60" rx="3"/>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".55" stroke-width="1.4" marker-end="url(#wf)">
+          <line x1="320" y1="78" x2="320" y2="124"/>
+          <line x1="320" y1="192" x2="320" y2="238"/>
+          <line x1="320" y1="306" x2="320" y2="352"/>
+          <line x1="320" y1="420" x2="320" y2="466"/>
+          <line x1="320" y1="534" x2="320" y2="580"/>
+        </g>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor" fill-opacity=".55" text-anchor="end">
+          <text x="140" y="49">01</text><text x="140" y="163">02</text><text x="140" y="277">03</text>
+          <text x="140" y="391">04</text><text x="140" y="505">05</text><text x="140" y="619">06</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="14.5" font-weight="500" fill="currentColor">
+          <text x="176" y="42">시험 설계 · 시편 준비</text>
+          <text x="176" y="156">DMA 측정</text>
+          <text x="176" y="270">마스터커브 작성</text>
+          <text x="176" y="384">Prony 피팅</text>
+          <text x="176" y="498">물성 카드 작성</text>
+          <text x="176" y="612">검증</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".6">
+          <text x="176" y="62">모드 선택 · 선형 영역(LVE) 확인</text>
+          <text x="176" y="176">온도 스텝 × 주파수 스윕</text>
+          <text x="176" y="290">시간–온도 중첩(TTS)으로 수평 이동</text>
+          <text x="176" y="404">지수함수 합으로 곡선 압축</text>
+          <text x="176" y="518">단위계 · 정규화 · 기준 탄성률 정리</text>
+          <text x="176" y="632">단일 요소 재현 · 부품 시험 상관</text>
+        </g>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="currentColor" fill-opacity=".62">
+          <text x="336" y="105">변형률 진폭 결정</text>
+          <text x="336" y="219">E′, E″, tan δ (T, f)</text>
+          <text x="336" y="333">E′(ω·a_T) + a_T(T)</text>
+          <text x="336" y="447">gᵢ, τᵢ, C₁, C₂</text>
+          <text x="336" y="561">.inp / .k / .dat</text>
+        </g>
+        <path d="M155,614 C 96,614 96,366 155,366" fill="none" stroke="currentColor" stroke-opacity=".4"
+              stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#wf)"/>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".55" text-anchor="end">
+          <text x="86" y="494">안 맞으면</text>
+          <text x="86" y="510">04로 복귀</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>여섯 단계와 그 사이를 흐르는 데이터.</b> 각 화살표 옆에 적힌 것이 앞 단계가 뒤 단계에 넘겨주는 실제 산출물입니다. 검증에서 어긋나면 시험이 아니라 대개 피팅(04)으로 돌아갑니다.</figcaption>
+  </figure>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 기초</span>점탄성이란 무엇인가</h2>
+  <p>재료를 두 극단으로 놓고 보면 이해가 쉽습니다.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>완전 탄성 = 스프링</h4>
+      <p>σ = E ε. 하중을 주면 <strong>즉시</strong> 변형하고, 놓으면 <strong>즉시</strong> 원래대로. 넣은 에너지를 100% 돌려줍니다. 시간이라는 변수가 아예 없습니다.</p>
+    </div>
+    <div class="card">
+      <h4>완전 점성 = 대시포트(damper)</h4>
+      <p>σ = η ε̇. 응력이 변형이 아니라 <strong>변형 속도</strong>에 비례합니다. 넣은 에너지는 전부 열로 사라집니다. 꿀이나 오일이 여기에 가깝습니다.</p>
+    </div>
+    <div class="card">
+      <h4>점탄성 = 스프링 + 대시포트</h4>
+      <p>고분자는 그 중간입니다. 일부는 저장했다가 돌려주고, 일부는 열로 버립니다. 그래서 <strong>얼마나 빨리 하중을 주느냐</strong>와 <strong>온도가 몇 도냐</strong>에 따라 물성이 바뀝니다.</p>
+    </div>
+  </div>
+
+  <h3>같은 현상, 두 가지 시험</h3>
+  <p><strong>응력 완화(stress relaxation)</strong>는 변형을 일정하게 붙잡아 두는 시험입니다. 고무 개스킷을 눌러 두면 처음엔 세게 밀어내다가 시간이 갈수록 미는 힘이 줄어드는데, 이때 측정하는 것이 완화 탄성률 E(t)입니다. 반대로 <strong>크리프(creep)</strong>는 하중을 일정하게 두고 변형이 계속 늘어나는 것을 봅니다. 플라스틱 클립이 오래 끼워두면 헐거워지는 현상이 이것입니다. 선형 영역이라면 둘은 같은 정보를 담고 있어 수학적으로 서로 변환됩니다.</p>
+
+  <h3>Prony 시리즈의 기계적 그림</h3>
+  <p>완화 곡선은 지수함수 하나로는 절대 안 맞습니다. 실제 고분자는 아주 빠른 완화(사슬 국소 운동)부터 아주 느린 완화(사슬 얽힘 풀림)까지 <strong>여러 시간 스케일</strong>을 동시에 갖기 때문입니다. 그래서 서로 다른 완화 시간을 가진 Maxwell 요소(스프링+대시포트 직렬)를 여러 개 병렬로 붙입니다. 이것이 <strong>일반화 Maxwell 모델</strong>이고, 그 수식 표현이 곧 Prony 시리즈입니다.</p>
+
+  <figure>
+    <div class="fbox">
+      <svg viewBox="0 0 800 300" role="img" aria-label="평형 스프링 하나와 스프링-대시포트 직렬 가지 여러 개가 병렬로 연결된 일반화 맥스웰 모델">
+        <defs>
+          <marker id="gm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g stroke="currentColor" fill="none">
+          <line x1="60" y1="14" x2="60" y2="272" stroke-width="2" stroke-opacity=".7"/>
+          <g stroke-opacity=".4">
+            <line x1="60" y1="30"  x2="44" y2="46"/><line x1="60" y1="80"  x2="44" y2="96"/>
+            <line x1="60" y1="130" x2="44" y2="146"/><line x1="60" y1="180" x2="44" y2="196"/>
+            <line x1="60" y1="230" x2="44" y2="246"/>
+          </g>
+          <line x1="700" y1="14" x2="700" y2="272" stroke-width="2" stroke-opacity=".7"/>
+          <line x1="700" y1="143" x2="768" y2="143" stroke-width="1.5" stroke-opacity=".6" marker-end="url(#gm)"/>
+        </g>
+        <g stroke="currentColor" stroke-width="1.7" fill="none" stroke-opacity=".85">
+          <path d="M60,36 H 300 l 10,-13 l 20,26 l 20,-26 l 20,26 l 20,-26 l 20,26 l 10,-13 H 700"/>
+          <path d="M60,110 H 190 l 10,-13 l 20,26 l 20,-26 l 20,26 l 20,-26 l 20,26 l 10,-13 H 400"/>
+          <path d="M400,110 H 424 M424,96 V 124 M424,110 H 700"/>
+          <path d="M482,92 H 424 V 128 H 482" stroke-opacity=".85"/>
+          <path d="M60,180 H 190 l 10,-13 l 20,26 l 20,-26 l 20,26 l 20,-26 l 20,26 l 10,-13 H 400"/>
+          <path d="M400,180 H 424 M424,166 V 194 M424,180 H 700"/>
+          <path d="M482,162 H 424 V 198 H 482"/>
+          <path d="M60,250 H 190 l 10,-13 l 20,26 l 20,-26 l 20,26 l 20,-26 l 20,26 l 10,-13 H 400"/>
+          <path d="M400,250 H 424 M424,236 V 264 M424,250 H 700"/>
+          <path d="M482,232 H 424 V 268 H 482"/>
+        </g>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12.5" fill="currentColor">
+          <text x="352" y="18" text-anchor="middle">E∞</text>
+          <text x="242" y="90" text-anchor="middle">E₁</text><text x="453" y="82" text-anchor="middle">η₁ = E₁τ₁</text>
+          <text x="242" y="160" text-anchor="middle">E₂</text><text x="453" y="152" text-anchor="middle">η₂ = E₂τ₂</text>
+          <text x="242" y="230" text-anchor="middle">E_N</text><text x="453" y="222" text-anchor="middle">η_N = E_Nτ_N</text>
+          <text x="712" y="139" fill-opacity=".62">σ, ε</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".58">
+          <text x="530" y="60">영구히 남는 강성 = 고무 평탄역</text>
+          <text x="530" y="96">빠른 완화</text>
+          <text x="530" y="236">느린 완화</text>
+          <text x="242" y="286" text-anchor="middle">스프링</text>
+          <text x="453" y="286" text-anchor="middle">대시포트</text>
+        </g>
+        <line x1="130" y1="215" x2="130" y2="222" stroke="currentColor" stroke-opacity=".0"/>
+        <text x="130" y="215" font-family="IBM Plex Mono, monospace" font-size="16" fill="currentColor" fill-opacity=".45">⋮</text>
+      </svg>
+    </div>
+    <figcaption><b>일반화 Maxwell 모델.</b> 가지 하나가 Prony 항 하나 (Eᵢ, τᵢ)입니다. 맨 위 스프링만 대시포트가 없어서 시간이 아무리 지나도 남습니다 — 이것이 E∞, 고무의 평탄역 강성입니다.</figcaption>
+  </figure>
+
+  <div class="note">
+    <h4>핵심 감각 하나</h4>
+    <p><strong>빠르게 = 차갑게, 느리게 = 뜨겁게.</strong> 고무를 아주 빠르게 때리면 유리처럼 단단하고, 아주 천천히 누르면 물렁합니다. 온도를 낮추면 똑같이 단단해집니다. 즉 <strong>시간(주파수) 축과 온도 축은 사실상 같은 축</strong>이고, 이 사실이 뒤에 나올 마스터커브의 전부입니다.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 측정량</span>DMA가 실제로 재는 값</h2>
+  <p>DMA(Dynamic Mechanical Analysis, 동적기계분석)는 시편에 <strong>작은 정현파 변형을 계속 넣으면서</strong> 나오는 힘을 재는 장비입니다. 온도를 바꿔가며, 주파수를 바꿔가며 이 일을 반복합니다.</p>
+  <p>완전 탄성체라면 힘과 변형이 정확히 같은 박자로 움직입니다(위상차 0°). 완전 점성체라면 90° 어긋납니다. 고분자는 그 사이 어딘가 — 그 <strong>어긋난 각도 δ</strong>가 재료가 얼마나 “점성스러운가”를 그대로 말해줍니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 760 300" role="img" aria-label="정현 변형률 입력과 위상이 delta 만큼 뒤진 응력 응답" style="width:100%;height:auto;overflow:visible"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".6"/></marker></defs><line x1="62" y1="131.0" x2="696" y2="131.0" stroke="currentColor" stroke-opacity=".35" stroke-width="1" marker-end="url(#ah)"/><line x1="62" y1="20" x2="62" y2="242" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="62.00,131.00 63.50,128.55 65.01,126.10 66.51,123.66 68.02,121.23 69.52,118.80 71.02,116.39 72.53,113.99 74.03,111.61 75.53,109.25 77.04,106.91 78.54,104.59 80.05,102.30 81.55,100.04 83.05,97.81 84.56,95.61 86.06,93.44 87.56,91.32 89.07,89.23 90.57,87.19 92.08,85.18 93.58,83.23 95.08,81.32 96.59,79.46 98.09,77.65 99.59,75.89 101.10,74.19 102.60,72.55 104.11,70.96 105.61,69.43 107.11,67.97 108.62,66.56 110.12,65.23 111.62,63.95 113.13,62.74 114.63,61.60 116.14,60.53 117.64,59.53 119.14,58.60 120.65,57.74 122.15,56.95 123.65,56.24 125.16,55.60 126.66,55.04 128.17,54.55 129.67,54.14 131.17,53.80 132.68,53.54 134.18,53.36 135.68,53.25 137.19,53.22 138.69,53.27 140.20,53.40 141.70,53.60 143.20,53.88 144.71,54.23 146.21,54.66 147.71,55.17 149.22,55.75 150.72,56.41 152.23,57.14 153.73,57.95 155.23,58.82 156.74,59.77 158.24,60.79 159.74,61.88 161.25,63.04 162.75,64.26 164.26,65.55 165.76,66.91 167.26,68.33 168.77,69.81 170.27,71.35 171.77,72.95 173.28,74.61 174.78,76.33 176.29,78.10 177.79,79.92 179.29,81.79 180.80,83.71 182.30,85.68 183.80,87.69 185.31,89.75 186.81,91.85 188.32,93.98 189.82,96.15 191.32,98.36 192.83,100.60 194.33,102.87 195.83,105.17 197.34,107.49 198.84,109.84 200.35,112.20 201.85,114.59 203.35,116.99 204.86,119.41 206.36,121.84 207.86,124.27 209.37,126.72 210.87,129.16 212.38,131.61 213.88,134.06 215.38,136.51 216.89,138.95 218.39,141.38 219.89,143.80 221.40,146.21 222.90,148.61 224.41,150.98 225.91,153.34 227.41,155.67 228.92,157.98 230.42,160.27 231.92,162.52 233.43,164.75 234.93,166.94 236.44,169.09 237.94,171.21 239.44,173.28 240.95,175.32 242.45,177.31 243.95,179.25 245.46,181.15 246.96,183.00 248.47,184.79 249.97,186.54 251.47,188.22 252.98,189.85 254.48,191.43 255.98,192.94 257.49,194.39 258.99,195.78 260.50,197.10 262.00,198.36 263.50,199.55 265.01,200.67 266.51,201.73 268.02,202.71 269.52,203.62 271.02,204.46 272.53,205.23 274.03,205.93 275.53,206.55 277.04,207.09 278.54,207.56 280.05,207.95 281.55,208.27 283.05,208.51 284.56,208.68 286.06,208.76 287.56,208.77 289.07,208.70 290.57,208.56 292.08,208.34 293.58,208.04 295.08,207.67 296.59,207.22 298.09,206.69 299.59,206.09 301.10,205.41 302.60,204.66 304.11,203.84 305.61,202.94 307.11,201.98 308.62,200.94 310.12,199.84 311.62,198.66 313.13,197.42 314.63,196.11 316.14,194.74 317.64,193.31 319.14,191.81 320.65,190.25 322.15,188.64 323.65,186.96 325.16,185.23 326.66,183.45 328.17,181.62 329.67,179.73 331.17,177.80 332.68,175.82 334.18,173.80 335.68,171.73 337.19,169.62 338.69,167.48 340.20,165.30 341.70,163.08 343.20,160.83 344.71,158.56 346.21,156.25 347.71,153.93 349.22,151.57 350.72,149.20 352.23,146.81 353.73,144.41 355.23,141.99 356.74,139.56 358.24,137.12 359.74,134.67 361.25,132.22 362.75,129.78 364.26,127.33 365.76,124.88 367.26,122.44 368.77,120.01 370.27,117.59 371.77,115.19 373.28,112.80 374.78,110.43 376.29,108.07 377.79,105.75 379.29,103.44 380.80,101.17 382.30,98.92 383.80,96.70 385.31,94.52 386.81,92.38 388.32,90.27 389.82,88.20 391.32,86.18 392.83,84.20 394.33,82.27 395.83,80.38 397.34,78.55 398.84,76.77 400.35,75.04 401.85,73.36 403.35,71.75 404.86,70.19 406.36,68.69 407.86,67.26 409.37,65.89 410.87,64.58 412.38,63.34 413.88,62.16 415.38,61.06 416.89,60.02 418.39,59.06 419.89,58.16 421.40,57.34 422.90,56.59 424.41,55.91 425.91,55.31 427.41,54.78 428.92,54.33 430.42,53.96 431.92,53.66 433.43,53.44 434.93,53.30 436.44,53.23 437.94,53.24 439.44,53.32 440.95,53.49 442.45,53.73 443.95,54.05 445.46,54.44 446.96,54.91 448.47,55.45 449.97,56.07 451.47,56.77 452.98,57.54 454.48,58.38 455.98,59.29 457.49,60.27 458.99,61.33 460.50,62.45 462.00,63.64 463.50,64.90 465.01,66.22 466.51,67.61 468.02,69.06 469.52,70.57 471.02,72.15 472.53,73.78 474.03,75.46 475.53,77.21 477.04,79.00 478.54,80.85 480.05,82.75 481.55,84.69 483.05,86.68 484.56,88.72 486.06,90.79 487.56,92.91 489.07,95.06 490.57,97.25 492.08,99.48 493.58,101.73 495.08,104.02 496.59,106.33 498.09,108.66 499.59,111.02 501.10,113.39 502.60,115.79 504.11,118.20 505.61,120.62 507.11,123.05 508.62,125.49 510.12,127.94 511.62,130.39 513.13,132.84 514.63,135.28 516.14,137.73 517.64,140.16 519.14,142.59 520.65,145.01 522.15,147.41 523.65,149.80 525.16,152.16 526.66,154.51 528.17,156.83 529.67,159.13 531.17,161.40 532.68,163.64 534.18,165.85 535.68,168.02 537.19,170.15 538.69,172.25 540.20,174.31 541.70,176.32 543.20,178.29 544.71,180.21 546.21,182.08 547.71,183.90 549.22,185.67 550.72,187.39 552.23,189.05 553.73,190.65 555.23,192.19 556.74,193.67 558.24,195.09 559.74,196.45 561.25,197.74 562.75,198.96 564.26,200.12 565.76,201.21 567.26,202.23 568.77,203.18 570.27,204.05 571.77,204.86 573.28,205.59 574.78,206.25 576.29,206.83 577.79,207.34 579.29,207.77 580.80,208.12 582.30,208.40 583.80,208.60 585.31,208.73 586.81,208.78 588.32,208.75 589.82,208.64 591.32,208.46 592.83,208.20 594.33,207.86 595.83,207.45 597.34,206.96 598.84,206.40 600.35,205.76 601.85,205.05 603.35,204.26 604.86,203.40 606.36,202.47 607.86,201.47 609.37,200.40 610.87,199.26 612.38,198.05 613.88,196.77 615.38,195.44 616.89,194.03 618.39,192.57 619.89,191.04 621.40,189.45 622.90,187.81 624.41,186.11 625.91,184.35 627.41,182.54 628.92,180.68 630.42,178.77 631.92,176.82 633.43,174.81 634.93,172.77 636.44,170.68 637.94,168.56 639.44,166.39 640.95,164.19 642.45,161.96 643.95,159.70 645.46,157.41 646.96,155.09 648.47,152.75 649.97,150.39 651.47,148.01 652.98,145.61 654.48,143.20 655.98,140.77 657.49,138.34 658.99,135.90 660.50,133.45 662.00,131.00" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1.8" stroke-dasharray="6 4"/><polyline points="62.00,75.93 63.50,73.74 65.01,71.60 66.51,69.53 68.02,67.51 69.52,65.56 71.02,63.67 72.53,61.85 74.03,60.10 75.53,58.42 77.04,56.81 78.54,55.27 80.05,53.81 81.55,52.43 83.05,51.12 84.56,49.89 86.06,48.74 87.56,47.68 89.07,46.70 90.57,45.80 92.08,44.98 93.58,44.25 95.08,43.61 96.59,43.05 98.09,42.58 99.59,42.20 101.10,41.91 102.60,41.70 104.11,41.59 105.61,41.56 107.11,41.62 108.62,41.77 110.12,42.00 111.62,42.33 113.13,42.74 114.63,43.25 116.14,43.83 117.64,44.51 119.14,45.27 120.65,46.12 122.15,47.05 123.65,48.06 125.16,49.16 126.66,50.33 128.17,51.59 129.67,52.92 131.17,54.34 132.68,55.83 134.18,57.39 135.68,59.03 137.19,60.73 138.69,62.51 140.20,64.36 141.70,66.27 143.20,68.24 144.71,70.28 146.21,72.38 147.71,74.54 149.22,76.75 150.72,79.02 152.23,81.33 153.73,83.70 155.23,86.12 156.74,88.57 158.24,91.07 159.74,93.61 161.25,96.19 162.75,98.80 164.26,101.45 165.76,104.12 167.26,106.82 168.77,109.54 170.27,112.29 171.77,115.05 173.28,117.83 174.78,120.62 176.29,123.43 177.79,126.24 179.29,129.05 180.80,131.87 182.30,134.68 183.80,137.50 185.31,140.30 186.81,143.10 188.32,145.88 189.82,148.65 191.32,151.41 192.83,154.14 194.33,156.85 195.83,159.53 197.34,162.19 198.84,164.81 200.35,167.40 201.85,169.96 203.35,172.47 204.86,174.95 206.36,177.38 207.86,179.76 209.37,182.10 210.87,184.39 212.38,186.62 213.88,188.80 215.38,190.92 216.89,192.98 218.39,194.98 219.89,196.92 221.40,198.79 222.90,200.59 224.41,202.33 225.91,203.99 227.41,205.58 228.92,207.10 230.42,208.54 231.92,209.91 233.43,211.20 234.93,212.40 236.44,213.53 237.94,214.57 239.44,215.54 240.95,216.42 242.45,217.21 243.95,217.92 245.46,218.54 246.96,219.07 248.47,219.52 249.97,219.88 251.47,220.15 252.98,220.34 254.48,220.43 255.98,220.44 257.49,220.35 258.99,220.18 260.50,219.92 262.00,219.57 263.50,219.14 265.01,218.61 266.51,218.00 268.02,217.31 269.52,216.53 271.02,215.66 272.53,214.71 274.03,213.67 275.53,212.56 277.04,211.36 278.54,210.08 280.05,208.73 281.55,207.30 283.05,205.79 284.56,204.21 286.06,202.55 287.56,200.83 289.07,199.03 290.57,197.17 292.08,195.24 293.58,193.25 295.08,191.20 296.59,189.09 298.09,186.91 299.59,184.69 301.10,182.41 302.60,180.08 304.11,177.70 305.61,175.27 307.11,172.80 308.62,170.29 310.12,167.74 311.62,165.16 313.13,162.54 314.63,159.89 316.14,157.21 317.64,154.50 319.14,151.77 320.65,149.02 322.15,146.25 323.65,143.47 325.16,140.68 326.66,137.87 328.17,135.06 329.67,132.24 331.17,129.43 332.68,126.61 334.18,123.80 335.68,121.00 337.19,118.20 338.69,115.42 340.20,112.66 341.70,109.91 343.20,107.18 344.71,104.48 346.21,101.80 347.71,99.15 349.22,96.54 350.72,93.96 352.23,91.41 353.73,88.90 355.23,86.44 356.74,84.02 358.24,81.65 359.74,79.32 361.25,77.05 362.75,74.83 364.26,72.67 365.76,70.56 367.26,68.51 368.77,66.53 370.27,64.61 371.77,62.75 373.28,60.97 374.78,59.25 376.29,57.60 377.79,56.03 379.29,54.53 380.80,53.11 382.30,51.76 383.80,50.50 385.31,49.31 386.81,48.20 388.32,47.18 389.82,46.24 391.32,45.38 392.83,44.61 394.33,43.92 395.83,43.32 397.34,42.81 398.84,42.38 400.35,42.04 401.85,41.79 403.35,41.63 404.86,41.56 406.36,41.58 407.86,41.68 409.37,41.87 410.87,42.16 412.38,42.53 413.88,42.98 415.38,43.53 416.89,44.16 418.39,44.88 419.89,45.68 421.40,46.57 422.90,47.54 424.41,48.60 425.91,49.73 427.41,50.95 428.92,52.25 430.42,53.62 431.92,55.07 433.43,56.60 434.93,58.20 436.44,59.87 437.94,61.61 439.44,63.43 440.95,65.30 442.45,67.25 443.95,69.26 445.46,71.32 446.96,73.45 448.47,75.64 449.97,77.88 451.47,80.17 452.98,82.51 454.48,84.90 455.98,87.34 457.49,89.82 458.99,92.34 460.50,94.90 462.00,97.49 463.50,100.12 465.01,102.78 466.51,105.47 468.02,108.18 469.52,110.91 471.02,113.67 472.53,116.44 474.03,119.23 475.53,122.02 477.04,124.83 478.54,127.64 480.05,130.46 481.55,133.28 483.05,136.09 484.56,138.90 486.06,141.70 487.56,144.49 489.07,147.27 490.57,150.03 492.08,152.78 493.58,155.50 495.08,158.19 496.59,160.86 498.09,163.50 499.59,166.11 501.10,168.68 502.60,171.22 504.11,173.72 505.61,176.17 507.11,178.58 508.62,180.94 510.12,183.25 511.62,185.51 513.13,187.72 514.63,189.87 516.14,191.96 517.64,193.99 519.14,195.96 520.65,197.86 522.15,199.70 523.65,201.47 525.16,203.17 526.66,204.80 528.17,206.35 529.67,207.83 531.17,209.24 532.68,210.56 534.18,211.81 535.68,212.98 537.19,214.06 538.69,215.07 540.20,215.99 541.70,216.82 543.20,217.57 544.71,218.24 546.21,218.82 547.71,219.31 549.22,219.71 550.72,220.03 552.23,220.26 553.73,220.39 555.23,220.44 556.74,220.41 558.24,220.28 559.74,220.06 561.25,219.76 562.75,219.37 564.26,218.89 565.76,218.32 567.26,217.67 568.77,216.93 570.27,216.10 571.77,215.19 573.28,214.20 574.78,213.13 576.29,211.97 577.79,210.73 579.29,209.42 580.80,208.02 582.30,206.55 583.80,205.01 585.31,203.39 586.81,201.70 588.32,199.94 589.82,198.11 591.32,196.22 592.83,194.26 594.33,192.23 595.83,190.15 597.34,188.01 598.84,185.81 600.35,183.56 601.85,181.25 603.35,178.90 604.86,176.49 606.36,174.04 607.86,171.55 609.37,169.02 610.87,166.46 612.38,163.85 613.88,161.22 615.38,158.55 616.89,155.86 618.39,153.14 619.89,150.40 621.40,147.64 622.90,144.86 624.41,142.08 625.91,139.27 627.41,136.47 628.92,133.65 630.42,130.84 631.92,128.02 633.43,125.21 634.93,122.40 636.44,119.60 637.94,116.81 639.44,114.04 640.95,111.28 642.45,108.54 643.95,105.83 645.46,103.14 646.96,100.47 648.47,97.84 649.97,95.24 651.47,92.68 652.98,90.15 654.48,87.67 655.98,85.22 657.49,82.83 658.99,80.48 660.50,78.18 662.00,75.93" fill="none" stroke="#C4402B" stroke-width="2.4"/><line x1="137.0" y1="53.2" x2="137.0" y2="236.0" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><line x1="105.3" y1="41.6" x2="105.3" y2="236.0" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><line x1="105.3" y1="221.2" x2="137.0" y2="221.2" stroke="#C4402B" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/><text x="121.2" y="213.2" text-anchor="middle" fill="#C4402B" font-size="13" font-family="IBM Plex Mono, monospace">δ / ω</text><text x="444.5" y="26.8" fill="#C4402B" font-size="12.5" font-family="IBM Plex Mono, monospace">응력 σ(t) = σ₀ sin(ωt + δ)</text><text x="444.5" y="43.8" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">변형률 ε(t) = ε₀ sin(ωt)</text><text x="52" y="135.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><text x="702" y="135.0" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">시간</text></svg></div>
+    <figcaption><b>위상차 δ.</b> 변형률(점선)을 넣으면 응력(굵은 선)이 δ만큼 앞서 나옵니다. 이 한 개의 각도와 진폭비 σ₀/ε₀만 알면 아래 값들이 전부 계산됩니다.</figcaption>
+  </figure>
+
+  <div class="eq">E* = E′ + i·E″          <span class="cm">복소 탄성률</span>
+E′  = (σ₀/ε₀) · cos δ    <span class="cm">저장 탄성률 — 돌려주는 몫</span>
+E″  = (σ₀/ε₀) · sin δ    <span class="cm">손실 탄성률 — 열로 버리는 몫</span>
+tan δ = E″ / E′          <span class="cm">손실 계수 (damping)</span>
+|E*| = √(E′² + E″²)      <span class="cm">동적 탄성률 크기</span></div>
+
+  <ul>
+    <li><strong>E′ (저장 탄성률)</strong> — 그 주파수·온도에서의 실질 강성입니다. 부시 강성, 마운트 동특성, 구조 고유진동수를 지배합니다.</li>
+    <li><strong>E″ (손실 탄성률)</strong> — 한 사이클마다 열로 사라지는 에너지. 사이클당 소산 에너지는 ΔW = π·σ₀·ε₀·sin δ 입니다. 히스테리시스 발열, 롤링 저항, 진동 감쇠가 여기서 나옵니다.</li>
+    <li><strong>tan δ</strong> — 두 값의 비. 절대 강성과 무관해서 재료 비교와 유리전이 판정에 씁니다. tan δ가 최대가 되는 온도를 흔히 Tg로 보고합니다(주파수에 따라 이동한다는 점에 주의).</li>
+  </ul>
+
+  <div class="note trap">
+    <h4>주의 · 전단이냐 인장이냐</h4>
+    <p>인장/굽힘 모드로 재면 <strong>E′, E″</strong>(Young), 전단 모드로 재면 <strong>G′, G″</strong>(shear)가 나옵니다. 솔버의 Prony 카드는 거의 모두 <strong>전단 G 기준</strong>입니다. 07번 절에서 변환을 다루는데, 단순히 3으로 나누는 게 아니라 포아송비가 개입합니다. 보고서에 E인지 G인지 안 적혀 있으면 그 데이터는 반쪽입니다.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 시험</span>시험 계획과 실행</h2>
+  <p class="lede">시험을 잘못 잡으면 뒤 단계가 아무리 정교해도 소용이 없습니다. 실무에서 결정해야 하는 것은 네 가지입니다: <strong>변형 모드, 변형률 진폭, 온도 범위·간격, 주파수 목록.</strong></p>
+
+  <h3>1) 변형 모드 고르기</h3>
+  <div class="tw"><table>
+    <thead><tr><th>모드</th><th>적합한 재료·강성</th><th>얻는 값</th><th>메모</th></tr></thead>
+    <tbody>
+      <tr><td class="k">인장 (tension)</td><td>필름, 섬유, 얇은 시트, 연질 고무</td><td>E′, E″</td><td>정적 인장력(static force)을 걸어 좌굴을 막아야 함</td></tr>
+      <tr><td class="k">이중 캔틸레버</td><td>강성 플라스틱, 복합재 바</td><td>E′, E″</td><td>가장 안정적인 범용 모드. 클램프 컴플라이언스 보정 필수</td></tr>
+      <tr><td class="k">3점 굽힘</td><td>매우 단단한 시편, 세라믹·복합재</td><td>E′, E″</td><td>클램핑 영향이 작지만 시편이 커야 함</td></tr>
+      <tr><td class="k">전단 (sandwich/torsion)</td><td>고무, 접착제, 점착제, 소프트 폼</td><td>G′, G″</td><td>솔버 입력과 직결 — 고무는 되도록 이 모드</td></tr>
+      <tr><td class="k">압축</td><td>폼, 저밀도 발포체</td><td>E′, E″</td><td>포아송 구속·마찰 때문에 값이 커지기 쉬움</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>2) 반드시 먼저: 변형률 스윕으로 선형 영역 확인</h3>
+  <p>Prony 시리즈와 시간–온도 중첩은 모두 <strong>선형 점탄성(LVE)</strong>을 전제로 합니다. 진폭이 커지면 고무는 Payne 효과로 E′가 뚝 떨어지고, 그 데이터로 만든 카드는 아무 데도 못 씁니다. 그래서 본시험 전에 고정 온도·고정 주파수(예: 25 °C, 1 Hz)에서 진폭만 키워보며 <strong>E′가 5% 이내로 평평하게 유지되는 구간</strong>을 찾고, 그 구간 안쪽에서 진폭을 고정합니다.</p>
+  <ul class="tight">
+    <li>비충전 고무 · 플라스틱: 대개 0.01 – 0.1 % 변형률</li>
+    <li>카본블랙·실리카 충전 고무: 훨씬 좁음. 0.01 % 이하로 잡아야 할 때도 있음</li>
+    <li>폼·점착제: 장비 힘 분해능이 하한을 정함 — 너무 작게 잡으면 노이즈에 묻힘</li>
+  </ul>
+
+  <h3>3) 온도 × 주파수 매트릭스</h3>
+  <p>마스터커브를 만들려면 <strong>등온 주파수 스윕(isothermal frequency sweep)</strong>이 필요합니다. 온도를 한 스텝 올리고 → 충분히 평형을 기다리고 → 그 온도에서 주파수를 훑고 → 다음 온도로. 온도를 연속으로 올리면서 재는 온도 램프 방식은 빠르지만 시프트에 쓰기엔 부정확합니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>항목</th><th>권장</th><th>이유</th></tr></thead>
+    <tbody>
+      <tr><td>온도 범위</td><td>Tg − 60 °C ~ Tg + 80 °C (사용 온도 포함)</td><td>유리·전이·고무 세 영역을 모두 지나야 커브가 닫힘</td></tr>
+      <tr><td>온도 스텝</td><td class="n">전이 근처 2–5 °C, 그 밖 10 °C</td><td>전이부에서 시프트 인자가 급변함</td></tr>
+      <tr><td>평형 유지(soak)</td><td class="n">스텝당 3–5 분</td><td>시편 내부까지 온도가 균일해져야 함</td></tr>
+      <tr><td>주파수</td><td>0.1 – 100 Hz, decade당 5–6점 (log 간격)</td><td>인접 온도 곡선끼리 겹쳐야 시프트가 결정됨</td></tr>
+      <tr><td>변형률 진폭</td><td>LVE 구간의 1/3 이하로 고정</td><td>전 온도에서 같은 진폭이어야 비교 가능</td></tr>
+      <tr><td>반복</td><td class="n">시편 3개 이상</td><td>고무는 배치·가황 편차가 큼</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 760 360" role="img" aria-label="1헤르츠 고정 온도 스윕에서 저장탄성률 감소와 tan delta 봉우리" style="width:100%;height:auto;overflow:visible"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".6"/></marker></defs><line x1="96.8" y1="26" x2="96.8" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="96.8" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">-40</text><line x1="162.3" y1="26" x2="162.3" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="162.3" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">-20</text><line x1="227.9" y1="26" x2="227.9" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="227.9" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">0</text><line x1="293.4" y1="26" x2="293.4" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="293.4" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">20</text><line x1="359.0" y1="26" x2="359.0" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="359.0" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">40</text><line x1="424.6" y1="26" x2="424.6" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="424.6" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">60</text><line x1="490.1" y1="26" x2="490.1" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="490.1" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">80</text><line x1="555.7" y1="26" x2="555.7" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="555.7" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">100</text><line x1="621.2" y1="26" x2="621.2" y2="288" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="621.2" y="306" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">120</text><line x1="64" y1="288.0" x2="654" y2="288.0" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="55" y="292.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁰</text><line x1="64" y1="215.3" x2="654" y2="215.3" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="55" y="219.3" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10¹</text><line x1="64" y1="142.5" x2="654" y2="142.5" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="55" y="146.5" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10²</text><line x1="64" y1="69.8" x2="654" y2="69.8" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="55" y="73.8" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10³</text><rect x="64" y="26" width="590" height="262" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="64.00,42.17 65.48,42.18 66.96,42.19 68.44,42.20 69.91,42.22 71.39,42.24 72.87,42.27 74.35,42.30 75.83,42.33 77.31,42.37 78.79,42.40 80.27,42.44 81.74,42.49 83.22,42.54 84.70,42.62 86.18,42.72 87.66,42.82 89.14,42.94 90.62,43.06 92.10,43.17 93.57,43.28 95.05,43.39 96.53,43.52 98.01,43.68 99.49,43.87 100.97,44.10 102.45,44.37 103.92,44.67 105.40,44.97 106.88,45.27 108.36,45.55 109.84,45.81 111.32,46.07 112.80,46.34 114.28,46.64 115.75,46.99 117.23,47.41 118.71,47.91 120.19,48.46 121.67,49.06 123.15,49.67 124.63,50.27 126.11,50.82 127.58,51.34 129.06,51.82 130.54,52.29 132.02,52.77 133.50,53.29 134.98,53.88 136.46,54.55 137.93,55.32 139.41,56.19 140.89,57.13 142.37,58.12 143.85,59.11 145.33,60.06 146.81,60.96 148.29,61.79 149.76,62.56 151.24,63.29 152.72,63.99 154.20,64.71 155.68,65.47 157.16,66.30 158.64,67.24 160.12,68.28 161.59,69.44 163.07,70.70 164.55,72.03 166.03,73.40 167.51,74.76 168.99,76.09 170.47,77.34 171.94,78.51 173.42,79.59 174.90,80.60 176.38,81.55 177.86,82.47 179.34,83.40 180.82,84.36 182.30,85.39 183.77,86.50 185.25,87.72 186.73,89.05 188.21,90.49 189.69,92.03 191.17,93.65 192.65,95.32 194.13,96.99 195.60,98.64 197.08,100.23 198.56,101.73 200.04,103.15 201.52,104.47 203.00,105.71 204.48,106.87 205.95,107.99 207.43,109.07 208.91,110.16 210.39,111.27 211.87,112.43 213.35,113.66 214.83,114.98 216.31,116.39 217.78,117.91 219.26,119.52 220.74,121.22 222.22,122.98 223.70,124.79 225.18,126.62 226.66,128.44 228.14,130.22 229.61,131.95 231.09,133.60 232.57,135.16 234.05,136.64 235.53,138.03 237.01,139.33 238.49,140.58 239.96,141.76 241.44,142.92 242.92,144.06 244.40,145.20 245.88,146.36 247.36,147.56 248.84,148.80 250.32,150.11 251.79,151.49 253.27,152.94 254.75,154.45 256.23,156.04 257.71,157.68 259.19,159.36 260.67,161.06 262.15,162.78 263.62,164.49 265.10,166.17 266.58,167.81 268.06,169.40 269.54,170.93 271.02,172.38 272.50,173.75 273.97,175.05 275.45,176.28 276.93,177.44 278.41,178.54 279.89,179.58 281.37,180.59 282.85,181.56 284.33,182.52 285.80,183.46 287.28,184.40 288.76,185.35 290.24,186.31 291.72,187.30 293.20,188.30 294.68,189.34 296.16,190.39 297.63,191.48 299.11,192.58 300.59,193.70 302.07,194.83 303.55,195.96 305.03,197.09 306.51,198.20 307.98,199.30 309.46,200.36 310.94,201.39 312.42,202.38 313.90,203.32 315.38,204.22 316.86,205.06 318.34,205.86 319.81,206.61 321.29,207.31 322.77,207.97 324.25,208.58 325.73,209.16 327.21,209.70 328.69,210.21 330.17,210.69 331.64,211.15 333.12,211.58 334.60,212.01 336.08,212.41 337.56,212.81 339.04,213.20 340.52,213.59 341.99,213.97 343.47,214.34 344.95,214.72 346.43,215.09 347.91,215.46 349.39,215.82 350.87,216.19 352.35,216.55 353.82,216.90 355.30,217.25 356.78,217.59 358.26,217.91 359.74,218.23 361.22,218.54 362.70,218.84 364.18,219.12 365.65,219.38 367.13,219.64 368.61,219.87 370.09,220.10 371.57,220.31 373.05,220.50 374.53,220.68 376.01,220.85 377.48,221.01 378.96,221.15 380.44,221.28 381.92,221.40 383.40,221.51 384.88,221.61 386.36,221.70 387.83,221.79 389.31,221.86 390.79,221.93 392.27,222.00 393.75,222.06 395.23,222.11 396.71,222.16 398.19,222.20 399.66,222.24 401.14,222.27 402.62,222.31 404.10,222.34 405.58,222.36 407.06,222.39 408.54,222.41 410.02,222.43 411.49,222.45 412.97,222.46 414.45,222.48 415.93,222.49 417.41,222.50 418.89,222.51 420.37,222.52 421.84,222.53 423.32,222.54 424.80,222.55 426.28,222.56 427.76,222.56 429.24,222.57 430.72,222.57 432.20,222.58 433.67,222.58 435.15,222.59 436.63,222.59 438.11,222.59 439.59,222.60 441.07,222.60 442.55,222.60 444.03,222.60 445.50,222.61 446.98,222.61 448.46,222.61 449.94,222.61 451.42,222.61 452.90,222.61 454.38,222.62 455.85,222.62 457.33,222.62 458.81,222.62 460.29,222.62 461.77,222.62 463.25,222.62 464.73,222.62 466.21,222.62 467.68,222.62 469.16,222.62 470.64,222.62 472.12,222.62 473.60,222.63 475.08,222.63 476.56,222.63 478.04,222.63 479.51,222.63 480.99,222.63 482.47,222.63 483.95,222.63 485.43,222.63 486.91,222.63 488.39,222.63 489.86,222.63 491.34,222.63 492.82,222.63 494.30,222.63 495.78,222.63 497.26,222.63 498.74,222.63 500.22,222.63 501.69,222.63 503.17,222.63 504.65,222.63 506.13,222.63 507.61,222.63 509.09,222.63 510.57,222.63 512.05,222.63 513.52,222.63 515.00,222.63 516.48,222.63 517.96,222.63 519.44,222.63 520.92,222.63 522.40,222.63 523.87,222.63 525.35,222.63 526.83,222.63 528.31,222.63 529.79,222.63 531.27,222.63 532.75,222.63 534.23,222.63 535.70,222.63 537.18,222.63 538.66,222.63 540.14,222.63 541.62,222.63 543.10,222.63 544.58,222.63 546.06,222.63 547.53,222.63 549.01,222.63 550.49,222.63 551.97,222.63 553.45,222.63 554.93,222.63 556.41,222.63 557.88,222.63 559.36,222.63 560.84,222.63 562.32,222.63 563.80,222.63 565.28,222.63 566.76,222.63 568.24,222.63 569.71,222.63 571.19,222.63 572.67,222.63 574.15,222.63 575.63,222.63 577.11,222.63 578.59,222.63 580.07,222.63 581.54,222.63 583.02,222.63 584.50,222.63 585.98,222.63 587.46,222.63 588.94,222.63 590.42,222.63 591.89,222.63 593.37,222.63 594.85,222.63 596.33,222.63 597.81,222.63 599.29,222.63 600.77,222.63 602.25,222.63 603.72,222.63 605.20,222.63 606.68,222.63 608.16,222.63 609.64,222.63 611.12,222.63 612.60,222.63 614.08,222.63 615.55,222.63 617.03,222.63 618.51,222.63 619.99,222.63 621.47,222.63 622.95,222.63 624.43,222.63 625.90,222.63 627.38,222.63 628.86,222.63 630.34,222.63 631.82,222.63 633.30,222.63 634.78,222.63 636.26,222.63 637.73,222.63 639.21,222.63 640.69,222.63 642.17,222.63 643.65,222.63 645.13,222.63 646.61,222.63 648.09,222.63 649.56,222.63 651.04,222.63 652.52,222.63 654.00,222.63" fill="none" stroke="#2F6FC4" stroke-width="2.6"/><polyline points="64.00,265.57 65.48,260.00 66.96,254.11 68.44,248.05 69.91,242.10 71.39,236.60 72.87,231.75 74.35,227.58 75.83,223.85 77.31,220.19 78.79,216.25 80.27,211.91 81.74,207.26 83.22,202.55 84.70,198.09 86.18,194.13 87.66,190.82 89.14,188.12 90.62,185.78 92.10,183.48 93.57,180.91 95.05,177.94 96.53,174.57 98.01,170.99 99.49,167.43 100.97,164.17 102.45,161.38 103.92,159.16 105.40,157.47 106.88,156.12 108.36,154.87 109.84,153.44 111.32,151.68 112.80,149.51 114.28,147.00 115.75,144.30 117.23,141.61 118.71,139.12 120.19,136.99 121.67,135.33 123.15,134.13 124.63,133.30 126.11,132.69 127.58,132.10 129.06,131.36 130.54,130.31 132.02,128.92 133.50,127.21 134.98,125.25 136.46,123.18 137.93,121.14 139.41,119.28 140.89,117.71 142.37,116.49 143.85,115.65 145.33,115.13 146.81,114.84 148.29,114.67 149.76,114.46 151.24,114.11 152.72,113.52 154.20,112.64 155.68,111.49 157.16,110.10 158.64,108.55 160.12,106.94 161.59,105.36 163.07,103.92 164.55,102.68 166.03,101.71 167.51,101.02 168.99,100.59 170.47,100.40 171.94,100.36 173.42,100.39 174.90,100.41 176.38,100.33 177.86,100.08 179.34,99.63 180.82,98.96 182.30,98.08 183.77,97.01 185.25,95.82 186.73,94.56 188.21,93.29 189.69,92.08 191.17,90.99 192.65,90.06 194.13,89.33 195.60,88.80 197.08,88.48 198.56,88.33 200.04,88.33 201.52,88.43 203.00,88.57 204.48,88.69 205.95,88.75 207.43,88.70 208.91,88.50 210.39,88.16 211.87,87.64 213.35,86.98 214.83,86.18 216.31,85.28 217.78,84.31 219.26,83.32 220.74,82.34 222.22,81.42 223.70,80.58 225.18,79.86 226.66,79.28 228.14,78.84 229.61,78.55 231.09,78.41 232.57,78.39 234.05,78.47 235.53,78.63 237.01,78.84 238.49,79.05 239.96,79.25 241.44,79.39 242.92,79.46 244.40,79.44 245.88,79.31 247.36,79.07 248.84,78.73 250.32,78.29 251.79,77.77 253.27,77.18 254.75,76.54 256.23,75.89 257.71,75.24 259.19,74.61 260.67,74.04 262.15,73.54 263.62,73.12 265.10,72.80 266.58,72.59 268.06,72.48 269.54,72.48 271.02,72.59 272.50,72.78 273.97,73.05 275.45,73.39 276.93,73.77 278.41,74.19 279.89,74.61 281.37,75.03 282.85,75.43 284.33,75.80 285.80,76.12 287.28,76.40 288.76,76.61 290.24,76.78 291.72,76.89 293.20,76.95 294.68,76.97 296.16,76.97 297.63,76.94 299.11,76.91 300.59,76.89 302.07,76.89 303.55,76.92 305.03,76.99 306.51,77.12 307.98,77.32 309.46,77.58 310.94,77.91 312.42,78.32 313.90,78.80 315.38,79.36 316.86,79.98 318.34,80.67 319.81,81.41 321.29,82.20 322.77,83.04 324.25,83.91 325.73,84.80 327.21,85.72 328.69,86.64 330.17,87.57 331.64,88.49 333.12,89.41 334.60,90.31 336.08,91.20 337.56,92.07 339.04,92.92 340.52,93.75 341.99,94.56 343.47,95.36 344.95,96.15 346.43,96.93 347.91,97.70 349.39,98.48 350.87,99.26 352.35,100.05 353.82,100.86 355.30,101.69 356.78,102.54 358.26,103.42 359.74,104.34 361.22,105.28 362.70,106.26 364.18,107.28 365.65,108.33 367.13,109.42 368.61,110.54 370.09,111.70 371.57,112.89 373.05,114.11 374.53,115.37 376.01,116.65 377.48,117.95 378.96,119.28 380.44,120.64 381.92,122.01 383.40,123.40 384.88,124.80 386.36,126.22 387.83,127.65 389.31,129.09 390.79,130.53 392.27,131.99 393.75,133.45 395.23,134.92 396.71,136.39 398.19,137.86 399.66,139.33 401.14,140.81 402.62,142.28 404.10,143.76 405.58,145.23 407.06,146.70 408.54,148.17 410.02,149.64 411.49,151.10 412.97,152.56 414.45,154.02 415.93,155.47 417.41,156.92 418.89,158.36 420.37,159.80 421.84,161.23 423.32,162.66 424.80,164.08 426.28,165.50 427.76,166.91 429.24,168.32 430.72,169.72 432.20,171.11 433.67,172.50 435.15,173.88 436.63,175.26 438.11,176.63 439.59,178.00 441.07,179.36 442.55,180.71 444.03,182.06 445.50,183.40 446.98,184.74 448.46,186.07 449.94,187.39 451.42,188.71 452.90,190.02 454.38,191.33 455.85,192.63 457.33,193.93 458.81,195.21 460.29,196.50 461.77,197.78 463.25,199.05 464.73,200.31 466.21,201.57 467.68,202.83 469.16,204.08 470.64,205.32 472.12,206.56 473.60,207.79 475.08,209.02 476.56,210.24 478.04,211.46 479.51,212.67 480.99,213.88 482.47,215.08 483.95,216.27 485.43,217.46 486.91,218.65 488.39,219.83 489.86,221.00 491.34,222.17 492.82,223.33 494.30,224.49 495.78,225.65 497.26,226.80 498.74,227.94 500.22,229.08 501.69,230.21 503.17,231.34 504.65,232.47 506.13,233.59 507.61,234.70 509.09,235.81 510.57,236.92 512.05,238.02 513.52,239.11 515.00,240.20 516.48,241.29 517.96,242.37 519.44,243.45 520.92,244.52 522.40,245.59 523.87,246.65 525.35,247.71 526.83,248.77 528.31,249.82 529.79,250.87 531.27,251.91 532.75,252.95 534.23,253.98 535.70,255.01 537.18,256.03 538.66,257.05 540.14,258.07 541.62,259.08 543.10,260.09 544.58,261.10 546.06,262.10 547.53,263.09 549.01,264.08 550.49,265.07 551.97,266.06 553.45,267.04 554.93,268.01 556.41,268.98 557.88,269.95 559.36,270.92 560.84,271.88 562.32,272.83 563.80,273.79 565.28,274.74 566.76,275.68 568.24,276.62 569.71,277.56 571.19,278.50 572.67,279.43 574.15,280.35 575.63,281.28 577.11,282.20 578.59,283.11 580.07,284.03 581.54,284.94 583.02,285.84 584.50,286.74 585.98,287.64 587.46,288.54 588.94,289.43 590.42,290.32 591.89,291.20 593.37,292.08 594.85,292.96 596.33,293.84 597.81,294.71 599.29,295.58 600.77,296.44 602.25,297.30 603.72,298.16 605.20,299.02 606.68,299.87 608.16,300.72 609.64,301.57 611.12,302.41 612.60,303.25 614.08,304.08 615.55,304.92 617.03,305.75 618.51,306.57 619.99,307.40 621.47,308.22 622.95,309.04 624.43,309.85 625.90,310.66 627.38,311.47 628.86,312.28 630.34,313.08 631.82,313.88 633.30,314.68 634.78,315.47 636.26,316.27 637.73,317.05 639.21,317.84 640.69,318.62 642.17,319.40 643.65,320.18 645.13,320.96 646.61,321.73 648.09,322.50 649.56,323.26 651.04,324.03 652.52,324.79 654.00,325.55" fill="none" stroke="#C4402B" stroke-width="2.2"/><line x1="268.1" y1="26" x2="268.1" y2="288" stroke="#C4402B" stroke-width="1.2" stroke-dasharray="4 4"/><text x="276.1" y="42" fill="#C4402B" font-size="12" font-family="IBM Plex Mono, monospace">tan δ 최대 → Tg(1 Hz) ≈ 12°C</text><text x="83.7" y="62.2" fill="#2F6FC4" font-size="12.5" font-family="IBM Plex Mono, monospace">E′</text><text x="654.0" y="324" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">온도 [°C] · 1 Hz 고정</text><text x="55" y="18" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">E′ [MPa]</text></svg></div>
+    <figcaption><b>1 Hz 고정 온도 스윕의 전형적인 모습.</b> E′가 3 decade 가까이 떨어지고 tan δ가 봉우리를 만듭니다. 이 그림은 “재료가 어디쯤에 있나”를 보는 용도이고, <b>이 데이터만으로는 Prony를 만들 수 없습니다</b> — 주파수 축 정보가 없기 때문입니다.</figcaption>
+  </figure>
+
+  <h3>4) 재료별 실무 포인트</h3>
+  <div class="cards">
+    <div class="card">
+      <h4>고무 / 엘라스토머</h4>
+      <p>전단 모드 우선. 충전 고무는 LVE가 매우 좁고 Payne 효과 때문에 진폭 관리가 핵심입니다. 대변형 해석이면 점탄성만으로는 부족하고 <strong>초탄성(hyperelastic) 물성을 별도 준정적 시험</strong>(단축인장·평면인장·이축)으로 따로 확보해 결합해야 합니다. Mullins 손상이 있으면 사전 사이클링 이력을 통일하세요.</p>
+    </div>
+    <div class="card">
+      <h4>플라스틱 / 수지</h4>
+      <p>이중 캔틸레버가 무난합니다. 결정성 수지(PP, PA, PET)는 Tg 위에서 결정화·어닐링이 진행되어 TTS가 깨지기 쉬우니 <strong>가열 이력을 먼저 통일</strong>(1차 스캔 후 재측정)하세요. 흡습성 소재(PA6, PC)는 건조 상태를 반드시 명시해야 합니다.</p>
+    </div>
+    <div class="card">
+      <h4>접착제 / 폼 / 댐핑재</h4>
+      <p>목적이 대개 tan δ 자체이므로 <strong>전이 영역을 촘촘히</strong> 재는 것이 중요합니다. 접착층은 실제 두께가 수십 µm인데 시험은 mm 단위 시편으로 하는 경우가 많아, 해석에서는 두께 스케일 차이와 구속 조건(거의 체적 구속)을 따로 검토해야 합니다.</p>
+    </div>
+    <div class="card">
+      <h4>복합재 / 이방성</h4>
+      <p>수지가 지배하는 방향(전단, 횡방향)에서만 점탄성이 크게 나타납니다. 섬유 방향은 거의 탄성입니다. 등방 Prony 하나로 뭉뚱그리면 섬유 방향 강성을 과도하게 완화시키므로, 방향별 시험 후 <strong>수지 지배 성분에만</strong> 완화를 부여하는 접근이 안전합니다.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 마스터커브</span>시간–온도 중첩과 시프트 인자</h2>
+  <p class="lede">장비로는 대략 0.1 – 100 Hz, 즉 <strong>3 decade</strong>밖에 못 잽니다. 그런데 해석에서 필요한 건 충돌(수 kHz)부터 크리프(수 년, 10⁻⁸ Hz)까지 <strong>10 decade 이상</strong>입니다. 이 간극을 메우는 것이 시간–온도 중첩(TTS)입니다.</p>
+  <p>원리는 01절의 “빠르게 = 차갑게”입니다. 낮은 온도에서 잰 곡선은 사실 <strong>더 높은 주파수의 상온 거동</strong>과 같습니다. 그러니 각 온도 곡선을 주파수 축(log 스케일) 위에서 <strong>좌우로만</strong> 밀어 이웃 곡선과 포개면, 3 decade짜리 조각들이 이어져 10 decade 넘는 하나의 곡선이 됩니다. 이때 각 온도를 얼마나 밀었는지가 <strong>시프트 인자 a_T</strong>입니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 800 400" role="img" aria-label="각 온도별 등온 데이터를 수평 이동시켜 하나의 마스터커브로 합치는 시간-온도 중첩" style="width:100%;height:auto;overflow:visible"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".6"/></marker></defs><polyline points="69.76,51.88 72.76,51.70 75.75,51.52 78.74,51.35 81.73,51.19 84.72,51.03 87.71,50.86 90.70,50.68 93.69,50.51 96.68,50.32 99.67,50.13 102.67,49.95 105.66,49.76 108.65,49.59 111.64,49.42 114.63,49.27 117.62,49.14 120.61,49.01 123.60,48.90 126.59,48.81 129.59,48.72 132.58,48.65 135.57,48.58 138.56,48.51 141.55,48.45 144.54,48.39 147.53,48.33 150.52,48.26 153.51,48.20 156.50,48.13 159.50,48.07 162.49,48.01 165.48,47.94 168.47,47.89 171.46,47.83 174.45,47.78 177.44,47.74 180.43,47.70 183.42,47.66 186.41,47.63 189.41,47.60 192.40,47.58 195.39,47.56 198.38,47.54 201.37,47.52 204.36,47.50 207.35,47.49 210.34,47.47 213.33,47.45 216.33,47.44 219.32,47.42 222.31,47.40 225.30,47.39 228.29,47.37 231.28,47.36 234.27,47.35 237.26,47.34 240.25,47.33 243.24,47.32 246.24,47.31" fill="none" stroke="#2F6FC4" stroke-width="2.4"/><polyline points="705.58,51.88 707.03,51.70 708.48,51.52 709.94,51.35 711.39,51.19 712.84,51.03 714.29,50.86 715.75,50.68 717.20,50.51 718.65,50.32 720.11,50.13 721.56,49.95 723.01,49.76 724.46,49.59 725.92,49.42 727.37,49.27 728.82,49.14 730.28,49.01 731.73,48.90 733.18,48.81 734.63,48.72 736.09,48.65 737.54,48.58 738.99,48.51 740.45,48.45 741.90,48.39 743.35,48.33 744.80,48.26 746.26,48.20 747.71,48.13 749.16,48.07 750.61,48.01 752.07,47.94 753.52,47.89 754.97,47.83 756.43,47.78 757.88,47.74 759.33,47.70 760.78,47.66 762.24,47.63 763.69,47.60 765.14,47.58 766.60,47.56 768.05,47.54 769.50,47.52 770.95,47.50 772.41,47.49 773.86,47.47 775.31,47.45 776.76,47.44 778.22,47.42 779.67,47.40 781.12,47.39 782.58,47.37 784.03,47.36 785.48,47.35 786.93,47.34 788.39,47.33 789.84,47.32 791.29,47.31" fill="none" stroke="#2F6FC4" stroke-width="3"/><polyline points="69.76,139.15 72.76,136.89 75.75,134.65 78.74,132.47 81.73,130.39 84.72,128.43 87.71,126.62 90.70,124.96 93.69,123.43 96.68,122.03 99.67,120.71 102.67,119.45 105.66,118.23 108.65,116.99 111.64,115.72 114.63,114.39 117.62,112.98 120.61,111.47 123.60,109.87 126.59,108.20 129.59,106.46 132.58,104.70 135.57,102.95 138.56,101.25 141.55,99.62 144.54,98.10 147.53,96.69 150.52,95.40 153.51,94.22 156.50,93.15 159.50,92.16 162.49,91.22 165.48,90.32 168.47,89.43 171.46,88.53 174.45,87.59 177.44,86.60 180.43,85.54 183.42,84.42 186.41,83.25 189.41,82.03 192.40,80.79 195.39,79.56 198.38,78.35 201.37,77.19 204.36,76.11 207.35,75.11 210.34,74.20 213.33,73.37 216.33,72.62 219.32,71.94 222.31,71.30 225.30,70.70 228.29,70.11 231.28,69.52 234.27,68.92 237.26,68.29 240.25,67.62 243.24,66.92 246.24,66.18" fill="none" stroke="#5D6BC6" stroke-width="2.4"/><polyline points="574.05,139.15 575.50,136.89 576.95,134.65 578.41,132.47 579.86,130.39 581.31,128.43 582.76,126.62 584.22,124.96 585.67,123.43 587.12,122.03 588.58,120.71 590.03,119.45 591.48,118.23 592.93,116.99 594.39,115.72 595.84,114.39 597.29,112.98 598.74,111.47 600.20,109.87 601.65,108.20 603.10,106.46 604.56,104.70 606.01,102.95 607.46,101.25 608.91,99.62 610.37,98.10 611.82,96.69 613.27,95.40 614.73,94.22 616.18,93.15 617.63,92.16 619.08,91.22 620.54,90.32 621.99,89.43 623.44,88.53 624.89,87.59 626.35,86.60 627.80,85.54 629.25,84.42 630.71,83.25 632.16,82.03 633.61,80.79 635.06,79.56 636.52,78.35 637.97,77.19 639.42,76.11 640.88,75.11 642.33,74.20 643.78,73.37 645.23,72.62 646.69,71.94 648.14,71.30 649.59,70.70 651.04,70.11 652.50,69.52 653.95,68.92 655.40,68.29 656.86,67.62 658.31,66.92 659.76,66.18" fill="none" stroke="#5D6BC6" stroke-width="3"/><polyline points="69.76,231.51 72.76,230.73 75.75,229.95 78.74,229.15 81.73,228.33 84.72,227.44 87.71,226.49 90.70,225.44 93.69,224.28 96.68,222.98 99.67,221.54 102.67,219.96 105.66,218.24 108.65,216.40 111.64,214.48 114.63,212.50 117.62,210.51 120.61,208.55 123.60,206.64 126.59,204.81 129.59,203.07 132.58,201.41 135.57,199.81 138.56,198.26 141.55,196.73 144.54,195.16 147.53,193.54 150.52,191.82 153.51,189.98 156.50,188.00 159.50,185.87 162.49,183.60 165.48,181.20 168.47,178.72 171.46,176.20 174.45,173.68 177.44,171.22 180.43,168.86 183.42,166.62 186.41,164.53 189.41,162.59 192.40,160.78 195.39,159.10 198.38,157.51 201.37,155.96 204.36,154.43 207.35,152.87 210.34,151.25 213.33,149.54 216.33,147.72 219.32,145.77 222.31,143.71 225.30,141.55 228.29,139.32 231.28,137.06 234.27,134.81 237.26,132.63 240.25,130.54 243.24,128.57 246.24,126.75" fill="none" stroke="#8E63AE" stroke-width="2.4"/><polyline points="496.94,231.51 498.40,230.73 499.85,229.95 501.30,229.15 502.75,228.33 504.21,227.44 505.66,226.49 507.11,225.44 508.57,224.28 510.02,222.98 511.47,221.54 512.92,219.96 514.38,218.24 515.83,216.40 517.28,214.48 518.73,212.50 520.19,210.51 521.64,208.55 523.09,206.64 524.55,204.81 526.00,203.07 527.45,201.41 528.90,199.81 530.36,198.26 531.81,196.73 533.26,195.16 534.72,193.54 536.17,191.82 537.62,189.98 539.07,188.00 540.53,185.87 541.98,183.60 543.43,181.20 544.88,178.72 546.34,176.20 547.79,173.68 549.24,171.22 550.70,168.86 552.15,166.62 553.60,164.53 555.05,162.59 556.51,160.78 557.96,159.10 559.41,157.51 560.87,155.96 562.32,154.43 563.77,152.87 565.22,151.25 566.68,149.54 568.13,147.72 569.58,145.77 571.04,143.71 572.49,141.55 573.94,139.32 575.39,137.06 576.85,134.81 578.30,132.63 579.75,130.54 581.20,128.57 582.66,126.75" fill="none" stroke="#8E63AE" stroke-width="3"/><polyline points="69.76,240.13 72.76,240.13 75.75,240.13 78.74,240.12 81.73,240.12 84.72,240.12 87.71,240.11 90.70,240.10 93.69,240.09 96.68,240.08 99.67,240.06 102.67,240.04 105.66,240.02 108.65,239.99 111.64,239.95 114.63,239.90 117.62,239.83 120.61,239.75 123.60,239.66 126.59,239.54 129.59,239.39 132.58,239.21 135.57,238.98 138.56,238.71 141.55,238.39 144.54,238.01 147.53,237.57 150.52,237.07 153.51,236.50 156.50,235.87 159.50,235.19 162.49,234.47 165.48,233.72 168.47,232.96 171.46,232.19 174.45,231.41 177.44,230.64 180.43,229.85 183.42,229.05 186.41,228.22 189.41,227.33 192.40,226.37 195.39,225.31 198.38,224.13 201.37,222.81 204.36,221.35 207.35,219.75 210.34,218.02 213.33,216.17 216.33,214.23 219.32,212.25 222.31,210.27 225.30,208.31 228.29,206.41 231.28,204.59 234.27,202.86 237.26,201.21 240.25,199.62 243.24,198.08 246.24,196.54" fill="none" stroke="#B75C86" stroke-width="2.4"/><polyline points="446.27,240.13 447.73,240.13 449.18,240.13 450.63,240.12 452.09,240.12 453.54,240.12 454.99,240.11 456.44,240.10 457.90,240.09 459.35,240.08 460.80,240.06 462.26,240.04 463.71,240.02 465.16,239.99 466.61,239.95 468.07,239.90 469.52,239.83 470.97,239.75 472.42,239.66 473.88,239.54 475.33,239.39 476.78,239.21 478.24,238.98 479.69,238.71 481.14,238.39 482.59,238.01 484.05,237.57 485.50,237.07 486.95,236.50 488.41,235.87 489.86,235.19 491.31,234.47 492.76,233.72 494.22,232.96 495.67,232.19 497.12,231.41 498.57,230.64 500.03,229.85 501.48,229.05 502.93,228.22 504.39,227.33 505.84,226.37 507.29,225.31 508.74,224.13 510.20,222.81 511.65,221.35 513.10,219.75 514.56,218.02 516.01,216.17 517.46,214.23 518.91,212.25 520.37,210.27 521.82,208.31 523.27,206.41 524.72,204.59 526.18,202.86 527.63,201.21 529.08,199.62 530.54,198.08 531.99,196.54" fill="none" stroke="#B75C86" stroke-width="3"/><polyline points="69.76,240.14 72.76,240.14 75.75,240.14 78.74,240.14 81.73,240.14 84.72,240.14 87.71,240.14 90.70,240.14 93.69,240.14 96.68,240.14 99.67,240.14 102.67,240.14 105.66,240.14 108.65,240.14 111.64,240.14 114.63,240.14 117.62,240.14 120.61,240.14 123.60,240.14 126.59,240.14 129.59,240.14 132.58,240.14 135.57,240.14 138.56,240.13 141.55,240.13 144.54,240.13 147.53,240.13 150.52,240.13 153.51,240.12 156.50,240.12 159.50,240.11 162.49,240.11 165.48,240.10 168.47,240.09 171.46,240.07 174.45,240.06 177.44,240.03 180.43,240.01 183.42,239.97 186.41,239.93 189.41,239.88 192.40,239.81 195.39,239.72 198.38,239.62 201.37,239.49 204.36,239.33 207.35,239.14 210.34,238.90 213.33,238.61 216.33,238.27 219.32,237.88 222.31,237.41 225.30,236.89 228.29,236.30 231.28,235.65 234.27,234.96 237.26,234.22 240.25,233.47 243.24,232.70 246.24,231.93" fill="none" stroke="#D07A3B" stroke-width="2.4"/><polyline points="410.44,240.14 411.89,240.14 413.34,240.14 414.79,240.14 416.25,240.14 417.70,240.14 419.15,240.14 420.61,240.14 422.06,240.14 423.51,240.14 424.96,240.14 426.42,240.14 427.87,240.14 429.32,240.14 430.77,240.14 432.23,240.14 433.68,240.14 435.13,240.14 436.59,240.14 438.04,240.14 439.49,240.14 440.94,240.14 442.40,240.14 443.85,240.13 445.30,240.13 446.76,240.13 448.21,240.13 449.66,240.13 451.11,240.12 452.57,240.12 454.02,240.11 455.47,240.11 456.92,240.10 458.38,240.09 459.83,240.07 461.28,240.06 462.74,240.03 464.19,240.01 465.64,239.97 467.09,239.93 468.55,239.88 470.00,239.81 471.45,239.72 472.91,239.62 474.36,239.49 475.81,239.33 477.26,239.14 478.72,238.90 480.17,238.61 481.62,238.27 483.08,237.88 484.53,237.41 485.98,236.89 487.43,236.30 488.89,235.65 490.34,234.96 491.79,234.22 493.24,233.47 494.70,232.70 496.15,231.93" fill="none" stroke="#D07A3B" stroke-width="3"/><polyline points="69.76,240.14 72.76,240.14 75.75,240.14 78.74,240.14 81.73,240.14 84.72,240.14 87.71,240.14 90.70,240.14 93.69,240.14 96.68,240.14 99.67,240.14 102.67,240.14 105.66,240.14 108.65,240.14 111.64,240.14 114.63,240.14 117.62,240.14 120.61,240.14 123.60,240.14 126.59,240.14 129.59,240.14 132.58,240.14 135.57,240.14 138.56,240.14 141.55,240.14 144.54,240.14 147.53,240.14 150.52,240.14 153.51,240.14 156.50,240.14 159.50,240.14 162.49,240.14 165.48,240.14 168.47,240.14 171.46,240.14 174.45,240.14 177.44,240.14 180.43,240.14 183.42,240.14 186.41,240.14 189.41,240.14 192.40,240.13 195.39,240.13 198.38,240.13 201.37,240.13 204.36,240.13 207.35,240.12 210.34,240.12 213.33,240.12 216.33,240.11 219.32,240.10 222.31,240.09 225.30,240.08 228.29,240.06 231.28,240.04 234.27,240.02 237.26,239.99 240.25,239.95 243.24,239.90 246.24,239.84" fill="none" stroke="#C4402B" stroke-width="2.4"/><polyline points="383.75,240.14 385.20,240.14 386.65,240.14 388.11,240.14 389.56,240.14 391.01,240.14 392.46,240.14 393.92,240.14 395.37,240.14 396.82,240.14 398.28,240.14 399.73,240.14 401.18,240.14 402.63,240.14 404.09,240.14 405.54,240.14 406.99,240.14 408.44,240.14 409.90,240.14 411.35,240.14 412.80,240.14 414.26,240.14 415.71,240.14 417.16,240.14 418.61,240.14 420.07,240.14 421.52,240.14 422.97,240.14 424.43,240.14 425.88,240.14 427.33,240.14 428.78,240.14 430.24,240.14 431.69,240.14 433.14,240.14 434.59,240.14 436.05,240.14 437.50,240.14 438.95,240.14 440.41,240.14 441.86,240.14 443.31,240.13 444.76,240.13 446.22,240.13 447.67,240.13 449.12,240.13 450.58,240.12 452.03,240.12 453.48,240.12 454.93,240.11 456.39,240.10 457.84,240.09 459.29,240.08 460.74,240.06 462.20,240.04 463.65,240.02 465.10,239.99 466.56,239.95 468.01,239.90 469.46,239.84" fill="none" stroke="#C4402B" stroke-width="3"/><text x="263.9" y="51.3" fill="#2F6FC4" font-size="10.5" font-family="IBM Plex Mono, monospace">-40°C</text><text x="263.9" y="70.2" fill="#5D6BC6" font-size="10.5" font-family="IBM Plex Mono, monospace">-10°C</text><text x="263.9" y="130.8" fill="#8E63AE" font-size="10.5" font-family="IBM Plex Mono, monospace">20°C</text><text x="263.9" y="200.5" fill="#B75C86" font-size="10.5" font-family="IBM Plex Mono, monospace">50°C</text><text x="263.9" y="235.9" fill="#D07A3B" font-size="10.5" font-family="IBM Plex Mono, monospace">80°C</text><text x="263.9" y="249.4" fill="#C4402B" font-size="10.5" font-family="IBM Plex Mono, monospace">110°C</text><rect x="58" y="30" width="200" height="280" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><rect x="350" y="30" width="400" height="280" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><text x="58" y="18" fill="currentColor" font-size="12" font-family="IBM Plex Mono, ui-monospace, monospace">측정 그대로: 온도별 등온 곡선</text><text x="350" y="18" fill="currentColor" font-size="12" font-family="IBM Plex Mono, ui-monospace, monospace">수평 이동 후: 하나의 마스터커브</text><text x="158.0" y="332" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log f [Hz] · 0.1–100</text><text x="550.0" y="332" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">log ω·a_T [rad/s] · 14 decade</text><text x="50" y="38" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">E′</text><line x1="300" y1="170.0" x2="334" y2="170.0" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" marker-end="url(#ah)"/><text x="317.0" y="160.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">×a_T</text><text x="317.0" y="188.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">수평만</text><text x="750.0" y="350" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">기준온도 T_ref = 25°C</text></svg></div>
+    <figcaption><b>중첩의 전부.</b> 왼쪽은 실제로 측정된 것 — 온도마다 짧은 조각들. 오른쪽은 각 조각을 log 주파수 축에서 a_T만큼 수평 이동시킨 결과입니다. 세로로는 (원칙적으로) 거의 움직이지 않습니다.</figcaption>
+  </figure>
+
+  <h3>시프트 인자를 수식으로 </h3>
+  <p>a_T를 온도마다 표로 줄 수도 있지만, 솔버는 보통 두 가지 함수 형태를 씁니다.</p>
+  <div class="eq"><b>WLF</b>  (Tg 부근 ~ Tg+100 °C, 고분자 전이 영역)
+  log₁₀ a_T = − C₁ (T − T_ref) / ( C₂ + T − T_ref )
+
+<b>Arrhenius</b>  (Tg에서 멀리 떨어진 유리/고무 영역, 활성화 과정)
+  ln a_T = (E_a / R) · ( 1/T − 1/T_ref )      <span class="cm">T는 절대온도 [K]</span></div>
+  <p class="eqn">T_ref = 기준 온도, C₁ [무차원], C₂ [°C], E_a = 활성화 에너지, R = 8.314 J/mol·K</p>
+  <ul class="tight">
+    <li>C₁, C₂는 <strong>기준 온도에 종속</strong>입니다. T_ref를 바꾸면 값이 달라집니다 — 보고할 때 반드시 T_ref를 함께 적으세요.</li>
+    <li>T_ref는 해석 대상의 실제 사용 온도 근처로 잡는 것이 좋습니다(예: 엔진룸 90 °C, 실내 부품 23 °C).</li>
+    <li>C₂ + (T − T_ref) = 0이 되는 온도에서 식이 발산합니다. 이 온도(T_ref − C₂) 아래로는 절대 외삽하지 마세요. 솔버가 폭주합니다.</li>
+  </ul>
+
+  <h3>중첩이 잘 됐는지 확인하는 법</h3>
+  <ol class="tight">
+    <li>E′뿐 아니라 <strong>E″와 tan δ도 같은 a_T로</strong> 겹쳐야 합니다. E′만 억지로 맞춘 경우가 매우 흔합니다.</li>
+    <li><strong>log a_T vs T</strong> 그래프를 그려 매끄러운지 봅니다. 꺾이거나 튀면 그 온도에서 물리적 변화(결정화, 후가황, 수분 증발)가 일어난 것입니다.</li>
+    <li><strong>Cole-Cole 선도</strong>(E″ vs E′) 또는 <strong>van Gurp-Palmen 선도</strong>(δ vs |E*|)를 그립니다. 이 그림들은 주파수·온도를 포함하지 않으므로, 모든 온도 데이터가 한 곡선 위에 놓이면 열유변학적 단순(thermorheologically simple) 재료라는 증거가 됩니다.</li>
+    <li>세로 시프트 b_T는 원칙적으로 밀도·절대온도 보정(≈ ρ₀T₀/ρT)만큼만 허용됩니다. 곡선을 맞추려고 b_T를 크게 쓰기 시작하면 그건 중첩이 아니라 그림 맞추기입니다.</li>
+  </ol>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 780 400" role="img" aria-label="환산 주파수에 대한 저장탄성률 손실탄성률 tan delta 마스터커브" style="width:100%;height:auto;overflow:visible"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".6"/></marker></defs><line x1="66.0" y1="24" x2="66.0" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="66.0" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻⁵</text><line x1="153.1" y1="24" x2="153.1" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="153.1" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻³</text><line x1="240.3" y1="24" x2="240.3" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="240.3" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻¹</text><line x1="327.4" y1="24" x2="327.4" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="327.4" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10¹</text><line x1="414.6" y1="24" x2="414.6" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="414.6" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10³</text><line x1="501.7" y1="24" x2="501.7" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="501.7" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁵</text><line x1="588.9" y1="24" x2="588.9" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="588.9" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁷</text><line x1="676.0" y1="24" x2="676.0" y2="320" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="676.0" y="338" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁹</text><line x1="66" y1="320.0" x2="676" y2="320.0" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="57" y="324.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁰</text><line x1="66" y1="237.8" x2="676" y2="237.8" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="57" y="241.8" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10¹</text><line x1="66" y1="155.6" x2="676" y2="155.6" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="57" y="159.6" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10²</text><line x1="66" y1="73.5" x2="676" y2="73.5" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><text x="57" y="77.5" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10³</text><rect x="66" y="24" width="610" height="296" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><polyline points="66.00,246.15 67.22,246.15 68.44,246.15 69.67,246.15 70.89,246.15 72.11,246.15 73.33,246.15 74.56,246.15 75.78,246.15 77.00,246.15 78.22,246.15 79.45,246.15 80.67,246.15 81.89,246.15 83.11,246.15 84.34,246.15 85.56,246.15 86.78,246.15 88.00,246.15 89.23,246.15 90.45,246.15 91.67,246.15 92.89,246.15 94.12,246.15 95.34,246.15 96.56,246.15 97.78,246.15 99.01,246.15 100.23,246.15 101.45,246.15 102.67,246.15 103.90,246.15 105.12,246.15 106.34,246.15 107.56,246.15 108.79,246.15 110.01,246.15 111.23,246.15 112.45,246.15 113.68,246.15 114.90,246.15 116.12,246.15 117.34,246.15 118.57,246.15 119.79,246.15 121.01,246.15 122.23,246.15 123.45,246.15 124.68,246.15 125.90,246.15 127.12,246.15 128.34,246.15 129.57,246.15 130.79,246.15 132.01,246.15 133.23,246.15 134.46,246.15 135.68,246.15 136.90,246.15 138.12,246.15 139.35,246.15 140.57,246.15 141.79,246.15 143.01,246.15 144.24,246.15 145.46,246.15 146.68,246.15 147.90,246.15 149.13,246.15 150.35,246.15 151.57,246.15 152.79,246.15 154.02,246.15 155.24,246.15 156.46,246.15 157.68,246.15 158.91,246.15 160.13,246.15 161.35,246.15 162.57,246.15 163.80,246.15 165.02,246.15 166.24,246.15 167.46,246.15 168.69,246.15 169.91,246.15 171.13,246.15 172.35,246.15 173.58,246.15 174.80,246.15 176.02,246.15 177.24,246.15 178.46,246.15 179.69,246.15 180.91,246.15 182.13,246.15 183.35,246.15 184.58,246.15 185.80,246.15 187.02,246.15 188.24,246.15 189.47,246.15 190.69,246.15 191.91,246.15 193.13,246.15 194.36,246.15 195.58,246.15 196.80,246.15 198.02,246.15 199.25,246.15 200.47,246.14 201.69,246.14 202.91,246.14 204.14,246.14 205.36,246.14 206.58,246.14 207.80,246.14 209.03,246.14 210.25,246.14 211.47,246.14 212.69,246.14 213.92,246.14 215.14,246.14 216.36,246.14 217.58,246.13 218.81,246.13 220.03,246.13 221.25,246.13 222.47,246.13 223.70,246.12 224.92,246.12 226.14,246.12 227.36,246.11 228.59,246.11 229.81,246.10 231.03,246.09 232.25,246.09 233.47,246.08 234.70,246.07 235.92,246.06 237.14,246.05 238.36,246.03 239.59,246.02 240.81,246.00 242.03,245.98 243.25,245.95 244.48,245.93 245.70,245.90 246.92,245.87 248.14,245.83 249.37,245.78 250.59,245.74 251.81,245.68 253.03,245.62 254.26,245.55 255.48,245.47 256.70,245.39 257.92,245.29 259.15,245.18 260.37,245.06 261.59,244.92 262.81,244.77 264.04,244.60 265.26,244.42 266.48,244.22 267.70,244.00 268.93,243.76 270.15,243.50 271.37,243.21 272.59,242.91 273.82,242.59 275.04,242.24 276.26,241.88 277.48,241.50 278.71,241.11 279.93,240.70 281.15,240.28 282.37,239.84 283.60,239.41 284.82,238.96 286.04,238.51 287.26,238.06 288.48,237.61 289.71,237.16 290.93,236.71 292.15,236.26 293.37,235.81 294.60,235.35 295.82,234.89 297.04,234.42 298.26,233.93 299.49,233.44 300.71,232.92 301.93,232.39 303.15,231.83 304.38,231.23 305.60,230.61 306.82,229.95 308.04,229.24 309.27,228.50 310.49,227.70 311.71,226.87 312.93,225.98 314.16,225.05 315.38,224.07 316.60,223.06 317.82,222.00 319.05,220.91 320.27,219.79 321.49,218.66 322.71,217.50 323.94,216.34 325.16,215.18 326.38,214.03 327.60,212.89 328.83,211.76 330.05,210.66 331.27,209.58 332.49,208.53 333.72,207.51 334.94,206.52 336.16,205.55 337.38,204.61 338.61,203.69 339.83,202.78 341.05,201.88 342.27,200.98 343.49,200.08 344.72,199.17 345.94,198.25 347.16,197.30 348.38,196.33 349.61,195.32 350.83,194.28 352.05,193.19 353.27,192.05 354.50,190.87 355.72,189.64 356.94,188.37 358.16,187.04 359.39,185.68 360.61,184.28 361.83,182.85 363.05,181.40 364.28,179.93 365.50,178.45 366.72,176.98 367.94,175.52 369.17,174.08 370.39,172.67 371.61,171.29 372.83,169.95 374.06,168.65 375.28,167.41 376.50,166.21 377.72,165.05 378.95,163.95 380.17,162.89 381.39,161.87 382.61,160.89 383.84,159.94 385.06,159.01 386.28,158.11 387.50,157.21 388.73,156.32 389.95,155.42 391.17,154.52 392.39,153.60 393.62,152.66 394.84,151.69 396.06,150.69 397.28,149.65 398.51,148.57 399.73,147.46 400.95,146.31 402.17,145.12 403.39,143.89 404.62,142.63 405.84,141.35 407.06,140.05 408.28,138.73 409.51,137.41 410.73,136.10 411.95,134.79 413.17,133.50 414.40,132.24 415.62,131.02 416.84,129.83 418.06,128.68 419.29,127.58 420.51,126.53 421.73,125.52 422.95,124.56 424.18,123.64 425.40,122.77 426.62,121.94 427.84,121.13 429.07,120.36 430.29,119.61 431.51,118.88 432.73,118.16 433.96,117.44 435.18,116.73 436.40,116.01 437.62,115.27 438.85,114.52 440.07,113.75 441.29,112.96 442.51,112.14 443.74,111.29 444.96,110.40 446.18,109.49 447.40,108.55 448.63,107.59 449.85,106.60 451.07,105.59 452.29,104.57 453.52,103.55 454.74,102.52 455.96,101.50 457.18,100.49 458.40,99.50 459.63,98.53 460.85,97.60 462.07,96.69 463.29,95.82 464.52,94.99 465.74,94.20 466.96,93.45 468.18,92.73 469.41,92.05 470.63,91.41 471.85,90.79 473.07,90.20 474.30,89.63 475.52,89.09 476.74,88.55 477.96,88.03 479.19,87.51 480.41,86.99 481.63,86.47 482.85,85.94 484.08,85.40 485.30,84.84 486.52,84.27 487.74,83.68 488.97,83.06 490.19,82.43 491.41,81.78 492.63,81.11 493.86,80.42 495.08,79.71 496.30,79.00 497.52,78.28 498.75,77.55 499.97,76.83 501.19,76.11 502.41,75.41 503.64,74.72 504.86,74.05 506.08,73.40 507.30,72.78 508.53,72.18 509.75,71.61 510.97,71.07 512.19,70.56 513.41,70.08 514.64,69.62 515.86,69.18 517.08,68.77 518.30,68.38 519.53,68.00 520.75,67.64 521.97,67.28 523.19,66.94 524.42,66.59 525.64,66.25 526.86,65.91 528.08,65.56 529.31,65.21 530.53,64.84 531.75,64.47 532.97,64.09 534.20,63.69 535.42,63.28 536.64,62.86 537.86,62.43 539.09,61.99 540.31,61.54 541.53,61.09 542.75,60.63 543.98,60.18 545.20,59.73 546.42,59.28 547.64,58.84 548.87,58.42 550.09,58.00 551.31,57.61 552.53,57.23 553.76,56.86 554.98,56.52 556.20,56.20 557.42,55.89 558.65,55.60 559.87,55.33 561.09,55.07 562.31,54.83 563.54,54.59 564.76,54.37 565.98,54.16 567.20,53.95 568.42,53.75 569.65,53.55 570.87,53.35 572.09,53.15 573.31,52.95 574.54,52.75 575.76,52.55 576.98,52.33 578.20,52.12 579.43,51.89 580.65,51.67 581.87,51.43 583.09,51.19 584.32,50.95 585.54,50.71 586.76,50.46 587.98,50.21 589.21,49.97 590.43,49.72 591.65,49.49 592.87,49.26 594.10,49.03 595.32,48.82 596.54,48.61 597.76,48.42 598.99,48.23 600.21,48.05 601.43,47.89 602.65,47.73 603.88,47.59 605.10,47.45 606.32,47.32 607.54,47.20 608.77,47.09 609.99,46.98 611.21,46.87 612.43,46.77 613.66,46.67 614.88,46.58 616.10,46.48 617.32,46.38 618.55,46.29 619.77,46.19 620.99,46.10 622.21,46.00 623.43,45.89 624.66,45.79 625.88,45.69 627.10,45.58 628.32,45.47 629.55,45.36 630.77,45.25 631.99,45.14 633.21,45.04 634.44,44.93 635.66,44.82 636.88,44.72 638.10,44.62 639.33,44.53 640.55,44.44 641.77,44.35 642.99,44.27 644.22,44.20 645.44,44.13 646.66,44.06 647.88,44.00 649.11,43.94 650.33,43.88 651.55,43.83 652.77,43.79 654.00,43.74 655.22,43.70 656.44,43.66 657.66,43.62 658.89,43.58 660.11,43.54 661.33,43.51 662.55,43.47 663.78,43.43 665.00,43.40 666.22,43.36 667.44,43.33 668.67,43.29 669.89,43.25 671.11,43.21 672.33,43.18 673.56,43.14 674.78,43.10 676.00,43.06" fill="none" stroke="#2F6FC4" stroke-width="2.6"/><polyline points="66.00,669.43 67.22,667.12 68.44,664.82 69.67,662.51 70.89,660.21 72.11,657.90 73.33,655.60 74.56,653.29 75.78,650.99 77.00,648.68 78.22,646.37 79.45,644.07 80.67,641.76 81.89,639.46 83.11,637.15 84.34,634.85 85.56,632.54 86.78,630.24 88.00,627.93 89.23,625.62 90.45,623.32 91.67,621.01 92.89,618.71 94.12,616.40 95.34,614.10 96.56,611.79 97.78,609.49 99.01,607.18 100.23,604.88 101.45,602.57 102.67,600.26 103.90,597.96 105.12,595.65 106.34,593.35 107.56,591.04 108.79,588.74 110.01,586.43 111.23,584.13 112.45,581.82 113.68,579.51 114.90,577.21 116.12,574.90 117.34,572.60 118.57,570.29 119.79,567.99 121.01,565.68 122.23,563.38 123.45,561.07 124.68,558.76 125.90,556.46 127.12,554.15 128.34,551.85 129.57,549.54 130.79,547.24 132.01,544.93 133.23,542.63 134.46,540.32 135.68,538.02 136.90,535.71 138.12,533.40 139.35,531.10 140.57,528.79 141.79,526.49 143.01,524.18 144.24,521.88 145.46,519.57 146.68,517.27 147.90,514.96 149.13,512.65 150.35,510.35 151.57,508.04 152.79,505.74 154.02,503.43 155.24,501.13 156.46,498.82 157.68,496.52 158.91,494.21 160.13,491.90 161.35,489.60 162.57,487.29 163.80,484.99 165.02,482.68 166.24,480.38 167.46,478.07 168.69,475.77 169.91,473.46 171.13,471.16 172.35,468.85 173.58,466.54 174.80,464.24 176.02,461.93 177.24,459.63 178.46,457.32 179.69,455.02 180.91,452.71 182.13,450.41 183.35,448.10 184.58,445.80 185.80,443.49 187.02,441.18 188.24,438.88 189.47,436.57 190.69,434.27 191.91,431.96 193.13,429.66 194.36,427.35 195.58,425.05 196.80,422.74 198.02,420.44 199.25,418.13 200.47,415.83 201.69,413.52 202.91,411.22 204.14,408.91 205.36,406.61 206.58,404.30 207.80,402.00 209.03,399.69 210.25,397.39 211.47,395.08 212.69,392.78 213.92,390.47 215.14,388.17 216.36,385.87 217.58,383.56 218.81,381.26 220.03,378.96 221.25,376.65 222.47,374.35 223.70,372.05 224.92,369.75 226.14,367.45 227.36,365.15 228.59,362.85 229.81,360.55 231.03,358.26 232.25,355.96 233.47,353.67 234.70,351.37 235.92,349.08 237.14,346.79 238.36,344.51 239.59,342.22 240.81,339.94 242.03,337.66 243.25,335.39 244.48,333.12 245.70,330.85 246.92,328.60 248.14,326.34 249.37,324.09 250.59,321.86 251.81,319.63 253.03,317.40 254.26,315.20 255.48,313.00 256.70,310.82 257.92,308.65 259.15,306.50 260.37,304.37 261.59,302.26 262.81,300.17 264.04,298.11 265.26,296.07 266.48,294.07 267.70,292.10 268.93,290.17 270.15,288.27 271.37,286.41 272.59,284.59 273.82,282.82 275.04,281.09 276.26,279.40 277.48,277.76 278.71,276.16 279.93,274.60 281.15,273.08 282.37,271.59 283.60,270.13 284.82,268.70 286.04,267.28 287.26,265.88 288.48,264.48 289.71,263.09 290.93,261.68 292.15,260.27 293.37,258.84 294.60,257.39 295.82,255.92 297.04,254.43 298.26,252.90 299.49,251.36 300.71,249.78 301.93,248.19 303.15,246.58 304.38,244.94 305.60,243.30 306.82,241.65 308.04,240.00 309.27,238.35 310.49,236.71 311.71,235.09 312.93,233.48 314.16,231.90 315.38,230.35 316.60,228.84 317.82,227.36 319.05,225.93 320.27,224.54 321.49,223.19 322.71,221.90 323.94,220.65 325.16,219.44 326.38,218.28 327.60,217.15 328.83,216.06 330.05,214.98 331.27,213.93 332.49,212.89 333.72,211.85 334.94,210.80 336.16,209.74 337.38,208.66 338.61,207.56 339.83,206.43 341.05,205.26 342.27,204.06 343.49,202.82 344.72,201.55 345.94,200.24 347.16,198.90 348.38,197.54 349.61,196.15 350.83,194.74 352.05,193.32 353.27,191.90 354.50,190.48 355.72,189.07 356.94,187.68 358.16,186.31 359.39,184.97 360.61,183.67 361.83,182.42 363.05,181.21 364.28,180.05 365.50,178.95 366.72,177.90 367.94,176.91 369.17,175.98 370.39,175.10 371.61,174.26 372.83,173.47 374.06,172.72 375.28,171.99 376.50,171.28 377.72,170.58 378.95,169.89 380.17,169.18 381.39,168.46 382.61,167.72 383.84,166.94 385.06,166.12 386.28,165.27 387.50,164.37 388.73,163.42 389.95,162.43 391.17,161.40 392.39,160.33 393.62,159.22 394.84,158.09 396.06,156.93 397.28,155.76 398.51,154.59 399.73,153.42 400.95,152.26 402.17,151.12 403.39,150.00 404.62,148.93 405.84,147.90 407.06,146.91 408.28,145.99 409.51,145.12 410.73,144.32 411.95,143.58 413.17,142.91 414.40,142.30 415.62,141.75 416.84,141.25 418.06,140.80 419.29,140.39 420.51,140.01 421.73,139.65 422.95,139.29 424.18,138.94 425.40,138.58 426.62,138.20 427.84,137.79 429.07,137.34 430.29,136.85 431.51,136.31 432.73,135.72 433.96,135.08 435.18,134.38 436.40,133.64 437.62,132.86 438.85,132.03 440.07,131.17 441.29,130.29 442.51,129.39 443.74,128.48 444.96,127.58 446.18,126.69 447.40,125.82 448.63,124.98 449.85,124.18 451.07,123.44 452.29,122.75 453.52,122.12 454.74,121.56 455.96,121.06 457.18,120.64 458.40,120.29 459.63,120.01 460.85,119.78 462.07,119.62 463.29,119.50 464.52,119.43 465.74,119.39 466.96,119.36 468.18,119.35 469.41,119.34 470.63,119.31 471.85,119.26 473.07,119.18 474.30,119.06 475.52,118.89 476.74,118.67 477.96,118.40 479.19,118.07 480.41,117.68 481.63,117.24 482.85,116.76 484.08,116.23 485.30,115.66 486.52,115.07 487.74,114.45 488.97,113.84 490.19,113.22 491.41,112.62 492.63,112.04 493.86,111.50 495.08,111.00 496.30,110.55 497.52,110.17 498.75,109.85 499.97,109.60 501.19,109.42 502.41,109.32 503.64,109.28 504.86,109.32 506.08,109.42 507.30,109.58 508.53,109.79 509.75,110.05 510.97,110.33 512.19,110.63 513.41,110.94 514.64,111.25 515.86,111.55 517.08,111.82 518.30,112.06 519.53,112.26 520.75,112.41 521.97,112.51 523.19,112.56 524.42,112.54 525.64,112.47 526.86,112.34 528.08,112.17 529.31,111.95 530.53,111.69 531.75,111.40 532.97,111.10 534.20,110.79 535.42,110.48 536.64,110.18 537.86,109.92 539.09,109.68 540.31,109.50 541.53,109.37 542.75,109.30 543.98,109.29 545.20,109.36 546.42,109.50 547.64,109.71 548.87,110.00 550.09,110.35 551.31,110.77 552.53,111.24 553.76,111.76 554.98,112.33 556.20,112.92 557.42,113.53 558.65,114.15 559.87,114.76 561.09,115.37 562.31,115.95 563.54,116.50 564.76,117.01 565.98,117.47 567.20,117.88 568.42,118.24 569.65,118.54 570.87,118.79 572.09,118.98 573.31,119.13 574.54,119.22 575.76,119.29 576.98,119.33 578.20,119.34 579.43,119.36 580.65,119.37 581.87,119.40 583.09,119.46 584.32,119.55 585.54,119.69 586.76,119.89 587.98,120.14 589.21,120.46 590.43,120.84 591.65,121.30 592.87,121.83 594.10,122.43 595.32,123.09 596.54,123.80 597.76,124.58 598.99,125.39 600.21,126.25 601.43,127.13 602.65,128.03 603.88,128.93 605.10,129.84 606.32,130.73 607.54,131.60 608.77,132.45 609.99,133.25 611.21,134.02 612.43,134.74 613.66,135.40 614.88,136.02 616.10,136.58 617.32,137.10 618.55,137.57 619.77,138.00 620.99,138.39 622.21,138.76 623.43,139.12 624.66,139.47 625.88,139.82 627.10,140.19 628.32,140.59 629.55,141.02 630.77,141.49 631.99,142.02 633.21,142.60 634.44,143.24 635.66,143.94 636.88,144.71 638.10,145.55 639.33,146.44 640.55,147.40 641.77,148.41 642.99,149.46 644.22,150.56 645.44,151.68 646.66,152.83 647.88,154.00 649.11,155.18 650.33,156.35 651.55,157.51 652.77,158.66 654.00,159.78 655.22,160.87 656.44,161.92 657.66,162.93 658.89,163.90 660.11,164.82 661.33,165.70 662.55,166.54 663.78,167.33 665.00,168.09 666.22,168.83 667.44,169.54 668.67,170.24 669.89,170.93 671.11,171.63 672.33,172.35 673.56,173.09 674.78,173.86 676.00,174.67" fill="none" stroke="#D07A3B" stroke-width="2.2"/><polyline points="66.00,539.72 67.22,537.42 68.44,535.11 69.67,532.81 70.89,530.50 72.11,528.20 73.33,525.89 74.56,523.59 75.78,521.28 77.00,518.97 78.22,516.67 79.45,514.36 80.67,512.06 81.89,509.75 83.11,507.45 84.34,505.14 85.56,502.84 86.78,500.53 88.00,498.23 89.23,495.92 90.45,493.61 91.67,491.31 92.89,489.00 94.12,486.70 95.34,484.39 96.56,482.09 97.78,479.78 99.01,477.48 100.23,475.17 101.45,472.86 102.67,470.56 103.90,468.25 105.12,465.95 106.34,463.64 107.56,461.34 108.79,459.03 110.01,456.73 111.23,454.42 112.45,452.11 113.68,449.81 114.90,447.50 116.12,445.20 117.34,442.89 118.57,440.59 119.79,438.28 121.01,435.98 122.23,433.67 123.45,431.37 124.68,429.06 125.90,426.75 127.12,424.45 128.34,422.14 129.57,419.84 130.79,417.53 132.01,415.23 133.23,412.92 134.46,410.62 135.68,408.31 136.90,406.00 138.12,403.70 139.35,401.39 140.57,399.09 141.79,396.78 143.01,394.48 144.24,392.17 145.46,389.87 146.68,387.56 147.90,385.26 149.13,382.95 150.35,380.64 151.57,378.34 152.79,376.03 154.02,373.73 155.24,371.42 156.46,369.12 157.68,366.81 158.91,364.51 160.13,362.20 161.35,359.89 162.57,357.59 163.80,355.28 165.02,352.98 166.24,350.67 167.46,348.37 168.69,346.06 169.91,343.76 171.13,341.45 172.35,339.14 173.58,336.84 174.80,334.53 176.02,332.23 177.24,329.92 178.46,327.62 179.69,325.31 180.91,323.01 182.13,320.70 183.35,318.40 184.58,316.09 185.80,313.79 187.02,311.48 188.24,309.17 189.47,306.87 190.69,304.56 191.91,302.26 193.13,299.95 194.36,297.65 195.58,295.34 196.80,293.04 198.02,290.73 199.25,288.43 200.47,286.12 201.69,283.82 202.91,281.51 204.14,279.21 205.36,276.90 206.58,274.60 207.80,272.30 209.03,269.99 210.25,267.69 211.47,265.38 212.69,263.08 213.92,260.78 215.14,258.48 216.36,256.17 217.58,253.87 218.81,251.57 220.03,249.27 221.25,246.97 222.47,244.67 223.70,242.37 224.92,240.07 226.14,237.78 227.36,235.48 228.59,233.19 229.81,230.90 231.03,228.61 232.25,226.32 233.47,224.03 234.70,221.75 235.92,219.47 237.14,217.19 238.36,214.92 239.59,212.65 240.81,210.39 242.03,208.13 243.25,205.88 244.48,203.63 245.70,201.40 246.92,199.17 248.14,196.96 249.37,194.75 250.59,192.56 251.81,190.39 253.03,188.23 254.26,186.09 255.48,183.97 256.70,181.87 257.92,179.80 259.15,177.76 260.37,175.75 261.59,173.78 262.81,171.84 264.04,169.95 265.26,168.10 266.48,166.30 267.70,164.55 268.93,162.85 270.15,161.22 271.37,159.64 272.59,158.13 273.82,156.67 275.04,155.29 276.26,153.96 277.48,152.70 278.71,151.49 279.93,150.34 281.15,149.24 282.37,148.19 283.60,147.17 284.82,146.18 286.04,145.21 287.26,144.26 288.48,143.31 289.71,142.37 290.93,141.42 292.15,140.45 293.37,139.48 294.60,138.49 295.82,137.48 297.04,136.45 298.26,135.41 299.49,134.36 300.71,133.30 301.93,132.24 303.15,131.19 304.38,130.15 305.60,129.14 306.82,128.15 308.04,127.20 309.27,126.30 310.49,125.45 311.71,124.66 312.93,123.94 314.16,123.29 315.38,122.72 316.60,122.22 317.82,121.80 319.05,121.46 320.27,121.19 321.49,120.98 322.71,120.84 323.94,120.75 325.16,120.70 326.38,120.69 327.60,120.71 328.83,120.74 330.05,120.77 331.27,120.79 332.49,120.79 333.72,120.77 334.94,120.72 336.16,120.63 337.38,120.50 338.61,120.32 339.83,120.09 341.05,119.83 342.27,119.52 343.49,119.18 344.72,118.82 345.94,118.43 347.16,118.04 348.38,117.65 349.61,117.26 350.83,116.90 352.05,116.57 353.27,116.29 354.50,116.05 355.72,115.87 356.94,115.75 358.16,115.71 359.39,115.73 360.61,115.83 361.83,116.01 363.05,116.25 364.28,116.56 365.50,116.94 366.72,117.36 367.94,117.83 369.17,118.34 370.39,118.87 371.61,119.42 372.83,119.96 374.06,120.50 375.28,121.03 376.50,121.52 377.72,121.97 378.95,122.38 380.17,122.73 381.39,123.03 382.61,123.27 383.84,123.44 385.06,123.55 386.28,123.60 387.50,123.60 388.73,123.55 389.95,123.45 391.17,123.32 392.39,123.17 393.62,123.01 394.84,122.84 396.06,122.69 397.28,122.56 398.51,122.46 399.73,122.40 400.95,122.39 402.17,122.44 403.39,122.56 404.62,122.74 405.84,122.99 407.06,123.31 408.28,123.70 409.51,124.15 410.73,124.67 411.95,125.24 413.17,125.85 414.40,126.50 415.62,127.17 416.84,127.86 418.06,128.56 419.29,129.25 420.51,129.92 421.73,130.57 422.95,131.18 424.18,131.74 425.40,132.25 426.62,132.71 427.84,133.10 429.07,133.42 430.29,133.68 431.51,133.87 432.73,134.00 433.96,134.07 435.18,134.10 436.40,134.08 437.62,134.02 438.85,133.95 440.07,133.86 441.29,133.77 442.51,133.69 443.74,133.64 444.96,133.61 446.18,133.63 447.40,133.71 448.63,133.83 449.85,134.03 451.07,134.29 452.29,134.62 453.52,135.01 454.74,135.48 455.96,136.01 457.18,136.59 458.40,137.23 459.63,137.91 460.85,138.63 462.07,139.37 463.29,140.12 464.52,140.88 465.74,141.63 466.96,142.36 468.18,143.06 469.41,143.73 470.63,144.35 471.85,144.91 473.07,145.42 474.30,145.87 475.52,146.25 476.74,146.56 477.96,146.81 479.19,147.00 480.41,147.13 481.63,147.22 482.85,147.26 484.08,147.27 485.30,147.26 486.52,147.24 487.74,147.22 488.97,147.21 490.19,147.23 491.41,147.28 492.63,147.38 493.86,147.52 495.08,147.73 496.30,148.00 497.52,148.33 498.75,148.74 499.97,149.21 501.19,149.75 502.41,150.35 503.64,151.01 504.86,151.72 506.08,152.47 507.30,153.25 508.53,154.06 509.75,154.88 510.97,155.70 512.19,156.51 513.41,157.31 514.64,158.08 515.86,158.81 517.08,159.49 518.30,160.13 519.53,160.70 520.75,161.22 521.97,161.67 523.19,162.06 524.42,162.39 525.64,162.66 526.86,162.88 528.08,163.05 529.31,163.18 530.53,163.29 531.75,163.37 532.97,163.45 534.20,163.54 535.42,163.64 536.64,163.76 537.86,163.93 539.09,164.13 540.31,164.40 541.53,164.72 542.75,165.10 543.98,165.55 545.20,166.08 546.42,166.66 547.64,167.31 548.87,168.03 550.09,168.79 551.31,169.61 552.53,170.46 553.76,171.34 554.98,172.25 556.20,173.16 557.42,174.08 558.65,174.99 559.87,175.88 561.09,176.74 562.31,177.56 563.54,178.35 564.76,179.08 565.98,179.75 567.20,180.37 568.42,180.93 569.65,181.43 570.87,181.88 572.09,182.27 573.31,182.61 574.54,182.91 575.76,183.19 576.98,183.43 578.20,183.67 579.43,183.90 580.65,184.15 581.87,184.41 583.09,184.71 584.32,185.05 585.54,185.43 586.76,185.87 587.98,186.37 589.21,186.93 590.43,187.56 591.65,188.26 592.87,189.02 594.10,189.83 595.32,190.71 596.54,191.63 597.76,192.60 598.99,193.61 600.21,194.64 601.43,195.68 602.65,196.74 603.88,197.79 605.10,198.83 606.32,199.85 607.54,200.84 608.77,201.80 609.99,202.72 611.21,203.59 612.43,204.41 613.66,205.17 614.88,205.89 616.10,206.55 617.32,207.16 618.55,207.72 619.77,208.25 620.99,208.74 622.21,209.21 623.43,209.67 624.66,210.12 625.88,210.58 627.10,211.06 628.32,211.56 629.55,212.10 630.77,212.68 631.99,213.32 633.21,214.00 634.44,214.75 635.66,215.56 636.88,216.43 638.10,217.37 639.33,218.36 640.55,219.40 641.77,220.49 642.99,221.63 644.22,222.80 645.44,224.00 646.66,225.22 647.88,226.45 649.11,227.68 650.33,228.91 651.55,230.12 652.77,231.31 654.00,232.48 655.22,233.61 656.44,234.71 657.66,235.76 658.89,236.76 660.11,237.72 661.33,238.64 662.55,239.51 663.78,240.34 665.00,241.14 666.22,241.91 667.44,242.65 668.67,243.39 669.89,244.12 671.11,244.86 672.33,245.62 673.56,246.39 674.78,247.20 676.00,248.05" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="1.8" stroke-dasharray="5 4"/><text x="127.0" y="46" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">고무 영역</text><text x="353.6" y="46" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">전이 영역</text><text x="606.3" y="46" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">유리 영역</text><text x="79.1" y="236.1" fill="#2F6FC4" font-size="12.5" font-family="IBM Plex Mono, monospace">E′ 저장탄성률</text><text x="567.1" y="209.1" fill="#D07A3B" font-size="12.5" font-family="IBM Plex Mono, monospace">E″ 손실탄성률</text><line x1="595.4" y1="200.8" x2="606.3" y2="124.7" stroke="#D07A3B" stroke-width="1" stroke-opacity=".6"/><text x="366.2" y="107.7" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">tan δ (임의 축)</text><text x="676.0" y="356" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">환산 주파수 ω·a_T [rad/s]</text><text x="57" y="16" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">[MPa]</text></svg></div>
+    <figcaption><b>완성된 마스터커브.</b> 14 decade에 걸쳐 E′는 유리 영역(≈ 2400 MPa)에서 고무 평탄역(≈ 8 MPa)까지 떨어지고, E″는 그 중간에서 봉우리를 만듭니다. 이 곡선이 다음 단계 피팅의 유일한 입력입니다.</figcaption>
+  </figure>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 모델</span>Prony 시리즈</h2>
+  <p>마스터커브는 점 수백 개짜리 표입니다. 솔버는 이걸 그대로 쓰지 않고, <strong>지수함수의 합</strong>이라는 형태로 압축한 것을 원합니다. 이유는 계산 효율입니다. 지수함수 합은 매 시간 스텝마다 내부 변수 몇 개만 업데이트하면 되는 <strong>점화식</strong>으로 적분되기 때문에, 과거 이력 전체를 저장하지 않아도 됩니다.</p>
+
+  <h3>시간 영역</h3>
+  <div class="eq"><b>절대값 형태</b>
+  E(t) = E∞ + Σᵢ Eᵢ · exp( − t / τᵢ )        i = 1 … N
+
+<b>정규화 형태</b> <span class="cm">(솔버가 요구하는 형태)</span>
+  E(t) = E₀ · [ 1 − Σᵢ gᵢ ( 1 − exp( − t/τᵢ ) ) ]
+  gᵢ = Eᵢ / E₀ ,   E₀ = E∞ + Σᵢ Eᵢ ,   g∞ = 1 − Σᵢ gᵢ</div>
+  <p class="eqn">E₀ = 순간(유리) 탄성률, E∞ = 장기(평형) 탄성률, τᵢ = 완화 시간 [s]</p>
+  <p>여기서 <strong>gᵢ는 항상 순간 탄성률 E₀로 나눈 비율</strong>이라는 점이 결정적으로 중요합니다. 세 솔버가 모두 이 규약을 씁니다(08절). 그리고 Σgᵢ &lt; 1이어야 합니다 — 1이 되면 평형 강성이 0인 유체가 됩니다.</p>
+
+  <h3>주파수 영역 — DMA 데이터와 직접 연결되는 식</h3>
+  <div class="eq">E′(ω) = E₀ [ g∞ + Σᵢ gᵢ (ω²τᵢ²) / (1 + ω²τᵢ²) ]
+E″(ω) = E₀ [       Σᵢ gᵢ (ω τᵢ)  / (1 + ω²τᵢ²) ]
+ω = 2π f      <span class="cm">f [Hz] → ω [rad/s]. 이 환산을 빠뜨리는 실수가 매우 잦습니다</span></div>
+  <p>이 두 식이 피팅의 전부입니다. 마스터커브의 (ω·a_T, E′, E″) 점들에 대해 위 식이 최대한 잘 맞도록 (gᵢ, τᵢ)를 고르면 됩니다.</p>
+
+  <figure>
+    <div class="fbox"><svg viewBox="0 0 780 360" role="img" aria-label="각 Prony 항이 손실탄성률에 만드는 봉우리와 그 합" style="width:100%;height:auto;overflow:visible"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".6"/></marker></defs><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,288.00 189.62,288.00 192.17,288.00 194.72,288.00 197.27,288.00 199.82,288.00 202.38,288.00 204.93,288.00 207.48,288.00 210.03,288.00 212.59,288.00 215.14,288.00 217.69,288.00 220.24,288.00 222.79,288.00 225.35,288.00 227.90,288.00 230.45,288.00 233.00,288.00 235.56,288.00 238.11,288.00 240.66,288.00 243.21,288.00 245.77,288.00 248.32,288.00 250.87,288.00 253.42,288.00 255.97,288.00 258.53,288.00 261.08,288.00 263.63,288.00 266.18,288.00 268.74,288.00 271.29,288.00 273.84,288.00 276.39,288.00 278.95,288.00 281.50,288.00 284.05,288.00 286.60,288.00 289.15,288.00 291.71,288.00 294.26,288.00 296.81,288.00 299.36,288.00 301.92,288.00 304.47,288.00 307.02,288.00 309.57,288.00 312.13,288.00 314.68,288.00 317.23,288.00 319.78,288.00 322.33,288.00 324.89,288.00 327.44,288.00 329.99,288.00 332.54,288.00 335.10,288.00 337.65,288.00 340.20,288.00 342.75,288.00 345.31,288.00 347.86,288.00 350.41,288.00 352.96,288.00 355.51,288.00 358.07,288.00 360.62,288.00 363.17,288.00 365.72,288.00 368.28,288.00 370.83,288.00 373.38,288.00 375.93,288.00 378.49,288.00 381.04,288.00 383.59,288.00 386.14,288.00 388.69,288.00 391.25,288.00 393.80,288.00 396.35,288.00 398.90,288.00 401.46,288.00 404.01,288.00 406.56,288.00 409.11,288.00 411.67,288.00 414.22,288.00 416.77,288.00 419.32,288.00 421.87,288.00 424.43,288.00 426.98,288.00 429.53,288.00 432.08,288.00 434.64,288.00 437.19,288.00 439.74,288.00 442.29,288.00 444.85,288.00 447.40,288.00 449.95,288.00 452.50,288.00 455.05,288.00 457.61,288.00 460.16,288.00 462.71,288.00 465.26,288.00 467.82,288.00 470.37,288.00 472.92,288.00 475.47,288.00 478.03,288.00 480.58,288.00 483.13,288.00 485.68,288.00 488.23,288.00 490.79,288.00 493.34,287.99 495.89,287.99 498.44,287.99 501.00,287.99 503.55,287.99 506.10,287.99 508.65,287.99 511.21,287.99 513.76,287.98 516.31,287.98 518.86,287.98 521.41,287.98 523.97,287.97 526.52,287.97 529.07,287.96 531.62,287.96 534.18,287.95 536.73,287.95 539.28,287.94 541.83,287.93 544.38,287.92 546.94,287.91 549.49,287.90 552.04,287.88 554.59,287.86 557.15,287.84 559.70,287.82 562.25,287.79 564.80,287.76 567.36,287.73 569.91,287.69 572.46,287.65 575.01,287.60 577.56,287.54 580.12,287.47 582.67,287.39 585.22,287.31 587.77,287.21 590.33,287.09 592.88,286.96 595.43,286.81 597.98,286.64 600.54,286.44 603.09,286.22 605.64,285.96 608.19,285.67 610.74,285.33 613.30,284.95 615.85,284.51 618.40,284.01 620.95,283.44 623.51,282.79 626.06,282.05 628.61,281.21 631.16,280.25 633.72,279.17 636.27,277.95 638.82,276.57 641.37,275.04 643.92,273.34 646.48,271.47 649.03,269.45 651.58,267.29 654.13,265.04 656.69,262.75 659.24,260.51 661.79,258.43 664.34,256.62 666.90,255.22 669.45,254.32 672.00,254.02" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,288.00 189.62,288.00 192.17,288.00 194.72,288.00 197.27,288.00 199.82,288.00 202.38,288.00 204.93,288.00 207.48,288.00 210.03,288.00 212.59,288.00 215.14,288.00 217.69,288.00 220.24,288.00 222.79,288.00 225.35,288.00 227.90,288.00 230.45,288.00 233.00,288.00 235.56,288.00 238.11,288.00 240.66,288.00 243.21,288.00 245.77,288.00 248.32,288.00 250.87,288.00 253.42,288.00 255.97,288.00 258.53,288.00 261.08,288.00 263.63,288.00 266.18,288.00 268.74,288.00 271.29,288.00 273.84,288.00 276.39,288.00 278.95,288.00 281.50,288.00 284.05,288.00 286.60,288.00 289.15,288.00 291.71,288.00 294.26,288.00 296.81,288.00 299.36,288.00 301.92,288.00 304.47,288.00 307.02,288.00 309.57,288.00 312.13,288.00 314.68,288.00 317.23,288.00 319.78,288.00 322.33,288.00 324.89,288.00 327.44,288.00 329.99,288.00 332.54,288.00 335.10,288.00 337.65,288.00 340.20,288.00 342.75,288.00 345.31,288.00 347.86,288.00 350.41,288.00 352.96,288.00 355.51,288.00 358.07,288.00 360.62,288.00 363.17,288.00 365.72,288.00 368.28,288.00 370.83,288.00 373.38,288.00 375.93,288.00 378.49,288.00 381.04,288.00 383.59,288.00 386.14,288.00 388.69,288.00 391.25,288.00 393.80,288.00 396.35,288.00 398.90,288.00 401.46,288.00 404.01,288.00 406.56,288.00 409.11,288.00 411.67,288.00 414.22,288.00 416.77,288.00 419.32,288.00 421.87,288.00 424.43,288.00 426.98,288.00 429.53,287.99 432.08,287.99 434.64,287.99 437.19,287.99 439.74,287.99 442.29,287.99 444.85,287.99 447.40,287.99 449.95,287.98 452.50,287.98 455.05,287.98 457.61,287.98 460.16,287.97 462.71,287.97 465.26,287.97 467.82,287.96 470.37,287.95 472.92,287.95 475.47,287.94 478.03,287.93 480.58,287.92 483.13,287.91 485.68,287.90 488.23,287.88 490.79,287.87 493.34,287.85 495.89,287.83 498.44,287.80 501.00,287.77 503.55,287.74 506.10,287.70 508.65,287.66 511.21,287.61 513.76,287.55 516.31,287.49 518.86,287.41 521.41,287.33 523.97,287.23 526.52,287.12 529.07,286.99 531.62,286.85 534.18,286.68 536.73,286.49 539.28,286.27 541.83,286.02 544.38,285.74 546.94,285.41 549.49,285.04 552.04,284.61 554.59,284.12 557.15,283.57 559.70,282.93 562.25,282.19 564.80,281.36 567.36,280.40 569.91,279.31 572.46,278.06 575.01,276.63 577.56,275.01 580.12,273.15 582.67,271.04 585.22,268.64 587.77,265.91 590.33,262.83 592.88,259.35 595.43,255.44 597.98,251.08 600.54,246.24 603.09,240.94 605.64,235.19 608.19,229.07 610.74,222.70 613.30,216.24 615.85,209.94 618.40,204.10 620.95,199.07 623.51,195.20 626.06,192.79 628.61,192.05 631.16,193.04 633.72,195.67 636.27,199.73 638.82,204.89 641.37,210.82 643.92,217.16 646.48,223.62 649.03,229.97 651.58,236.04 654.13,241.72 656.69,246.96 659.24,251.73 661.79,256.02 664.34,259.87 666.90,263.29 669.45,266.32 672.00,269.00" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="628.4" y1="288.0" x2="628.4" y2="192.0" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="628.4" cy="192.0" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,288.00 189.62,288.00 192.17,288.00 194.72,288.00 197.27,288.00 199.82,288.00 202.38,288.00 204.93,288.00 207.48,288.00 210.03,288.00 212.59,288.00 215.14,288.00 217.69,288.00 220.24,288.00 222.79,288.00 225.35,288.00 227.90,288.00 230.45,288.00 233.00,288.00 235.56,288.00 238.11,288.00 240.66,288.00 243.21,288.00 245.77,288.00 248.32,288.00 250.87,288.00 253.42,288.00 255.97,288.00 258.53,288.00 261.08,288.00 263.63,288.00 266.18,288.00 268.74,288.00 271.29,288.00 273.84,288.00 276.39,288.00 278.95,288.00 281.50,288.00 284.05,288.00 286.60,288.00 289.15,288.00 291.71,288.00 294.26,288.00 296.81,288.00 299.36,288.00 301.92,288.00 304.47,288.00 307.02,288.00 309.57,288.00 312.13,288.00 314.68,288.00 317.23,288.00 319.78,288.00 322.33,288.00 324.89,288.00 327.44,288.00 329.99,288.00 332.54,288.00 335.10,288.00 337.65,288.00 340.20,288.00 342.75,288.00 345.31,288.00 347.86,288.00 350.41,288.00 352.96,288.00 355.51,288.00 358.07,288.00 360.62,288.00 363.17,288.00 365.72,288.00 368.28,288.00 370.83,288.00 373.38,287.99 375.93,287.99 378.49,287.99 381.04,287.99 383.59,287.99 386.14,287.99 388.69,287.99 391.25,287.99 393.80,287.98 396.35,287.98 398.90,287.98 401.46,287.98 404.01,287.97 406.56,287.97 409.11,287.96 411.67,287.96 414.22,287.95 416.77,287.95 419.32,287.94 421.87,287.93 424.43,287.92 426.98,287.91 429.53,287.90 432.08,287.88 434.64,287.86 437.19,287.84 439.74,287.82 442.29,287.80 444.85,287.77 447.40,287.73 449.95,287.69 452.50,287.65 455.05,287.60 457.61,287.54 460.16,287.47 462.71,287.40 465.26,287.31 467.82,287.21 470.37,287.10 472.92,286.97 475.47,286.82 478.03,286.65 480.58,286.45 483.13,286.23 485.68,285.97 488.23,285.68 490.79,285.34 493.34,284.96 495.89,284.52 498.44,284.02 501.00,283.44 503.55,282.78 506.10,282.03 508.65,281.17 511.21,280.18 513.76,279.05 516.31,277.76 518.86,276.29 521.41,274.60 523.97,272.67 526.52,270.47 529.07,267.95 531.62,265.07 534.18,261.79 536.73,258.05 539.28,253.79 541.83,248.95 544.38,243.45 546.94,237.24 549.49,230.23 552.04,222.36 554.59,213.58 557.15,203.85 559.70,193.19 562.25,181.65 564.80,169.38 567.36,156.62 569.91,143.71 572.46,131.17 575.01,119.61 577.56,109.70 580.12,102.16 582.67,97.57 585.22,96.33 587.77,98.55 590.33,104.04 592.88,112.32 595.43,122.77 597.98,134.69 600.54,147.39 603.09,160.29 605.64,172.95 608.19,185.03 610.74,196.33 613.30,206.73 615.85,216.18 618.40,224.70 620.95,232.32 623.51,239.09 626.06,245.10 628.61,250.40 631.16,255.07 633.72,259.17 636.27,262.77 638.82,265.93 641.37,268.70 643.92,271.13 646.48,273.25 649.03,275.11 651.58,276.73 654.13,278.15 656.69,279.39 659.24,280.48 661.79,281.43 664.34,282.26 666.90,282.98 669.45,283.61 672.00,284.17" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="584.9" y1="288.0" x2="584.9" y2="96.3" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="584.9" cy="96.3" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,288.00 189.62,288.00 192.17,288.00 194.72,288.00 197.27,288.00 199.82,288.00 202.38,288.00 204.93,288.00 207.48,288.00 210.03,288.00 212.59,288.00 215.14,288.00 217.69,288.00 220.24,288.00 222.79,288.00 225.35,288.00 227.90,288.00 230.45,288.00 233.00,288.00 235.56,288.00 238.11,288.00 240.66,288.00 243.21,288.00 245.77,288.00 248.32,288.00 250.87,288.00 253.42,288.00 255.97,288.00 258.53,288.00 261.08,288.00 263.63,288.00 266.18,288.00 268.74,288.00 271.29,288.00 273.84,288.00 276.39,288.00 278.95,288.00 281.50,288.00 284.05,288.00 286.60,288.00 289.15,288.00 291.71,288.00 294.26,288.00 296.81,288.00 299.36,288.00 301.92,288.00 304.47,288.00 307.02,288.00 309.57,288.00 312.13,288.00 314.68,288.00 317.23,288.00 319.78,288.00 322.33,287.99 324.89,287.99 327.44,287.99 329.99,287.99 332.54,287.99 335.10,287.99 337.65,287.99 340.20,287.99 342.75,287.98 345.31,287.98 347.86,287.98 350.41,287.98 352.96,287.97 355.51,287.97 358.07,287.97 360.62,287.96 363.17,287.96 365.72,287.95 368.28,287.94 370.83,287.93 373.38,287.92 375.93,287.91 378.49,287.90 381.04,287.89 383.59,287.87 386.14,287.85 388.69,287.83 391.25,287.80 393.80,287.78 396.35,287.74 398.90,287.71 401.46,287.67 404.01,287.62 406.56,287.56 409.11,287.50 411.67,287.43 414.22,287.34 416.77,287.25 419.32,287.14 421.87,287.02 424.43,286.87 426.98,286.71 429.53,286.52 432.08,286.31 434.64,286.07 437.19,285.79 439.74,285.47 442.29,285.10 444.85,284.68 447.40,284.21 449.95,283.66 452.50,283.03 455.05,282.31 457.61,281.49 460.16,280.55 462.71,279.48 465.26,278.25 467.82,276.84 470.37,275.23 472.92,273.39 475.47,271.29 478.03,268.88 480.58,266.13 483.13,262.98 485.68,259.39 488.23,255.28 490.79,250.60 493.34,245.26 495.89,239.19 498.44,232.28 501.00,224.45 503.55,215.58 506.10,205.59 508.65,194.38 511.21,181.87 513.76,168.03 516.31,152.87 518.86,136.48 521.41,119.07 523.97,100.99 526.52,82.77 529.07,65.11 531.62,48.90 534.18,35.11 536.73,24.72 539.28,18.56 541.83,17.16 544.38,20.64 546.94,28.69 549.49,40.66 552.04,55.61 554.59,72.56 557.15,90.56 559.70,108.79 562.25,126.64 564.80,143.64 567.36,159.52 569.91,174.12 572.46,187.39 575.01,199.34 577.56,210.02 580.12,219.51 582.67,227.92 585.22,235.35 587.77,241.89 590.33,247.64 592.88,252.68 595.43,257.11 597.98,260.99 600.54,264.38 603.09,267.35 605.64,269.95 608.19,272.22 610.74,274.21 613.30,275.95 615.85,277.47 618.40,278.80 620.95,279.96 623.51,280.97 626.06,281.86 628.61,282.63 631.16,283.31 633.72,283.90 636.27,284.42 638.82,284.87 641.37,285.27 643.92,285.61 646.48,285.91 649.03,286.18 651.58,286.41 654.13,286.61 656.69,286.78 659.24,286.94 661.79,287.07 664.34,287.19 666.90,287.29 669.45,287.38 672.00,287.46" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="541.3" y1="288.0" x2="541.3" y2="17.2" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="541.3" cy="17.2" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,288.00 189.62,288.00 192.17,288.00 194.72,288.00 197.27,288.00 199.82,288.00 202.38,288.00 204.93,288.00 207.48,288.00 210.03,288.00 212.59,288.00 215.14,288.00 217.69,288.00 220.24,288.00 222.79,288.00 225.35,288.00 227.90,288.00 230.45,288.00 233.00,288.00 235.56,288.00 238.11,288.00 240.66,288.00 243.21,288.00 245.77,288.00 248.32,288.00 250.87,288.00 253.42,288.00 255.97,288.00 258.53,288.00 261.08,288.00 263.63,288.00 266.18,288.00 268.74,288.00 271.29,288.00 273.84,288.00 276.39,288.00 278.95,287.99 281.50,287.99 284.05,287.99 286.60,287.99 289.15,287.99 291.71,287.99 294.26,287.99 296.81,287.99 299.36,287.98 301.92,287.98 304.47,287.98 307.02,287.98 309.57,287.97 312.13,287.97 314.68,287.97 317.23,287.96 319.78,287.96 322.33,287.95 324.89,287.94 327.44,287.93 329.99,287.92 332.54,287.91 335.10,287.90 337.65,287.89 340.20,287.87 342.75,287.85 345.31,287.83 347.86,287.80 350.41,287.77 352.96,287.74 355.51,287.70 358.07,287.66 360.62,287.61 363.17,287.56 365.72,287.49 368.28,287.42 370.83,287.34 373.38,287.24 375.93,287.13 378.49,287.01 381.04,286.86 383.59,286.70 386.14,286.51 388.69,286.29 391.25,286.05 393.80,285.77 396.35,285.44 398.90,285.07 401.46,284.65 404.01,284.17 406.56,283.62 409.11,282.98 411.67,282.26 414.22,281.43 416.77,280.48 419.32,279.40 421.87,278.16 424.43,276.73 426.98,275.11 429.53,273.25 432.08,271.13 434.64,268.69 437.19,265.92 439.74,262.74 442.29,259.11 444.85,254.97 447.40,250.24 449.95,244.86 452.50,238.72 455.05,231.75 457.61,223.85 460.16,214.91 462.71,204.83 465.26,193.53 467.82,180.92 470.37,166.99 472.92,151.73 475.47,135.27 478.03,117.80 480.58,99.69 483.13,81.48 485.68,63.90 488.23,47.82 490.79,34.24 493.34,24.13 495.89,18.30 498.44,17.24 501.00,21.07 503.55,29.43 506.10,41.64 508.65,56.76 511.21,73.82 513.76,91.86 516.31,110.09 518.86,127.88 521.41,144.82 523.97,160.61 526.52,175.11 529.07,188.29 531.62,200.14 534.18,210.73 536.73,220.15 539.28,228.49 541.83,235.84 544.38,242.32 546.94,248.02 549.49,253.02 552.04,257.40 554.59,261.24 557.15,264.61 559.70,267.55 562.25,270.12 564.80,272.38 567.36,274.34 569.91,276.07 572.46,277.57 575.01,278.89 577.56,280.03 580.12,281.04 582.67,281.92 585.22,282.68 587.77,283.36 590.33,283.94 592.88,284.45 595.43,284.90 597.98,285.29 600.54,285.63 603.09,285.93 605.64,286.19 608.19,286.42 610.74,286.62 613.30,286.79 615.85,286.95 618.40,287.08 620.95,287.20 623.51,287.30 626.06,287.39 628.61,287.46 631.16,287.53 633.72,287.59 636.27,287.64 638.82,287.69 641.37,287.73 643.92,287.76 646.48,287.79 649.03,287.82 651.58,287.84 654.13,287.86 656.69,287.88 659.24,287.89 661.79,287.91 664.34,287.92 666.90,287.93 669.45,287.94 672.00,287.95" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="497.7" y1="288.0" x2="497.7" y2="17.2" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="497.7" cy="17.2" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,288.00 189.62,288.00 192.17,288.00 194.72,288.00 197.27,288.00 199.82,288.00 202.38,288.00 204.93,288.00 207.48,288.00 210.03,288.00 212.59,288.00 215.14,288.00 217.69,288.00 220.24,288.00 222.79,288.00 225.35,288.00 227.90,288.00 230.45,288.00 233.00,288.00 235.56,288.00 238.11,288.00 240.66,288.00 243.21,287.99 245.77,287.99 248.32,287.99 250.87,287.99 253.42,287.99 255.97,287.99 258.53,287.99 261.08,287.99 263.63,287.98 266.18,287.98 268.74,287.98 271.29,287.98 273.84,287.97 276.39,287.97 278.95,287.96 281.50,287.96 284.05,287.95 286.60,287.95 289.15,287.94 291.71,287.93 294.26,287.92 296.81,287.91 299.36,287.89 301.92,287.88 304.47,287.86 307.02,287.84 309.57,287.82 312.13,287.79 314.68,287.76 317.23,287.72 319.78,287.68 322.33,287.64 324.89,287.59 327.44,287.53 329.99,287.46 332.54,287.38 335.10,287.29 337.65,287.19 340.20,287.07 342.75,286.94 345.31,286.78 347.86,286.61 350.41,286.40 352.96,286.17 355.51,285.91 358.07,285.61 360.62,285.26 363.17,284.87 365.72,284.42 368.28,283.90 370.83,283.31 373.38,282.63 375.93,281.85 378.49,280.97 381.04,279.95 383.59,278.79 386.14,277.46 388.69,275.95 391.25,274.21 393.80,272.22 396.35,269.96 398.90,267.36 401.46,264.41 404.01,261.03 406.56,257.18 409.11,252.81 411.67,247.83 414.22,242.19 416.77,235.80 419.32,228.62 421.87,220.55 424.43,211.57 426.98,201.64 429.53,190.79 432.08,179.08 434.64,166.68 437.19,153.85 439.74,140.98 442.29,128.59 444.85,117.32 447.40,107.87 449.95,100.91 452.50,97.02 455.05,96.52 457.61,99.47 460.16,105.60 462.71,114.40 465.26,125.23 467.82,137.36 470.37,150.15 472.92,163.04 475.47,175.60 478.03,187.52 480.58,198.63 483.13,208.83 485.68,218.08 488.23,226.40 490.79,233.84 493.34,240.44 495.89,246.29 498.44,251.45 501.00,255.99 503.55,259.98 506.10,263.49 508.65,266.56 511.21,269.25 513.76,271.61 516.31,273.67 518.86,275.47 521.41,277.05 523.97,278.43 526.52,279.64 529.07,280.69 531.62,281.61 534.18,282.42 536.73,283.12 539.28,283.74 541.83,284.28 544.38,284.75 546.94,285.16 549.49,285.51 552.04,285.83 554.59,286.10 557.15,286.34 559.70,286.55 562.25,286.73 564.80,286.89 567.36,287.03 569.91,287.16 572.46,287.26 575.01,287.35 577.56,287.44 580.12,287.51 582.67,287.57 585.22,287.62 587.77,287.67 590.33,287.71 592.88,287.75 595.43,287.78 597.98,287.81 600.54,287.83 603.09,287.85 605.64,287.87 608.19,287.89 610.74,287.90 613.30,287.91 615.85,287.93 618.40,287.93 620.95,287.94 623.51,287.95 626.06,287.96 628.61,287.96 631.16,287.97 633.72,287.97 636.27,287.97 638.82,287.98 641.37,287.98 643.92,287.98 646.48,287.99 649.03,287.99 651.58,287.99 654.13,287.99 656.69,287.99 659.24,287.99 661.79,287.99 664.34,287.99 666.90,287.99 669.45,288.00 672.00,288.00" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="454.1" y1="288.0" x2="454.1" y2="96.5" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="454.1" cy="96.5" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,288.00 189.62,288.00 192.17,288.00 194.72,288.00 197.27,288.00 199.82,288.00 202.38,288.00 204.93,288.00 207.48,288.00 210.03,288.00 212.59,287.99 215.14,287.99 217.69,287.99 220.24,287.99 222.79,287.99 225.35,287.99 227.90,287.99 230.45,287.99 233.00,287.98 235.56,287.98 238.11,287.98 240.66,287.98 243.21,287.97 245.77,287.97 248.32,287.96 250.87,287.96 253.42,287.95 255.97,287.95 258.53,287.94 261.08,287.93 263.63,287.92 266.18,287.91 268.74,287.89 271.29,287.88 273.84,287.86 276.39,287.84 278.95,287.82 281.50,287.79 284.05,287.76 286.60,287.73 289.15,287.69 291.71,287.64 294.26,287.59 296.81,287.53 299.36,287.46 301.92,287.38 304.47,287.30 307.02,287.19 309.57,287.08 312.13,286.94 314.68,286.79 317.23,286.62 319.78,286.42 322.33,286.19 324.89,285.93 327.44,285.63 329.99,285.29 332.54,284.89 335.10,284.45 337.65,283.93 340.20,283.35 342.75,282.68 345.31,281.91 347.86,281.03 350.41,280.03 352.96,278.88 355.51,277.57 358.07,276.08 360.62,274.37 363.17,272.43 365.72,270.22 368.28,267.70 370.83,264.85 373.38,261.63 375.93,258.00 378.49,253.93 381.04,249.40 383.59,244.40 386.14,238.93 388.69,233.05 391.25,226.82 393.80,220.39 396.35,213.95 398.90,207.78 401.46,202.19 404.01,197.54 406.56,194.16 409.11,192.33 411.67,192.20 414.22,193.80 416.77,196.97 419.32,201.46 421.87,206.94 424.43,213.05 426.98,219.46 429.53,225.91 432.08,232.17 434.64,238.12 437.19,243.65 439.74,248.72 442.29,253.32 444.85,257.45 447.40,261.14 449.95,264.42 452.50,267.32 455.05,269.88 457.61,272.13 460.16,274.11 462.71,275.85 465.26,277.37 467.82,278.70 470.37,279.87 472.92,280.90 475.47,281.79 478.03,282.57 480.58,283.26 483.13,283.85 485.68,284.38 488.23,284.83 490.79,285.23 493.34,285.58 495.89,285.89 498.44,286.15 501.00,286.39 503.55,286.59 506.10,286.77 508.65,286.92 511.21,287.06 513.76,287.18 516.31,287.28 518.86,287.37 521.41,287.45 523.97,287.52 526.52,287.58 529.07,287.63 531.62,287.68 534.18,287.72 536.73,287.76 539.28,287.79 541.83,287.81 544.38,287.84 546.94,287.86 549.49,287.88 552.04,287.89 554.59,287.91 557.15,287.92 559.70,287.93 562.25,287.94 564.80,287.94 567.36,287.95 569.91,287.96 572.46,287.96 575.01,287.97 577.56,287.97 580.12,287.98 582.67,287.98 585.22,287.98 587.77,287.98 590.33,287.99 592.88,287.99 595.43,287.99 597.98,287.99 600.54,287.99 603.09,287.99 605.64,287.99 608.19,287.99 610.74,288.00 613.30,288.00 615.85,288.00 618.40,288.00 620.95,288.00 623.51,288.00 626.06,288.00 628.61,288.00 631.16,288.00 633.72,288.00 636.27,288.00 638.82,288.00 641.37,288.00 643.92,288.00 646.48,288.00 649.03,288.00 651.58,288.00 654.13,288.00 656.69,288.00 659.24,288.00 661.79,288.00 664.34,288.00 666.90,288.00 669.45,288.00 672.00,288.00" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="410.6" y1="288.0" x2="410.6" y2="192.2" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="410.6" cy="192.2" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,288.00 174.30,288.00 176.85,288.00 179.41,288.00 181.96,288.00 184.51,288.00 187.06,287.99 189.62,287.99 192.17,287.99 194.72,287.99 197.27,287.99 199.82,287.99 202.38,287.99 204.93,287.99 207.48,287.99 210.03,287.98 212.59,287.98 215.14,287.98 217.69,287.97 220.24,287.97 222.79,287.97 225.35,287.96 227.90,287.96 230.45,287.95 233.00,287.94 235.56,287.93 238.11,287.93 240.66,287.91 243.21,287.90 245.77,287.89 248.32,287.87 250.87,287.85 253.42,287.83 255.97,287.81 258.53,287.78 261.08,287.75 263.63,287.71 266.18,287.67 268.74,287.62 271.29,287.57 273.84,287.51 276.39,287.43 278.95,287.35 281.50,287.26 284.05,287.15 286.60,287.03 289.15,286.89 291.71,286.73 294.26,286.55 296.81,286.34 299.36,286.10 301.92,285.82 304.47,285.51 307.02,285.15 309.57,284.74 312.13,284.27 314.68,283.74 317.23,283.13 319.78,282.43 322.33,281.64 324.89,280.74 327.44,279.73 329.99,278.57 332.54,277.28 335.10,275.83 337.65,274.21 340.20,272.43 342.75,270.48 345.31,268.38 347.86,266.17 350.41,263.89 352.96,261.62 355.51,259.44 358.07,257.48 360.62,255.86 363.17,254.70 365.72,254.10 368.28,254.10 370.83,254.70 373.38,255.86 375.93,257.48 378.49,259.44 381.04,261.62 383.59,263.89 386.14,266.17 388.69,268.38 391.25,270.48 393.80,272.43 396.35,274.21 398.90,275.83 401.46,277.28 404.01,278.57 406.56,279.73 409.11,280.74 411.67,281.64 414.22,282.43 416.77,283.13 419.32,283.74 421.87,284.27 424.43,284.74 426.98,285.15 429.53,285.51 432.08,285.82 434.64,286.10 437.19,286.34 439.74,286.55 442.29,286.73 444.85,286.89 447.40,287.03 449.95,287.15 452.50,287.26 455.05,287.35 457.61,287.43 460.16,287.51 462.71,287.57 465.26,287.62 467.82,287.67 470.37,287.71 472.92,287.75 475.47,287.78 478.03,287.81 480.58,287.83 483.13,287.85 485.68,287.87 488.23,287.89 490.79,287.90 493.34,287.91 495.89,287.93 498.44,287.93 501.00,287.94 503.55,287.95 506.10,287.96 508.65,287.96 511.21,287.97 513.76,287.97 516.31,287.97 518.86,287.98 521.41,287.98 523.97,287.98 526.52,287.99 529.07,287.99 531.62,287.99 534.18,287.99 536.73,287.99 539.28,287.99 541.83,287.99 544.38,287.99 546.94,287.99 549.49,288.00 552.04,288.00 554.59,288.00 557.15,288.00 559.70,288.00 562.25,288.00 564.80,288.00 567.36,288.00 569.91,288.00 572.46,288.00 575.01,288.00 577.56,288.00 580.12,288.00 582.67,288.00 585.22,288.00 587.77,288.00 590.33,288.00 592.88,288.00 595.43,288.00 597.98,288.00 600.54,288.00 603.09,288.00 605.64,288.00 608.19,288.00 610.74,288.00 613.30,288.00 615.85,288.00 618.40,288.00 620.95,288.00 623.51,288.00 626.06,288.00 628.61,288.00 631.16,288.00 633.72,288.00 636.27,288.00 638.82,288.00 641.37,288.00 643.92,288.00 646.48,288.00 649.03,288.00 651.58,288.00 654.13,288.00 656.69,288.00 659.24,288.00 661.79,288.00 664.34,288.00 666.90,288.00 669.45,288.00 672.00,288.00" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="367.0" y1="288.0" x2="367.0" y2="254.1" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="367.0" cy="254.1" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,288.00 151.33,288.00 153.88,288.00 156.44,288.00 158.99,288.00 161.54,288.00 164.09,288.00 166.64,288.00 169.20,288.00 171.75,287.99 174.30,287.99 176.85,287.99 179.41,287.99 181.96,287.99 184.51,287.99 187.06,287.99 189.62,287.99 192.17,287.98 194.72,287.98 197.27,287.98 199.82,287.98 202.38,287.97 204.93,287.97 207.48,287.96 210.03,287.96 212.59,287.95 215.14,287.94 217.69,287.94 220.24,287.93 222.79,287.92 225.35,287.90 227.90,287.89 230.45,287.87 233.00,287.86 235.56,287.84 238.11,287.81 240.66,287.79 243.21,287.75 245.77,287.72 248.32,287.68 250.87,287.63 253.42,287.58 255.97,287.52 258.53,287.45 261.08,287.37 263.63,287.28 266.18,287.18 268.74,287.06 271.29,286.92 273.84,286.77 276.39,286.59 278.95,286.39 281.50,286.16 284.05,285.91 286.60,285.62 289.15,285.29 291.71,284.92 294.26,284.51 296.81,284.06 299.36,283.57 301.92,283.05 304.47,282.49 307.02,281.92 309.57,281.35 312.13,280.81 314.68,280.32 317.23,279.92 319.78,279.64 322.33,279.50 324.89,279.51 327.44,279.67 329.99,279.97 332.54,280.39 335.10,280.88 337.65,281.43 340.20,282.00 342.75,282.57 345.31,283.12 347.86,283.65 350.41,284.13 352.96,284.58 355.51,284.98 358.07,285.34 360.62,285.66 363.17,285.95 365.72,286.20 368.28,286.42 370.83,286.62 373.38,286.79 375.93,286.94 378.49,287.07 381.04,287.19 383.59,287.29 386.14,287.38 388.69,287.46 391.25,287.53 393.80,287.59 396.35,287.64 398.90,287.68 401.46,287.72 404.01,287.76 406.56,287.79 409.11,287.82 411.67,287.84 414.22,287.86 416.77,287.88 419.32,287.89 421.87,287.91 424.43,287.92 426.98,287.93 429.53,287.94 432.08,287.95 434.64,287.95 437.19,287.96 439.74,287.96 442.29,287.97 444.85,287.97 447.40,287.98 449.95,287.98 452.50,287.98 455.05,287.98 457.61,287.99 460.16,287.99 462.71,287.99 465.26,287.99 467.82,287.99 470.37,287.99 472.92,287.99 475.47,287.99 478.03,288.00 480.58,288.00 483.13,288.00 485.68,288.00 488.23,288.00 490.79,288.00 493.34,288.00 495.89,288.00 498.44,288.00 501.00,288.00 503.55,288.00 506.10,288.00 508.65,288.00 511.21,288.00 513.76,288.00 516.31,288.00 518.86,288.00 521.41,288.00 523.97,288.00 526.52,288.00 529.07,288.00 531.62,288.00 534.18,288.00 536.73,288.00 539.28,288.00 541.83,288.00 544.38,288.00 546.94,288.00 549.49,288.00 552.04,288.00 554.59,288.00 557.15,288.00 559.70,288.00 562.25,288.00 564.80,288.00 567.36,288.00 569.91,288.00 572.46,288.00 575.01,288.00 577.56,288.00 580.12,288.00 582.67,288.00 585.22,288.00 587.77,288.00 590.33,288.00 592.88,288.00 595.43,288.00 597.98,288.00 600.54,288.00 603.09,288.00 605.64,288.00 608.19,288.00 610.74,288.00 613.30,288.00 615.85,288.00 618.40,288.00 620.95,288.00 623.51,288.00 626.06,288.00 628.61,288.00 631.16,288.00 633.72,288.00 636.27,288.00 638.82,288.00 641.37,288.00 643.92,288.00 646.48,288.00 649.03,288.00 651.58,288.00 654.13,288.00 656.69,288.00 659.24,288.00 661.79,288.00 664.34,288.00 666.90,288.00 669.45,288.00 672.00,288.00" fill="none" stroke="currentColor" stroke-opacity=".42" stroke-width="1.3"/><line x1="323.4" y1="288.0" x2="323.4" y2="279.5" stroke="currentColor" stroke-opacity=".14" stroke-width="1"/><circle cx="323.4" cy="279.5" r="2.6" fill="currentColor" fill-opacity=".55"/><polyline points="62.00,288.00 64.55,288.00 67.10,288.00 69.66,288.00 72.21,288.00 74.76,288.00 77.31,288.00 79.87,288.00 82.42,288.00 84.97,288.00 87.52,288.00 90.08,288.00 92.63,288.00 95.18,288.00 97.73,288.00 100.28,288.00 102.84,288.00 105.39,288.00 107.94,288.00 110.49,288.00 113.05,288.00 115.60,288.00 118.15,288.00 120.70,288.00 123.26,288.00 125.81,288.00 128.36,288.00 130.91,288.00 133.46,288.00 136.02,288.00 138.57,288.00 141.12,288.00 143.67,288.00 146.23,288.00 148.78,287.99 151.33,287.99 153.88,287.99 156.44,287.99 158.99,287.99 161.54,287.99 164.09,287.99 166.64,287.99 169.20,287.98 171.75,287.98 174.30,287.98 176.85,287.98 179.41,287.97 181.96,287.97 184.51,287.96 187.06,287.96 189.62,287.95 192.17,287.95 194.72,287.94 197.27,287.93 199.82,287.92 202.38,287.91 204.93,287.89 207.48,287.88 210.03,287.86 212.59,287.84 215.14,287.82 217.69,287.79 220.24,287.76 222.79,287.72 225.35,287.68 227.90,287.64 230.45,287.59 233.00,287.53 235.56,287.46 238.11,287.38 240.66,287.30 243.21,287.20 245.77,287.08 248.32,286.96 250.87,286.81 253.42,286.65 255.97,286.47 258.53,286.27 261.08,286.05 263.63,285.81 266.18,285.54 268.74,285.27 271.29,284.97 273.84,284.66 276.39,284.34 278.95,284.01 281.50,283.66 284.05,283.29 286.60,282.89 289.15,282.45 291.71,281.95 294.26,281.40 296.81,280.77 299.36,280.05 301.92,279.25 304.47,278.37 307.02,277.40 309.57,276.35 312.13,275.25 314.68,274.10 317.23,272.94 319.78,271.76 322.33,270.60 324.89,269.43 327.44,268.24 329.99,266.99 332.54,265.66 335.10,264.17 337.65,262.49 340.20,260.57 342.75,258.39 345.31,255.91 347.86,253.15 350.41,250.13 352.96,246.90 355.51,243.52 358.07,240.08 360.62,236.69 363.17,233.42 365.72,230.33 368.28,227.45 370.83,224.72 373.38,222.05 375.93,219.30 378.49,216.30 381.04,212.89 383.59,208.92 386.14,204.29 388.69,198.94 391.25,192.87 393.80,186.14 396.35,178.92 398.90,171.41 401.46,163.89 404.01,156.66 406.56,150.00 409.11,144.13 411.67,139.15 414.22,135.00 416.77,131.45 419.32,128.18 421.87,124.77 424.43,120.80 426.98,115.91 429.53,109.80 432.08,102.33 434.64,93.46 437.19,83.33 439.74,72.22 442.29,60.60 444.85,49.04 447.40,38.17 449.95,28.65 452.50,20.96 455.05,15.38 457.61,11.87 460.16,10.10 462.71,9.48 465.26,9.26 467.82,8.67 470.37,7.00 472.92,3.72 475.47,-1.53 478.03,-8.85 480.58,-18.10 483.13,-28.87 485.68,-40.52 488.23,-52.22 490.79,-62.99 493.34,-71.87 495.89,-78.08 498.44,-81.13 501.00,-80.96 503.55,-77.96 506.10,-72.85 508.65,-66.60 511.21,-60.26 513.76,-54.77 516.31,-50.89 518.86,-49.13 521.41,-49.73 523.97,-52.59 526.52,-57.35 529.07,-63.38 531.62,-69.80 534.18,-75.61 536.73,-79.78 539.28,-81.44 541.83,-80.01 544.38,-75.35 546.94,-67.72 549.49,-57.78 552.04,-46.43 554.59,-34.64 557.15,-23.33 559.70,-13.25 562.25,-4.94 564.80,1.35 567.36,5.59 569.91,8.01 572.46,9.06 575.01,9.37 577.56,9.69 580.12,10.80 582.67,13.38 585.22,17.90 587.77,24.55 590.33,33.21 592.88,43.48 595.43,54.77 597.98,66.44 600.54,77.87 603.09,88.54 605.64,98.07 608.19,106.24 610.74,113.02 613.30,118.49 615.85,122.88 618.40,126.52 620.95,129.81 623.51,133.17 626.06,136.98 628.61,141.53 631.16,146.96 633.72,153.24 636.27,160.22 638.82,167.63 641.37,175.19 643.92,182.58 646.48,189.58 649.03,195.99 651.58,201.71 654.13,206.70 656.69,210.98 659.24,214.66 661.79,217.84 664.34,220.69 666.90,223.39 669.45,226.07 672.00,228.87" fill="none" stroke="#D07A3B" stroke-width="2.8"/><line x1="62" y1="288.0" x2="672" y2="288.0" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><line x1="62" y1="26" x2="62" y2="288.0" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/><text x="62.0" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻⁵</text><text x="149.1" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻³</text><text x="236.3" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁻¹</text><text x="323.4" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10¹</text><text x="410.6" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10³</text><text x="497.7" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁵</text><text x="584.9" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁷</text><text x="672.0" y="306.0" text-anchor="middle" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">10⁹</text><text x="567.4" y="42" fill="#D07A3B" font-size="12.5" font-family="IBM Plex Mono, monospace">E″ = Σ 각 항의 기여</text><text x="79.4" y="42" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">가지 1개 = (E_i, τ_i) 한 쌍</text><text x="79.4" y="59" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">봉우리 위치 ω = 1/τ_i</text><text x="672.0" y="324.0" text-anchor="end" fill="currentColor" fill-opacity=".62" font-size="11.5" font-family="IBM Plex Mono, ui-monospace, monospace">환산 주파수 ω·a_T [rad/s]</text></svg></div>
+    <figcaption><b>Prony 항 하나 = 봉우리 하나.</b> 각 항은 ω = 1/τᵢ 에서 최대가 되는 종 모양 곡선을 손실 탄성률에 기여합니다(가는 선). 굵은 선은 그 합. 그래서 <b>커버하고 싶은 주파수 범위마다 τᵢ가 하나씩 있어야</b> 하고, τ가 없는 구간은 모델이 볼 수 없습니다.</figcaption>
+  </figure>
+
+  <h3>항을 몇 개 쓸 것인가</h3>
+  <ul>
+    <li><strong>decade당 1개(넉넉히는 2개)</strong>가 표준입니다. 마스터커브가 12 decade면 12–15개 정도.</li>
+    <li>τᵢ는 <strong>log 등간격으로 미리 고정</strong>하는 것이 정석입니다(τ = 10⁻⁸, 10⁻⁷, … ). 이렇게 하면 미지수가 gᵢ뿐이라 문제가 선형이 되어 안정적으로 풀립니다.</li>
+    <li>τ 범위는 마스터커브의 주파수 범위와 짝을 맞춥니다: ω_max ↔ τ_min ≈ 1/ω_max, ω_min ↔ τ_max ≈ 1/ω_min.</li>
+    <li>항을 늘릴수록 곡선은 잘 맞지만 계산 비용이 늘고 gᵢ가 음수로 튀기 쉽습니다. <strong>과적합은 이득이 없습니다.</strong></li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 피팅</span>마스터커브를 (gᵢ, τᵢ)로 바꾸기</h2>
+  <p class="lede">τᵢ를 log 등간격으로 <strong>미리 고정</strong>해버리면, 남는 미지수 gᵢ에 대해 문제가 완전히 선형이 됩니다. 비선형 최적화의 초기값 문제·국소 최소값 문제가 통째로 사라지므로 실무에서는 거의 항상 이 방법을 씁니다.</p>
+
+  <h3>선형화되는 이유</h3>
+  <div class="eq">E₀ − E′(ω) = E₀ · Σᵢ gᵢ · 1 / (1 + ω²τᵢ²)      <span class="cm">gᵢ에 대해 선형</span>
+      E″(ω) = E₀ · Σᵢ gᵢ · ωτᵢ / (1 + ω²τᵢ²)      <span class="cm">gᵢ에 대해 선형</span></div>
+  <p>두 식을 세로로 쌓으면 <strong>A·g = b</strong> 꼴의 과결정 연립방정식이 됩니다. 여기에 gᵢ ≥ 0 제약을 건 최소제곱(NNLS)을 풀면 끝입니다. 음수 gᵢ는 물리적으로 음의 강성을 뜻하고 솔버를 불안정하게 만들기 때문에, 제약을 거는 것이 사후에 손으로 고치는 것보다 훨씬 낫습니다.</p>
+
+  <pre><i># 마스터커브(rad/s, MPa) → Prony 계수</i>
+import numpy as np
+from scipy.optimize import nnls
+
+w, Ep, Epp = np.loadtxt("master.csv", delimiter=",", unpack=True)   <i># ω, E′, E″</i>
+
+E0  = Ep.max()                        <i># 유리 영역 평탄값 = 순간 탄성률</i>
+tau = np.logspace(-8, 2, 11)          <i># decade당 1개, log 등간격으로 <b>고정</b></i>
+
+W, T = np.meshgrid(w, tau, indexing="ij")
+A1 = E0 / (1 + (W*T)**2)              <i># E₀ − E′  =  A1 · g</i>
+A2 = E0 * (W*T) / (1 + (W*T)**2)      <i># E″       =  A2 · g</i>
+b1, b2 = E0 - Ep, Epp
+
+<i># 상대오차 가중: 저주파 고무영역과 고주파 유리영역을 대등하게 취급</i>
+s1 = 1/np.maximum(np.abs(b1), 1e-6)
+s2 = 1/np.maximum(np.abs(b2), 1e-6)
+A  = np.vstack([A1*s1[:,None], A2*s2[:,None]])
+b  = np.concatenate([b1*s1,    b2*s2])
+
+<b>g, _ = nnls(A, b)</b>                     <i># gᵢ ≥ 0 을 강제로 만족시키며 최소제곱</i>
+
+assert g.sum() &lt; 1.0, "Σgᵢ ≥ 1 → 평형 강성이 0. 항 수나 τ 범위를 조정하세요"
+print("E_inf =", E0*(1-g.sum()), "MPa")
+for gi, ti in zip(g, tau):
+    print(f"{gi:12.6f}{ti:14.3e}")</pre>
+
+  <h3>피팅에서 반드시 지킬 것</h3>
+  <ol class="tight">
+    <li><strong>E′와 E″를 같이 맞추세요.</strong> E′만 맞추면 강성은 맞는데 감쇠가 틀린 카드가 나옵니다. NVH 해석에서는 그게 곧 오답입니다.</li>
+    <li><strong>절대오차가 아니라 상대오차(로그 가중)로.</strong> 그냥 최소제곱을 돌리면 값이 큰 유리 영역만 맞추고 고무 영역은 버립니다.</li>
+    <li><strong>E₀를 어디서 잡을지 정하세요.</strong> 마스터커브가 유리 평탄역까지 닿았다면 그 값이 E₀입니다. 안 닿았다면 E₀도 미지수로 두거나, 저온 데이터를 추가로 재야 합니다.</li>
+    <li><strong>데이터가 없는 구간으로 외삽하지 마세요.</strong> τ를 데이터 범위 밖까지 늘리면 그 항의 gᵢ는 순전히 수치적 잡음입니다.</li>
+    <li><strong>gᵢ가 이웃끼리 크게 진동하면 항이 너무 많은 것</strong>입니다. 항 수를 줄이거나 Tikhonov 정규화(λ‖g‖² 항 추가)를 거세요.</li>
+  </ol>
+
+  <h3>예제 결과 — 이 문서의 모든 그래프를 만든 세트</h3>
+  <p>인장 기준 E₀ = 2400 MPa, T_ref = 25 °C, WLF C₁ = 10 / C₂ = 150 °C.</p>
+  <div class="tw"><table>
+    <thead><tr><th class="n">i</th><th class="n">gᵢ</th><th class="n">τᵢ [s]</th><th class="n">Eᵢ = gᵢE₀ [MPa]</th><th class="n">βᵢ = 1/τᵢ [1/s]</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td class="n">0.00125</td><td class="n">1.0E−11</td><td class="n">3.0</td><td class="n">1.0E+11</td></tr>
+      <tr><td class="n">2</td><td class="n">0.00704</td><td class="n">1.0E−10</td><td class="n">16.9</td><td class="n">1.0E+10</td></tr>
+      <tr><td class="n">3</td><td class="n">0.02810</td><td class="n">1.0E−09</td><td class="n">67.4</td><td class="n">1.0E+09</td></tr>
+      <tr><td class="n">4</td><td class="n">0.07935</td><td class="n">1.0E−08</td><td class="n">190.4</td><td class="n">1.0E+08</td></tr>
+      <tr><td class="n">5</td><td class="n">0.15853</td><td class="n">1.0E−07</td><td class="n">380.5</td><td class="n">1.0E+07</td></tr>
+      <tr><td class="n">6</td><td class="n">0.22407</td><td class="n">1.0E−06</td><td class="n">537.8</td><td class="n">1.0E+06</td></tr>
+      <tr><td class="n">7</td><td class="n">0.22407</td><td class="n">1.0E−05</td><td class="n">537.8</td><td class="n">1.0E+05</td></tr>
+      <tr><td class="n">8</td><td class="n">0.15853</td><td class="n">1.0E−04</td><td class="n">380.5</td><td class="n">1.0E+04</td></tr>
+      <tr><td class="n">9</td><td class="n">0.07935</td><td class="n">1.0E−03</td><td class="n">190.4</td><td class="n">1.0E+03</td></tr>
+      <tr><td class="n">10</td><td class="n">0.02810</td><td class="n">1.0E−02</td><td class="n">67.4</td><td class="n">1.0E+02</td></tr>
+      <tr><td class="n">11</td><td class="n">0.00704</td><td class="n">1.0E−01</td><td class="n">16.9</td><td class="n">1.0E+01</td></tr>
+      <tr><td class="n">12</td><td class="n">0.00125</td><td class="n">1.0E+00</td><td class="n">3.0</td><td class="n">1.0E+00</td></tr>
+      <tr><td class="n"><b>Σ</b></td><td class="n"><b>0.99670</b></td><td class="n">g∞ = 0.00330</td><td class="n">E∞ = 7.9</td><td class="n">—</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>τ 범위는 해석 목적에 맞춰 잘라내세요</h4>
+    <p>위 세트의 τ = 10⁻¹¹ s는 “25 °C 기준”이라 극단적으로 작아 보이지만, 저온(−40 °C)에서는 a_T ≈ 10⁺⁷·⁶만큼 느려져 실제로는 10⁻³·⁴ s 영역의 거동을 담당합니다. 그래도 <strong>양함수(explicit) 해석</strong>에서는 βᵢ = 10¹¹ 같은 값이 시간 스텝보다 훨씬 빨라 계산에 아무 기여도 못 하면서 불안정만 유발할 수 있습니다. 해석 시간 스케일에서 의미 없는 항은 병합하거나 삭제하고, 그만큼을 E₀에 흡수시키는 것이 실무적입니다.</p>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 변환</span>인장에서 전단·체적으로</h2>
+  <p>DMA는 대개 E(인장/굽힘)로 재는데, 솔버 Prony 카드는 G(전단)와 K(체적) 기준입니다. 등방 선형 탄성 관계는 다음과 같습니다.</p>
+  <div class="eq">G = E / [ 2 (1 + ν) ]        K = E / [ 3 (1 − 2ν) ]        E = 9KG / (3K + G)</div>
+  <p>문제는 <strong>ν도 시간에 따라 변한다</strong>는 것입니다. 유리 상태의 고무는 ν ≈ 0.35지만, 고무 상태에서는 ν → 0.4995에 가깝습니다. 그래서 두 가지 가정 중 하나를 골라야 합니다.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>가정 A · ν 일정 (간편)</h4>
+      <p>G(t) ∝ E(t)이므로 <strong>gᵢ가 그대로 이전</strong>되고 kᵢ = gᵢ가 됩니다. 계산은 쉽지만 체적도 전단만큼 완화한다는 뜻이라 고분자 물리와 어긋납니다. 전단 지배 문제에서만 쓰세요.</p>
+    </div>
+    <div class="card">
+      <h4>가정 B · K 일정 (권장)</h4>
+      <p>체적 완화는 무시하고(kᵢ = 0) K를 상수로 둡니다. 그러면 <strong>G(t) = 3K·E(t) / (9K − E(t))</strong>로 시간 이력을 변환한 뒤 그 곡선에 다시 Prony를 피팅합니다. ν가 자동으로 0.35 → 0.5로 변해 물리에 맞습니다.</p>
+    </div>
+  </div>
+
+  <div class="note trap">
+    <h4>흔한 함정 · gᵢ를 그냥 복사하기</h4>
+    <p>E의 gᵢ를 그대로 G의 gᵢ로 쓰는 것은 <strong>가정 A를 암묵적으로 채택한 것</strong>입니다. 인장 탄성률이 2 decade 이상 변하는 재료(= 대부분의 고무)라면 가정 B와 결과가 눈에 띄게 달라집니다. 어느 쪽을 썼는지 물성 카드 주석에 반드시 남기세요.</p>
+  </div>
+
+  <h3>고무의 K는 어떻게 잡나</h3>
+  <ul class="tight">
+    <li>정확히는 <strong>구속 압축 시험(confined compression)</strong>이나 PVT 시험으로 잽니다.</li>
+    <li>없으면 통상 K ≈ 1000 – 2500 MPa를 씁니다. 이 문서 예제는 고무 상태 E∞ = 7.9 MPa, ν = 0.4995 → K ≈ 1330 MPa를 사용했습니다.</li>
+    <li>거의 비압축성이므로 <strong>하이브리드(혼합 정식화) 요소</strong>를 쓰세요. 일반 요소로는 체적 잠김(volumetric locking)이 납니다.</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 카드</span>솔버별 물성 카드 만들기</h2>
+  <p class="lede">여기서 사고가 가장 많이 납니다. 세 솔버 모두 gᵢ를 <strong>순간(유리) 탄성률 기준 비율</strong>로 받지만, <strong>함께 주는 탄성 상수가 순간값인지 장기값인지</strong>에 대한 기본 규약이 서로 다릅니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th></th><th>Abaqus</th><th>LS-DYNA</th><th>Ansys APDL</th></tr></thead>
+    <tbody>
+      <tr><td>시간 상수</td><td class="k">τᵢ (완화 시간)</td><td class="k">BETAI = 1/τ (감쇠 상수)</td><td class="k">τᵢ (완화 시간)</td></tr>
+      <tr><td>계수 형태</td><td>gᵢ — 순간값 대비 <b>비율</b></td><td>GI — <b>절대</b> 전단탄성률</td><td>gᵢ — 순간값 대비 <b>비율</b></td></tr>
+      <tr><td>전단+체적</td><td>한 줄에 gᵢ, kᵢ 함께</td><td>한 줄에 GI, BETAI, KI, BETAKI</td><td>SHEAR / BULK 표를 <b>따로</b></td></tr>
+      <tr><td>같이 주는 탄성 상수</td><td><b>기본이 장기(LONG TERM)</b> — 유리값을 주려면 <code>MODULI=INSTANTANEOUS</code> 명시</td><td>G0(순간)와 GI(장기)를 카드에 모두 기입</td><td><b>항상 순간(유리)값</b>으로 해석됨</td></tr>
+      <tr><td>WLF 입력</td><td><code>*TRS</code> → T_ref, C₁, C₂</td><td>MAT 카드의 TREF, A, B</td><td><code>TB,SHIFT</code> → Tr, C₁, C₂</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Abaqus</h3>
+  <pre>*MATERIAL, NAME=RUBBER_VISCO
+<i>** 순간(유리) 탄성률로 주겠다고 반드시 선언 — 기본값은 LONG TERM</i>
+<b>*ELASTIC, MODULI=INSTANTANEOUS</b>
+<i>**  E0[MPa],   nu</i>
+   2400.0,   0.4995
+<i>**  g_i,      k_i,     tau_i[s]</i>
+<b>*VISCOELASTIC, TIME=PRONY</b>
+  0.00125,   0.0,   1.0E-11
+  0.00704,   0.0,   1.0E-10
+  0.02810,   0.0,   1.0E-09
+  0.07935,   0.0,   1.0E-08
+  0.15853,   0.0,   1.0E-07
+  0.22407,   0.0,   1.0E-06
+  0.22407,   0.0,   1.0E-05
+  0.15853,   0.0,   1.0E-04
+  0.07935,   0.0,   1.0E-03
+  0.02810,   0.0,   1.0E-02
+  0.00704,   0.0,   1.0E-01
+  0.00125,   0.0,   1.0E+00
+<i>**  theta_0(기준온도), C1, C2</i>
+<b>*TRS, DEFINITION=WLF</b>
+   25.0,   10.0,   150.0</pre>
+  <ul class="tight">
+    <li>대변형 고무라면 <code>*ELASTIC</code> 대신 <code>*HYPERELASTIC, OGDEN, N=3, MODULI=INSTANTANEOUS</code> 를 쓰고 그 아래에 같은 <code>*VISCOELASTIC</code>을 붙입니다. 이때 초탄성 계수는 <strong>순간(고속) 시험 기준</strong>으로 피팅된 값이어야 합니다.</li>
+    <li>주파수 영역 해석(steady-state dynamics)에서는 규약이 반대입니다. 주파수 영역 점탄성은 <strong>장기 탄성률을 기준</strong>으로 정의되므로 <code>*ELASTIC, MODULI=LONG TERM</code>(기본값)을 써야 합니다.</li>
+    <li>DMA 결과를 피팅 없이 표로 직접 넣고 싶다면 <code>*VISCOELASTIC, FREQUENCY=TABULAR</code>가 있습니다. 데이터 열 순서는 <code>ω·Re(g*), ω·Im(g*), ω·Re(k*), ω·Im(k*), f</code>이고 마지막 열의 f는 <strong>rad/s가 아니라 cycles/time</strong>입니다. 단, 이 경로는 주파수 영역 해석에만 쓰입니다.</li>
+    <li>Arrhenius가 필요하면 <code>*TRS, DEFINITION=ARRHENIUS</code>에 (기준온도, 활성화 에너지)를 주고, <code>*PHYSICAL CONSTANTS</code>에 기체상수와 절대영도를 정의해야 합니다.</li>
+  </ul>
+
+  <h3>LS-DYNA</h3>
+  <pre>$ 단위계: mm / ton / s → MPa,  RO = 1.1E-9 ton/mm^3
+<b>*MAT_GENERAL_VISCOELASTIC</b>
+$      MID        RO      BULK       PCF        EF      TREF         A         B
+         1   1.10E-9    1333.0       0.0       0.0      25.0      10.0     150.0
+$     LCID        NT    BSTART     TRAMP     LCIDK       NTK   BSTARTK    TRAMPK
+         0         0       0.0       0.0         0         0       0.0       0.0
+$       GI     BETAI        KI    BETAKI      <i>&lt;- GI = g_i · G0,  BETAI = 1/tau_i</i>
+       1.00   1.00E11       0.0       0.0
+       5.63   1.00E10       0.0       0.0
+      22.48   1.00E09       0.0       0.0
+      63.48   1.00E08       0.0       0.0
+     126.82   1.00E07       0.0       0.0
+     179.26   1.00E06       0.0       0.0
+     179.26   1.00E05       0.0       0.0
+     126.82   1.00E04       0.0       0.0
+      63.48   1.00E03       0.0       0.0
+      22.48   1.00E02       0.0       0.0
+       5.63   1.00E01       0.0       0.0
+       1.00   1.00E00       0.0       0.0</pre>
+  <ul class="tight">
+    <li>G₀ = E₀/3 ≈ 800 MPa(비압축성 근사)로 두고 GI = gᵢ·G₀를 계산했습니다. <strong>비율이 아니라 절대 탄성률</strong>이라는 점이 Abaqus/Ansys와 가장 다릅니다.</li>
+    <li>카드 1의 <strong>TREF, A, B가 시프트 함수</strong>입니다. WLF는 exp[−A(T−T_ref)/(B+T−T_ref)], Arrhenius는 exp[−A(1/T − 1/T_ref)] 형태입니다. 두 형태 중 무엇이 적용되는지는 릴리스별 키워드 매뉴얼에서 반드시 확인하세요.</li>
+    <li>카드 2(LCID … TRAMPK)는 <strong>완화 시험 곡선을 주면 LS-DYNA가 직접 Prony를 피팅</strong>해 주는 경로입니다. 직접 gᵢ를 넣을 때는 0으로 둡니다. 항 수 상한은 릴리스에 따라 6 또는 18이니 확인이 필요합니다.</li>
+    <li>빠른 단일 항 근사가 필요하면 <code>*MAT_VISCOELASTIC</code>(MAT_006): <code>MID, RO, BULK, G0, GI, BETA</code> 순서이고 여기서 GI는 <strong>장기 전단탄성률 G∞</strong>입니다.</li>
+    <li>대변형 고무는 <code>*MAT_OGDEN_RUBBER</code>(077_O) 또는 <code>*MAT_HYPERELASTIC_RUBBER</code>(077_H)에서 <strong>NV</strong>(Prony 항 수)를 주고 아래에 (GI, BETAI) 쌍을 나열합니다.</li>
+    <li><strong>양함수 해석 주의:</strong> BETAI가 1/Δt보다 훨씬 크면 그 항은 매 스텝 완전히 완화되어 기여가 사라지고 수치 잡음만 남습니다. 시간 스텝에 맞춰 항을 정리하세요.</li>
+  </ul>
+
+  <h3>Ansys Mechanical APDL</h3>
+  <pre>MP,EX,1,2400.0          <i>! 순간(유리) 탄성률 — Ansys는 이 값을 t=0 값으로 해석</i>
+MP,PRXY,1,0.4995
+
+<b>TB,PRONY,1,,12,SHEAR</b>    <i>! NPTS = 12 항</i>
+TBDATA,1,  0.00125, 1.0E-11, 0.00704, 1.0E-10, 0.02810, 1.0E-09
+TBDATA,7,  0.07935, 1.0E-08, 0.15853, 1.0E-07, 0.22407, 1.0E-06
+TBDATA,13, 0.22407, 1.0E-05, 0.15853, 1.0E-04, 0.07935, 1.0E-03
+TBDATA,19, 0.02810, 1.0E-02, 0.00704, 1.0E-01, 0.00125, 1.0E+00
+
+<b>TB,SHIFT,1,,3,WLF</b>       <i>! Tr, C1, C2</i>
+TBDATA,1,  25.0, 10.0, 150.0</pre>
+  <ul class="tight">
+    <li><code>TBDATA</code>는 <strong>(gᵢ, τᵢ) 쌍이 번갈아</strong> 들어갑니다. 위치 인덱스는 2·NPTS까지.</li>
+    <li>체적 완화가 있으면 <code>TB,PRONY,1,,n,BULK</code> 표를 <strong>따로</strong> 만듭니다. 없으면 아예 정의하지 않으면 됩니다.</li>
+    <li>Σgᵢ는 0과 1 사이여야 합니다. 1을 넘으면 음의 강성이 되어 해가 발산합니다.</li>
+    <li>유리 전이를 포함한 정밀 해석이면 <code>TBOPT=TN</code>(Tool-Narayanaswamy) 또는 <code>FICT</code>(가상온도 포함)도 선택지입니다.</li>
+    <li><strong>Abaqus에서 이식할 때 가장 잦은 오류:</strong> Abaqus <code>*ELASTIC</code>은 기본이 장기값인데 Ansys <code>MP,EX</code>는 순간값입니다. 숫자를 그대로 옮기면 강성이 수백 배 틀립니다.</li>
+  </ul>
+
+  <div class="note trap">
+    <h4>단위계 — 조용히 틀리는 자리</h4>
+    <p>τ와 β는 <strong>항상 초 단위</strong>로 두는 것이 안전합니다. 해석 단위계를 mm-ton-s(MPa)로 잡았다면 τ는 그대로지만, ms 단위계를 쓰면 τ와 β를 모두 환산해야 합니다. WLF의 C₂와 T_ref는 <strong>°C</strong>, Arrhenius는 <strong>K</strong> 기준이라는 점도 함께 확인하세요.</p>
+  </div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 / 검증</span>카드가 맞는지 확인하는 세 단계</h2>
+  <p>물성 카드를 부품 모델에 바로 넣고 결과를 보는 것은 가장 비싼 디버깅 방법입니다. 단계를 나누세요.</p>
+
+  <ol class="steps">
+    <li><b>단일 요소 완화 시험 — 입력이 그대로 나오는가</b>
+      요소 1개짜리 모델에 t=0에서 변형률 0.01을 계단 인가하고 응력 이력을 뽑습니다. σ(t)/0.01이 E(t) = E₀[1 − Σgᵢ(1−e^(−t/τᵢ))]와 겹쳐야 합니다. 여기서 어긋나면 <strong>단위계·정규화 기준·MODULI 설정</strong> 중 하나가 틀린 것입니다. 이 단계에서 거의 모든 카드 오류가 잡힙니다.</li>
+    <li><b>가상 DMA — 시험을 재현하는가</b>
+      같은 단일 요소에 여러 온도·주파수로 사인 가진을 걸고(또는 주파수 영역 해석으로) E′, tan δ를 뽑아 원래 DMA 데이터와 겹쳐 그립니다. <strong>온도 시프트(WLF)까지 검증되는 유일한 단계</strong>입니다. 상온만 맞고 −30 °C에서 어긋난다면 C₁·C₂ 또는 T_ref가 잘못된 것입니다.</li>
+    <li><b>부품 상관 — 실제로 쓸 조건에서 맞는가</b>
+      마운트·부시라면 동적 강성 K*(f)와 손실각을, 개스킷이라면 압축 응력 완화를, 범퍼라면 낙하 반발을 실측과 비교합니다. 이 단계에서 어긋나면 물성이 아니라 <strong>기하·경계조건·초기 압입량</strong>을 먼저 의심하는 편이 대개 맞습니다.</li>
+  </ol>
+
+  <div class="note">
+    <h4>인수인계용 체크리스트</h4>
+    <p>물성 카드를 다른 사람에게 넘길 때 이 여섯 가지가 함께 적혀 있지 않으면 그 카드는 재사용이 불가능합니다.</p>
+    <ul class="tight">
+      <li>기준 온도 T_ref와 시프트 인자(C₁, C₂ 또는 a_T 표)</li>
+      <li>gᵢ의 정규화 기준 — 순간값인지 장기값인지</li>
+      <li>전단 기준인지 인장 기준인지, E→G 변환에 쓴 가정</li>
+      <li>유효 주파수·시간 범위 (외삽 금지 구간)</li>
+      <li>측정 변형률 진폭과 LVE 확인 결과</li>
+      <li>단위계, 그리고 시편 이력(가황·어닐링·건조·사전 사이클링)</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10 / 정리</span>자주 틀리는 지점</h2>
+  <div class="tw"><table>
+    <thead><tr><th>증상</th><th>원인</th><th>조치</th></tr></thead>
+    <tbody>
+      <tr><td>강성이 수백 배 틀림</td><td>순간값/장기값 규약 혼동 (<code>MODULI</code>, <code>MP,EX</code>)</td><td>단일 요소 완화 시험으로 t=0과 t=∞ 값 확인</td></tr>
+      <tr><td>강성은 맞는데 감쇠가 안 맞음</td><td>E′만 피팅하고 E″를 버림</td><td>E′·E″ 동시 피팅, tan δ로 검증</td></tr>
+      <tr><td>상온은 맞고 저온이 틀림</td><td>WLF 상수가 다른 T_ref 기준</td><td>C₁·C₂를 해석 T_ref로 재환산</td></tr>
+      <tr><td>주파수를 바꿔도 결과가 그대로</td><td>f[Hz]를 ω[rad/s]로 안 바꿈 (2π 누락)</td><td>피팅 입력 단위 재확인</td></tr>
+      <tr><td>해가 발산 / 음의 에너지</td><td>gᵢ 음수 또는 Σgᵢ ≥ 1</td><td>NNLS로 재피팅, Σgᵢ &lt; 1 강제</td></tr>
+      <tr><td>고무가 너무 물렁하게 나옴</td><td>충전 고무를 큰 진폭으로 측정 (Payne 효과)</td><td>변형률 스윕으로 LVE 재확인 후 재측정</td></tr>
+      <tr><td>마스터커브가 안 겹침</td><td>결정화·후가황·수분 등 열유변학적 복잡성</td><td>Cole-Cole / van Gurp-Palmen 선도로 판정, 이력 통일</td></tr>
+      <tr><td>체적 잠김, 압력 오실레이션</td><td>비압축성 고무에 일반 요소 사용</td><td>하이브리드 요소 + kᵢ = 0, K 상수</td></tr>
+      <tr><td>양함수 해석이 불안정</td><td>βᵢ ≫ 1/Δt 인 초고속 항</td><td>해석 시간 스케일 밖 항 제거·병합</td></tr>
+      <tr><td>대변형에서 응답이 이상함</td><td>선형 점탄성만으로 대변형 모델링</td><td>초탄성 + 점탄성 결합, 순간값 기준 초탄성 피팅</td></tr>
+    </tbody>
+  </table></div>
+
+  <hr>
+
+  <h3>기호 정리</h3>
+  <div class="tw"><table>
+    <thead><tr><th>기호</th><th>이름</th><th>의미</th></tr></thead>
+    <tbody>
+      <tr><td class="k">E′, G′</td><td>저장 탄성률</td><td>돌려주는 에너지 = 그 조건에서의 강성</td></tr>
+      <tr><td class="k">E″, G″</td><td>손실 탄성률</td><td>열로 버리는 에너지 = 감쇠</td></tr>
+      <tr><td class="k">tan δ</td><td>손실 계수</td><td>E″/E′, 감쇠 성능 지표, Tg 판정</td></tr>
+      <tr><td class="k">E(t), G(t)</td><td>완화 탄성률</td><td>변형을 고정했을 때 시간에 따른 강성</td></tr>
+      <tr><td class="k">E₀, G₀</td><td>순간(유리) 탄성률</td><td>t = 0, ω → ∞ 에서의 값</td></tr>
+      <tr><td class="k">E∞, G∞</td><td>장기(평형) 탄성률</td><td>t → ∞, ω → 0 에서의 값</td></tr>
+      <tr><td class="k">gᵢ, kᵢ</td><td>Prony 계수</td><td>전단·체적 완화 강도, 순간값 대비 비율</td></tr>
+      <tr><td class="k">τᵢ</td><td>완화 시간</td><td>i번째 항이 1/e로 줄어드는 시간 [s]</td></tr>
+      <tr><td class="k">βᵢ</td><td>감쇠 상수</td><td>1/τᵢ, LS-DYNA 입력 형식 [1/s]</td></tr>
+      <tr><td class="k">a_T</td><td>시프트 인자</td><td>온도 T의 곡선을 T_ref로 옮기는 배율</td></tr>
+      <tr><td class="k">LVE</td><td>선형 점탄성 영역</td><td>물성이 변형 진폭에 무관한 진폭 범위</td></tr>
+      <tr><td class="k">TTS</td><td>시간–온도 중첩</td><td>온도 데이터를 주파수 축으로 환산하는 원리</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+
+</main>
+
+<footer>
+  DMA → 마스터커브 → Prony → CAE 카드 · 그래프는 본문에 실린 예제 Prony 세트(E₀ = 2400 MPa, T_ref = 25 °C, WLF C₁ = 10 / C₂ = 150)로 직접 계산해 그렸습니다.
+</footer>
+</body></html>
