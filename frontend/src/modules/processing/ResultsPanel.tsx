@@ -179,7 +179,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                 </div>
 
                 {expanded && (
-                  <div className="grid gap-4 border-t px-3 py-3 2xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)] 2xl:items-start">
+                  <div className="grid gap-4 border-t px-3 py-3 2xl:grid-cols-[minmax(0,4fr)_minmax(0,6fr)] 2xl:items-start">
                     {/* **곡선을 오른쪽에, 읽는 값을 왼쪽에.** 채택은 이 곡선을
                         물성으로 삼는 결정인데, 세로로 쌓으면 곡선을 보고 스크롤을
                         내려 숫자를 보고 다시 올라와야 한다 — 「이 곡선에서 이 값이

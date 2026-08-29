@@ -480,7 +480,9 @@ export default function TestRunDetailPage() {
                   양쪽 다 못 쓴다 — 안쪽은 `2xl`(1536) 부터 갈린다. 폭은
                   `minmax` 로 두어 요약값은 300~420 에 묶고 **남는 것은 전부
                   곡선**이 가져간다. */}
-              <div className="grid gap-6 2xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)] 2xl:items-start">
+              {/* **둘 다 늘어난다.** 왼쪽을 고정폭으로 묶으면 넓은 화면에서
+                  요약값 칸만 남고 곡선이 혼자 커진다 — 처리 탭과 같은 4:6 이다. */}
+              <div className="grid gap-6 2xl:grid-cols-[minmax(0,4fr)_minmax(0,6fr)] 2xl:items-start">
                 <div className="space-y-8 2xl:order-1">
                   {item && item.summary.length > 0 && (
                     <section className="mb-8">
@@ -779,20 +781,23 @@ function ConditionBlock({
   return (
     <section className="mb-6 rounded-md border p-4">
       <h2 className="mb-3 text-sm font-medium">시험 조건</h2>
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+      {/* **한 줄에 하나다.** 왼쪽 열은 260~320px 뿐이라 둘씩 넣으면 라벨이
+          줄바꿈되거나 잘린다 — 「인장속도」 가 「인장」 으로 보이면 값이 무엇의
+          값인지 알 수 없다. 좁은 자리에 많이 넣는 것보다 **읽히는 것**이 먼저다. */}
+      <dl className="space-y-2 text-sm">
         {/* **시편의 값이지 시험의 값이 아니다.** 그래도 여기 보여 준다 — 곡선을
             보는 자리에서 "이게 어떤 시편이었나" 를 알아야 하고, 다른 규격끼리
             연신율을 견주면 그 차이는 재료가 아니라 시편의 것이다. */}
         {item.specimen_standard && (
-          <div>
-            <dt className="text-muted-foreground text-xs">시편 규격</dt>
-            <dd>{item.specimen_standard}</dd>
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground shrink-0 text-xs">시편 규격</dt>
+            <dd className="text-right">{item.specimen_standard}</dd>
           </div>
         )}
         {filled.map((field) => (
-          <div key={field.key}>
-            <dt className="text-muted-foreground text-xs">{field.label}</dt>
-            <dd className="tabular-nums">
+          <div key={field.key} className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground shrink-0 text-xs">{field.label}</dt>
+            <dd className="text-right tabular-nums">
               {/* **저장은 SI, 화면은 실무 단위.** 온도를 298.15 K 로 보여 주면
                   아무도 25℃ 인 줄 모른다. */}
               {/* `formatValue(value, text, siUnit, dimension)` — 인자가 넷이다.
@@ -810,9 +815,9 @@ function ConditionBlock({
           </div>
         ))}
         {filledMeta.map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-muted-foreground text-xs">{label}</dt>
-            <dd>{value}</dd>
+          <div key={label} className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground shrink-0 text-xs">{label}</dt>
+            <dd className="text-right">{value}</dd>
           </div>
         ))}
       </dl>
@@ -836,14 +841,17 @@ function ConditionBlock({
           <h3 className="text-muted-foreground mb-2 text-xs">
             이 시험이 쓴 시편 치수 <span className="opacity-70">— 시편 규격이 정한 칸</span>
           </h3>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+          <dl className="space-y-2 text-sm">
             {sized.map((one) => (
-              <div key={one.field}>
-                <dt className="text-muted-foreground text-xs">
+              <div
+                key={one.field}
+                className="flex items-baseline justify-between gap-3"
+              >
+                <dt className="text-muted-foreground shrink-0 text-xs">
                   {one.label}
                   {one.symbol && <span className="ml-1 opacity-60">{one.symbol}</span>}
                 </dt>
-                <dd className="tabular-nums">
+                <dd className="text-right tabular-nums">
                   {formatValue(one.run_m ?? 0, null, 'm', 'length')}
                   {one.source && DIMENSION_SOURCE[one.source] && (
                     <span
