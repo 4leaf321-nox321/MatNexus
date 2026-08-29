@@ -10,6 +10,9 @@
  * 이것은 표시일 뿐 권한이 아니다. 권한은 서버가 판정한다(`pytest`).
  */
 
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { NAV_GROUPS, visibleGroups } from '@/shared/layout/navigation'
@@ -197,6 +200,41 @@ describe('미구현 표시', () => {
     const seen = labels(ADMIN)
     expect(seen).toContain('서버')
     expect(seen).not.toContain('저장소 정리')
+  })
+})
+
+describe('e2e 가 누르는 이름', () => {
+  /**
+   * **이름을 바꿀 때마다 여기서 먼저 걸려야 한다.**
+   *
+   * 스모크는 사이드바를 눌러서 화면에 닿는다 — 주소로 바로 열면 「메뉴가 옮겨가서
+   * 못 찾는」 사고를 못 잡기 때문이고, 그 판단은 옳다. 대신 **이름을 바꾸면 그
+   * 시험이 깨진다.** 실제로 두 번 그랬다:
+   *
+   *     v1.161.0  홈 카드 문구를 바꾸고 e2e 만 안 고쳤다
+   *     v1.164.0  '파일 형식' → '인풋 파일 정의' 로 바꾸고 e2e 만 안 고쳤다
+   *
+   * 둘 다 **CI 에서 14분 걸려 알았다.** e2e 는 서버 둘과 브라우저가 필요해 손에서
+   * 안 돌리니, 여기서 55초에 잡는다.
+   *
+   * 화면을 열지 않는다 — 스모크 파일에서 **사이드바를 집는 줄**만 읽어 그 이름이
+   * `NAV_GROUPS` 에 있는지 본다.
+   */
+  it('스모크가 누르는 사이드바 항목이 실제로 있다', () => {
+    const spec = readFileSync(
+      path.resolve(process.cwd(), 'e2e/smoke.spec.ts'),
+      'utf-8'
+    )
+    // `[data-app-chrome="sidebar"]` 로 좁힌 뒤 이름으로 집는 자리만 본다.
+    const wanted = [...spec.matchAll(/data-app-chrome="sidebar"[\s\S]{0,200}?name: '([^']+)'/g)].map(
+      (found) => found[1]
+    )
+    expect(wanted.length, '스모크가 사이드바를 안 누른다면 이 시험이 지킬 것도 없다').toBeGreaterThan(0)
+
+    const labels = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.label))
+    for (const name of wanted) {
+      expect(labels, `스모크가 '${name}' 를 누르는데 사이드바에 그런 항목이 없다`).toContain(name)
+    }
   })
 })
 
