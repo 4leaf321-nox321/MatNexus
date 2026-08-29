@@ -163,7 +163,7 @@ export default function WorkspaceHomePage() {
           title="처리"
           detail="원본 곡선을 다듬고(단위·토우 보정·평활) 어느 결과를 쓸지 채택합니다. 채택한 것만 물성으로 올라갑니다."
           to={`/w/${workspaceSlug}/tests`}
-          action="시험 데이터"
+          action="시험"
           count={{
             value: waiting.data?.total ?? 0,
             unit: '건 처리 대기',

@@ -27,14 +27,28 @@ function depthOf(axis: Vocabulary, all: Vocabulary[]): number {
   return depth
 }
 
+/** 축이 아니지만 같은 자리에서 고르는 것. 지금은 「단위」 하나다. */
+export interface AxisExtra {
+  key: string
+  label: string
+}
+
 export function VocabularyAxisPanel({
   axes,
   current,
   onPick,
+  extras = [],
+  extrasLabel,
 }: {
   axes: Vocabulary[]
   current: string | null
   onPick: (slug: string) => void
+  /** **축과 섞지 않는다.** 아래에 선을 긋고 따로 세운다 — 축은 사람이 값을
+   *  더할 수 있고 이쪽은 못 고친다. 같은 줄에 놓으면 그 차이가 안 보인다. */
+  extras?: AxisExtra[]
+  /** 선 위에 붙일 이름. **없으면 선만 긋는다** — 항목이 하나뿐일 때는 이름이
+   *  오히려 「여기 더 있다」 로 읽힌다. 둘 이상이 되면 그때 붙인다. */
+  extrasLabel?: string
 }) {
   return (
     <LeftPanel label="기준정보 축">
@@ -64,6 +78,29 @@ export function VocabularyAxisPanel({
               </button>
             )
           })}
+
+          {extras.length > 0 && (
+            <div className="mt-2 border-t pt-2">
+              {extrasLabel && (
+                <p className="text-muted-foreground px-3 pb-1 text-[11px] font-medium">
+                  {extrasLabel}
+                </p>
+              )}
+              {extras.map((extra) => (
+                <button
+                  key={extra.key}
+                  type="button"
+                  aria-current={extra.key === current ? 'true' : undefined}
+                  onClick={() => onPick(extra.key)}
+                  className={`flex w-full items-center px-3 py-1.5 text-left text-sm ${
+                    extra.key === current ? 'bg-muted font-medium' : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <span className="truncate">{extra.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </aside>
     </LeftPanel>

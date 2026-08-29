@@ -10,6 +10,7 @@ import { NavLink } from 'react-router-dom'
 import { UNKNOWN_VERSION, systemApi } from '@/shared/api/system'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { cn } from '@/shared/lib/utils'
+import { isAnyManager, isSystemAdmin } from '@/shared/auth/roles'
 import { itemHref, visibleGroups } from '@/shared/layout/navigation'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -36,8 +37,8 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
   // **볼 수 있는 것만 보여 준다.** 눌러야 403 을 아는 메뉴는 "할 수 있는 일" 을
   // 알려 주지 못한다. 권한은 서버가 판정한다 — 여기는 표시일 뿐이다.
   const groups = visibleGroups({
-    isSystemAdmin: Boolean(user?.is_system_admin),
-    isAnyManager: (user?.memberships ?? []).some((m) => m.role === 'manager'),
+    isSystemAdmin: isSystemAdmin(user),
+    isAnyManager: isAnyManager(user),
   })
 
   return (
@@ -76,8 +77,12 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
         {groups.map((group) => (
-          <div key={group.title}>
-            <p className="text-muted-foreground px-2 pb-1 text-xs font-medium">{group.title}</p>
+          <div key={group.title ?? group.items[0]?.label}>
+            {/* **제목이 없으면 자리도 안 남긴다.** 빈 <p> 를 두면 홈 위에 설명
+                없는 여백이 생겨 「뭔가 안 나온다」 로 읽힌다. */}
+            {group.title && (
+              <p className="text-muted-foreground px-2 pb-1 text-xs font-medium">{group.title}</p>
+            )}
             <ul className="space-y-0.5">
               {group.items.map((item) => (
                 <li key={item.label}>

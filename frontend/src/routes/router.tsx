@@ -51,6 +51,7 @@ const MembersPage = lazy(() => import('@/modules/workspaces/MembersPage'))
 const NoticesPage = lazy(() => import('@/modules/notices/NoticesPage'))
 const RecipesPage = lazy(() => import('@/modules/processing/RecipesPage'))
 const SignupPage = lazy(() => import('@/modules/auth/SignupPage'))
+const ServerPage = lazy(() => import('@/modules/server/ServerPage'))
 const StoragePage = lazy(() => import('@/modules/tests/StoragePage'))
 const TrashPage = lazy(() => import('@/modules/trash/TrashPage'))
 const ConnectorsPage = lazy(() => import('@/modules/pipelines/ConnectorsPage'))
@@ -58,8 +59,8 @@ const GuidePage = lazy(() => import('@/modules/guide/GuidePage'))
 const ProfilePage = lazy(() => import('@/modules/auth/ProfilePage'))
 const AnalysisPage = lazy(() => import('@/modules/statistics/AnalysisPage'))
 const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
-const UnitsPage = lazy(() => import('@/modules/units/UnitsPage'))
 const VocabularyAdminPage = lazy(() => import('@/modules/vocabulary/VocabularyAdminPage'))
+const VocabularyPage = lazy(() => import('@/modules/vocabulary/VocabularyPage'))
 const VocPage = lazy(() => import('@/modules/voc/VocPage'))
 const WorkspaceHomePage = lazy(() => import('@/modules/workspaces/WorkspaceHomePage'))
 const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
@@ -99,6 +100,10 @@ export const router = createBrowserRouter([
           { path: 'materials', element: <MaterialsPage /> },
           // **재료를 거치지 않고 시편을 찾는다.** `/cards` 가 있는 이유와 같다.
           { path: 'specimens', element: <SpecimensPage /> },
+          // **전역 시험 목록.** 사이드바의 「시험」 이 여기다 — 옆의 재료·시편과
+          // 같은 범위여야 한다. `/w/<부서>/tests` 도 살아 있고 그쪽은 홈에서
+          // 사업부 현황을 눌러 들어가는 길이다(같은 화면이 slug 유무로 갈린다).
+          { path: 'tests', element: <TestRunsPage /> },
           // **재료를 거치지 않고 카드를 찾는 자리.** 재료 상세의 'CAE 카드'
           // 탭은 그 재료의 것만 본다.
           { path: 'cards', element: <CardsPage /> },
@@ -112,6 +117,9 @@ export const router = createBrowserRouter([
           { path: 'me', element: <ProfilePage /> },
 
           // 공통
+          // 공지와 VOC 는 사이드바에서 한 항목이고, 화면 안에서 탭으로 갈린다.
+          // **주소는 둘로 남긴다** — 탭을 화면 안에 감추면 공지 하나를 링크로
+          // 가리킬 수 없다(`SubTabs`).
           { path: 'notices', element: <NoticesPage /> },
           { path: 'voc', element: <VocPage /> },
           // 물성 핸드북 — 배포 없이 갱신된다. 누구나 초안, 검토자가 승인(ADR 0022).
@@ -138,11 +146,15 @@ export const router = createBrowserRouter([
           // 관리 (전사)
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
-          { path: 'admin/units', element: <UnitsPage /> },
+          // **단위는 기준정보 안의 한 칸이다.** 따로 주소를 두지 않는다 —
+          // 사람이 폼에서 고르는 목록이라는 점에서 같은 것이고, 문 둘을 두면
+          // 어느 쪽이 진짜인지 묻게 된다.
+          { path: 'vocabulary', element: <VocabularyPage /> },
           { path: 'admin/vocabulary', element: <VocabularyAdminPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/trash', element: <TrashPage /> },
-          { path: 'server', ...stub('서버', 'Phase 1') },
+          // 저장소 정리는 이 화면의 탭 하나다 — 주소는 둘로 남는다(`SubTabs`).
+          { path: 'server', element: <ServerPage /> },
 
           // 부서 스코프
           {

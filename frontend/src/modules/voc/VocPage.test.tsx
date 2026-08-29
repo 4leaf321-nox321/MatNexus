@@ -13,6 +13,7 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import VocPage from '@/modules/voc/VocPage'
@@ -51,7 +52,12 @@ const item = (over: Record<string, unknown> = {}) => ({
 
 async function show(rows: unknown[]) {
   list.mockResolvedValue(rows)
-  render(<VocPage />)
+  // 화면 위에 공지 탭이 붙어 라우터가 필요하다 — 공지와 VOC 는 한 진입점이다.
+  render(
+    <MemoryRouter initialEntries={['/voc']}>
+      <VocPage />
+    </MemoryRouter>
+  )
   await waitFor(() => expect(list).toHaveBeenCalled())
 }
 

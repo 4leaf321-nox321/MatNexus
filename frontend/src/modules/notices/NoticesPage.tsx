@@ -13,6 +13,7 @@ import type { Notice } from '@/modules/notices/api'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { SubTabs } from '@/shared/components/SubTabs'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -41,7 +42,16 @@ export default function NoticesPage() {
   const rows = notices.data ?? []
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-6xl">
+      {/* **공지와 VOC 는 한 진입점이다.** 메뉴에 둘로 서 있으면 「어느 쪽에
+          쓰지」 를 매번 묻는다 — 위에서 내려오는 글과 아래에서 올라가는 글일
+          뿐, 사람에게는 같은 게시판이다. */}
+      <SubTabs
+        items={[
+          { to: '/notices', label: '공지' },
+          { to: '/voc', label: 'VOC' },
+        ]}
+      />
       <PageHeader
         title="공지"
         description="배포 없이 안내를 갱신할 수 있는 곳입니다."

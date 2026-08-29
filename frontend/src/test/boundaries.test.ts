@@ -28,6 +28,12 @@ const MODULES = path.join(SRC, 'modules')
  * 것은 도메인상 자연스럽다 — 재료 모듈이 그 선택기를 제공하고 시험이 조립한다.
  */
 const ALLOWED: Record<string, { to: string; why: string }[]> = {
+  vocabulary: [
+    {
+      to: 'units',
+      why: '단위는 기준정보의 한 칸이다 — 사람이 폼에서 고르는 목록이라는 점에서 같은 것이라, 메뉴에 둘로 세우면 「단위가 기준정보가 아닌가」 를 묻게 된다. 다만 축은 값을 더할 수 있고 단위는 못 고쳐서(환산 계수는 이미 저장된 숫자의 뜻이다) 왼쪽 목록에서 따로 세운다. 표를 그리는 것은 units 의 일이고 기준정보 화면은 자리만 내준다.',
+    },
+  ],
   tests: [
     {
       to: 'materials',

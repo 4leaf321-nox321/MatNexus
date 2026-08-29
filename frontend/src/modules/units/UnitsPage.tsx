@@ -33,7 +33,6 @@ import { Lock } from 'lucide-react'
 import { display } from '@/shared/units'
 import { unitsApi } from '@/modules/units/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import {
   Table,
@@ -84,17 +83,18 @@ const DIMENSION_LABEL: Record<string, string> = {
   velocity: '속도',
 }
 
-export default function UnitsPage() {
+/**
+ * 표만. **머리글이 없다** — 기준정보 화면이 자기 머리글 아래 한 칸으로 품는다.
+ *
+ * 단위는 사람이 폼에서 고르는 목록이라는 점에서 기준정보와 같은 것이다. 다만
+ * **고칠 수 없다는 점이 다르고**, 그래서 축 목록에서도 따로 떨어뜨려 세운다.
+ */
+export function UnitsContent() {
   const units = useResource(() => unitsApi.list(), [])
   const rows = units.data?.dimensions ?? []
 
   return (
     <div>
-      <PageHeader
-        title="단위"
-        description="장비 파일과 입력 폼이 어떤 표기를 받고, 무엇으로 저장하고, 화면에 무엇으로 보여 주는지."
-      />
-
       <ErrorNotice error={units.error} className="mb-4" />
 
       {/* **고칠 수 없다는 것을 먼저 말한다.** 관리 화면인데 버튼이 없으면 사람은

@@ -18,6 +18,8 @@ import { FlaskConical, Globe2, Trash2 } from 'lucide-react'
 import { processingApi } from '@/modules/processing/api'
 import type { Recipe, RecipeStep } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { useAuth } from '@/shared/auth/AuthContext'
+import { isAnyManager } from '@/shared/auth/roles'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -33,6 +35,7 @@ import { ownerOf, TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPane
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function RecipesPage() {
+  const canEdit = isAnyManager(useAuth().user)
   const recipes = useResource(() => processingApi.recipes(), [])
   const [error, setError] = useState<Error | null>(null)
   const [open, setOpen] = useState<string | null>(null)
@@ -155,9 +158,15 @@ export default function RecipesPage() {
                   )}
                 </TableCell>
                 <TableCell className="text-right">
+                  {/* **볼 수는 있어도 지우는 것은 부서 관리자다.** 레시피는
+                      「이 시험을 어떻게 처리했나」 의 답이라 누구나 봐야 하지만,
+                      지우는 것은 다른 일이다. 서버가 판정하지만 **눌러 보고
+                      403 을 알게 하지는 않는다.** */}
                   <Button
                     size="sm"
                     variant="ghost"
+                    className={canEdit ? undefined : 'invisible'}
+                    disabled={!canEdit}
                     title="지웁니다. 이 레시피로 만든 결과는 그대로 남습니다."
                     onClick={() => remove(item)}
                   >

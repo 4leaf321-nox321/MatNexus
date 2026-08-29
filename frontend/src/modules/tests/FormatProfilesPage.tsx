@@ -17,6 +17,8 @@ import { Link } from 'react-router-dom'
 import { testsApi } from '@/modules/tests/api'
 import type { FormatProfile, ProfileDefinition } from '@/modules/tests/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { useAuth } from '@/shared/auth/AuthContext'
+import { isAnyManager } from '@/shared/auth/roles'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -32,6 +34,7 @@ import { TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function FormatProfilesPage() {
+  const canEdit = isAnyManager(useAuth().user)
   const profiles = useResource(() => testsApi.formats(), [])
   const [error, setError] = useState<Error | null>(null)
   // `null` 이면 전체. **DMA 프로파일을 찾는 사람에게 인장 프로파일은 소음이다.**
@@ -64,12 +67,18 @@ export default function FormatProfilesPage() {
         title="형식 프로파일"
         description="장비 파일을 어떻게 읽을지. 구조는 코드가 자동으로 읽고, '이 열이 무엇인가'만 여기에 저장합니다 — 새 장비를 붙이는 데 배포가 필요 없습니다."
         actions={
-          <Button asChild>
-            <Link to="/settings/formats/new">
-              <Plus className="size-4" />
-              프로파일 만들기
-            </Link>
-          </Button>
+          // **볼 수는 있어도 고치는 것은 부서 관리자다.** 목록을 모두에게 연 것은
+          // 「우리가 무엇을 읽을 수 있나」 를 누구나 물어야 해서고, 그 답을 보는
+          // 것과 정의를 바꾸는 것은 다른 일이다. 서버가 판정하지만 **눌러 보고
+          // 403 을 알게 하지는 않는다.**
+          canEdit ? (
+            <Button asChild>
+              <Link to="/settings/formats/new">
+                <Plus className="size-4" />
+                프로파일 만들기
+              </Link>
+            </Button>
+          ) : null
         }
       />
 
@@ -164,20 +173,24 @@ export default function FormatProfilesPage() {
                     {item.priority}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="outline" asChild>
-                      <Link to={`/settings/formats/${item.key}`}>
-                        <Pencil className="size-3.5" />
-                        편집
-                      </Link>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      title="지웁니다. 이미 읽은 데이터는 그대로 남습니다."
-                      onClick={() => remove(item)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    {canEdit && (
+                      <>
+                        <Button size="sm" variant="outline" asChild>
+                          <Link to={`/settings/formats/${item.key}`}>
+                            <Pencil className="size-3.5" />
+                            편집
+                          </Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="지웁니다. 이미 읽은 데이터는 그대로 남습니다."
+                          onClick={() => remove(item)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )
