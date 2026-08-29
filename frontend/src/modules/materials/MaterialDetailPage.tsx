@@ -103,8 +103,12 @@ export default function MaterialDetailPage() {
         />
       )}
 
+      {/* **열 수를 폭에 맞춘다.** 4열 고정이라 전체 폭을 쓰게 된 뒤로 한 칸이
+          500px 을 넘었다 — 값은 `Metal`·`1.2 mm` 처럼 짧은데 그 뒤가 전부
+          빈칸이라, 라벨과 값이 멀어져 어느 라벨의 값인지 눈으로 이어야 했다.
+          한 칸이 250px 안팎이 되도록 늘린다. */}
       {item && (
-        <dl className="mb-8 grid grid-cols-2 gap-x-6 gap-y-3 rounded-md border p-4 text-sm sm:grid-cols-4">
+        <dl className="mb-8 grid grid-cols-2 gap-x-6 gap-y-3 rounded-md border p-4 text-sm sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
           <Field label="Family" value={item.family} />
           <Field label="Category" value={item.category} />
           <Field label="Grade" value={item.grade} />
