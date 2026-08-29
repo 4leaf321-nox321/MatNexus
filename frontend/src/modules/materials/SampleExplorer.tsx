@@ -60,7 +60,15 @@ import { cn } from '@/shared/lib/utils'
 /** 시험을 어디에 그리나. **정해지면 한쪽을 걷는다.** */
 type Mode = 'inline' | 'side'
 
-const MODE_KEY = 'mnx.sampleExplorer.mode'
+/**
+ * **`.choice` 로 갈아탄 이유.** 앞 판은 화면을 열기만 해도 지금 모드를 적었다
+ * (`useEffect` 가 마운트에서 한 번 돈다). 그러면 **아무도 고른 적 없는 값**이
+ * 저장되어 있고, 뒤에 「고른 사람의 뜻이 이긴다」 규칙을 붙이자 그 값이 사람의
+ * 뜻 행세를 하며 폭을 영영 무시했다 — 창을 늘려도 모드가 안 바뀌었다.
+ *
+ * 옛 열쇠는 그대로 둔다. 지우려 들면 그 코드가 또 한동안 남고, 값이 몇 바이트다.
+ */
+const MODE_KEY = 'mnx.sampleExplorer.mode.choice'
 
 /**
  * 옆에 띄울 만큼 넓은가. **`xl` 과 같은 자리다** — 그보다 좁으면 표와 시험이

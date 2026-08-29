@@ -205,6 +205,19 @@ describe('시험 보이는 자리', () => {
     )
   })
 
+  it('열기만 한 것은 고른 것이 아니다 — 옛 값에 안 끌린다', async () => {
+    // 앞 판은 마운트에서 지금 모드를 적었다. 그 값이 사람의 뜻 행세를 하면
+    // **창을 늘려도 모드가 안 바뀐다** — 실제로 그렇게 났다(2026-08-30).
+    localStorage.setItem('mnx.sampleExplorer.mode', 'inline')
+    screenWidth(true)
+    show()
+    await screen.findByText('MD_01')
+    expect(screen.getByRole('button', { name: /옆에서/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
   it('고르고 나면 그 뜻이 이긴다', async () => {
     // 넓은 화면에서 일부러 「줄 안에서」 를 고른 사람에게, 창을 늘렸다고 되돌려
     // 놓으면 그건 고른 것을 무시하는 것이다.
@@ -214,7 +227,7 @@ describe('시험 보이는 자리', () => {
     await screen.findByText('MD_01')
     await user.click(screen.getByRole('button', { name: /줄 안에서/ }))
 
-    expect(localStorage.getItem('mnx.sampleExplorer.mode')).toBe('inline')
+    expect(localStorage.getItem('mnx.sampleExplorer.mode.choice')).toBe('inline')
     expect(screen.getByRole('button', { name: /줄 안에서/ })).toHaveAttribute(
       'aria-pressed',
       'true'
