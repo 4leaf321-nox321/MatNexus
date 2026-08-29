@@ -161,3 +161,28 @@ describe('재료 목록 옆패널', () => {
     )
   })
 })
+
+describe('접기 · 펴기', () => {
+  /**
+   * **여닫는 손잡이는 여닫히는 것 옆에 있어야 한다.** 접는 단추가 상단 바에만
+   * 있었는데, 패널에서 멀어 그것이 있는 줄도 몰랐다 — 실제로 「접기·열기 핸들을
+   * 만들어 달라」 는 말이 나왔다(2026-08-30).
+   *
+   * 접힌 뒤에 **아무것도 안 남는 것**이 더 나쁘다. 다시 펴는 길이 화면에서
+   * 사라지므로, 그 상태에 빠진 사람은 목록을 영영 못 본다.
+   */
+  it('접고 나면 다시 펴는 자리가 남는다', async () => {
+    const user = userEvent.setup()
+    panel()
+    await screen.findByText('DP600 1.2t')
+
+    await user.click(screen.getByRole('button', { name: '재료 목록 접기' }))
+    expect(screen.queryByLabelText('재료 찾기')).not.toBeInTheDocument()
+
+    // **여기가 요점이다.** 접힌 자리에 펴는 단추가 남아야 한다.
+    const open = screen.getByRole('button', { name: '재료 목록 펴기' })
+    await user.click(open)
+    expect(await screen.findByLabelText('재료 찾기')).toBeInTheDocument()
+  })
+})
+

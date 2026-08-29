@@ -26,21 +26,23 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Material } from '@/modules/materials/api'
 import { categoriesOf, familiesOf } from '@/modules/materials/classification'
 import { OptionPicker } from '@/shared/components/OptionPicker'
+import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { useResource } from '@/shared/hooks/useResource'
-import { LeftPanel } from '@/shared/layout/SidePanel'
+import { LeftPanel, useLeftPanel } from '@/shared/layout/SidePanel'
 
 /** 한 번에 받아 오는 수. 옆 목록이라 스크롤로 훑는 것이 전부다. */
 const LIMIT = 50
 
 export function MaterialListPanel({ currentId }: { currentId: string | undefined }) {
+  const panel = useLeftPanel()
   const [query, setQuery] = useState('')
   const [family, setFamily] = useState('')
   const [category, setCategory] = useState('')
@@ -79,9 +81,49 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
   const known = classes.data ?? []
 
   return (
-    <LeftPanel label="재료 목록">
+    <LeftPanel
+      label="재료 목록"
+      rail={
+        // **접히면 아무것도 안 남는 것이 문제였다.** 다시 펴는 길이 상단 바
+        // 단추뿐이었는데, 패널에서 멀어 그것이 있는 줄도 모른다 — 실제로
+        // 「접기·열기 핸들을 만들어 달라」 는 말이 나왔다. 접힌 자리에 좁은
+        // 띠를 남겨, **여닫는 손잡이가 여닫히는 것 옆에** 있게 한다.
+        <div className="bg-background flex h-full w-8 flex-col items-center border-r pt-2">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={panel.toggle}
+            aria-label="재료 목록 펴기"
+            title="재료 목록 펴기"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+          {/* 무엇을 펴는 자리인지 적는다 — 아이콘만 있으면 다음에 또 묻는다. */}
+          <span
+            className="text-muted-foreground mt-2 text-[11px] tracking-wide"
+            style={{ writingMode: 'vertical-rl' }}
+          >
+            재료 목록
+          </span>
+        </div>
+      }
+    >
       <aside className="bg-background flex h-full w-64 flex-col border-r">
         <div className="border-b p-2">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-muted-foreground text-xs font-medium">재료 목록</span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-6"
+              onClick={panel.toggle}
+              aria-label="재료 목록 접기"
+              title="재료 목록 접기"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+          </div>
           <div className="relative">
             <Search className="text-muted-foreground absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
             <Input

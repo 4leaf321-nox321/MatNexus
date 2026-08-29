@@ -83,7 +83,17 @@ function createSidePanel(hostId: string, defaultOpen: boolean) {
    *
    * `label` 은 상단 바 단추에 뜨는 이름이다.
    */
-  function Panel({ label, children }: { label: string; children: ReactNode }) {
+  function Panel({
+    label,
+    rail,
+    children,
+  }: {
+    label: string
+    /** 접혔을 때 그 자리에 남는 것. **없으면 아무것도 안 남는다** — 그러면 다시
+     *  펴는 길이 상단 바 단추뿐이고, 패널에서 멀어 아무도 못 찾는다. */
+    rail?: ReactNode
+    children: ReactNode
+  }) {
     const { open, register } = use()
     // 껍데기가 먼저 그려져 있어야 찾을 수 있다. 첫 렌더에는 없으므로 효과에서 잡는다.
     const [host, setHost] = useState<HTMLElement | null>(null)
@@ -94,7 +104,8 @@ function createSidePanel(hostId: string, defaultOpen: boolean) {
       return () => register(null)
     }, [label, register])
 
-    return host && open ? createPortal(children, host) : null
+    const shown = open ? children : rail
+    return host && shown ? createPortal(shown, host) : null
   }
 
   return { Provider, Host, Panel, use }
