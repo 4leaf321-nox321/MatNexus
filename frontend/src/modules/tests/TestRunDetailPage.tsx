@@ -558,7 +558,9 @@ export default function TestRunDetailPage() {
                 )}
               </div>
 
-              <div className="lg:order-2 lg:sticky lg:top-4">
+              {/* **머리글이 맨 위를 차지한다.** `top-4` 로 두면 곡선 윗부분이
+                  그 아래로 기어들어 축 라벨이 잘린다 — 머리글 높이만큼 내린다. */}
+              <div className="lg:order-2 lg:sticky lg:top-28">
                 {item?.status === 'parsed' && (
                   <section className="mb-8">
                     <h2 className="mb-2 font-medium">곡선</h2>

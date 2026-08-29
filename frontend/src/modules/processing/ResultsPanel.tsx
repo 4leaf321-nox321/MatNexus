@@ -188,8 +188,10 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                         좁은 화면에서는 한 열로 돌아가고 그때는 **곡선이 먼저다**
                         (`order`) — 무엇을 계산했는지 보고 나서 숫자를 본다. */}
                     <div className="space-y-3 lg:order-1">
+                      {/* 칸이 좁아 두 열이면 한 줄에 하나꼴로 늘어졌다. 값은
+                          짧고(숫자+단위) 이름도 짧아 셋이 들어간다. */}
                       {item.scalars.length > 0 && (
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                           {item.scalars.map((scalar) => (
                             <div key={scalar.key} className="rounded-md border px-2 py-1.5">
                               <div className="text-muted-foreground text-xs">{scalar.label}</div>
@@ -223,7 +225,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                       </ol>
                     </div>
 
-                    <div className="lg:order-2 lg:sticky lg:top-4">
+                    <div className="lg:order-2 lg:sticky lg:top-28">
                       <ResultCurve resultId={item.id} />
                     </div>
                   </div>

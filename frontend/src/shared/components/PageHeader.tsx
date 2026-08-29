@@ -60,10 +60,14 @@ export function PageHeader({
         // 제목·재료·시험 종류가 사라지고, 곡선만 남으면 그것이 어느 시험의
         // 곡선인지 화면에 없다 — 되돌아가는 단추도 함께 사라진다.
         //
-        // 스크롤 상자는 `AppShell` 의 `<main>`(`overflow-auto p-6`)이다. 음수
-        // 여백으로 그 안쪽 여백까지 덮어야 **내용이 옆으로 새어 보이지 않는다.**
-        sticky &&
-          'bg-background sticky top-0 z-20 -mx-6 -mt-6 mb-4 border-b px-6 pt-6 pb-3'
+        // 스크롤 상자는 `AppShell` 의 `<main>`(`overflow-auto p-6`)이다. **가로만**
+        // 음수 여백으로 덮는다 — 안 그러면 내용이 머리글 옆으로 새어 보인다.
+        //
+        // **세로로는 음수 여백을 쓰지 않는다.** `-mt-6` 을 주면 sticky 가 마진
+        // 상자를 기준으로 붙어, 실제로 칠해지는 자리가 24px 아래로 밀린다 — 그
+        // 빈 띠로 **스크롤되는 내용이 머리글 위에 비쳐 보인다**(2026-08-30 실측).
+        // 음수 여백 없이 두면 붙었을 때 테두리 상자가 그대로 맨 위에 온다.
+        sticky && 'bg-background sticky top-0 z-20 -mx-6 mb-4 border-b px-6 pt-3 pb-3'
       )}
     >
       {back && (
