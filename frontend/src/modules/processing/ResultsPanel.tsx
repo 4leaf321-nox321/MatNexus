@@ -179,44 +179,53 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                 </div>
 
                 {expanded && (
-                  <div className="space-y-3 border-t px-3 py-3">
-                    {/* **채택은 이 곡선을 물성으로 삼는 결정이다.** 그 곡선을
-                        안 보고 누르게 두지 않는다. */}
-                    <ResultCurve resultId={item.id} />
+                  <div className="grid gap-4 border-t px-3 py-3 lg:grid-cols-2 lg:items-start">
+                    {/* **곡선을 오른쪽에, 읽는 값을 왼쪽에.** 채택은 이 곡선을
+                        물성으로 삼는 결정인데, 세로로 쌓으면 곡선을 보고 스크롤을
+                        내려 숫자를 보고 다시 올라와야 한다 — 「이 곡선에서 이 값이
+                        나오는 게 맞나」 가 채택 직전에 하는 질문이다.
 
-                    {item.scalars.length > 0 && (
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        {item.scalars.map((scalar) => (
-                          <div key={scalar.key} className="rounded-md border px-2 py-1.5">
-                            <div className="text-muted-foreground text-xs">{scalar.label}</div>
-                            <div className="font-mono text-xs">
-                              {formatScalar(scalar.value, scalar.si_unit, scalar.dimension)}
+                        좁은 화면에서는 한 열로 돌아가고 그때는 **곡선이 먼저다**
+                        (`order`) — 무엇을 계산했는지 보고 나서 숫자를 본다. */}
+                    <div className="space-y-3 lg:order-1">
+                      {item.scalars.length > 0 && (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {item.scalars.map((scalar) => (
+                            <div key={scalar.key} className="rounded-md border px-2 py-1.5">
+                              <div className="text-muted-foreground text-xs">{scalar.label}</div>
+                              <div className="font-mono text-xs">
+                                {formatScalar(scalar.value, scalar.si_unit, scalar.dimension)}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* **이 값이 무엇으로 나왔나.** 스냅샷이라 레시피가 나중에
-                        바뀌어도 여기 적힌 것은 그대로다. */}
-                    <ol className="space-y-1.5">
-                      {item.stages.map((stage, index) => (
-                        <li key={`${stage.plugin}-${index}`} className="text-xs">
-                          <span className="text-muted-foreground font-mono">
-                            {index + 1}.
-                          </span>{' '}
-                          <span className="font-medium">{stage.label}</span>
-                          <span className="text-muted-foreground ml-1 font-mono">
-                            v{stage.version}
-                          </span>
-                          {stage.notes.map((note) => (
-                            <p key={note} className="text-muted-foreground ml-4 border-l pl-2">
-                              {note}
-                            </p>
                           ))}
-                        </li>
-                      ))}
-                    </ol>
+                        </div>
+                      )}
+
+                      {/* **이 값이 무엇으로 나왔나.** 스냅샷이라 레시피가 나중에
+                          바뀌어도 여기 적힌 것은 그대로다. */}
+                      <ol className="space-y-1.5">
+                        {item.stages.map((stage, index) => (
+                          <li key={`${stage.plugin}-${index}`} className="text-xs">
+                            <span className="text-muted-foreground font-mono">
+                              {index + 1}.
+                            </span>{' '}
+                            <span className="font-medium">{stage.label}</span>
+                            <span className="text-muted-foreground ml-1 font-mono">
+                              v{stage.version}
+                            </span>
+                            {stage.notes.map((note) => (
+                              <p key={note} className="text-muted-foreground ml-4 border-l pl-2">
+                                {note}
+                              </p>
+                            ))}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    <div className="lg:order-2 lg:sticky lg:top-4">
+                      <ResultCurve resultId={item.id} />
+                    </div>
                   </div>
                 )}
               </div>
