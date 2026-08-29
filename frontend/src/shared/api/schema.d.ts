@@ -1464,6 +1464,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/{material_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Material Summary
+         * @description 계층 요약. **목록과 따로 두는 이유는 N+1 이다** — 재료 목록이 재료마다 이
+         *     셋을 물으면 한 화면에 수백 질의가 나간다. 상세에서만 한 번 부른다.
+         */
+        get: operations["material_summary_api_materials__material_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notices": {
         parameters: {
             query?: never;
@@ -6553,6 +6574,27 @@ export interface components {
             material_id: string;
             /** Material Name */
             material_name: string;
+        };
+        /**
+         * MaterialTreeSummaryOut
+         * @description 재료 아래 계층을 한 줄로 — **「무엇이 얼마나 있나」 와 「빠진 게 어디냐」.**
+         *
+         *     시료 목록만으로는 답이 안 나온다. 목록은 페이지로 잘리므로 화면에서 더하면
+         *     **부분합을 전체인 양** 보이고, 「시험 없는 시편」 은 시료 단위 수로는 아예 셀 수
+         *     없다(시편마다 봐야 한다).
+         *
+         *     빠진 것을 세는 이유: 시편을 잘라 놓고 시험을 안 한 것이 그대로 남으면 아무도
+         *     모른다 — **그것이 다음에 할 일이다.**
+         */
+        MaterialTreeSummaryOut: {
+            /** Run Count */
+            run_count: number;
+            /** Sample Count */
+            sample_count: number;
+            /** Specimen Count */
+            specimen_count: number;
+            /** Specimens Without Run */
+            specimens_without_run: number;
         };
         /** MaterialUpdateRequest */
         MaterialUpdateRequest: {
@@ -12561,6 +12603,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    material_summary_api_materials__material_id__summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialTreeSummaryOut"];
                 };
             };
             /** @description Validation Error */

@@ -42,6 +42,7 @@ from app.modules.materials.schemas import (
     MaterialDeleteOut,
     MaterialDeleteRequest,
     MaterialOut,
+    MaterialTreeSummaryOut,
     MaterialUpdateRequest,
     MillCheckOut,
     MillCheckRowOut,
@@ -890,6 +891,44 @@ def create_bulk(
         specimens=specimens,
         made=made,
         blocked=blocked,
+    )
+
+
+@router.get("/{material_id}/summary", response_model=MaterialTreeSummaryOut)
+def material_summary(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MaterialTreeSummaryOut:
+    """계층 요약. **목록과 따로 두는 이유는 N+1 이다** — 재료 목록이 재료마다 이
+    셋을 물으면 한 화면에 수백 질의가 나간다. 상세에서만 한 번 부른다.
+    """
+    material = services.get_material(db, user, material_id)
+
+    samples = select(Sample.id).where(
+        Sample.material_id == material.id, Sample.deleted_at.is_(None)
+    )
+    specimens = select(Specimen.id).where(
+        Specimen.sample_id.in_(samples), Specimen.deleted_at.is_(None)
+    )
+    runs = select(TestRun.id).where(
+        TestRun.specimen_id.in_(specimens), TestRun.deleted_at.is_(None)
+    )
+    # **시험이 붙은 시편**을 따로 센다. 시험 수를 빼면 안 된다 — 한 시편에 시험이
+    # 둘이면 그만큼 어긋난다.
+    with_run = select(TestRun.specimen_id).where(
+        TestRun.specimen_id.in_(specimens), TestRun.deleted_at.is_(None)
+    )
+
+    def count(query: Any) -> int:
+        return int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
+
+    specimen_count = count(specimens)
+    return MaterialTreeSummaryOut(
+        sample_count=count(samples),
+        specimen_count=specimen_count,
+        run_count=count(runs),
+        specimens_without_run=specimen_count - count(with_run.distinct()),
     )
 
 

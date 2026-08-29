@@ -6,6 +6,7 @@ import { display } from '@/shared/units'
 
 export type Material = components['schemas']['MaterialOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
+export type MaterialTreeSummary = components['schemas']['MaterialTreeSummaryOut']
 export type Sample = components['schemas']['SampleOut']
 export type Specimen = components['schemas']['SpecimenOut']
 /** 평면 목록의 한 줄 — 시편에 재료·시료를 얹은 것. */
@@ -149,6 +150,12 @@ export const materialsApi = {
   /** 소속 거르기의 선택지. 내가 볼 수 있는 부서. */
   workspaces: () => api.get<WorkspaceChoice[]>('/workspaces'),
   list: (query: MaterialQuery = {}) => api.get<MaterialPage>(`/materials${search(query)}`),
+
+  /**
+   * 계층 요약. **목록과 따로 부른다** — 재료 목록이 재료마다 이것을 물으면 한
+   * 화면에 수백 질의가 나간다(N+1). 상세에서만 한 번.
+   */
+  summary: (id: string) => api.get<MaterialTreeSummary>(`/materials/${id}/summary`),
 
   /**
    * 시편을 **재료를 거치지 않고** 찾는다.

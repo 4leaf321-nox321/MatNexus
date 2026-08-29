@@ -6537,6 +6537,35 @@
         "title": "MaterialStatisticsOut",
         "type": "object"
       },
+      "MaterialTreeSummaryOut": {
+        "description": "재료 아래 계층을 한 줄로 — **「무엇이 얼마나 있나」 와 「빠진 게 어디냐」.**\n\n시료 목록만으로는 답이 안 나온다. 목록은 페이지로 잘리므로 화면에서 더하면\n**부분합을 전체인 양** 보이고, 「시험 없는 시편」 은 시료 단위 수로는 아예 셀 수\n없다(시편마다 봐야 한다).\n\n빠진 것을 세는 이유: 시편을 잘라 놓고 시험을 안 한 것이 그대로 남으면 아무도\n모른다 — **그것이 다음에 할 일이다.**",
+        "properties": {
+          "run_count": {
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "specimen_count": {
+            "title": "Specimen Count",
+            "type": "integer"
+          },
+          "specimens_without_run": {
+            "title": "Specimens Without Run",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sample_count",
+          "specimen_count",
+          "run_count",
+          "specimens_without_run"
+        ],
+        "title": "MaterialTreeSummaryOut",
+        "type": "object"
+      },
       "MaterialUpdateRequest": {
         "properties": {
           "alias": {
@@ -19518,6 +19547,50 @@
           }
         },
         "summary": "Create Sample",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/summary": {
+      "get": {
+        "description": "계층 요약. **목록과 따로 두는 이유는 N+1 이다** — 재료 목록이 재료마다 이\n셋을 물으면 한 화면에 수백 질의가 나간다. 상세에서만 한 번 부른다.",
+        "operationId": "material_summary_api_materials__material_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialTreeSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Material Summary",
         "tags": [
           "materials"
         ]

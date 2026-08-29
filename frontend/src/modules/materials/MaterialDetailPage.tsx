@@ -7,24 +7,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsDownUp,
-  ChevronsUpDown,
-  FileCheck2,
-  FlaskConical,
-  Globe2,
-  Layers,
-  ListTree,
-  Pencil,
-  Plus,
-  Table2,
-  Trash2,
-} from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileCheck2, FlaskConical, Globe2, Layers, ListTree, Pencil, Plus, Table2, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { DeleteMaterialDialog } from '@/modules/materials/DeleteMaterialDialog'
@@ -85,6 +68,8 @@ export default function MaterialDetailPage() {
   const navigate = useNavigate()
   const material = useResource(() => materialsApi.get(id), [id])
   const samples = useResource(() => materialsApi.samples(id), [id])
+  // 시료를 더하거나 지우면 수가 달라진다 — 같은 신호로 다시 읽는다.
+  const summary = useResource(() => materialsApi.summary(id), [id, samples.data])
   const [addingSample, setAddingSample] = useState(false)
   const [sources, setSources] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -195,6 +180,29 @@ export default function MaterialDetailPage() {
             value={new Date(item.created_at).toLocaleDateString('ko-KR')}
           />
         </dl>
+      )}
+
+      {/* **계층을 한 줄로.** 시료 ▸ 시편 ▸ 시험이 아코디언 3단이라, 펼치기
+          전에는 무엇이 얼마나 있는지 알 수 없었다 — 「구조가 한눈에 안 들어온다」
+          가 그 말이다.
+
+          **빠진 것을 함께 센다.** 시편을 잘라 놓고 시험을 안 한 것이 남으면
+          아무도 모른다 — 그것이 다음에 할 일이고, 0 이면 그 칩이 사라진다. */}
+      {summary.data && (
+        <div className="text-muted-foreground mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span className="text-foreground font-medium">시료 {summary.data.sample_count}</span>
+          <ChevronRight className="size-3.5 opacity-50" />
+          <span className="text-foreground font-medium">
+            시편 {summary.data.specimen_count}
+          </span>
+          <ChevronRight className="size-3.5 opacity-50" />
+          <span className="text-foreground font-medium">시험 {summary.data.run_count}</span>
+          {summary.data.specimens_without_run > 0 && (
+            <Badge variant="outline" className="ml-1 text-xs">
+              시험 없는 시편 {summary.data.specimens_without_run}
+            </Badge>
+          )}
+        </div>
       )}
 
       {/* **재료 화면이 답해야 하는 질문이 둘이다** — "무엇이 있나(시료·시편)" 와
