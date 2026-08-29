@@ -388,313 +388,334 @@ export default function TestRunDetailPage() {
         </div>
       )}
 
-      {item && definition && <ConditionBlock item={item} fields={definition.conditions} />}
+      {/* **시험 조건은 탭의 것이 아니라 시험의 것이다.** 탭 안에 두면 원본·처리·
+          결과가 저마다 같은 것을 이고 가고, 그 열이 조건+요약값+시편정보로 길어져
+          정작 곡선이 눌린다. 밖으로 빼서 왼쪽에 세로로 세운다 — **접지 않아도
+          항상 보이고, 탭을 옮겨도 그대로 있다.**
 
-      {item?.parse_error && (
-        <div className="border-destructive/40 bg-destructive/5 text-destructive mb-6 rounded-md border p-3 text-sm">
-          <p className="font-medium">읽지 못했습니다</p>
-          <p className="mt-1">{item.parse_error}</p>
-          <p className="mt-2 text-xs opacity-80">
-            원본을 내려받아 형식을 확인하세요. <b>「다시 읽기」 를 열면 형식을 골라
-            읽을 수 있습니다</b> — 자동으로 고른 것이 틀렸을 때 쓰는 길입니다. 맞는
-            형식이 없으면 <b>기준정보 · 파일 형식</b>에서 새로 만들고 다시 읽습니다.
-          </p>
+          폭은 해상도로 분기하지 않는다. 왼쪽만 260~320px 로 묶고 **남는 것을
+          전부 오른쪽에 준다** — 사람마다 모니터가 다르므로 특정 해상도에 맞춘
+          고정 값은 어딘가에서 반드시 어긋난다.
+
+          `lg` 아래(뷰포트 1024 미만)에서는 한 열로 쌓는다. 그 폭에서는 나눠 봐야
+          양쪽 다 못 쓴다. */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] lg:items-start">
+        <div className="space-y-4 lg:sticky lg:top-28">
+        {item && definition && <ConditionBlock item={item} fields={definition.conditions} />}
+        {item?.parse_error && (
+          <div className="border-destructive/40 bg-destructive/5 text-destructive mb-6 rounded-md border p-3 text-sm">
+            <p className="font-medium">읽지 못했습니다</p>
+            <p className="mt-1">{item.parse_error}</p>
+            <p className="mt-2 text-xs opacity-80">
+              원본을 내려받아 형식을 확인하세요. <b>「다시 읽기」 를 열면 형식을 골라
+              읽을 수 있습니다</b> — 자동으로 고른 것이 틀렸을 때 쓰는 길입니다. 맞는
+              형식이 없으면 <b>기준정보 · 파일 형식</b>에서 새로 만들고 다시 읽습니다.
+            </p>
+          </div>
+        )}
+
+        {item?.note && (
+          <div className="bg-muted/40 mb-6 rounded-md border p-3 text-sm">
+            {/* 서버가 sha256 으로 잡은 중복 안내가 여기 온다. 실을 곳이 없으면
+                서버만 알고 사용자는 끝내 모른다. */}
+            <p className="whitespace-pre-wrap">{item.note}</p>
+          </div>
+        )}
+
+        {item && item.warnings.length > 0 && (
+          <div className="mb-6 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+            <p className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-500">
+              <AlertTriangle className="size-4" />
+              읽기는 했지만 확인이 필요합니다
+            </p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-amber-800 dark:text-amber-400">
+              {item.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         </div>
-      )}
 
-      {item?.note && (
-        <div className="bg-muted/40 mb-6 rounded-md border p-3 text-sm">
-          {/* 서버가 sha256 으로 잡은 중복 안내가 여기 온다. 실을 곳이 없으면
-              서버만 알고 사용자는 끝내 모른다. */}
-          <p className="whitespace-pre-wrap">{item.note}</p>
-        </div>
-      )}
+        <div className="min-w-0">
 
-      {item && item.warnings.length > 0 && (
-        <div className="mb-6 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-          <p className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-500">
-            <AlertTriangle className="size-4" />
-            읽기는 했지만 확인이 필요합니다
-          </p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-amber-800 dark:text-amber-400">
-            {item.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* **세로로 이어 붙이지 않는다.** 원본 → 처리 → 결과가 한 화면에 쌓이면,
-          처리하는 동안 원본 곡선이 위로 사라지고 결과는 또 아래에 있다. 계획서의
-          워크벤치(Data → Process → Stats → Fit → Export)와 같은 구조라, 나중에
-          여러 시험을 다루는 워크벤치로 그대로 넓어진다(ADR 0007). */}
-      {item && (
-        <Tabs defaultValue="source">
-          <TabsList>
-            <TabsTrigger value="source">원본</TabsTrigger>
-            <TabsTrigger value="process" disabled={item.status !== 'parsed'}>
-              처리
-            </TabsTrigger>
-            {/* **DMA 일 때만 뜬다.** 점탄성은 온도가 다른 스윕 여럿을 겹치는
-                일이라 인장 시험에는 할 것이 없다 — 눌러 봐야 "겹칠 스윕이
-                없습니다" 만 나오는 탭은 두지 않는다. */}
-            {isViscoelastic && (
-              <TabsTrigger value="viscoelastic" disabled={item.status !== 'parsed'}>
-                점탄성
+        {/* **세로로 이어 붙이지 않는다.** 원본 → 처리 → 결과가 한 화면에 쌓이면,
+            처리하는 동안 원본 곡선이 위로 사라지고 결과는 또 아래에 있다. 계획서의
+            워크벤치(Data → Process → Stats → Fit → Export)와 같은 구조라, 나중에
+            여러 시험을 다루는 워크벤치로 그대로 넓어진다(ADR 0007). */}
+        {item && (
+          <Tabs defaultValue="source">
+            <TabsList>
+              <TabsTrigger value="source">원본</TabsTrigger>
+              <TabsTrigger value="process" disabled={item.status !== 'parsed'}>
+                처리
               </TabsTrigger>
-            )}
-            <TabsTrigger value="results" disabled={item.status !== 'parsed'}>
-              결과
-              {item.result_count > 0 && (
-                <Badge variant="secondary" className="ml-1.5 text-xs">
-                  {item.result_count}
-                </Badge>
+              {/* **DMA 일 때만 뜬다.** 점탄성은 온도가 다른 스윕 여럿을 겹치는
+                  일이라 인장 시험에는 할 것이 없다 — 눌러 봐야 "겹칠 스윕이
+                  없습니다" 만 나오는 탭은 두지 않는다. */}
+              {isViscoelastic && (
+                <TabsTrigger value="viscoelastic" disabled={item.status !== 'parsed'}>
+                  점탄성
+                </TabsTrigger>
               )}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="source">
-            {/* **곡선을 오른쪽에, 읽는 값을 왼쪽에.** 세로로 쌓으면 곡선을 보다가
-                요약값을 보려고 스크롤을 내리고, 숫자를 확인하고 다시 올라온다 —
-                「장비가 160 이라는데 곡선이 그렇게 보이나」 가 이 화면에서 가장 자주
-                하는 질문인데 둘이 한 화면에 없었다.
-
-                좁은 화면에서는 한 열로 돌아간다. 그때는 **곡선이 먼저다**(`order`) —
-                무엇을 읽었는지 보고 나서 숫자를 본다. */}
-            <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-              <div className="space-y-8 lg:order-1">
-                {item && item.summary.length > 0 && (
-                  <section className="mb-8">
-                    <h2 className="mb-1 font-medium">요약값</h2>
-                    {/* **나란히 두는 것이 목적이다.** 한 줄씩 평평하게 그리면 같은
-                        항복강도가 표의 다른 자리에 떨어져, source 를 나눈 의미가
-                        사라진다. 실측: 장비 160.0 MPa vs 우리 249.5 MPa. */}
-                    <p className="text-muted-foreground mb-2 text-xs">
-                      장비가 계산한 값과 우리가 계산한 값을 같은 줄에 둡니다. 크게 다르면
-                      둘 중 하나가 틀린 것인데, <b>어느 쪽인지는 곡선을 봐야 압니다</b> —
-                      대개 탄성 구간을 어디로 잡았는지에서 갈립니다.
-                    </p>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>항목</TableHead>
-                          <TableHead className="text-right">장비</TableHead>
-                          <TableHead className="text-right">MatNexus</TableHead>
-                          <TableHead className="text-right">차이</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pairs.map((pair) => {
-                          const notable =
-                            pair.differencePercent !== null &&
-                            Math.abs(pair.differencePercent) >= NOTABLE_DIFFERENCE
-                          return (
-                            <TableRow key={pair.key}>
-                              <TableCell>
-                                <span className="text-sm">{pair.label}</span>
-                                <p className="text-muted-foreground font-mono text-xs">
-                                  {pair.key}
-                                </p>
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {pair.instrument
-                                  ? formatValue(
-                                      pair.instrument.value,
-                                      pair.instrument.text,
-                                      pair.instrument.si_unit,
-                                      pair.dimension
-                                    )
-                                  : '—'}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {pair.ours
-                                  ? formatValue(
-                                      pair.ours.value,
-                                      pair.ours.text,
-                                      pair.ours.si_unit,
-                                      pair.dimension
-                                    )
-                                  : '—'}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {pair.differencePercent === null ? (
-                                  <span className="text-muted-foreground">—</span>
-                                ) : (
-                                  <span
-                                    className={
-                                      notable ? 'font-medium text-amber-700 dark:text-amber-500' : ''
-                                    }
-                                  >
-                                    {pair.differencePercent > 0 ? '+' : ''}
-                                    {pair.differencePercent.toPrecision(3)}%
-                                  </span>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </section>
+              <TabsTrigger value="results" disabled={item.status !== 'parsed'}>
+                결과
+                {item.result_count > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 text-xs">
+                    {item.result_count}
+                  </Badge>
                 )}
+              </TabsTrigger>
+            </TabsList>
 
-                {item && Object.keys(item.source_metadata).length > 0 && (
-                  <section>
-                    <h2 className="mb-2 font-medium">장비가 준 시편 정보</h2>
-                    <p className="text-muted-foreground mb-2 text-xs">
-                      시험 결과가 아니라 입력값입니다. 시편 실측치를 자동으로 덮어쓰지 않습니다 —
-                      사람이 이미 재어 넣은 값을 파일이 조용히 바꾸면 어느 것이 맞는지 알 수
-                      없습니다.
-                    </p>
-                    <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border p-3 text-sm sm:grid-cols-3">
-                      {Object.entries(item.source_metadata).map(([key, value]) => (
-                        <div key={key}>
-                          <dt className="text-muted-foreground text-xs">{key}</dt>
-                          <dd className="font-mono text-xs">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </section>
-                )}
-              </div>
+            <TabsContent value="source">
+              {/* **곡선을 오른쪽에, 읽는 값을 왼쪽에.** 세로로 쌓으면 곡선을 보다가
+                  요약값을 보려고 스크롤을 내리고, 숫자를 확인하고 다시 올라온다 —
+                  「장비가 160 이라는데 곡선이 그렇게 보이나」 가 이 화면에서 가장 자주
+                  하는 질문인데 둘이 한 화면에 없었다.
 
-              {/* **머리글이 맨 위를 차지한다.** `top-4` 로 두면 곡선 윗부분이
-                  그 아래로 기어들어 축 라벨이 잘린다 — 머리글 높이만큼 내린다. */}
-              <div className="lg:order-2 lg:sticky lg:top-28">
-                {item?.status === 'parsed' && (
-                  <section className="mb-8">
-                    <h2 className="mb-2 font-medium">곡선</h2>
-
-                    {/* **종류 → 벌 → 축** 으로 좁혀 들어간다. 한 줄에 8개를 늘어놓으면
-                        무엇이 같은 종류의 반복이고 무엇이 성격이 다른 곡선인지 구분이 안 된다. */}
-                    <div className="mb-3 space-y-1">
-                      {families.length > 1 && (
-                        <div className="flex flex-wrap items-center gap-1 text-xs">
-                          <span className="text-muted-foreground w-12 shrink-0">종류</span>
-                          {families.map((family) => (
-                            <Button
-                              key={family.name}
-                              size="sm"
-                              variant={activeFamily?.name === family.name ? 'default' : 'outline'}
-                              onClick={() => {
-                                setFamilyName(family.name)
-                                // 종류를 바꾸면 벌 선택은 처음으로. 안 그러면 다른 종류의
-                                // 키가 남아 첫 벌로 조용히 되돌아간 것처럼 보인다.
-                                setCurveKey(null)
-                              }}
-                            >
-                              {family.name}
-                              <span className="ml-1 opacity-70">
-                                {family.kind === 'derived' ? '처리결과' : '측정'}
-                                {family.items.length > 1 && ` ${family.items.length}벌`}
-                              </span>
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* 그 종류가 여러 벌일 때만. 한 벌뿐이면 고를 것이 없다. */}
-                      {(activeFamily?.items.length ?? 0) > 1 && (
-                        <div className="flex flex-wrap items-center gap-1 text-xs">
-                          <span className="text-muted-foreground w-12 shrink-0">구간</span>
-                          {activeFamily?.items.map((curveItem) => (
-                            <Button
-                              key={curveItem.key}
-                              size="sm"
-                              variant={activeCurve?.key === curveItem.key ? 'default' : 'outline'}
-                              onClick={() => setCurveKey(curveItem.key)}
-                              title={`${curveItem.row_count}행 · ${curveItem.channels.join(', ')}`}
-                            >
-                              {/* 종류 이름을 뗀 나머지 — `- 3` 처럼 구간만 보인다. */}
-                              {memberLabel(curveItem, activeFamily.name)}
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* **X 도 고를 수 있어야 한다.** 처리결과 곡선은 열이 12개다 —
-                          주파수-저장탄성률로 볼지, 온도-이동인자로 볼지는 그때그때 다르다.
-                          X 가 첫 채널로 고정돼 있던 때는 볼 수 없는 조합이 대부분이었다. */}
-                      {(['x', 'y'] as const).map((axis) => (
-                        <div key={axis} className="flex flex-wrap items-center gap-1 text-xs">
-                          <span className="text-muted-foreground w-12 shrink-0">
-                            {axis === 'x' ? 'X축' : 'Y축'}
-                          </span>
-                          {axisOptions.map((channel) => (
-                            <Button
-                              key={channel.key}
-                              size="sm"
-                              variant={axes?.[axis] === channel.key ? 'default' : 'outline'}
-                              onClick={() =>
-                                setAxes((current) =>
-                                  current ? { ...current, [axis]: channel.key } : current,
-                                )
-                              }
-                              disabled={axes?.[axis === 'x' ? 'y' : 'x'] === channel.key}
-                            >
-                              {channel.label}
-                            </Button>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-
-                    <ErrorNotice error={curve.error} className="mb-2" />
-
-                    <CurveChart
-                      points={points}
-                      xLabel={axisLabel(
-                        xChannel?.label ?? '',
-                        xChannel?.si_unit,
-                        xChannel?.dimension,
-                      )}
-                      yLabel={axisLabel(
-                        yChannel?.label ?? '',
-                        yChannel?.si_unit,
-                        yChannel?.dimension,
-                      )}
-                    />
-                    {curve.data && (
-                      <p className="text-muted-foreground mt-2 text-xs">
-                        원본 {curve.data.row_count.toLocaleString('ko-KR')}행 중{' '}
-                        {curve.data.returned}점을 표시합니다 — 모양을 지키면서 줄였습니다(LTTB).
+                  좁은 화면에서는 한 열로 돌아간다. 그때는 **곡선이 먼저다**(`order`) —
+                  무엇을 읽었는지 보고 나서 숫자를 본다. */}
+              {/* **바깥이 이미 한 열을 먹었다.** `lg`(1024) 에서 또 나누면
+                  양쪽 다 못 쓴다 — 안쪽은 `2xl`(1536) 부터 갈린다. 폭은
+                  `minmax` 로 두어 요약값은 300~420 에 묶고 **남는 것은 전부
+                  곡선**이 가져간다. */}
+              <div className="grid gap-6 2xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)] 2xl:items-start">
+                <div className="space-y-8 2xl:order-1">
+                  {item && item.summary.length > 0 && (
+                    <section className="mb-8">
+                      <h2 className="mb-1 font-medium">요약값</h2>
+                      {/* **나란히 두는 것이 목적이다.** 한 줄씩 평평하게 그리면 같은
+                          항복강도가 표의 다른 자리에 떨어져, source 를 나눈 의미가
+                          사라진다. 실측: 장비 160.0 MPa vs 우리 249.5 MPa. */}
+                      <p className="text-muted-foreground mb-2 text-xs">
+                        장비가 계산한 값과 우리가 계산한 값을 같은 줄에 둡니다. 크게 다르면
+                        둘 중 하나가 틀린 것인데, <b>어느 쪽인지는 곡선을 봐야 압니다</b> —
+                        대개 탄성 구간을 어디로 잡았는지에서 갈립니다.
                       </p>
-                    )}
-                  </section>
-                )}
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>항목</TableHead>
+                            <TableHead className="text-right">장비</TableHead>
+                            <TableHead className="text-right">MatNexus</TableHead>
+                            <TableHead className="text-right">차이</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pairs.map((pair) => {
+                            const notable =
+                              pair.differencePercent !== null &&
+                              Math.abs(pair.differencePercent) >= NOTABLE_DIFFERENCE
+                            return (
+                              <TableRow key={pair.key}>
+                                <TableCell>
+                                  <span className="text-sm">{pair.label}</span>
+                                  <p className="text-muted-foreground font-mono text-xs">
+                                    {pair.key}
+                                  </p>
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {pair.instrument
+                                    ? formatValue(
+                                        pair.instrument.value,
+                                        pair.instrument.text,
+                                        pair.instrument.si_unit,
+                                        pair.dimension
+                                      )
+                                    : '—'}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {pair.ours
+                                    ? formatValue(
+                                        pair.ours.value,
+                                        pair.ours.text,
+                                        pair.ours.si_unit,
+                                        pair.dimension
+                                      )
+                                    : '—'}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {pair.differencePercent === null ? (
+                                    <span className="text-muted-foreground">—</span>
+                                  ) : (
+                                    <span
+                                      className={
+                                        notable ? 'font-medium text-amber-700 dark:text-amber-500' : ''
+                                      }
+                                    >
+                                      {pair.differencePercent > 0 ? '+' : ''}
+                                      {pair.differencePercent.toPrecision(3)}%
+                                    </span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </section>
+                  )}
+
+                  {item && Object.keys(item.source_metadata).length > 0 && (
+                    <section>
+                      <h2 className="mb-2 font-medium">장비가 준 시편 정보</h2>
+                      <p className="text-muted-foreground mb-2 text-xs">
+                        시험 결과가 아니라 입력값입니다. 시편 실측치를 자동으로 덮어쓰지 않습니다 —
+                        사람이 이미 재어 넣은 값을 파일이 조용히 바꾸면 어느 것이 맞는지 알 수
+                        없습니다.
+                      </p>
+                      <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border p-3 text-sm sm:grid-cols-3">
+                        {Object.entries(item.source_metadata).map(([key, value]) => (
+                          <div key={key}>
+                            <dt className="text-muted-foreground text-xs">{key}</dt>
+                            <dd className="font-mono text-xs">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </section>
+                  )}
+                </div>
+
+                {/* **머리글이 맨 위를 차지한다.** `top-4` 로 두면 곡선 윗부분이
+                    그 아래로 기어들어 축 라벨이 잘린다 — 머리글 높이만큼 내린다. */}
+                <div className="2xl:order-2 2xl:sticky 2xl:top-28">
+                  {item?.status === 'parsed' && (
+                    <section className="mb-8">
+                      <h2 className="mb-2 font-medium">곡선</h2>
+
+                      {/* **종류 → 벌 → 축** 으로 좁혀 들어간다. 한 줄에 8개를 늘어놓으면
+                          무엇이 같은 종류의 반복이고 무엇이 성격이 다른 곡선인지 구분이 안 된다. */}
+                      <div className="mb-3 space-y-1">
+                        {families.length > 1 && (
+                          <div className="flex flex-wrap items-center gap-1 text-xs">
+                            <span className="text-muted-foreground w-12 shrink-0">종류</span>
+                            {families.map((family) => (
+                              <Button
+                                key={family.name}
+                                size="sm"
+                                variant={activeFamily?.name === family.name ? 'default' : 'outline'}
+                                onClick={() => {
+                                  setFamilyName(family.name)
+                                  // 종류를 바꾸면 벌 선택은 처음으로. 안 그러면 다른 종류의
+                                  // 키가 남아 첫 벌로 조용히 되돌아간 것처럼 보인다.
+                                  setCurveKey(null)
+                                }}
+                              >
+                                {family.name}
+                                <span className="ml-1 opacity-70">
+                                  {family.kind === 'derived' ? '처리결과' : '측정'}
+                                  {family.items.length > 1 && ` ${family.items.length}벌`}
+                                </span>
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 그 종류가 여러 벌일 때만. 한 벌뿐이면 고를 것이 없다. */}
+                        {(activeFamily?.items.length ?? 0) > 1 && (
+                          <div className="flex flex-wrap items-center gap-1 text-xs">
+                            <span className="text-muted-foreground w-12 shrink-0">구간</span>
+                            {activeFamily?.items.map((curveItem) => (
+                              <Button
+                                key={curveItem.key}
+                                size="sm"
+                                variant={activeCurve?.key === curveItem.key ? 'default' : 'outline'}
+                                onClick={() => setCurveKey(curveItem.key)}
+                                title={`${curveItem.row_count}행 · ${curveItem.channels.join(', ')}`}
+                              >
+                                {/* 종류 이름을 뗀 나머지 — `- 3` 처럼 구간만 보인다. */}
+                                {memberLabel(curveItem, activeFamily.name)}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* **X 도 고를 수 있어야 한다.** 처리결과 곡선은 열이 12개다 —
+                            주파수-저장탄성률로 볼지, 온도-이동인자로 볼지는 그때그때 다르다.
+                            X 가 첫 채널로 고정돼 있던 때는 볼 수 없는 조합이 대부분이었다. */}
+                        {(['x', 'y'] as const).map((axis) => (
+                          <div key={axis} className="flex flex-wrap items-center gap-1 text-xs">
+                            <span className="text-muted-foreground w-12 shrink-0">
+                              {axis === 'x' ? 'X축' : 'Y축'}
+                            </span>
+                            {axisOptions.map((channel) => (
+                              <Button
+                                key={channel.key}
+                                size="sm"
+                                variant={axes?.[axis] === channel.key ? 'default' : 'outline'}
+                                onClick={() =>
+                                  setAxes((current) =>
+                                    current ? { ...current, [axis]: channel.key } : current,
+                                  )
+                                }
+                                disabled={axes?.[axis === 'x' ? 'y' : 'x'] === channel.key}
+                              >
+                                {channel.label}
+                              </Button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+
+                      <ErrorNotice error={curve.error} className="mb-2" />
+
+                      <CurveChart
+                        points={points}
+                        xLabel={axisLabel(
+                          xChannel?.label ?? '',
+                          xChannel?.si_unit,
+                          xChannel?.dimension,
+                        )}
+                        yLabel={axisLabel(
+                          yChannel?.label ?? '',
+                          yChannel?.si_unit,
+                          yChannel?.dimension,
+                        )}
+                      />
+                      {curve.data && (
+                        <p className="text-muted-foreground mt-2 text-xs">
+                          원본 {curve.data.row_count.toLocaleString('ko-KR')}행 중{' '}
+                          {curve.data.returned}점을 표시합니다 — 모양을 지키면서 줄였습니다(LTTB).
+                        </p>
+                      )}
+                    </section>
+                  )}
+                </div>
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="process">
-            {activeCurve ? (
-              <ProcessingPanel
-                testRunId={item.id}
-                testTypeKey={item.test_type_key}
-                curveKey={activeCurve.key}
-                sourceColumns={activeCurve.channels}
-                /* 변수 목록이 `displacement` 를 '변위 (m)' 로 읽게 한다. */
-                sourceChannels={channels}
-                managedWorkspaces={managed}
-              />
-            ) : (
-              <p className="text-muted-foreground py-12 text-center text-sm">
-                처리할 곡선이 없습니다.
-              </p>
-            )}
-          </TabsContent>
-
-          {isViscoelastic && (
-            <TabsContent value="viscoelastic">
-              <ViscoelasticPanel testRunId={item.id} />
             </TabsContent>
-          )}
 
-          <TabsContent value="results">
-            <ResultsPanel testRunId={item.id} onAdoptChange={run.reload} />
-          </TabsContent>
-        </Tabs>
-      )}
+            <TabsContent value="process">
+              {activeCurve ? (
+                <ProcessingPanel
+                  testRunId={item.id}
+                  testTypeKey={item.test_type_key}
+                  curveKey={activeCurve.key}
+                  sourceColumns={activeCurve.channels}
+                  /* 변수 목록이 `displacement` 를 '변위 (m)' 로 읽게 한다. */
+                  sourceChannels={channels}
+                  managedWorkspaces={managed}
+                />
+              ) : (
+                <p className="text-muted-foreground py-12 text-center text-sm">
+                  처리할 곡선이 없습니다.
+                </p>
+              )}
+            </TabsContent>
+
+            {isViscoelastic && (
+              <TabsContent value="viscoelastic">
+                <ViscoelasticPanel testRunId={item.id} />
+              </TabsContent>
+            )}
+
+            <TabsContent value="results">
+              <ResultsPanel testRunId={item.id} onAdoptChange={run.reload} />
+            </TabsContent>
+          </Tabs>
+        )}
+        </div>
+      </div>
     </div>
   )
 }

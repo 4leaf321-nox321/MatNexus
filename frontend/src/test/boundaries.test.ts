@@ -276,6 +276,25 @@ describe('본문 폭', () => {
     const shell = readFileSync(path.join(SRC, SHELL, 'AppShell.tsx'), 'utf-8')
     expect(shell).toMatch(/max-w-\[1600px\]/)
   })
+
+  it('상한을 푸는 화면도 AppShell 이 안다', () => {
+    // **화면이 스스로 넓어지면 안 된다.** 좁히는 예외는 `NARROW_BY_DESIGN` 에
+    // 적히는데 넓히는 쪽은 개념이 없었다 — 그러면 각 화면이 제멋대로 `w-screen`
+    // 같은 것을 쓰고, 폭 지식이 흩어진 뒤에는 「왜 이 화면만 다른가」 에 답할
+    // 데가 없다. 넓히는 것도 AppShell 이 경로로 정한다.
+    const shell = readFileSync(path.join(SRC, SHELL, 'AppShell.tsx'), 'utf-8')
+    expect(shell, 'AppShell 에 WIDE 목록이 있어야 한다').toMatch(/const WIDE\b/)
+
+    const offenders: string[] = []
+    for (const file of walk(MODULES)) {
+      const source = readFileSync(file, 'utf-8')
+      // 화면이 뷰포트 폭을 직접 잡는 자리. `w-full` 은 부모를 따르므로 괜찮다.
+      for (const match of source.matchAll(/className="[^"]*\b(w-screen|max-w-none)\b[^"]*"/g)) {
+        offenders.push(`${path.relative(MODULES, file)}: ${match[0]}`)
+      }
+    }
+    expect(offenders, '폭은 AppShell 이 정합니다 — WIDE 에 경로를 넣으세요.').toEqual([])
+  })
 })
 
 

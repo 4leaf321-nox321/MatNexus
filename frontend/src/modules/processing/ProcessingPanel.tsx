@@ -723,13 +723,15 @@ export function ProcessingPanel({
           왼쪽이 먼저 쪼그라들었고, 단계 이름이 한 글자씩 끊겨 세로로 섰다
           (실측 2026-08-28). 비율로 두면 좁아져도 같은 몫을 지킨다.
           `minmax(0,…)` 는 그대로 둔다 — 없으면 내용이 칸을 밀어 가로 스크롤이 난다. */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
+      {/* 시험 상세가 이미 한 열을 먹으므로 여기도 `2xl` 부터 갈린다 —
+          `lg` 에서 나누면 순서도와 곡선이 둘 다 못 쓸 폭이 된다. */}
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
         {/* **순서도가 길어져도 곡선과 위 단추가 안 밀린다.**
             전에는 페이지 전체가 늘어나서, 단계를 스무 개쯤 켜면 그래프를 보려고
             위로 다시 굴려야 했다 — 고치는 자리와 결과를 보는 자리가 한 화면에
             있어야 「고쳐 보고 다시 본다」가 된다.
             좁은 화면(lg 미만)에서는 한 칸으로 쌓이므로 그대로 둔다. */}
-        <div className="flex flex-col gap-2 lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)]">
+        <div className="flex flex-col gap-2 2xl:sticky 2xl:top-28 2xl:max-h-[calc(100vh-10rem)]">
           {/* **막지 않는다. 미리 말할 뿐이다.** 공칭까지만 필요한 작업도 정상이다.
               다만 그 사실을 CAE 카드 탭에서 알게 되면 20건을 다시 처리해야 한다 —
               결과는 불변이라 열을 나중에 덧붙일 수 없다. */}

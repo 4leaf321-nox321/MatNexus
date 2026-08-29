@@ -6,7 +6,7 @@
  */
 
 import { Suspense, useState } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useParams } from 'react-router-dom'
 
 import { NoticePopup } from '@/modules/notices/NoticePopup'
 import { useAuth } from '@/shared/auth/AuthContext'
@@ -20,6 +20,7 @@ import {
 } from '@/shared/layout/SidePanel'
 import { Sidebar } from '@/shared/layout/Sidebar'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
+import { cn } from '@/shared/lib/utils'
 
 /** 화면 조각을 받아 오는 동안. **빈 화면을 보이지 않는다.** */
 function PageSkeleton() {
@@ -32,9 +33,21 @@ function PageSkeleton() {
   )
 }
 
+/**
+ * **상한을 푸는 화면.** 폭은 여기가 정한다 — 화면이 스스로 정하면 규칙이 흩어지고,
+ * `boundaries.test.ts` 가 그것을 막는다.
+ *
+ * 시험 상세가 첫 손님이다: 왼쪽에 시험 조건, 오른쪽 탭 안에서 다시 요약값과 곡선
+ * 으로 갈리는 3단 구조라 1600 에서는 곡선이 눌린다. **표를 그리는 화면은 넣지
+ * 않는다** — 4K 에서 한 줄이 화면을 가로지르면 눈이 행을 놓친다.
+ */
+const WIDE = [/^\/test-runs\/[^/]+$/]
+
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const { slug } = useParams<{ slug?: string }>()
+  const { pathname } = useLocation()
+  const wide = WIDE.some((one) => one.test(pathname))
   const { user } = useAuth()
   // 부서 스코프가 아닌 화면(재료·알림·관리)에서도 사이드바의 '홈'·'워크벤치'·
   // '부서 멤버' 는 **어느 부서인지** 정해야 한다. `default` 로 두면 자기 부서가
@@ -71,7 +84,13 @@ export function AppShell() {
 
               좁아야 하는 화면(공지·알림·VOC 같이 **읽는** 것)은 자기 안에서
               다시 좁힌다. 그쪽은 폭이 넓을수록 읽기 나쁘다. */}
-          <div className="mx-auto w-full max-w-[1600px]">
+          {/* **왼쪽 정렬이다(`mx-auto` 를 뺐다).** 가운데 정렬이면 2560 화면에서
+              좌우 336px 씩이 죽고, 사이드바와 내용 사이가 그만큼 벌어진다. 더
+              나쁜 것은 **상한을 푼 화면으로 옮길 때 왼쪽 끝이 튀는 것**이다 —
+              가운데 정렬에서는 넓은 화면과 좁은 화면의 시작점이 다르다.
+
+              왼쪽 정렬이면 폭이 달라도 시작점이 같아 오른쪽으로만 늘어난다. */}
+          <div className={cn('w-full', wide ? '' : 'max-w-[1600px]')}>
             {/* 화면 대부분을 나눠 싣는다(router.tsx). 껍데기는 이미 떠 있으므로
                 여기서 기다리는 동안에도 사이드바와 상단 바는 그대로 있다. */}
             <Suspense fallback={<PageSkeleton />}>
