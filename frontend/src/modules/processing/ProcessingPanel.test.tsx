@@ -31,6 +31,9 @@ import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
  * 「무엇을 못 찾았는지」 에서 「시간이 다 됐다」 로 바뀌어 **원인이 오히려 덜
  * 보이게** 됐다. 대기보다 넉넉해야 한다.
  */
+// **느린 러너 몫이지 경합을 덮는 값이 아니다.** 경합은 `clickStep` 이 눌리기
+// 직전에 노드를 다시 집는 것으로 고쳤다 — 여기서 기다리는 것은 실제로 오는 일이라
+// 더 기다리면 온다. CI 는 공유 윈도우 러너라 한 상호작용이 초를 넘길 때가 있다.
 configure({ asyncUtilTimeout: 5000 })
 vi.setConfig({ testTimeout: 20000 })
 import {
