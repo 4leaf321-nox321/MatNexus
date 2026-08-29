@@ -104,6 +104,38 @@ MEMBERS = [
 ]
 
 
+def shaped(label: str, *, amplitude: float, tau_factor: float, rmse: float) -> groups.Member:
+    """**모양이 다른** 시편. `member` 는 진폭만 바꾸지만 이쪽은 완화 시간도 옮긴다.
+
+    실제 시편은 완화 시간 분포가 서로 다르고, **거기서 세 방법이 갈린다** — 배율만
+    다르면 pooled 와 averaged 가 수학적으로 같은 답을 낸다.
+    """
+    series = PronySeries(
+        equilibrium_pa=TRUE.equilibrium_pa * amplitude,
+        terms=tuple(
+            PronyTerm(term.modulus_pa * amplitude, term.relaxation_time_s * tau_factor)
+            for term in TRUE.terms
+        ),
+        normalized_rmse=rmse,
+        bic=0.0,
+    )
+    storage, loss = storage_loss(series, FREQUENCY_HZ)
+    return groups.Member(
+        label=label,
+        columns={"frequency_hz": FREQUENCY_HZ, "storage_pa": storage, "loss_pa": loss},
+        values={"reference_temperature_k": 293.15},
+        meta={"prony": series},
+    )
+
+
+#: A 가 잔차 0 이라 대표가 되고, 나머지는 진폭과 완화 시간이 함께 흩어진다.
+SHAPED = [
+    shaped("A", amplitude=1.0, tau_factor=1.0, rmse=0.0),
+    shaped("B", amplitude=1.05, tau_factor=3.0, rmse=0.05),
+    shaped("C", amplitude=1.20, tau_factor=0.3, rmse=0.10),
+]
+
+
 class Test세_방법:
     def test_pooled_는_전부_쓴다(self) -> None:
         outcome = run(MEMBERS, method="pooled")
@@ -141,12 +173,38 @@ class Test세_방법:
         assert outcome.used == ["B"]
 
     def test_세_방법이_서로_다른_답을_낸다(self) -> None:
-        """**같은 답이 나오면 셋을 둘 이유가 없다.** 흩어진 시편을 주면 갈린다."""
+        """**같은 답이 나오면 셋을 둘 이유가 없다.**
+
+        ## 진폭만 다른 시편으로는 갈리지 않는다
+
+        `MEMBERS` 는 같은 곡선을 배율만 바꾼 것이다(τ 가 같다). 그러면
+
+            averaged      계수의 평균 = 평균 진폭
+            pooled        같은 모양을 모아 맞추므로 역시 평균 진폭
+
+        **둘이 수학적으로 같아진다.** 게다가 `MEMBERS` 는 대칭이라(0, +0.05, -0.05)
+        평균이 가운데 시편과도 같아져 `representative` 까지 붙는다. 이 시험은 그
+        상태에서 부동소수 마지막 자리(4999999.999999999 vs 5000000.0)로만 갈려
+        **우연히** 통과하고 있었고, CI 에서 그 자리가 붙자 빨개졌다(2026-08-29).
+
+        ## 실제로 갈리는 것은 **모양이 다를 때**다
+
+        시편마다 완화 시간 분포가 다르다. 그때 공통 τ 격자에 맞추는 방식이 셋이
+        서로 다른 답을 낸다 — 그것이 셋을 둔 이유다. 여기서는 τ 를 흩어 준다.
+
+        ## 「다르다」 는 자릿수가 아니라 크기로 본다
+
+        `set()` 으로 세면 1 ULP 차이도 「다른 답」 이 된다. 사람이 보는 뜻은 그것이
+        아니므로 **상대 차이**로 잰다.
+        """
         answers = {
-            method: run(MEMBERS, method=method, terms=3).values["equilibrium_pa"]
+            method: run(SHAPED, method=method, terms=3).values["equilibrium_pa"]
             for method in ("pooled", "averaged", "representative")
         }
-        assert len(set(answers.values())) == 3, answers
+        values = list(answers.values())
+        for one, other in ((0, 1), (0, 2), (1, 2)):
+            gap = abs(values[one] - values[other]) / max(abs(values[one]), abs(values[other]))
+            assert gap > 0.05, f"두 방법이 사실상 같은 답을 낸다: {answers}"
 
 
 class Test막는_자리:
