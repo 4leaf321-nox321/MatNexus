@@ -2504,6 +2504,67 @@
         "title": "CoverageTypeOut",
         "type": "object"
       },
+      "CpuOut": {
+        "properties": {
+          "load_avg_15m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Avg 15M"
+          },
+          "load_avg_1m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Avg 1M"
+          },
+          "load_avg_5m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Avg 5M"
+          },
+          "logical_cpus": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Cpus"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "logical_cpus",
+          "load_avg_1m",
+          "load_avg_5m",
+          "load_avg_15m"
+        ],
+        "title": "CpuOut",
+        "type": "object"
+      },
       "CreateAccountRequest": {
         "description": "관리자가 직접 계정을 만들 때. 승인 절차 없이 바로 활성이다.",
         "properties": {
@@ -2805,6 +2866,39 @@
           "count"
         ],
         "title": "CurveStatsOut",
+        "type": "object"
+      },
+      "DatabaseOut": {
+        "properties": {
+          "pool": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Pool",
+            "type": "object"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "size_bytes",
+          "pool"
+        ],
+        "title": "DatabaseOut",
         "type": "object"
       },
       "DeclaredCardPreviewOut": {
@@ -3261,6 +3355,45 @@
           "reason"
         ],
         "title": "DiscardIn",
+        "type": "object"
+      },
+      "DiskOut": {
+        "description": "디스크 한 칸. **경로마다 다른 드라이브일 수 있다** — 파일 저장소와 프로그램이\n같은 드라이브라는 보장이 없고, 찬 쪽이 어느 쪽인지가 곧 할 일이다.",
+        "properties": {
+          "free_bytes": {
+            "title": "Free Bytes",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "percent_used": {
+            "title": "Percent Used",
+            "type": "number"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          },
+          "used_bytes": {
+            "title": "Used Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "path",
+          "total_bytes",
+          "used_bytes",
+          "free_bytes",
+          "percent_used"
+        ],
+        "title": "DiskOut",
         "type": "object"
       },
       "DismissRequest": {
@@ -5158,6 +5291,46 @@
         "title": "HomeWorkspaceRequest",
         "type": "object"
       },
+      "HostOut": {
+        "properties": {
+          "arch": {
+            "title": "Arch",
+            "type": "string"
+          },
+          "hostname": {
+            "title": "Hostname",
+            "type": "string"
+          },
+          "kernel": {
+            "title": "Kernel",
+            "type": "string"
+          },
+          "os": {
+            "title": "Os",
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uptime Seconds"
+          }
+        },
+        "required": [
+          "hostname",
+          "os",
+          "kernel",
+          "arch",
+          "uptime_seconds"
+        ],
+        "title": "HostOut",
+        "type": "object"
+      },
       "InboxItemDetail": {
         "properties": {
           "candidate_count": {
@@ -6620,6 +6793,62 @@
         "title": "MemberRoleRequest",
         "type": "object"
       },
+      "MemoryOut": {
+        "properties": {
+          "available_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Bytes"
+          },
+          "percent_used": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Used"
+          },
+          "total_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Bytes"
+          },
+          "used_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Bytes"
+          }
+        },
+        "required": [
+          "total_bytes",
+          "available_bytes",
+          "used_bytes",
+          "percent_used"
+        ],
+        "title": "MemoryOut",
+        "type": "object"
+      },
       "MergeRequest": {
         "properties": {
           "into_id": {
@@ -7515,6 +7744,36 @@
           "name"
         ],
         "title": "Person",
+        "type": "object"
+      },
+      "ProcessOut": {
+        "properties": {
+          "pid": {
+            "title": "Pid",
+            "type": "integer"
+          },
+          "python_version": {
+            "title": "Python Version",
+            "type": "string"
+          },
+          "rss_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rss Bytes"
+          }
+        },
+        "required": [
+          "pid",
+          "rss_bytes",
+          "python_version"
+        ],
+        "title": "ProcessOut",
         "type": "object"
       },
       "ProcessingPreviewOut": {
@@ -10556,6 +10815,47 @@
           }
         },
         "title": "SectionUpdate",
+        "type": "object"
+      },
+      "ServerInfoOut": {
+        "properties": {
+          "app_version": {
+            "title": "App Version",
+            "type": "string"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/CpuOut"
+          },
+          "database": {
+            "$ref": "#/components/schemas/DatabaseOut"
+          },
+          "disks": {
+            "items": {
+              "$ref": "#/components/schemas/DiskOut"
+            },
+            "title": "Disks",
+            "type": "array"
+          },
+          "host": {
+            "$ref": "#/components/schemas/HostOut"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/MemoryOut"
+          },
+          "process": {
+            "$ref": "#/components/schemas/ProcessOut"
+          }
+        },
+        "required": [
+          "host",
+          "cpu",
+          "memory",
+          "disks",
+          "process",
+          "database",
+          "app_version"
+        ],
+        "title": "ServerInfoOut",
         "type": "object"
       },
       "ShiftOut": {
@@ -19643,6 +19943,41 @@
       }
     },
     "/api/pipelines/connectors/{connector_id}": {
+      "delete": {
+        "description": "장비를 목록에서 치운다. **지우는 것이 아니라 감추는 것이다.**\n\n## 끄기와 무엇이 다른가\n\n`is_active=false` 는 **잠시 안 받는다**이고 이것은 **더 안 쓴다**이다. 끈 것은\n목록에 남아 「저건 뭐지」 를 계속 묻게 만든다 — 바꾼 장비, 반납한 PC, 시험 삼아\n붙였다 만 것이 쌓이면 살아 있는 커넥터를 그 사이에서 골라내야 한다.\n\n## 수집함은 함께 안 지운다\n\n이미 들어온 파일과 그것으로 만든 시험은 커넥터와 **수명이 다르다.** 장비를\n치웠다고 그 장비가 낸 데이터가 없던 일이 되면 안 된다 — 그래서 여기서는\n커넥터 행 하나만 감춘다.\n\n## 같은 PC 를 다시 붙일 수 있다\n\n유니크가 부분 인덱스라(`deleted_at IS NULL`) 지운 커넥터가 hostname 을 붙들지\n않는다. 에이전트가 다시 등록하면 **새 커넥터**가 선다 — 옛 것을 되살리고\n싶으면 휴지통에서 한다.",
+        "operationId": "delete_connector_api_pipelines_connectors__connector_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Connector",
+        "tags": [
+          "pipelines"
+        ]
+      },
       "patch": {
         "operationId": "update_connector_api_pipelines_connectors__connector_id__patch",
         "parameters": [
@@ -21149,6 +21484,28 @@
         "summary": "Create Specimen",
         "tags": [
           "materials"
+        ]
+      }
+    },
+    "/api/server/info": {
+      "get": {
+        "description": "호스트·CPU·메모리·디스크·DB 를 한 번에.\n\n**시스템 관리자만.** 호스트 이름과 경로가 담겨 있어 사내라도 모두에게 보일\n것은 아니다.",
+        "operationId": "server_info_api_server_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerInfoOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Server Info",
+        "tags": [
+          "server"
         ]
       }
     },

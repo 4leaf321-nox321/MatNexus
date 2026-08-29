@@ -1643,7 +1643,29 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Connector
+         * @description 장비를 목록에서 치운다. **지우는 것이 아니라 감추는 것이다.**
+         *
+         *     ## 끄기와 무엇이 다른가
+         *
+         *     `is_active=false` 는 **잠시 안 받는다**이고 이것은 **더 안 쓴다**이다. 끈 것은
+         *     목록에 남아 「저건 뭐지」 를 계속 묻게 만든다 — 바꾼 장비, 반납한 PC, 시험 삼아
+         *     붙였다 만 것이 쌓이면 살아 있는 커넥터를 그 사이에서 골라내야 한다.
+         *
+         *     ## 수집함은 함께 안 지운다
+         *
+         *     이미 들어온 파일과 그것으로 만든 시험은 커넥터와 **수명이 다르다.** 장비를
+         *     치웠다고 그 장비가 낸 데이터가 없던 일이 되면 안 된다 — 그래서 여기서는
+         *     커넥터 행 하나만 감춘다.
+         *
+         *     ## 같은 PC 를 다시 붙일 수 있다
+         *
+         *     유니크가 부분 인덱스라(`deleted_at IS NULL`) 지운 커넥터가 hostname 을 붙들지
+         *     않는다. 에이전트가 다시 등록하면 **새 커넥터**가 선다 — 옛 것을 되살리고
+         *     싶으면 휴지통에서 한다.
+         */
+        delete: operations["delete_connector_api_pipelines_connectors__connector_id__delete"];
         options?: never;
         head?: never;
         /** Update Connector */
@@ -2139,6 +2161,29 @@ export interface paths {
         put?: never;
         /** Create Specimen */
         post: operations["create_specimen_api_samples__sample_id__specimens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server Info
+         * @description 호스트·CPU·메모리·디스크·DB 를 한 번에.
+         *
+         *     **시스템 관리자만.** 호스트 이름과 경로가 담겨 있어 사내라도 모두에게 보일
+         *     것은 아니다.
+         */
+        get: operations["server_info_api_server_info_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4959,6 +5004,19 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** CpuOut */
+        CpuOut: {
+            /** Load Avg 15M */
+            load_avg_15m: number | null;
+            /** Load Avg 1M */
+            load_avg_1m: number | null;
+            /** Load Avg 5M */
+            load_avg_5m: number | null;
+            /** Logical Cpus */
+            logical_cpus: number | null;
+            /** Model */
+            model: string;
+        };
         /**
          * CreateAccountRequest
          * @description 관리자가 직접 계정을 만들 때. 승인 절차 없이 바로 활성이다.
@@ -5091,6 +5149,17 @@ export interface components {
             x: string;
             /** Y */
             y: string;
+        };
+        /** DatabaseOut */
+        DatabaseOut: {
+            /** Pool */
+            pool: {
+                [key: string]: number;
+            };
+            /** Size Bytes */
+            size_bytes: number | null;
+            /** Version */
+            version: string;
         };
         /**
          * DeclaredCardPreviewOut
@@ -5267,6 +5336,25 @@ export interface components {
         DiscardIn: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * DiskOut
+         * @description 디스크 한 칸. **경로마다 다른 드라이브일 수 있다** — 파일 저장소와 프로그램이
+         *     같은 드라이브라는 보장이 없고, 찬 쪽이 어느 쪽인지가 곧 할 일이다.
+         */
+        DiskOut: {
+            /** Free Bytes */
+            free_bytes: number;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /** Percent Used */
+            percent_used: number;
+            /** Total Bytes */
+            total_bytes: number;
+            /** Used Bytes */
+            used_bytes: number;
         };
         /**
          * DismissRequest
@@ -6003,6 +6091,19 @@ export interface components {
             /** Workspace Slug */
             workspace_slug: string;
         };
+        /** HostOut */
+        HostOut: {
+            /** Arch */
+            arch: string;
+            /** Hostname */
+            hostname: string;
+            /** Kernel */
+            kernel: string;
+            /** Os */
+            os: string;
+            /** Uptime Seconds */
+            uptime_seconds: number | null;
+        };
         /** InboxItemDetail */
         InboxItemDetail: {
             /**
@@ -6520,6 +6621,17 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** MemoryOut */
+        MemoryOut: {
+            /** Available Bytes */
+            available_bytes: number | null;
+            /** Percent Used */
+            percent_used: number | null;
+            /** Total Bytes */
+            total_bytes: number | null;
+            /** Used Bytes */
+            used_bytes: number | null;
+        };
         /** MergeRequest */
         MergeRequest: {
             /**
@@ -6869,6 +6981,15 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** ProcessOut */
+        ProcessOut: {
+            /** Pid */
+            pid: number;
+            /** Python Version */
+            python_version: string;
+            /** Rss Bytes */
+            rss_bytes: number | null;
         };
         /** ProcessingPreviewOut */
         ProcessingPreviewOut: {
@@ -8054,6 +8175,18 @@ export interface components {
             position?: number | null;
             /** Title */
             title?: string | null;
+        };
+        /** ServerInfoOut */
+        ServerInfoOut: {
+            /** App Version */
+            app_version: string;
+            cpu: components["schemas"]["CpuOut"];
+            database: components["schemas"]["DatabaseOut"];
+            /** Disks */
+            disks: components["schemas"]["DiskOut"][];
+            host: components["schemas"]["HostOut"];
+            memory: components["schemas"]["MemoryOut"];
+            process: components["schemas"]["ProcessOut"];
         };
         /** ShiftOut */
         ShiftOut: {
@@ -12761,6 +12894,35 @@ export interface operations {
             };
         };
     };
+    delete_connector_api_pipelines_connectors__connector_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_connector_api_pipelines_connectors__connector_id__patch: {
         parameters: {
             query?: never;
@@ -13761,6 +13923,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    server_info_api_server_info_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerInfoOut"];
                 };
             };
         };

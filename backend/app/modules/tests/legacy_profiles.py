@@ -221,6 +221,9 @@ def ensure_builtin_format_profiles(db: Session) -> list[str]:
     created: list[str] = []
 
     for key, label, type_key, description, definition in BUILTIN_FORMAT_PROFILES:
+        # **지운 것도 센다 — 일부러 그렇다.** 관리자가 기본 프로파일을 지웠는데
+        # 다음 부팅에 조용히 되살아나면, 지운 사람은 그것을 못 지운다. 되살리려면
+        # 휴지통에서 명시적으로 한다.
         existing = db.scalar(
             select(FormatProfile).where(
                 FormatProfile.key == key, FormatProfile.owner_workspace_id.is_(None)

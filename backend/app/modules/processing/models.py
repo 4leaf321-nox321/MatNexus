@@ -25,11 +25,12 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
-    UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -53,11 +54,14 @@ class ProcessingRecipe(Base):
 
     __tablename__ = "processing_recipes"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_processing_recipes_scope_key",
             "owner_workspace_id",
             "key",
-            name="uq_processing_recipes_scope_key",
+            unique=True,
             postgresql_nulls_not_distinct=True,
+            # **지운 행은 key 를 잡아 두지 않는다.** 재료에서 배운 것과 같다.
+            postgresql_where=text("deleted_at IS NULL"),
         ),
     )
 
@@ -111,6 +115,16 @@ class ProcessingRecipe(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    """지운 때. **행은 남는다** — 휴지통에서 되살린다(재료와 같은 모델).
+
+    이것이 있으면 위의 유니크는 **부분 인덱스**여야 한다. 그냥 두면 지운 행이
+    key 를 붙들어, 같은 key 로 다시 만들 때 「이미 있습니다」 가 나오는데 화면
+    어디에도 그것이 없다 — 재료에서 그대로 터졌다(2026-08-28 이관 사고).
+    """
 
 
 class ProcessingResult(Base):

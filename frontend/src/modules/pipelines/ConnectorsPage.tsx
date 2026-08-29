@@ -21,11 +21,16 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+import { Trash2 } from 'lucide-react'
+
 import { INBOX_STATUSES, STATUS_LABELS, pipelinesApi } from '@/modules/pipelines/api'
 import type { Connector, InboxItem, InboxItemDetail, SpecimenChoice } from '@/modules/pipelines/api'
 import { AccessTokens } from '@/shared/components/AccessTokens'
 import { CopyId } from '@/shared/components/CopyId'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { useAuth } from '@/shared/auth/AuthContext'
+import { isAnyManager } from '@/shared/auth/roles'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -81,6 +86,7 @@ function statusBadge(status: string) {
 }
 
 export default function ConnectorsPage() {
+  const canEdit = isAnyManager(useAuth().user)
   const [params, setParams] = useSearchParams()
   const wanted = params.get('tab')
   const tab: Tab = TABS.includes(wanted as Tab) ? (wanted as Tab) : 'all'
@@ -98,7 +104,10 @@ export default function ConnectorsPage() {
           <TabsTrigger value="connectors">커넥터</TabsTrigger>
           <TabsTrigger value="inbox">수집함</TabsTrigger>
           <TabsTrigger value="failed">실패</TabsTrigger>
-          <TabsTrigger value="setup">연결 정보</TabsTrigger>
+          {/* **연결 정보는 자격 증명이다.** 서버 주소·토큰·부서 id 를 모아 둔
+              자리라, 다른 탭과 달리 보는 것부터 부서 관리자만이다 — 나머지는
+              「내 파일이 들어왔나」 를 누구나 물을 수 있어야 해서 열었다. */}
+          {canEdit && <TabsTrigger value="setup">연결 정보</TabsTrigger>}
         </TabsList>
       </Tabs>
 
@@ -106,7 +115,7 @@ export default function ConnectorsPage() {
       {tab === 'connectors' && <ConnectorsTab />}
       {tab === 'inbox' && <InboxTab status="suggested" onOpen={setOpen} />}
       {tab === 'failed' && <InboxTab status="failed" onOpen={setOpen} />}
-      {tab === 'setup' && <SetupTab />}
+      {tab === 'setup' && canEdit && <SetupTab />}
 
       {open && <ItemDialog id={open} onClose={() => setOpen(null)} />}
     </div>
@@ -168,9 +177,25 @@ function SetupTab() {
 // --- 커넥터 -----------------------------------------------------------------
 
 function ConnectorsTab() {
+  const canEdit = isAnyManager(useAuth().user)
+  const [removing, setRemoving] = useState<Connector | null>(null)
   const { data, error, loading, reload } = useResource(() => pipelinesApi.connectors(), [])
   const [busy, setBusy] = useState<string | null>(null)
   const [failed, setFailed] = useState<Error | null>(null)
+
+  async function remove(row: Connector) {
+    setBusy(row.id)
+    setFailed(null)
+    try {
+      await pipelinesApi.removeConnector(row.id)
+      setRemoving(null)
+      reload()
+    } catch (caught) {
+      setFailed(caught instanceof Error ? caught : new Error('커넥터를 치우지 못했습니다.'))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function toggleAuto(row: Connector) {
     if (
@@ -249,27 +274,56 @@ function ConnectorsTab() {
                   <TableCell>
                     {/* 기본은 승인 대기다. 규칙이 「틀리게 맞으면」 엉뚱한 시편에
                         시험이 붙는다 — 대조 열이 한동안 전부 맞은 커넥터만 켠다. */}
-                    <Button
-                      size="sm"
-                      variant={row.auto_register ? 'secondary' : 'outline'}
-                      disabled={busy === row.id}
-                      onClick={() => toggleAuto(row)}
-                    >
-                      {row.auto_register ? '켜짐' : '승인 대기'}
-                    </Button>
+                    {/* **끄고 켜는 것은 부서 관리자다.** 상태를 보는 것은
+                        누구나 해야 한다 — 「내 장비가 살아 있나」 는 실험하는
+                        사람이 먼저 묻는다. 바꾸는 것은 다른 일이다. */}
+                    {canEdit ? (
+                      <Button
+                        size="sm"
+                        variant={row.auto_register ? 'secondary' : 'outline'}
+                        disabled={busy === row.id}
+                        onClick={() => toggleAuto(row)}
+                      >
+                        {row.auto_register ? '켜짐' : '승인 대기'}
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">
+                        {row.auto_register ? '켜짐' : '승인 대기'}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs">
                     {row.app_version ?? '—'}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy === row.id}
-                      onClick={() => toggle(row)}
-                    >
-                      {row.is_active ? '끄기' : '켜기'}
-                    </Button>
+                    {canEdit ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy === row.id}
+                          onClick={() => toggle(row)}
+                        >
+                          {row.is_active ? '끄기' : '켜기'}
+                        </Button>
+                        {/* **끄기와 다르다.** 끄는 것은 「잠시 안 받는다」 이고
+                            이것은 「더 안 쓴다」 다 — 바꾼 장비·반납한 PC 가
+                            쌓이면 살아 있는 커넥터를 그 사이에서 골라야 한다. */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy === row.id}
+                          title="목록에서 치웁니다. 수집함은 그대로 남고, 휴지통에서 되살릴 수 있습니다."
+                          onClick={() => setRemoving(row)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">
+                        {row.is_active ? '켜짐' : '꺼짐'}
+                      </span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -277,6 +331,25 @@ function ConnectorsTab() {
           </Table>
         </div>
       )}
+
+      {/* **무엇이 남는지 함께 말한다.** 「지웁니다」 만으로는 수집함까지 사라지는
+          줄 알고 못 누른다 — 실제로는 커넥터 행 하나만 감춘다. */}
+      <ConfirmDialog
+        open={removing !== null}
+        title="이 커넥터를 목록에서 치울까요?"
+        confirmLabel="치우기"
+        busy={busy === removing?.id}
+        body={
+          <>
+            <b>{removing?.name}</b> ({removing?.hostname}) 가 목록에서 사라집니다.
+            <br />
+            <b>이미 들어온 파일과 그것으로 만든 시험은 그대로 남습니다.</b> 같은 PC 를
+            다시 붙이면 새 커넥터가 서고, 이 커넥터는 휴지통에서 되살릴 수 있습니다.
+          </>
+        }
+        onConfirm={() => removing && void remove(removing)}
+        onClose={() => setRemoving(null)}
+      />
     </div>
   )
 }
@@ -284,6 +357,7 @@ function ConnectorsTab() {
 // --- 수집함 -----------------------------------------------------------------
 
 function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => void }) {
+  const canEdit = isAnyManager(useAuth().user)
   const [filter, setFilter] = useState(status)
   useEffect(() => setFilter(status), [status])
   const { data, error, loading, reload } = useResource(
@@ -323,7 +397,12 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
     }
   }
 
-  const pickable = filter === 'suggested'
+  // **고르는 칸과 묶음 승인이 이 깃발 하나에 달려 있다.** 여기서 막으면 체크칸도
+  // 함께 사라진다 — 고를 수는 있는데 승인 단추가 없으면 무엇을 하라는 건지 모른다.
+  //
+  // 목록 자체는 모두에게 보인다. 「내 파일이 들어왔나」 는 실험한 사람이 먼저
+  // 묻는 것이고, 붙이는 일만 부서 관리자다.
+  const pickable = canEdit && filter === 'suggested'
 
   return (
     <div>
@@ -469,6 +548,7 @@ function InboxRow({
 // --- 항목 하나 ----------------------------------------------------------------
 
 function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const { user } = useAuth()
   const [item, setItem] = useState<InboxItemDetail | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
@@ -526,6 +606,9 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
   }
 
   const done = item ? item.status === 'registered' || item.status === 'discarded' : true
+  // **상세는 누구나 본다. 손대는 것만 부서 관리자다.** 파일이 왜 안 붙었는지는
+  // 그 시험을 한 사람이 먼저 묻고, 그 답이 여기 있다 — 후보·오류·요약이 그것이다.
+  const canAct = !done && isAnyManager(user)
   const summary = (item?.summary ?? {}) as {
     channels?: string[]
     row_count?: number
@@ -578,7 +661,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
               </p>
             )}
 
-            {item.status === 'suggested' && item.candidates.length === 1 && (
+            {canAct && item.status === 'suggested' && item.candidates.length === 1 && (
               <section className="rounded-md border border-sky-300 bg-sky-50 p-3">
                 <div className="mb-2 text-sm text-sky-900">
                   <span className="font-medium">{item.candidates[0].specimen_name}</span> 에 붙일
@@ -590,7 +673,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
               </section>
             )}
 
-            {!done && item.status !== 'suggested' && item.candidates.length > 0 && (
+            {canAct && item.status !== 'suggested' && item.candidates.length > 0 && (
               <section>
                 <h3 className="mb-1 font-medium">후보 — 서버가 좁힌 것</h3>
                 <ul className="divide-y rounded-md border">
@@ -624,7 +707,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
               </section>
             )}
 
-            {!done && item.status !== 'failed' && (
+            {canAct && item.status !== 'failed' && (
               <section>
                 <h3 className="mb-1 font-medium">다른 시편 찾기</h3>
                 <Input
@@ -664,7 +747,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
               </section>
             )}
 
-            {!done && (
+            {canAct && (
               <section className="flex flex-wrap items-end gap-2 border-t pt-3">
                 {item.status === 'failed' && (
                   <Button

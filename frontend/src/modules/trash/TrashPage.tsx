@@ -26,7 +26,7 @@
 
 import { useState } from 'react'
 
-import { TRASH_KINDS, trashApi } from '@/modules/trash/api'
+import { TRASH_GROUPS, trashApi } from '@/modules/trash/api'
 import type { TrashItem } from '@/modules/trash/api'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -93,20 +93,44 @@ export default function TrashPage() {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">종류</span>
-        <select
-          aria-label="종류로 거르기"
-          className="border-input bg-background h-8 rounded-md border px-2 text-sm"
-          value={kind}
-          onChange={(event) => setKind(event.target.value)}
-        >
-          <option value="">전부</option>
-          {TRASH_KINDS.map((one) => (
-            <option key={one} value={one}>
-              {labels.get(one) ?? one}
-            </option>
+        {/* **드롭다운이 아니라 토글이다.** 고를 것이 여덟이고 그중 무엇에
+            지운 것이 있는지가 매번 다르다 — 드롭다운은 열어 봐야 목록을 알고,
+            고르고 나면 나머지가 무엇이었는지 사라진다. 펼쳐 두면 **한눈에 보고
+            한 번에 옮겨 다닌다.**
+
+            두 묶음으로 갈라 세운다: 재료 계층은 아래로 딸린 것이 있고 수집
+            체계는 정의 한 줄이 통째로 하나라, 되살릴 때 무슨 일이 나는지가
+            다르다. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="종류로 거르기">
+          <Button
+            size="sm"
+            variant={kind === '' ? 'default' : 'outline'}
+            className="h-7 text-xs"
+            aria-pressed={kind === ''}
+            onClick={() => setKind('')}
+          >
+            전부
+          </Button>
+          {TRASH_GROUPS.map((group) => (
+            <div key={group.label} className="flex items-center gap-1">
+              <span className="text-muted-foreground text-[11px]">{group.label}</span>
+              {group.kinds.map((one) => (
+                <Button
+                  key={one.key}
+                  size="sm"
+                  variant={kind === one.key ? 'default' : 'outline'}
+                  className="h-7 text-xs"
+                  aria-pressed={kind === one.key}
+                  // **누른 것을 다시 누르면 전부로 돌아온다.** 토글은 끄는 길이
+                  // 있어야 토글이다 — 없으면 「전부」 를 찾아 눈이 되돌아간다.
+                  onClick={() => setKind((now) => (now === one.key ? '' : one.key))}
+                >
+                  {labels.get(one.key) ?? one.label}
+                </Button>
+              ))}
+            </div>
           ))}
-        </select>
+        </div>
       </div>
 
       {!items.loading && rows.length === 0 && (

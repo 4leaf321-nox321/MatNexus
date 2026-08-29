@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -427,9 +428,14 @@ def list_results(
 
 
 def _visible_recipes(db: Session, user: User) -> Select[tuple[ProcessingRecipe]]:
-    """내 부서 것 + 전역. 재료·프로파일·시험 종류와 **같은 규칙, 같은 코드**다."""
+    """내 부서 것 + 전역. 재료·프로파일·시험 종류와 **같은 규칙, 같은 코드**다.
+
+    **지운 것은 여기서 빠진다.** 소프트 삭제라 행은 남는다 — 이 한 곳을 안 거르면
+    지운 레시피가 처리 탭의 레시피 고르기에 그대로 뜬다.
+    """
     return select(ProcessingRecipe).where(
-        visible_owner_clause(db, user, ProcessingRecipe.owner_workspace_id)
+        visible_owner_clause(db, user, ProcessingRecipe.owner_workspace_id),
+        ProcessingRecipe.deleted_at.is_(None),
     )
 
 
@@ -514,6 +520,8 @@ def create_recipe(
     duplicate = db.scalar(
         select(ProcessingRecipe).where(
             ProcessingRecipe.key == payload.key,
+            # **지운 것은 안 센다.** 위 프로파일·시험 정의와 같은 이유다.
+            ProcessingRecipe.deleted_at.is_(None),
             ProcessingRecipe.owner_workspace_id.is_(None)
             if owner_id is None
             else ProcessingRecipe.owner_workspace_id == owner_id,
@@ -593,7 +601,10 @@ def delete_recipe(
         .where(ProcessingResult.recipe_id == item.id)
         .values(recipe_id=None)
     )
-    db.delete(item)
+    # **지우는 것이 아니라 감추는 것이다.** 되살리는 길은 휴지통에 있다.
+    # 위에서 끊은 연결은 되돌리지 않는다 — 결과는 스냅샷으로 이미 자기가 무엇으로
+    # 계산됐는지 알고, 그것이 이 화면이 처음부터 지킨 규칙이다.
+    item.deleted_at = datetime.now(UTC)
     db.commit()
     return Response(status_code=204)
 

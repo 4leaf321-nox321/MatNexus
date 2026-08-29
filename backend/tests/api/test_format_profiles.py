@@ -458,7 +458,14 @@ class TestTryBeforeSave:
         # 워커인데, 시험에는 워커가 없다. 여기서 볼 것은 "참조가 있을 때 어떻게
         # 되는가" 이므로 참조를 만드는 방법은 상관없다.
         run = _upload_dma(client, admin_headers, specimen["id"])
-        profile = db.scalar(select(FormatProfile).where(FormatProfile.key == "to_delete"))
+        # **살아 있는 것만 집는다.** 위에서 한 번 지웠다 같은 key 로 다시 만들었고,
+        # 삭제가 소프트라 그 key 의 행이 둘이다 — 안 좁히면 지워진 쪽을 집어서
+        # 참조를 엉뚱한 데 매단다(2026-08-29, 수집 체계 소프트 삭제).
+        profile = db.scalar(
+            select(FormatProfile).where(
+                FormatProfile.key == "to_delete", FormatProfile.deleted_at.is_(None)
+            )
+        )
         assert profile is not None
         stored = db.scalar(select(TestRun).where(TestRun.id == uuid.UUID(run["id"])))
         assert stored is not None

@@ -33,8 +33,8 @@ from sqlalchemy import (
     Index,
     String,
     Text,
-    UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -83,7 +83,17 @@ class PipelineConnector(Base):
     __table_args__ = (
         # **재설치하면 기존 것을 돌려준다.** 같은 PC 가 둘로 보이면 관리 화면에서
         # 어느 것이 살아 있는지 알 수 없다.
-        UniqueConstraint("workspace_id", "hostname", name="uq_pipeline_connectors_host"),
+        # **지운 행은 hostname 을 잡아 두지 않는다.** 그냥 유니크면 지운 커넥터가
+        # 그 PC 의 이름을 붙들어, 같은 장비를 다시 붙일 때 등록이 실패한다 —
+        # 화면 어디에도 그 커넥터가 없는 채로. 재료가 그 상태로 이관을 막았다
+        # (2026-08-28). 되살리는 길은 휴지통이다.
+        Index(
+            "uq_pipeline_connectors_host",
+            "workspace_id",
+            "hostname",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -123,7 +133,14 @@ class PipelineConnector(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    """지운 때. **행은 남는다** — 휴지통에서 되살린다.
+
+    **수집함은 함께 안 지운다.** 이미 들어온 파일과 그것으로 만든 시험은 커넥터와
+    수명이 다르다 — 장비를 치웠다고 그 장비가 낸 데이터가 없던 일이 되면 안 된다.
+    """
 
 
 class PipelineInboxItem(Base):

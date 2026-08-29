@@ -164,8 +164,16 @@ def _run_counts(db: Session, type_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
 
 
 def _visible_types(db: Session, user: User) -> Select[tuple[TestType]]:
-    """내 부서 것 + 전역. 재료·형식 프로파일과 **같은 규칙, 같은 코드**다."""
-    return select(TestType).where(visible_owner_clause(db, user, TestType.owner_workspace_id))
+    """내 부서 것 + 전역. 재료·형식 프로파일과 **같은 규칙, 같은 코드**다.
+
+    **지운 것은 여기서 빠진다.** 소프트 삭제라 행은 남는데, 이 한 곳을 안 거르면
+    지운 정의가 업로드 폼의 드롭다운에 그대로 뜬다 — 목록·상세·삭제가 모두 이
+    함수를 지나므로 여기가 유일한 관문이다.
+    """
+    return select(TestType).where(
+        visible_owner_clause(db, user, TestType.owner_workspace_id),
+        TestType.deleted_at.is_(None),
+    )
 
 
 def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
@@ -383,7 +391,12 @@ def create_test_type(
     키는 **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이
     아니라 하나를 같이 써야 하고, 여기서 부딪히면 그 사실을 알게 된다.
     """
-    existing = db.scalar(select(TestType).where(TestType.key == payload.key))
+    # **지운 것은 안 센다.** 소프트 삭제라 행은 남는데, 여기서 세면 지운 종류의
+    # key 로 다시 만들 수 없으면서 화면 어디에도 그것이 없다 — 재료가 그 상태로
+    # 이관을 막았다(2026-08-28). 되살리는 길은 휴지통이다.
+    existing = db.scalar(
+        select(TestType).where(TestType.key == payload.key, TestType.deleted_at.is_(None))
+    )
     if existing:
         owner = (
             db.get(Workspace, existing.owner_workspace_id)

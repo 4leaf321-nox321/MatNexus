@@ -207,6 +207,104 @@ class Test커넥터:
         assert response.json()["error"]["code"] == "MNX-PIPE-0001"
 
 
+class Test커넥터_치우기:
+    """**끄기와 지우기는 다르다.** 끈 것은 목록에 남아 「저건 뭐지」 를 계속 묻게
+    만든다 — 바꾼 장비, 반납한 PC, 시험 삼아 붙였다 만 것이 쌓이면 살아 있는
+    커넥터를 그 사이에서 골라내야 한다."""
+
+    def test_지우면_목록에서_빠진다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        connector: dict[str, Any],
+    ) -> None:
+        gone = client.delete(
+            f"/api/pipelines/connectors/{connector['id']}", headers=admin_headers
+        )
+        assert gone.status_code == 204, gone.text
+        rows = client.get("/api/pipelines/connectors", headers=admin_headers).json()
+        assert connector["id"] not in [one["id"] for one in rows]
+
+    def test_같은_PC_를_다시_붙일_수_있다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        workspace: Any,
+    ) -> None:
+        """**여기가 재료에서 터진 자리다.** 유니크가 지운 행까지 세면 그 PC 를
+        영영 다시 못 붙이는데, 화면 어디에도 그 커넥터가 없다."""
+        client.delete(f"/api/pipelines/connectors/{connector['id']}", headers=admin_headers)
+        again = client.post(
+            "/api/pipelines/connectors",
+            json={
+                "name": "인장기-1",
+                "hostname": "ZWICK-PC",
+                "workspace_id": str(workspace.id),
+            },
+            headers=pat,
+        )
+        assert again.status_code == 201, again.text
+        # **새 커넥터다.** 옛 것을 되살리려면 휴지통에서 한다.
+        assert again.json()["id"] != connector["id"]
+
+    def test_수집함은_함께_안_지운다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+    ) -> None:
+        """장비를 치웠다고 그 장비가 낸 데이터가 없던 일이 되면 안 된다."""
+        _send(client, pat, connector["id"], filename="a.tra")
+        before = client.get("/api/pipelines/inbox", headers=admin_headers).json()["total"]
+        client.delete(f"/api/pipelines/connectors/{connector['id']}", headers=admin_headers)
+        after = client.get("/api/pipelines/inbox", headers=admin_headers).json()["total"]
+        assert after == before
+
+    def test_휴지통에서_되살아난다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        connector: dict[str, Any],
+    ) -> None:
+        client.delete(f"/api/pipelines/connectors/{connector['id']}", headers=admin_headers)
+        item = client.get("/api/trash?kind=connector", headers=admin_headers).json()[0]
+        assert item["kind_label"] == "장비 커넥터"
+        assert item["name"] == "인장기-1"
+        back = client.post(f"/api/trash/connector/{item['id']}/restore", headers=admin_headers)
+        assert back.status_code == 200, back.text
+        rows = client.get("/api/pipelines/connectors", headers=admin_headers).json()
+        assert connector["id"] in [one["id"] for one in rows]
+
+    def test_그_PC_가_이미_다시_붙어_있으면_못_되살린다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        workspace: Any,
+    ) -> None:
+        """**DB 에 맡기면 500 이다.** 부분 인덱스가 막긴 하는데 화면에는
+        "서버 오류" 만 뜬다."""
+        client.delete(f"/api/pipelines/connectors/{connector['id']}", headers=admin_headers)
+        client.post(
+            "/api/pipelines/connectors",
+            json={
+                "name": "인장기-1",
+                "hostname": "ZWICK-PC",
+                "workspace_id": str(workspace.id),
+            },
+            headers=pat,
+        )
+        item = client.get("/api/trash?kind=connector", headers=admin_headers).json()[0]
+        blocked = client.post(
+            f"/api/trash/connector/{item['id']}/restore", headers=admin_headers
+        )
+        assert blocked.status_code == 409, blocked.text
+
+
 class Test반입:
     def test_받으면_파일이_수집함에_떨어지고_작업이_생긴다(
         self, client: TestClient, db: Session, pat: dict[str, str], connector: dict[str, Any]

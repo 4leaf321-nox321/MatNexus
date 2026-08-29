@@ -6,7 +6,7 @@
  * 보이지만, 뒤엣것은 조용히 틀리고 되돌릴 수 없다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -124,3 +124,37 @@ describe('영구 삭제', () => {
     await waitFor(() => expect(purge).toHaveBeenCalledWith('specimen', 's1'))
   })
 })
+
+describe('수집 체계', () => {
+  /**
+   * 시험 정의·인풋 파일 정의·레시피도 소프트 삭제가 됐다. **되살리는 자리가
+   * 없으면 소프트 삭제는 그냥 「안 보이는 삭제」 다** — 지운 사람은 되돌릴 길이
+   * 없고, 그 행이 남아 있다는 것조차 모른다.
+   */
+  it('종류가 펼쳐져 있다 — 열어 봐야 아는 목록이 아니다', async () => {
+    // 고를 것이 여덟이고 그중 무엇에 지운 것이 있는지가 매번 다르다. 드롭다운은
+    // 고르고 나면 나머지가 무엇이었는지 사라진다.
+    render(<TrashPage />)
+    const picker = await screen.findByRole('group', { name: '종류로 거르기' })
+    for (const name of ['전부', '재료', '시험 정의', '인풋 파일 정의', '장비 커넥터']) {
+      expect(within(picker).getByRole('button', { name }), name).toBeInTheDocument()
+    }
+  })
+
+  it('누른 것을 다시 누르면 전부로 돌아온다', async () => {
+    // **끄는 길이 있어야 토글이다.** 없으면 「전부」 를 찾아 눈이 되돌아간다.
+    const user = userEvent.setup()
+    render(<TrashPage />)
+    const picker = await screen.findByRole('group', { name: '종류로 거르기' })
+    const one = within(picker).getByRole('button', { name: '시험 정의' })
+    await user.click(one)
+    expect(one).toHaveAttribute('aria-pressed', 'true')
+    await user.click(one)
+    expect(one).toHaveAttribute('aria-pressed', 'false')
+    expect(within(picker).getByRole('button', { name: '전부' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+})
+

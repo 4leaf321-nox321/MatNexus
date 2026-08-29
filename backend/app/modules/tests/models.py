@@ -22,11 +22,13 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -73,6 +75,17 @@ class TestType(Base):
     """시험 종류 정의. 부서 관리자와 시스템 관리자가 추가·수정한다."""
 
     __tablename__ = "test_types"
+    __table_args__ = (
+        # **지운 행은 key 를 잡아 두지 않는다**(재료와 같은 판단, 2026-08-28).
+        # 그냥 유니크면 지운 종류의 key 로 다시 만들 수 없는데, 화면 어디에도
+        # 그 종류가 없어서 빠져나갈 길이 없다.
+        Index(
+            "uq_test_types_key",
+            "key",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -86,7 +99,7 @@ class TestType(Base):
     연 순간 막다른 길이 생겼다 — 부서 관리자가 새 장비를 붙이려면 시험 종류가
     먼저 있어야 하는데, 그것을 만들 권한이 없었다. 새 장비란 대개 **없는 종류**를
     재는 장비다. 문을 반쪽만 연 셈이었다(ADR 0006)."""
-    key: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    key: Mapped[str] = mapped_column(String(50), index=True)
     """`tensile`, `dma_strain_sweep`. 코드가 참조하는 안정된 이름이다.
 
     기존 앱은 **라벨 문자열**로 필드를 찾았다(`label:contains(...)`). 라벨 문구를
@@ -127,6 +140,16 @@ class TestType(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    """지운 때. **행은 남는다** — 휴지통에서 되살린다(재료와 같은 모델).
+
+    이것이 있으면 위의 유니크는 **부분 인덱스**여야 한다. 그냥 두면 지운 행이
+    key 를 붙들어, 같은 key 로 다시 만들 때 「이미 있습니다」 가 나오는데 화면
+    어디에도 그것이 없다 — 재료에서 그대로 터졌다(2026-08-28 이관 사고).
+    """
 
 
 class TestChannel(Base):
@@ -496,13 +519,17 @@ class FormatProfile(Base):
 
     __tablename__ = "format_profiles"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_format_profiles_scope_key",
             "owner_workspace_id",
             "key",
-            name="uq_format_profiles_scope_key",
+            unique=True,
             # PG15+. 없으면 NULL != NULL 이라 **전역 프로파일끼리 같은 키가 허용된다.**
             # 재료가 같은 문제를 겪어 같은 방식으로 막았다(ADR 0004).
             postgresql_nulls_not_distinct=True,
+            # **지운 행은 key 를 잡아 두지 않는다.** 그냥 유니크면 지운 프로파일의
+            # key 로 다시 만들 수 없는데 화면 어디에도 그것이 없다(2026-08-28 재료).
+            postgresql_where=text("deleted_at IS NULL"),
         ),
     )
 
@@ -553,3 +580,13 @@ class FormatProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    """지운 때. **행은 남는다** — 휴지통에서 되살린다(재료와 같은 모델).
+
+    이것이 있으면 위의 유니크는 **부분 인덱스**여야 한다. 그냥 두면 지운 행이
+    key 를 붙들어, 같은 key 로 다시 만들 때 「이미 있습니다」 가 나오는데 화면
+    어디에도 그것이 없다 — 재료에서 그대로 터졌다(2026-08-28 이관 사고).
+    """

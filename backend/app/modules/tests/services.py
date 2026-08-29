@@ -66,7 +66,11 @@ get_run = permissions.get_run
 
 
 def get_test_type(db: Session, key: str) -> TestType:
-    test_type = db.scalar(select(TestType).where(TestType.key == key))
+    # **지운 정의로는 못 올린다.** 소프트 삭제라 행은 남는데, 안 거르면 지운
+    # 종류로 파일이 계속 들어온다 — 목록에는 없는 종류의 시험이 쌓인다.
+    test_type = db.scalar(
+        select(TestType).where(TestType.key == key, TestType.deleted_at.is_(None))
+    )
     if test_type is None:
         raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
     if not test_type.is_active:
@@ -299,7 +303,13 @@ def save_definition(
                 status=422,
             ) from None
 
-    test_type = db.scalar(select(TestType).where(TestType.key == key))
+    # **지운 것을 되쓰지 않는다.** 여기서 안 거르면 같은 key 로 새로 만들 때
+    # 소프트 삭제된 행을 찾아 그 위에 덮어쓰고, `deleted_at` 이 그대로 남아
+    # **201 을 받았는데 목록에 없는** 상태가 된다(2026-08-29 실측 — 같은 id 가
+    # 두 번 돌아왔다). 되살리는 길은 휴지통이지 이 경로가 아니다.
+    test_type = db.scalar(
+        select(TestType).where(TestType.key == key, TestType.deleted_at.is_(None))
+    )
     creating = test_type is None
 
     # **사전을 읽기 전에 flush 한다.** 세션이 `autoflush=False` 다
@@ -569,8 +579,20 @@ def _replace_children(
 
 def delete_definition(db: Session, key: str) -> None:
     """시험이 하나라도 있으면 지우지 않는다 — 지우면 그 시험들이 무엇이었는지
-    말할 수 없게 된다. 쓰지 않으려면 `is_active` 를 끈다."""
-    test_type = db.scalar(select(TestType).where(TestType.key == key))
+    말할 수 없게 된다. 쓰지 않으려면 `is_active` 를 끈다.
+
+    ## 지우는 것이 아니라 **감추는 것**이다
+
+    행은 남고 `deleted_at` 만 찍는다. 정의는 **이미 저장된 데이터의 뜻**이라
+    (채널이 무엇을 재는 것이었나) 진짜로 지우면 그 답이 사라진다. 되살리는 길은
+    휴지통에 있다.
+
+    막는 검사를 그대로 둔 이유: 소프트여도 목록에서는 사라지고, 그 종류로 등록된
+    시험이 있으면 화면에서 **이름 없는 시험**이 된다. 그럴 때 쓰라고 '중단' 이 있다.
+    """
+    test_type = db.scalar(
+        select(TestType).where(TestType.key == key, TestType.deleted_at.is_(None))
+    )
     if test_type is None:
         raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
     _, count = definition_is_locked(db, test_type.id)
@@ -581,8 +603,9 @@ def delete_definition(db: Session, key: str) -> None:
             f"더 쓰지 않으려면 '중단' 으로 바꾸세요.",
             status=409,
         )
-    _replace_children(db, test_type, [], [])
-    db.delete(test_type)
+    # **자식은 그대로 둔다.** 되살릴 때 채널·조건이 함께 돌아와야 한다 —
+    # 비우고 나면 껍데기만 남은 정의가 복원된다.
+    test_type.deleted_at = datetime.now(UTC)
     db.commit()
 
 

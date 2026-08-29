@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
@@ -64,9 +65,14 @@ PREVIEW_ROWS = 8
 
 
 def visible_profiles(db: Session, user: User) -> Select[tuple[FormatProfile]]:
-    """내 부서 것 + 전역. 재료·시험 종류와 **같은 규칙, 같은 코드**다."""
+    """내 부서 것 + 전역. 재료·시험 종류와 **같은 규칙, 같은 코드**다.
+
+    **지운 것은 여기서 빠진다.** 소프트 삭제라 행은 남는다 — 이 한 곳을 안 거르면
+    지운 프로파일이 업로드 화면의 형식 목록에 그대로 뜬다.
+    """
     return select(FormatProfile).where(
-        visible_owner_clause(db, user, FormatProfile.owner_workspace_id)
+        visible_owner_clause(db, user, FormatProfile.owner_workspace_id),
+        FormatProfile.deleted_at.is_(None),
     )
 
 
@@ -285,6 +291,9 @@ def create_profile(
     duplicate = db.scalar(
         select(FormatProfile).where(
             FormatProfile.key == payload.key,
+            # **지운 것은 안 센다.** 안 거르면 지운 프로파일의 key 로 다시 만들 수
+            # 없으면서 화면 어디에도 그것이 없다 — 되살리는 길은 휴지통이다.
+            FormatProfile.deleted_at.is_(None),
             FormatProfile.owner_workspace_id.is_(None)
             if owner_id is None
             else FormatProfile.owner_workspace_id == owner_id,
@@ -369,7 +378,9 @@ def delete_profile(
             f"더 쓰지 않으려면 '중단' 으로 바꾸세요.",
             status=409,
         )
-    db.delete(item)
+    # **지우는 것이 아니라 감추는 것이다.** 이 프로파일로 읽은 시험이 「무엇으로
+    # 읽었나」 에 답하려면 정의가 남아 있어야 한다. 되살리는 길은 휴지통이다.
+    item.deleted_at = datetime.now(UTC)
     db.commit()
     return Response(status_code=204)
 

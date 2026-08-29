@@ -169,6 +169,39 @@ def update_connector(
     )
 
 
+@router.delete("/connectors/{connector_id}", status_code=204)
+def delete_connector(
+    connector_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """장비를 목록에서 치운다. **지우는 것이 아니라 감추는 것이다.**
+
+    ## 끄기와 무엇이 다른가
+
+    `is_active=false` 는 **잠시 안 받는다**이고 이것은 **더 안 쓴다**이다. 끈 것은
+    목록에 남아 「저건 뭐지」 를 계속 묻게 만든다 — 바꾼 장비, 반납한 PC, 시험 삼아
+    붙였다 만 것이 쌓이면 살아 있는 커넥터를 그 사이에서 골라내야 한다.
+
+    ## 수집함은 함께 안 지운다
+
+    이미 들어온 파일과 그것으로 만든 시험은 커넥터와 **수명이 다르다.** 장비를
+    치웠다고 그 장비가 낸 데이터가 없던 일이 되면 안 된다 — 그래서 여기서는
+    커넥터 행 하나만 감춘다.
+
+    ## 같은 PC 를 다시 붙일 수 있다
+
+    유니크가 부분 인덱스라(`deleted_at IS NULL`) 지운 커넥터가 hostname 을 붙들지
+    않는다. 에이전트가 다시 등록하면 **새 커넥터**가 선다 — 옛 것을 되살리고
+    싶으면 휴지통에서 한다.
+    """
+    # 고치는 것과 같은 관문을 쓴다 — 부서 관리자만, 꺼진 것도 집는다.
+    row = _connector_for_edit(db, user, connector_id)
+    row.deleted_at = datetime.now(UTC)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.post("/connectors/{connector_id}/heartbeat", response_model=HeartbeatOut)
 def post_heartbeat(
     connector_id: uuid.UUID,

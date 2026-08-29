@@ -9,7 +9,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ConnectorsPage, { seenTone } from '@/modules/pipelines/ConnectorsPage'
 
@@ -26,6 +26,16 @@ const approveMany = vi.fn()
 
 vi.mock('@/shared/components/AccessTokens', () => ({
   AccessTokens: () => <div>토큰 패널</div>,
+}))
+
+/**
+ * **보는 것은 모두, 손대는 것은 부서 관리자.** 목록을 모두에게 연 뒤로(서버는
+ * 원래 열려 있었다) 이 화면은 두 얼굴이다 — 아래 시험 대부분은 관리자 쪽이고,
+ * 마지막 묶음이 멤버에게 단추가 안 보이는 것을 확인한다.
+ */
+let memberships: { role: string }[] = [{ role: 'manager' }]
+vi.mock('@/shared/auth/AuthContext', () => ({
+  useAuth: () => ({ user: { is_system_admin: false, memberships } }),
 }))
 
 vi.mock('@/modules/pipelines/api', async () => {
@@ -272,3 +282,59 @@ describe('실패 탭', () => {
     await waitFor(() => expect(retry).toHaveBeenCalledWith('i1'))
   })
 })
+
+describe('커넥터 치우기', () => {
+  it('무엇이 남는지 함께 묻는다', async () => {
+    // 「지웁니다」 만으로는 수집함까지 사라지는 줄 알고 못 누른다.
+    const user = userEvent.setup()
+    mount('/settings/connectors?tab=connectors')
+    await screen.findByText('ZWICK-PC')
+    await user.click(screen.getByTitle(/목록에서 치웁니다/))
+    expect(await screen.findByText(/이미 들어온 파일과 그것으로 만든 시험은 그대로/)).toBeVisible()
+  })
+
+  it('멤버에게는 치우는 단추가 없다', async () => {
+    memberships = [{ role: 'member' }]
+    mount('/settings/connectors?tab=connectors')
+    await screen.findByText('ZWICK-PC')
+    expect(screen.queryByTitle(/목록에서 치웁니다/)).not.toBeInTheDocument()
+    memberships = [{ role: 'manager' }]
+  })
+})
+
+describe('멤버', () => {
+  /**
+   * **목록은 열고 손대는 것은 막는다.** 서버의 읽기 엔드포인트는 원래 열려
+   * 있었는데 사이드바가 막고 있어서, 실험한 사람이 「내 파일이 왜 안 들어왔나」 를
+   * 물을 데가 없었다. 열고 나면 남는 위험은 하나다 — **쓰기 단추가 그대로면
+   * 누르고 403 을 본다.**
+   */
+  beforeEach(() => {
+    memberships = [{ role: 'member' }]
+  })
+
+  afterEach(() => {
+    memberships = [{ role: 'manager' }]
+  })
+
+  it('수집함은 보되 승인하지 못한다', async () => {
+    mount('/settings/connectors?tab=inbox')
+    expect(await screen.findByText('Example.tra')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /건 승인$/ })).not.toBeInTheDocument()
+  })
+
+  it('커넥터 상태는 보되 끄고 켜지 못한다', async () => {
+    // 「내 장비가 살아 있나」 는 실험하는 사람이 먼저 묻는다.
+    mount('/settings/connectors?tab=connectors')
+    expect(await screen.findByText('ZWICK-PC')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '끄기' })).not.toBeInTheDocument()
+  })
+
+  it('연결 정보 탭은 아예 안 보인다 — 자격 증명이다', async () => {
+    // 다른 탭과 다르다. 서버 주소·토큰·부서 id 를 모아 둔 자리라 보는 것부터 막는다.
+    mount('/settings/connectors')
+    await screen.findByText('Example.tra')
+    expect(screen.queryByRole('tab', { name: '연결 정보' })).not.toBeInTheDocument()
+  })
+})
+

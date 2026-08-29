@@ -59,6 +59,12 @@ function search(query: InboxQuery): string {
 
 export const pipelinesApi = {
   connectors: () => api.get<Connector[]>('/pipelines/connectors'),
+  /**
+   * 목록에서 치운다. **끄기와 다르다** — 끈 것은 목록에 남아 「저건 뭐지」 를 계속
+   * 묻게 만든다. 행은 남고 휴지통에서 되살린다.
+   */
+  removeConnector: (id: string) => api.delete(`/pipelines/connectors/${id}`),
+
   updateConnector: (
     id: string,
     body: { name?: string; is_active?: boolean; auto_register?: boolean }

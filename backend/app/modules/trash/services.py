@@ -39,20 +39,33 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
-from app.modules.tests.models import Curve, TestRun, TestSummary
+from app.modules.pipelines.models import PipelineConnector
+from app.modules.processing.models import ProcessingRecipe, ProcessingResult
+from app.modules.tests.models import Curve, FormatProfile, TestRun, TestSummary, TestType
 from app.modules.vocabulary import services as vocabulary_services
 from app.shared import audit, filestore
 from app.shared.errors import AppError, Conflict, NotFound
 
-#: 다루는 것. **재료 계층과 시험이다** — 이관과 실사용에서 지워지는 것이 이 넷이다.
-#: 계정은 뺐다: 성격이 달라(권한·소속) 같은 표에 섞으면 읽히지 않고, 계정 관리
-#: 화면이 이미 따로 있다.
-KINDS = ("material", "sample", "specimen", "test_run")
+#: 재료 계층과 시험. **아래로 딸린 것이 있다** — 재료를 되살리면 그 아래 시료·
+#: 시편·시험이 함께 돌아온다.
+TREE_KINDS = ("material", "sample", "specimen", "test_run")
+
+#: 데이터 수집 체계. **아래로 딸린 것이 없다** — 정의 한 줄이 통째로 하나다.
+#:
+#: 이 셋은 「이미 저장된 데이터의 뜻」 이라 진짜로 지우면 그 답이 사라진다 —
+#: 이 시험의 채널이 무엇을 재는 것이었나, 그 파일을 무엇으로 읽었나. 그래서
+#: 지우는 자리를 소프트로 바꾸고 여기로 들여보낸다.
+#:
+FLAT_KINDS = ("test_type", "format_profile", "recipe", "connector")
+
+#: 다루는 것 전부. 계정은 뺐다: 성격이 달라(권한·소속) 같은 표에 섞으면 읽히지
+#: 않고, 계정 관리 화면이 이미 따로 있다.
+KINDS = TREE_KINDS + FLAT_KINDS
 
 #: 종류 → (모델, 사람이 읽는 이름). 순서는 위에서 아래로 — 화면이 그대로 그린다.
 #:
@@ -64,10 +77,34 @@ _MODELS: dict[str, tuple[Any, str]] = {
     "sample": (Sample, "시료"),
     "specimen": (Specimen, "시편"),
     "test_run": (TestRun, "시험"),
+    "test_type": (TestType, "시험 정의"),
+    "format_profile": (FormatProfile, "인풋 파일 정의"),
+    "recipe": (ProcessingRecipe, "레시피"),
+    "connector": (PipelineConnector, "장비 커넥터"),
+}
+
+#: **자리를 다투는 칸.** 되살릴 때 살아 있는 것이 이미 그 값을 쓰고 있으면 막는다 —
+#: DB 의 부분 유니크 인덱스가 보는 것과 같은 칸이어야 한다. 안 맞으면 여기서
+#: 통과한 것이 DB 에서 막혀 500 이 된다.
+_UNIQUE_COLUMNS = {
+    "test_type": ("key",),
+    "format_profile": ("owner_workspace_id", "key"),
+    "recipe": ("owner_workspace_id", "key"),
+    "connector": ("workspace_id", "hostname"),
+}
+
+#: 이름을 담은 칸. 종류마다 다르다 — 없으면 `record_name` 을 본다.
+_NAME_COLUMNS = {
+    "test_type": "label",
+    "format_profile": "label",
+    "recipe": "label",
+    "connector": "name",
 }
 
 #: 되살릴 때 되돌려 놓을 기준정보 연결. 지울 때 `release_bindings` 가 뺀 것을
 #: 그대로 다시 더한다 — 안 되돌리면 피커의 「쓰는 곳」 이 실제보다 작아진다.
+#: **수집 체계 셋은 여기 없다.** 기준정보에 매달리지 않는다 — 없는 키를 읽으면
+#: 그대로 KeyError 라, 부르는 쪽이 `.get(kind, ())` 로 받는다.
 _BINDINGS = {
     "material": vocabulary_services.MATERIAL_BINDINGS,
     "sample": vocabulary_services.SAMPLE_BINDINGS,
@@ -95,6 +132,16 @@ class Item:
 def _name(kind: str, row: Any) -> str:
     if kind == "test_run":
         return str(getattr(row, "record_name", "") or getattr(row, "source_filename", ""))
+    column = _NAME_COLUMNS.get(kind)
+    if column:
+        # 정의는 라벨이 사람이 읽는 이름이고, 없으면 key(커넥터는 hostname)가
+        # 그것을 대신한다.
+        return str(
+            getattr(row, column, "")
+            or getattr(row, "key", "")
+            or getattr(row, "hostname", "")
+            or ""
+        )
     return str(getattr(row, "record_name", "") or "")
 
 
@@ -118,7 +165,8 @@ def _below(db: Session, kind: str, row: Any) -> dict[str, int]:
 
     되살리면 함께 돌아오는 것이 곧 이 숫자다 — 사람이 「되살리기」 를 누를 근거다.
     """
-    if kind == "test_run":
+    if kind == "test_run" or kind in FLAT_KINDS:
+        # 정의 한 줄이 통째로 하나다 — 아래로 딸린 것이 없다.
         return {}
 
     counted: dict[str, int] = {}
@@ -160,6 +208,29 @@ def _blocker(db: Session, kind: str, row: Any) -> str | None:
 
     **막는 것이 둘이다** — 조상이 죽어 있거나, 자리가 이미 차 있거나.
     """
+    if kind in FLAT_KINDS:
+        # **그 key 를 살아 있는 것이 이미 쓰고 있으면 못 되살린다.** 부분 유니크
+        # 인덱스라 DB 도 막는데, 여기서 먼저 잡아 **사람이 읽을 말**로 알린다 —
+        # 안 그러면 500 이 나고 화면은 "서버 오류" 만 적는다.
+        model = _MODELS[kind][0]
+        scope = [model.deleted_at.is_(None)]
+        for name in _UNIQUE_COLUMNS[kind]:
+            column = getattr(model, name)
+            mine = getattr(row, name)
+            # **`== None` 으로 쓰면 안 된다.** 전역 정의는 소유 부서가 NULL 인데
+            # SQL 에서 `NULL = NULL` 은 참이 아니라 NULL 이라 **아무것도 안
+            # 걸린다** — 막아야 할 자리에서 조용히 통과한다. 유니크 인덱스가
+            # `nulls_not_distinct` 를 쓰는 것과 같은 이유다.
+            scope.append(column.is_(None) if mine is None else column == mine)
+        taken = db.scalar(select(func.count()).select_from(model).where(*scope))
+        if taken:
+            what = _name(kind, row) or "그것"
+            return (
+                f"같은 자리를 쓰는 {_MODELS[kind][1]} 가 이미 있습니다 ({what}). "
+                f"그것을 먼저 지우거나 이름을 바꾸세요."
+            )
+        return None
+
     if kind == "material":
         taken = db.scalar(
             select(func.count())
@@ -264,6 +335,10 @@ def _tree(db: Session, kind: str, row: Any) -> dict[str, list[Any]]:
 
     두 길이 다른 목록을 보면, 화면이 보여 준 숫자와 실제로 손대는 것이 어긋난다.
     """
+    if kind in FLAT_KINDS:
+        # 아래가 없다. 자기 하나뿐인 나무다.
+        return {one: ([row] if one == kind else []) for one in KINDS}
+
     materials: list[Any] = [row] if kind == "material" else []
     samples: list[Any] = [row] if kind == "sample" else []
     specimens: list[Any] = [row] if kind == "specimen" else []
@@ -283,6 +358,7 @@ def _tree(db: Session, kind: str, row: Any) -> dict[str, list[Any]]:
         "sample": samples,
         "specimen": specimens,
         "test_run": runs,
+        **{one: [] for one in FLAT_KINDS},
     }
 
 
@@ -322,8 +398,8 @@ def restore(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
         counts[_MODELS[one][1]] = len(rows)
         for target in rows:
             target.deleted_at = None
-            # 지울 때 뺀 것을 그대로 되돌린다.
-            for binding in _BINDINGS[one]:
+            # 지울 때 뺀 것을 그대로 되돌린다. **수집 체계 셋은 매달린 것이 없다.**
+            for binding in _BINDINGS.get(one, ()):
                 vocabulary_services.bump_usage(db, getattr(target, binding.column), 1)
 
     done = Done(name=_name(kind, row), counts=counts)
@@ -371,6 +447,18 @@ def purge(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
 
     # **아래에서 위로.** 위부터 지우면 FK 가 막고, 막힌 자리에서 이미 지운 것은
     # 돌아오지 않는다.
+    if kind in FLAT_KINDS:
+        # **결과가 가리키던 연결을 먼저 끊는다.** 지울 때는 소프트라 FK 가 살아
+        # 있었는데, 진짜로 지우면 그 참조가 깨진다 — 500 이 아니라 여기서 푼다.
+        if kind == "recipe":
+            db.execute(
+                update(ProcessingResult)
+                .where(ProcessingResult.recipe_id == row.id)
+                .values(recipe_id=None)
+            )
+        db.delete(row)
+        return done
+
     runs: Sequence[Any] = tree["test_run"]
     for run in runs:
         _purge_run(db, run)
