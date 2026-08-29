@@ -91,8 +91,20 @@ function show() {
   )
 }
 
+/** jsdom 에는 `matchMedia` 가 없다. 폭을 흉내 낸다. */
+function screenWidth(wide: boolean) {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: wide,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }))
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
+  screenWidth(false)
   specimens.mockImplementation((sampleId: string) =>
     Promise.resolve(
       sampleId === 's1'
@@ -181,6 +193,34 @@ describe('고르기', () => {
 })
 
 describe('시험 보이는 자리', () => {
+  it('넓으면 옆에서, 좁으면 줄 안에서 — 고르기 전까지는 폭이 정한다', async () => {
+    // **매번 사람에게 시킬 판단이 아니다.** 넓으면 옆에 띄우는 편이 낫고(시편을
+    // 바꿔 가며 견준다), 좁으면 줄 안에서 펼치는 것 말고 길이 없다.
+    screenWidth(true)
+    show()
+    await screen.findByText('MD_01')
+    expect(screen.getByRole('button', { name: /옆에서/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
+  it('고르고 나면 그 뜻이 이긴다', async () => {
+    // 넓은 화면에서 일부러 「줄 안에서」 를 고른 사람에게, 창을 늘렸다고 되돌려
+    // 놓으면 그건 고른 것을 무시하는 것이다.
+    const user = userEvent.setup()
+    screenWidth(true)
+    show()
+    await screen.findByText('MD_01')
+    await user.click(screen.getByRole('button', { name: /줄 안에서/ }))
+
+    expect(localStorage.getItem('mnx.sampleExplorer.mode')).toBe('inline')
+    expect(screen.getByRole('button', { name: /줄 안에서/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
   it('두 모드를 고를 수 있다 — 어느 쪽이 나은지는 써 봐야 안다', async () => {
     const user = userEvent.setup()
     show()

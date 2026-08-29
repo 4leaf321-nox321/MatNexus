@@ -71,7 +71,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { missingSteps } from '@/modules/processing/gaps'
-import { missingStandard } from '@/modules/processing/standard'
+import { DMA_STARTER, TENSILE_STARTER, missingStandard } from '@/modules/processing/standard'
 import {
   blockersAt,
   columnsAt,
@@ -147,32 +147,6 @@ const SOURCE_HELP: Record<string, string> = {
   measured: '시편 기록에 적힌 값입니다. 이 시험 파일에 치수가 없어서 여기서 왔습니다.',
   nominal: '시편 규격이 정한 공칭입니다. 시험에도 시편에도 잰 값이 없어서 여기서 왔습니다.',
 }
-
-const DMA_STARTER: RecipeStep[] = [
-  { plugin: 'dma.derived', options: {} },
-  { plugin: 'curve.sort_unique', options: { x: 'temperature', duplicate_policy: 'mean' } },
-]
-
-const TENSILE_STARTER: RecipeStep[] = [
-  {
-    plugin: 'tensile.engineering',
-    options: { gauge_length: '@specimen_gauge_length', area: '@specimen_area' },
-  },
-  {
-    plugin: 'curve.sort_unique',
-    options: { x: 'strain_engineering', duplicate_policy: 'mean' },
-  },
-  {
-    plugin: 'tensile.elastic_modulus',
-    options: { method: 'linear_regression', minimum_strain: 0.0005, maximum_strain: 0.0025 },
-  },
-  {
-    plugin: 'tensile.proof_stress',
-    options: { youngs_modulus: '@youngs_modulus', offset_strain: 0.002 },
-  },
-  { plugin: 'tensile.strength', options: {} },
-  { plugin: 'tensile.necking_candidate', options: {} },
-]
 
 /** `ParamSpec` 의 기본값. 화면과 서버가 같은 값을 보게 하는 유일한 출처다. */
 function defaults(plugin: ProcessingStep | undefined): Record<string, unknown> {
@@ -293,7 +267,7 @@ export function ProcessingPanel({
     // '열을 고르세요' 로 비어 보였는데 서버는 displacement 로 잘 돌고 있었다 —
     // 화면과 서버가 서로 다른 것을 아는 상태다.
     if (!available.length) return
-    const starter =
+    const starter: RecipeStep[] =
       testTypeKey === 'tensile'
         ? TENSILE_STARTER
         : testTypeKey === 'dma_sweep'

@@ -92,3 +92,55 @@ export function missingStandard(plugins: string[]): RecipeStep[] {
     options: { ...step.options },
   }))
 }
+
+
+/**
+ * 처음 열었을 때 깔리는 순서 — **바로 돌려 볼 수 있는 것.**
+ *
+ * 표준(`TENSILE_STANDARD`)과 다른 점은 다듬기(정렬·재표본)를 뺀 것뿐이다. 그건
+ * 카드로 내보낼 때 필요한 것이고, 처음 여는 사람에게는 **한 번 돌려서 곡선이
+ * 나오는 것**이 먼저다.
+
+ * 빼면 안 되는 것이 진응력이다. 솔버 덱이 요구하는 것은 공칭이 아니라
+ * 진응력-진소성변형률이라(`matcore/export`), 여기서 끊으면 채택해도 결과 화면이
+ * 「채택된 결과에 진응력 열이 없습니다」 로 되돌려 보낸다.
+ */
+export const DMA_STARTER: RecipeStep[] = [
+  { plugin: 'dma.derived', options: {} },
+  { plugin: 'curve.sort_unique', options: { x: 'temperature', duplicate_policy: 'mean' } },
+]
+
+export const TENSILE_STARTER: RecipeStep[] = [
+  {
+    plugin: 'tensile.engineering',
+    options: { gauge_length: '@specimen_gauge_length', area: '@specimen_area' },
+  },
+  {
+    plugin: 'curve.sort_unique',
+    options: { x: 'strain_engineering', duplicate_policy: 'mean' },
+  },
+  // **표준과 같은 차례로 둔다.** 강도는 앞 단계에 매달리지 않아 어디에 놓아도
+  // 값은 같지만, 두 목록이 다른 차례를 가르치면 「어느 쪽이 맞나」 를 묻게 된다.
+  { plugin: 'tensile.strength', options: {} },
+  {
+    plugin: 'tensile.elastic_modulus',
+    options: { method: 'linear_regression', minimum_strain: 0.0005, maximum_strain: 0.0025 },
+  },
+  {
+    plugin: 'tensile.proof_stress',
+    options: { youngs_modulus: '@youngs_modulus', offset_strain: 0.002 },
+  },
+  { plugin: 'tensile.necking_candidate', options: {} },
+  // **여기서 끊으면 카드까지 못 간다.** 솔버 덱이 요구하는 것은 공칭이 아니라
+  // 진응력-진소성변형률이라(`matcore/export`), 진응력이 없는 결과를 채택하면
+  // 결과 화면이 「채택된 결과에 진응력 열이 없습니다」 로 되돌려 보낸다.
+  //
+  // **자르기가 먼저다.** 네킹이 시작되면 단면이 한 곳으로 몰려, 그 뒤 구간은
+  // 「길이 변화로 단면을 안다」 는 가정이 깨진다 — 자르지 않고 변환하면 그럴듯한
+  // 숫자가 나오지만 그 숫자가 틀렸다는 신호는 어디에도 없다.
+  {
+    plugin: 'curve.crop',
+    options: { x: 'strain_engineering', end: '@necking_candidate_strain' },
+  },
+  { plugin: 'tensile.true_plastic', options: { youngs_modulus: '@youngs_modulus' } },
+]

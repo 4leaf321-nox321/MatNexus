@@ -8,7 +8,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { missingSteps } from '@/modules/processing/gaps'
-import { TENSILE_STANDARD, missingStandard } from '@/modules/processing/standard'
+import {
+  TENSILE_STANDARD,
+  TENSILE_STARTER,
+  missingStandard,
+} from '@/modules/processing/standard'
 
 const at = (plugin: string) => TENSILE_STANDARD.findIndex((one) => one.plugin === plugin)
 const last = (plugin: string) =>
@@ -88,5 +92,43 @@ describe('빠진 것만 채우기', () => {
     const added = missingStandard([])
     added[0].options.gauge_length = '엉뚱한 값'
     expect(TENSILE_STANDARD[0].options.gauge_length).toBe('@specimen_gauge_length')
+  })
+})
+
+describe('처음 열면 깔리는 순서', () => {
+  const plugins = TENSILE_STARTER.map((one) => one.plugin)
+  const at = (plugin: string) => plugins.indexOf(plugin)
+
+  it('진응력까지 간다 — 여기서 끊으면 카드로 못 간다', () => {
+    // 솔버 덱이 요구하는 것은 공칭이 아니라 진응력-진소성변형률이다
+    // (`matcore/export`). 없으면 채택해도 결과 화면이 「채택된 결과에 진응력
+    // 열이 없습니다」 로 되돌려 보낸다 — 처음 여는 사람이 거기서 막힌다.
+    expect(plugins).toContain('tensile.true_plastic')
+  })
+
+  it('네킹에서 자른 뒤에 진응력을 낸다', () => {
+    // **자르기가 먼저다.** 네킹이 시작되면 단면이 한 곳으로 몰려 「길이 변화로
+    // 단면을 안다」 는 가정이 깨진다 — 자르지 않고 변환하면 그럴듯한 숫자가
+    // 나오지만 틀렸다는 신호가 어디에도 없다.
+    expect(at('tensile.necking_candidate')).toBeLessThan(at('curve.crop'))
+    expect(at('curve.crop')).toBeLessThan(at('tensile.true_plastic'))
+  })
+
+  it('탄성계수를 먼저 내고 그것으로 진소성을 뺀다', () => {
+    // 진소성변형률은 전체 변형률에서 탄성분을 뺀 것이라 E 가 있어야 한다.
+    expect(at('tensile.elastic_modulus')).toBeLessThan(at('tensile.true_plastic'))
+  })
+
+  it('표준이 아는 순서를 어기지 않는다', () => {
+    // 시작 순서는 표준의 부분집합이어야 한다 — 둘이 다른 차례를 말하면 어느
+    // 쪽이 옳은지 화면에서 알 수 없다.
+    // **차례만 본다.** 표준에는 같은 플러그인이 두 번 나오는 자리가 있어
+    // (`curve.sort_unique`), 목록을 통째로 견주면 그 중복 때문에 어긋난다.
+    const standard = TENSILE_STANDARD.map((one) => one.plugin)
+    const ranks = plugins
+      .map((one) => standard.indexOf(one))
+      .filter((rank) => rank >= 0)
+    const sorted = [...ranks].sort((a, b) => a - b)
+    expect(ranks).toEqual(sorted)
   })
 })

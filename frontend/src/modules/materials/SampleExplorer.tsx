@@ -17,7 +17,7 @@
  * 그래서 지금은 고를 수 있게 두고, 한쪽으로 정해지면 다른 쪽을 걷는다.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -61,6 +61,55 @@ import { cn } from '@/shared/lib/utils'
 type Mode = 'inline' | 'side'
 
 const MODE_KEY = 'mnx.sampleExplorer.mode'
+
+/**
+ * 옆에 띄울 만큼 넓은가. **`xl` 과 같은 자리다** — 그보다 좁으면 표와 시험이
+ * 반씩 나눠 가져 둘 다 못 쓴다.
+ */
+const WIDE_ENOUGH = '(min-width: 1280px)'
+
+/**
+ * 화면 폭이 정한다 — **사람이 고르기 전까지는.**
+ *
+ * 넓으면 옆에 띄우는 편이 낫다(시편을 바꿔 가며 견준다). 좁으면 줄 안에서 펼치는
+ * 것 말고 길이 없다. 그 판단을 매번 사람에게 시킬 이유가 없다.
+ *
+ * 다만 **고르고 나면 그 뜻이 이긴다.** 넓은 화면에서 일부러 「줄 안에서」 를 고른
+ * 사람에게 창을 늘렸다고 되돌려 놓으면, 그건 고른 것을 무시하는 것이다.
+ */
+function useAutoMode(): [Mode, (next: Mode) => void] {
+  const [chosen, setChosen] = useState<Mode | null>(() => {
+    try {
+      const saved = localStorage.getItem(MODE_KEY)
+      return saved === 'side' || saved === 'inline' ? saved : null
+    } catch {
+      // 사생활 보호 창에서는 못 읽는다. 그때는 폭이 정한다.
+      return null
+    }
+  })
+  const [wide, setWide] = useState(
+    () => typeof matchMedia === 'function' && matchMedia(WIDE_ENOUGH).matches
+  )
+
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return
+    const query = matchMedia(WIDE_ENOUGH)
+    const onChange = () => setWide(query.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
+
+  const choose = (next: Mode) => {
+    setChosen(next)
+    try {
+      localStorage.setItem(MODE_KEY, next)
+    } catch {
+      // 못 적어도 이번 방문 동안은 고른 대로 간다.
+    }
+  }
+
+  return [chosen ?? (wide ? 'side' : 'inline'), choose]
+}
 
 function sizeText(specimen: Specimen): string {
   if (specimen.sizes.length === 0) return '—'
@@ -120,22 +169,7 @@ export function SampleExplorer({
   // 통과하게 하지 않는다 — 그것이 아코디언에서 가장 자주 하던 헛클릭이다.
   const [sampleId, setSampleId] = useState<string | null>(null)
   const [specimenId, setSpecimenId] = useState<string | null>(null)
-  const [mode, setMode] = useState<Mode>(() => {
-    try {
-      return localStorage.getItem(MODE_KEY) === 'side' ? 'side' : 'inline'
-    } catch {
-      // 사생활 보호 창에서는 못 읽는다. 그때는 기본값으로 간다.
-      return 'inline'
-    }
-  })
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(MODE_KEY, mode)
-    } catch {
-      // 못 적어도 화면은 돌아야 한다.
-    }
-  }, [mode])
+  const [mode, setMode] = useAutoMode()
 
   const active = samples.find((one) => one.id === sampleId) ?? samples[0] ?? null
 
@@ -306,21 +340,27 @@ export function SampleExplorer({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8" />
+                    {/* **시편이 가장 넓다.** 이름·규격·치수가 여기 걸리고, 나머지는
+                        짧은 값이라 자리를 덜 먹어야 한다. */}
                     <TableHead>시편</TableHead>
-                    <TableHead>방향</TableHead>
-                    <TableHead>규격</TableHead>
+                    <TableHead className="w-16">방향</TableHead>
+                    <TableHead className="w-28">규격</TableHead>
                     <TableHead>치수</TableHead>
+                    {/* **머리와 내용의 정렬을 맞춘다.** `text-right` 를 줬는데 칸
+                        안은 flex 라 그 값이 안 먹었다 — 머리만 오른쪽으로 붙어
+                        어긋나 보였다. */}
+                    <TableHead className="w-32">시험</TableHead>
                     <TableHead className="w-20" />
-                    <TableHead className="text-right">시험</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((specimen) => {
                     const open = specimen.id === specimenId
                     return (
-                      <>
+                      // **열쇠는 조각에 붙인다.** 목록이 받는 자식이 이 조각이라,
+                      // 안쪽 `TableRow` 에 붙이면 React 는 못 본다.
+                      <Fragment key={specimen.id}>
                         <TableRow
-                          key={specimen.id}
                           onClick={() => setSpecimenId(open ? null : specimen.id)}
                           aria-selected={open}
                           className={cn('cursor-pointer', open && 'bg-muted/60')}
@@ -341,6 +381,13 @@ export function SampleExplorer({
                           <TableCell className="text-xs">{specimen.standard ?? '—'}</TableCell>
                           <TableCell className="text-muted-foreground text-xs">
                             {sizeText(specimen)}
+                          </TableCell>
+                          <TableCell>
+                            <RunTally
+                              total={specimen.test_run_count}
+                              adopted={specimen.adopted_count}
+                              failed={specimen.failed_count}
+                            />
                           </TableCell>
                           <TableCell
                             className="text-right"
@@ -365,18 +412,10 @@ export function SampleExplorer({
                               <Trash2 className="size-3.5" />
                             </Button>
                           </TableCell>
-                          <TableCell className="text-right">
-                            {/* **수만으로는 상태를 모른다.** 3건인데 채택이 0 이면
-                                아직 물성을 못 낸 것이다. */}
-                            <RunTally
-                              total={specimen.test_run_count}
-                              adopted={specimen.adopted_count}
-                              failed={specimen.failed_count}
-                            />
-                          </TableCell>
+
                         </TableRow>
                         {mode === 'inline' && open && (
-                          <TableRow key={`${specimen.id}-tests`}>
+                          <TableRow>
                             <TableCell colSpan={7} className="bg-muted/30 p-3">
                               <SpecimenTests
                                 specimenId={specimen.id}
@@ -385,7 +424,7 @@ export function SampleExplorer({
                             </TableCell>
                           </TableRow>
                         )}
-                      </>
+                      </Fragment>
                     )
                   })}
                 </TableBody>
