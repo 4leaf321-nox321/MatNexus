@@ -6,62 +6,27 @@
  * 같은 시료의 MD/TD/DD 를 묶어 r값·이방성 파라미터를 구할 수 있다(ADR 0004).
  */
 
-import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileCheck2, FlaskConical, Globe2, Layers, ListTree, Pencil, Plus, Table2, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronLeft, ChevronRight, Globe2, Layers, ListTree, Pencil, Plus } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { DeleteMaterialDialog } from '@/modules/materials/DeleteMaterialDialog'
 import { materialsApi } from '@/modules/materials/api'
-import type { Sample, Specimen } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { EditMaterialDialog } from '@/modules/materials/EditMaterialDialog'
-import { EditSpecimenDialog } from '@/modules/materials/EditSpecimenDialog'
 import { MaterialListPanel } from '@/modules/materials/MaterialListPanel'
+import { SampleExplorer } from '@/modules/materials/SampleExplorer'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
-import { NewSpecimenDialog } from '@/modules/materials/NewSpecimenDialog'
-import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
-import { MillSheetDialog } from '@/modules/materials/MillSheetDialog'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { GroupsPanel } from '@/modules/materials/GroupsPanel'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
-import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
-import { CreatedOn } from '@/shared/components/CreatedOn'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
-import { SummaryImportDialog } from '@/modules/tests/SummaryImportDialog'
 import { useResource } from '@/shared/hooks/useResource'
-import { display, toDisplay } from '@/shared/units'
-
-/**
- * '모두 펼치기·접기' 명령.
- *
- * 여닫힘을 부모가 통째로 들고 있으면 줄 하나를 열 때마다 목록 전체가 다시
- * 그려진다. 그래서 상태는 줄에 두고 **명령만 내려보낸다.** `at` 은 같은 방향을
- * 두 번 눌러도 다시 반영되게 하는 값이다 — 사람이 하나를 손으로 닫은 뒤
- * '모두 펼치기' 를 다시 누르는 일이 실제로 있다.
- */
-interface ExpandCommand {
-  open: boolean
-  at: number
-}
-
-/**
- * 누가 등록했나. **이름만 적으면 무엇인지 모른다** — 로트번호나 시험자처럼
- * 읽히므로 「올린 사람」 을 붙인다.
- */
-function Registrant({ name }: { name?: string | null }) {
-  if (!name) return null
-  return (
-    <span className="text-muted-foreground text-xs whitespace-nowrap" title="올린 사람">
-      {name} 올림
-    </span>
-  )
-}
 
 export default function MaterialDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -74,7 +39,6 @@ export default function MaterialDetailPage() {
   const [sources, setSources] = useState(false)
   const [editing, setEditing] = useState(false)
   const [removing, setRemoving] = useState(false)
-  const [expand, setExpand] = useState<ExpandCommand | null>(null)
 
   const item = material.data
 
@@ -261,28 +225,6 @@ export default function MaterialDetailPage() {
           시료
         </h2>
         <div className="flex items-center gap-1">
-          {/* **두 층을 한 번에 여닫는다.** 시료 3개 × 시편 6개를 손으로 여는
-              것은 클릭 20번이다. 펼치면 시편마다 시험 목록을 부르므로 요청이
-              늘지만, 그것은 누른 사람이 요청한 일이다 — 기본이 접힘인 이유는
-              누르지 않았을 때 그 비용을 치르지 않게 하는 것이다. */}
-          <Button
-            size="sm"
-            variant="ghost"
-            title="시료와 시편을 모두 펼칩니다"
-            onClick={() => setExpand({ open: true, at: Date.now() })}
-          >
-            <ChevronsUpDown className="size-4" />
-            모두 펼치기
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            title="시료와 시편을 모두 접습니다"
-            onClick={() => setExpand({ open: false, at: Date.now() })}
-          >
-            <ChevronsDownUp className="size-4" />
-            모두 접기
-          </Button>
           <Button size="sm" variant="secondary" onClick={() => setAddingSample(true)}>
             <Plus className="size-4" />
             시료 추가
@@ -298,23 +240,14 @@ export default function MaterialDetailPage() {
         </div>
       )}
 
-      {/* **위의 재료 정보는 붙박이다.** 전에는 시료·시편이 늘면 페이지 전체가
-          늘어나서, 재료의 밀도나 Grade 를 보려고 위로 다시 굴려야 했다 —
-          시료를 견주는 동안 그 값이 계속 보여야 한다.
-          높이는 화면에 맞춘다. 좁은 화면에서는 굴릴 여지가 적으므로 넉넉히 둔다. */}
-      <ul className="max-h-[60vh] space-y-2 overflow-y-auto pr-1 lg:max-h-[calc(100vh-26rem)]">
-        {(samples.data ?? []).map((sample, index) => (
-          <SampleRow
-            key={sample.id}
-            sample={sample}
-            /* 첫 시료는 펼친 채로 연다. 전부 접어 두면 시편도 '시험 등록'도
-               보이지 않아, 처음 온 사람이 어디서 시작하는지 알 수 없다. */
-            defaultOpen={index === 0}
-            expand={expand}
-            onChanged={() => samples.reload()}
-          />
-        ))}
-      </ul>
+      {/* **아코디언을 걷었다.** 시료 ▸ 시편 ▸ 시험 3단 중첩이라 열기 전에는
+          무엇이 있는지 모르고, 열고 나면 세로로 길어져 견줄 수가 없었다.
+          왼쪽에서 시료를 고르고 오른쪽 표에서 시편을 견준다(`SampleExplorer`). */}
+      <SampleExplorer
+        materialId={id}
+        samples={samples.data ?? []}
+        onChanged={() => samples.reload()}
+      />
 
         </TabsContent>
       </Tabs>
@@ -356,427 +289,5 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-muted-foreground text-xs">{label}</dt>
       <dd className="mt-0.5">{value}</dd>
     </div>
-  )
-}
-
-function SampleRow({
-  sample,
-  onChanged,
-  defaultOpen = false,
-  expand,
-}: {
-  sample: Sample
-  onChanged: () => void
-  defaultOpen?: boolean
-  expand: ExpandCommand | null
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  const [adding, setAdding] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [mill, setMill] = useState(false)
-  const [removing, setRemoving] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<Error | null>(null)
-
-  async function removeSample() {
-    setBusy(true)
-    setFailure(null)
-    try {
-      await materialsApi.removeSample(sample.id)
-      setRemoving(false)
-      onChanged()
-    } catch (caught) {
-      // 서버가 "시편 N건이 남아 있어 지울 수 없습니다" 를 이유와 함께 준다.
-      setFailure(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-  /**
-   * 표로 시험 넣기.
-   *
-   * **표에는 재료 이름이 없다** — 한 파일이 대개 한 시료 분이라, 어디 붙는지는
-   * 사람이 고른다. 그 자리가 여기다.
-   */
-  const [importing, setImporting] = useState(false)
-  const [specimenError, setSpecimenError] = useState<Error | null>(null)
-  const specimens = useResource(
-    () => (open ? materialsApi.specimens(sample.id) : Promise.resolve([])),
-    [open, sample.id]
-  )
-
-  // '모두 펼치기·접기'. 명령이 올 때만 따라가고, 그 뒤에는 다시 이 줄이 자기
-  // 상태를 갖는다 — 하나만 손으로 닫는 것이 계속 가능해야 한다.
-  useEffect(() => {
-    if (expand) setOpen(expand.open)
-  }, [expand])
-
-  return (
-    <li className="rounded-md border">
-      {/* 수정 버튼은 펼치기 버튼 **바깥**에 둔다. 버튼 안의 버튼은 중첩이
-          허용되지 않고, 눌렀을 때 줄이 함께 접혔다 펴진다. */}
-      <div className="flex items-center">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="hover:bg-muted/40 flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
-        >
-          {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-          <span className="font-mono text-xs">{sample.record_name}</span>
-          {sample.lot_no && <Badge variant="outline">로트 {sample.lot_no}</Badge>}
-          {/* **언제 들어온 로트인가.** 로트를 견줄 때 늘 따라 붙는 물음이다. */}
-          <CreatedOn at={sample.created_at} />
-          {/* **로트가 이상할 때 물어볼 데가 여기다.** 전에는 시험에만 있어서,
-              시료를 보고 있으면서 누가 넣었는지 알 방법이 없었다. */}
-          <Registrant name={sample.registered_by} />
-          {/* **접힌 줄이 상태를 말한다.** 펼치지 않고도 "시험이 몇 건이고 몇 건이
-              채택됐나" 가 보여야, 물성 탭의 n 이 왜 그 수인지 여기서 설명된다. */}
-          <span className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
-            <span>시편 {sample.specimen_count}</span>
-            <RunTally
-              total={sample.test_run_count}
-              adopted={sample.adopted_count}
-              failed={sample.failed_count}
-            />
-          </span>
-        </button>
-        {/* **밀시트는 이 로트의 것이다.** 재료가 아니라 여기에 붙는다 —
-            로트마다 다른 값이라, 재료에 적으면 첫 로트가 그 Grade 전체의
-            값이 된다(ADR 0016). */}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="shrink-0"
-          onClick={() => setMill(true)}
-          aria-label="밀시트"
-          title="밀시트가 준 값 — 우리가 잰 값과 견줍니다"
-        >
-          <FileCheck2 className="size-3.5" />
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="shrink-0"
-          onClick={() => setEditing(true)}
-          aria-label="시료 수정"
-        >
-          <Pencil className="size-3.5" />
-        </Button>
-        {/* **시편이 남아 있으면 서버가 막는다.** 그 이유를 그대로 보여 준다 —
-            "지울 수 없습니다" 만으로는 무엇을 먼저 치워야 하는지 모른다. */}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="mr-2 shrink-0"
-          onClick={() => setRemoving(true)}
-          aria-label="시료 삭제"
-          title="시편이 남아 있으면 지울 수 없습니다"
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
-
-      <ConfirmDialog
-        open={removing}
-        busy={busy}
-        title="이 시료를 지웁니다"
-        body={
-          <>
-            <p>
-              <b className="font-mono">{sample.record_name}</b>
-              {sample.lot_no ? ` (로트 ${sample.lot_no})` : ''} 이 사라집니다.
-            </p>
-            {failure && <p className="text-destructive mt-2 text-xs">{failure.message}</p>}
-            {sample.specimen_count > 0 && (
-              // **누르기 전에 안다.** 서버도 막지만, 막힌다는 것을 미리 알면
-              // 시편을 먼저 치우러 갈 수 있다.
-              <p className="text-destructive mt-2 text-xs">
-                시편 {sample.specimen_count}건이 남아 있어 지울 수 없습니다. 시편을 먼저
-                지우세요.
-              </p>
-            )}
-          </>
-        }
-        onConfirm={removeSample}
-        onClose={() => setRemoving(false)}
-      />
-
-      <MillSheetDialog
-        sample={sample}
-        open={mill}
-        onClose={() => setMill(false)}
-        onSaved={onChanged}
-      />
-
-      <EditSampleDialog
-        sample={sample}
-        open={editing}
-        onClose={() => setEditing(false)}
-        onSaved={() => {
-          setEditing(false)
-          onChanged()
-        }}
-      />
-
-      {open && (
-        <div className="border-t p-3">
-          <dl className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-            <Field label="제조사" value={sample.manufacturer ?? '—'} />
-            <Field label="벤더" value={sample.primary_vendor ?? '—'} />
-            <Field label="생산일" value={sample.production_date ?? '—'} />
-            <Field
-              label="밀도"
-              value={
-                sample.density == null ? '—' : `${sample.density} ${sample.density_unit}`
-              }
-            />
-          </dl>
-
-          <div className="mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              <FlaskConical className="size-3.5" />
-              시편
-            </span>
-            <div className="flex items-center gap-1">
-              {/* **곡선 없는 시험도 데이터다.** 기존 표에 쌓인 것을 못 가져오면
-                  사용자가 옮겨오지 않는다 — 도입 성패가 여기서 갈린다. */}
-              <Button size="sm" variant="ghost" onClick={() => setImporting(true)}>
-                <Table2 className="size-3.5" />
-                표로 시험 넣기
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
-                <Plus className="size-3.5" />
-                시편 추가
-              </Button>
-            </div>
-          </div>
-
-          <ErrorNotice error={specimens.error ?? specimenError} className="mb-2" />
-
-          {(specimens.data ?? []).length === 0 ? (
-            <p className="text-muted-foreground py-4 text-center text-sm">시편이 없습니다.</p>
-          ) : (
-            <ul className="divide-y">
-              {(specimens.data ?? []).map((specimen, index) => (
-                <SpecimenRow
-                  key={specimen.id}
-                  specimen={specimen}
-                  /* 시료와 같은 규칙 — 첫 줄만 펼쳐 둔다. 전부 접으면 '시험
-                     등록' 이 어디 있는지 알 수 없고, 전부 펼치면 시편 11개짜리
-                     시료에서 화면이 끝없이 늘어난다.
-                     '모두 펼치기' 뒤에 시료를 열면 시편도 펼쳐진 채로 붙는다 —
-                     그러지 않으면 명령이 절반만 먹은 것처럼 보인다. */
-                  defaultOpen={expand?.open === true || index === 0}
-                  expand={expand}
-                  onChanged={() => {
-                    specimens.reload()
-                    onChanged()
-                  }}
-                  onRemove={async () => {
-                    setSpecimenError(null)
-                    try {
-                      await materialsApi.removeSpecimen(specimen.id)
-                      specimens.reload()
-                      onChanged()
-                    } catch (caught) {
-                      setSpecimenError(
-                        caught instanceof Error ? caught : new Error('삭제 실패')
-                      )
-                    }
-                  }}
-                />
-              ))}
-            </ul>
-          )}
-
-          {importing && (
-            <SummaryImportDialog
-              sampleId={sample.id}
-              sampleName={sample.record_name}
-              testType="tensile"
-              testTypeLabel="인장시험"
-              onClose={() => setImporting(false)}
-              onDone={() => {
-                specimens.reload()
-                onChanged()
-              }}
-            />
-          )}
-
-          <NewSpecimenDialog
-            sampleId={sample.id}
-            open={adding}
-            onClose={() => setAdding(false)}
-            onDone={() => {
-              setAdding(false)
-              specimens.reload()
-              onChanged()
-            }}
-          />
-        </div>
-      )}
-    </li>
-  )
-}
-
-/**
- * 시험 상태 한 조각 — 시료 줄과 시편 줄이 같은 것을 쓴다.
- *
- * **채택을 눈에 띄게 두는 이유:** 통계와 적합에 들어가는 것은 채택된 결과뿐이다
- * (ADR 0007). 물성 탭의 n 이 왜 그 수인지가 이 숫자에 있다 — 안 보이면 "시험은
- * 15건인데 왜 8개로 평균을 냈지" 를 답할 수 없다.
- */
-function RunTally({
-  total,
-  adopted,
-  failed,
-}: {
-  total: number
-  adopted: number
-  failed: number
-}) {
-  if (total === 0) return <span className="text-muted-foreground text-xs">시험 0</span>
-  return (
-    <span className="flex items-center gap-1.5 text-xs">
-      <span>시험 {total}</span>
-      {adopted > 0 && (
-        <span className="inline-flex items-center gap-0.5 text-emerald-700 dark:text-emerald-500">
-          <CheckCircle2 className="size-3" />
-          채택 {adopted}
-        </span>
-      )}
-      {failed > 0 && (
-        <span className="inline-flex items-center gap-0.5 text-destructive">
-          <AlertTriangle className="size-3" />
-          실패 {failed}
-        </span>
-      )}
-    </span>
-  )
-}
-
-/**
- * 시편 한 줄 — **접힌다.**
- *
- * 시편 11개를 전부 펼쳐 두면 화면이 끝없이 늘어나고, 시험 목록을 시편마다
- * 한 번씩 불러 요청이 11번 나간다. 접힌 줄이 아무것도 말하지 않으면 접는 뜻이
- * 없으므로, **시험 수는 접힌 채로도 보인다**(목록이 한 번에 세어 준다).
- */
-function SpecimenRow({
-  specimen,
-  defaultOpen,
-  expand,
-  onRemove,
-  onChanged,
-}: {
-  specimen: Specimen
-  defaultOpen: boolean
-  expand: ExpandCommand | null
-  onRemove: () => void
-  onChanged: () => void
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  const [editing, setEditing] = useState(false)
-
-  useEffect(() => {
-    if (expand) setOpen(expand.open)
-  }, [expand])
-
-  return (
-    <li className="text-sm">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="hover:bg-muted/40 -mx-1 flex flex-1 items-center gap-3 rounded px-1 py-2 text-left"
-        >
-          {open ? (
-            <ChevronDown className="size-3.5 shrink-0" />
-          ) : (
-            <ChevronRight className="size-3.5 shrink-0" />
-          )}
-          <Badge variant="secondary">{specimen.orientation}</Badge>
-          <span className="font-mono text-xs">{specimen.record_name}</span>
-          <CreatedOn at={specimen.created_at} />
-          <Registrant name={specimen.registered_by} />
-          {/* **규격이 치수를 정한다.** 치수 옆에 붙여야 그 관계가 보이고, 다른
-              규격끼리 연신율을 견주고 있는지도 여기서 걸린다. */}
-          {specimen.standard && (
-            <Badge variant="outline" className="text-xs">
-              {specimen.standard}
-            </Badge>
-          )}
-          {/* **자리로 외울 수가 없다.** 전에는 두께·폭·게이지 세 값을 이름 없이
-              늘어놓았는데, 칸이 규격마다 다른 지금은 환봉 규격의 첫 값이 직경이고
-              평판 규격의 첫 값은 폭이다. 이름을 함께 적는다.
-
-              그리고 **규격에서 온 값은 흐리게.** 합쳐서 보여 주면 전부 실측으로
-              읽히고, "이 두께가 잰 건가 규격값인가" 를 나중에 답할 수 없다. */}
-          <span className="text-muted-foreground ml-auto flex flex-wrap justify-end gap-x-2 tabular-nums">
-            {specimen.sizes.map((size) => {
-              const shown = display(size.si_unit, size.dimension)
-              return (
-                <span
-                  key={size.key}
-                  className={size.source === 'nominal' ? 'opacity-50' : undefined}
-                  title={size.source === 'nominal' ? '규격이 정한 값입니다' : '잰 값입니다'}
-                >
-                  {size.label} {Number(toDisplay(size.value, size.si_unit, size.dimension).toPrecision(6))}
-                  {shown.unit && ` ${shown.unit}`}
-                </span>
-              )
-            })}
-          </span>
-          {/* 접힌 줄에서 시험 상태가 보여야 한다. 없으면 하나씩 펼쳐 봐야
-              "어느 시편이 실패했나 · 채택됐나" 를 알게 된다. */}
-          <RunTally
-            total={specimen.test_run_count}
-            adopted={specimen.adopted_count}
-            failed={specimen.failed_count}
-          />
-        </button>
-
-        {/* **치수를 고칠 자리.** 일괄 등록은 방향만 주고 시편을 만들어서
-            치수가 빈 채로 쌓인다 — 그 상태로는 처리가 첫 단계에서 막힌다. */}
-        <Button
-          size="sm"
-          variant="ghost"
-          title="시편 수정 (규격·치수·메모)"
-          onClick={() => setEditing(true)}
-        >
-          <Pencil className="size-3.5" />
-        </Button>
-
-        {/* 일괄 등록이 만든 뒤 업로드가 실패하면 빈 시편이 남는다. 치울 길이
-            없으면 목록이 계속 지저분해진다. 서버가 시험이 달린 시편은 거절하므로
-            실수로 지울 수는 없다. */}
-        <Button
-          size="sm"
-          variant="ghost"
-          title="시편 삭제 (시험이 있으면 서버가 막습니다)"
-          onClick={onRemove}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
-
-      {/* 시험 UI 는 시험 모듈이 갖는다. 여기는 자리만 내어 준다(R5).
-          접혀 있으면 아예 부르지 않는다 — 요청도 같이 줄어든다. */}
-      {open && (
-        <div className="pb-2 pl-7">
-          <SpecimenTests specimenId={specimen.id} specimenName={specimen.record_name} />
-        </div>
-      )}
-
-      <EditSpecimenDialog
-        specimen={specimen}
-        open={editing}
-        onClose={() => setEditing(false)}
-        onSaved={() => {
-          setEditing(false)
-          onChanged()
-        }}
-      />
-    </li>
   )
 }
