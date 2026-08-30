@@ -1,0 +1,39 @@
+#RADIOSS ENGINE
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+# Rate-dependent plasticity single-element tension  --  Radioss / OpenRadioss  (Engine)
+#
+#   The Engine file carries only run control and output.  Model, material and
+#   /TH definitions all live in the Starter (_0000.rad).
+#
+#   /RUN/<runname>/<run number>  --  runname must match the Starter's /BEGIN.
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/VERS/2022
+/RUN/rate-1elem-radioss/1
+#              Tstop
+          0.00405465
+#
+# nodal time step, scale factor 0.9, no added mass (Tmin = 0)
+/DT/NODA/CST/0
+#              Tscal                Tmin
+                 0.9                 0.0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  OUTPUT
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/ANIM/DT
+#             TSTART               TFREQ
+                 0.0             5.0E-04
+/ANIM/ELEM/EPSP
+/ANIM/ELEM/VONM
+/ANIM/BRICK/TENS/STRESS
+/ANIM/BRICK/TENS/STRAIN
+/ANIM/VECT/DISP
+#
+# time-history write frequency (the /TH groups themselves are in the Starter)
+/TFILE/0
+#             dT_HIS
+             1.0E-05
+#
+/PRINT/-100
+/MON/ON
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/END

@@ -1,0 +1,121 @@
+!------------------------------------------------------------------------------
+! Rate-dependent plasticity, single element  --  Ansys Mechanical APDL
+!
+!   units : mm - N - tonne - s   (stress MPa)
+!   model : same 1 mm cube and 1/8 symmetry as the DP600 quasi-static deck,
+!           pulled on an EXPONENTIAL history so the TRUE strain rate is exactly
+!           100 /s :  u(t) = exp(100 t) - 1 ,  t = 0 .. 0.00405465 s
+!   check : SX ~= 770.30 MPa , reaction ~= 514.29 N
+!           (quasi-static 700.32 MPa x the 1.10 rate factor)
+!
+!   TB,RATE with TBOPT=PERZYNA is
+!       sigma = sigma_static * [1 + (eps_dot_pl / gamma)^m]
+!   which is Cowper-Symonds written with gamma = C and m = 1/p.  So the LS-DYNA
+!   pair C = 1.0e7, P = 5 becomes gamma = 1.0e7, m = 0.2 here.  Getting m and
+!   1/m the wrong way round is the classic slip -- it turns a 10% rate factor
+!   into an enormous one.
+!
+!   Perzyna needs a plasticity model underneath it (MISO here); on its own it
+!   does nothing.  Rate effects are active in a STATIC analysis as long as the
+!   step times are real, so TIME below is physical, not a load-step counter.
+!
+!   run   : ansys -b -i rate-1elem-ansys.dat -o out.txt
+!------------------------------------------------------------------------------
+FINISH
+/CLEAR,NOSTART
+/TITLE, Rate-dependent plasticity 1-element, 100/s (mm-N-tonne-s)
+/UNITS,MPA
+/PREP7
+
+!==============================================================================
+! MATERIAL
+!==============================================================================
+MP,EX,1,210000
+MP,PRXY,1,0.3
+MP,DENS,1,7.85e-9
+
+! quasi-static curve, (plastic strain, true stress)
+TB,PLASTIC,1,1,5,MISO
+TBPT,,0.000,350
+TBPT,,0.020,455
+TBPT,,0.100,560
+TBPT,,0.400,700
+TBPT,,1.000,790
+
+! Perzyna:  sigma = sigma_static * [1 + (eps_dot_pl/gamma)^m]
+! m = 1/p = 0.2  and  gamma = C = 1.0e7  -> factor 1.10 at 100 /s
+TB,RATE,1,,,PERZYNA
+TBDATA,1,0.2,1.0e7
+
+!==============================================================================
+! MESH
+!==============================================================================
+ET,1,SOLID185
+KEYOPT,1,2,2
+
+N,1, 0.0, 0.0, 0.0
+N,2, 1.0, 0.0, 0.0
+N,3, 1.0, 1.0, 0.0
+N,4, 0.0, 1.0, 0.0
+N,5, 0.0, 0.0, 1.0
+N,6, 1.0, 0.0, 1.0
+N,7, 1.0, 1.0, 1.0
+N,8, 0.0, 1.0, 1.0
+
+TYPE,1  $  MAT,1
+E,1,2,3,4,5,6,7,8
+
+!==============================================================================
+! BOUNDARY CONDITIONS
+!==============================================================================
+NSEL,S,LOC,X,0.0  $  D,ALL,UX,0.0
+NSEL,S,LOC,Y,0.0  $  D,ALL,UY,0.0
+NSEL,S,LOC,Z,0.0  $  D,ALL,UZ,0.0
+NSEL,ALL
+FINISH
+
+!==============================================================================
+! SOLVE  -- exponential displacement, applied as 20 load steps
+!          u(t) = exp(100 t) - 1, so the true strain rate stays at 100 /s
+!==============================================================================
+/SOLU
+ANTYPE,STATIC
+NLGEOM,ON
+OUTRES,ALL,ALL
+AUTOTS,ON
+KBC,0                            ! ramped within each load step
+
+*DIM,TT,ARRAY,20
+TT(1)=0.0002027,0.0004055,0.0006082,0.0008109,0.0010137
+TT(6)=0.0012164,0.0014191,0.0016219,0.0018246,0.0020273
+TT(11)=0.0022301,0.0024328,0.0026355,0.0028383,0.0030410
+TT(16)=0.0032437,0.0034465,0.0036492,0.0038519,0.0040547
+*DIM,UU,ARRAY,20
+UU(1)=0.0204802,0.0413797,0.0627074,0.0844718,0.1066819
+UU(6)=0.1293469,0.1524761,0.1760790,0.2001653,0.2247449
+UU(11)=0.2498278,0.2754245,0.3015454,0.3282012,0.3554030
+UU(16)=0.3831619,0.4114892,0.4403968,0.4698963,0.5000000
+
+*DO,I,1,20
+  NSEL,S,LOC,X,1.0
+  D,ALL,UX,UU(I)
+  NSEL,ALL
+  TIME,TT(I)
+  NSUBST,20,200,10
+  SOLVE
+*ENDDO
+FINISH
+
+!==============================================================================
+! CHECK
+!==============================================================================
+/POST1
+SET,LAST
+ESEL,S,ELEM,,1
+ETABLE,SX_,S,X
+ETABLE,EPEQ_,NL,EPEQ
+PRETAB,SX_,EPEQ_                 ! expect SX ~ 770.3 MPa, EPEQ ~ 0.4018
+NSEL,S,LOC,X,1.0
+FSUM                             ! expect FX ~ 514.3 N
+NSEL,ALL
+FINISH

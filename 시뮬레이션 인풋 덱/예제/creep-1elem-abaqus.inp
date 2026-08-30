@@ -1,0 +1,106 @@
+**-----------------------------------------------------------------------------
+** Secondary (Norton) creep, single element, constant load  --  Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa)
+**   model : 1 x 1 x 1 mm hex, 1/8 symmetry, 100 N pulled on the x=1 face
+**           -> sigma_x = 100 MPa held for 1000 s
+**   law   : Norton   eps_dot_cr = A * sigma^n ,  A = 1e-15, n = 5
+**           at 100 MPa :  eps_dot = 1e-15 * 100^5 = 1e-5 /s
+**   check : creep strain after 1000 s = 1e-5 * 1000 = 0.01000  (1%)
+**           elastic strain            = 100/210000 = 0.00047619
+**           total ux at t = 1000 s    = 0.0104762 mm
+**
+**   NLGEOM is OFF on purpose: with small strain the section does not shrink,
+**   so the stress stays exactly 100 MPa and the answer is closed form.  Turn
+**   NLGEOM on and the true stress creeps upward, and with n = 5 a 1% area
+**   change moves the rate by 5%.
+**
+**   *CREEP, LAW=STRAIN takes A, n, m for  eps_dot = A sigma^n eps_cr^m.
+**   m = 0 reduces it to Norton.  LAW=TIME would put the exponent on TIME
+**   instead -- same three numbers, different physics.
+**
+**   run   : abaqus job=creep-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+Norton creep 1-element, constant 100 MPa (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PULL
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=STEEL_CREEP
+,
+**
+**=============================================================================
+** MATERIAL
+**=============================================================================
+*MATERIAL, NAME=STEEL_CREEP
+*DENSITY
+7.85E-09,
+*ELASTIC
+210000., 0.3
+** A, n, m   ->   eps_dot_cr = A * sigma^n * eps_cr^m
+*CREEP, LAW=STRAIN
+1.0E-15, 5.0, 0.0
+**
+**=============================================================================
+** STEP 1  --  apply the load, no creep yet
+**=============================================================================
+*STEP, NLGEOM=NO
+apply 100 N
+*STATIC
+1.0, 1.0
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+** 4 nodes x 25 N = 100 N over 1 mm2 = 100 MPa
+*CLOAD
+PULL, 1, 25.0
+*OUTPUT, FIELD, FREQUENCY=1
+*ELEMENT OUTPUT
+S, E, CEEQ
+*NODE OUTPUT
+U, RF
+*END STEP
+**
+**=============================================================================
+** STEP 2  --  hold for 1000 s and let it creep
+**   *VISCO is the transient creep procedure; *STATIC would ignore the creep law
+**=============================================================================
+*STEP, NLGEOM=NO, INC=1000
+hold 1000 s
+*VISCO, CETOL=1.E-5
+1.0, 1000.0, 1.E-4, 50.0
+*OUTPUT, FIELD, FREQUENCY=10
+*ELEMENT OUTPUT
+S, E, CEEQ, CE
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+CEEQ, S11
+*NODE OUTPUT, NSET=PULL
+U1
+*END STEP

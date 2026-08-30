@@ -1,0 +1,90 @@
+**-----------------------------------------------------------------------------
+** Quasi-isotropic laminate, single shell element  --  Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa, density 1.57e-9)
+**   model : 1 x 1 mm S4R shell, 4 plies [0/45/-45/90] x 0.125 mm = 0.5 mm
+**           membrane only (all rotations and uz fixed), pulled to ux = 0.005 mm
+**           -> eps_x = 0.5%, transverse contraction free
+**   check : laminate average S11 ~= 260.45 MPa, edge reaction ~= 130.23 N
+**           (classical lamination theory: E_eff = 52090.3 MPa, nu_eff = 0.30686)
+**           0 deg ply sigma_1 ~= 674.9 MPa -> worst ply index 0.69, nothing fails
+**
+**   ply : E1=135000  E2=9000  nu12=0.3  G12=5000  G13=5000  G23=3500 MPa
+**
+**   run   : abaqus job=laminate-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+QI laminate 1-element tension (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+*ELEMENT, TYPE=S4R, ELSET=SKIN
+ 1, 1, 2, 3, 4
+**
+*NSET, NSET=XEDGE
+ 1, 4
+*NSET, NSET=YEDGE
+ 1, 2
+*NSET, NSET=PULL
+ 2, 3
+**
+** The ply angles below are measured from this orientation, NOT from the global
+** axes and NOT from the element edge.  Leave *ORIENTATION out and Abaqus falls
+** back to the default shell local system -- on a curved part that silently
+** rotates the whole layup.
+*ORIENTATION, NAME=LAMORI, SYSTEM=RECTANGULAR
+1.0, 0.0, 0.0,  0.0, 1.0, 0.0
+3, 0.0
+**
+*SHELL SECTION, ELSET=SKIN, COMPOSITE, ORIENTATION=LAMORI, LAYUP=QI
+0.125, 3, CFRP,   0.0, PLY0
+0.125, 3, CFRP,  45.0, PLY45
+0.125, 3, CFRP, -45.0, PLYM45
+0.125, 3, CFRP,  90.0, PLY90
+**
+**=============================================================================
+** MATERIAL
+**=============================================================================
+*MATERIAL, NAME=CFRP
+*DENSITY
+1.57E-09,
+** TYPE=LAMINA is the plane-stress orthotropic form: E1 E2 nu12 G12 G13 G23
+*ELASTIC, TYPE=LAMINA
+135000., 9000., 0.3, 5000., 5000., 3500.
+** Hashin needs the six strengths: Xt Xc Yt Yc Sl St
+*DAMAGE INITIATION, CRITERION=HASHIN
+2200., 1400., 60., 200., 90., 90.
+** Without *DAMAGE EVOLUTION the criterion only reports indices (DMICRT) and
+** never softens the material.  That is what we want here -- the check value is
+** the linear laminate response.
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=NO, INC=100
+pull to eps_x = 0.5%
+*STATIC
+0.1, 1.0, 1.E-06, 1.0
+**
+*BOUNDARY
+XEDGE, 1, 1, 0.0
+YEDGE, 2, 2, 0.0
+ALLN,  3, 6, 0.0
+PULL,  1, 1, 0.005
+**
+*OUTPUT, FIELD, FREQUENCY=1
+*ELEMENT OUTPUT
+S, E, DAMAGEFT, DAMAGEFC, DAMAGEMT, DAMAGEMC
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*NODE OUTPUT, NSET=PULL
+U1, RF1
+*END STEP

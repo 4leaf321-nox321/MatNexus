@@ -1,0 +1,101 @@
+**-----------------------------------------------------------------------------
+** Crushable foam, single-element COMPRESSION  --  Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa, density 6.0e-11)
+**   model : 1 x 1 x 1 mm hex, 1/8 symmetry, x-face pushed to u = -0.3 mm
+**           (30% engineering compression)
+**   check : S11 ~= -0.55 MPa, reaction on the pushed face ~= 0.55 N
+**
+**   material : *CRUSHABLE FOAM, HARDENING=VOLUMETRIC
+**     data line : k = sigma_c0/p_c0 , kt = p_t/p_c0
+**     The VOLUMETRIC model has a plastic Poisson's ratio of ZERO, which is
+**     what makes it comparable with LS-DYNA's *MAT_063 (PR = 0) here.
+**
+**   THE HARDENING CURVE IS IN PLASTIC VOLUMETRIC STRAIN, NOT TOTAL.
+**   LS-DYNA's *MAT_063 curve is in TOTAL volumetric strain.  Same physical
+**   foam, two different abscissas -- converted below with eps_p = eps - sig/E:
+**       total   sigma      ->   plastic
+**       0.000   0.35            0.0000
+**       0.050   0.38            0.0424
+**       0.100   0.42            0.0916
+**       0.300   0.55            0.2890
+**       0.500   0.90            0.4820
+**       0.700   3.00            0.6400
+**
+**   run   : abaqus job=foam-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+Crushable foam 1-element compression (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PUSH
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=FOAM
+,
+**
+**=============================================================================
+** MATERIAL
+**=============================================================================
+*MATERIAL, NAME=FOAM
+*DENSITY
+6.00E-11,
+*ELASTIC
+50.0, 0.0
+*CRUSHABLE FOAM, HARDENING=VOLUMETRIC
+1.0, 0.1
+** yield stress, plastic volumetric strain  (uniaxial compression)
+*CRUSHABLE FOAM HARDENING
+0.35, 0.0000
+0.38, 0.0424
+0.42, 0.0916
+0.55, 0.2890
+0.90, 0.4820
+3.00, 0.6400
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=YES, INC=300
+compress to 30%
+*STATIC
+0.005, 1.0, 1.E-08, 0.02
+**
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+PUSH, 1, 1, -0.3
+**
+*OUTPUT, FIELD, FREQUENCY=1
+*ELEMENT OUTPUT
+S, E, LE, PEEQ
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+S11, LE11
+*NODE OUTPUT, NSET=PUSH
+U1, RF1
+*END STEP

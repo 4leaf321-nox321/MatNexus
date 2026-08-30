@@ -1,0 +1,579 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Abaqus 물성 카드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">인풋 덱 · Abaqus</div>
+  <h1>Abaqus<br>물성 카드</h1>
+  <p class="dek">키워드 블록(<code>*MATERIAL</code>)의 구조, 탄성·소성·손상·초탄성·점탄성을 쌓아 올리는 순서, Standard 와 Explicit 이 갈리는 지점, 그리고 <code>.inp</code> 를 손으로 쓰거나 생성할 때 필요한 규칙을 모았습니다.</p>
+  <div class="mast-meta">
+    <div><b>솔버</b> Abaqus/Standard · Abaqus/Explicit (2020 이후)</div>
+    <div><b>파일</b> .inp (+ .f 서브루틴)</div>
+    <div><b>단위</b> 없음 — SI(mm) 계가 사실상 표준</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 물성 블록의 구조</a>
+    <a href="#s1"><span>01</span> 키워드 문법</a>
+    <a href="#s2"><span>02</span> 단위계</a>
+    <a href="#s3"><span>03</span> 탄성</a>
+    <a href="#s4"><span>04</span> 소성 — *PLASTIC</a>
+    <a href="#s5"><span>05</span> 속도 의존과 온도</a>
+    <a href="#s6"><span>06</span> 손상과 파단</a>
+    <a href="#s7"><span>07</span> 초탄성 · 점탄성 · 폼</a>
+    <a href="#s8"><span>08</span> 복합재와 이방성</a>
+    <a href="#s9"><span>09</span> 완성된 덱 조각</a>
+    <a href="#s10"><span>10</span> 자주 틀리는 지점</a>
+    <a href="#s11"><span>11</span> 출처</a>
+  </nav>
+</header>
+
+<main>
+<section id="s0">
+  <h2><span class="num">00 / 구조</span>물성 블록의 구조</h2>
+  <p class="lede">Abaqus 물성은 <strong><code>*MATERIAL, NAME=…</code> 한 줄이 열고, 그 아래 붙는 모든 물성 키워드가 그 재료에 속하는</strong> 구조입니다. 다른 <code>*MATERIAL</code> 이나 관계없는 키워드가 나오면 블록이 닫힙니다 — <em>블록을 끝내는 키워드는 따로 없습니다.</em></p>
+  <p>요소는 물성을 직접 참조하지 않습니다. <strong>요소 → ELSET → SECTION → MATERIAL</strong> 로 이어집니다.</p>
+
+  <figure>
+    <div class="fbox">
+      <svg viewBox="0 0 640 200" role="img" aria-label="요소 집합이 섹션을 통해 재료를 참조하고 재료 블록 아래에 밀도 탄성 소성 손상 키워드가 쌓이는 구조">
+        <defs><marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <g fill="none" stroke="currentColor" stroke-opacity=".38">
+          <rect x="8" y="72" width="120" height="46" rx="3"/>
+          <rect x="176" y="72" width="150" height="46" rx="3"/>
+          <rect x="374" y="14" width="250" height="172" rx="3"/>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".55" stroke-width="1.3" marker-end="url(#ab)">
+          <line x1="132" y1="95" x2="172" y2="95"/>
+          <line x1="330" y1="95" x2="370" y2="95"/>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".25"><line x1="390" y1="62" x2="608" y2="62"/></g>
+        <g font-family="IBM Plex Mono, monospace" font-size="12.5" fill="currentColor">
+          <text x="22" y="92">*ELSET</text>
+          <text x="190" y="92">*SOLID SECTION</text>
+          <text x="390" y="40">*MATERIAL, NAME=DP600</text>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor" fill-opacity=".72">
+          <text x="398" y="84">*DENSITY</text>
+          <text x="398" y="104">*ELASTIC</text>
+          <text x="398" y="124">*PLASTIC</text>
+          <text x="398" y="144">*DAMAGE INITIATION</text>
+          <text x="398" y="164">*DAMAGE EVOLUTION</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11" fill="currentColor" fill-opacity=".55">
+          <text x="22" y="110">요소 집합</text>
+          <text x="190" y="110">MATERIAL= 로 연결</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>블록은 들여쓰기가 아니라 순서로 묶입니다.</b> <code>*DAMAGE EVOLUTION</code> 은 바로 앞의 <code>*DAMAGE INITIATION</code> 에 붙습니다 — 사이에 다른 키워드를 끼우면 짝이 끊깁니다.</figcaption>
+  </figure>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 문법</span>키워드 문법</h2>
+  <ul>
+    <li><strong>키워드 줄</strong>은 <code>*</code> 로 시작하고, 매개변수는 쉼표로 이어 붙입니다: <code>*PLASTIC, HARDENING=ISOTROPIC, RATE=0.001</code></li>
+    <li><strong>데이터 줄</strong>은 그 아래 쉼표로 구분된 숫자들. 줄당 최대 <strong>8개 필드 / 256자</strong>.</li>
+    <li><strong>주석</strong>은 <code>**</code> 로 시작합니다(별 두 개 — 한 개는 키워드입니다).</li>
+    <li>대소문자를 가리지 않고, 공백은 무시됩니다. 고정폭이 아닙니다 — <strong>이 점이 LS-DYNA/Nastran 과 크게 다릅니다.</strong></li>
+    <li>줄이 길면 끝에 <code>,</code> 를 두어 다음 줄로 잇습니다.</li>
+  </ul>
+  <pre>** 주석은 별 두 개
+*MATERIAL, NAME=DP600
+*DENSITY
+7.85E-09,
+*ELASTIC
+210000., 0.3
+*PLASTIC
+350., 0.0
+455., 0.02
+560., 0.10
+790., 1.00</pre>
+  <div class="note">
+    <h4>데이터 줄의 열 순서는 “값이 먼저, 독립변수가 나중”</h4>
+    <p><code>*PLASTIC</code> 은 <strong>(항복응력, 소성변형률)</strong> 순입니다 — 응력이 앞입니다. LS-DYNA 곡선(<strong>변형률, 응력</strong>)과 반대라, 두 솔버 사이에서 표를 옮길 때 열이 바뀌지 않았는지 반드시 확인합니다. 뒤바뀌어도 숫자가 다 양수라 솔버는 조용히 받습니다.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 단위</span>단위계</h2>
+  <p>Abaqus 도 단위를 모릅니다. 실무에서는 형상을 mm 로 쓰는 <strong>SI(mm)</strong> 계가 사실상 표준입니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>계</th><th>길이</th><th>힘</th><th>질량</th><th>시간</th><th>응력</th><th class="n">강재 ρ</th><th class="n">강재 E</th></tr></thead>
+    <tbody>
+      <tr><td class="k">SI</td><td>m</td><td>N</td><td>kg</td><td>s</td><td>Pa</td><td class="n">7.85e+03</td><td class="n">2.10e+11</td></tr>
+      <tr><td class="k">SI(mm)</td><td>mm</td><td>N</td><td>tonne</td><td>s</td><td>MPa</td><td class="n">7.85e-09</td><td class="n">2.10e+05</td></tr>
+      <tr><td class="k">US(ft)</td><td>ft</td><td>lbf</td><td>slug</td><td>s</td><td>lbf/ft²</td><td class="n">15.2</td><td class="n">4.32e+09</td></tr>
+      <tr><td class="k">US(in)</td><td>in</td><td>lbf</td><td>lbf·s²/in</td><td>s</td><td>psi</td><td class="n">7.33e-04</td><td class="n">3.00e+07</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">SI(mm) 에서 질량 단위는 <b>tonne</b>(=1000 kg) 입니다. 강재 7800 kg/m³ → 7.8e-9 tonne/mm³.</p>
+  <div class="note trap">
+    <h4>SI(mm) 에서 에너지는 mJ 다</h4>
+    <p>N·mm = mJ 이므로, <strong>파괴에너지·변형에너지 결과값이 J 라고 가정하면 1000배 틀립니다.</strong> <code>*DAMAGE EVOLUTION, TYPE=ENERGY</code> 에 넣는 파괴에너지도 이 단위여야 합니다 — 논문의 kJ/m² 값을 그대로 넣는 실수가 흔합니다(kJ/m² = mJ/mm² 이라 이 경우는 우연히 맞지만, 확인하고 넣는 것과 다릅니다).</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 탄성</span>탄성</h2>
+  <div class="tw"><table>
+    <thead><tr><th>키워드</th><th>데이터 줄</th><th>쓰는 자리</th></tr></thead>
+    <tbody>
+      <tr><td class="k">*ELASTIC</td><td>E, ν</td><td>등방 — 기본값(TYPE=ISOTROPIC)</td></tr>
+      <tr><td class="k">*ELASTIC, TYPE=ENGINEERING CONSTANTS</td><td>E1,E2,E3,ν12,ν13,ν23,G12,G13 / G23</td><td>직교이방 3D</td></tr>
+      <tr><td class="k">*ELASTIC, TYPE=LAMINA</td><td>E1,E2,ν12,G12,G13,G23</td><td>복합재 쉘 층</td></tr>
+      <tr><td class="k">*ELASTIC, TYPE=ORTHOTROPIC</td><td>D 행렬 9개 항</td><td>강성 행렬을 직접 줄 때</td></tr>
+      <tr><td class="k">*ELASTIC, TYPE=ANISOTROPIC</td><td>21개 항</td><td>완전 이방</td></tr>
+      <tr><td class="k">*ELASTIC, TYPE=TRACTION</td><td>Enn, Ess, Ett</td><td>응집 요소(cohesive)</td></tr>
+    </tbody>
+  </table></div>
+  <p>온도 의존은 데이터 줄 끝에 온도를 덧붙이고 줄을 반복합니다 — <strong>별도 키워드가 필요 없습니다.</strong> 이것이 Abaqus 물성 입력의 일관된 규칙입니다.</p>
+  <pre>*ELASTIC
+210000.,  0.30,   20.
+198000.,  0.30,  200.
+181000.,  0.31,  400.
+<i>**  E,      nu,   온도</i></pre>
+  <p>온도 말고 다른 변수(가령 섬유 배향, 노화도)에 물성을 걸려면 <code>DEPENDENCIES=n</code> 을 주고 그 뒤에 필드변수 n 개를 더 적습니다. <code>*FIELD</code> 로 그 값을 모델에 공급합니다.</p>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 소성</span>*PLASTIC — 이 문서의 중심</h2>
+  <pre>*PLASTIC, HARDENING=ISOTROPIC
+<i>** 항복응력, 소성변형률[, 변형률속도][, 온도][, 필드변수…]</i>
+350., 0.000
+455., 0.020
+560., 0.100
+790., 1.000</pre>
+  <div class="tw"><table>
+    <thead><tr><th>HARDENING=</th><th>모델</th><th>필요한 값</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ISOTROPIC</td><td>등방 경화 (기본값)</td><td>σ–ε_p 표</td></tr>
+      <tr><td class="k">KINEMATIC</td><td>선형 이동 경화</td><td>두 점(σ_y 와 한 점 더)</td></tr>
+      <tr><td class="k">COMBINED</td><td>비선형 등방+이동 (Chaboche/Lemaitre)</td><td>C, γ (+ Q∞, b) 또는 반복 시험 데이터</td></tr>
+      <tr><td class="k">JOHNSON COOK</td><td>Johnson–Cook 경화</td><td>A, B, n, m, T_melt, T_transition</td></tr>
+      <tr><td class="k">USER</td><td>UHARD 서브루틴</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>진응력·진소성변형률이며, 첫 점의 변형률은 0</h3>
+  <div class="eq">σ_true = s(1+e)
+ε_true = ln(1+e)
+ε_p    = ε_true − σ_true/E   <span class="cm">첫 점은 (σ_y, 0)</span></div>
+  <p>Abaqus 는 표의 <strong>바깥을 외삽하지 않고 마지막 값을 그대로 유지</strong>합니다(완전소성으로 평평해짐). 큰 변형률까지 갈 해석이면 표를 ε_p = 1 근처까지 연장해 두어야 하고, 그 연장 구간은 시험이 아니라 <strong>가정</strong>입니다.</p>
+
+  <h3>항복면을 바꾸는 것은 별도 키워드</h3>
+  <div class="tw"><table>
+    <thead><tr><th>키워드</th><th>뜻</th></tr></thead>
+    <tbody>
+      <tr><td class="k">*POTENTIAL</td><td>Hill 이방 항복 — R11,R22,R33,R12,R13,R23 여섯 비</td></tr>
+      <tr><td class="k">*ANISOTROPIC YIELD</td><td>Barlat Yld91 등 (Explicit)</td></tr>
+      <tr><td class="k">*DRUCKER PRAGER</td><td>압력 의존 — 토질·콘크리트·폴리머</td></tr>
+      <tr><td class="k">*POROUS METAL PLASTICITY</td><td>Gurson</td></tr>
+      <tr><td class="k">*CAST IRON PLASTICITY</td><td>인장/압축 비대칭 주철</td></tr>
+      <tr><td class="k">*CRUSHABLE FOAM</td><td>압괴 폼</td></tr>
+    </tbody>
+  </table></div>
+  <p><code>*POTENTIAL</code> 은 <strong><code>*PLASTIC</code> 바로 뒤에 놓아야</strong> 그 소성에 붙습니다. 그리고 R 값들은 응력비이지 <em>Lankford r값이 아닙니다</em> — 변환이 필요합니다.</p>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 속도·온도</span>속도 의존과 온도</h2>
+  <p>속도 의존을 넣는 길이 셋 있고, <strong>섞어 쓰면 안 됩니다.</strong></p>
+  <div class="cards">
+    <div class="card">
+      <h4>표에 속도 열을 추가</h4>
+      <pre style="font-size:.78rem;padding:.7rem">*PLASTIC
+350.,0.00,0.001
+455.,0.02,0.001
+390.,0.00,100.
+505.,0.02,100.</pre>
+      <p>속도별 곡선을 그대로. 가장 정직하다.</p>
+    </div>
+    <div class="card">
+      <h4>*RATE DEPENDENT</h4>
+      <pre style="font-size:.78rem;padding:.7rem">*RATE DEPENDENT,
+   TYPE=POWER LAW
+40., 5.</pre>
+      <p>Cowper–Symonds 형태(D, n)로 정적 곡선에 배율. YIELD RATIO 로 표를 줄 수도 있다.</p>
+    </div>
+    <div class="card">
+      <h4>*PLASTIC, HARDENING=JOHNSON COOK</h4>
+      <pre style="font-size:.78rem;padding:.7rem">*PLASTIC,
+  HARDENING=JOHNSON COOK
+A,B,n,m,Tmelt,Ttrans
+*RATE DEPENDENT,
+  TYPE=JOHNSON COOK
+C, eps0</pre>
+      <p>속도항은 <b>반드시 별도 <code>*RATE DEPENDENT</code></b> 로 준다.</p>
+    </div>
+  </div>
+  <p>온도가 도는 해석이면 소성일이 열로 바뀌게 <code>*INELASTIC HEAT FRACTION</code>(보통 0.9)과 <code>*SPECIFIC HEAT</code>, <code>*CONDUCTIVITY</code> 를 함께 둡니다. 이것 없이 Johnson–Cook 의 <code>m</code> 만 채우면 <strong>온도항은 계산에 관여하지 않습니다.</strong></p>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 손상</span>손상과 파단</h2>
+  <p class="lede">Abaqus 의 파단은 <strong>초기화(언제 손상이 시작되는가)</strong> 와 <strong>전개(시작 후 얼마나 버티는가)</strong> 두 키워드로 나뉩니다. 이 분리가 메시 의존성을 줄이는 장치입니다.</p>
+  <pre>*DAMAGE INITIATION, CRITERION=DUCTILE
+<i>** 파단 등가소성변형률, 응력삼축도, 변형률속도</i>
+1.20, -0.33, 0.001
+0.70,  0.00, 0.001
+0.45,  0.33, 0.001
+0.32,  0.67, 0.001
+*DAMAGE EVOLUTION, TYPE=DISPLACEMENT, SOFTENING=LINEAR
+0.05
+*DAMAGE INITIATION, CRITERION=SHEAR, KS=0.3
+0.90, 1.7, 0.001
+*DAMAGE EVOLUTION, TYPE=ENERGY
+12.0</pre>
+  <div class="tw"><table>
+    <thead><tr><th>CRITERION=</th><th>기준</th><th>데이터 줄</th></tr></thead>
+    <tbody>
+      <tr><td class="k">DUCTILE</td><td>공극 성장 — 연성 파단</td><td>ε_p^D, 삼축도, 속도, (온도, 필드)</td></tr>
+      <tr><td class="k">DUCTILE + LODE DEPENDENT</td><td>+ Lode 각 의존</td><td>ε_p^D, 삼축도, Lode 항, 속도</td></tr>
+      <tr><td class="k">SHEAR</td><td>전단 밴드</td><td>ε_p^S, 전단응력비, 속도</td></tr>
+      <tr><td class="k">FLD</td><td>성형한계선도(변형률)</td><td>주변형률, 부변형률, 온도</td></tr>
+      <tr><td class="k">FLSD</td><td>성형한계(응력)</td><td>주응력, 부응력</td></tr>
+      <tr><td class="k">MSFLD</td><td>비례하지 않는 경로까지 — M-K</td><td>ε_p 또는 주변형률, 변형률비, 속도</td></tr>
+      <tr><td class="k">JOHNSON COOK</td><td>JC 파단 — 데이터 한 줄</td><td>d1..d5, T_melt, T_trans, ε̇₀</td></tr>
+      <tr><td class="k">HASHIN</td><td>복합재 4모드</td><td>Xt,Xc,Yt,Yc,Sl,St (ALPHA 는 전단 기여, 기본 0.5)</td></tr>
+      <tr><td class="k">MAXS · QUADS · MAXE · QUADE</td><td>응집 요소 초기화</td><td>수직/전단 강도</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap">
+    <h4>DAMAGE EVOLUTION 을 빠뜨리면 아무 일도 안 일어난다</h4>
+    <p><code>*DAMAGE INITIATION</code> 만 있으면 Abaqus 는 <strong>손상 지표(DUCTCRT/SHRCRT 등)만 출력하고 강성은 전혀 떨어뜨리지 않습니다.</strong> “파단 조건을 넣었는데 요소가 안 지워진다” 의 대부분이 이것입니다. 요소 삭제까지 원하면 <code>*DAMAGE EVOLUTION</code> 에 더해 <code>*SECTION CONTROLS, ELEMENT DELETION=YES</code> 도 봐야 합니다.</p>
+  </div>
+  <div class="note">
+    <h4>전개를 변위나 에너지로 주는 이유</h4>
+    <p>“파단 후 변형률” 로 주면 메시가 촘촘할수록 흡수 에너지가 0 으로 갑니다. <strong>등가 소성 변위(<code>TYPE=DISPLACEMENT</code>)나 파괴에너지(<code>TYPE=ENERGY</code>)로 주면 요소 특성길이로 나눠 자동 정규화</strong>되어 메시 의존이 크게 줄어듭니다. 값의 단위는 각각 길이·에너지/면적입니다.</p>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 비금속</span>초탄성 · 점탄성 · 폼</h2>
+  <h3>초탄성 — 상수를 주거나 시험 데이터를 주거나</h3>
+  <pre>** (1) 상수를 직접
+*HYPERELASTIC, NEO HOOKE
+0.6, 0.0
+**       C10,  D1        <i>D1=0 이면 비압축</i>
+
+** (2) 시험 데이터를 주고 Abaqus 가 피팅
+*HYPERELASTIC, OGDEN, N=3, TEST DATA INPUT
+*UNIAXIAL TEST DATA
+0.0,   0.00
+0.6,   0.10
+1.1,   0.30
+2.4,   1.00
+*BIAXIAL TEST DATA
+...
+*PLANAR TEST DATA
+...
+*VOLUMETRIC TEST DATA
+...</pre>
+  <div class="tw"><table>
+    <thead><tr><th>모델</th><th>특징</th></tr></thead>
+    <tbody>
+      <tr><td class="k">NEO HOOKE</td><td>상수 1개. 변형률 30% 이하</td></tr>
+      <tr><td class="k">MOONEY-RIVLIN</td><td>상수 2개. 100% 정도까지</td></tr>
+      <tr><td class="k">OGDEN, N=3</td><td>대변형 · 실무 기본값. 세 모드 데이터가 필요</td></tr>
+      <tr><td class="k">YEOH</td><td>단축 데이터만 있을 때 비교적 안전</td></tr>
+      <tr><td class="k">ARRUDA-BOYCE</td><td>물리 기반(사슬망). 상수 2개로 넓은 범위</td></tr>
+      <tr><td class="k">MARLOW</td><td>단축 곡선을 그대로 재현 — 피팅 오차 없음, 대신 다른 모드는 예측</td></tr>
+      <tr><td class="k">*HYPERFOAM</td><td>초탄성 폼(압축성)</td></tr>
+      <tr><td class="k">*LOW DENSITY FOAM</td><td>속도 의존 연질 폼(Explicit)</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>점탄성 — Prony 급수</h3>
+  <pre>*VISCOELASTIC, TIME=PRONY
+<i>** g_i,   k_i,   tau_i     (완화시간 오름차순)</i>
+0.30,  0.0,  1.0E-02
+0.25,  0.0,  1.0E-01
+0.18,  0.0,  1.0E+00</pre>
+  <p><code>g_i</code> 는 <strong>정규화된</strong> 전단완화 계수라 <code>Σg_i &lt; 1</code> 이어야 합니다(1 이면 완전 완화 = 장기 강성 0). 쓰지 않는 체적 항은 0 또는 빈칸으로 둡니다. <code>*ELASTIC</code> 이나 <code>*HYPERELASTIC</code> 이 <strong>순간(instantaneous) 응답</strong>인지 <strong>장기(long-term) 응답</strong>인지는 <code>*VISCOELASTIC</code> 이 붙는 순간 의미가 갈리므로, DMA·완화시험을 어느 쪽으로 환산했는지 기록해 둡니다.</p>
+  <p>주파수 영역이 필요하면 <code>*VISCOELASTIC, FREQUENCY=TABULAR</code> 로 저장·손실 계수를 직접 줍니다 — DMA 결과를 시간영역으로 변환하지 않고 쓸 수 있습니다.</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 복합재</span>복합재와 이방성</h2>
+  <pre>*MATERIAL, NAME=CFRP_UD
+*ELASTIC, TYPE=LAMINA
+135000., 9000., 0.30, 5000., 5000., 3500.
+**  E1,     E2,   nu12,  G12,   G13,   G23
+*DAMAGE INITIATION, CRITERION=HASHIN
+2200., 1400., 60., 200., 90., 90.
+**  Xt,    Xc,   Yt,   Yc,  Sl,  St
+*DAMAGE EVOLUTION, TYPE=ENERGY
+90., 80., 0.25, 1.0
+**  Gft,  Gfc, Gmt, Gmc   (파괴에너지)
+*DAMAGE STABILIZATION
+1.E-05, 1.E-05, 1.E-05, 1.E-05
+*DENSITY
+1.57E-09,</pre>
+  <p>층 구성과 각도는 물성이 아니라 섹션에서 옵니다.</p>
+  <pre>*SHELL SECTION, ELSET=SKIN, COMPOSITE, LAYUP=quasi-iso
+0.125, 3, CFRP_UD,   0.
+0.125, 3, CFRP_UD,  45.
+0.125, 3, CFRP_UD, -45.
+0.125, 3, CFRP_UD,  90.
+** 두께, 적분점수, 재료, 각도</pre>
+  <p>각도의 기준이 되는 좌표계는 <code>*ORIENTATION</code> 으로 정의해 섹션에 붙입니다. <strong>이것을 빠뜨리면 전역 좌표계가 기준이 되어, 곡면 부품에서 층 각도가 통째로 어긋납니다.</strong></p>
+  <div class="note">
+    <h4>DAMAGE STABILIZATION 은 수렴용이지 물성이 아니다</h4>
+    <p>연화 구간에서 Standard 가 수렴하도록 넣는 점성 항입니다. <strong>값이 크면 결과가 인위적으로 질겨집니다.</strong> 해석 후 점성 소산 에너지(ALLCD/ALLVD)를 전체 에너지와 비교해 무시할 수준인지 확인하는 것이 사용 조건입니다.</p>
+  </div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 / 예제</span>완성된 덱 조각</h2>
+  <p>SI(mm) 계, 강판 쉘, 속도 의존 소성 + 연성 손상. 재료 정의부터 섹션 연결까지입니다.</p>
+    <div class="note">
+    <h4>돌려 볼 수 있는 덱이 옆에 있다</h4>
+    <p>아래 조각은 형식을 보이기 위한 것이라 그대로는 안 돕니다. <strong>실제로 도는 최소 덱</strong>이 <a href="예제/dp600-1elem-abaqus.inp"><code>예제/dp600-1elem-abaqus.inp</code></a> 에 있습니다 — 요소 하나를 0.5&nbsp;mm 당기는 단축 인장으로, 여섯 솔버가 같은 문제를 풀도록 맞춰 두었습니다. 기대값과 쓰는 법은 <a href="예제/README.md">예제/README.md</a> 에 있습니다.</p>
+  </div>
+  <pre>**==============================================================
+** MATERIALS      unit system: mm / N / tonne / s  (MPa, mJ)
+**==============================================================
+*MATERIAL, NAME=DP600
+*DENSITY
+7.85E-09,
+*ELASTIC
+210000., 0.30
+*PLASTIC, HARDENING=ISOTROPIC
+<i>**  yield,  eps_p,   rate</i>
+  350.,  0.000,  0.001
+  455.,  0.020,  0.001
+  560.,  0.100,  0.001
+  790.,  1.000,  0.001
+  378.,  0.000,  100.0
+  488.,  0.020,  100.0
+  600.,  0.100,  100.0
+  845.,  1.000,  100.0
+*DAMAGE INITIATION, CRITERION=DUCTILE
+<i>**  eps_p^D, triaxiality, rate</i>
+  1.20,  -0.33,  0.001
+  0.70,   0.00,  0.001
+  0.45,   0.33,  0.001
+  0.32,   0.67,  0.001
+*DAMAGE EVOLUTION, TYPE=DISPLACEMENT, SOFTENING=LINEAR
+0.05
+*INELASTIC HEAT FRACTION
+0.9
+*EXPANSION, ZERO=20.
+1.2E-05,
+**
+*MATERIAL, NAME=EPDM_SEAL
+*DENSITY
+1.10E-09,
+*HYPERELASTIC, OGDEN, N=3, TEST DATA INPUT
+*UNIAXIAL TEST DATA
+ 0.00, 0.00
+ 0.62, 0.10
+ 1.14, 0.30
+ 2.35, 1.00
+*PLANAR TEST DATA
+ 0.00, 0.00
+ 0.78, 0.10
+ 1.50, 0.30
+*BIAXIAL TEST DATA
+ 0.00, 0.00
+ 1.05, 0.10
+ 2.10, 0.30
+*VISCOELASTIC, TIME=PRONY
+ 0.30, 0.0, 1.0E-02
+ 0.25, 0.0, 1.0E-01
+ 0.18, 0.0, 1.0E+00
+**==============================================================
+** SECTIONS
+**==============================================================
+*SHELL SECTION, ELSET=PANEL, MATERIAL=DP600
+1.4, 5
+*SOLID SECTION, ELSET=SEAL, MATERIAL=EPDM_SEAL
+,
+**==============================================================
+*SECTION CONTROLS, NAME=DEL, ELEMENT DELETION=YES
+</pre>
+  <p class="eqn">숫자는 형식을 보이기 위한 예시입니다.</p>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10 / 함정</span>자주 틀리는 지점</h2>
+  <ol class="steps">
+    <li><b>*PLASTIC 의 열 순서를 뒤집는다</b>(응력, 변형률) 입니다. LS-DYNA 곡선과 반대라 옮길 때 자주 바뀌고, 솔버는 오류를 내지 않습니다.</li>
+    <li><b>공칭 응력–변형률을 그대로 넣는다</b>진응력·진소성변형률이어야 합니다. 대변형에서 수십 % 어긋납니다.</li>
+    <li><b>DAMAGE EVOLUTION 을 빠뜨린다</b>손상 지표만 계산되고 강성은 안 떨어집니다. 파단이 “안 일어나는” 첫 번째 이유입니다.</li>
+    <li><b>밀도를 kg/mm³ 로 적는다</b>SI(mm) 의 질량은 tonne 입니다. 7.85e-9 이지 7.85e-6 이 아닙니다.</li>
+    <li><b>Prony 계수 합이 1 이상이다</b>장기 강성이 0 이하가 되어 발산합니다. Σg_i &lt; 1.</li>
+    <li><b>초탄성을 단축 데이터만으로 피팅한다</b>이축 상태에서 불안정해집니다. Abaqus 가 안정성 경고를 내는데, 그 경고를 넘기면 나중에 발산합니다.</li>
+    <li><b>*ORIENTATION 없이 복합재 각도를 준다</b>전역 좌표계 기준이 되어 곡면에서 층 방향이 통째로 어긋납니다.</li>
+    <li><b>Johnson–Cook 속도항을 *PLASTIC 안에서 찾는다</b>속도항 C, ε̇₀ 은 별도 <code>*RATE DEPENDENT, TYPE=JOHNSON COOK</code> 입니다.</li>
+    <li><b>표 바깥이 외삽될 것이라 믿는다</b>마지막 값을 유지합니다(완전소성). 표를 충분히 연장해야 합니다.</li>
+    <li><b>DAMAGE STABILIZATION 을 크게 잡고 결과를 믿는다</b>점성 소산이 결과를 질기게 만듭니다. 에너지로 검증합니다.</li>
+  </ol>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11 / 출처</span>확인한 곳</h2>
+  <ul class="tight">
+    <li><a href="https://ceae-server.colorado.edu/v2016/pdf_books/ANALYSIS_3.pdf">Abaqus Analysis User's Guide, Volume III: Materials</a> · 물성 키워드 정본</li>
+    <li><a href="https://ceae-server.colorado.edu/v2016/books/key/ch04abk04.html">Abaqus Keywords Reference — *DAMAGE INITIATION</a> · 06장 기준 목록</li>
+    <li><a href="https://ceae-server.colorado.edu/v2016/books/usi/pt03ch12s09s03.html">Abaqus/CAE User's Guide — Defining damage</a></li>
+    <li><a href="https://abaqus-docs.mit.edu/2017/English/SIMACAEGSARefMap/simagsa-c-absunits.htm">Abaqus — Conventions: units</a> · 02장 단위표</li>
+    <li><a href="https://classes.engineering.wustl.edu/2009/spring/mase5513/abaqus/docs/v6.6/books/usb/pt05ch17s07abm11.html">Abaqus Analysis User's Manual — Time domain viscoelasticity</a> · 07장 Prony</li>
+    <li><a href="https://blog.technia.com/en/simulation/hyperelasticity-and-viscoelasticity-in-abaqus">TECHNIA — Hyperelasticity and Viscoelasticity in Abaqus</a></li>
+    <li><a href="https://davis68.github.io/me498cf-fa16/resources/alec05/notes-materials.pdf">Overview of Material, Damage and Failure Modeling in Abaqus</a></li>
+  </ul>
+</section>
+</main>
+
+<footer>MatNexus · 시뮬레이션 인풋 덱 · Abaqus 물성 카드 · 2026-08-30 수집</footer>
+</body></html>

@@ -1,0 +1,106 @@
+$-------------------------------------------------------------------------------
+$ Secondary (Norton) creep, single element, constant load  --  MSC Nastran SOL 400
+$
+$   units : mm - N - tonne - s   (stress MPa)
+$   model : 1 x 1 x 1 mm CHEXA, 1/8 symmetry, 100 N pulled on the x=1 face
+$           -> sigma_x = 100 MPa held for 1000 s
+$   law   : Norton   eps_dot_cr = A * sigma^M ,  A = 1e-15, M = 5
+$   check : creep strain after 1000 s = 0.01000, total ux = 0.0104762 mm
+$
+$   MATVP primary format is   MATVP MID A IT3D M N P Q IUSER   where the law is
+$       eps_dot_cr = A * sigma^M * eps^N * t^P   (Q is the temperature term)
+$   so Norton is M=5 with N=P=Q=0.  IT3D=0 means "no TABL3D, use the exponents".
+$
+$   TWO THINGS THE QRG IS EXPLICIT ABOUT AND BOTH BITE:
+$     1. "Creep analysis requires an initial static solution at t = 0, which can
+$        be obtained by specifying a subcase that requests an NLPARM entry with
+$        DT = 0.0."   -> SUBCASE 1 below does exactly that.
+$     2. "In SOL 400, MATVP is only supported for elements with property
+$        extensions" -- PSOLID must be paired with PSLDN1, same as MATS1 needs
+$        it for large strain.  Without it the creep data is not used.
+$-------------------------------------------------------------------------------
+SOL 400
+CEND
+TITLE    = Norton creep 1-element, constant 100 MPa (mm-N-tonne-s)
+ECHO     = NONE
+$
+$ SUBCASE 1 : t = 0 static solution (NLPARM with DT = 0.0)
+SUBCASE 1
+  LABEL = apply 100 N, no creep time
+  ANALYSIS     = NLSTATICS
+  SPC          = 1
+  LOAD         = 2
+  NLPARM       = 10
+  DISPLACEMENT(PLOT) = ALL
+  STRESS(PLOT)       = ALL
+  SPCFORCES(PLOT)    = ALL
+$
+$ SUBCASE 2 : hold the same load for 1000 s and creep
+SUBCASE 2
+  LABEL = hold 1000 s
+  ANALYSIS     = NLSTATICS
+  SPC          = 1
+  LOAD         = 2
+  NLPARM       = 20
+  DISPLACEMENT(PLOT) = ALL
+  STRESS(PLOT)       = ALL
+  STRAIN(PLOT)       = ALL
+$
+BEGIN BULK
+$
+PARAM,POST,-1
+$
+$ DT = 0.0 -> the t=0 static solution the QRG asks for
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV    INTOUT
+NLPARM  10      1       0.0     FNT     5       25      PW      YES
+$ 100 increments of 10 s = 1000 s of creep
+NLPARM  20      100     10.0    FNT     5       25      PW      YES
+$
+$===============================================================================
+$ MESH
+$===============================================================================
+$       ID                      X       Y       Z
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+$       EID     PID     G1      G2      G3      G4      G5      G6
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+$       PID     MID     CORDM
+PSOLID  1       1       0
+$ property extension -- MATVP needs it in SOL 400
+PSLDN1  1       1
++       C8      SOLID   L
+$
+$===============================================================================
+$ MATERIAL
+$===============================================================================
+$       MID     E       G       NU      RHO
+MAT1    1       210000.         0.3     7.85-9
+$
+$       MID     A       IT3D    M       N       P       Q       IUSER
+MATVP   1       1.0-15  0       5.0     0.0     0.0     0.0
+$
+$===============================================================================
+$ BOUNDARY CONDITIONS AND LOAD
+$===============================================================================
+$       SID     C       G1      G2      G3      G4
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+$
+$ 4 nodes x 25 N = 100 N over 1 mm2 = 100 MPa
+$       SID     G       CID     F       N1      N2      N3
+FORCE   2       2       0       25.0    1.0     0.0     0.0
+FORCE   2       3       0       25.0    1.0     0.0     0.0
+FORCE   2       6       0       25.0    1.0     0.0     0.0
+FORCE   2       7       0       25.0    1.0     0.0     0.0
+$
+ENDDATA

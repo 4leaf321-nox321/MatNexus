@@ -1,0 +1,96 @@
+!------------------------------------------------------------------------------
+! Rubber single-element uniaxial tension  --  Ansys Mechanical APDL
+!
+!   units : mm - N - tonne - s   (stress MPa, density 1.10e-9)
+!   model : 1 x 1 x 1 mm hex, 1/8 symmetry, x-face pulled to u = 1.0 mm
+!           (stretch lambda = 2, i.e. 100% engineering strain)
+!   check : SX ~= 4.7162 MPa, reaction on the pulled face ~= 2.3606 N
+!
+!           The closed-form INCOMPRESSIBLE answer is 4.7250 MPa; these decks
+!           set K/G = 1000, and that 0.1% of volume change lowers it to 4.7162.
+!           J = 1.001048 at the end, so the section is 0.500524 mm2, not 0.5.
+!   material : 2-term Mooney-Rivlin, C10 = 0.6, C01 = 0.15 MPa
+!              G0 = 2(C10+C01) = 1.5 MPa,  K = 1500 MPa  (K/G = 1000)
+!              third constant d = 2/K = 1.3333e-3  (same convention as Abaqus D1,
+!              the RECIPROCAL of MSC Nastran MATHP's D1 -- see README)
+!
+!   In Ansys the TB,HYPER constants ALWAYS describe the INSTANTANEOUS (t=0)
+!   response when TB,PRONY is added.  Abaqus defaults to LONG TERM instead.
+!
+!   run   : ansys -b -i rubber-1elem-ansys.dat -o out.txt
+!------------------------------------------------------------------------------
+FINISH
+/CLEAR,NOSTART
+/TITLE, Rubber 1-element tension, Mooney-Rivlin (mm-N-tonne-s)
+/UNITS,MPA                       ! tag only -- mm, tonne, s, N, MPa
+/PREP7
+
+!==============================================================================
+! MATERIAL
+!==============================================================================
+MP,DENS,1,1.10e-9
+TB,HYPER,1,,2,MOONEY             ! 2-parameter Mooney-Rivlin
+TBDATA,1,0.6,0.15,1.3333e-3      ! C10, C01, d   (d = 2/K)
+
+! ---- optional: time-domain viscoelasticity --------------------------------
+! Relative shear moduli, so alpha1 = G1/G0 = 0.3 with tau = 1e-3 s.
+! TB,PRONY,1,,1,SHEAR
+! TBDATA,1,0.3,1.0e-3
+
+!==============================================================================
+! MESH
+!==============================================================================
+ET,1,SOLID185
+KEYOPT,1,2,0                     ! B-bar (selective reduced) -- the default
+KEYOPT,1,6,1                     ! MIXED u-P for near-incompressible hyperelasticity
+! Ansys' own hyperelastic verification case VM56 instead uses KEYOPT(2)=1
+! (uniform reduced integration) on SOLID185 and no mixed u-P.  Both routes avoid
+! volumetric locking; mixed u-P is the documented choice as nu approaches 0.5,
+! reduced integration is lighter.  Swap if the solver complains.
+
+N,1, 0.0, 0.0, 0.0
+N,2, 1.0, 0.0, 0.0
+N,3, 1.0, 1.0, 0.0
+N,4, 0.0, 1.0, 0.0
+N,5, 0.0, 0.0, 1.0
+N,6, 1.0, 0.0, 1.0
+N,7, 1.0, 1.0, 1.0
+N,8, 0.0, 1.0, 1.0
+
+TYPE,1  $  MAT,1
+E,1,2,3,4,5,6,7,8
+
+!==============================================================================
+! BOUNDARY CONDITIONS  (1/8 symmetry + pulled face)
+!==============================================================================
+NSEL,S,LOC,X,0.0  $  D,ALL,UX,0.0
+NSEL,S,LOC,Y,0.0  $  D,ALL,UY,0.0
+NSEL,S,LOC,Z,0.0  $  D,ALL,UZ,0.0
+NSEL,S,LOC,X,1.0  $  D,ALL,UX,1.0
+NSEL,ALL
+FINISH
+
+!==============================================================================
+! SOLVE
+!==============================================================================
+/SOLU
+ANTYPE,STATIC
+NLGEOM,ON
+NSUBST,50,500,20
+OUTRES,ALL,ALL
+AUTOTS,ON
+SOLVE
+FINISH
+
+!==============================================================================
+! CHECK
+!==============================================================================
+/POST1
+SET,LAST
+ESEL,S,ELEM,,1
+ETABLE,SX_,S,X
+PRETAB,SX_                       ! expect SX ~ 4.7162 MPa
+NSEL,S,LOC,X,1.0
+FSUM                             ! expect FX ~ 2.3606 N
+NSEL,ALL
+FINISH

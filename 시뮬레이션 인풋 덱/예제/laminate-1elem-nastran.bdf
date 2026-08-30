@@ -1,0 +1,78 @@
+$-------------------------------------------------------------------------------
+$ Quasi-isotropic laminate, single shell element  --  MSC Nastran SOL 101
+$
+$   units : mm - N - tonne - s   (stress MPa, density 1.57-9)
+$   model : 1 x 1 mm CQUAD4, 4 plies [0/45/-45/90] x 0.125 mm = 0.5 mm
+$           membrane only (all rotations and uz fixed), pulled to ux = 0.005 mm
+$           -> eps_x = 0.5%, transverse contraction free
+$   check : laminate average sigma_x ~= 260.45 MPa, edge reaction ~= 130.23 N
+$           (CLT: E_eff = 52090.3 MPa, nu_eff = 0.30686)
+$
+$   This one is LINEAR (SOL 101) on purpose.  The laminate response at 0.5% strain
+$   is linear elastic, so the answer is a closed-form CLT check that every
+$   solver in the set must reproduce exactly.
+$
+$   PCOMP field order is  PID Z0 NSM SB FT TREF GE LAM  -- FT is the FIFTH data
+$   field.  Leave FT blank and no failure index is computed at all; the run
+$   still succeeds, which is how "no failure reported" gets mistaken for "safe".
+$-------------------------------------------------------------------------------
+SOL 101
+CEND
+TITLE    = QI laminate 1-element tension (mm-N-tonne-s)
+ECHO     = NONE
+$
+SUBCASE 1
+  LABEL = pull to eps_x = 0.5 percent
+  SPC          = 1
+  LOAD         = 2
+  DISPLACEMENT(PLOT) = ALL
+  STRESS(PLOT)       = ALL
+  FORCE(PLOT)        = ALL
+  SPCFORCES(PLOT)    = ALL
+$
+BEGIN BULK
+$
+PARAM,POST,-1
+$
+$===============================================================================
+$ MESH
+$===============================================================================
+$       ID                      X       Y       Z
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+$
+$       EID     PID     G1      G2      G3      G4      THETA
+CQUAD4  1       100     1       2       3       4       0.0
+$
+$===============================================================================
+$ LAMINATE
+$   PCOMP  PID  Z0  NSM  SB  FT  TREF  GE  LAM
+$   then   MIDi Ti  THETAi SOUTi  (two plies per continuation line)
+$===============================================================================
+PCOMP   100                     60.0    TSAI    20.0
++       1       0.125   0.0     YES     1       0.125   45.0    YES
++       1       0.125   -45.0   YES     1       0.125   90.0    YES
+$
+$===============================================================================
+$ PLY MATERIAL
+$   MAT8  MID  E1  E2  NU12  G12  G1Z  G2Z  RHO
+$         A1   A2  TREF  Xt  Xc  Yt  Yc  S
+$===============================================================================
+MAT8    1       135000. 9000.   0.3     5000.   5000.   3500.   1.57-9
++       -0.5-6  28.0-6  20.0    2200.   1400.   60.0    200.0   90.0
+$
+$===============================================================================
+$ BOUNDARY CONDITIONS   (membrane only + enforced displacement)
+$===============================================================================
+$       SID     C       G1      G2      G3      G4
+SPC1    1       1       1       4
+SPC1    1       2       1       2
+SPC1    1       3456    1       2       3       4
+SPC1    1       1       2       3
+$
+$       SID     G1      C1      D1      G2      C2      D2
+SPCD    2       2       1       0.005   3       1       0.005
+$
+ENDDATA

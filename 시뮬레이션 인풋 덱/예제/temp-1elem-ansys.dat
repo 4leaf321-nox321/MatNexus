@@ -1,0 +1,105 @@
+!------------------------------------------------------------------------------
+! Temperature-dependent plasticity, single element  --  Ansys Mechanical APDL
+!
+!   units : mm - N - tonne - s   (stress MPa)
+!   model : same 1 mm cube and 1/8 symmetry as the DP600 quasi-static deck,
+!           held at a uniform 200 C and pulled to u = 0.5 mm
+!   check : SX ~= 600.31 MPa , reaction ~= 400.69 N
+!           (the same pull at 20 C gives 700.32 MPa / 467.50 N)
+!
+!   Ansys splits the two families of properties:
+!     MP  properties -> MPTEMP / MPDATA   (a temperature list, then values)
+!     TB  properties -> TBTEMP blocks inside one TB table
+!   NTEMP on the TB command must match the number of TBTEMP blocks that follow.
+!   Declare 2 and write 3 and the extra data is quietly dropped.
+!
+!   No thermal expansion is defined, so the temperature only softens the
+!   material -- it does not add a thermal strain.  If ALPX were set, TREF
+!   would decide how much thermal strain the 200 C field produces.
+!
+!   run   : ansys -b -i temp-1elem-ansys.dat -o out.txt
+!------------------------------------------------------------------------------
+FINISH
+/CLEAR,NOSTART
+/TITLE, Temperature-dependent plasticity 1-element, 200 C (mm-N-tonne-s)
+/UNITS,MPA
+/PREP7
+
+!==============================================================================
+! MATERIAL
+!==============================================================================
+MPTEMP
+MPTEMP,1,20,200
+MPDATA,EX,1,1,210000,198000
+MPDATA,PRXY,1,1,0.3,0.3
+MP,DENS,1,7.85e-9
+
+! NTEMP = 2, NPTS = 5  -> exactly two TBTEMP blocks of five points below
+TB,PLASTIC,1,2,5,MISO
+TBTEMP,20
+TBPT,,0.000,350
+TBPT,,0.020,455
+TBPT,,0.100,560
+TBPT,,0.400,700
+TBPT,,1.000,790
+TBTEMP,200
+TBPT,,0.000,300
+TBPT,,0.020,390
+TBPT,,0.100,480
+TBPT,,0.400,600
+TBPT,,1.000,677
+
+!==============================================================================
+! MESH
+!==============================================================================
+ET,1,SOLID185
+KEYOPT,1,2,2
+
+N,1, 0.0, 0.0, 0.0
+N,2, 1.0, 0.0, 0.0
+N,3, 1.0, 1.0, 0.0
+N,4, 0.0, 1.0, 0.0
+N,5, 0.0, 0.0, 1.0
+N,6, 1.0, 0.0, 1.0
+N,7, 1.0, 1.0, 1.0
+N,8, 0.0, 1.0, 1.0
+
+TYPE,1  $  MAT,1
+E,1,2,3,4,5,6,7,8
+
+!==============================================================================
+! BOUNDARY CONDITIONS AND TEMPERATURE FIELD
+!==============================================================================
+NSEL,S,LOC,X,0.0  $  D,ALL,UX,0.0
+NSEL,S,LOC,Y,0.0  $  D,ALL,UY,0.0
+NSEL,S,LOC,Z,0.0  $  D,ALL,UZ,0.0
+NSEL,S,LOC,X,1.0  $  D,ALL,UX,0.5
+NSEL,ALL
+BF,ALL,TEMP,200                  ! uniform 200 C body temperature
+FINISH
+
+!==============================================================================
+! SOLVE
+!==============================================================================
+/SOLU
+ANTYPE,STATIC
+NLGEOM,ON
+NSUBST,50,500,20
+OUTRES,ALL,ALL
+AUTOTS,ON
+SOLVE
+FINISH
+
+!==============================================================================
+! CHECK
+!==============================================================================
+/POST1
+SET,LAST
+ESEL,S,ELEM,,1
+ETABLE,SX_,S,X
+ETABLE,EPEQ_,NL,EPEQ
+PRETAB,SX_,EPEQ_                 ! expect SX ~ 600.3 MPa, EPEQ ~ 0.4024
+NSEL,S,LOC,X,1.0
+FSUM                             ! expect FX ~ 400.7 N
+NSEL,ALL
+FINISH

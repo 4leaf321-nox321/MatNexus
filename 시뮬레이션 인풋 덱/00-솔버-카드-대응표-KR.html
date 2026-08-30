@@ -1,0 +1,411 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>솔버 물성 카드 대응표</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">인풋 덱 · 개요</div>
+  <h1>솔버 여섯,<br>같은 물성 다른 카드</h1>
+  <p class="dek">같은 시험 데이터가 OptiStruct · Radioss · LS-DYNA · Ansys Mechanical · Abaqus · Nastran 에서 어떤 카드로 들어가는지 — 대응표와, 옮길 때 조용히 틀리는 지점들.</p>
+  <div class="mast-meta">
+    <div><b>대상 솔버</b> 6종</div>
+    <div><b>수집일</b> 2026-08-30</div>
+    <div><b>문서</b> 솔버별 상세는 아래 링크</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 문서 목록</a>
+    <a href="#s1"><span>01</span> 세 계보</a>
+    <a href="#s2"><span>02</span> 물성별 카드 대응표</a>
+    <a href="#s3"><span>03</span> 경화곡선 — 넣는 값이 다르다</a>
+    <a href="#s4"><span>04</span> 단위계 대조</a>
+    <a href="#s5"><span>05</span> 파단 · 손상</a>
+    <a href="#s6"><span>06</span> 시험 → 카드 지도</a>
+    <a href="#s7"><span>07</span> 이식할 때 검증 순서</a>
+    <a href="#s8"><span>08</span> 출처</a>
+  </nav>
+</header>
+
+<main>
+<section id="s0">
+  <h2><span class="num">00 / 문서</span>이 폴더의 문서</h2>
+  <div class="cards">
+    <div class="card">
+      <h4><a href="optistruct-material-cards-KR.html">OptiStruct</a></h4>
+      <p>Nastran 계열 벌크 데이터. MAT1 + MATS1, 최적화와 얽히는 자리.</p>
+    </div>
+    <div class="card">
+      <h4><a href="radioss-material-cards-KR.html">Radioss</a></h4>
+      <p>Starter 블록. /MAT/LAW2 · LAW36, /FAIL 계열, /UNIT 로 카드마다 단위 선언.</p>
+    </div>
+    <div class="card">
+      <h4><a href="lsdyna-material-cards-KR.html">LS-DYNA</a></h4>
+      <p>키워드 덱. *MAT_024 중심, *DEFINE_CURVE/TABLE, GISSMO.</p>
+    </div>
+    <div class="card">
+      <h4><a href="ansys-mechanical-material-cards-KR.html">Ansys Mechanical</a></h4>
+      <p>MP 와 TB 두 계열의 APDL. Command Snippet 으로 넣는 법.</p>
+    </div>
+    <div class="card">
+      <h4><a href="abaqus-material-cards-KR.html">Abaqus</a></h4>
+      <p>*MATERIAL 블록. 손상의 초기화/전개 분리, 초탄성 피팅.</p>
+    </div>
+    <div class="card">
+      <h4><a href="nastran-material-cards-KR.html">Nastran</a></h4>
+      <p>8칸 벌크 데이터. MATS1+TABLES1, SOL 400 의 MATEP 계열.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <h4>어느 값을 실제로 잴 수 있나</h4>
+    <p>예제 덱의 물성값 하나하나에 <strong>지금 장비로 측정 가능한지</strong> 표시를 붙인 문서를 따로 두었습니다 — <a href="08-측정-가능-범위-KR.html">측정 가능 범위</a>. 덱에 값이 있다는 것과 그 값을 잴 수 있다는 것은 <strong>별개</strong>입니다. 물성 종류와 장비를 격자로 놓은 판은 <a href="../공통-가이드/물성-장비-대응표-KR.html">물성 × 장비 대응표</a> 에 있습니다.</p>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 계보</span>세 계보</h2>
+  <p class="lede">여섯 솔버가 여섯 개의 독립된 문법을 가진 것이 아닙니다. <strong>세 계보</strong>로 묶이고, 같은 계보 안에서는 카드가 거의 그대로 옮겨집니다.</p>
+  <figure>
+    <div class="fbox">
+      <svg viewBox="0 0 640 260" role="img" aria-label="Nastran 계보에 Nastran과 OptiStruct, 명시적 계보에 LS-DYNA와 Radioss, 독자 계보에 Abaqus와 Ansys가 묶인 그림">
+        <defs><marker id="ix" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <g fill="none" stroke="currentColor" stroke-opacity=".3">
+          <rect x="10" y="10" width="196" height="240" rx="4"/>
+          <rect x="222" y="10" width="196" height="240" rx="4"/>
+          <rect x="434" y="10" width="196" height="240" rx="4"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" fill-opacity=".6" letter-spacing="1.5">
+          <text x="26" y="36">벌크 데이터 계보</text>
+          <text x="238" y="36">명시적 키워드 계보</text>
+          <text x="450" y="36">독자 계보</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="15" font-weight="500" fill="currentColor">
+          <text x="26" y="76">Nastran</text>
+          <text x="26" y="132">OptiStruct</text>
+          <text x="238" y="76">LS-DYNA</text>
+          <text x="238" y="132">Radioss</text>
+          <text x="450" y="76">Abaqus</text>
+          <text x="450" y="132">Ansys Mechanical</text>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" fill-opacity=".62">
+          <text x="26" y="94">MAT1 / MATS1 / TABLES1</text>
+          <text x="26" y="150">MAT1 / MATS1 / MATHE</text>
+          <text x="238" y="94">*MAT_nnn + *DEFINE_CURVE</text>
+          <text x="238" y="150">/MAT/LAWnn + /FUNCT</text>
+          <text x="450" y="94">*MATERIAL 블록</text>
+          <text x="450" y="150">MP + TB 명령</text>
+        </g>
+        <g font-family="IBM Plex Sans KR, sans-serif" font-size="11.5" fill="currentColor" fill-opacity=".62">
+          <text x="26" y="196">8칸 고정폭 · 카드 하나가</text>
+          <text x="26" y="214">물성 하나 · 확장은 별도</text>
+          <text x="26" y="232">카드가 같은 MID 로 보완</text>
+          <text x="238" y="196">고정폭 · 곡선을 ID 로</text>
+          <text x="238" y="214">참조 · 파단을 재료 밖에</text>
+          <text x="238" y="232">별도 카드로 얹는다</text>
+          <text x="450" y="196">자유형식 · 키워드를</text>
+          <text x="450" y="214">순서대로 쌓아 하나의</text>
+          <text x="450" y="232">재료를 조립한다</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>문법이 아니라 사고방식이 다릅니다.</b> 벌크 데이터 계보는 “카드 = 물성 하나”, 명시적 계보는 “법칙 하나에 필드 수십 개”, 독자 계보는 “키워드를 쌓아 조립”. 이식이 어려운 이유는 문법이 아니라 이 구조 차이입니다.</figcaption>
+  </figure>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 대응</span>물성별 카드 대응표</h2>
+  <div class="tw"><table>
+    <thead><tr><th>물성</th><th>OptiStruct</th><th>Radioss</th><th>LS-DYNA</th><th>Ansys</th><th>Abaqus</th><th>Nastran</th></tr></thead>
+    <tbody>
+      <tr><td>등방 탄성</td><td class="k">MAT1</td><td class="k">/MAT/LAW1</td><td class="k">*MAT_001</td><td class="k">MP,EX/PRXY</td><td class="k">*ELASTIC</td><td class="k">MAT1</td></tr>
+      <tr><td>직교이방 (쉘)</td><td class="k">MAT8</td><td class="k">/MAT/LAW25</td><td class="k">*MAT_002</td><td class="k">MP,EX/EY/…</td><td class="k">*ELASTIC,<br>TYPE=LAMINA</td><td class="k">MAT8</td></tr>
+      <tr><td>직교이방 (솔리드)</td><td class="k">MAT9</td><td class="k">/MAT/LAW12</td><td class="k">*MAT_002</td><td class="k">TB,ANEL</td><td class="k">TYPE=ENGINEERING<br>CONSTANTS</td><td class="k">MAT9 · MAT11</td></tr>
+      <tr><td>표 입력 소성</td><td class="k">MATS1<br>+TABLES1</td><td class="k">/MAT/LAW36</td><td class="k">*MAT_024</td><td class="k">TB,PLASTIC,<br>MISO</td><td class="k">*PLASTIC</td><td class="k">MATS1+TABLES1<br>· MATEP</td></tr>
+      <tr><td>Johnson–Cook</td><td>—</td><td class="k">/MAT/LAW2</td><td class="k">*MAT_015</td><td>—</td><td class="k">*PLASTIC,<br>HARDENING=JC</td><td>—</td></tr>
+      <tr><td>Cowper–Symonds</td><td>—</td><td class="k">/MAT/LAW44</td><td class="k">*MAT_024 (C,P)</td><td class="k">TB,RATE,<br>PERZYNA</td><td class="k">*RATE DEPENDENT,<br>POWER LAW</td><td>—</td></tr>
+      <tr><td>이동경화 (반복)</td><td class="k">MATS1 HR=2</td><td class="k">Chard 필드</td><td class="k">*MAT_003 등</td><td class="k">TB,CHABOCHE</td><td class="k">*PLASTIC,<br>HARDENING=COMBINED</td><td class="k">MATS1 HR=2<br>· MATEP</td></tr>
+      <tr><td>이방 항복 (Hill)</td><td class="k">MATS1 + 이방</td><td class="k">/MAT/LAW32</td><td class="k">*MAT_037</td><td class="k">TB,HILL</td><td class="k">*POTENTIAL</td><td class="k">MATEP</td></tr>
+      <tr><td>초탄성</td><td class="k">MATHE</td><td class="k">/MAT/LAW42</td><td class="k">*MAT_077</td><td class="k">TB,HYPER</td><td class="k">*HYPERELASTIC</td><td class="k">MATHP · MATHE</td></tr>
+      <tr><td>점탄성 (Prony)</td><td class="k">MATVE</td><td class="k">/MAT/LAW62<br>+PRONY</td><td class="k">*MAT_076<br>· 077_H</td><td class="k">TB,PRONY</td><td class="k">*VISCOELASTIC,<br>TIME=PRONY</td><td class="k">MATVE</td></tr>
+      <tr><td>크리프</td><td class="k">MATVP</td><td>—</td><td class="k">*MAT_115 등</td><td class="k">TB,CREEP</td><td class="k">*CREEP</td><td class="k">MATVP</td></tr>
+      <tr><td>압괴 폼</td><td class="k">MATHE(FOAM)</td><td class="k">/MAT/LAW70</td><td class="k">*MAT_063</td><td class="k">TB,HYPER,FOAM</td><td class="k">*CRUSHABLE FOAM</td><td class="k">MATHE</td></tr>
+      <tr><td>온도 의존</td><td class="k">MATT1 + TABLEM</td><td>함수 참조</td><td>곡선 참조</td><td class="k">MPTEMP<br>· TBTEMP</td><td>데이터 줄에<br>온도 열 추가</td><td class="k">MATT1<br>· TABLEST</td></tr>
+      <tr><td>파단</td><td class="k">MATF · MATBRT</td><td class="k">/FAIL/…</td><td class="k">*MAT_ADD_<br>EROSION/DAMAGE</td><td class="k">TB,DMGI<br>· TB,DMGE</td><td class="k">*DAMAGE<br>INITIATION</td><td class="k">MATF</td></tr>
+      <tr><td>사용자 정의</td><td class="k">MATUSR</td><td class="k">/MAT/USERn</td><td class="k">*MAT_041-050</td><td class="k">TB,USER</td><td class="k">*USER MATERIAL</td><td class="k">외부 서브루틴</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn">대응은 “같은 물리를 표현하는 자리” 를 뜻하지, 상수가 그대로 옮겨진다는 뜻이 아닙니다.</p>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 곡선</span>경화곡선 — 넣는 값이 다르다</h2>
+  <p class="lede">이 표가 이 문서에서 가장 중요합니다. <strong>같은 시험에서 나온 경화곡선이 솔버마다 다른 형태로 들어갑니다.</strong> 그리고 틀려도 아무도 경고하지 않습니다 — 숫자가 전부 양수라 문법 검사를 통과하기 때문입니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>솔버</th><th>x 축</th><th>y 축</th><th>열 순서</th><th>첫 점</th></tr></thead>
+    <tbody>
+      <tr><td class="k">LS-DYNA</td><td>진소성변형률</td><td>진응력</td><td>(변형률, 응력)</td><td>(0, σ_y)</td></tr>
+      <tr><td class="k">Radioss LAW36</td><td>진소성변형률</td><td>진응력</td><td>(변형률, 응력)</td><td>(0, σ_y)</td></tr>
+      <tr><td class="k">Abaqus</td><td>진소성변형률</td><td>진응력</td><td><b>(응력, 변형률)</b></td><td>(σ_y, 0)</td></tr>
+      <tr><td class="k">Ansys TB,PLASTIC,MISO</td><td>진소성변형률</td><td>진응력</td><td>(변형률, 응력)</td><td>(0, σ_y)</td></tr>
+      <tr><td class="k">Ansys 구형 TB,MISO</td><td><b>전체 변형률</b></td><td>진응력</td><td>(변형률, 응력)</td><td>(σ_y/E, σ_y)</td></tr>
+      <tr><td class="k">OptiStruct MATS1</td><td><b>TYPSTRN 이 고른다</b><br>0=전체 · 1=소성</td><td>진응력</td><td>(변형률, 응력) 쌍</td><td>0 → (0,0)<br>1 → (0, σ_y)</td></tr>
+      <tr><td class="k">Nastran MATS1</td><td><b>전체 변형률</b></td><td>진응력</td><td>(변형률, 응력) 쌍</td><td><b>(0, 0)</b> — 둘째가 항복점</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap">
+    <h4>세 가지가 동시에 다를 수 있다</h4>
+    <p>Abaqus 표를 Nastran 으로 옮긴다면 <strong>(1) 열을 뒤집고, (2) 소성변형률에 σ/E 를 더해 전체변형률로 바꾸고, (3) 맨 앞에 원점을 끼워 넣어야</strong> 합니다. 셋 중 하나만 빼먹어도 초기 강성이나 항복점이 어긋나는데, 결과는 “좀 이상한 정도” 로 나와서 알아채기 어렵습니다.</p>
+  </div>
+  <div class="eq">공칭 → 진값        σ = s(1+e),   ε = ln(1+e)
+진 → 소성          ε_p = ε − σ/E
+소성 → 전체        ε   = ε_p + σ/E</div>
+  <p>그리고 <strong>표 바깥은 어느 솔버도 외삽하지 않습니다</strong> — 마지막 값을 유지해 완전소성처럼 됩니다. 대변형 해석이면 ε_p ≈ 1 까지 연장해 두어야 하고, 그 연장 구간은 시험이 아니라 가정입니다.</p>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 단위</span>단위계 대조</h2>
+  <p>여섯 중 <strong>Ansys 만 단위를 인식</strong>합니다(그마저도 Command Snippet 은 예외). 나머지는 숫자만 받습니다. Radioss 는 <code>/UNIT</code> 으로 카드마다 단위를 선언할 수 있어 중간쯤입니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>단위계</th><th class="n">강재 E</th><th class="n">강재 ρ</th><th class="n">항복 350MPa</th><th>주로 쓰는 곳</th></tr></thead>
+    <tbody>
+      <tr><td class="k">SI (m · kg · s)</td><td class="n">2.10e+11</td><td class="n">7.85e+03</td><td class="n">3.50e+08</td><td>문서의 기본 표기</td></tr>
+      <tr><td class="k">mm · tonne · s (MPa)</td><td class="n">2.10e+05</td><td class="n">7.85e-09</td><td class="n">350.</td><td><b>Abaqus · Nastran · OptiStruct · LS-DYNA</b></td></tr>
+      <tr><td class="k">mm · kg · ms (GPa)</td><td class="n">210.</td><td class="n">7.85e-06</td><td class="n">0.350</td><td><b>Radioss · LS-DYNA 충돌</b></td></tr>
+      <tr><td class="k">mm · g · ms (MPa)</td><td class="n">2.10e+05</td><td class="n">7.85e-03</td><td class="n">350.</td><td>LS-DYNA 일부</td></tr>
+      <tr><td class="k">mm · kg · N · s (Ansys 특수)</td><td class="n">2.10e+05</td><td class="n">7.85e-06</td><td class="n">350.</td><td>Ansys 전용 — <b>일관계가 아니다</b></td></tr>
+      <tr><td class="k">in · lbf·s²/in · s (psi)</td><td class="n">3.00e+07</td><td class="n">7.33e-04</td><td class="n">5.08e+04</td><td>미국 항공</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>밀도 칸이 단위계의 지문이다</h4>
+    <p>남의 덱을 열었을 때 <strong>강재 밀도 한 숫자로 단위계를 역추적</strong>할 수 있습니다 — 7.85e-9 면 mm·tonne, 7.85e-6 이면 mm·kg, 7850 이면 SI. 물성 카드를 검토하는 첫 동작으로 습관화해 둘 만합니다.</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 파단</span>파단 · 손상</h2>
+  <p>파단은 대응이 가장 헐거운 영역입니다 — <strong>같은 이름의 기준이라도 손상 누적 방식과 요소 삭제 규칙이 달라, 상수를 그대로 옮기면 같은 시점에 찢어지지 않습니다.</strong></p>
+  <div class="tw"><table>
+    <thead><tr><th>접근</th><th>LS-DYNA</th><th>Radioss</th><th>Abaqus</th><th>Ansys</th></tr></thead>
+    <tbody>
+      <tr><td>상수 하나</td><td class="k">MAT_024 의 FAIL</td><td class="k">LAW36 의 ε_p^max</td><td class="k">*DAMAGE INITIATION,<br>DUCTILE (한 점)</td><td class="k">TB,DMGI</td></tr>
+      <tr><td>삼축도 의존</td><td class="k">GISSMO</td><td class="k">/FAIL/BIQUAD<br>· TAB1</td><td class="k">DUCTILE (표)</td><td class="k">TB,DMGI + 사용자</td></tr>
+      <tr><td>초기화/전개 분리</td><td class="k">DIEM</td><td class="k">/FAIL/INIEVO</td><td class="k">INITIATION<br>+ EVOLUTION</td><td class="k">DMGI + DMGE</td></tr>
+      <tr><td>메시 정규화</td><td class="k">GISSMO 의<br>정규화 곡선</td><td class="k">/FAIL/TAB1 의<br>요소크기 함수</td><td class="k">EVOLUTION,<br>TYPE=DISPLACEMENT<br>· ENERGY</td><td class="k">DMGE 의<br>파괴에너지</td></tr>
+      <tr><td>성형한계</td><td class="k">FLD</td><td class="k">/FAIL/FLD</td><td class="k">CRITERION=FLD<br>· MSFLD</td><td>—</td></tr>
+      <tr><td>복합재</td><td class="k">MAT_054/055</td><td class="k">/FAIL/HASHIN<br>· PUCK · TSAIWU</td><td class="k">CRITERION=HASHIN</td><td class="k">TB,FCLI + DMGI</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap">
+    <h4>파단변형률은 재료 상수가 아니다 — 어느 솔버에서도</h4>
+    <p>같은 강판이 2mm 메시에서 0.6, 5mm 메시에서 0.3 으로 맞습니다. 국부 넥이 요소 하나에 담기느냐의 문제라 <strong>메시 크기 · 요소 정식 · 적분점 수 · 삭제 규칙이 전부 값에 섞여 들어갑니다.</strong> 그래서 파단 카드는 <b>항상 그 조건과 함께 기록</b>해야 하고, 솔버를 옮기면 <b>기본 시편 몇 개로 재보정</b>하는 것 말고 다른 길이 없습니다.</p>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 시험</span>시험 → 카드 지도</h2>
+  <p>거꾸로도 유용합니다 — <strong>어떤 시험을 해야 이 카드를 채울 수 있는가.</strong> 시험 계획을 세울 때 쓰는 표입니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>채우려는 것</th><th>필요한 시험</th><th>최소 개수</th></tr></thead>
+    <tbody>
+      <tr><td>등방 탄성 + 소성</td><td>단축 인장 (준정적)</td><td>3본 (반복성)</td></tr>
+      <tr><td>속도 의존 경화</td><td>속도별 인장 (준정적 ~ 고속)</td><td>속도 4~5수준 × 3본</td></tr>
+      <tr><td>이방 항복 (r값)</td><td>압연방향 0°/45°/90° 인장</td><td>3방향 × 3본</td></tr>
+      <tr><td>온도 의존</td><td>온도별 인장</td><td>온도 3~4수준</td></tr>
+      <tr><td>삼축도 의존 파단</td><td>매끈·노치(R 2종)·전단·이축(돔)</td><td>5~7 형상 × 3본</td></tr>
+      <tr><td>성형한계 (FLD)</td><td>Nakajima 또는 Marciniak</td><td>폭 5~7종</td></tr>
+      <tr><td>반복 경화 (Chaboche)</td><td>변형률 제어 저주기 피로</td><td>진폭 3~4수준</td></tr>
+      <tr><td>초탄성</td><td>단축 인장 · 평면(순수전단) · 이축</td><td><b>세 모드 전부</b></td></tr>
+      <tr><td>점탄성 (Prony)</td><td>완화시험 또는 DMA (온도-주파수 스윕)</td><td>온도 5수준 이상</td></tr>
+      <tr><td>크리프</td><td>정하중 크리프 (응력 × 온도 격자)</td><td>응력 3 × 온도 3</td></tr>
+      <tr><td>복합재 층 물성</td><td>0°/90° 인장·압축, ±45° 전단</td><td>5종 × 5본</td></tr>
+      <tr><td>폼</td><td>압축 (속도별), 인장, 이력</td><td>속도 3수준</td></tr>
+    </tbody>
+  </table></div>
+  <p>시험 규격과 시편 형상은 이 저장소의 <a href="../규격/">규격</a> 폴더에 정리돼 있습니다 — <a href="../규격/astm-tensile-specimens-KR.html">인장 시편</a>, <a href="../규격/tensile-plasticity-guide-KR.html">인장에서 소성곡선까지</a>, <a href="../규격/dma-prony-viscoelasticity-guide-KR.html">DMA · Prony</a>, <a href="../규격/creep-guide-KR.html">크리프</a>, <a href="../규격/fracture-guide-KR.html">파괴</a>, <a href="../규격/sheet-formability-specimens-KR.html">판재 성형성</a>.</p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 이식</span>이식할 때 검증 순서</h2>
+  <p class="lede">솔버를 옮긴 물성 카드는 <strong>“오류 없이 돌았다” 가 검증이 아닙니다.</strong> 값이 틀려도 대부분 돌기 때문입니다. 아래 순서가 싸고 확실합니다.</p>
+  <ol class="steps">
+    <li><b>단위계를 밀도로 확인한다</b>강재 밀도 한 숫자면 계가 드러납니다. 여기가 틀리면 나머지 검증이 무의미합니다.</li>
+    <li><b>단일 요소 인장</b>요소 하나를 잡아당겨 응력–변형률을 뽑고, 입력한 곡선과 겹칩니다. <strong>열 순서·전체/소성 변형률 실수가 여기서 전부 드러납니다.</strong> 몇 초면 돕니다.</li>
+    <li><b>단일 요소 제하</b>항복 너머까지 당겼다 놓습니다. 탄성 기울기로 되돌아오는지 — NLELAST 를 잘못 쓴 경우가 여기서 잡힙니다.</li>
+    <li><b>단일 요소 이축·전단</b>이방성·초탄성·압력 의존 카드는 단축만으로 검증되지 않습니다. 초탄성이 이축에서 발산하는지 봅니다.</li>
+    <li><b>속도 스윕</b>속도 의존 카드라면 여러 속도로 돌려 표의 상한·하한 밖에서 무슨 일이 일어나는지 확인합니다.</li>
+    <li><b>시편 모델</b>실제 인장시편을 메시로 만들어 하중–변위를 시험과 겹칩니다. 네킹 이후 구간이 맞는지가 외삽의 검증입니다.</li>
+    <li><b>파단은 재보정</b>이식된 값을 그대로 믿지 않습니다. 노치·전단 시편으로 다시 맞춥니다 — <strong>이 단계는 생략할 수 없습니다.</strong></li>
+    <li><b>에너지 점검</b>인위적 에너지(hourglass, 점성 안정화, 질량 스케일링)가 전체의 몇 %인지 봅니다. 5%를 넘으면 물성 검증이 아니라 모델 검증으로 돌아갑니다.</li>
+  </ol>
+  <div class="note">
+    <h4>단일 요소 시험은 만들어 두면 계속 쓴다</h4>
+    <p>솔버별로 <strong>“요소 하나 + 규정 변위” 덱</strong>을 한 번 만들어 두면, 이후 모든 물성 카드가 그 덱을 통과한 뒤 실모델로 갑니다. 카드 하나 검증에 몇 초, 실수를 늦게 발견했을 때의 비용은 며칠입니다.</p>
+    <p><strong>여섯 벌을 <a href="예제/">예제/</a> 에 만들어 두었습니다</strong> — 같은 재료·같은 형상·같은 하중이라 결과를 서로 겹쳐 볼 수 있습니다. 기대값(진응력 700.3&nbsp;MPa, 반력 466.9&nbsp;N)과 쓰는 법은 <a href="예제/README.md">예제/README.md</a> 에 있습니다.</p>
+  </div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 출처</span>확인한 곳</h2>
+  <p>솔버별 상세 출처는 각 문서의 마지막 장에 있습니다. 대응표를 만들 때 함께 본 것들:</p>
+  <ul class="tight">
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/mat_024_piecewise_linear_plasticity_lsdyna_r.htm">Altair — LS-DYNA *MAT_024 → Radioss 변환 대응</a></li>
+    <li><a href="https://help.altair.com/hwsolvers/os/topics/solvers/os/materials_os_r.htm">Altair — OptiStruct Materials 목록</a></li>
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/materials_starter_overview_r.htm">Altair — Radioss Materials 개요</a></li>
+    <li><a href="https://lsdyna.ansys.com/consistent-units/">LS-DYNA Consistent Units</a> · 04장 단위 대조</li>
+    <li><a href="https://abaqus-docs.mit.edu/2017/English/SIMACAEGSARefMap/simagsa-c-absunits.htm">Abaqus — Units</a></li>
+    <li><a href="https://ansyshelp.ansys.com/public/Views/Secured/corp/v242/en/ans_cmd/Hlp_C_TB.html">Ansys — TB 명령 Lab 목록</a></li>
+    <li><a href="https://www.afs.enea.it/software/msc/nastran_docs/nastran_2013.1_doc_quick_reference.pdf">MSC Nastran Quick Reference Guide</a></li>
+    <li><a href="https://ceae-server.colorado.edu/v2016/pdf_books/ANALYSIS_3.pdf">Abaqus Analysis User's Guide Vol. III: Materials</a></li>
+  </ul>
+</section>
+</main>
+
+<footer>MatNexus · 시뮬레이션 인풋 덱 · 솔버 대응표 · 2026-08-30 수집</footer>
+</body></html>

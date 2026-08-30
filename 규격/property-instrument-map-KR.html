@@ -1,0 +1,463 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>물성 × 장비 대응표</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+
+/* ---------- matrix ---------- */
+.mx table{min-width:56rem}
+.mx th.c,.mx td.c{text-align:center;width:3rem;padding-left:.25rem;padding-right:.25rem}
+.mx td.c{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);font-weight:600}
+.mx td:first-child{min-width:14rem}
+.mx tbody tr.grp td{background:var(--sunk);font-family:"IBM Plex Mono",monospace;
+  font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  padding-top:.75rem;padding-bottom:.45rem}
+.mx td.vd{white-space:nowrap;font-weight:600;font-size:.82rem}
+.mx td.vd.y{color:var(--accent-ink)}
+.mx td.vd.m{color:var(--cold)}
+.mx td.vd.no{color:var(--hot)}
+</style></head><body>
+<header class="mast">
+  <div class="eyebrow">핸드북 · 측정 범위</div>
+  <h1>물성 × 장비<br>대응표</h1>
+  <p class="dek">세로에 <strong>해석이 요구하는 물성</strong>, 가로에 <strong>그것을 재는 장비</strong>를 놓고, 마지막 열에 <strong>지금 이 실험실에서 실제로 나오는가</strong>를 적었습니다. 핸드북의 <strong>시편 규격 · 시험 방법 · 물성 계산</strong> 문서를 가로지르는 한 장입니다.</p>
+  <div class="mast-meta">
+    <div><b>항목</b> 물성 29 · 장비 9</div>
+    <div><b>기준</b> 보유 장비 — DMA · 인장시험기 · 신율계 (+확인 필요 셋)</div>
+    <div><b>갱신</b> 2026-08-30</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 읽는 법</a>
+    <a href="#s1"><span>01</span> 대응표</a>
+    <a href="#s2"><span>02</span> 결과 — 13 가능 · 13 조건부 · 3 불가</a>
+    <a href="#s3"><span>03</span> 조건부를 가능으로 바꾸는 것</a>
+    <a href="#s4"><span>04</span> 불가 셋을 어떻게 다루나</a>
+    <a href="#s5"><span>05</span> 이어지는 문서</a>
+  </nav>
+</header>
+
+<main>
+
+<section id="s0">
+  <h2><span class="num">00 / 규약</span>읽는 법</h2>
+  <p class="lede">가로 칸의 표시는 <strong>「이 장비가 이 물성에 관여하는가」</strong>, 마지막 열의 표시는 <strong>「그래서 지금 낼 수 있는가」</strong>입니다. 둘은 다릅니다 — 관여하는 장비를 다 갖췄어도 시편·치구가 없으면 조건부입니다.</p>
+
+  <div class="cards">
+    <div class="card"><h4>가로 칸</h4><p><strong>●</strong> 이 장비가 <strong>주로</strong> 내는 값<br><strong>◐</strong> 보조로 쓰이거나 우회 경로<br>빈칸 — 관계 없음</p></div>
+    <div class="card"><h4>마지막 열</h4><p><strong>●</strong> 지금 바로 가능<br><strong>◐</strong> 시편·치구·사양 확인이 남음<br><strong>○</strong> 다른 장비가 있어야 함</p></div>
+    <div class="card"><h4>장비 보유 표시</h4><p><strong>보유</strong> — 확인된 것<br><strong>추정</strong> — 있다고 들었으나 사양 미확인<br><strong>없음</strong> — 미보유</p></div>
+  </div>
+
+  <h3>가로축 — 장비 아홉</h3>
+  <div class="tw"><table>
+    <thead><tr><th>줄임</th><th>장비</th><th>보유</th><th>내는 것</th></tr></thead>
+    <tbody>
+      <tr><td class="k">치수</td><td>저울 · 캘리퍼</td><td>보유</td><td>밀도, 시편 단면적</td></tr>
+      <tr><td class="k">인장</td><td>만능 인장시험기</td><td><b>보유</b></td><td>하중–변위, 강도, 경화곡선</td></tr>
+      <tr><td class="k">신율</td><td>신율계 (축방향 / 횡방향)</td><td><b>보유</b> (축)</td><td>정확한 변형률 — E 와 ν 의 전제</td></tr>
+      <tr><td class="k">DMA</td><td>동적 기계 분석기</td><td><b>보유</b></td><td>E′·E″·tan δ, Tg, 마스터커브</td></tr>
+      <tr><td class="k">챔버</td><td>온도챔버 (인장기 부착)</td><td>추정</td><td>온도별 시험, 장시간 유지</td></tr>
+      <tr><td class="k">고속</td><td>고속 압축시험기 (드롭타워)</td><td>추정</td><td>속도별 압축 곡선, 제하 이력</td></tr>
+      <tr><td class="k">압축</td><td>압축 압반 · 좌굴방지 치구</td><td>추정</td><td>준정적 압축, 압축강도</td></tr>
+      <tr><td class="k">크리프</td><td>크리프 프레임 (정하중 장기)</td><td>없음</td><td>수백~수천 시간 정하중</td></tr>
+      <tr><td class="k">SHPB</td><td>홉킨슨 바 (압축 / 인장 SHTB)</td><td>없음</td><td>금속 100~1000 /s</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>「추정」 셋이 표의 절반을 좌우한다</h4>
+    <p>온도챔버 · 고속 압축 · 압축 치구 셋은 <strong>있다고 들었으나 사양이 확인되지 않은</strong> 장비입니다. 마지막 열의 <strong>◐ 13개 중 여섯</strong>이 이 셋에 걸려 있습니다 — 사양 확인 한 번이 이 문서에서 가장 값싼 작업입니다.</p>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 표</span>대응표</h2>
+  <p class="lede">가로로 넘칩니다 — 좁은 화면에서는 표 안에서 옆으로 밉니다.</p>
+
+  <div class="tw wide mx"><table>
+    <thead><tr>
+      <th>물성</th>
+      <th class="c">치수</th><th class="c">인장</th><th class="c">신율</th><th class="c">DMA</th>
+      <th class="c">챔버</th><th class="c">고속</th><th class="c">압축</th><th class="c">크리프</th><th class="c">SHPB</th>
+      <th>측정 가능</th>
+    </tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="11">기본 탄성 · 소성</td></tr>
+      <tr><td>밀도 ρ</td>
+        <td class="c">●</td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>탄성계수 E</td>
+        <td class="c"></td><td class="c">●</td><td class="c">●</td><td class="c">◐</td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>포아송비 ν</td>
+        <td class="c"></td><td class="c">●</td><td class="c">●</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 횡방향 신율계</td></tr>
+      <tr><td>항복강도 · 인장강도 · 연신율</td>
+        <td class="c">◐</td><td class="c">●</td><td class="c">◐</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>경화곡선 — 넥킹 전 (ε<sub>pl</sub> ≲ 0.15)</td>
+        <td class="c">◐</td><td class="c">●</td><td class="c">●</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>경화곡선 — 넥킹 이후 (ε<sub>pl</sub> → 1.0)</td>
+        <td class="c"></td><td class="c">◐</td><td class="c">◐</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 역해석 필요</td></tr>
+      <tr><td>응력완화</td>
+        <td class="c"></td><td class="c">●</td><td class="c">◐</td><td class="c">◐</td>
+        <td class="c">◐</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+
+      <tr class="grp"><td colspan="11">온도 · 시간</td></tr>
+      <tr><td>E(T) · 경화곡선(T)</td>
+        <td class="c"></td><td class="c">●</td><td class="c">●</td><td class="c">◐</td>
+        <td class="c">●</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 챔버 · 고온 신율계</td></tr>
+      <tr><td>크리프 Norton A · n</td>
+        <td class="c"></td><td class="c">◐</td><td class="c">◐</td><td class="c"></td>
+        <td class="c">●</td><td class="c"></td><td class="c"></td><td class="c">●</td><td class="c"></td>
+        <td class="vd m">◐ 장시간 정하중</td></tr>
+      <tr><td>열팽창계수 CTE</td>
+        <td class="c">◐</td><td class="c"></td><td class="c"></td><td class="c">◐</td>
+        <td class="c">◐</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ TMA 모드 여부</td></tr>
+
+      <tr class="grp"><td colspan="11">속도 의존</td></tr>
+      <tr><td>금속 속도 의존 (Cowper–Symonds D · n)</td>
+        <td class="c"></td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c">●</td>
+        <td class="vd no">○ 불가</td></tr>
+      <tr><td>폼 속도별 압축 곡선</td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c">●</td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 고속기 사양</td></tr>
+      <tr><td>폼 제하 이력 (HU · Hys)</td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c">●</td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 고속기 사양</td></tr>
+
+      <tr class="grp"><td colspan="11">고분자 · 고무</td></tr>
+      <tr><td>Prony 계수 g<sub>i</sub> · τ<sub>i</sub></td>
+        <td class="c"></td><td class="c">◐</td><td class="c"></td><td class="c">●</td>
+        <td class="c">◐</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>유리전이온도 Tg</td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c">●</td>
+        <td class="c">◐</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>WLF · TTS 이동계수</td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c">●</td>
+        <td class="c">◐</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>초탄성 C10 · C01 — 단축만</td>
+        <td class="c"></td><td class="c">●</td><td class="c">●</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능 (외삽 주의)</td></tr>
+      <tr><td>초탄성 다축 적합 (평면 · 등이축)</td>
+        <td class="c"></td><td class="c">◐</td><td class="c">◐</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 시편 형상 · 압반</td></tr>
+      <tr><td>체적계수 D1 (비압축성)</td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c">●</td><td class="c"></td><td class="c"></td>
+        <td class="vd no">○ 구속 압축 필요</td></tr>
+
+      <tr class="grp"><td colspan="11">복합재</td></tr>
+      <tr><td>E1 · E2 (0° · 90° 인장)</td>
+        <td class="c"></td><td class="c">●</td><td class="c">●</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>ν12</td>
+        <td class="c"></td><td class="c">●</td><td class="c">●</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 횡방향 신율계</td></tr>
+      <tr><td>면내 전단 G12 · Sl (±45° 인장)</td>
+        <td class="c"></td><td class="c">●</td><td class="c">●</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ ±45° 적층판 제작</td></tr>
+      <tr><td>인장강도 Xt · Yt</td>
+        <td class="c"></td><td class="c">●</td><td class="c">◐</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>압축강도 Xc · Yc</td>
+        <td class="c"></td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c">●</td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 좌굴방지 치구</td></tr>
+      <tr><td>면외 전단 G13 · G23 · St</td>
+        <td class="c"></td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="vd no">○ V-notch 치구 필요</td></tr>
+
+      <tr class="grp"><td colspan="11">폼 · 완충재</td></tr>
+      <tr><td>준정적 압축 곡선</td>
+        <td class="c">◐</td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c">◐</td><td class="c">●</td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 압반이면 인장기로도</td></tr>
+      <tr><td>폼 인장 컷오프 (TSC)</td>
+        <td class="c"></td><td class="c">●</td><td class="c">◐</td><td class="c"></td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd m">◐ 폼 인장 시편 · 물림</td></tr>
+      <tr><td>폼 밀도 · 초기 강성</td>
+        <td class="c">●</td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="c"></td><td class="c">◐</td><td class="c">◐</td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+      <tr><td>폼 점탄성 (완충재 시간 의존)</td>
+        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c">●</td>
+        <td class="c">◐</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
+        <td class="vd y">● 가능</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 결과</span>13 가능 · 13 조건부 · 3 불가</h2>
+
+  <div class="tw"><table>
+    <thead><tr><th>묶음</th><th class="n">항목</th><th class="n">● 가능</th><th class="n">◐ 조건부</th><th class="n">○ 불가</th></tr></thead>
+    <tbody>
+      <tr><td>기본 탄성 · 소성</td><td class="n">7</td><td class="n">5</td><td class="n">2</td><td class="n">0</td></tr>
+      <tr><td>온도 · 시간</td><td class="n">3</td><td class="n">0</td><td class="n">3</td><td class="n">0</td></tr>
+      <tr><td>속도 의존</td><td class="n">3</td><td class="n">0</td><td class="n">2</td><td class="n">1</td></tr>
+      <tr><td>고분자 · 고무</td><td class="n">6</td><td class="n">4</td><td class="n">1</td><td class="n">1</td></tr>
+      <tr><td>복합재</td><td class="n">6</td><td class="n">2</td><td class="n">3</td><td class="n">1</td></tr>
+      <tr><td>폼 · 완충재</td><td class="n">4</td><td class="n">2</td><td class="n">2</td><td class="n">0</td></tr>
+      <tr><td><b>합계</b></td><td class="n"><b>29</b></td><td class="n"><b>13</b></td><td class="n"><b>13</b></td><td class="n"><b>3</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>모양을 한 줄로</h4>
+    <p><strong>상온 · 준정적 · 단축</strong>이면 거의 다 나옵니다. 거기서 <strong>온도로 벗어나거나(챔버), 속도로 벗어나거나(고속기·SHPB), 축을 늘리면(다축·면외) 조건부나 불가로 떨어집니다.</strong></p>
+    <p>DMA 가 있는 덕에 <strong>고분자 시간 의존성은 예외적으로 강합니다</strong> — Prony·Tg·TTS 가 전부 ● 입니다. 이건 흔치 않은 조합입니다.</p>
+  </div>
+
+  <div class="note trap">
+    <h4>「가능」이 「정확」은 아니다</h4>
+    <p>초탄성 C10·C01 은 <strong>단축 인장만으로 ● 이지만</strong>, 그 상수를 압축·이축 상태에 쓰면 크게 어긋납니다. 넥킹 전 경화곡선도 ● 이지만 <strong>성형·충돌 해석은 그 범위를 훌쩍 넘어갑니다.</strong></p>
+    <p>표의 ● 는 <strong>「그 시험으로 그 숫자가 나온다」</strong>는 뜻이지 <strong>「해석에 쓰기 충분하다」</strong>는 뜻이 아닙니다. 후자는 해석 조건마다 다릅니다.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 전환</span>조건부를 가능으로 바꾸는 것</h2>
+  <p class="lede">◐ 열셋을 푸는 열쇠는 <strong>대부분 장비가 아닙니다.</strong> 확인·시편·치구 순으로 값이 쌉니다.</p>
+
+  <ol class="steps">
+    <li><b>확인만 하면 되는 것 — 비용 0</b>
+      <p><strong>고속 압축기가 준정적 속도로도 도는가</strong> · <strong>온도챔버의 상한과 장시간 유지</strong> · <strong>고온용 신율계 유무</strong>. 여기에 ◐ 여섯 개가 걸려 있습니다.</p>
+      <p>고속기가 드롭타워식(낙하 에너지)이면 저속은 원리적으로 안 되지만, <strong>폼은 하중이 낮아 인장기에 압축 압반만 달면 대신할 수 있습니다.</strong></p>
+    </li>
+    <li><b>시편 형상만 바꾸면 되는 것 — 장비 불필요</b>
+      <p><strong>고무 평면 인장</strong>(폭이 매우 넓고 짧은 시편) · <strong>±45° 적층판</strong>. 둘 다 지금 인장기로 돌아가고, 각각 초탄성 다축 적합과 G12·Sl 을 엽니다.</p>
+    </li>
+    <li><b>치구를 갖추는 것</b>
+      <p><strong>횡방향 신율계</strong>가 가장 쌉니다 — ν 세 자리(금속·복합재·고분자)를 한 번에 ● 로 만듭니다. 다음이 <strong>좌굴방지 압축 치구</strong>(Xc·Yc), <strong>V-notch 전단 치구</strong>(면외 셋)입니다.</p>
+    </li>
+    <li><b>계산으로 푸는 것</b>
+      <p><strong>넥킹 이후 경화곡선</strong>은 새 장비가 아니라 <strong>역해석</strong>으로 좁힙니다 — 넥킹 이후 하중–변위를 FE 가 재현하도록 Swift·Voce 외삽 계수를 맞춥니다. <strong>크리프</strong>도 가속 시험 + Larson–Miller 외삽이 우회로입니다.</p>
+      <p>이 두 가지는 <strong>이 저장소가 붙기 좋은 자리</strong>입니다 — 필요한 것이 장비가 아니라 계산이라서 그렇습니다.</p>
+    </li>
+  </ol>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 불가</span>불가 셋을 어떻게 다루나</h2>
+
+  <h3>금속 속도 의존 — Cowper–Symonds D · n</h3>
+  <p>폼용 고속 압축기로 대신할 수 없습니다. 금속은 <strong>변형이 작고 응력이 세</strong>서, 시편이 균일하게 변형되기 전에 하중 신호가 장비 진동에 묻힙니다. 표준 장비는 <strong>SHPB</strong>(압축) · <strong>SHTB</strong>(인장)이고, 1~100 /s 구간은 <strong>고속 유압 인장기</strong>입니다.</p>
+  <p><strong>우회</strong> — 파라미터가 둘뿐이라, 문헌의 강종별 값을 출발점으로 두고 <strong>실물 충돌·낙하 시험의 변형 형상과 흡수 에너지에 맞춰 역산</strong>합니다.</p>
+
+  <h3>체적계수 D1</h3>
+  <p>구속 압축(체적 압축) 시험이 필요합니다. <strong>실무에서는 재지 않습니다</strong> — ν ≈ 0.4995 로 두는 것이 사실상 표준이고, 대부분의 해석에서 결과에 거의 영향이 없습니다.</p>
+
+  <h3>복합재 면외 — G13 · G23 · St</h3>
+  <p>V-notch(ASTM D5379) 치구가 필요합니다. <strong>면내 인장·압축 해석에서는 이 값들이 답에 아예 안 들어갑니다.</strong> 필요해지는 것은 <strong>층간 박리 · 충격 · 두꺼운 적층</strong>부터입니다.</p>
+
+  <div class="note">
+    <h4>불가 항목을 다루는 원칙</h4>
+    <p><strong>못 재는 값이 답을 얼마나 흔드는지 먼저 봅니다.</strong> 감도가 작으면 문헌값으로 두고 그 사실을 문서에 남기고, 크면 그 값 하나를 위해 외주 시험을 설계합니다. 값이 실측인지 문헌인지가 <strong>기록에 남아 있어야</strong> 결과가 안 맞을 때 무엇을 먼저 의심할지 알 수 있습니다.</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 연결</span>이어지는 문서</h2>
+  <p class="lede">이 표는 <strong>어느 물성을 어느 장비가 내는가</strong>만 봅니다. 그 시험을 실제로 어떻게 하는지, 잰 것을 어떻게 물성으로 바꾸는지는 핸드북의 다른 종류에 있습니다.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>시편 규격 — 어떻게 자르나</h4>
+      <p>이 표의 한 칸을 실제로 재려면 먼저 시편이 있어야 합니다. 치수·표면·표점거리가 값을 바꾸는 자리를 시험별로 적어 두었습니다.</p>
+    </div>
+    <div class="card">
+      <h4>시험 방법 — 어떻게 재나</h4>
+      <p>속도·온도·유지시간 같은 시험 조건. <strong>◐ 로 표시된 항목은 대개 여기서 조건 하나가 빠져 있습니다.</strong></p>
+    </div>
+    <div class="card">
+      <h4>물성 계산 — 잰 것이 어떻게 물성이 되나</h4>
+      <p>하중–변위 한 줄에서 솔버 카드까지. <strong>「가능」 이 「해석에 쓰기 충분」 이 아닌 이유</strong>가 대부분 여기에 있습니다.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <h4>이 표를 언제 갱신하나</h4>
+    <p><strong>장비 사양이 확인될 때</strong>(추정 셋), <strong>치구·시편이 갖춰질 때</strong>, <strong>새 물성이 해석에 들어올 때</strong>. 특히 첫 번째는 ◐ 를 한꺼번에 옮기므로, 확인하는 즉시 이 표부터 고칩니다.</p>
+    <p>고칠 것이 생기면 <strong>이 절을 편집</strong>해서 초안으로 내면 됩니다 — 검토자가 승인하면 정본이 됩니다.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  핸드북 · 측정 범위 — 물성 29 × 장비 9 · 2026-08-30
+</footer>
+
+</body></html>

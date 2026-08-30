@@ -1,0 +1,93 @@
+$$------------------------------------------------------------------------------
+$$ DP600 single-element uniaxial tension  --  Altair OptiStruct
+$$
+$$   units : mm - N - tonne - s   (stress MPa, density 7.85-9)
+$$   model : 1 x 1 x 1 mm CHEXA, 1/8 symmetry, x-face pulled to u = 0.5 mm
+$$   check : sigma_x ~= 700.3 MPa at the end (see README.md)
+$$
+$$   run   : optistruct dp600-1elem-optistruct.fem
+$$
+$$   TABLES1 here is stress vs TOTAL strain (MATS1 TYPSTRN left blank = 0).
+$$   With TYPSTRN = 0 the first point is the origin and the SECOND point must be
+$$   the yield point, so that those two points reproduce the elastic slope of
+$$   MAT1: 350 / 210000 = 0.00167.  Set TYPSTRN = 1 and the same table would be
+$$   read as stress vs PLASTIC strain -- a different curve entirely.
+$$------------------------------------------------------------------------------
+$$ I/O Options
+SCREEN,OUT
+OUTPUT,H3D
+DISPLACEMENT(H3D) = ALL
+STRESS(H3D)       = ALL
+STRAIN(H3D)       = ALL
+SPCFORCE(H3D)     = ALL
+$$
+$$ Subcase Information
+SUBCASE 1
+  LABEL    = pull x face to 0.5 mm
+  ANALYSIS = NLSTAT
+  SPC      = 1
+  LOAD     = 2
+  NLPARM   = 10
+$$
+BEGIN BULK
+$
+$ ANALYSIS=NLSTAT on its own is SMALL displacement nonlinear.  Large strain
+$ elasto-plasticity with MATS1 needs the large displacement solution, and
+$ Altair's own material says LGDISP "needs to be used together with hash
+$ assembly option (PARAM,HASHASSM,YES)" -- both are set here.
+$ In large displacement analysis the curve is read as TRUE stress / TRUE strain.
+PARAM,LGDISP,1
+PARAM,HASHASSM,YES
+$
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV
+NLPARM  10      50              AUTO    5       25      UPW
+$
+$$-----------------------------------------------------------------------------
+$$ MESH
+$$-----------------------------------------------------------------------------
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+PSOLID  1       1       0
+$
+$$-----------------------------------------------------------------------------
+$$ MATERIAL   -- MATS1 supplements the MAT1 with the same MID; both are needed
+$$-----------------------------------------------------------------------------
+MAT1    1       210000.         0.3     7.85-9
+$
+$       MID     TID     TYPE    H       YF      HR      LIMIT1  LIMIT2
+MATS1   1       200     PLASTIC         1       1       350.0
+$
+$ stress vs TOTAL strain.  8-character fields, so the values butt up against
+$ each other -- that is normal fixed format, not a typo.  Pairs are:
+$   (0, 0) (.0016667, 350) (.0221667, 455) (.1026667, 560)
+$   (.4033333, 700) (1.003761, 790)
+$ The second point reproduces the elastic slope of MAT1: 350/.0016667 = 210000.
+TABLES1 200
++       .0000000.0000000.0016667350.0000.0221667455.0000.1026667560.0000
++       .4033333700.00001.003761790.0000
++       ENDT
+$
+$$-----------------------------------------------------------------------------
+$$ BOUNDARY CONDITIONS   (1/8 symmetry + enforced displacement)
+$$   The pulled DOF must be in the SPC set; SPCD supplies its value and the
+$$   subcase must select that SPCD set through LOAD.
+$$-----------------------------------------------------------------------------
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+SPC1    1       1       2       3       6       7
+$
+SPCD    2       2       1       0.5     3       1       0.5
+SPCD    2       6       1       0.5     7       1       0.5
+$
+ENDDATA

@@ -1,0 +1,97 @@
+!------------------------------------------------------------------------------
+! Quasi-isotropic laminate, single shell element  --  Ansys Mechanical APDL
+!
+!   units : mm - N - tonne - s   (stress MPa, density 1.57e-9)
+!   model : 1 x 1 mm SHELL181, 4 plies [0/45/-45/90] x 0.125 mm = 0.5 mm
+!           membrane only (all rotations and uz fixed), pulled to ux = 0.005 mm
+!   check : laminate average SX ~= 260.45 MPa, edge reaction ~= 130.23 N
+!           (CLT: E_eff = 52090.3 MPa, nu_eff = 0.30686)
+!
+!   PRXY here is the MAJOR Poisson ratio nu12 = 0.3.  Ansys' NUXY is the MINOR
+!   one; for this ply they differ by the modulus ratio (nu21 = 0.02).  In an
+!   isotropic material the two are equal, which is why the distinction only
+!   ever bites on composites.
+!
+!   run   : ansys -b -i laminate-1elem-ansys.dat -o out.txt
+!------------------------------------------------------------------------------
+FINISH
+/CLEAR,NOSTART
+/TITLE, QI laminate 1-element tension (mm-N-tonne-s)
+/UNITS,MPA
+/PREP7
+
+!==============================================================================
+! PLY MATERIAL
+!==============================================================================
+MP,EX,1,135000   $  MP,EY,1,9000    $  MP,EZ,1,9000
+MP,PRXY,1,0.3    $  MP,PRYZ,1,0.4   $  MP,PRXZ,1,0.3
+MP,GXY,1,5000    $  MP,GYZ,1,3500   $  MP,GXZ,1,5000
+MP,DENS,1,1.57e-9
+
+! failure limits, stress form: Xt Xc Yt Yc Zt Zc then Sxy Syz Sxz
+TB,FCLI,1,,,S
+TBDATA,1,2200,-1400,60,-200,60,-200
+TBDATA,7,90,90,60
+
+!==============================================================================
+! SECTION  (layup)   SECDATA = thickness, matid, angle, integration points
+!==============================================================================
+SECTYPE,1,SHELL,,QI
+SECDATA,0.125,1,  0.0,3
+SECDATA,0.125,1, 45.0,3
+SECDATA,0.125,1,-45.0,3
+SECDATA,0.125,1, 90.0,3
+SECOFFSET,MID
+
+!==============================================================================
+! MESH
+!==============================================================================
+ET,1,SHELL181
+KEYOPT,1,8,1                     ! store results for ALL layers, not just top/bottom
+
+N,1, 0.0, 0.0, 0.0
+N,2, 1.0, 0.0, 0.0
+N,3, 1.0, 1.0, 0.0
+N,4, 0.0, 1.0, 0.0
+
+TYPE,1  $  MAT,1  $  SECNUM,1
+E,1,2,3,4
+
+! ply angles are measured from the element coordinate system; ESYS pins it so a
+! curved part does not silently rotate the layup
+ESYS,0
+
+!==============================================================================
+! BOUNDARY CONDITIONS  (membrane only + pulled edge)
+!==============================================================================
+NSEL,S,LOC,X,0.0  $  D,ALL,UX,0.0
+NSEL,S,LOC,Y,0.0  $  D,ALL,UY,0.0
+NSEL,ALL          $  D,ALL,UZ,0.0  $  D,ALL,ROTX,0.0  $  D,ALL,ROTY,0.0  $  D,ALL,ROTZ,0.0
+NSEL,S,LOC,X,1.0  $  D,ALL,UX,0.005
+NSEL,ALL
+FINISH
+
+!==============================================================================
+! SOLVE
+!==============================================================================
+/SOLU
+ANTYPE,STATIC
+NLGEOM,OFF
+OUTRES,ALL,ALL
+SOLVE
+FINISH
+
+!==============================================================================
+! CHECK
+!==============================================================================
+/POST1
+SET,LAST
+ESEL,S,ELEM,,1
+LAYER,1                          ! bottom ply (0 deg)
+ETABLE,S1_,S,X
+PRETAB,S1_                       ! expect ~674.9 MPa in the 0 deg ply
+LAYER,0                          ! whole-section average
+NSEL,S,LOC,X,1.0
+FSUM                             ! expect FX ~ 130.23 N
+NSEL,ALL
+FINISH

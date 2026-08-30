@@ -1,0 +1,91 @@
+$$------------------------------------------------------------------------------
+$$ Rubber single-element uniaxial tension  --  Altair OptiStruct
+$$
+$$   units : mm - N - tonne - s   (stress MPa, density 1.10-9)
+$$   model : 1 x 1 x 1 mm CHEXA, 1/8 symmetry, x-face pulled to u = 1.0 mm
+$$           (stretch lambda = 2, i.e. 100% engineering strain)
+$$   check : sigma_x ~= 4.7162 MPa, reaction on the pulled face ~= 2.3606 N
+$$
+$           The closed-form INCOMPRESSIBLE answer is 4.7250 MPa; these decks
+$           set K/G = 1000, and that 0.1% of volume change lowers it to 4.7162.
+$           J = 1.001048 at the end, so the section is 0.500524 mm2, not 0.5.
+$$   TWO OptiStruct-specific points, both from Altair's own nonlinear FEA book:
+$$     1. "MATHE materials are referenced by PLSOLID property, which is a
+$$        property dedicated exclusively for nonlinear hyperelastic materials."
+$$        So this deck uses PLSOLID, NOT PSOLID.
+$$     2. "Since it is a large displacement analysis, LGDISP card should be
+$$        activated (together with HASHASSM,YES)."
+$$
+$$   material : generalized Mooney-Rivlin, C10 = 0.6, C01 = 0.15 MPa,
+$$              K = 1500 MPa (K/G = 1000 with G0 = 2(C10+C01) = 1.5 MPa)
+$$
+$$   run   : optistruct rubber-1elem-optistruct.fem
+$$------------------------------------------------------------------------------
+$$ I/O Options
+SCREEN,OUT
+OUTPUT,H3D
+DISPLACEMENT(H3D) = ALL
+STRESS(H3D)       = ALL
+STRAIN(H3D)       = ALL
+SPCFORCE(H3D)     = ALL
+$$
+$$ Subcase Information
+SUBCASE 1
+  LABEL    = stretch to lambda = 2
+  ANALYSIS = NLSTAT
+  SPC      = 1
+  LOAD     = 2
+  NLPARM   = 10
+$$
+BEGIN BULK
+$
+PARAM,LGDISP,1
+PARAM,HASHASSM,YES
+$
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV
+NLPARM  10      50              AUTO    5       25      UPW
+$
+$$-----------------------------------------------------------------------------
+$$ MESH
+$$-----------------------------------------------------------------------------
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+$ hyperelastic solids use PLSOLID, not PSOLID
+$       PID     MID
+PLSOLID 1       1
+$
+$$-----------------------------------------------------------------------------
+$$ MATERIAL
+$$   MATHE line 1 : MID, Model, (blank), K, RHO, TEXP, TREF, GE
+$$   MATHE line 2 : C10, C01, D1, TAB1, TAB2, TAB3, TAB4, TABD
+$$   line 3       : C20, C11, C02, D2, NA, ND
+$$-----------------------------------------------------------------------------
+$       MID     MODEL           K       RHO
+MATHE   1       MOONEY          1500.   1.10-9
+$       C10     C01     D1
++       0.6     0.15
++                               NA      ND
++                               1       1
+$
+$$-----------------------------------------------------------------------------
+$$ BOUNDARY CONDITIONS   (1/8 symmetry + enforced displacement)
+$$-----------------------------------------------------------------------------
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+SPC1    1       1       2       3       6       7
+$
+SPCD    2       2       1       1.0     3       1       1.0
+SPCD    2       6       1       1.0     7       1       1.0
+$
+ENDDATA

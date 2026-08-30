@@ -1,0 +1,72 @@
+$$------------------------------------------------------------------------------
+$$ Quasi-isotropic laminate, single shell element  --  Altair OptiStruct
+$$
+$$   units : mm - N - tonne - s   (stress MPa, density 1.57-9)
+$$   model : 1 x 1 mm CQUAD4, 4 plies [0/45/-45/90] x 0.125 mm = 0.5 mm
+$$           membrane only (all rotations and uz fixed), pulled to ux = 0.005 mm
+$$   check : laminate average sigma_x ~= 260.45 MPa, edge reaction ~= 130.23 N
+$$           (CLT: E_eff = 52090.3 MPa, nu_eff = 0.30686)
+$$
+$$   Linear static -- the laminate is elastic at 0.5% strain, so the answer is a
+$$   closed-form check.  Bulk data is Nastran-compatible; only the I/O section
+$$   and the H3D output requests are OptiStruct-specific.
+$$
+$$   MAT8 carries the allowables (Xt Xc Yt Yc S) and PCOMP's FT selects the
+$$   criterion.  Both are needed: allowables without FT, or FT without
+$$   allowables, silently produces no failure index.
+$$------------------------------------------------------------------------------
+$$ I/O Options
+SCREEN,OUT
+OUTPUT,H3D
+DISPLACEMENT(H3D) = ALL
+STRESS(H3D)       = ALL
+STRAIN(H3D)       = ALL
+FORCE(H3D)        = ALL
+SPCFORCE(H3D)     = ALL
+CSTRESS(H3D)      = ALL
+$$
+$$ Subcase Information
+SUBCASE 1
+  LABEL    = pull to eps_x = 0.5 percent
+  ANALYSIS = STATICS
+  SPC      = 1
+  LOAD     = 2
+$$
+BEGIN BULK
+$
+$$-----------------------------------------------------------------------------
+$$ MESH
+$$-----------------------------------------------------------------------------
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+$
+$       EID     PID     G1      G2      G3      G4      THETA
+CQUAD4  1       100     1       2       3       4       0.0
+$
+$$-----------------------------------------------------------------------------
+$$ LAMINATE      PCOMP  PID  Z0  NSM  SB  FT  TREF  GE  LAM
+$$-----------------------------------------------------------------------------
+PCOMP   100                     60.0    TSAI    20.0
++       1       0.125   0.0     YES     1       0.125   45.0    YES
++       1       0.125   -45.0   YES     1       0.125   90.0    YES
+$
+$$-----------------------------------------------------------------------------
+$$ PLY MATERIAL  MAT8  MID  E1  E2  NU12  G12  G1Z  G2Z  RHO
+$$                     A1  A2  TREF  Xt  Xc  Yt  Yc  S
+$$-----------------------------------------------------------------------------
+MAT8    1       135000. 9000.   0.3     5000.   5000.   3500.   1.57-9
++       -0.5-6  28.0-6  20.0    2200.   1400.   60.0    200.0   90.0
+$
+$$-----------------------------------------------------------------------------
+$$ BOUNDARY CONDITIONS   (membrane only + enforced displacement)
+$$-----------------------------------------------------------------------------
+SPC1    1       1       1       4
+SPC1    1       2       1       2
+SPC1    1       3456    1       2       3       4
+SPC1    1       1       2       3
+$
+SPCD    2       2       1       0.005   3       1       0.005
+$
+ENDDATA

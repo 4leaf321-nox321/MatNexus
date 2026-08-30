@@ -1,0 +1,397 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>앱이 다루는 물성</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+
+/* ---------- matrix ---------- */
+.mx table{min-width:56rem}
+.mx th.c,.mx td.c{text-align:center;width:3rem;padding-left:.25rem;padding-right:.25rem}
+.mx td.c{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);font-weight:600}
+.mx td:first-child{min-width:14rem}
+.mx tbody tr.grp td{background:var(--sunk);font-family:"IBM Plex Mono",monospace;
+  font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  padding-top:.75rem;padding-bottom:.45rem}
+.mx td.vd{white-space:nowrap;font-weight:600;font-size:.82rem}
+.mx td.vd.y{color:var(--accent-ink)}
+.mx td.vd.m{color:var(--cold)}
+.mx td.vd.no{color:var(--hot)}
+</style></head><body>
+<header class="mast">
+  <div class="eyebrow">핸드북 · 측정 범위</div>
+  <h1>지금 이 앱이<br>다루는 물성</h1>
+  <p class="dek">MatNexus 가 <strong>담고 · 처리하고 · 맞추고 · 카드로 만들고 · 덱으로 내보내는</strong> 다섯 단계 각각에서, 어떤 물성이 끝까지 가고 어디서 끊기는지 적었습니다. <strong>「장비로 잴 수 있나」와는 다른 축</strong>입니다 — 잰 값이 있어도 앱이 그 자리를 아직 안 가지고 있으면 못 갑니다.</p>
+  <div class="mast-meta">
+    <div><b>기준</b> 코드에 실제로 등록된 것만</div>
+    <div><b>등록 현황</b> 처리 16 · 묶음 1 · 식 8 · 카드 블록 6 · 렌더러 6</div>
+    <div><b>갱신</b> 2026-08-30</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 다섯 단계</a>
+    <a href="#s1"><span>01</span> 물성별 대응표</a>
+    <a href="#s2"><span>02</span> 지금 등록된 것 전부</a>
+    <a href="#s3"><span>03</span> 어디서 끊기나</a>
+    <a href="#s4"><span>04</span> 늘리려면 무엇을 하나</a>
+  </nav>
+</header>
+
+<main>
+
+<section id="s0">
+  <h2><span class="num">00 / 구조</span>다섯 단계</h2>
+  <p class="lede">물성 하나가 해석에 쓰이려면 <strong>다섯 자리를 모두 지나야</strong> 합니다. 한 자리라도 비면 그 물성은 앱 안에서 끝까지 못 갑니다 — 그래서 표의 마지막 열은 <strong>앞의 다섯 칸이 다 찼는가</strong>입니다.</p>
+
+  <div class="eq">담기 ──→ 처리 ──→ 피팅·묶음 ──→ 카드 ──→ 내보내기
+ │        │         │           │         │
+ 시험     곡선을     식을        해석에     솔버 덱
+ 종류가   물성으로   맞춘다      쓸 값의    글자로
+ 받는다   바꾼다     (선택)      한 벌      찍는다</div>
+
+  <div class="tw"><table>
+    <thead><tr><th>단계</th><th>무엇이 정하나</th><th>지금</th></tr></thead>
+    <tbody>
+      <tr><td><b>담기</b></td><td>시험 종류 — 처리가 어느 종류에 붙는지</td><td class="k">tensile · dma_sweep</td></tr>
+      <tr><td><b>처리</b></td><td><code>@register(kind="processing")</code></td><td class="k">16개</td></tr>
+      <tr><td><b>피팅 · 묶음</b></td><td><code>register_family</code> · <code>kind="grouping"</code></td><td class="k">식 8 · 묶음 1</td></tr>
+      <tr><td><b>카드</b></td><td><code>register_block</code> — 덱에 실릴 값의 자리</td><td class="k">6개 블록</td></tr>
+      <tr><td><b>내보내기</b></td><td><code>register_renderer</code> · <strong>덱 템플릿(파일)</strong></td><td class="k">렌더러 6 + 템플릿</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>병목은 이제 솔버가 아니라 물성이다</h4>
+    <p>ADR 0023 이 들어오면서 <strong>덱을 파일 정의로 만들 수 있게</strong> 됐습니다 — 새 솔버를 붙이는 데 코드 배포가 필요 없습니다. 그래서 <strong>「LS-DYNA 를 지원하나」는 이제 중요한 질문이 아닙니다.</strong> 정말 막는 것은 <strong>카드 블록에 그 물성의 자리가 있는가</strong>입니다.</p>
+    <p>템플릿이 감당하는 것은 <strong>조판</strong>(키워드 이름·차례·칸 폭·정렬)까지입니다. 계산이 필요하면 그것은 새 솔버가 아니라 <strong>새 물성</strong>이고, <code>register_block</code>·<code>register_family</code> 로 갑니다.</p>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 표</span>물성별 대응표</h2>
+  <p class="lede">가로로 넘칩니다 — 좁은 화면에서는 표 안에서 옆으로 밉니다. <strong>—</strong> 는 그 단계가 필요 없다는 뜻, <strong>없음</strong> 은 그 자리가 아직 비었다는 뜻입니다.</p>
+
+  <div class="tw wide mx"><table>
+    <thead><tr>
+      <th>물성</th><th>담기</th><th>처리</th><th>피팅 · 묶음</th><th>카드</th><th>내보내기</th><th>지금</th>
+    </tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="7">끝까지 간다</td></tr>
+      <tr><td>탄성계수 · 푸아송비 · 밀도</td>
+        <td>인장</td><td class="k">tensile.elastic_modulus</td><td>—</td>
+        <td class="k">elastic</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
+      <tr><td>진응력 – 진소성변형률 곡선</td>
+        <td>인장</td><td class="k">engineering · toe · true_plastic</td><td>—</td>
+        <td class="k">table</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
+      <tr><td>경화식 (금속)</td>
+        <td>인장</td><td class="k">true_plastic</td><td>Voce · Swift · Hockett-Sherby · <b>Ghosh</b></td>
+        <td class="k">hardening</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
+      <tr><td>네킹 이후 외삽</td>
+        <td>인장</td><td class="k">necking_candidate</td><td>경화식으로 잇는다</td>
+        <td class="k">table (외삽 구간 기록)</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
+
+      <tr class="grp"><td colspan="7">일부만 간다</td></tr>
+      <tr><td>초탄성 (고무)</td>
+        <td>인장</td><td class="k">engineering</td><td>Neo-Hookean · Mooney-Rivlin · Yeoh · Ogden 1항</td>
+        <td class="k">hyperelastic</td><td><b>Abaqus 만</b></td><td class="vd m">◐ 솔버 하나</td></tr>
+      <tr><td>Prony 점탄성</td>
+        <td>DMA 스윕</td><td class="k">derived · frequency · to_shear · lve_modulus</td><td class="k">viscoelastic.prony_group</td>
+        <td class="k">viscoelastic</td><td><b>Abaqus 만</b></td><td class="vd m">◐ 솔버 하나</td></tr>
+      <tr><td>온도 의존 탄성</td>
+        <td>온도별 인장</td><td class="k">elastic_modulus</td><td>—</td>
+        <td class="k">elastic (온도별 표)</td><td>Abaqus</td><td class="vd m">◐ 표를 채우면</td></tr>
+      <tr><td>열팽창 · 비열 · 열전도도</td>
+        <td><b>손입력</b> (기준정보 선언 물성)</td><td>—</td><td>—</td>
+        <td class="k">thermal</td><td>Abaqus · OpenRadioss</td><td class="vd m">◐ 시험에서 안 나옴</td></tr>
+      <tr><td>항복강도 · 인장강도 · 연신율</td>
+        <td>인장</td><td class="k">proof_stress · strength</td><td>—</td>
+        <td><b>없음</b> — 요약값으로만 남음</td><td>—</td><td class="vd m">◐ 값만 나옴</td></tr>
+      <tr><td>유리전이온도 Tg</td>
+        <td>DMA 스윕</td><td class="k">glass_transition</td><td>—</td>
+        <td><b>없음</b></td><td>—</td><td class="vd m">◐ 값만 나옴</td></tr>
+
+      <tr class="grp"><td colspan="7">아직 못 간다</td></tr>
+      <tr><td>온도 의존 소성 (경화곡선 × 온도)</td>
+        <td>온도별 인장</td><td class="k">true_plastic</td><td>—</td>
+        <td><b>표에 온도축 없음</b></td><td>—</td><td class="vd no">○ 카드가 막음</td></tr>
+      <tr><td>속도 의존 소성</td>
+        <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
+        <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
+      <tr><td>크리프</td>
+        <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
+        <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
+      <tr><td>복합재 직교이방 · 파손</td>
+        <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
+        <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
+      <tr><td>폼 (압축 · 이력)</td>
+        <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
+        <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
+      <tr><td>손상 · 파단 기준</td>
+        <td>인장</td><td><b>없음</b></td><td><b>없음</b></td>
+        <td><b>없음</b></td><td>—</td><td class="vd no">○ 처리부터</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="tw"><table>
+    <thead><tr><th>판정</th><th class="n">개수</th><th>뜻</th></tr></thead>
+    <tbody>
+      <tr><td class="vd y">● 됨</td><td class="n">4</td><td>담기부터 덱까지 끊기는 곳이 없습니다</td></tr>
+      <tr><td class="vd m">◐ 일부</td><td class="n">6</td><td>값은 나오는데 <strong>솔버가 하나뿐</strong>이거나 <strong>카드 자리가 없</strong>습니다</td></tr>
+      <tr><td class="vd no">○ 아직</td><td class="n">6</td><td>담기·처리 단계부터 비어 있습니다</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 목록</span>지금 등록된 것 전부</h2>
+  <p class="lede">코드에서 그대로 뽑은 목록입니다. <strong>이 목록에 없으면 앱 안에 없습니다.</strong></p>
+
+  <h3>처리 — 16개</h3>
+  <div class="tw"><table>
+    <thead><tr><th>붙는 시험</th><th class="n">개수</th><th>목록</th></tr></thead>
+    <tbody>
+      <tr><td><b>인장</b></td><td class="n">7</td><td class="k">engineering · toe_compensation · elastic_modulus · proof_stress · strength · necking_candidate · true_plastic</td></tr>
+      <tr><td><b>DMA 스윕</b></td><td class="n">5</td><td class="k">derived (tan δ · 복소 탄성률) · frequency · lve_modulus · to_shear (E → G) · glass_transition</td></tr>
+      <tr><td><b>공통 (곡선)</b></td><td class="n">4</td><td class="k">sort_unique · crop · smooth · resample</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>피팅 식 — 8개 (+ 묶음 1)</h3>
+  <div class="tw"><table>
+    <thead><tr><th>대상</th><th>식</th><th>비고</th></tr></thead>
+    <tbody>
+      <tr><td><b>금속 경화</b></td><td class="k">Voce · Swift · Hockett-Sherby · Ghosh</td><td>Ghosh 는 <strong>확장 폴더 하나로 붙은</strong> 첫 사례입니다</td></tr>
+      <tr><td><b>초탄성</b></td><td class="k">Neo-Hookean · Mooney-Rivlin · Yeoh · Ogden (1항)</td><td>Rubber · Elastomer · Polymer 에 적용</td></tr>
+      <tr><td><b>묶음</b></td><td class="k">viscoelastic.prony_group</td><td>여러 온도 스윕을 <strong>한 번에</strong> 맞춥니다 (마스터커브)</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>카드 블록 — 6개</h3>
+  <div class="tw"><table>
+    <thead><tr><th>블록</th><th>담는 값</th></tr></thead>
+    <tbody>
+      <tr><td class="k">elastic</td><td>탄성계수 · 푸아송비 · 밀도 (온도별 표 가능)</td></tr>
+      <tr><td class="k">hardening</td><td>맞춘 식과 그 잔차 · 유효 변형률 구간</td></tr>
+      <tr><td class="k">table</td><td>소성 표 — 출처 · 실측 끝 · 외삽 끝 · 이음 간격</td></tr>
+      <tr><td class="k">viscoelastic</td><td>Prony — 평형/순간 탄성률 · 기준 온도 · RMSE · BIC</td></tr>
+      <tr><td class="k">hyperelastic</td><td>초탄성 상수 · 전단탄성률 · 잔차 · 구간</td></tr>
+      <tr><td class="k">thermal</td><td>열팽창 · 비열 · 열전도도 · 기준 온도</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>내보내기 — 렌더러 6개 + 덱 템플릿</h3>
+  <div class="tw"><table>
+    <thead><tr><th>형식</th><th>요구하는 블록</th></tr></thead>
+    <tbody>
+      <tr><td class="k">abaqus</td><td>elastic · thermal · table</td></tr>
+      <tr><td class="k">abaqus_hyperelastic</td><td>hyperelastic · elastic · thermal</td></tr>
+      <tr><td class="k">abaqus_viscoelastic</td><td>elastic · thermal · viscoelastic</td></tr>
+      <tr><td class="k">openradioss</td><td>elastic · table</td></tr>
+      <tr><td class="k">openradioss_thermal</td><td>elastic · thermal</td></tr>
+      <tr><td class="k">json</td><td>없음 — 중립 형식</td></tr>
+      <tr><td><b>덱 템플릿</b></td><td>파일로 정의 — <strong>배포 없이 새 솔버</strong>. 자유 형식 · 고정 8 / 10 / 20칸을 다 냅니다</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 경계</span>어디서 끊기나</h2>
+  <p class="lede">◐ 여섯과 ○ 여섯은 <strong>끊기는 자리가 서로 다릅니다.</strong> 그 자리가 곧 다음에 할 일의 크기입니다.</p>
+
+  <h3>1. 솔버가 하나뿐 — 초탄성 · 점탄성</h3>
+  <p>둘 다 <strong>담기부터 카드까지는 다 됩니다.</strong> Abaqus 렌더러만 있어서 거기서 멈춥니다. 그런데 이것은 <strong>덱 템플릿으로 풀리는 종류</strong>입니다 — 코드가 아니라 파일 하나를 더 쓰면 됩니다.</p>
+
+  <h3>2. 카드 자리가 없다 — 항복강도 · 인장강도 · 연신율 · Tg</h3>
+  <p>처리가 값을 잘 냅니다. 다만 그 값이 <strong>덱에 실리는 자리가 없</strong>어서 요약값으로만 남습니다. 통계·비교에는 이미 쓰이지만 해석으로는 안 갑니다.</p>
+  <div class="note">
+    <p>이건 <strong>빠뜨린 것이 아닐 수 있습니다.</strong> 항복강도는 소성 표가 이미 담고 있고(표의 첫 점), Tg 는 Prony 카드의 기준 온도로 들어갑니다. <strong>한 자리는 한 블록이 채운다</strong>는 규칙 때문에 일부러 안 넣은 것에 가깝습니다 — 둘이 채우면 어느 값이 덱에 실렸는지 알 수 없어집니다.</p>
+  </div>
+
+  <h3>3. 카드가 막는다 — 온도 의존 소성</h3>
+  <p><strong>탄성은 온도별 표가 됩니다.</strong> <code>*ELASTIC</code> 이 온도 열을 받고, 빈 칸이 있으면 덱을 안 내고 멈춥니다(이웃 값으로 메우지 않습니다). 그런데 <strong>소성 표에는 온도 축이 없습니다</strong> — (변형률, 응력) 두 열뿐입니다.</p>
+  <p>담기와 처리는 이미 됩니다. 온도별로 인장을 담아 각각 처리하면 곡선이 여럿 나옵니다. <strong>그 여럿을 한 카드에 묶는 자리가 없</strong>는 것이 전부입니다.</p>
+
+  <h3>4. 시험이 없다 — 속도 · 크리프 · 복합재 · 폼</h3>
+  <p>담기 단계부터 비어 있습니다. 처리 플러그인이 <code>tensile</code> 과 <code>dma_sweep</code> 에만 붙어 있어서, 다른 종류의 곡선은 담겨도 그 위에서 할 일이 없습니다.</p>
+  <div class="note trap">
+    <h4>이것이 「하나만 만들면 되는」 일이 아니다</h4>
+    <p>예컨대 폼 하나를 끝까지 보내려면 <strong>다섯 자리를 다 만들어야</strong> 합니다 — 압축 시험 종류 · 압축 곡선 처리 · (선택) 식 · 폼 카드 블록 · 덱 템플릿. 반대로 <strong>온도 의존 소성은 카드 하나</strong>면 열립니다. <strong>같은 ○ 라도 거리가 다릅니다.</strong></p>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 확장</span>늘리려면 무엇을 하나</h2>
+  <p class="lede">가까운 것부터 적었습니다. 앞의 둘은 <strong>중심 코드를 안 건드리고</strong> 됩니다.</p>
+
+  <ol class="steps">
+    <li><b>덱 템플릿을 쓴다 — 파일 하나</b>
+      <p>초탄성·점탄성을 Abaqus 밖으로 내보내는 일, LS-DYNA·OptiStruct·Radioss 를 붙이는 일이 여기 듭니다. <strong>배포가 필요 없</strong>고, 칸 폭(8·10·20칸)까지 템플릿이 냅니다.</p>
+    </li>
+    <li><b>확장 폴더를 만든다 — 파일 두세 개</b>
+      <p>새 경화식·새 초탄성 식은 <code>extensions/&lt;이름&gt;/</code> 하나로 끝납니다. <strong>Ghosh 가 그 증거</strong>입니다 — 중심 코드를 한 줄도 안 고치고 붙었습니다.</p>
+    </li>
+    <li><b>카드 블록을 더한다 — 중심 코드</b>
+      <p>온도 의존 소성, 속도 의존 계수, 크리프 상수처럼 <strong>덱에 새 자리가 필요한</strong> 것. 블록 하나가 무엇을 담는지 정하는 일이라 신중해야 합니다 — <strong>한 자리는 한 블록이 채웁니다.</strong></p>
+    </li>
+    <li><b>시험 종류와 처리를 더한다 — 가장 큰 일</b>
+      <p>압축·크리프·복합재처럼 <strong>담기부터 없는</strong> 것. 장비 파일을 읽는 규칙(형식 프로필)까지 딸려 옵니다.</p>
+    </li>
+  </ol>
+
+  <div class="note">
+    <h4>다른 표와 함께 본다</h4>
+    <p>이 표는 <strong>앱이 무엇을 다루나</strong>이고, 「물성 × 장비 대응표」는 <strong>장비로 무엇을 재나</strong>입니다. 둘을 겹치면 우선순위가 나옵니다 — <strong>잴 수 있는데 앱이 못 받는 것</strong>이 가장 아까운 자리입니다.</p>
+    <p>지금 그 자리에 있는 것: <strong>온도 의존 소성</strong>(온도챔버가 있으면 잴 수 있고, 카드 하나면 열립니다)과 <strong>폼 압축</strong>(고속 압축기가 있으면 잴 수 있으나 다섯 자리가 다 비었습니다).</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  핸드북 · 측정 범위 — 앱이 다루는 물성 16항목 × 5단계 · 2026-08-30
+</footer>
+
+</body></html>

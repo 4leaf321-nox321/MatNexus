@@ -1,0 +1,101 @@
+!------------------------------------------------------------------------------
+! Secondary (Norton) creep, single element, constant load  --  Ansys Mechanical APDL
+!
+!   units : mm - N - tonne - s   (stress MPa)
+!   model : 1 x 1 x 1 mm hex, 1/8 symmetry, 100 N pulled on the x=1 face
+!           -> sigma_x = 100 MPa held for 1000 s
+!   law   : Norton   eps_dot_cr = A * sigma^n ,  A = 1e-15, n = 5
+!   check : creep strain after 1000 s = 0.01000, total ux = 0.0104762 mm
+!
+!   TB,CREEP TBOPT=2 is the TIME HARDENING form:
+!       eps_dot_cr = C1 * sigma^C2 * t^C3 * exp(-C4/T)
+!   C3 = 0 removes the time term and leaves Norton; C4 = 0 removes the
+!   Arrhenius term.  If C4 is nonzero, T must be an ABSOLUTE temperature --
+!   a model set up in Celsius silently gets the wrong activation term.
+!
+!   RATE,OFF / RATE,ON is what switches implicit creep off and on.  Step 1
+!   applies the load with creep OFF so the elastic solution is clean; step 2
+!   holds the load with creep ON.
+!
+!   run   : ansys -b -i creep-1elem-ansys.dat -o out.txt
+!------------------------------------------------------------------------------
+FINISH
+/CLEAR,NOSTART
+/TITLE, Norton creep 1-element, constant 100 MPa (mm-N-tonne-s)
+/UNITS,MPA
+/PREP7
+
+!==============================================================================
+! MATERIAL
+!==============================================================================
+MP,EX,1,210000
+MP,PRXY,1,0.3
+MP,DENS,1,7.85e-9
+
+TB,CREEP,1,,,2                  ! TBOPT = 2 : time hardening
+TBDATA,1,1.0e-15,5.0,0.0,0.0     ! C1, C2, C3, C4
+
+!==============================================================================
+! MESH
+!==============================================================================
+ET,1,SOLID185
+KEYOPT,1,2,2                     ! enhanced strain
+
+N,1, 0.0, 0.0, 0.0
+N,2, 1.0, 0.0, 0.0
+N,3, 1.0, 1.0, 0.0
+N,4, 0.0, 1.0, 0.0
+N,5, 0.0, 0.0, 1.0
+N,6, 1.0, 0.0, 1.0
+N,7, 1.0, 1.0, 1.0
+N,8, 0.0, 1.0, 1.0
+
+TYPE,1  $  MAT,1
+E,1,2,3,4,5,6,7,8
+
+!==============================================================================
+! BOUNDARY CONDITIONS AND LOAD
+!==============================================================================
+NSEL,S,LOC,X,0.0  $  D,ALL,UX,0.0
+NSEL,S,LOC,Y,0.0  $  D,ALL,UY,0.0
+NSEL,S,LOC,Z,0.0  $  D,ALL,UZ,0.0
+NSEL,S,LOC,X,1.0  $  F,ALL,FX,25.0     ! 4 nodes x 25 N = 100 N on 1 mm2
+NSEL,ALL
+FINISH
+
+!==============================================================================
+! SOLVE
+!==============================================================================
+/SOLU
+ANTYPE,STATIC
+NLGEOM,OFF
+OUTRES,ALL,ALL
+
+! ---- step 1 : load applied, creep OFF -------------------------------------
+RATE,OFF
+TIME,1.0
+NSUBST,1
+SOLVE
+
+! ---- step 2 : hold 1000 s, creep ON ---------------------------------------
+RATE,ON
+TIME,1001.0
+NSUBST,100,1000,20
+SOLVE
+FINISH
+
+!==============================================================================
+! CHECK
+!==============================================================================
+/POST1
+SET,LAST
+ESEL,S,ELEM,,1
+ETABLE,SX_,S,X
+ETABLE,CREQ_,NL,CREQ            ! equivalent creep strain
+PRETAB,SX_,CREQ_                ! expect SX ~ 100 MPa, CREQ ~ 0.01
+NSEL,S,LOC,X,1.0
+PRNSOL,U,X                      ! expect UX ~ 0.0104762 mm
+NSEL,S,LOC,X,0.0
+FSUM                            ! expect FX ~ -100 N (balances the applied load)
+NSEL,ALL
+FINISH

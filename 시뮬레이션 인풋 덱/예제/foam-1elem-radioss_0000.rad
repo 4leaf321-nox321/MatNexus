@@ -1,0 +1,154 @@
+#RADIOSS STARTER
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+# Crushable foam, single-element COMPRESSION  --  Radioss / OpenRadioss
+#
+#   units : Mg - mm - s   (force N, stress MPa, density 6.0e-11)
+#   model : 1 x 1 x 1 mm brick, 1/8 symmetry, x-face pushed to u = -0.3 mm
+#           (30% engineering compression)
+#   check : sig_x ~= -0.55 MPa, reaction on the pushed face ~= 0.55 N
+#
+#   material : /MAT/LAW70 (FOAM_TAB), tabulated visco-elastic foam.
+#     Altair states the tabulated curve is ENGINEERING stress versus
+#     ENGINEERING strain and that "all curves need to be defined as positive
+#     abscissa and ordinate" -- so compression is entered POSITIVE, and the
+#     numbers are exactly the same as the LS-DYNA *MAT_063 curve.
+#     LAW70 unloads through a separate function (NuL), so unlike *MAT_063 it
+#     can carry hysteresis; here NuL = 0, i.e. elastic unloading, to keep the
+#     two decks comparable.
+#
+#   CONFIDENCE NOTE: the line grouping of the LAW70 parameter block could not
+#   be checked against a real model (OpenRadioss' public examples have no foam
+#   case).  Field ORDER follows the reference page; read _0000.out first.
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/BEGIN
+foam-1elem-radioss
+      2022         0
+                  Mg                  mm                   s
+                  Mg                  mm                   s
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/TITLE
+Crushable foam one brick, uniaxial compression
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  NODES
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/NODE
+#  node_ID                   X                   Y                   Z
+         1                 0.0                 0.0                 0.0
+         2                 1.0                 0.0                 0.0
+         3                 1.0                 1.0                 0.0
+         4                 0.0                 1.0                 0.0
+         5                 0.0                 0.0                 1.0
+         6                 1.0                 0.0                 1.0
+         7                 1.0                 1.0                 1.0
+         8                 0.0                 1.0                 1.0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  MATERIAL
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/MAT/LAW70/1
+EPP-like foam  60 kg/m3   E0=50 MPa
+#              RHO_I
+             6.0E-11
+#                 E0                  Nu                Emax             Eps_max     Itens
+                  50                 0.0
+#               Fcut  Fsmooth        NL       NuL     Iflag               Shape                 Hys
+                              1         0         0
+#  fct_IDL             Eps_rate              FscaleL
+       300                                       1.0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  FUNCTIONS
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+# foam crush curve: ENGINEERING stress vs ENGINEERING strain, compression POSITIVE
+/FUNCT/300
+foam crush curve
+#                  X                   Y
+                 0.0                0.35
+                0.05                0.38
+                0.10                0.42
+                0.30                0.55
+                0.50                0.90
+                0.70                3.00
+#
+# crush ramp: 0 -> -0.3 mm over 0.01 s
+/FUNCT/200
+crush ramp
+#                  X                   Y
+                 0.0                 0.0
+                0.01                -0.3
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  PROPERTY
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/PROP/SOLID/1
+one brick, foam
+#   Isolid    Ismstr               Icpre               Inpts      Irot    Iframe                  dn
+        24         4                   0                   0         0         0                   0
+#                q_a                 q_b                   h            LAMBDA_V                MU_V
+                   0                   0                   0                   0                   0
+#             dt_min   istrain      IHKT
+                   0         1         0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  PART AND ELEMENT
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/PART/1
+one brick, foam
+#  prop_ID    mat_ID subset_ID
+         1         1         0
+/BRICK/1
+# brick_ID     node1     node2     node3     node4     node5     node6     node7     node8
+         1         1         2         3         4         5         6         7         8
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  NODE GROUPS
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/GRNOD/NODE/1
+x = 0 face
+         1         4         5         8
+/GRNOD/NODE/2
+y = 0 face
+         1         2         5         6
+/GRNOD/NODE/3
+z = 0 face
+         1         2         3         4
+/GRNOD/NODE/4
+x = 1 face (pushed)
+         2         3         6         7
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  BOUNDARY CONDITIONS
+#   Trarot = TX TY TZ  wX wY wZ, six codes right justified in the 10-char field
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/BCS/1
+x symmetry
+#  Tra rot   skew_ID  grnod_ID
+   100 000         0         1
+/BCS/2
+y symmetry
+#  Tra rot   skew_ID  grnod_ID
+   010 000         0         2
+/BCS/3
+z symmetry
+#  Tra rot   skew_ID  grnod_ID
+   001 000         0         3
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  IMPOSED DISPLACEMENT
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/IMPDISP/1
+crush x face to -0.3 mm
+#   Ifunct       DIR     Iskew   Isensor   Gnod_id     Frame     Icoor
+       200         X         0         0         4         0         0
+#            Scale_x             Scale_y              Tstart               Tstop
+                   0                   0                   0                   0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  TIME HISTORY
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/TH/BRIC/1
+brick history
+#     var1      var2      var3      var4      var5      var6      var7      var8      var9     var10
+DEF
+#     Elid                                                      Elname
+         1          foam
+/TH/NODE/2
+pushed node history
+#     var1      var2      var3      var4      var5      var6      var7      var8      var9     var10
+DEF       REACX
+#   Nodeid   skew_ID                                           Nodename
+         2                    pushed
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/END

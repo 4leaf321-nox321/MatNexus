@@ -1,0 +1,87 @@
+!------------------------------------------------------------------------------
+! DP600 single-element uniaxial tension  --  Ansys Mechanical APDL
+!
+!   units : mm - N - tonne - s   (stress MPa, density 7.85e-9)
+!           APDL has no unit system of its own here -- the numbers below ARE
+!           the unit system.  /UNITS only tags the database, it converts nothing.
+!   model : 1 x 1 x 1 mm hex, 1/8 symmetry, x-face pulled to u = 0.5 mm
+!   check : SX ~= 700 MPa at the end (see README.md)
+!
+!   run   : ansys -b -i dp600-1elem-ansys.dat -o dp600-1elem-ansys.out
+!------------------------------------------------------------------------------
+FINISH
+/CLEAR,NOSTART
+/TITLE, DP600 1-element tension (mm-N-tonne-s)
+/UNITS,MPA                       ! tag only -- mm, tonne, s, N, MPa
+/PREP7
+
+!==============================================================================
+! MATERIAL
+!==============================================================================
+MP,EX,1,210000
+MP,PRXY,1,0.3
+MP,DENS,1,7.85e-9
+
+! TB,PLASTIC + MISO takes (PLASTIC strain, true stress).
+! First point is (0, yield).  The older bare TB,MISO took TOTAL strain --
+! do not copy points between the two forms without converting.
+TB,PLASTIC,1,1,5,MISO
+TBPT,,0.000,350
+TBPT,,0.020,455
+TBPT,,0.100,560
+TBPT,,0.400,700
+TBPT,,1.000,790
+
+!==============================================================================
+! MESH
+!==============================================================================
+ET,1,SOLID185
+KEYOPT,1,2,2                     ! enhanced strain -- avoids shear/volumetric locking
+
+N,1, 0.0, 0.0, 0.0
+N,2, 1.0, 0.0, 0.0
+N,3, 1.0, 1.0, 0.0
+N,4, 0.0, 1.0, 0.0
+N,5, 0.0, 0.0, 1.0
+N,6, 1.0, 0.0, 1.0
+N,7, 1.0, 1.0, 1.0
+N,8, 0.0, 1.0, 1.0
+
+TYPE,1  $  MAT,1
+E,1,2,3,4,5,6,7,8
+
+!==============================================================================
+! BOUNDARY CONDITIONS  (1/8 symmetry + pulled face)
+!==============================================================================
+NSEL,S,LOC,X,0.0  $  D,ALL,UX,0.0
+NSEL,S,LOC,Y,0.0  $  D,ALL,UY,0.0
+NSEL,S,LOC,Z,0.0  $  D,ALL,UZ,0.0
+NSEL,S,LOC,X,1.0  $  D,ALL,UX,0.5
+NSEL,ALL
+FINISH
+
+!==============================================================================
+! SOLVE
+!==============================================================================
+/SOLU
+ANTYPE,STATIC
+NLGEOM,ON                        ! large deflection -- true stress/log strain
+NSUBST,50,500,20
+OUTRES,ALL,ALL
+AUTOTS,ON
+SOLVE
+FINISH
+
+!==============================================================================
+! CHECK
+!==============================================================================
+/POST1
+SET,LAST
+ESEL,S,ELEM,,1
+ETABLE,SX_,S,X
+ETABLE,EPEQ_,NL,EPEQ
+PRETAB,SX_,EPEQ_                 ! expect SX ~ 700.3 MPa, EPEQ ~ 0.4021
+NSEL,S,LOC,X,1.0
+FSUM                             ! expect FX ~ 467.50 N
+NSEL,ALL
+FINISH

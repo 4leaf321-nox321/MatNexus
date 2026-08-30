@@ -1,0 +1,537 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ansys Mechanical 물성 카드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">인풋 덱 · Ansys Mechanical</div>
+  <h1>Ansys Mechanical<br>물성 카드</h1>
+  <p class="dek">Workbench 의 Engineering Data 가 결국 무엇을 쓰는가 — <code>MP</code> 와 <code>TB</code> 두 계열의 APDL 명령, 그 인자 순서, 그리고 Command Snippet 으로 GUI 가 못 주는 물성을 넣는 법.</p>
+  <div class="mast-meta">
+    <div><b>솔버</b> Ansys Mechanical (Workbench) · Mechanical APDL</div>
+    <div><b>파일</b> ds.dat / .cdb / .mac (APDL 명령)</div>
+    <div><b>단위</b> 단위계를 인식하지만, 스니펫은 활성 단위계로 읽힌다</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> Engineering Data 아래에 있는 것</a>
+    <a href="#s1"><span>01</span> MP — 선형 물성</a>
+    <a href="#s2"><span>02</span> TB — 비선형 데이터 테이블</a>
+    <a href="#s3"><span>03</span> 소성</a>
+    <a href="#s4"><span>04</span> 속도 의존과 크리프</a>
+    <a href="#s5"><span>05</span> 초탄성과 점탄성</a>
+    <a href="#s6"><span>06</span> 이방성 · 복합재 · 손상</a>
+    <a href="#s7"><span>07</span> 단위계와 온도 의존</a>
+    <a href="#s8"><span>08</span> Command Snippet 으로 넣기</a>
+    <a href="#s9"><span>09</span> 완성된 스니펫</a>
+    <a href="#s10"><span>10</span> 자주 틀리는 지점</a>
+    <a href="#s11"><span>11</span> 출처</a>
+  </nav>
+</header>
+
+<main>
+<section id="s0">
+  <h2><span class="num">00 / 구조</span>Engineering Data 아래에 있는 것</h2>
+  <p class="lede">Workbench 에서 물성을 표로 채우면, Mechanical 은 그것을 <strong>APDL 명령 두 계열</strong>로 번역해 <code>ds.dat</code> 에 씁니다. 그 둘의 경계가 이 문서의 뼈대입니다.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>MP — 선형 · 상수형</h4>
+      <p>탄성계수, 포아송비, 밀도, 열팽창, 감쇠. <strong>한 번에 물성 하나.</strong></p>
+      <pre style="font-size:.78rem;padding:.7rem">MP,EX,1,210000
+MP,PRXY,1,0.3
+MP,DENS,1,7.85e-9</pre>
+    </div>
+    <div class="card">
+      <h4>TB — 비선형 · 표형</h4>
+      <p>소성, 초탄성, 점탄성, 크리프, 손상. <strong>표를 열고(TB) 값을 채운다(TBDATA/TBPT).</strong></p>
+      <pre style="font-size:.78rem;padding:.7rem">TB,PLASTIC,1,1,4,MISO
+TBPT,,0.000,350
+TBPT,,0.020,455</pre>
+    </div>
+  </div>
+  <p>재료의 정체성은 <strong>재료 번호(MAT ID)</strong> 하나입니다. 요소는 <code>MAT,1</code> 로 그 번호를 붙여 생성되고, 물성 명령의 두 번째(또는 세 번째) 인자가 그 번호입니다.</p>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / MP</span>선형 물성</h2>
+  <div class="eq">MP, Lab, MAT, C0, C1, C2, C3, C4
+       <span class="cm">값 = C0 + C1·T + C2·T² + C3·T³ + C4·T⁴</span></div>
+  <p><strong>C1~C4 를 쓰면 온도 다항식이 됩니다</strong> — 표를 만들지 않고 온도 의존을 주는 가벼운 방법입니다. 표로 주려면 <code>MPTEMP</code>/<code>MPDATA</code> 를 씁니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Lab</th><th>뜻</th><th>메모</th></tr></thead>
+    <tbody>
+      <tr><td class="k">EX, EY, EZ</td><td>탄성계수</td><td>등방이면 EX 만</td></tr>
+      <tr><td class="k">PRXY, PRYZ, PRXZ</td><td>주 포아송비 (major)</td><td><b>NUXY 와 다르다 — 아래 함정</b></td></tr>
+      <tr><td class="k">NUXY, NUYZ, NUXZ</td><td>부 포아송비 (minor)</td><td>등방에서는 PRXY = NUXY 로 같다</td></tr>
+      <tr><td class="k">GXY, GYZ, GXZ</td><td>전단계수</td><td>이방성에서 필수</td></tr>
+      <tr><td class="k">DENS</td><td>밀도</td><td>—</td></tr>
+      <tr><td class="k">ALPX, ALPY, ALPZ</td><td>순간 열팽창계수</td><td>CTEX 는 평균 기준, THSX 는 열변형률 표</td></tr>
+      <tr><td class="k">KXX, C, HF</td><td>열전도 · 비열 · 열전달계수</td><td>열해석</td></tr>
+      <tr><td class="k">DMPR</td><td>재료 감쇠비</td><td>BETD/ALPD 는 Rayleigh</td></tr>
+      <tr><td class="k">RSVX, PERX, MURX</td><td>비저항 · 유전율 · 투자율</td><td>전자기</td></tr>
+      <tr><td class="k">REFT</td><td>기준 온도</td><td>열변형의 기준</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap">
+    <h4>PRXY 와 NUXY 는 이방성에서 다른 값이다</h4>
+    <p>둘 다 “xy 포아송비” 로 읽히지만, PRXY 는 <em>major</em>(x 방향 인장 시 y 수축), NUXY 는 <em>minor</em> 입니다. 직교이방에서 <code>ν_xy/E_x = ν_yx/E_y</code> 이므로 <strong>E_x 와 E_y 가 10배 다르면 두 값도 10배 다릅니다.</strong> 등방 재료에서는 같아서 이 차이가 드러나지 않다가, 복합재로 넘어가는 순간 조용히 틀립니다.</p>
+  </div>
+  <p>구조해석에 <code>TB,ELASTIC</code> 을 쓸 수도 있습니다 — 조화해석에서 주파수 의존 탄성을 주려면 그쪽이 필요합니다.</p>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / TB</span>비선형 데이터 테이블</h2>
+  <div class="eq">TB, Lab, MATID, NTEMP, NPTS, TBOPT
+TBTEMP, T          <span class="cm">이 온도의 데이터를 시작</span>
+TBDATA, STLOC, C1, C2, C3, C4, C5, C6   <span class="cm">상수형</span>
+TBPT, oper, X, Y   <span class="cm">점 형(곡선)</span></div>
+  <div class="tw"><table>
+    <thead><tr><th>인자</th><th>뜻</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Lab</td><td>모델 계열 (PLASTIC · HYPER · PRONY · CREEP · CHABOCHE …)</td></tr>
+      <tr><td class="k">MATID</td><td>재료 번호</td></tr>
+      <tr><td class="k">NTEMP</td><td>온도 개수 (기본 1)</td></tr>
+      <tr><td class="k">NPTS</td><td>온도당 데이터 점(또는 상수) 개수</td></tr>
+      <tr><td class="k">TBOPT</td><td>같은 계열 안의 세부 모델 (MISO · KINH · NEOH · OGDEN …)</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>TBOPT 가 실제 모델을 고릅니다.</strong> 예컨대 <code>TB,HYPER</code> 는 “초탄성” 이라는 서랍일 뿐이고, Mooney–Rivlin 인지 Ogden 인지는 TBOPT 가 정합니다. 문서에서 모델을 찾을 때 Lab 만 보고 헤매는 일이 여기서 생깁니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Lab</th><th>담는 것</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ELASTIC · ANEL</td><td>탄성 · 이방 탄성(강성/유연 행렬)</td></tr>
+      <tr><td class="k">PLASTIC</td><td>소성 — TBOPT 로 MISO · KINH · BISO · BKIN · NLISO 등</td></tr>
+      <tr><td class="k">BISO · MISO · NLISO · BKIN · KINH · CHABOCHE</td><td>개별 경화 모델(구형 Lab, 지금도 유효)</td></tr>
+      <tr><td class="k">HILL</td><td>이방 항복 — 소성/크리프/점소성 위에 얹는다</td></tr>
+      <tr><td class="k">HYPER</td><td>초탄성 — Mooney-Rivlin(기본) · Neo-Hooke · Ogden · Yeoh · Gent · Arruda-Boyce · Blatz-Ko · 응답함수 등</td></tr>
+      <tr><td class="k">AHYPER</td><td>이방 초탄성 (섬유 보강 고무·연조직)</td></tr>
+      <tr><td class="k">PRONY</td><td>점탄성 Prony 급수</td></tr>
+      <tr><td class="k">CREEP</td><td>크리프 — 순수/등방경화/이동경화 조합</td></tr>
+      <tr><td class="k">RATE</td><td>속도 의존 소성 — Perzyna · Peirce · EVH · Anand</td></tr>
+      <tr><td class="k">GURSON</td><td>다공 금속</td></tr>
+      <tr><td class="k">EDP · DP · CONCR</td><td>확장 Drucker–Prager · 콘크리트</td></tr>
+      <tr><td class="k">CAST</td><td>주철 (인장/압축 비대칭)</td></tr>
+      <tr><td class="k">SMA</td><td>형상기억합금</td></tr>
+      <tr><td class="k">CZM</td><td>응집 영역 (접착·박리)</td></tr>
+      <tr><td class="k">CDM</td><td>Mullins 효과 (고무 연화)</td></tr>
+      <tr><td class="k">FCLI · DMGI · DMGE</td><td>복합재 파손 한계 · 손상 개시 · 손상 전개</td></tr>
+      <tr><td class="k">USER</td><td>USERMAT 서브루틴</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 소성</span>소성</h2>
+  <pre>! 다선형 등방경화 — 금속의 기본값
+MP,EX,1,210000
+MP,PRXY,1,0.3
+MP,DENS,1,7.85e-9
+TB,PLASTIC,1,1,4,MISO
+TBPT,,0.000,350        ! 첫 점은 (0, 항복응력)
+TBPT,,0.020,455
+TBPT,,0.100,560
+TBPT,,1.000,790</pre>
+  <div class="tw"><table>
+    <thead><tr><th>TBOPT</th><th>모델</th><th>넣는 값</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MISO</td><td>다선형 등방경화</td><td>(소성변형률, 진응력) 점들. 최대 100점</td></tr>
+      <tr><td class="k">BISO</td><td>이선형 등방경화</td><td>σ_y, 접선계수</td></tr>
+      <tr><td class="k">NLISO</td><td>Voce 또는 멱법칙</td><td>σ_y, R₀, R∞, b</td></tr>
+      <tr><td class="k">KINH</td><td>다선형 이동경화</td><td>(소성변형률, 응력) — 반복하중</td></tr>
+      <tr><td class="k">BKIN</td><td>이선형 이동경화</td><td>σ_y, 접선계수</td></tr>
+      <tr><td class="k">CHAB</td><td>Chaboche 비선형 이동경화</td><td>σ_y, C1, γ1, C2, γ2 … (쌍으로)</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>MISO 의 첫 점은 (0, σ_y) — 소성변형률 0 이다</h4>
+    <p>Ansys 문서가 “첫 점은 소성 변형의 시작, 즉 (0, 항복강도)” 라고 명시합니다. <strong>구형 <code>TB,MISO</code>(TB,PLASTIC 없이) 는 전체 변형률 기준이라 첫 점이 (σ_y/E, σ_y) 였습니다</strong> — 옛 매크로를 가져다 쓸 때 이 차이가 그대로 사고가 됩니다.</p>
+  </div>
+  <p>반복 하중(저주기 피로, 볼트 이완)이면 등방경화만으로는 안 됩니다. Chaboche(<code>TB,CHABOCHE</code>)에 등방 항(<code>TB,NLISO</code>)을 겹쳐 쓰는 것이 표준 조합이고, <strong>Ansys 는 같은 재료에 여러 TB 를 겹치는 방식으로 모델을 합성합니다.</strong></p>
+  <pre>TB,CHABOCHE,1,1,2      ! 항 2개
+TBDATA,1,350, 60000,500, 12000,80
+!         sy    C1    g1     C2    g2
+TB,NLISO,1,1,2,VOCE
+TBDATA,1,350,0,120,8   ! sy, R0, Rinf, b</pre>
+  <p>이방 항복이 필요하면 <code>TB,HILL</code> 을 <strong>소성 테이블과 함께</strong> 둡니다 — Hill 은 단독으로 서지 않고, 아래에 깔린 소성/크리프에 이방성을 입히는 층입니다.</p>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 속도</span>속도 의존과 크리프</h2>
+  <pre>! Perzyna 점소성 — 소성 위에 얹는다
+TB,PLASTIC,1,1,4,MISO
+TBPT,,0.000,350
+...
+TB,RATE,1,1,2,PERZYNA
+TBDATA,1,0.05,1.0      ! m, gamma</pre>
+  <div class="tw"><table>
+    <thead><tr><th>TBOPT</th><th>모델</th><th>쓰는 자리</th></tr></thead>
+    <tbody>
+      <tr><td class="k">PERZYNA</td><td>σ = σ_y[1+(ε̇_p/γ)^m]</td><td>중·고속</td></tr>
+      <tr><td class="k">PEIRCE</td><td>Perzyna 변형 — 수치적으로 더 안정</td><td>m 이 작을 때</td></tr>
+      <tr><td class="k">EVH</td><td>지수형 점성경화</td><td>—</td></tr>
+      <tr><td class="k">ANAND</td><td>Anand 점소성</td><td><b>땜납·저융점 합금 — 전자패키징의 표준</b></td></tr>
+    </tbody>
+  </table></div>
+  <p>크리프는 <code>TB,CREEP</code> 에 TBOPT 로 식 번호를 고릅니다 — 1~12 가 <strong>Norton, Bailey–Norton(시간경화/변형률경화), 지수형, Prandtl–Garofalo(sinh)</strong> 등입니다. 가장 흔한 것이 TBOPT=2(변형률 경화)와 TBOPT=10(Prandtl–Garofalo).</p>
+  <pre>TB,CREEP,1,1,4,2       ! 변형률 경화 Bailey-Norton
+TBDATA,1,C1,C2,C3,C4   ! eps_cr = C1*sigma^C2*eps^C3*exp(-C4/T)</pre>
+  <div class="note trap">
+    <h4>크리프 상수는 온도 단위에 붙어 있다</h4>
+    <p><code>exp(−C4/T)</code> 의 T 는 <strong>절대온도</strong>입니다. 모델의 온도가 섭씨로 설정돼 있으면 이 항이 완전히 틀립니다. Ansys 의 <code>TOFFST</code> 로 오프셋을 주거나 처음부터 켈빈으로 갑니다 — <b>결과가 그럴듯하게 나오면서 틀리는 대표적인 자리입니다.</b></p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 고무</span>초탄성과 점탄성</h2>
+  <pre>! 상수를 직접
+TB,HYPER,1,,2,MOONEY
+TBDATA,1,0.6,0.15,0.001    ! C10, C01, d
+
+! Ogden 3항
+TB,HYPER,1,,3,OGDEN
+TBDATA,1,mu1,a1,mu2,a2,mu3,a3
+
+! 시험 데이터를 주고 피팅
+TB,UNIAXIAL,1
+TBPT,,0.10,0.62
+TBPT,,0.30,1.14
+TB,BIAXIAL,1
+...
+TB,SHEAR,1                 ! = 평면 인장(순수 전단)
+...</pre>
+  <p>시험 데이터를 넣은 뒤 GUI(Engineering Data)의 <em>Curve Fitting</em> 이나 APDL 의 <code>TBFT</code> 명령으로 상수를 뽑습니다. <strong><code>TBFT</code> 는 피팅 결과를 재료에 자동으로 써 주므로 스크립트로 반복하기 좋습니다.</strong></p>
+  <div class="tw"><table>
+    <thead><tr><th>TBOPT</th><th>모델</th><th>메모</th></tr></thead>
+    <tbody>
+      <tr><td class="k">NEO</td><td>Neo-Hookean</td><td>상수 1개 + d</td></tr>
+      <tr><td class="k">MOONEY</td><td>Mooney–Rivlin</td><td>2 · 3 · 5 · 9항 (NPTS 로)</td></tr>
+      <tr><td class="k">OGDEN</td><td>Ogden</td><td>대변형 · 실무 기본값</td></tr>
+      <tr><td class="k">YEOH</td><td>Yeoh</td><td>단축 데이터만 있을 때</td></tr>
+      <tr><td class="k">ABOYCE</td><td>Arruda–Boyce</td><td>물리 기반, 상수 2개</td></tr>
+      <tr><td class="k">GENT</td><td>Gent</td><td>극한 신장 한계가 있는 재료</td></tr>
+      <tr><td class="k">BLATZ</td><td>Blatz–Ko</td><td>압축성 폼</td></tr>
+      <tr><td class="k">FOAM</td><td>Ogden Foam</td><td>초탄성 폼</td></tr>
+      <tr><td class="k">RESPONSE</td><td>응답 함수</td><td>곡선을 그대로 재현 — 피팅 오차 없음</td></tr>
+    </tbody>
+  </table></div>
+  <pre>! 점탄성 — Prony 급수 (전단 항)
+TB,PRONY,1,,3,SHEAR
+TBDATA,1,0.30,0.01,0.25,0.10,0.18,1.0
+!         g1   tau1  g2   tau2  g3   tau3
+TB,PRONY,1,,1,BULK
+TBDATA,1,0.05,0.10</pre>
+  <p><code>g_i</code> 는 정규화 값이라 Σ &lt; 1. 그리고 <strong><code>MP,EX</code> 또는 <code>TB,HYPER</code> 로 준 강성이 “순간 응답” 으로 해석됩니다</strong> — DMA 나 완화시험을 어느 쪽으로 정리했는지가 여기서 갈립니다. 온도 이동(WLF/TRS)은 <code>TB,SHIFT</code> 로 붙입니다.</p>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 이방</span>이방성 · 복합재 · 손상</h2>
+  <pre>! 직교이방 탄성 (MP 계열)
+MP,EX,2,135000   $ MP,EY,2,9000   $ MP,EZ,2,9000
+MP,PRXY,2,0.30   $ MP,PRYZ,2,0.40 $ MP,PRXZ,2,0.30
+MP,GXY,2,5000    $ MP,GYZ,2,3500  $ MP,GXZ,2,5000
+MP,DENS,2,1.57e-9
+
+! 복합재 파손 한계 (응력 기준)
+TB,FCLI,2,,,S
+TBDATA,1,2200,-1400,60,-200,60,-200   ! Xt,Xc,Yt,Yc,Zt,Zc
+TBDATA,7,90,90,60                     ! Sxy,Syz,Sxz</pre>
+  <p>층 구성은 물성이 아니라 <strong>섹션</strong>에서 옵니다 — <code>SECTYPE,1,SHELL</code> + <code>SECDATA,두께,재료번호,각도,적분점</code>. 각도의 기준은 요소 좌표계이고, 그것을 <code>ESYS</code> 로 지정합니다. <strong>ESYS 를 안 주면 요소 기본 좌표계가 기준이 되어 곡면에서 층 방향이 어긋납니다.</strong></p>
+  <pre>SECTYPE,1,SHELL,,quasi-iso
+SECDATA,0.125,2,0.0,3
+SECDATA,0.125,2,45.0,3
+SECDATA,0.125,2,-45.0,3
+SECDATA,0.125,2,90.0,3</pre>
+  <p>손상까지 가려면 <code>TB,DMGI</code>(개시 기준: 최대응력/Puck/LaRc 등) 와 <code>TB,DMGE</code>(전개: 즉시 또는 연속 손상) 를 얹습니다. 접착·박리는 <code>TB,CZM</code> 으로, 이중선형(<code>BILI</code>) 또는 지수형(<code>EXPO</code>) 에 파괴에너지를 줍니다.</p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 단위</span>단위계와 온도 의존</h2>
+  <p>Ansys 는 다른 명시적 솔버들과 달리 <strong>단위를 인식합니다.</strong> Workbench 에서 단위계를 바꾸면 Engineering Data 의 값이 환산됩니다. 다만 —</p>
+  <div class="note trap">
+    <h4>Command Snippet 의 숫자는 환산되지 않는다</h4>
+    <p>스니펫에 적은 <code>MP,EX,1,210000</code> 은 <strong>그 시점의 활성 단위계로 그대로 읽힙니다.</strong> 단위계를 mm 에서 m 으로 바꾸면 GUI 물성은 따라오지만 스니펫 숫자는 그대로라, 모델 안에서 물성이 서로 어긋납니다. <b>스니펫 첫 줄에 단위계를 주석으로 못 박아 두는 것이 최소한의 방어입니다.</b></p>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>단위계</th><th>길이</th><th>힘</th><th>질량</th><th>응력</th><th class="n">강재 ρ</th><th class="n">강재 E</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Metric (m, kg, N, s)</td><td>m</td><td>N</td><td>kg</td><td>Pa</td><td class="n">7.85e+03</td><td class="n">2.10e+11</td></tr>
+      <tr><td class="k">Metric (mm, t, N, s)</td><td>mm</td><td>N</td><td>tonne</td><td>MPa</td><td class="n">7.85e-09</td><td class="n">2.10e+05</td></tr>
+      <tr><td class="k">Metric (mm, kg, N, s)</td><td>mm</td><td>N</td><td>kg</td><td>MPa</td><td class="n">7.85e-06</td><td class="n">2.10e+05</td></tr>
+      <tr><td class="k">U.S. (in, lbm, lbf, s)</td><td>in</td><td>lbf</td><td>lbm</td><td>psi</td><td class="n">0.283</td><td class="n">3.00e+07</td></tr>
+    </tbody>
+  </table></div>
+  <p class="eqn"><b>mm·kg·N·s 는 일관계가 아닙니다</b> — Ansys 가 내부에서 질량 항을 보정해 주는 특수 단위계입니다. 다른 솔버로 물성을 옮길 때 이 계에서 나온 밀도를 그대로 쓰면 1000배 틀립니다.</p>
+
+  <h3>온도 의존</h3>
+  <pre>! MP 계열 — 표로
+MPTEMP,1,20,200,400
+MPDATA,EX,1,1,210000,198000,181000
+MPDATA,PRXY,1,1,0.30,0.30,0.31
+
+! TB 계열 — TBTEMP 로 구간을 나눈다
+TB,PLASTIC,1,3,4,MISO
+TBTEMP,20
+TBPT,,0.000,350
+TBPT,,0.020,455
+TBTEMP,200
+TBPT,,0.000,300
+TBPT,,0.020,395
+TBTEMP,400
+...</pre>
+  <p><code>TB</code> 의 NTEMP 는 <strong>미리 선언한 온도 개수와 실제 <code>TBTEMP</code> 블록 수가 맞아야</strong> 합니다. 안 맞으면 뒤쪽 데이터가 잘리거나 0 으로 채워집니다.</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 스니펫</span>Command Snippet 으로 넣기</h2>
+  <p>Engineering Data GUI 가 못 주는 물성(Anand, 특정 CZM 옵션, 사용자 조합)은 <strong>Command Snippet</strong> 으로 넣습니다. Mechanical 트리에서 Geometry 아래 Body 나 Part 에 붙이면 됩니다.</p>
+  <div class="note">
+    <h4>스니펫에서 재료 번호를 알아내는 법</h4>
+    <p>Body 에 붙인 스니펫에는 <code>matid</code> 라는 인수가 자동으로 들어옵니다 — <strong>그 body 의 재료 번호</strong>입니다. 숫자를 직접 적지 말고 <code>matid</code> 를 쓰면, 재료 배정이 바뀌어도 스니펫이 따라갑니다.</p>
+  </div>
+  <pre>! Body 에 붙인 스니펫
+! units: mm, tonne, N, s  (MPa)
+TBDELE,PLASTIC,matid          ! GUI 가 넣은 것을 지우고
+TB,PLASTIC,matid,1,4,MISO     ! 내 것으로 다시 정의
+TBPT,,0.000,350
+TBPT,,0.020,455
+TBPT,,0.100,560
+TBPT,,1.000,790</pre>
+  <p>스니펫은 <strong>GUI 물성 다음에 실행</strong>되므로 나중에 정의한 것이 이깁니다. 다만 같은 Lab 을 두 번 정의하면 겹쳐 쓰이는 방식이 모델마다 다르므로, <code>TBDELE</code> 로 명시적으로 지우고 시작하는 편이 안전합니다.</p>
+  <p>확인은 <code>TBLIST,ALL,matid</code> 와 <code>MPLIST,matid</code> 로 합니다 — Solution Information 출력에 표가 그대로 찍힙니다.</p>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 / 예제</span>완성된 스니펫</h2>
+    <div class="note">
+    <h4>돌려 볼 수 있는 덱이 옆에 있다</h4>
+    <p>아래 조각은 형식을 보이기 위한 것이라 그대로는 안 돕니다. <strong>실제로 도는 최소 덱</strong>이 <a href="예제/dp600-1elem-ansys.dat"><code>예제/dp600-1elem-ansys.dat</code></a> 에 있습니다 — 요소 하나를 0.5&nbsp;mm 당기는 단축 인장으로, 여섯 솔버가 같은 문제를 풀도록 맞춰 두었습니다. 기대값과 쓰는 법은 <a href="예제/README.md">예제/README.md</a> 에 있습니다.</p>
+  </div>
+  <pre>!===============================================================
+! 재료 정의   units: mm / tonne / N / s   (MPa, mJ)
+!===============================================================
+! ---- 1. 강재: 온도 의존 탄성 + 다선형 등방경화 ---------------
+MPTEMP
+MPTEMP,1,20,200,400
+MPDATA,EX,1,1,210000,198000,181000
+MPDATA,PRXY,1,1,0.30,0.30,0.31
+MP,DENS,1,7.85e-9
+MP,ALPX,1,1.2e-5
+MP,REFT,1,20
+
+TB,PLASTIC,1,3,4,MISO
+TBTEMP,20
+TBPT,,0.000,350
+TBPT,,0.020,455
+TBPT,,0.100,560
+TBPT,,1.000,790
+TBTEMP,200
+TBPT,,0.000,300
+TBPT,,0.020,395
+TBPT,,0.100,490
+TBPT,,1.000,690
+TBTEMP,400
+TBPT,,0.000,255
+TBPT,,0.020,335
+TBPT,,0.100,415
+TBPT,,1.000,585
+
+! ---- 2. 고무 씰: Ogden 3항 + Prony -------------------------
+MP,DENS,2,1.10e-9
+TB,HYPER,2,,3,OGDEN
+TBDATA,1, 0.62, 1.30, -0.05, -2.00, 0.004, 5.00
+TB,PRONY,2,,3,SHEAR
+TBDATA,1, 0.30, 0.01, 0.25, 0.10, 0.18, 1.00
+TB,SHIFT,2,,3,WLF
+TBDATA,1, 20.0, 8.86, 101.6            ! Tref, C1, C2
+
+! ---- 3. 땜납: Anand 점소성 ---------------------------------
+MP,EX,3,41000  $ MP,PRXY,3,0.35  $ MP,DENS,3,7.4e-9
+TB,RATE,3,,9,ANAND
+TBDATA,1, 1.3e6, 9400, 4.0e6, 1.5, 0.303
+TBDATA,6, 1.4e7, 5.0e7, 0.07, 1.3, 1.0
+!         s0     Q/R    A      xi    m
+!         h0     s_hat  n      a     (초기 변형저항)
+
+! ---- 확인 --------------------------------------------------
+MPLIST,ALL
+TBLIST,ALL,ALL</pre>
+  <p class="eqn">숫자는 형식을 보이기 위한 예시입니다.</p>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10 / 함정</span>자주 틀리는 지점</h2>
+  <ol class="steps">
+    <li><b>PRXY 와 NUXY 를 같은 것으로 본다</b>등방에서는 같지만 직교이방에서는 E 비만큼 다릅니다. 복합재에서 조용히 틀립니다.</li>
+    <li><b>스니펫 숫자가 단위계 변경을 따라온다고 믿는다</b>GUI 값만 환산됩니다. 스니펫에 단위를 주석으로 못 박습니다.</li>
+    <li><b>mm·kg·N·s 계의 밀도를 다른 솔버로 옮긴다</b>Ansys 가 보정해 주는 특수 계입니다. 일관계가 아닙니다.</li>
+    <li><b>구형 TB,MISO 매크로를 TB,PLASTIC,,MISO 로 그대로 옮긴다</b>전자는 전체변형률, 후자는 소성변형률 기준입니다. 첫 점이 다릅니다.</li>
+    <li><b>크리프에서 온도를 섭씨로 둔다</b><code>exp(−C4/T)</code> 의 T 는 절대온도입니다. <code>TOFFST</code> 를 확인합니다.</li>
+    <li><b>TB 의 NTEMP 와 TBTEMP 블록 수를 안 맞춘다</b>뒤쪽 데이터가 잘립니다.</li>
+    <li><b>Hill 을 단독으로 쓴다</b>아래에 소성 테이블이 있어야 얹힙니다.</li>
+    <li><b>Prony 의 Σg_i 가 1 이상이다</b>장기 강성이 0 이하가 됩니다.</li>
+    <li><b>ESYS 없이 복합재 층 각도를 준다</b>곡면에서 층 방향이 요소마다 달라집니다.</li>
+    <li><b>Body 스니펫에 재료 번호를 숫자로 적는다</b>재료 배정이 바뀌면 엉뚱한 재료를 덮어씁니다. <code>matid</code> 를 씁니다.</li>
+  </ol>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11 / 출처</span>확인한 곳</h2>
+  <ul class="tight">
+    <li><a href="https://ansyshelp.ansys.com/public/Views/Secured/corp/v242/en/ans_cmd/Hlp_C_TB.html">Ansys — TB 명령 (Lab 전체 목록)</a> · 02장 지도의 출처</li>
+    <li><a href="https://www.mm.bme.hu/~gyebro/files/ans_help_v182/ans_cmd/Hlp_C_TB.html">Ansys Mechanical APDL Command Reference — TB</a> · 공개 사본</li>
+    <li><a href="https://ansyshelp.ansys.com/public/views/secured/corp/v251/en/ans_arch/archmiso.html">Ansys — Multilinear Isotropic Hardening (TB,MISO)</a> · 03장</li>
+    <li><a href="https://ansyshelp.ansys.com/public//////Views/Secured/corp/v242/en/ans_arch/archmatdefmisohard.html">Ansys — Defining the Multilinear Isotropic Hardening Model</a></li>
+    <li><a href="https://www.mm.bme.hu/~gyebro/files/fea/ansys/ansys_13_element_reference.pdf">Ansys Mechanical APDL Element Reference</a> · 섹션/요소 연결</li>
+    <li><a href="https://mapdl.docs.pyansys.com/version/stable/mapdl_commands/prep7/_autosummary/ansys.mapdl.core._commands.prep7.data_tables.DataTables.tb.html">PyMAPDL — tb</a> · 인자 순서를 코드로 확인할 때</li>
+  </ul>
+</section>
+</main>
+
+<footer>MatNexus · 시뮬레이션 인풋 덱 · Ansys Mechanical 물성 카드 · 2026-08-30 수집</footer>
+</body></html>

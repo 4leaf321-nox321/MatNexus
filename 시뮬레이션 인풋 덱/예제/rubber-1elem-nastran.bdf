@@ -1,0 +1,96 @@
+$-------------------------------------------------------------------------------
+$ Rubber single-element uniaxial tension  --  MSC Nastran SOL 400
+$
+$   units : mm - N - tonne - s   (stress MPa, density 1.10-9)
+$   model : 1 x 1 x 1 mm CHEXA, 1/8 symmetry, x-face pulled to u = 1.0 mm
+$           (stretch lambda = 2, i.e. 100% engineering strain)
+$   check : sigma_x ~= 4.7162 MPa, reaction on the pulled face ~= 2.3606 N
+$
+$           The closed-form INCOMPRESSIBLE answer is 4.7250 MPa; these decks
+$           set K/G = 1000, and that 0.1% of volume change lowers it to 4.7162.
+$           J = 1.001048 at the end, so the section is 0.500524 mm2, not 0.5.
+$   material : MATHP generalized Mooney-Rivlin.
+$              A10 = C10 = 0.6,  A01 = C01 = 0.15 MPa
+$
+$   WATCH THE SYMBOL D1.  MSC's MATHP defines the volumetric term so that
+$   K = 2*D1, i.e. D1 = K/2 = 750 for K = 1500 MPa.  Abaqus and Ansys use the
+$   RECIPROCAL sense (their D1 = 2/K = 1.3333e-3).  Same letter, inverse meaning.
+$   MATHP's own default is D1 = 1000*(A10+A01) = 750, which is exactly the
+$   K/G = 1000 we want, so leaving D1 blank would also be correct here.  It is
+$   written out explicitly so the number is visible.
+$
+$   Hyperelasticity is large strain by definition, so NLMOPTS,LRGSTRN,1 and the
+$   advanced solid (PSOLID + PSLDN1) are set as in the plasticity deck.
+$-------------------------------------------------------------------------------
+SOL 400
+CEND
+TITLE    = Rubber 1-element tension, Mooney-Rivlin (mm-N-tonne-s)
+ECHO     = NONE
+$
+SUBCASE 1
+  LABEL = stretch to lambda = 2
+  ANALYSIS     = NLSTATICS
+  SPC          = 1
+  LOAD         = 2
+  NLPARM       = 10
+  DISPLACEMENT(PLOT) = ALL
+  STRESS(PLOT)       = ALL
+  STRAIN(PLOT)       = ALL
+  SPCFORCES(PLOT)    = ALL
+$
+BEGIN BULK
+$
+PARAM,LGDISP,1
+PARAM,POST,-1
+NLMOPTS,LRGSTRN,1
+$
+$ SOL 400 with NLPARM requires KMETHOD=FNT (full Newton, stiffness updated
+$ every iteration).  AUTO/SEMI/ITER are the SOL 106-era strategies.
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV    INTOUT
+NLPARM  10      50              FNT     5       25      PW      YES
+$
+$===============================================================================
+$ MESH
+$===============================================================================
+$       ID                      X       Y       Z
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+$       EID     PID     G1      G2      G3      G4      G5      G6
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+$       PID     MID     CORDM
+PSOLID  1       1       0
+$ advanced (large strain) solid: C8 = 8-node hex, BEH = SOLID, INT = L
+PSLDN1  1       1
++       C8      SOLID   L
+$
+$===============================================================================
+$ MATERIAL
+$===============================================================================
+$       MID     A10     A01     D1      RHO     AV      TREF    GE
+MATHP   1       0.6     0.15    750.    1.10-9
+$       NA      ND
++       1       1
+$
+$===============================================================================
+$ BOUNDARY CONDITIONS   (1/8 symmetry + enforced displacement)
+$===============================================================================
+$       SID     C       G1      G2      G3      G4
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+SPC1    1       1       2       3       6       7
+$
+$       SID     G1      C1      D1      G2      C2      D2
+SPCD    2       2       1       1.0     3       1       1.0
+SPCD    2       6       1       1.0     7       1       1.0
+$
+ENDDATA

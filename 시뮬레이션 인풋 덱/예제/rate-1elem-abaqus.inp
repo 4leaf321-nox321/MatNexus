@@ -1,0 +1,109 @@
+**-----------------------------------------------------------------------------
+** Rate-dependent plasticity, single element  --  Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa)
+**   model : same 1 mm cube and 1/8 symmetry as the DP600 quasi-static deck,
+**           but pulled on an EXPONENTIAL history so the TRUE strain rate is
+**           exactly 100 /s throughout:   u(t) = exp(100 t) - 1
+**           t = 0 .. 0.00405465 s  ->  u = 0 .. 0.5 mm
+**   check : sigma_x ~= 770.30 MPa , reaction ~= 514.29 N
+**           (quasi-static answer 700.32 MPa x the 1.10 rate factor)
+**
+**   rate law : Cowper-Symonds   sigma = sigma_static * [1 + (eps_dot/D)^(1/n)]
+**              D = 1.0e7 /s , n = 5   ->  factor 1.10 at 100 /s
+**   Abaqus writes this as *RATE DEPENDENT, TYPE=POWER LAW with (D, n).
+**   LS-DYNA calls the same two numbers C and P on *MAT_024; Ansys calls them
+**   gamma and m on TB,RATE PERZYNA.  Same law, three names.
+**
+**   Rate-dependent yield IS active in an Abaqus/Standard *STATIC step -- the
+**   docs list it as one of the few time-dependent responses that are.  The
+**   step time therefore has physical meaning here and must not be rescaled.
+**
+**   run   : abaqus job=rate-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+Rate-dependent plasticity 1-element, 100/s (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PULL
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=DP600
+,
+**
+**=============================================================================
+** MATERIAL
+**=============================================================================
+*MATERIAL, NAME=DP600
+*DENSITY
+7.85E-09,
+*ELASTIC
+210000., 0.3
+** quasi-static curve: (true stress, plastic strain)
+*PLASTIC, HARDENING=ISOTROPIC
+350., 0.000
+455., 0.020
+560., 0.100
+700., 0.400
+790., 1.000
+** D, n   ->  sigma = sigma_static * [1 + (eps_dot_pl/D)^(1/n)]
+*RATE DEPENDENT, TYPE=POWER LAW
+1.0E7, 5.0
+**
+** exponential pull: constant TRUE strain rate of 100 /s
+*AMPLITUDE, NAME=EXPPULL, TIME=STEP TIME
+0.0000000, 0.0000000, 0.0002027, 0.0409603, 0.0004055, 0.0827595
+0.0006082, 0.1254147, 0.0008109, 0.1689435, 0.0010137, 0.2133638
+0.0012164, 0.2586939, 0.0014191, 0.3049523, 0.0016219, 0.3521580
+0.0018246, 0.4003306, 0.0020273, 0.4494897, 0.0022301, 0.4996557
+0.0024328, 0.5508490, 0.0026355, 0.6030908, 0.0028383, 0.6564025
+0.0030410, 0.7108060, 0.0032437, 0.7663237, 0.0034465, 0.8229785
+0.0036492, 0.8807935, 0.0038519, 0.9397926, 0.0040547, 1.0000000
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=YES, INC=500
+pull at 100 /s
+*STATIC
+1.0E-5, 0.00405465, 1.0E-9, 5.0E-5
+**
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+*BOUNDARY, AMPLITUDE=EXPPULL
+PULL, 1, 1, 0.5
+**
+*OUTPUT, FIELD, FREQUENCY=10
+*ELEMENT OUTPUT
+S, LE, PEEQ, ER
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+S11, PEEQ, ER11
+*NODE OUTPUT, NSET=PULL
+U1, RF1
+*END STEP

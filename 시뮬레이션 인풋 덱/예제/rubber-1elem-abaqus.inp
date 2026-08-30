@@ -1,0 +1,98 @@
+**-----------------------------------------------------------------------------
+** Rubber single-element uniaxial tension  --  Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa, density 1.10e-9)
+**   model : 1 x 1 x 1 mm hex, 1/8 symmetry, x-face pulled to u = 1.0 mm
+**           (stretch lambda = 2, i.e. 100% engineering strain)
+**   check : S11 ~= 4.7162 MPa, reaction on the pulled face ~= 2.3606 N
+**
+**           The closed-form INCOMPRESSIBLE answer is 4.7250 MPa; these decks
+**           set K/G = 1000, and that 0.1% of volume change lowers it to 4.7162.
+**           J = 1.001048 at the end, so the section is 0.500524 mm2, not 0.5.
+**   material : 2-term Mooney-Rivlin, C10 = 0.6, C01 = 0.15 MPa
+**              G0 = 2(C10+C01) = 1.5 MPa,  K = 1500 MPa  (K/G = 1000)
+**              Abaqus D1 = 2/K = 1.3333e-3   <-- see README, the symbol D1 means
+**              the RECIPROCAL of what MSC Nastran's MATHP calls D1.
+**
+**   run   : abaqus job=rubber-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+Rubber 1-element tension, Mooney-Rivlin (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH   (identical to the DP600 plasticity deck)
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8H, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+** C3D8H = HYBRID formulation.  Near-incompressible rubber needs it: with a
+** plain C3D8 the pressure is computed from a nearly singular volumetric term
+** and the element locks.  This is the one place where the rubber deck must
+** differ from the plasticity deck.
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PULL
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=RUBBER
+,
+**
+**=============================================================================
+** MATERIAL
+**=============================================================================
+*MATERIAL, NAME=RUBBER
+*DENSITY
+1.10E-09,
+** MODULI=INSTANTANEOUS is set explicitly.  Abaqus' DEFAULT is LONG TERM, i.e.
+** the constants would describe the FULLY RELAXED response -- Ansys reads the
+** same constants as the INSTANTANEOUS response.  Set it either way, but set it
+** on purpose.  (Harmless when no *VISCOELASTIC is present.)
+*HYPERELASTIC, MOONEY-RIVLIN, MODULI=INSTANTANEOUS
+0.6, 0.15, 1.3333E-03
+**
+** ---- optional: add time-domain viscoelasticity -----------------------------
+** Uncomment to relax 30% of the shear stiffness with tau = 1e-3 s.  Read the
+** README section on what the hyperelastic constants then MEAN in each solver.
+**   *VISCOELASTIC, TIME=PRONY
+**   0.3, 0.0, 1.0E-03
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=YES, INC=500
+stretch to lambda = 2
+*STATIC
+0.002, 1.0, 1.E-08, 0.02
+**
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+PULL, 1, 1, 1.0
+**
+*OUTPUT, FIELD, FREQUENCY=1
+*ELEMENT OUTPUT
+S, LE, E
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+S11, LE11
+*NODE OUTPUT, NSET=PULL
+U1, RF1
+*END STEP

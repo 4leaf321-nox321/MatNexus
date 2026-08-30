@@ -1,0 +1,493 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OptiStruct 물성 카드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">인풋 덱 · Altair OptiStruct</div>
+  <h1>OptiStruct<br>물성 카드</h1>
+  <p class="dek">Nastran 계열 벌크 데이터 형식 위에서, MAT1 · MATS1 · MATHE · MATVE 로 이어지는 물성 카드와 그것이 최적화·비선형 서브케이스와 어떻게 얽히는지 정리했습니다.</p>
+  <div class="mast-meta">
+    <div><b>솔버</b> Altair OptiStruct 2022 이후</div>
+    <div><b>파일</b> .fem (Bulk Data)</div>
+    <div><b>형식</b> Nastran 계열 — 8칸 / 16칸 / free</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 덱의 세 구역</a>
+    <a href="#s1"><span>01</span> 필드 형식 세 가지</a>
+    <a href="#s2"><span>02</span> MAT1 — 등방 선형</a>
+    <a href="#s3"><span>03</span> 이방성 — MAT2 · MAT8 · MAT9</a>
+    <a href="#s4"><span>04</span> MATS1 — 비선형 소성</a>
+    <a href="#s5"><span>05</span> 초탄성 · 점탄성 · 크리프</a>
+    <a href="#s6"><span>06</span> 온도 · 주파수 의존</a>
+    <a href="#s7"><span>07</span> 파손과 피로</a>
+    <a href="#s8"><span>08</span> 최적화가 물성을 볼 때</a>
+    <a href="#s9"><span>09</span> 완성된 덱 조각</a>
+    <a href="#s10"><span>10</span> 자주 틀리는 지점</a>
+    <a href="#s11"><span>11</span> 출처</a>
+  </nav>
+</header>
+
+<main>
+<section id="s0">
+  <h2><span class="num">00 / 구조</span>덱의 세 구역</h2>
+  <p class="lede">OptiStruct 덱은 Nastran 의 구조를 따릅니다 — <strong>I/O Options → Subcase Information → Bulk Data</strong>. 물성은 전부 <code>BEGIN BULK</code> 아래입니다.</p>
+  <pre>$$ I/O Options
+OUTPUT,H3D
+$$
+$$ Subcase Information
+SUBCASE 1
+  LABEL = pressure load
+  ANALYSIS = NLSTAT
+  SPC = 1
+  LOAD = 2
+  NLPARM = 10
+$$
+BEGIN BULK
+$$ ---- 여기부터 모델. 물성 카드도 여기 ----
+MAT1     1       210000.         0.3     7.85-9
+MATS1    1               PLASTIC 0.0     1       1       350.0
+$$
+ENDDATA</pre>
+  <p>참조 사슬은 <strong>요소 → PSHELL/PSOLID → MID</strong> 입니다. 그리고 OptiStruct 의 결정적 규칙 하나 —</p>
+  <div class="note">
+    <h4>비선형 물성은 MAT 를 “덮는” 것이 아니라 “보완”한다</h4>
+    <p><code>MATS1</code>, <code>MATVE</code>, <code>MATVP</code> 는 <strong>같은 MID 를 가진 MAT1 과 짝을 이룹니다.</strong> MAT1 이 탄성 부분을, MATS1 이 소성 부분을 담당합니다. 그래서 <b>MATS1 만 쓰고 MAT1 을 빼면 카드가 성립하지 않고</b>, 반대로 MAT1 만 있고 서브케이스가 선형이면 MATS1 은 조용히 무시됩니다.</p>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 형식</span>필드 형식 세 가지</h2>
+  <div class="tw"><table>
+    <thead><tr><th>형식</th><th>필드 폭</th><th>구분</th><th>쓰는 때</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Small field</td><td>8칸 × 9필드</td><td>이름 8칸 + 8필드 + 연속</td><td>기본. 사람이 읽기 좋다</td></tr>
+      <tr><td class="k">Large field</td><td>16칸 × 5필드</td><td>카드 이름에 <code>*</code> 를 붙인다</td><td>유효숫자가 더 필요할 때</td></tr>
+      <tr><td class="k">Free field</td><td>—</td><td>쉼표</td><td>스크립트 생성</td></tr>
+    </tbody>
+  </table></div>
+  <pre>$       1       2       3       4       5       6       7       8       9
+$2345678123456781234567812345678123456781234567812345678123456781234567 8
+MAT1    1       210000.         0.3     7.85-9  1.2-5   20.0
++       400.0   400.0   240.0
+
+MAT1*   1               210000.                 0.3             <i>← large field</i>
+*       7.85-9
+
+MAT1,1,210000.,,0.3,7.85-9,1.2-5,20.0           <i>← free field</i></pre>
+  <div class="note trap">
+    <h4>지수 표기의 관용 형태 — 7.85-9</h4>
+    <p>Nastran 계열은 <code>E</code> 를 생략한 <code>7.85-9</code>(=7.85e-9) 를 받습니다. 8칸에 값을 우겨넣기 위해 생긴 관습이고, <strong>지금도 라이브러리 덱에 흔합니다.</strong> 파서를 만든다면 이 형태를 반드시 처리해야 하고, 사람이 읽을 때는 <code>7.85-9</code> 와 <code>7.85E-9</code> 가 같은 값임을 알아야 합니다.</p>
+  </div>
+  <p>연속줄은 첫 칸에 <code>+</code> 또는 공백을 두고 이어 갑니다. HyperMesh 가 생성하는 덱은 대개 <code>+</code> 를 씁니다.</p>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / MAT1</span>등방 선형 — 모든 것의 출발점</h2>
+  <pre>$MAT1   MID     E       G       NU      RHO     A       TREF    GE
+$       ST      SC      SS      MCSID
+MAT1    1       210000.         0.3     7.85-9  1.2-5   20.0    0.02
++       400.0   400.0   240.0</pre>
+  <div class="tw"><table>
+    <thead><tr><th>필드</th><th>뜻</th><th>주의</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MID</td><td>재료 ID</td><td>PSHELL/PSOLID 가 이 번호로 부른다</td></tr>
+      <tr><td class="k">E, G, NU</td><td>탄성계수 · 전단계수 · 포아송비</td><td><b>셋 중 둘만 준다.</b> 나머지는 계산된다 — 셋 다 주고 서로 안 맞으면 경고 없이 이상해진다</td></tr>
+      <tr><td class="k">RHO</td><td>밀도</td><td>질량·고유진동수에 직결. 정적 해석이라 비워 두면 중력하중이 0 이 된다</td></tr>
+      <tr><td class="k">A</td><td>열팽창계수</td><td>—</td></tr>
+      <tr><td class="k">TREF</td><td>기준 온도</td><td>열하중의 기준. 비우면 0</td></tr>
+      <tr><td class="k">GE</td><td>구조 감쇠 계수</td><td>주파수 응답에서만 쓰인다</td></tr>
+      <tr><td class="k">ST, SC, SS</td><td>인장 · 압축 · 전단 허용응력</td><td><b>해석에 안 쓰인다</b> — 안전계수 출력·최적화 응답에서만</td></tr>
+      <tr><td class="k">MCSID</td><td>재료 좌표계</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+  <p>OptiStruct 는 단위를 모릅니다. Nastran 계열의 관용은 <strong>mm · N · tonne · s (MPa)</strong> 로, Abaqus SI(mm) 과 같습니다. 강재 밀도가 <code>7.85-9</code> 인 것이 그 표시입니다.</p>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 이방성</span>MAT2 · MAT8 · MAT9</h2>
+  <div class="tw"><table>
+    <thead><tr><th>카드</th><th>대상</th><th>주는 값</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MAT2</td><td>2D 이방 (쉘)</td><td>G11,G12,G13,G22,G23,G33 — <b>강성 행렬을 직접</b></td></tr>
+      <tr><td class="k">MAT3</td><td>축대칭 · 평면변형 직교이방</td><td>Ex,Eth,Ez,νxth,νthz,νzx,Rho,Gzx</td></tr>
+      <tr><td class="k">MAT8</td><td>2D 직교이방 (복합재 층)</td><td>E1,E2,ν12,G12,G1Z,G2Z + 허용값 Xt,Xc,Yt,Yc,S</td></tr>
+      <tr><td class="k">MAT9</td><td>3D 이방 (솔리드)</td><td>G11…G66 — 21개 항</td></tr>
+      <tr><td class="k">MAT10</td><td>유체 (음향 연성)</td><td>Bulk, Rho, c</td></tr>
+      <tr><td class="k">MAT4 · MAT5</td><td>열전도(등방 · 이방)</td><td>K, Cp, H …</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>MAT8 이 복합재의 중심</strong>입니다. 허용값(Xt·Xc·Yt·Yc·S)을 함께 넣고 PCOMP/PCOMPP 의 <code>FT</code> 에 파손 기준(HILL·HOFF·TSAI·STRN)을 지정하면 층별 파손 지수가 나옵니다.</p>
+  <pre>$MAT8   MID     E1      E2      NU12    G12     G1Z     G2Z     RHO
+$       A1      A2      TREF    Xt      Xc      Yt      Yc      S
+$       GE      F12     STRN
+MAT8    10      135000. 9000.   0.3     5000.   5000.   3500.   1.57-9
++       -0.5-6  28.0-6  20.0    2200.   1400.   60.0    200.0   90.0
+
+PCOMP   100     0.0                     HILL
++       10      0.125   0.0     YES     10      0.125   45.0    YES
++       10      0.125   -45.0   YES     10      0.125   90.0    YES</pre>
+  <p>층 각도의 기준은 요소의 재료 좌표계입니다 — <code>CQUAD4</code> 의 THETA 필드나 <code>MCID</code>, 혹은 <code>PCOMP</code> 의 기준 각도로 정합니다. <strong>이것을 안 정하면 요소의 첫 변이 기준이 되어, 메시 방향에 따라 층 각도가 요소마다 달라집니다.</strong></p>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / MATS1</span>비선형 소성</h2>
+  <pre>$MATS1  MID     TID     TYPE    H       YF      HR      LIMIT1  LIMIT2
+MATS1   1               PLASTIC 0.0     1       1       350.0
+$ 또는 곡선을 표로:
+MATS1   1       200     PLASTIC         1       1       350.0
+
+TABLES1 200
++       0.0     350.0   0.02    455.0   0.10    560.0   1.00    790.0
++       ENDT</pre>
+  <div class="tw"><table>
+    <thead><tr><th>필드</th><th>뜻</th><th>값</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MID</td><td>같은 MID 의 MAT1 을 보완한다</td><td>MAT1 이 반드시 있어야 한다</td></tr>
+      <tr><td class="k">TID</td><td>TABLES1 의 ID</td><td>비우면 H(선형 경화)로 간다</td></tr>
+      <tr><td class="k">TYPE</td><td>모델 종류</td><td><b>PLASTIC</b>(탄소성) · <b>NLELAST</b>(비선형 탄성 — 제하가 하중 경로를 되짚는다)</td></tr>
+      <tr><td class="k">H</td><td>경화 기울기</td><td>TID 를 안 줄 때의 이선형 경화</td></tr>
+      <tr><td class="k">YF</td><td>항복 기준</td><td>1 = von Mises(기본), 2 = Tresca, 3 = Mohr–Coulomb, 4 = Drucker–Prager</td></tr>
+      <tr><td class="k">HR</td><td>경화 규칙</td><td>1 = 등방(기본), 2 = 이동, 3 = 혼합</td></tr>
+      <tr><td class="k">LIMIT1</td><td>초기 항복응력</td><td>Mohr–Coulomb·Drucker–Prager 에서는 점착력</td></tr>
+      <tr><td class="k">LIMIT2</td><td>—</td><td>Mohr–Coulomb·Drucker–Prager 의 마찰각</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap">
+    <h4>어느 변형률인지는 TYPSTRN 이 정한다</h4>
+    <p>OptiStruct 는 이 규약을 <strong><code>TYPSTRN</code> 필드</strong>로 고르게 해 두었습니다 — 여섯 솔버 중 유일합니다.</p>
+    <ul class="tight">
+      <li><b>TYPSTRN = 0 (전체변형률)</b> — 첫 점은 원점 (0, 0), <b>둘째 점이 초기 항복점</b>이어야 하고 그 응력이 MATS1 의 LIMIT1 과 같아야 합니다. Nastran 과 같은 규약입니다.</li>
+      <li><b>TYPSTRN = 1 (소성변형률)</b> — 첫 점이 (0, σ_y). Abaqus·Ansys·LS-DYNA 와 같은 규약입니다.</li>
+    </ul>
+    <p><strong>표는 그대로 두고 이 플래그만 바꾸면 초기 강성이 통째로 달라집니다</strong> — 남의 덱을 받으면 TYPSTRN 과 첫 두 점을 함께 봅니다. 둘째 점의 변형률이 σ_y/E 와 맞아떨어지면 전체변형률 표이고, 첫 점의 x 가 0 인데 y 가 항복응력이면 소성변형률 표입니다.</p>
+  </div>
+  <div class="note trap">
+    <h4>대변형이면 LGDISP 와 HASHASSM 을 한 쌍으로 켠다</h4>
+    <p><code>ANALYSIS = NLSTAT</code> 만으로는 <strong>소변위 비선형</strong>입니다 — 문서가 그렇게 정의합니다. 변형률이 5% 를 넘으면 <code>PARAM,LGDISP,1</code> 을 켜야 하고, Altair 자료는 그것을 <strong><code>PARAM,HASHASSM,YES</code> 와 함께 쓰라</strong>고 명시합니다.</p>
+    <p>그리고 이때 <strong>곡선의 의미가 바뀝니다</strong> — 선형·소변위 비선형은 공학 응력–변형률로 계산하고, 대변위 해석은 진응력–진변형률을 씁니다. 같은 표를 그대로 두고 LGDISP 만 켜면 곡선이 다른 뜻이 됩니다.</p>
+    <pre style="font-size:.8rem;padding:.8rem;margin-top:.3rem">PARAM,LGDISP,1
+PARAM,HASHASSM,YES</pre>
+  </div>
+  <p>MATS1 이 실제로 동작하려면 서브케이스가 비선형이어야 합니다 — <code>ANALYSIS = NLSTAT</code> (또는 NLGEOM/IMPDYN) 과 <code>NLPARM</code>. <strong>선형 정적(SOL 101 상당) 서브케이스에서는 MATS1 이 무시되고 결과가 탄성으로 나옵니다.</strong> 항복을 훨씬 넘긴 응력이 찍히는데 아무도 경고하지 않는 것이 이 상황입니다.</p>
+  <p>주철처럼 인장/압축이 다른 재료는 <code>MCIRON</code> 이 따로 있습니다.</p>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 비금속</span>초탄성 · 점탄성 · 크리프</h2>
+  <h3>MATHE — 초탄성</h3>
+  <pre>$MATHE  MID     Model   ...     RHO     TEXP    TREF    ...
+MATHE   20      MOONEY          1.10-9
++       0.6     0.15            0.001
+$       C10     C01     C20     D1</pre>
+  <p>모델은 <code>MOONEY</code>(Mooney–Rivlin, 기본) · <code>OGDEN</code> · <code>ABOYCE</code>(Arruda–Boyce) · <code>YEOH</code> · <code>POLY</code> · <code>ABOYCE</code> · <code>RPOLY</code> 등을 고릅니다. <strong>시험 데이터를 주고 피팅시키려면 <code>MATTEST</code>(단축·이축·평면·체적 시험 데이터) 를 같은 MID 로 함께 둡니다.</strong></p>
+  <h3>MATVE — 점탄성 (Prony)</h3>
+  <pre>MATVE   20      PRONY
++       1       0.30    0.01    0.0     0.0
++       2       0.25    0.10    0.0     0.0
+$       i       g_i     tau_i   k_i     tau_k</pre>
+  <p>MATHE 또는 MAT1 과 <strong>같은 MID</strong> 로 짝을 지어야 하고, 이때 MATHE/MAT1 이 순간 응답인지 장기 응답인지가 갈립니다. Σg_i &lt; 1 이어야 합니다.</p>
+  <h3>MATVP — 크리프 · 점소성</h3>
+  <p>Bailey–Norton 형태의 크리프 상수를 줍니다. 온도 의존은 <code>MATTVP</code>. 장시간 하중(고온 배관·볼트 이완)에 씁니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>카드</th><th>대상</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MATHE / MATTHE</td><td>초탄성 / 온도 의존 초탄성</td></tr>
+      <tr><td class="k">MATVE / MATTVE / MATFVE</td><td>점탄성 / 온도 의존 / 주파수 의존</td></tr>
+      <tr><td class="k">MATVP / MATTVP</td><td>크리프 · 점소성</td></tr>
+      <tr><td class="k">MCIRON</td><td>주철 (인장/압축 비대칭)</td></tr>
+      <tr><td class="k">MATPE1</td><td>다공탄성 (흡음재)</td></tr>
+      <tr><td class="k">MGASK</td><td>가스켓</td></tr>
+      <tr><td class="k">MATUSR</td><td>사용자 정의 재료</td></tr>
+      <tr><td class="k">MATMDS</td><td>Multiscale Designer 연동 (복합재 멀티스케일)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 의존성</span>온도 · 주파수 의존</h2>
+  <p>OptiStruct 는 의존성을 <strong>별도 카드</strong>로 분리합니다 — Abaqus 가 데이터 줄에 열을 덧붙이는 것과 정반대의 설계입니다.</p>
+  <pre>MAT1    1       210000.         0.3     7.85-9
+MATT1   1       300     0       301                     <i>← E(T), NU(T) 를 표로</i>
+
+TABLEM1 300
++       20.0    210000. 200.0   198000. 400.0   181000.
++       ENDT</pre>
+  <div class="tw"><table>
+    <thead><tr><th>계열</th><th>짝이 되는 카드</th><th>표</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MATT1 · MATT2 · MATT8 · MATT9</td><td>MAT1 · MAT2 · MAT8 · MAT9</td><td>TABLEM1~4 (온도)</td></tr>
+      <tr><td class="k">MATTHE · MATTVE · MATTVP</td><td>MATHE · MATVE · MATVP</td><td>동상</td></tr>
+      <tr><td class="k">MATF1 · MATF2 · MATF8 · MATF9 · MATFVE</td><td>동명 MAT 카드</td><td>주파수 의존 (진동·NVH)</td></tr>
+    </tbody>
+  </table></div>
+  <p>표의 필드가 <strong>어느 물성을 대체하는지는 위치로 결정</strong>됩니다. MATT1 의 두 번째 필드가 E 의 표 ID, 세 번째가 G, 네 번째가 NU 순입니다 — 비워 두면 그 물성은 온도에 무관하게 MAT1 값을 씁니다. <strong>위치를 하나 밀면 G 의 표가 NU 에 들어가고, 포아송비가 20 만이 되는데 경고가 안 납니다.</strong></p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 파손</span>파손과 피로</h2>
+  <div class="tw"><table>
+    <thead><tr><th>카드</th><th>뜻</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MAT1 의 ST/SC/SS</td><td>허용응력 — 해석엔 안 쓰이고 최적화 응답·후처리에 쓰인다</td></tr>
+      <tr><td class="k">MAT8 의 Xt/Xc/Yt/Yc/S + PCOMP 의 FT</td><td>복합재 층별 파손 지수 (HILL · HOFF · TSAI · STRN)</td></tr>
+      <tr><td class="k">MATBRT</td><td>취성 손상 재료</td></tr>
+      <tr><td class="k">MATFAT</td><td>피로 물성 — S-N(SE,SB,SRI1,NC1) 또는 E-N(SF,B,C,EF,NP,NC)</td></tr>
+      <tr><td class="k">FATDEF · FATPARM · FATSEQ</td><td>피로 해석의 정의 · 파라미터 · 하중 이력</td></tr>
+    </tbody>
+  </table></div>
+  <pre>MATFAT  1       MPA
++       UTS     620.0
++       SN      1000.0  -0.1    1.0+6           <i>← SRI1, b1, NC1</i>
++       EN      950.0   -0.09   -0.55   0.55</pre>
+  <p><code>MATFAT</code> 의 첫 연속줄에 있는 <strong>단위 지시자(MPA/PA 등)가 중요합니다</strong> — 피로 물성만은 모델 단위계와 별도로 선언하게 되어 있어, 여기를 비우면 모델 단위로 읽습니다.</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 최적화</span>최적화가 물성을 볼 때</h2>
+  <p>OptiStruct 를 쓰는 이유의 절반은 최적화입니다. 물성이 최적화에 들어오는 자리는 셋입니다.</p>
+  <ul>
+    <li><strong>설계변수로서</strong> — <code>DVMREL1/DVMREL2</code> 로 MAT 카드의 필드(E, RHO 등)를 설계변수에 묶습니다. 재료 선택 최적화나 등가 물성 보정에 씁니다.</li>
+    <li><strong>제약으로서</strong> — <code>DRESP1</code> 의 <code>CSTRESS</code>·<code>CSTRAIN</code>·<code>CFAILURE</code> 응답이 MAT8 의 허용값과 PCOMP 의 FT 를 읽습니다. <strong>허용값을 안 넣으면 복합재 파손 제약이 걸리지 않습니다.</strong></li>
+    <li><strong>다재료 위상최적화</strong> — <code>DTPL</code> 에 여러 MID 를 주고 재료 자체를 고르게 합니다.</li>
+  </ul>
+  <div class="note">
+    <h4>비선형 물성과 최적화는 비싸다</h4>
+    <p>MATS1 이 붙은 서브케이스에서 위상최적화를 돌리면 반복마다 비선형 해석이 돕니다. 실무에서는 <strong>선형으로 위상을 뽑고, 확정된 형상에 대해서만 비선형으로 검증</strong>하는 순서가 일반적입니다.</p>
+  </div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 / 예제</span>완성된 덱 조각</h2>
+    <div class="note">
+    <h4>돌려 볼 수 있는 덱이 옆에 있다</h4>
+    <p>아래 조각은 형식을 보이기 위한 것이라 그대로는 안 돕니다. <strong>실제로 도는 최소 덱</strong>이 <a href="예제/dp600-1elem-optistruct.fem"><code>예제/dp600-1elem-optistruct.fem</code></a> 에 있습니다 — 요소 하나를 0.5&nbsp;mm 당기는 단축 인장으로, 여섯 솔버가 같은 문제를 풀도록 맞춰 두었습니다. 기대값과 쓰는 법은 <a href="예제/README.md">예제/README.md</a> 에 있습니다.</p>
+  </div>
+  <pre>$$------------------------------------------------------------------------------
+$$ units: mm / N / tonne / s  (MPa)
+$$------------------------------------------------------------------------------
+SUBCASE 1
+  LABEL = nonlinear static
+  ANALYSIS = NLSTAT
+  SPC = 1
+  LOAD = 2
+  NLPARM = 10
+$
+BEGIN BULK
+$
+NLPARM  10      20              AUTO    5       25      UPW
+$
+$$ ---- 강재: 탄성 + 소성 ------------------------------------------------------
+MAT1    1       210000.         0.3     7.85-9  1.2-5   20.0
++       400.0   400.0   240.0
+MATS1   1       200     PLASTIC         1       1       350.0
+$ TYPSTRN 을 비웠으므로 전체변형률 표 — 첫 점은 원점, 둘째 점이 항복(350/210000)
+TABLES1 200
+$          strain  sigma   strain  sigma   strain  sigma   strain  sigma
++       0.0     0.0     0.00167 350.0   0.02217 455.0   0.10267 560.0
++       1.00376 790.0   ENDT
+MATT1   1       300
+TABLEM1 300
++       20.0    210000. 200.0   198000. 400.0   181000.
++       ENDT
+$
+$$ ---- 고무 씰: 초탄성 + 점탄성 -----------------------------------------------
+MATHE   20      MOONEY          1.10-9
++       0.6     0.15            0.001
+MATVE   20      PRONY
++       1       0.30    0.01
++       2       0.25    0.10
+$
+$$ ---- 복합재 스킨 -------------------------------------------------------------
+MAT8    10      135000. 9000.   0.3     5000.   5000.   3500.   1.57-9
++       -0.5-6  28.0-6  20.0    2200.   1400.   60.0    200.0   90.0
+$
+$$ ---- 속성 --------------------------------------------------------------------
+PSHELL  1       1       1.4     1               1
+PSOLID  2       20
+PCOMP   100     0.0                     HILL
++       10      0.125   0.0     YES     10      0.125   45.0    YES
++       10      0.125   -45.0   YES     10      0.125   90.0    YES
+$
+ENDDATA</pre>
+  <p class="eqn">숫자는 형식을 보이기 위한 예시입니다.</p>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10 / 함정</span>자주 틀리는 지점</h2>
+  <ol class="steps">
+    <li><b>MAT1 에 E·G·NU 를 셋 다 준다</b>둘만 줍니다. 셋이 서로 안 맞으면 어느 것이 이겼는지 모른 채 결과가 나옵니다.</li>
+    <li><b>MATS1 을 선형 서브케이스에서 쓴다</b>조용히 무시되고 탄성 결과가 나옵니다. <code>ANALYSIS=NLSTAT</code> 과 <code>NLPARM</code> 이 있어야 합니다.</li>
+    <li><b>MATS1 만 두고 MAT1 을 뺀다</b>MATS1 은 보완 카드입니다. 같은 MID 의 MAT1 이 있어야 성립합니다.</li>
+    <li><b>TYPSTRN 을 확인 안 하고 표를 옮긴다</b>전체변형률(0)인지 소성변형률(1)인지에 따라 같은 표가 다른 곡선이 됩니다. 초기 강성이 통째로 달라집니다.</li>
+    <li><b>MATT1 의 표 ID 위치를 하나 민다</b>E 자리의 표가 G 로 들어가도 경고가 없습니다. 결과의 자릿수로만 알아챕니다.</li>
+    <li><b>ST/SC/SS 가 해석을 제한한다고 믿는다</b>안 씁니다. 응력이 그 값을 넘어도 아무 일도 안 일어납니다.</li>
+    <li><b>MAT8 허용값 없이 복합재 파손 제약을 건다</b>제약이 걸리지 않고 최적화가 그냥 통과합니다.</li>
+    <li><b>PCOMP 층 각도의 기준 좌표계를 안 정한다</b>요소의 첫 변이 기준이 되어, 곡면에서 층 방향이 요소마다 달라집니다.</li>
+    <li><b>7.85-9 를 파서가 못 읽는다</b>E 생략 지수 표기가 Nastran 계열의 관용입니다.</li>
+    <li><b>MATVE 의 Σg_i 가 1 을 넘는다</b>장기 강성이 음수가 되어 발산합니다.</li>
+  </ol>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11 / 출처</span>확인한 곳</h2>
+  <ul class="tight">
+    <li><a href="https://help.altair.com/hwsolvers/os/topics/solvers/os/materials_os_r.htm">Altair — OptiStruct Materials (Bulk Data 목록)</a> · 카드 지도의 출처</li>
+    <li><a href="https://help.altair.com/hwsolvers/os/topics/solvers/os/mat1_bulk_r.htm">Altair — MAT1</a> · 02장 필드</li>
+    <li><a href="https://help.altair.com/hwsolvers/os/topics/solvers/os/mats1_bulk_r.htm">Altair — MATS1</a> · 04장 필드</li>
+    <li><a href="https://help.altair.com/hwsolvers/os/topics/solvers/os/mat8_bulk_r.htm">Altair — MAT8</a> · 03장 복합재</li>
+    <li><a href="https://help.altair.com/hwsolvers/os/topics/solvers/os/matt1_bulk_r.htm">Altair — MATT1</a> · 06장 온도 의존</li>
+    <li><a href="https://2019.help.altair.com/2019/os/topics/solvers/os/materials_os_r.htm">Altair — Materials (2019 판, 분류 설명이 더 상세)</a></li>
+  </ul>
+</section>
+</main>
+
+<footer>MatNexus · 시뮬레이션 인풋 덱 · OptiStruct 물성 카드 · 2026-08-30 수집</footer>
+</body></html>

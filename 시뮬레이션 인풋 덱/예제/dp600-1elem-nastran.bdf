@@ -1,0 +1,110 @@
+$-------------------------------------------------------------------------------
+$ DP600 single-element uniaxial tension  --  MSC Nastran SOL 400
+$
+$   units : mm - N - tonne - s   (stress MPa, density 7.85-9)
+$   model : 1 x 1 x 1 mm CHEXA, 1/8 symmetry, x-face pulled to u = 0.5 mm
+$   check : sigma_x ~= 700.3 MPa at the end (see README.md)
+$
+$   WHY SOL 400 AND NOT SOL 106:
+$     this deck stretches the element to 40% true strain.  SOL 106 offers large
+$     DISPLACEMENT (PARAM,LGDISP) but not large STRAIN for plasticity, so it is
+$     outside its validity here.  SOL 400 adds large strain, and the guide lists
+$     it as a separate trigger: "Large displacement by LGDISP parameter ...
+$     Large strain by LRGSTRN".  Both are switched on below.
+$
+$   Large strain also needs the "advanced" element: the traditional PSOLID must
+$   be supplemented by PSLDN1 (BEH=SOLID).  PSOLID alone silently stays on the
+$   older formulation.
+$
+$   NOTE the table convention: TABLES1 under MATS1 is stress vs TOTAL strain,
+$   first point at the ORIGIN and the SECOND point at the yield point named in
+$   LIMIT1.  This is NOT the same table as Abaqus/Ansys/LS-DYNA use.
+$-------------------------------------------------------------------------------
+SOL 400
+CEND
+TITLE    = DP600 1-element tension (mm-N-tonne-s)
+ECHO     = NONE
+$
+SUBCASE 1
+  LABEL = pull x face to 0.5 mm
+  ANALYSIS     = NLSTATICS
+  SPC          = 1
+  LOAD         = 2
+  NLPARM       = 10
+  DISPLACEMENT(PLOT) = ALL
+  STRESS(PLOT)       = ALL
+  STRAIN(PLOT)       = ALL
+  SPCFORCES(PLOT)    = ALL
+$
+BEGIN BULK
+$
+PARAM,LGDISP,1
+PARAM,POST,-1
+NLMOPTS,LRGSTRN,1
+$
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV    INTOUT
+$ SOL 400 with NLPARM requires KMETHOD=FNT (full Newton, stiffness updated
+$ every iteration).  AUTO/SEMI/ITER are the SOL 106-era strategies.
+NLPARM  10      50              FNT     5       25      PW      YES
+$
+$===============================================================================
+$ MESH
+$===============================================================================
+$       ID                      X       Y       Z
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+$       EID     PID     G1      G2      G3      G4      G5      G6
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+$       PID     MID     CORDM
+PSOLID  1       1       0
+$ advanced (large strain) solid: C8 = 8-node hex, BEH = SOLID, INT = L
+PSLDN1  1       1
++       C8      SOLID   L
+$
+$===============================================================================
+$ MATERIAL
+$===============================================================================
+$       MID     E       G       NU      RHO
+MAT1    1       210000.         0.3     7.85-9
+$
+$       MID     TID     TYPE    H       YF      HR      LIMIT1  LIMIT2
+MATS1   1       200     PLASTIC         1       1       350.0
+$
+$ stress vs TOTAL strain.  second point 350/210000 = 0.00167 must agree with
+$ both LIMIT1 (350.) and the MAT1 Young's modulus, or the initial stiffness is
+$ defined twice and convergence suffers.
+$ stress vs TOTAL strain.  8-character fields, so the values butt up against
+$ each other -- that is normal fixed format, not a typo.  Pairs are:
+$   (0, 0) (.0016667, 350) (.0221667, 455) (.1026667, 560)
+$   (.4033333, 700) (1.003761, 790)
+$ The second point reproduces the elastic slope of MAT1: 350/.0016667 = 210000.
+TABLES1 200
++       .0000000.0000000.0016667350.0000.0221667455.0000.1026667560.0000
++       .4033333700.00001.003761790.0000
++       ENDT
+$
+$===============================================================================
+$ BOUNDARY CONDITIONS   (1/8 symmetry + enforced displacement)
+$   The pulled DOF must be in the SPC set; SPCD supplies its value and the
+$   subcase must select that SPCD set through LOAD.
+$===============================================================================
+$       SID     C       G1      G2      G3      G4
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+SPC1    1       1       2       3       6       7
+$
+$       SID     G1      C1      D1      G2      C2      D2
+SPCD    2       2       1       0.5     3       1       0.5
+SPCD    2       6       1       0.5     7       1       0.5
+$
+ENDDATA

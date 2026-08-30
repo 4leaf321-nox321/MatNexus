@@ -1,0 +1,82 @@
+**-----------------------------------------------------------------------------
+** DP600 single-element uniaxial tension  --  Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa, density 7.85e-9, energy mJ)
+**   model : 1 x 1 x 1 mm hex, 1/8 symmetry, x-face pulled to u = 0.5 mm
+**   check : S11 ~= 700 MPa at the end (see README.md)
+**
+**   run   : abaqus job=dp600-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+DP600 1-element tension (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PULL
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=DP600
+,
+**
+**=============================================================================
+** MATERIAL
+**=============================================================================
+*MATERIAL, NAME=DP600
+*DENSITY
+7.85E-09,
+*ELASTIC
+210000., 0.3
+** *PLASTIC data lines are (TRUE STRESS, PLASTIC STRAIN) -- stress first.
+** First point must be at plastic strain = 0.
+*PLASTIC, HARDENING=ISOTROPIC
+350., 0.000
+455., 0.020
+560., 0.100
+700., 0.400
+790., 1.000
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=YES, INC=500
+pull to 0.5 mm
+*STATIC
+0.002, 1.0, 1.E-08, 0.02
+**
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+PULL, 1, 1, 0.5
+**
+*OUTPUT, FIELD, FREQUENCY=1
+*ELEMENT OUTPUT
+S, E, PE, PEEQ, LE
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+S11, LE11, PEEQ
+*NODE OUTPUT, NSET=PULL
+U1, RF1
+*END STEP

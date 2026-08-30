@@ -1,0 +1,112 @@
+**-----------------------------------------------------------------------------
+** Rate-dependent crushable foam, compression + unload  --  Abaqus
+**
+**   units : mm - N - tonne - s   (stress MPa, density 6.0e-11)
+**   model : 1 x 1 x 1 mm hex, 1/8 symmetry
+**           compress x-face to -0.3 mm over 0.003 s   (100 /s engineering)
+**           then release back to 0 over the next 0.003 s
+**   check : at t = 0.003 s (peak)  S11 ~= -0.77 MPa, reaction ~= 0.77 N
+**           = static 0.55 MPa x the 1.40 yield ratio, because the run is above
+**             the top tabulated rate and Abaqus clamps rather than extrapolates
+**
+**   *RATE DEPENDENT, TYPE=YIELD RATIO is a SUBOPTION of *CRUSHABLE FOAM
+**   HARDENING: the static hardening curve stays where it is and the table
+**   below scales it.  Abaqus' own words: the rate increase "becomes important
+**   when the strain rates are in the range of 0.1-1 per second and can be very
+**   important ... in the range of 10-100 per second" -- i.e. exactly the drop
+**   tower window.
+**
+**   ONE THING THIS CARD CANNOT DO.
+**   Crushable foam here is a PLASTICITY model, so it unloads ELASTICALLY.
+**   The drop tower will show a hysteresis loop that this deck will not
+**   reproduce; LS-DYNA's *MAT_083 (HU) and Radioss LAW70 (Hys) can.  In
+**   Abaqus the equivalent is *LOW DENSITY FOAM, which is Explicit only.
+**
+**   run   : abaqus job=foamdyn-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+Rate-dependent foam, compress and release (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PUSH
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=FOAM
+,
+**
+**=============================================================================
+** MATERIAL
+**=============================================================================
+*MATERIAL, NAME=FOAM
+*DENSITY
+6.00E-11,
+*ELASTIC
+50.0, 0.0
+*CRUSHABLE FOAM, HARDENING=VOLUMETRIC
+1.0, 0.1
+** static curve: yield stress, plastic volumetric strain
+*CRUSHABLE FOAM HARDENING
+0.35, 0.0000
+0.38, 0.0424
+0.42, 0.0916
+0.55, 0.2890
+0.90, 0.4820
+3.00, 0.6400
+** yield stress ratio, equivalent plastic strain rate
+** first point must be ratio 1.0 at zero rate
+*RATE DEPENDENT, TYPE=YIELD RATIO
+1.00,  0.0
+1.40, 50.0
+**
+** exponential-free: constant crosshead speed, so the ENGINEERING strain rate
+** is constant at 100 /s.  Both branches run above the 50 /s table top.
+*AMPLITUDE, NAME=CRUSH, TIME=STEP TIME
+0.0, 0.0, 0.003, 1.0, 0.006, 0.0
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=YES, INC=1000
+compress to 30% at 100/s, then release
+*DYNAMIC
+1.0E-5, 0.006, 1.0E-9, 5.0E-5
+**
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+*BOUNDARY, AMPLITUDE=CRUSH
+PUSH, 1, 1, -0.3
+**
+*OUTPUT, FIELD, FREQUENCY=10
+*ELEMENT OUTPUT
+S, E, LE, PEEQ
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+S11, LE11, PEEQ, ER11
+*NODE OUTPUT, NSET=PUSH
+U1, RF1
+*END STEP

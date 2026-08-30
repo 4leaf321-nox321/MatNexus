@@ -1,0 +1,164 @@
+#RADIOSS STARTER
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+# Rate-dependent crushable foam, compression + unload  --  Radioss / OpenRadioss
+#
+#   units : Mg - mm - s   (force N, stress MPa, density 6.0e-11)
+#   model : 1 x 1 x 1 mm brick, 1/8 symmetry
+#           compress x-face to -0.3 mm over 0.003 s   (100 /s engineering)
+#           then release back to 0 over the next 0.003 s
+#   check : at t = 0.003 s (peak)  sig_x ~= -0.77 MPa, reaction ~= 0.77 N
+#           = the 50 /s curve, since the run is above the table top and Radioss
+#             clamps rather than extrapolates
+#
+#   /MAT/LAW70 takes one loading FUNCTION PER STRAIN RATE (NL = 2 here), which
+#   is exactly the shape of drop-tower data: one curve per drop height.
+#   Altair states the curves are ENGINEERING stress vs ENGINEERING strain with
+#   positive abscissa and ordinate, so compression is entered POSITIVE and the
+#   numbers match the LS-DYNA table one for one.
+#
+#   Hys is the hysteresis factor -- the counterpart of LS-DYNA *MAT_083's HU.
+#   It is what lets the unload branch dissipate energy, which is the second
+#   thing a drop tower measures and the quasi-static *MAT_063 deck throws away.
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/BEGIN
+foamdyn-1elem-radioss
+      2022         0
+                  Mg                  mm                   s
+                  Mg                  mm                   s
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/TITLE
+Rate-dependent foam one brick, compress and release
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  NODES
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/NODE
+#  node_ID                   X                   Y                   Z
+         1                 0.0                 0.0                 0.0
+         2                 1.0                 0.0                 0.0
+         3                 1.0                 1.0                 0.0
+         4                 0.0                 1.0                 0.0
+         5                 0.0                 0.0                 1.0
+         6                 1.0                 0.0                 1.0
+         7                 1.0                 1.0                 1.0
+         8                 0.0                 1.0                 1.0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  MATERIAL
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/MAT/LAW70/1
+EPP-like foam  60 kg/m3   two drop-tower rates
+#              RHO_I
+             6.0E-11
+#                 E0                  Nu                Emax             Eps_max     Itens
+                  50                 0.0
+#               Fcut  Fsmooth        NL       NuL     Iflag               Shape                 Hys
+                              2         0         0                                             0.7
+#  fct_IDL             Eps_rate              FscaleL
+       301               0.001                 1.0
+       302                  50                 1.0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  FUNCTIONS   engineering stress vs engineering strain, compression POSITIVE
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/FUNCT/301
+foam crush 0.001/s  (quasi-static compression test)
+#                  X                   Y
+                 0.0                0.35
+                0.05                0.38
+                0.10                0.42
+                0.30                0.55
+                0.50                0.90
+                0.70                3.00
+/FUNCT/302
+foam crush 50/s  (drop tower)  = quasi-static x 1.40
+#                  X                   Y
+                 0.0                0.49
+                0.05               0.532
+                0.10               0.588
+                0.30                0.77
+                0.50                1.26
+                0.70                4.20
+#
+# compress at 100 mm/s then release at 100 mm/s
+/FUNCT/200
+crush then release
+#                  X                   Y
+                 0.0                 0.0
+               0.003                -0.3
+               0.006                 0.0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  PROPERTY
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/PROP/SOLID/1
+one brick, foam
+#   Isolid    Ismstr               Icpre               Inpts      Irot    Iframe                  dn
+        24         4                   0                   0         0         0                   0
+#                q_a                 q_b                   h            LAMBDA_V                MU_V
+                   0                   0                   0                   0                   0
+#             dt_min   istrain      IHKT
+                   0         1         0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  PART AND ELEMENT
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/PART/1
+one brick, foam
+#  prop_ID    mat_ID subset_ID
+         1         1         0
+/BRICK/1
+# brick_ID     node1     node2     node3     node4     node5     node6     node7     node8
+         1         1         2         3         4         5         6         7         8
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  NODE GROUPS
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/GRNOD/NODE/1
+x = 0 face
+         1         4         5         8
+/GRNOD/NODE/2
+y = 0 face
+         1         2         5         6
+/GRNOD/NODE/3
+z = 0 face
+         1         2         3         4
+/GRNOD/NODE/4
+x = 1 face (pushed)
+         2         3         6         7
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  BOUNDARY CONDITIONS
+#   Trarot = TX TY TZ  wX wY wZ, six codes right justified in the 10-char field
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/BCS/1
+x symmetry
+#  Tra rot   skew_ID  grnod_ID
+   100 000         0         1
+/BCS/2
+y symmetry
+#  Tra rot   skew_ID  grnod_ID
+   010 000         0         2
+/BCS/3
+z symmetry
+#  Tra rot   skew_ID  grnod_ID
+   001 000         0         3
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  IMPOSED DISPLACEMENT
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/IMPDISP/1
+crush to -0.3 mm then release
+#   Ifunct       DIR     Iskew   Isensor   Gnod_id     Frame     Icoor
+       200         X         0         0         4         0         0
+#            Scale_x             Scale_y              Tstart               Tstop
+                   0                   0                   0                   0
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+#-  TIME HISTORY
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/TH/BRIC/1
+brick history
+#     var1      var2      var3      var4      var5      var6      var7      var8      var9     var10
+DEF
+#     Elid                                                      Elname
+         1          foam
+/TH/NODE/2
+pushed node history
+#     var1      var2      var3      var4      var5      var6      var7      var8      var9     var10
+DEF       REACX
+#   Nodeid   skew_ID                                           Nodename
+         2                    pushed
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
+/END

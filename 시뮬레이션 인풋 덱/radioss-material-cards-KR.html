@@ -1,0 +1,523 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Radioss 물성 카드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+
+<header class="mast">
+  <div class="eyebrow">인풋 덱 · Altair Radioss</div>
+  <h1>Radioss<br>물성 카드</h1>
+  <p class="dek">Starter 파일(<code>_0000.rad</code>)에서 <code>/MAT/LAW…</code> 가 놓이는 자리, LAW2 · LAW36 을 중심으로 한 필드 의미, 함수(<code>/FUNCT</code>)와 파단(<code>/FAIL/…</code>)을 붙이는 법을 정리했습니다.</p>
+  <div class="mast-meta">
+    <div><b>솔버</b> Altair Radioss 2021 이후</div>
+    <div><b>파일</b> _0000.rad (Starter) · _0001.rad (Engine)</div>
+    <div><b>단위</b> /UNIT 블록으로 카드마다 선언할 수 있다</div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> Starter 안에서의 자리</a>
+    <a href="#s1"><span>01</span> 블록 형식과 /UNIT</a>
+    <a href="#s2"><span>02</span> LAW2 — Johnson-Cook</a>
+    <a href="#s3"><span>03</span> LAW36 — 표로 주는 경화</a>
+    <a href="#s4"><span>04</span> 함수 /FUNCT</a>
+    <a href="#s5"><span>05</span> 파단 /FAIL</a>
+    <a href="#s6"><span>06</span> 재료 법칙 지도</a>
+    <a href="#s7"><span>07</span> 고무 · 폼 · 복합재</a>
+    <a href="#s8"><span>08</span> 완성된 덱 조각</a>
+    <a href="#s9"><span>09</span> LS-DYNA 에서 옮겨올 때</a>
+    <a href="#s10"><span>10</span> 자주 틀리는 지점</a>
+    <a href="#s11"><span>11</span> 출처</a>
+  </nav>
+</header>
+
+<main>
+<section id="s0">
+  <h2><span class="num">00 / 위치</span>Starter 안에서의 자리</h2>
+  <p class="lede">Radioss 는 파일이 둘로 갈립니다. <strong>Starter(<code>_0000.rad</code>)</strong> 가 모델 전부 — 절점·요소·물성·파단 — 를 담고, <strong>Engine(<code>_0001.rad</code>)</strong> 은 시간·출력·제어만 담습니다. <em>물성 카드는 전부 Starter 에 있습니다.</em></p>
+  <p>참조 사슬은 <strong>요소 → /PART → (/PROP, /MAT)</strong> 입니다. 파단은 물성에 얹힙니다.</p>
+  <pre>/PART/1
+part_title
+<i>#  prop_ID   mat_ID   subset_ID</i>
+         1        1        0
+
+/MAT/LAW36/1/1        <i>← /MAT/LAW&lt;번호&gt;/&lt;mat_ID&gt;/&lt;unit_ID&gt;</i>
+DP600 sheet
+
+/FAIL/TAB1/1          <i>← /FAIL/&lt;모델&gt;/&lt;mat_ID&gt;  ← 재료에 직접 붙는다</i></pre>
+  <p><strong><code>/FAIL</code> 은 자기 ID 가 아니라 붙일 재료의 ID 를 씁니다.</strong> 이것이 Radioss 파단 카드의 핵심 규칙이고, 하나의 재료에 여러 <code>/FAIL</code> 을 붙일 수 있습니다 — 먼저 만족되는 기준이 이깁니다.</p>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 형식</span>블록 형식과 /UNIT</h2>
+  <p>Radioss 도 고정폭입니다 — <strong>기본 필드폭 20칸</strong>(정수는 10칸인 자리도 있음). <code>#</code> 로 시작하는 줄이 주석이고, 관례로 필드 이름 줄을 그 위에 답니다.</p>
+  <pre>#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|
+/MAT/LAW2/1/1
+DP600 Johnson-Cook
+#              RHO_I
+             7.85E-9
+#                  E                  Nu     Iflag        VP        Pmin
+              210000                 0.3         0         1</pre>
+
+  <h3>/UNIT — 카드마다 단위를 선언한다</h3>
+  <p>Radioss 가 다른 명시적 솔버와 확연히 다른 점입니다. <code>unit_ID</code> 를 카드 끝에 붙이면 <strong>그 카드의 숫자를 어떤 단위로 읽을지</strong> 선언할 수 있고, Starter 가 모델 단위계로 자동 환산합니다.</p>
+  <pre>/UNIT/1
+model units: kg mm ms
+#          MU_M                MU_L                MU_T
+             kg                  mm                  ms
+
+/UNIT/2
+supplier data in SI
+             kg                   m                   s</pre>
+  <p class="eqn">순서는 <b>질량 · 길이 · 시간</b>입니다 — 길이를 앞세워 적는 실수가 흔한데, kg 과 mm 은 서로 자리를 바꿔도 문법 오류가 나지 않습니다.</p>
+  <p><strong>이 기능 덕분에 공급사가 SI 로 준 카드를 그대로 붙여 넣고 <code>unit_ID</code> 만 2 로 지정할 수 있습니다.</strong> 다만 <code>/BEGIN</code> 블록에 모델 전체의 작업 단위계가 선언돼 있어야 하고, unit_ID 를 0 이나 빈칸으로 두면 <em>모델 단위계로 읽습니다</em> — 이 기본값을 잊고 SI 숫자를 넣는 것이 가장 흔한 사고입니다.</p>
+  <div class="note">
+    <h4>충돌 해석의 관용 단위계</h4>
+    <p><strong>kg · mm · ms</strong> (힘 kN, 응력 GPa) 와 <strong>ton · mm · s</strong> (힘 N, 응력 MPa) 가 대부분입니다. Radioss 문서의 필드 단위는 SI(kg·m·s, Pa)로 적혀 있으므로, 문서의 “Pa” 를 그대로 믿고 210e9 를 넣으면 mm 계 모델에서는 완전히 틀립니다.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / LAW2</span>/MAT/LAW2 (PLAS_JOHNS) — Johnson-Cook</h2>
+  <div class="eq">σ = (a + b·ε_p^n) · (1 + c·ln(ε̇/ε̇₀)) · (1 − T*^m)
+T* = (T − T_r)/(T_melt − T_r)</div>
+  <pre>/MAT/LAW2/1/1
+DP600 Johnson-Cook
+#              RHO_I
+             7.85E-9
+#                  E                  Nu     Iflag        VP                Pmin
+              210000                 0.3         1         1
+#                  a                 UTS               E_UTS            EPS_p_max            SIG_max0
+                 350                 620                0.18                 1.0
+#                  c            EPS_DOT_0       ICC   Fsmooth                Fcut               Chard
+                0.02                 1.0         1         1                1000                   0
+#                  m               T_melt              rho_Cp                  T_r                T_max
+                 1.0                1800             3.6E-3                 300</pre>
+  <div class="tw"><table>
+    <thead><tr><th>필드</th><th>뜻</th><th>기본값 · 주의</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ρ_i</td><td>초기 밀도</td><td>—</td></tr>
+      <tr><td class="k">E, ν</td><td>탄성계수, 포아송비</td><td>—</td></tr>
+      <tr><td class="k">Iflag</td><td>입력 방식</td><td><b>0 = a,b,n 을 직접</b> / <b>1 = σ_y, UTS, ε_UTS 를 주면 Radioss 가 a,b,n 을 계산</b>. 기본 0</td></tr>
+      <tr><td class="k">VP</td><td>속도의 정의</td><td>1 = 소성, 2 = 전체(기본), 3 = 편차. 0 을 넣으면 2 로 바뀐다</td></tr>
+      <tr><td class="k">P_min</td><td>압력 컷오프</td><td>기본 −1e20. 음수여야 한다</td></tr>
+      <tr><td class="k">a / b / n</td><td>JC 경화 상수 (Iflag=0)</td><td>n ≤ 1.0</td></tr>
+      <tr><td class="k">σ_y / UTS / ε_UTS</td><td>공학값으로 주는 입력 (Iflag=1)</td><td>UTS &gt; σ_y. ε_UTS 는 <b>공칭</b> 균일연신</td></tr>
+      <tr><td class="k">ε_p^max</td><td>파단 소성변형률</td><td>기본 1e20. 쉘은 삭제, 솔리드는 정수압만 남음</td></tr>
+      <tr><td class="k">σ_max0</td><td>응력 상한</td><td>기본 1e20</td></tr>
+      <tr><td class="k">c</td><td>속도 계수</td><td>기본 0 → 속도 효과 없음</td></tr>
+      <tr><td class="k">ε̇₀</td><td>기준 변형률속도</td><td>이보다 느리면 속도 효과 없음</td></tr>
+      <tr><td class="k">ICC</td><td>σ_max 에 속도효과 적용 여부</td><td>1 = 적용(기본), 2 = 미적용</td></tr>
+      <tr><td class="k">Fsmooth / Fcut</td><td>속도 필터 on/off · 차단 주파수</td><td>Fsmooth=1 권장. Fcut 기본 1e20(=필터 없음)</td></tr>
+      <tr><td class="k">Chard</td><td>경화 방식</td><td>0 = 등방(기본), 1 = 이동(Prager–Ziegler). 사이는 혼합</td></tr>
+      <tr><td class="k">m, T_melt, ρC_p, T_r, T_max</td><td>온도항</td><td><b>ρC_p 가 0 이면 온도는 T_r 에 고정 — 온도항이 죽는다.</b> T_r 기본 300 K</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <h4>Iflag=1 이 실무에서 유용한 이유</h4>
+    <p>재료 데이터시트에는 a, b, n 이 없고 <strong>항복강도·인장강도·균일연신</strong>이 있습니다. Iflag=1 은 그 세 값에서 JC 상수를 역산해 줍니다 — 시험 곡선 없이 카드를 채워야 할 때 가장 빠른 길이고, 대신 곡선 모양은 JC 식이 강제하는 형태가 됩니다.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / LAW36</span>/MAT/LAW36 (PLAS_TAB) — 표로 주는 경화</h2>
+  <p>시험 곡선이 있으면 이 법칙이 정답입니다. <strong>속도별로 함수를 하나씩</strong> 주고, 사이는 보간합니다.</p>
+  <pre>/MAT/LAW36/1/1
+DP600 tabulated
+#              RHO_I
+             7.85E-9
+#                  E                  Nu           Eps_p_max              EPS_t               EPS_m
+              210000                 0.3                 1.0
+#            N_funct   Fsmooth               Chard                Fcut               EPS_f      VP
+                   4         1                   0                1000                          1
+#           Fct_ID_p              Fscale
+                   0
+#           fct_ID_1  fct_ID_2  fct_ID_3  fct_ID_4  fct_ID_5
+                 201       202       203       204
+#            Fscale_1            Fscale_2            Fscale_3            Fscale_4
+                   1                   1                   1                   1
+#            Eps_dot1            Eps_dot2            Eps_dot3            Eps_dot4
+               0.001                   1                  10                 100</pre>
+  <div class="tw"><table>
+    <thead><tr><th>필드</th><th>뜻</th><th>기본값 · 주의</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ε_p^max</td><td>요소 삭제 소성변형률</td><td>기본 1e20</td></tr>
+      <tr><td class="k">ε_t</td><td>항복응력이 줄기 시작하는 인장변형률</td><td>기본 1e20 — 연화 시작점</td></tr>
+      <tr><td class="k">ε_m</td><td>응력이 0 이 되는 인장변형률</td><td>기본 2e20. ε_t 와 짝으로 선형 연화</td></tr>
+      <tr><td class="k">ε_f</td><td>요소 삭제 인장변형률</td><td>기본 3e20</td></tr>
+      <tr><td class="k">N_funct</td><td>함수 개수</td><td>1 ~ 100</td></tr>
+      <tr><td class="k">Fsmooth</td><td>속도 보간 방식</td><td>1 = 선형(기본), 2 = 로그. <b>속도가 자릿수로 벌어지면 2 가 맞다</b></td></tr>
+      <tr><td class="k">Chard</td><td>0 = 등방, 1 = 이동</td><td>기본 0</td></tr>
+      <tr><td class="k">Fcut</td><td>속도 필터 차단 주파수</td><td>기본 10000 Hz</td></tr>
+      <tr><td class="k">VP</td><td>0 = 전체 변형률속도, 1 = 소성</td><td>기본 0</td></tr>
+      <tr><td class="k">fct_ID_p / Fscale</td><td>압력 의존 항복 함수와 배율</td><td>폴리머·발포체에</td></tr>
+      <tr><td class="k">fct_ID_i</td><td>속도별 항복응력 함수 ID</td><td>줄당 5개씩</td></tr>
+      <tr><td class="k">Fscale_i</td><td>함수 세로 배율</td><td><b>단위 환산을 여기서 처리하면 원본 곡선을 안 고쳐도 된다</b></td></tr>
+      <tr><td class="k">ε̇_i</td><td>각 함수의 변형률속도</td><td><b>엄격한 오름차순</b></td></tr>
+      <tr><td class="k">fct_ID_E, E_inf, C_E</td><td>탄성계수 감소</td><td>E(ε_p) = E − (E−E_inf)(1−exp(−C_E·ε_p)). 판재 스프링백에</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap">
+    <h4>함수의 첫 점은 (0, σ_y)</h4>
+    <p>“항복응력 함수의 첫 점은 소성변형률 ε_p 가 0 이어야 한다” 는 것이 문서의 명시적 요구입니다. 그리고 <strong>넣는 값은 진응력 대 진소성변형률</strong>입니다 — 공칭을 넣으면 대변형에서 조용히 낮은 응력으로 계산됩니다.</p>
+  </div>
+  <p>탄성계수 감소(E_inf, C_E)는 판재 성형의 <strong>스프링백</strong>에서 의미가 큽니다. 실제 강판은 소성이 쌓이면 제하 기울기가 10~20% 낮아지는데, 이것을 무시하면 스프링백을 일관되게 작게 예측합니다.</p>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 함수</span>함수 /FUNCT</h2>
+  <pre>/FUNCT/201
+DP600 hardening 0.001/s
+#                  X                   Y
+                   0                 350
+                0.005                 390
+                0.020                 455
+                0.100                 560
+                1.000                 790</pre>
+  <p>구조가 단순합니다 — ID, 제목, (x, y) 쌍의 나열. 물성·파단·접촉 어디서든 이 ID 로 부릅니다. <code>/TABLE</code> 은 독립변수가 둘 이상일 때(예: 삼축도 × 변형률속도) 씁니다.</p>
+  <div class="note trap">
+    <h4>표 밖으로는 외삽하지 않는다</h4>
+    <p>가장 큰 x 를 넘어가면 <strong>마지막 값을 그대로 유지</strong>합니다. 속도 함수도 마찬가지라, 시험 최고 속도가 100/s 인데 해석에서 2000/s 가 나오면 그 구간은 100/s 물성으로 계산됩니다. <b>Engine 출력에서 최대 변형률속도를 뽑아 대조하는 것이 검증 절차입니다.</b></p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 파단</span>/FAIL — 재료에 얹는 층</h2>
+  <p class="lede">Radioss 는 파단을 <strong>물성과 분리해</strong> 별도 블록으로 둡니다. 물성 카드를 손대지 않고 파단만 바꿔 볼 수 있고, <strong>한 재료에 여러 개를 붙일 수 있습니다.</strong></p>
+  <div class="tw"><table>
+    <thead><tr><th>키워드</th><th>기준</th><th>쓰는 자리</th></tr></thead>
+    <tbody>
+      <tr><td class="k">/FAIL/JOHNSON</td><td>Johnson–Cook 소성변형률 파단</td><td>가장 흔한 시작점</td></tr>
+      <tr><td class="k">/FAIL/BIQUAD</td><td>삼축도–파단변형률을 이차식 두 개로</td><td>시험 3~5종으로 실용적 보정</td></tr>
+      <tr><td class="k">/FAIL/TAB1 · TAB2</td><td>삼축도·속도·온도·요소크기 함수 표</td><td>정밀 보정 — GISSMO 에 대응</td></tr>
+      <tr><td class="k">/FAIL/HC_DSSE</td><td>Hosford–Coulomb</td><td>고강도강 전단 파단</td></tr>
+      <tr><td class="k">/FAIL/GURSON</td><td>공극 핵생성·성장 (GNH)</td><td>연성 손상 기구를 볼 때</td></tr>
+      <tr><td class="k">/FAIL/LEMAITRE</td><td>연성 손상 + 연화</td><td>—</td></tr>
+      <tr><td class="k">/FAIL/FLD</td><td>성형한계선도</td><td>판재 성형</td></tr>
+      <tr><td class="k">/FAIL/TENSSTRAIN</td><td>인장변형률 한계</td><td>단순 · 폼 · 플라스틱</td></tr>
+      <tr><td class="k">/FAIL/ENERGY</td><td>에너지 밀도</td><td>—</td></tr>
+      <tr><td class="k">/FAIL/CONNECT · SNCONNECT</td><td>용접·접착 연결의 변위·에너지 파단</td><td>스팟웰드·접착</td></tr>
+      <tr><td class="k">/FAIL/HASHIN · PUCK · TSAIWU · TSAIHILL · CHANG</td><td>복합재 파손 기준</td><td>층별 판정</td></tr>
+      <tr><td class="k">/FAIL/INIEVO</td><td>초기화 / 전개 2단계</td><td>Abaqus 의 손상 구조에 대응</td></tr>
+      <tr><td class="k">/FAIL/ALTER · FRACTAL_DMG</td><td>유리</td><td>—</td></tr>
+      <tr><td class="k">/FAIL/WIERZBICKI · WILKINS · RTCL · COCKCROFT · EMC</td><td>고전 연성 파단 기준들</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+  <pre>/FAIL/BIQUAD/1        <i>← 1 은 이 파단이 붙을 mat_ID</i>
+#            c1                  c2                  c3                  c4       c5    M_flag
+           1.20                0.70                0.45                0.32                    1
+#         Ifail_sh  Ifail_so             Pthinfail                Inst_start
+                 1         1</pre>
+  <p><code>Ifail_sh</code>/<code>Ifail_so</code> 는 쉘·솔리드에서 <strong>몇 개의 적분점이 파단해야 요소를 삭제하는가</strong>입니다. 5적분점 쉘에서 1 로 두면 표면 한 점만 파단해도 요소가 사라져 조기 파단이 됩니다 — 이 값이 결과를 크게 바꿉니다.</p>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 지도</span>재료 법칙 지도</h2>
+  <div class="tw"><table>
+    <thead><tr><th>분류</th><th>법칙</th><th>메모</th></tr></thead>
+    <tbody>
+      <tr><td>탄성</td><td class="k">LAW1 (ELAST)</td><td>등방 선형</td></tr>
+      <tr><td rowspan="6">탄소성</td><td class="k">LAW2 (PLAS_JOHNS)</td><td>Johnson–Cook. 데이터가 적을 때</td></tr>
+      <tr><td class="k">LAW36 (PLAS_TAB)</td><td>표 입력. <b>실무 기본값</b></td></tr>
+      <tr><td class="k">LAW44 (COWPER)</td><td>Cowper–Symonds 속도</td></tr>
+      <tr><td class="k">LAW60 (PLAS_T3)</td><td>속도 곡선 스플라인 보간</td></tr>
+      <tr><td class="k">LAW32 (HILL) · LAW43 · LAW73</td><td>이방 항복(판재 성형)</td></tr>
+      <tr><td class="k">LAW22 (DAMA)</td><td>JC + 연성 손상</td></tr>
+      <tr><td rowspan="3">초·점탄성</td><td class="k">LAW42 (OGDEN)</td><td>고무 — 실무 기본값</td></tr>
+      <tr><td class="k">LAW62 (VISC_HYP) · LAW82 · LAW92</td><td>점성 초탄성. PRONY 붙임</td></tr>
+      <tr><td class="k">LAW34 (BOLTZMAN)</td><td>선형 점탄성 폴리머</td></tr>
+      <tr><td rowspan="3">폼 · 허니컴</td><td class="k">LAW70 · LAW77 · LAW90</td><td>탄성/점성 폼</td></tr>
+      <tr><td class="k">LAW33 · LAW35 · LAW38</td><td>발포체</td></tr>
+      <tr><td class="k">LAW28 (HONEYCOMB) · LAW50</td><td>허니컴 · 압괴 직교이방</td></tr>
+      <tr><td rowspan="3">복합재</td><td class="k">LAW25 (COMPSH)</td><td>쉘 — Tsai–Wu 또는 CRASURV</td></tr>
+      <tr><td class="k">LAW12 (3D_COMP)</td><td>솔리드 Tsai–Wu</td></tr>
+      <tr><td class="k">LAW19 (FABRI) · LAW58</td><td>직물 · 에어백</td></tr>
+      <tr><td rowspan="2">연결</td><td class="k">LAW59 (CONNECT)</td><td>스팟웰드 · 접착 · 리벳</td></tr>
+      <tr><td class="k">LAW83 · LAW116/117/169</td><td>응집 · 접착</td></tr>
+      <tr><td rowspan="3">기타</td><td class="k">LAW10/21/81 (DPRAG)</td><td>Drucker–Prager — 흙 · 콘크리트</td></tr>
+      <tr><td class="k">LAW24 (CONC) · LAW124 (CDPM2)</td><td>콘크리트</td></tr>
+      <tr><td class="k">LAW5 (JWL) · LAW6 (HYDRO) · LAW51</td><td>폭약 · 유체 · 다상</td></tr>
+    </tbody>
+  </table></div>
+  <p>데이터가 없을 때는 <code>/MAT/PLAS_PREDEF</code> 도 있습니다 — 재료 이름과 등급만 고르면 Altair 가 내장한 곡선을 쓰는 카드입니다. <strong>초기 검토용으로는 유용하지만 납품 해석의 근거로 쓰기에는 출처가 약합니다.</strong></p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 비금속</span>고무 · 폼 · 복합재</h2>
+  <p><strong>LAW42 (OGDEN)</strong> 이 고무의 기본입니다. μ_i, α_i 쌍을 최대 5개까지 주고, 비압축성 정도는 포아송비(0.495 부근)로 조절합니다. 점성이 필요하면 같은 카드에 Prony 항을 이어 붙입니다.</p>
+  <p><strong>폼</strong>은 어떤 물리를 볼 것인지로 갈립니다 — 흡수 에너지가 목적이면 LAW70(압축 곡선 직접 입력)이 단순하고 확실합니다. 반발·이력이 중요하면 LAW77·LAW90 처럼 점성 항이 있는 쪽으로 갑니다.</p>
+  <p><strong>복합재</strong>는 LAW25(COMPSH)가 중심입니다. <code>Iform</code> 으로 Tsai–Wu 와 CRASURV 를 고르는데, 충돌처럼 파손 후 거동이 필요하면 CRASURV 를 씁니다 — 손상 후 응력 감쇠를 방향별로 제어할 수 있기 때문입니다. 층 구성은 물성이 아니라 <code>/PROP/TYPE11 (SH_SANDW)</code> 또는 <code>/PROP/TYPE17 (STACK)</code> 에서 옵니다.</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 예제</span>완성된 덱 조각</h2>
+    <div class="note">
+    <h4>돌려 볼 수 있는 덱이 옆에 있다</h4>
+    <p>아래 조각은 형식을 보이기 위한 것이라 그대로는 안 돕니다. <strong>실제로 도는 최소 덱</strong>이 <a href="예제/dp600-1elem-radioss_0000.rad"><code>예제/dp600-1elem-radioss_0000.rad</code></a> 에 있습니다 — 요소 하나를 0.5&nbsp;mm 당기는 단축 인장으로, 여섯 솔버가 같은 문제를 풀도록 맞춰 두었습니다. 기대값과 쓰는 법은 <a href="예제/README.md">예제/README.md</a> 에 있습니다.</p>
+  </div>
+  <pre>#RADIOSS STARTER
+/BEGIN
+crash_model
+      2021         0
+#          MU_M                MU_L                MU_T
+            kg                  mm                  ms
+#          MU_M                MU_L                MU_T
+            kg                  mm                  ms
+#---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|
+/UNIT/1
+model  kg mm ms
+            kg                  mm                  ms
+#---------------------------------------------------------------------
+/PART/1
+DP600 outer panel
+#  prop_ID    mat_ID  subset_ID
+         1         1         0
+/PROP/TYPE1/1
+shell 1.4mm
+#              Ishell    Ismstr     Ish3n     Idril
+                    24         2         0         0
+#                 hm                  hf                  hr                  dm                  dn
+#               N_ip             Istrain              Thick               Ashear             Ithick     Iplas
+                    5                   1                 1.4                                     1         1
+#---------------------------------------------------------------------
+/MAT/LAW36/1/1
+DP600  tabulated   (kg mm ms -> GPa)
+#              RHO_I
+             7.85E-6
+#                  E                  Nu           Eps_p_max               EPS_t               EPS_m
+                 210                 0.3                 1.0
+#            N_funct   Fsmooth               Chard                Fcut               EPS_f      VP
+                   2         2                   0                1000                          1
+#           Fct_ID_p              Fscale
+                   0
+#           fct_ID_1  fct_ID_2
+                 201       202
+#            Fscale_1            Fscale_2
+                   1                   1
+#            Eps_dot1            Eps_dot2
+               0.001                 100
+#---------------------------------------------------------------------
+/FAIL/BIQUAD/1
+#            c1                  c2                  c3                  c4       c5    M_flag
+           1.20                0.70                0.45                0.32                    1
+#         Ifail_sh  Ifail_so
+                 3         1
+#---------------------------------------------------------------------
+/FUNCT/201
+hardening 0.001/s   (GPa)
+#                  X                   Y
+                   0               0.350
+               0.020               0.455
+               0.100               0.560
+               1.000               0.790
+/FUNCT/202
+hardening 100/s     (GPa)
+                   0               0.378
+               0.020               0.488
+               0.100               0.600
+               1.000               0.845
+/END</pre>
+  <p class="eqn">kg·mm·ms 계라 응력이 GPa 입니다 — 곡선의 y 값이 0.35 인 이유. 숫자는 형식 예시입니다.</p>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 / 이식</span>LS-DYNA 에서 옮겨올 때</h2>
+  <p>HyperMesh 의 변환기가 대응시키는 관계를 알아 두면, 변환 결과가 왜 그렇게 나왔는지 읽을 수 있습니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>LS-DYNA</th><th>Radioss</th><th>조건</th></tr></thead>
+    <tbody>
+      <tr><td class="k">*MAT_024</td><td class="k">/MAT/LAW36</td><td>LCSS 또는 EPS/ES 로 곡선을 준 경우</td></tr>
+      <tr><td class="k">*MAT_024</td><td class="k">/MAT/LAW44</td><td>SIGY·ETAN·C·P 로 준 경우 (Cowper–Symonds)</td></tr>
+      <tr><td class="k">*MAT_015</td><td class="k">/MAT/LAW2</td><td>Johnson–Cook</td></tr>
+      <tr><td class="k">*MAT_001</td><td class="k">/MAT/LAW1</td><td>탄성</td></tr>
+      <tr><td class="k">*MAT_020</td><td class="k">/MAT/LAW13</td><td>강체</td></tr>
+      <tr><td class="k">*MAT_027 / 077</td><td class="k">/MAT/LAW42 (OGDEN)</td><td>고무</td></tr>
+      <tr><td class="k">*MAT_063</td><td class="k">/MAT/LAW70</td><td>압괴 폼</td></tr>
+      <tr><td class="k">*MAT_054</td><td class="k">/MAT/LAW25</td><td>복합재 쉘</td></tr>
+      <tr><td class="k">*MAT_ADD_EROSION</td><td class="k">/FAIL/…</td><td>기준별로 나뉜다</td></tr>
+      <tr><td class="k">GISSMO</td><td class="k">/FAIL/TAB1</td><td>삼축도 + 메시 정규화</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap">
+    <h4>변환은 형식만 옮기고 보정은 안 옮긴다</h4>
+    <p>파단 카드의 값은 <strong>그 솔버의 요소 정식·적분점·삭제 규칙에 맞춰 보정된 것</strong>입니다. 카드가 성공적으로 변환됐어도 같은 시편에서 같은 시점에 찢어지지 않습니다. 이식 후에는 반드시 <b>기본 시편 몇 개로 재보정</b>합니다.</p>
+  </div>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10 / 함정</span>자주 틀리는 지점</h2>
+  <ol class="steps">
+    <li><b>unit_ID 를 0 으로 두고 SI 숫자를 넣는다</b>모델 단위계로 읽힙니다. mm 계 모델에 210e9 를 넣으면 자릿수가 통째로 어긋납니다.</li>
+    <li><b>문서의 “Pa” 를 그대로 믿는다</b>Radioss 문서는 SI 기준으로 필드 단위를 적습니다. 실제 모델은 대개 mm 계입니다.</li>
+    <li><b>/FAIL 의 ID 를 파단 자체의 번호로 오해한다</b><code>/FAIL/JOHNSON/3</code> 의 3 은 <b>재료 ID</b> 입니다. 다른 재료에 붙습니다.</li>
+    <li><b>Ifail_sh 를 1 로 둔다</b>적분점 하나만 파단해도 요소가 사라져 조기 파단이 됩니다. 5적분점이면 3 정도가 흔한 선택입니다.</li>
+    <li><b>속도 함수를 선형 보간(Fsmooth=1)으로 두고 자릿수로 벌린다</b>0.001 과 100 사이를 선형 보간하면 중간 속도가 거의 최고 속도 곡선이 됩니다. 로그(2)로 둡니다.</li>
+    <li><b>LAW2 에서 ρC_p 를 비운다</b>온도항이 계산에 관여하지 않습니다. m 과 T_melt 만 채워 넣어도 아무 일이 일어나지 않습니다.</li>
+    <li><b>함수 첫 점의 x 가 0 이 아니다</b>문서가 명시적으로 요구합니다. 초기 응답이 어긋납니다.</li>
+    <li><b>공칭 곡선을 넣는다</b>진응력–진소성변형률이어야 합니다.</li>
+    <li><b>ε_t / ε_m 을 기본값으로 두고 연화를 기대한다</b>기본값이 1e20 이라 연화는 일어나지 않습니다.</li>
+    <li><b>LS-DYNA 에서 변환한 파단 값을 그대로 믿는다</b>재보정이 필요합니다(09장).</li>
+  </ol>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11 / 출처</span>확인한 곳</h2>
+  <ul class="tight">
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/mat_law36_plas_tab_starter_r.htm">Altair — /MAT/LAW36 (PLAS_TAB)</a> · 03장 필드 정본</li>
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/mat_law2_plas_johns_starter_r.htm">Altair — /MAT/LAW2 (PLAS_JOHNS)</a> · 02장 필드 정본</li>
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/materials_starter_overview_r.htm">Altair — Materials (Starter) 개요</a> · 06장 지도</li>
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/failure_models_starter_r.htm">Altair — Failure Models</a> · 05장 목록</li>
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/starter_input_r.htm">Altair — Starter Input</a> · 블록 형식</li>
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/mat_plas_predef_starter_r.htm">Altair — /MAT/PLAS_PREDEF</a></li>
+    <li><a href="https://help.altair.com/hwsolvers/rad/topics/solvers/rad/mat_024_piecewise_linear_plasticity_lsdyna_r.htm">Altair — *MAT_024 대응(LS-DYNA → Radioss)</a> · 09장 이식표</li>
+    <li><a href="https://advanced-eng.cz/wp-content/uploads/2022/09/Best_practice_in_setting_up_a_well_created_crash_model_Marian_BULLA_Altair_2022_09_29.pdf">Altair — Material and failure models in Radioss (best practice)</a></li>
+  </ul>
+</section>
+</main>
+
+<footer>MatNexus · 시뮬레이션 인풋 덱 · Radioss 물성 카드 · 2026-08-30 수집</footer>
+</body></html>

@@ -1,0 +1,433 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>측정 가능 범위</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#F8F9F6; --sunk:#E3E7E1;
+  --ink:#17211E; --ink2:#39443F; --muted:#67736D; --rule:#CBD2CA;
+  --accent:#0E5F5A; --accent-ink:#0E5F5A; --accent-bg:#DCE9E6;
+  --hot:#B33C29; --hot-bg:#F1DFD9;
+  --cold:#2F6FC4;
+  --col:44rem; --mid:53rem; --wide:62rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+    --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+    --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+    --hot:#E8735A; --hot-bg:#2E1A15;
+    --cold:#6FA5E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#161D19; --sunk:#1D2621;
+  --ink:#E7EBE5; --ink2:#C2CBC5; --muted:#8D9A93; --rule:#2A342E;
+  --accent:#63C6B4; --accent-ink:#7ED3C3; --accent-bg:#12302B;
+  --hot:#E8735A; --hot-bg:#2E1A15;
+  --cold:#6FA5E6;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;
+  font-weight:350; font-size:16.5px; line-height:1.78;
+  margin:0; padding:0 1.25rem 7rem;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0}
+a{color:var(--accent-ink)}
+strong{font-weight:600;color:var(--ink)}
+em{font-style:normal;background:var(--accent-bg);padding:.05em .3em;border-radius:2px}
+
+/* ---------- masthead ---------- */
+header.mast{max-width:var(--wide);margin:0 auto;padding:5rem 0 3rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(2.3rem,6vw,3.7rem);
+  line-height:1.14;margin:.9rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+.dek{max-width:38rem;margin-top:1.5rem;color:var(--ink2);font-size:1.06rem}
+.mast-meta{display:flex;flex-wrap:wrap;gap:.5rem 2.2rem;margin-top:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.mast-meta b{color:var(--ink2);font-weight:500}
+
+/* ---------- toc ---------- */
+nav.toc{max-width:var(--wide);margin:2.6rem auto 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.1rem 2rem}
+nav.toc a{display:flex;gap:.8rem;padding:.42rem 0;border-bottom:1px solid var(--rule);
+  text-decoration:none;color:var(--ink2);font-size:.9rem}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc span{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- flow ---------- */
+main{display:flex;flex-direction:column;gap:5rem;margin-top:5rem}
+section{display:flex;flex-direction:column;gap:1.2rem;scroll-margin-top:2rem}
+/* specificity note: these must outrank the element rules below (p, h2, pre, ul, figure),
+   otherwise their `margin:0` cancels the centering. */
+main section>*{width:100%;max-width:var(--col);margin-inline:auto}
+main section>.tw,main section>pre,main section>.eq,main section>.cards{max-width:var(--mid)}
+main section>figure,main section>.wide{max-width:var(--wide)}
+
+h2{font-family:"Gowun Batang",serif;font-weight:700;font-size:clamp(1.6rem,3.4vw,2.15rem);
+  line-height:1.28;margin:0;text-wrap:balance}
+h2 .num{display:block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:400;
+  letter-spacing:.2em;color:var(--accent-ink);margin-bottom:.7rem}
+h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 -.35rem;color:var(--ink)}
+h3::before{content:"— ";color:var(--muted)}
+h4{font-size:.82rem;font-weight:600;margin:0;letter-spacing:.02em;
+  font-family:"IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.08rem;color:var(--ink2)}
+
+ul,ol{margin:0;padding-left:1.35rem;display:flex;flex-direction:column;gap:.4rem}
+li::marker{color:var(--muted)}
+ul.tight,ol.tight{gap:.15rem}
+
+/* ---------- equations ---------- */
+.eq{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:3px;padding:1rem 1.15rem;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.93rem;line-height:1.95;overflow-x:auto;white-space:pre}
+.eq .cm{color:var(--muted);font-size:.84em}
+.eqn{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace;margin-top:-.55rem}
+
+/* ---------- code ---------- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  padding:1.05rem 1.15rem;overflow-x:auto;margin:0;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.83rem;line-height:1.72;
+  font-variant-numeric:tabular-nums}
+pre b{color:var(--accent-ink);font-weight:500}
+pre i{color:var(--muted);font-style:normal}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:.1em .35em;border-radius:2px}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:34rem}
+th,td{text-align:left;padding:.58rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
+td.k{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.94rem}
+.note.trap{background:var(--hot-bg);border-color:transparent}
+.note.trap h4{color:var(--hot)}
+.note.trap strong{color:var(--hot)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.9rem}
+.card h4{color:var(--accent-ink)}
+
+/* ---------- figures ---------- */
+figure{margin:0;display:flex;flex-direction:column;gap:.85rem}
+.fbox{border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  padding:1.4rem 1.2rem;overflow-x:auto}
+figcaption{font-size:.85rem;color:var(--muted);max-width:44rem;margin-inline:auto;text-align:center}
+figcaption b{color:var(--ink2);font-weight:500}
+svg{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+/* ---------- misc ---------- */
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:1.15rem;padding:0;list-style:none}
+.steps>li{counter-increment:s;position:relative;padding-left:3rem}
+.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.3rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--accent-ink);letter-spacing:.05em}
+.steps b{display:block;font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);width:100%;max-width:var(--col);margin:.6rem auto}
+footer{max-width:var(--wide);margin:6rem auto 0;padding-top:1.6rem;border-top:1px solid var(--rule);
+  font-size:.82rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+::selection{background:var(--accent-bg)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (max-width:640px){
+  body{font-size:16px}
+  header.mast{padding-top:3rem}
+  main{gap:3.6rem}
+  .fbox{padding:.9rem .6rem}
+}
+</style></head><body>
+<header class="mast">
+  <div class="eyebrow">인풋 덱 · 장비 대조</div>
+  <h1>이 장비로<br>어디까지 채우나</h1>
+  <p class="dek">여덟 세트 예제 덱에 들어 있는 <strong>모든 물성값 하나하나</strong>에, 지금 있는 장비로 잴 수 있는지 표시를 붙였습니다. 어떤 숫자가 실측이 될 수 있고 어떤 숫자가 끝까지 문헌값으로 남는지를 가르는 것이 목적입니다.</p>
+  <div class="mast-meta">
+    <div><b>장비</b> DMA · 인장시험기+신율계 · 고속 압축 · 온도챔버</div>
+    <div><b>대상</b> 예제 덱 8세트 · 값 60여 개</div>
+    <div><b>덱</b> <a href="예제/README.md">예제/README.md</a></div>
+  </div>
+  <nav class="toc">
+    <a href="#s0"><span>00</span> 표시 규약과 장비</a>
+    <a href="#s1"><span>01</span> 한 장 요약</a>
+    <a href="#s2"><span>02</span> 금속 소성</a>
+    <a href="#s3"><span>03</span> 고무 — DMA 의 자리</a>
+    <a href="#s4"><span>04</span> 복합재</a>
+    <a href="#s5"><span>05</span> 폼 · 속도 의존 폼</a>
+    <a href="#s6"><span>06</span> 크리프 · 온도</a>
+    <a href="#s7"><span>07</span> 속도 의존 소성 — 못 재는 세트</a>
+    <a href="#s8"><span>08</span> 장비에 물어야 할 것</a>
+  </nav>
+</header>
+
+<main>
+
+<section id="s0">
+  <h2><span class="num">00 / 규약</span>표시 규약과 장비</h2>
+  <p class="lede">판정은 <strong>「이 값을 만들 수 있는가」</strong> 기준입니다. 값을 <em>대충 넣을 수 있는가</em>가 아니라, <strong>시험 결과로부터 그 숫자가 결정되는가</strong>를 봅니다.</p>
+
+  <div class="cards">
+    <div class="card"><h4>● 실측</h4><p>지금 장비로 <strong>바로 나옵니다.</strong> 표준 시험법과 시편만 있으면 됩니다.</p></div>
+    <div class="card"><h4>◐ 조건부</h4><p>장비는 되는데 <strong>치구·시편·소프트웨어 중 하나가 더 필요</strong>하거나, 장비 사양 확인이 필요합니다.</p></div>
+    <div class="card"><h4>○ 못 잼</h4><p>원리적으로 <strong>다른 장비가 있어야</strong> 합니다. 문헌값·역산·가정으로 남습니다.</p></div>
+  </div>
+
+  <h3>장비가 각각 무엇을 주는가</h3>
+  <div class="tw"><table>
+    <thead><tr><th>장비</th><th>직접 나오는 것</th><th>이것으로 채워지는 카드</th></tr></thead>
+    <tbody>
+      <tr><td><b>DMA</b></td><td>E′(T), E″, tan δ, Tg, 주파수 스윕 → TTS 마스터커브</td><td class="k">*VISCOELASTIC PRONY<br>TB,PRONY · /VISC/PRONY</td></tr>
+      <tr><td><b>인장시험기 + 신율계</b></td><td>E, ν, 진응력–진변형률(넥킹 전), 강도</td><td class="k">*ELASTIC · *PLASTIC<br>MAT1 · MATS1 · TABLES1</td></tr>
+      <tr><td><b>고속 압축시험기</b></td><td>압축 응력–변형률 곡선을 속도별로, 제하 곡선</td><td class="k">*MAT_083 TBID · LAW70 NL<br>*RATE DEPENDENT</td></tr>
+      <tr><td><b>온도챔버 인장</b></td><td>E(T), 경화곡선(T), (장시간 유지 시) 크리프</td><td class="k">MATT1 · TABLEST<br>*CREEP · MATVP</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>덱과 장비는 서로 다른 축이다</h4>
+    <p>덱 여덟 세트는 <strong>솔버가 어떻게 다른가</strong>를 보이려고 만든 것이고, 값은 그 목적에 맞는 대표값입니다. 그래서 <strong>덱에 값이 있다는 것이 그 값을 잴 수 있다는 뜻이 전혀 아닙니다.</strong> 이 문서는 그 둘을 처음으로 겹쳐 놓습니다.</p>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 / 요약</span>한 장 요약</h2>
+  <p class="lede">세트별 <strong>채워지는 비율</strong>입니다. <strong>「항목」은 아래 각 절 상세표의 줄 수</strong>입니다 — 곡선 하나는 점이 여럿이어도 한 줄로 셉니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>세트</th><th class="n">항목</th><th class="n">●</th><th class="n">◐</th><th class="n">○</th><th>남는 것</th></tr></thead>
+    <tbody>
+      <tr><td><b>온도 의존 소성</b> <code>temp</code></td><td class="n">3</td><td class="n">2</td><td class="n">1</td><td class="n">0</td><td>ν 하나 — <strong>가장 잘 맞는 세트</strong></td></tr>
+      <tr><td><b>폼 · 속도 의존 폼</b> <code>foam</code> <code>foamdyn</code></td><td class="n">7</td><td class="n">5</td><td class="n">1</td><td class="n">1</td><td>준정적 압축 여부 · 폼 인장</td></tr>
+      <tr><td><b>금속 소성</b> <code>dp600</code></td><td class="n">5</td><td class="n">3</td><td class="n">1</td><td class="n">1</td><td>넥킹 이후 경화 외삽</td></tr>
+      <tr><td><b>고무</b> <code>rubber</code></td><td class="n">5</td><td class="n">3</td><td class="n">1</td><td class="n">1</td><td>이축·체적 — <strong>DMA 는 점탄성만</strong></td></tr>
+      <tr><td><b>크리프</b> <code>creep</code></td><td class="n">3</td><td class="n">1</td><td class="n">2</td><td class="n">0</td><td>장시간 정하중 유지 능력</td></tr>
+      <tr><td><b>속도 의존 소성</b> <code>rate</code></td><td class="n">3</td><td class="n">1</td><td class="n">0</td><td class="n">2</td><td><strong>속도 파라미터 자체를 못 잼</strong></td></tr>
+      <tr><td><b>복합재</b> <code>laminate</code></td><td class="n">10</td><td class="n">4</td><td class="n">4</td><td class="n">2</td><td>면외 전단·압축</td></tr>
+      <tr><td><b>합계</b></td><td class="n"><b>36</b></td><td class="n"><b>19</b></td><td class="n"><b>10</b></td><td class="n"><b>7</b></td><td>절반은 바로, 넷 중 하나는 끝까지 가정</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap">
+    <h4>한 줄로 줄이면</h4>
+    <p><strong>고분자·폼 쪽은 거의 다 채워지고, 금속의 고속 거동과 고무의 다축 거동이 구멍입니다.</strong> 앞의 것은 SHPB(홉킨슨 바)가, 뒤의 것은 이축 인장 치구가 있어야 합니다.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 / 금속</span>금속 소성 <code>dp600</code></h2>
+  <p class="lede">인장시험기의 본령입니다. 다만 <strong>덱의 경화곡선이 소성변형률 100% 까지 가 있습니다</strong> — 인장시험으로는 거기까지 못 갑니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>값</th><th class="n">덱의 값</th><th>판정</th><th>근거</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ρ</td><td class="n">7.85e-9</td><td>●</td><td>저울 + 치수</td></tr>
+      <tr><td class="k">E</td><td class="n">210000</td><td>●</td><td>신율계 필수 — 크로스헤드 변위로 계산하면 장비 컴플라이언스 때문에 낮게 나옵니다</td></tr>
+      <tr><td class="k">ν</td><td class="n">0.3</td><td>◐</td><td><strong>횡방향 신율계가 따로 있어야</strong> 합니다. 축방향 하나뿐이면 문헌값</td></tr>
+      <tr><td class="k">σ–ε<sub>pl</sub> 0 ~ 0.1</td><td class="n">350 → 560</td><td>●</td><td>진응력·진변형률 환산까지 표준 처리</td></tr>
+      <tr><td class="k">σ–ε<sub>pl</sub> 0.4, 1.0</td><td class="n">700, 790</td><td>○</td><td><strong>넥킹 이후</strong>. DP600 균일연신은 대략 14%, 진변형률로 0.13 근처. 그 너머는 외삽</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap">
+    <h4>넥킹 이후는 잰 값이 아니다</h4>
+    <p>넥킹이 시작되면 변형이 국부화되어 <strong>「하중/원단면적」이 더 이상 그 지점의 응력이 아닙니다.</strong> 성형·충돌 해석은 소성변형률 0.5~1.0 을 예사로 지나가므로, 그 구간은 어차피 <strong>Swift·Voce 같은 식으로 외삽</strong>하게 됩니다.</p>
+    <p>실무적으로는 <strong>인장시험 + 역해석</strong>으로 좁힙니다 — 넥킹 이후의 하중–변위 곡선을 FE 가 재현하도록 외삽 계수를 맞추는 것입니다. 이때 필요한 것은 새 장비가 아니라 <strong>계산</strong>이므로, 이 저장소가 붙기 좋은 자리입니다.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 / 고무</span>고무 — DMA 의 자리와 그 한계</h2>
+  <p class="lede">DMA 는 <strong>시간 의존성(Prony)을 정확히 주지만, 초탄성 상수는 주지 않습니다.</strong> 덱의 값 중 DMA 가 채우는 것은 점탄성 두 개뿐입니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>값</th><th class="n">덱의 값</th><th>판정</th><th>근거</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ρ</td><td class="n">1.10e-9</td><td>●</td><td>저울 + 치수</td></tr>
+      <tr><td class="k">C10, C01</td><td class="n">0.6, 0.15</td><td>◐</td><td><strong>단축 인장만으로는 둘이 갈리지 않습니다.</strong> 아래 함정 참조</td></tr>
+      <tr><td class="k">D1 (체적)</td><td class="n">1.3333e-3</td><td>○</td><td>체적 압축(구속 압축) 시험이 필요. 사실상 <strong>ν≈0.4995 로 가정</strong>하는 것이 표준</td></tr>
+      <tr><td class="k">Prony g₁</td><td class="n">0.3</td><td>●</td><td><strong>DMA 주파수 스윕 → 마스터커브 → Prony 적합.</strong> 정확히 DMA 를 위한 값</td></tr>
+      <tr><td class="k">Prony τ₁</td><td class="n">1.0e-3</td><td>●</td><td>같음. 항의 개수도 DMA 데이터 폭이 정합니다</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap">
+    <h4>단축 인장 하나로 초탄성을 맞추면 외삽에서 갈라진다</h4>
+    <p>Mooney–Rivlin 의 C10 과 C01 은 <strong>단축 인장 데이터만으로는 무수히 많은 조합이 똑같이 잘 맞습니다.</strong> 그렇게 맞춘 상수를 압축이나 이축 상태에 쓰면 크게 어긋나고, 심하면 해가 불안정해집니다.</p>
+    <p>정석은 <strong>단축 인장 · 평면 인장(순수 전단) · 등이축</strong> 셋을 함께 맞추는 것입니다. 그중 <strong>평면 인장은 폭이 매우 넓고 짧은 시편만 있으면 지금 인장기로 됩니다</strong> — 치구가 아니라 시편 형상 문제입니다. 등이축은 <strong>구속 없는 원판 압축으로 근사</strong>할 수 있어서, 압축시험기의 준정적 사용 가능 여부가 여기서도 갈립니다.</p>
+  </div>
+
+  <div class="note">
+    <h4>DMA 상수를 넣을 때 솔버가 갈린다</h4>
+    <p>DMA 마스터커브의 <strong>순간 응답(instantaneous)</strong>과 <strong>완전 완화(long term)</strong> 중 어느 것을 초탄성 상수로 적느냐가 솔버마다 기본값이 다릅니다 — Abaqus 는 <strong>long term 이 기본</strong>, Ansys <code>TB,HYPER</code> 는 <strong>항상 instantaneous</strong>. <a href="예제/README.md">README</a> 의 고무 절에 자세히 적어 두었습니다. 이 하나로 강성이 <strong>1/(1−g₁) 배</strong>, 여기서는 43% 틀립니다.</p>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 / 복합재</span>복합재 <code>laminate</code></h2>
+  <p class="lede">면내 값은 인장기로 대부분 나옵니다. <strong>압축 강도와 면외 전단이 구멍</strong>입니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>값</th><th class="n">덱의 값</th><th>판정</th><th>시험</th></tr></thead>
+    <tbody>
+      <tr><td class="k">E1</td><td class="n">135000</td><td>●</td><td>0° 인장 (ASTM D3039) + 신율계</td></tr>
+      <tr><td class="k">E2</td><td class="n">9000</td><td>●</td><td>90° 인장</td></tr>
+      <tr><td class="k">ν12</td><td class="n">0.3</td><td>◐</td><td>0° 인장 + <strong>횡방향 신율계</strong></td></tr>
+      <tr><td class="k">G12</td><td class="n">5000</td><td>◐</td><td><strong>±45° 인장 (ASTM D3518)</strong> — 인장기로 됩니다. 그 적층판을 만들 수 있어야</td></tr>
+      <tr><td class="k">G13, G23</td><td class="n">5000, 3500</td><td>○</td><td>면외 전단. V-notch(D5379) 치구 필요</td></tr>
+      <tr><td class="k">Xt (0° 인장강도)</td><td class="n">2200</td><td>●</td><td>D3039 같은 시편에서 함께</td></tr>
+      <tr><td class="k">Yt (90° 인장강도)</td><td class="n">60</td><td>●</td><td>같음</td></tr>
+      <tr><td class="k">Sl (면내 전단강도)</td><td class="n">90</td><td>◐</td><td>D3518 에서 함께 나옵니다</td></tr>
+      <tr><td class="k">Xc, Yc (압축강도)</td><td class="n">1400, 200</td><td>◐</td><td>압축시험기 + <strong>좌굴 방지 치구</strong>(D6641 등). 고속기가 준정적으로 되는지에 달림</td></tr>
+      <tr><td class="k">St (면외 전단강도)</td><td class="n">90</td><td>○</td><td>면외 계열과 함께 못 잽니다</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>못 재는 값이 답에 얼마나 영향을 주는가</h4>
+    <p>이 덱의 검산에서 <strong>면외 값(G13·G23·St)은 답에 전혀 안 들어갑니다</strong> — 면내 인장 문제라서 그렇습니다. 대신 덱을 만들며 발견한 것처럼 <strong>Yt(기질 인장강도)가 파손지수를 먼저 1 로 올립니다</strong>(0.5% 변형률에서 섬유 0.61 대 기질 1.37). Yt 는 <strong>●</strong> 입니다. 즉 <strong>파손 판정을 좌우하는 값은 잴 수 있고, 못 재는 값은 이 하중에서 안 쓰입니다.</strong></p>
+    <p>면외 값이 필요해지는 것은 <strong>층간 박리·충격·두꺼운 적층</strong>부터입니다.</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 / 폼</span>폼 <code>foam</code> · 속도 의존 폼 <code>foamdyn</code></h2>
+  <p class="lede">고속 압축시험기가 있다면 <strong>여덟 세트 중 가장 완전하게 채워지는 곳</strong>입니다. <code>foamdyn</code> 덱은 애초에 그 데이터를 받으려고 만든 것입니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>값</th><th class="n">덱의 값</th><th>판정</th><th>근거</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ρ</td><td class="n">6.0e-11</td><td>●</td><td>60 kg/m³ — 저울 + 치수</td></tr>
+      <tr><td class="k">E</td><td class="n">50</td><td>●</td><td>압축 곡선 초기 기울기</td></tr>
+      <tr><td class="k">ν</td><td class="n">0.0</td><td>●</td><td>폼은 0 에 가깝습니다. 확인만 하면 됨</td></tr>
+      <tr><td class="k">정적 압축 곡선 6점</td><td class="n">0.35 → 3.00</td><td>◐</td><td><strong>준정적 압축이 되어야</strong> 합니다 (아래)</td></tr>
+      <tr><td class="k">50 /s 곡선 6점</td><td class="n">정적 × 1.40</td><td>●</td><td><strong>드롭타워 그대로.</strong> 낙하 높이별 곡선 하나씩</td></tr>
+      <tr><td class="k">HU / Hys (이력)</td><td class="n">0.70</td><td>●</td><td><strong>제하 곡선에서 직접</strong>. 흡수 에너지 비율</td></tr>
+      <tr><td class="k">TSC (인장 컷오프)</td><td class="n">0.35</td><td>○</td><td>폼 인장은 별도 시편·치구</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>카드가 시험을 그대로 받는다</h4>
+    <p>세 솔버 다 <strong>「속도 하나에 곡선 하나」</strong> 구조입니다. 낙하 높이를 바꿔 가며 얻은 곡선을 그대로 쌓으면 되고, 중간 값은 솔버가 보간합니다.</p>
+    <div class="eq">LS-DYNA   *DEFINE_TABLE 300 -&gt; 0.001, 50.0 -&gt; *DEFINE_CURVE 301, 302
+Radioss   /MAT/LAW70  NL=2 -&gt; fct_IDL 301 @0.001, 302 @50
+Abaqus    *RATE DEPENDENT, TYPE=YIELD RATIO -&gt; (1.00, 0.0) (1.40, 50.0)</div>
+    <p>LS-DYNA 와 Radioss 는 <strong>공칭응력 vs 공칭변형률, 압축을 양수로</strong> 넣는 규약이 같아 시험 데이터가 한 줄씩 그대로 들어갑니다.</p>
+  </div>
+
+  <div class="note trap">
+    <h4>이력은 Abaqus/Standard 로는 못 낸다</h4>
+    <p>드롭타워가 주는 두 번째 정보인 <strong>제하 이력(흡수 에너지)</strong> 을 LS-DYNA <code>HU</code> 와 Radioss <code>Hys</code> 는 받지만, <strong>Abaqus/Standard 의 crushable foam 은 소성 모델이라 제하가 탄성입니다.</strong> 그 값을 쓰려면 <code>*LOW DENSITY FOAM</code> 이 필요하고 그것은 Explicit 전용입니다.</p>
+    <p>완충재는 흡수 에너지가 곧 성능이므로, <strong>이 선택이 시험 결과의 절반을 쓸지 버릴지를 정합니다.</strong></p>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 / 온도·크리프</span>온도 의존 <code>temp</code> · 크리프 <code>creep</code></h2>
+
+  <h3>온도 의존 소성 — 가장 잘 맞는 세트</h3>
+  <p>온도챔버 인장시험기가 있으면 <strong>덱의 값이 그대로 시험 계획이 됩니다.</strong> 20 °C 와 200 °C 두 온도에서 E 와 경화곡선을 각각 얻어 두 벌을 적는 구조입니다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>값</th><th class="n">덱의 값</th><th>판정</th><th>근거</th></tr></thead>
+    <tbody>
+      <tr><td class="k">E(20°C), E(200°C)</td><td class="n">210000 / 198000</td><td>●</td><td>온도별 인장 + 신율계 (<strong>고온용 신율계여야</strong>)</td></tr>
+      <tr><td class="k">경화곡선 2온도 × 5점</td><td class="n">350→790 / 300→677</td><td>●</td><td>같음. 넥킹 이후는 소성 세트와 같은 한계</td></tr>
+      <tr><td class="k">ν</td><td class="n">0.3</td><td>◐</td><td>횡방향 신율계</td></tr>
+    </tbody>
+  </table></div>
+  <p>온도 축을 더 촘촘히 하고 싶으면 <strong>덱을 안 고치고 표만 늘리면 됩니다</strong> — 네 솔버 다 온도별 곡선을 쌓는 구조라서, 값이 늘어도 카드 형식이 안 바뀝니다.</p>
+
+  <h3>크리프 — 시간이 관건</h3>
+  <div class="tw"><table>
+    <thead><tr><th>값</th><th class="n">덱의 값</th><th>판정</th><th>근거</th></tr></thead>
+    <tbody>
+      <tr><td class="k">E, ν, ρ</td><td class="n">210000, 0.3</td><td>●</td><td>상온 인장</td></tr>
+      <tr><td class="k">Norton A</td><td class="n">1.0e-15</td><td>◐</td><td><strong>정하중을 장시간 유지</strong>할 수 있어야. 여러 응력 수준 필요</td></tr>
+      <tr><td class="k">Norton M (=n)</td><td class="n">5.0</td><td>◐</td><td>같음. <strong>응력 3점 이상</strong>의 정상상태 속도를 log–log 로 기울기</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap">
+    <h4>크리프는 장비가 아니라 시간이 벽이다</h4>
+    <p>덱이 1000초를 봅니다만 그건 예제라서 짧게 잡은 것이고, <strong>실제 크리프 시험은 수백~수천 시간</strong>입니다. 확인할 것은 두 가지입니다 — 인장기가 <strong>하중 제어로 며칠씩 물려 있을 수 있는가</strong>(보통 크리프 프레임은 지렛대와 추를 쓰는 별도 장비입니다), 그리고 <strong>챔버가 그 시간 동안 온도를 유지하는가</strong>.</p>
+    <p>둘 중 하나가 안 되면 <strong>가속 시험(더 높은 응력·온도) + Larson–Miller 외삽</strong>으로 우회합니다. 이때도 필요한 것은 계산이지 장비가 아닙니다.</p>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 / 구멍</span>속도 의존 소성 <code>rate</code> — 유일하게 못 재는 세트</h2>
+  <p class="lede">이 세트만은 <strong>지금 장비 목록으로는 안 됩니다.</strong> 나머지 값은 다 실측인데, 정작 이 세트의 존재 이유인 속도 파라미터 둘이 ○ 입니다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>값</th><th class="n">덱의 값</th><th>판정</th><th>근거</th></tr></thead>
+    <tbody>
+      <tr><td class="k">E, ν, ρ, 정적 경화곡선</td><td class="n">소성 세트와 동일</td><td>●</td><td>상온 인장</td></tr>
+      <tr><td class="k">Cowper–Symonds D</td><td class="n">1.0e7</td><td>○</td><td rowspan="2"><strong>금속의 100~1000 /s 인장</strong>이 필요합니다. 고속 압축기는 폼용이라 이 영역의 <strong>금속 인장</strong>을 못 냅니다</td></tr>
+      <tr><td class="k">Cowper–Symonds n (P)</td><td class="n">5.0</td><td>○</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>왜 압축기로 대신할 수 없나</h4>
+    <p>폼용 고속 압축기는 <strong>변형이 크고 응력이 낮은</strong> 재료를 위한 것입니다. 금속은 반대로 <strong>변형이 작고 응력이 세</strong>서, 시편이 균일하게 변형되기 전에 하중 신호가 장비 자체의 진동에 묻힙니다. 이 영역의 표준 장비가 <strong>SHPB(분리 홉킨슨 압력봉)</strong> 이고, 인장판은 <strong>SHTB</strong> 입니다.</p>
+    <p>그 사이 영역(1~100 /s)은 <strong>고속 유압 인장기</strong>가 담당하는데, 이 역시 별도 장비입니다.</p>
+  </div>
+
+  <div class="note">
+    <h4>그래도 할 수 있는 것</h4>
+    <p><strong>Cowper–Symonds 는 두 파라미터뿐입니다.</strong> 문헌의 강종별 값을 출발점으로 두고, <strong>실물 충돌·낙하 시험의 변형 형상과 흡수 에너지에 맞추어 역산</strong>하는 것이 실무의 통상 경로입니다. 덱의 <code>1.0e7</code> 도 그런 문헌값입니다.</p>
+    <p>중요한 것은 <strong>그 숫자가 실측이 아니라는 사실이 문서에 남아 있는 것</strong>입니다 — 결과가 안 맞을 때 어느 값을 먼저 의심할지가 여기서 갈립니다.</p>
+  </div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 / 확인</span>장비에 물어야 할 것 두 가지</h2>
+  <p class="lede">이 표에서 <strong>◐ 가 ● 이 되느냐 ○ 가 되느냐</strong>가 아래 두 답에 걸려 있습니다. 걸린 값의 개수로 보면 이 둘이 가장 큽니다.</p>
+
+  <ol class="steps">
+    <li><b>고속 압축시험기가 준정적 속도로도 도는가</b>
+      <p>여기 걸린 항목 셋 — <strong>폼 정적 곡선</strong>(그 안에 6점), <strong>복합재 압축강도 Xc·Yc</strong>, <strong>고무 등이축</strong>(구속 없는 원판 압축으로 근사). 단일 확인 항목 중 파급이 가장 큽니다.</p>
+      <p>드롭타워식(낙하 에너지)이면 저속이 원리적으로 안 되고, 서보유압식이면 속도 범위만 확인하면 됩니다. 안 되면 <strong>인장기에 압축 압반을 달아</strong> 대신할 수 있습니다 — 폼은 하중이 낮아 인장기 용량으로 충분합니다.</p>
+    </li>
+    <li><b>온도챔버의 범위와 장시간 유지 능력</b>
+      <p>여기 걸린 값 — 크리프 A·M, 그리고 온도 세트를 200 °C 너머로 넓힐 수 있는지. 확인할 것은 <strong>상한 온도</strong>, <strong>고온용 신율계 유무</strong>, <strong>며칠간 유지 가능 여부</strong> 셋입니다.</p>
+    </li>
+  </ol>
+
+  <h3>추가로 갖추면 큰 것</h3>
+  <div class="tw"><table>
+    <thead><tr><th>추가</th><th class="n">채워지는 값</th><th>비고</th></tr></thead>
+    <tbody>
+      <tr><td><b>횡방향 신율계</b></td><td class="n">3</td><td>ν 세 세트. 가장 싸고 즉시 효과</td></tr>
+      <tr><td><b>평면 인장 시편 형상</b></td><td class="n">2</td><td>장비 불필요 — <strong>시편만 넓고 짧게</strong>. 고무 C10/C01 분리</td></tr>
+      <tr><td><b>±45° 적층판</b></td><td class="n">2</td><td>장비 불필요. G12, Sl</td></tr>
+      <tr><td><b>V-notch 전단 치구</b></td><td class="n">3</td><td>복합재 면외 — 층간 해석에 들어갈 때</td></tr>
+      <tr><td><b>SHTB / 고속 유압 인장</b></td><td class="n">2</td><td>금속 속도 의존. <strong>큰 투자</strong></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <h4>이 문서를 어떻게 쓰나</h4>
+    <p>덱을 실제 부품에 쓸 때 <strong>○ 와 ◐ 로 표시된 값을 먼저 목록으로 뽑아</strong>, 그 값들이 답에 얼마나 영향을 주는지 감도를 봅니다. 영향이 작으면 문헌값으로 두고 넘어가고, 크면 그 값 하나를 위해 시험을 설계합니다.</p>
+    <p>덱마다의 기대값과 그 근거는 <a href="예제/README.md">예제/README.md</a> 에, 솔버별 카드 문법은 <a href="00-솔버-카드-대응표-KR.html">대응표</a> 에 있습니다. 이 문서가 <strong>예제 덱의 숫자 하나하나</strong>를 본다면, <a href="../공통-가이드/물성-장비-대응표-KR.html">물성 × 장비 대응표</a> 는 같은 판정을 <strong>물성 종류와 장비의 격자</strong>로 놓은 것입니다.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  시뮬레이션 인풋 덱 · 측정 가능 범위 — 예제 덱 8세트 대조 · 2026-08-30
+</footer>
+
+</body></html>

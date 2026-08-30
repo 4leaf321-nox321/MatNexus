@@ -1,0 +1,83 @@
+$$------------------------------------------------------------------------------
+$$ Secondary (Norton) creep, single element, constant load  --  Altair OptiStruct
+$$
+$$   units : mm - N - tonne - s   (stress MPa)
+$$   model : 1 x 1 x 1 mm CHEXA, 1/8 symmetry, 100 N pulled on the x=1 face
+$$           -> sigma_x = 100 MPa held for 1000 s
+$$   law   : Norton   eps_dot_cr = A * sigma^M ,  A = 1e-15, M = 5
+$$   check : creep strain after 1000 s = 0.01000, total ux = 0.0104762 mm
+$$
+$$   MATVP supplements MAT1 with the same MID, exactly like MATS1 does for
+$$   plasticity.  Field order follows the MSC MATVP primary format
+$$       MATVP MID A IT3D M N P Q IUSER
+$$   with the law  eps_dot_cr = A * sigma^M * eps^N * t^P.
+$$
+$$   CONFIDENCE NOTE: Altair's MATVP field table is not machine readable, so
+$$   this deck assumes OptiStruct mirrors the MSC layout (it does for MAT1,
+$$   MATS1, MAT8, PCOMP, TABLES1).  Check the .out listing before trusting it.
+$$
+$$   Small displacement on purpose -- no PARAM,LGDISP.  At 1% creep strain the
+$$   section barely shrinks, and holding the stress at exactly 100 MPa is what
+$$   makes the answer closed form.
+$$------------------------------------------------------------------------------
+$$ I/O Options
+SCREEN,OUT
+OUTPUT,H3D
+DISPLACEMENT(H3D) = ALL
+STRESS(H3D)       = ALL
+STRAIN(H3D)       = ALL
+SPCFORCE(H3D)     = ALL
+$$
+$$ Subcase Information
+SUBCASE 1
+  LABEL    = hold 100 N for 1000 s
+  ANALYSIS = NLSTAT
+  SPC      = 1
+  LOAD     = 2
+  NLPARM   = 10
+$$
+BEGIN BULK
+$
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV
+NLPARM  10      100     10.0    AUTO    5       25      UPW
+$
+$$-----------------------------------------------------------------------------
+$$ MESH
+$$-----------------------------------------------------------------------------
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+PSOLID  1       1       0
+$
+$$-----------------------------------------------------------------------------
+$$ MATERIAL   -- MATVP supplements the MAT1 with the same MID
+$$-----------------------------------------------------------------------------
+MAT1    1       210000.         0.3     7.85-9
+$
+$       MID     A       IT3D    M       N       P       Q       IUSER
+MATVP   1       1.0-15  0       5.0     0.0     0.0     0.0
+$
+$$-----------------------------------------------------------------------------
+$$ BOUNDARY CONDITIONS AND LOAD
+$$-----------------------------------------------------------------------------
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+$
+$ 4 nodes x 25 N = 100 N over 1 mm2 = 100 MPa
+$       SID     G       CID     F       N1      N2      N3
+FORCE   2       2       0       25.0    1.0     0.0     0.0
+FORCE   2       3       0       25.0    1.0     0.0     0.0
+FORCE   2       6       0       25.0    1.0     0.0     0.0
+FORCE   2       7       0       25.0    1.0     0.0     0.0
+$
+ENDDATA

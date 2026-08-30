@@ -1,0 +1,111 @@
+**-----------------------------------------------------------------------------
+** Temperature-dependent plasticity, single element  --  Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa)
+**   model : same 1 mm cube and 1/8 symmetry as the DP600 quasi-static deck,
+**           held at a uniform 200 C and pulled to u = 0.5 mm
+**   check : S11 ~= 600.31 MPa , reaction ~= 400.69 N
+**           (the same pull at 20 C gives 700.32 MPa / 467.50 N)
+**
+**   material at 20 C : E = 210000, curve 350/455/560/700/790
+**   material at 200 C: E = 198000, curve 300/390/480/600/677
+**
+**   NO THERMAL EXPANSION IS DEFINED, on purpose.  With *EXPANSION the jump
+**   from TREF to 200 C would add a thermal strain on top of the mechanical
+**   one and the closed-form check would no longer isolate the softening.
+**
+**   Abaqus takes temperature as an EXTRA COLUMN on the existing data lines --
+**   there is no separate temperature-table card.  That is the opposite of the
+**   Nastran family, where MATT1 / TABLEST are separate entries.
+**
+**   run   : abaqus job=temp-1elem-abaqus interactive
+**-----------------------------------------------------------------------------
+*HEADING
+Temperature-dependent plasticity 1-element, 200 C (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PULL
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=DP600
+,
+**
+**=============================================================================
+** MATERIAL   -- temperature is the LAST column on each data line
+**=============================================================================
+*MATERIAL, NAME=DP600
+*DENSITY
+7.85E-09,
+** E, nu, temperature
+*ELASTIC
+210000., 0.3,  20.
+198000., 0.3, 200.
+** true stress, plastic strain, temperature
+*PLASTIC, HARDENING=ISOTROPIC
+350., 0.000,  20.
+455., 0.020,  20.
+560., 0.100,  20.
+700., 0.400,  20.
+790., 1.000,  20.
+300., 0.000, 200.
+390., 0.020, 200.
+480., 0.100, 200.
+600., 0.400, 200.
+677., 1.000, 200.
+**
+**=============================================================================
+** INITIAL TEMPERATURE FIELD
+**=============================================================================
+*INITIAL CONDITIONS, TYPE=TEMPERATURE
+ALLN, 200.
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=YES, INC=500
+pull at 200 C
+*STATIC
+0.002, 1.0, 1.E-08, 0.02
+**
+** hold the whole model at 200 C for the entire step
+*TEMPERATURE
+ALLN, 200.
+**
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+PULL, 1, 1, 0.5
+**
+*OUTPUT, FIELD, FREQUENCY=1
+*ELEMENT OUTPUT
+S, LE, PEEQ, TEMP
+*NODE OUTPUT
+U, RF, NT
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+S11, PEEQ
+*NODE OUTPUT, NSET=PULL
+U1, RF1
+*END STEP

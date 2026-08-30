@@ -1,0 +1,113 @@
+$-------------------------------------------------------------------------------
+$ Temperature-dependent plasticity, single element  --  MSC Nastran SOL 400
+$
+$   units : mm - N - tonne - s   (stress MPa)
+$   model : same 1 mm CHEXA and 1/8 symmetry as the DP600 quasi-static deck,
+$           held at a uniform 200 C and pulled to u = 0.5 mm
+$   check : sigma_x ~= 600.31 MPa , reaction ~= 400.69 N
+$           (the same pull at 20 C gives 700.32 MPa / 467.50 N)
+$
+$   TWO SEPARATE TEMPERATURE MECHANISMS, and both are needed:
+$     MATT1   -> makes the ELASTIC constants temperature dependent (TABLEM1)
+$     TABLEST -> makes the whole MATS1 STRESS-STRAIN CURVE temperature
+$                dependent by mapping temperature to a TABLES1 id
+$   Set only MATT1 and the yield curve stays at its 20 C values.
+$
+$   No thermal expansion (A is blank), so temperature only softens the
+$   material and the closed-form check isolates that effect.
+$-------------------------------------------------------------------------------
+SOL 400
+CEND
+TITLE    = Temperature-dependent plasticity 1-element, 200 C
+ECHO     = NONE
+$
+SUBCASE 1
+  LABEL = pull at 200 C
+  ANALYSIS     = NLSTATICS
+  SPC          = 1
+  LOAD         = 2
+  NLPARM       = 10
+  TEMPERATURE(INITIAL) = 3
+  TEMPERATURE(LOAD)    = 3
+  DISPLACEMENT(PLOT) = ALL
+  STRESS(PLOT)       = ALL
+  STRAIN(PLOT)       = ALL
+  SPCFORCES(PLOT)    = ALL
+$
+BEGIN BULK
+$
+PARAM,LGDISP,1
+PARAM,POST,-1
+NLMOPTS,LRGSTRN,1
+$
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV    INTOUT
+NLPARM  10      50              FNT     5       25      PW      YES
+$
+$===============================================================================
+$ MESH
+$===============================================================================
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+$       PID     MID     CORDM
+PSOLID  1       1       0
+$ property extension -- large strain plasticity needs it in SOL 400
+PSLDN1  1       1
++       C8      SOLID   L
+$
+$===============================================================================
+$ MATERIAL
+$===============================================================================
+$       MID     E       G       NU      RHO     A       TREF
+MAT1    1       210000.         0.3     7.85-9          20.0
+$ MATT1 points at TABLEMi curves: field 2 = E(T), field 4 = NU(T)
+MATT1   1       300
+$       MID     TID     TYPE    H       YF      HR      LIMIT1
+MATS1   1       500     PLASTIC         1       1       350.0
+$
+$ E versus temperature
+TABLEM1 300
++       20.0    210000. 200.0   198000. ENDT
+$
+$ TABLEST maps TEMPERATURE -> TABLES1 id, so the whole stress-strain curve
+$ changes with temperature, not just a scale factor.
+TABLEST 500
++       20.0    501     200.0   502     ENDT
+$
+$ stress vs TOTAL strain at 20 C   (second point = 350/210000)
+TABLES1 501
++       .00000000       .0016667350     .0221667455     .1026667560
++       .4033333700     1.003761790
++       ENDT
+$
+$ stress vs TOTAL strain at 200 C  (second point = 300/198000)
+TABLES1 502
++       .00000000       .0015152300     .0219697390     .1024242480
++       .4030303600     1.003419677
++       ENDT
+$
+$===============================================================================
+$ BOUNDARY CONDITIONS   (1/8 symmetry + enforced displacement)
+$===============================================================================
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+SPC1    1       1       2       3       6       7
+$
+SPCD    2       2       1       0.5     3       1       0.5
+SPCD    2       6       1       0.5     7       1       0.5
+$
+$
+$ uniform 200 C over the whole model
+TEMPD   3       200.0
+$
+ENDDATA
