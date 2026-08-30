@@ -41,7 +41,7 @@ import type { Sample, Specimen } from '@/modules/materials/api'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { SummaryImportDialog } from '@/modules/tests/SummaryImportDialog'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
-import { display, toDisplay } from '@/shared/units'
+import { display, significant, toDisplay } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -124,7 +124,9 @@ function sizeText(specimen: Specimen): string {
   return specimen.sizes
     .map((size) => {
       const shown = display(size.si_unit, size.dimension)
-      const value = Number(toDisplay(size.value, size.si_unit, size.dimension).toPrecision(4))
+      // **자리 수는 한 곳에서 정한다**(`SIGNIFICANT_DIGITS`). 화면마다 다르면
+      // 같은 값이 화면을 옮길 때 달라 보인다.
+      const value = significant(toDisplay(size.value, size.si_unit, size.dimension))
       return `${size.label} ${value}${shown.unit ? shown.unit : ''}`
     })
     .join(' · ')
@@ -167,11 +169,17 @@ export function SampleExplorer({
   materialId,
   samples,
   onChanged,
+  onAddSample,
 }: {
   materialId: string
   samples: Sample[]
   /** 시료·시편이 늘거나 줄면 위의 요약 줄과 시료 목록이 달라진다. */
   onChanged: () => void
+  /**
+   * 시료 추가 창을 연다. **창 자체는 부모가 든다** — 시료가 하나도 없을 때도
+   * 더할 수 있어야 하는데, 그때는 이 탐색기가 아예 안 그려진다.
+   */
+  onAddSample: () => void
 }) {
   // **시료가 하나뿐이어도 고른 상태로 시작한다.** 한 항목짜리 층을 눌러서
   // 통과하게 하지 않는다 — 그것이 아코디언에서 가장 자주 하던 헛클릭이다.
@@ -223,80 +231,120 @@ export function SampleExplorer({
   if (samples.length === 0) return null
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(200px,260px)_minmax(0,1fr)] lg:items-start">
+    // 시료 목록을 조금 넓혔다 — `SECC_1.0__01` 에 제조사·로트가 붙으면
+    // 260px 에서는 로트가 잘렸다.
+    <div className="grid gap-4 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)] lg:items-start">
       <div className="space-y-1">
-        <p className="text-muted-foreground px-1 text-xs font-medium">시료 {samples.length}</p>
-        {samples.map((sample) => (
-          <button
-            key={sample.id}
-            type="button"
-            onClick={() => setSampleId(sample.id)}
-            aria-current={sample.id === active?.id ? 'true' : undefined}
-            className={cn(
-              'w-full rounded-md border px-2.5 py-2 text-left text-sm',
-              sample.id === active?.id ? 'bg-muted border-foreground/20' : 'hover:bg-muted/50'
+        {/* **일은 그 대상이 있는 열에서 한다.** 시료를 더하는 단추가 시편 쪽
+            머리에 있으면, 무엇에 더하는 것인지 매번 눈으로 되짚게 된다. */}
+        {/* **시료에 하는 일이 한 자리에 모인다.** 더하기는 머리에, 고른 것을
+            고치고 지우는 것은 바로 아래에 — 목록 아래에 흩어 두었을 때는 스크롤
+            끝까지 내려가야 보였고, 더하기와 고치기가 서로 멀었다. */}
+        {/* **머리에는 늘 쓰는 둘만.** 고치기·지우기는 줄마다 붙는다 — 그것은
+            「어느 시료」 를 먼저 정해야 하는 일이라, 머리에 두면 무엇에 거는지
+            카드를 눈으로 되짚게 된다. */}
+        <div className="mb-2 flex items-center justify-between gap-1 px-1">
+          <p className="text-muted-foreground text-xs font-medium">시료 {samples.length}</p>
+          <div className="flex items-center gap-1">
+            {active && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => setMill(true)}
+              >
+                <FileText className="size-3.5" />
+                밀시트
+              </Button>
             )}
-          >
-            <div className="truncate font-mono text-xs">{sample.record_name}</div>
-            {/* **로트와 제조사가 시료를 가르는 것이다.** 이름만으로는 `__01`·
-                `__02` 라 무엇이 다른지 알 수 없다. */}
-            <div className="text-muted-foreground mt-0.5 truncate text-xs">
-              {[sample.manufacturer, sample.lot_no].filter(Boolean).join(' · ') || '—'}
+            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={onAddSample}>
+              <Plus className="size-3.5" />
+              시료 추가
+            </Button>
+          </div>
+        </div>
+        {samples.map((sample) => (
+          // **줄마다 그 줄의 일이 붙는다.** 목록이 길면 고른 카드가 화면 밖으로
+          // 나가는데, 머리에 있는 단추는 그때 무엇에 거는 것인지 안 보인다.
+          <div key={sample.id} className="group relative">
+            <button
+              type="button"
+              onClick={() => setSampleId(sample.id)}
+              aria-current={sample.id === active?.id ? 'true' : undefined}
+              className={cn(
+                'w-full rounded-md border px-2.5 py-2 text-left text-sm',
+                sample.id === active?.id ? 'bg-muted border-foreground/20' : 'hover:bg-muted/50'
+              )}
+            >
+              <div className="truncate pr-14 font-mono text-xs">{sample.record_name}</div>
+              {/* **로트와 제조사가 시료를 가르는 것이다.** 이름만으로는 `__01`·
+                  `__02` 라 무엇이 다른지 알 수 없다. */}
+              <div className="text-muted-foreground mt-0.5 truncate text-xs">
+                {[sample.manufacturer, sample.lot_no].filter(Boolean).join(' · ') || '—'}
+              </div>
+              <div className="text-muted-foreground mt-0.5 text-xs">
+                시편 {sample.specimen_count} · 시험 {sample.test_run_count}
+              </div>
+            </button>
+
+            {/* **평소에는 숨는다.** 카드마다 아이콘 둘이 늘 떠 있으면 목록이
+                시끄러워, 정작 시료를 가르는 로트·제조사가 안 읽힌다.
+
+                `focus-within` 도 함께 본다 — 마우스가 없으면 hover 도 없다.
+                Tab 으로 닿는 순간 보여야 키보드로도 쓸 수 있다. */}
+            <div className="absolute top-1.5 right-1.5 hidden gap-0.5 group-hover:flex focus-within:flex">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-6"
+                aria-label={`${sample.record_name} 편집`}
+                title="시료 편집"
+                onClick={() => {
+                  // **누른 줄이 곧 대상이다.** 고르지 않고 옆 줄을 고치면, 창에
+                  // 뜬 이름과 목록에서 강조된 줄이 어긋난다.
+                  setSampleId(sample.id)
+                  setEditingSample(true)
+                }}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-6"
+                aria-label={`${sample.record_name} 삭제`}
+                title="시료 삭제"
+                onClick={() => {
+                  setSampleId(sample.id)
+                  setRemovingSample(true)
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
             </div>
-            <div className="text-muted-foreground mt-0.5 text-xs">
-              시편 {sample.specimen_count} · 시험 {sample.test_run_count}
-            </div>
-          </button>
+          </div>
         ))}
       </div>
 
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1">
-            <p className="text-muted-foreground mr-1 text-xs font-medium">
-              {active?.record_name} 의 시편 {rows.length}
-            </p>
-            {/* **고른 시료에 하는 일이다.** 왼쪽 카드에 밀어 넣으면 좁아서 아이콘만
-                남고, 아이콘만으로는 무엇을 지우는지 알 수 없다. */}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => setEditingSample(true)}
-            >
-              <Pencil className="size-3.5" />
-              시료 편집
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => setMill(true)}
-            >
-              <FileText className="size-3.5" />
-              밀시트
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => setRemovingSample(true)}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </div>
+          <p className="text-muted-foreground text-xs font-medium">
+            {active?.record_name} 의 시편 {rows.length}
+          </p>
           <div className="flex items-center gap-1">
-            {/* **곡선 없는 시험도 데이터다.** 기존 표에 쌓인 것을 못 가져오면
-                사용자가 옮겨오지 않는다. */}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => setImporting(true)}
-            >
-              <Table2 className="size-3.5" />
-              표로 시험 넣기
-            </Button>
+            {/* **「줄 안에서」 모드에는 시험 열이 없다.** 그 모드에서 이 단추가
+                사라지면 기능이 없어진 것과 같으므로, 그때만 여기 둔다. */}
+            {mode === 'inline' && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => setImporting(true)}
+              >
+                <Table2 className="size-3.5" />
+                표로 시험 넣기
+              </Button>
+            )}
             <Button
               size="sm"
               variant="secondary"
@@ -337,7 +385,10 @@ export function SampleExplorer({
         <div
           className={cn(
             'grid gap-4',
-            mode === 'side' && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:items-start'
+            // **시편이 넓고 시험이 좁다.** 시편 표는 이름·방향·규격·치수·시험
+            // 수까지 열이 다섯인데, 시험 쪽은 목록 한 줄씩이라 좁아도 읽힌다.
+            mode === 'side' &&
+              'xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:items-start'
           )}
         >
           <div className="min-w-0 overflow-x-auto rounded-md border">
@@ -353,7 +404,10 @@ export function SampleExplorer({
                     <TableHead>시편</TableHead>
                     <TableHead className="w-16">방향</TableHead>
                     <TableHead className="w-28">규격</TableHead>
-                    <TableHead>치수</TableHead>
+                    {/* **치수가 폭을 먼저 가져간다.** `w-px` 는 「내용만큼」 이라는
+                        뜻이라, 이름이 길어도 치수가 밀려 두 줄이 되지 않는다.
+                        대신 남는 폭은 이름 열이 쓴다 — 이름은 줄바꿈해도 읽힌다. */}
+                    <TableHead className="w-px whitespace-nowrap">치수</TableHead>
                     {/* **머리와 내용의 정렬을 맞춘다.** `text-right` 를 줬는데 칸
                         안은 flex 라 그 값이 안 먹었다 — 머리만 오른쪽으로 붙어
                         어긋나 보였다. */}
@@ -380,14 +434,19 @@ export function SampleExplorer({
                               <ChevronRight className="size-3.5" />
                             )}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">
+                          {/* 이름이 길면 여기서 접힌다. 식별자라 잘라내지 않는다 —
+                              `SECC_1.0__01_TD_02` 의 뒤가 잘리면 어느 시편인지 모른다. */}
+                          <TableCell className="font-mono text-xs break-all">
                             {specimen.record_name}
                           </TableCell>
                           <TableCell>
                             <Badge variant="secondary">{specimen.orientation}</Badge>
                           </TableCell>
                           <TableCell className="text-xs">{specimen.standard ?? '—'}</TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
+                          {/* **치수는 한 줄로 둔다.** `두께 1mm · 폭 25mm · 표점 50mm`
+                              가 줄바꿈되면 값과 이름이 어긋나 붙어, 어느 숫자가
+                              무엇인지 눈으로 다시 맞춰야 한다. */}
+                          <TableCell className="text-muted-foreground w-px text-xs whitespace-nowrap">
                             {sizeText(specimen)}
                           </TableCell>
                           <TableCell>
@@ -442,11 +501,30 @@ export function SampleExplorer({
 
           {mode === 'side' && (
             <div className="min-w-0 rounded-md border p-3">
+              {/* **시험을 넣는 일은 시험 쪽에 있어야 한다.** 「표로 시험 넣기」 가
+                  시편 추가 옆에 있을 때는, 시편을 더하는 일과 시험을 더하는 일이
+                  한 묶음처럼 보였다 — 둘은 다른 층이다.
+
+                  이 창은 시료 하나에 붙은 시험을 한꺼번에 넣는다. 고른 시편이
+                  없어도 쓸 수 있으므로 머리에 늘 둔다. */}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-muted-foreground text-xs font-medium">시험</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => setImporting(true)}
+                >
+                  <Table2 className="size-3.5" />
+                  표로 시험 넣기
+                </Button>
+              </div>
               {picked ? (
                 <SpecimenTests specimenId={picked.id} specimenName={picked.record_name} />
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  왼쪽 표에서 시편을 고르면 그 시험이 여기 뜹니다.
+                  왼쪽 표에서 시편을 고르면 그 시험이 여기 뜹니다. 곡선 없이 요약값만
+                  있는 시험은 위의 <b>표로 시험 넣기</b> 로 한꺼번에 넣습니다.
                 </p>
               )}
             </div>

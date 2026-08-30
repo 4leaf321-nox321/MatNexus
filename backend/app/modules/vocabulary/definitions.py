@@ -79,7 +79,7 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     # **부위를 제품 아래에 두지 않는다.** 계층은 값 하나에 부모 하나인데(`grade`
     # 의 부모가 `category` 하나이듯), `이너 패널` 은 도어에도 후드에도 쓰인다.
     # 부모를 붙이면 먼저 들어온 제품이 이기고 나머지는 조용히 틀린 곳에 매달린다.
-    ("part", "적용 부위", "open", 70, None, None),
+    ("part", "적용 파트", "open", 70, None, None),
 ]
 
 #: **전부 `open` 이다.** `closed` 는 만들어 두고 안 켠다.

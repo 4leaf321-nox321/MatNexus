@@ -61,7 +61,10 @@ function Sizes({ row }: { row: { sizes: { label: string; value: number | null; s
   const shown = row.sizes.filter((one) => one.value != null)
   if (shown.length === 0) return <span className="text-muted-foreground">—</span>
   return (
-    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+    // **접지 않는다.** 접히면 `gauge_length 50 mm` 의 이름과 값이 다른 줄로
+    // 갈라져, 어느 숫자가 무엇인지 눈으로 다시 맞춰야 한다. 열은 내용만큼
+    // 넓어지고, 표가 넘치면 가로로 밀린다(바깥이 `overflow-x-auto`).
+    <div className="flex flex-nowrap gap-x-2 whitespace-nowrap">
       {shown.map((one) => (
         <span
           key={one.label}
@@ -266,7 +269,10 @@ export default function SpecimensPage() {
               {/* 치수와 시험 수는 **서버가 거르는 축이 아니다.** 거르는 칸을
                   두면 눌러도 아무 일이 안 일어나거나, 이 쪽에 실린 것만 걸러
                   거짓말을 한다. */}
-              <TableHead className={`min-w-[10rem] ${FILTER_HEAD}`}>
+              {/* **치수는 내용만큼 넓다.** `min-w-[10rem]` 이 이 열을 160px 에
+                  묶어서, `width 12.47 mm · thickness 0.986 mm · gauge_length 50 mm`
+                  가 두 줄로 접혔다. `w-px` 는 표에서 「내용만큼」 이라는 뜻이다. */}
+              <TableHead className={`w-px whitespace-nowrap ${FILTER_HEAD}`}>
                 <ColumnLabel>치수</ColumnLabel>
               </TableHead>
               <TableHead className={`text-right ${FILTER_HEAD}`}>

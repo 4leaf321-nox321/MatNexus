@@ -240,7 +240,7 @@ USE_AXES = ("product", "part")
 
 
 class MaterialUse(Base):
-    """재료의 용도 한 줄 — 적용 제품 또는 적용 부위.
+    """재료의 용도 한 줄 — 적용 제품 또는 적용 파트.
 
     ## 왜 칸이 아니라 표인가
 

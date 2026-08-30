@@ -241,7 +241,9 @@ describe('모듈 경계', () => {
  * 화면에 5가지 폭이었고, 규칙이 없으니 새 화면은 옆 파일을 베꼈다. 그래서 같은
  * 성격의 표가 화면마다 다른 폭으로 잘렸다.
  *
- * 지금은 `AppShell` 의 `main` 이 정한다. **읽는 화면만 자기 안에서 다시 좁힌다** —
+ * 지금은 `AppShell` 의 `main` 이 정하고, **상한은 없다**(2026-08-30). 상한이 있던
+ * 동안에는 그것이 표를 접었고 — 시편 목록의 치수 칸이 두 줄이 됐다 — 넓혀야 할
+ * 때마다 경로 목록에 한 줄씩 더해야 했다. **읽는 화면만 자기 안에서 다시 좁힌다** —
  * 공지·알림·VOC 는 글이라 폭이 넓을수록 읽기 나쁘다.
  *
  * 이 검사가 없으면 다음 화면이 또 제 폭을 단다. 65가 프론트 122파일 평면이 된
@@ -272,19 +274,22 @@ describe('본문 폭', () => {
     ).toEqual([])
   })
 
-  it('AppShell 이 폭을 들고 있다', () => {
+  it('껍데기가 본문 폭을 자르지 않는다', () => {
+    // **상한을 다시 달면 여기서 걸린다.** 걷은 이유가 코드에만 남아 있으면 다음
+    // 사람이 「넓어 보이니 1600 으로 묶자」 를 되풀이하고, 그때 접히는 것은 표의
+    // 한 칸이라 아무도 못 본다.
     const shell = readFileSync(path.join(SRC, SHELL, 'AppShell.tsx'), 'utf-8')
-    expect(shell).toMatch(/max-w-\[1600px\]/)
+    const body = shell.slice(shell.indexOf('<main'))
+    const capped = [...body.matchAll(/className=[^\n]*max-w-\[[^\]]+\]/g)]
+    expect(
+      capped.map((one) => one[0]),
+      '본문에 폭 상한을 다시 달았습니다 — 표는 제 열 폭을 스스로 잡습니다.'
+    ).toEqual([])
   })
 
-  it('상한을 푸는 화면도 AppShell 이 안다', () => {
-    // **화면이 스스로 넓어지면 안 된다.** 좁히는 예외는 `NARROW_BY_DESIGN` 에
-    // 적히는데 넓히는 쪽은 개념이 없었다 — 그러면 각 화면이 제멋대로 `w-screen`
-    // 같은 것을 쓰고, 폭 지식이 흩어진 뒤에는 「왜 이 화면만 다른가」 에 답할
-    // 데가 없다. 넓히는 것도 AppShell 이 경로로 정한다.
-    const shell = readFileSync(path.join(SRC, SHELL, 'AppShell.tsx'), 'utf-8')
-    expect(shell, 'AppShell 에 WIDE 목록이 있어야 한다').toMatch(/const WIDE\b/)
-
+  it('화면이 뷰포트 폭을 직접 잡지 않는다', () => {
+    // 폭은 부모(`main`)를 따른다. 화면이 `w-screen` 을 쓰면 사이드바 밑까지
+    // 깔려 가로 스크롤이 생기고, 그 화면만 다른 규칙으로 산다.
     const offenders: string[] = []
     for (const file of walk(MODULES)) {
       const source = readFileSync(file, 'utf-8')
@@ -293,7 +298,7 @@ describe('본문 폭', () => {
         offenders.push(`${path.relative(MODULES, file)}: ${match[0]}`)
       }
     }
-    expect(offenders, '폭은 AppShell 이 정합니다 — WIDE 에 경로를 넣으세요.').toEqual([])
+    expect(offenders, '폭은 부모가 정합니다 — 화면이 뷰포트를 직접 잡지 않습니다.').toEqual([])
   })
 })
 

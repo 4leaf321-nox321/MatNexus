@@ -180,7 +180,7 @@ export function NewMaterialDialog({
           />
           <VocabularyMultiField
             slug="part"
-            label="적용 부위 (선택)"
+            label="적용 파트 (선택)"
             values={parts}
             onChange={setParts}
           />

@@ -203,7 +203,7 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
           />
           <VocabularyMultiField
             slug="part"
-            label="적용 부위"
+            label="적용 파트"
             values={parts}
             onChange={setParts}
           />

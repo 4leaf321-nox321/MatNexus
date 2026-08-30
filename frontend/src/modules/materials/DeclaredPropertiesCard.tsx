@@ -35,7 +35,7 @@
  * 생기고, 서버와 갈라지는 날 잘못된 단위가 목록에 뜬다(막는 것은 서버다).
  */
 
-import { BookOpen, Plus, Save, Trash2 } from 'lucide-react'
+import { BookOpen, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { materialsApi } from '@/modules/materials/api'
@@ -45,7 +45,7 @@ import type {
   PropertyItem,
 } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { fromDisplay, toDisplay } from '@/shared/units'
+import { fromDisplay, significant, toDisplay } from '@/shared/units'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
@@ -56,6 +56,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 
 /**
@@ -129,6 +145,9 @@ function toDraft(row: DeclaredProperty): Draft {
 
 export function DeclaredPropertiesCard({
   level,
+  openItem,
+  onOpenChange,
+  list = true,
   rows: saved,
   onSave,
   title,
@@ -136,6 +155,21 @@ export function DeclaredPropertiesCard({
 }: {
   /** `재료` | `시료`. **넣을 수 있는 항목이 이것으로 갈린다.** */
   level: string
+  /**
+   * 지금 창을 열어 둘 항목. `null` 이면 닫혀 있다.
+   *
+   * **값 목록은 여기 없다** — 물성 요약이 잰 값과 함께 보이고, 거기의 편집
+   * 단추가 이 창을 연다. 같은 값을 두 곳에서 보이면 어느 쪽이 진짜인지 묻게 된다.
+   */
+  openItem?: string | null
+  onOpenChange?: (item: string | null) => void
+  /**
+   * 값 목록을 여기서도 보일까.
+   *
+   * 재료 쪽은 **끈다** — 물성 요약이 잰 값과 함께 보이므로 같은 값이 두 번
+   * 나온다. 시료 쪽(밀시트)에는 그 요약이 없어 여기가 유일한 목록이다.
+   */
+  list?: boolean
   rows: DeclaredProperty[]
   onSave: (rows: DeclaredPropertyIn[]) => Promise<void>
   title?: string
@@ -148,6 +182,43 @@ export function DeclaredPropertiesCard({
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  /**
+   * 지금 펼쳐 놓은 줄. **`null` 이면 전부 접혀 있다.**
+   *
+   * 전에는 항목마다 편집 폼을 늘 펼쳐 두었다. 한 항목이 세 줄(단위·출처·값·근거)
+   * 이라 **여섯 개만 있어도 화면이 다 찼고**, 그러면 「무엇이 적혀 있나」 를 보려고
+   * 스크롤을 하게 된다 — 그것이 이 카드에 가장 자주 하는 일인데.
+   *
+   * 한 번에 하나만 편다. 둘을 동시에 고칠 일이 없고, 여럿이 펴져 있으면 다시
+   * 같은 문제가 된다.
+   */
+  /**
+   * 지금 고치는 항목. **부모가 든다** — 값 목록은 물성 요약에 있고, 거기의 편집
+   * 단추가 이 창을 연다(2026-08-30). 상태를 여기 두면 요약이 그것을 못 건드린다.
+   */
+  const [own, setOwn] = useState<string | null>(null)
+  /**
+   * 창을 열 때의 값. **취소가 되돌릴 곳이다.**
+   *
+   * 창에서 고치고 저장까지 하는 흐름(A안)이면 「닫기」 가 곧 「버리기」 여야 한다 —
+   * 되돌릴 데가 없으면 잘못 고친 것을 손으로 다시 적어야 한다.
+   */
+  const [snapshot, setSnapshot] = useState<Draft[] | null>(null)
+  const editing = openItem !== undefined ? openItem : own
+  const setEditing = onOpenChange ?? setOwn
+
+  /** 창을 연다 — 그때의 값을 함께 담아 둔다. */
+  function open(item: string) {
+    setSnapshot(rows)
+    setEditing(item)
+  }
+
+  /** 고친 것을 버리고 닫는다. */
+  function cancel() {
+    if (snapshot) setRows(snapshot)
+    setSnapshot(null)
+    setEditing(null)
+  }
 
   // 서버 값을 초안으로 옮긴다. **고치는 중이면 안 덮는다** — 저장 전에 목록이
   // 다시 읽히면 타이핑하던 것이 사라진다.
@@ -166,6 +237,10 @@ export function DeclaredPropertiesCard({
 
   function add(item: PropertyItem) {
     setDirty(true)
+    // **더하자마자 편다.** 값을 적으려고 더한 것이므로, 접힌 줄을 다시 눌러
+    // 열게 하면 한 걸음이 헛돈다.
+    setSnapshot(rows)
+    setEditing(item.item)
     setRows((current) => [
       ...current,
       {
@@ -196,6 +271,13 @@ export function DeclaredPropertiesCard({
           : row
       )
     )
+  }
+
+  /** 읽는 자리의 값. **편집 상자는 이걸 안 쓴다** — 상자에는 적은 값이 그대로
+   *  있어야 하고, 반올림한 값을 보여 주고 저장하면 아무도 안 고쳤는데 값이 달라진다. */
+  function shown(text: string): string {
+    const value = Number(text)
+    return Number.isFinite(value) ? String(significant(value)) : text
   }
 
   async function save() {
@@ -231,257 +313,356 @@ export function DeclaredPropertiesCard({
     }
   }
 
+  const picker = free.length > 0 && (
+    <Select value="" onValueChange={(value) => add(free[Number(value)])}>
+      <SelectTrigger size="sm" aria-label="선언 물성 추가" className="h-7 w-40 text-xs">
+        <Plus className="size-3.5" />
+        <SelectValue placeholder="선언 물성 추가" />
+      </SelectTrigger>
+      <SelectContent>
+        {free.map((item, index) => (
+          <SelectItem key={item.item} value={String(index)}>
+            {item.item}
+            {item.symbol ? ` (${item.symbol})` : ''}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
   return (
-    <section className="rounded-md border p-4">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          <BookOpen className="size-4" />
-          {title ?? '선언 물성'}
-        </h3>
-        <div className="flex items-center gap-2">
-          {free.length > 0 && (
-            <Select value="" onValueChange={(value) => add(free[Number(value)])}>
-              <SelectTrigger size="sm" aria-label="항목 추가" className="w-44">
-                <Plus className="size-4" />
-                <SelectValue placeholder="항목 추가" />
-              </SelectTrigger>
-              <SelectContent>
-                {free.map((item, index) => (
-                  <SelectItem key={item.item} value={String(index)}>
-                    {item.item}
-                    {item.symbol ? ` (${item.symbol})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+    <>
+      {/* **`list=false` 면 박스를 안 두른다.** 값 목록이 물성 표로 갔으므로 여기
+          남는 것은 「항목을 넣고 빼는 자리」 하나뿐이고, 그것에 제목과 테두리를
+          두르면 빈 상자가 화면 위쪽을 차지한다.
+
+          시료(밀시트) 쪽은 그 물성 표가 없어 여기가 유일한 목록이다 — 그때는
+          제목·안내와 함께 상자로 선다. */}
+      {list ? (
+        <section className="rounded-md border p-4">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              <BookOpen className="size-4" />
+              {title ?? '선언 물성'}
+            </h3>
+            {picker}
+          </div>
+
+          <p className="text-muted-foreground mb-3 text-xs">
+            {hint ?? (
+              <>
+                <b>인장시험이 주지 않는 값</b>입니다 — 핸드북·규격에서 옵니다. 여기 적은 값은{' '}
+                <b>잰 값이 없을 때만</b> 물성 카드에 실리고, 덱에는 「사람이 적은 값」이라고
+                근거 문서와 함께 나갑니다.
+              </>
+            )}
+          </p>
+
+          <ErrorNotice error={items.error ?? error} className="mb-3" />
+
+          {known.length === 0 && !items.loading && (
+            <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
+              {level}에 넣을 수 있는 물성 항목이 없습니다. 기준정보의 <b>물성 항목</b> 축에
+              먼저 등록하고 <b>붙는 곳</b>을 {level} 로 두세요.
+            </p>
           )}
-          <Button size="sm" onClick={save} disabled={!dirty || saving}>
-            <Save className="size-4" />
-            저장
-          </Button>
-        </div>
-      </div>
 
-      <p className="text-muted-foreground mb-3 text-xs">
-        {hint ?? (
-          <>
-            <b>인장시험이 주지 않는 값</b>입니다 — 핸드북·규격에서 옵니다. 여기 적은 값은{' '}
-            <b>잰 값이 없을 때만</b> 물성 카드에 실리고, 덱에는 「사람이 적은 값」이라고
-            근거 문서와 함께 나갑니다.
-          </>
-        )}
-      </p>
+          {rows.length === 0 && known.length > 0 && (
+            <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
+              적어 둔 값이 없습니다. 오른쪽 위에서 항목을 고르세요.
+            </p>
+          )}
 
-      <ErrorNotice error={items.error ?? error} className="mb-3" />
-
-      {known.length === 0 && !items.loading && (
-        <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-          {level}에 넣을 수 있는 물성 항목이 없습니다. 기준정보의 <b>물성 항목</b> 축에
-          먼저 등록하고 <b>붙는 곳</b>을 {level} 로 두세요 — 무엇을 넣을 수 있는지는 코드가
-          아니라 기준정보가 정합니다.
-        </p>
+          {rows.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>항목</TableHead>
+              <TableHead>값</TableHead>
+              <TableHead className="w-16" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const spec = known.find((item) => item.item === row.item)
+              const points = row.points.filter((point) => point.value !== '')
+              return (
+                <TableRow key={row.item}>
+                  <TableCell className="font-medium">
+                    {row.item}
+                    {spec?.symbol ? (
+                      <span className="text-muted-foreground ml-1 font-mono text-xs">
+                        {spec.symbol}
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  {/* **단위를 값에 붙이고 낱값을 다 적는다.** 줄여 놓으면 그 값이
+                      얼마인지 보려고 매번 창을 열어야 한다. */}
+                  <TableCell className="font-mono">
+                    {points.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {points.map((point, spot) => (
+                          <div key={spot}>
+                            {shown(point.value)} {row.measure}
+                            {point.temperature !== '' && (
+                              <span className="text-muted-foreground">
+                                {' @ '}
+                                {shown(point.temperature)} °C
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`${row.item} 편집`}
+                      title={`${row.item} 값을 고칩니다`}
+                      onClick={() => open(row.item)}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      )}
+        </section>
+      ) : (
+        <>
+          {picker}
+          <ErrorNotice error={items.error ?? error} />
+        </>
       )}
 
-      {rows.length === 0 && known.length > 0 && (
-        <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-          적어 둔 값이 없습니다. 오른쪽 위에서 항목을 고르세요.
-        </p>
-      )}
-
-      <div className="space-y-3">
-        {rows.map((row, index) => {
-          const spec = known.find((item) => item.item === row.item)
-          const choices = spec?.units.length ? spec.units : [row.measure]
-          return (
-            <div key={row.item} className="grid grid-cols-12 items-end gap-2 rounded-md border p-3">
-              <div className="col-span-12 sm:col-span-3">
-                <Label className="text-muted-foreground mb-1 text-[11px]">항목</Label>
-                <div className="text-sm font-medium">
-                  {row.item}
-                  {spec?.symbol && (
-                    <span className="text-muted-foreground ml-1 font-mono text-xs">
-                      {spec.symbol}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="col-span-7 sm:col-span-2">
-                <Label htmlFor={`${row.item}-unit`} className="text-muted-foreground mb-1 text-[11px]">
-                  {spec?.scales.length ? '시험 척도' : '단위'}
-                </Label>
-                {/* **차원이 맞는 단위만 뜬다.** 비열 자리에 W/(m.K) 를 넣으면
-                    값은 멀쩡한데 뜻이 다르다 — 서버도 같은 검사를 한다.
-
-                    경도처럼 **척도로 재는 물성**은 여기가 척도 목록이 된다.
-                    `HV 200` 과 `HB 200` 은 다른 값이고 환산식이 없어서, 척도는
-                    단위가 아니라 값의 일부다. */}
-                <Select
-                  value={row.measure}
-                  onValueChange={(value) => edit(index, { measure: value })}
-                >
-                  <SelectTrigger id={`${row.item}-unit`} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(spec?.scales.length ? spec.scales : choices).map((unit) => (
-                      <SelectItem key={unit} value={unit}>
-                        {unit}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="col-span-6 sm:col-span-2">
-                <Label htmlFor={`${row.item}-source`} className="text-muted-foreground mb-1 text-[11px]">
-                  출처
-                </Label>
-                <Select
-                  value={row.source}
-                  onValueChange={(value) => edit(index, { source: value })}
-                >
-                  <SelectTrigger id={`${row.item}-source`} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SOURCES.map((source) => (
-                      <SelectItem key={source.value} value={source.value}>
-                        {source.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="col-span-12 flex justify-end sm:col-span-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  title={`${row.item} 줄을 지웁니다`}
-                  onClick={() => {
-                    setDirty(true)
-                    setRows((current) => current.filter((_, at) => at !== index))
-                  }}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-
-              {/* **한 줄이 표를 든다.** 강판 탄성계수는 상온 206 GPa 가
-                  400 °C 에서 170 GPa 쯤으로 떨어지고, 열간 성형·용접·화재
-                  해석은 그 곡선이 필요하다. 그렇다고 줄을 여럿 두면 카드가 어느
-                  것을 쓸지 못 정한다 — 항목은 하나이고 그 하나가 온도에 따라
-                  변할 뿐이다. */}
-              <div className="col-span-12">
-                <Label className="text-muted-foreground mb-1 text-[11px]">
-                  값 {row.points.length > 1 && `(온도 ${row.points.length}점)`}
-                </Label>
-                <div className="space-y-1">
-                  {row.points.map((point, spot) => (
-                    <div key={spot} className="flex items-center gap-2">
-                      <Input
-                        aria-label={
-                          row.points.length > 1 ? `${row.item} 값 ${spot + 1}` : `${row.item} 값`
-                        }
-                        className="w-40"
-                        value={point.value}
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          editPoint(index, spot, { value: event.target.value })
-                        }
-                      />
-                      <span className="text-muted-foreground text-xs">{row.measure}</span>
-                      <span className="text-muted-foreground text-xs">@</span>
-                      <Input
-                        aria-label={
-                          row.points.length > 1
-                            ? `${row.item} 온도 ${spot + 1}`
-                            : `${row.item} 온도`
-                        }
-                        className="w-32"
-                        value={point.temperature}
-                        inputMode="decimal"
-                        placeholder={row.points.length > 1 ? '필수' : '비우면 상온'}
-                        onChange={(event) =>
-                          editPoint(index, spot, { temperature: event.target.value })
-                        }
-                      />
-                      <span className="text-muted-foreground text-xs">℃</span>
-                      {row.points.length > 1 && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-7"
-                          title={`${spot + 1}번째 온도를 지웁니다`}
-                          onClick={() => {
-                            setDirty(true)
-                            setRows((current) =>
-                              current.map((one, position) =>
-                                position === index
-                                  ? {
-                                      ...one,
-                                      points: one.points.filter((_, at) => at !== spot),
-                                    }
-                                  : one
-                              )
-                            )
-                          }}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="mt-1 h-7 px-2 text-[11px]"
-                  onClick={() => {
-                    setDirty(true)
-                    setRows((current) =>
-                      current.map((one, position) =>
-                        position === index
-                          ? { ...one, points: [...one.points, { value: '', temperature: '' }] }
-                          : one
-                      )
-                    )
-                  }}
-                >
-                  <Plus className="size-3.5" />
-                  온도 추가
-                </Button>
-                {row.points.length > 1 && (
-                  // **온도 없는 점이 섞이면 서버가 거절한다.** 누르기 전에
-                  // 알려 주는 편이 낫다.
-                  <p className="text-muted-foreground mt-1 text-[11px]">
-                    값이 여럿이면 각각 어느 온도의 것인지 적어야 합니다. 표 밖에서는 솔버가
-                    끝값을 유지합니다.
-                  </p>
-                )}
-              </div>
-
-              <div className="col-span-12">
-                <Label
-                  htmlFor={`${row.item}-reference`}
-                  className="text-muted-foreground mb-1 text-[11px]"
-                >
-                  근거 문서
-                </Label>
-                {/* **'문헌' 만으로는 어느 핸드북 몇 판인지 알 수 없다.** 값이
-                    의심스러울 때 확인할 길이 없으면 적어 둔 뜻이 반쯤 사라진다. */}
-                <Input
-                  id={`${row.item}-reference`}
-                  value={row.reference}
-                  placeholder="예: ASM Handbook Vol.1 p.123 / KS D 3512 표 3"
-                  onChange={(event) => edit(index, { reference: event.target.value })}
-                />
-              </div>
+      {/* **편집은 창에서 한다.** 줄 안에서 펼치면 표가 흔들리고, 무엇보다 닫는
+          길이 분명하지 않았다 — 창은 바깥을 누르거나 Esc 로 닫힌다. */}
+      {/* **창에서 저장까지 한다**(2026-08-30). 전에는 창을 닫고 바깥의 저장을
+          눌러야 했는데, 값 목록이 물성 표로 옮겨 가면서 **고친 것이 어디에도 안
+          보이는** 상태가 생겼다 — 닫고 나면 바뀐 게 없어 보이고, 저장 단추가
+          켜진 것을 스스로 알아채야 했다. */}
+      <Dialog open={editing !== null} onOpenChange={(next) => !next && cancel()}>
+        {/* **좁으면 겹친다.** 값·단위·온도 상자가 한 줄에 오고, 단위 목록은
+            `J/(kg.K)` 처럼 긴 이름을 담는다 — 42rem 으로는 모자랐다. */}
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{editing}</DialogTitle>
+            <DialogDescription>
+              <b>저장</b> 을 눌러야 서버에 남습니다. 닫으면 고친 것이 사라집니다.
+            </DialogDescription>
+          </DialogHeader>
+          {rows.map((row, index) => {
+            if (row.item !== editing) return null
+            const spec = known.find((item) => item.item === row.item)
+            const choices = spec?.units.length ? spec.units : [row.measure]
+            return (
+              <div key={row.item} className="grid grid-cols-12 items-end gap-2">
+            <div className="col-span-12 flex justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive"
+                title={`${row.item} 줄을 지웁니다`}
+                onClick={() => {
+                  setDirty(true)
+                  setEditing(null)
+                  setRows((current) => current.filter((_, at) => at !== index))
+                }}
+              >
+                <Trash2 className="size-4" />
+                이 항목 지우기
+              </Button>
             </div>
-          )
-        })}
-      </div>
-    </section>
+
+            {/* **한 줄이 표를 든다.** 강판 탄성계수는 상온 206 GPa 가
+                400 °C 에서 170 GPa 쯤으로 떨어지고, 열간 성형·용접·화재
+                해석은 그 곡선이 필요하다. 그렇다고 줄을 여럿 두면 카드가 어느
+                것을 쓸지 못 정한다 — 항목은 하나이고 그 하나가 온도에 따라
+                변할 뿐이다. */}
+            <div className="col-span-12 sm:col-span-6">
+              <Label htmlFor={`${row.item}-unit`} className="text-muted-foreground mb-1 text-[11px]">
+                {spec?.scales.length ? '시험 척도' : '단위'}
+              </Label>
+              {/* **차원이 맞는 단위만 뜬다.** 비열 자리에 W/(m.K) 를 넣으면
+                  값은 멀쩡한데 뜻이 다르다 — 서버도 같은 검사를 한다.
+
+                  경도처럼 **척도로 재는 물성**은 여기가 척도 목록이 된다.
+                  `HV 200` 과 `HB 200` 은 다른 값이고 환산식이 없어서, 척도는
+                  단위가 아니라 값의 일부다. */}
+              <Select
+                value={row.measure}
+                onValueChange={(value) => edit(index, { measure: value })}
+              >
+                <SelectTrigger id={`${row.item}-unit`} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(spec?.scales.length ? spec.scales : choices).map((unit) => (
+                    <SelectItem key={unit} value={unit}>
+                      {unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-12">
+              <Label className="text-muted-foreground mb-1 text-[11px]">
+                값 {row.points.length > 1 && `(온도 ${row.points.length}점)`}
+              </Label>
+              <div className="space-y-1">
+                {row.points.map((point, spot) => (
+                  <div key={spot} className="flex flex-wrap items-center gap-2">
+                    <Input
+                      aria-label={
+                        row.points.length > 1 ? `${row.item} 값 ${spot + 1}` : `${row.item} 값`
+                      }
+                      className="w-36 shrink-0"
+                      value={point.value}
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        editPoint(index, spot, { value: event.target.value })
+                      }
+                    />
+                    <span className="text-muted-foreground text-xs">{row.measure}</span>
+                    <span className="text-muted-foreground text-xs">@</span>
+                    <Input
+                      aria-label={
+                        row.points.length > 1
+                          ? `${row.item} 온도 ${spot + 1}`
+                          : `${row.item} 온도`
+                      }
+                      className="w-28 shrink-0"
+                      value={point.temperature}
+                      inputMode="decimal"
+                      placeholder={row.points.length > 1 ? '필수' : '비우면 상온'}
+                      onChange={(event) =>
+                        editPoint(index, spot, { temperature: event.target.value })
+                      }
+                    />
+                    <span className="text-muted-foreground text-xs">℃</span>
+                    {row.points.length > 1 && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7"
+                        title={`${spot + 1}번째 온도를 지웁니다`}
+                        onClick={() => {
+                          setDirty(true)
+                          setRows((current) =>
+                            current.map((one, position) =>
+                              position === index
+                                ? {
+                                    ...one,
+                                    points: one.points.filter((_, at) => at !== spot),
+                                  }
+                                : one
+                            )
+                          )
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-1 h-7 px-2 text-[11px]"
+                onClick={() => {
+                  setDirty(true)
+                  setRows((current) =>
+                    current.map((one, position) =>
+                      position === index
+                        ? { ...one, points: [...one.points, { value: '', temperature: '' }] }
+                        : one
+                    )
+                  )
+                }}
+              >
+                <Plus className="size-3.5" />
+                온도 추가
+              </Button>
+              {row.points.length > 1 && (
+                // **온도 없는 점이 섞이면 서버가 거절한다.** 누르기 전에
+                // 알려 주는 편이 낫다.
+                <p className="text-muted-foreground mt-1 text-[11px]">
+                  값이 여럿이면 각각 어느 온도의 것인지 적어야 합니다. 표 밖에서는 솔버가
+                  끝값을 유지합니다.
+                </p>
+              )}
+            </div>
+
+            <div className="col-span-12 sm:col-span-6">
+              <Label htmlFor={`${row.item}-source`} className="text-muted-foreground mb-1 text-[11px]">
+                출처
+              </Label>
+              <Select
+                value={row.source}
+                onValueChange={(value) => edit(index, { source: value })}
+              >
+                <SelectTrigger id={`${row.item}-source`} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCES.map((source) => (
+                    <SelectItem key={source.value} value={source.value}>
+                      {source.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-12">
+              <Label
+                htmlFor={`${row.item}-reference`}
+                className="text-muted-foreground mb-1 text-[11px]"
+              >
+                근거 문서
+              </Label>
+              {/* **'문헌' 만으로는 어느 핸드북 몇 판인지 알 수 없다.** 값이
+                  의심스러울 때 확인할 길이 없으면 적어 둔 뜻이 반쯤 사라진다. */}
+              <Input
+                id={`${row.item}-reference`}
+                value={row.reference}
+                placeholder="예: ASM Handbook Vol.1 p.123 / KS D 3512 표 3"
+                onChange={(event) => edit(index, { reference: event.target.value })}
+              />
+            </div>
+              </div>
+            )
+          })}
+          <DialogFooter>
+            {/* **닫기가 곧 버리기다.** 그러니 그렇게 적는다 — 「닫기」 만 있으면
+                고친 것이 남는지 사라지는지 눌러 보고서야 안다. */}
+            <Button variant="ghost" onClick={cancel} disabled={saving}>
+              취소
+            </Button>
+            <Button
+              onClick={async () => {
+                await save()
+                setSnapshot(null)
+                setEditing(null)
+              }}
+              disabled={saving}
+            >
+              <Save className="size-4" />
+              저장
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+    </>
   )
 }

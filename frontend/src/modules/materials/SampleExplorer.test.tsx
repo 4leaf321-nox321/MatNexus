@@ -86,6 +86,7 @@ function show() {
         materialId="m1"
         samples={SAMPLES as never}
         onChanged={() => {}}
+        onAddSample={() => {}}
       />
     </MemoryRouter>
   )
@@ -134,14 +135,45 @@ describe('아코디언에 있던 일', () => {
   it('시료 편집 · 밀시트 · 삭제가 남아 있다', async () => {
     show()
     await screen.findByText('MD_01')
-    expect(screen.getByRole('button', { name: /시료 편집/ })).toBeInTheDocument()
+    // **줄마다 붙는다.** 이름에 그 시료가 들어가야 무엇을 고치는지 화면이 말한다.
+    expect(
+      screen.getByRole('button', { name: 'SECC_1.0__01 편집' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'SECC_1.0__01 삭제' })
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /밀시트/ })).toBeInTheDocument()
   })
 
-  it('시편 추가 · 표로 시험 넣기가 남아 있다', async () => {
+  it('줄마다 제 것이 붙는다 — 시료가 둘이면 단추도 두 벌', async () => {
+    // 머리에 하나만 두면 목록이 길 때 무엇에 거는지 안 보인다.
+    show()
+    await screen.findByText('MD_01')
+    expect(screen.getByRole('button', { name: 'SECC_1.0__02 편집' })).toBeInTheDocument()
+  })
+
+  it('편집을 누르면 그 줄이 고른 것이 된다', async () => {
+    // **누른 줄이 곧 대상이다.** 안 그러면 창에 뜬 이름과 목록에서 강조된 줄이
+    // 어긋나고, 그때 사람은 남의 시료를 고치고 있다.
+    const user = userEvent.setup()
+    show()
+    await screen.findByText('MD_01')
+    await user.click(screen.getByRole('button', { name: 'SECC_1.0__02 편집' }))
+    expect(await screen.findByText('DD_01')).toBeInTheDocument()
+  })
+
+  it('시편 추가가 남아 있다', async () => {
     show()
     await screen.findByText('MD_01')
     expect(screen.getByRole('button', { name: /시편 추가/ })).toBeInTheDocument()
+  })
+
+  it('표로 시험 넣기가 남아 있다 — 시험 쪽에서', async () => {
+    // **곡선 없는 시험도 데이터다.** 기존 표에 쌓인 것을 못 가져오면 사용자가
+    // 옮겨오지 않는다. 자리만 시험 열로 옮겼지 없앤 것이 아니다.
+    screenWidth(true)
+    show()
+    await screen.findByText('MD_01')
     expect(screen.getByRole('button', { name: /표로 시험 넣기/ })).toBeInTheDocument()
   })
 
@@ -260,5 +292,81 @@ describe('시험 수', () => {
     const row = (await screen.findByText('MD_01')).closest('tr') as HTMLElement
     expect(within(row).getByText(/시험 2/)).toBeInTheDocument()
     expect(within(row).getByText(/채택 1/)).toBeInTheDocument()
+  })
+})
+
+describe('일이 붙는 자리', () => {
+  /**
+   * **일은 그 대상이 있는 열에서 한다** (2026-08-30).
+   *
+   * 전에는 시료 편집·밀시트·삭제와 시편 추가가 **모두 가운데(시편) 열 머리**에
+   * 몰려 있었고, 시료 추가는 아예 화면 맨 위에 있었다. 그러면 「이 편집이 시료를
+   * 고치는 건지 시편을 고치는 건지」 가 자리로 안 드러나, 누를 때마다 글자를
+   * 읽어 확인하게 된다.
+   *
+   * 자리가 층을 말하게 한다: 시료의 일은 시료 목록 열에, 시편의 일은 시편 표 열에.
+   */
+  const columnOf = (name: string | RegExp) => {
+    const button = screen.getByRole('button', { name })
+    // 열은 그리드의 직계 자식이다.
+    return button.closest('.space-y-1, .min-w-0')
+  }
+
+  it('시료의 일은 시료 목록 열에 있다', async () => {
+    show()
+    await screen.findByText('MD_01')
+    const list = columnOf(/시료 추가/)
+    expect(list).not.toBeNull()
+    // 편집·밀시트·삭제가 같은 열에 있어야 한다 — 셋 다 시료에 거는 일이다.
+    expect(columnOf('SECC_1.0__01 편집')).toBe(list)
+    expect(columnOf(/밀시트/)).toBe(list)
+    expect(columnOf('SECC_1.0__01 삭제')).toBe(list)
+  })
+
+  it('시편의 일은 시편 표 열에 있다', async () => {
+    show()
+    await screen.findByText('MD_01')
+    const table = columnOf(/시편 추가/)
+    expect(table).not.toBeNull()
+    // **두 열이 서로 다른 자리다.** 같으면 옮긴 뜻이 없다.
+    expect(table).not.toBe(columnOf(/시료 추가/))
+  })
+
+  it('시험을 넣는 일은 시험 쪽에 있다', async () => {
+    // **시편을 더하는 일과 시험을 더하는 일은 다른 층이다.** 나란히 두면 한
+    // 묶음처럼 보이고, 그러면 「시편을 넣는 김에 시험도」 로 읽힌다.
+    screenWidth(true)
+    show()
+    await screen.findByText('MD_01')
+    const bulk = screen.getByRole('button', { name: /표로 시험 넣기/ })
+    const add = screen.getByRole('button', { name: /시편 추가/ })
+    expect(bulk.closest('.min-w-0')).not.toBe(add.closest('.min-w-0'))
+  })
+
+  it('밀시트는 고른 시료의 것이다', async () => {
+    // 줄마다 붙일 일이 아니다 — 한 시료에 밀시트는 하나이고, 그것을 보는 것은
+    // 고르고 나서 하는 일이다.
+    show()
+    await screen.findByText('MD_01')
+    expect(screen.getAllByRole('button', { name: /밀시트/ })).toHaveLength(1)
+  })
+})
+
+describe('보기 모드에 따라', () => {
+  it('줄 안에서 모드에도 표로 시험 넣기가 있다', async () => {
+    // **모드를 바꿨다고 기능이 없어지면 안 된다.** 그 모드에는 시험 열이 없으므로
+    // 시편 열 머리에 둔다 — 자리는 옮기되 길은 남긴다.
+    screenWidth(false)
+    show()
+    await screen.findByText('MD_01')
+    expect(screen.getByRole('button', { name: /표로 시험 넣기/ })).toBeInTheDocument()
+  })
+
+  it('두 모드에서 한 번씩만 나온다', async () => {
+    // 둘 다 그리면 같은 일이 두 자리에 있고, 그때 어느 쪽이 진짜인지 모른다.
+    screenWidth(true)
+    show()
+    await screen.findByText('MD_01')
+    expect(screen.getAllByRole('button', { name: /표로 시험 넣기/ })).toHaveLength(1)
   })
 })

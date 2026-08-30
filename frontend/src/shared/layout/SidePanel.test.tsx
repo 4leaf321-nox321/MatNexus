@@ -73,7 +73,7 @@ describe('오른쪽 영역', () => {
     await user.click(screen.getByRole('button', { name: '변수 목록 펴기' }))
 
     const host = document.getElementById('app-right-panel')
-    // 본문 안이면 폭 제한(`max-w-[1600px]`)을 따라 가운데로 딸려 들어간다.
+    // 본문 안이면 본문의 여백 안으로 들어가고 본문과 함께 스크롤된다.
     expect(host).toContainElement(screen.getByRole('complementary'))
     expect(screen.getByTestId('main')).not.toContainElement(screen.getByRole('complementary'))
   })

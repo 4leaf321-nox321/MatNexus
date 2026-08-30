@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { DIMENSIONS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatScalar, formatValue, fromDisplay, spanToDisplay, toDisplay } from '@/shared/units'
+import { DIMENSIONS, SIGNIFICANT_DIGITS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatScalar, formatValue, fromDisplay, significant, spanToDisplay, toDisplay } from '@/shared/units'
 
 describe('저장 단위와 표시 단위', () => {
   it('저장은 SI, 표시는 실무 단위', () => {
@@ -52,7 +52,9 @@ describe('변형률과 tan δ', () => {
 
 describe('요약값 표시', () => {
   it('SI 를 실무 단위로 바꿔 적는다', () => {
-    expect(formatValue(282128000, null, 'Pa')).toBe('282.13 MPa')
+    // **유효숫자 4자리**(`SIGNIFICANT_DIGITS`). 실무 관행이 3~4자리이고,
+    // 그보다 길게 적으면 측정이 그만큼 정밀했다고 읽힌다.
+    expect(formatValue(282128000, null, 'Pa')).toBe('282.1 MPa')
   })
 
   it('값이 없으면 원문을 보여 준다', () => {
@@ -169,7 +171,7 @@ describe('스칼라 표시 — 환산이 한 곳에만 있어야 한다', () => 
   })
 
   it('변형률도 개수도 그대로 적는다', () => {
-    expect(formatScalar(0.0686479, '1', 'strain')).toBe('0.068648')
+    expect(formatScalar(0.0686479, '1', 'strain')).toBe('0.06865')
     expect(formatScalar(14, '1')).toBe('14')
   })
 
@@ -178,5 +180,37 @@ describe('스칼라 표시 — 환산이 한 곳에만 있어야 한다', () => 
     // 단위이고, 손으로 1e-12 를 곱하던 것이 사고의 자리였다.
     expect(formatValue(7850, null, 'kg/m3')).toBe('7.850e-9 tonne/mm³')
     expect(fromDisplay(toDisplay(7850, 'kg/m3'), 'kg/m3')).toBeCloseTo(7850, 6)
+  })
+})
+
+describe('유효숫자', () => {
+  /**
+   * **자리를 더 적는 것은 없는 정밀도를 주장하는 것이다.**
+   *
+   * 물성 실무의 관행은 3~4자리다 — ASTM E8·ISO 6892 가 인장 결과를 3자리로
+   * 보고하게 한다. `77.748477312` 는 float 계산이 낸 자릿수이지 그만큼 정확하다는
+   * 뜻이 아닌데, 그 값을 본 사람은 측정이 그만큼 정밀했다고 읽는다.
+   */
+  it('네 자리로 자른다', () => {
+    // 77748.477… mm → 4자리 → 77750. **자리를 채우는 0 은 자릿수가 아니다.**
+    expect(formatScalar(77.748477312, 'm', 'length')).toBe('77750 mm')
+    expect(formatScalar(0.077748477312, 'm', 'length')).toBe('77.75 mm')
+  })
+
+  it('뒤따르는 0 은 안 적는다', () => {
+    // `206.0 GPa` 는 소수 첫째 자리까지 쟀다는 뜻이 된다.
+    expect(formatScalar(206e9, 'Pa')).toBe('206 GPa')
+  })
+
+  it('아주 크거나 아주 작으면 지수로 적는다', () => {
+    // 자릿수를 세게 하지 않는다 — `0.0000123` 은 0 을 몇 개인지 세어야 한다.
+    expect(formatScalar(1.23e-9, 'm', 'length')).toContain('e-')
+  })
+
+  it('한 곳에서 정한다', () => {
+    // **자리 수가 화면마다 다르면** 같은 값이 화면을 옮길 때 달라 보이고,
+    // 그때 사람은 둘 중 어느 것이 진짜인지 묻는다. 실제로 그랬다(5·4·무제한).
+    expect(significant(77.748477312)).toBe(77.75)
+    expect(SIGNIFICANT_DIGITS).toBe(4)
   })
 })

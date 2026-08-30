@@ -174,7 +174,7 @@ export const COLUMNS: Column[] = [
     key: 'material.applied_part',
     field: 'applied_parts',
     group: 'material',
-    label: '적용 부위',
+    label: '적용 파트',
     kind: 'text',
     width: 'w-24',
     carry: true,

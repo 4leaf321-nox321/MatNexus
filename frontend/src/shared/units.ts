@@ -175,7 +175,7 @@ export function formatValue(
       ? '0'
       : magnitude >= 10000 || magnitude < 0.001
         ? shown.toExponential(3)
-        : Number(shown.toPrecision(5)).toString()
+        : significant(shown).toString()
   return unit ? `${rounded} ${unit}` : rounded
 }
 
@@ -313,6 +313,29 @@ export const VALUE_TYPES = [
  * 스칼라가 m 나 K 로 오면 SI 그대로 나왔다. 환산 규칙이 여러 곳에 있으면
  * 언젠가 갈라진다는 것이 이 파일의 첫 줄에 적혀 있다.
  */
+/**
+ * **표시 유효숫자.**
+ *
+ * 물성 실무의 관행은 3~4자리다 — ASTM E8 · ISO 6892 가 인장 결과를 유효숫자
+ * 3자리로 보고하게 하고, 밀시트·성적서도 대개 3~4자리다.
+ *
+ * **자리를 더 적는 것은 없는 정밀도를 주장하는 것이다.** `77.748477312` 는 float
+ * 계산이 낸 자릿수이지 그만큼 정확하다는 뜻이 아니고, 그 값을 본 사람은 측정이
+ * 그만큼 정밀했다고 읽는다.
+ *
+ * 4로 둔 이유: 3이면 `206 GPa` 는 되지만 `7.85 g/cm³` 옆의 `1.234 mm` 같은 치수가
+ * 굵어진다. 4는 실무 상한이면서 치수까지 덮는다.
+ *
+ * **저장 값은 여기서 자르지 않는다.** 사람이 적은 값은 적은 그대로 남아야 하고
+ * (편집 상자), 계산도 SI 원값으로 한다 — 이 상수는 **읽는 자리에만** 쓴다.
+ */
+export const SIGNIFICANT_DIGITS = 4
+
+/** 표시용으로 자른 수. 뒤따르는 0 은 떼어 낸다(`206.0` → `206`). */
+export function significant(value: number): number {
+  return Number(value.toPrecision(SIGNIFICANT_DIGITS))
+}
+
 export function formatScalar(
   value: number,
   siUnit: string | null | undefined,
@@ -321,7 +344,7 @@ export function formatScalar(
   // 응력만 예외다. GPa 까지 올라가는 것은 탄성계수뿐이고, 그 값을 MPa 로 적으면
   // 205000 이 된다.
   if (siUnit === 'Pa' && Math.abs(value) >= 1e9) {
-    return `${Number((value / 1e9).toPrecision(4))} GPa`
+    return `${significant(value / 1e9)} GPa`
   }
   const { unit, factor, offset } = display(siUnit, dimension)
   const shown = value * factor + offset
@@ -331,6 +354,6 @@ export function formatScalar(
       ? '0'
       : magnitude >= 100000 || magnitude < 0.001
         ? shown.toExponential(3)
-        : String(Number(shown.toPrecision(5)))
+        : String(significant(shown))
   return unit ? `${text} ${unit}` : text
 }
