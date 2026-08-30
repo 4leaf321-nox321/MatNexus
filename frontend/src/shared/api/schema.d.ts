@@ -190,6 +190,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{account_id}/system-admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set System Admin
+         * @description 시스템 관리자 권한을 주거나 뺀다 — **시스템 관리자만.**
+         */
+        post: operations["set_system_admin_api_accounts__account_id__system_admin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audit": {
         parameters: {
             query?: never;
@@ -635,6 +655,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/export-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Export Profiles
+         * @description 내 부서 것 + 전역. 시스템 관리자는 전부.
+         */
+        get: operations["list_export_profiles_api_fitting_export_profiles_get"];
+        put?: never;
+        /**
+         * Create Export Profile
+         * @description 부서 관리자가 자기 부서의 해석용 물성 정의를 만든다.
+         *
+         *     **부서마다 쓰는 솔버가 다르다.** 그리고 같은 솔버라도 사업부마다 덱 관례가
+         *     다르다 — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을
+         *     돌리는 사람에게 있지 시스템 관리자에게 없다.
+         */
+        post: operations["create_export_profile_api_fitting_export_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/export-profiles/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Deck
+         * @description 정의를 **저장하기 전에** 실제 카드로 그려 본다 (ADR 0023 3단계).
+         *
+         *     장비 파일 쪽 미리보기가 이미 같은 일을 한다 — 실제 파일을 받아 무엇으로 읽히는지
+         *     먼저 보여 준다(ADR 0006). 덱 쪽에서 그것이 더 필요하다: **틀린 덱은 솔버가
+         *     오류로 알려 주지 않는다.** 칸이 어긋나면 다른 필드로 읽히고, 해석은 그대로
+         *     돌아서 그럴듯한 결과를 낸다.
+         *
+         *     **아무것도 저장하지 않는다.** 그리고 **못 냈어도 200 이다** — 못 낸 이유를
+         *     보여 주는 것이 미리보기의 절반이다. 422 로 던지면 화면은 오류 상자 하나를
+         *     띄우고, 사람은 정의의 어느 줄이 문제인지 모른 채 돌아간다.
+         */
+        post: operations["preview_deck_api_fitting_export_profiles_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/export-profiles/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan Deck
+         * @description 예제 덱을 읽어 **정의 초안**을 만든다.
+         *
+         *     빈 폼에서 시작하면 막연하다 — 무슨 줄을 몇 개 쌓아야 하는지, 칸 폭을 얼마로
+         *     둬야 하는지 화면 어디에도 없다. 그런데 **덱을 붙이려는 사람에게는 대개 그
+         *     솔버의 덱 파일이 이미 있다.**
+         *
+         *     장비 파일 정의가 같은 문제를 이미 풀었다(ADR 0006): 구조는 코드가 읽고
+         *     **「이 값이 무엇인가」 만 사람이 정한다.** 여기도 같은 선이다.
+         *
+         *     **아무것도 저장하지 않는다.** 카드를 주면 덱의 숫자와 카드 값을 맞춰 이름을
+         *     제안하는데, 그것도 **짐작이라고 적어서** 돌려준다.
+         */
+        post: operations["scan_deck_api_fitting_export_profiles_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/export-profiles/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Export Profile
+         * @description 해석용 물성 정의를 고친다. **이미 내보낸 덱은 안 바뀐다** — 파일로 나갔다.
+         *
+         *     그래서 잠그지 않는다. 정의가 틀렸다는 것을 나중에 아는 것이 정상이고, 그때
+         *     고쳐서 다시 내보내면 된다.
+         */
+        put: operations["update_export_profile_api_fitting_export_profiles__key__put"];
+        post?: never;
+        /**
+         * Delete Export Profile
+         * @description 지운다 — **행은 남는다.** 휴지통에서 되살린다.
+         *
+         *     매달린 것을 검사하지 않는다: 해석용 물성 정의에 딸린 데이터가 없다. 지우면 그 솔버로
+         *     못 낼 뿐이고, 이미 나간 덱은 파일이라 그대로다.
+         */
+        delete: operations["delete_export_profile_api_fitting_export_profiles__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/families": {
         parameters: {
             query?: never;
@@ -668,6 +805,9 @@ export interface paths {
         /**
          * List Formats
          * @description 내보낼 수 있는 솔버. **화면이 이 응답만으로 목록을 그린다.**
+         *
+         *     코드 렌더러와 **부서의 해석용 물성 정의**가 함께 온다(ADR 0023). 정의를 고치면 다음
+         *     요청부터 먹는다 — 기동 때 얹지 않는 이유는 `renderers.py` 에 적었다.
          */
         get: operations["list_formats_api_fitting_formats_get"];
         put?: never;
@@ -859,6 +999,13 @@ export interface paths {
          *
          *     화면이 목록을 적어 두면 새 물성을 붙일 때 화면도 고쳐야 한다 — 그게 확장이
          *     아닌 상태다(D7).
+         *
+         *     ## `applies_to` 는 **풀어서** 준다
+         *
+         *     선언에 적힌 키(`dma_sweep`)가 아니라 **지금 이 DB 에서 그 방법을 쓸 수 있는
+         *     시험 종류 전부**를 돌려준다. 부서가 만든 DMA 종류는 키가 다르지만 저장·손실
+         *     탄성률을 그대로 재므로 조건을 만족한다 — 화면은 이 목록으로 후보를 거르므로,
+         *     선언 그대로 주면 그 종류의 시험이 후보에서 조용히 사라진다.
          */
         get: operations["list_kinds_api_groups_kinds_get"];
         put?: never;
@@ -3011,6 +3158,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-types/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Capabilities
+         * @description **어떤 채널이 무엇을 여는가.** 시험 종류를 만드는 화면이 참조한다.
+         *
+         *     계산은 채널을 **이름으로** 찾는다(`registry.requires_channels`). 그래서 저장
+         *     탄성률을 `E_prime` 이라고 적으면 DMA 단계가 목록에서 조용히 사라진다 — 막히는
+         *     것이 아니라 안 보이는 것이라, 사람은 「이 기능이 없구나」 로 읽는다.
+         *
+         *     요건을 적어 둔 자리는 레지스트리 하나뿐이고, 이 응답이 그것을 그대로 옮긴다.
+         */
+        get: operations["list_capabilities_api_test_types_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-types/detect": {
         parameters: {
             query?: never;
@@ -3114,6 +3287,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trash/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Purge Many
+         * @description 고른 줄을 한꺼번에 영영 지운다. **되돌릴 수 없다.**
+         *
+         *     화면이 하나씩 부르지 않는 이유는 **겹쳐 고르는 것** 때문이다 — 재료와 그
+         *     아래 시료를 함께 고르면 두 번째 요청이 「없는 행」 으로 터지는데, 그때
+         *     앞엣것은 이미 지워져 있다. 서버가 계층 위부터 지우고 딸려 사라진 것은
+         *     건너뛴다.
+         */
+        post: operations["purge_many_api_trash_purge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trash/{kind}/{item_id}": {
         parameters: {
             query?: never;
@@ -3198,6 +3396,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/viscoelastic/master-curves/{master_curve_id}/primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Primary
+         * @description **이 시험의 대표를 이 곡선으로 옮긴다.**
+         *
+         *     재료의 글로벌 피팅은 시험마다 대표 하나를 읽는다. 전에는 「가장 최근 것」 을
+         *     말없이 썼는데, 기준 온도를 바꿔 하나 더 만들면 그 순간부터 재료 쪽 계산이
+         *     바뀌면서 **화면 어디에도 그 전환이 안 보였다.**
+         *
+         *     처리 결과의 **채택**과 같은 자리다 — 여러 벌 만들고 하나를 고른다.
+         */
+        post: operations["set_primary_api_viscoelastic_master_curves__master_curve_id__primary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/viscoelastic/master-curves/{master_curve_id}/prony": {
         parameters: {
             query?: never;
@@ -3216,6 +3440,26 @@ export interface paths {
          *     "3항이면 충분한데 왜 6항이지" 를 사람이 볼 수 있어야 한다.
          */
         post: operations["create_prony_fit_api_viscoelastic_master_curves__master_curve_id__prony_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/runs/{test_run_id}/importable-curves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Importable Curves
+         * @description 장비가 계산해 준 표 목록. 마스터커브로 등록할 것을 여기서 고른다.
+         */
+        get: operations["list_importable_curves_api_viscoelastic_runs__test_run_id__importable_curves_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3241,6 +3485,33 @@ export interface paths {
          *     둘이 벌어지면 그 모델이 이 재료에 안 맞는다는 뜻이다.
          */
         post: operations["create_master_curve_api_viscoelastic_runs__test_run_id__master_curves_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/runs/{test_run_id}/master-curves/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Master Curve
+         * @description **장비가 겹쳐 준 곡선을 그대로 받는다.**
+         *
+         *     겹치기를 다시 하지 않는다 — 장비가 쓴 이동인자를 모르기 때문이다. 점을 그대로
+         *     받고 `method="imported"` 로 적는다. 이동인자 자리는 비어 있고, 그 사실이 화면과
+         *     카드 주석에 남는다.
+         *
+         *     이것이 없으면 **마스터커브만 내보낸 파일은 Prony 도 글로벌 피팅도 못 쓴다** —
+         *     프로파일이 그 표를 읽어 두기는 해도(`derived`) 행이 되지 않았다.
+         */
+        post: operations["import_master_curve_api_viscoelastic_runs__test_run_id__master_curves_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5183,6 +5454,75 @@ export interface components {
             version: string;
         };
         /**
+         * DeckPreviewIn
+         * @description 저장하기 **전에** 돌려 볼 것. 정의 한 벌 + 카드 하나.
+         *
+         *     장비 파일 쪽 미리보기와 같은 자리다(ADR 0006) — 거기서는 실제 파일을 받아 무엇으로
+         *     읽히는지 먼저 보여 준다. **저장하고 나서 틀린 것을 아는 것과 다르다.**
+         */
+        DeckPreviewIn: {
+            /**
+             * Card Id
+             * Format: uuid
+             */
+            card_id: string;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /**
+             * Units
+             * @default si
+             */
+            units: string;
+        };
+        /**
+         * DeckPreviewOut
+         * @description 미리보기 결과. **덱이 안 나와도 200 이다.**
+         *
+         *     못 낸 이유를 보여 주는 것이 미리보기의 절반이다 — 422 로 던지면 화면은 오류
+         *     상자 하나를 띄우고, 사람은 정의의 어느 줄이 문제인지 모른 채 돌아간다.
+         */
+        DeckPreviewOut: {
+            /** Error */
+            error?: string | null;
+            /**
+             * Missing
+             * @default []
+             */
+            missing: string[];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /** Text */
+            text?: string | null;
+        };
+        /**
+         * DeckScanIn
+         * @description 예제 덱 하나. **저장하지 않는다** — 읽고 초안만 돌려준다.
+         */
+        DeckScanIn: {
+            /** Card Id */
+            card_id?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** DeckScanOut */
+        DeckScanOut: {
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["ScannedLineOut"][];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+        };
+        /**
          * DeclaredCardPreviewOut
          * @description 적어 둔 값만으로 카드를 만들면 **무엇이 실리는가.**
          *
@@ -5681,6 +6021,85 @@ export interface components {
             /** Requires */
             requires: string[];
         };
+        /** ExportProfileCreateRequest */
+        ExportProfileCreateRequest: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Owner Workspace Slug */
+            owner_workspace_slug?: string | null;
+        };
+        /**
+         * ExportProfileOut
+         * @description 저장된 해석용 물성 정의 하나.
+         */
+        ExportProfileOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Global */
+            is_global: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Owner Workspace Name */
+            owner_workspace_name?: string | null;
+            /** Owner Workspace Slug */
+            owner_workspace_slug?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ExportProfileSaveRequest
+         * @description 고칠 때 보내는 것. **소유는 여기서 안 바꾼다** — 전역 승격은 성격이 다른
+         *     결정이라 별도 경로다(장비 파일 정의과 같은 규칙).
+         */
+        ExportProfileSaveRequest: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Label */
+            label: string;
+        };
         /** FamilyOut */
         FamilyOut: {
             /**
@@ -6004,6 +6423,14 @@ export interface components {
          *     타입을 손으로 적지 않게 하려고 스키마를 내보내는 것인데 그러면 뜻이 없다.
          */
         GroupingParamOut: {
+            /** Choice Help */
+            choice_help?: {
+                [key: string]: string;
+            };
+            /** Choice Labels */
+            choice_labels?: {
+                [key: string]: string;
+            };
             /** Choices */
             choices?: string[];
             /** Default */
@@ -6044,6 +6471,11 @@ export interface components {
             makes_values: components["schemas"]["GroupingProducedOut"][];
             /** Params */
             params: components["schemas"]["GroupingParamOut"][];
+            /**
+             * Requires Channels
+             * @default []
+             */
+            requires_channels: string[][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -6124,6 +6556,28 @@ export interface components {
             os: string;
             /** Uptime Seconds */
             uptime_seconds: number | null;
+        };
+        /**
+         * ImportableCurveOut
+         * @description 장비가 계산해 준 표 하나. **못 쓰는 것도 이유와 함께 나온다.**
+         *
+         *     `derived` 에는 마스터커브와 이동인자 표가 함께 들어온다. 못 쓰는 것을 목록에서
+         *     빼면 「내 파일의 그 표가 왜 안 보이지」 가 되고, 그냥 두면 골라 놓고 나서야
+         *     거절을 본다.
+         */
+        ImportableCurveOut: {
+            /** Channels */
+            channels: string[];
+            /** Curve Key */
+            curve_key: string;
+            /** Label */
+            label: string | null;
+            /** Note */
+            note: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Usable */
+            usable: boolean;
         };
         /** InboxItemDetail */
         InboxItemDetail: {
@@ -6323,6 +6777,20 @@ export interface components {
             expires_in: number;
             user: components["schemas"]["UserOut"];
         };
+        /**
+         * MasterCurveImportRequest
+         * @description **장비가 이미 겹쳐 준 곡선**을 그대로 등록한다.
+         *
+         *     TA TRIOS 같은 장비는 시간-온도 중첩을 제 소프트웨어에서 하고 마스터커브를
+         *     함께 내보낸다. 그런 파일에는 겹칠 원본이 없거나, 있어도 장비가 쓴 이동인자를
+         *     우리가 모른다 — **다시 겹치면 다른 곡선이 나오는데 둘 다 그럴듯하다.**
+         */
+        MasterCurveImportRequest: {
+            /** Curve Key */
+            curve_key: string;
+            /** Reference Temperature K */
+            reference_temperature_k: number;
+        };
         /** MasterCurveOut */
         MasterCurveOut: {
             /**
@@ -6335,6 +6803,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
             /** Maximum Frequency Hz */
             maximum_frequency_hz: number;
             /** Method */
@@ -7197,6 +7670,11 @@ export interface components {
             order: number;
             /** Params */
             params: components["schemas"]["StepParamOut"][];
+            /**
+             * Requires Channels
+             * @default []
+             */
+            requires_channels: string[][];
             /** Version */
             version: string;
         };
@@ -8108,6 +8586,61 @@ export interface components {
             sample_sd: number | null;
             /** Si Unit */
             si_unit: string;
+        };
+        /** ScannedCellOut */
+        ScannedCellOut: {
+            /**
+             * Empty
+             * @default false
+             */
+            empty: boolean;
+            /** Suggested */
+            suggested?: string | null;
+            /** Text */
+            text: string;
+            /** Value */
+            value: number;
+        };
+        /** ScannedLineOut */
+        ScannedLineOut: {
+            /**
+             * Align
+             * @default right
+             */
+            align: string;
+            /**
+             * Cells
+             * @default []
+             */
+            cells: components["schemas"]["ScannedCellOut"][];
+            /**
+             * Join
+             * @default ,
+             */
+            join: string;
+            /** Kind */
+            kind: string;
+            /** Precision */
+            precision?: number | null;
+            /**
+             * Prefix
+             * @default
+             */
+            prefix: string;
+            /**
+             * Rows
+             * @default 0
+             */
+            rows: number;
+            /**
+             * Suffix
+             * @default
+             */
+            suffix: string;
+            /** Text */
+            text?: string | null;
+            /** Width */
+            width?: number | null;
         };
         /** SearchHit */
         SearchHit: {
@@ -9038,6 +9571,19 @@ export interface components {
             /** Temperature K */
             temperature_k: number;
         };
+        /**
+         * SystemAdminRequest
+         * @description 시스템 관리자 권한을 주거나 뺀다.
+         *
+         *     **한 엔드포인트에 참·거짓을 실어 보낸다.** 정지/활성처럼 둘로 가르지 않는
+         *     이유는, 이 값이 상태가 아니라 **권한 한 칸**이기 때문이다 — 화면이 지금 값을
+         *     보고 반대를 보내면 되고, 「지정」과 「해제」가 따로 있으면 지금 값을 모르는
+         *     쪽이 둘 중 하나를 골라야 한다.
+         */
+        SystemAdminRequest: {
+            /** Is System Admin */
+            is_system_admin: boolean;
+        };
         /** TablePreviewOut */
         TablePreviewOut: {
             /** Column Count */
@@ -9260,6 +9806,11 @@ export interface components {
             id: string;
             /** Instrument */
             instrument: string | null;
+            /**
+             * Master Curve Count
+             * @default 0
+             */
+            master_curve_count: number;
             /** Material Id */
             material_id: string | null;
             /** Material Name */
@@ -9276,6 +9827,11 @@ export interface components {
             parse_profile_key?: string | null;
             /** Parser Version */
             parser_version: string | null;
+            /**
+             * Prony Fit Count
+             * @default 0
+             */
+            prony_fit_count: number;
             /** Record Name */
             record_name: string;
             /** Registered By */
@@ -9345,6 +9901,11 @@ export interface components {
             id: string;
             /** Instrument */
             instrument: string | null;
+            /**
+             * Master Curve Count
+             * @default 0
+             */
+            master_curve_count: number;
             /** Material Id */
             material_id: string | null;
             /** Material Name */
@@ -9412,6 +9973,28 @@ export interface components {
             text: string | null;
             /** Value */
             value: number | null;
+        };
+        /**
+         * TestTypeCapabilityOut
+         * @description 이 채널을 넣으면 **무엇이 열리나.**
+         *
+         *     시험 종류를 만드는 사람은 「저장 탄성률을 `storage_modulus` 로 적어야 DMA
+         *     단계가 뜬다」 를 알 방법이 없었다. 채널 이름은 자유롭게 지을 수 있는데, 계산은
+         *     **정해진 이름**을 찾기 때문이다 — 조금 다르게 적으면 막히는 게 아니라 그
+         *     계산이 목록에서 조용히 사라진다.
+         *
+         *     그래서 **레지스트리가 선언한 요건을 그대로 화면에 준다.** 화면이 목록을 적어
+         *     두면 계산을 더할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다(D7).
+         */
+        TestTypeCapabilityOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Requires Channels */
+            requires_channels: string[][];
         };
         /** TestTypeCreateRequest */
         TestTypeCreateRequest: {
@@ -9567,6 +10150,54 @@ export interface components {
             name: string;
             /** Workspace Id */
             workspace_id: string | null;
+        };
+        /**
+         * TrashPurgeManyIn
+         * @description 고른 줄을 한꺼번에 영영 지운다.
+         *
+         *     **`confirm` 을 여기서도 받는다.** 한 줄짜리와 같은 이유다 — 이 길은 API 로도
+         *     열려 있고, 스크립트가 실수로 부르면 그 데이터는 돌아오지 않는다. 여럿이라
+         *     잘못 불렀을 때 잃는 것이 더 크다.
+         */
+        TrashPurgeManyIn: {
+            /**
+             * Confirm
+             * @default false
+             */
+            confirm: boolean;
+            /** Items */
+            items: components["schemas"]["TrashRef"][];
+        };
+        /**
+         * TrashPurgedManyOut
+         * @description 여럿을 지운 결과.
+         */
+        TrashPurgedManyOut: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Purged */
+            purged: number;
+            /** Requested */
+            requested: number;
+            /** Said */
+            said: string;
+            /** Skipped */
+            skipped: number;
+        };
+        /**
+         * TrashRef
+         * @description 지울 줄 하나를 가리킨다.
+         */
+        TrashRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
         };
         /** TrendPointOut */
         TrendPointOut: {
@@ -10392,6 +11023,41 @@ export interface operations {
             };
         };
     };
+    set_system_admin_api_accounts__account_id__system_admin_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemAdminRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_entries_api_audit_get: {
         parameters: {
             query?: {
@@ -11061,6 +11727,189 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PropertyCardOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_export_profiles_api_fitting_export_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportProfileOut"][];
+                };
+            };
+        };
+    };
+    create_export_profile_api_fitting_export_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportProfileCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_deck_api_fitting_export_profiles_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeckPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_deck_api_fitting_export_profiles_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeckScanIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_export_profile_api_fitting_export_profiles__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportProfileSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_export_profile_api_fitting_export_profiles__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -15196,6 +16045,26 @@ export interface operations {
             };
         };
     };
+    list_capabilities_api_test_types_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestTypeCapabilityOut"][];
+                };
+            };
+        };
+    };
     detect_test_type_api_test_types_detect_post: {
         parameters: {
             query?: never;
@@ -15345,6 +16214,39 @@ export interface operations {
             };
         };
     };
+    purge_many_api_trash_purge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrashPurgeManyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashPurgedManyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     purge_api_trash__kind___item_id__delete: {
         parameters: {
             query?: {
@@ -15464,6 +16366,37 @@ export interface operations {
             };
         };
     };
+    set_primary_api_viscoelastic_master_curves__master_curve_id__primary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                master_curve_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterCurveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_prony_fits_api_viscoelastic_master_curves__master_curve_id__prony_get: {
         parameters: {
             query?: never;
@@ -15530,6 +16463,37 @@ export interface operations {
             };
         };
     };
+    list_importable_curves_api_viscoelastic_runs__test_run_id__importable_curves_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportableCurveOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_master_curves_api_viscoelastic_runs__test_run_id__master_curves_get: {
         parameters: {
             query?: never;
@@ -15573,6 +16537,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MasterCurveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterCurveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_master_curve_api_viscoelastic_runs__test_run_id__master_curves_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MasterCurveImportRequest"];
             };
         };
         responses: {

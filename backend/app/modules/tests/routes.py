@@ -63,10 +63,12 @@ from app.modules.tests.schemas import (
     TestRunDetailOut,
     TestRunOut,
     TestSummaryOut,
+    TestTypeCapabilityOut,
     TestTypeCreateRequest,
     TestTypeOut,
     TestTypeUpdateRequest,
 )
+from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
 from app.shared import (
@@ -88,7 +90,8 @@ from app.shared.permissions import (
     resolve_owner_workspace,
     visible_owner_clause,
 )
-from matcore import naming, parsers, readers, registry
+from matcore import naming, parsers, processing, readers, registry
+from matcore.groups import prony as _prony_group  # noqa: F401  (등록시킨다)
 from matcore.readers import profile as profiles
 
 router = APIRouter(prefix="/test-types", tags=["tests"])
@@ -351,6 +354,29 @@ def detect_test_type(
             "맞는 프로파일도 확장자도 없습니다. 종류를 고르거나 형식 프로파일을 만드세요."
         ),
     )
+
+
+@router.get("/capabilities", response_model=list[TestTypeCapabilityOut])
+def list_capabilities(user: User = Depends(current_user)) -> list[TestTypeCapabilityOut]:
+    """**어떤 채널이 무엇을 여는가.** 시험 종류를 만드는 화면이 참조한다.
+
+    계산은 채널을 **이름으로** 찾는다(`registry.requires_channels`). 그래서 저장
+    탄성률을 `E_prime` 이라고 적으면 DMA 단계가 목록에서 조용히 사라진다 — 막히는
+    것이 아니라 안 보이는 것이라, 사람은 「이 기능이 없구나」 로 읽는다.
+
+    요건을 적어 둔 자리는 레지스트리 하나뿐이고, 이 응답이 그것을 그대로 옮긴다.
+    """
+    processing.load_builtin()
+    return [
+        TestTypeCapabilityOut(
+            id=plugin.id,
+            label=plugin.label,
+            kind=plugin.kind,
+            requires_channels=[list(one) for one in plugin.requires_channels],
+        )
+        for plugin in registry.list_plugins()
+        if plugin.requires_channels
+    ]
 
 
 @router.get("/parsers", response_model=list[ParserOut])
@@ -622,6 +648,19 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
             .group_by(ProcessingResult.test_run_id)
         )
     }
+    # **마스터커브가 있나.** 글로벌 피팅은 그것이 있는 시험만 쓸 수 있는데, 없는
+    # 것을 목록에 두면 골라 보고서야 안다 — 그리고 변형률 스윕처럼 **애초에 만들
+    # 수 없는** 시험도 같은 목록에 섞여 있다(둘 다 시험종류가 `dma_sweep` 이다).
+    #
+    # 시험마다 세지 않고 한 번에 집계한다(CLAUDE.md: N+1 은 명시적 join 으로 막는다).
+    curves_made = {
+        run_id: count
+        for run_id, count in db.execute(
+            select(MasterCurve.test_run_id, func.count())
+            .where(MasterCurve.test_run_id.in_([r.id for r in runs]))
+            .group_by(MasterCurve.test_run_id)
+        )
+    }
     return {
         "specimens": specimens,
         "samples": samples,
@@ -629,6 +668,7 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
         "types": types,
         "curves": {c.test_run_id: c for c in curve_rows},
         "results": counts,
+        "master_curves": curves_made,
         "users": people,
     }
 
@@ -670,6 +710,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         channels=list(curve.channels) if curve else [],
         warnings=[w for w in warnings.split(" / ") if w],
         result_count=int(ctx["results"].get(run.id, 0)),
+        master_curve_count=int(ctx["master_curves"].get(run.id, 0)),
         adopted_result_id=run.adopted_result_id,
         created_at=run.created_at,
     )
@@ -1124,8 +1165,15 @@ def get_run(
         .order_by(TestSummary.source, TestSummary.key)
     )
     base = _run_out(run, ctx)
+    fits = db.scalar(
+        select(func.count())
+        .select_from(PronyFit)
+        .join(MasterCurve, MasterCurve.id == PronyFit.master_curve_id)
+        .where(MasterCurve.test_run_id == run.id)
+    )
     return TestRunDetailOut(
         **base.model_dump(),
+        prony_fit_count=int(fits or 0),
         summary=[
             TestSummaryOut(
                 key=s.key,

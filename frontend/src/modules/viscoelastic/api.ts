@@ -21,6 +21,7 @@ export type ShiftFactor = components['schemas']['ShiftOut']
 export type PronyFit = components['schemas']['PronyFitOut']
 export type PronyCandidate = components['schemas']['PronyCandidateOut']
 export type PronyTerm = components['schemas']['PronyTermOut']
+export type ImportableCurve = components['schemas']['ImportableCurveOut']
 
 /** 겹친 곡선의 점. 화면이 그린다. */
 export type MasterCurvePoints = Record<string, (number | null)[]>
@@ -52,6 +53,39 @@ export const viscoelasticApi = {
       curve_keys?: string[]
     }
   ) => api.post<MasterCurve>(`/viscoelastic/runs/${testRunId}/master-curves`, body),
+
+  /**
+   * 장비가 계산해 준 표. **못 쓰는 것도 이유와 함께 온다** — 이동인자 표가 같은
+   * 칸에 들어오므로, 안 보여 주면 「내 파일에 있는 그 표가 왜 없지」 가 된다.
+   */
+  importableCurves: (testRunId: string) =>
+    api.get<ImportableCurve[]>(`/viscoelastic/runs/${testRunId}/importable-curves`),
+
+  /**
+   * **장비가 이미 겹쳐 준 곡선**을 마스터커브로 등록한다.
+   *
+   * TA TRIOS 같은 장비는 시간-온도 중첩을 제 소프트웨어에서 하고 마스터커브를
+   * 함께 내보낸다. 장비 파일 정의가 그 표를 「처리결과」 로 읽어 두지만, 그것만
+   * 으로는 **Prony 도 글로벌 피팅도 못 쓴다** — `MasterCurve` 행이 아니어서다.
+   *
+   * **겹치기를 다시 하지 않는다.** 장비가 쓴 이동인자를 모르고, 다시 겹치면
+   * 다른 곡선이 나오는데 둘 다 그럴듯하다.
+   */
+  importMasterCurve: (
+    testRunId: string,
+    body: { curve_key: string; reference_temperature_k: number }
+  ) =>
+    api.post<MasterCurve>(`/viscoelastic/runs/${testRunId}/master-curves/import`, body),
+
+  /**
+   * **이 시험의 대표를 이 곡선으로 옮긴다.**
+   *
+   * 재료의 글로벌 피팅이 시험마다 대표 하나를 읽는다. 전에는 「가장 최근 것」 을
+   * 말없이 썼는데, 기준 온도를 바꿔 하나 더 만들면 그 순간부터 재료 쪽 계산이
+   * 바뀌면서 **그 전환이 화면 어디에도 안 보였다.**
+   */
+  setPrimary: (masterCurveId: string) =>
+    api.post<MasterCurve>(`/viscoelastic/master-curves/${masterCurveId}/primary`, {}),
 
   points: (masterCurveId: string) =>
     api.get<MasterCurvePoints>(`/viscoelastic/master-curves/${masterCurveId}/points`),

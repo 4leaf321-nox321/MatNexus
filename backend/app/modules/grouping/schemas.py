@@ -24,6 +24,10 @@ class GroupingParamOut(BaseModel):
     type: str
     default: Any = None
     choices: list[str] = Field(default_factory=list)
+    choice_labels: dict[str, str] = Field(default_factory=dict)
+    choice_help: dict[str, str] = Field(default_factory=dict)
+    """고른 값의 설명. **화면은 고른 것만 보인다** — 셋을 한 줄에 이어 적으면
+    지금 무엇을 고른 것인지 눈으로 찾아야 한다."""
     help: str | None = None
 
 
@@ -41,6 +45,13 @@ class GroupingSpecOut(BaseModel):
     id: str
     label: str
     applies_to: list[str]
+    """**풀어서 준다** — 지금 이 DB 에서 이 방법을 쓸 수 있는 시험 종류 키 전부.
+
+    선언에 적힌 키만 주면, 부서가 만든 DMA 종류(키가 다르지만 재는 것은 같다)의
+    시험이 화면의 후보에서 조용히 사라진다."""
+    requires_channels: list[list[str]] = []
+    """필요한 채널. **안쪽 묶음은 「그중 하나」.** 시험 종류를 만드는 화면이 이것을
+    읽어 「이 채널을 넣으면 무엇이 열리나」 를 보여 준다."""
     params: list[GroupingParamOut]
     makes_values: list[GroupingProducedOut]
 

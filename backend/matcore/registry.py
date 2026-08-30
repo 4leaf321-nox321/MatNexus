@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -39,6 +39,14 @@ class ParamSpec:
     `linear_regression` 은 레시피 JSON 에 저장되고 결과 스냅샷에도 남는 계약이다.
     그것을 한국어로 바꾸면 저장된 레시피가 전부 깨진다. 그래서 값은 그대로 두고
     화면에 보여 줄 이름만 따로 둔다 — `TestType.key`/`label` 을 나눈 것과 같다."""
+    choice_help: dict[str, str] = field(default_factory=dict)
+    """고를 값 → **그것이 무엇을 하는지.**
+
+    `help` 는 파라미터 전체에 하나뿐이라, 고를 값이 셋이면 셋을 한 줄에 이어
+    적게 된다 — 그러면 지금 고른 것이 무엇인지 눈으로 찾아야 한다. 값마다 두면
+    화면이 **고른 것의 설명만** 보일 수 있다.
+
+    **화면이 적어 두지 않는다.** 새 방법이 붙으면 그 설명도 여기서 온다."""
     unit: str | None = None
     """**저장 단위(SI)** 다. 화면은 실무 단위로 보여 주고 받는다 — CAE 는 길이를
     mm 로 쓰고, `0.05` 를 치라고 하면 사람이 `50` 을 친다. 환산은 화면이 한다."""
@@ -131,7 +139,21 @@ class Plugin:
     지금 지운다 — 남겨 두면 다음 사람이 또 "의존성 검사가 있구나" 하고 믿는다."""
     params: tuple[ParamSpec, ...] = ()
     applies_to: tuple[str, ...] = ()
-    """적용 가능한 재료군·시험종류. 비어 있으면 제한 없음."""
+    """적용 가능한 재료군·시험종류 **키**. 비어 있으면 제한 없음.
+
+    **키만으로는 부족하다.** 부서가 자기 DMA 종류를 만들면(정의는 데이터다) 키가
+    `dma_sweep` 이 아니라서, 저장·손실 탄성률을 그대로 재는 시험인데도 DMA 단계와
+    묶음이 목록에서 사라진다. 막히는 것이 아니라 **안 보이는** 것이라 사람은
+    「이 기능이 없구나」 로 읽는다. 그래서 `requires_channels` 를 함께 둔다."""
+    requires_channels: tuple[tuple[str, ...], ...] = ()
+    """이 계산에 필요한 채널. **안쪽 묶음은 「그중 하나」** 다.
+
+        (("storage_modulus",), ("frequency", "angular_frequency"))
+        → 저장 탄성률이 있고, 주파수나 각주파수 중 하나가 있으면 된다.
+
+    키가 아니라 **데이터의 모양**으로 판별한다 — 이름이 무엇이든 그 열이 있으면
+    그 계산은 성립한다. 시험 종류 편집기가 이 선언을 읽어 「이 채널을 넣으면 무엇이
+    열리나」 를 보여 주므로, 여기 적는 것이 곧 사람에게 보이는 설명이다."""
     makes_columns: tuple[Produced, ...] = ()
     """이 단계가 프레임에 **새로 더하는 열**.
 
@@ -169,6 +191,7 @@ def register(
     produces: str | None = None,
     params: tuple[ParamSpec, ...] = (),
     applies_to: tuple[str, ...] = (),
+    requires_channels: tuple[tuple[str, ...], ...] = (),
     makes_columns: tuple[Produced, ...] = (),
     makes_values: tuple[Produced, ...] = (),
     order: int = 100,
@@ -192,6 +215,7 @@ def register(
             produces=produces,
             params=params,
             applies_to=applies_to,
+            requires_channels=requires_channels,
             makes_columns=makes_columns,
             makes_values=makes_values,
             order=order,
@@ -210,10 +234,46 @@ def get(plugin_id: str) -> Plugin:
         raise KeyError(f"등록되지 않은 플러그인: {plugin_id}") from None
 
 
-def list_plugins(kind: Kind | None = None, applies_to: str | None = None) -> list[Plugin]:
+def missing_channels(plugin: Plugin, channels: Iterable[str]) -> list[tuple[str, ...]]:
+    """이 시험 종류에 **무엇이 없어서** 이 계산을 못 쓰나. 빈 목록이면 쓸 수 있다.
+
+    화면이 그대로 적는다 — 「조건을 만족하지 않습니다」 는 다음에 할 일을 안 알려
+    준다. 채널 편집기가 이 목록을 보고 「storage_modulus 가 빠졌습니다」 라고 쓴다.
+    """
+    found = set(channels)
+    return [one for one in plugin.requires_channels if not any(name in found for name in one)]
+
+
+def fits(plugin: Plugin, key: str | None, channels: Iterable[str] | None = None) -> bool:
+    """이 시험 종류에서 이 계산을 보여 줄까.
+
+    **셋 중 하나면 보여 준다.**
+
+        제한이 없다                    아무 데나 쓴다
+        키가 맞는다                    `applies_to` 에 적힌 그 종류다
+        채널이 맞는다                  이름이 달라도 데이터의 모양이 같다
+
+    셋째가 핵심이다. 부서가 만든 DMA 종류는 키가 다르지만 저장·손실 탄성률을
+    그대로 재고, 그러면 DMA 단계와 Prony 묶음이 성립한다.
+    """
+    if not plugin.applies_to and not plugin.requires_channels:
+        return True
+    if key is not None and key in plugin.applies_to:
+        return True
+    if plugin.requires_channels and channels is not None:
+        return not missing_channels(plugin, channels)
+    return False
+
+
+def list_plugins(
+    kind: Kind | None = None,
+    applies_to: str | None = None,
+    channels: Iterable[str] | None = None,
+) -> list[Plugin]:
     items = [p for p in _REGISTRY.values() if kind is None or p.kind == kind]
-    if applies_to is not None:
-        items = [p for p in items if not p.applies_to or applies_to in p.applies_to]
+    if applies_to is not None or channels is not None:
+        seen = tuple(channels) if channels is not None else None
+        items = [p for p in items if fits(p, applies_to, seen)]
     # **권장 순서로 낸다.** 화면이 순서도를 이 순서로 세우고, 사람이 단계를
     # 고르는 순서도 이것이다 — 목록이 알파벳순이면 `curve.crop` 이 맨 앞에 오고
     # 공칭 변환이 가운데 묻힌다.

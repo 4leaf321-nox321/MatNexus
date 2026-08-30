@@ -74,6 +74,7 @@ def _moduli(frame: Frame, options: dict[str, Any]) -> tuple[np.ndarray, np.ndarr
         ),
     ),
     applies_to=("dma_sweep",),
+    requires_channels=(("storage_modulus",), ("loss_modulus",)),
     makes_columns=(
         Produced(
             key=TAN_DELTA,
@@ -147,6 +148,7 @@ def derived(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
     ),
     applies_to=("dma_sweep",),
+    requires_channels=(("frequency", "angular_frequency"),),
     makes_columns=(
         Produced(key=ANGULAR, label="각주파수", si_unit="rad/s"),
         Produced(key=FREQUENCY, label="주파수", si_unit="Hz"),
@@ -207,6 +209,7 @@ def frequency(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
     ),
     applies_to=("dma_sweep",),
+    requires_channels=(("temperature",), ("tan_delta", "loss_modulus")),
     makes_values=(
         Produced(
             key="glass_transition",
@@ -319,6 +322,7 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
     ),
     applies_to=("dma_sweep",),
+    requires_channels=(("storage_modulus",), ("loss_modulus",)),
     makes_columns=(
         Produced(
             key="storage_modulus_shear",
@@ -411,6 +415,7 @@ LVE_POINTS = "lve_point_count"
         ),
     ),
     applies_to=("dma_sweep",),
+    requires_channels=(("storage_modulus",), ("oscillation_strain",)),
     makes_values=(
         Produced(
             key=LVE_MODULUS,

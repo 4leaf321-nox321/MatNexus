@@ -2901,6 +2901,125 @@
         "title": "DatabaseOut",
         "type": "object"
       },
+      "DeckPreviewIn": {
+        "description": "저장하기 **전에** 돌려 볼 것. 정의 한 벌 + 카드 하나.\n\n장비 파일 쪽 미리보기와 같은 자리다(ADR 0006) — 거기서는 실제 파일을 받아 무엇으로\n읽히는지 먼저 보여 준다. **저장하고 나서 틀린 것을 아는 것과 다르다.**",
+        "properties": {
+          "card_id": {
+            "format": "uuid",
+            "title": "Card Id",
+            "type": "string"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "units": {
+            "default": "si",
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition",
+          "card_id"
+        ],
+        "title": "DeckPreviewIn",
+        "type": "object"
+      },
+      "DeckPreviewOut": {
+        "description": "미리보기 결과. **덱이 안 나와도 200 이다.**\n\n못 낸 이유를 보여 주는 것이 미리보기의 절반이다 — 422 로 던지면 화면은 오류\n상자 하나를 띄우고, 사람은 정의의 어느 줄이 문제인지 모른 채 돌아간다.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "missing": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "notes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "DeckPreviewOut",
+        "type": "object"
+      },
+      "DeckScanIn": {
+        "description": "예제 덱 하나. **저장하지 않는다** — 읽고 초안만 돌려준다.",
+        "properties": {
+          "card_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "DeckScanIn",
+        "type": "object"
+      },
+      "DeckScanOut": {
+        "properties": {
+          "lines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScannedLineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "notes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          }
+        },
+        "title": "DeckScanOut",
+        "type": "object"
+      },
       "DeclaredCardPreviewOut": {
         "description": "적어 둔 값만으로 카드를 만들면 **무엇이 실리는가.**\n\n화면이 재료 API 를 따로 불러 나름대로 판정하지 않게 하려고 둔다 — 규칙이\n두 벌이 되면 어긋나는 순간 화면이 거짓말을 한다. `FitPreviewOut.elastic` 이\n같은 이유로 있다.\n\n**누르기 전에 알아야 한다.** 만들기를 누른 뒤에 \"적어 둔 물성이 없습니다\" 를\n보는 것은 늦다.",
         "properties": {
@@ -4180,6 +4299,185 @@
         "title": "ExportFormatOut",
         "type": "object"
       },
+      "ExportProfileCreateRequest": {
+        "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "owner_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Slug"
+          }
+        },
+        "required": [
+          "label",
+          "definition",
+          "key"
+        ],
+        "title": "ExportProfileCreateRequest",
+        "type": "object"
+      },
+      "ExportProfileOut": {
+        "description": "저장된 해석용 물성 정의 하나.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_global": {
+            "title": "Is Global",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "owner_workspace_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Name"
+          },
+          "owner_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Slug"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "label",
+          "is_global",
+          "definition",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ExportProfileOut",
+        "type": "object"
+      },
+      "ExportProfileSaveRequest": {
+        "description": "고칠 때 보내는 것. **소유는 여기서 안 바꾼다** — 전역 승격은 성격이 다른\n결정이라 별도 경로다(장비 파일 정의과 같은 규칙).",
+        "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "definition"
+        ],
+        "title": "ExportProfileSaveRequest",
+        "type": "object"
+      },
       "FamilyOut": {
         "properties": {
           "block": {
@@ -4975,6 +5273,20 @@
       "GroupingParamOut": {
         "description": "조절하는 값 하나. **화면의 폼 필드가 여기서 생긴다.**\n\n`dict[str, Any]` 로 두면 프론트 타입이 `{}` 가 되어 화면이 아무거나 읽는다 —\n타입을 손으로 적지 않게 하려고 스키마를 내보내는 것인데 그러면 뜻이 없다.",
         "properties": {
+          "choice_help": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Choice Help",
+            "type": "object"
+          },
+          "choice_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Choice Labels",
+            "type": "object"
+          },
           "choices": {
             "items": {
               "type": "string"
@@ -5071,6 +5383,17 @@
               "$ref": "#/components/schemas/GroupingParamOut"
             },
             "title": "Params",
+            "type": "array"
+          },
+          "requires_channels": {
+            "default": [],
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Requires Channels",
             "type": "array"
           }
         },
@@ -5329,6 +5652,62 @@
           "uptime_seconds"
         ],
         "title": "HostOut",
+        "type": "object"
+      },
+      "ImportableCurveOut": {
+        "description": "장비가 계산해 준 표 하나. **못 쓰는 것도 이유와 함께 나온다.**\n\n`derived` 에는 마스터커브와 이동인자 표가 함께 들어온다. 못 쓰는 것을 목록에서\n빼면 「내 파일의 그 표가 왜 안 보이지」 가 되고, 그냥 두면 골라 놓고 나서야\n거절을 본다.",
+        "properties": {
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "curve_key": {
+            "title": "Curve Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "usable": {
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "curve_key",
+          "label",
+          "row_count",
+          "channels",
+          "usable",
+          "note"
+        ],
+        "title": "ImportableCurveOut",
         "type": "object"
       },
       "InboxItemDetail": {
@@ -5896,6 +6275,25 @@
         "title": "LoginResponse",
         "type": "object"
       },
+      "MasterCurveImportRequest": {
+        "description": "**장비가 이미 겹쳐 준 곡선**을 그대로 등록한다.\n\nTA TRIOS 같은 장비는 시간-온도 중첩을 제 소프트웨어에서 하고 마스터커브를\n함께 내보낸다. 그런 파일에는 겹칠 원본이 없거나, 있어도 장비가 쓴 이동인자를\n우리가 모른다 — **다시 겹치면 다른 곡선이 나오는데 둘 다 그럴듯하다.**",
+        "properties": {
+          "curve_key": {
+            "title": "Curve Key",
+            "type": "string"
+          },
+          "reference_temperature_k": {
+            "title": "Reference Temperature K",
+            "type": "number"
+          }
+        },
+        "required": [
+          "curve_key",
+          "reference_temperature_k"
+        ],
+        "title": "MasterCurveImportRequest",
+        "type": "object"
+      },
       "MasterCurveOut": {
         "properties": {
           "created_at": {
@@ -5907,6 +6305,11 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "is_primary": {
+            "default": false,
+            "title": "Is Primary",
+            "type": "boolean"
           },
           "maximum_frequency_hz": {
             "title": "Maximum Frequency Hz",
@@ -8200,6 +8603,17 @@
               "$ref": "#/components/schemas/StepParamOut"
             },
             "title": "Params",
+            "type": "array"
+          },
+          "requires_channels": {
+            "default": [],
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Requires Channels",
             "type": "array"
           },
           "version": {
@@ -10604,6 +11018,119 @@
         "title": "ScalarStatsOut",
         "type": "object"
       },
+      "ScannedCellOut": {
+        "properties": {
+          "empty": {
+            "default": false,
+            "title": "Empty",
+            "type": "boolean"
+          },
+          "suggested": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "text",
+          "value"
+        ],
+        "title": "ScannedCellOut",
+        "type": "object"
+      },
+      "ScannedLineOut": {
+        "properties": {
+          "align": {
+            "default": "right",
+            "title": "Align",
+            "type": "string"
+          },
+          "cells": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScannedCellOut"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "join": {
+            "default": ", ",
+            "title": "Join",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "prefix": {
+            "default": "",
+            "title": "Prefix",
+            "type": "string"
+          },
+          "rows": {
+            "default": 0,
+            "title": "Rows",
+            "type": "integer"
+          },
+          "suffix": {
+            "default": "",
+            "title": "Suffix",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ScannedLineOut",
+        "type": "object"
+      },
       "SearchHit": {
         "properties": {
           "document_key": {
@@ -12776,6 +13303,20 @@
         "title": "SweepOut",
         "type": "object"
       },
+      "SystemAdminRequest": {
+        "description": "시스템 관리자 권한을 주거나 뺀다.\n\n**한 엔드포인트에 참·거짓을 실어 보낸다.** 정지/활성처럼 둘로 가르지 않는\n이유는, 이 값이 상태가 아니라 **권한 한 칸**이기 때문이다 — 화면이 지금 값을\n보고 반대를 보내면 되고, 「지정」과 「해제」가 따로 있으면 지금 값을 모르는\n쪽이 둘 중 하나를 골라야 한다.",
+        "properties": {
+          "is_system_admin": {
+            "title": "Is System Admin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_system_admin"
+        ],
+        "title": "SystemAdminRequest",
+        "type": "object"
+      },
       "TablePreviewOut": {
         "properties": {
           "column_count": {
@@ -13374,6 +13915,11 @@
             ],
             "title": "Instrument"
           },
+          "master_curve_count": {
+            "default": 0,
+            "title": "Master Curve Count",
+            "type": "integer"
+          },
           "material_id": {
             "anyOf": [
               {
@@ -13462,6 +14008,11 @@
               }
             ],
             "title": "Parser Version"
+          },
+          "prony_fit_count": {
+            "default": 0,
+            "title": "Prony Fit Count",
+            "type": "integer"
           },
           "record_name": {
             "title": "Record Name",
@@ -13694,6 +14245,11 @@
               }
             ],
             "title": "Instrument"
+          },
+          "master_curve_count": {
+            "default": 0,
+            "title": "Master Curve Count",
+            "type": "integer"
           },
           "material_id": {
             "anyOf": [
@@ -13993,6 +14549,41 @@
           "si_unit"
         ],
         "title": "TestSummaryOut",
+        "type": "object"
+      },
+      "TestTypeCapabilityOut": {
+        "description": "이 채널을 넣으면 **무엇이 열리나.**\n\n시험 종류를 만드는 사람은 「저장 탄성률을 `storage_modulus` 로 적어야 DMA\n단계가 뜬다」 를 알 방법이 없었다. 채널 이름은 자유롭게 지을 수 있는데, 계산은\n**정해진 이름**을 찾기 때문이다 — 조금 다르게 적으면 막히는 게 아니라 그\n계산이 목록에서 조용히 사라진다.\n\n그래서 **레지스트리가 선언한 요건을 그대로 화면에 준다.** 화면이 목록을 적어\n두면 계산을 더할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다(D7).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "requires_channels": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Requires Channels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "requires_channels"
+        ],
+        "title": "TestTypeCapabilityOut",
         "type": "object"
       },
       "TestTypeCreateRequest": {
@@ -14425,6 +15016,87 @@
           "blocked"
         ],
         "title": "TrashItemOut",
+        "type": "object"
+      },
+      "TrashPurgeManyIn": {
+        "description": "고른 줄을 한꺼번에 영영 지운다.\n\n**`confirm` 을 여기서도 받는다.** 한 줄짜리와 같은 이유다 — 이 길은 API 로도\n열려 있고, 스크립트가 실수로 부르면 그 데이터는 돌아오지 않는다. 여럿이라\n잘못 불렀을 때 잃는 것이 더 크다.",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TrashRef"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TrashPurgeManyIn",
+        "type": "object"
+      },
+      "TrashPurgedManyOut": {
+        "description": "여럿을 지운 결과.",
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "purged": {
+            "title": "Purged",
+            "type": "integer"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "integer"
+          },
+          "said": {
+            "title": "Said",
+            "type": "string"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requested",
+          "purged",
+          "skipped",
+          "counts",
+          "said"
+        ],
+        "title": "TrashPurgedManyOut",
+        "type": "object"
+      },
+      "TrashRef": {
+        "description": "지울 줄 하나를 가리킨다.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "TrashRef",
         "type": "object"
       },
       "TrendPointOut": {
@@ -16180,6 +16852,60 @@
         ]
       }
     },
+    "/api/accounts/{account_id}/system-admin": {
+      "post": {
+        "description": "시스템 관리자 권한을 주거나 뺀다 — **시스템 관리자만.**",
+        "operationId": "set_system_admin_api_accounts__account_id__system_admin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemAdminRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set System Admin",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/audit": {
       "get": {
         "description": "감사 기록. **최근 것부터.**\n\n부서 관리자는 자기 부서 것만 본다. 부서가 없는 기록(계정처럼 전사에 걸린\n일)은 **시스템 관리자만** 본다 — 어느 부서 소관인지 정할 수 없는 일이라\n부서 관리자에게 보이면 소관 밖을 보는 것이 된다.",
@@ -17225,6 +17951,243 @@
         ]
       }
     },
+    "/api/fitting/export-profiles": {
+      "get": {
+        "description": "내 부서 것 + 전역. 시스템 관리자는 전부.",
+        "operationId": "list_export_profiles_api_fitting_export_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExportProfileOut"
+                  },
+                  "title": "Response List Export Profiles Api Fitting Export Profiles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Export Profiles",
+        "tags": [
+          "fitting"
+        ]
+      },
+      "post": {
+        "description": "부서 관리자가 자기 부서의 해석용 물성 정의를 만든다.\n\n**부서마다 쓰는 솔버가 다르다.** 그리고 같은 솔버라도 사업부마다 덱 관례가\n다르다 — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을\n돌리는 사람에게 있지 시스템 관리자에게 없다.",
+        "operationId": "create_export_profile_api_fitting_export_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportProfileCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Export Profile",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/export-profiles/preview": {
+      "post": {
+        "description": "정의를 **저장하기 전에** 실제 카드로 그려 본다 (ADR 0023 3단계).\n\n장비 파일 쪽 미리보기가 이미 같은 일을 한다 — 실제 파일을 받아 무엇으로 읽히는지\n먼저 보여 준다(ADR 0006). 덱 쪽에서 그것이 더 필요하다: **틀린 덱은 솔버가\n오류로 알려 주지 않는다.** 칸이 어긋나면 다른 필드로 읽히고, 해석은 그대로\n돌아서 그럴듯한 결과를 낸다.\n\n**아무것도 저장하지 않는다.** 그리고 **못 냈어도 200 이다** — 못 낸 이유를\n보여 주는 것이 미리보기의 절반이다. 422 로 던지면 화면은 오류 상자 하나를\n띄우고, 사람은 정의의 어느 줄이 문제인지 모른 채 돌아간다.",
+        "operationId": "preview_deck_api_fitting_export_profiles_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeckPreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeckPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Deck",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/export-profiles/scan": {
+      "post": {
+        "description": "예제 덱을 읽어 **정의 초안**을 만든다.\n\n빈 폼에서 시작하면 막연하다 — 무슨 줄을 몇 개 쌓아야 하는지, 칸 폭을 얼마로\n둬야 하는지 화면 어디에도 없다. 그런데 **덱을 붙이려는 사람에게는 대개 그\n솔버의 덱 파일이 이미 있다.**\n\n장비 파일 정의가 같은 문제를 이미 풀었다(ADR 0006): 구조는 코드가 읽고\n**「이 값이 무엇인가」 만 사람이 정한다.** 여기도 같은 선이다.\n\n**아무것도 저장하지 않는다.** 카드를 주면 덱의 숫자와 카드 값을 맞춰 이름을\n제안하는데, 그것도 **짐작이라고 적어서** 돌려준다.",
+        "operationId": "scan_deck_api_fitting_export_profiles_scan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeckScanIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeckScanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scan Deck",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/export-profiles/{key}": {
+      "delete": {
+        "description": "지운다 — **행은 남는다.** 휴지통에서 되살린다.\n\n매달린 것을 검사하지 않는다: 해석용 물성 정의에 딸린 데이터가 없다. 지우면 그 솔버로\n못 낼 뿐이고, 이미 나간 덱은 파일이라 그대로다.",
+        "operationId": "delete_export_profile_api_fitting_export_profiles__key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Export Profile",
+        "tags": [
+          "fitting"
+        ]
+      },
+      "put": {
+        "description": "해석용 물성 정의를 고친다. **이미 내보낸 덱은 안 바뀐다** — 파일로 나갔다.\n\n그래서 잠그지 않는다. 정의가 틀렸다는 것을 나중에 아는 것이 정상이고, 그때\n고쳐서 다시 내보내면 된다.",
+        "operationId": "update_export_profile_api_fitting_export_profiles__key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportProfileSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Export Profile",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
     "/api/fitting/families": {
       "get": {
         "description": "등록된 적합식. **화면이 이 응답만으로 목록을 그린다.**\n\n재료를 주면 그 재료군에서 뜻이 있는 것만 낸다. **금속 경화식과 고무 초탄성을\n한 목록에 섞어 RMSE 로 줄 세우면 안 된다** — 같은 물음의 답이 아니다.",
@@ -17282,7 +18245,7 @@
     },
     "/api/fitting/formats": {
       "get": {
-        "description": "내보낼 수 있는 솔버. **화면이 이 응답만으로 목록을 그린다.**",
+        "description": "내보낼 수 있는 솔버. **화면이 이 응답만으로 목록을 그린다.**\n\n코드 렌더러와 **부서의 해석용 물성 정의**가 함께 온다(ADR 0023). 정의를 고치면 다음\n요청부터 먹는다 — 기동 때 얹지 않는 이유는 `renderers.py` 에 적었다.",
         "operationId": "list_formats_api_fitting_formats_get",
         "responses": {
           "200": {
@@ -17682,7 +18645,7 @@
     },
     "/api/groups/kinds": {
       "get": {
-        "description": "고를 수 있는 묶음. **레지스트리가 정한다.**\n\n화면이 목록을 적어 두면 새 물성을 붙일 때 화면도 고쳐야 한다 — 그게 확장이\n아닌 상태다(D7).",
+        "description": "고를 수 있는 묶음. **레지스트리가 정한다.**\n\n화면이 목록을 적어 두면 새 물성을 붙일 때 화면도 고쳐야 한다 — 그게 확장이\n아닌 상태다(D7).\n\n## `applies_to` 는 **풀어서** 준다\n\n선언에 적힌 키(`dma_sweep`)가 아니라 **지금 이 DB 에서 그 방법을 쓸 수 있는\n시험 종류 전부**를 돌려준다. 부서가 만든 DMA 종류는 키가 다르지만 저장·손실\n탄성률을 그대로 재므로 조건을 만족한다 — 화면은 이 목록으로 후보를 거르므로,\n선언 그대로 주면 그 종류의 시험이 후보에서 조용히 사라진다.",
         "operationId": "list_kinds_api_groups_kinds_get",
         "parameters": [
           {
@@ -23667,6 +24630,32 @@
         ]
       }
     },
+    "/api/test-types/capabilities": {
+      "get": {
+        "description": "**어떤 채널이 무엇을 여는가.** 시험 종류를 만드는 화면이 참조한다.\n\n계산은 채널을 **이름으로** 찾는다(`registry.requires_channels`). 그래서 저장\n탄성률을 `E_prime` 이라고 적으면 DMA 단계가 목록에서 조용히 사라진다 — 막히는\n것이 아니라 안 보이는 것이라, 사람은 「이 기능이 없구나」 로 읽는다.\n\n요건을 적어 둔 자리는 레지스트리 하나뿐이고, 이 응답이 그것을 그대로 옮긴다.",
+        "operationId": "list_capabilities_api_test_types_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TestTypeCapabilityOut"
+                  },
+                  "title": "Response List Capabilities Api Test Types Capabilities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Capabilities",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
     "/api/test-types/detect": {
       "post": {
         "description": "이 파일이 어느 시험 종류인가. **고르는 일을 없애려고 있다.**\n\n확장자만으로는 부족하다. 확장자는 *파서가* 선언한 것에서 나오는데, 프로파일로\n읽는 종류는 파서가 없어서 확장자가 비어 있다 — 그래서 프로파일을 만들어 두고도\n일괄 등록에서 매번 손으로 골라야 했다.\n\n**지문이 확장자보다 정확하다.** `.csv` 는 어느 장비나 쓰지만 헤더의 열 이름은\n그 장비의 것이다. 프로파일을 먼저 보고, 없으면 확장자로 내려간다.\n\n관리자 전용이 아니다 — 파일을 올리는 사람이 쓰는 기능이다.\n\n화면은 **첫 조각만 보낸다.** 지문은 머리에 있고, 20개짜리 배치를 통째로 두 번\n보낼 이유가 없다.",
@@ -23891,6 +24880,48 @@
         ]
       }
     },
+    "/api/trash/purge": {
+      "post": {
+        "description": "고른 줄을 한꺼번에 영영 지운다. **되돌릴 수 없다.**\n\n화면이 하나씩 부르지 않는 이유는 **겹쳐 고르는 것** 때문이다 — 재료와 그\n아래 시료를 함께 고르면 두 번째 요청이 「없는 행」 으로 터지는데, 그때\n앞엣것은 이미 지워져 있다. 서버가 계층 위부터 지우고 딸려 사라진 것은\n건너뛴다.",
+        "operationId": "purge_many_api_trash_purge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrashPurgeManyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashPurgedManyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge Many",
+        "tags": [
+          "trash"
+        ]
+      }
+    },
     "/api/trash/{kind}/{item_id}": {
       "delete": {
         "description": "영영 지운다. **되돌릴 수 없다.**\n\n`confirm=true` 를 받아야 지운다. 창에서 한 번 물었더라도 서버가 다시 받는\n이유는, 이 길이 API 로도 열려 있기 때문이다 — 스크립트가 실수로 부르면 그\n데이터는 돌아오지 않는다.",
@@ -24087,6 +25118,50 @@
         ]
       }
     },
+    "/api/viscoelastic/master-curves/{master_curve_id}/primary": {
+      "post": {
+        "description": "**이 시험의 대표를 이 곡선으로 옮긴다.**\n\n재료의 글로벌 피팅은 시험마다 대표 하나를 읽는다. 전에는 「가장 최근 것」 을\n말없이 썼는데, 기준 온도를 바꿔 하나 더 만들면 그 순간부터 재료 쪽 계산이\n바뀌면서 **화면 어디에도 그 전환이 안 보였다.**\n\n처리 결과의 **채택**과 같은 자리다 — 여러 벌 만들고 하나를 고른다.",
+        "operationId": "set_primary_api_viscoelastic_master_curves__master_curve_id__primary_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "master_curve_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Master Curve Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterCurveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Primary",
+        "tags": [
+          "viscoelastic"
+        ]
+      }
+    },
     "/api/viscoelastic/master-curves/{master_curve_id}/prony": {
       "get": {
         "operationId": "list_prony_fits_api_viscoelastic_master_curves__master_curve_id__prony_get",
@@ -24186,6 +25261,54 @@
         ]
       }
     },
+    "/api/viscoelastic/runs/{test_run_id}/importable-curves": {
+      "get": {
+        "description": "장비가 계산해 준 표 목록. 마스터커브로 등록할 것을 여기서 고른다.",
+        "operationId": "list_importable_curves_api_viscoelastic_runs__test_run_id__importable_curves_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Test Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportableCurveOut"
+                  },
+                  "title": "Response List Importable Curves Api Viscoelastic Runs  Test Run Id  Importable Curves Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Importable Curves",
+        "tags": [
+          "viscoelastic"
+        ]
+      }
+    },
     "/api/viscoelastic/runs/{test_run_id}/master-curves": {
       "get": {
         "operationId": "list_master_curves_api_viscoelastic_runs__test_run_id__master_curves_get",
@@ -24280,6 +25403,60 @@
           }
         },
         "summary": "Create Master Curve",
+        "tags": [
+          "viscoelastic"
+        ]
+      }
+    },
+    "/api/viscoelastic/runs/{test_run_id}/master-curves/import": {
+      "post": {
+        "description": "**장비가 겹쳐 준 곡선을 그대로 받는다.**\n\n겹치기를 다시 하지 않는다 — 장비가 쓴 이동인자를 모르기 때문이다. 점을 그대로\n받고 `method=\"imported\"` 로 적는다. 이동인자 자리는 비어 있고, 그 사실이 화면과\n카드 주석에 남는다.\n\n이것이 없으면 **마스터커브만 내보낸 파일은 Prony 도 글로벌 피팅도 못 쓴다** —\n프로파일이 그 표를 읽어 두기는 해도(`derived`) 행이 되지 않았다.",
+        "operationId": "import_master_curve_api_viscoelastic_runs__test_run_id__master_curves_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Test Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MasterCurveImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterCurveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Master Curve",
         "tags": [
           "viscoelastic"
         ]

@@ -156,7 +156,7 @@ MATERIAL_FIELDS: dict[str, str] = {
     # **목록이지만 한 줄에 하나씩 붙인다.** 옛 DB 에는 「적용 제품」 칸이 하나뿐인
     # 경우가 흔하고, 여럿이면 프로파일에 규칙을 여럿 두면 된다.
     "applied_products": "적용 제품",
-    "applied_parts": "적용 부위",
+    "applied_parts": "적용 파트",
 }
 
 #: 프로파일이 **이관에서** 시료에 적을 수 있는 칸. 쓰이는 자리는 재료와 같다.
@@ -264,6 +264,12 @@ class RunFacetsOut(BaseModel):
 class TestRunOut(BaseModel):
     id: uuid.UUID
     result_count: int = 0
+    master_curve_count: int = 0
+    """겹쳐 만든 마스터커브가 몇 개인가.
+
+    **글로벌 피팅은 이것이 있는 시험만 쓸 수 있다.** 없는 것을 후보 목록에 두면
+    골라 보고서야 알고, 변형률 스윕처럼 **애초에 만들 수 없는** 시험도 같은
+    목록에 섞인다 — 둘 다 시험종류가 `dma_sweep` 이라 종류로는 못 가른다."""
     """저장된 처리 결과 수. **목록에서 진행이 보여야 한다** — 시편 20개짜리
     배치에서 무엇이 아직 안 됐는지를 하나씩 열어 봐야 아는 것은 일이 아니다."""
     adopted_result_id: uuid.UUID | None = None
@@ -346,6 +352,12 @@ class CurveOut(BaseModel):
 
 
 class TestRunDetailOut(TestRunOut):
+    prony_fit_count: int = 0
+    """이 시험의 마스터커브에 맞춘 계수가 몇 벌인가.
+
+    **진행 띠가 「어디까지 됐나」 를 말하려면 필요하다.** 목록에는 안 싣는다 —
+    한 건을 열었을 때만 쓰는 값이라 목록마다 조인을 하나 더 걸 이유가 없다."""
+
     summary: list[TestSummaryOut]
     source_metadata: dict[str, str]
     curves: list[CurveOut]
@@ -499,6 +511,26 @@ class ConditionInput(BaseModel):
     choices: list[str] | None = None
     is_required: bool = False
     sort_order: int = 0
+
+
+class TestTypeCapabilityOut(BaseModel):
+    """이 채널을 넣으면 **무엇이 열리나.**
+
+    시험 종류를 만드는 사람은 「저장 탄성률을 `storage_modulus` 로 적어야 DMA
+    단계가 뜬다」 를 알 방법이 없었다. 채널 이름은 자유롭게 지을 수 있는데, 계산은
+    **정해진 이름**을 찾기 때문이다 — 조금 다르게 적으면 막히는 게 아니라 그
+    계산이 목록에서 조용히 사라진다.
+
+    그래서 **레지스트리가 선언한 요건을 그대로 화면에 준다.** 화면이 목록을 적어
+    두면 계산을 더할 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다(D7).
+    """
+
+    id: str
+    label: str
+    kind: str
+    """`processing`(처리 단계) | `grouping`(묶음)."""
+    requires_channels: list[list[str]]
+    """필요한 채널. **안쪽 묶음은 「그중 하나」.**"""
 
 
 class TestTypeSaveRequest(BaseModel):

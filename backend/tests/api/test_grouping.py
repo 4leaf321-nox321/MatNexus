@@ -201,6 +201,82 @@ class Test묶어서_남긴다:
         assert response.status_code == 422, response.text
 
 
+class Test대표를_읽는다:
+    """묶을 때 **어느 마스터커브를 쓰는가.**
+
+    전에는 「가장 최근 것」 이었다. 기준 온도를 바꿔 하나 더 만들면 그 순간부터
+    이 계산이 다른 곡선으로 바뀌는데, 그 전환이 화면 어디에도 안 보였다 —
+    결과는 그럴듯하게 나오고 숫자만 달라진다.
+    """
+
+    def test_최근_것이_아니라_대표를_쓴다(
+        self, client: TestClient, admin_headers: dict[str, str], two_runs: dict[str, Any]
+    ) -> None:
+        run = two_runs["runs"][0]
+        curves = client.get(
+            f"/api/viscoelastic/runs/{run['id']}/master-curves", headers=admin_headers
+        ).json()
+        first = curves[0]
+
+        # 기준 온도가 다른 것을 하나 더 만든다 — 이것이 **더 최근**이다.
+        sweeps = client.get(
+            f"/api/viscoelastic/runs/{run['id']}/sweeps", headers=admin_headers
+        ).json()["items"]
+        other = max(item["temperature_k"] for item in sweeps)
+        second = client.post(
+            f"/api/viscoelastic/runs/{run['id']}/master-curves",
+            json={"reference_temperature_k": other, "method": "wlf"},
+            headers=admin_headers,
+        ).json()
+        assert second["is_primary"] is False
+
+        # 그런데도 묶음은 **대표(먼저 만든 것)** 의 기준 온도로 나와야 한다.
+        made = client.post(
+            "/api/groups",
+            json={
+                "plugin_id": PLUGIN,
+                "run_ids": [one["id"] for one in two_runs["runs"]],
+                "options": {"method": "pooled"},
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["values"]["reference_temperature_k"] == pytest.approx(
+            first["reference_temperature_k"]
+        )
+
+    def test_대표를_옮기면_그것으로_묶는다(
+        self, client: TestClient, admin_headers: dict[str, str], two_runs: dict[str, Any]
+    ) -> None:
+        """옮긴 것이 실제로 계산에 반영돼야 한다 — 표시만 바뀌면 더 나쁘다."""
+        for run in two_runs["runs"]:
+            sweeps = client.get(
+                f"/api/viscoelastic/runs/{run['id']}/sweeps", headers=admin_headers
+            ).json()["items"]
+            other = max(item["temperature_k"] for item in sweeps)
+            made = client.post(
+                f"/api/viscoelastic/runs/{run['id']}/master-curves",
+                json={"reference_temperature_k": other, "method": "wlf"},
+                headers=admin_headers,
+            ).json()
+            moved = client.post(
+                f"/api/viscoelastic/master-curves/{made['id']}/primary", headers=admin_headers
+            )
+            assert moved.status_code == 200, moved.text
+
+        grouped = client.post(
+            "/api/groups",
+            json={
+                "plugin_id": PLUGIN,
+                "run_ids": [one["id"] for one in two_runs["runs"]],
+                "options": {"method": "pooled"},
+            },
+            headers=admin_headers,
+        )
+        assert grouped.status_code == 201, grouped.text
+        assert grouped.json()["values"]["reference_temperature_k"] == pytest.approx(other)
+
+
 class Test섞으면_막는다:
     def test_재료가_다르면_막는다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]

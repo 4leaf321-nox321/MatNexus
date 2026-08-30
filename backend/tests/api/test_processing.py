@@ -104,6 +104,73 @@ class Test단계목록:
         # 시험을 가리지 않는 단계는 언제나 보인다.
         assert "curve.sort_unique" in ids
 
+    def test_부서가_만든_종류에서도_그_계산이_보인다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**키가 아니라 재는 것으로 판별한다.**
+
+        시험 종류는 데이터라서 부서가 자기 DMA 를 만든다(D7). 그때 키가
+        `dma_sweep` 이 아니라고 DMA 단계가 목록에서 사라지면, **막히는 것이
+        아니라 안 보이는** 것이라 사람은 「이 기능이 없구나」 로 읽는다.
+
+        실측(2026-08-31): 운영에 `dma_sweep` 이 아직 없을 수 있다는 것을 사람이
+        먼저 물었다 — 시험 종류는 마이그레이션이 만들어 주지 않는다.
+        """
+        made = client.post(
+            "/api/test-types",
+            json={
+                "key": "dma_inhouse_freqtemp",
+                "label": "사내 DMA",
+                "abbr": "DMA2",
+                "description": None,
+                "parser_key": None,
+                "channels": [
+                    {
+                        "key": "storage_modulus",
+                        "label": "저장 탄성률",
+                        "dimension": "stress",
+                        "si_unit": "Pa",
+                    },
+                    {
+                        "key": "loss_modulus",
+                        "label": "손실 탄성률",
+                        "dimension": "stress",
+                        "si_unit": "Pa",
+                    },
+                    {
+                        "key": "temperature",
+                        "label": "온도",
+                        "dimension": "temperature",
+                        "si_unit": "K",
+                    },
+                ],
+                "conditions": [],
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+        response = client.get(
+            "/api/processing/steps?test_type=dma_inhouse_freqtemp", headers=admin_headers
+        )
+        ids = {item["id"] for item in response.json()}
+        assert "dma.derived" in ids
+        # 인장 단계는 여전히 안 보인다 — 넓히는 것이 아무거나 보이게 하는 것은 아니다.
+        assert "tensile.elastic_modulus" not in ids
+
+    def test_필요한_채널이_응답에_적혀_있다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """시험 종류를 만드는 화면이 이것을 읽어 「이 채널을 넣으면 무엇이
+        열리나」 를 보여 준다. 화면이 목록을 적어 두면 계산을 더할 때 두 곳을
+        고쳐야 하고, 그러면 한 곳을 빠뜨린다."""
+        response = client.get("/api/processing/steps", headers=admin_headers)
+        found = {item["id"]: item for item in response.json()}
+        assert found["dma.derived"]["requires_channels"] == [
+            ["storage_modulus"],
+            ["loss_modulus"],
+        ]
+
 
 class Test미리보기:
     def test_아무것도_저장하지_않는다(

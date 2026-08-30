@@ -20,7 +20,8 @@ import { Lock, Plus, Rows3, Trash2 } from 'lucide-react'
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { testsApi } from '@/modules/tests/api'
 import { useAuth } from '@/shared/auth/AuthContext'
-import type { Parser, TestType } from '@/modules/tests/api'
+import type { Parser, TestType, TestTypeCapability } from '@/modules/tests/api'
+import { CAPABILITIES, missingFor } from '@/modules/tests/capabilities'
 import { toChannelKey } from '@/modules/tests/keys'
 import { DIMENSIONS, SI_BY_DIMENSION, VALUE_TYPES, display } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -418,6 +419,8 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
           onBulk={() => setBulk('channel')}
         />
 
+        <ChannelCapabilities keys={channels.map((row) => row.key)} />
+
         <RowEditor
           title="조건 (입력 항목)"
           hint="업로드할 때 사람이 입력합니다. 단위가 있으면 화면이 실무 단위로 받아 서버가 환산합니다."
@@ -475,6 +478,87 @@ interface RowLike {
   is_required: boolean
   value_type?: string
   existing: boolean
+}
+
+/**
+ * **이 채널을 넣으면 무엇이 열리나.**
+ *
+ * 채널 이름은 자유롭게 지을 수 있는데 계산은 **정해진 이름**을 찾는다. 저장
+ * 탄성률을 `E_prime` 이라고 적으면 DMA 단계와 Prony 묶음이 목록에서 **조용히
+ * 사라진다** — 막히는 것이 아니라 안 보이는 것이라, 사람은 「이 기능이 없구나」 로
+ * 읽고 우회한다. 실측(2026-08-31): 운영에 `dma_sweep` 이 없을 수 있다는 물음에서
+ * 이 규칙이 어디에도 안 적혀 있다는 것이 드러났다.
+ *
+ * **목록을 화면이 적어 두지 않는다.** 서버가 레지스트리 선언을 그대로 준다 —
+ * 계산을 더할 때 두 곳을 고쳐야 하면 한 곳을 빠뜨린다(D7).
+ */
+function ChannelCapabilities({ keys }: { keys: string[] }) {
+  const [found, setFound] = useState<TestTypeCapability[]>([])
+
+  useEffect(() => {
+    let alive = true
+    void testsApi
+      .capabilities()
+      .then((items) => {
+        if (alive) setFound(items)
+      })
+      // **안내가 없어도 저장은 된다.** 여기서 실패했다고 편집을 막지 않는다.
+      .catch(() => {
+        if (alive) setFound([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const filled = keys.filter(Boolean)
+  const tab = CAPABILITIES.find((one) => one.id === 'viscoelastic_tab')
+  const rows = [
+    ...(tab
+      ? [{ id: tab.id, label: `${tab.label} (${tab.where})`, missing: missingFor(tab, filled) }]
+      : []),
+    ...found.map((one) => ({
+      id: one.id,
+      label: one.kind === 'grouping' ? `${one.label} (묶음)` : one.label,
+      missing: one.requires_channels.filter(
+        (group) => !group.some((name) => filled.includes(name))
+      ),
+    })),
+  ]
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="rounded-md border p-3">
+      <p className="mb-1 text-xs font-medium">이 채널이면 무엇이 열리나</p>
+      <p className="text-muted-foreground mb-2 text-xs">
+        계산은 채널을 <b>이름으로</b> 찾습니다. 같은 것을 다른 이름으로 적으면 막히는
+        것이 아니라 <b>목록에서 사라집니다</b> — 아래 이름을 그대로 쓰세요.
+      </p>
+      <div className="space-y-1">
+        {rows.map((row) => (
+          <div key={row.id} className="flex items-start gap-2 text-xs">
+            <Badge
+              variant={row.missing.length === 0 ? 'default' : 'outline'}
+              className="mt-0.5 shrink-0 text-[10px]"
+            >
+              {row.missing.length === 0 ? '열림' : '안 열림'}
+            </Badge>
+            <div className="min-w-0">
+              <p>{row.label}</p>
+              {/* **무엇이 빠졌는지 이름으로 적는다.** 「조건을 만족하지 않습니다」 는
+                  다음에 할 일을 알려 주지 않는다. */}
+              {row.missing.length > 0 && (
+                <p className="text-muted-foreground font-mono">
+                  {row.missing.map((group) => group.join(' 또는 ')).join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /** 여러 개 넣기 모달을 어느 목록에 열었나. */

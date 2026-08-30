@@ -5,6 +5,7 @@ import type { components } from '@/shared/api/schema'
 
 export type TestType = components['schemas']['TestTypeOut']
 export type TestChannel = components['schemas']['TestChannelOut']
+export type TestTypeCapability = components['schemas']['TestTypeCapabilityOut']
 export type TestConditionField = components['schemas']['TestConditionFieldOut']
 export type TestRun = components['schemas']['TestRunOut']
 export type RunFacets = components['schemas']['RunFacetsOut']
@@ -172,6 +173,15 @@ export const testsApi = {
 
   /** 등록된 파서. **파서는 정의로 만들 수 없다 — 코드다.** */
   parsers: () => api.get<Parser[]>('/test-types/parsers'),
+
+  /**
+   * **어떤 채널이 무엇을 여는가.** 종류를 만드는 화면이 참조한다.
+   *
+   * 계산은 채널을 **이름으로** 찾는다. 저장 탄성률을 `E_prime` 이라고 적으면 DMA
+   * 단계가 목록에서 조용히 사라진다 — 막히는 것이 아니라 안 보이는 것이라, 사람은
+   * 「이 기능이 없구나」 로 읽는다.
+   */
+  capabilities: () => api.get<TestTypeCapability[]>('/test-types/capabilities'),
 
   /**
    * 이 파일이 어느 시험 종류인가. 프로파일 지문 → 확장자 순으로 본다.

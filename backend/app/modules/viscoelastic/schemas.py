@@ -46,6 +46,40 @@ class MasterCurveRequest(BaseModel):
     """겹칠 곡선. 안 주면 측정 곡선 전부."""
 
 
+class ImportableCurveOut(BaseModel):
+    """장비가 계산해 준 표 하나. **못 쓰는 것도 이유와 함께 나온다.**
+
+    `derived` 에는 마스터커브와 이동인자 표가 함께 들어온다. 못 쓰는 것을 목록에서
+    빼면 「내 파일의 그 표가 왜 안 보이지」 가 되고, 그냥 두면 골라 놓고 나서야
+    거절을 본다.
+    """
+
+    curve_key: str
+    label: str | None
+    row_count: int
+    channels: list[str]
+    usable: bool
+    """주파수·저장 탄성률 열이 둘 다 있는가."""
+    note: str | None
+    """못 쓰는 이유. 쓸 수 있으면 비어 있다."""
+
+
+class MasterCurveImportRequest(BaseModel):
+    """**장비가 이미 겹쳐 준 곡선**을 그대로 등록한다.
+
+    TA TRIOS 같은 장비는 시간-온도 중첩을 제 소프트웨어에서 하고 마스터커브를
+    함께 내보낸다. 그런 파일에는 겹칠 원본이 없거나, 있어도 장비가 쓴 이동인자를
+    우리가 모른다 — **다시 겹치면 다른 곡선이 나오는데 둘 다 그럴듯하다.**
+    """
+
+    curve_key: str
+    """어느 곡선인가. 프로파일이 `derived` 로 읽어 둔 표들 중 하나다."""
+
+    reference_temperature_k: float
+    """**사람이 적는다.** 표 이름에 있는 일이 많지만 장비마다 다르고, 틀린 온도로
+    등록하면 그 덱은 조용히 다른 온도의 해석에 쓰인다 — 짐작하지 않는다."""
+
+
 class MasterCurveOut(BaseModel):
     id: uuid.UUID
     test_run_id: uuid.UUID
@@ -58,6 +92,8 @@ class MasterCurveOut(BaseModel):
     point_count: int
     minimum_frequency_hz: float
     maximum_frequency_hz: float
+    is_primary: bool = False
+    """**이 시험의 대표인가.** 재료의 글로벌 피팅이 이 곡선을 읽는다."""
     created_at: datetime
 
 

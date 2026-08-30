@@ -25,10 +25,10 @@ from app.modules.grouping.schemas import (
     GroupResultOut,
 )
 from app.modules.materials.models import Material
-from app.shared import permissions
+from app.shared import permissions, test_type_channels
 from app.shared.auth import current_user
 from app.shared.errors import NotFound
-from matcore import groups
+from matcore import groups, registry
 
 router = APIRouter(prefix="/groups", tags=["grouping"])
 
@@ -54,17 +54,29 @@ def _out(row: GroupResult) -> GroupResultOut:
 def list_kinds(
     applies_to: str | None = None,
     user: User = Depends(current_user),
+    db: Session = Depends(get_db),
 ) -> list[GroupingSpecOut]:
     """고를 수 있는 묶음. **레지스트리가 정한다.**
 
     화면이 목록을 적어 두면 새 물성을 붙일 때 화면도 고쳐야 한다 — 그게 확장이
     아닌 상태다(D7).
+
+    ## `applies_to` 는 **풀어서** 준다
+
+    선언에 적힌 키(`dma_sweep`)가 아니라 **지금 이 DB 에서 그 방법을 쓸 수 있는
+    시험 종류 전부**를 돌려준다. 부서가 만든 DMA 종류는 키가 다르지만 저장·손실
+    탄성률을 그대로 재므로 조건을 만족한다 — 화면은 이 목록으로 후보를 거르므로,
+    선언 그대로 주면 그 종류의 시험이 후보에서 조용히 사라진다.
     """
+    known = test_type_channels.channels_by_key(db)
     return [
         GroupingSpecOut(
             id=plugin.id,
             label=plugin.label,
-            applies_to=list(plugin.applies_to),
+            applies_to=sorted(
+                key for key, channels in known.items() if registry.fits(plugin, key, channels)
+            ),
+            requires_channels=[list(one) for one in plugin.requires_channels],
             params=[
                 GroupingParamOut(
                     name=item.name,
@@ -72,6 +84,8 @@ def list_kinds(
                     type=item.type,
                     default=item.default,
                     choices=list(item.choices),
+                    choice_labels=dict(item.choice_labels),
+                    choice_help=dict(item.choice_help),
                     help=item.help,
                 )
                 for item in plugin.params
@@ -81,7 +95,9 @@ def list_kinds(
                 for item in plugin.makes_values
             ],
         )
-        for plugin in groups.groupings(applies_to)
+        for plugin in groups.groupings(
+            applies_to, channels=test_type_channels.channels_of(db, applies_to)
+        )
     ]
 
 

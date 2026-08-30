@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ChevronDown, Download, RefreshCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, Circle, Download, RefreshCw, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { backTarget } from '@/modules/tests/backTarget'
@@ -52,7 +52,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { hasViscoelasticTab } from '@/modules/tests/capabilities'
+import { runProgress } from '@/modules/tests/progress'
 import { ViscoelasticPanel } from '@/modules/viscoelastic/ViscoelasticPanel'
+import { ViscoelasticSummary } from '@/modules/viscoelastic/ViscoelasticSummary'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -103,6 +106,10 @@ export default function TestRunDetailPage() {
     return () => clearInterval(timer)
   }, [pending, run])
 
+  /** 지금 켠 탭. **진행 띠가 눌러서 데려간다** — 「채택하러 가기」 가 말만 하고
+   *  사람이 탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다. */
+  const [tab, setTab] = useState('source')
+
   const definition = useMemo(
     () => (types.data ?? []).find((t) => t.key === item?.test_type_key),
     [types.data, item?.test_type_key],
@@ -117,10 +124,13 @@ export default function TestRunDetailPage() {
    * 순간(D7 — 정의는 데이터다) 그 시험에는 탭이 안 뜬다. 대신 **저장·손실
    * 탄성률 채널이 있는가**를 본다 — 그 둘이 있으면 겹치고 맞출 수 있다.
    */
-  const isViscoelastic = useMemo(() => {
-    const keys = new Set(channels.map((channel) => channel.key))
-    return keys.has('storage_modulus') && keys.has('loss_modulus')
-  }, [channels])
+  const isViscoelastic = useMemo(
+    // **요건은 `capabilities` 에 있다.** 장비 파일 정의 화면이 「이 매핑이면 점탄성
+    // 탭이 열립니다」 를 미리 보여 주는데, 두 곳이 각자 적으면 한쪽만 고쳐진 채
+    // 「열린다더니 안 뜬다」 가 된다.
+    () => hasViscoelasticTab(channels.map((channel) => channel.key)),
+    [channels]
+  )
 
   /**
    * 어느 곡선을 볼 것인가. **한 시험이 곡선을 여럿 가진다.**
@@ -444,7 +454,11 @@ export default function TestRunDetailPage() {
             워크벤치(Data → Process → Stats → Fit → Export)와 같은 구조라, 나중에
             여러 시험을 다루는 워크벤치로 그대로 넓어진다(ADR 0007). */}
         {item && (
-          <Tabs defaultValue="source">
+          <RunProgress item={item} viscoelastic={isViscoelastic} onGo={setTab} />
+        )}
+
+        {item && (
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
               <TabsTrigger value="source">원본</TabsTrigger>
               <TabsTrigger value="process" disabled={item.status !== 'parsed'}>
@@ -713,6 +727,17 @@ export default function TestRunDetailPage() {
 
             <TabsContent value="results">
               <ResultsPanel testRunId={item.id} onAdoptChange={run.reload} />
+              {/* **이 시험이 낸 것을 한 자리에서 본다.** 점탄성은 다른 탭에서
+                  만들어지고 여기 결과를 안 남기는데, 그 사실을 아무도 안 말해 줘서
+                  통째로 건너뛴 채 재료에서 물성이 비었다고 여기는 일이 생겼다.
+                  만드는 자리는 그대로 두고 보이는 자리만 모은다. */}
+              {isViscoelastic && (
+                <ViscoelasticSummary
+                  testRunId={item.id}
+                  fitCount={item.prony_fit_count}
+                  onGo={() => setTab('viscoelastic')}
+                />
+              )}
             </TabsContent>
           </Tabs>
         )}
@@ -734,6 +759,75 @@ export default function TestRunDetailPage() {
  * 비어 있으면 통째로 감춘다. 값이 하나도 없는 표는 화면만 차지하고, "이 시험은
  * 조건을 안 적었다" 는 사실은 빈 표보다 없는 것이 더 분명하다.
  */
+/**
+ * 진행 띠 — **이 시험이 무엇을 냈고 무엇이 남았나.**
+ *
+ * 무엇이 남았는지 **정하는 것은 `progress.ts`** 다. 여기서는 그리기만 한다 —
+ * 판단을 화면 안 삼항 연산자로 두면 시험이 못 문다.
+ *
+ * **말만 하지 않는다.** 각 칸이 해당 탭으로 데려간다 — 「채택하러 가기」 를 읽고
+ * 사람이 탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다.
+ */
+function RunProgress({
+  item,
+  viscoelastic,
+  onGo,
+}: {
+  item: TestRunDetail
+  viscoelastic: boolean
+  onGo: (tab: string) => void
+}) {
+  const steps = runProgress({
+    status: item.status,
+    resultCount: item.result_count,
+    adopted: item.adopted_result_id != null,
+    curveCount: item.curves.length,
+    viscoelastic,
+    masterCurveCount: item.master_curve_count,
+    pronyFitCount: item.prony_fit_count,
+  })
+  if (steps.length === 0) return null
+
+  return (
+    <div className="mb-4 rounded-md border p-3" aria-label="진행">
+      <div className="flex flex-wrap items-stretch gap-2">
+        {steps.map((step) => (
+          <div key={step.key} className="min-w-56 flex-1 rounded-md border p-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium">
+              {step.done ? (
+                <Check className="size-3.5 text-emerald-600" />
+              ) : (
+                <Circle className="text-muted-foreground size-3.5" />
+              )}
+              {step.title}
+            </p>
+            <p className="text-muted-foreground mt-0.5 text-xs">{step.now}</p>
+            {step.go && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-1 h-6 px-1.5 text-xs"
+                onClick={() => onGo(step.go!.tab)}
+              >
+                {step.go.label}
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+      {/* **둘을 한 줄로 읽지 않게 한다.** 이어진 절차로 보이면 「점탄성을 했는데
+          왜 결과가 비었지」 가 된다. */}
+      {viscoelastic && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          <b>두 경로는 선행 관계가 없습니다.</b> 값 내기는 곡선 하나에서 얻은 값(Tg·선형구간
+          탄성률 등)을 채택해 재료 통계에 싣고, 점탄성은 온도를 가로질러 겹친 마스터커브에서
+          계수를 얻어 물성 카드로 내보냅니다. 필요한 경로만 수행하면 됩니다.
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** 치수가 **어디서 왔는가.** 정본은 서버의 `Size.source` 다. */
 const DIMENSION_SOURCE: Record<string, string> = {
   run: '이 시험이 잰 값',

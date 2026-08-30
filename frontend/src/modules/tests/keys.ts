@@ -23,6 +23,28 @@ export function toChannelKey(text: string): string {
 }
 
 /**
+ * **매핑을 안 한 열의 키.** 서버가 그렇게 만든다(`matcore/readers/profile.py` 의
+ * `slug`) — `key = mapping.channel or slug(name)`.
+ *
+ * `toChannelKey` 와 다르다. 이쪽은 **서버가 실제로 무엇을 저장할지 예측**하는
+ * 것이라 서버 규칙을 그대로 옮긴다: 한글을 남기고(국산 장비 라벨이 통째로
+ * 지워지면 둘이 서로 덮는다), 앞의 숫자도 남긴다(`1/temperature` →
+ * `1_temperature`). 저쪽은 **사람이 새로 만들 채널 키**라 서버의 채널 규칙
+ * (`^[a-z][a-z0-9_]*$`)을 따른다.
+ *
+ * 둘을 한 함수로 합치면 안 된다 — 예측이 틀리면 화면이 「이 열은 `temperature`
+ * 로 들어갑니다」 라고 적어 놓고 실제로는 `1_temperature` 로 저장된다.
+ */
+export function toFallbackKey(text: string): string {
+  const key = text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_]+/gu, '_')
+    .replace(/^_+|_+$/g, '')
+  return key || 'unnamed'
+}
+
+/**
  * 채널 키로 쓸 수 있는가. 화면이 저장 전에 스스로 확인한다.
  *
  * 열 이름이 숫자나 기호로만 되어 있으면 키를 만들 수 없다(`1/temperature` 의

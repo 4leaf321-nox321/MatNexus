@@ -70,6 +70,12 @@ class ProcessingStepOut(BaseModel):
     version: str
     """계산이 바뀌면 올라간다. 결과에 기록해 "이 값은 v1 계산이다" 를 남긴다."""
     applies_to: list[str]
+    requires_channels: list[list[str]] = []
+    """필요한 채널. **안쪽 묶음은 「그중 하나」.**
+
+    시험 종류를 만드는 화면이 이것을 읽어 「이 채널을 넣으면 무엇이 열리나」 를
+    보여 준다. 키(`applies_to`)만으로 거르면 부서가 만든 종류에서 그 단계가
+    조용히 사라진다."""
     params: list[StepParamOut]
     makes_columns: list[ProducedOut] = []
     """이 단계가 새로 더하는 열. `{param}` 은 그 단계 옵션 값으로 치환한다.

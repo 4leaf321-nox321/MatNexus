@@ -26,13 +26,16 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -45,6 +48,16 @@ class MasterCurve(Base):
     """시간-온도 중첩으로 겹친 곡선 한 벌."""
 
     __tablename__ = "master_curves"
+    __table_args__ = (
+        # **시험당 대표는 하나다.** 부분 유니크로 DB 가 지킨다 — 두 곳에서 동시에
+        # 지정해도 하나만 남는다.
+        Index(
+            "uq_master_curves_primary",
+            "test_run_id",
+            unique=True,
+            postgresql_where=text("is_primary"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -74,6 +87,21 @@ class MasterCurve(Base):
     minimum_frequency_hz: Mapped[float] = mapped_column(Float)
     maximum_frequency_hz: Mapped[float] = mapped_column(Float)
     """겹친 범위. 목록에서 "얼마나 넓어졌나" 를 보여 주는 데 쓴다."""
+
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    """**이 시험의 대표 마스터커브인가.** 재료의 글로벌 피팅이 이것을 읽는다.
+
+    전에는 「가장 최근 것」 을 말없이 썼다. 편의 같지만 **조용히 틀리는 자리**다 —
+    20 °C 로 만들어 쓰다가 30 °C 로 하나 더 만들면, 그 순간부터 재료 쪽 계산이
+    30 °C 것으로 바뀌는데 화면 어디에도 그 전환이 안 보인다.
+
+    처리 결과의 **채택**과 같은 문법이기도 하다. 「여러 벌 만들고 하나를 고른다」
+    하나만 배우면 값 쪽과 점탄성 쪽이 같아진다 — 문법이 둘이면 하나는 잊힌다.
+
+    첫 곡선은 만들면서 자동으로 대표가 된다. 고를 것이 하나뿐인데 고르라고 하면
+    그것은 일이 아니라 절차다."""
 
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True

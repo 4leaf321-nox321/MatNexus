@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -84,9 +84,15 @@ class GroupOutcome:
     안 맞아 빠진 것이 있으면 사람이 그것을 알아야 한다."""
 
 
-def groupings(applies_to: str | None = None) -> list[Plugin]:
-    """등록된 묶음. 화면이 목록을 적어 두지 않게 한다."""
-    return list_plugins(kind="grouping", applies_to=applies_to)
+def groupings(
+    applies_to: str | None = None, channels: Iterable[str] | None = None
+) -> list[Plugin]:
+    """등록된 묶음. 화면이 목록을 적어 두지 않게 한다.
+
+    **키가 아니라 채널로도 잡는다** — 부서가 만든 DMA 종류는 키가 다른데 재는
+    것은 같다(`registry.fits`).
+    """
+    return list_plugins(kind="grouping", applies_to=applies_to, channels=channels)
 
 
 def run_group(

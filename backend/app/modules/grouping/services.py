@@ -100,15 +100,22 @@ def _prony_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
     """마스터커브와 (있으면) 맞춰 둔 Prony 를 꺼낸다.
 
     **시험마다 마스터커브가 여럿일 수 있다**(기준 온도를 바꿔 가며 만든다).
-    가장 최근 것을 쓴다 — 사람이 마지막에 만든 것이 그가 쓰려는 것이다. 다른
-    것을 쓰려면 그 마스터커브로 다시 만들면 된다.
+    그중 **대표로 지정한 것**을 쓴다.
+
+    전에는 「가장 최근 것」 을 썼다. 편의 같지만 조용히 틀리는 자리였다 — 20 °C 로
+    만들어 쓰다가 30 °C 로 하나 더 만들면, 그 순간부터 이 계산이 30 °C 것으로
+    바뀌는데 화면 어디에도 그 전환이 안 보인다. 처리 결과를 **채택**하는 것과 같은
+    문법으로 맞췄다.
+
+    정렬에 `created_at` 을 남겨 둔다 — 대표가 없는 옛 데이터(마이그레이션 전에
+    만들어진 것)에서도 무언가는 나와야 한다.
     """
     members: list[groups.Member] = []
     for run in runs:
         curve = db.scalar(
             select(MasterCurve)
             .where(MasterCurve.test_run_id == run.id)
-            .order_by(MasterCurve.created_at.desc())
+            .order_by(MasterCurve.is_primary.desc(), MasterCurve.created_at.desc())
             .limit(1)
         )
         if curve is None:

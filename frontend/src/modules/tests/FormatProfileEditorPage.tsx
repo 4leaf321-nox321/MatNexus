@@ -75,7 +75,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
-import { toChannelKey } from '@/modules/tests/keys'
+import { CAPABILITIES, missingFor } from '@/modules/tests/capabilities'
+import { toChannelKey, toFallbackKey } from '@/modules/tests/keys'
 import { TablePreviewRows } from '@/modules/tests/TablePreviewRows'
 import type { ProfileDraft } from '@/modules/tests/profileDraft'
 import { forgetDraft, readDraft, since, writeDraft } from '@/modules/tests/profileDraft'
@@ -248,7 +249,7 @@ const MATERIAL_FIELD_LABEL: Record<string, string> = {
   density: '밀도',
   poisson_ratio: '푸아송비',
   applied_products: '적용 제품',
-  applied_parts: '적용 부위',
+  applied_parts: '적용 파트',
 }
 
 /** 이관이 **시료를 만들 때** 적을 수 있는 칸. 정본은 서버의 `SAMPLE_FIELDS` 다. */
@@ -295,6 +296,16 @@ const SPECIMEN_FIELD_LABEL: Record<string, string> = {
 /** 단위를 **선언해야** 하는 칸. 안 적으면 이관이 mm · tonne/mm3 로 읽는다 —
  *  m 로 적어 온 파일에서 그것은 1000배이고 숫자는 그럴듯하다. */
 const NEEDS_UNIT = new Set(['spec_thickness', 'density'])
+
+/**
+ * 무엇을 보고 정해지는가. **셋이 다르다** — 이것을 안 적으면 「탭은 떴는데 겹칠
+ * 스윕이 없습니다」 가 왜 나오는지 알 수 없다.
+ */
+const SCOPE_NOTE: Record<'type' | 'measured' | 'derived', string> = {
+  type: '시험 종류에 선언된 채널을 봅니다 — 이 파일에 그 열이 있었는지와 무관합니다.',
+  measured: '측정 표의 열을 봅니다.',
+  derived: '처리결과 표의 열을 봅니다.',
+}
 
 /** 채널 드롭다운의 특수 항목. 채널 키와 겹치지 않게 접두어를 붙인다. */
 const NEW_CHANNEL = '__new__'
@@ -363,6 +374,8 @@ export default function FormatProfileEditorPage() {
   const [columnMap, setColumnMap] = useState<Record<string, ColumnRule>>({})
   const [metaMap, setMetaMap] = useState<Record<string, MetaRule>>({})
   const [drafts, setDrafts] = useState<DraftChannel[]>([])
+  /** 처리결과 표에만 있는 열을 매핑 표에 펼칠까. **기본은 접어 둔다.** */
+  const [showDerivedColumns, setShowDerivedColumns] = useState(false)
   const [newType, setNewType] = useState<{ key: string; label: string; abbr: string } | null>(
     null
   )
@@ -569,10 +582,27 @@ export default function FormatProfileEditorPage() {
     [preview, include, derived, tableMode]
   )
 
-  /** 열 매핑에 쓸 표 — **측정만.** 처리결과의 열(복소 컴플라이언스 등)까지 섞으면
-   *  매핑 표가 두 배로 길어지는데, 그 열들은 대개 매핑할 채널이 없다. */
+  /** 열 매핑에 쓸 표 — 측정. 기본으로 보이는 것은 이쪽이다. */
   const selectedTables = useMemo<TablePreview[]>(
     () => classified.filter((row) => row.kind === 'measured').map((row) => row.table),
+    [classified]
+  )
+
+  /**
+   * 처리결과 표. **여기 열도 매핑할 수 있어야 한다.**
+   *
+   * 전에는 측정만 매핑 표에 넣었다 — 처리결과의 열(복소 컴플라이언스 등)까지
+   * 섞으면 표가 두 배로 길어지는데 대개 매핑할 채널이 없기 때문이다. 그런데
+   * **매핑은 열 「이름」 으로 걸린다**(`profile.py` 의 `columns` 는 표를 안 가린다).
+   * 처리결과 표가 측정과 다른 이름을 쓰면(`Storage Modulus` / `E' (master)`)
+   * 그 열은 화면에서 정할 방법이 아예 없었고, 그러면 장비가 만든 마스터커브를
+   * 가져올 때 「저장 탄성률 열이 없습니다」 에서 막힌다.
+   *
+   * 그래서 **접어 두되 열 수는 보여 준다** — 길어지는 문제와 정할 수 없는 문제를
+   * 둘 다 피한다.
+   */
+  const derivedTables = useMemo<TablePreview[]>(
+    () => classified.filter((row) => row.kind === 'derived').map((row) => row.table),
     [classified]
   )
 
@@ -587,22 +617,39 @@ export default function FormatProfileEditorPage() {
       sample: string
       dimension: string | null
       inFile: boolean
+      /** 측정 표에 있나. 두 표에 다 있는 열이 실제로 많다(`Frequency`). */
+      inMeasured: boolean
+      /** 처리결과 표에 있나. 여기에만 있는 열을 접어 둔다. */
+      inDerived: boolean
     }
     const seen = new Map<string, Info>()
-    for (const table of selectedTables) {
-      const hasUnitRow = table.units.length > 0
-      table.header.forEach((name, index) => {
-        if (seen.has(name)) return
-        seen.set(name, {
-          raw: hasUnitRow ? (table.units[index] ?? '') : undefined,
-          symbol: hasUnitRow ? table.unit_symbols[index] : undefined,
-          sample: table.sample_rows[0]?.[index] ?? '',
-          // 차원은 **서버가 알려 준다.** 단위 표를 여기에 복제하면 갈라진다.
-          dimension: table.dimensions[index] ?? null,
-          inFile: true,
+    const take = (tables: TablePreview[], kind: 'measured' | 'derived') => {
+      for (const table of tables) {
+        const hasUnitRow = table.units.length > 0
+        table.header.forEach((name, index) => {
+          // **양쪽 다 표시한다.** 하나로 덮어쓰면 두 표에 다 있는 열이 한쪽에서
+          // 사라져, 「가져오기에 주파수가 없다」 처럼 없는 문제를 만들어 낸다.
+          const found = seen.get(name)
+          if (found) {
+            if (kind === 'measured') found.inMeasured = true
+            else found.inDerived = true
+            return
+          }
+          seen.set(name, {
+            raw: hasUnitRow ? (table.units[index] ?? '') : undefined,
+            symbol: hasUnitRow ? table.unit_symbols[index] : undefined,
+            sample: table.sample_rows[0]?.[index] ?? '',
+            // 차원은 **서버가 알려 준다.** 단위 표를 여기에 복제하면 갈라진다.
+            dimension: table.dimensions[index] ?? null,
+            inFile: true,
+            inMeasured: kind === 'measured',
+            inDerived: kind === 'derived',
+          })
         })
-      })
+      }
     }
+    take(selectedTables, 'measured')
+    take(derivedTables, 'derived')
     // 저장된 프로파일에만 있고 이 파일에는 없는 열도 지우지 않고 보여 준다.
     for (const name of Object.keys(columnMap)) {
       if (!seen.has(name)) {
@@ -612,11 +659,59 @@ export default function FormatProfileEditorPage() {
           sample: '',
           dimension: null,
           inFile: false,
+          inMeasured: true,
+          inDerived: false,
         })
       }
     }
     return [...seen.entries()].map(([name, info]) => ({ name, ...info }))
-  }, [selectedTables, columnMap])
+  }, [selectedTables, derivedTables, columnMap])
+
+  /**
+   * 매핑 표에 그릴 열. 처리결과에만 있는 것은 펼쳤을 때만 보인다 —
+   * **다만 이미 정해 둔 것은 접혀 있어도 보인다.**
+   *
+   * 안 그러면 저장된 프로파일을 열었을 때 그 매핑이 화면에서 사라진다. 그 상태로
+   * 단위 경고가 뜨면 어느 열 이야기인지 찾을 수가 없고, 지우려 해도 줄이 없다.
+   */
+  const hidden = useMemo(
+    () => columns.filter((one) => one.inDerived && !one.inMeasured && !columnMap[one.name]),
+    [columns, columnMap]
+  )
+
+  const visibleColumns = useMemo(
+    () => (showDerivedColumns ? columns : columns.filter((one) => !hidden.includes(one))),
+    [columns, hidden, showDerivedColumns]
+  )
+
+  /** 접혀 있는 열 수. **0 이면 접기 단추 자체를 안 보여 준다.** */
+  const derivedOnlyCount = hidden.length
+
+  /**
+   * 저장하고 나면 **무엇이 어떤 키로 남는가.** 세 벌을 따로 센다 — 점탄성 탭은
+   * 시험 종류를, 겹치기는 측정 곡선을, 가져오기는 처리결과 곡선을 보기 때문이다.
+   *
+   * 매핑을 안 한 열도 버려지지 않고 이름을 슬러그로 만든 키로 들어간다
+   * (`profile.py`: `mapping.channel or slug(name)`). 그것을 빼고 세면 「영문 표기
+   * 그대로라 매핑 없이도 되는」 파일을 안 된다고 적게 된다.
+   */
+  const capabilityKeys = useMemo(() => {
+    const ofColumns = (where: 'inMeasured' | 'inDerived') => {
+      const keys = new Set<string>()
+      for (const column of columns) {
+        if (!column[where] || !column.inFile) continue
+        const rule = columnMap[column.name]
+        if (rule?.skip) continue
+        keys.add(rule?.channel || toFallbackKey(column.name))
+      }
+      return keys
+    }
+    const type = new Set<string>([
+      ...(testType?.channels ?? []).map((channel) => channel.key),
+      ...drafts.map((draft) => draft.key),
+    ])
+    return { type, measured: ofColumns('inMeasured'), derived: ofColumns('inDerived') }
+  }, [columns, columnMap, testType, drafts])
 
   const metaRows = useMemo(() => {
     const rows = new Map<string, string>(preview?.meta.map(([k, v]) => [k, v]) ?? [])
@@ -1308,7 +1403,8 @@ export default function FormatProfileEditorPage() {
                 <span>
                   장비 소프트웨어가 <b>이미 계산해 낸</b> 표(TTS 마스터 곡선·이동인자).
                   곡선으로 <b>보관은 하되 처리의 입력으로는 쓰지 않습니다</b> — 마스터커브에
-                  또 마스터커브를 씌우게 됩니다.
+                  또 마스터커브를 씌우게 됩니다. 다만 <b>점탄성 화면에서 마스터커브로 등록</b>
+                  할 수 있습니다(그러면 Prony·글로벌 피팅에 쓰입니다).
                 </span>
               </p>
               <p className="flex items-start gap-2">
@@ -1354,13 +1450,21 @@ export default function FormatProfileEditorPage() {
               {/* **버리지도 섞지도 않는다.** 장비가 계산해 준 표(TTS 마스터 곡선)를
                   버리면 결과를 잃고, 측정과 섞으면 처리가 원본으로 착각한다. */}
               <div className="min-w-48 flex-1 space-y-1.5">
-                <Label className="text-xs">처리결과 (장비가 계산해 준 것)</Label>
+                <Label className="text-xs">처리결과 — 마스터커브 · 이동인자 (정규식)</Label>
                 <Input
                   className="h-8 font-mono text-xs"
                   value={derived}
                   placeholder="^TTS"
                   onChange={(event) => setDerived(event.target.value)}
                 />
+                {/* **무엇에 쓰이는지 적는다.** 「처리결과」 만으로는 이 칸이 왜 있는지
+                    안 보인다 — 마스터커브를 함께 내보낸 파일에서 이 칸이 비어 있으면
+                    그 표는 「건너뜀」 이 되고, 그러면 Prony 도 글로벌 피팅도 못 쓴다. */}
+                <p className="text-muted-foreground text-xs">
+                  장비가 겹쳐 준 마스터커브(<code>TTS - master curve</code>)나 이동인자 표처럼,
+                  장비 소프트웨어가 계산한 표를 가리킵니다. 측정과 <b>섞지 않고</b> 따로 저장해
+                  두었다가, 점탄성 화면에서 마스터커브로 등록할 수 있습니다.
+                </p>
               </div>
             </div>
 
@@ -1581,12 +1685,36 @@ export default function FormatProfileEditorPage() {
               </p>
             )}
 
+            {/* **매핑은 표를 안 가리고 열 이름으로 걸린다.** 처리결과 표가 측정과
+                다른 이름을 쓰면 그 열은 여기서만 정할 수 있는데, 전에는 아예 안
+                보였다 — 그러면 장비가 만든 마스터커브를 가져올 때 막힌다. */}
+            {derivedOnlyCount > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground">
+                  처리결과 표에만 있는 열 <b>{derivedOnlyCount}개</b>{' '}
+                  {showDerivedColumns ? '를 함께 보고 있습니다.' : '는 접어 두었습니다.'}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-xs"
+                  onClick={() => setShowDerivedColumns((now) => !now)}
+                >
+                  {showDerivedColumns ? '접기' : '펼쳐서 매핑하기'}
+                </Button>
+                <span className="text-muted-foreground">
+                  장비가 마스터커브 표에만 다른 이름을 쓰면(<code>E&apos; (master)</code>) 여기서
+                  정합니다.
+                </span>
+              </div>
+            )}
+
             {columns.length === 0 ? (
               <p className="text-muted-foreground rounded-md border py-6 text-center text-xs">
                 파일을 놓으면 열이 나옵니다.
               </p>
             ) : (
-              <Table>
+              <Table aria-label="열 매핑">
                 <TableHeader>
                   <TableRow>
                     <TableHead>파일의 열 이름</TableHead>
@@ -1597,9 +1725,18 @@ export default function FormatProfileEditorPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {columns.map((column) => (
+                  {visibleColumns.map((column) => (
                     <TableRow key={column.name}>
-                      <TableCell className="text-sm">{column.name || '(이름 없음)'}</TableCell>
+                      <TableCell className="text-sm">
+                        {column.name || '(이름 없음)'}
+                        {/* **어느 표의 열인지 보인다.** 안 그러면 펼친 뒤에 측정 열과
+                            섞여, 있지도 않은 열을 측정에 매핑한 줄 안다. */}
+                        {column.inDerived && !column.inMeasured && (
+                          <Badge variant="outline" className="ml-2 text-[10px]">
+                            처리결과
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="font-mono text-xs">
                         {(() => {
                           const rule = columnMap[column.name] ?? EMPTY_RULE
@@ -1764,7 +1901,58 @@ export default function FormatProfileEditorPage() {
               </div>
             )}
 
-            <div className="text-muted-foreground mt-2 max-w-prose space-y-1 text-xs">
+            {/* **무엇이 열리는지 먼저 보여 준다.** 「점탄성 탭」 처럼 채널 조합으로
+                조용히 생기는 화면이 있는데, 그 규칙이 어디에도 안 적혀 있어서
+                만드는 사람은 저장하고 시험을 열어 봐야 없다는 것을 알았다. */}
+            {columns.length > 0 && (
+              <div className="mt-3 rounded-md border p-3">
+                <p className="mb-1 text-xs font-medium">이 매핑이면 무엇이 열리나</p>
+                <p className="text-muted-foreground mb-2 text-xs">
+                  채널 이름으로 <b>자동으로</b> 결정됩니다 — 어디에도 「점탄성 시험」 이라고
+                  적는 칸은 없습니다. 그래서 무엇을 매핑해야 하는지 여기서 보입니다.
+                </p>
+                <div className="space-y-1.5">
+                  {CAPABILITIES.map((capability) => {
+                    const keys = capabilityKeys[capability.scope]
+                    const missing = missingFor(capability, keys)
+                    const open = missing.length === 0
+                    return (
+                      <div key={capability.id} className="flex items-start gap-2 text-xs">
+                        <Badge
+                          variant={open ? 'default' : 'outline'}
+                          className="mt-0.5 shrink-0 text-[10px]"
+                        >
+                          {open ? '열림' : '안 열림'}
+                        </Badge>
+                        <div className="min-w-0">
+                          <p>
+                            <b>{capability.label}</b>
+                            <span className="text-muted-foreground"> · {capability.where}</span>
+                          </p>
+                          {/* **무엇이 빠졌는지 이름으로 적는다.** 「조건을 만족하지
+                              않습니다」 는 다음에 할 일을 알려 주지 않는다. */}
+                          <p className="text-muted-foreground">
+                            {open
+                              ? capability.why
+                              : `빠진 것: ${missing
+                                  .map((one) => one.join(' 또는 '))
+                                  .join(', ')} — ${capability.why}`}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {SCOPE_NOTE[capability.scope]}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* **컨테이너 폭을 다 쓴다.** `max-w-prose` 로 묶어 두면 넓은 화면에서
+                오른쪽 절반이 빈 채 글만 길게 흘러, 매핑 표와 폭이 안 맞아 따로
+                떠 보였다. 대신 단마다 나눠 한 줄이 읽기 좋은 길이로 남게 한다. */}
+            <div className="text-muted-foreground mt-2 text-xs md:columns-2 md:gap-6 xl:columns-3 [&>p]:mb-2 [&>p]:break-inside-avoid">
               <p>
                 안 정한 열도 <b>버려지지 않습니다</b> — 열 이름을 그대로 키로 삼아 곡선에
                 들어갑니다. 다만 정의된 채널이 아니므로 워크벤치나 통계에서는 잡히지
@@ -1805,7 +1993,9 @@ export default function FormatProfileEditorPage() {
             title="표 앞의 키-값을 어떻게 할까"
             hint="기계는 못 가릅니다. '최대하중 3466 N' 은 시험 결과이고 '두께 0.989 mm' 는 입력인데, 파일에서는 똑같이 생겼습니다."
           >
-            <div className="text-muted-foreground mb-3 max-w-prose space-y-1 text-xs">
+            {/* ④ 의 설명과 같은 이유로 폭을 다 쓴다 — 절반만 쓰면 오른쪽이 비고,
+                아래 표와 폭이 안 맞아 따로 떠 보인다. */}
+            <div className="text-muted-foreground mb-3 text-xs md:columns-2 md:gap-6 xl:columns-3 [&>p]:mb-2 [&>p]:break-inside-avoid">
               <p>
                 <b>시험 칸에 채움</b> — 시험일·시험자·장비·사업부를 파일에서 채웁니다.{' '}
                 <b>빈 칸일 때만</b> 들어갑니다. 사람이 적은 값을 파일이 조용히 바꾸면 어느

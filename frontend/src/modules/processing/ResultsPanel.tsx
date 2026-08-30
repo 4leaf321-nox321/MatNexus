@@ -101,6 +101,16 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
         </div>
       )}
 
+      {/* **이 탭이 무엇을 담는지 먼저 말한다.** 이름이 「결과」 라서 사람은 이
+          시험이 낸 모든 것을 여기서 찾는데, 실제로는 **곡선 하나에서 나온 값**만
+          온다 — 온도를 가로질러 겹치는 점탄성은 「점탄성」 탭에 따로 산다. */}
+      <p className="text-muted-foreground mb-3 rounded-md border p-3 text-sm">
+        <b>곡선 하나에서 나온 값</b>이 여기 쌓입니다(Tg·강도·선형구간 탄성률 …). 여러 벌
+        만들어 견주고 <b>하나를 채택</b>하면 그것이 이 시험의 값이 되어 <b>재료의 물성
+        표(통계)</b> 에 실립니다. 온도를 가로질러 겹치는 일은 「점탄성」 탭에 따로 있으며,
+        두 경로는 선행 관계가 없습니다.
+      </p>
+
       {!results.loading && rows.length === 0 ? (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           저장된 처리 결과가 없습니다.

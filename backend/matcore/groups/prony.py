@@ -178,34 +178,68 @@ def _outcome(
 @register(
     id="viscoelastic.prony_group",
     kind="grouping",
-    label="묶음 Prony",
-    applies_to=("dma_temperature_sweep",),
+    # **화면에 뜨는 말이다.** 코드의 갈래 이름은 `grouping` 이 맞지만, 이 라벨은
+    # 무엇을 하는 계산인지 알려 줘야 한다 — 시편 여럿의 마스터커브를 한 번에
+    # 적합해 Prony 계수 한 벌을 구한다. 실무에서 글로벌 피팅이라 부른다.
+    label="Prony 글로벌 피팅",
+    # **실제 시험종류 key 다**(`dma_sweep`). 전에는 `dma_temperature_sweep` 이라고
+    # 적혀 있었는데 그런 종류는 없다 — 아무도 이 값으로 조회한 적이 없어서 오래
+    # 안 드러났다(2026-08-30, 화면이 「이 종류로 뭘 할 수 있나」 를 처음 물었을 때).
+    #
+    # **온도 스윕만 받는다는 뜻은 여기 못 담는다.** 한 시험종류가 온도 스윕일 수도
+    # 변형률 스윕일 수도 있고, 그것은 처리 결과가 안다 — 그 판정은 아래 계산이 한다.
+    applies_to=("dma_sweep",),
+    # **키만으로 거르면 부서가 만든 DMA 종류에서 이 방법이 사라진다.** 이름이
+    # 무엇이든 저장·손실 탄성률을 재는 시험이면 겹치고 맞출 수 있다.
+    requires_channels=(("storage_modulus",), ("loss_modulus",)),
     params=(
         ParamSpec(
             name="method",
-            label="묶는 방법",
+            label="적합 방법",
             type="choice",
             choices=METHODS,
             default="pooled",
-            help=(
-                "pooled: 점을 모아 한 번에 맞춘다(흩어짐이 잔차에 남는다) · "
-                "averaged: 시편마다 맞춰 평균(τ 를 못 박는다) · "
-                "representative: 대표 하나를 고른다"
-            ),
+            # **값은 안 바꾼다** — 저장된 것과 결과 스냅샷에 그대로 남는 계약이다.
+            choice_labels={
+                "pooled": "한 번에 적합",
+                "averaged": "시편별 적합 후 평균",
+                "representative": "대표 하나 고르기",
+            },
+            choice_help={
+                "pooled": (
+                    "시편들의 점을 모두 모아 한 번에 맞춥니다. 시편 사이의 차이가 "
+                    "잔차로 남아, 그 값이 크면 「이 재료를 계수 한 벌로 표현하기 "
+                    "어렵다」 는 뜻입니다 — 평균은 그것을 지웁니다."
+                ),
+                "averaged": (
+                    "시편마다 맞춘 뒤 계수를 평균합니다. 시편별 값을 따로 보고 싶을 "
+                    "때 씁니다. **완화시간을 공통 격자에 못 박습니다** — 자유롭게 "
+                    "맞추면 시편마다 다른 값으로 수렴해 평균이 성립하지 않습니다."
+                ),
+                "representative": (
+                    "시편 하나의 계수를 그대로 씁니다. 시편이 한둘이거나 하나가 "
+                    "확실히 좋을 때. 나머지 시편의 정보는 안 들어갑니다."
+                ),
+            },
+            help="여러 시편의 마스터커브에서 계수 한 벌을 구하는 방법입니다.",
         ),
         ParamSpec(
             name="terms",
             label="항 수",
             type="int",
             default=0,
-            help="0 이면 BIC 가 고른다. averaged 는 공통 격자가 필요해 0 이면 4 를 쓴다.",
+            help=(
+                "Prony 항이 몇 개인가. 0 이면 BIC 가 고릅니다 — 항이 많을수록 잘 "
+                "맞지만 과적합이 되고, 그 균형을 잡는 기준입니다. "
+                "시편별 평균은 공통 격자가 필요해 0 이면 4 를 씁니다."
+            ),
         ),
         ParamSpec(
             name="representative",
-            label="대표",
+            label="대표 시편",
             type="str",
             default="",
-            help="representative 일 때 고를 구성원의 이름. 비우면 잔차가 가장 작은 것.",
+            help="비우면 잔차가 가장 작은 시편을 씁니다. 「대표 하나 고르기」 에만 쓰입니다.",
         ),
     ),
     makes_values=(

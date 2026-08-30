@@ -25,6 +25,8 @@ from app.modules.accounts.models import User
 from app.modules.viscoelastic import services
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.viscoelastic.schemas import (
+    ImportableCurveOut,
+    MasterCurveImportRequest,
     MasterCurveOut,
     MasterCurveRequest,
     PronyFitOut,
@@ -53,6 +55,7 @@ def _curve_out(row: MasterCurve) -> MasterCurveOut:
         point_count=row.point_count,
         minimum_frequency_hz=row.minimum_frequency_hz,
         maximum_frequency_hz=row.maximum_frequency_hz,
+        is_primary=row.is_primary,
         created_at=row.created_at,
     )
 
@@ -152,6 +155,80 @@ def create_master_curve(
     db.commit()
     db.refresh(row)
     return _curve_out(row)
+
+
+@router.get(
+    "/runs/{test_run_id}/importable-curves",
+    response_model=list[ImportableCurveOut],
+)
+def list_importable_curves(
+    test_run_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ImportableCurveOut]:
+    """장비가 계산해 준 표 목록. 마스터커브로 등록할 것을 여기서 고른다."""
+    run = get_run(db, user, test_run_id)
+    return [
+        ImportableCurveOut.model_validate(one)
+        for one in services.importable_curves(db, run.id)
+    ]
+
+
+@router.post(
+    "/runs/{test_run_id}/master-curves/import",
+    response_model=MasterCurveOut,
+    status_code=201,
+)
+def import_master_curve(
+    test_run_id: uuid.UUID,
+    payload: MasterCurveImportRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MasterCurveOut:
+    """**장비가 겹쳐 준 곡선을 그대로 받는다.**
+
+    겹치기를 다시 하지 않는다 — 장비가 쓴 이동인자를 모르기 때문이다. 점을 그대로
+    받고 `method="imported"` 로 적는다. 이동인자 자리는 비어 있고, 그 사실이 화면과
+    카드 주석에 남는다.
+
+    이것이 없으면 **마스터커브만 내보낸 파일은 Prony 도 글로벌 피팅도 못 쓴다** —
+    프로파일이 그 표를 읽어 두기는 해도(`derived`) 행이 되지 않았다.
+    """
+    run = get_run(db, user, test_run_id)
+    row = services.import_master_curve(
+        db,
+        run,
+        curve_key=payload.curve_key,
+        reference_temperature_k=payload.reference_temperature_k,
+        created_by_id=user.id,
+    )
+    db.commit()
+    db.refresh(row)
+    return _curve_out(row)
+
+
+@router.post("/master-curves/{master_curve_id}/primary", response_model=MasterCurveOut)
+def set_primary(
+    master_curve_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MasterCurveOut:
+    """**이 시험의 대표를 이 곡선으로 옮긴다.**
+
+    재료의 글로벌 피팅은 시험마다 대표 하나를 읽는다. 전에는 「가장 최근 것」 을
+    말없이 썼는데, 기준 온도를 바꿔 하나 더 만들면 그 순간부터 재료 쪽 계산이
+    바뀌면서 **화면 어디에도 그 전환이 안 보였다.**
+
+    처리 결과의 **채택**과 같은 자리다 — 여러 벌 만들고 하나를 고른다.
+    """
+    curve = services.curve_or_404(db, master_curve_id)
+    # 곡선은 시험에 매달려 있다. 그 시험을 볼 수 있어야 만질 수 있다.
+    run = get_run(db, user, curve.test_run_id)
+    assert run is not None
+    services.mark_primary(db, curve)
+    db.commit()
+    db.refresh(curve)
+    return _curve_out(curve)
 
 
 @router.get("/master-curves/{master_curve_id}/points")

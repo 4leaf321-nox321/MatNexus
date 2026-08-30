@@ -9,7 +9,7 @@
  * "저장하지 못했습니다" 로 뭉개면 사람은 새로고침하고 자기 작업을 다시 잃는다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -17,6 +17,7 @@ import { TestTypeEditor } from '@/modules/tests/TestTypeEditor'
 
 const updateType = vi.fn()
 const createType = vi.fn()
+const capabilities = vi.fn()
 
 vi.mock('@/modules/tests/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/tests/api')>()),
@@ -24,6 +25,7 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
     updateType: (...args: unknown[]) => updateType(...args),
     createType: (...args: unknown[]) => createType(...args),
     parsers: () => Promise.resolve([]),
+    capabilities: () => capabilities(),
   },
 }))
 
@@ -62,8 +64,16 @@ const TYPE = {
   conditions: [],
 }
 
+const DMA_STEP = {
+  id: 'dma.derived',
+  label: 'tan δ · 복소 탄성률',
+  kind: 'processing',
+  requires_channels: [['storage_modulus'], ['loss_modulus']],
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  capabilities.mockResolvedValue([DMA_STEP])
   updateType.mockResolvedValue(TYPE)
 })
 
@@ -103,5 +113,41 @@ describe('시험 종류 편집기', () => {
     await save()
     await waitFor(() => expect(updateType).toHaveBeenCalled())
     expect(onSaved).not.toHaveBeenCalled()
+  })
+})
+
+describe('이 채널이면 무엇이 열리나', () => {
+  it('빠진 채널을 이름으로 적는다', async () => {
+    // **채널 이름은 자유인데 계산은 정해진 이름을 찾는다.** 다르게 적으면 막히는
+    // 것이 아니라 목록에서 사라져서, 사람은 「이 기능이 없구나」 로 읽는다.
+    render(<TestTypeEditor type={TYPE} open onClose={() => {}} onSaved={() => {}} />)
+    // 배지와 이름은 형제가 아니다 — 줄 전체(배지 + 설명)를 잡는다.
+    const row = (await screen.findByText(/tan δ/)).closest('div.flex') as HTMLElement
+    expect(within(row).getByText('안 열림')).toBeInTheDocument()
+    expect(within(row).getByText(/storage_modulus/)).toBeInTheDocument()
+  })
+
+  it('채널이 다 있으면 열린다고 말한다', async () => {
+    const dma = {
+      ...TYPE,
+      channels: [
+        { ...TYPE.channels[0], key: 'storage_modulus', label: '저장 탄성률' },
+        { ...TYPE.channels[0], key: 'loss_modulus', label: '손실 탄성률' },
+      ],
+    }
+    render(<TestTypeEditor type={dma} open onClose={() => {}} onSaved={() => {}} />)
+    const row = (await screen.findByText(/tan δ/)).closest('div.flex') as HTMLElement
+    expect(within(row).getByText('열림')).toBeInTheDocument()
+  })
+
+  it('목록을 화면이 적어 두지 않는다', async () => {
+    // 서버가 레지스트리 선언을 그대로 준다 — 계산을 더할 때 화면도 고쳐야 하면
+    // 한 곳을 빠뜨린다.
+    capabilities.mockResolvedValue([
+      { id: 'new.thing', label: '새 계산', kind: 'processing', requires_channels: [['torque']] },
+    ])
+    render(<TestTypeEditor type={TYPE} open onClose={() => {}} onSaved={() => {}} />)
+    expect(await screen.findByText('새 계산')).toBeInTheDocument()
+    expect(screen.getByText(/torque/)).toBeInTheDocument()
   })
 })

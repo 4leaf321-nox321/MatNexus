@@ -46,7 +46,7 @@ from app.modules.processing.schemas import (
 )
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
 from app.modules.workspaces.models import Workspace
-from app.shared import curvedata, filestore, revision
+from app.shared import curvedata, filestore, revision, test_type_channels
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import (
@@ -75,6 +75,7 @@ def _produced(item: registry.Produced) -> ProducedOut:
 def list_steps(
     test_type: str | None = Query(default=None),
     user: User = Depends(current_user),
+    db: Session = Depends(get_db),
 ) -> list[ProcessingStepOut]:
     """등록된 처리 단계와 그 입력 칸.
 
@@ -89,6 +90,7 @@ def list_steps(
             label=plugin.label,
             version=plugin.version,
             applies_to=list(plugin.applies_to),
+            requires_channels=[list(one) for one in plugin.requires_channels],
             params=[
                 StepParamOut(
                     name=spec.name,
@@ -111,7 +113,13 @@ def list_steps(
             makes_values=[_produced(item) for item in plugin.makes_values],
             order=plugin.order,
         )
-        for plugin in registry.list_plugins(kind="processing", applies_to=test_type)
+        for plugin in registry.list_plugins(
+            kind="processing",
+            applies_to=test_type,
+            # **키가 아니라 채널로도 잡는다.** 부서가 만든 DMA 종류는 키가 다른데,
+            # 저장·손실 탄성률을 그대로 재므로 DMA 단계가 성립한다.
+            channels=test_type_channels.channels_of(db, test_type),
+        )
     ]
 
 
