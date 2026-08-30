@@ -28,6 +28,12 @@ export type ViscoelasticCardSaveRequest =
 export type DeclaredCardSaveRequest = components['schemas']['DeclaredCardSaveRequest']
 export type DeclaredCardPreview = components['schemas']['DeclaredCardPreviewOut']
 export type CardPage = components['schemas']['Page_PropertyCardOut_']
+/** 해석용 물성 정의 — **배포 없이 새 솔버**(ADR 0023). */
+export type ExportProfile = components['schemas']['ExportProfileOut']
+export type ExportProfileSave = components['schemas']['ExportProfileSaveRequest']
+export type ExportProfileCreate = components['schemas']['ExportProfileCreateRequest']
+export type DeckPreview = components['schemas']['DeckPreviewOut']
+export type DeckScan = components['schemas']['DeckScanOut']
 /** 거를 수 있는 값들과 **각각 몇 장인가.** 개수는 서버가 센다. */
 export type CardFacets = components['schemas']['CardFacetsOut']
 
@@ -65,6 +71,41 @@ function search(query: CardQuery): string {
 
 export const fittingApi = {
   families: () => api.get<Family[]>('/fitting/families'),
+
+  /** 저장된 덱 정의. 내 부서 것 + 전역. */
+  exportProfiles: () => api.get<ExportProfile[]>('/fitting/export-profiles'),
+  createExportProfile: (payload: ExportProfileCreate) =>
+    api.post<ExportProfile>('/fitting/export-profiles', payload),
+  saveExportProfile: (key: string, payload: ExportProfileSave) =>
+    api.put<ExportProfile>(`/fitting/export-profiles/${key}`, payload),
+  removeExportProfile: (key: string) =>
+    api.delete<void>(`/fitting/export-profiles/${key}`),
+
+  /**
+   * 예제 덱을 읽어 **정의 초안**을 만든다.
+   *
+   * 빈 폼에서 시작하면 막연하다 — 그런데 덱을 붙이려는 사람에게는 대개 그 솔버의
+   * 덱 파일이 이미 있다. **구조는 서버가 읽고 「이 값이 무엇인가」 만 사람이 정한다**
+   * (장비 파일 정의와 같은 선, ADR 0006).
+   */
+  scanDeck: (text: string, cardId?: string) =>
+    api.post<DeckScan>('/fitting/export-profiles/scan', {
+      text,
+      card_id: cardId ?? null,
+    }),
+
+  /**
+   * 저장하기 **전에** 실제 카드로 그려 본다.
+   *
+   * **못 냈어도 200 이다** — 못 낸 이유가 응답 안에 있다. 그래서 이것을 부르는
+   * 화면은 `catch` 가 아니라 `error` 필드를 봐야 한다.
+   */
+  previewDeck: (definition: unknown, cardId: string, units = 'si') =>
+    api.post<DeckPreview>('/fitting/export-profiles/preview', {
+      definition,
+      card_id: cardId,
+      units,
+    }),
 
   /**
    * 물성 블록 선언. **화면이 이것만으로 카드를 그린다.**

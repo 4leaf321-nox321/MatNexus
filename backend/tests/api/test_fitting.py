@@ -2573,3 +2573,271 @@ class Test쓸_시험_고르기:
         )
         assert seen.status_code == 200, seen.text
         assert seen.json()["sample_count"] == 2
+
+
+class Test덱_미리보기:
+    """정의를 **저장하기 전에** 실제 카드로 그려 본다 (ADR 0023 3단계).
+
+    장비 파일 쪽이 이미 같은 일을 한다 — 실제 파일을 받아 무엇으로 읽히는지 먼저
+    보여 준다(ADR 0006). 덱 쪽에서 더 필요하다: **틀린 덱은 솔버가 오류로 알려
+    주지 않는다.** 칸이 어긋나면 다른 필드로 읽히고, 해석은 그대로 돌아 그럴듯한
+    결과를 낸다.
+
+    무는 자리 넷:
+
+      1. **미리보기와 실제 내려받기가 같은 덱이다.** 다르면 미리보기의 뜻이 없다.
+      2. **못 냈어도 200 이다.** 못 낸 이유를 보여 주는 것이 미리보기의 절반이다.
+      3. **정의가 틀린 것과 카드가 빈 것을 구별한다.** 안 하면 멀쩡한 정의를
+         고치며 시간을 버린다 — 실제로 할 일은 다른 카드를 고르는 것이다.
+      4. **아무것도 저장하지 않는다.**
+    """
+
+    @pytest.fixture
+    def card(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> dict[str, Any]:
+        created: dict[str, Any] = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "미리보기 시험",
+                "family": "voce",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        return created
+
+    def _preview(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        card: dict[str, Any],
+        definition: dict[str, Any],
+    ) -> dict[str, Any]:
+        response = client.post(
+            "/api/fitting/export-profiles/preview",
+            json={"definition": definition, "card_id": card["id"]},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        body: dict[str, Any] = response.json()
+        return body
+
+    def test_미리보기가_실제_덱과_같다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """**여기가 이 기능의 전부다.** 미리보기가 「이렇게 나온다」 를 보여 주고
+        실제로 다른 것이 나가면, 사람은 미리보기를 한 번 믿고 두 번 안 믿는다."""
+        from matcore import export
+
+        body = self._preview(
+            client,
+            admin_headers,
+            card,
+            {
+                "key": "미리보기",
+                "label": "Abaqus 그대로",
+                "extension": "inp",
+                "describe": "코드 렌더러를 정의로 옮긴 것.",
+                "lines": export.ABAQUS_TEMPLATE["lines"],
+            },
+        )
+        real = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+        )
+        assert real.status_code == 200, real.text
+        assert body["text"] == real.text
+
+    def test_못_내도_200_이고_이유를_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """422 로 던지면 화면은 오류 상자 하나를 띄우고, 사람은 정의의 어느 줄이
+        문제인지 모른 채 돌아간다."""
+        body = self._preview(client, admin_headers, card, {"label": "줄이 없다"})
+        assert body["text"] is None
+        assert body["error"]
+        assert "lines" in body["error"], body["error"]
+
+    def test_모르는_칸_형식도_이유가_된다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        body = self._preview(
+            client,
+            admin_headers,
+            card,
+            {
+                "key": "x",
+                "label": "x",
+                "extension": "x",
+                "describe": "x",
+                "lines": [{"fields": [{"value": "elastic.density", "format": "nastran"}]}],
+            },
+        )
+        assert body["text"] is None
+        assert "nastran" in (body["error"] or "")
+
+    def test_카드가_빈_것과_정의가_틀린_것을_가른다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """**둘을 안 가르면 멀쩡한 정의를 고치며 시간을 버린다.** 실제로 할 일은
+        다른 카드를 고르는 것이다."""
+        body = self._preview(
+            client,
+            admin_headers,
+            card,
+            {
+                "key": "x",
+                "label": "x",
+                "extension": "x",
+                "describe": "x",
+                "needs": [{"block": "viscoelastic", "values": ["없는값"]}],
+                "lines": [{"text": "*MATERIAL, NAME={name}"}],
+            },
+        )
+        assert body["missing"], "카드에 모자란 것을 안 알려 줍니다"
+        assert body["error"] is None or body["text"] is None
+
+    def test_아무것도_저장하지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        card: dict[str, Any],
+        db: Session,
+    ) -> None:
+        from app.modules.fitting.models import ExportProfile
+
+        before = db.query(ExportProfile).count()
+        self._preview(
+            client,
+            admin_headers,
+            card,
+            {
+                "key": "저장되면_안_된다",
+                "label": "x",
+                "extension": "x",
+                "describe": "x",
+                "lines": [{"text": "*MATERIAL, NAME={name}"}],
+            },
+        )
+        assert db.query(ExportProfile).count() == before
+
+    def test_덱을_만들며_한_일을_함께_준다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        # **조용히 하지 않았다는 증거다.** 표를 정리했으면 그것을 저장 전에 본다.
+        from matcore import export
+
+        body = self._preview(
+            client,
+            admin_headers,
+            card,
+            {
+                "key": "x",
+                "label": "x",
+                "extension": "inp",
+                "describe": "x",
+                "lines": export.ABAQUS_TEMPLATE["lines"],
+            },
+        )
+        assert body["text"]
+        assert isinstance(body["notes"], list)
+
+
+class Test예제_덱_읽기:
+    """**빈 폼에서 시작하지 않게** (ADR 0023 4단계 보강).
+
+    덱을 붙이려는 사람에게는 대개 그 솔버의 덱 파일이 이미 있다 — 해석을 돌려 본
+    사람이니까. 장비 파일 정의가 같은 문제를 이미 풀었고(ADR 0006), 여기도 같은
+    선이다: **구조는 코드가 읽고 「이 값이 무엇인가」 만 사람이 정한다.**
+    """
+
+    @pytest.fixture
+    def card(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> dict[str, Any]:
+        created: dict[str, Any] = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "덱 읽기 시험",
+                "family": "voce",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        return created
+
+    def test_내가_낸_덱을_다시_읽어_초안이_된다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """**답을 아는 입력이다.** 방금 내보낸 덱을 그대로 먹여, 나온 초안이 그
+        덱의 구조와 같은지 본다."""
+        deck = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+        )
+        assert deck.status_code == 200, deck.text
+
+        response = client.post(
+            "/api/fitting/export-profiles/scan",
+            json={"text": deck.text, "card_id": card["id"]},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        kinds = [one["kind"] for one in body["lines"]]
+        assert "text" in kinds, "키워드 줄을 못 읽었습니다"
+        assert "rows" in kinds, "소성 표를 표로 못 봤습니다"
+
+    def test_카드_값에_이름을_붙인다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """**여기가 「막연하다」 를 없애는 자리다.** 화면은 숫자만 보지만, 덱을
+        올린 사람은 그것이 자기 재료의 덱임을 안다."""
+        deck = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+        )
+        body = client.post(
+            "/api/fitting/export-profiles/scan",
+            json={"text": deck.text, "card_id": card["id"]},
+            headers=admin_headers,
+        ).json()
+        named = {
+            cell["suggested"]
+            for one in body["lines"]
+            for cell in one["cells"]
+            if cell["suggested"]
+        }
+        assert "elastic.density" in named, named
+        assert any("짐작" in said for said in body["notes"])
+
+    def test_카드를_안_줘도_구조는_읽는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        # 남의 솔버 덱을 먼저 붙여 놓고 카드는 나중에 고르는 것이 정상이다.
+        body = client.post(
+            "/api/fitting/export-profiles/scan",
+            json={"text": "*MATERIAL, NAME=X\n1.0, 2.0\n"},
+            headers=admin_headers,
+        ).json()
+        assert [one["kind"] for one in body["lines"]] == ["text", "fields"]
+        assert body["lines"][0]["text"] == "*MATERIAL, NAME=X"
+
+    def test_아무것도_저장하지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        from app.modules.fitting.models import ExportProfile
+
+        before = db.query(ExportProfile).count()
+        client.post(
+            "/api/fitting/export-profiles/scan",
+            json={"text": "*MATERIAL\n1.0\n"},
+            headers=admin_headers,
+        )
+        assert db.query(ExportProfile).count() == before

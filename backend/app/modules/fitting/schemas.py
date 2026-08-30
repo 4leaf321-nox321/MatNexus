@@ -199,6 +199,115 @@ class ExportFormatOut(BaseModel):
     내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
 
 
+class ExportProfileOut(BaseModel):
+    """저장된 해석용 물성 정의 하나."""
+
+    id: uuid.UUID
+    key: str
+    label: str
+    description: str | None = None
+    owner_workspace_slug: str | None = None
+    owner_workspace_name: str | None = None
+    is_global: bool
+    definition: dict[str, Any]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExportProfileSaveRequest(BaseModel):
+    """고칠 때 보내는 것. **소유는 여기서 안 바꾼다** — 전역 승격은 성격이 다른
+    결정이라 별도 경로다(장비 파일 정의과 같은 규칙)."""
+
+    label: str = Field(min_length=1, max_length=100)
+    description: str | None = None
+    definition: dict[str, Any]
+    is_active: bool = True
+
+
+class ExportProfileCreateRequest(ExportProfileSaveRequest):
+    key: str = Field(min_length=1, max_length=50)
+    owner_workspace_slug: str | None = None
+    """어느 부서의 것으로 만들까. 안 주면 내 부서. **시스템 관리자만 전역으로
+    만든다** — 전역은 여러 부서가 함께 쓰므로 한 부서가 고치면 남의 덱이 바뀐다."""
+
+
+class DeckScanIn(BaseModel):
+    """예제 덱 하나. **저장하지 않는다** — 읽고 초안만 돌려준다."""
+
+    text: str
+    card_id: uuid.UUID | None = None
+    """대조할 카드. 주면 덱의 숫자와 카드 값을 맞춰 이름을 제안한다."""
+
+
+class ScannedCellOut(BaseModel):
+    text: str
+    value: float
+    empty: bool = False
+    """비운 칸인가. Nastran 자유 필드의 `,,` 가 그렇다 — **자리는 지켜야 한다.**"""
+    suggested: str | None = None
+    """카드의 어느 값과 같아 보이는가. **제안일 뿐이다.**"""
+
+
+class ScannedLineOut(BaseModel):
+    kind: str
+    text: str | None = None
+    prefix: str = ""
+    """값 앞에 붙는 글자. ANSYS 의 `MP,EX,` · Nastran 의 `MAT1    ` 처럼."""
+    cells: list[ScannedCellOut] = []
+    join: str = ", "
+    suffix: str = ""
+    width: int | None = None
+    align: str = "right"
+    """`right` 는 LS-DYNA·Radioss, `left` 는 Nastran·OptiStruct 벌크."""
+    precision: int | None = None
+    rows: int = 0
+
+
+class DeckScanOut(BaseModel):
+    lines: list[ScannedLineOut] = []
+    notes: list[str] = []
+    """읽으면서 짐작한 자리. **숨기지 않는다.**"""
+
+
+class DeckPreviewIn(BaseModel):
+    """저장하기 **전에** 돌려 볼 것. 정의 한 벌 + 카드 하나.
+
+    장비 파일 쪽 미리보기와 같은 자리다(ADR 0006) — 거기서는 실제 파일을 받아 무엇으로
+    읽히는지 먼저 보여 준다. **저장하고 나서 틀린 것을 아는 것과 다르다.**
+    """
+
+    definition: dict[str, Any]
+    """`matcore/export/template` 의 줄 정의. 저장된 것이 아니라 **지금 화면의 것**."""
+
+    card_id: uuid.UUID
+    """어느 카드로 시험 삼아 그려 볼까. 실물 카드라야 뜻이 있다 — 지어낸 값으로는
+    「이 카드에는 밀도가 없다」 같은 것이 안 드러난다."""
+
+    units: str = "si"
+
+
+class DeckPreviewOut(BaseModel):
+    """미리보기 결과. **덱이 안 나와도 200 이다.**
+
+    못 낸 이유를 보여 주는 것이 미리보기의 절반이다 — 422 로 던지면 화면은 오류
+    상자 하나를 띄우고, 사람은 정의의 어느 줄이 문제인지 모른 채 돌아간다.
+    """
+
+    text: str | None = None
+    """나온 덱. 못 냈으면 `null`."""
+
+    error: str | None = None
+    """왜 못 냈나. 사람이 고칠 수 있는 말로."""
+
+    missing: list[str] = []
+    """이 카드에 모자라서 못 낸 값. **정의가 틀린 것과 카드가 빈 것은 다르다** —
+    구별이 안 되면 정의를 고치며 시간을 버린다."""
+
+    notes: list[str] = []
+    """덱을 만들며 한 일. 조용히 하지 않았다는 증거다."""
+
+
 class UnitSystemOut(BaseModel):
     """덱을 쓸 수 있는 단위계 하나.
 

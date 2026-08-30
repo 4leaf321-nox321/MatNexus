@@ -14,7 +14,7 @@ from app.jobs.models import Job
 from app.modules.accounts.models import User
 from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
-from app.modules.fitting.models import PropertyCard
+from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.guide.models import (
     GuideAsset,
@@ -49,6 +49,7 @@ __all__ = [
     "Base",
     "Curve",
     "EnsembleResult",
+    "ExportProfile",
     "FormatProfile",
     "GroupResult",
     "GuideAsset",

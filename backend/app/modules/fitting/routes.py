@@ -24,15 +24,23 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.fitting.models import PropertyCard
+from app.modules.fitting import renderers
+from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.fitting.schemas import (
     BlockSpecOut,
     CardFacetOut,
     CardFacetsOut,
     CardValueOut,
+    DeckPreviewIn,
+    DeckPreviewOut,
+    DeckScanIn,
+    DeckScanOut,
     DeclaredCardPreviewOut,
     DeclaredCardSaveRequest,
     ExportFormatOut,
+    ExportProfileCreateRequest,
+    ExportProfileOut,
+    ExportProfileSaveRequest,
     FamilyOut,
     FitOut,
     FitPreviewOut,
@@ -55,9 +63,15 @@ from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
 from app.shared import audit, display, pagination, permissions
 from app.shared.auth import current_user
-from app.shared.errors import AppError, Forbidden, NotFound
+from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from app.shared.pagination import Page
+from app.shared.permissions import (
+    require_owner_edit,
+    resolve_owner_workspace,
+    visible_owner_clause,
+)
 from matcore import cards, export, fitting, prony, runtime, statistics
+from matcore.export import scan, template
 from matcore.fitting import hyperelastic
 from matcore.registry import Produced
 
@@ -1782,42 +1796,263 @@ def list_unit_systems(user: User = Depends(current_user)) -> list[UnitSystemOut]
 
 
 @router.get("/formats", response_model=list[ExportFormatOut])
-def list_formats(user: User = Depends(current_user)) -> list[ExportFormatOut]:
-    """내보낼 수 있는 솔버. **화면이 이 응답만으로 목록을 그린다.**"""
+def list_formats(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ExportFormatOut]:
+    """내보낼 수 있는 솔버. **화면이 이 응답만으로 목록을 그린다.**
+
+    코드 렌더러와 **부서의 해석용 물성 정의**가 함께 온다(ADR 0023). 정의를 고치면 다음
+    요청부터 먹는다 — 기동 때 얹지 않는 이유는 `renderers.py` 에 적었다.
+    """
     return [
         ExportFormatOut(
             key=item.key,
             label=item.label,
             extension=item.extension,
             describe=item.describe,
-            requires=list(export.requires_labels(item.key)),
+            requires=list(export.requires_labels(item)),
         )
-        for item in export.list_renderers()
+        for item in renderers.all_renderers(db, user.home_workspace_id)
     ]
 
 
-@router.get("/cards/{card_id}/export")
-def export_card(
-    card_id: uuid.UUID,
-    format: str = Query(default="json"),
-    units: str = Query(default="si", description="덱의 단위계. 기본은 SI."),
+def _visible_profiles(db: Session, user: User) -> Any:
+    """내 부서 것 + 전역. **지운 것은 여기서 빠진다.**
+
+    이 한 곳을 안 거르면 지운 정의가 내보내기 형식 목록에 그대로 뜬다 — 인풋
+    프로파일이 같은 규칙, 같은 코드다.
+    """
+    return select(ExportProfile).where(
+        visible_owner_clause(db, user, ExportProfile.owner_workspace_id),
+        ExportProfile.deleted_at.is_(None),
+    )
+
+
+def _checked(definition: dict[str, Any], key: str, label: str) -> None:
+    """저장하기 전에 **실제로 만들어 본다.**
+
+    안 해 보면 「저장은 됐는데 내려받을 때 터지는」 정의가 생기고, 그때는 화면에서
+    고칠 사람이 그 자리에 없다 — 해석을 돌리려던 사람이 500 을 본다.
+    """
+    if key in {item.key for item in export.list_renderers()}:
+        # **코드 렌더러를 덮지 못한다.** 덮게 두면 코드 쪽 검증(키워드 확인·물리적
+        # 타당성)을 정의 하나가 조용히 우회한다.
+        raise Conflict(
+            "MNX-FITTING-0026",
+            f"'{key}' 는 코드로 만든 솔버 형식입니다. 다른 key 를 쓰세요 — "
+            f"같은 이름으로 덮으면 그 형식의 검사가 통째로 빠집니다.",
+        )
+    try:
+        # 행의 칸이 정본이다 — `renderers.py` 와 같은 규칙으로 넘긴다.
+        template.renderer_from_definition({**definition, "key": key, "label": label})
+    except export.ExportError as exc:
+        raise AppError("MNX-FITTING-0025", str(exc), status=422) from exc
+
+
+def _profile_out(db: Session, item: ExportProfile) -> ExportProfileOut:
+    owner = db.get(Workspace, item.owner_workspace_id) if item.owner_workspace_id else None
+    return ExportProfileOut(
+        id=item.id,
+        key=item.key,
+        label=item.label,
+        description=item.description,
+        owner_workspace_slug=owner.slug if owner else None,
+        owner_workspace_name=owner.name if owner else None,
+        is_global=item.owner_workspace_id is None,
+        definition=item.definition,
+        is_active=item.is_active,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+@router.get("/export-profiles", response_model=list[ExportProfileOut])
+def list_export_profiles(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ExportProfileOut]:
+    """내 부서 것 + 전역. 시스템 관리자는 전부."""
+    query = _visible_profiles(db, user).order_by(ExportProfile.key)
+    return [_profile_out(db, item) for item in db.scalars(query)]
+
+
+@router.post("/export-profiles", response_model=ExportProfileOut, status_code=201)
+def create_export_profile(
+    payload: ExportProfileCreateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ExportProfileOut:
+    """부서 관리자가 자기 부서의 해석용 물성 정의를 만든다.
+
+    **부서마다 쓰는 솔버가 다르다.** 그리고 같은 솔버라도 사업부마다 덱 관례가
+    다르다 — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을
+    돌리는 사람에게 있지 시스템 관리자에게 없다.
+    """
+    owner_id = resolve_owner_workspace(
+        db,
+        user,
+        payload.owner_workspace_slug,
+        what="해석용 물성 정의",
+        code="MNX-FITTING-0027",
+    )
+    duplicate = db.scalar(
+        select(ExportProfile).where(
+            ExportProfile.key == payload.key,
+            # **지운 것은 안 센다.** 안 거르면 지운 정의의 key 로 다시 만들 수
+            # 없으면서 화면 어디에도 그것이 없다 — 되살리는 길은 휴지통이다.
+            ExportProfile.deleted_at.is_(None),
+            ExportProfile.owner_workspace_id.is_(None)
+            if owner_id is None
+            else ExportProfile.owner_workspace_id == owner_id,
+        )
+    )
+    if duplicate:
+        raise Conflict("MNX-FITTING-0024", f"이미 있는 해석용 물성 정의입니다: {payload.key}")
+    _checked(payload.definition, payload.key, payload.label)
+    item = ExportProfile(
+        key=payload.key,
+        label=payload.label,
+        description=payload.description,
+        owner_workspace_id=owner_id,
+        definition=payload.definition,
+        is_active=payload.is_active,
+        created_by_id=user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _profile_out(db, item)
+
+
+@router.put("/export-profiles/{key}", response_model=ExportProfileOut)
+def update_export_profile(
+    key: str,
+    payload: ExportProfileSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ExportProfileOut:
+    """해석용 물성 정의를 고친다. **이미 내보낸 덱은 안 바뀐다** — 파일로 나갔다.
+
+    그래서 잠그지 않는다. 정의가 틀렸다는 것을 나중에 아는 것이 정상이고, 그때
+    고쳐서 다시 내보내면 된다.
+    """
+    item = db.scalar(_visible_profiles(db, user).where(ExportProfile.key == key))
+    if item is None:
+        raise NotFound("MNX-FITTING-0025", f"해석용 물성 정의를 찾을 수 없습니다: {key}")
+    require_owner_edit(
+        db, user, item.owner_workspace_id, what="해석용 물성 정의", code="MNX-FITTING-0027"
+    )
+    _checked(payload.definition, key, payload.label)
+    item.label = payload.label
+    item.description = payload.description
+    item.definition = payload.definition
+    item.is_active = payload.is_active
+    db.commit()
+    db.refresh(item)
+    return _profile_out(db, item)
+
+
+@router.delete("/export-profiles/{key}", status_code=204)
+def delete_export_profile(
+    key: str,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    """솔버 카드를 텍스트로 만든다.
+    """지운다 — **행은 남는다.** 휴지통에서 되살린다.
 
-    **초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의
-    실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면
-    카드 안에 그렇게 적어 둔다.
+    매달린 것을 검사하지 않는다: 해석용 물성 정의에 딸린 데이터가 없다. 지우면 그 솔버로
+    못 낼 뿐이고, 이미 나간 덱은 파일이라 그대로다.
+    """
+    item = db.scalar(_visible_profiles(db, user).where(ExportProfile.key == key))
+    if item is None:
+        raise NotFound("MNX-FITTING-0025", f"해석용 물성 정의를 찾을 수 없습니다: {key}")
+    require_owner_edit(
+        db, user, item.owner_workspace_id, what="해석용 물성 정의", code="MNX-FITTING-0027"
+    )
+    item.deleted_at = datetime.now(UTC)
+    db.commit()
+    return Response(status_code=204)
 
-    ## 단위계를 고른다
 
-    판재 CAE 는 관행이 mm·N·tonne 이고 화면도 그 단위계다. SI 덱만 내면
-    해석자가 매번 손으로 환산하게 되는데, **그 손이 바로 사고의 자리**다.
+@router.post("/export-profiles/scan", response_model=DeckScanOut)
+def scan_deck(
+    payload: DeckScanIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckScanOut:
+    """예제 덱을 읽어 **정의 초안**을 만든다.
 
-    고른 계는 덱 머리와 **파일 이름에** 들어간다. 두 계가 한 폴더에 섞이면
-    어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
-    생긴다.
+    빈 폼에서 시작하면 막연하다 — 무슨 줄을 몇 개 쌓아야 하는지, 칸 폭을 얼마로
+    둬야 하는지 화면 어디에도 없다. 그런데 **덱을 붙이려는 사람에게는 대개 그
+    솔버의 덱 파일이 이미 있다.**
+
+    장비 파일 정의가 같은 문제를 이미 풀었다(ADR 0006): 구조는 코드가 읽고
+    **「이 값이 무엇인가」 만 사람이 정한다.** 여기도 같은 선이다.
+
+    **아무것도 저장하지 않는다.** 카드를 주면 덱의 숫자와 카드 값을 맞춰 이름을
+    제안하는데, 그것도 **짐작이라고 적어서** 돌려준다.
+    """
+    known: dict[str, float] = {}
+    if payload.card_id is not None:
+        item = _visible_card(db, user, payload.card_id)
+        cards.load_builtin()
+        for block, values in item.blocks.items():
+            for name, value in cards.values_of(values).items():
+                if isinstance(value, int | float) and not isinstance(value, bool):
+                    known[f"{block}.{name}"] = float(value)
+    return DeckScanOut.model_validate(scan.as_payload(scan.scan(payload.text, known)))
+
+
+@router.post("/export-profiles/preview", response_model=DeckPreviewOut)
+def preview_deck(
+    payload: DeckPreviewIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckPreviewOut:
+    """정의를 **저장하기 전에** 실제 카드로 그려 본다 (ADR 0023 3단계).
+
+    장비 파일 쪽 미리보기가 이미 같은 일을 한다 — 실제 파일을 받아 무엇으로 읽히는지
+    먼저 보여 준다(ADR 0006). 덱 쪽에서 그것이 더 필요하다: **틀린 덱은 솔버가
+    오류로 알려 주지 않는다.** 칸이 어긋나면 다른 필드로 읽히고, 해석은 그대로
+    돌아서 그럴듯한 결과를 낸다.
+
+    **아무것도 저장하지 않는다.** 그리고 **못 냈어도 200 이다** — 못 낸 이유를
+    보여 주는 것이 미리보기의 절반이다. 422 로 던지면 화면은 오류 상자 하나를
+    띄우고, 사람은 정의의 어느 줄이 문제인지 모른 채 돌아간다.
+    """
+    deck = _deck_for_card(db, user, payload.card_id)
+    try:
+        system = export.systems.get(payload.units)
+    except KeyError as exc:
+        known = ", ".join(one.key for one in export.SYSTEMS)
+        raise AppError(
+            "MNX-FITTING-0023",
+            f"모르는 단위계입니다: {payload.units!r}. 쓸 수 있는 것: {known}",
+            status=422,
+        ) from exc
+
+    try:
+        target = template.renderer_from_definition({"key": "preview", **payload.definition})
+    except export.ExportError as exc:
+        return DeckPreviewOut(error=str(exc))
+
+    # **정의가 틀린 것과 카드가 빈 것은 다르다.** 구별이 안 되면 사람은 멀쩡한
+    # 정의를 고치며 시간을 버린다 — 실제로 필요한 것은 다른 카드를 고르는 것이다.
+    missing = list(export.missing_for(deck, target))
+    try:
+        made = export.render(target, deck, system)
+    except export.ExportError as exc:
+        return DeckPreviewOut(error=str(exc), missing=missing)
+    return DeckPreviewOut(text=made.text, notes=list(made.notes), missing=missing)
+
+
+def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
+    """카드 하나를 덱으로 — 이름·근거 줄까지 붙여서.
+
+    **내려받기와 미리보기가 같은 덱을 봐야 한다.** 다르면 미리보기가 「이렇게
+    나온다」 를 보여 주고 실제로 나가는 것은 다르므로, 미리보기의 뜻 자체가
+    없어진다(ADR 0023 3단계).
     """
     item = _visible_card(db, user, card_id)
     material = db.get(Material, item.material_id)
@@ -1916,7 +2151,33 @@ def export_card(
             f"{float(hardening.get('strain_max', 0.0)):.5g} (그 밖은 검증되지 않았습니다)"
         )
 
-    deck = _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
+    return _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
+
+
+@router.get("/cards/{card_id}/export")
+def export_card(
+    card_id: uuid.UUID,
+    format: str = Query(default="json"),
+    units: str = Query(default="si", description="덱의 단위계. 기본은 SI."),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """솔버 카드를 텍스트로 만든다.
+
+    **초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의
+    실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면
+    카드 안에 그렇게 적어 둔다.
+
+    ## 단위계를 고른다
+
+    판재 CAE 는 관행이 mm·N·tonne 이고 화면도 그 단위계다. SI 덱만 내면
+    해석자가 매번 손으로 환산하게 되는데, **그 손이 바로 사고의 자리**다.
+
+    고른 계는 덱 머리와 **파일 이름에** 들어간다. 두 계가 한 폴더에 섞이면
+    어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
+    생긴다.
+    """
+    deck = _deck_for_card(db, user, card_id)
     try:
         system = export.systems.get(units)
     except KeyError as exc:
@@ -1927,8 +2188,8 @@ def export_card(
             status=422,
         ) from exc
     try:
-        rendered = export.render(format, deck, system)
-        target = export.renderer(format)
+        target = renderers.renderer_for(db, user.home_workspace_id, format)
+        rendered = export.render(target, deck, system)
     except export.ExportError as exc:
         raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
 

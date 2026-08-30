@@ -34,7 +34,17 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -119,3 +129,72 @@ class PropertyCard(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ExportProfile(Base):
+    """솔버 덱을 **어떻게 적을지** 를 담은 규칙. 코드가 아니라 데이터다(ADR 0023).
+
+    `FormatProfile` 이 장비 파일을 **읽는** 쪽에서 이미 푼 문제의 반대 방향이다.
+    거기서 배운 것이 그대로 여기 온다: 새 솔버마다 요청 → 개발 → 배포가 도는
+    동안 해석은 못 나간다. 쓰는 솔버가 Abaqus·OptiStruct·Radioss·ANSYS
+    Mechanical·LS-DYNA… 로 늘면 그 사슬이 매번 돈다.
+
+    `definition` 의 모양은 `matcore/export/template` 이 정의한다. JSONB 인 이유도
+    같다 — 줄 문법이 솔버를 겪으면서 는다. 컬럼으로 쪼개면 새 문법마다
+    마이그레이션이고, 그러면 배포 없이 대응한다는 목적이 무너진다.
+
+    **코드 렌더러를 덮지 못한다.** 같은 `key` 는 저장할 때 막는다 — 덮게 두면
+    코드 쪽 검증(키워드 확인·물리적 타당성)을 정의 하나가 조용히 우회한다.
+    """
+
+    __tablename__ = "export_profiles"
+    __table_args__ = (
+        Index(
+            "uq_export_profiles_scope_key",
+            "owner_workspace_id",
+            "key",
+            unique=True,
+            # 없으면 NULL != NULL 이라 **전역 정의끼리 같은 key 가 허용된다**(ADR 0004).
+            postgresql_nulls_not_distinct=True,
+            # **지운 행은 key 를 잡아 두지 않는다** — 재료가 그대로 터졌다(2026-08-28).
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    key: Mapped[str] = mapped_column(String(50), index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    owner_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True, nullable=True
+    )
+    """만든 부서. **`NULL` 이면 전역이다.**
+
+    부서마다 쓰는 솔버가 다르다. 그리고 같은 솔버라도 **사업부마다 덱 관례가
+    다르다** — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을
+    돌리는 사람에게 있지 시스템 관리자에게 없다.
+
+    읽을 때는 **내 부서 것이 전역보다 먼저다**(프로파일과 같은 규칙)."""
+
+    definition: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """줄 차례·값 자리·칸 폭·`needs`. `matcore/export/template` 참조."""
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    """지운 때. **행은 남는다** — 휴지통에서 되살린다(ADR 0023 5단계)."""

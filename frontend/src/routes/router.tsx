@@ -47,6 +47,10 @@ const CardsPage = lazy(() => import('@/modules/fitting/CardsPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
 const FormatProfileEditorPage = lazy(() => import('@/modules/tests/FormatProfileEditorPage'))
 const FormatProfilesPage = lazy(() => import('@/modules/tests/FormatProfilesPage'))
+const ExportProfilesPage = lazy(() => import('@/modules/fitting/ExportProfilesPage'))
+const ExportProfileEditorPage = lazy(
+  () => import('@/modules/fitting/ExportProfileEditorPage')
+)
 const MembersPage = lazy(() => import('@/modules/workspaces/MembersPage'))
 const NoticesPage = lazy(() => import('@/modules/notices/NoticesPage'))
 const RecipesPage = lazy(() => import('@/modules/processing/RecipesPage'))
@@ -139,6 +143,9 @@ export const router = createBrowserRouter([
           { path: 'settings/formats', element: <FormatProfilesPage /> },
           { path: 'settings/formats/new', element: <FormatProfileEditorPage /> },
           { path: 'settings/formats/:key', element: <FormatProfileEditorPage /> },
+          { path: 'settings/export-profiles', element: <ExportProfilesPage /> },
+          { path: 'settings/export-profiles/new', element: <ExportProfileEditorPage /> },
+          { path: 'settings/export-profiles/:key', element: <ExportProfileEditorPage /> },
           // **장비 커넥터는 부서 설정이다.** 장비를 붙이는 것은 사업부의 일이고,
           // 시편을 못 정한 파일을 붙이는 것도 부서 관리자가 한다(ADR 0021).
           { path: 'settings/connectors', element: <ConnectorsPage /> },

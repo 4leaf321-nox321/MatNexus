@@ -39,6 +39,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from matcore.export import systems as systems  # 재수출 — 앱이 key 로 고른다
+from matcore.export import template
 from matcore.export.systems import SI, UnitSystem
 from matcore.export.systems import SYSTEMS as SYSTEMS  # 재수출 — 앱이 목록을 보여 준다
 
@@ -282,13 +283,25 @@ def _label(block: str, key: str | None = None) -> str:
     return f"{spec.label} {key}"
 
 
-def missing_for(deck: Deck, format_key: str) -> tuple[str, ...]:
+def _resolve(target: str | Renderer) -> Renderer | None:
+    """`key` 든 **이미 만들어진 렌더러** 든 받는다.
+
+    **DB 정의로 만든 렌더러를 전역 레지스트리에 얹지 않기 위해서다.** 얹으면
+    요청 하나가 프로세스 전체를 바꾸고, 부서마다 정의가 다르면 옆 요청이 남의
+    솔버로 덱을 낸다. 그래서 만든 것을 그대로 들고 다닌다.
+    """
+    if isinstance(target, str):
+        return _RENDERERS.get(target)
+    return target
+
+
+def missing_for(deck: Deck, format_key: str | Renderer) -> tuple[str, ...]:
     """이 형식으로 내보내려면 덱에 더 있어야 하는 것. 사람이 읽는 이름으로.
 
     **누르기 전에 알아야 한다.** 내려받기를 누른 뒤에 "푸아송비가 없습니다" 를
     보는 것은 늦다.
     """
-    target = _RENDERERS.get(format_key)
+    target = _resolve(format_key)
     if target is None:
         return ()
     missing: list[str] = []
@@ -307,13 +320,13 @@ def missing_for(deck: Deck, format_key: str) -> tuple[str, ...]:
     return tuple(missing)
 
 
-def requires_labels(format_key: str) -> tuple[str, ...]:
+def requires_labels(format_key: str | Renderer) -> tuple[str, ...]:
     """이 형식이 **반드시** 요구하는 것. 카드를 보기 전에도 답할 수 있다.
 
     화면의 형식 목록에 그대로 뜬다 — *"이 솔버는 밀도가 있어야 합니다"* 를 카드를
     고르기 전에 알 수 있어야 한다. 선택인 것(`optional`)은 안 넣는다.
     """
-    target = _RENDERERS.get(format_key)
+    target = _resolve(format_key)
     if target is None:
         return ()
     out: list[str] = []
@@ -633,6 +646,71 @@ def render_abaqus(deck: Deck) -> Rendered:
     # **응력이 먼저, 소성변형률이 나중이다.** OpenRadioss 와 순서가 반대다.
     lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+#: ADR 0023 1단계 — **위 `render_abaqus` 를 파일 정의로 다시 적은 것.**
+#:
+#: 시험이 둘을 같은 덱에 대고 바이트로 견준다. 여기가 맞으면 「배포 없이 새 솔버」
+#: 가 가능하다는 뜻이고, 어긋나면 그 자리가 곧 템플릿에 없는 표현이다.
+#:
+#: **검증과 정리는 여기 없다.** 온도별 표의 빈 칸 검사(`_elastic_lines`)와 표 정리
+#: (`prepare`)는 코드에 남는다 — 그것은 조판이 아니라 계산이다.
+ABAQUS_TEMPLATE: dict[str, Any] = {
+    "lines": [
+        {"block": "header"},
+        {"text": "** Consistent units: {units}"},
+        {
+            "when": "missing:elastic.density",
+            "text": (
+                "** DENSITY: 측정값이 없어 비웠습니다. "
+                "동적 해석에는 이 덱이 그대로 쓰이지 못합니다."
+            ),
+            "note": "밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다.",
+        },
+        {"text": "*MATERIAL, NAME={name}"},
+        {"when": "elastic.density", "text": "*DENSITY"},
+        {
+            "when": "elastic.density",
+            "fields": [{"value": "elastic.density", "format": "free"}],
+            "suffix": ",",
+        },
+        {"block": "elastic"},
+        {"block": "thermal"},
+        {"text": "*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT"},
+        {
+            # **응력이 먼저, 소성변형률이 나중이다.** OpenRadioss 와 반대이고,
+            # 템플릿이 표현해야 하는 것이 정확히 이런 차이다.
+            "rows": "table",
+            "x": "plastic_strain",
+            "y": "true_stress",
+            "fields": [
+                {"value": "true_stress", "format": "free"},
+                {"value": "plastic_strain", "format": "free"},
+            ],
+        },
+    ],
+}
+
+
+def _register_template_blocks() -> None:
+    """코드가 만드는 줄 묶음을 템플릿 쪽에 넘긴다.
+
+    **여기서 넘기는 이유는 순환이다** — `template` 이 이 모듈을 맨 위에서 부르면
+    서로를 기다린다. 넘기는 것은 셋뿐이고, 셋 다 조판이 아니라 검증·분기가 있다.
+    """
+    template.register_block("header", lambda deck: _header(deck, "**"))
+    template.register_block(
+        "elastic",
+        lambda deck: _elastic_lines(
+            deck,
+            deck.number("elastic", "youngs_modulus"),
+            deck.number("elastic", "poisson_ratio"),
+        ),
+    )
+    template.register_block("thermal", _thermal_lines)
+
+
+_register_template_blocks()
 
 
 @register_renderer(
@@ -1255,7 +1333,7 @@ def to_system(deck: Deck, system: UnitSystem) -> Deck:
     return replace(deck, blocks=blocks, units=system)
 
 
-def render(format_key: str, deck: Deck, system: UnitSystem = SI) -> Rendered:
+def render(format_key: str | Renderer, deck: Deck, system: UnitSystem = SI) -> Rendered:
     """덱을 솔버 텍스트로 만든다.
 
     **쓰고 나서 다시 읽는다.** 키워드가 빠진 파일은 솔버가 오류 없이 무시하기도
@@ -1264,11 +1342,16 @@ def render(format_key: str, deck: Deck, system: UnitSystem = SI) -> Rendered:
     `system` 은 **여기서 한 번** 적용된다(`to_system`). 렌더러는 이미 그 계로
     바뀐 덱을 받고, 선언 줄만 `deck.units` 에서 읽는다.
     """
-    target = renderer(format_key)
+    found = _resolve(format_key)
+    if found is None:
+        raise ExportError(
+            f"모르는 형식입니다: {format_key}. 있는 것: {', '.join(sorted(_RENDERERS))}"
+        )
+    target = found
 
     # **모자란 것 검사가 여기 한 곳에 있다.** 형식마다 흩어져 있으면 새 형식이
     # 붙을 때 빠뜨리고, 빠뜨린 형식은 0 을 써서 내보낸다.
-    missing = missing_for(deck, format_key)
+    missing = missing_for(deck, target)
     if missing:
         raise ExportError(
             f"{target.label} 덱에 {', '.join(missing)} 가 필요한데 카드에 없습니다. "

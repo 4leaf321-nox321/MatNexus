@@ -41,7 +41,7 @@ describe('사이드바 메뉴', () => {
     // 쓰기 단추는 화면이 가린다(`shared/auth/roles`) — 눌러 보고 403 을 알게
     // 하지 않는다.
     const seen = labels(MEMBER)
-    for (const shown of ['장비 커넥터', '인풋 파일 정의', '시험 정의', '레시피 목록']) {
+    for (const shown of ['장비 커넥터', '장비 파일 정의', '시험 정의', '레시피 목록']) {
       expect(seen, shown).toContain(shown)
     }
   })
@@ -63,7 +63,7 @@ describe('사이드바 메뉴', () => {
     // 뒤 저장 순간 403 이 난다(ADR 0006).
     const seen = labels(MANAGER)
     expect(seen).toContain('시험 정의')
-    expect(seen).toContain('인풋 파일 정의')
+    expect(seen).toContain('장비 파일 정의')
     expect(seen).toContain('레시피 목록')
     expect(seen).toContain('부서 멤버')
   })
@@ -77,7 +77,7 @@ describe('사이드바 메뉴', () => {
 
   it('시스템 관리자는 전부 본다', () => {
     const seen = labels(ADMIN)
-    for (const shown of ['계정', '부서 정보', '시험 정의', '인풋 파일 정의', '서버']) {
+    for (const shown of ['계정', '부서 정보', '시험 정의', '장비 파일 정의', '서버']) {
       expect(seen, shown).toContain(shown)
     }
   })
@@ -137,13 +137,17 @@ describe('자리', () => {
   })
 
   it('수집 체계는 사슬 차례로 선다', () => {
-    // **정의 셋을 갖춰 놓고 마지막에 장비를 붙인다.** 앞 셋은 「무엇을 어떻게
-    // 받고 처리할지」 를 미리 적는 자리고, 커넥터는 그 정의를 따라 실제로 들어온
-    // 파일을 다루는 자리다 — 새로 붙이는 사람의 일 순서가 그대로 차례다.
-    const chain = NAV_GROUPS.find((group) => group.title === '데이터 수집 체계')
+    // **정의를 갖춰 놓고 마지막에 장비를 붙인다.** 앞쪽은 「무엇을 어떻게 받고
+    // 처리하고 내보낼지」 를 미리 적는 자리고, 커넥터는 그 정의를 따라 실제로
+    // 들어온 파일을 다루는 자리다 — 새로 붙이는 사람의 일 순서가 그대로 차례다.
+    //
+    // **덱 정의는 장비 파일 정의 바로 다음이다**(2026-08-30). 읽는 규칙과 쓰는 규칙은
+    // 짝이고, 새 솔버를 붙이는 사람은 장비 파일 정의를 만든 그 사람일 때가 많다.
+    const chain = NAV_GROUPS.find((group) => group.title === '데이터 체계')
     expect(chain?.items.map((item) => item.label)).toEqual([
       '시험 정의',
-      '인풋 파일 정의',
+      '장비 파일 정의',
+      '해석용 물성 정의',
       '레시피 목록',
       '장비 커넥터',
     ])
@@ -152,7 +156,7 @@ describe('자리', () => {
   it('사슬이 아닌 것은 그 그룹에 안 넣는다', () => {
     // 「부서 설정」 이 애매했던 까닭이다 — 권한(누가 하나)으로 이름을 붙이자
     // 성격이 다른 여섯이 한 이름 아래 모였고, 그 이름이 아무것도 안 말했다.
-    const chain = NAV_GROUPS.find((group) => group.title === '데이터 수집 체계')
+    const chain = NAV_GROUPS.find((group) => group.title === '데이터 체계')
     const labels = chain?.items.map((item) => item.label) ?? []
     expect(labels).not.toContain('부서 멤버')
     expect(labels).not.toContain('변경 이력')
@@ -212,7 +216,7 @@ describe('e2e 가 누르는 이름', () => {
    * 시험이 깨진다.** 실제로 두 번 그랬다:
    *
    *     v1.161.0  홈 카드 문구를 바꾸고 e2e 만 안 고쳤다
-   *     v1.164.0  '파일 형식' → '인풋 파일 정의' 로 바꾸고 e2e 만 안 고쳤다
+   *     v1.164.0  '파일 형식' → '장비 파일 정의' 로 바꾸고 e2e 만 안 고쳤다
    *
    * 둘 다 **CI 에서 14분 걸려 알았다.** e2e 는 서버 둘과 브라우저가 필요해 손에서
    * 안 돌리니, 여기서 55초에 잡는다.
