@@ -43,6 +43,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
+from app.modules.fitting.models import ExportProfile
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.pipelines.models import PipelineConnector
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult
@@ -61,7 +62,7 @@ TREE_KINDS = ("material", "sample", "specimen", "test_run")
 #: 이 시험의 채널이 무엇을 재는 것이었나, 그 파일을 무엇으로 읽었나. 그래서
 #: 지우는 자리를 소프트로 바꾸고 여기로 들여보낸다.
 #:
-FLAT_KINDS = ("test_type", "format_profile", "recipe", "connector")
+FLAT_KINDS = ("test_type", "format_profile", "recipe", "connector", "export_profile")
 
 #: 다루는 것 전부. 계정은 뺐다: 성격이 달라(권한·소속) 같은 표에 섞으면 읽히지
 #: 않고, 계정 관리 화면이 이미 따로 있다.
@@ -78,9 +79,10 @@ _MODELS: dict[str, tuple[Any, str]] = {
     "specimen": (Specimen, "시편"),
     "test_run": (TestRun, "시험"),
     "test_type": (TestType, "시험 정의"),
-    "format_profile": (FormatProfile, "인풋 파일 정의"),
+    "format_profile": (FormatProfile, "장비 파일 정의"),
     "recipe": (ProcessingRecipe, "레시피"),
     "connector": (PipelineConnector, "장비 커넥터"),
+    "export_profile": (ExportProfile, "해석용 물성 정의"),
 }
 
 #: **자리를 다투는 칸.** 되살릴 때 살아 있는 것이 이미 그 값을 쓰고 있으면 막는다 —
@@ -91,6 +93,7 @@ _UNIQUE_COLUMNS = {
     "format_profile": ("owner_workspace_id", "key"),
     "recipe": ("owner_workspace_id", "key"),
     "connector": ("workspace_id", "hostname"),
+    "export_profile": ("owner_workspace_id", "key"),
 }
 
 #: 이름을 담은 칸. 종류마다 다르다 — 없으면 `record_name` 을 본다.
@@ -99,6 +102,7 @@ _NAME_COLUMNS = {
     "format_profile": "label",
     "recipe": "label",
     "connector": "name",
+    "export_profile": "label",
 }
 
 #: 되살릴 때 되돌려 놓을 기준정보 연결. 지울 때 `release_bindings` 가 뺀 것을
@@ -428,7 +432,15 @@ def purge(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
 
     **감사 기록을 먼저 남긴다.** 행이 사라지고 나면 무엇이었는지 적을 수 없다.
     """
-    row = _get(db, kind, item_id)
+    return _purge_row(db, kind, _get(db, kind, item_id), actor=actor)[0]
+
+
+def _purge_row(
+    db: Session, kind: str, row: Any, *, actor: User
+) -> tuple[Done, dict[str, list[Any]]]:
+    """`purge` 의 알맹이. **지운 나무를 함께 돌려준다** — 여럿을 한꺼번에 지울 때
+    「이미 이 나무에 딸려 사라진 것」 을 알아야 같은 행을 두 번 지우지 않는다."""
+    item_id = row.id
     tree = _tree(db, kind, row)
     counts = {_MODELS[one][1]: len(tree[one]) for one in KINDS if tree[one]}
     done = Done(name=_name(kind, row), counts=counts)
@@ -457,15 +469,85 @@ def purge(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
                 .values(recipe_id=None)
             )
         db.delete(row)
-        return done
+        return done, tree
 
     runs: Sequence[Any] = tree["test_run"]
     for run in runs:
         _purge_run(db, run)
+    db.flush()
     for one in ("specimen", "sample", "material"):
         for target in tree[one]:
             db.delete(target)
-    return done
+        # **한 층을 지우고 밀어낸다.** `db.delete` 는 표시만 하고 실제 순서는
+        # flush 가 정하는데, 시료-재료 사이에 ORM 관계가 없어 SQLAlchemy 는
+        # 둘의 의존을 모른다 — 표시만 해 두면 재료를 먼저 지우려다 FK 가 막고
+        # 500 이 난다. 실측(2026-08-31): 재료를 통째로 영구삭제하면 언제나 터졌다.
+        # 한 줄짜리 삭제도 같은 길이라 같이 고쳤다 — 시편만 지우는 시험뿐이라
+        # 안 걸렸다.
+        db.flush()
+    return done, tree
+
+
+@dataclass(frozen=True)
+class PurgedMany:
+    """여러 줄을 한꺼번에 영영 지운 결과."""
+
+    requested: int
+    purged: int
+    """실제로 지운 줄. 겹쳐서 건너뛴 것은 안 센다."""
+    skipped: int
+    """**앞서 지운 것에 딸려 이미 사라진** 줄. 사고가 아니라 정상이다."""
+    counts: dict[str, int]
+
+    @property
+    def said(self) -> str:
+        parts = [f"{label} {count}건" for label, count in self.counts.items() if count]
+        return ", ".join(parts) if parts else "없음"
+
+
+def purge_many(
+    db: Session, targets: Sequence[tuple[str, uuid.UUID]], *, actor: User
+) -> PurgedMany:
+    """고른 줄을 한꺼번에 영영 지운다. **되돌릴 수 없다.**
+
+    ## 겹쳐 고른 것을 서버가 푼다
+
+    재료와 그 아래 시료를 함께 골랐다면, 재료를 지우는 순간 시료도 사라진다.
+    화면이 하나씩 부르면 두 번째 요청이 「없는 행」 으로 터지고, **앞엣것은 이미
+    지워졌으므로 되돌릴 수도 없다.** 그래서 여기서 계층 위부터 지우고, 앞선
+    나무에 딸려 사라진 것은 건너뛴다 — 건너뛴 수는 세어서 화면에 말한다.
+
+    ## 한 트랜잭션이다
+
+    중간에 하나가 터지면 전부 되돌아간다(커밋은 부르는 쪽이 한다). 열 개를
+    골랐는데 셋만 지워진 채 오류를 보는 것보다, 아무것도 안 지워진 편이 낫다 —
+    **무엇이 남았는지 다시 세어야 하는 상태**를 만들지 않는다.
+    """
+    # **계층 위부터.** 부모를 먼저 지우면 함께 고른 아래는 자연히 사라진다.
+    # 아래부터 지우면 부모를 지울 때 이미 없는 행을 또 지우려 든다.
+    order = {kind: n for n, kind in enumerate(KINDS)}
+    ordered = sorted(dict.fromkeys(targets), key=lambda one: order.get(one[0], len(order)))
+
+    gone: set[tuple[str, uuid.UUID]] = set()
+    counts: dict[str, int] = {}
+    purged = 0
+    for kind, item_id in ordered:
+        if (kind, item_id) in gone:
+            continue
+        done, tree = _purge_row(db, kind, _get(db, kind, item_id), actor=actor)
+        for one in KINDS:
+            gone.update((one, target.id) for target in tree[one])
+        for label, count in done.counts.items():
+            counts[label] = counts.get(label, 0) + count
+        purged += 1
+
+    requested = len(dict.fromkeys(targets))
+    return PurgedMany(
+        requested=requested,
+        purged=purged,
+        skipped=requested - purged,
+        counts=counts,
+    )
 
 
 def _purge_run(db: Session, run: Any) -> None:

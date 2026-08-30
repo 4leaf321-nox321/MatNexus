@@ -16,6 +16,7 @@ type DeleteResult = components['schemas']['DeleteAccountResponse']
 type TemporaryPassword = components['schemas']['TemporaryPasswordResponse']
 type SignupRequest = components['schemas']['SignupRequest']
 type CreateAccountRequest = components['schemas']['CreateAccountRequest']
+type SystemAdminRequest = components['schemas']['SystemAdminRequest']
 
 export const accountsApi = {
   signup: (payload: SignupRequest) => api.post<Account>('/accounts/signup', payload),
@@ -43,6 +44,15 @@ export const accountsApi = {
    *  일이라, 여기서 겸하면 "대표 소속을 정했더니 없던 권한이 생겼다" 가 된다. */
   setHomeWorkspace: (id: string, workspaceSlug: string) =>
     api.post<Account>(`/accounts/${id}/home-workspace`, { workspace_slug: workspaceSlug }),
+
+  /** 시스템 관리자 권한 — **주는 것과 빼는 것이 한 자리다.**
+   *
+   *  화면이 지금 값의 반대를 보낸다. 자기 계정과, 활성이 아닌 계정에 주는 것은
+   *  서버가 막는다(마지막 관리자가 스스로 권한을 빼면 되돌릴 길이 없다). */
+  setSystemAdmin: (id: string, grant: boolean) =>
+    api.post<Account>(`/accounts/${id}/system-admin`, {
+      is_system_admin: grant,
+    } satisfies SystemAdminRequest),
 
   resetPassword: (id: string) => api.post<TemporaryPassword>(`/accounts/${id}/reset-password`),
 

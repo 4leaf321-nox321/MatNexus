@@ -13,7 +13,9 @@ import {
   KeyRound,
   Loader2,
   ShieldCheck,
+  ShieldMinus,
   ShieldOff,
+  ShieldPlus,
   Trash2,
   UserCheck,
   UserPlus,
@@ -25,6 +27,7 @@ import { HomeWorkspaceDialog } from '@/modules/accounts/HomeWorkspaceDialog'
 import { accountsApi } from '@/modules/accounts/api'
 import type { Account, AccountStatus } from '@/modules/accounts/api'
 import { workspacesApi } from '@/modules/workspaces/api'
+import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { SecretOnceDialog } from '@/shared/components/SecretOnceDialog'
@@ -78,11 +81,30 @@ export default function AccountsAdminPage() {
   const [homing, setHoming] = useState<Account | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  const { user: me } = useAuth()
+
   const accounts = useResource(
     () => accountsApi.list(tab === 'pending' ? ('pending' as AccountStatus) : undefined),
     [tab],
   )
   const workspaces = useResource(() => workspacesApi.options(), [])
+
+  /** 시스템 관리자 권한 — **주는 것은 되돌리기 어려운 일이라 한 번 묻는다.**
+   *
+   *  자기 것은 서버가 막는다(마지막 관리자가 스스로 빼면 되돌릴 길이 없다).
+   *  화면에서도 자기 줄에는 단추를 안 보인다 — 눌러 보고 409 를 알게 하지 않는다. */
+  async function toggleAdmin(account: Account) {
+    const grant = !account.is_system_admin
+    const asked = window.confirm(
+      grant
+        ? `'${account.display_name}' 에게 시스템 관리자 권한을 줍니다.
+` +
+            '계정·부서·기준정보 전체를 만들고 지울 수 있게 됩니다.'
+        : `'${account.display_name}' 의 시스템 관리자 권한을 뺍니다.`
+    )
+    if (!asked) return
+    await run(account.id, () => accountsApi.setSystemAdmin(account.id, grant))
+  }
 
   async function run(id: string, action: () => Promise<unknown>) {
     setBusyId(id)
@@ -256,6 +278,23 @@ export default function AccountsAdminPage() {
                         활성화
                       </Button>
                     )}
+
+                    {account.id !== me?.id &&
+                      (account.is_system_admin || account.status === 'active') && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === account.id}
+                          onClick={() => void toggleAdmin(account)}
+                        >
+                          {account.is_system_admin ? (
+                            <ShieldMinus className="size-4" />
+                          ) : (
+                            <ShieldPlus className="size-4" />
+                          )}
+                          {account.is_system_admin ? '관리자 해제' : '관리자 지정'}
+                        </Button>
+                      )}
 
                     {account.status !== 'pending' && (
                       <Button

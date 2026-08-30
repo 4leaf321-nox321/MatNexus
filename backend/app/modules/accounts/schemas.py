@@ -71,6 +71,18 @@ class HomeWorkspaceRequest(BaseModel):
     workspace_slug: str = Field(min_length=1, max_length=50)
 
 
+class SystemAdminRequest(BaseModel):
+    """시스템 관리자 권한을 주거나 뺀다.
+
+    **한 엔드포인트에 참·거짓을 실어 보낸다.** 정지/활성처럼 둘로 가르지 않는
+    이유는, 이 값이 상태가 아니라 **권한 한 칸**이기 때문이다 — 화면이 지금 값을
+    보고 반대를 보내면 되고, 「지정」과 「해제」가 따로 있으면 지금 값을 모르는
+    쪽이 둘 중 하나를 골라야 한다.
+    """
+
+    is_system_admin: bool
+
+
 class ReferenceOut(BaseModel):
     """이 계정을 가리키는 참조 하나. 삭제 전에 보여 준다."""
 

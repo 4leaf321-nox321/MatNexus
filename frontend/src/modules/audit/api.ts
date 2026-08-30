@@ -39,6 +39,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'account.decided': '가입 결정',
   'account.suspended': '계정 정지',
   'account.home_changed': '대표 소속 변경',
+  'account.admin_changed': '시스템 관리자 권한 변경',
   'account.deleted': '계정 삭제',
   'vocabulary.renamed': '기준정보 이름 변경',
   'test_type.changed': '시험 종류 변경',

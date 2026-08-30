@@ -11,13 +11,15 @@ import type { components } from '@/shared/api/schema'
 
 export type TrashItem = components['schemas']['TrashItemOut']
 export type TrashDone = components['schemas']['TrashDoneOut']
+export type TrashPurgedMany = components['schemas']['TrashPurgedManyOut']
+type PurgeManyIn = components['schemas']['TrashPurgeManyIn']
 
 /** 종류 순서. 표의 필터가 이 순서로 선다 — 위에서 아래로 계층이다. */
 /**
  * 거를 수 있는 종류 — **두 묶음이다.**
  *
  * 위는 재료 계층과 시험이라 **아래로 딸린 것이 있다**(재료를 되살리면 그 아래가
- * 함께 돌아온다). 아래는 데이터 수집 체계라 정의 한 줄이 통째로 하나다. 성격이
+ * 함께 돌아온다). 아래는 데이터 체계라 정의 한 줄이 통째로 하나다. 성격이
  * 다르므로 고르는 자리에서도 갈라 세운다.
  *
  * **라벨을 여기 적어 둔다.** 서버가 주는 `kind_label` 이 정본이지만, 그 종류로
@@ -35,12 +37,13 @@ export const TRASH_GROUPS = [
     ],
   },
   {
-    label: '데이터 수집 체계',
+    label: '데이터 체계',
     kinds: [
       { key: 'test_type', label: '시험 정의' },
-      { key: 'format_profile', label: '인풋 파일 정의' },
+      { key: 'format_profile', label: '장비 파일 정의' },
       { key: 'recipe', label: '레시피' },
       { key: 'connector', label: '장비 커넥터' },
+      { key: 'export_profile', label: '해석용 물성 정의' },
     ],
   },
 ] as const
@@ -68,4 +71,18 @@ export const trashApi = {
    */
   purge: (kind: string, id: string) =>
     api.delete<TrashDone>(`/trash/${kind}/${id}?confirm=true`),
+
+  /**
+   * 고른 것을 한꺼번에 영영 지운다.
+   *
+   * **하나씩 부르지 않는다.** 재료와 그 아래 시료를 함께 골랐다면 재료를 지우는
+   * 순간 시료도 사라지는데, 화면이 이어서 시료를 부르면 「없는 행」 으로 터진다 —
+   * 그때 앞엣것은 이미 지워져 있어 되돌릴 수도 없다. 서버가 계층 위부터 지우고
+   * 딸려 사라진 것은 건너뛴 수로 돌려준다.
+   */
+  purgeMany: (items: { kind: string; id: string }[]) =>
+    api.post<TrashPurgedMany>('/trash/purge', {
+      items,
+      confirm: true,
+    } satisfies PurgeManyIn),
 }

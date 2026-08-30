@@ -25,6 +25,7 @@ from app.modules.accounts.schemas import (
     ReferenceOut,
     RejectRequest,
     SignupRequest,
+    SystemAdminRequest,
     TemporaryPasswordResponse,
 )
 from app.shared.auth import require_system_admin
@@ -135,6 +136,20 @@ def set_home_workspace(
     """대표 소속 — 이 사람이 로그인해서 처음 서는 부서."""
     user = services.set_home_workspace(
         db, user_id=account_id, workspace_slug=payload.workspace_slug, actor=admin
+    )
+    return services.account_out(db, user)
+
+
+@router.post("/{account_id}/system-admin", response_model=AccountOut)
+def set_system_admin(
+    account_id: uuid.UUID,
+    payload: SystemAdminRequest,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> AccountOut:
+    """시스템 관리자 권한을 주거나 뺀다 — **시스템 관리자만.**"""
+    user = services.set_system_admin(
+        db, user_id=account_id, grant=payload.is_system_admin, actor=admin
     )
     return services.account_out(db, user)
 

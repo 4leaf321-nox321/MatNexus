@@ -22,6 +22,12 @@
  * 되살릴 수 없을 때 단추를 그냥 끄지 않는다. **왜 안 되는지와 무엇을 먼저 해야
  * 하는지**를 그 자리에 적는다 — 처리 화면이 「돌려 보기가 그냥 비활성」 이었을
  * 때 사람들이 거기서 멈췄다.
+ *
+ * ## 여럿을 지울 때도 서버가 판단한다
+ *
+ * 골라서 한꺼번에 지우는 길은 **요청 하나**로 간다. 화면이 하나씩 부르면, 재료와
+ * 그 아래 시료를 함께 골랐을 때 두 번째 요청이 「없는 행」 으로 터지고 **앞엣것은
+ * 이미 지워져 되돌릴 수도 없다.** 겹친 선택을 푸는 것은 계층을 아는 쪽의 일이다.
  */
 
 import { useState } from 'react'
@@ -58,10 +64,18 @@ export default function TrashPage() {
   const [said, setSaid] = useState<string | null>(null)
   const [failed, setFailed] = useState<Error | null>(null)
   const [purging, setPurging] = useState<TrashItem | null>(null)
+  // `종류-id` 를 열쇠로 든다 — 종류가 다르면 id 가 같을 수 있다.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [purgingMany, setPurgingMany] = useState(false)
 
   const items = useResource(() => trashApi.list(kind ? { kind } : {}), [kind])
   const rows = items.data ?? []
   const labels = new Map(rows.map((row) => [row.kind, row.kind_label]))
+
+  const keyOf = (row: TrashItem) => `${row.kind}-${row.id}`
+  // **화면에 있는 것만 센다.** 걸러서 안 보이는 줄이 선택에 남아 있으면, 사람이
+  // 본 수와 지워지는 수가 어긋난다.
+  const chosen = rows.filter((row) => picked.has(keyOf(row)))
 
   async function run(job: () => Promise<{ said: string }>, what: string) {
     setBusy(what)
@@ -69,6 +83,29 @@ export default function TrashPage() {
     try {
       const done = await job()
       setSaid(done.said)
+      items.reload()
+    } catch (error) {
+      setFailed(error as Error)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** 고른 것을 한 번에 지운다 — **요청 하나로.** 건너뛴 수는 서버가 세어 준다. */
+  async function purgeChosen() {
+    const targets = chosen.map((row) => ({ kind: row.kind, id: row.id }))
+    setBusy('purge-many')
+    setFailed(null)
+    try {
+      const done = await trashApi.purgeMany(targets)
+      // **건너뛴 것을 말한다.** 다섯을 골랐는데 「셋 지움」 만 뜨면 나머지가 어떻게
+      // 됐는지 사람이 모른다 — 겹쳐 고른 것은 사고가 아니라 정상이다.
+      setSaid(
+        done.skipped > 0
+          ? `${done.purged}건을 지웠습니다 (${done.skipped}건은 함께 사라져 건너뜀) — ${done.said}`
+          : `${done.purged}건을 지웠습니다 — ${done.said}`
+      )
+      setPicked(new Set())
       items.reload()
     } catch (error) {
       setFailed(error as Error)
@@ -107,7 +144,10 @@ export default function TrashPage() {
             variant={kind === '' ? 'default' : 'outline'}
             className="h-7 text-xs"
             aria-pressed={kind === ''}
-            onClick={() => setKind('')}
+            onClick={() => {
+              setKind('')
+              setPicked(new Set())
+            }}
           >
             전부
           </Button>
@@ -123,7 +163,10 @@ export default function TrashPage() {
                   aria-pressed={kind === one.key}
                   // **누른 것을 다시 누르면 전부로 돌아온다.** 토글은 끄는 길이
                   // 있어야 토글이다 — 없으면 「전부」 를 찾아 눈이 되돌아간다.
-                  onClick={() => setKind((now) => (now === one.key ? '' : one.key))}
+                  onClick={() => {
+                    setKind((now) => (now === one.key ? '' : one.key))
+                    setPicked(new Set())
+                  }}
                 >
                   {labels.get(one.key) ?? one.label}
                 </Button>
@@ -139,11 +182,54 @@ export default function TrashPage() {
         </div>
       )}
 
+      {/* **고른 것이 있을 때만 뜬다.** 늘 떠 있으면 「0개 선택」 이라는 빈 줄이
+          표 위를 차지하고, 실제로 고른 순간의 변화가 안 보인다. */}
+      {chosen.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          <span>
+            <b>{chosen.length}건</b> 선택
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-destructive h-7 text-xs"
+            disabled={busy !== null}
+            onClick={() => setPurgingMany(true)}
+          >
+            선택한 것 영구 삭제
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            disabled={busy !== null}
+            onClick={() => setPicked(new Set())}
+          >
+            선택 해제
+          </Button>
+        </div>
+      )}
+
       {rows.length > 0 && (
         <div className="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="이 쪽 전부 선택"
+                    checked={rows.length > 0 && chosen.length === rows.length}
+                    ref={(node) => {
+                      if (node) {
+                        node.indeterminate = chosen.length > 0 && chosen.length < rows.length
+                      }
+                    }}
+                    onChange={(event) =>
+                      setPicked(event.target.checked ? new Set(rows.map(keyOf)) : new Set())
+                    }
+                  />
+                </TableHead>
                 <TableHead className="whitespace-nowrap">언제 지웠나</TableHead>
                 <TableHead>종류</TableHead>
                 <TableHead>이름</TableHead>
@@ -153,7 +239,22 @@ export default function TrashPage() {
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={`${row.kind}-${row.id}`}>
+                <TableRow key={keyOf(row)}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      aria-label={`${row.name || '이름 없음'} 선택`}
+                      checked={picked.has(keyOf(row))}
+                      onChange={(event) =>
+                        setPicked((current) => {
+                          const next = new Set(current)
+                          if (event.target.checked) next.add(keyOf(row))
+                          else next.delete(keyOf(row))
+                          return next
+                        })
+                      }
+                    />
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-xs whitespace-nowrap tabular-nums">
                     {stamp(row.deleted_at)}
                   </TableCell>
@@ -226,6 +327,47 @@ export default function TrashPage() {
           if (!target) return
           setPurging(null)
           void run(() => trashApi.purge(target.kind, target.id), `purge-${target.id}`)
+        }}
+      />
+
+      {/* **고른 것을 이름으로 보여 준다.** 「5건을 지웁니다」 만으로는 어느 다섯인지
+          모른다 — 옆줄을 잘못 눌렀을 수 있다. 많으면 앞의 몇을 보이고 나머지는 수로
+          말한다. */}
+      <ConfirmDialog
+        open={purgingMany}
+        title={`영구 삭제 ${chosen.length}건 — 되돌릴 수 없습니다`}
+        confirmLabel={`${chosen.length}건 영구 삭제`}
+        busy={busy !== null}
+        body={
+          <>
+            <ul className="mb-2 list-disc space-y-0.5 pl-4">
+              {chosen.slice(0, 8).map((row) => (
+                <li key={keyOf(row)}>
+                  <span className="text-muted-foreground">{row.kind_label}</span>{' '}
+                  {row.name || '(이름 없음)'}
+                  {below(row.below) && (
+                    <span className="text-muted-foreground"> — 아래 {below(row.below)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {chosen.length > 8 && (
+              <p className="text-muted-foreground mb-2">그 밖에 {chosen.length - 8}건</p>
+            )}
+            <p>
+              행과 곡선 파일까지 <b>영영</b> 지웁니다. 휴지통에서도 사라지고 되살릴 수
+              없습니다.
+            </p>
+            <p className="text-muted-foreground mt-1">
+              위아래로 겹쳐 고른 것은 한 번에 사라집니다 — 재료를 지우면 그 아래 시료도
+              함께 갑니다.
+            </p>
+          </>
+        }
+        onClose={() => setPurgingMany(false)}
+        onConfirm={() => {
+          setPurgingMany(false)
+          void purgeChosen()
         }}
       />
     </div>

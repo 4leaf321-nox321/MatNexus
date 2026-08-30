@@ -18,8 +18,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.trash import services
-from app.modules.trash.schemas import TrashDoneOut, TrashItemOut
+from app.modules.trash.schemas import (
+    TrashDoneOut,
+    TrashItemOut,
+    TrashPurgedManyOut,
+    TrashPurgeManyIn,
+)
 from app.shared.auth import require_system_admin
+from app.shared.errors import AppError
 from app.shared.pagination import clamp_limit
 
 router = APIRouter(prefix="/trash", tags=["trash"])
@@ -80,8 +86,6 @@ def purge(
     데이터는 돌아오지 않는다.
     """
     if not confirm:
-        from app.shared.errors import AppError
-
         raise AppError(
             "MNX-TRASH-0005",
             "영구 삭제는 되돌릴 수 없습니다. confirm=true 를 함께 보내세요.",
@@ -90,3 +94,33 @@ def purge(
     done = services.purge(db, kind, item_id, actor=user)
     db.commit()
     return TrashDoneOut(name=done.name, counts=done.counts, said=done.said)
+
+
+@router.post("/purge", response_model=TrashPurgedManyOut)
+def purge_many(
+    payload: TrashPurgeManyIn,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> TrashPurgedManyOut:
+    """고른 줄을 한꺼번에 영영 지운다. **되돌릴 수 없다.**
+
+    화면이 하나씩 부르지 않는 이유는 **겹쳐 고르는 것** 때문이다 — 재료와 그
+    아래 시료를 함께 고르면 두 번째 요청이 「없는 행」 으로 터지는데, 그때
+    앞엣것은 이미 지워져 있다. 서버가 계층 위부터 지우고 딸려 사라진 것은
+    건너뛴다.
+    """
+    if not payload.confirm:
+        raise AppError(
+            "MNX-TRASH-0005",
+            "영구 삭제는 되돌릴 수 없습니다. confirm=true 를 함께 보내세요.",
+            status=422,
+        )
+    done = services.purge_many(db, [(one.kind, one.id) for one in payload.items], actor=user)
+    db.commit()
+    return TrashPurgedManyOut(
+        requested=done.requested,
+        purged=done.purged,
+        skipped=done.skipped,
+        counts=done.counts,
+        said=done.said,
+    )

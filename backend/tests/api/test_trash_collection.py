@@ -187,7 +187,7 @@ class Test인풋_파일_정의:
         client.post("/api/formats", json=PROFILE, headers=admin_headers)
         client.delete("/api/formats/acme_csv", headers=admin_headers)
         item = client.get("/api/trash?kind=format_profile", headers=admin_headers).json()[0]
-        assert item["kind_label"] == "인풋 파일 정의"
+        assert item["kind_label"] == "장비 파일 정의"
         back = client.post(
             f"/api/trash/format_profile/{item['id']}/restore", headers=admin_headers
         )

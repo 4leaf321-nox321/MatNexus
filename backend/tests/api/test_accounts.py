@@ -326,3 +326,150 @@ def test_대표_소속은_시스템_관리자만_정한다(
         headers=headers,
     )
     assert denied.status_code == 403
+
+
+# --- 시스템 관리자 권한 ---------------------------------------------------------
+
+
+def _approved_member(client: TestClient, admin_headers: dict[str, str]) -> str:
+    account_id = signup(client).json()["id"]
+    client.post(
+        f"/api/accounts/{account_id}/approve", json={"role": "member"}, headers=admin_headers
+    )
+    return str(account_id)
+
+
+def test_시스템_관리자_권한을_주고_뺀다(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    account_id = _approved_member(client, admin_headers)
+
+    granted = client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": True},
+        headers=admin_headers,
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["is_system_admin"] is True
+
+    revoked = client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": False},
+        headers=admin_headers,
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["is_system_admin"] is False
+
+
+def test_받은_사람이_실제로_관리자_일을_할_수_있다(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    """플래그만 켜지고 권한이 안 따라오면 화면에는 관리자인데 아무것도 못 한다."""
+    account_id = _approved_member(client, admin_headers)
+    login = client.post(
+        "/api/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/api/accounts", headers=headers).status_code == 403
+
+    client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": True},
+        headers=admin_headers,
+    )
+    assert client.get("/api/accounts", headers=headers).status_code == 200
+
+
+def test_시스템_관리자만_권한을_준다(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    account_id = _approved_member(client, admin_headers)
+    login = client.post(
+        "/api/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    denied = client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": True},
+        headers=headers,
+    )
+    assert denied.status_code == 403
+
+
+def test_자기_권한은_못_바꾼다(client: TestClient, admin, admin_headers) -> None:  # type: ignore[no-untyped-def]
+    """마지막 관리자가 자기 권한을 빼면 **아무도 되돌릴 수 없다** — DB 를 직접
+    고치는 수밖에 없다. 자기 것을 막아 두면 관리자가 0명이 되는 길이 없다."""
+    denied = client.post(
+        f"/api/accounts/{admin.id}/system-admin",
+        json={"is_system_admin": False},
+        headers=admin_headers,
+    )
+    assert denied.status_code == 409
+    assert denied.json()["error"]["code"] == "MNX-ACCOUNTS-0015"
+
+
+def test_활성이_아닌_계정에는_못_준다(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    """화면에는 관리자인데 로그인은 안 되는 계정이 생긴다."""
+    pending_id = signup(client).json()["id"]
+    denied = client.post(
+        f"/api/accounts/{pending_id}/system-admin",
+        json={"is_system_admin": True},
+        headers=admin_headers,
+    )
+    assert denied.status_code == 409
+    assert denied.json()["error"]["code"] == "MNX-ACCOUNTS-0016"
+
+
+def test_정지된_관리자의_권한은_뺄_수_있다(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    """주는 것만 상태를 본다 — 정지된 관리자의 권한을 못 뺀다면 그것이 더 이상하다."""
+    account_id = _approved_member(client, admin_headers)
+    client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": True},
+        headers=admin_headers,
+    )
+    client.post(f"/api/accounts/{account_id}/suspend", headers=admin_headers)
+
+    revoked = client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": False},
+        headers=admin_headers,
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["is_system_admin"] is False
+
+
+def test_권한_변경이_감사_기록에_남는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    from app.modules.audit.models import AuditEntry
+
+    account_id = _approved_member(client, admin_headers)
+    client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": True},
+        headers=admin_headers,
+    )
+
+    rows = list(
+        db.scalars(select(AuditEntry).where(AuditEntry.action == "account.admin_changed"))
+    )
+    assert len(rows) == 1
+    assert rows[0].changes == {"is_system_admin": {"before": False, "after": True}}
+
+    # 같은 값을 다시 보내면 아무것도 안 바뀌었으므로 기록도 안 늘어난다.
+    client.post(
+        f"/api/accounts/{account_id}/system-admin",
+        json={"is_system_admin": True},
+        headers=admin_headers,
+    )
+    db.expire_all()
+    again = list(
+        db.scalars(select(AuditEntry).where(AuditEntry.action == "account.admin_changed"))
+    )
+    assert len(again) == 1

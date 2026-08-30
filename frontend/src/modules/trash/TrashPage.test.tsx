@@ -15,6 +15,7 @@ import TrashPage from '@/modules/trash/TrashPage'
 const list = vi.fn()
 const restore = vi.fn()
 const purge = vi.fn()
+const purgeMany = vi.fn()
 
 vi.mock('@/modules/trash/api', async () => {
   const actual = await vi.importActual<typeof import('@/modules/trash/api')>(
@@ -26,6 +27,7 @@ vi.mock('@/modules/trash/api', async () => {
       list: (...args: unknown[]) => list(...args),
       restore: (...args: unknown[]) => restore(...args),
       purge: (...args: unknown[]) => purge(...args),
+      purgeMany: (...args: unknown[]) => purgeMany(...args),
     },
   }
 })
@@ -56,9 +58,11 @@ beforeEach(() => {
   list.mockReset()
   restore.mockReset()
   purge.mockReset()
+  purgeMany.mockReset()
   list.mockResolvedValue([FREE, BLOCKED])
   restore.mockResolvedValue({ name: 'x', counts: {}, said: '시편 1건' })
   purge.mockResolvedValue({ name: 'x', counts: {}, said: '시편 1건' })
+  purgeMany.mockResolvedValue({ requested: 2, purged: 2, skipped: 0, counts: {}, said: '시편 2건' })
 })
 
 describe('되살리기', () => {
@@ -127,7 +131,7 @@ describe('영구 삭제', () => {
 
 describe('수집 체계', () => {
   /**
-   * 시험 정의·인풋 파일 정의·레시피도 소프트 삭제가 됐다. **되살리는 자리가
+   * 시험 정의·장비 파일 정의·레시피도 소프트 삭제가 됐다. **되살리는 자리가
    * 없으면 소프트 삭제는 그냥 「안 보이는 삭제」 다** — 지운 사람은 되돌릴 길이
    * 없고, 그 행이 남아 있다는 것조차 모른다.
    */
@@ -136,7 +140,7 @@ describe('수집 체계', () => {
     // 고르고 나면 나머지가 무엇이었는지 사라진다.
     render(<TrashPage />)
     const picker = await screen.findByRole('group', { name: '종류로 거르기' })
-    for (const name of ['전부', '재료', '시험 정의', '인풋 파일 정의', '장비 커넥터']) {
+    for (const name of ['전부', '재료', '시험 정의', '장비 파일 정의', '장비 커넥터']) {
       expect(within(picker).getByRole('button', { name }), name).toBeInTheDocument()
     }
   })
@@ -158,3 +162,111 @@ describe('수집 체계', () => {
   })
 })
 
+
+describe('골라서 한꺼번에 지우기', () => {
+  /**
+   * **되돌릴 수 없는 자리다.** 무는 데를 고를 때 「여러 개가 지워진다」 보다
+   * **「고르지 않은 것이 안 나간다」·「묻기 전에는 안 나간다」** 를 우선한다.
+   */
+
+  it('고르기 전에는 일괄 단추가 없다', async () => {
+    render(<TrashPage />)
+    await screen.findByText('SECC__01_MD_01')
+
+    expect(screen.queryByRole('button', { name: '선택한 것 영구 삭제' })).toBeNull()
+  })
+
+  it('고른 것만 보낸다', async () => {
+    /** **제일 위험한 자리다.** 하나를 더 보내면 그것은 돌아오지 않는다. */
+    render(<TrashPage />)
+    await screen.findByText('SECC__01_MD_01')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
+    await userEvent.click(screen.getByRole('button', { name: '선택한 것 영구 삭제' }))
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: '1건 영구 삭제' }))
+
+    await waitFor(() =>
+      expect(purgeMany).toHaveBeenCalledWith([{ kind: 'specimen', id: 's1' }])
+    )
+  })
+
+  it('묻기 전에는 안 부른다', async () => {
+    render(<TrashPage />)
+    await screen.findByText('SECC__01_MD_01')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
+    await userEvent.click(screen.getByRole('button', { name: '선택한 것 영구 삭제' }))
+    expect(purgeMany).not.toHaveBeenCalled()
+  })
+
+  it('머리 칸으로 이 쪽 전부를 고른다', async () => {
+    render(<TrashPage />)
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: '이 쪽 전부 선택' }))
+    expect(screen.getByText('2건')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '선택한 것 영구 삭제' }))
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: '2건 영구 삭제' }))
+
+    await waitFor(() =>
+      expect(purgeMany).toHaveBeenCalledWith([
+        { kind: 'specimen', id: 's1' },
+        { kind: 'material', id: 'm1' },
+      ])
+    )
+  })
+
+  it('무엇이 사라지는지 이름으로 적는다', async () => {
+    // 「2건을 지웁니다」 만으로는 어느 둘인지 모른다 — 옆줄을 눌렀을 수 있다.
+    render(<TrashPage />)
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: '이 쪽 전부 선택' }))
+    await userEvent.click(screen.getByRole('button', { name: '선택한 것 영구 삭제' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('SECC__01_MD_01')
+    expect(dialog).toHaveTextContent('SECC_MDOI_1.0')
+    expect(dialog).toHaveTextContent('시료 2건 · 시편 6건')
+  })
+
+  it('건너뛴 것을 말한다', async () => {
+    /**
+     * 겹쳐 고르면 앞선 나무에 딸려 사라진다. **다섯을 골랐는데 「셋 지움」 만
+     * 뜨면 나머지가 어떻게 됐는지 사람이 모른다** — 사고가 아니라 정상이다.
+     */
+    purgeMany.mockResolvedValue({
+      requested: 2,
+      purged: 1,
+      skipped: 1,
+      counts: { 시료: 2 },
+      said: '시료 2건',
+    })
+    render(<TrashPage />)
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: '이 쪽 전부 선택' }))
+    await userEvent.click(screen.getByRole('button', { name: '선택한 것 영구 삭제' }))
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: '2건 영구 삭제' }))
+
+    expect(await screen.findByText(/1건은 함께 사라져 건너뜀/)).toBeInTheDocument()
+  })
+
+  it('종류를 바꾸면 선택이 풀린다', async () => {
+    // 걸러서 안 보이는 줄이 선택에 남아 있으면, 본 수와 지워지는 수가 어긋난다.
+    render(<TrashPage />)
+    await screen.findByText('SECC__01_MD_01')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
+    expect(screen.getByText('1건')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '재료' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '선택한 것 영구 삭제' })).toBeNull()
+    )
+  })
+})

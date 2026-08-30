@@ -325,6 +325,58 @@ def set_status(db: Session, *, user_id: uuid.UUID, status: str, actor: User) -> 
     return user
 
 
+def set_system_admin(db: Session, *, user_id: uuid.UUID, grant: bool, actor: User) -> User:
+    """시스템 관리자 권한을 주거나 뺀다. **시스템 관리자만 부른다**(라우트가 막는다).
+
+    ## 자기 것은 못 바꾼다
+
+    빼는 쪽이 위험하다 — 마지막 관리자가 자기 권한을 빼면 **아무도 되돌릴 수 없는
+    상태**가 된다. 계정을 새로 만들 수도, 남에게 권한을 줄 수도 없으니 DB 를 직접
+    고치는 수밖에 없다. 주는 쪽은 무의미하므로(이미 갖고 있다) 둘 다 막는다.
+
+    자기 것을 막아 두면 **관리자가 0명이 되는 길이 없다**. 부르는 사람이 이미
+    관리자이고 대상이 자기가 아니므로, 무엇을 빼든 부른 사람은 남는다.
+
+    ## 활성 계정에만 준다
+
+    정지·대기·거절 상태에 권한을 주면 화면에는 관리자로 보이는데 로그인은 안 되는
+    계정이 생긴다. 「관리자인데 왜 못 들어오지」 를 설명할 길이 없다. **빼는 것은
+    상태를 안 본다** — 정지된 관리자의 권한을 못 뺀다면 그것이 더 이상하다.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFound("MNX-ACCOUNTS-0003", "계정을 찾을 수 없습니다.")
+    if user.id == actor.id:
+        raise Conflict(
+            "MNX-ACCOUNTS-0015",
+            "자기 계정의 시스템 관리자 권한은 바꿀 수 없습니다. 다른 관리자에게 요청하세요.",
+        )
+    if grant and user.status != "active":
+        raise Conflict(
+            "MNX-ACCOUNTS-0016",
+            "활성 계정에만 시스템 관리자 권한을 줄 수 있습니다.",
+        )
+
+    before = user.is_system_admin
+    if before == grant:
+        # **아무것도 안 바뀌었으면 기록도 안 남긴다.** 두 번 누른 것이 감사 로그에
+        # 「변경」 으로 두 줄 남으면, 나중에 누가 무엇을 했는지 읽을 때 방해가 된다.
+        return user
+    user.is_system_admin = grant
+
+    audit.record(
+        db,
+        action=audit.ACCOUNT_ADMIN_CHANGED,
+        actor=actor,
+        target_table="users",
+        target_id=user.id,
+        target_label=user.display_name or user.email,
+        changes={"is_system_admin": {"before": before, "after": grant}},
+    )
+    db.commit()
+    return user
+
+
 def set_home_workspace(
     db: Session, *, user_id: uuid.UUID, workspace_slug: str, actor: User
 ) -> User:
