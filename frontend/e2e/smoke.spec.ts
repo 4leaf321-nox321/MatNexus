@@ -204,7 +204,7 @@ test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) =
   // 쓰던 사람이 못 찾고 "만드는 게 없어졌다" 고 했다. 화면은 멀쩡했고 메뉴가
   // 옮겨갔을 뿐이었다.
   //
-  // **그 뒤로 이름이 두 번 더 바뀌었다** — '파일 형식' → '인풋 파일 정의'
+  // **그 뒤로 이름이 두 번 더 바뀌었다** — '파일 형식' → '장비 파일 정의'
   // (2026-08-29). 그때마다 이 줄만 남아 CI 에서 14분 걸려 알았다. 그래서
   // `navigation.test.ts` 가 **여기 적힌 이름이 사이드바에 실제로 있는지**를
   // 먼저 본다 — 55초짜리 vitest 가 잡으면 여기까지 안 온다.
@@ -222,7 +222,7 @@ test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) =
   // 보려는 것은 **사이드바로 갈 수 있는가** 이므로 범위를 좁히는 것이 뜻에도 맞다.
   await page
     .locator('[data-app-chrome="sidebar"]')
-    .getByRole('link', { name: '인풋 파일 정의' })
+    .getByRole('link', { name: '장비 파일 정의' })
     .click()
   await expect(page).toHaveURL(/\/settings\/formats$/)
   await expect(page.getByRole('link', { name: '프로파일 만들기' })).toBeVisible()
