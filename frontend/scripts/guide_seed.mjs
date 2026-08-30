@@ -45,6 +45,8 @@ const CATALOG = {
   'aging-guide-KR': { key: 'aging', kind: 'method', topic: 'aging' },
   'wear-guide-KR': { key: 'wear', kind: 'method', topic: 'wear' },
   'longlife-test-property-map-KR': { key: 'longlife-property-map', kind: 'method', topic: 'longlife' },
+  'property-instrument-map-KR': { key: 'property-instrument-map', kind: 'coverage', topic: 'coverage' },
+  'app-property-coverage-KR': { key: 'app-property-coverage', kind: 'coverage', topic: 'coverage' },
 }
 
 /**

@@ -23,6 +23,7 @@ export const KINDS = [
   { key: 'specimen', label: '시편 규격', hint: '어떻게 자르나' },
   { key: 'method', label: '시험 방법', hint: '어떻게 재나' },
   { key: 'calculation', label: '물성 계산', hint: '잰 것이 어떻게 물성이 되나' },
+  { key: 'coverage', label: '측정 범위', hint: '무엇을 잴 수 있고 무엇이 가정인가' },
   { key: 'instrument', label: '장비 사용', hint: '장비를 어떻게 다루나' },
   { key: 'glossary', label: '용어', hint: '말이 무엇을 뜻하나' },
 ] as const

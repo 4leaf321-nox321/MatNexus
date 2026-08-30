@@ -50,9 +50,10 @@ from app.database import Base
 #:   specimen     시편 규격 — 어떻게 자르나
 #:   method       시험 방법 — 어떻게 재나
 #:   calculation  물성 계산 — 잰 것이 어떻게 물성이 되나
+#:   coverage     측정 범위 — 무엇을 잴 수 있고 무엇이 가정인가
 #:   instrument   장비 사용
 #:   glossary     용어
-KINDS = ("specimen", "method", "calculation", "instrument", "glossary")
+KINDS = ("specimen", "method", "calculation", "coverage", "instrument", "glossary")
 
 REVISION_STATUSES = ("pending", "approved", "rejected", "superseded")
 
