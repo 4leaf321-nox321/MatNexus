@@ -265,6 +265,12 @@ class TestRunOut(BaseModel):
     id: uuid.UUID
     result_count: int = 0
     master_curve_count: int = 0
+    temperature_step_count: int | None = None
+    """**겹칠 수 있는 온도 단 수.** 1이면 겹칠 것이 없고(변형률 스윕), `None` 은
+    「안 세어 봤다」 — 이 칸이 생기기 전에 읽은 시험이다.
+
+    재료 화면이 「마스터커브가 없는 DMA n건」 을 셀 때 이것을 본다. 안 보면
+    변형률 스윕까지 세어 **할 수 없는 일을 남은 일로 재촉한다.**"""
     """겹쳐 만든 마스터커브가 몇 개인가.
 
     **글로벌 피팅은 이것이 있는 시험만 쓸 수 있다.** 없는 것을 후보 목록에 두면

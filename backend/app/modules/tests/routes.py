@@ -711,6 +711,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         warnings=[w for w in warnings.split(" / ") if w],
         result_count=int(ctx["results"].get(run.id, 0)),
         master_curve_count=int(ctx["master_curves"].get(run.id, 0)),
+        temperature_step_count=run.temperature_step_count,
         adopted_result_id=run.adopted_result_id,
         created_at=run.created_at,
     )

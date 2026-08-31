@@ -39,6 +39,7 @@ import { useState } from 'react'
 import { Layers } from 'lucide-react'
 
 import { groupsApi } from '@/modules/materials/api.groups'
+import { masterCurveGap } from '@/modules/materials/masterCurveGap'
 import type { GroupResult, GroupingSpec } from '@/modules/materials/api.groups'
 import { testsApi } from '@/modules/tests/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -177,8 +178,13 @@ export function GroupsPanel({
       !chosen || chosen.applies_to.length === 0 || chosen.applies_to.includes(run.test_type_key)
   )
   const candidates = kindMatched.filter((run) => (run.master_curve_count ?? 0) > 0)
-  /** 종류는 맞는데 마스터커브가 없어 빠진 수. **왜 안 뜨는지 말하려고 센다.** */
-  const withoutCurve = kindMatched.length - candidates.length
+  /**
+   * 종류는 맞는데 마스터커브가 없어 빠진 것. **왜 안 뜨는지 말하려고 센다.**
+   *
+   * 「겹칠 수 있는데 안 한 것」 과 「겹칠 수 없는 것」 을 가른다 — 변형률 스윕까지
+   * 「만들면 쓸 수 있다」 고 적으면 할 수 없는 일을 시키는 셈이다.
+   */
+  const gap = masterCurveGap(kindMatched, [])
 
   /** 지금 고른 적합 방법. **쓰이지 않는 칸을 숨기는 데 쓴다.** */
   const method =
@@ -489,8 +495,11 @@ export function GroupsPanel({
                   가리킨다 — 마스터커브를 만들면 그것도 쓸 수 있다. */}
               <p className="text-muted-foreground text-xs">
                 마스터커브가 있는 시험만 보입니다.
-                {withoutCurve > 0 &&
-                  ` ${withoutCurve}건은 마스터커브가 없어 빠졌습니다 — 겹쳐서 만들면 쓸 수 있습니다.`}
+                {gap.pending > 0 &&
+                  ` ${gap.pending}건은 아직 안 겹쳐서 빠졌습니다 — 그 시험의 점탄성 탭에서 겹치면 쓸 수 있습니다.`}
+                {gap.cannot > 0 &&
+                  ` ${gap.cannot}건은 온도가 한 단이라 겹칠 수 없습니다(변형률 스윕).`}
+                {gap.unknown > 0 && ` ${gap.unknown}건은 온도 단 수를 아직 안 세었습니다.`}
               </p>
             </div>
           </div>

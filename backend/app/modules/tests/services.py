@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import statistics
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -35,9 +36,16 @@ from app.modules.tests.models import (
 )
 from app.modules.tests.schemas import RECORD_FIELDS
 from app.modules.vocabulary import services as vocabulary_services
-from app.shared import audit, curvedata, filestore, permissions, specimen_size
+from app.shared import (
+    audit,
+    curvedata,
+    filestore,
+    parse_hooks,
+    permissions,
+    specimen_size,
+)
 from app.shared.errors import AppError, NotFound
-from matcore import curves, parsers, readers, registry, units
+from matcore import curves, parsers, readers, registry, units, viscoelastic
 from matcore.parsers import ParsedTest, ParseError
 from matcore.readers import profile as profiles
 
@@ -686,6 +694,7 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
 
     _store_curves(db, run, parsed, version=how)
     _store_summary(db, run, parsed)
+    run.temperature_step_count = _temperature_steps(parsed)
 
     run.source_metadata = dict(parsed.metadata)
     _apply_dimensions(db, run, parsed)
@@ -694,7 +703,11 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     run.parser_version = how[:80]
     run.status = "parsed"
     run.parse_error = None
-    notes = [*parsed.warnings, *filled]
+    # **다 읽은 뒤에 도메인이 할 일.** 파싱은 무엇을 하는지 모른다 — 점탄성이
+    # 장비가 겹쳐 준 표를 마스터커브로 등록하는 것이 여기 걸린다(`parse_hooks`).
+    # 훅에서 난 오류는 경고가 될 뿐 읽기를 실패시키지 않는다.
+    db.flush()
+    notes = [*parsed.warnings, *filled, *parse_hooks.fire_parsed(db, run)]
     if notes:
         # 경고는 실패가 아니지만 사라지면 안 된다. 상세 화면이 그대로 보여 준다.
         run.source_metadata = {
@@ -1063,6 +1076,37 @@ def _dimension_of(symbol: str) -> str | None:
         return units.unit_of(symbol).dimension
     except units.UnknownUnit:
         return None
+
+
+def _temperature_steps(parsed: ParsedTest) -> int | None:
+    """읽은 곡선이 **온도 몇 단인가.** 온도 채널이 없으면 `None`.
+
+    측정 곡선만 센다 — 장비가 계산해 준 표(마스터커브·이동인자)에도 온도 열이
+    있는데, 그것은 잰 단이 아니라 겹친 결과다. 함께 세면 온도 한 단짜리 파일이
+    여러 단으로 보인다.
+
+    **곡선 하나가 한 단이다.** TA DMA850 은 `[step]` 마다 별개 측정이라 온도가
+    구간마다 고정돼 있고, 그 안의 흔들림은 중앙값으로 뭉갠다. 한 곡선 안에서
+    온도를 훑는 장비가 나오면 그때 다시 본다 — 지금 그것까지 가정하면 못 본
+    파일에 맞춰 코드를 쓰는 것이다.
+
+    `None` 과 0 을 구분한다. `None` 은 「온도를 안 쟀거나 못 읽었다」 이고,
+    화면은 그것을 「겹칠 수 없다」 로 읽으면 안 된다.
+    """
+    found: list[float] = []
+    for curve in parsed.all_curves:
+        if curve.kind != "measured":
+            continue
+        for channel in curve.channels:
+            if channel.key != "temperature":
+                continue
+            values = [float(one) for one in channel.values if one is not None and one == one]
+            if values:
+                found.append(statistics.median(values))
+            break
+    if not found:
+        return None
+    return viscoelastic.count_temperature_levels(found)
 
 
 def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str) -> None:

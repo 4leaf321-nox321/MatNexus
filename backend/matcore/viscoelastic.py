@@ -36,6 +36,7 @@ TA TRIOS 가 TTS 를 계산해 준다(`TTS - master curve (20.0 °C)`). 그것�
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -58,6 +59,30 @@ OVERLAP_SAMPLES = 64
 #: 이동인자를 맞추려면 최소 몇 개 온도가 필요한가. WLF 는 계수가 둘이라
 #: 세 점은 있어야 맞춘 것이 뜻을 갖는다.
 MIN_TEMPERATURES = 3
+
+
+#: 두 온도를 **다른 단**으로 볼 최소 간격(K).
+#:
+#: 장비가 온도를 잡는 동안 0.1 K 안팎으로 흔들리고, 같은 단을 두 번 잰 파일도
+#: 있다. 1 K 는 그 흔들림보다 크고, 실제 스윕 간격(보통 5~10 K)보다 한참 작다.
+LEVEL_GAP_K = 1.0
+
+
+def count_temperature_levels(temperatures: Iterable[float]) -> int:
+    """**겹칠 수 있는 온도 단이 몇인가.** 곡선마다의 대표 온도를 받는다.
+
+    이 수가 1이면 겹칠 것이 없다 — 변형률 스윕(한 온도에서 진폭만 바꾼 것)이
+    그렇다. 마스터커브는 온도가 다른 스윕이 둘 이상 있어야 만들 수 있다.
+
+    **「할 수 있는데 안 한 것」 과 「할 수 없는 것」 을 가르려고 센다.** 재료 화면이
+    「마스터커브가 없는 DMA 시험 3건」 이라고 재촉할 때, 그중 변형률 스윕이 섞여
+    있으면 할 수 없는 일을 남은 일로 적는 셈이다.
+    """
+    levels: list[float] = []
+    for value in sorted(float(one) for one in temperatures if one == one):
+        if not levels or value - levels[-1] >= LEVEL_GAP_K:
+            levels.append(value)
+    return len(levels)
 
 
 class ViscoelasticError(Exception):

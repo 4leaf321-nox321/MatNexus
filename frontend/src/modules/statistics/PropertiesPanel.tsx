@@ -104,6 +104,13 @@ interface Props {
    */
   groupSlot?: React.ReactNode
   /**
+   * 물성 표 **위**에 놓을 한 줄. 지금은 「아직 안 겹친 DMA」 안내가 온다.
+   *
+   * 화면이 그 계산을 직접 하지 않는다 — 무엇을 세는지는 재료 쪽 일이고, 여기는
+   * 자리만 내준다(`groupSlot` 과 같은 판단).
+   */
+  notice?: React.ReactNode
+  /**
    * 물성 상자 오른쪽 위에 세울 것 — **선언 물성을 넣는 자리**.
    *
    * 제 상자를 따로 두면 값 목록이 없는 빈 상자가 화면 위쪽을 차지한다. 더하는
@@ -120,6 +127,7 @@ export function PropertiesPanel({
   groupKinds = [],
   groupSlot,
   header,
+  notice,
 }: Props) {
   const stats = useResource(() => statisticsApi.forMaterial(materialId), [materialId])
   const [error, setError] = useState<Error | null>(null)
@@ -192,6 +200,8 @@ export function PropertiesPanel({
           일이 그것이다. */}
       {/* **값이 하나도 없어도 상자는 뜬다.** 「선언 물성 추가」 가 그 머리에
           있으므로, 안 그리면 첫 값을 넣을 길이 사라진다. */}
+      {notice}
+
       {(
         <PropertySummary
           groups={groups}

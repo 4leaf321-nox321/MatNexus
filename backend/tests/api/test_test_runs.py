@@ -374,6 +374,27 @@ class TestParsing:
         db.refresh(run)
         return run
 
+    def test_온도를_안_재는_시험은_단_수가_비어_있다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**「모른다」 와 「못 한다」 는 다르다.**
+
+        인장은 온도를 안 재므로 온도 단 수가 없다. 그것을 0 이나 1 로 채우면
+        화면이 「겹칠 수 없는 시험」 으로 세는데, 그 재료의 DMA 현황을 세는 자리에
+        인장이 「못 하는 것 1건」 으로 끼어든다.
+
+        `None` 은 옛 시험(칸이 생기기 전에 읽은 것)에도 남는 값이고, 화면은 그것을
+        남은 일로도 못 하는 일로도 세지 않는다.
+        """
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        run = self._parse(db, created["id"])
+        assert run.temperature_step_count is None
+
     def test_실제_장비파일을_읽어_곡선과_요약값을_만든다(
         self,
         client: TestClient,

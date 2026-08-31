@@ -369,6 +369,23 @@ class TestRun(Base):
     이어져야** 하기 때문이다. 큐 페이로드에만 실으면 재시도에서 사라진다.
     """
 
+    temperature_step_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """**겹칠 수 있는 온도 단이 몇이었나.** 읽을 때 세어 둔다. 안 세어 본 것은 `None`.
+
+    DMA 는 같은 시험종류 아래 성격이 다른 두 가지가 온다.
+
+        주파수-온도 스윕   온도 여러 단 → 겹쳐서 마스터커브를 만든다
+        변형률 스윕        온도 한 단   → 겹칠 것이 없다(선형 구간을 본다)
+
+    시험종류 키로는 못 가른다. 그런데 재료 화면이 「마스터커브가 없는 DMA 3건」
+    이라고 재촉할 때 변형률 스윕이 섞여 있으면 **할 수 없는 일을 남은 일로 적는
+    셈**이다. 그래서 읽는 김에 세어 둔다 — 목록에서 이걸 다시 재려면 시험마다
+    Parquet 을 열어야 한다.
+
+    **`None` 은 0 이 아니다.** 이 칸이 생기기 전에 읽은 시험이라 「모른다」 는
+    뜻이고, 모르는 것을 「못 한다」 로 세면 그 시험은 화면에서 조용히 빠진다.
+    `scripts/backfill_temperature_steps.py` 가 채운다."""
+
     parser_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
     """무엇으로 읽었는가(`profile:ta_dma850` · `zwick_tra:1`).
 

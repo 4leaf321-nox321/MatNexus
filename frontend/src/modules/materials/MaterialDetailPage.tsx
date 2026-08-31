@@ -21,6 +21,7 @@ import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { GroupsPanel } from '@/modules/materials/GroupsPanel'
+import { MasterCurveNotice } from '@/modules/materials/MasterCurveNotice'
 import { groupsApi } from '@/modules/materials/api.groups'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -33,6 +34,10 @@ export default function MaterialDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const material = useResource(() => materialsApi.get(id), [id])
+  /** 지금 켠 탭. **안내가 눌러서 데려간다** — 「그 시험 보기」 가 말만 하고 사람이
+   *  탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다. */
+  const [tab, setTab] = useState('samples')
+
   const samples = useResource(() => materialsApi.samples(id), [id])
   // 시료를 더하거나 지우면 수가 달라진다 — 같은 신호로 다시 읽는다.
   const summary = useResource(() => materialsApi.summary(id), [id, samples.data])
@@ -169,7 +174,7 @@ export default function MaterialDetailPage() {
       {/* **재료 화면이 답해야 하는 질문이 둘이다** — "무엇이 있나(시료·시편)" 와
           "이 재료의 물성은 얼마인가". 세로로 이어 붙이면 시료가 늘수록 물성이
           아래로 밀려나는데, 물성이 이 화면의 결론이다. */}
-      <Tabs defaultValue="samples" className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         {/* **탭 셋이 서로 다른 질문에 답한다** — 무엇이 있나 / 물성이 얼마인가 /
             해석에 뭘 넣나. 한때 '시험' 탭을 따로 뒀는데, 시편 줄이 접히고 그
             줄에 시험 수·채택·실패가 붙으면서 답하던 것이 겹쳤다. 같은 것을 두
@@ -231,6 +236,9 @@ export default function MaterialDetailPage() {
               groupResults={groupRows.data ?? []}
               groupKinds={groupKinds.data ?? []}
               groupSlot={<GroupsPanel materialId={id} list={false} />}
+              notice={
+                <MasterCurveNotice materialId={id} onGoToTests={() => setTab('samples')} />
+              }
               header={
                 item && (
                   <DeclaredPropertiesCard

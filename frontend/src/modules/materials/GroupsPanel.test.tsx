@@ -358,6 +358,7 @@ describe('마스터커브가 있어야 후보다', () => {
 
   it('몇 건이 왜 빠졌는지 말한다', async () => {
     // **그 수가 다음 할 일을 가리킨다** — 겹쳐서 만들면 그것도 쓸 수 있다.
+    // 온도가 여러 단인 것만 그렇게 말한다: 한 단짜리는 겹칠 상대가 없다.
     runs.mockResolvedValue({
       items: [
         {
@@ -373,6 +374,7 @@ describe('마스터커브가 있어야 후보다', () => {
           test_type_key: 'dma_sweep',
           test_type_label: 'DMA',
           master_curve_count: 0,
+          temperature_step_count: 6,
         },
       ],
       total: 2,
@@ -380,7 +382,38 @@ describe('마스터커브가 있어야 후보다', () => {
       offset: 0,
     })
     await open()
-    expect(await screen.findByText(/1건은 마스터커브가 없어 빠졌습니다/)).toBeInTheDocument()
+    expect(await screen.findByText(/1건은 아직 안 겹쳐서 빠졌습니다/)).toBeInTheDocument()
+  })
+
+  it('겹칠 수 없는 시험은 「안 겹쳤다」 고 말하지 않는다', async () => {
+    // **변형률 스윕은 온도가 한 단이라 겹칠 상대가 없다.** 「만들면 쓸 수 있다」 고
+    // 적으면 할 수 없는 일을 시키는 셈이다.
+    runs.mockResolvedValue({
+      items: [
+        {
+          id: 'r1',
+          record_name: 'A',
+          test_type_key: 'dma_sweep',
+          test_type_label: 'DMA',
+          master_curve_count: 1,
+          temperature_step_count: 6,
+        },
+        {
+          id: 'r2',
+          record_name: 'B',
+          test_type_key: 'dma_sweep',
+          test_type_label: 'DMA',
+          master_curve_count: 0,
+          temperature_step_count: 1,
+        },
+      ],
+      total: 2,
+      limit: 200,
+      offset: 0,
+    })
+    await open()
+    expect(await screen.findByText(/온도가 한 단이라 겹칠 수 없습니다/)).toBeInTheDocument()
+    expect(screen.queryByText(/아직 안 겹쳐서 빠졌습니다/)).not.toBeInTheDocument()
   })
 
   it('빠진 것이 없으면 그 말을 안 한다', async () => {
