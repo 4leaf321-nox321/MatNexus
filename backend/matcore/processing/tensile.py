@@ -346,6 +346,68 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
 
 
+#: `auto` 가 볼 응력 띠 — **그 곡선 자신의 최대응력에 대한 비율.**
+#:
+#: 변형률 절대값으로 고정하면 곡선마다 토우 길이와 항복 시점이 달라 맞지 않는다.
+#: 응력 비율은 그 곡선을 따라간다: 아래끝이 토우를 지나고, 위끝이 항복 앞에서
+#: 끊는다. 규격도 같은 방식으로 구간을 정한다(ISO 6892-1 은 응력 범위로 규정).
+#:
+#: 10~40% 인 이유: 강의 항복은 보통 인장강도의 60~70% 라 40% 는 안전하게 아래다.
+#:
+#: **항복이 낮은 재료에서는 이 기본값이 안 맞는다.** 항복이 인장강도의 29% 인
+#: 곡선에서 재 보면(2026-08-31) 띠 전체가 항복 뒤에 놓여 **2.2 GPa** 가 나온다 —
+#: 참값은 200 GPa 다. 다만 그 구간은 직선이 아니라 R²=0.72 이고, **거절 검사가
+#: 잡아 값을 안 낸다.** 조용히 틀린 값이 나가지는 않는다.
+#:
+#: 그래서 띠를 **사람이 조절할 수 있게** 열어 둔다. 같은 곡선을 5~20% 로 재면
+#: 200 GPa 가 정확히 나온다. 어느 띠가 옳은지는 재료와 규격이 정하는 것이라,
+#: 여기서 재료를 알아맞히려 하지 않는다.
+_AUTO_STRESS_LOW = 0.10
+_AUTO_STRESS_HIGH = 0.40
+
+
+def _auto_window(
+    strain: Any,
+    stress: Any,
+    low_fraction: float = _AUTO_STRESS_LOW,
+    high_fraction: float = _AUTO_STRESS_HIGH,
+) -> tuple[float, float] | None:
+    """탄성 구간을 **응력 띠**로 잡는다. 점이 모자라면 `None`.
+
+    ## 창을 훑지 않는 이유
+
+    처음에는 「R² 기준을 만족하는 가장 긴 창」 으로 짰다가 합성 곡선에서 걸렸다
+    (2026-08-31): **소성 구역이 뽑혀 2.25 GPa** 가 나왔다. R² 는 전체 분산 대비
+    잔차라, 넓은 구간에서는 완만히 굽은 곡선도 0.98 을 넘는다 — 길이는 직선다움의
+    척도가 아니다.
+
+    그래서 「가장 가파른 창」 으로 바꿨더니 이번엔 **잡음이 이겼다.** 짧은 창은
+    얼마든지 가팔라질 수 있어서, 400점 직선(200 GPa)에서 11점짜리 223 GPa 가
+    뽑혔다. 탄성 구간이 성긴 곡선에서는 **소성 구역을 확신에 차서** 골랐다.
+
+    두 번 다 같은 함정이었다: **창을 자유롭게 고르게 두면 이상한 창이 이긴다.**
+
+    ## 응력 띠는 곡선을 따라간다
+
+    아래끝이 토우를 지나고 위끝이 항복 앞에서 끊는다. 고를 자유가 없으므로
+    이상한 창이 이길 수 없고, 띠 안이 직선이 아니면 **아래의 R² 검사가 거절한다** —
+    이 함수가 판정까지 하지 않는다.
+    """
+    peak = int(np.argmax(stress))
+    x = np.asarray(strain[: peak + 1], dtype=float)
+    y = np.asarray(stress[: peak + 1], dtype=float)
+    top = float(y.max()) if y.size else 0.0
+    if not math.isfinite(top) or top <= 0:
+        return None
+
+    inside = (y >= low_fraction * top) & (y <= high_fraction * top)
+    if int(np.sum(inside)) < MIN_TRUSTWORTHY_POINTS:
+        # **여기서 값을 지어내지 않는다.** 띠 안에 점이 모자라다는 것은 곡선이
+        # 성기다는 뜻이고, 그때 다른 구간을 고르면 소성 구역이 뽑힌다.
+        return None
+    return float(x[inside].min()), float(x[inside].max())
+
+
 @register(
     id="tensile.elastic_modulus",
     kind="processing",
@@ -356,14 +418,18 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="방법",
             type="choice",
             default="linear_regression",
-            choices=("linear_regression", "chord", "secant", "manual"),
+            choices=("linear_regression", "chord", "secant", "auto", "manual"),
             choice_labels={
                 "linear_regression": "최소제곱 회귀",
                 "chord": "현 (구간 양 끝 두 점)",
                 "secant": "할선 (원점에서 구간 끝)",
+                "auto": "자동 (응력 띠)",
                 "manual": "직접 입력",
             },
-            help="같은 곡선에서도 방법마다 몇 % 다릅니다. 어느 쪽이 옳은지는 규격이 정합니다.",
+            help=(
+                "같은 곡선에서도 방법마다 몇 % 다릅니다. 어느 쪽이 옳은지는 규격이 "
+                "정합니다 — **규격이 구간을 지정하면 자동을 쓰지 마세요.**"
+            ),
         ),
         ParamSpec(
             name="minimum_strain",
@@ -382,6 +448,31 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
             default=0.0025,
             unit="1",
             when={"method": ("linear_regression", "chord", "secant")},
+        ),
+        ParamSpec(
+            name="auto_stress_low",
+            label="자동 띠 아래끝",
+            type="float",
+            default=_AUTO_STRESS_LOW,
+            unit="1",
+            when={"method": ("auto",)},
+            help=(
+                "최대응력에 대한 비율. 토우를 지나야 하므로 0 이 아닙니다. "
+                "**항복이 낮은 재료면 위아래를 함께 낮추세요** — "
+                "5~20% 로 재는 경우가 있습니다."
+            ),
+        ),
+        ParamSpec(
+            name="auto_stress_high",
+            label="자동 띠 위끝",
+            type="float",
+            default=_AUTO_STRESS_HIGH,
+            unit="1",
+            when={"method": ("auto",)},
+            help=(
+                "항복 앞에서 끊어야 합니다. "
+                "항복이 인장강도의 60~70% 인 강은 40% 가 안전합니다."
+            ),
         ),
         ParamSpec(
             name="manual_modulus",
@@ -429,6 +520,21 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
                 "않습니다** — 값이 왜 없는지 이 수가 말합니다."
             ),
         ),
+        Produced(
+            key="elastic_window_start",
+            label="탄성 구간 시작",
+            si_unit="1",
+            help=(
+                "실제로 쓴 구간의 시작 변형률. **자동으로 고른 값은 무엇을 골랐는지 "
+                "보여야** 사람이 검토할 수 있습니다."
+            ),
+        ),
+        Produced(
+            key="elastic_window_end",
+            label="탄성 구간 끝",
+            si_unit="1",
+            help="실제로 쓴 구간의 끝 변형률.",
+        ),
     ),
     order=50,
     version="1",
@@ -447,10 +553,43 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     strain, stress, strain_key, _ = _pair(frame, options)
     require_increasing(strain, what=f"'{strain_key}'")
 
-    method = option_text(options, "method", ("linear_regression", "chord", "secant", "manual"))
+    method = option_text(
+        options, "method", ("linear_regression", "chord", "secant", "auto", "manual")
+    )
     low = option_float(options, "minimum_strain", 0.0005)
     high = option_float(options, "maximum_strain", 0.0025)
-    if low >= high:
+
+    auto_note: str | None = None
+    if method == "auto":
+        band_low = option_float(options, "auto_stress_low", _AUTO_STRESS_LOW)
+        band_high = option_float(options, "auto_stress_high", _AUTO_STRESS_HIGH)
+        if not 0 < band_low < band_high <= 1:
+            raise ProcessingError(
+                f"자동 띠가 0 < 아래끝({band_low}) < 위끝({band_high}) ≤ 1 이어야 합니다."
+            )
+        found = _auto_window(strain, stress, band_low, band_high)
+        if found is None:
+            # **값을 안 낸다.** 지어낸 구간으로 낸 값은 그럴듯해 보이고, 그대로
+            # 카드와 덱까지 간다. 고정 구간의 거절과 같은 자리다.
+            return StepResult(
+                frame,
+                notes=(
+                    "자동 구간에 점이 모자라 **탄성계수를 내지 않았습니다.** "
+                    f"최대응력의 {band_low:.0%}~{band_high:.0%} 띠 안에 "
+                    f"{MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 — 곡선이 성깁니다. "
+                    "더 조밀한 곡선을 쓰거나, 구간을 아는 경우 방법을 "
+                    "「최소제곱 회귀」 로 바꿔 직접 지정하세요.",
+                ),
+                scalars=(),
+            )
+        low, high = found
+        auto_note = (
+            f"최대응력의 {band_low:.0%}~{band_high:.0%} 띠로 잡은 구간: "
+            f"변형률 [{low:.6g}, {high:.6g}]. "
+            "**규격이 구간을 정하는 경우에는 이 방법을 쓰지 마세요.**"
+        )
+        method = "linear_regression"
+    elif low >= high:
         raise ProcessingError(f"구간 시작({low})이 끝({high}) 이상입니다.")
 
     intercept = 0.0
@@ -499,6 +638,14 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         observed = (
             f"관측 범위는 [{float(strain.min()):.6g}, {float(strain.max()):.6g}] 입니다."
         )
+        # **자동이면 고칠 데가 다르다.** 「창을 좁히세요」 는 구간을 손으로 지정한
+        # 사람에게 하는 말이고, 자동을 쓴 사람에게는 띠가 손잡이다.
+        advice = (
+            "자동이라면 **띠를 낮춰 보세요** — 항복이 인장강도의 절반 아래인 재료는 "
+            "기본 띠(10~40%)가 항복 뒤에 놓입니다. "
+            if auto_note is not None
+            else ""
+        )
         refused = None
         if count < MIN_TRUSTWORTHY_POINTS:
             refused = (
@@ -517,7 +664,7 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 f"**탄성계수를 내지 않았습니다.** 기울기 {modulus / 1e9:.4g} GPa 는 나왔지만 "
                 f"그 구간이 직선이 아니면 그것은 탄성계수가 아닙니다. 구간이 항복 뒤까지 "
                 f"걸쳤거나 초기 토우가 섞였는지 보고 창을 좁히세요. 값을 아는 경우 방법을 "
-                f"「직접 입력」 으로 바꾸세요. {observed}"
+                f"「직접 입력」 으로 바꾸세요. {advice}{observed}"
             )
         if refused is not None:
             # **인장강도·연신율은 멀쩡히 나온 것이다.** 단계를 실패시키면 사람이
@@ -536,6 +683,11 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         Scalar("youngs_modulus", "탄성계수", float(modulus), "Pa"),
         Scalar("elastic_intercept", "탄성 절편", float(intercept), "Pa"),
     ]
+    if method != "manual":
+        # **실제로 쓴 구간을 남긴다.** 자동이면 사람이 안 고른 값이고, 손으로
+        # 지정했어도 나중에 「무엇으로 쟀나」 에 답해야 한다.
+        scalars.append(Scalar("elastic_window_start", "탄성 구간 시작", float(low), "1"))
+        scalars.append(Scalar("elastic_window_end", "탄성 구간 끝", float(high), "1"))
     if math.isfinite(r_squared):
         scalars.append(Scalar("elastic_r_squared", "탄성 구간 R²", float(r_squared), "1"))
     if method != "manual":
@@ -549,6 +701,10 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"{modulus / 1e9:.4g} GPa (R²={r_squared:.5f})"
         )
     )
+    if auto_note is not None:
+        # **사람이 안 고른 구간이다.** 무엇을 골랐는지 메모에 남지 않으면
+        # 검토할 근거가 없다.
+        note = f"{auto_note} {note}"
     notes = [note]
     if math.isfinite(r_squared) and r_squared < 0.995:
         # **경고이지 실패가 아니다.** 0.98 미만은 위에서 이미 막았다 — 여기는 그

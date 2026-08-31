@@ -144,6 +144,191 @@ class Test탄성계수:
         assert scalar(result, "elastic_point_count") == pytest.approx(2.0)
         assert any("탄성계수를 내지 않았습니다" in note for note in result.notes)
 
+    def test_자동은_토우와_항복_사이를_잡는다(self) -> None:
+        """**고정 구간이 매 곡선에 안 맞는 것**이 이 방법의 이유다. 곡선마다 토우
+        길이와 항복 시점이 달라, 변형률 절대값으로 박아 두면 어떤 곡선에서는
+        토우를 물고 어떤 곡선에서는 항복 뒤를 문다.
+
+        띠를 응력 비율로 잡으면 그 곡선을 따라간다.
+        """
+        # 토우(위로 굽음) → 직선 → 항복 뒤
+        toe = np.linspace(0.0, 0.0002, 40)
+        toe_stress = E_TRUE * (toe**2) / 0.0002
+        straight = np.linspace(0.0002, 0.004, 300)
+        straight_stress = toe_stress[-1] + E_TRUE * (straight - 0.0002)
+        after = np.linspace(0.004, 0.20, 600)
+        after_stress = straight_stress[-1] + 3e8 * np.log1p((after - 0.004) * 60)
+        frame = Frame(
+            {
+                "strain_engineering": np.concatenate([toe, straight[1:], after[1:]]),
+                "stress_engineering": np.concatenate(
+                    [toe_stress, straight_stress[1:], after_stress[1:]]
+                ),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+        result = processing.apply([Step("tensile.elastic_modulus", {"method": "auto"})], frame)
+
+        assert scalar(result, "youngs_modulus") == pytest.approx(E_TRUE, rel=0.01)
+        # **고른 구간이 값으로 남는다.** 사람이 안 고른 값이라 검토할 근거가 있어야 한다.
+        assert scalar(result, "elastic_window_start") > 0.0002, "토우를 물었다"
+        assert scalar(result, "elastic_window_end") < 0.004, "항복 뒤를 물었다"
+
+    def test_자동이_소성_구역을_고르지_않는다(self) -> None:
+        """**처음 두 판이 여기서 걸렸다**(2026-08-31).
+
+        「R² 기준을 만족하는 가장 긴 창」 은 소성 구역을 골라 2.25 GPa 를 냈다 —
+        R² 는 전체 분산 대비 잔차라 넓은 구간에서는 완만히 굽은 곡선도 0.98 을
+        넘는다. 「가장 가파른 창」 으로 바꿨더니 잡음이 이겼다.
+        """
+        result = processing.apply(
+            [Step("tensile.elastic_modulus", {"method": "auto"})], synthetic()
+        )
+
+        got = scalar(result, "youngs_modulus")
+        assert got == pytest.approx(E_TRUE, rel=0.01)
+        assert got > HARDENING * 10, "소성 구역 기울기가 뽑혔다"
+
+    def test_자동은_파단_뒤를_안_본다(self) -> None:
+        """**실제 곡선은 최대응력 뒤에 떨어진다.** 그 하강 구간의 점들이 응력
+        띠(최대의 10~40%) 안에 **다시 들어온다** — 변형률은 큰데 응력은 낮은
+        점들이라, 그것까지 물면 구간이 곡선 끝까지 벌어지고 기울기가 무너진다.
+
+        사보타주로 드러났다(2026-08-31): 합성 곡선이 전부 단조증가라 최대응력
+        자르기를 없애도 시험이 안 물었다.
+        """
+        rising = synthetic()
+        rise = rising.columns["strain_engineering"]
+        rise_stress = rising.columns["stress_engineering"]
+        # 파단: 최대응력의 5% 까지 떨어진다 — 하강하며 **띠를 다시 가로지른다.**
+        fall = np.linspace(rise[-1], rise[-1] * 1.2, 60)[1:]
+        fall_stress = np.linspace(rise_stress[-1], rise_stress[-1] * 0.05, 59)
+        frame = Frame(
+            {
+                "strain_engineering": np.concatenate([rise, fall]),
+                "stress_engineering": np.concatenate([rise_stress, fall_stress]),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+        result = processing.apply([Step("tensile.elastic_modulus", {"method": "auto"})], frame)
+
+        assert scalar(result, "elastic_window_end") < 0.01, "파단 뒤를 물었다"
+        assert scalar(result, "youngs_modulus") == pytest.approx(E_TRUE, rel=0.05)
+
+    def test_자동도_잡음에_안_흔들린다(self) -> None:
+        """짧은 창은 잡음으로 얼마든지 가팔라진다. 띠는 창을 고를 자유가 없다."""
+        rng = np.random.default_rng(7)
+        strain = np.linspace(0.0, 0.004, 400)
+        frame = Frame(
+            {
+                "strain_engineering": strain,
+                "stress_engineering": E_TRUE * strain + rng.normal(0, 2e6, 400),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+        result = processing.apply([Step("tensile.elastic_modulus", {"method": "auto"})], frame)
+
+        assert scalar(result, "youngs_modulus") == pytest.approx(E_TRUE, rel=0.01)
+
+    def test_항복이_낮으면_기본띠가_안_맞고_그것을_말한다(self) -> None:
+        """**기본 띠(10~40%)가 모든 재료에 맞지 않는다.**
+
+        항복이 인장강도의 29% 인 곡선에서는 띠 전체가 항복 뒤에 놓여 2.2 GPa 가
+        나온다 — 참값은 200 GPa 다. 다만 그 구간은 직선이 아니라 **거절 검사가
+        잡는다.** 조용히 틀린 값이 나가지 않는 것이 요점이다.
+        """
+        strain = np.concatenate(
+            [np.linspace(0.0, 0.001, 40), np.linspace(0.001, 0.40, 400)[1:]]
+        )
+        low_yield = Frame(
+            {
+                "strain_engineering": strain,
+                "stress_engineering": np.where(
+                    strain <= 0.001, E_TRUE * strain, 200e6 + 1.25e9 * (strain - 0.001)
+                ),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+        refused = processing.apply(
+            [Step("tensile.elastic_modulus", {"method": "auto"})], low_yield
+        )
+        assert "youngs_modulus" not in {item.key for item in refused.scalars}
+        # **고칠 데를 말한다.** 「직선이 아니다」 만으로는 띠가 손잡이인 줄 모른다.
+        assert any("띠를 낮춰 보세요" in note for note in refused.notes)
+
+        # 띠를 낮추면 맞는다.
+        fixed = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {"method": "auto", "auto_stress_low": 0.05, "auto_stress_high": 0.20},
+                )
+            ],
+            low_yield,
+        )
+        assert scalar(fixed, "youngs_modulus") == pytest.approx(E_TRUE, rel=0.01)
+
+    def test_뒤집힌_띠는_받지_않는다(self) -> None:
+        """아래끝이 위끝보다 크면 띠가 비고, 그러면 「점이 모자라다」 로만 보인다 —
+        사람은 곡선을 의심하지 설정을 의심하지 않는다."""
+        for low, high in ((0.5, 0.2), (0.0, 0.4), (0.1, 1.5)):
+            with pytest.raises(processing.ProcessingError, match="자동 띠"):
+                processing.apply(
+                    [
+                        Step(
+                            "tensile.elastic_modulus",
+                            {
+                                "method": "auto",
+                                "auto_stress_low": low,
+                                "auto_stress_high": high,
+                            },
+                        )
+                    ],
+                    synthetic(),
+                )
+
+    def test_자동도_성기면_값을_안_낸다(self) -> None:
+        """**여기서 지어내면 소성 구역이 뽑힌다.** 고정 구간의 거절과 같은 자리다."""
+        strain = np.linspace(0.0, 0.05, 60)
+        sparse = Frame(
+            {
+                "strain_engineering": strain,
+                "stress_engineering": np.where(
+                    strain < 0.0015,
+                    E_TRUE * strain,
+                    E_TRUE * 0.0015 + HARDENING * (strain - 0.0015),
+                ),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+        result = processing.apply(
+            [Step("tensile.elastic_modulus", {"method": "auto"})], sparse
+        )
+
+        assert "youngs_modulus" not in {item.key for item in result.scalars}
+        assert any("탄성계수를 내지 않았습니다" in note for note in result.notes)
+
+    def test_자동도_직선이_아니면_거절한다(self) -> None:
+        """띠가 곡선을 따라가도 그 안이 직선이라는 보장은 없다 — 판정은 그대로
+        R² 가 한다. **이 함수가 판정까지 하지 않는다.**"""
+        strain = np.linspace(0.0, 0.1, 200)
+        curved = Frame(
+            {"strain_engineering": strain, "stress_engineering": 5e8 * np.sqrt(strain)},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+        result = processing.apply(
+            [Step("tensile.elastic_modulus", {"method": "auto"})], curved
+        )
+
+        assert "youngs_modulus" not in {item.key for item in result.scalars}
+        assert any("직선이 아닙니다" in note for note in result.notes)
+
     def test_단계를_실패시키지는_않는다(self) -> None:
         """인장강도·연신율은 멀쩡히 나온 것이다 — 그것까지 잃으면 사람이 「점이
         모자란 것」 을 고치는 대신 이 단계를 빼 버린다."""
