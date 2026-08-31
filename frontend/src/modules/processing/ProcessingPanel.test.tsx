@@ -11,7 +11,7 @@
  * 그래서 여기서는 **켜고 끄면서** 잠금과 목록이 따라오는지 본다.
  */
 
-import { configure, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -31,11 +31,11 @@ import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
  * 「무엇을 못 찾았는지」 에서 「시간이 다 됐다」 로 바뀌어 **원인이 오히려 덜
  * 보이게** 됐다. 대기보다 넉넉해야 한다.
  */
-// **느린 러너 몫이지 경합을 덮는 값이 아니다.** 경합은 `clickStep` 이 눌리기
-// 직전에 노드를 다시 집는 것으로 고쳤다 — 여기서 기다리는 것은 실제로 오는 일이라
-// 더 기다리면 온다. CI 는 공유 윈도우 러너라 한 상호작용이 초를 넘길 때가 있다.
-configure({ asyncUtilTimeout: 5000 })
-vi.setConfig({ testTimeout: 20000 })
+// **여기서 낮추지 않는다.** 이 줄이 `setup.ts` 의 공통값(12초)을 5초로 **내리고**
+// 있었다 — 늘리려던 값이 실은 낮추는 값이 된 것이다. 그래서 이 파일만 부하에서
+// 흔들렸고, 실패는 「단추가 아직 비활성」 이라는 마지막 오류로 나와 코드가 틀린
+// 것처럼 보였다(실측 2026-08-31, 다른 세션이 같은 머신에서 백엔드 스위트를 돌리는
+// 동안). 공통값을 쓰고, 예산은 `vitest.config.ts` 가 정한다.
 import {
   RightPanelHost,
   RightPanelProvider,
