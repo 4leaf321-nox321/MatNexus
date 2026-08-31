@@ -72,6 +72,7 @@ import {
 } from '@/shared/components/ui/table'
 import { VocabularyAxisPanel } from '@/modules/vocabulary/VocabularyAxisPanel'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 
 /**
  * 이 축이 치수와 어떤 관계인가. **축 목록에서 알아낸다.**
@@ -282,7 +283,6 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
   const [error, setError] = useState<Error | null>(null)
   const [size, setSize] = useState<number>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [removed, setRemoved] = useState<DeleteResult | null>(null)
 
   // 검색은 서버가 한다 — 기준정보가 수만 개가 되면 전체를 받을 수 없다.
@@ -308,12 +308,6 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
     [vocabulary.slug, term, showHidden, leastUsed, size, offset]
   )
 
-  // 검색·필터가 바뀌면 첫 쪽으로. 안 그러면 3쪽에서 검색해 0건이 뜬다.
-  useEffect(() => {
-    setOffset(0)
-    setPicked(new Set())
-  }, [vocabulary.slug, term, showHidden, leastUsed, size])
-
   /** 지우려고 확인을 기다리는 값. **묻지 않고 지우지 않는다.** */
   const [removing, setRemoving] = useState<Term | null>(null)
 
@@ -321,22 +315,13 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
     setError(null)
     setRemoved(null)
     try {
-      const result = await vocabularyApi.removeMany(vocabulary.slug, [...picked])
+      const result = await vocabularyApi.removeMany(vocabulary.slug, selection.chosen)
       setRemoved(result)
-      setPicked(new Set())
+      selection.clear()
       terms.reload()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
     }
-  }
-
-  function togglePick(id: string) {
-    setPicked((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
   }
 
   async function recount() {
@@ -361,6 +346,21 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
 
   const page = terms.data
   const rows = page?.items ?? []
+  // **Shift 로 범위를 고른다.** 기준정보는 한 쪽이 수십 줄이다.
+  //
+  // 선언이 `removeSelected` 보다 아래인데, 그 함수는 사람이 누를 때 도므로
+  // 그때는 이미 만들어져 있다.
+  const selection = useRowSelection(rows.map((item) => item.id))
+  const picked = selection.picked
+  const clearPicked = selection.clear
+
+  // 검색·필터가 바뀌면 첫 쪽으로. 안 그러면 3쪽에서 검색해 0건이 뜬다.
+  //
+  // **훅 아래에 둔다.** 선택을 비우려면 훅이 먼저 있어야 한다.
+  useEffect(() => {
+    setOffset(0)
+    clearPicked()
+  }, [vocabulary.slug, term, showHidden, leastUsed, size, clearPicked])
   const total = page?.total ?? 0
   // 천장에 걸렸는지. 걸렸으면 몇 건에서 멈췄는지 말한다.
   const truncated = size === ALL && rows.length < total
@@ -528,7 +528,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
           <span className="text-sm">
             <b>{picked.size}개</b> 골랐습니다
           </span>
-          <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+          <Button size="sm" variant="ghost" onClick={() => selection.clear()}>
             선택 해제
           </Button>
           <Button
@@ -582,17 +582,11 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
               <input
                 type="checkbox"
                 aria-label="이 쪽 전체 선택"
-                checked={rows.length > 0 && rows.every((item) => picked.has(item.id))}
-                onChange={(event) =>
-                  setPicked((current) => {
-                    const next = new Set(current)
-                    for (const item of rows) {
-                      if (event.target.checked) next.add(item.id)
-                      else next.delete(item.id)
-                    }
-                    return next
-                  })
-                }
+                checked={selection.allOn}
+                ref={(node) => {
+                  if (node) node.indeterminate = selection.someOn
+                }}
+                onChange={(event) => selection.setAll(event.target.checked)}
               />
             </TableHead>
             <TableHead>값</TableHead>
@@ -614,7 +608,9 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                   type="checkbox"
                   aria-label={`${item.value} 선택`}
                   checked={picked.has(item.id)}
-                  onChange={() => togglePick(item.id)}
+                  // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+                  onClick={(event) => selection.toggle(item.id, event)}
+                  onChange={() => {}}
                 />
               </TableCell>
               <TableCell>

@@ -42,6 +42,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 
 export function StandardCatalogDialog({
   onClose,
@@ -51,7 +52,6 @@ export function StandardCatalogDialog({
   onImported: () => void
 }) {
   const catalog = useResource(() => vocabularyApi.standardCatalog(), [])
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   /**
    * 이미 있는 규격을 **다른 이름으로** 한 벌 더 만들 때 쓸 이름.
    *
@@ -88,28 +88,29 @@ export function StandardCatalogDialog({
    */
   const selectable = (items: StandardTemplate[]) => items.filter((one) => !one.taken)
 
+  // **Shift 로 범위를 고른다.** 카탈로그는 한 묶음이 수십 줄이다.
+  //
+  // **화면에 그리는 차례 그대로 넘긴다.** 묶음별로 그리므로 원본 배열 순서가
+  // 아니다 — 어긋나면 Shift 가 눈에 보이는 것과 다른 구간을 켠다.
+  //
+  // 이미 들여온 줄도 넣는다. 그것도 고를 수 있다(이름을 바꿔 가져오는 자리다).
+  const selection = useRowSelection(
+    families.flatMap(([, items]) => items.map((one) => one.key))
+  )
+  const picked = selection.picked
+
   /** 이미 있는 것을 골랐다면 새 이름이 있어야 한다. */
   const needsName = (item: StandardTemplate) =>
     item.taken && picked.has(item.key) && !(renames[item.key] ?? '').trim()
   const blocked = (catalog.data ?? []).some(needsName)
 
-  function toggle(key: string) {
-    setPicked((now) => {
-      const next = new Set(now)
-      if (!next.delete(key)) next.add(key)
-      return next
-    })
-  }
-
   /** 한 묶음을 통째로 켜고 끈다. 다 켜져 있으면 끄는 쪽이 된다. */
   function toggleMany(items: StandardTemplate[]) {
     const keys = selectable(items).map((one) => one.key)
-    setPicked((now) => {
-      const next = new Set(now)
-      if (keys.every((key) => next.has(key))) keys.forEach((key) => next.delete(key))
-      else keys.forEach((key) => next.add(key))
-      return next
-    })
+    const on = !keys.every((key) => picked.has(key))
+    for (const key of keys) {
+      if (picked.has(key) !== on) selection.toggle(key)
+    }
   }
 
   const everything = selectable(catalog.data ?? [])
@@ -120,13 +121,13 @@ export function StandardCatalogDialog({
     setError(null)
     try {
       const result = await vocabularyApi.importStandards(
-        [...picked].map((key) => {
+        selection.chosen.map((key) => {
           const name = (renames[key] ?? '').trim()
           return name ? { key, value: name } : { key }
         })
       )
       setMade(result.length)
-      setPicked(new Set())
+      selection.clear()
       setRenames({})
       catalog.reload()
       onImported()
@@ -251,7 +252,9 @@ export function StandardCatalogDialog({
                     className="mt-1"
                     aria-label={item.value}
                     checked={picked.has(item.key)}
-                    onChange={() => toggle(item.key)}
+                    // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+                    onClick={(event) => selection.toggle(item.key, event)}
+                    onChange={() => {}}
                   />
                   <span className="flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">

@@ -56,6 +56,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { formatScalar } from '@/shared/units'
 
 /** 값 한 줄. 단위는 **서버가 준 것**을 쓴다(라벨에 손으로 안 적는다). */
@@ -145,7 +146,6 @@ export function GroupsPanel({
 }) {
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState('')
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [options, setOptions] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<Error | null>(null)
@@ -178,6 +178,9 @@ export function GroupsPanel({
       !chosen || chosen.applies_to.length === 0 || chosen.applies_to.includes(run.test_type_key)
   )
   const candidates = kindMatched.filter((run) => (run.master_curve_count ?? 0) > 0)
+  // **Shift 로 범위를 고른다.** 온도 여섯 단이면 여섯 번 누르게 된다.
+  const selection = useRowSelection(candidates.map((run) => run.id))
+  const picked = selection.picked
   /**
    * 종류는 맞는데 마스터커브가 없어 빠진 것. **왜 안 뜨는지 말하려고 센다.**
    *
@@ -212,7 +215,7 @@ export function GroupsPanel({
         ),
       })
       setOpen(false)
-      setPicked(new Set())
+      selection.clear()
       rows.reload()
     } catch (error) {
       setFailed(error as Error)
@@ -469,14 +472,9 @@ export function GroupsPanel({
                       type="checkbox"
                       aria-label={`${run.record_name} 고르기`}
                       checked={picked.has(run.id)}
-                      onChange={(event) =>
-                        setPicked((now) => {
-                          const next = new Set(now)
-                          if (event.target.checked) next.add(run.id)
-                          else next.delete(run.id)
-                          return next
-                        })
-                      }
+                      // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+                      onClick={(event) => selection.toggle(run.id, event)}
+                      onChange={() => {}}
                     />
                     <span className="font-mono text-xs">{run.record_name}</span>
                     <span className="text-muted-foreground text-xs">{run.orientation}</span>

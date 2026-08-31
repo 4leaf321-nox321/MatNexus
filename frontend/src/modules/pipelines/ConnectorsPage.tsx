@@ -52,6 +52,7 @@ import {
 } from '@/shared/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { stamp } from '@/shared/lib/datetime'
 
 type Tab = 'all' | 'connectors' | 'inbox' | 'failed' | 'setup'
@@ -365,19 +366,13 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
     () => pipelinesApi.inbox({ ...(filter ? { status: filter } : {}), limit: 100 }),
     [filter]
   )
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
-  useEffect(() => setPicked(new Set()), [filter, data])
-
-  function togglePick(id: string) {
-    setPicked((now) => {
-      const next = new Set(now)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  // **Shift 로 범위를 고른다.** 받은 편지함은 한 번에 수십 건이 들어온다.
+  const selection = useRowSelection((data?.items ?? []).map((row) => row.id))
+  const picked = selection.picked
+  const clearPicked = selection.clear
+  useEffect(() => clearPicked(), [filter, data, clearPicked])
 
   async function approvePicked() {
     setBusy(true)
@@ -435,11 +430,7 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
           <Button
             size="sm"
             variant="ghost"
-            onClick={() =>
-              setPicked((now) =>
-                now.size === data.items.length ? new Set() : new Set(data.items.map((r) => r.id))
-              )
-            }
+            onClick={() => selection.setAll(!selection.allOn)}
           >
             전체 고르기/해제
           </Button>
@@ -475,7 +466,11 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
                   row={row}
                   onOpen={onOpen}
                   picked={pickable ? picked.has(row.id) : undefined}
-                  onPick={pickable ? () => togglePick(row.id) : undefined}
+                  onPick={
+                    pickable
+                      ? (event) => selection.toggle(row.id, event)
+                      : undefined
+                  }
                 />
               ))}
             </TableBody>
@@ -507,7 +502,7 @@ function InboxRow({
   row: InboxItem
   onOpen: (id: string) => void
   picked?: boolean
-  onPick?: () => void
+  onPick?: (event: { shiftKey?: boolean }) => void
 }) {
   return (
     <TableRow className="cursor-pointer" onClick={() => onOpen(row.id)}>
@@ -516,7 +511,9 @@ function InboxRow({
           <input
             type="checkbox"
             checked={picked ?? false}
-            onChange={onPick}
+            // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+            onClick={onPick}
+            onChange={() => {}}
             aria-label={`${row.filename} 고르기`}
           />
         </TableCell>
