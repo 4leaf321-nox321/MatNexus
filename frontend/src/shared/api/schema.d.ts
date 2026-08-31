@@ -9868,6 +9868,8 @@ export interface components {
             status: string;
             /** Summary */
             summary: components["schemas"]["TestSummaryOut"][];
+            /** Temperature Step Count */
+            temperature_step_count?: number | null;
             /** Test Type Key */
             test_type_key: string;
             /** Test Type Label */
@@ -9948,6 +9950,8 @@ export interface components {
             specimen_standard?: string | null;
             /** Status */
             status: string;
+            /** Temperature Step Count */
+            temperature_step_count?: number | null;
             /** Test Type Key */
             test_type_key: string;
             /** Test Type Label */

@@ -35,6 +35,9 @@ from app.modules.tests import formats as tests_formats
 from app.modules.tests import routes as tests_routes
 from app.modules.trash import routes as trash_routes
 from app.modules.units import routes as units_routes
+from app.modules.viscoelastic import (  # noqa: F401  (파싱 훅을 등록시킨다)
+    autoregister as _viscoelastic_autoregister,
+)
 from app.modules.viscoelastic import routes as viscoelastic_routes
 from app.modules.voc import routes as voc_routes
 from app.modules.vocabulary import routes as vocabulary_routes

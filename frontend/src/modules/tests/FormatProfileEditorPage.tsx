@@ -371,6 +371,9 @@ export default function FormatProfileEditorPage() {
   const [tableMode, setTableMode] = useState<'first' | 'all'>('first')
   const [include, setInclude] = useState('')
   const [derived, setDerived] = useState('')
+  /** 처리결과 표를 마스터커브로 **자동 등록**할 규칙. 비우면 자동 등록을 안 한다. */
+  const [curveRule, setCurveRule] = useState('')
+  const [curveUnit, setCurveUnit] = useState('degC')
   const [columnMap, setColumnMap] = useState<Record<string, ColumnRule>>({})
   const [metaMap, setMetaMap] = useState<Record<string, MetaRule>>({})
   const [drafts, setDrafts] = useState<DraftChannel[]>([])
@@ -466,6 +469,8 @@ export default function FormatProfileEditorPage() {
     setTableMode(definition.tables?.mode === 'all' ? 'all' : 'first')
     setInclude(definition.tables?.include ?? '')
     setDerived(definition.tables?.derived ?? '')
+    setCurveRule(definition.tables?.master_curve?.pattern ?? '')
+    setCurveUnit(definition.tables?.master_curve?.unit || 'degC')
     // **단위와 `skip` 까지 읽는다.** 채널만 읽던 때는 열고 저장만 눌러도
     // 그 둘이 사라졌다(`profileColumns.ts` 머리말).
     setColumnMap(readColumnRules(definition.columns))
@@ -1052,6 +1057,9 @@ export default function FormatProfileEditorPage() {
         mode: tableMode,
         ...(include ? { include } : {}),
         ...(derived ? { derived } : {}),
+        // **규칙이 있을 때만 담는다.** 빈 규칙을 넣어 두면 읽는 쪽이 「자동 등록을
+        // 켰는데 아무것도 안 된다」 로 읽는다.
+        ...(curveRule ? { master_curve: { pattern: curveRule, unit: curveUnit } } : {}),
       },
       columns: columnRules,
       ...(Object.keys(specimen).length ? { specimen } : {}),
@@ -1467,6 +1475,39 @@ export default function FormatProfileEditorPage() {
                 </p>
               </div>
             </div>
+
+            {/* **읽자마자 등록할지.** 규칙이 없으면 사람이 화면에서 한 건씩 가져온다 —
+                파일 100개면 100번이다. 다만 **기준 온도를 짐작하지는 않는다**: 틀린
+                온도로 등록해도 곡선은 멀쩡하고 덱까지 나가서 아무 데서도 안 걸린다. */}
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <div className="min-w-64 flex-1 space-y-1.5">
+                <Label className="text-xs">
+                  마스터커브 자동 등록 — 표 이름에서 기준 온도 (정규식)
+                </Label>
+                <Input
+                  className="h-8 font-mono text-xs"
+                  value={curveRule}
+                  placeholder="\(([\d.]+)\s*°?\s*C\)"
+                  onChange={(event) => setCurveRule(event.target.value)}
+                />
+              </div>
+              <div className="w-28 space-y-1.5">
+                <Label className="text-xs">그 숫자의 단위</Label>
+                <Input
+                  className="h-8 font-mono text-xs"
+                  value={curveUnit}
+                  placeholder="degC"
+                  onChange={(event) => setCurveUnit(event.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-muted-foreground mt-1 text-xs">
+              비워 두면 자동 등록을 안 합니다(점탄성 화면에서 손으로 가져옵니다).{' '}
+              <b>첫 괄호가 기준 온도</b>입니다 — TA DMA850 은 표 이름이{' '}
+              <code>TTS - master curve (20.0 °C)</code> 이고 파일 머리에는 그 온도가 없습니다.
+              <b> 단위는 여기서 정합니다</b>: 이름에 <code>°C</code> 가 보인다고 섭씨로
+              단정하면, 다른 뜻의 온도가 이름에 든 파일에서 조용히 틀립니다.
+            </p>
 
             {preview && (
               <div className="mt-3 space-y-1">

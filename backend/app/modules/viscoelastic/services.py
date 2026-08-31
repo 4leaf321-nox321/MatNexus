@@ -320,6 +320,13 @@ def measured_curves(db: Session, run_id: uuid.UUID) -> list[Curve]:
 #: 장비가 겹쳐 준 곡선에서 찾을 열. **이름을 넓게 본다** — 장비마다 다르게 적는다.
 IMPORT_FREQUENCY = ("frequency", "frequency_hz", "angular_frequency", "omega")
 IMPORT_STORAGE = ("storage_modulus", "storage_pa", "e_prime", "g_prime")
+#: 손실 탄성률. **없어도 받지만, 있으면 반드시 함께 담는다.**
+#:
+#: 묶음 Prony 는 저장·손실을 함께 맞춘다 — 손실이 없는 마스터커브는 글로벌 피팅에서
+#: 거절된다(`MNX-GROUPING-0006`). 가져온 곡선이 그 자리에서 막히면 「가져오기는
+#: 됐는데 묶이지가 않는다」 가 되고, 원인이 곡선 안에 있어 화면에서 안 보인다
+#: (실측 2026-08-31: 자동 등록을 켜자 묶음 시험 여섯이 이 오류로 떨어졌다).
+IMPORT_LOSS = ("loss_modulus", "loss_pa", "e_double_prime", "g_double_prime")
 
 
 def mark_primary(db: Session, curve: MasterCurve) -> MasterCurve:
@@ -433,6 +440,7 @@ def import_master_curve(
     frame, curve = curvedata.load_frame(db, run, curve_key)
     frequency = _first_column(frame, IMPORT_FREQUENCY)
     storage = _first_column(frame, IMPORT_STORAGE)
+    loss = _first_column(frame, IMPORT_LOSS)
     if frequency is None or storage is None:
         raise AppError(
             "MNX-VISCOELASTIC-0007",
@@ -453,6 +461,17 @@ def import_master_curve(
             values=tuple(storage),
         ),
     ]
+    if loss is not None:
+        # **있으면 함께 담는다.** 없다고 지어내지는 않는다 — 손실이 없는 표는
+        # 그대로 받고, 그 곡선으로 글로벌 피팅을 하려 할 때 그쪽이 이유를 말한다.
+        channels.append(
+            Channel(
+                key="loss_modulus",
+                label="손실 탄성률",
+                si_unit="Pa",
+                values=tuple(loss[order]),
+            )
+        )
     stored = filestore.write_bytes(
         curvekit.to_parquet(channels),
         relative_dir=f"master-curves/{run.id}",

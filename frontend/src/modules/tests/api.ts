@@ -50,6 +50,17 @@ export interface ProfileDefinition {
     include?: string
     /** **장비가 계산해 준 표**(TTS 마스터 곡선 등). 버리지도 섞지도 않는다. */
     derived?: string
+    /**
+     * 처리결과 표를 **마스터커브로 자동 등록**할 규칙(ADR 0023).
+     *
+     * `pattern` 의 첫 괄호가 기준 온도다 — 실측(TA DMA850)에서 표 이름이
+     * `TTS - master curve (20.0 °C)` 이고 파일 머리에는 그 온도가 없다.
+     * **단위는 사람이 적는다**: 이름에 `°C` 가 보인다고 섭씨로 단정하면, 다른
+     * 뜻의 온도가 이름에 든 파일에서 조용히 틀린다.
+     *
+     * 규칙이 없으면 자동 등록을 안 한다 — 점탄성 화면에서 손으로 가져온다.
+     */
+    master_curve?: { pattern?: string; unit?: string }
   }
   /** 열 규칙. **셋이 한 벌이다.**
    *

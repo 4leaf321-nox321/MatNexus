@@ -20,11 +20,13 @@ from typing import Any
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
+from app.modules.tests.models import FormatProfile
 from app.modules.viscoelastic import services
 from matcore import cards, export
 from matcore.registry import Produced
@@ -33,16 +35,21 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
 
 
-@pytest.fixture
-def dma_run(client: TestClient, db: Session, admin_headers: dict[str, str]) -> dict[str, Any]:
-    """DMA 파일을 올려 읽힌 시험 하나."""
+def _dma_run(
+    client: TestClient, db: Session, admin_headers: dict[str, str], *, grade: str = "VE01"
+) -> dict[str, Any]:
+    """DMA 파일을 올려 읽힌 시험 하나. **프로파일을 바꿔 가며 여러 번 만든다.**
+
+    자동 등록은 읽을 때 한 번 일어나므로, 규칙을 바꾼 뒤에는 **새로 올려 읽어야**
+    그 규칙이 걸린 결과를 볼 수 있다.
+    """
     ensure_builtin_test_types(db)
     ensure_builtin_format_profiles(db)
     db.commit()
 
     material = client.post(
         "/api/materials",
-        json={"family": "Polymer", "category": "EPDM", "grade": "VE01", "spec_thickness": 1.0},
+        json={"family": "Polymer", "category": "EPDM", "grade": grade, "spec_thickness": 1.0},
         headers=admin_headers,
     ).json()
     sample = client.post(
@@ -62,6 +69,42 @@ def dma_run(client: TestClient, db: Session, admin_headers: dict[str, str]) -> d
     assert test_services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
     run: dict[str, Any] = created
     return run
+
+
+@pytest.fixture
+def dma_run(client: TestClient, db: Session, admin_headers: dict[str, str]) -> dict[str, Any]:
+    """DMA 파일을 올려 읽힌 시험 하나."""
+    return _dma_run(client, db, admin_headers)
+
+
+def _drop_rule(db: Session) -> None:
+    """기본 프로파일에서 **마스터커브 자동 등록 규칙만** 걷는다."""
+    ensure_builtin_test_types(db)
+    ensure_builtin_format_profiles(db)
+    db.commit()
+    profile = db.scalar(select(FormatProfile).where(FormatProfile.key == "ta_dma850"))
+    assert profile is not None
+    tables = {
+        key: value
+        for key, value in profile.definition["tables"].items()
+        if key != "master_curve"
+    }
+    profile.definition = {**profile.definition, "tables": tables}
+    db.commit()
+
+
+@pytest.fixture
+def dma_run_plain(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> dict[str, Any]:
+    """자동 등록을 **끄고** 읽은 시험.
+
+    프로파일에 규칙이 있으면 읽자마자 마스터커브가 생긴다 — 그게 기본 동작이고,
+    `Test읽자마자_마스터커브가_된다` 가 그것을 본다. 여기 시험들이 보려는 것은 그
+    **앞 단계**(사람이 손으로 만들 때의 규칙)라, 빈 상태에서 시작해야 한다.
+    """
+    _drop_rule(db)
+    return _dma_run(client, db, admin_headers, grade="PLAIN")
 
 
 class Test겹칠_후보:
@@ -158,13 +201,18 @@ class Test마스터커브:
         assert len(points["frequency"]) == curve["point_count"]
 
     def test_목록에_남는다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
-        """**만들고 나면 안 고친다.** 기준 온도를 바꾸면 새로 만들고, 둘 다 남는다."""
-        self._make(client, admin_headers, dma_run)
-        self._make(client, admin_headers, dma_run)
+        """**만들고 나면 안 고친다.** 기준 온도를 바꾸면 새로 만들고, 둘 다 남는다.
+
+        수를 세므로 **자동 등록이 없는 시험**으로 본다 — 프로파일에 규칙이 있으면
+        읽자마자 한 벌이 이미 들어 있어서, 「둘 다 남는다」 가 3이 된다.
+        """
+        self._make(client, admin_headers, dma_run_plain)
+        self._make(client, admin_headers, dma_run_plain)
         listed = client.get(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves", headers=admin_headers
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves",
+            headers=admin_headers,
         ).json()
         assert len(listed) == 2
 
@@ -477,27 +525,27 @@ class Test시험_목록이_마스터커브를_센다:
     """
 
     def test_안_만들었으면_0(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         body = client.get("/api/test-runs", headers=admin_headers).json()
-        mine = next(one for one in body["items"] if one["id"] == dma_run["id"])
+        mine = next(one for one in body["items"] if one["id"] == dma_run_plain["id"])
         assert mine["master_curve_count"] == 0
 
     def test_만들면_센다(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
-        dma_run: dict[str, Any],
+        dma_run_plain: dict[str, Any],
     ) -> None:
         sweeps = client.get(
-            f"/api/viscoelastic/runs/{dma_run['id']}/sweeps", headers=admin_headers
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/sweeps", headers=admin_headers
         ).json()["items"]
         shifts = {
             str(item["temperature_k"]): -1.0 * index
             for index, item in enumerate(sorted(sweeps, key=lambda x: x["temperature_k"]))
         }
         made = client.post(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves",
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves",
             json={
                 "reference_temperature_k": min(one["temperature_k"] for one in sweeps),
                 "method": "manual",
@@ -508,8 +556,168 @@ class Test시험_목록이_마스터커브를_센다:
         assert made.status_code == 201, made.text
 
         body = client.get("/api/test-runs", headers=admin_headers).json()
-        mine = next(one for one in body["items"] if one["id"] == dma_run["id"])
+        mine = next(one for one in body["items"] if one["id"] == dma_run_plain["id"])
         assert mine["master_curve_count"] == 1
+
+
+class Test읽자마자_마스터커브가_된다:
+    """**프로파일 규칙이 있으면 자동으로 등록한다**(ADR 0023 의 B).
+
+    장비가 겹쳐 준 표를 사람이 화면에서 한 건씩 가져오는 길은 있다. 그런데 파일
+    100개면 100번이다. 기준 온도를 어디서 읽을지 프로파일에 적어 두면 읽는 김에
+    등록할 수 있다.
+
+    **짐작은 안 한다.** 틀린 온도로 등록해도 곡선은 멀쩡하고 계산도 돌고 덱도
+    나간다 — 아무 데서도 안 걸린다. 그래서 규칙이 있을 때만, 규칙이 읽힐 때만.
+    """
+
+    def test_규칙이_있으면_읽는_김에_등록한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """기본 프로파일(TA DMA850)이 규칙을 들고 있다 — 실측 파일의 표 이름이
+        `TTS - master curve (20.0 °C)` 이고 파일 머리에는 그 온도가 없다."""
+        curves = client.get(
+            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves", headers=admin_headers
+        ).json()
+        assert len(curves) == 1, curves
+        assert curves[0]["method"] == "imported"
+        assert curves[0]["reference_temperature_k"] == pytest.approx(293.15)
+        # 첫 곡선이므로 대표가 된다 — 재료의 글로벌 피팅이 이것을 읽는다.
+        assert curves[0]["is_primary"] is True
+
+    def test_손실_탄성률까지_담는다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """**묶음 Prony 는 저장·손실을 함께 맞춘다.**
+
+        손실을 안 담으면 가져온 곡선이 글로벌 피팅에서 거절된다
+        (`MNX-GROUPING-0006`) — 「가져오기는 됐는데 묶이지가 않는다」 가 되고,
+        원인이 곡선 파일 안에 있어 화면 어디에도 안 보인다. 자동 등록을 켠 날
+        묶음 시험 여섯이 이것으로 떨어졌다(2026-08-31).
+        """
+        curves = client.get(
+            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves", headers=admin_headers
+        ).json()
+        points = client.get(
+            f"/api/viscoelastic/master-curves/{curves[0]['id']}/points", headers=admin_headers
+        ).json()
+        assert set(points) >= {"frequency", "storage_modulus", "loss_modulus"}
+
+    def test_어디서_읽은_온도인지_남긴다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """**사람이 적은 값과 규칙이 읽은 값은 뜻이 다르다.** 나중에 「이 온도 어디서
+        났나」 를 물을 때 카드까지 따라가야 한다."""
+        curves = client.get(
+            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves", headers=admin_headers
+        ).json()
+        notes = " ".join(curves[0]["notes"])
+        assert "표 이름에서 읽었습니다" in notes
+        assert "20.0" in notes
+
+    def test_등록했다는_사실이_시험에_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """조용히 만들지 않는다 — 사람이 안 시킨 일이라 더 그렇다."""
+        body = client.get(f"/api/test-runs/{dma_run['id']}", headers=admin_headers).json()
+        assert any("마스터커브로 등록" in one for one in body["warnings"]), body["warnings"]
+
+    def test_다시_읽어도_늘지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """재파싱은 곡선을 새로 쓰지만 마스터커브는 남아 있다. 같은 곡선으로 또
+        만들면 재파싱마다 하나씩 늘고, 그중 어느 것이 대표인지가 흔들린다."""
+        assert test_services.parse_run(db, uuid.UUID(dma_run["id"])) == "parsed"
+        curves = client.get(
+            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves", headers=admin_headers
+        ).json()
+        assert len(curves) == 1
+
+    def test_규칙이_없으면_등록하지_않는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**기본은 안 하는 쪽이다.** 프로파일이 온도를 어디서 읽을지 안 적었으면
+        우리는 모르는 것이고, 모르는 값을 지어내지 않는다."""
+        _drop_rule(db)
+        run = _dma_run(client, db, admin_headers, grade="NORULE")
+        curves = client.get(
+            f"/api/viscoelastic/runs/{run['id']}/master-curves", headers=admin_headers
+        ).json()
+        assert curves == []
+
+    def test_규칙이_안_맞으면_말하고_넘어간다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**등록 안 함 + 이유**가 조용히 틀린 온도보다 낫다. 앞은 화면에 뜨고
+        뒤는 덱까지 간다."""
+        ensure_builtin_test_types(db)
+        ensure_builtin_format_profiles(db)
+        db.commit()
+        profile = db.scalar(select(FormatProfile).where(FormatProfile.key == "ta_dma850"))
+        assert profile is not None
+        profile.definition = {
+            **profile.definition,
+            "tables": {
+                **profile.definition["tables"],
+                "master_curve": {"pattern": r"기준온도 ([\d.]+)", "unit": "degC"},
+            },
+        }
+        db.commit()
+
+        run = _dma_run(client, db, admin_headers, grade="NOMATCH")
+        curves = client.get(
+            f"/api/viscoelastic/runs/{run['id']}/master-curves", headers=admin_headers
+        ).json()
+        assert curves == []
+
+        body = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert any("기준 온도를 못 읽어" in one for one in body["warnings"]), body["warnings"]
+
+
+class Test온도_단_수:
+    """**겹칠 수 있는 시험인지 읽을 때 세어 둔다.**
+
+    DMA 는 같은 시험종류 아래 성격이 다른 둘이 온다 — 주파수-온도 스윕(온도 여러
+    단)과 변형률 스윕(한 단). 시험종류 키로는 못 가른다.
+
+    재료 화면이 「마스터커브가 없는 DMA n건」 이라고 재촉할 때 변형률 스윕이 섞여
+    있으면 **할 수 없는 일을 남은 일로 적는 셈**이다. 목록에서 다시 재려면 시험마다
+    Parquet 을 열어야 하므로 읽을 때 센다.
+    """
+
+    def test_읽으면_세어_둔다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        body = client.get(f"/api/test-runs/{dma_run['id']}", headers=admin_headers).json()
+        # 실측 파일(TA DMA850)은 -40~10 °C 를 여섯 단으로 잰다.
+        assert body["temperature_step_count"] == 6
+
+    def test_목록에도_실린다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """**목록이 이 값을 본다.** 상세에만 있으면 재료 화면이 시험마다 상세를
+        불러야 하고, 그러면 20건짜리 재료에서 20번을 부른다."""
+        rows = client.get("/api/test-runs", headers=admin_headers).json()["items"]
+        mine = next(one for one in rows if one["id"] == dma_run["id"])
+        assert mine["temperature_step_count"] == 6
+
+    def test_장비가_계산한_표는_안_센다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        """마스터커브·이동인자 표에도 온도 열이 있는데 그것은 **잰 단이 아니라 겹친
+        결과**다. 함께 세면 한 단짜리 파일이 여러 단으로 보인다.
+
+        실측 파일의 측정 곡선은 여섯이고 처리결과 표가 둘이다 — 처리결과의 온도까지
+        셌다면 6보다 커진다.
+        """
+        body = client.get(f"/api/test-runs/{dma_run['id']}", headers=admin_headers).json()
+        derived = [one for one in body["curves"] if one["kind"] == "derived"]
+        assert derived, "이 파일에는 처리결과 표가 있다"
+        assert body["temperature_step_count"] == 6
 
 
 class Test대표_마스터커브:
@@ -548,38 +756,39 @@ class Test대표_마스터커브:
         return sorted(float(item["temperature_k"]) for item in sweeps)
 
     def test_첫_곡선은_만들면서_대표가_된다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         """고를 것이 하나뿐인데 고르라고 하면 그것은 일이 아니라 절차다."""
-        temperatures = self._temperatures(client, admin_headers, dma_run)
-        made = self._make(client, admin_headers, dma_run, temperatures[0])
+        temperatures = self._temperatures(client, admin_headers, dma_run_plain)
+        made = self._make(client, admin_headers, dma_run_plain, temperatures[0])
         assert made["is_primary"] is True
 
     def test_둘째는_자동으로_대표가_되지_않는다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         """**이것이 이 기능의 요점이다.** 새로 만든 것이 자동으로 대표가 되면
         「최근 것이 대표」 라는 옛 동작이 이름만 바꿔 그대로 남는다."""
-        temperatures = self._temperatures(client, admin_headers, dma_run)
-        first = self._make(client, admin_headers, dma_run, temperatures[0])
-        second = self._make(client, admin_headers, dma_run, temperatures[-1])
+        temperatures = self._temperatures(client, admin_headers, dma_run_plain)
+        first = self._make(client, admin_headers, dma_run_plain, temperatures[0])
+        second = self._make(client, admin_headers, dma_run_plain, temperatures[-1])
         assert second["is_primary"] is False
 
         listed = {
             one["id"]: one
             for one in client.get(
-                f"/api/viscoelastic/runs/{dma_run['id']}/master-curves", headers=admin_headers
+                f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves",
+                headers=admin_headers,
             ).json()
         }
         assert listed[first["id"]]["is_primary"] is True
 
     def test_옮기면_앞의_것이_내려온다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         """대표가 둘이면 「어느 계수로 나온 물성인가」 에 답할 수 없다."""
-        temperatures = self._temperatures(client, admin_headers, dma_run)
-        first = self._make(client, admin_headers, dma_run, temperatures[0])
-        second = self._make(client, admin_headers, dma_run, temperatures[-1])
+        temperatures = self._temperatures(client, admin_headers, dma_run_plain)
+        first = self._make(client, admin_headers, dma_run_plain, temperatures[0])
+        second = self._make(client, admin_headers, dma_run_plain, temperatures[-1])
 
         moved = client.post(
             f"/api/viscoelastic/master-curves/{second['id']}/primary", headers=admin_headers
@@ -590,23 +799,25 @@ class Test대표_마스터커브:
         listed = {
             one["id"]: one
             for one in client.get(
-                f"/api/viscoelastic/runs/{dma_run['id']}/master-curves", headers=admin_headers
+                f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves",
+                headers=admin_headers,
             ).json()
         }
         assert listed[first["id"]]["is_primary"] is False
         assert sum(1 for one in listed.values() if one["is_primary"]) == 1
 
     def test_가져온_곡선도_대표가_된다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         """장비가 만든 것만 있는 파일도 재료로 나가야 한다 — 그 시험에는 겹친
         곡선이 아예 없으므로, 가져온 것이 대표가 되지 않으면 대표가 영영 빈다."""
         listed = client.get(
-            f"/api/viscoelastic/runs/{dma_run['id']}/importable-curves", headers=admin_headers
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/importable-curves",
+            headers=admin_headers,
         ).json()
         usable = next(one for one in listed if one["usable"])
         made = client.post(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves/import",
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves/import",
             json={"curve_key": usable["curve_key"], "reference_temperature_k": 293.15},
             headers=admin_headers,
         ).json()
@@ -714,13 +925,13 @@ class Test장비가_겹친_곡선을_가져온다:
         return str(body["curves"][0]["key"]) if body.get("curves") else "raw"
 
     def test_가져오면_마스터커브가_된다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         sweeps = client.get(
-            f"/api/viscoelastic/runs/{dma_run['id']}/sweeps", headers=admin_headers
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/sweeps", headers=admin_headers
         ).json()["items"]
         made = client.post(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves/import",
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves/import",
             json={
                 "curve_key": sweeps[0]["curve_key"],
                 "reference_temperature_k": 293.15,
@@ -731,15 +942,15 @@ class Test장비가_겹친_곡선을_가져온다:
         assert made.json()["method"] == "imported"
 
     def test_이동인자를_안_지어낸다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         """**모르는 것을 채우지 않는다.** 장비가 무엇으로 겹쳤는지 우리는 모르고,
         그 자리에 값을 넣으면 나중에 그것이 관측인지 짐작인지 알 수 없다."""
         sweeps = client.get(
-            f"/api/viscoelastic/runs/{dma_run['id']}/sweeps", headers=admin_headers
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/sweeps", headers=admin_headers
         ).json()["items"]
         body = client.post(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves/import",
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves/import",
             json={
                 "curve_key": sweeps[0]["curve_key"],
                 "reference_temperature_k": 293.15,
@@ -750,14 +961,14 @@ class Test장비가_겹친_곡선을_가져온다:
         assert any("이동인자는 이 시스템이 모릅니다" in said for said in body["notes"])
 
     def test_사람이_적은_온도라고_남긴다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         # **틀린 온도로 등록하면 그 덱은 조용히 다른 온도의 해석에 쓰인다.**
         sweeps = client.get(
-            f"/api/viscoelastic/runs/{dma_run['id']}/sweeps", headers=admin_headers
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/sweeps", headers=admin_headers
         ).json()["items"]
         body = client.post(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves/import",
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves/import",
             json={
                 "curve_key": sweeps[0]["curve_key"],
                 "reference_temperature_k": 293.15,
@@ -767,14 +978,14 @@ class Test장비가_겹친_곡선을_가져온다:
         assert any("사람이 적은 값" in said for said in body["notes"])
 
     def test_가져온_것도_시험_목록이_센다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         """**이것이 이 기능의 요점이다.** 세어지지 않으면 글로벌 피팅 후보에 안 뜬다."""
         sweeps = client.get(
-            f"/api/viscoelastic/runs/{dma_run['id']}/sweeps", headers=admin_headers
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/sweeps", headers=admin_headers
         ).json()["items"]
         client.post(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves/import",
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves/import",
             json={
                 "curve_key": sweeps[0]["curve_key"],
                 "reference_temperature_k": 293.15,
@@ -782,16 +993,16 @@ class Test장비가_겹친_곡선을_가져온다:
             headers=admin_headers,
         )
         rows = client.get("/api/test-runs", headers=admin_headers).json()["items"]
-        mine = next(one for one in rows if one["id"] == dma_run["id"])
+        mine = next(one for one in rows if one["id"] == dma_run_plain["id"])
         assert mine["master_curve_count"] == 1
 
     def test_열을_못_찾으면_어디를_고칠지_말한다(
-        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
     ) -> None:
         """「못 찾았습니다」 만으로는 사람이 다음에 할 일을 모른다 — 매핑을 고치는
         자리를 함께 적는다."""
         response = client.post(
-            f"/api/viscoelastic/runs/{dma_run['id']}/master-curves/import",
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves/import",
             json={"curve_key": "없는곡선", "reference_temperature_k": 293.15},
             headers=admin_headers,
         )

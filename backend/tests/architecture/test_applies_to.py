@@ -31,10 +31,19 @@ from matcore import registry
 
 @pytest.fixture(scope="module", autouse=True)
 def _loaded() -> None:
-    """확장까지 올려 둔다 — 확장이 등록한 플러그인도 같은 규칙을 받는다."""
+    """**등록될 것을 전부 등록시킨다.**
+
+    확장까지 올린다 — 확장이 등록한 플러그인도 같은 규칙을 받는다. 그리고 내장
+    처리 단계와 묶음도 명시적으로 올린다: 다른 시험이 먼저 부른 덕에 우연히
+    등록돼 있는 상태에 기대면, **이 파일만 돌릴 때와 전체를 돌릴 때 결과가
+    갈린다**(실측 2026-08-31 — 인장 단계가 안 올라와 목록 검사가 실패했다).
+    """
     from app.main import create_app
+    from matcore import processing
+    from matcore.groups import prony as _prony  # noqa: F401  (등록시킨다)
 
     create_app()
+    processing.load_builtin()
 
 
 def _keys() -> set[str]:

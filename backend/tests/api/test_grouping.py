@@ -16,11 +16,13 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
+from app.modules.tests.models import FormatProfile
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
@@ -86,12 +88,38 @@ def _master_curve(client: TestClient, headers: dict[str, str], run: dict[str, An
     assert response.status_code == 201, response.text
 
 
+def _drop_master_curve_rule(db: Session) -> None:
+    """기본 프로파일에서 **마스터커브 자동 등록 규칙만** 걷는다.
+
+    켜 두면 DMA 파일을 읽자마자 20 °C 마스터커브가 한 벌 생긴다(ADR 0023 의 B).
+    묶음 시험이 보려는 것은 **묶는 계산**이라, 손으로 만든 곡선이 대표여야
+    「무엇으로 묶었나」 를 시험이 정할 수 있다.
+    """
+    profile = db.scalar(select(FormatProfile).where(FormatProfile.key == "ta_dma850"))
+    assert profile is not None
+    tables = {
+        key: value
+        for key, value in profile.definition["tables"].items()
+        if key != "master_curve"
+    }
+    profile.definition = {**profile.definition, "tables": tables}
+    db.commit()
+
+
 @pytest.fixture
 def two_runs(client: TestClient, db: Session, admin_headers: dict[str, str]) -> dict[str, Any]:
-    """한 재료 아래 마스터커브까지 만든 시험 둘."""
+    """한 재료 아래 마스터커브까지 만든 시험 둘.
+
+    **자동 등록은 끄고 시작한다.** 기본 프로파일에 규칙이 있어서 읽자마자 20 °C
+    마스터커브가 한 벌 생기는데(ADR 0023 의 B), 여기 시험들이 보려는 것은 **묶는
+    계산**이다 — 손으로 만든 곡선이 대표여야 「무엇으로 묶었나」 를 시험이 정할 수
+    있다. 자동 등록 자체는 `test_viscoelastic_api.py` 가 본다.
+    """
     ensure_builtin_test_types(db)
     ensure_builtin_format_profiles(db)
     db.commit()
+
+    _drop_master_curve_rule(db)
 
     material = _material(client, admin_headers, "VG01")
     runs = [_run(client, db, admin_headers, material) for _ in range(2)]
@@ -199,6 +227,47 @@ class Test묶어서_남긴다:
             headers=admin_headers,
         )
         assert response.status_code == 422, response.text
+
+
+class Test자동_등록된_것으로도_묶인다:
+    """**읽자마자 생긴 마스터커브가 곧바로 쓰여야 한다**(ADR 0023 의 B).
+
+    자동 등록을 켜자 묶음이 전부 거절됐다(2026-08-31). 가져오기가 저장 탄성률만
+    담고 손실을 버려서, 묶음 Prony 가 「손실 탄성률이 없습니다」 로 막았다 —
+    **가져오기는 성공했는데 묶이지가 않는** 상태였고, 원인이 곡선 파일 안에 있어
+    화면 어디에도 안 보였다.
+
+    그래서 여기서는 **손으로 아무것도 안 만들고** 묶는다. 이 시험이 통과한다는
+    것은 「파일을 올리기만 하면 재료에서 글로벌 피팅이 된다」 는 뜻이다.
+    """
+
+    def test_손으로_겹치지_않아도_묶인다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        ensure_builtin_test_types(db)
+        ensure_builtin_format_profiles(db)
+        db.commit()
+
+        material = _material(client, admin_headers, "VAUTO")
+        runs = [_run(client, db, admin_headers, material) for _ in range(2)]
+        # 손으로 만든 마스터커브가 하나도 없다 — 읽으면서 생긴 것뿐이다.
+        for run in runs:
+            curves = client.get(
+                f"/api/viscoelastic/runs/{run['id']}/master-curves", headers=admin_headers
+            ).json()
+            assert len(curves) == 1 and curves[0]["method"] == "imported"
+
+        made = client.post(
+            "/api/groups",
+            json={
+                "plugin_id": PLUGIN,
+                "run_ids": [run["id"] for run in runs],
+                "options": {"method": "pooled"},
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["values"]["equilibrium_pa"] > 0
 
 
 class Test대표를_읽는다:
@@ -309,6 +378,8 @@ class Test섞으면_막는다:
         ensure_builtin_test_types(db)
         ensure_builtin_format_profiles(db)
         db.commit()
+        # 자동 등록이 켜져 있으면 읽자마자 마스터커브가 생겨 이 상황이 안 만들어진다.
+        _drop_master_curve_rule(db)
 
         material = _material(client, admin_headers, "VY01")
         runs = [_run(client, db, admin_headers, material) for _ in range(2)]

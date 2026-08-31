@@ -14127,6 +14127,17 @@
             "title": "Summary",
             "type": "array"
           },
+          "temperature_step_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Step Count"
+          },
           "test_type_key": {
             "title": "Test Type Key",
             "type": "string"
@@ -14416,6 +14427,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "temperature_step_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Step Count"
           },
           "test_type_key": {
             "title": "Test Type Key",

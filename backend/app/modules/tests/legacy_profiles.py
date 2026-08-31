@@ -155,6 +155,12 @@ TA_DMA850_DEFINITION: dict[str, Any] = {
         "mode": "all",
         "include": "^Temperature Sweep|^Strain Sweep|^Frequency Sweep",
         "derived": "^TTS",
+        # **읽자마자 마스터커브로 등록한다**(ADR 0023 의 B). 이 장비는 기준 온도를
+        # 표 이름에만 적는다 — 파일 머리에는 없다. 첫 괄호가 그 온도이고, 단위는
+        # 여기서 정한다(이름에 `°C` 가 보인다고 단정하지 않는다).
+        #
+        # 규칙이 없으면 자동 등록을 안 한다. 그때는 점탄성 화면에서 손으로 가져온다.
+        "master_curve": {"pattern": r"\(([\d.]+)\s*°?\s*C\)", "unit": "degC"},
     },
     "columns": {
         "Angular frequency": {"channel": "angular_frequency"},
