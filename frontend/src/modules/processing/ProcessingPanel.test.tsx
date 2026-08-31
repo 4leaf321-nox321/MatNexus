@@ -161,8 +161,20 @@ const CATALOG = [
  */
 const getStep = (label: string) =>
   screen.getAllByRole('button').find((node) => node.textContent?.includes(label))!
+
+/**
+ * 그 단계 줄. **단계 목록이 올 때까지 기다린다.**
+ *
+ * 전에는 `findAllByRole('button')` 만 기다렸는데, 그건 **아무 단추나** 하나 있으면
+ * 끝난다 — 화면에는 「변수 목록 펴기」 같은 단추가 처음부터 있어서 조회가 끝나기
+ * 전에 통과했다. 그러면 `getStep` 이 `undefined` 를 돌려주고, 뒤따르는 클릭이나
+ * 「비활성이 아니다」 가 엉뚱하게 깨진다 — **코드가 틀린 것처럼 보인다.**
+ *
+ * 실측(2026-08-31): 단계 조회를 300ms 늦추자 이 파일의 시험 여덟이 깨졌다. 부하가
+ * 걸린 병렬 실행에서 나던 것과 같은 실패였다.
+ */
 const findStep = async (label: string) => {
-  await screen.findAllByRole('button')
+  await waitFor(() => expect(getStep(label)).toBeTruthy())
   return getStep(label)
 }
 type User = ReturnType<typeof userEvent.setup>
@@ -389,7 +401,9 @@ describe('변수 목록', () => {
     await openSidebar(user)
     expect(sidebar()).not.toHaveTextContent('strain_engineering')
 
-    await user.click(getStep('공칭 응력-변형률'))
+    // **단계 목록이 온 뒤에 누른다.** `getStep` 은 안 기다린다 — 조회가 늦으면
+    // `undefined` 를 누르게 되고, 실패는 엉뚱한 자리에서 난다.
+    await clickStep(user, '공칭 응력-변형률')
     await waitFor(() => expect(sidebar()).toHaveTextContent('strain_engineering'))
   })
 })

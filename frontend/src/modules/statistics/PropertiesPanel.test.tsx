@@ -97,11 +97,25 @@ const summary = async () => within(await screen.findByLabelText('물성 요약')
  * 같은 항목이 여러 곳에서 오면 행이 여럿이다(계산·묶음·선언). 첫 줄만 집으면
  * 「그 값이 있나」 는 못 보므로, 여러 줄을 함께 보는 시험은 `linesOf` 를 쓴다.
  */
-const card = async (label: string) =>
-  within((await summary()).getAllByLabelText(label)[0])
+const card = async (label: string) => within((await linesOf(label))[0])
 
-/** 그 항목의 모든 줄. */
-const linesOf = async (label: string) => (await summary()).getAllByLabelText(label)
+/**
+ * 그 항목의 모든 줄. **몇 줄을 기다릴지 말할 수 있다.**
+ *
+ * 표는 두 곳에서 채워진다 — 적어 둔 값(`declared` prop)은 첫 렌더에 이미 있고,
+ * 잰 값(통계)은 조회가 끝난 뒤에 붙는다. 그래서 표가 뜨자마자 줄을 집으면
+ * **적어 둔 줄만 있는 순간**을 잡을 수 있다. CI 에서 그렇게 깨졌다(2026-08-31):
+ * 첫 줄에 「통계」 배지가 없다고 나왔는데, 그 순간 첫 줄은 선언 줄이었다.
+ *
+ * 두 곳에서 오는 것을 보는 시험은 `linesOf(label, 2)` 처럼 **몇 줄인지 적는다.**
+ */
+const linesOf = async (label: string, count = 1) => {
+  const table = await summary()
+  await waitFor(() =>
+    expect(table.getAllByLabelText(label).length).toBeGreaterThanOrEqual(count)
+  )
+  return table.getAllByLabelText(label)
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -351,7 +365,7 @@ describe('값 개수가 제각각일 때', () => {
     uneven()
     show()
     // 항목 이름은 첫 줄에만 보이지만 줄은 둘이다.
-    expect(await linesOf('탄성계수')).toHaveLength(2)
+    expect(await linesOf('탄성계수', 2)).toHaveLength(2)
   })
 
 })
@@ -365,15 +379,17 @@ describe('전체 여닫기', () => {
     // 없는 선택지도 소음이다 — 그 카드의 단추 하나로 끝난다.
     forMaterial.mockResolvedValue({ groups: [group('MD', 285)] })
     show()
-    await summary()
+    // **줄이 붙은 뒤에 본다.** 표는 조회가 끝나기 전에도 떠서, 곧바로 「없다」 를
+    // 보면 아직 안 온 것을 없는 것으로 읽는다.
+    await linesOf('항복강도')
     expect(screen.queryByRole('button', { name: /전체 펼치기|전체 접기/ })).not.toBeInTheDocument()
   })
 
   it('한 번에 전부 펴진다', async () => {
     const user = userEvent.setup()
     show()
-    await summary()
-    await user.click(screen.getByRole('button', { name: /전체 펼치기/ }))
+    // 여닫기 단추는 묶음이 둘 이상일 때만 선다 — 조회가 끝나야 생긴다.
+    await user.click(await screen.findByRole('button', { name: /전체 펼치기/ }))
     expect(screen.getByRole('button', { name: /인장시험 MD 접기/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /인장시험 TD 접기/ })).toBeInTheDocument()
   })
@@ -381,8 +397,7 @@ describe('전체 여닫기', () => {
   it('한 번에 전부 접힌다', async () => {
     const user = userEvent.setup()
     show()
-    await summary()
-    await user.click(screen.getByRole('button', { name: /전체 펼치기/ }))
+    await user.click(await screen.findByRole('button', { name: /전체 펼치기/ }))
     await user.click(screen.getByRole('button', { name: /전체 접기/ }))
     expect(screen.getByRole('button', { name: /인장시험 MD 펴기/ })).toBeInTheDocument()
   })
@@ -392,8 +407,7 @@ describe('전체 여닫기', () => {
     // 펴져 있으면 접는 쪽이 다음 할 일이다.
     const user = userEvent.setup()
     show()
-    await summary()
-    expect(screen.getByRole('button', { name: /전체 펼치기/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /전체 펼치기/ })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /인장시험 MD 펴기/ }))
     expect(screen.getByRole('button', { name: /전체 접기/ })).toBeInTheDocument()
@@ -407,8 +421,7 @@ describe('전체 여닫기', () => {
       groups: [group('MD', 285, { notes: ['시험 2건이 곡선을 못 냈습니다.'] }), group('TD', 301)],
     })
     show()
-    await summary()
-    await user.click(screen.getByRole('button', { name: /전체 접기/ }))
+    await user.click(await screen.findByRole('button', { name: /전체 접기/ }))
     expect(screen.getByRole('button', { name: /인장시험 MD 펴기/ })).toBeInTheDocument()
   })
 })
@@ -447,13 +460,14 @@ describe('선언과 계산', () => {
 
   it('시편마다 잰 값에는 통계 배지가 붙는다', async () => {
     both()
-    const one = await card('탄성계수')
-    expect(one.getByText('통계')).toBeInTheDocument()
+    // 잰 값 줄은 조회가 끝난 뒤에 붙는다 — 두 줄이 다 설 때까지 기다린다.
+    const [measured] = await linesOf('탄성계수', 2)
+    expect(within(measured).getByText('통계')).toBeInTheDocument()
   })
 
   it('적은 값에는 선언 배지와 근거가 붙는다', async () => {
     both()
-    const lines = await linesOf('탄성계수')
+    const lines = await linesOf('탄성계수', 2)
     const stated = within(lines[1])
     expect(stated.getByText('선언')).toBeInTheDocument()
     // **근거가 그 자리에 있어야 한다** — 「선언」 만으로는 어느 핸드북인지 모른다.
@@ -463,7 +477,7 @@ describe('선언과 계산', () => {
   it('적은 값만 고칠 수 있다', async () => {
     // 잰 값은 시험에서 나온 것이라 여기서 고칠 것이 아니다.
     both()
-    await linesOf('탄성계수')
+    await linesOf('탄성계수', 2)
     // 잰 값 줄에는 없고 적은 값 줄에만 하나.
     expect(screen.getAllByRole('button', { name: /적어 둔 값 편집/ })).toHaveLength(1)
   })
