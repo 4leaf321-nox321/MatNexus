@@ -402,6 +402,35 @@ if ($SkipMigrations) {
     Pop-Location
 }
 
+# --- 핸드북 씨앗 -------------------------------------------------------------
+#
+# **코드 배포 ≠ DB 반영이다.** 가이드 본문은 행이라 `alembic upgrade` 로는 안
+# 들어간다 — 실측(2026-08-31): 운영 가이드가 통째로 비어 있었고, 씨앗 파일은
+# 패키지에 실려 서버에 이미 가 있었는데 넣는 명령을 아무도 안 돌렸다.
+#
+# **기본 모드는 아무것도 안 덮는다** — 빠진 문서·절만 채운다. 운영에서 고쳐
+# 승인한 본문은 그대로 둔다(덮으려면 사람이 `--replace` 를 의식적으로 부른다).
+#
+# **실패해도 배포는 세우지 않는다.** 가이드가 비는 것은 불편이지 장애가 아닌데,
+# 여기서 세우면 앱이 통째로 안 올라간다. 대신 로그에 남겨 다음 사람이 본다.
+if ($SkipMigrations) {
+    Write-Log '핸드북 씨앗 건너뜀 (마이그레이션과 함께)'
+} else {
+    Write-Log '핸드북 씨앗 적재'
+    Push-Location (Join-Path $AppPath 'backend')
+    try {
+        Invoke-Native '씨앗 적재 실패' { & $backendPython scripts\import_guides.py }
+        Write-Log '핸드북 씨앗 완료'
+    } catch {
+        Write-Log "핸드북 씨앗 실패 (배포는 계속합니다): $_"
+        Write-Host ''
+        Write-Host '가이드 화면이 비어 보일 수 있습니다. 서버에서 직접 돌려 보세요:'
+        Write-Host "  cd '$AppPathackend'"
+        Write-Host "  & '$backendPython' scripts\import_guides.py"
+    }
+    Pop-Location
+}
+
 # **무엇이 깔렸는지 남긴다.** 태그를 지정하지 않고 배포하면 나중에 되짚을 방법이
 # 없었다. 패키지가 자기 버전을 들고 오므로 여기서 읽어 적기만 하면 된다.
 $installed = Get-Content (Join-Path $AppPath 'BUILD_INFO.txt') -ErrorAction SilentlyContinue |

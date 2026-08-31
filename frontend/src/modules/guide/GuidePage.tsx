@@ -14,7 +14,7 @@
  * 보냈습니다」).
  */
 
-import { ChevronRight, Pencil, Search, Sparkles } from 'lucide-react'
+import { ChevronRight, FileCode2, Pencil, Search, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -335,6 +335,19 @@ function SectionView({
           {' › '}
           {document.title}
         </div>
+        {/* **정본이 어디인지 미리 말한다.** 저장소에서 온 문서는 배포가 빠진 절을
+            채우고, 사람이 `--replace` 를 부르면 본문까지 갱신된다 — 고치는 사람이
+            그 사실을 모르면 다음 릴리스에 자기 글이 바뀐 것을 보고 놀란다.
+            (고친 것은 안 사라진다. 승인 이력에 남고, 저장소로 되돌리는 길도 있다.) */}
+        {document.source_filename && (
+          <p className="text-muted-foreground mb-2 flex items-start gap-1.5 text-xs">
+            <FileCode2 className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              <b>저장소가 정본인 문서</b>입니다 — 여기서 고쳐 승인한 것은 그대로
+              남지만, 저장소 쪽이 갱신되면 배포에서 본문이 바뀔 수 있습니다.
+            </span>
+          </p>
+        )}
         <ErrorNotice error={section.error ?? failed} className="mb-3" />
         {section.data && (
           <>
