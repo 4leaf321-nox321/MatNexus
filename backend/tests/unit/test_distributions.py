@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -355,3 +356,74 @@ class Test문헌_벤치마크:
         sound_gap = next(i for i in sound.candidates if i.key == "normal").delta_aicc
         assert broken_gap is not None and sound_gap is not None
         assert abs(broken_gap - sound_gap) > 0.5
+
+
+# --- 모자랄 때도 빈손으로 두지 않는다 ---------------------------------------
+
+
+def test_최소값이_덮는_분위수는_표본이_늘수록_꼬리로_간다() -> None:
+    """**작은 표본이 꼬리를 못 본다는 사실을 수로 말한다.**
+
+    「데이터가 모자랍니다」 는 막다른 길이고, 「최소값으로 63% 분위수까지
+    말할 수 있습니다」 는 판단할 거리다.
+    """
+    assert distributions.covered_quantile(3) == pytest.approx(0.6316, abs=1e-4)
+    assert distributions.covered_quantile(20) == pytest.approx(0.1391, abs=1e-4)
+    # 표본이 늘면 단조로 내려간다 — 최소값이 점점 더 아래 분위수를 덮는다.
+    covered = [distributions.covered_quantile(n) for n in range(1, 40)]
+    assert all(one is not None for one in covered)
+    assert all(a > b for a, b in pairwise([one for one in covered if one is not None]))
+
+
+def test_표본이_없으면_분위수도_없다() -> None:
+    assert distributions.covered_quantile(0) is None
+
+
+def test_하위_5퍼센트를_분포_없이_말하려면_59개() -> None:
+    """**분포를 맞추는 이유가 이 수다.** 59개를 재는 대신 모양을 가정한다."""
+    assert distributions.needed_for(0.05, confidence=0.95) == 59
+    # 정의를 되짚는다: 그 n 에서 최소값이 덮는 분위수가 0.05 이하여야 한다.
+    낮은쪽 = distributions.covered_quantile(59)
+    높은쪽 = distributions.covered_quantile(58)
+    assert 낮은쪽 is not None and 낮은쪽 <= 0.05
+    assert 높은쪽 is not None and 높은쪽 > 0.05
+
+
+def test_요약은_가정_없이_있는_값만_말한다() -> None:
+    summary = distributions.empirical([610.0, 618.0, 625.0])
+    assert summary.count == 3
+    assert summary.minimum == 610.0
+    assert summary.median == 618.0
+    assert summary.maximum == 625.0
+
+
+def test_값이_없어도_자료형은_돌려준다() -> None:
+    """**화면이 갈리지 않게.** `None` 이면 쓰는 쪽이 매번 분기한다."""
+    summary = distributions.empirical([])
+    assert summary.count == 0
+    assert summary.minimum is None
+    assert summary.needed_for_design == 59
+
+
+def test_적합이_하나도_못_돌아도_요약과_안내가_남는다() -> None:
+    """**막다른 길로 두지 않는다.** 전에는 「표본 모자람」 배지 셋이 전부였다."""
+    report = distributions.fit_all([610.0, 618.0, 625.0])
+    assert report.best is None
+    assert all(item.status == "not_eligible" for item in report.candidates)
+
+    assert report.empirical is not None
+    assert report.empirical.count == 3
+    assert report.empirical.covered_quantile == pytest.approx(0.6316, abs=1e-4)
+
+    말 = " ".join(report.notes)
+    assert "59개" in 말
+    assert "63%" in 말
+
+
+def test_적합이_돌_때도_요약은_함께_온다() -> None:
+    """적합한 분위수가 관측값에서 얼마나 떨어졌는지 견줄 자리가 된다."""
+    값 = [610.0, 615.0, 618.0, 620.0, 622.0, 625.0, 628.0, 631.0, 634.0, 640.0]
+    report = distributions.fit_all(값, bootstrap=19)
+    assert report.empirical is not None
+    assert report.empirical.count == len(값)
+    assert report.empirical.minimum == 610.0

@@ -5805,6 +5805,7 @@ export interface components {
             candidates: components["schemas"]["DistributionCandidateOut"][];
             /** Count */
             count: number;
+            empirical: components["schemas"]["EmpiricalOut"] | null;
             /**
              * Material Id
              * Format: uuid
@@ -5954,6 +5955,34 @@ export interface components {
             items: components["schemas"]["DriftOut"][];
             /** Total */
             total: number;
+        };
+        /**
+         * EmpiricalOut
+         * @description **분포를 가정하지 않은** 요약. n 이 몇이든 나온다.
+         *
+         *     적합이 하나도 못 돌 때(n < 8) 화면이 빈손이 되지 않게 하는 것이 첫 목적이다.
+         *     전에는 「표본 모자람」 배지 셋만 떴고, 그것은 막다른 길이었다 — 사람이 할 수
+         *     있는 판단이 아무것도 없었다.
+         */
+        EmpiricalOut: {
+            /** Confidence */
+            confidence: number;
+            /** Count */
+            count: number;
+            /** Covered Quantile */
+            covered_quantile: number | null;
+            /** Maximum */
+            maximum: number | null;
+            /** Median */
+            median: number | null;
+            /** Minimum */
+            minimum: number | null;
+            /** Needed For Design */
+            needed_for_design: number | null;
+            /** Q1 */
+            q1: number | null;
+            /** Q3 */
+            q3: number | null;
         };
         /** EnsembleResultOut */
         EnsembleResultOut: {

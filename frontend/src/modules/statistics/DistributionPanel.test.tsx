@@ -80,25 +80,25 @@ describe('분포 화면', () => {
     panel()
     expect(distributable).not.toHaveBeenCalled()
     expect(distributions).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '흩어짐의 모양 보기' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '산포 분포 적합' })).toBeInTheDocument()
   })
 
   it('항목마다 값이 몇 개인지 미리 보인다', async () => {
     // 눌러 보고 나서 "모자랍니다" 를 받는 것보다 미리 아는 것이 낫다.
     panel()
-    await userEvent.click(screen.getByRole('button', { name: '흩어짐의 모양 보기' }))
+    await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     expect(await screen.findByRole('button', { name: /항복강도/ })).toHaveTextContent('n=12')
   })
 
   it('고르면 후보를 나란히 보인다', async () => {
     panel()
-    await userEvent.click(screen.getByRole('button', { name: '흩어짐의 모양 보기' }))
+    await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     await userEvent.click(await screen.findByRole('button', { name: /항복강도/ }))
     await waitFor(() => expect(distributions).toHaveBeenCalled())
     expect(screen.getByText('와이블')).toBeInTheDocument()
     expect(screen.getByText('1등')).toBeInTheDocument()
     // **설계가 묻는 것은 파라미터가 아니라 하위 5% 다.**
-    expect(screen.getByText('하위 5%')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '하위 5%' })).toBeInTheDocument()
   })
 
   it('모자란 것과 안 맞는 것을 가른다', async () => {
@@ -120,7 +120,7 @@ describe('분포 화면', () => {
       })
     )
     panel()
-    await userEvent.click(screen.getByRole('button', { name: '흩어짐의 모양 보기' }))
+    await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     await userEvent.click(await screen.findByRole('button', { name: /항복강도/ }))
     expect(await screen.findByText('표본 모자람')).toBeInTheDocument()
     expect(screen.getByText(/8개 이상 필요/)).toBeInTheDocument()
@@ -146,7 +146,7 @@ describe('분포 화면', () => {
       })
     )
     panel()
-    await userEvent.click(screen.getByRole('button', { name: '흩어짐의 모양 보기' }))
+    await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     await userEvent.click(await screen.findByRole('button', { name: /항복강도/ }))
     expect(await screen.findByText('로그정규')).toBeInTheDocument()
     expect(screen.getByText('실패')).toBeInTheDocument()
@@ -164,7 +164,7 @@ describe('분포 화면', () => {
       })
     )
     panel()
-    await userEvent.click(screen.getByRole('button', { name: '흩어짐의 모양 보기' }))
+    await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     await userEvent.click(await screen.findByRole('button', { name: /항복강도/ }))
     expect(await screen.findByText(/쓰지 못한 값 1개/)).toBeInTheDocument()
     expect(screen.getByText(/A_02 — 그 시편에 이 항목이 없음/)).toBeInTheDocument()
@@ -173,7 +173,7 @@ describe('분포 화면', () => {
   it('전부 정상이면 못 쓴 값 표를 안 그린다', async () => {
     // 빈 표는 화면만 먹는다.
     panel()
-    await userEvent.click(screen.getByRole('button', { name: '흩어짐의 모양 보기' }))
+    await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     await userEvent.click(await screen.findByRole('button', { name: /항복강도/ }))
     await waitFor(() => expect(screen.getByText('와이블')).toBeInTheDocument())
     expect(screen.queryByText(/쓰지 못한 값/)).not.toBeInTheDocument()
@@ -184,9 +184,44 @@ describe('분포 화면', () => {
       report({ notes: ['정규 도 AICc 차이가 2 미만이라 이 데이터로는 구별되지 않습니다.'] })
     )
     panel()
-    await userEvent.click(screen.getByRole('button', { name: '흩어짐의 모양 보기' }))
+    await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     await userEvent.click(await screen.findByRole('button', { name: /항복강도/ }))
     // 표 아래 설명문도 같은 문구를 쓴다 — 서버가 준 **안내** 쪽을 짚는다.
     expect(await screen.findByText(/^정규 도 AICc 차이가/)).toBeInTheDocument()
+  })
+})
+
+describe('모자랄 때', () => {
+  it('후보가 전부 모자라도 판단할 거리를 준다', async () => {
+    // **막다른 길로 두지 않는다.** 전에는 「표본 모자람」 배지 셋이 전부였고,
+    // 그것만 보고 할 수 있는 일이 없었다.
+    distributions.mockResolvedValue(
+      report({
+        count: 3,
+        best: null,
+        candidates: [candidate({ status: 'not_eligible', aicc: null, delta_aicc: null, p_value: null })],
+        empirical: {
+          count: 3,
+          minimum: 610e6,
+          q1: 614e6,
+          median: 618e6,
+          q3: 621.5e6,
+          maximum: 625e6,
+          covered_quantile: 0.6316,
+          needed_for_design: 59,
+          confidence: 0.95,
+        },
+      })
+    )
+
+    const user = userEvent.setup()
+    panel()
+    await user.click(screen.getByRole('button', { name: '산포 분포 적합' }))
+    await user.click(await screen.findByRole('button', { name: /항복강도/ }))
+
+    const 말 = (await screen.findByText(/관측 최소값/)).textContent ?? ''
+    // 「지금 데이터로 여기까지」 와 「그러려면 몇 개」 둘 다 있어야 판단이 된다.
+    expect(말).toContain('63% 분위수')
+    expect(말).toContain('59개')
   })
 })

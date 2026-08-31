@@ -154,6 +154,32 @@ class DistributionCandidateOut(BaseModel):
     파라미터가 아니라 하위 5% 다."""
 
 
+class EmpiricalOut(BaseModel):
+    """**분포를 가정하지 않은** 요약. n 이 몇이든 나온다.
+
+    적합이 하나도 못 돌 때(n < 8) 화면이 빈손이 되지 않게 하는 것이 첫 목적이다.
+    전에는 「표본 모자람」 배지 셋만 떴고, 그것은 막다른 길이었다 — 사람이 할 수
+    있는 판단이 아무것도 없었다.
+    """
+
+    count: int
+    minimum: float | None
+    q1: float | None
+    median: float | None
+    q3: float | None
+    maximum: float | None
+
+    covered_quantile: float | None
+    """관측 **최소값**이 덮는 분위수(순서통계량). n=3 이면 0.63 이다.
+
+    **작은 표본이 꼬리를 못 본다는 사실 자체를 수로 보여 준다.** 「데이터가
+    모자랍니다」 보다 「최소값으로 63% 분위수까지 말할 수 있습니다」 가 판단할
+    거리를 준다."""
+    needed_for_design: int | None
+    """하위 5% 를 **분포 없이** 말하려면 필요한 표본 수. 95% 신뢰로 59개."""
+    confidence: float
+
+
 class DistributionReportOut(BaseModel):
     """한 항목에 대한 분포 적합 한 벌."""
 
@@ -168,6 +194,8 @@ class DistributionReportOut(BaseModel):
     observations: list[ObservationOut]
     candidates: list[DistributionCandidateOut]
     best: str | None
+    empirical: EmpiricalOut | None
+    """**적합이 하나도 못 돌아도 이것은 있다.**"""
     notes: list[str]
 
 

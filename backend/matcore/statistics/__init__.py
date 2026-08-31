@@ -296,19 +296,42 @@ def grid_check(grids: list[np.ndarray]) -> GridCheck:
 
     first = grids[0]
     for index, grid in enumerate(grids[1:], start=1):
-        if len(grid) != len(first) or not np.allclose(grid, first, rtol=0, atol=0):
-            return GridCheck(
-                ok=False,
-                reason=(
-                    f"{index + 1}번째 곡선의 x 가 첫 곡선과 다릅니다 "
-                    f"({len(first)}점 vs {len(grid)}점). 통계는 정렬을 대신 하지 않습니다 — "
-                    f"레시피에 '균등 격자로 재샘플' 단계를 넣고 구간을 "
-                    f"[{common_start:.6g}, {common_end:.6g}] 로 고정한 뒤 다시 처리하세요."
-                ),
-                common_start=common_start,
-                common_end=common_end,
-                shortest_index=shortest,
+        if len(grid) == len(first) and np.allclose(grid, first, rtol=0, atol=0):
+            continue
+
+        # **왜 다른지를 갈라 말한다.** 둘은 고칠 데가 다르다.
+        #
+        #   점 수가 다르다      → 재샘플 단계가 아예 없다(또는 점 수를 달리 적었다)
+        #   점 수는 같다        → 재샘플은 했는데 **구간이 시편마다 다르다**
+        #
+        # 뒤엣것이 흔하다. 표준 레시피는 끝을 비워 두고, 비우면 각자의 관측
+        # 최댓값이 쓰인다 — 400점씩 잘 만들어 놓고도 안 맞는다. 그때 전에는
+        # "(400점 vs 400점)" 이라고만 적었고, 그것은 고칠 데를 안 알려 주는 데다
+        # 버그처럼 읽혔다(2026-08-31 실측).
+        if len(grid) != len(first):
+            why = (
+                f"점 수가 다릅니다 ({len(first)}점 vs {len(grid)}점) — "
+                f"'균등 격자로 재샘플' 단계가 빠졌거나 점 수를 달리 적었습니다."
             )
+        else:
+            why = (
+                f"점 수는 {len(first)}점으로 같은데 **구간이 다릅니다** "
+                f"([{float(first[0]):.6g}, {float(first[-1]):.6g}] vs "
+                f"[{float(grid[0]):.6g}, {float(grid[-1]):.6g}]) — 재샘플의 끝을 "
+                f"비워 두면 시편마다 제 관측 최댓값이 쓰입니다."
+            )
+        return GridCheck(
+            ok=False,
+            reason=(
+                f"{index + 1}번째 곡선의 x 가 첫 곡선과 다릅니다. {why} "
+                f"통계는 정렬을 대신 하지 않습니다 — 레시피의 '균등 격자로 재샘플' "
+                f"구간을 [{common_start:.6g}, {common_end:.6g}] 로 **고정한 뒤** 다시 "
+                f"처리하세요."
+            ),
+            common_start=common_start,
+            common_end=common_end,
+            shortest_index=shortest,
+        )
 
     return GridCheck(
         ok=True,

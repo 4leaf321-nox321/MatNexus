@@ -47,6 +47,22 @@ AICc 는 *"후보들 중 어느 것이 낫나"* 를 답한다. 상대적이라 *
 Anderson-Darling 은 *"이것이 맞기는 하나"* 를 답한다. 절대적이다. 꼬리에 가중치를
 크게 두므로 하위 5% 를 묻는 이 자리에 맞다.
 
+## 모자랄 때도 빈손으로 두지 않는다
+
+n < 8 이면 분포는 못 맞춘다. 그렇다고 아무것도 못 말하는 것은 아니다 —
+**분포를 가정하지 않고도** 말할 수 있는 것이 있다(`empirical`).
+
+    n·최소·사분위·중앙·최대        가정 없이 그냥 있는 값
+    최소값이 덮는 분위수            순서통계량. `1 - (1-p)^n = 신뢰도`
+
+세 시편의 최소값은 **63% 분위수의 95% 하한**이다 — 하위 5% 근처에도 못 간다.
+그 사실 자체가 값진 정보다: 「데이터가 모자라다」 가 아니라 **「지금 데이터로는
+여기까지 말할 수 있고, 하위 5% 를 분포 없이 말하려면 59개가 필요하다」** 로
+바뀐다. 앞엣말은 막다른 길이고 뒤엣말은 판단이다.
+
+분포를 맞추는 이유가 여기 있다. 59개를 재는 대신 **모양을 가정해서** 꼬리를
+외삽하는 것이고, 그 가정이 맞는지를 AD 검정이 묻는다.
+
 p 값은 **모수 부트스트랩**으로 낸다. 파라미터를 데이터에서 추정했으므로 표준
 임계값표를 쓸 수 없다 — 추정한 만큼 A² 가 작아지고, 그 표를 쓰면 안 맞는 분포도
 통과한다. 적합한 분포에서 표본을 다시 뽑아 매번 다시 적합하고, 그 A² 분포에서
@@ -78,6 +94,12 @@ BOOTSTRAP = 999
 
 #: 한 번에 이 이상은 안 받는다. 부트스트랩이 n 에 비례해 무거워진다.
 MAX_SAMPLES = 500
+
+#: 비모수 하한을 말할 때의 신뢰도. 설계 관행이 95% 다.
+NONPARAMETRIC_CONFIDENCE = 0.95
+
+#: 설계가 실제로 묻는 분위수. 「하위 5%」.
+DESIGN_QUANTILE = 0.05
 
 
 class DistributionError(Exception):
@@ -169,6 +191,95 @@ class Candidate:
 
 
 @dataclass(frozen=True)
+class Empirical:
+    """**분포를 가정하지 않은** 요약. n 이 몇이든 낸다.
+
+    분포 적합이 못 돌 때(n < 8) 화면이 빈손이 되지 않게 하는 것이 첫 목적이고,
+    돌 때도 값이 있다 — 적합한 분위수가 관측값에서 얼마나 떨어졌는지 견줄
+    자리가 된다.
+    """
+
+    count: int
+    minimum: float | None
+    q1: float | None
+    median: float | None
+    q3: float | None
+    maximum: float | None
+
+    covered_quantile: float | None
+    """관측 **최소값**이 덮는 분위수. `1 - (1-p)^n = 신뢰도` 를 p 에 대해 푼 것.
+
+    「최소값 아래에 모집단의 p 이하가 있다」 를 95% 신뢰로 말할 수 있다는 뜻이다.
+    n=3 이면 0.63, n=20 이면 0.14 — **작은 n 이 꼬리를 못 본다는 사실 자체**를
+    수로 보여 준다.
+    """
+
+    needed_for_design: int | None
+    """하위 5% 를 **분포 없이** 말하려면 몇 개가 필요한가. 95% 신뢰로 59개다."""
+
+    confidence: float = NONPARAMETRIC_CONFIDENCE
+
+
+def covered_quantile(
+    count: int, *, confidence: float = NONPARAMETRIC_CONFIDENCE
+) -> float | None:
+    """관측 최소값이 덮는 분위수. 표본이 없으면 `None`.
+
+    순서통계량이다. 최소값 `X(1)` 이 p 분위수보다 작을 확률은
+    `1 - (1-p)^n` 이므로, 그것을 신뢰도로 놓고 p 를 푼다:
+
+        p = 1 - (1 - 신뢰도)^(1/n)
+
+    **분포를 가정하지 않는다.** 그래서 작은 n 에서 정직하게 약하다 — 그 약함이
+    곧 「지금 데이터로 꼬리를 말할 수 없다」 는 답이다.
+    """
+    if count < 1:
+        return None
+    return float(1.0 - (1.0 - confidence) ** (1.0 / count))
+
+
+def needed_for(
+    quantile: float = DESIGN_QUANTILE, *, confidence: float = NONPARAMETRIC_CONFIDENCE
+) -> int:
+    """그 분위수를 **분포 없이** 말하려면 표본이 몇 개여야 하는가.
+
+    위 식을 n 에 대해 푼다: `n >= ln(1 - 신뢰도) / ln(1 - p)`. 하위 5% 를 95%
+    신뢰로 말하려면 59개다 — **분포를 맞추는 이유가 이 수다.**
+    """
+    return math.ceil(math.log(1.0 - confidence) / math.log(1.0 - quantile))
+
+
+def empirical(values: Sequence[float] | np.ndarray) -> Empirical:
+    """가정 없는 요약. **비어 있어도 자료형은 돌려준다** — 화면이 갈리지 않게."""
+    data = np.asarray([float(v) for v in values], dtype=np.float64)
+    count = int(data.size)
+    if count == 0:
+        return Empirical(
+            count=0,
+            minimum=None,
+            q1=None,
+            median=None,
+            q3=None,
+            maximum=None,
+            covered_quantile=None,
+            needed_for_design=needed_for(),
+        )
+    # `linear` 는 numpy 기본이자 대부분의 통계 도구가 쓰는 정의다. 표본이 적을 때
+    # 정의마다 사분위가 갈리므로 **무엇을 썼는지가 중요하다.**
+    q1, median, q3 = (float(v) for v in np.quantile(data, [0.25, 0.5, 0.75], method="linear"))
+    return Empirical(
+        count=count,
+        minimum=float(np.min(data)),
+        q1=q1,
+        median=median,
+        q3=q3,
+        maximum=float(np.max(data)),
+        covered_quantile=covered_quantile(count),
+        needed_for_design=needed_for(),
+    )
+
+
+@dataclass(frozen=True)
 class Report:
     """한 항목에 대한 답 한 벌."""
 
@@ -179,6 +290,8 @@ class Report:
     """AICc 오름차순. 실패한 것도 **목록에 남는다** — 안 뜨면 "안 해 봤다" 로 읽힌다."""
     best: str | None
     """1등의 key. 아무것도 성공 못 했으면 `None`."""
+    empirical: Empirical | None = None
+    """**가정 없는 요약.** 적합이 하나도 못 돌아도 이것은 늘 있다."""
     notes: tuple[str, ...] = ()
 
 
@@ -338,11 +451,23 @@ def fit_all(
 
     candidates.sort(key=lambda item: (item.aicc is None, item.aicc or 0.0))
 
+    summary = empirical(usable)
     if count < MIN_ELIGIBLE:
         notes.append(
             f"쓸 수 있는 값이 {count}개입니다. 분포를 맞추려면 {MIN_ELIGIBLE}개 이상이어야 "
             f"합니다 — 모자란 것이지 안 맞는 것이 아닙니다."
         )
+        if summary.covered_quantile is not None:
+            # **빈손으로 돌려보내지 않는다.** 분포 없이도 말할 수 있는 것이 있고,
+            # 그 말의 약함 자체가 「지금 데이터로 꼬리를 못 본다」 는 답이다.
+            notes.append(
+                f"그래도 **가정 없이** 말할 수 있는 것이 있습니다 — 관측 최소값은 "
+                f"{summary.covered_quantile:.0%} 분위수의 "
+                f"{NONPARAMETRIC_CONFIDENCE:.0%} 신뢰 하한입니다(순서통계량). "
+                f"하위 {DESIGN_QUANTILE:.0%} 를 분포 없이 말하려면 "
+                f"{summary.needed_for_design}개가 필요합니다 — **분포를 맞추는 이유가 "
+                f"그 수입니다.** {MIN_ELIGIBLE}개부터 모양을 가정해 꼬리를 외삽합니다."
+            )
     elif count < WARN_BELOW:
         notes.append(
             f"값이 {count}개입니다. 답은 냈지만 **어느 분포인지 가려낼 힘이 없습니다** — "
@@ -366,6 +491,7 @@ def fit_all(
         observations=tuple(marks),
         candidates=tuple(candidates),
         best=best,
+        empirical=summary,
         notes=tuple(notes),
     )
 

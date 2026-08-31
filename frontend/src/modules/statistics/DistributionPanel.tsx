@@ -16,15 +16,41 @@
  * 안 뜨면 "안 해 봤다" 로 읽힌다. 그리고 **"모자라다" 와 "안 맞는다" 를 다른
  * 색으로** 보인다 — 한 칸에 넣으면 *와이블이 안 맞는 재료*와 *시편이 모자란
  * 재료*가 같아 보인다.
+ *
+ * ## 모자라도 빈손으로 두지 않는다
+ *
+ * n < 8 이면 후보 셋이 전부 「표본 모자람」 이다. 그것만 보이면 **막다른 길**이다 —
+ * 사람이 할 수 있는 판단이 아무것도 없다. 그래서 **가정 없는 요약**을 늘 위에
+ * 둔다: n·최소·중앙·최대와, 관측 최소값이 덮는 분위수.
+ *
+ * 그 분위수가 이 화면의 답이다. 시편 3개면 최소값이 덮는 것이 63% 분위수라,
+ * **하위 5% 근처에도 못 간다.** 그 사실을 수로 보여 주면 「데이터가 모자라다」 가
+ * 「지금 데이터로는 여기까지 말할 수 있고, 분포 없이 하위 5% 를 말하려면 59개가
+ * 필요하다」 로 바뀐다. 앞엣말은 막다른 길이고 뒤엣말은 판단이다.
+ *
+ * ## 모달로 띄운다
+ *
+ * 표·곡선과 같은 자리에 펼치면 **묶음 하나가 화면 두 판을 먹는다** — 인장
+ * MD/TD 에 DMA 까지면 셋이고, 아래 묶음을 보려면 이걸 다시 접어야 했다. 여기서
+ * 하는 일은 *하나의 항목*을 파고드는 일이라 그동안 다른 것을 볼 이유가 없다.
  */
 
 import { useEffect, useState } from 'react'
+import { Sigma } from 'lucide-react'
 
 import { statisticsApi } from '@/modules/statistics/api'
 import type { DistributionCandidate, DistributionReport } from '@/modules/statistics/api'
+import type { components } from '@/shared/api/schema'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -82,26 +108,30 @@ export function DistributionPanel({
     }
   }
 
-  if (!open) {
-    return (
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        흩어짐의 모양 보기
-      </Button>
-    )
-  }
-
   const unit = report?.si_unit ?? '1'
 
   return (
-    <section className="space-y-3 rounded-md border p-3">
-      <header className="flex flex-wrap items-center gap-2">
-        <h4 className="text-sm font-medium">흩어짐의 모양</h4>
-        <span className="text-muted-foreground text-xs">
-          정규·로그정규·와이블을 나란히 맞춥니다. <b>고르지 않고 견줘 줍니다.</b>
-        </span>
-      </header>
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Sigma className="size-4" />
+        산포 분포 적합
+      </Button>
 
-      <ErrorNotice error={error} />
+      <Dialog open={open} onOpenChange={setOpen}>
+        {/* 표가 일곱 칸이라 좁으면 가로로 샌다. 세로는 화면을 넘기지 않고 안에서
+            굴린다 — 후보가 셋에 관측값 목록까지 붙는다. */}
+        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>산포 분포 적합</DialogTitle>
+            <DialogDescription>
+              정규·로그정규·와이블을 나란히 맞춥니다. <b>고르지 않고 견줘 줍니다.</b>{' '}
+              평균·SD 는 산포가 <i>얼마나</i> 큰지를 말하고, 여기서는 <i>어떤 모양</i>인지를
+              묻습니다 — <b>하위 5%</b> 는 같은 평균·같은 SD 에서도 모양에 따라 달라집니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+            <ErrorNotice error={error} />
 
       <div className="flex flex-wrap gap-1.5">
         {keys.map((item) => (
@@ -141,6 +171,10 @@ export function DistributionPanel({
             </ul>
           )}
 
+          {/* **표보다 먼저 온다.** 후보가 전부 「표본 모자람」 일 때 이것이
+              화면에 남는 유일한 판단 거리다. */}
+          {report.empirical && <EmpiricalSummary summary={report.empirical} unit={unit} />}
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -173,10 +207,13 @@ export function DistributionPanel({
             맞다는 증명은 아닙니다). 둘이 다른 것을 보므로 함께 읽으세요.
           </p>
 
-          <Observations report={report} />
-        </>
-      )}
-    </section>
+              <Observations report={report} />
+            </>
+          )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -243,6 +280,68 @@ function CandidateRow({
  *
  * 전부 정상이면 안 그린다 — 빈 표는 화면만 먹는다.
  */
+/**
+ * **분포를 가정하지 않은 요약.** 적합이 하나도 못 돌아도 이것은 있다.
+ *
+ * 「최소값이 덮는 분위수」 가 핵심이다 — 순서통계량이라 어떤 분포에서도 참이고,
+ * 작은 표본에서 **정직하게 약하다.** 그 약함이 곧 답이다.
+ */
+function EmpiricalSummary({
+  summary,
+  unit,
+}: {
+  summary: components['schemas']['EmpiricalOut']
+  unit: string
+}) {
+  const show = (value: number | null) => (value === null ? '—' : formatScalar(value, unit, null))
+  const cells: [string, number | null][] = [
+    ['n', summary.count],
+    ['최소', summary.minimum],
+    ['1사분위', summary.q1],
+    ['중앙', summary.median],
+    ['3사분위', summary.q3],
+    ['최대', summary.maximum],
+  ]
+  return (
+    <section className="bg-muted/30 space-y-2 rounded-md border p-3">
+      <header className="flex flex-wrap items-baseline gap-2">
+        <h5 className="text-sm font-medium">가정 없이 말할 수 있는 것</h5>
+        <span className="text-muted-foreground text-xs">
+          분포를 안 씁니다 — <b>있는 값 그대로</b>입니다.
+        </span>
+      </header>
+
+      <dl className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs sm:grid-cols-6">
+        {cells.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-mono">{label === 'n' ? (value ?? 0) : show(value)}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {summary.covered_quantile !== null && summary.minimum !== null && (
+        <p className="text-xs">
+          {/* **여기가 이 칸의 요점이다.** 「모자랍니다」 는 막다른 길이고, 이
+              문장은 지금 데이터로 어디까지 말할 수 있는지를 준다. */}
+          관측 최소값 <b className="font-mono">{show(summary.minimum)}</b> 은{' '}
+          <b>{(summary.covered_quantile * 100).toFixed(0)}% 분위수</b>의{' '}
+          {(summary.confidence * 100).toFixed(0)}% 신뢰 하한입니다 — 시편 {summary.count}개로
+          분포 없이 말할 수 있는 데까지입니다.
+          {summary.needed_for_design !== null && (
+            <>
+              {' '}
+              하위 5% 를 이렇게 말하려면 <b>{summary.needed_for_design}개</b>가 필요합니다.{' '}
+              <b>분포를 맞추는 이유가 그 수입니다</b> — 59개를 재는 대신 모양을 가정해 꼬리를
+              외삽하고, 그 가정이 맞는지를 아래 <b>p</b> 가 묻습니다.
+            </>
+          )}
+        </p>
+      )}
+    </section>
+  )
+}
+
 function Observations({ report }: { report: DistributionReport }) {
   const problems = report.observations.filter((item) => item.status !== 'observed')
   if (problems.length === 0) return null

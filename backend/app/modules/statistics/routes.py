@@ -43,6 +43,7 @@ from app.modules.statistics.schemas import (
     DistributionReportOut,
     DivisionOverviewOut,
     DivisionTallyOut,
+    EmpiricalOut,
     EnsembleResultOut,
     EnsembleSaveRequest,
     GroupOut,
@@ -388,6 +389,9 @@ def distribution_report(
             for item in report.candidates
         ],
         best=report.best,
+        empirical=(
+            None if report.empirical is None else EmpiricalOut(**asdict(report.empirical))
+        ),
         notes=list(report.notes),
     )
 

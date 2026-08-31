@@ -3746,6 +3746,16 @@
             "title": "Count",
             "type": "integer"
           },
+          "empirical": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmpiricalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "material_id": {
             "format": "uuid",
             "title": "Material Id",
@@ -3797,6 +3807,7 @@
           "observations",
           "candidates",
           "best",
+          "empirical",
           "notes"
         ],
         "title": "DistributionReportOut",
@@ -4152,6 +4163,109 @@
           "items"
         ],
         "title": "DriftReportOut",
+        "type": "object"
+      },
+      "EmpiricalOut": {
+        "description": "**분포를 가정하지 않은** 요약. n 이 몇이든 나온다.\n\n적합이 하나도 못 돌 때(n < 8) 화면이 빈손이 되지 않게 하는 것이 첫 목적이다.\n전에는 「표본 모자람」 배지 셋만 떴고, 그것은 막다른 길이었다 — 사람이 할 수\n있는 판단이 아무것도 없었다.",
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "covered_quantile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covered Quantile"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "needed_for_design": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needed For Design"
+          },
+          "q1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q1"
+          },
+          "q3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q3"
+          }
+        },
+        "required": [
+          "count",
+          "minimum",
+          "q1",
+          "median",
+          "q3",
+          "maximum",
+          "covered_quantile",
+          "needed_for_design",
+          "confidence"
+        ],
+        "title": "EmpiricalOut",
         "type": "object"
       },
       "EnsembleResultOut": {
