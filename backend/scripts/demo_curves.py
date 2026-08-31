@@ -33,8 +33,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import math
 import random
+import sys
 from pathlib import Path
 
 #: 목표 물성. 공개 자료의 DP590 범위 안에서 고른 값이다.
@@ -148,10 +150,22 @@ def write_tra(
         '"mm","N","mm"',
     ]
     lines += [f"{a:.6g},{b:.6g},{c:.6g}" for a, b, c in rows]
-    # 장비는 CP949 로 적고 줄 끝이 CRLF 다. **바이트로 적는다** — `write_text`
+    # **UTF-8 로 적는다.** 전에는 CP949 였다 — 「장비가 그렇게 적는다」 는 이유
+    # 였는데, 파서는 UTF-8 이 아니면 CP1252 로 읽으므로(`zwick_tra._decode`) 이
+    # 파일의 한글 라벨이 화면에서 깨져 보였다(실측 2026-08-31). 예시 파일이
+    # 파서의 인코딩 폴백을 시험하는 자리는 아니다.
+    #
+    # 줄 끝은 장비대로 CRLF 다. **바이트로 적는다** — `write_text`
     # 는 줄 끝을 플랫폼에 맞춰 바꿔서, 실제 파일과 다른 것이 나온다.
     body = "\r\n".join(lines) + "\r\n"
-    path.write_bytes(body.encode("cp949"))
+    path.write_bytes(body.encode("utf-8"))
+
+
+# **콘솔 인코딩에 걸려 죽지 않게 한다.** 운영·개발 모두 Windows 이고 기본 콘솔이
+# CP949 라, 요약에 쓰는 `≈` 하나가 `UnicodeEncodeError` 를 내며 스크립트를 끝낸다
+# — 파일은 이미 다 만들어 놓고 마지막 줄에서 죽는다(실측 2026-08-31).
+with contextlib.suppress(AttributeError, OSError):  # 파이프로 넘길 때는 이미 안전하다
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def main() -> None:
