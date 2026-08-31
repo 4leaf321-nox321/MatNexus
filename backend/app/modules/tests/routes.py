@@ -1028,25 +1028,41 @@ def list_runs(
             TestRun.test_type_id == (found.id if found else None),
             TestRun.test_type_id.is_not(None),
         )
-    if orientation:
+    if orientation == EMPTY_FILTER_KEY:
+        query = query.where(
+            TestRun.specimen_id.in_(select(Specimen.id).where(Specimen.orientation.is_(None)))
+        )
+    elif orientation:
         query = query.where(
             TestRun.specimen_id.in_(
                 select(Specimen.id).where(Specimen.orientation == orientation)
             )
         )
-    if registered_by:
+    if registered_by == EMPTY_FILTER_KEY:
+        # **계정이 지워진 것도 여기 걸린다.** 기록은 남고 이름만 사라지는데,
+        # 그것도 「등록한 사람을 모르는」 상태다.
+        query = query.where(TestRun.registered_by_id.is_(None))
+    elif registered_by:
         query = query.where(
             TestRun.registered_by_id.in_(
                 select(User.id).where(User.display_name == registered_by)
             )
         )
-    if operator:
+    if operator == EMPTY_FILTER_KEY:
+        query = query.where(TestRun.operator.is_(None))
+    elif operator:
         query = query.where(TestRun.operator == operator)
-    if testing_group:
+    if testing_group == EMPTY_FILTER_KEY:
+        # **키가 아예 없는 것과 값이 비어 있는 것을 같게 본다.** `->>` 는 둘 다
+        # NULL 로 낸다 — 사람에게는 어느 쪽이든 「안 적은 것」 이다.
+        query = query.where(TestRun.conditions["testing_group"].astext.is_(None))
+    elif testing_group:
         # **JSONB 안의 글자 하나로 거른다.** `->>` 는 텍스트로 꺼내므로 값이
         # 없는 행은 NULL 이 되어 자연히 빠진다.
         query = query.where(TestRun.conditions["testing_group"].astext == testing_group)
-    if division:
+    if division == EMPTY_FILTER_KEY:
+        query = query.where(TestRun.division.is_(None))
+    elif division:
         query = query.where(TestRun.division == division)
     if q and (text := q.strip()):
         like = f"%{text}%"
@@ -1126,6 +1142,23 @@ def run_facets(
         for key, count in tally(base.c.registered_by_id)
         if key is not None and key in names
     ]
+
+    def empty_row(pairs: list[tuple[Any, int]]) -> RunFacetOut | None:
+        """빈 값의 수. **없으면 줄을 안 낸다** — 0 짜리 줄은 고를 수 없는 선택지다.
+
+        빈 것을 못 고르면 「사업부를 안 적은 시험」 을 찾을 길이 목록을 눈으로
+        훑는 것뿐이다. 스무 건이면 되지만 이백 건이면 안 된다.
+        """
+        total = sum(count for value, count in pairs if value is None or value == "")
+        if total == 0:
+            return None
+        return RunFacetOut(key=EMPTY_FILTER_KEY, label=EMPTY_FILTER_LABEL, count=total)
+
+    def with_empty(rows: list[RunFacetOut], pairs: list[tuple[Any, int]]) -> list[RunFacetOut]:
+        """**「없음」 은 늘 끝에 둔다.** 값들 사이에 가나다순으로 끼면 눈이 못 찾는다."""
+        blank = empty_row(pairs)
+        return [*rows, blank] if blank is not None else rows
+
     # **차례는 한 군데서 정한다.** 그룹핑이 준 순서를 그대로 쓰면 거르기 목록이
     # 홈의 표와 다른 차례로 서고, 사람은 그것을 다른 목록으로 읽는다.
     divisions = sorted(
@@ -1136,15 +1169,27 @@ def run_facets(
         ),
         key=lambda one: divisions_order.rank(one.key),
     )
-    # 방향은 시편에 있다 — 시험에서 바로 못 센다.
-    directions = [
-        RunFacetOut(key=str(value), label=str(value), count=int(count))
+    orientation_pairs = [
+        (value, int(count))
         for value, count in db.execute(
             select(Specimen.orientation, func.count())
             .select_from(base)
             .join(Specimen, Specimen.id == base.c.specimen_id)
             .group_by(Specimen.orientation)
         ).all()
+    ]
+    group_pairs = [
+        (value, int(count))
+        for value, count in db.execute(
+            select(base.c.conditions["testing_group"].astext.label("g"), func.count())
+            .select_from(base)
+            .group_by("g")
+        ).all()
+    ]
+    # 방향은 시편에 있다 — 시험에서 바로 못 센다.
+    directions = [
+        RunFacetOut(key=str(value), label=str(value), count=count)
+        for value, count in orientation_pairs
         if value
     ]
     statuses = [
@@ -1156,24 +1201,27 @@ def run_facets(
         for value, count in tally(base.c.operator)
         if value
     ]
-    # **조건 dict 안이라 컬럼처럼 못 센다.** `->>` 로 꺼내 묶는다. 값이 없는
-    # 행은 NULL 로 나와 아래에서 빠진다.
+    # **조건 dict 안이라 컬럼처럼 못 센다.** `->>` 로 꺼내 묶는다.
     groups = [
-        RunFacetOut(key=str(value), label=str(value), count=int(count))
-        for value, count in db.execute(
-            select(base.c.conditions["testing_group"].astext.label("g"), func.count())
-            .select_from(base)
-            .group_by("g")
-        ).all()
+        RunFacetOut(key=str(value), label=str(value), count=count)
+        for value, count in group_pairs
         if value
     ]
     return RunFacetsOut(
         test_types=sorted(kinds, key=lambda one: one.label),
-        orientations=sorted(directions, key=lambda one: one.label),
-        registrants=sorted(people, key=lambda one: one.label),
-        operators=sorted(operators, key=lambda one: one.label),
-        testing_groups=sorted(groups, key=lambda one: one.label),
-        divisions=sorted(divisions, key=lambda one: one.label),
+        orientations=with_empty(
+            sorted(directions, key=lambda one: one.label), orientation_pairs
+        ),
+        registrants=with_empty(
+            sorted(people, key=lambda one: one.label), tally(base.c.registered_by_id)
+        ),
+        operators=with_empty(
+            sorted(operators, key=lambda one: one.label), tally(base.c.operator)
+        ),
+        testing_groups=with_empty(sorted(groups, key=lambda one: one.label), group_pairs),
+        divisions=with_empty(
+            sorted(divisions, key=lambda one: one.label), tally(base.c.division)
+        ),
         statuses=sorted(statuses, key=lambda one: one.key),
     )
 
@@ -1447,6 +1495,22 @@ def reparse(
         ),
         profile_key=pinned.key if pinned else None,
     )
+
+
+#: 「값이 없는 것」 을 가리키는 거르기 표식.
+#:
+#: **왜 별도 매개변수가 아니라 표식인가.** 거르기 목록은 서버가 준 `{key, label,
+#: count}` 를 그대로 그린다 — 화면은 그 key 를 되돌려 보낼 뿐 뜻을 모른다. 여기에
+#: `division_empty=true` 같은 칸을 더하면 거를 수 있는 열마다 매개변수가 하나씩
+#: 늘고, 화면이 열마다 다른 길을 알아야 한다.
+#:
+#: 진짜 값과 겹칠 위험이 있지만, 사업부·시험자·시험 그룹에 이 글자를 그대로 적는
+#: 일은 없다고 본다. 겹치면 그 값으로 거르는 대신 빈 것이 걸린다 — **틀린 값이
+#: 저장되는 종류의 사고는 아니다.**
+EMPTY_FILTER_KEY = "__none__"
+
+#: 빈 것을 가리키는 이름. 화면이 그대로 그린다.
+EMPTY_FILTER_LABEL = "(없음)"
 
 
 def _plain(value: object) -> object:

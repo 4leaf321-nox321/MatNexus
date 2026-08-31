@@ -918,8 +918,10 @@ class Test사업부:
         _upload(client, admin_headers, specimen["id"])  # 안 적은 것
 
         body = client.get("/api/test-runs/facets", headers=admin_headers).json()
-        divisions = {row["key"]: row["count"] for row in body["divisions"]}
-        assert divisions == {"전장": 2}, "안 적은 것이 빈 이름으로 실렸다"
+        divisions = {row["label"]: row["count"] for row in body["divisions"]}
+        # **안 적은 것은 빈 이름이 아니라 「(없음)」 으로 선다.** 이름 없는 줄은
+        # 고를 수도 읽을 수도 없다.
+        assert divisions == {"전장": 2, "(없음)": 1}
 
     def test_안_적어도_올라간다(
         self,
@@ -1156,6 +1158,57 @@ class Test여러_건_한꺼번에_고치기:
         ).json()
         assert {row["id"] for row in by_operator["items"]} == set(rest)
 
+    def test_값이_없는_것으로도_거른다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """**「사업부를 안 적은 시험」 을 찾을 길이 없었다.** 값들만 고를 수 있으니
+        빈 것을 보려면 목록을 눈으로 훑는 수밖에 없다 — 스무 건이면 되지만 이백
+        건이면 안 된다."""
+        head, *rest = three
+        self._apply(client, admin_headers, [head], "division", "전장")
+
+        body = client.get("/api/test-runs/facets", headers=admin_headers).json()
+        blank = [row for row in body["divisions"] if row["label"] == "(없음)"]
+        assert blank and blank[0]["count"] == len(rest)
+        # **끝에 둔다.** 값들 사이에 가나다순으로 끼면 눈이 못 찾는다.
+        assert body["divisions"][-1]["label"] == "(없음)"
+
+        listed = client.get(
+            "/api/test-runs",
+            params={"division": blank[0]["key"]},
+            headers=admin_headers,
+        ).json()
+        assert {row["id"] for row in listed["items"]} == set(rest)
+
+    def test_값이_다_있으면_없음_줄이_안_뜬다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """0 짜리 줄은 고를 수 없는 선택지다."""
+        self._apply(client, admin_headers, three, "division", "전장")
+
+        body = client.get("/api/test-runs/facets", headers=admin_headers).json()
+
+        assert [row for row in body["divisions"] if row["label"] == "(없음)"] == []
+
+    def test_시험_그룹은_키가_없는_것도_없음이다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """조건 dict 이라 **키가 아예 없는 것**과 값이 빈 것이 갈린다 — 사람에게는
+        어느 쪽이든 「안 적은 것」 이다."""
+        head, *rest = three
+        self._apply(client, admin_headers, [head], "testing_group", "2026 고온")
+
+        body = client.get("/api/test-runs/facets", headers=admin_headers).json()
+        blank = [row for row in body["testing_groups"] if row["label"] == "(없음)"]
+        assert blank and blank[0]["count"] == len(rest)
+
+        listed = client.get(
+            "/api/test-runs",
+            params={"testing_group": blank[0]["key"]},
+            headers=admin_headers,
+        ).json()
+        assert {row["id"] for row in listed["items"]} == set(rest)
+
     def test_두_축이_필터_목록에_나온다(
         self, client: TestClient, admin_headers: dict[str, str], three: list[str]
     ) -> None:
@@ -1165,7 +1218,9 @@ class Test여러_건_한꺼번에_고치기:
         self._apply(client, admin_headers, rest, "operator", "홍길동")
 
         body = client.get("/api/test-runs/facets", headers=admin_headers).json()
-        assert {row["key"]: row["count"] for row in body["testing_groups"]} == {
-            "2026 고온": 1
-        }, "값이 없는 것이 빈 이름으로 실렸다"
-        assert {row["key"]: row["count"] for row in body["operators"]} == {"홍길동": 2}
+        groups = {row["label"]: row["count"] for row in body["testing_groups"]}
+        assert groups == {"2026 고온": 1, "(없음)": 2}
+        assert {row["label"]: row["count"] for row in body["operators"]} == {
+            "홍길동": 2,
+            "(없음)": 1,
+        }
