@@ -21,6 +21,7 @@ import type { Material } from '@/modules/materials/api'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
+import { RecordName } from '@/shared/components/RecordName'
 
 /** 한 번에 받는 수. 사람이 눈으로 훑을 수 있는 정도면 충분하다 — 나머지는 검색으로. */
 const PAGE = 50
@@ -150,7 +151,7 @@ export function MaterialPicker({
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-mono text-xs">
-                  {material.record_name}
+                  <RecordName name={material.record_name} />
                 </span>
                 {material.alias && (
                   <span className="text-muted-foreground block truncate text-xs">

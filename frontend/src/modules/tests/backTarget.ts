@@ -20,6 +20,21 @@ export interface BackTarget {
   label: string
 }
 
+/**
+ * 이 시험이 붙은 **재료로 가는 길.** 재료를 모르면 `null`.
+ *
+ * `backTarget` 과 갈라 둔다. 「뒤로」 는 *왔던 자리*로 가므로 목록에서 들어온
+ * 사람은 목록으로 돌아가는데, 그러면 **재료로 가는 길이 화면 어디에도 없다** —
+ * 제목 밑에 재료 이름이 적혀 있을 뿐이라 읽을 수는 있고 갈 수는 없었다. 이것은
+ * 왔던 자리와 무관하게 언제나 재료로 간다.
+ */
+export function materialTarget(
+  item: { material_id?: string | null; material_name?: string | null } | null
+): BackTarget | null {
+  if (!item?.material_id) return null
+  return { to: `/materials/${item.material_id}`, label: item.material_name ?? '재료' }
+}
+
 export function backTarget(
   from: BackTarget | undefined,
   item: { material_id?: string | null; material_name?: string | null } | null

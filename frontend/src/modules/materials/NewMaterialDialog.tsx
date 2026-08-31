@@ -29,6 +29,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import type { ApiError } from '@/shared/api/client'
+import { RecordName } from '@/shared/components/RecordName'
 
 const EMPTY = {
   family: 'Metal',
@@ -196,7 +197,9 @@ export function NewMaterialDialog({
 
         <div className="bg-muted/40 rounded-md border p-3">
           <p className="text-muted-foreground mb-1 text-xs">이름 (자동)</p>
-          <p className="font-mono text-sm">{preview?.record_name ?? '—'}</p>
+          <p className="font-mono text-sm">
+            {preview ? <RecordName name={preview.record_name} /> : '—'}
+          </p>
           {preview?.taken && (
             <p className="text-destructive mt-1 text-xs">
               같은 이름의 재료가 이미 있습니다. Details 로 구분하세요.

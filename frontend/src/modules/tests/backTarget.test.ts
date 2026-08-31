@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { backTarget } from '@/modules/tests/backTarget'
+import { backTarget, materialTarget } from '@/modules/tests/backTarget'
 
 const MATERIAL = { material_id: 'm1', material_name: 'SECC_MDOI_1.0' }
 
@@ -39,5 +39,25 @@ describe('시험 상세의 뒤로', () => {
   it('재료 이름이 없어도 라벨이 빈 채로 안 나간다', () => {
     // 라벨이 비면 화살표만 남아서 어디로 가는지 알 수 없다.
     expect(backTarget(undefined, { material_id: 'm1', material_name: null }).label).toBe('재료')
+  })
+})
+
+describe('materialTarget', () => {
+  it('왔던 자리와 무관하게 재료로 간다', () => {
+    // **`backTarget` 과 갈리는 지점이다.** 목록에서 들어오면 「뒤로」 는 목록으로
+    // 가고, 그때 재료로 갈 길은 이것뿐이다.
+    expect(materialTarget({ material_id: 'm1', material_name: 'DP600' })).toEqual({
+      to: '/materials/m1',
+      label: 'DP600',
+    })
+  })
+
+  it('재료를 모르면 길이 없다', () => {
+    expect(materialTarget({ material_id: null, material_name: 'DP600' })).toBeNull()
+    expect(materialTarget(null)).toBeNull()
+  })
+
+  it('이름이 없어도 갈 수는 있다', () => {
+    expect(materialTarget({ material_id: 'm1', material_name: null })?.label).toBe('재료')
   })
 })

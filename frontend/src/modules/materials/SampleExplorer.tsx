@@ -56,6 +56,7 @@ import {
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 import { cn } from '@/shared/lib/utils'
+import { RecordName } from '@/shared/components/RecordName'
 
 /** 시험을 어디에 그리나. **정해지면 한쪽을 걷는다.** */
 type Mode = 'inline' | 'side'
@@ -276,7 +277,9 @@ export function SampleExplorer({
                 sample.id === active?.id ? 'bg-muted border-foreground/20' : 'hover:bg-muted/50'
               )}
             >
-              <div className="truncate pr-14 font-mono text-xs">{sample.record_name}</div>
+              <div className="truncate pr-14 font-mono text-xs">
+                <RecordName name={sample.record_name} />
+              </div>
               {/* **로트와 제조사가 시료를 가르는 것이다.** 이름만으로는 `__01`·
                   `__02` 라 무엇이 다른지 알 수 없다. */}
               <div className="text-muted-foreground mt-0.5 truncate text-xs">
@@ -437,7 +440,7 @@ export function SampleExplorer({
                           {/* 이름이 길면 여기서 접힌다. 식별자라 잘라내지 않는다 —
                               `SECC_1.0__01_TD_02` 의 뒤가 잘리면 어느 시편인지 모른다. */}
                           <TableCell className="font-mono text-xs break-all">
-                            {specimen.record_name}
+                            <RecordName name={specimen.record_name} />
                           </TableCell>
                           <TableCell>
                             <Badge variant="secondary">{specimen.orientation}</Badge>

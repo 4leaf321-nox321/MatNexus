@@ -12,9 +12,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, ChevronDown, Circle, Download, RefreshCw, Trash2 } from 'lucide-react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
-import { backTarget } from '@/modules/tests/backTarget'
+import { backTarget, materialTarget } from '@/modules/tests/backTarget'
 import type { BackTarget } from '@/modules/tests/backTarget'
 
 import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
@@ -58,6 +58,7 @@ import { ViscoelasticPanel } from '@/modules/viscoelastic/ViscoelasticPanel'
 import { ViscoelasticSummary } from '@/modules/viscoelastic/ViscoelasticSummary'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
+import { RecordName } from '@/shared/components/RecordName'
 
 export default function TestRunDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -251,6 +252,9 @@ export default function TestRunDetailPage() {
     }
   }
 
+  /** 이 시험의 재료. 「뒤로」 와 별개다 — 그쪽은 왔던 자리로 간다. */
+  const material = materialTarget(item ?? null)
+
   return (
     /* **이 화면만 넓다.** 처리 탭이 순서도·단계·곡선 셋을 나란히 놓는 작업
        화면이라 4xl(896px)에서는 곡선이 손바닥만 해진다. 다른 화면은 읽는
@@ -273,9 +277,29 @@ export default function TestRunDetailPage() {
         // **이 화면은 길다.** 곡선·요약값·처리 단계·결과가 탭마다 쌓여, 아래로
         // 내려가면 어느 시험을 보고 있었는지가 화면에서 사라진다.
         sticky
-        title={item?.record_name ?? '시험'}
+        title={item ? <RecordName name={item.record_name} /> : '시험'}
         description={
-          item ? `${item.test_type_label} · ${item.material_name ?? ''}` : undefined
+          item ? (
+            <>
+              {item.test_type_label}
+              {/* **재료로 가는 길이 여기다.** 목록에서 들어오면 「뒤로」 는 목록으로
+                  가므로(`backTarget`), 이 이름이 링크가 아니면 이 시험이 어느 재료
+                  것인지 보이기만 하고 갈 수는 없다. */}
+              {material ? (
+                <>
+                  {' · '}
+                  <Link
+                    to={material.to}
+                    className="hover:text-foreground underline underline-offset-2"
+                  >
+                    <RecordName name={material.label} />
+                  </Link>
+                </>
+              ) : (
+                item.material_name && ` · ${item.material_name}`
+              )}
+            </>
+          ) : undefined
         }
         created={item?.created_at}
         // **왔던 자리로 돌려보낸다.** 규칙은 `backTarget` 이 갖는다 — 화면에

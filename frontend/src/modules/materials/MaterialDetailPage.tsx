@@ -29,6 +29,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
+import { RecordName } from '@/shared/components/RecordName'
 
 export default function MaterialDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -63,7 +64,7 @@ export default function MaterialDetailPage() {
       <MaterialListPanel currentId={id} />
 
       <PageHeader
-        title={item?.record_name ?? '재료'}
+        title={item ? <RecordName name={item.record_name} /> : '재료'}
         description={item?.alias ?? undefined}
         created={item?.created_at}
         actions={

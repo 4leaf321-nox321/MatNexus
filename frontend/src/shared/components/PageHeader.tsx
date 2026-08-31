@@ -7,8 +7,16 @@ import { Link } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 
 interface PageHeaderProps {
-  title: string
-  description?: string
+  /**
+   * 제목. **글자만이 아니다** — 조합된 이름(`RecordName`)은 값이 없는 칸을
+   * 흐리게 그려야 읽힌다.
+   */
+  title: ReactNode
+  /**
+   * 제목 아래 한 줄. **글자만이 아니다** — 여기 적히는 것(재료·시험 종류)은
+   * 대개 다른 화면에 있는 것이라, 이름만 적어 두면 보이기만 하고 갈 수는 없다.
+   */
+  description?: ReactNode
   actions?: ReactNode
   /** 스크롤해도 맨 위에 남는다. **긴 화면에만 켠다** — 짧은 화면에서는 얻는 것
    *  없이 세로만 먹는다. */

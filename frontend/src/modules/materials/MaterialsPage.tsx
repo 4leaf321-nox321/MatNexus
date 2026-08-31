@@ -50,6 +50,7 @@ import {
 import { useResource } from '@/shared/hooks/useResource'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
+import { RecordName } from '@/shared/components/RecordName'
 
 /**
  * 한 쪽에 몇 건. `'all'` 은 200건씩 이어 받아 모은다(`shared/api/paging.ts`).
@@ -485,7 +486,7 @@ export default function MaterialsPage() {
                       to={`/materials/${material.id}`}
                       className="hover:text-primary hover:underline"
                     >
-                      {material.record_name}
+                      <RecordName name={material.record_name} />
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{material.alias ?? '—'}</TableCell>

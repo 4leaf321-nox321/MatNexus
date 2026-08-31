@@ -31,6 +31,7 @@ import { statisticsApi } from '@/modules/statistics/api'
 import { DivisionPanel } from '@/modules/statistics/DivisionPanel'
 import { OverviewPanel } from '@/modules/statistics/OverviewPanel'
 import { useResource } from '@/shared/hooks/useResource'
+import { RecordName } from '@/shared/components/RecordName'
 
 /** 최근 목록에 몇 건. 훑어보는 자리라 한 화면을 넘기지 않는다. */
 const RECENT = 8
@@ -237,7 +238,9 @@ export default function WorkspaceHomePage() {
                   to={`/test-runs/${run.id}`}
                   className="hover:bg-accent/40 flex items-center gap-3 px-3 py-2 text-sm"
                 >
-                  <span className="min-w-0 flex-1 truncate font-medium">{run.record_name}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    <RecordName name={run.record_name} />
+                  </span>
                   <span className="text-muted-foreground hidden shrink-0 sm:inline">
                     {run.test_type_label}
                   </span>

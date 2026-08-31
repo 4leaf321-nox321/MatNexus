@@ -54,6 +54,7 @@ import { useResource } from '@/shared/hooks/useResource'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 import { formatScalar } from '@/shared/units'
+import { RecordName } from '@/shared/components/RecordName'
 
 const PAGE = 50
 
@@ -309,7 +310,9 @@ export default function SpecimensPage() {
                 <TableCell className="text-muted-foreground text-xs">
                   {row.lot_no ?? '—'}
                 </TableCell>
-                <TableCell className="font-mono text-xs">{row.record_name}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  <RecordName name={row.record_name} />
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline">{row.orientation}</Badge>
                 </TableCell>

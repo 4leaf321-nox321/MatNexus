@@ -81,7 +81,10 @@ function show() {
 
 /** 두 재료를 고르고 「지우기」 를 눌러 확인창을 연다. */
 async function pickAndOpen(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByText('SPCC_-_1.2')
+  // **이름은 조각으로 그려진다.** `RecordName` 이 값이 없는 칸(`-`)만 흐리게
+  // 그리느라 span 을 나눈다 — 글자는 그대로지만 `findByText` 의 기본 대조는
+  // 직계 텍스트만 보므로 안 걸린다. 링크의 이름으로 찾으면 조각이 합쳐진다.
+  await screen.findByRole('link', { name: 'SPCC_-_1.2' })
   const boxes = screen.getAllByRole('checkbox')
   // 첫 칸은 '전부 고르기' 다. 그것을 눌러 둘을 함께 고른다.
   await user.click(boxes[0])

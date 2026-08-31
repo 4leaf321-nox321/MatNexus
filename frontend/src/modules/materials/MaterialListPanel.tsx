@@ -37,6 +37,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { useResource } from '@/shared/hooks/useResource'
 import { LeftPanel, useLeftPanel } from '@/shared/layout/SidePanel'
+import { RecordName } from '@/shared/components/RecordName'
 
 /** 한 번에 받아 오는 수. 옆 목록이라 스크롤로 훑는 것이 전부다. */
 const LIMIT = 50
@@ -168,7 +169,9 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
                   here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
                 }`}
               >
-                <div className="truncate">{material.record_name}</div>
+                <div className="truncate">
+                  <RecordName name={material.record_name} />
+                </div>
                 {material.alias && (
                   <div className="text-muted-foreground truncate text-xs">
                     {material.alias}

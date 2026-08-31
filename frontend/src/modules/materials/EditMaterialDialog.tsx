@@ -33,6 +33,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { RecordName } from '@/shared/components/RecordName'
 
 interface Props {
   material: Material
@@ -249,13 +250,17 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
           {renamed ? (
             <p className="flex flex-wrap items-center gap-2 font-mono text-sm">
               <span className="text-muted-foreground line-through">
-                {material.record_name}
+                <RecordName name={material.record_name} />
               </span>
               <ArrowRight className="size-3.5" />
-              <span>{preview.record_name}</span>
+              <span>
+                <RecordName name={preview.record_name} />
+              </span>
             </p>
           ) : (
-            <p className="font-mono text-sm">{preview?.record_name ?? material.record_name}</p>
+            <p className="font-mono text-sm">
+              <RecordName name={preview?.record_name ?? material.record_name} />
+            </p>
           )}
 
           {conflict && (
