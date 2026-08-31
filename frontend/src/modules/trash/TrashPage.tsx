@@ -48,6 +48,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { stamp } from '@/shared/lib/datetime'
 
 /** `{시료: 2, 시편: 6}` → `시료 2건 · 시편 6건`. 비면 빈 글자. */
@@ -64,18 +65,19 @@ export default function TrashPage() {
   const [said, setSaid] = useState<string | null>(null)
   const [failed, setFailed] = useState<Error | null>(null)
   const [purging, setPurging] = useState<TrashItem | null>(null)
-  // `종류-id` 를 열쇠로 든다 — 종류가 다르면 id 가 같을 수 있다.
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [purgingMany, setPurgingMany] = useState(false)
 
   const items = useResource(() => trashApi.list(kind ? { kind } : {}), [kind])
   const rows = items.data ?? []
   const labels = new Map(rows.map((row) => [row.kind, row.kind_label]))
 
+  // `종류-id` 를 열쇠로 든다 — 종류가 다르면 id 가 같을 수 있다.
   const keyOf = (row: TrashItem) => `${row.kind}-${row.id}`
-  // **화면에 있는 것만 센다.** 걸러서 안 보이는 줄이 선택에 남아 있으면, 사람이
-  // 본 수와 지워지는 수가 어긋난다.
-  const chosen = rows.filter((row) => picked.has(keyOf(row)))
+  // **화면에 있는 것만 센다.** 훅이 안 보이는 줄을 버린다 — 걸러서 사라진 줄이
+  // 선택에 남아 있으면, 사람이 본 수와 지워지는 수가 어긋난다.
+  const selection = useRowSelection(rows.map(keyOf))
+  const byKey = new Map(rows.map((row) => [keyOf(row), row]))
+  const chosen = selection.chosen.map((key) => byKey.get(key)!).filter(Boolean)
 
   async function run(job: () => Promise<{ said: string }>, what: string) {
     setBusy(what)
@@ -105,7 +107,7 @@ export default function TrashPage() {
           ? `${done.purged}건을 지웠습니다 (${done.skipped}건은 함께 사라져 건너뜀) — ${done.said}`
           : `${done.purged}건을 지웠습니다 — ${done.said}`
       )
-      setPicked(new Set())
+      selection.clear()
       items.reload()
     } catch (error) {
       setFailed(error as Error)
@@ -146,7 +148,7 @@ export default function TrashPage() {
             aria-pressed={kind === ''}
             onClick={() => {
               setKind('')
-              setPicked(new Set())
+              selection.clear()
             }}
           >
             전부
@@ -165,7 +167,7 @@ export default function TrashPage() {
                   // 있어야 토글이다 — 없으면 「전부」 를 찾아 눈이 되돌아간다.
                   onClick={() => {
                     setKind((now) => (now === one.key ? '' : one.key))
-                    setPicked(new Set())
+                    selection.clear()
                   }}
                 >
                   {labels.get(one.key) ?? one.label}
@@ -203,7 +205,7 @@ export default function TrashPage() {
             variant="ghost"
             className="h-7 text-xs"
             disabled={busy !== null}
-            onClick={() => setPicked(new Set())}
+            onClick={() => selection.clear()}
           >
             선택 해제
           </Button>
@@ -219,15 +221,11 @@ export default function TrashPage() {
                   <input
                     type="checkbox"
                     aria-label="이 쪽 전부 선택"
-                    checked={rows.length > 0 && chosen.length === rows.length}
+                    checked={selection.allOn}
                     ref={(node) => {
-                      if (node) {
-                        node.indeterminate = chosen.length > 0 && chosen.length < rows.length
-                      }
+                      if (node) node.indeterminate = selection.someOn
                     }}
-                    onChange={(event) =>
-                      setPicked(event.target.checked ? new Set(rows.map(keyOf)) : new Set())
-                    }
+                    onChange={(event) => selection.setAll(event.target.checked)}
                   />
                 </TableHead>
                 <TableHead className="whitespace-nowrap">언제 지웠나</TableHead>
@@ -244,15 +242,10 @@ export default function TrashPage() {
                     <input
                       type="checkbox"
                       aria-label={`${row.name || '이름 없음'} 선택`}
-                      checked={picked.has(keyOf(row))}
-                      onChange={(event) =>
-                        setPicked((current) => {
-                          const next = new Set(current)
-                          if (event.target.checked) next.add(keyOf(row))
-                          else next.delete(keyOf(row))
-                          return next
-                        })
-                      }
+                      checked={selection.picked.has(keyOf(row))}
+                      // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+                      onClick={(event) => selection.toggle(keyOf(row), event)}
+                      onChange={() => {}}
                     />
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs whitespace-nowrap tabular-nums">

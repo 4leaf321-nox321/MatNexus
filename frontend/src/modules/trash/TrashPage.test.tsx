@@ -6,7 +6,7 @@
  * 보이지만, 뒤엣것은 조용히 틀리고 되돌릴 수 없다.
  */
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -52,6 +52,18 @@ const BLOCKED = {
   workspace_id: null,
   below: { 시료: 2, 시편: 6 },
   blocked: '같은 이름의 재료가 이미 살아 있습니다: SECC_MDOI_1.0.',
+}
+
+/** 사이에 끼는 줄. **Shift 범위가 뜻을 가지려면 셋이어야 한다.** */
+const MIDDLE = {
+  kind: 'specimen',
+  kind_label: '시편',
+  id: 's2',
+  name: 'SECC__01_MD_02',
+  deleted_at: '2026-08-28T01:30:00Z',
+  workspace_id: null,
+  below: {},
+  blocked: null,
 }
 
 beforeEach(() => {
@@ -198,6 +210,28 @@ describe('골라서 한꺼번에 지우기', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
     await userEvent.click(screen.getByRole('button', { name: '선택한 것 영구 삭제' }))
     expect(purgeMany).not.toHaveBeenCalled()
+  })
+
+  it('Shift 로 사이에 낀 줄까지 고른다', async () => {
+    /**
+     * **하나씩 누르는 것이 일이 되는 자리다.** 스무 건을 지우려고 스무 번 누르면
+     * 사람은 중간에 「전부 선택」 을 눌러 버리고, 그때 안 지울 것까지 딸려 간다.
+     *
+     * 줄이 셋이어야 이 시험이 뜻을 갖는다 — 둘뿐이면 Shift 없이 두 번 눌러도
+     * 2건이라 **범위가 먹었는지 안 먹었는지 구별할 수 없다.**
+     */
+    list.mockResolvedValue([FREE, MIDDLE, BLOCKED])
+    render(<TrashPage />)
+    await screen.findByText('SECC_MDOI_1.0')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
+    // **`fireEvent` 다.** `userEvent.click` 의 둘째 인자는 shiftKey 를 안 받는다.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'SECC_MDOI_1.0 선택' }), {
+      shiftKey: true,
+    })
+
+    // 가운데 줄까지 켜진다 — 두 번만 눌렀는데 3건이다.
+    expect(await screen.findByText('3건')).toBeInTheDocument()
   })
 
   it('머리 칸으로 이 쪽 전부를 고른다', async () => {

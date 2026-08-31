@@ -51,6 +51,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 import { formatScalar } from '@/shared/units'
 
@@ -97,7 +98,6 @@ export default function SpecimensPage() {
     // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
     allowed: ['created_at', 'material_name', 'lot_no', 'record_name', 'orientation', 'standard'],
   })
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState(false)
 
   // **거르면 첫 쪽으로 돌아간다.** 3쪽을 보다 거르면 걸러진 결과의 3쪽이 나오는데,
@@ -106,7 +106,7 @@ export default function SpecimensPage() {
     setOffset(0)
     // **선택도 함께 푼다.** 걸러서 안 보이게 된 줄이 골라진 채 남으면, 「12건에
     // 걸기」 가 화면에 없는 것까지 건드린다.
-    setPicked(new Set())
+    selection.clear()
   }, [material, lot, name, orientation, standard])
 
   const page = useResource(
@@ -126,6 +126,12 @@ export default function SpecimensPage() {
   )
 
   const rows = page.data?.items ?? []
+
+  // **Shift 로 범위를 고른다.** 수백 장을 하나씩 누르는 것은 일이 아니다.
+
+  const selection = useRowSelection(rows.map((row) => row.id))
+
+  const picked = selection.picked
   const total = page.data?.total ?? 0
   const filtered = !!(material || lot || name || orientation || standard)
 
@@ -169,7 +175,7 @@ export default function SpecimensPage() {
             size="sm"
             variant="ghost"
             className="h-7 text-xs"
-            onClick={() => setPicked(new Set())}
+            onClick={() => selection.clear()}
           >
             선택 해제
           </Button>
@@ -188,7 +194,7 @@ export default function SpecimensPage() {
         onClose={() => {
           setEditing(false)
           // **선택은 닫을 때 푼다.** 걸자마자 풀면 창이 「0건」 으로 바뀐다.
-          setPicked(new Set())
+          selection.clear()
         }}
         onDone={() => page.reload()}
       />
@@ -209,15 +215,11 @@ export default function SpecimensPage() {
                   <input
                     type="checkbox"
                     aria-label="이 쪽 전부 선택"
-                    checked={picked.size > 0 && picked.size === rows.length}
+                    checked={selection.allOn}
                     ref={(node) => {
-                      if (node) node.indeterminate = picked.size > 0 && picked.size < rows.length
+                      if (node) node.indeterminate = selection.someOn
                     }}
-                    onChange={(event) =>
-                      setPicked(
-                        event.target.checked ? new Set(rows.map((row) => row.id)) : new Set()
-                      )
-                    }
+                    onChange={(event) => selection.setAll(event.target.checked)}
                   />
                 </div>
               </TableHead>
@@ -291,14 +293,9 @@ export default function SpecimensPage() {
                     type="checkbox"
                     aria-label={`${row.record_name} 선택`}
                     checked={picked.has(row.id)}
-                    onChange={(event) =>
-                      setPicked((current) => {
-                        const next = new Set(current)
-                        if (event.target.checked) next.add(row.id)
-                        else next.delete(row.id)
-                        return next
-                      })
-                    }
+                    // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+                    onClick={(event) => selection.toggle(row.id, event)}
+                    onChange={() => {}}
                   />
                 </TableCell>
                 <TableCell className="font-mono text-xs">

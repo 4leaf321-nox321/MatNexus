@@ -46,6 +46,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 
 const POLL_MS = 3000
@@ -159,7 +160,6 @@ export default function TestRunsPage() {
   // **거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이 없는
   // 시험이 된다 — 이 화면의 머리말이 그 이야기다.
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   // 기본은 **최근 등록순.** 전에도 그랬고, 이제 다른 열로도 바꿀 수 있다.
   const { sort, handle } = useSort('created_at', {
     // **이 브라우저가 기억한다.** 계정이 아니다 — 같은 PC 를 다른 사람이
@@ -200,7 +200,7 @@ export default function TestRunsPage() {
   /** 열 하나를 좁힌다. **필터가 바뀌면 처음부터 다시 본다.** */
   function narrow(key: string, value: string | undefined) {
     setOffset(0)
-    setPicked(new Set())
+    selection.clear()
     setFilters((current) => ({ ...current, [key]: value }))
   }
 
@@ -217,7 +217,7 @@ export default function TestRunsPage() {
           )
         )
       }
-      setPicked(new Set())
+      selection.clear()
       setRemoving(false)
       runs.reload()
       facets.reload()
@@ -239,6 +239,10 @@ export default function TestRunsPage() {
   const [failure, setFailure] = useState<Error | null>(null)
   /** 읽히지 않은 시험은 처리할 곡선이 없다. 고를 수 있게 두면 전부 실패한다. */
   const processable = rows.filter((run) => run.status === 'parsed')
+  // **고를 수 있는 줄만 넘긴다.** Shift 범위가 못 고르는 줄을 건너뛰어야 한다 —
+  // 안 그러면 범위 안의 실패한 시험까지 켜지고, 배치가 통째로 실패한다.
+  const selection = useRowSelection(processable.map((run) => run.id))
+  const picked = selection.picked
   /** 한 배치는 **한 종류**여야 한다 — 인장 레시피가 DMA 곡선에 걸리면 실패한다. */
   const pickedTypes = new Set(
     rows.filter((run) => picked.has(run.id)).map((run) => run.test_type_key)
@@ -293,7 +297,7 @@ export default function TestRunsPage() {
             </span>
           )}
           <div className="ml-auto flex gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+            <Button size="sm" variant="ghost" onClick={() => selection.clear()}>
               선택 해제
             </Button>
             <Button
@@ -361,7 +365,7 @@ export default function TestRunsPage() {
           testTypeKey={[...pickedTypes][0] ?? null}
           onClose={() => {
             setBatching(false)
-            setPicked(new Set())
+            selection.clear()
           }}
           // **선택은 닫을 때 푼다.** 돌자마자 풀었더니 다이얼로그가 자기가 방금
           // 무엇을 돌렸는지 잊고 "0건에 레시피 적용" 을 띄웠다 — 결과를 보고
@@ -399,17 +403,11 @@ export default function TestRunsPage() {
                 <input
                   type="checkbox"
                   aria-label="전부 선택"
-                  checked={picked.size > 0 && picked.size === processable.length}
+                  checked={selection.allOn}
                   ref={(node) => {
-                    if (node) {
-                      node.indeterminate = picked.size > 0 && picked.size < processable.length
-                    }
+                    if (node) node.indeterminate = selection.someOn
                   }}
-                  onChange={(event) =>
-                    setPicked(
-                      event.target.checked ? new Set(processable.map((r) => r.id)) : new Set()
-                    )
-                  }
+                  onChange={(event) => selection.setAll(event.target.checked)}
                 />
               </TableHead>
               <TableHead>
@@ -497,14 +495,10 @@ export default function TestRunsPage() {
                     aria-label={`${run.record_name} 선택`}
                     disabled={run.status !== 'parsed'}
                     checked={picked.has(run.id)}
-                    onChange={(event) =>
-                      setPicked((current) => {
-                        const next = new Set(current)
-                        if (event.target.checked) next.add(run.id)
-                        else next.delete(run.id)
-                        return next
-                      })
-                    }
+                    // **`onClick` 이다.** `onChange` 이벤트에는 shiftKey 가 없다 —
+                    // 브라우저가 만들어 내는 합성 이벤트라 누른 키가 안 실린다.
+                    onClick={(event) => selection.toggle(run.id, event)}
+                    onChange={() => {}}
                   />
                 </TableCell>
                 <TableCell className="font-mono text-xs">
@@ -601,7 +595,7 @@ export default function TestRunsPage() {
                   setOffset(0)
                   // 쪽을 넘기면 고른 것이 화면에서 사라진다. 남겨 두면 안 보이는
                   // 시험에 레시피가 걸린다.
-                  setPicked(new Set())
+                  selection.clear()
                 }}
                 className={`rounded px-1.5 py-0.5 tabular-nums ${
                   size === value ? 'bg-muted text-foreground font-medium' : 'hover:bg-muted/60'
@@ -619,7 +613,7 @@ export default function TestRunsPage() {
               disabled={offset === 0}
               onClick={() => {
                 setOffset(Math.max(0, offset - size))
-                setPicked(new Set())
+                selection.clear()
               }}
             >
               <ChevronLeft className="size-3.5" />
@@ -631,7 +625,7 @@ export default function TestRunsPage() {
               disabled={offset + rows.length >= total}
               onClick={() => {
                 setOffset(offset + size)
-                setPicked(new Set())
+                selection.clear()
               }}
             >
               다음

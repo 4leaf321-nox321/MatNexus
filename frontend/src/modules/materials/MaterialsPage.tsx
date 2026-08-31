@@ -48,6 +48,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 
 /**
@@ -85,7 +86,6 @@ export default function MaterialsPage() {
     // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
     allowed: ['created_at', 'record_name', 'alias', 'family', 'category', 'spec_thickness'],
   })
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [removing, setRemoving] = useState(false)
   // 아래(시료·시편·시험)까지 함께 지울지. **기본은 안 지우는 쪽이다** — 고르고
   // 지우기를 누르는 것이 갑자기 트리를 날리는 뜻이 되면 안 된다.
@@ -157,7 +157,7 @@ export default function MaterialsPage() {
             `을 지웠습니다.`
         )
       }
-      setPicked(new Set())
+      selection.clear()
       setRemoving(false)
       materials.reload()
       classes.reload()
@@ -170,6 +170,9 @@ export default function MaterialsPage() {
 
   const page = materials.data
   const rows = page?.items ?? []
+  // **Shift 로 범위를 고른다.** 한 쪽이 50건이라 하나씩 누르는 것은 일이 아니다.
+  const selection = useRowSelection(rows.map((material) => material.id))
+  const picked = selection.picked
   const total = page?.total ?? 0
   // 천장(2,000)에 걸렸는지. 걸렸으면 몇 건에서 멈췄는지 말한다.
   const truncated = all && rows.length < total
@@ -253,7 +256,7 @@ export default function MaterialsPage() {
             <Trash2 className="size-3.5" />
             지우기
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+          <Button size="sm" variant="ghost" onClick={() => selection.clear()}>
             선택 해제
           </Button>
         </div>
@@ -365,17 +368,11 @@ export default function MaterialsPage() {
                     <input
                       type="checkbox"
                       aria-label="전부 선택"
-                      checked={picked.size > 0 && picked.size === rows.length}
+                      checked={selection.allOn}
                       ref={(node) => {
-                        if (node) node.indeterminate = picked.size > 0 && picked.size < rows.length
+                        if (node) node.indeterminate = selection.someOn
                       }}
-                      onChange={(event) =>
-                        setPicked(
-                          event.target.checked
-                            ? new Set(rows.map((material) => material.id))
-                            : new Set()
-                        )
-                      }
+                      onChange={(event) => selection.setAll(event.target.checked)}
                     />
                   </div>
                 </TableHead>
@@ -420,7 +417,7 @@ export default function MaterialsPage() {
                       // 남겨 두면 조용히 0건이 되고, 사람은 재료가 없는 줄 안다.
                       setCategory('')
                       setOffset(0)
-                      setPicked(new Set())
+                      selection.clear()
                     }}
                   />
                 </TableHead>
@@ -478,14 +475,9 @@ export default function MaterialsPage() {
                       type="checkbox"
                       aria-label={`${material.record_name} 선택`}
                       checked={picked.has(material.id)}
-                      onChange={(event) =>
-                        setPicked((current) => {
-                          const next = new Set(current)
-                          if (event.target.checked) next.add(material.id)
-                          else next.delete(material.id)
-                          return next
-                        })
-                      }
+                      // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+                      onClick={(event) => selection.toggle(material.id, event)}
+                      onChange={() => {}}
                     />
                   </TableCell>
                   <TableCell className="font-mono text-xs">
