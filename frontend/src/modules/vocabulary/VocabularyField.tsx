@@ -29,6 +29,14 @@ interface Props {
    * 의도하지 않는다. 그 화면은 정리하는 자리지 늘리는 자리가 아니다.
    */
   allowCreate?: boolean
+  /**
+   * 도구줄용 배치 — **작은 회색 이름을 위에 두고, 옆에 붙는 이름은 지운다.**
+   *
+   * 기본 배치는 이름이 두 번 나온다(위의 `Label` 과 피커가 트리거 옆에 다는
+   * 것). 세로 폼에서는 눈에 안 띄지만, 칸이 가로로 늘어선 도구줄에서는 옆
+   * 칸들과 이름 크기도 높이도 안 맞아 어디까지가 한 칸인지 안 보인다.
+   */
+  compact?: boolean
   onChange: (next: string) => void
 }
 
@@ -38,13 +46,16 @@ export function VocabularyField({
   value,
   parentValue,
   allowCreate = true,
+  compact = false,
   onChange,
 }: Props) {
   return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
+    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
+      <Label className={compact ? 'text-muted-foreground text-xs' : undefined}>{label}</Label>
       <OptionPicker
         label={label}
+        showLabel={!compact}
+        triggerClassName={compact ? 'h-9 w-full justify-between' : ''}
         value={value}
         options={[]}
         search={async (term) => {

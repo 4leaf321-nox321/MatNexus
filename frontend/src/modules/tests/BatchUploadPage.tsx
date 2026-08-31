@@ -40,7 +40,10 @@ import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
 import { MaterialPicker } from '@/modules/materials/MaterialPicker'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
+import { vocabularyApi } from '@/modules/vocabulary/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
+import { nominalSizes, SIZE_FIELDS } from '@/modules/tests/nominalSizes'
+import type { Nominal } from '@/modules/tests/nominalSizes'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { conditionUnits, display } from '@/shared/units'
@@ -69,6 +72,9 @@ import { useResource } from '@/shared/hooks/useResource'
 
 const ORIENTATIONS = ['MD', 'TD', 'DD', 'NA'] as const
 /** 이방성 세트. 한 시료에서 세 방향을 뜨는 것이 인장의 기본 작업이다. */
+/** 도구줄 칸 이름 — **한 곳에서 읽는다.** 칸마다 적으면 하나만 바뀐다. */
+const FIELD_LABEL = 'text-muted-foreground text-xs'
+
 const ANISOTROPY_SET = ['MD', 'TD', 'DD'] as const
 
 type RowStatus = 'incomplete' | 'uploading' | 'done' | 'error'
@@ -139,6 +145,19 @@ export default function BatchUploadPage() {
   const types = useResource(() => testsApi.types(), [])
 
   const [rows, setRows] = useState<Row[]>([])
+
+  /** 일괄 지정이 왜 안 걸렸는지. **말없이 넘어가지 않는다.** */
+  const [notice, setNotice] = useState<string | null>(null)
+
+  /**
+   * 규격이 정한 공칭 치수 — 규격 이름으로 찾는다.
+   *
+   * **흐린 글씨로만 쓴다.** 칸에 베껴 넣으면 공칭이 실측인 척하게 된다
+   * (`nominalSizes` 의 주석). 사람이 이것을 볼 이유는 하나다 — **안 적어도
+   * 되는 칸이 어느 것인지.** 안 보여 주면 빈 칸을 보고 손으로 채우게 되고,
+   * 그때 규격의 공칭이 이 시편을 실제로 잰 값으로 둔갑한다.
+   */
+  const [nominal, setNominal] = useState<Record<string, Nominal>>({})
 
   const [sampleCache, setSampleCache] = useState<Record<string, Sample[]>>({})
   const [specimenCache, setSpecimenCache] = useState<Record<string, Specimen[]>>({})
@@ -253,12 +272,51 @@ export default function BatchUploadPage() {
     )
   }, [availableTypes])
 
+  // 표에 있는 규격의 공칭을 읽어 둔다. **규격 하나에 한 번만 묻는다** —
+  // 한 배치가 대개 같은 규격이라, 줄마다 물으면 같은 질문을 20번 한다.
+  useEffect(() => {
+    const fresh = [...new Set(rows.map((row) => row.standard))].filter(
+      (value) => value !== '' && !(value in nominal)
+    )
+    if (fresh.length === 0) return
+    // **먼저 자리를 잡는다.** 응답을 기다리는 사이 렌더가 또 돌면 같은 규격을
+    // 다시 묻게 된다.
+    setNominal((current) => {
+      const next = { ...current }
+      for (const value of fresh) next[value] = {}
+      return next
+    })
+    for (const value of fresh) {
+      void (async () => {
+        try {
+          const found = await vocabularyApi.search('specimen_standard', value)
+          // 검색은 별칭에도 걸리므로 이름이 똑같은 것만 쓴다.
+          const term = found.items.find((item) => item.value === value)
+          if (!term) return
+          const fields = await vocabularyApi.termFields('specimen_standard', term.id)
+          setNominal((current) => ({ ...current, [value]: nominalSizes(term.attributes, fields) }))
+        } catch {
+          // 못 읽어도 화면은 그대로 둔다 — 흐린 글씨는 도움말이지 값이 아니다.
+        }
+      })()
+    }
+  }, [rows, nominal])
+
   function patch(key: string, change: Partial<Row>) {
     setRows((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)))
   }
 
-  /** 아직 안 올라간 선택 줄에만 적용한다. `done` 은 건드리지 않는다. */
+  /** 일괄 지정이 걸리는 줄 — **고른 것 중 아직 안 올린 것.** */
+  const assignable = rows.filter((row) => row.selected && row.status !== 'done')
+
   function assignSelected(change: Partial<Row>) {
+    // **아무 줄도 안 골랐으면 말한다.** 전에는 조용히 아무 일도 안 났다 — 사람은
+    // 규격을 골랐으니 걸렸다고 믿고 그대로 올렸고, 시편에 규격이 안 붙었다.
+    if (assignable.length === 0) {
+      setNotice('먼저 표에서 줄을 고르세요 — 고른 줄에만 걸립니다.')
+      return
+    }
+    setNotice(null)
     setRows((current) =>
       current.map((row) =>
         row.selected && row.status !== 'done' ? { ...row, ...change } : row
@@ -477,198 +535,217 @@ export default function BatchUploadPage() {
 
       {rows.length > 0 && (
         <>
+          {/* **일괄 지정 도구줄 — 두 묶음이다.**
+
+              위는 *이 줄이 무엇이고 어디에 붙는가*(종류·재료·시료·새 시편),
+              아래는 *시편에 적어 넣을 값*(규격·치수·사업부). 하나로 이어 두었을
+              때는 칸마다 이름 크기와 높이가 달라(피커는 이름을 옆에 달고 셀렉트는
+              위에 달았다) 어디까지가 한 칸인지 눈으로 안 잘렸다. 이름은 전부 위,
+              컨트롤은 전부 `h-9`, 너비는 격자가 정한다. */}
           <fieldset
             disabled={running}
-            className="bg-muted/30 mb-3 flex flex-wrap items-end gap-3 rounded-md border p-3"
+            className="bg-muted/30 mb-3 space-y-3 rounded-md border p-3"
           >
-            <div className="text-muted-foreground text-xs">
-              선택한 {selected.length}줄에 적용
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-muted-foreground text-xs">시험 종류</Label>
-              <Select
-                value=""
-                onValueChange={(typeKey) => assignSelected({ typeKey, typeSource: 'manual' })}
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-muted-foreground text-xs">
+                고른 {assignable.length}줄에 적용됩니다
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setRows((current) => current.filter((row) => !row.selected))}
+                disabled={selected.length === 0}
               >
-                {/* 셋 다 라벨이 '일괄 지정' 이라 낭독기로는 구분할 수 없었다. */}
-                <SelectTrigger className="w-36" aria-label="시험 종류 일괄 지정">
-                  <SelectValue placeholder="일괄 지정" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTypes.map((type) => (
-                    <SelectItem key={type.key} value={type.key}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <Trash2 className="size-4" />
+                선택 제거
+              </Button>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-muted-foreground text-xs">재료</Label>
-              {/* 검색과 목록이 **한 컨트롤**이다. 나눠 두었을 때 실사용 보고:
-                  "재료 검색에는 안 나오는데 우측의 일괄지정을 보면 리스트가 있다."
-                  검색은 걸리고 있었지만 입력칸 아래에 아무것도 안 떠서 안 되는 줄
-                  알았다 — 두 위젯이 한 일을 나눠 가지면 어느 쪽이 반응하는지 모른다. */}
-              <MaterialPicker
-                action
-                placeholder="일괄 지정"
-                ariaLabel="재료 일괄 지정"
-                className="h-9 w-56"
-                onSelect={(material) => {
-                  remember(material)
-                  void loadSamples(material.id)
-                  assignSelected({
-                    materialId: material.id,
-                    sampleId: null,
-                    specimen: null,
-                  })
-                }}
-              />
-            </div>
+            {/* **왜 안 걸렸는지 말한다.** 조용히 넘어가면 사람은 걸린 줄 알고
+                그대로 올린다 — 그때 시편에 규격이 안 붙는다. */}
+            {notice && (
+              <p className="rounded-md border border-amber-400 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                {notice}
+              </p>
+            )}
 
-            <div className="space-y-1">
-              <Label className="text-muted-foreground text-xs">
-                시료
-                {selected.length > 0 && !commonMaterial && (
-                  <span className="text-amber-600 dark:text-amber-500">
-                    {' '}
-                    · 선택한 줄의 재료가 다릅니다
-                  </span>
-                )}
-              </Label>
-              {/* 재료가 섞인 채로 시료를 지정하면 재료 B 파일이 재료 A 의 시료에
-                  붙는다. 화면은 끝까지 B 라고 보여 준다 — 그래서 막는다. */}
-              <div className="flex gap-1">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1">
+                <Label className={FIELD_LABEL}>시험 종류</Label>
                 <Select
                   value=""
-                  onValueChange={(sampleId) => {
-                    void loadSpecimens(sampleId)
-                    assignSelected({ sampleId, specimen: null })
-                  }}
-                  disabled={!commonMaterial}
+                  onValueChange={(typeKey) => assignSelected({ typeKey, typeSource: 'manual' })}
                 >
-                  <SelectTrigger className="w-40" aria-label="시료 일괄 지정">
-                    <SelectValue placeholder="일괄 지정" />
+                  {/* 넷 다 이름이 '일괄 지정' 이라 낭독기로는 구분할 수 없었다. */}
+                  <SelectTrigger className="h-9 w-full" aria-label="시험 종류 일괄 지정">
+                    <SelectValue placeholder="고르세요" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(sampleCache[commonMaterial ?? ''] ?? []).map((sample) => (
-                      <SelectItem key={sample.id} value={sample.id}>
-                        {String(sample.seq_no).padStart(2, '0')}
-                        {sample.lot_no ? ` · ${sample.lot_no}` : ''}
+                    {availableTypes.map((type) => (
+                      <SelectItem key={type.key} value={type.key}>
+                        {type.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {/* **파일이 오는 순간이 시료를 처음 아는 순간이기도 하다.** 새로
-                    받은 판에서 자른 시편들을 올리는데 시료를 등록하러 다른 화면에
-                    다녀오게 하면, 시편에서 없앤 왕복이 시료에 그대로 남는다. */}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!commonMaterial}
-                  title={
-                    commonMaterial
-                      ? '이 재료에 시료를 만들고 선택한 줄에 지정합니다'
-                      : '선택한 줄의 재료가 하나여야 합니다'
-                  }
-                  onClick={() => setNewSample(true)}
-                >
-                  <Plus className="size-3.5" />새 시료
-                </Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label className={FIELD_LABEL}>재료</Label>
+                {/* 검색과 목록이 **한 컨트롤**이다. 나눠 두었을 때 실사용 보고:
+                    "재료 검색에는 안 나오는데 우측의 일괄지정을 보면 리스트가 있다."
+                    검색은 걸리고 있었지만 입력칸 아래에 아무것도 안 떠서 안 되는 줄
+                    알았다 — 두 위젯이 한 일을 나눠 가지면 어느 쪽이 반응하는지 모른다. */}
+                <MaterialPicker
+                  action
+                  placeholder="고르세요"
+                  ariaLabel="재료 일괄 지정"
+                  className="h-9 w-full"
+                  onSelect={(material) => {
+                    remember(material)
+                    void loadSamples(material.id)
+                    assignSelected({
+                      materialId: material.id,
+                      sampleId: null,
+                      specimen: null,
+                    })
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className={FIELD_LABEL}>
+                  시료
+                  {selected.length > 0 && !commonMaterial && (
+                    <span className="text-amber-600 dark:text-amber-500">
+                      {' '}
+                      · 고른 줄의 재료가 다릅니다
+                    </span>
+                  )}
+                </Label>
+                {/* 재료가 섞인 채로 시료를 지정하면 재료 B 파일이 재료 A 의 시료에
+                    붙는다. 화면은 끝까지 B 라고 보여 준다 — 그래서 막는다. */}
+                <div className="flex gap-1">
+                  <Select
+                    value=""
+                    onValueChange={(sampleId) => {
+                      void loadSpecimens(sampleId)
+                      assignSelected({ sampleId, specimen: null })
+                    }}
+                    disabled={!commonMaterial}
+                  >
+                    <SelectTrigger className="h-9 flex-1" aria-label="시료 일괄 지정">
+                      <SelectValue placeholder="고르세요" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(sampleCache[commonMaterial ?? ''] ?? []).map((sample) => (
+                        <SelectItem key={sample.id} value={sample.id}>
+                          {String(sample.seq_no).padStart(2, '0')}
+                          {sample.lot_no ? ` · ${sample.lot_no}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* **파일이 오는 순간이 시료를 처음 아는 순간이기도 하다.** 새로
+                      받은 판에서 자른 시편들을 올리는데 시료를 등록하러 다른 화면에
+                      다녀오게 하면, 시편에서 없앤 왕복이 시료에 그대로 남는다. */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-9 shrink-0"
+                    disabled={!commonMaterial}
+                    title={
+                      commonMaterial
+                        ? '이 재료에 시료를 만들고 고른 줄에 지정합니다'
+                        : '고른 줄의 재료가 하나여야 합니다'
+                    }
+                    onClick={() => setNewSample(true)}
+                  >
+                    <Plus className="size-3.5" />새 시료
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className={FIELD_LABEL}>새 시편 (번호 자동)</Label>
+                <div className="flex flex-wrap gap-1">
+                  {ORIENTATIONS.map((orientation) => (
+                    <Button
+                      key={orientation}
+                      size="sm"
+                      variant="outline"
+                      className="h-9 flex-1"
+                      disabled={!selected.some((row) => row.sampleId)}
+                      onClick={() => assignNewSpecimens([orientation])}
+                    >
+                      {orientation}
+                    </Button>
+                  ))}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-9"
+                    disabled={!selected.some((row) => row.sampleId)}
+                    title="고른 줄에 MD·TD·DD 를 돌아가며 지정합니다"
+                    onClick={() => assignNewSpecimens(ANISOTROPY_SET)}
+                  >
+                    MD·TD·DD
+                  </Button>
+                </div>
               </div>
             </div>
 
-            {/* **치수도 여기서 넣는다.** 파일에서 채우는 길이 있지만 그것만으로는
-                모자란다 — 게이지 길이는 장비 파일에 아예 없고, 두께·폭도 장비가
-                잘못 적어 오는 경우가 있다. 대개 한 배치가 같은 규격이라 일괄로
-                넣고, 다른 줄만 표에서 고친다. */}
-            {/* **규격이 치수를 정한다.** 그래서 치수 바로 위다. 장비 파일에는
-                없는 값이라(번호·두께 a0·폭 b0 뿐) 사람이 넣지 않으면 아무 데서도
-                안 온다. 대개 한 배치가 같은 규격이다. */}
-            <div className="space-y-1">
-              {/* **일괄 지정이라 오타의 파급이 크다.** 자유 입력이면 여기서 한
+            {/* **여기부터는 시편에 적어 넣는 값이다.** 위 묶음이 「어디에 붙나」 를
+                정하고, 이 묶음이 「무엇을 적나」 를 정한다. */}
+            <div className="grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2 lg:grid-cols-4">
+              {/* **규격이 치수를 정한다.** 그래서 치수 바로 왼쪽이다. 장비 파일에는
+                  없는 값이라(번호·두께 a0·폭 b0 뿐) 사람이 넣지 않으면 아무 데서도
+                  안 온다. 대개 한 배치가 같은 규격이다.
+
+                  **일괄 지정이라 오타의 파급이 크다** — 자유 입력이면 여기서 한
                   글자 틀릴 때 시편 20개가 한꺼번에 새 값을 가리킨다. */}
               <VocabularyField
+                compact
                 slug="specimen_standard"
-                label="시편 규격 일괄 지정"
+                label="시편 규격"
                 value=""
                 onChange={(next) => assignSelected({ standard: next })}
               />
-            </div>
 
-            <div className="space-y-1">
+              {/* **치수도 여기서 넣는다.** 파일에서 채우는 길이 있지만 그것만으로는
+                  모자란다 — 게이지 길이는 장비 파일에 아예 없고, 두께·폭도 장비가
+                  잘못 적어 오는 경우가 있다. 대개 한 배치가 같은 규격이라 일괄로
+                  넣고, 다른 줄만 표에서 고친다. */}
+              <div className="space-y-1 sm:col-span-2">
+                <Label className={FIELD_LABEL}>시편 치수 ({LENGTH_UNIT})</Label>
+                <div className="flex gap-1">
+                  {SIZE_FIELDS.map(([key, , label]) => (
+                    <Input
+                      key={key}
+                      className="h-9 w-full text-xs"
+                      inputMode="decimal"
+                      placeholder={label}
+                      aria-label={`${label} 일괄 지정`}
+                      onChange={(event) => assignSelected({ [key]: event.target.value })}
+                    />
+                  ))}
+                </div>
+              </div>
+
               {/* **사업부도 대개 한 배치가 같다.** 기준정보를 거치므로 여기서
                   한 글자 틀려도 새 값이 생기지 않는다. */}
               <VocabularyField
+                compact
                 slug="division"
-                label="사업부 일괄 지정"
+                label="사업부"
                 value=""
                 onChange={(next) => assignSelected({ division: next })}
               />
-            </div>
 
-            <div className="space-y-1">
-              <Label className="text-muted-foreground text-xs">
-                시편 치수 일괄 지정 ({LENGTH_UNIT})
-              </Label>
-              <div className="flex gap-1">
-                {(
-                  [
-                    ['thickness', '두께'],
-                    ['width', '폭'],
-                    ['gauge', '게이지'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <Input
-                    key={key}
-                    className="h-8 w-20 text-xs"
-                    inputMode="decimal"
-                    placeholder={label}
-                    aria-label={`${label} 일괄 지정`}
-                    onChange={(event) => assignSelected({ [key]: event.target.value })}
-                  />
-                ))}
-              </div>
+              <p className="text-muted-foreground text-xs sm:col-span-2 lg:col-span-4">
+                표에 흐리게 보이는 숫자는 규격이 정한 공칭입니다 — 그 칸은 비워 두세요.
+              </p>
             </div>
-
-            <div className="space-y-1">
-              <Label className="text-muted-foreground text-xs">새 시편 (번호 자동)</Label>
-              <div className="flex gap-1">
-                {ORIENTATIONS.map((orientation) => (
-                  <Button
-                    key={orientation}
-                    size="sm"
-                    variant="outline"
-                    disabled={!selected.some((row) => row.sampleId)}
-                    onClick={() => assignNewSpecimens([orientation])}
-                  >
-                    {orientation}
-                  </Button>
-                ))}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!selected.some((row) => row.sampleId)}
-                  title="선택한 줄에 MD·TD·DD 를 돌아가며 지정합니다"
-                  onClick={() => assignNewSpecimens(ANISOTROPY_SET)}
-                >
-                  MD·TD·DD
-                </Button>
-              </div>
-            </div>
-
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto"
-              onClick={() => setRows((current) => current.filter((row) => !row.selected))}
-              disabled={selected.length === 0}
-            >
-              <Trash2 className="size-4" />
-              선택 제거
-            </Button>
           </fieldset>
 
           <fieldset disabled={running}>
@@ -691,6 +768,9 @@ export default function BatchUploadPage() {
                   <TableHead className="w-52">재료</TableHead>
                   <TableHead className="w-32">시료</TableHead>
                   <TableHead className="w-36">시편</TableHead>
+                  {/* **일괄 지정이 걸렸는지 여기서 보인다.** 열이 없던 동안에는
+                      규격을 골라도 표가 그대로라, 걸렸는지 알 길이 없었다. */}
+                  <TableHead className="w-40">시편 규격</TableHead>
                   <TableHead className="w-56">치수 (두께·폭·게이지, mm)</TableHead>
                   <TableHead className="w-24">사업부</TableHead>
                   <TableHead className="w-44">상태</TableHead>
@@ -816,23 +896,45 @@ export default function BatchUploadPage() {
                       </Select>
                     </TableCell>
 
+                    {/* **일괄 지정이 걸렸는지 여기서 보인다.** 줄마다 다를 수
+                        있으므로(한 배치에 규격이 섞이는 경우) 줄에서도 고친다. */}
+                    <TableCell>
+                      <VocabularyField
+                        slug="specimen_standard"
+                        label=""
+                        value={row.standard}
+                        onChange={(next) => patch(row.key, { standard: next })}
+                      />
+                    </TableCell>
+
                     {/* **줄마다 고칠 수 있어야 한다.** 두께·폭은 시편마다 실측이
                         달라서 일괄 지정만으로는 모자란다. 비워 두면 안 보낸다 —
                         그때는 파일 값으로 채우거나 나중에 시편 수정에서 넣는다. */}
                     <TableCell>
                       <div className="flex gap-1">
-                        {(['thickness', 'width', 'gauge'] as const).map((key) => (
-                          <Input
-                            key={key}
-                            className="h-8 w-16 text-xs"
-                            inputMode="decimal"
-                            value={row[key]}
-                            aria-label={`${row.file.name} ${key}`}
-                            onChange={(event) =>
-                              patch(row.key, { [key]: event.target.value })
-                            }
-                          />
-                        ))}
+                        {SIZE_FIELDS.map(([key, , label]) => {
+                          // **비워 두라는 뜻이다.** 규격이 주는 값을 손으로 적으면
+                          // 공칭이 실측 칸에 들어앉는다.
+                          const hint = nominal[row.standard]?.[key]
+                          return (
+                            <Input
+                              key={key}
+                              className="h-8 w-16 text-xs"
+                              inputMode="decimal"
+                              value={row[key]}
+                              placeholder={hint ?? ''}
+                              title={
+                                hint
+                                  ? `규격의 공칭 ${label} ${hint} ${LENGTH_UNIT} — 비워 두면 이 값이 쓰입니다`
+                                  : undefined
+                              }
+                              aria-label={`${row.file.name} ${key}`}
+                              onChange={(event) =>
+                                patch(row.key, { [key]: event.target.value })
+                              }
+                            />
+                          )
+                        })}
                       </div>
                     </TableCell>
 

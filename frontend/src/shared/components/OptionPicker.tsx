@@ -77,6 +77,16 @@ interface Props {
   onCreate?: (term: string) => Promise<Option>
   /** 아무것도 안 고른 상태의 이름. 기본은 '전체'. */
   anyLabel?: string
+  /**
+   * 이름을 트리거 옆에 적을 것인가. 기본은 적는다.
+   *
+   * **끄는 자리는 이름을 위에 따로 단 폼이다.** 둘 다 그리면 같은 말이 두 번
+   * 나오고, 옆에 붙은 이름만큼 칸 너비가 제각각이 된다 — 일괄 등록 도구줄이
+   * 그래서 들쭉날쭉했다. 낭독기가 읽을 이름은 `label` 에서 그대로 온다.
+   */
+  showLabel?: boolean
+  /** 트리거에 더할 클래스. 도구줄에서 **높이·너비를 옆 칸과 맞추는** 데 쓴다. */
+  triggerClassName?: string
   onChange: (next: string) => void
 }
 
@@ -87,6 +97,8 @@ export function OptionPicker({
   search,
   onCreate,
   anyLabel = '전체',
+  showLabel = true,
+  triggerClassName = '',
   onChange,
 }: Props) {
   const [open, setOpen] = useState(false)
@@ -152,7 +164,9 @@ export function OptionPicker({
     // `min-width` 는 `auto` 라, 안의 글자가 길면 칸이 트랙을 넘어 부모 밖으로
     // 밀려 나간다 — 사이드바(`w-64`)에서 그렇게 걸렸다.
     <div className="flex min-w-0 items-center gap-1.5">
-      <span className="text-muted-foreground shrink-0 text-xs">{label}</span>
+      {showLabel && (
+        <span className="text-muted-foreground shrink-0 text-xs">{label}</span>
+      )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           {/* **이름에 어느 칸인지가 들어가야 한다.** 보이는 글자는 고른 값뿐이라,
@@ -165,7 +179,7 @@ export function OptionPicker({
             // **`shrink` 를 되돌려 준다.** `Button` 기본 클래스에 `shrink-0` 이
             // 박혀 있어서, `min-w-0` 만으로는 안 줄어든다 — 실측으로 확인했다
             // (사이드바 256px 안에서 버튼이 293px 였다).
-            className="h-7 min-w-0 shrink gap-1 text-xs"
+            className={`h-7 min-w-0 shrink gap-1 text-xs ${triggerClassName}`}
             aria-label={`${label}: ${value || anyLabel}`}
           >
             {/* **고른 값이 트리거에 보인다.** 열어 봐야 아는 필터는 필터가 아니다.
