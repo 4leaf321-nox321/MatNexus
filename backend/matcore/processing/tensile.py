@@ -371,7 +371,7 @@ def _auto_window(
     stress: Any,
     low_fraction: float = _AUTO_STRESS_LOW,
     high_fraction: float = _AUTO_STRESS_HIGH,
-) -> tuple[float, float] | None:
+) -> tuple[tuple[float, float] | None, int, int]:
     """탄성 구간을 **응력 띠**로 잡는다. 점이 모자라면 `None`.
 
     ## 창을 훑지 않는 이유
@@ -392,20 +392,29 @@ def _auto_window(
     아래끝이 토우를 지나고 위끝이 항복 앞에서 끊는다. 고를 자유가 없으므로
     이상한 창이 이길 수 없고, 띠 안이 직선이 아니면 **아래의 R² 검사가 거절한다** —
     이 함수가 판정까지 하지 않는다.
+
+    ## 못 잡았을 때도 수를 돌려준다
+
+    `(구간, 띠 안의 점 수, 상승 구간 점 수)` 를 낸다. 구간이 `None` 이어도 나머지
+    둘은 뜻이 있다 — **왜 못 잡았는지가 그 수에 있다.** 「2점밖에 없었다」 와
+    「띠가 항복 뒤였다」 는 고칠 데가 다르고, 수가 없으면 사람이 곡선을 직접
+    열어 보는 수밖에 없다(실측 2026-08-31: 18점 발췌본에서 그 일을 했다).
     """
     peak = int(np.argmax(stress))
     x = np.asarray(strain[: peak + 1], dtype=float)
     y = np.asarray(stress[: peak + 1], dtype=float)
+    rising = int(y.size)
     top = float(y.max()) if y.size else 0.0
     if not math.isfinite(top) or top <= 0:
-        return None
+        return None, 0, rising
 
     inside = (y >= low_fraction * top) & (y <= high_fraction * top)
-    if int(np.sum(inside)) < MIN_TRUSTWORTHY_POINTS:
+    count = int(np.sum(inside))
+    if count < MIN_TRUSTWORTHY_POINTS:
         # **여기서 값을 지어내지 않는다.** 띠 안에 점이 모자라다는 것은 곡선이
         # 성기다는 뜻이고, 그때 다른 구간을 고르면 소성 구역이 뽑힌다.
-        return None
-    return float(x[inside].min()), float(x[inside].max())
+        return None, count, rising
+    return (float(x[inside].min()), float(x[inside].max())), count, rising
 
 
 @register(
@@ -567,20 +576,26 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             raise ProcessingError(
                 f"자동 띠가 0 < 아래끝({band_low}) < 위끝({band_high}) ≤ 1 이어야 합니다."
             )
-        found = _auto_window(strain, stress, band_low, band_high)
+        found, in_band, rising = _auto_window(strain, stress, band_low, band_high)
         if found is None:
             # **값을 안 낸다.** 지어낸 구간으로 낸 값은 그럴듯해 보이고, 그대로
             # 카드와 덱까지 간다. 고정 구간의 거절과 같은 자리다.
+            # **왜 없는지를 값으로도 남긴다.** 고정 구간 쪽이 그렇게 하고 있고
+            # (「값이 없다」 만으로는 고칠 데를 모른다), 자동만 안 남기면 사람이
+            # 곡선을 직접 열어 점을 세게 된다 — 실측 2026-08-31 에 그 일을 했다.
             return StepResult(
                 frame,
                 notes=(
-                    "자동 구간에 점이 모자라 **탄성계수를 내지 않았습니다.** "
-                    f"최대응력의 {band_low:.0%}~{band_high:.0%} 띠 안에 "
-                    f"{MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 — 곡선이 성깁니다. "
-                    "더 조밀한 곡선을 쓰거나, 구간을 아는 경우 방법을 "
-                    "「최소제곱 회귀」 로 바꿔 직접 지정하세요.",
+                    f"최대응력의 {band_low:.0%}~{band_high:.0%} 띠 안에 {in_band}점밖에 "
+                    f"없어 **탄성계수를 내지 않았습니다**(상승 구간 전체가 {rising}점). "
+                    f"{MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 — {in_band}점을 지나는 "
+                    "직선은 거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. "
+                    "**곡선이 성깁니다** — 더 조밀한 원본을 쓰거나, 구간을 아는 경우 "
+                    "방법을 「최소제곱 회귀」 로 바꿔 직접 지정하세요.",
                 ),
-                scalars=(),
+                scalars=(
+                    Scalar("elastic_point_count", "탄성 구간 점 수", float(in_band), "1"),
+                ),
             )
         low, high = found
         auto_note = (

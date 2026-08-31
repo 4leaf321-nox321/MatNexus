@@ -29,6 +29,9 @@ E_TRUE = 200e9
 YIELD_TRUE = 400e6
 HARDENING = 2e9
 
+#: 이 미만이면 탄성계수를 안 낸다(`matcore.processing.tensile`).
+MIN_POINTS_FOR_TRUST = 5
+
 
 @pytest.fixture(autouse=True)
 def _plugins() -> None:
@@ -312,6 +315,11 @@ class Test탄성계수:
 
         assert "youngs_modulus" not in {item.key for item in result.scalars}
         assert any("탄성계수를 내지 않았습니다" in note for note in result.notes)
+        # **왜 없는지가 값으로 남는다.** 「값이 없다」 만으로는 고칠 데를 모른다 —
+        # 실측(2026-08-31): 이 수가 없어서 사람이 18점 곡선을 직접 열어 점을 셌다.
+        assert scalar(result, "elastic_point_count") < MIN_POINTS_FOR_TRUST
+        # 몇 점이었는지와 곡선 전체가 몇 점인지를 함께 말한다 — 고칠 데가 다르다.
+        assert any("상승 구간 전체가" in note for note in result.notes)
 
     def test_자동도_직선이_아니면_거절한다(self) -> None:
         """띠가 곡선을 따라가도 그 안이 직선이라는 보장은 없다 — 판정은 그대로
