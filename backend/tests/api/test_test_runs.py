@@ -1078,3 +1078,94 @@ class Test여러_건_한꺼번에_고치기:
         ).json()
         assert len(entries) == 3
         assert entries[0]["changes"]["division"]["after"] == "전장"
+
+    def test_시험_그룹을_한_번에_맞춘다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """**나중에 묶으려고 적는 값이다.** 스무 건을 올린 뒤에 "이건 2026 고온
+        묶음이었다" 를 깨닫는 일이 잦은데, 지금까지는 하나씩 여는 수밖에 없었다.
+
+        조건값이라 원래는 못 고치는 자리인데, 시험 그룹만 예외인 이유는 **단위가
+        없어서**다 — 단위 있는 조건은 값만 갈아 끼우면 `input_units` 와 어긋난다.
+        """
+        done = self._apply(client, admin_headers, three, "testing_group", "2026 고온")
+        assert done.status_code == 200, done.text
+        assert done.json() == {"updated": 3, "unchanged": 0, "blocked": []}
+
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        assert {row["conditions"].get("testing_group") for row in listed["items"]} == {
+            "2026 고온"
+        }
+
+    def test_시험_그룹을_비우면_조건에서_빠진다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """빈 글자로 남기면 필터 축에 **이름 없는 묶음**이 하나 생긴다."""
+        self._apply(client, admin_headers, three, "testing_group", "2026 고온")
+        done = self._apply(client, admin_headers, three, "testing_group", None)
+
+        assert done.json()["updated"] == 3
+        listed = client.get("/api/test-runs", headers=admin_headers).json()
+        for row in listed["items"]:
+            assert "testing_group" not in row["conditions"]
+
+    def test_시험_그룹은_옆_조건을_안_건드린다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """**여기가 제일 위험한 자리다.** 조건은 dict 하나에 함께 사는데, 통째로
+        갈아 끼우면서 옆 값을 떨어뜨리면 **시험 온도가 조용히 사라진다.** 덱까지
+        그대로 흘러가고, 200 도에서 잰 것이 상온 것과 같은 표에 선다."""
+        del tensile
+        made = _upload(
+            client,
+            admin_headers,
+            specimen["id"],
+            conditions='{"temperature": 473.15}',
+        )
+        assert made.status_code == 202, made.text
+        run_id = made.json()["id"]
+        before = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert before["conditions"].get("temperature") is not None, "시험 준비가 틀렸다"
+
+        self._apply(client, admin_headers, [run_id], "testing_group", "2026 고온")
+
+        after = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert after["conditions"].get("testing_group") == "2026 고온"
+        assert after["conditions"]["temperature"] == before["conditions"]["temperature"], (
+            "옆 조건이 사라지거나 바뀌었다"
+        )
+
+    def test_시험_그룹과_시험자로_거른다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        head, *rest = three
+        self._apply(client, admin_headers, [head], "testing_group", "2026 고온")
+        self._apply(client, admin_headers, rest, "operator", "홍길동")
+
+        by_group = client.get(
+            "/api/test-runs", params={"testing_group": "2026 고온"}, headers=admin_headers
+        ).json()
+        assert [row["id"] for row in by_group["items"]] == [head]
+
+        by_operator = client.get(
+            "/api/test-runs", params={"operator": "홍길동"}, headers=admin_headers
+        ).json()
+        assert {row["id"] for row in by_operator["items"]} == set(rest)
+
+    def test_두_축이_필터_목록에_나온다(
+        self, client: TestClient, admin_headers: dict[str, str], three: list[str]
+    ) -> None:
+        """화면이 목록에서 세면 필터 옆 숫자가 거짓말을 한다 — 서버가 센다."""
+        head, *rest = three
+        self._apply(client, admin_headers, [head], "testing_group", "2026 고온")
+        self._apply(client, admin_headers, rest, "operator", "홍길동")
+
+        body = client.get("/api/test-runs/facets", headers=admin_headers).json()
+        assert {row["key"]: row["count"] for row in body["testing_groups"]} == {
+            "2026 고온": 1
+        }, "값이 없는 것이 빈 이름으로 실렸다"
+        assert {row["key"]: row["count"] for row in body["operators"]} == {"홍길동": 2}

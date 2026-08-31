@@ -64,7 +64,27 @@ describe('일괄 수정', () => {
     fireEvent.keyDown(screen.getByLabelText('고칠 칸'), { key: 'Enter' })
     const options = await screen.findAllByRole('option')
     const labels = options.map((one) => one.textContent)
-    expect(labels).toEqual(['사업부', '장비', '시험자', '시험일', '메모'])
+    expect(labels).toEqual(['사업부', '장비', '시험자', '시험일', '시험 그룹', '메모'])
+  })
+
+  it('시험 그룹도 고칠 수 있다', async () => {
+    /**
+     * 조건값이라 원래는 못 고치는 자리인데 **단위가 없어서** 예외다. 스무 건을
+     * 올린 뒤에 "이건 2026 고온 묶음이었다" 를 깨닫는 일이 잦다.
+     */
+    open()
+    fireEvent.keyDown(screen.getByLabelText('고칠 칸'), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('option', { name: '시험 그룹' }))
+
+    fireEvent.change(await screen.findByLabelText('시험 그룹'), {
+      target: { value: '2026 고온' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '3건에 적용' }))
+
+    await waitFor(() => expect(bulkUpdate).toHaveBeenCalled())
+    const [, field, value] = bulkUpdate.mock.calls[0]
+    expect(field).toBe('testing_group')
+    expect(value).toBe('2026 고온')
   })
 
   it('칸을 바꾸면 적어 둔 값을 비운다', async () => {
@@ -74,13 +94,13 @@ describe('일괄 수정', () => {
     fireEvent.keyDown(screen.getByLabelText('고칠 칸'), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('option', { name: '시험자' }))
 
-    const box = await screen.findByLabelText('시험자로')
+    const box = await screen.findByLabelText('시험자')
     fireEvent.change(box, { target: { value: '박' } })
     expect(box).toHaveValue('박')
 
     fireEvent.keyDown(screen.getByLabelText('고칠 칸'), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('option', { name: '메모' }))
-    expect(await screen.findByLabelText('메모로')).toHaveValue('')
+    expect(await screen.findByLabelText('메모')).toHaveValue('')
   })
 
   it('비우면 지운다고 미리 말한다', () => {

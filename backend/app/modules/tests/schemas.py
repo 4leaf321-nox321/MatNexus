@@ -209,7 +209,14 @@ class RunBulkUpdateRequest(BaseModel):
     """
 
     run_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_RUNS)
-    field: Literal["division", "instrument", "operator", "tested_at", "note"]
+    field: Literal["division", "instrument", "operator", "tested_at", "note", "testing_group"]
+    """`testing_group` 만 **조건값**이고 나머지는 시험의 칸이다.
+
+    조건값을 일반적으로 못 고치는 이유는 **단위가 딸려 있어서**다 — 값만 갈아
+    끼우면 `input_units` 의 기록과 어긋나고, 그 어긋남은 화면에 안 보인다.
+    시험 그룹은 단위 없는 글자 조건이라(`("testing_group", "시험 그룹", "text",
+    None, None, ...)`) 그 문제가 없다. **단위가 있는 조건은 여기 넣지 않는다.**
+    """
     value: str | None = None
     """비우면 그 칸을 지운다. **빈 문자열과 `null` 을 같게 본다** — 화면의 빈
     칸이 둘 중 어느 것으로 오는지에 뜻이 달라지면 안 된다."""
@@ -257,6 +264,11 @@ class RunFacetsOut(BaseModel):
     test_types: list[RunFacetOut]
     orientations: list[RunFacetOut]
     registrants: list[RunFacetOut]
+    operators: list[RunFacetOut]
+    """시험자. **등록한 사람과 다른 축이다** — 등록은 파일을 올린 사람이고
+    시험자는 장비를 돌린 사람이다."""
+    testing_groups: list[RunFacetOut]
+    """시험 그룹. 조건이지만 단위 없는 글자라 그대로 셀 수 있다."""
     divisions: list[RunFacetOut]
     statuses: list[RunFacetOut]
 

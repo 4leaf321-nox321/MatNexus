@@ -58,6 +58,11 @@ const FIELDS: {
   { key: 'instrument', label: '장비', slug: 'instrument', hint: '시험을 돌린 장비' },
   { key: 'operator', label: '시험자', hint: '집계 축이 아니라 연락처에 가깝다' },
   { key: 'tested_at', label: '시험일', kind: 'date', hint: '실제로 시험한 날' },
+  {
+    key: 'testing_group',
+    label: '시험 그룹',
+    hint: '나중에 묶으려고 적는 이름. 스무 건을 올린 뒤에 정해지는 일이 잦다',
+  },
   { key: 'note', label: '메모', hint: '' },
 ]
 
@@ -147,13 +152,13 @@ export function BulkEditDialog({
           // 크다 — 자유 입력이면 한 글자 틀릴 때 스무 건이 새 값을 가리킨다.
           <VocabularyField
             slug={picked.slug}
-            label={`${picked.label}로`}
+            label={picked.label}
             value={value}
             onChange={setValue}
           />
         ) : (
           <div className="space-y-1.5">
-            <Label htmlFor="bulk-value">{picked.label}로</Label>
+            <Label htmlFor="bulk-value">{picked.label}</Label>
             <Input
               id="bulk-value"
               type={picked.kind === 'date' ? 'date' : 'text'}

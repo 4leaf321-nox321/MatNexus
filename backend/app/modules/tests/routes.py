@@ -975,6 +975,8 @@ def list_runs(
     test_type_key: str | None = Query(default=None),
     orientation: str | None = Query(default=None),
     registered_by: str | None = Query(default=None),
+    operator: str | None = Query(default=None),
+    testing_group: str | None = Query(default=None),
     division: str | None = Query(default=None),
     q: str | None = Query(default=None),
     adopted: bool | None = Query(
@@ -1038,6 +1040,12 @@ def list_runs(
                 select(User.id).where(User.display_name == registered_by)
             )
         )
+    if operator:
+        query = query.where(TestRun.operator == operator)
+    if testing_group:
+        # **JSONB 안의 글자 하나로 거른다.** `->>` 는 텍스트로 꺼내므로 값이
+        # 없는 행은 NULL 이 되어 자연히 빠진다.
+        query = query.where(TestRun.conditions["testing_group"].astext == testing_group)
     if division:
         query = query.where(TestRun.division == division)
     if q and (text := q.strip()):
@@ -1143,10 +1151,28 @@ def run_facets(
         RunFacetOut(key=str(value), label=str(value), count=count)
         for value, count in tally(base.c.status)
     ]
+    operators = [
+        RunFacetOut(key=str(value), label=str(value), count=count)
+        for value, count in tally(base.c.operator)
+        if value
+    ]
+    # **조건 dict 안이라 컬럼처럼 못 센다.** `->>` 로 꺼내 묶는다. 값이 없는
+    # 행은 NULL 로 나와 아래에서 빠진다.
+    groups = [
+        RunFacetOut(key=str(value), label=str(value), count=int(count))
+        for value, count in db.execute(
+            select(base.c.conditions["testing_group"].astext.label("g"), func.count())
+            .select_from(base)
+            .group_by("g")
+        ).all()
+        if value
+    ]
     return RunFacetsOut(
         test_types=sorted(kinds, key=lambda one: one.label),
         orientations=sorted(directions, key=lambda one: one.label),
         registrants=sorted(people, key=lambda one: one.label),
+        operators=sorted(operators, key=lambda one: one.label),
+        testing_groups=sorted(groups, key=lambda one: one.label),
         divisions=sorted(divisions, key=lambda one: one.label),
         statuses=sorted(statuses, key=lambda one: one.key),
     )
@@ -1428,6 +1454,13 @@ def _plain(value: object) -> object:
     return value.isoformat() if isinstance(value, datetime) else value
 
 
+def _before_of(run: Any, field: str) -> Any:
+    """일괄 수정이 보는 지금 값. **시험 그룹만 조건 dict 안에 있다.**"""
+    if field == "testing_group":
+        return (run.conditions or {}).get(field)
+    return getattr(run, field)
+
+
 @runs_router.post("/bulk-update", response_model=RunBulkUpdateOut)
 def bulk_update_runs(
     payload: RunBulkUpdateRequest,
@@ -1446,6 +1479,10 @@ def bulk_update_runs(
 
     남는 것은 올릴 때 사람이 적는 메타데이터뿐이다. 그걸 나중에 고치는 길이
     지금까지 아예 없어서, 사업부를 빠뜨리면 다시 올리는 수밖에 없었다.
+
+    **예외는 시험 그룹 하나다.** 조건값이지만 단위가 없는 글자라(`text`) 위의
+    이유가 안 걸린다. 그리고 이 값은 **나중에 묶으려고 적는 것**이라 — 스무 건을
+    올린 뒤에 "이건 2026 고온 묶음이었다" 를 깨닫는 일이 실제로 잦다.
 
     ## 왜 건마다 기록을 남기는가
 
@@ -1481,8 +1518,18 @@ def bulk_update_runs(
             blocked.append(str(run_id))
             continue
 
-        before = getattr(run, field)
-        if field in ("division", "instrument"):
+        before = _before_of(run, field)
+        if field == "testing_group":
+            # **조건 dict 는 통째로 갈아 끼운다.** JSONB 를 제자리에서 고치면
+            # SQLAlchemy 가 바뀐 줄 모르고 UPDATE 를 안 낸다 — 화면에는 「바꿨다」
+            # 가 뜨고 DB 는 그대로인 상태가 된다.
+            conditions = dict(run.conditions or {})
+            if raw is None:
+                conditions.pop(field, None)
+            else:
+                conditions[field] = raw
+            run.conditions = conditions
+        elif field in ("division", "instrument"):
             # 기준정보를 거친다(ADR 0010). `usage_count` 도 여기서 옮겨진다 —
             # 옛 값은 하나 줄고 새 값은 하나 는다.
             vocabulary_services.apply_bindings(
@@ -1497,7 +1544,7 @@ def bulk_update_runs(
         else:
             setattr(run, field, raw)
 
-        after = getattr(run, field)
+        after = _before_of(run, field)
         if before == after:
             unchanged += 1
             continue

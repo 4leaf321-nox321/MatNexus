@@ -455,6 +455,27 @@ export default function TestRunsPage() {
                 />
               </TableHead>
               <TableHead>
+                {/* **묶어 보려고 적는 값이다.** 조건이지만 단위가 없는 글자라
+                    목록에서 그대로 보인다 — 「2026 고온」 이 몇 건인지 세려고
+                    상세를 하나씩 열게 하지 않는다. */}
+                <ColumnFilter
+                  label="시험 그룹"
+                  rows={facets.data?.testing_groups ?? []}
+                  current={filters.testing_group}
+                  onPick={(value) => narrow('testing_group', value)}
+                />
+              </TableHead>
+              <TableHead>
+                {/* **등록한 사람과 다르다.** 등록은 파일을 올린 사람이고,
+                    시험자는 실제로 장비를 돌린 사람이다 — 물어볼 데가 다르다. */}
+                <ColumnFilter
+                  label="시험자"
+                  rows={facets.data?.operators ?? []}
+                  current={filters.operator}
+                  onPick={(value) => narrow('operator', value)}
+                />
+              </TableHead>
+              <TableHead>
                 <ColumnFilter
                   label="등록한 사람"
                   rows={facets.data?.registrants ?? []}
@@ -539,8 +560,16 @@ export default function TestRunsPage() {
                 <TableCell className="text-muted-foreground text-sm">
                   {run.division ?? '—'}
                 </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {typeof run.conditions?.testing_group === 'string'
+                    ? run.conditions.testing_group
+                    : '—'}
+                </TableCell>
                 {/* **파일이 이상할 때 물어볼 데가 여기다.** 전에는 상세를
                     열어야 알 수 있었고, 20건이 이상하면 20번 열어야 했다. */}
+                <TableCell className="text-muted-foreground text-sm">
+                  {run.operator ?? '—'}
+                </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
                   {run.registered_by ?? '—'}
                 </TableCell>

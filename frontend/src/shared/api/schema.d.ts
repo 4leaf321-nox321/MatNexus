@@ -2822,6 +2822,10 @@ export interface paths {
          *     남는 것은 올릴 때 사람이 적는 메타데이터뿐이다. 그걸 나중에 고치는 길이
          *     지금까지 아예 없어서, 사업부를 빠뜨리면 다시 올리는 수밖에 없었다.
          *
+         *     **예외는 시험 그룹 하나다.** 조건값이지만 단위가 없는 글자라(`text`) 위의
+         *     이유가 안 걸린다. 그리고 이 값은 **나중에 묶으려고 적는 것**이라 — 스무 건을
+         *     올린 뒤에 "이건 2026 고온 묶음이었다" 를 깨닫는 일이 실제로 잦다.
+         *
          *     ## 왜 건마다 기록을 남기는가
          *
          *     한 번에 스무 건을 바꾸는 일이라 **누가 무엇을 어떻게 바꿨는지**가 남지
@@ -8361,7 +8365,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "division" | "instrument" | "operator" | "tested_at" | "note";
+            field: "division" | "instrument" | "operator" | "tested_at" | "note" | "testing_group";
             /** Run Ids */
             run_ids: string[];
             /** Value */
@@ -8414,6 +8418,8 @@ export interface components {
         RunFacetsOut: {
             /** Divisions */
             divisions: components["schemas"]["RunFacetOut"][];
+            /** Operators */
+            operators: components["schemas"]["RunFacetOut"][];
             /** Orientations */
             orientations: components["schemas"]["RunFacetOut"][];
             /** Registrants */
@@ -8422,6 +8428,8 @@ export interface components {
             statuses: components["schemas"]["RunFacetOut"][];
             /** Test Types */
             test_types: components["schemas"]["RunFacetOut"][];
+            /** Testing Groups */
+            testing_groups: components["schemas"]["RunFacetOut"][];
         };
         /** SampleCreateRequest */
         SampleCreateRequest: {
@@ -15490,6 +15498,8 @@ export interface operations {
                 test_type_key?: string | null;
                 orientation?: string | null;
                 registered_by?: string | null;
+                operator?: string | null;
+                testing_group?: string | null;
                 division?: string | null;
                 q?: string | null;
                 /** @description 채택된 처리 결과가 있는가 — 없는 것만 보려면 false */
