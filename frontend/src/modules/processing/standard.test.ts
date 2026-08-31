@@ -22,8 +22,7 @@ describe('표준 단계', () => {
   it('gaps 가 짚는 것을 빠짐없이 담는다', () => {
     // **말하는 것과 넣어 주는 것이 어긋나면 안 된다.** 경고만 뜨고 채워도
     // 그대로 뜨면, 사람은 무엇을 더 해야 하는지 모른다.
-    const plugins = TENSILE_STANDARD.map((one) => one.plugin)
-    expect(missingSteps(plugins)).toEqual([])
+    expect(missingSteps(TENSILE_STANDARD)).toEqual([])
   })
 
   it('탄성계수가 그것을 쓰는 단계보다 앞에 있다', () => {
@@ -119,16 +118,22 @@ describe('처음 열면 깔리는 순서', () => {
     expect(at('tensile.elastic_modulus')).toBeLessThan(at('tensile.true_plastic'))
   })
 
-  it('표준이 아는 순서를 어기지 않는다', () => {
-    // 시작 순서는 표준의 부분집합이어야 한다 — 둘이 다른 차례를 말하면 어느
-    // 쪽이 옳은지 화면에서 알 수 없다.
-    // **차례만 본다.** 표준에는 같은 플러그인이 두 번 나오는 자리가 있어
-    // (`curve.sort_unique`), 목록을 통째로 견주면 그 중복 때문에 어긋난다.
-    const standard = TENSILE_STANDARD.map((one) => one.plugin)
-    const ranks = plugins
-      .map((one) => standard.indexOf(one))
-      .filter((rank) => rank >= 0)
-    const sorted = [...ranks].sort((a, b) => a - b)
-    expect(ranks).toEqual(sorted)
+  it('표준과 같은 목록이다', () => {
+    // 전에는 「부분집합이면 된다」 였다. 그때 시작 구성에는 진소성 축의
+    // 다듬기가 없었고, **처음 여는 사람이 실제로 돌리는 것이 그 구성**이라
+    // 그 결과로는 대표 곡선도 덱의 표도 제대로 안 나왔다(2026-08-31 실측:
+    // 인장 6건이 18점·718점으로 갈렸다).
+    //
+    // 이제 둘은 같다. 다르게 만들 자리가 생기면 이 시험이 먼저 걸린다.
+    expect(TENSILE_STARTER).toEqual(TENSILE_STANDARD)
+  })
+
+  it('탄성계수는 구간을 못 박지 않는다', () => {
+    // 0.05~0.25% 는 추측이었고, 그 창에 점이 없어 값을 못 낸 곡선이 있었다.
+    // `auto` 는 최대응력의 10~40% 띠에서 찾고, 못 찾으면 **값을 지어내지 않고**
+    // 띠 안에 몇 점이었는지를 말한다.
+    const 탄성 = TENSILE_STARTER.find((one) => one.plugin === 'tensile.elastic_modulus')
+    expect(탄성?.options.method).toBe('auto')
+    expect(탄성?.options).not.toHaveProperty('minimum_strain')
   })
 })

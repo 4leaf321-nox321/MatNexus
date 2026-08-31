@@ -58,7 +58,7 @@ export const TENSILE_STANDARD: RecipeStep[] = [
     options: { x: 'strain_engineering', count: 400, start: 0 },
   },
   { plugin: 'tensile.strength', options: {} },
-  { plugin: 'tensile.elastic_modulus', options: { method: 'linear_regression' } },
+  { plugin: 'tensile.elastic_modulus', options: { method: 'auto' } },
   {
     plugin: 'tensile.proof_stress',
     options: { offset_strain: 0.002, youngs_modulus: '@youngs_modulus' },
@@ -97,20 +97,31 @@ export function missingStandard(plugins: string[]): RecipeStep[] {
 /**
  * 처음 열었을 때 깔리는 순서 — **바로 돌려 볼 수 있는 것.**
  *
- * 표준(`TENSILE_STANDARD`)과 다른 점은 **진소성 축의 다듬기**를 뺀 것뿐이다.
- * 그건 카드로 내보낼 때 필요한 것이고, 처음 여는 사람에게는 **한 번 돌려서
- * 곡선이 나오는 것**이 먼저다.
+ * **표준(`TENSILE_STANDARD`)의 복사본이다.** 두 목록을 따로 적어 두면 한쪽만
+ * 고쳐지고, 그때 화면은 「처음 깔리는 것」 과 「빠진 것 채우기」 가 서로 다른
+ * 차례를 가르친다. 이름을 둘 두는 것은 **쓰는 자리가 다르기 때문**이다 —
+ * 이쪽은 새 레시피에 깔리고, 저쪽은 이미 있는 목록과 대조된다.
  *
- * ## 공칭 축의 재샘플은 여기에도 둔다
+ * 복사본인 이유는 부르는 쪽이 옵션을 채워 넣기 때문이다(`defaults`). 같은
+ * 배열을 나눠 쓰면 그 손질이 표준까지 물들인다.
  *
- * 전에는 뺐다 — 「다듬기는 나중」 이라는 생각이었다. 그런데 **처음 여는 사람이
- * 실제로 돌리는 것이 이 구성**이고, 재샘플이 없으면 그 결과로는 재료의 대표
- * 곡선이 영영 안 나온다. 그 사실은 재료 물성 화면에서야 드러나고, 그때는 다시
- * 처리하는 것 말고 방법이 없다(결과는 불변이다).
+ * ## 다듬기를 뺐다가 도로 넣었다
+ *
+ * 전에는 정렬·재샘플을 뺐다 — 「다듬기는 나중」 이라는 생각이었다. 그런데
+ * **처음 여는 사람이 실제로 돌리는 것이 이 구성**이고, 재샘플이 없으면 그
+ * 결과로는 재료의 대표 곡선이 영영 안 나온다. 그 사실은 재료 물성 화면에서야
+ * 드러나고, 그때는 다시 처리하는 것 말고 방법이 없다(결과는 불변이다).
+ * 실측 2026-08-31: 이 구성으로 처리한 인장 6건이 18점·718점으로 갈려 대표
+ * 곡선이 안 나왔다.
+ *
+ * **공칭 축을 넣고 나니 진소성 축을 뺄 근거가 없어졌다.** 「끝을 정할 값이
+ * 없다」 는 두 축에 똑같이 해당하고(공칭은 관측 최댓값, 진소성은 네킹 자르기),
+ * 그건 *넣지 말 이유*가 아니라 *첫 판에 격자가 안 맞는 이유*다 — 통계가 공통
+ * 구간을 계산해 말해 주고, 두 번째 판에서 고정한다. 게다가 진소성 축은
+ * **덱이 실제로 싣는 축**이라 여기서 빠지면 목적지에서 걸린다.
  *
  * 넣어도 잃는 것이 없다. 재샘플은 맨 뒤에 돌고(`order=95`), 탄성계수·항복강도는
- * 그 전에 **잰 점**으로 계산된다. 실측 2026-08-31: 이 구성으로 처리한 인장
- * 6건이 18점·718점으로 갈려 대표 곡선이 안 나왔다.
+ * 그 전에 **잰 점**으로 계산된다.
 
  * 빼면 안 되는 것이 진응력이다. 솔버 덱이 요구하는 것은 공칭이 아니라
  * 진응력-진소성변형률이라(`matcore/export`), 여기서 끊으면 채택해도 결과 화면이
@@ -121,44 +132,7 @@ export const DMA_STARTER: RecipeStep[] = [
   { plugin: 'curve.sort_unique', options: { x: 'temperature', duplicate_policy: 'mean' } },
 ]
 
-export const TENSILE_STARTER: RecipeStep[] = [
-  {
-    plugin: 'tensile.engineering',
-    options: { gauge_length: '@specimen_gauge_length', area: '@specimen_area' },
-  },
-  {
-    plugin: 'curve.sort_unique',
-    options: { x: 'strain_engineering', duplicate_policy: 'mean' },
-  },
-  // **끝은 여기서도 비워 둔다.** 묶음의 모든 시편이 같은 값이어야 하는데 그
-  // 값은 가장 짧은 곡선이 정하고, 그것은 재료마다 다르다 — 지어내면 어떤
-  // 재료에서는 데이터를 잘라 버린다. 통계가 그 값을 계산해 문장으로 말해 준다.
-  {
-    plugin: 'curve.resample',
-    options: { x: 'strain_engineering', count: 400, start: 0 },
-  },
-  // **표준과 같은 차례로 둔다.** 강도는 앞 단계에 매달리지 않아 어디에 놓아도
-  // 값은 같지만, 두 목록이 다른 차례를 가르치면 「어느 쪽이 맞나」 를 묻게 된다.
-  { plugin: 'tensile.strength', options: {} },
-  {
-    plugin: 'tensile.elastic_modulus',
-    options: { method: 'linear_regression', minimum_strain: 0.0005, maximum_strain: 0.0025 },
-  },
-  {
-    plugin: 'tensile.proof_stress',
-    options: { youngs_modulus: '@youngs_modulus', offset_strain: 0.002 },
-  },
-  { plugin: 'tensile.necking_candidate', options: {} },
-  // **여기서 끊으면 카드까지 못 간다.** 솔버 덱이 요구하는 것은 공칭이 아니라
-  // 진응력-진소성변형률이라(`matcore/export`), 진응력이 없는 결과를 채택하면
-  // 결과 화면이 「채택된 결과에 진응력 열이 없습니다」 로 되돌려 보낸다.
-  //
-  // **자르기가 먼저다.** 네킹이 시작되면 단면이 한 곳으로 몰려, 그 뒤 구간은
-  // 「길이 변화로 단면을 안다」 는 가정이 깨진다 — 자르지 않고 변환하면 그럴듯한
-  // 숫자가 나오지만 그 숫자가 틀렸다는 신호는 어디에도 없다.
-  {
-    plugin: 'curve.crop',
-    options: { x: 'strain_engineering', end: '@necking_candidate_strain' },
-  },
-  { plugin: 'tensile.true_plastic', options: { youngs_modulus: '@youngs_modulus' } },
-]
+export const TENSILE_STARTER: RecipeStep[] = TENSILE_STANDARD.map((step) => ({
+  plugin: step.plugin,
+  options: { ...step.options },
+}))
