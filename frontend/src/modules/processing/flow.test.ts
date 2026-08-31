@@ -16,6 +16,7 @@ import {
   madeColumns,
   outOfOrder,
   resolveTemplate,
+  stepIO,
   stepSummary,
   valuesAt,
 } from '@/modules/processing/flow'
@@ -416,5 +417,83 @@ describe('필수 칸이 비면 막힌다', () => {
 
     const manual = [step('needs', { gauge_length: 0.05, method: 'manual' })]
     expect(blockersAt(manual[0], 0, manual, SOURCE, CAT)).toHaveLength(1)
+  })
+})
+
+describe('stepIO — 단계 사이로 무엇이 흘러가나', () => {
+  /** 바깥에서 오는 값과 조건부 칸을 가진 단계를 얹은 목록. */
+  const CATALOG2 = new Map(CATALOG)
+  CATALOG2.set(
+    'tensile.engineering2',
+    plugin({
+      id: 'tensile.engineering2',
+      order: 10,
+      makes_columns: [made('strain_engineering', '공칭 변형률')],
+      params: [
+        column('displacement', '변위 열', 'displacement'),
+        { ...column('gauge_length', '게이지 길이'), role: null, default: '@specimen_gauge_length' },
+        { ...column('manual', '직접 입력'), role: null, when: { method: ['manual'] } },
+      ] as ProcessingStep['params'],
+    })
+  )
+
+  it('열·값·시편에서 오는 것을 갈래로 가른다', () => {
+    const steps = [step('tensile.engineering2', { manual: '@youngs_modulus' })]
+    const io = stepIO(steps[0], 0, steps, SOURCE, CATALOG2)
+
+    expect(io.takes.find((one) => one.key === 'displacement')?.kind).toBe('channel')
+    // **시편에서 오는 것은 따로 센다.** 「앞 단계가 만들어야 할 값」 으로 세면
+    // 첫 단계부터 빨갛게 된다 — 그건 곡선이 아니라 시편 기록에 있다.
+    const 게이지 = io.takes.find((one) => one.key === 'specimen_gauge_length')
+    expect(게이지?.kind).toBe('specimen')
+    expect(게이지?.present).toBe(true)
+    expect(io.makes.map((one) => one.key)).toEqual(['strain_engineering'])
+    // **내는 것의 이름은 계산이 선언한 한글이다.** `strain_engineering` 이
+    // 무엇인지는 코드를 읽어야 알고, 그러면 아무도 안 읽는다.
+    expect(io.makes[0].label).toBe('공칭 변형률')
+  })
+
+  it('받는 열도 한글 이름으로 적는다', () => {
+    // 같은 열이 「내는 것」 에서는 공칭 변형률인데 「받는 것」 에서는
+    // `strain_engineering` 이면, 같은 것인 줄 알아볼 수 없다.
+    const steps = [step('tensile.engineering'), step('tensile.strength')]
+    const names = new Map([['strain_engineering', { label: '공칭 변형률' }]])
+    const io = stepIO(steps[1], 1, steps, SOURCE, CATALOG, undefined, names)
+    expect(io.takes.find((one) => one.key === 'strain_engineering')?.label).toBe('공칭 변형률')
+    // 모르는 열은 키 그대로 — **지어내지 않는다.**
+    expect(io.takes.find((one) => one.key === 'stress_engineering')?.label).toBe(
+      'stress_engineering'
+    )
+  })
+
+  it('지금 안 쓰이는 칸은 받는 것이 아니다', () => {
+    // 방법이 '자동' 이면 '직접 입력' 칸의 값은 아무 데도 안 간다. 그것까지
+    // 적으면 이 목록이 거짓말이 된다.
+    const steps = [step('tensile.engineering2', { manual: '@youngs_modulus' })]
+    const io = stepIO(steps[0], 0, steps, SOURCE, CATALOG2)
+    expect(io.takes.map((one) => one.key)).not.toContain('youngs_modulus')
+  })
+
+  it('아직 없는 열은 지우지 않고 없다고 표시한다', () => {
+    // **안 보이면 「이 단계는 그걸 안 쓰는구나」 로 읽힌다** — 못 받고 있다는
+    // 사실이 사라진다.
+    const steps = [step('tensile.strength')]
+    const io = stepIO(steps[0], 0, steps, SOURCE, CATALOG)
+    expect(io.takes.find((one) => one.key === 'strain_engineering')?.present).toBe(false)
+  })
+
+  it('앞 단계가 만들면 있는 것이 된다', () => {
+    const steps = [step('tensile.engineering'), step('tensile.strength')]
+    const io = stepIO(steps[1], 1, steps, SOURCE, CATALOG)
+    expect(io.takes.find((one) => one.key === 'strain_engineering')?.present).toBe(true)
+  })
+
+  it('앞 단계의 스칼라는 값으로 센다', () => {
+    const steps = [step('tensile.elastic_modulus'), step('tensile.proof_stress')]
+    const io = stepIO(steps[1], 1, steps, SOURCE, CATALOG)
+    const E = io.takes.find((one) => one.key === 'youngs_modulus')
+    expect(E?.kind).toBe('scalar')
+    expect(E?.present).toBe(true)
+    expect(stepIO(steps[1], 0, steps, SOURCE, CATALOG).takes[0].present).toBe(false)
   })
 })

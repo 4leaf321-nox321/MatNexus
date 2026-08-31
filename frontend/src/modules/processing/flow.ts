@@ -155,6 +155,131 @@ export function blockersAt(
   return found
 }
 
+/**
+ * 이 단계가 **받는 것과 내는 것.**
+ *
+ * ## 왜 필요했나
+ *
+ * 단계 목록은 「무엇을 하는가」 만 보여 준다. 그런데 처리에서 실제로 헷갈리는
+ * 것은 **단계와 단계 사이로 무엇이 흘러가는가**다 — 장비는 변위·하중만 주고
+ * 응력도 변형률도 탄성계수도 앞 단계가 만든다. 그것이 안 보이면 순서를 왜
+ * 이렇게 두는지 알 수 없고, 한 단계를 끄면 무엇이 끊어지는지도 모른다.
+ *
+ * 선언은 이미 있다(`ParamSpec.role`·`makes_columns`·`makes_values`). 여기서는
+ * 그것을 한 단계 몫으로 모아 줄 뿐이다 — **화면이 다시 규칙을 적지 않는다.**
+ *
+ * ## 셋을 가른다
+ *
+ *   channel    곡선의 한 줄. 앞 단계가 만들었거나 장비가 준 것이다.
+ *   scalar     값 하나. `@youngs_modulus` 처럼 이름으로 가리킨다.
+ *   specimen   시편 기록에서 온 것. 치수는 곡선에 없다.
+ *
+ * `specimen` 을 따로 두는 이유: 그것을 「앞 단계가 만들어야 하는 값」 으로 세면
+ * 첫 단계부터 빨갛게 된다. 사람이 봐야 하는 것은 **어디서 오는가**다.
+ *
+ * **갈래 이름은 영어다.** 「열」 이 화면에서 thermal 로 읽힌다는 지적이 있었고,
+ * 실제로 이 저장소에는 열전도·비열이 함께 산다. 「값」 도 무엇이든 값이라 갈래
+ * 이름으로는 아무것도 안 가른다. 변수 이름은 반대로 **한글로** 적는다 —
+ * `strain_engineering` 이 무엇인지는 코드를 읽어야 알고, 그러면 아무도 안 읽는다.
+ */
+export type CarryKind = 'channel' | 'scalar' | 'specimen'
+
+export interface Carried {
+  /** 계산이 쓰는 이름. `strain_engineering` 처럼. 도구 팁과 레시피가 이것을 쓴다. */
+  key: string
+  /** 사람이 읽는 이름. 모르면 `key` 그대로 — **지어내지 않는다.** */
+  label: string
+  kind: CarryKind
+  /** 지금 이 자리에 실제로 있는가. 없으면 화면이 흐리게 그린다. */
+  present: boolean
+}
+
+export interface StepIO {
+  takes: Carried[]
+  makes: Carried[]
+}
+
+export function stepIO(
+  step: RecipeStep,
+  index: number,
+  steps: RecipeStep[],
+  source: string[],
+  catalog: Map<string, ProcessingStep>,
+  /** 바깥에서 들어오는 값. 있으면 참조를 사람이 읽는 이름으로 적는다. */
+  inputs?: Map<string, ProcessingScalar>,
+  /**
+   * 열 이름 → 그 뜻. `vocabularyOf` 가 만든 것을 그대로 준다.
+   *
+   * 없으면 `strain_engineering` 이 그대로 보인다 — 틀린 것은 아니지만 읽히지
+   * 않는다. 이름은 계산이 선언해 두었으므로(`makes_columns` 의 `label`)
+   * **화면이 지어낼 일은 없다.**
+   */
+  names?: Map<string, { label: string }>
+): StepIO {
+  const plugin = catalog.get(step.plugin)
+  if (!plugin) return { takes: [], makes: [] }
+
+  const columns = new Set(columnsAt(steps, index, source, catalog))
+  const values = valuesAt(steps, index, catalog)
+  const takes: Carried[] = []
+
+  for (const param of plugin.params) {
+    // 지금 안 쓰이는 칸은 받는 것이 아니다 — 방법이 '자동' 이면 '직접 입력'
+    // 칸의 숫자는 아무 데도 안 간다. 그것까지 적으면 이 목록이 거짓말이 된다.
+    if (!isUsed(param, step.options)) continue
+    const value = step.options[param.name] ?? param.default
+    if (value === null || value === undefined || value === '') continue
+
+    if (param.role === 'column') {
+      const key = String(value)
+      takes.push({
+        key,
+        label: names?.get(key)?.label ?? key,
+        kind: 'channel',
+        present: columns.has(key),
+      })
+      continue
+    }
+    if (isReference(value)) {
+      const key = String(value).slice(1)
+      const outside = key.startsWith(FROM_SPECIMEN)
+      takes.push({
+        key,
+        label: referenceLabel(String(value), inputs, catalog),
+        kind: outside ? 'specimen' : 'scalar',
+        present: outside || values.has(key),
+      })
+    }
+  }
+
+  const makes: Carried[] = [
+    ...madeColumns(step, catalog).map(
+      (item): Carried => ({
+        key: item.key,
+        label: item.label || item.key,
+        kind: 'channel',
+        present: true,
+      })
+    ),
+    ...(plugin.makes_values ?? []).map(
+      (item): Carried => ({
+        key: item.key,
+        label: item.label || item.key,
+        kind: 'scalar',
+        present: true,
+      })
+    ),
+  ]
+
+  // 같은 것을 두 번 적지 않는다 — 한 단계가 같은 열을 두 칸에서 가리키는 일이
+  // 있다(정렬의 기준 열과 자르기의 기준 열).
+  const once = (list: Carried[]) => {
+    const seen = new Set<string>()
+    return list.filter((one) => !seen.has(`${one.kind}:${one.key}`) && seen.add(`${one.kind}:${one.key}`))
+  }
+  return { takes: once(takes), makes: once(makes) }
+}
+
 /** 그 열을 만드는 단계의 id. 옵션에 따라 이름이 달라지는 틀은 못 찾는다. */
 function makerOfColumn(
   column: string,
@@ -307,7 +432,7 @@ export function stepSummary(
     if (value === null || value === undefined || value === '') continue
 
     if (isReference(value)) {
-      parts.push(`${param.label} ${referenceLabel(String(value), inputs)}`)
+      parts.push(`${param.label} ${referenceLabel(String(value), inputs, catalog)}`)
       continue
     }
     if (param.role === 'column') {

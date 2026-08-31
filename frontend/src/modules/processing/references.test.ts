@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { isReference, isUsed, referenceFor, referenceLabel, referencesFor } from '@/modules/processing/api'
-import type { ProcessingScalar } from '@/modules/processing/api'
+import type { ProcessingScalar, ProcessingStep } from '@/modules/processing/api'
 
 const scalar = (key: string, label: string, si_unit = 'm'): ProcessingScalar =>
   ({ key, label, value: 0.05, si_unit, dimension: null }) as unknown as ProcessingScalar
@@ -83,6 +83,27 @@ describe('참조', () => {
     // 감추면 "빈 칸" 으로 읽힌다. 모르는 것은 모르는 대로 보여 주는 편이 낫다.
     expect(referenceLabel('@made_up', GIVEN)).toBe('made_up')
     expect(referenceLabel('@made_up')).toBe('made_up')
+  })
+
+  it('앞 단계가 만드는 값도 이름으로 읽는다', () => {
+    // **같은 값이 화면에서 두 이름을 가지면 안 된다.** 만드는 단계는 「내는 것:
+    // 탄성계수」 라고 적는데 받는 단계가 「youngs_modulus」 라고 적으면, 같은
+    // 것인 줄 알아볼 수 없다. 이름은 이미 계산이 선언해 두었다.
+    const CATALOG = new Map([
+      [
+        'tensile.elastic_modulus',
+        {
+          id: 'tensile.elastic_modulus',
+          makes_values: [{ key: 'youngs_modulus', label: '탄성계수', si_unit: 'Pa', help: null }],
+        },
+      ],
+    ] as unknown as [string, ProcessingStep][])
+
+    expect(referenceLabel('@youngs_modulus', GIVEN, CATALOG)).toBe('탄성계수')
+    // 시편이 이어 주는 것이 먼저다 — 거기 있으면 그 이름을 쓴다.
+    expect(referenceLabel('@specimen_gauge_length', GIVEN, CATALOG)).toBe('시편 게이지 길이')
+    // 어느 쪽에도 없으면 키 그대로. 지어내지 않는다.
+    expect(referenceLabel('@made_up', GIVEN, CATALOG)).toBe('made_up')
   })
 
   it('숫자는 참조가 아니다', () => {

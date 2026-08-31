@@ -75,13 +75,14 @@ import { DMA_STARTER, TENSILE_STARTER, missingStandard } from '@/modules/process
 import {
   blockersAt,
   columnsAt,
+  stepIO,
   flowRows,
   stepSummary,
   insertionIndex,
   outOfOrder,
   vocabularyOf,
 } from '@/modules/processing/flow'
-import type { Blocker } from '@/modules/processing/flow'
+import type { Blocker, Carried, CarryKind, StepIO } from '@/modules/processing/flow'
 import { testsApi } from '@/modules/tests/api'
 import {
   axisLabel,
@@ -455,7 +456,9 @@ export function ProcessingPanel({
 
   /** 지금 구성으로 못 하게 되는 일. 인장에만 뜻이 있다. */
   const gaps = useMemo(
-    () => (testTypeKey === 'tensile' ? missingSteps(steps.map((step) => step.plugin)) : []),
+    // **단계 그대로 넘긴다.** 이름만 넘기면 축을 못 가려, 공칭 축 재샘플
+    // 하나로 진소성 축까지 「있다」 가 된다.
+    () => (testTypeKey === 'tensile' ? missingSteps(steps) : []),
     [testTypeKey, steps]
   )
 
@@ -905,6 +908,23 @@ export function ProcessingPanel({
                         </ul>
                       )}
 
+                      {/* **단계와 단계 사이로 무엇이 흘러가는가.**
+                          장비는 변위·하중만 준다 — 응력도 변형률도 탄성계수도
+                          앞 단계가 만든다. 그것이 안 보이면 순서를 왜 이렇게
+                          두는지 알 수 없고, 한 단계를 끄면 무엇이 끊어지는지도
+                          모른다. 고치는 칸보다 먼저 둔다. */}
+                      <StepCarry
+                        io={stepIO(
+                          step,
+                          index,
+                          steps,
+                          sourceColumns,
+                          byId,
+                          inputs,
+                          columnInfo
+                        )}
+                      />
+
                       {(plugin?.params ?? []).map((param) => (
                         <ParamField
                           key={param.name}
@@ -913,6 +933,7 @@ export function ProcessingPanel({
                           columns={columnsFor(index)}
                           columnInfo={columnInfo}
                           inputs={inputs}
+                          catalog={byId}
                           /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
                              '직접 입력' 이 살아 있으면, 거기 넣은 숫자가 무시된다는
                              것을 알 방법이 없다 — 값을 넣었는데 아무 일도 안
@@ -1182,18 +1203,87 @@ function VariablesSidebar({ vocabulary }: { vocabulary: ReturnType<typeof vocabu
  * 참조(`@…`)를 값과 같은 칸에서 다루는 이유: 사람은 "게이지 길이" 하나를 정할
  * 뿐이고, 그것이 시편에서 오는지 손으로 넣는지가 다른 개념일 이유가 없다.
  */
+/**
+ * 오가는 것의 갈래별 모양. **셋을 한 색으로 칠하지 않는다.**
+ *
+ * **갈래는 영어, 변수는 한글이다.** 「열」 은 이 저장소에서 thermal 로 읽힐
+ * 자리가 있고(열전도·비열이 함께 산다), 「값」 은 무엇이든 값이라 갈래 이름으로
+ * 아무것도 안 가른다. 반대로 변수 이름은 한글이어야 한다 — `strain_engineering`
+ * 이 무엇인지는 코드를 읽어야 알고, 그러면 아무도 안 읽는다.
+ */
+const CARRY_STYLE: Record<CarryKind, { label: string; className: string }> = {
+  channel: { label: 'channel', className: 'border-sky-300 text-sky-700 dark:text-sky-300' },
+  scalar: { label: 'scalar', className: 'border-violet-300 text-violet-700 dark:text-violet-300' },
+  specimen: {
+    label: 'specimen',
+    className: 'border-amber-300 text-amber-700 dark:text-amber-300',
+  },
+}
+
+/**
+ * 이 단계가 **받는 것과 내는 것.**
+ *
+ * 갈래를 색으로 가른다 — 곡선의 **열**과 스칼라 **값**과 시편에서 오는 것은
+ * 서로 다른 데서 오고, 없을 때 할 일도 다르다. 열이 없으면 앞 단계를 켜야
+ * 하고, 시편 값이 없으면 시편 기록을 고쳐야 한다.
+ *
+ * **없는 것은 지우지 않고 흐리게 둔다.** 안 보이면 「이 단계는 그걸 안 쓰는구나」
+ * 로 읽힌다 — 못 받고 있다는 사실이 사라진다.
+ */
+function StepCarry({ io }: { io: StepIO }) {
+  if (io.takes.length === 0 && io.makes.length === 0) return null
+  const row = (title: string, items: Carried[]) =>
+    items.length === 0 ? null : (
+      <div className="flex flex-wrap items-baseline gap-1">
+        <span className="text-muted-foreground w-12 shrink-0 text-xs">{title}</span>
+        {items.map((one) => {
+          const style = CARRY_STYLE[one.kind] ?? CARRY_STYLE.channel
+          return (
+            <Badge
+              key={`${one.kind}:${one.key}`}
+              variant="outline"
+              className={`h-5 gap-1 text-[10px] ${style.className} ${
+                one.present ? '' : 'opacity-40 line-through'
+              }`}
+              /* **계산이 쓰는 이름을 여기 남긴다.** 레시피와 덱은 그 이름으로
+                 적히므로, 한글만 보이면 둘을 이어 붙일 수 없다. */
+              title={
+                one.present
+                  ? `${style.label} · ${one.key}`
+                  : `${style.label} · ${one.key} — 이 자리에 아직 없습니다`
+              }
+            >
+              <span className="font-mono opacity-60">{style.label}</span>
+              {one.label}
+            </Badge>
+          )
+        })}
+      </div>
+    )
+
+  return (
+    <div className="bg-muted/30 space-y-1 rounded-md border p-2">
+      {row('받는 것', io.takes)}
+      {row('내는 것', io.makes)}
+    </div>
+  )
+}
+
 function ParamField({
   param,
   value,
   columns,
   columnInfo,
   inputs,
+  catalog,
   disabled = false,
   onChange,
 }: {
   param: StepParam
   value: unknown
   columns: string[]
+  /** 등록된 단계들. **가리키는 값의 이름이 여기 있다**(`makes_values`). */
+  catalog: Map<string, ProcessingStep>
   /** 열 이름 → 그 이름의 뜻. 고르는 자리에서 바로 읽게 한다. */
   columnInfo: Map<string, { label: string; si_unit: string; help?: string | null }>
   /**
@@ -1340,7 +1430,7 @@ function ParamField({
                   그 둘은 곡선을 다시 처리했을 때 갈린다. */}
               앞 단계의{' '}
               <b className="text-foreground">
-                {referenceLabel(String(value), inputs)}
+                {referenceLabel(String(value), inputs, catalog)}
               </b>
               를 자동으로 가져옵니다
               {/* **규격의 공칭과 그 시편의 실측은 뜻이 조금 다르다.** 얼마인지

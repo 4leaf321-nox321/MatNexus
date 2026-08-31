@@ -122,11 +122,30 @@ export function referencesFor(
   return best ? [best, ...alike] : alike
 }
 
-/** `@specimen_gauge_length` 같은 원문을 사람이 읽는 이름으로. */
-export function referenceLabel(raw: string, available?: Map<string, ProcessingScalar>): string {
+/**
+ * `@specimen_gauge_length` 같은 원문을 사람이 읽는 이름으로.
+ *
+ * **두 군데서 찾는다.** 가리키는 값은 두 곳에서 온다 — 시편이 이어 주는 것
+ * (`available`)과 **앞 단계가 만드는 것**(`catalog` 의 `makes_values`). 앞의
+ * 것만 보고 있었더니 같은 값이 화면에서 두 이름을 가졌다: 만드는 단계는
+ * 「내는 것: 탄성계수」 라고 적고, 그것을 받는 단계는 「받는 것:
+ * youngs_modulus」 라고 적었다. 같은 것인 줄 알아볼 수 없다.
+ *
+ * 이름은 이미 계산이 선언해 두었다(`makes_values` 의 `label`). 여기서 한 번 더
+ * 보기만 하면 된다 — **화면이 이름을 짓지 않는다.**
+ */
+export function referenceLabel(
+  raw: string,
+  available?: Map<string, ProcessingScalar>,
+  catalog?: Map<string, ProcessingStep>
+): string {
   const name = raw.startsWith(REFERENCE_PREFIX) ? raw.slice(1) : raw
   const known = available?.get(name)
   if (known) return known.label
+  for (const plugin of catalog?.values() ?? []) {
+    const made = plugin.makes_values.find((item) => item.key === name)
+    if (made) return made.label
+  }
   return name
 }
 
