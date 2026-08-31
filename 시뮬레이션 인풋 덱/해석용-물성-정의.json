@@ -1,0 +1,1339 @@
+{
+  "kind": "matnexus.export-profile",
+  "version": 1,
+  "exported_at": "2026-08-31T11:34:52.321793+00:00",
+  "exported_from": "dev",
+  "profiles": [
+    {
+      "key": "ansys",
+      "label": "Ansys Mechanical APDL",
+      "description": "MP + TB,PLASTIC,,,,MISO + TBPT — 자유 형식. TBPT 는 소성변형률 vs 진응력. 열물성이 있으면 MP,ALPX/C/KXX 로 함께 나간다.",
+      "is_active": true,
+      "definition": {
+        "key": "ansys",
+        "label": "Ansys Mechanical APDL",
+        "lines": [
+          {
+            "text": "! {name}"
+          },
+          {
+            "text": "! Consistent units: {units}"
+          },
+          {
+            "note": "밀도가 카드에 없어 MP,DENS 를 빼고 그 사실을 덱 주석에 적었습니다.",
+            "text": "! DENSITY: no measured value. MP,DENS omitted -- no dynamics, no body loads.",
+            "when": "missing:elastic.density"
+          },
+          {
+            "text": "/PREP7"
+          },
+          {
+            "fields": [
+              {
+                "value": "elastic.youngs_modulus",
+                "format": "free"
+              }
+            ],
+            "prefix": "MP,EX,1,"
+          },
+          {
+            "fields": [
+              {
+                "value": "elastic.poisson_ratio",
+                "format": "free"
+              }
+            ],
+            "prefix": "MP,NUXY,1,"
+          },
+          {
+            "when": "elastic.density",
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": "free"
+              }
+            ],
+            "prefix": "MP,DENS,1,"
+          },
+          {
+            "when": "thermal.thermal_expansion",
+            "fields": [
+              {
+                "value": "thermal.thermal_expansion",
+                "format": "free"
+              }
+            ],
+            "prefix": "MP,ALPX,1,"
+          },
+          {
+            "when": "thermal.specific_heat",
+            "fields": [
+              {
+                "value": "thermal.specific_heat",
+                "format": "free"
+              }
+            ],
+            "prefix": "MP,C,1,"
+          },
+          {
+            "when": "thermal.thermal_conductivity",
+            "fields": [
+              {
+                "value": "thermal.thermal_conductivity",
+                "format": "free"
+              }
+            ],
+            "prefix": "MP,KXX,1,"
+          },
+          {
+            "text": "! NPTS is left blank -- Ansys counts the TBPT lines."
+          },
+          {
+            "text": "TB,PLASTIC,1,,,MISO"
+          },
+          {
+            "x": "plastic_strain",
+            "y": "true_stress",
+            "join": ",",
+            "rows": "table",
+            "fields": [
+              {
+                "value": "plastic_strain",
+                "format": "free"
+              },
+              {
+                "value": "true_stress",
+                "format": "free"
+              }
+            ],
+            "prefix": "TBPT,,"
+          },
+          {
+            "text": "FINISH"
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ]
+          },
+          {
+            "block": "table",
+            "rows_min": 2
+          },
+          {
+            "block": "thermal",
+            "optional": true
+          }
+        ],
+        "describe": "MP + TB,PLASTIC,,,,MISO + TBPT — 자유 형식. TBPT 는 소성변형률 vs 진응력. 열물성이 있으면 MP,ALPX/C/KXX 로 함께 나간다.",
+        "keywords": [
+          "MP,EX",
+          "TB,PLASTIC",
+          "TBPT"
+        ],
+        "extension": "dat"
+      }
+    },
+    {
+      "key": "lsdyna",
+      "label": "LS-DYNA",
+      "description": "*MAT_PIECEWISE_LINEAR_PLASTICITY (024) + *DEFINE_CURVE — 소성 표를 곡선으로 준다. 카드 10칸 고정폭. 열팽창이 있으면 *MAT_ADD_THERMAL_EXPANSION 이 함께 나간다.",
+      "is_active": true,
+      "definition": {
+        "key": "lsdyna",
+        "label": "LS-DYNA",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "note": "밀도가 카드에 없어 RO 를 0 으로 두고 그 사실을 덱 주석에 적었습니다.",
+            "text": "$ DENSITY: no measured value. This deck is not usable for dynamics as-is.",
+            "when": "missing:elastic.density"
+          },
+          {
+            "text": "*KEYWORD"
+          },
+          {
+            "text": "*MAT_PIECEWISE_LINEAR_PLASTICITY_TITLE"
+          },
+          {
+            "text": "{name}"
+          },
+          {
+            "text": "$#     mid        ro         e        pr      sigy      etan      fail      tdel"
+          },
+          {
+            "join": "",
+            "when": "elastic.density",
+            "fields": [
+              {
+                "const": "         1"
+              },
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              }
+            ]
+          },
+          {
+            "join": "",
+            "when": "missing:elastic.density",
+            "fields": [
+              {
+                "const": "         1"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              }
+            ]
+          },
+          {
+            "text": "$#       c         p      lcss      lcsr        vp"
+          },
+          {
+            "text": "       0.0       0.0       200         0       0.0"
+          },
+          {
+            "text": "*DEFINE_CURVE_TITLE"
+          },
+          {
+            "text": "{name} true stress vs effective plastic strain"
+          },
+          {
+            "text": "$#    lcid      sidr       sfa       sfo      offa      offo    dattyp"
+          },
+          {
+            "text": "       200         0     1.000     1.000     0.000     0.000         0"
+          },
+          {
+            "text": "$#                a1                  o1"
+          },
+          {
+            "x": "plastic_strain",
+            "y": "true_stress",
+            "join": "",
+            "rows": "table",
+            "fields": [
+              {
+                "value": "plastic_strain",
+                "format": [
+                  "fixed",
+                  20,
+                  12
+                ]
+              },
+              {
+                "value": "true_stress",
+                "format": [
+                  "fixed",
+                  20,
+                  12
+                ]
+              }
+            ]
+          },
+          {
+            "text": "$",
+            "when": "thermal.thermal_expansion"
+          },
+          {
+            "note": "*MAT_ADD_THERMAL_EXPANSION 은 재료가 아니라 **PART** 를 가리킵니다 — 덱에 붙일 때 PID 를 맞추세요.",
+            "text": "$ Thermal expansion is added to the structural material by PART id.",
+            "when": "thermal.thermal_expansion"
+          },
+          {
+            "text": "*MAT_ADD_THERMAL_EXPANSION",
+            "when": "thermal.thermal_expansion"
+          },
+          {
+            "text": "$#     pid      lcid      mult",
+            "when": "thermal.thermal_expansion"
+          },
+          {
+            "join": "",
+            "when": "thermal.thermal_expansion",
+            "fields": [
+              {
+                "const": "         1"
+              },
+              {
+                "const": "         0"
+              },
+              {
+                "value": "thermal.thermal_expansion",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              }
+            ]
+          },
+          {
+            "text": "*END"
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ]
+          },
+          {
+            "block": "table",
+            "rows_min": 2
+          },
+          {
+            "block": "thermal",
+            "optional": true
+          }
+        ],
+        "describe": "*MAT_PIECEWISE_LINEAR_PLASTICITY (024) + *DEFINE_CURVE — 소성 표를 곡선으로 준다. 카드 10칸 고정폭. 열팽창이 있으면 *MAT_ADD_THERMAL_EXPANSION 이 함께 나간다.",
+        "keywords": [
+          "*MAT_PIECEWISE_LINEAR_PLASTICITY",
+          "*DEFINE_CURVE"
+        ],
+        "extension": "k"
+      }
+    },
+    {
+      "key": "lsdyna_thermal",
+      "label": "LS-DYNA (열전도)",
+      "description": "*MAT_THERMAL_ISOTROPIC — 비열·열전도도. **구조 재료와 별개의 열 재료 카드**라 덱에 붙일 때 TMID 를 PART 에 맞추고 *CONTROL_THERMAL_* 을 함께 둬야 한다. 열팽창은 여기가 아니라 구조 덱의 *MAT_ADD_THERMAL_EXPANSION 에 실린다.",
+      "is_active": true,
+      "definition": {
+        "key": "lsdyna_thermal",
+        "label": "LS-DYNA (열전도)",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$"
+          },
+          {
+            "note": "열 재료 카드입니다 — 구조 덱과 별개입니다. TMID 를 PART 에 맞추고 *CONTROL_THERMAL_* 을 함께 두세요.",
+            "text": "$ THERMAL material card. Pair TMID with the structural PART and add"
+          },
+          {
+            "text": "$ *CONTROL_THERMAL_SOLVER / _TIMESTEP. This deck alone does not run."
+          },
+          {
+            "text": "$ Thermal expansion is NOT here -- it rides on the structural card"
+          },
+          {
+            "text": "$ (*MAT_ADD_THERMAL_EXPANSION)."
+          },
+          {
+            "text": "*KEYWORD"
+          },
+          {
+            "text": "*MAT_THERMAL_ISOTROPIC_TITLE"
+          },
+          {
+            "text": "{name}"
+          },
+          {
+            "text": "$ TRO=0 -> use the structural density. TGRLC=0 -> constant TGMULT."
+          },
+          {
+            "text": "$#    tmid       tro     tgrlc    tgmult      tlat      hlat"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "         1"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              },
+              {
+                "const": "       0.0"
+              }
+            ]
+          },
+          {
+            "text": "$#      hc        tc"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "value": "thermal.specific_heat",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              },
+              {
+                "value": "thermal.thermal_conductivity",
+                "format": [
+                  "fixed",
+                  10,
+                  4
+                ]
+              }
+            ]
+          },
+          {
+            "text": "*END"
+          }
+        ],
+        "needs": [
+          {
+            "block": "thermal",
+            "values": [
+              "specific_heat",
+              "thermal_conductivity"
+            ]
+          }
+        ],
+        "describe": "*MAT_THERMAL_ISOTROPIC — 비열·열전도도. **구조 재료와 별개의 열 재료 카드**라 덱에 붙일 때 TMID 를 PART 에 맞추고 *CONTROL_THERMAL_* 을 함께 둬야 한다. 열팽창은 여기가 아니라 구조 덱의 *MAT_ADD_THERMAL_EXPANSION 에 실린다.",
+        "keywords": [
+          "*MAT_THERMAL_ISOTROPIC"
+        ],
+        "extension": "k"
+      }
+    },
+    {
+      "key": "nastran",
+      "label": "MSC Nastran (탄성)",
+      "description": "MAT1 하나 — 벌크 데이터 큰칸(16칸). **소성은 안 나간다**: MSC 의 MATS1+TABLES1 은 총변형률 표라 소성변형률에 sigma/E 를 더해야 하는데, 정의는 조판만 하고 계산은 안 한다. OptiStruct 는 TYPSTRN=1 이 있어 그쪽으로 나간다.",
+      "is_active": true,
+      "definition": {
+        "key": "nastran",
+        "label": "MSC Nastran (탄성)",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "note": "소성 표는 안 실었습니다 — MSC 의 TABLES1 은 총변형률 표라 소성변형률에 sigma/E 를 더해야 합니다.",
+            "text": "$ ELASTIC ONLY. MATS1/TABLES1 needs stress vs TOTAL strain"
+          },
+          {
+            "text": "$ (plastic strain + sigma/E), which this definition cannot compute."
+          },
+          {
+            "text": "$ DENSITY: no measured value. MAT1 RHO left blank.",
+            "when": "missing:elastic.density"
+          },
+          {
+            "text": "$ Large-field format (16-char). The small field holds only 3 significant"
+          },
+          {
+            "text": "$ digits, which would round a measured modulus (210530 -> 211000)."
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT1*   "
+          },
+          {
+            "join": "",
+            "when": "elastic.density",
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*",
+            "when": "missing:elastic.density"
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ]
+          }
+        ],
+        "describe": "MAT1 하나 — 벌크 데이터 큰칸(16칸). **소성은 안 나간다**: MSC 의 MATS1+TABLES1 은 총변형률 표라 소성변형률에 sigma/E 를 더해야 하는데, 정의는 조판만 하고 계산은 안 한다. OptiStruct 는 TYPSTRN=1 이 있어 그쪽으로 나간다.",
+        "keywords": [
+          "MAT1"
+        ],
+        "extension": "bdf"
+      }
+    },
+    {
+      "key": "nastran_temp",
+      "label": "MSC Nastran (온도 의존 탄성)",
+      "description": "MAT1 + MATT1 + TABLEM1 — 탄성계수와 푸아송비가 온도를 따라간다. **소성은 20 도 값에 머문다**: 경화곡선을 온도 의존으로 만들려면 TABLEST 가 필요한데 카드의 소성 표에 온도 축이 없다.",
+      "is_active": true,
+      "definition": {
+        "key": "nastran_temp",
+        "label": "MSC Nastran (온도 의존 탄성)",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$ ELASTIC constants follow temperature (MATT1 -> TABLEM1)."
+          },
+          {
+            "note": "탄성만 온도를 따라갑니다. 경화곡선은 잰 온도의 값 그대로입니다 — 카드의 소성 표에 온도 축이 없습니다.",
+            "text": "$ The hardening curve does NOT -- it stays at its measured temperature."
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT1*   "
+          },
+          {
+            "join": "",
+            "when": "elastic.density",
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*",
+            "when": "missing:elastic.density"
+          },
+          {
+            "text": "$ MATT1 field 2 = table for E(T), field 4 = table for NU(T)."
+          },
+          {
+            "text": "MATT1   1       300             310"
+          },
+          {
+            "text": "$ E versus temperature"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "300             "
+              }
+            ],
+            "prefix": "TABLEM1*"
+          },
+          {
+            "join": "",
+            "rows": "elastic",
+            "fields": [
+              {
+                "value": "temperature",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*       ENDT"
+          },
+          {
+            "text": "$ NU versus temperature"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "310             "
+              }
+            ],
+            "prefix": "TABLEM1*"
+          },
+          {
+            "join": "",
+            "rows": "elastic",
+            "fields": [
+              {
+                "value": "temperature",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*       ENDT"
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ],
+            "rows_min": 2
+          }
+        ],
+        "describe": "MAT1 + MATT1 + TABLEM1 — 탄성계수와 푸아송비가 온도를 따라간다. **소성은 20 도 값에 머문다**: 경화곡선을 온도 의존으로 만들려면 TABLEST 가 필요한데 카드의 소성 표에 온도 축이 없다.",
+        "keywords": [
+          "MAT1",
+          "MATT1",
+          "TABLEM1"
+        ],
+        "extension": "bdf"
+      }
+    },
+    {
+      "key": "nastran_thermal",
+      "label": "MSC Nastran (열물성)",
+      "description": "MAT1(A 포함) + MAT4 — 열응력·열전도 해석용. 다섯 값(E·ν·밀도·열팽창·비열·열전도도)이 다 있어야 뜬다: MAT1 의 밀도와 열팽창이 같은 줄이라 한쪽만 있는 경우를 정의로 가려낼 수 없다.",
+      "is_active": true,
+      "definition": {
+        "key": "nastran_thermal",
+        "label": "MSC Nastran (열물성)",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT1*   "
+          },
+          {
+            "text": "$*      RHO             A               TREF            GE"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "thermal.thermal_expansion",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "$ TREF is left blank -- the analysis initial temperature is used."
+          },
+          {
+            "text": "$MAT4*  MID             K               CP"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "thermal.thermal_conductivity",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "thermal.specific_heat",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT4*   "
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio",
+              "density"
+            ]
+          },
+          {
+            "block": "thermal",
+            "values": [
+              "thermal_expansion",
+              "specific_heat",
+              "thermal_conductivity"
+            ]
+          }
+        ],
+        "describe": "MAT1(A 포함) + MAT4 — 열응력·열전도 해석용. 다섯 값(E·ν·밀도·열팽창·비열·열전도도)이 다 있어야 뜬다: MAT1 의 밀도와 열팽창이 같은 줄이라 한쪽만 있는 경우를 정의로 가려낼 수 없다.",
+        "keywords": [
+          "MAT1",
+          "MAT4"
+        ],
+        "extension": "bdf"
+      }
+    },
+    {
+      "key": "optistruct",
+      "label": "Altair OptiStruct",
+      "description": "MAT1 + MATS1(TYPSTRN=1) + TABLES1 — 벌크 데이터 큰칸(16칸). TYPSTRN=1 이라 표가 소성변형률이다.",
+      "is_active": true,
+      "definition": {
+        "key": "optistruct",
+        "label": "Altair OptiStruct",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "note": "밀도가 카드에 없어 MAT1 의 RHO 를 비우고 그 사실을 덱 주석에 적었습니다.",
+            "text": "$ DENSITY: no measured value. MAT1 RHO left blank -- no dynamics as-is.",
+            "when": "missing:elastic.density"
+          },
+          {
+            "text": "$ Large-field format (16-char). The small field holds only 3 significant"
+          },
+          {
+            "text": "$ digits, which would round a measured modulus (210530 -> 211000)."
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT1*   "
+          },
+          {
+            "join": "",
+            "when": "elastic.density",
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*",
+            "when": "missing:elastic.density"
+          },
+          {
+            "text": "$       MID     TID     TYPE    H       YF      HR      LIMIT1  TYPSTRN"
+          },
+          {
+            "text": "$ TYPSTRN=1 -- the TABLES1 abscissa is PLASTIC strain, not total strain."
+          },
+          {
+            "text": "$ LIMIT1 is left blank on purpose: the first table point (plastic strain 0)"
+          },
+          {
+            "text": "$ is the yield stress. Writing it twice lets the two disagree."
+          },
+          {
+            "text": "MATS1   1       200     PLASTIC         1       1               1"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "200             "
+              }
+            ],
+            "prefix": "TABLES1*"
+          },
+          {
+            "x": "plastic_strain",
+            "y": "true_stress",
+            "join": "",
+            "rows": "table",
+            "fields": [
+              {
+                "value": "plastic_strain",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "true_stress",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*       ENDT"
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ]
+          },
+          {
+            "block": "table",
+            "rows_min": 2
+          }
+        ],
+        "describe": "MAT1 + MATS1(TYPSTRN=1) + TABLES1 — 벌크 데이터 큰칸(16칸). TYPSTRN=1 이라 표가 소성변형률이다.",
+        "keywords": [
+          "MAT1",
+          "MATS1",
+          "TABLES1"
+        ],
+        "extension": "fem"
+      }
+    },
+    {
+      "key": "optistruct_temp",
+      "label": "Altair OptiStruct (온도 의존 탄성)",
+      "description": "MAT1 + MATT1 + TABLEM1 — 탄성계수와 푸아송비가 온도를 따라간다. **소성은 20 도 값에 머문다**: 경화곡선을 온도 의존으로 만들려면 TABLEST 가 필요한데 카드의 소성 표에 온도 축이 없다.",
+      "is_active": true,
+      "definition": {
+        "key": "optistruct_temp",
+        "label": "Altair OptiStruct (온도 의존 탄성)",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$ ELASTIC constants follow temperature (MATT1 -> TABLEM1)."
+          },
+          {
+            "note": "탄성만 온도를 따라갑니다. 경화곡선은 잰 온도의 값 그대로입니다 — 카드의 소성 표에 온도 축이 없습니다.",
+            "text": "$ The hardening curve does NOT -- it stays at its measured temperature."
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT1*   "
+          },
+          {
+            "join": "",
+            "when": "elastic.density",
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*",
+            "when": "missing:elastic.density"
+          },
+          {
+            "text": "$ MATT1 field 2 = table for E(T), field 4 = table for NU(T)."
+          },
+          {
+            "text": "MATT1   1       300             310"
+          },
+          {
+            "text": "$ E versus temperature"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "300             "
+              }
+            ],
+            "prefix": "TABLEM1*"
+          },
+          {
+            "join": "",
+            "rows": "elastic",
+            "fields": [
+              {
+                "value": "temperature",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*       ENDT"
+          },
+          {
+            "text": "$ NU versus temperature"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "310             "
+              }
+            ],
+            "prefix": "TABLEM1*"
+          },
+          {
+            "join": "",
+            "rows": "elastic",
+            "fields": [
+              {
+                "value": "temperature",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "*       ENDT"
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ],
+            "rows_min": 2
+          }
+        ],
+        "describe": "MAT1 + MATT1 + TABLEM1 — 탄성계수와 푸아송비가 온도를 따라간다. **소성은 20 도 값에 머문다**: 경화곡선을 온도 의존으로 만들려면 TABLEST 가 필요한데 카드의 소성 표에 온도 축이 없다.",
+        "keywords": [
+          "MAT1",
+          "MATT1",
+          "TABLEM1"
+        ],
+        "extension": "fem"
+      }
+    },
+    {
+      "key": "optistruct_thermal",
+      "label": "Altair OptiStruct (열물성)",
+      "description": "MAT1(A 포함) + MAT4 — 열응력·열전도 해석용. 다섯 값(E·ν·밀도·열팽창·비열·열전도도)이 다 있어야 뜬다: MAT1 의 밀도와 열팽창이 같은 줄이라 한쪽만 있는 경우를 정의로 가려낼 수 없다.",
+      "is_active": true,
+      "definition": {
+        "key": "optistruct_thermal",
+        "label": "Altair OptiStruct (열물성)",
+        "lines": [
+          {
+            "text": "$ {name}"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT1*   "
+          },
+          {
+            "text": "$*      RHO             A               TREF            GE"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "thermal.thermal_expansion",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "*       "
+          },
+          {
+            "text": "$ TREF is left blank -- the analysis initial temperature is used."
+          },
+          {
+            "text": "$MAT4*  MID             K               CP"
+          },
+          {
+            "join": "",
+            "fields": [
+              {
+                "const": "1               "
+              },
+              {
+                "value": "thermal.thermal_conductivity",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              },
+              {
+                "value": "thermal.specific_heat",
+                "format": [
+                  "fixed_left",
+                  16,
+                  9
+                ]
+              }
+            ],
+            "prefix": "MAT4*   "
+          }
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio",
+              "density"
+            ]
+          },
+          {
+            "block": "thermal",
+            "values": [
+              "thermal_expansion",
+              "specific_heat",
+              "thermal_conductivity"
+            ]
+          }
+        ],
+        "describe": "MAT1(A 포함) + MAT4 — 열응력·열전도 해석용. 다섯 값(E·ν·밀도·열팽창·비열·열전도도)이 다 있어야 뜬다: MAT1 의 밀도와 열팽창이 같은 줄이라 한쪽만 있는 경우를 정의로 가려낼 수 없다.",
+        "keywords": [
+          "MAT1",
+          "MAT4"
+        ],
+        "extension": "fem"
+      }
+    }
+  ]
+}
