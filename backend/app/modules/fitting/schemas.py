@@ -454,6 +454,29 @@ class DeclaredCardSaveRequest(BaseModel):
     note: str | None = None
 
 
+#: 한 묶음에 담을 수 있는 카드 수. **막는 값이 아니라 사고를 막는 값이다** —
+#: 실수로 전부 고른 채 누르면 서버가 수백 장을 렌더링한다.
+MAX_BUNDLE_CARDS = 100
+
+
+class CardBundleRequest(BaseModel):
+    """카드 여럿을 한 묶음으로 내보낸다.
+
+    **해석 하나에 재료가 여럿 들어간다.** 한 장씩 내려받아 사람이 폴더에 모으면 그
+    묶음이 무엇이었는지가 아무 데도 안 남는다 — 해석자가 「내가 받은 이 덱이 그때
+    그 카드가 맞나」 를 물을 때 답할 것이 없다.
+    """
+
+    card_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_BUNDLE_CARDS)
+    """담을 카드. **서버가 상한을 강제한다** — 목록 엔드포인트와 같은 규칙이다."""
+
+    format: str = "json"
+    """덱 형식. 코드 렌더러와 DB 정의 둘 다에서 찾는다."""
+
+    units: str = "si"
+    """덱의 단위계. 파일 이름과 덱 머리에 들어간다."""
+
+
 class ViscoelasticCardSaveRequest(BaseModel):
     """점탄성 카드를 만든다 — **시편 하나에서, 또는 묶음에서.**
 

@@ -22,12 +22,14 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
+from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.fitting import renderers
+from app.modules.fitting import bundle, renderers
 from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.fitting.schemas import (
     BlockSpecOut,
+    CardBundleRequest,
     CardFacetOut,
     CardFacetsOut,
     CardValueOut,
@@ -2152,6 +2154,78 @@ def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
         )
 
     return _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
+
+
+@router.post("/cards/bundle")
+def export_bundle(
+    payload: CardBundleRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """카드 여럿을 **한 묶음으로** 내보낸다 — 덱 + manifest + 체크섬(ADR 0024 ②).
+
+    해석 하나에 재료가 여럿 들어간다. 지금까지는 한 장씩 내려받아 사람이 폴더에
+    모았고, **그 묶음이 무엇이었는지는 아무 데도 안 남았다.** 해석자가 물을 것은
+    「내가 받은 이 덱이 그때 그 카드가 맞나」 하나인데, 답할 방법이 없으면 덱을 다시
+    받는 수밖에 없고 그 사이에 카드가 바뀌었을 수도 있다.
+
+    **한 장 내보내기와 같은 덱을 낸다.** 다른 길로 만들면 두 벌이 갈리고, 그때
+    「번들로 받은 것과 낱장으로 받은 것이 다르다」 가 된다 — `_deck_for_card` 를
+    그대로 쓴다.
+
+    초안도 담는다(낱장과 같은 판단). 대신 **몇 장이 초안인지 manifest 와 응답 머리에
+    적는다** — 덱 안 주석은 파일을 열어야 보이고, 안 여는 사람이 있다.
+    """
+    try:
+        target = renderers.renderer_for(db, user.home_workspace_id, payload.format)
+    except export.ExportError as exc:
+        raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
+    try:
+        export.systems.get(payload.units)
+    except KeyError as exc:
+        known = ", ".join(one.key for one in export.SYSTEMS)
+        raise AppError(
+            "MNX-FITTING-0023",
+            f"모르는 단위계입니다: {payload.units!r}. 쓸 수 있는 것: {known}",
+            status=422,
+        ) from exc
+
+    items: list[bundle.BundleCard] = []
+    for card_id in payload.card_ids:
+        card = _visible_card(db, user, card_id)
+        material = db.get(Material, card.material_id)
+        items.append(
+            bundle.BundleCard(
+                card_id=str(card.id),
+                label=card.label,
+                material=material.record_name if material else "?",
+                status=card.status,
+                deck=_deck_for_card(db, user, card_id),
+            )
+        )
+
+    try:
+        made = bundle.build(
+            items,
+            target=target,
+            units=payload.units,
+            exported_by=user.email,
+            app_version=version.current(),
+            now=datetime.now(UTC),
+        )
+    except export.ExportError as exc:
+        raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
+
+    return Response(
+        content=made.content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{made.filename}"',
+            # **경고를 파일 안에만 두지 않는다.** 화면이 받은 그 자리에서 보여 줄 수
+            # 있어야 「초안이 섞였다」 를 압축을 풀기 전에 안다.
+            "X-MatNexus-Warnings": str(len(made.warnings)),
+        },
+    )
 
 
 @router.get("/cards/{card_id}/export")

@@ -13,7 +13,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import json
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -420,6 +424,177 @@ class Test물성카드:
         ).json()
         assert values(card, "elastic")["poisson_ratio"] == pytest.approx(0.29)
         assert values(card, "elastic")["density"] == pytest.approx(7850.0)
+
+
+class Test묶음_내보내기:
+    """**해석 하나에 재료가 여럿 들어간다.**
+
+    한 장씩 내려받아 사람이 폴더에 모으면 그 묶음이 무엇이었는지가 아무 데도 안
+    남는다. 해석자가 물을 것은 하나다 — 「내가 받은 이 덱이 그때 그 카드가 맞나」.
+    묶음은 그 물음에 답하려고 있다(ADR 0024 ②).
+    """
+
+    @pytest.fixture
+    def two_cards(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        made = []
+        for label in ("가", "나"):
+            made.append(
+                client.post(
+                    "/api/fitting/cards",
+                    json={
+                        "material_id": ready["id"],
+                        "test_type_key": "tensile",
+                        "orientation": "MD",
+                        "label": f"묶음 시험 {label}",
+                        "family": "voce",
+                        "poisson_ratio": 0.3,
+                        "density": 7850.0,
+                    },
+                    headers=admin_headers,
+                ).json()
+            )
+        return made
+
+    def _open(self, response: Any) -> zipfile.ZipFile:
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "application/zip"
+        return zipfile.ZipFile(io.BytesIO(response.content))
+
+    def _bundle(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        cards: list[dict[str, Any]],
+        **extra: Any,
+    ) -> Any:
+        return client.post(
+            "/api/fitting/cards/bundle",
+            json={"card_ids": [one["id"] for one in cards], "format": "abaqus", **extra},
+            headers=admin_headers,
+        )
+
+    def test_덱과_manifest_와_체크섬이_함께_온다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        two_cards: list[dict[str, Any]],
+    ) -> None:
+        archive = self._open(self._bundle(client, admin_headers, two_cards))
+        names = set(archive.namelist())
+        assert {"manifest.json", "SHA256SUMS"} <= names
+        assert len([one for one in names if one.startswith("decks/")]) == 2
+
+    def test_체크섬이_실제_덱과_맞는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        two_cards: list[dict[str, Any]],
+    ) -> None:
+        """**받은 쪽이 검산할 수 있어야 한다.** 안 맞으면 그 숫자는 장식이다."""
+        archive = self._open(self._bundle(client, admin_headers, two_cards))
+        manifest = json.loads(archive.read("manifest.json"))
+        for entry in manifest["cards"]:
+            digest = hashlib.sha256(archive.read(entry["file"])).hexdigest()
+            assert digest == entry["sha256"], entry["file"]
+
+        # `SHA256SUMS` 도 같은 값을 적는다 — 표준 도구로 검산하는 사람이 있다.
+        sums = archive.read("SHA256SUMS").decode("utf-8")
+        for entry in manifest["cards"]:
+            assert f"{entry['sha256']}  {entry['file']}" in sums
+
+    def test_무엇을_어떻게_뽑았는지_적힌다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        two_cards: list[dict[str, Any]],
+    ) -> None:
+        """형식·단위계·사람·시각이 없으면 「그때 그 덱」 을 되짚을 수 없다."""
+        archive = self._open(
+            self._bundle(client, admin_headers, two_cards, units="mm_n_tonne")
+        )
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["format"] == "abaqus"
+        assert manifest["units"] == "mm_n_tonne"
+        assert manifest["exported_by"]
+        assert manifest["exported_at"]
+        assert manifest["app_version"]
+        assert len(manifest["cards"]) == 2
+
+    def test_초안이_섞이면_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        two_cards: list[dict[str, Any]],
+    ) -> None:
+        """**초안도 담는다** — 돌려 보는 것이 검토의 실체다(낱장과 같은 판단).
+        다만 압축을 풀기 전에도 알아야 한다."""
+        response = self._bundle(client, admin_headers, two_cards)
+        archive = self._open(response)
+        manifest = json.loads(archive.read("manifest.json"))
+        assert any("초안" in one for one in manifest["warnings"])
+        assert response.headers["x-matnexus-warnings"] == "1"
+
+    def test_덱_바이트가_매번_같다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        two_cards: list[dict[str, Any]],
+    ) -> None:
+        """**체크섬이 뜻을 가지려면 덱이 결정적이어야 한다.**
+
+        압축 파일 자체는 다르다 — manifest 에 시각과 사람이 들어간다. 검산에 쓰는
+        것은 덱의 해시지 압축 파일의 해시가 아니다.
+        """
+        first = self._open(self._bundle(client, admin_headers, two_cards))
+        second = self._open(self._bundle(client, admin_headers, two_cards))
+        decks = sorted(one for one in first.namelist() if one.startswith("decks/"))
+        assert decks == sorted(one for one in second.namelist() if one.startswith("decks/"))
+        for name in decks:
+            assert first.read(name) == second.read(name)
+
+    def test_고른_순서와_무관하게_같은_차례로_담는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        two_cards: list[dict[str, Any]],
+    ) -> None:
+        """화면에서 고른 순서가 파일 차례를 바꾸면 diff 가 매번 통째로 바뀐다."""
+        forward = self._open(self._bundle(client, admin_headers, two_cards))
+        backward = self._open(self._bundle(client, admin_headers, list(reversed(two_cards))))
+        assert forward.namelist() == backward.namelist()
+
+        # **이름만 보면 못 잡는다.** 같은 재료의 카드는 덱 이름이 겹쳐 뒤엣것에
+        # 번호가 붙는데(`_2`), 차례가 뒤집히면 **어느 카드가 그 번호를 받았는지**가
+        # 바뀐다 — 파일 목록은 그대로다. manifest 의 차례로 본다.
+        def order(archive: zipfile.ZipFile) -> list[str]:
+            return [
+                one["card_id"] for one in json.loads(archive.read("manifest.json"))["cards"]
+            ]
+
+        assert order(forward) == order(backward)
+
+    def test_모르는_형식은_있는_것을_알려_준다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        two_cards: list[dict[str, Any]],
+    ) -> None:
+        response = self._bundle(client, admin_headers, two_cards, format="없는형식")
+        assert response.status_code == 422, response.text
+        assert "있는 것" in response.json()["error"]["message"]
+
+    def test_카드를_안_주면_막는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """빈 묶음은 빈 zip 이 아니라 실수다."""
+        response = client.post(
+            "/api/fitting/cards/bundle",
+            json={"card_ids": [], "format": "abaqus"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
 
 
 class Test내보내기:

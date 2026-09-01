@@ -15,17 +15,18 @@
  * 「43장 중 50장」. 표시 없이 자르면 사람이 알 방법이 없고, 그러면 없는 카드를
  * 없다고 믿는다.
  *
- * ## 여러 장 골라 한 번에 내보내기는 아직 없다
+ * ## 여러 장을 골라 한 묶음으로 (v1.168.0)
  *
- * 그것은 **번들**(여러 카드 + manifest + checksum 을 결정적 ZIP 으로)이고,
- * 계획서가 *"카드가 여러 장 쌓인 뒤에 만든다 — 지금 만들면 쓰이는 모양을 모르고
- * 만드는 것"* 이라고 미뤄 둔 것이다. 이 화면이 그 기능이 살 자리는 맞다.
+ * 해석 하나에 재료가 여럿 들어간다. 한 장씩 받아 사람이 폴더에 모으면 **그 묶음이
+ * 무엇이었는지가 아무 데도 안 남는다.** 골라서 `manifest.json`·`SHA256SUMS` 와 함께
+ * 내보낸다(ADR 0024 ②) — 받은 쪽이 「그때 그 카드가 맞나」 를 검산할 수 있다.
  */
 
 import { AlertTriangle, Globe2, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { BundleBar } from '@/modules/fitting/BundleBar'
 import { CardFilterPanel } from '@/modules/fitting/CardFilterPanel'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
@@ -48,6 +49,9 @@ export default function CardsPage() {
   const [q, setQ] = useState('')
   const [limit, setLimit] = useState(PAGE)
   const [error, setError] = useState<Error | null>(null)
+  /** 묶음에 담을 카드. **거르기를 바꿔도 안 비운다** — 조건을 바꿔 가며 모으는
+   *  것이 이 화면에서 카드를 고르는 방식이다. */
+  const [picked, setPicked] = useState<Set<string>>(new Set())
 
   // 타이핑이 멎으면 묻는다. 글자마다 부르면 앞 글자의 응답이 뒤늦게 와서
   // 목록을 덮는 일이 생긴다.
@@ -129,9 +133,25 @@ export default function CardsPage() {
             card={card}
             formats={formats.data ?? []}
             onError={setError}
+            picked={picked.has(card.id)}
+            onPick={(next) =>
+              setPicked((now) => {
+                const copy = new Set(now)
+                if (next) copy.add(card.id)
+                else copy.delete(card.id)
+                return copy
+              })
+            }
           />
         ))}
       </div>
+
+      <BundleBar
+        ids={[...picked]}
+        formats={formats.data ?? []}
+        onClear={() => setPicked(new Set())}
+        onError={setError}
+      />
 
       {/* **조용히 자르지 않는다.** 표시 없이 자르면 없는 카드를 없다고 믿는다. */}
       {rows.length < total && (
@@ -152,13 +172,25 @@ function Row({
   card,
   formats,
   onError,
+  picked,
+  onPick,
 }: {
   card: PropertyCard
   formats: Parameters<typeof ExportMenu>[0]['formats']
   onError: (error: Error) => void
+  picked: boolean
+  onPick: (next: boolean) => void
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border p-3">
+      {/* **낱장 내보내기를 없애지 않는다.** 한 장만 필요한 사람이 더 많고,
+          묶음은 여럿을 고를 때만 뜬다. */}
+      <input
+        type="checkbox"
+        aria-label={`${card.label} 묶음에 담기`}
+        checked={picked}
+        onChange={(event) => onPick(event.target.checked)}
+      />
       <span className="font-medium">{card.label}</span>
       <Badge
         variant={

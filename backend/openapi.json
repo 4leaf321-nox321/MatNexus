@@ -1834,6 +1834,36 @@
         "title": "CandidateOut",
         "type": "object"
       },
+      "CardBundleRequest": {
+        "description": "카드 여럿을 한 묶음으로 내보낸다.\n\n**해석 하나에 재료가 여럿 들어간다.** 한 장씩 내려받아 사람이 폴더에 모으면 그\n묶음이 무엇이었는지가 아무 데도 안 남는다 — 해석자가 「내가 받은 이 덱이 그때\n그 카드가 맞나」 를 물을 때 답할 것이 없다.",
+        "properties": {
+          "card_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Card Ids",
+            "type": "array"
+          },
+          "format": {
+            "default": "json",
+            "title": "Format",
+            "type": "string"
+          },
+          "units": {
+            "default": "si",
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_ids"
+        ],
+        "title": "CardBundleRequest",
+        "type": "object"
+      },
       "CardFacetOut": {
         "description": "거를 수 있는 값 하나와 **그것이 몇 장인가.**\n\n화면이 한 페이지에서 세면 안 된다. 50장만 받아 세면 「인장시험 12」라고\n적히는데 실제로는 40장일 수 있고, 그러면 **필터 옆의 숫자가 거짓말을 한다.**\n레시피 필터는 목록을 통째로 받으므로 화면에서 세도 됐지만, 카드는 페이지로\n온다.",
         "properties": {
@@ -8446,6 +8476,17 @@
             "title": "Source Row Count",
             "type": "integer"
           },
+          "stage_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Index"
+          },
           "stages": {
             "items": {
               "$ref": "#/components/schemas/ProcessingStageOut"
@@ -13090,6 +13131,17 @@
             ],
             "title": "Unit"
           },
+          "unit_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit From"
+          },
           "when": {
             "additionalProperties": {
               "items": {
@@ -17718,6 +17770,46 @@
         ]
       }
     },
+    "/api/fitting/cards/bundle": {
+      "post": {
+        "description": "카드 여럿을 **한 묶음으로** 내보낸다 — 덱 + manifest + 체크섬(ADR 0024 ②).\n\n해석 하나에 재료가 여럿 들어간다. 지금까지는 한 장씩 내려받아 사람이 폴더에\n모았고, **그 묶음이 무엇이었는지는 아무 데도 안 남았다.** 해석자가 물을 것은\n「내가 받은 이 덱이 그때 그 카드가 맞나」 하나인데, 답할 방법이 없으면 덱을 다시\n받는 수밖에 없고 그 사이에 카드가 바뀌었을 수도 있다.\n\n**한 장 내보내기와 같은 덱을 낸다.** 다른 길로 만들면 두 벌이 갈리고, 그때\n「번들로 받은 것과 낱장으로 받은 것이 다르다」 가 된다 — `_deck_for_card` 를\n그대로 쓴다.\n\n초안도 담는다(낱장과 같은 판단). 대신 **몇 장이 초안인지 manifest 와 응답 머리에\n적는다** — 덱 안 주석은 파일을 열어야 보이고, 안 여는 사람이 있다.",
+        "operationId": "export_bundle_api_fitting_cards_bundle_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardBundleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Bundle",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
     "/api/fitting/cards/declared": {
       "post": {
         "description": "**시험 없이** 선언 물성만으로 카드를 만든다(ADR 0016).\n\n## 왜 따로 있나\n\n`POST /cards` 는 대표 곡선에서 시작한다 — 재료+시험종류+방향의 묶음이 없으면\n아무것도 못 만든다. 그런데 개발 DB 의 재료 94개 중 **14개는 시험이 하나도\n없다.** 그 재료의 탄성계수·열물성을 사람이 적어 두어도 지금까지는 덱까지\n가는 길이 없었다 — 넣어 두고 안 쓰는 칸이었다.\n\n적합이 없으므로 식도 소성 표도 없다. `elastic` 과 `thermal` 만 든다.\n소성 표를 요구하는 형식은 `available_formats` 에서 저절로 빠진다.\n\n## 빈 카드를 안 만든다\n\n블록이 하나도 안 나오면 **거절한다.** 값이 없는 카드는 근거가 없는 것을\n넘어서, 목록에서 「이 재료는 물성이 있다」고 말하는 거짓말이 된다.\n\n## 시험종류를 비워 둔다\n\n아무 시험종류나 채우면 그 카드가 인장시험에서 나온 것처럼 보이고, 덱을 받은\n사람은 그 숫자를 잰 값으로 읽는다. **비어 있는 것이 사실이다.**",
@@ -21937,7 +22029,7 @@
     },
     "/api/processing/preview": {
       "post": {
-        "description": "**저장하지 않고** 돌려 본다.\n\n저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 처리가 잘못되면\n곡선이 조용히 이상해지고, 그 곡선으로 적합한 물성이 그대로 해석에 들어간다.",
+        "description": "**저장하지 않고** 돌려 본다.\n\n저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 처리가 잘못되면\n곡선이 조용히 이상해지고, 그 곡선으로 적합한 물성이 그대로 해석에 들어간다.\n\n## 중간 단계도 그린다 (`stage`)\n\n프레임은 표 하나이고 **모든 열이 x 축을 공유한다.** 그래서 마지막 단계가\n축을 진소성변형률로 바꾸면, 변위·하중도 그 격자로 다시 찍힌다 — 탄성 구간이\nx=0 한 점으로 접히면서 **원본 곡선의 앞부분이 사라진 것처럼 보인다.**\n실사용에서 그 물음이 나왔다(2026-09-01): \"S-S 곡선은 알겠는데 변위·하중은\n왜 끊기나\".\n\n전에는 답할 방법이 뒤 단계를 지우고 다시 돌리는 것뿐이었다. 단계마다 프레임이\n이미 남아 있으므로(`processing.Stage.frame`) **어느 것을 그릴지 고르게만\n하면 된다** — 파이프라인은 그대로 돈다.\n\n`stages`·`scalars`·`notes` 는 **늘 전체**다. 그것들은 한 번 돈 일 전체를\n말하는 것이라 고른 단계에 따라 달라지면 안 된다.",
         "operationId": "preview_api_processing_preview_post",
         "parameters": [
           {
@@ -21970,6 +22062,25 @@
                 }
               ],
               "title": "Y"
+            }
+          },
+          {
+            "description": "몇 번째 단계의 곡선을 그릴까(0부터). 생략하면 마지막",
+            "in": "query",
+            "name": "stage",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "몇 번째 단계의 곡선을 그릴까(0부터). 생략하면 마지막",
+              "title": "Stage"
             }
           }
         ],

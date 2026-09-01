@@ -6,7 +6,7 @@
  * 알 수 없게 된다.
  */
 
-import { api, downloadFile } from '@/shared/api/client'
+import { api, downloadFile, downloadPostFile } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type Family = components['schemas']['FamilyOut']
@@ -213,6 +213,21 @@ export const fittingApi = {
     downloadFile(
       `/fitting/cards/${id}/export?format=${format.key}&units=${system.key}`,
       `${filename(label)}_${system.key}.${format.extension}`
+    ),
+
+  /**
+   * 고른 카드를 **한 묶음으로** 내려받는다 — 덱 + manifest + 체크섬(ADR 0024 ②).
+   *
+   * 해석 하나에 재료가 여럿 들어간다. 한 장씩 받아 사람이 폴더에 모으면 **그 묶음이
+   * 무엇이었는지가 아무 데도 안 남는다** — 해석자가 「내가 받은 이 덱이 그때 그
+   * 카드가 맞나」 를 물을 때 답할 것이 없다.
+   */
+  downloadBundle: (ids: string[], format: ExportFormat, system: UnitSystem) =>
+    downloadPostFile(
+      '/fitting/cards/bundle',
+      { card_ids: ids, format: format.key, units: system.key },
+      // 서버도 같은 이름을 붙인다. 낱장 내보내기와 같은 규약이라 여기서도 적는다.
+      `matnexus_cards_${format.key}_${system.key}.zip`
     ),
 }
 

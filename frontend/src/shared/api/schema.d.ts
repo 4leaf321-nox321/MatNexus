@@ -417,6 +417,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Bundle
+         * @description 카드 여럿을 **한 묶음으로** 내보낸다 — 덱 + manifest + 체크섬(ADR 0024 ②).
+         *
+         *     해석 하나에 재료가 여럿 들어간다. 지금까지는 한 장씩 내려받아 사람이 폴더에
+         *     모았고, **그 묶음이 무엇이었는지는 아무 데도 안 남았다.** 해석자가 물을 것은
+         *     「내가 받은 이 덱이 그때 그 카드가 맞나」 하나인데, 답할 방법이 없으면 덱을 다시
+         *     받는 수밖에 없고 그 사이에 카드가 바뀌었을 수도 있다.
+         *
+         *     **한 장 내보내기와 같은 덱을 낸다.** 다른 길로 만들면 두 벌이 갈리고, 그때
+         *     「번들로 받은 것과 낱장으로 받은 것이 다르다」 가 된다 — `_deck_for_card` 를
+         *     그대로 쓴다.
+         *
+         *     초안도 담는다(낱장과 같은 판단). 대신 **몇 장이 초안인지 manifest 와 응답 머리에
+         *     적는다** — 덱 안 주석은 파일을 열어야 보이고, 안 여는 사람이 있다.
+         */
+        post: operations["export_bundle_api_fitting_cards_bundle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/declared": {
         parameters: {
             query?: never;
@@ -2106,6 +2138,21 @@ export interface paths {
          *
          *     저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 처리가 잘못되면
          *     곡선이 조용히 이상해지고, 그 곡선으로 적합한 물성이 그대로 해석에 들어간다.
+         *
+         *     ## 중간 단계도 그린다 (`stage`)
+         *
+         *     프레임은 표 하나이고 **모든 열이 x 축을 공유한다.** 그래서 마지막 단계가
+         *     축을 진소성변형률로 바꾸면, 변위·하중도 그 격자로 다시 찍힌다 — 탄성 구간이
+         *     x=0 한 점으로 접히면서 **원본 곡선의 앞부분이 사라진 것처럼 보인다.**
+         *     실사용에서 그 물음이 나왔다(2026-09-01): "S-S 곡선은 알겠는데 변위·하중은
+         *     왜 끊기나".
+         *
+         *     전에는 답할 방법이 뒤 단계를 지우고 다시 돌리는 것뿐이었다. 단계마다 프레임이
+         *     이미 남아 있으므로(`processing.Stage.frame`) **어느 것을 그릴지 고르게만
+         *     하면 된다** — 파이프라인은 그대로 돈다.
+         *
+         *     `stages`·`scalars`·`notes` 는 **늘 전체**다. 그것들은 한 번 돈 일 전체를
+         *     말하는 것이라 고른 단계에 따라 달라지면 안 된다.
          */
         post: operations["preview_api_processing_preview_post"];
         delete?: never;
@@ -5003,6 +5050,28 @@ export interface components {
             specimen_name: string;
         };
         /**
+         * CardBundleRequest
+         * @description 카드 여럿을 한 묶음으로 내보낸다.
+         *
+         *     **해석 하나에 재료가 여럿 들어간다.** 한 장씩 내려받아 사람이 폴더에 모으면 그
+         *     묶음이 무엇이었는지가 아무 데도 안 남는다 — 해석자가 「내가 받은 이 덱이 그때
+         *     그 카드가 맞나」 를 물을 때 답할 것이 없다.
+         */
+        CardBundleRequest: {
+            /** Card Ids */
+            card_ids: string[];
+            /**
+             * Format
+             * @default json
+             */
+            format: string;
+            /**
+             * Units
+             * @default si
+             */
+            units: string;
+        };
+        /**
          * CardFacetOut
          * @description 거를 수 있는 값 하나와 **그것이 몇 장인가.**
          *
@@ -7587,6 +7656,8 @@ export interface components {
             source_curve_key: string;
             /** Source Row Count */
             source_row_count: number;
+            /** Stage Index */
+            stage_index?: number | null;
             /** Stages */
             stages: components["schemas"]["ProcessingStageOut"][];
             /** Units */
@@ -9462,6 +9533,8 @@ export interface components {
             type: string;
             /** Unit */
             unit?: string | null;
+            /** Unit From */
+            unit_from?: string | null;
             /**
              * When
              * @default {}
@@ -11479,6 +11552,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_bundle_api_fitting_cards_bundle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardBundleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14384,6 +14490,8 @@ export interface operations {
             query?: {
                 x?: string | null;
                 y?: string | null;
+                /** @description 몇 번째 단계의 곡선을 그릴까(0부터). 생략하면 마지막 */
+                stage?: number | null;
             };
             header?: never;
             path?: never;

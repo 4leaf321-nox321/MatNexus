@@ -157,15 +157,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * src="/api/guide/assets/…">` 였고 서버는 401 을 냈다. 아래 `downloadFile` 이 이미
  * 같은 함정을 적어 두었는데, 그림을 붙일 때 그 교훈을 안 썼다.
  */
-export async function fetchWithAuth(path: string): Promise<Response> {
+export async function fetchWithAuth(path: string, init?: RequestInit): Promise<Response> {
   // **`/api` 로 시작하면 이미 붙어 있는 것이다.** 본문에 저장된 그림 주소가
   // `/api/guide/assets/<id>` 라서 그대로 넘기면 `send` 가 앞에 `/api` 를 한 번 더
   // 붙여 `/api/api/…` 가 되고, 라우트에 안 닿아 **404** 가 난다(2026-08-29 실측 —
   // 401 을 고치고 나니 이번엔 404 였다). 부르는 쪽이 매번 떼게 두면 잊는다.
   const relative = path.startsWith(`${BASE}/`) ? path.slice(BASE.length) : path
-  let response = await send(relative)
+  let response = await send(relative, init)
   if (response.status === 401 && !relative.startsWith('/auth/')) {
-    if (await tryRefresh()) response = await send(relative)
+    // **다시 보낼 때도 같은 요청이어야 한다.** 몸통을 빼고 다시 보내면 갱신 뒤
+    // 요청이 조용히 GET 이 되고, 그때 서버는 405 나 빈 결과를 낸다.
+    if (await tryRefresh()) response = await send(relative, init)
     else onSessionLost?.()
   }
   return response
@@ -191,6 +193,36 @@ export async function downloadFile(path: string, filename: string): Promise<void
     anchor.click()
   } finally {
     // 즉시 해제하면 저장이 시작되기 전에 사라지는 브라우저가 있다.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+}
+
+/**
+ * 몸통을 보내고 파일을 받는다 — 묶음 내보내기처럼 **고른 것이 여럿일 때.**
+ *
+ * `downloadFile` 은 GET 이라 고른 카드 목록을 주소에 실어야 하는데, 100장이면
+ * 주소가 길이 제한에 걸린다. 그리고 「무엇을 골랐나」 는 서버 로그에 남기기에도
+ * 주소보다 몸통이 맞다.
+ */
+export async function downloadPostFile(
+  path: string,
+  body: unknown,
+  filename: string
+): Promise<void> {
+  const response = await fetchWithAuth(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  })
+  if (!response.ok) throw await parseError(response)
+
+  const url = URL.createObjectURL(await response.blob())
+  try {
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    anchor.click()
+  } finally {
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 }

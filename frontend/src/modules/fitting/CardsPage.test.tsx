@@ -10,7 +10,7 @@
  *   못 쓰게 된 카드를 짚는다 만든 계산이 코드에 없으면 내보내기가 막힌다
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -21,6 +21,7 @@ import { LeftPanelHost, LeftPanelProvider } from '@/shared/layout/SidePanel'
 const cards = vi.fn()
 const cardFacets = vi.fn()
 const formats = vi.fn()
+const downloadBundle = vi.fn()
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
@@ -28,6 +29,7 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     cards: (...args: unknown[]) => cards(...args),
     cardFacets: () => cardFacets(),
     formats: () => formats(),
+    downloadBundle: (...args: unknown[]) => downloadBundle(...args),
     // 내보내기 메뉴가 단위계 목록을 읽는다 — **화면이 적어 두지 않는다.**
     unitSystems: () =>
       Promise.resolve([
@@ -204,5 +206,66 @@ describe('물성 카드 목록', () => {
       () => expect(cards).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'SECC' })),
       { timeout: 2000 }
     )
+  })
+})
+
+describe('묶음 내보내기', () => {
+  /**
+   * **해석 하나에 재료가 여럿 들어간다.** 한 장씩 받아 사람이 폴더에 모으면 그
+   * 묶음이 무엇이었는지가 아무 데도 안 남는다(ADR 0024 ②).
+   */
+  const two = () => {
+    cards.mockResolvedValue({
+      items: [card(), card({ id: 'c2', label: '둘째 카드' })],
+      total: 2,
+      limit: 50,
+      offset: 0,
+    })
+  }
+
+  it('고르기 전에는 띠가 안 뜬다', async () => {
+    // 늘 떠 있으면 목록 아래가 항상 가려진다.
+    two()
+    page()
+    await screen.findByText('둘째 카드')
+    expect(screen.queryByLabelText('묶음 내보내기')).toBeNull()
+  })
+
+  it('고른 수를 말하고 형식을 고르면 그것으로 내보낸다', async () => {
+    two()
+    page()
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    await userEvent.click(screen.getByLabelText('둘째 카드 묶음에 담기'))
+
+    const bar = within(screen.getByLabelText('묶음 내보내기'))
+    expect(bar.getByText('2장 골랐습니다')).toBeInTheDocument()
+
+    await userEvent.click(bar.getByRole('button', { name: /Abaqus/ }))
+    await waitFor(() => expect(downloadBundle).toHaveBeenCalled())
+    const [ids, format, system] = downloadBundle.mock.calls[0]
+    expect(new Set(ids as string[])).toEqual(new Set(['c1', 'c2']))
+    expect((format as { key: string }).key).toBe('abaqus')
+    // 화면이 'si' 를 적어 두지 않는다 — 서버가 기본이라고 말한 것을 쓴다.
+    expect((system as { key: string }).key).toBe('si')
+  })
+
+  it('비우면 띠가 사라진다', async () => {
+    two()
+    page()
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    const bar = within(screen.getByLabelText('묶음 내보내기'))
+    await userEvent.click(bar.getByRole('button', { name: /고른 것 비우기/ }))
+    expect(screen.queryByLabelText('묶음 내보내기')).toBeNull()
+  })
+
+  it('무엇이 함께 들어가는지 미리 말한다', async () => {
+    // **압축을 풀고 나서 알면 늦다.** 검산할 수 있다는 사실이 고르는 자리에 있어야
+    // 그것을 쓰는 사람이 생긴다.
+    two()
+    page()
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    const bar = within(screen.getByLabelText('묶음 내보내기'))
+    expect(bar.getByText(/manifest.json/)).toBeInTheDocument()
+    expect(bar.getByText(/SHA256SUMS/)).toBeInTheDocument()
   })
 })
