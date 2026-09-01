@@ -1065,6 +1065,14 @@ def list_runs(
     elif division:
         query = query.where(TestRun.division == division)
     if q and (text := q.strip()):
+        # **이름 하나로 재료·시료·시편·회차가 다 걸린다.** `record_name` 이
+        # `{재료}__{시료}__{시편}__{종류}_{회차}` 로 조합되기 때문이다
+        # (`matcore/naming.py`). 그래서 재료명으로 찾아도, 시편 번호로 찾아도
+        # 같은 칸 하나가 답한다 — 조인을 늘리지 않는다.
+        #
+        # 파일명을 함께 보는 이유: 장비에서 받은 이름으로 찾는 일이 실제로 있다.
+        # 그 이름은 우리 이름 규칙과 아무 상관이 없어서 `record_name` 으로는
+        # 영영 안 걸린다.
         like = f"%{text}%"
         query = query.where(
             or_(TestRun.record_name.ilike(like), TestRun.source_filename.ilike(like))

@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
@@ -31,6 +31,7 @@ import { BulkEditDialog } from '@/modules/tests/BulkEditDialog'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { Input } from '@/shared/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -160,6 +161,14 @@ export default function TestRunsPage() {
   // **거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이 없는
   // 시험이 된다 — 이 화면의 머리말이 그 이야기다.
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
+  /**
+   * 찾기 상자에 **치는 중**인 글자와 **적용된** 글자를 가른다.
+   *
+   * 한 글자마다 목록을 다시 부르면 233건짜리 화면에서도 요청이 줄줄이 나가고,
+   * 늦게 온 응답이 최신 결과를 덮는다. 재료 목록과 같은 방식이다 — 엔터나
+   * 「찾기」 를 누를 때만 간다.
+   */
+  const [query, setQuery] = useState('')
   // 기본은 **최근 등록순.** 전에도 그랬고, 이제 다른 열로도 바꿀 수 있다.
   const { sort, handle } = useSort('created_at', {
     // **이 브라우저가 기억한다.** 계정이 아니다 — 같은 PC 를 다른 사람이
@@ -196,6 +205,15 @@ export default function TestRunsPage() {
   )
   // 거르기 목록은 필터와 함께 안 바뀐다 — 「무엇이 있나」를 답하는 자리다.
   const facets = useResource(() => testsApi.runFacets(slug), [slug])
+
+  /** 찾기 상자가 적용한 글자. `filters` 에 섞어 두면 열 필터와 함께 흐른다. */
+  function search(text: string) {
+    setOffset(0)
+    selection.clear()
+    // 빈 글자는 **아예 안 보낸다** — `q=` 를 보내면 서버가 빈 조건으로 한 번 더
+    // 훑는다. 지운 것과 안 친 것을 같게 본다.
+    setFilters((current) => ({ ...current, q: text || undefined }))
+  }
 
   /** 열 하나를 좁힌다. **필터가 바뀌면 처음부터 다시 본다.** */
   function narrow(key: string, value: string | undefined) {
@@ -280,6 +298,53 @@ export default function TestRunsPage() {
           </>
         }
       />
+
+      {/* **이름 하나로 재료·시료·시편·회차가 다 걸린다.** `record_name` 이
+          그 넷을 조합해 만들어지기 때문이다(`matcore/naming.py`). 그래서 열
+          필터와 성격이 다르다 — 열 필터는 「이 열이 이 값인 것」 이고, 이건
+          「어디든 이 글자가 있는 것」 이다. 그래서 표 위에 따로 둔다. */}
+      <form
+        className="mb-4 flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          search(query.trim())
+        }}
+      >
+        <div className="relative flex-1">
+          <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="재료 · 시편 · 시험 이름 · 원본 파일명으로 찾기"
+            className="pl-9"
+            aria-label="시험 찾기"
+          />
+        </div>
+        {/* **지우는 길을 둔다.** 상자를 비우고 엔터를 치면 되지만, 찾은 뒤에는
+            상자에 글자가 남아 있어 「지금 걸러진 상태인가」 가 헷갈린다. */}
+        {filters.q && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setQuery('')
+              search('')
+            }}
+          >
+            <X className="size-4" />
+            지우기
+          </Button>
+        )}
+        <Button type="submit" variant="secondary">
+          찾기
+        </Button>
+      </form>
+
+      {filters.q && (
+        <p className="text-muted-foreground mb-3 text-sm">
+          <b className="text-foreground">{filters.q}</b> 로 좁힌 {total}건입니다.
+        </p>
+      )}
 
       <ErrorNotice error={runs.error ?? facets.error ?? failure} className="mb-4" />
 

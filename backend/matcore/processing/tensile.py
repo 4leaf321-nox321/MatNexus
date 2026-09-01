@@ -213,6 +213,7 @@ TOE_MIN_R_SQUARED = 0.995
             type="float",
             default=0.004,
             unit="1",
+            help="**공칭 변형률**입니다. 토우가 끝난 뒤의 직선 구간을 잡습니다.",
         ),
         ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
@@ -448,6 +449,11 @@ def _auto_window(
             default=0.0005,
             unit="1",
             when={"method": ("linear_regression", "chord", "secant")},
+            help=(
+                "**공칭 변형률**입니다. 기본 0.05~0.25% 는 금속 판재의 관례이고 "
+                "곡선마다 맞지 않습니다 — 그 구간에 점이 없으면 값이 안 나옵니다. "
+                "구간을 모르겠으면 방법을 「자동」 으로 두세요."
+            ),
         ),
         ParamSpec(
             name="maximum_strain",
@@ -457,6 +463,7 @@ def _auto_window(
             default=0.0025,
             unit="1",
             when={"method": ("linear_regression", "chord", "secant")},
+            help="**공칭 변형률**입니다. 항복 전이어야 합니다 — 넘으면 기울기가 눕습니다.",
         ),
         ParamSpec(
             name="auto_stress_low",
@@ -803,10 +810,20 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
             help="앞 단계에서 잰 값을 그대로 쓰거나, 직접 넣습니다.",
         ),
         ParamSpec(
-            name="search_start", dimension="strain", label="탐색 시작", type="float", unit="1"
+            name="search_start",
+            dimension="strain",
+            label="탐색 시작",
+            type="float",
+            unit="1",
+            help="**공칭 변형률**입니다. 오프셋 직선과 곡선의 교점을 이 구간에서 찾습니다.",
         ),
         ParamSpec(
-            name="search_end", dimension="strain", label="탐색 끝", type="float", unit="1"
+            name="search_end",
+            dimension="strain",
+            label="탐색 끝",
+            type="float",
+            unit="1",
+            help="**공칭 변형률**입니다. 비우면 관측 끝까지 봅니다.",
         ),
         ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),

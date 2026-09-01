@@ -1224,3 +1224,59 @@ class Test여러_건_한꺼번에_고치기:
             "홍길동": 2,
             "(없음)": 1,
         }
+
+
+class TestSearch:
+    """이름 하나로 재료·시료·시편·회차가 다 걸린다.
+
+    `record_name` 이 `{재료}__{시료}__{시편}__{종류}_{회차}` 로 조합되기
+    때문이다(`matcore/naming.py`). 그래서 조인을 늘리지 않아도 재료명으로
+    찾힌다 — **이 사실이 깨지면 검색이 반쪽이 된다.**
+    """
+
+    @pytest.fixture
+    def run(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        specimen: dict[str, Any],
+        tensile: None,
+    ) -> Any:
+        made = _upload(client, admin_headers, specimen["id"], filename="ZWICK-9911-원본.tra")
+        assert made.status_code in (200, 201, 202), made.text
+        return made.json()
+
+    def test_재료_이름으로_찾힌다(
+        self, client: TestClient, admin_headers: dict[str, str], run: Any
+    ) -> None:
+        material = str(run["record_name"]).split("__")[0]
+        found = client.get(f"/api/test-runs?q={material}", headers=admin_headers)
+        assert found.status_code == 200, found.text
+        assert any(one["id"] == run["id"] for one in found.json()["items"])
+
+    def test_원본_파일명으로도_찾힌다(
+        self, client: TestClient, admin_headers: dict[str, str], run: Any
+    ) -> None:
+        """장비에서 받은 이름으로 찾는 일이 실제로 있다. 그 이름은 우리 이름
+        규칙과 상관이 없어 `record_name` 으로는 영영 안 걸린다."""
+        found = client.get("/api/test-runs?q=ZWICK-9911", headers=admin_headers)
+        assert found.status_code == 200, found.text
+        assert any(one["id"] == run["id"] for one in found.json()["items"])
+
+    def test_없는_글자는_빈_목록이다(
+        self, client: TestClient, admin_headers: dict[str, str], run: Any
+    ) -> None:
+        found = client.get("/api/test-runs?q=없을만한글자zzz", headers=admin_headers)
+        assert found.status_code == 200, found.text
+        assert found.json()["items"] == []
+        assert found.json()["total"] == 0
+
+    def test_공백만_치면_안_거른다(
+        self, client: TestClient, admin_headers: dict[str, str], run: Any
+    ) -> None:
+        """**지운 것과 안 친 것을 같게 본다.** 공백으로 걸러 버리면 상자를
+        비웠는데 목록이 텅 비는 화면이 된다."""
+        blank = client.get("/api/test-runs?q=%20%20", headers=admin_headers)
+        every = client.get("/api/test-runs", headers=admin_headers)
+        assert blank.status_code == 200, blank.text
+        assert blank.json()["total"] == every.json()["total"]

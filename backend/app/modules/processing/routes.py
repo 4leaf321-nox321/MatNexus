@@ -101,6 +101,7 @@ def list_steps(
                     choice_labels=dict(spec.choice_labels),
                     unit=spec.unit,
                     dimension=spec.dimension,
+                    unit_from=spec.unit_from,
                     help=spec.help,
                     required=spec.required,
                     role=spec.role,
@@ -318,6 +319,11 @@ def preview(
     payload: ProcessingRunRequest,
     x: str | None = Query(default=None),
     y: str | None = Query(default=None),
+    stage: int | None = Query(
+        default=None,
+        ge=0,
+        description="몇 번째 단계의 곡선을 그릴까(0부터). 생략하면 마지막",
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> ProcessingPreviewOut:
@@ -325,10 +331,37 @@ def preview(
 
     저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 처리가 잘못되면
     곡선이 조용히 이상해지고, 그 곡선으로 적합한 물성이 그대로 해석에 들어간다.
+
+    ## 중간 단계도 그린다 (`stage`)
+
+    프레임은 표 하나이고 **모든 열이 x 축을 공유한다.** 그래서 마지막 단계가
+    축을 진소성변형률로 바꾸면, 변위·하중도 그 격자로 다시 찍힌다 — 탄성 구간이
+    x=0 한 점으로 접히면서 **원본 곡선의 앞부분이 사라진 것처럼 보인다.**
+    실사용에서 그 물음이 나왔다(2026-09-01): "S-S 곡선은 알겠는데 변위·하중은
+    왜 끊기나".
+
+    전에는 답할 방법이 뒤 단계를 지우고 다시 돌리는 것뿐이었다. 단계마다 프레임이
+    이미 남아 있으므로(`processing.Stage.frame`) **어느 것을 그릴지 고르게만
+    하면 된다** — 파이프라인은 그대로 돈다.
+
+    `stages`·`scalars`·`notes` 는 **늘 전체**다. 그것들은 한 번 돈 일 전체를
+    말하는 것이라 고른 단계에 따라 달라지면 안 된다.
     """
     run = get_run(db, user, payload.test_run_id)
     result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
+
+    shown: int | None = None
     frame = result.frame
+    if stage is not None:
+        if stage >= len(result.stages):
+            raise AppError(
+                "MNX-PROCESSING-0009",
+                f"{stage}번째 단계가 없습니다 — 이 구성은 {len(result.stages)}단계입니다.",
+                status=422,
+            )
+        shown = stage
+        frame = result.stages[stage].frame
+
     columns = sorted(frame.columns)
     return ProcessingPreviewOut(
         source_curve_key=curve.key,
@@ -336,10 +369,11 @@ def preview(
         row_count=frame.length(),
         columns=columns,
         units={name: frame.units.get(name, "1") for name in columns},
-        stages=[_stage_out(stage) for stage in result.stages],
+        stages=[_stage_out(stage_one) for stage_one in result.stages],
         scalars=[_scalar_out(item) for item in result.scalars],
         notes=list(result.notes),
         points=_points(frame, x or "", y or ""),
+        stage_index=shown,
     )
 
 

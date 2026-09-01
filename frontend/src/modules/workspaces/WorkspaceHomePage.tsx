@@ -186,7 +186,11 @@ export default function WorkspaceHomePage() {
           index={4}
           icon={PackageCheck}
           title="카드 내보내기"
-          detail="재료 상세의 「CAE 카드」 탭에서 Abaqus·OpenRadioss 덱으로 내려받습니다. 무엇을 가정했는지가 덱 주석에 함께 적힙니다."
+          /* **솔버 이름을 여기 적지 않는다.** 지원하는 양식은 「해석용 물성
+             정의」 에서 늘어나므로, 홈에 이름을 박아 두면 늘 때마다 이 줄이
+             옛 목록을 말한다 — 게다가 여기서 알아야 하는 것은 어느 솔버냐가
+             아니라 *덱으로 나간다* 는 사실이다. */
+          detail="재료 상세의 「CAE 카드」 탭에서 CAE 인풋 덱 양식으로 내려받습니다. 무엇을 가정했는지가 덱 주석에 함께 적힙니다."
           to="/materials"
           action="재료 상세 → CAE 카드"
           loading={loading}

@@ -69,9 +69,13 @@ export const TENSILE_STANDARD: RecipeStep[] = [
     options: { x: 'strain_engineering', end: '@necking_candidate_strain' },
   },
   { plugin: 'tensile.true_plastic', options: { youngs_modulus: '@youngs_modulus' } },
+  // **여기만 '마지막 점만 남김' 이다.** `clip_zero` 가 탄성 구간을 전부 x=0 에
+  // 쌓아 두는데(실측 120점 중 34점), 그것을 평균 내면 x=0 의 응력이 탄성 구간
+  // 전체의 평균이 된다 — 항복응력이 아니라 그보다 한참 낮은 값이고, 경화식의
+  // 첫 점이 그 값이면 적합이 통째로 아래로 끌려간다. 마지막 점이 항복점이다.
   {
     plugin: 'curve.sort_unique',
-    options: { x: 'strain_true_plastic', duplicate_policy: 'mean' },
+    options: { x: 'strain_true_plastic', duplicate_policy: 'last' },
   },
   {
     plugin: 'curve.resample',

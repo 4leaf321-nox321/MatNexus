@@ -137,3 +137,25 @@ describe('처음 열면 깔리는 순서', () => {
     expect(탄성?.options).not.toHaveProperty('minimum_strain')
   })
 })
+
+describe('진소성 축의 중복 정리', () => {
+  it('평균이 아니라 마지막 점을 남긴다', () => {
+    // **`clip_zero` 가 탄성 구간을 전부 x=0 에 쌓는다**(실측 120점 중 34점).
+    // 평균 내면 x=0 의 응력이 탄성 구간 전체의 평균이 된다 — 항복응력이 아니라
+    // 그보다 한참 낮은 값이고, 경화식의 첫 점이 그 값이면 적합이 아래로 끌려간다.
+    const 진소성 = TENSILE_STANDARD.filter(
+      (one) => one.plugin === 'curve.sort_unique' && one.options.x === 'strain_true_plastic'
+    )
+    expect(진소성).toHaveLength(1)
+    expect(진소성[0].options.duplicate_policy).toBe('last')
+  })
+
+  it('공칭 축은 그대로 평균이다', () => {
+    // 공칭 축에서 겹치는 것은 장비의 샘플링·제하이지 한 점에 쌓인 구간이
+    // 아니다 — 거기서 마지막만 남기면 잡음이 그대로 남는다.
+    const 공칭 = TENSILE_STANDARD.filter(
+      (one) => one.plugin === 'curve.sort_unique' && one.options.x === 'strain_engineering'
+    )
+    expect(공칭[0].options.duplicate_policy).toBe('mean')
+  })
+})

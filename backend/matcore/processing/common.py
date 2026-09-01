@@ -128,8 +128,20 @@ def sort_unique(frame: Frame, options: dict[str, Any]) -> StepResult:
     label="구간 자르기",
     params=(
         ParamSpec(name="x", label="기준 열", type="str", role="column"),
-        ParamSpec(name="start", label="시작", type="float", help="이 값 미만을 버립니다."),
-        ParamSpec(name="end", label="끝", type="float", help="이 값 초과를 버립니다."),
+        ParamSpec(
+            name="start",
+            label="시작",
+            type="float",
+            unit_from="x",
+            help="이 값 미만을 버립니다.",
+        ),
+        ParamSpec(
+            name="end",
+            label="끝",
+            type="float",
+            unit_from="x",
+            help="이 값 초과를 버립니다.",
+        ),
     ),
     order=40,
     version="1",
@@ -181,8 +193,20 @@ RANGE_SLACK = 1e-6
     params=(
         ParamSpec(name="x", label="기준 열", type="str", role="column"),
         ParamSpec(name="count", label="점 수", type="int", default=200),
-        ParamSpec(name="start", label="시작", type="float", help="비우면 관측 최솟값"),
-        ParamSpec(name="end", label="끝", type="float", help="비우면 관측 최댓값"),
+        ParamSpec(
+            name="start",
+            label="시작",
+            type="float",
+            unit_from="x",
+            help="비우면 관측 최솟값",
+        ),
+        ParamSpec(
+            name="end",
+            label="끝",
+            type="float",
+            unit_from="x",
+            help="비우면 관측 최댓값",
+        ),
     ),
     # **재샘플은 맨 뒤다.** 앞에 두면 탄성계수·항복강도가 전부 보간된 점으로
     # 계산된다 — 잰 점이 아니라 우리가 만들어 낸 점이다.

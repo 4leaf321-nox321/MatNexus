@@ -36,8 +36,8 @@ export function OverviewPanel({
 }) {
   if (loading && !data) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {[0, 1, 2, 3].map((index) => (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {[0, 1, 2, 3, 4].map((index) => (
           <Skeleton key={index} className="h-24" />
         ))}
       </div>
@@ -85,16 +85,25 @@ export function OverviewPanel({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* **계층 순서로 늘어놓는다** — 재료 → 시료 → 시편 → 시험 → 카드.
+          데이터가 실제로 쌓이는 순서이고, 어느 층에서 수가 줄어드는지가 그
+          순서대로 봐야 보인다(재료 94인데 시편이 12면 그 자체가 상태다).
+
+          전에는 「시료 · 시편」 이 한 칸이었다. 자리를 아끼려던 것인데, 둘은
+          다른 것이라 한 칸에 두면 어느 수가 어느 것인지 매번 다시 읽어야 했다. */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Tile label="재료" value={data.material_count} to="/materials">
           <Split items={data.families} />
         </Tile>
 
+        {/* 시료만 보는 화면은 없다 — 재료 상세 안에 산다. 링크를 안 건다. */}
+        <Tile label="시료" value={data.sample_count} />
+
+        <Tile label="시편" value={data.specimen_count} to="/specimens" />
+
         <Tile label="시험" value={data.run_count} to={`/w/${workspaceSlug}/tests`}>
           <Split items={data.test_types} />
         </Tile>
-
-        <Tile label="시료 · 시편" value={`${data.sample_count} · ${data.specimen_count}`} />
 
         <Tile label="물성 카드" value={data.card_total}>
           <div className="mt-1 flex flex-wrap gap-1">

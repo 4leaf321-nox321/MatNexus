@@ -223,6 +223,25 @@ class TestRun(Base):
         UniqueConstraint(
             "specimen_id", "test_type_id", "seq_no", name="uq_test_runs_specimen_type_seq"
         ),
+        # **검색용 trigram 인덱스.** `ILIKE '%낱말%'` 은 B-tree 를 못 탄다 — 앞의
+        # 와일드카드 때문에 어느 접두사부터 볼지 정할 수가 없다. `record_name` 에
+        # 이미 B-tree 가 있지만 그것은 정렬·정확일치용이고 부분일치에는 안 쓰인다.
+        #
+        # 재료 목록이 같은 자리에서 실측으로 걸렸다: 색인 없는 `OR` 가지 하나가
+        # 전 행 훑기를 부르면서 나머지 인덱스까지 무의미해졌다(6개 OR 118ms vs
+        # 4개 OR 4.6ms, 합성 5만 건). 그래서 **찾는 칸에는 전부 건다.**
+        Index(
+            "ix_test_runs_record_name_trgm",
+            "record_name",
+            postgresql_using="gin",
+            postgresql_ops={"record_name": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_test_runs_source_filename_trgm",
+            "source_filename",
+            postgresql_using="gin",
+            postgresql_ops={"source_filename": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

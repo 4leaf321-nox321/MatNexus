@@ -212,6 +212,64 @@ class Test미리보기:
         assert any("게이지 길이" in note for note in body["notes"])
         assert all(stage["version"] for stage in body["stages"])
 
+    def test_중간_단계의_곡선을_그린다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**프레임은 표 하나라 모든 열이 x 축을 공유한다.**
+
+        뒤 단계가 축을 바꾸면 변위·하중도 그 격자로 다시 찍히고, 앞부분이
+        사라진 것처럼 보인다. 어느 단계에서 모양이 바뀌었는지는 그 단계를
+        그려 봐야 안다 — 전에는 뒤 단계를 지우고 다시 돌리는 수밖에 없었다.
+        """
+        # **마지막에 행 수를 못 박는 단계를 둔다.** 그래야 「중간을 그렸다」 를
+        # 수 하나로 가를 수 있다 — 대충 견주면 사보타주가 안 물린다.
+        steps = [
+            *STEPS,
+            {
+                "plugin": "curve.resample",
+                "options": {"x": "strain_engineering", "count": 50},
+            },
+        ]
+        body = {"test_run_id": run_id, "steps": steps}
+        축 = "x=strain_engineering&y=stress_engineering"
+
+        마지막 = client.post(
+            f"/api/processing/preview?{축}", json=body, headers=admin_headers
+        ).json()
+        assert 마지막["stage_index"] is None
+        assert 마지막["row_count"] == 50
+
+        중간 = client.post(
+            f"/api/processing/preview?{축}&stage=0", json=body, headers=admin_headers
+        )
+        assert 중간.status_code == 200, 중간.text
+        나온것 = 중간.json()
+
+        # **어느 단계를 그렸는지 되돌려 준다.** 화면이 요청한 값을 그대로 믿으면,
+        # 서버가 다른 것을 그렸을 때 그림이 거짓말을 한다.
+        assert 나온것["stage_index"] == 0
+        assert 나온것["points"], "차트가 그릴 점이 없습니다"
+        # 재샘플 전이므로 50점일 수 없다. 여기가 이 기능의 전부다.
+        assert 나온것["row_count"] != 50
+        assert 나온것["row_count"] == 나온것["source_row_count"]
+
+        # **단계 목록·근거·요약값은 늘 전체다.** 한 번 돈 일 전체를 말하는
+        # 것이라 고른 단계에 따라 달라지면 안 된다.
+        assert len(나온것["stages"]) == len(마지막["stages"]) == len(steps)
+        assert 나온것["scalars"] == 마지막["scalars"]
+
+    def test_없는_단계를_고르면_말해_준다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """조용히 마지막을 그리면 「3단계를 본다」 고 적힌 채 다른 그림이 뜬다."""
+        response = client.post(
+            "/api/processing/preview?stage=99",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
+        assert str(len(STEPS)) in response.json()["error"]["message"]
+
     def test_실패는_422_이고_어느_단계인지_말한다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:

@@ -34,6 +34,7 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -97,6 +98,27 @@ class GuideSection(Base):
     __tablename__ = "guide_sections"
     __table_args__ = (
         UniqueConstraint("document_id", "key", name="uq_guide_sections_doc_key"),
+        # **검색용 trigram 인덱스 — 여기 적어 두는 것이 요점이다.**
+        #
+        # 이 둘은 `b3e8f1a2c9d4` 가 raw SQL 로 만들었고 모델에는 없었다. 그래서
+        # 모델이 그 존재를 모르고, autogenerate 가 **지우는 마이그레이션을
+        # 만든다** — 2026-09-01 에 다른 인덱스를 추가하다가 실제로 그랬다.
+        # 그대로 올렸으면 가이드 검색이 조용히 전 행 훑기가 됐을 것이다.
+        #
+        # `all_models.py` 에 import 를 빠뜨렸을 때와 같은 계열의 함정이다:
+        # **모델이 모르는 것은 autogenerate 가 지우려 든다.**
+        Index(
+            "ix_guide_sections_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_guide_sections_body_text_trgm",
+            "body_text",
+            postgresql_using="gin",
+            postgresql_ops={"body_text": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

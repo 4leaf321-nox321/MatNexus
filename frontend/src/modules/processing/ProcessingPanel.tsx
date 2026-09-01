@@ -85,6 +85,7 @@ import {
 import type { Blocker, Carried, CarryKind, StepIO } from '@/modules/processing/flow'
 import { testsApi } from '@/modules/tests/api'
 import {
+  DIMENSION_LABELS,
   axisLabel,
   display,
   formatScalar,
@@ -284,6 +285,30 @@ export function ProcessingPanel({
     setSaved(null)
   }, [testTypeKey, curveKey, available.length, byId])
 
+  /**
+   * 그림이 **어느 단계의 것인가.** `null` 이면 마지막.
+   *
+   * 프레임은 표 하나라 모든 열이 x 축을 공유한다. 마지막 단계가 축을
+   * 진소성변형률로 바꾸면 변위·하중도 그 격자로 다시 찍히고, 탄성 구간이
+   * x=0 한 점으로 접히면서 **원본의 앞부분이 사라진 것처럼 보인다.** 전에는
+   * 그것을 확인하려면 뒤 단계를 지우고 다시 돌리는 수밖에 없었다.
+   */
+  const [stageShown, setStageShown] = useState<number | null>(null)
+
+  /** 그림만 다시 받는다. 단계 구성은 그대로다. */
+  async function draw(next: { x: string; y: string }, stage: number | null) {
+    try {
+      setResult(await processingApi.preview(
+        { test_run_id: testRunId, source_curve_key: curveKey, steps },
+        next,
+        stage
+      ))
+    } catch {
+      // 그림을 못 바꿔도 **지금 보고 있는 것을 지우지 않는다** — 축을 잘못
+      // 고른 순간 화면이 비면 되돌릴 자리도 사라진다.
+    }
+  }
+
   async function run(): Promise<ProcessingPreview | null> {
     // 누른 순간부터 부족한 곳을 붉게 짚는다.
     setAttempted(true)
@@ -293,6 +318,9 @@ export function ProcessingPanel({
     setSaved(null)
     setNotice(null)
     try {
+      // **다시 돌리면 마지막으로 되돌린다.** 단계를 더하거나 지운 뒤라
+      // 3번이 아까 그 3번이 아니다.
+      setStageShown(null)
       const preview = await processingApi.preview(
         { test_run_id: testRunId, source_curve_key: curveKey, steps },
         axes
@@ -934,6 +962,7 @@ export function ProcessingPanel({
                           columnInfo={columnInfo}
                           inputs={inputs}
                           catalog={byId}
+                          options={step.options}
                           /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
                              '직접 입력' 이 살아 있으면, 거기 넣은 숫자가 무시된다는
                              것을 알 방법이 없다 — 값을 넣었는데 아무 일도 안
@@ -1029,13 +1058,7 @@ export function ProcessingPanel({
                       onValueChange={(value) => {
                         const next = { ...axes, [axis]: value }
                         setAxes(next)
-                        void processingApi
-                          .preview(
-                            { test_run_id: testRunId, source_curve_key: curveKey, steps },
-                            next
-                          )
-                          .then(setResult)
-                          .catch(() => undefined)
+                        void draw(next, stageShown)
                       }}
                     >
                       <SelectTrigger className="h-8 w-48" aria-label={`${axis}축`}>
@@ -1054,11 +1077,51 @@ export function ProcessingPanel({
                     </Select>
                   </div>
                 ))}
+                {/* **어느 단계의 곡선인가.** 마지막만 보면 「왜 앞이
+                    끊겼나」 를 알 수 없다 — 어느 단계에서 모양이 바뀌었는지는
+                    그 단계를 그려 봐야 안다. */}
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground text-xs">단계</span>
+                  <Select
+                    value={stageShown === null ? 'final' : String(stageShown)}
+                    onValueChange={(value) => {
+                      const next = value === 'final' ? null : Number(value)
+                      setStageShown(next)
+                      void draw(axes, next)
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-56" aria-label="그릴 단계">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="final">마지막 (전부 지난 뒤)</SelectItem>
+                      {result.stages.map((one) => (
+                        <SelectItem key={one.index} value={String(one.index)}>
+                          {one.index + 1}. {one.label} 뒤 · {one.row_count.toLocaleString('ko-KR')}행
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <span className="text-muted-foreground ml-auto text-xs">
                   {result.source_row_count.toLocaleString('ko-KR')}행 →{' '}
                   {result.row_count.toLocaleString('ko-KR')}행
                 </span>
               </div>
+
+              {/* **중간을 보고 있다는 것을 말한다.** 안 적으면 그 그림을
+                  최종 결과로 읽고, 「값이 왜 다르지」 로 이어진다. 서버가
+                  되돌려 준 값을 쓴다 — 화면이 요청한 값을 믿으면 서버가
+                  마지막으로 되돌렸을 때 그림이 거짓말을 한다. */}
+              {result.stage_index !== null && result.stage_index !== undefined && (
+                <p className="mb-2 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-900 dark:bg-sky-950 dark:text-sky-200">
+                  <b>
+                    {result.stage_index + 1}. {result.stages[result.stage_index]?.label}
+                  </b>{' '}
+                  까지만 돌린 곡선입니다 — 아래 요약값은 <b>전체를 돌린 것</b>입니다.
+                </p>
+              )}
 
               {/* **원본 탭과 같은 단위로 그린다.** 여기만 SI 그대로였다 —
                   같은 곡선이 '원본' 에서는 MPa, '처리' 에서는 Pa 로 보였다.
@@ -1276,11 +1339,14 @@ function ParamField({
   columnInfo,
   inputs,
   catalog,
+  options,
   disabled = false,
   onChange,
 }: {
   param: StepParam
   value: unknown
+  /** 이 단계의 옵션 전체. `unit_from` 이 가리키는 칸의 값을 여기서 읽는다. */
+  options: Record<string, unknown>
   columns: string[]
   /** 등록된 단계들. **가리키는 값의 이름이 여기 있다**(`makes_values`). */
   catalog: Map<string, ProcessingStep>
@@ -1307,6 +1373,40 @@ function ParamField({
    */
   const shown = display(param.unit, param.dimension)
   const numeric = param.type === 'float' || param.type === 'int'
+  /**
+   * 칸 이름 옆에 붙일 **단위 또는 물리량 이름.**
+   *
+   * 「시작 / 끝」 두 칸만 놓고는 무엇을 넣는 칸인지 알 수 없다(실사용
+   * 2026-09-01). 수를 받는 칸에 단위가 없는 것은 빈 칸보다 나쁘다 — 사람이
+   * 짐작해서 채우고, 짐작이 틀려도 계산은 그냥 돈다.
+   *
+   * 세 갈래로 푼다.
+   *
+   *   1. 단위가 있으면 그것       `(mm)` · `(Pa)`
+   *   2. 열이 정하는 칸이면 그 열  `curve.crop` 의 시작·끝 — 기준 열이 변형률이면
+   *                              무차원이고 온도면 K 다(`unit_from`)
+   *   3. 무차원이지만 차원이 있으면 이름   `(변형률)` — 단위가 `1` 이라 1번이
+   *                              아무것도 못 내는 자리다
+   *
+   * **화면이 이름을 짓지 않는다.** 셋 다 서버 선언(`ParamSpec`)과 표
+   * (`shared/units`)에서 온다.
+   */
+  const badge = (() => {
+    if (shown.unit) return shown.unit
+    if (param.unit_from) {
+      const column = options[param.unit_from]
+      const info = column ? columnInfo.get(String(column)) : undefined
+      if (info) {
+        const byColumn = display(info.si_unit, null)
+        if (byColumn.unit) return byColumn.unit
+        // 열도 무차원이면 열 이름을 적는다 — 「시작 (공칭 변형률)」.
+        return info.label
+      }
+      return undefined
+    }
+    // 무차원이라 단위가 빈 자리. 차원 이름이 그 뜻을 말한다.
+    return param.dimension ? (DIMENSION_LABELS[param.dimension] ?? param.dimension) : undefined
+  })()
   /** 잠금은 **세 갈래 모두**에 붙는다. 숫자 칸에만 붙이면, 조건이 걸린 칸이
    *  나중에 choice 로 바뀌었을 때 조용히 안 잠긴다. */
   const rowClass = `grid grid-cols-[9rem_1fr] gap-2 ${
@@ -1413,7 +1513,7 @@ function ParamField({
     <div className={`${rowClass} items-start`} aria-disabled={disabled || undefined}>
       <Label className="pt-1.5 text-xs">
         {param.label}
-        {shown.unit && <span className="text-muted-foreground ml-1">({shown.unit})</span>}
+        {badge && <span className="text-muted-foreground ml-1">({badge})</span>}
       </Label>
       <div className="space-y-1">
         {referenced ? (

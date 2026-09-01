@@ -170,13 +170,28 @@ export const processingApi = {
   steps: (testType?: string) =>
     api.get<ProcessingStep[]>(`/processing/steps${search({ test_type: testType })}`),
 
-  /** 저장하지 않고 돌려 본다. */
+  /**
+   * 저장하지 않고 돌려 본다.
+   *
+   * `stage` 를 주면 **그 단계가 끝난 시점의 곡선**을 그린다(0부터). 프레임은
+   * 표 하나라 모든 열이 x 축을 공유하므로, 마지막 단계가 축을 진소성변형률로
+   * 바꾸면 변위·하중도 그 격자로 다시 찍힌다 — 그래서 앞부분이 사라진 것처럼
+   * 보인다. 어느 단계에서 모양이 바뀌었는지는 그 단계를 그려 봐야 안다.
+   *
+   * **단계마다 미리 보내지 않는다.** 11단계 × 600점이면 점만 6,600쌍이고,
+   * 대개는 마지막 하나만 본다. 고른 것만 다시 묻는다.
+   */
   preview: (
     body: { test_run_id: string; source_curve_key?: string | null; steps: RecipeStep[] },
-    axes?: { x?: string; y?: string }
+    axes?: { x?: string; y?: string },
+    stage?: number | null
   ) =>
     api.post<ProcessingPreview>(
-      `/processing/preview${search({ x: axes?.x, y: axes?.y })}`,
+      `/processing/preview${search({
+        x: axes?.x,
+        y: axes?.y,
+        stage: stage === null || stage === undefined ? undefined : String(stage),
+      })}`,
       body
     ),
 

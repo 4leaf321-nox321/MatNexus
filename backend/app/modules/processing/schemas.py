@@ -28,6 +28,12 @@ class StepParamOut(BaseModel):
     unit: str | None = None
     dimension: str | None = None
     """단위만으로 못 가르는 것을 가른다 — 변형률은 %, tan δ 는 그대로."""
+    unit_from: str | None = None
+    """이 칸의 단위를 **어느 칸이 가리키는 열이 정하는가.**
+
+    `curve.crop` 의 시작·끝이 그렇다 — 기준 열이 변형률이면 무차원이고 온도면
+    K 다. 화면이 그 열의 선언을 보고 단위를 붙인다. 없으면 아무것도 안 붙고,
+    그때 「시작 / 끝」 두 칸만으로는 무엇을 넣는지 알 수 없다(실사용 2026-09-01)."""
     help: str | None = None
     required: bool = False
     """비면 계산이 실패하는 칸. 화면이 **켠 단계 중 덜 채운 것**을 붉게 짚는다.
@@ -142,6 +148,12 @@ class ProcessingPreviewOut(BaseModel):
     scalars: list[ProcessingScalarOut]
     notes: list[str]
     points: list[tuple[float, float]]
+    stage_index: int | None = None
+    """`points`·`columns`·`units` 가 **어느 단계의 것인가.** `None` 이면 마지막.
+
+    **되돌려 주는 이유가 있다.** 화면이 요청한 값을 그대로 믿으면, 서버가 범위를
+    벗어난 요청을 마지막으로 되돌렸을 때 「3단계를 보는 중」 이라고 적힌 채
+    마지막 그림이 뜬다 — 그림이 거짓말을 한다."""
 
 
 class ProcessingResultOut(BaseModel):

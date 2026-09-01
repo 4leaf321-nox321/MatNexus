@@ -54,7 +54,20 @@ describe('홈 요약', () => {
     panel()
     expect(screen.getByText('94')).toBeInTheDocument()
     expect(screen.getByText('122')).toBeInTheDocument()
-    expect(screen.getByText('91 · 127')).toBeInTheDocument()
+    // **시료와 시편을 따로 센다.** 한 칸에 `91 · 127` 로 붙여 두었더니 어느
+    // 수가 어느 것인지 매번 다시 읽어야 했다.
+    expect(screen.getByText('91')).toBeInTheDocument()
+    expect(screen.getByText('127')).toBeInTheDocument()
+  })
+
+  it('계층 순서로 늘어놓는다', () => {
+    // 재료 → 시료 → 시편 → 시험 → 카드. 데이터가 쌓이는 순서라, 어느 층에서
+    // 수가 줄어드는지가 그 순서대로 봐야 보인다.
+    panel()
+    const labels = screen
+      .getAllByText(/^(재료|시료|시편|시험|물성 카드)$/)
+      .map((node) => node.textContent)
+    expect(labels).toEqual(['재료', '시료', '시편', '시험', '물성 카드'])
   })
 
   it('초안과 확정을 가른다', () => {
