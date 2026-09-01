@@ -362,10 +362,15 @@ export default function TestRunsPage() {
               만들어집니다. 종류별로 나눠 거세요.
             </span>
           )}
+          {/* **담아 두면 화면을 오가지 않아도 된다**(ADR 0024). 여기서 고른 것을
+              워크벤치가 이어받는다.
+
+              **처리 단추 무리에서 꺼내 왼쪽에 세운다.** 「레시피 적용」·「삭제」 옆에
+              끼워 두면 그 줄에 묻혀 못 찾는다 — 담는 것은 되돌릴 일이 없는 다른
+              성격의 일이고, 고른 수 바로 옆이 눈이 먼저 가는 자리다. */}
+          <AddToBasket kind="test_run" ids={[...picked]} workspaceSlug={slug} />
+
           <div className="ml-auto flex items-center gap-2">
-            {/* **담아 두면 화면을 오가지 않아도 된다**(ADR 0024). 여기서 고른 것을
-                워크벤치가 이어받는다 — 담는 것은 처리·삭제와 달리 되돌릴 일이 없다. */}
-            <AddToBasket kind="test_run" ids={[...picked]} workspaceSlug={slug} />
             <Button size="sm" variant="ghost" onClick={() => selection.clear()}>
               선택 해제
             </Button>
