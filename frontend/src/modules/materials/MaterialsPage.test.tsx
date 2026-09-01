@@ -30,8 +30,13 @@ vi.mock('@/modules/materials/api', async (importOriginal) => ({
   },
 }))
 
+const VIEWER = { user: { is_system_admin: true, memberships: [] } }
+
+// 목록에 「담기」 패널이 얹혀 있고 그것이 부서를 묻는다(`useMaybeAuth`) —
+// 곁들이 위젯이라 제공자가 없어도 서지만, 모듈을 통째로 대신할 때는 같이 준다.
 vi.mock('@/shared/auth/AuthContext', () => ({
-  useAuth: () => ({ user: { is_system_admin: true, memberships: [] } }),
+  useAuth: () => VIEWER,
+  useMaybeAuth: () => VIEWER,
 }))
 
 function material(id: string, name: string) {

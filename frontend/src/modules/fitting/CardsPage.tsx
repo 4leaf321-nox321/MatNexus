@@ -150,7 +150,12 @@ export default function CardsPage() {
       {/* **담기와 내보내기는 다른 일이다.** 담는 것은 나중에 이어서 하려는 것이고,
           내보내기는 지금 받는 것이다. 담기는 떠 있는 패널로 화면 위에 뜨고(아래 띠와
           자리를 다투지 않는다), 내보내기 띠는 목록 끝에 그대로 붙는다. */}
-      <AddToBasket kind="card" ids={[...picked]} onError={setError} />
+      <AddToBasket
+        kind="card"
+        ids={[...picked]}
+        labels={rows.filter((one) => picked.has(one.id)).map((one) => one.label)}
+        onError={setError}
+      />
 
       <BundleBar
         ids={[...picked]}

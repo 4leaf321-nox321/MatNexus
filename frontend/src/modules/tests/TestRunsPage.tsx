@@ -368,7 +368,12 @@ export default function TestRunsPage() {
               **이 줄에 그려지지 않는다** — 떠 있는 패널로 화면 위에 뜬다. 이 줄에
               단추로 세워 봤더니(v1.174~1.178) 색을 채우고 자리를 옮겨도 못 찾았다:
               처리 단추가 넷 늘어선 줄에서 다섯째 단추는 눈에 안 들어온다. */}
-          <AddToBasket kind="test_run" ids={[...picked]} workspaceSlug={slug} />
+          <AddToBasket
+            kind="test_run"
+            ids={[...picked]}
+            labels={rows.filter((one) => picked.has(one.id)).map((one) => one.record_name)}
+            workspaceSlug={slug}
+          />
 
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm" variant="ghost" onClick={() => selection.clear()}>

@@ -15,6 +15,12 @@
  * **끌어서 옮길 수 있다.** 떠 있는 것은 무언가를 가린다 — 하필 지금 보려는 줄을 가리면
  * 그때부터는 방해물이다. 옮긴 자리는 이 브라우저가 기억한다.
  *
+ * ## 무엇을 담는지도 적는다
+ *
+ * 수만 적으면(「3건 담기」) 고른 것이 맞는지 확인하려고 목록으로 눈을 되돌려야 한다 —
+ * 그 사이에 스크롤이 어긋나 있으면 확인이 안 된다. 고른 것의 이름을 패널이 들고 있는다.
+ * 길면 앞의 몇만 적고 나머지는 수로 접는다.
+ *
  * ## 어디에 담기는지 늘 적는다
  *
  * 「지금 작업」 은 이 브라우저가 기억하지만(`shared/api/basket`), 그 이름을 패널에
@@ -95,12 +101,15 @@ function firstSpot(): Spot {
 export function AddToBasket({
   kind,
   ids,
+  labels,
   onError,
   workspaceSlug,
 }: {
   kind: ItemKind
   /** 담을 것. 비어 있으면 패널이 안 뜬다. */
   ids: string[]
+  /** 고른 것의 이름. `ids` 와 같은 차례. 안 주면 수만 적는다. */
+  labels?: string[]
   onError?: (error: Error) => void
   /**
    * 워크벤치로 보내는 링크에 쓴다. **안 주면 내 부서로 정한다** — 부서 스코프가
@@ -213,6 +222,18 @@ export function AddToBasket({
       </div>
 
       <div className="space-y-2 p-3">
+        {/* **무엇을 담는지 보여 준다.** 수만 적으면 고른 것이 맞는지 확인하려고
+            목록으로 눈을 되돌려야 한다. */}
+        {labels && labels.length > 0 && (
+          <ul className="text-muted-foreground max-h-24 space-y-0.5 overflow-y-auto text-xs">
+            {labels.slice(0, 5).map((label, at) => (
+              <li key={`${label}-${at}`} className="truncate">
+                {label}
+              </li>
+            ))}
+            {labels.length > 5 && <li>외 {labels.length - 5}건</li>}
+          </ul>
+        )}
         {/* **작업이 없으면 만들라고 말한다.** 꺼진 단추만 두면 고장으로 읽힌다. */}
         {runs !== null && runs.length === 0 ? (
           <p className="text-muted-foreground text-xs">

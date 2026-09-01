@@ -48,10 +48,10 @@ const RUN = {
   finished_at: null,
 }
 
-function show(ids = ['c1']) {
+function show(ids = ['c1'], labels?: string[]) {
   render(
     <MemoryRouter>
-      <AddToBasket kind="card" ids={ids} workspaceSlug="metal" />
+      <AddToBasket kind="card" ids={ids} labels={labels} workspaceSlug="metal" />
     </MemoryRouter>
   )
 }
@@ -83,6 +83,23 @@ describe('어디에 담기는지', () => {
     await userEvent.click(await screen.findByText('도어트림 검토'))
     await userEvent.click(screen.getByRole('button', { name: /「도어트림 검토」에 담기/ }))
     await waitFor(() => expect(add).toHaveBeenCalledWith('r2', 'card', ['c1']))
+  })
+})
+
+describe('무엇을 담는지', () => {
+  it('고른 것의 이름을 보여 준다', async () => {
+    // **수만 적으면 고른 것이 맞는지 확인하려고 목록으로 눈을 되돌려야 한다** —
+    // 그 사이 스크롤이 어긋나 있으면 확인이 안 된다.
+    show(['c1', 'c2'], ['EPDM-70 도어씰', 'PP-GF30 트림'])
+    expect(await screen.findByText('EPDM-70 도어씰')).toBeInTheDocument()
+    expect(screen.getByText('PP-GF30 트림')).toBeInTheDocument()
+  })
+
+  it('많으면 앞의 몇만 적고 나머지는 수로 접는다', async () => {
+    const many = Array.from({ length: 9 }, (_, at) => `재료-${at + 1}`)
+    show(many, many)
+    expect(await screen.findByText('외 4건')).toBeInTheDocument()
+    expect(screen.queryByText('재료-9')).toBeNull()
   })
 })
 

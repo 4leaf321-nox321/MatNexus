@@ -27,6 +27,7 @@ import { BulkMaterialDialog } from '@/modules/materials/BulkMaterialDialog'
 import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { AddToBasket } from '@/shared/components/AddToBasket'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import {
   ColumnFilter,
@@ -262,6 +263,15 @@ export default function MaterialsPage() {
           </Button>
         </div>
       )}
+
+      {/* **여기가 「해석에 쓸 물성 갖추기」 의 첫 단계다**(ADR 0024). 적용 제품·파트로
+          좁힌 재료를 담아 두면, 워크벤치가 재료마다 카드가 있는지 세어 준다. */}
+      <AddToBasket
+        kind="material"
+        ids={[...picked]}
+        labels={rows.filter((one) => picked.has(one.id)).map((one) => one.record_name)}
+        onError={setFailure}
+      />
 
       <ConfirmDialog
         open={removing}
