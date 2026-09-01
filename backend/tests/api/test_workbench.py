@@ -168,6 +168,73 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
         assert detail["items"][0]["facts"]["parsed"] == 0
 
+    def test_열이_채널로_잡혔는지_달고_온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """새 장비 파일을 붙일 때 사람이 확인하는 것 — **열이 채널로 잡혔나.**
+
+        정의에 있어도 파일에 없을 수 있다. 열 이름이 하나도 안 맞아도 파일은 읽히고
+        표는 비어 있는데, 그 둘을 같은 말로 안내하면 엉뚱한 화면을 고치게 된다.
+        """
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        ).json()
+        counted = item["facts"]["channels"]
+        assert counted >= 4
+
+        # **장비가 계산한 표는 열 매핑의 증거가 아니다.** 그것까지 세면 매핑이
+        # 하나도 안 됐는데 「채널이 잡혔다」 가 된다.
+        db.add(
+            test_models.Curve(
+                test_run_id=uuid.UUID(dma_run["id"]),
+                key="tts_master",
+                kind="derived",
+                storage_path="x/tts.parquet",
+                row_count=0,
+                sha256="0" * 64,
+                byte_size=0,
+                channels=["장비가_만든_채널"],
+            )
+        )
+        db.commit()
+        detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
+        assert detail["items"][0]["facts"]["channels"] == counted
+
+    def test_카드는_근거의_두께를_달고_온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        material: dict[str, Any],
+    ) -> None:
+        """확정 전에 보는 것 — **표본 수와 경고.** 표본 하나로 만든 카드는 만들
+        수는 있어도 그대로 확정하면 안 된다."""
+        card = PropertyCard(
+            material_id=uuid.UUID(material["id"]),
+            label="인장 TD",
+            status="draft",
+            source={"sample_count": 1, "notes": ["표본이 하나입니다", "구간이 짧습니다"]},
+        )
+        db.add(card)
+        db.commit()
+
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "card", "target_ids": [str(card.id)]},
+            headers=admin_headers,
+        ).json()
+        assert item["facts"]["samples"] == 1
+        assert item["facts"]["notes"] == 2
+        assert item["facts"]["published"] == 0
+
     def test_시험은_어느_재료의_것인지_달고_온다(
         self,
         client: TestClient,

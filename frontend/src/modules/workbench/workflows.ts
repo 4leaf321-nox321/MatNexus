@@ -403,13 +403,43 @@ export const WORKFLOWS: Workflow[] = [
   {
     key: 'new_instrument',
     title: '새 장비 파일 붙이기',
-    when: '새 장비의 출력 파일을 읽게 만듭니다.',
+    when: '새 장비의 출력 파일을 읽게 만들고, 한 벌 올려 확인합니다.',
     cadence: '이따금',
     steps: [
       { key: 'sample', title: '예제 파일', what: '한 벌 올려 구조를 읽습니다.', where: '/settings/formats' },
       { key: 'tables', title: '표 고르기', what: '측정과 처리결과를 가릅니다.', where: '/settings/formats' },
       { key: 'columns', title: '열 매핑', what: '이 열이 무슨 채널인지 정합니다.', where: '/settings/formats' },
-      { key: 'verify', title: '무엇이 열리나 확인', what: '점탄성 탭·처리 단계가 뜨는지 그 자리에서 봅니다.', where: '/settings/formats' },
+      {
+        key: 'verify',
+        title: '한 벌 올려 확인',
+        what: '그 정의로 파일을 올려 읽고, 담아서 열이 채널로 잡혔는지 봅니다.',
+        collects: 'test_run',
+        where: '/tests',
+        whereLabel: '시험 목록으로',
+        judge: (items) => {
+          const runs = live(items, 'test_run')
+          if (runs.length === 0) return null
+          // **읽혔다고 매핑이 된 것은 아니다.** 열 이름이 하나도 안 맞아도 파일은
+          // 읽히고, 표는 비어 있다 — 그 차이를 여기서 본다.
+          const blank = pendingOf(runs, (one) => fact(one, 'channels') > 0)
+          const unread = pendingOf(runs, (one) => fact(one, 'parsed') > 0)
+          if (unread.length > 0) {
+            return {
+              ok: false,
+              say: `${unread.length}건이 안 읽혔습니다 — 표를 고르는 규칙부터 보세요.`,
+              blocking: unread,
+            }
+          }
+          return {
+            ok: blank.length === 0,
+            say:
+              blank.length === 0
+                ? `채널이 잡혔습니다(${Math.max(...runs.map((one) => fact(one, 'channels')))}개). 이 채널로 열리는 탭과 처리 단계가 정해집니다.`
+                : `${blank.length}건에서 채널이 하나도 안 잡혔습니다 — 열 매핑을 보세요.`,
+            blocking: blank,
+          }
+        },
+      },
     ],
   },
   {
@@ -429,9 +459,26 @@ export const WORKFLOWS: Workflow[] = [
       {
         key: 'read',
         title: '근거 보기',
-        what: '어느 시험·표본 수·경고를 봅니다.',
+        what: '어느 시험에서 나왔는지, 표본이 몇인지, 경고가 붙었는지 봅니다.',
         where: '/cards',
         whereLabel: '카드 목록으로',
+        judge: (items) => {
+          const cards = live(items, 'card')
+          if (cards.length === 0) return null
+          // **표본 하나로 만든 카드는 만들 수는 있어도 그대로 확정하면 안 된다.**
+          // 확정은 「이 값을 해석에 쓴다」 는 선언이라, 근거의 두께가 곧 판단 재료다.
+          const thin = cards.filter((one) => fact(one, 'samples') === 1)
+          const noted = cards.filter((one) => fact(one, 'notes') > 0)
+          const say: string[] = []
+          if (thin.length > 0) say.push(`${thin.length}장은 표본이 하나입니다.`)
+          if (noted.length > 0) say.push(`${noted.length}장에 경고가 붙어 있습니다.`)
+          return {
+            // 읽어 보라는 안내이지 막는 것이 아니다 — 읽었는지는 화면이 알 수 없다.
+            ok: true,
+            say: say.length > 0 ? say.join(' ') : `카드 ${cards.length}장의 근거를 보세요.`,
+            blocking: [...new Set([...thin, ...noted])],
+          }
+        },
       },
       {
         key: 'decide',

@@ -28,7 +28,7 @@ from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestRun
+from app.modules.tests.models import Curve, TestRun
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workbench.models import WorkbenchItem
 from app.modules.workbench.schemas import ItemOut
@@ -115,6 +115,25 @@ def _material_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, uuid.U
     return {run_id: material_id for run_id, material_id in rows}
 
 
+def _channels_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, int]:
+    """파일에서 실제로 잡힌 채널 수. **열 매핑이 됐나** 를 이걸로 본다.
+
+    정의에 있어도 파일에 없을 수 있어서 `Curve.channels` 는 「실제로 들어 있는 것」
+    이다 — 새 장비 파일을 붙일 때 사람이 확인해야 하는 것이 정확히 그 차이다.
+    측정 곡선만 센다(장비가 계산한 표는 열 매핑의 증거가 아니다).
+    """
+    if not runs:
+        return {}
+    found: dict[uuid.UUID, set[str]] = {}
+    for run_id, channels in db.execute(
+        select(Curve.test_run_id, Curve.channels).where(
+            Curve.test_run_id.in_([one.id for one in runs]), Curve.kind == "measured"
+        )
+    ):
+        found.setdefault(run_id, set()).update(channels or [])
+    return {run_id: len(keys) for run_id, keys in found.items()}
+
+
 def _results_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, int]:
     """처리 결과 수. **레시피가 돌았나** 를 이걸로 본다 — 결과는 불변이라 다시
     돌리면 행이 는다(그래서 「몇 번 돌았나」 가 아니라 「돌았나」 로 읽는다)."""
@@ -149,6 +168,7 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     owners = _material_by_run(db, live)
     made = _cards_by_run(db, live, owners)
     processed = _results_by_run(db, live)
+    channels = _channels_by_run(db, live)
     return {
         row.id: Resolved(
             label=row.record_name,
@@ -165,6 +185,8 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
                 # 오늘 들어온 것을 미는 데 필요한 둘 — 읽혔나, 처리됐나.
                 "parsed": 1 if row.status == "parsed" else 0,
                 "results": processed.get(row.id, 0),
+                # 새 장비 파일을 붙일 때 보는 것 — 열이 채널로 잡혔나.
+                "channels": channels.get(row.id, 0),
                 # 1이면 겹칠 것이 없다(변형률 스윕). 0 은 「안 세어 봤다」 가 아니라
                 # 여기서는 「모른다」 를 뜻하므로 `-1` 로 구분한다.
                 "temperature_steps": (
@@ -243,7 +265,13 @@ def _cards(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
             label=row.label,
             detail=f"{name} · {row.status}",
             # 확정 여부는 「내보내도 되나」 를 가르는 사실이라 숫자로도 준다.
-            facts={"published": 1 if row.status == "published" else 0},
+            facts={
+                "published": 1 if row.status == "published" else 0,
+                # 확정 전에 보는 것 — **근거가 얼마나 두꺼운가.** 표본 하나로 만든
+                # 카드는 만들 수는 있어도 그대로 확정하면 안 된다.
+                "samples": int(row.source.get("sample_count") or 0),
+                "notes": len(row.source.get("notes") or []),
+            },
             material_id=row.material_id,
         )
     return found

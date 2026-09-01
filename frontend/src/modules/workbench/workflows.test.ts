@@ -242,6 +242,66 @@ describe('오늘 들어온 것 — 앞 단계가 말한 것을 두 번 말하지
   })
 })
 
+describe('새 장비 파일 — 읽혔다고 매핑이 된 것은 아니다', () => {
+  it('안 읽혔으면 표 규칙부터 보라고 한다', () => {
+    const check = judge('new_instrument', 'verify', [
+      item({ label: '시험-1', facts: { parsed: 0, channels: 0 } }),
+    ])
+    expect(check).toMatchObject({ ok: false })
+    expect(check!.say).toContain('표를 고르는 규칙')
+  })
+
+  it('읽혔는데 채널이 0이면 열 매핑을 보라고 한다', () => {
+    // **열 이름이 하나도 안 맞아도 파일은 읽힌다** — 그러고 표가 비어 있다.
+    // 이 둘을 같은 말로 안내하면 사람이 엉뚱한 화면을 고친다.
+    const check = judge('new_instrument', 'verify', [
+      item({ label: '시험-1', facts: { parsed: 1, channels: 0 } }),
+    ])
+    expect(check).toMatchObject({ ok: false })
+    expect(check!.say).toContain('열 매핑')
+    expect(names(check)).toEqual(['시험-1'])
+  })
+
+  it('채널이 잡혔으면 몇 개인지 적는다', () => {
+    const check = judge('new_instrument', 'verify', [
+      item({ label: '시험-1', facts: { parsed: 1, channels: 8 } }),
+    ])
+    expect(check).toMatchObject({ ok: true })
+    expect(check!.say).toContain('8개')
+  })
+})
+
+describe('확정 전 근거 훑기 — 근거의 두께', () => {
+  const card = (label: string, facts: Record<string, number>) =>
+    item({ kind: 'card', label, facts })
+
+  it('표본이 하나인 카드를 짚어 준다', () => {
+    // **표본 하나로 만든 카드는 만들 수는 있어도 그대로 확정하면 안 된다.**
+    const check = judge('review_cards', 'read', [
+      card('인장 MD', { samples: 5 }),
+      card('인장 TD', { samples: 1 }),
+    ])
+    expect(check!.say).toContain('표본이 하나')
+    expect(names(check)).toEqual(['인장 TD'])
+  })
+
+  it('경고가 붙은 카드도 짚어 준다', () => {
+    const check = judge('review_cards', 'read', [card('점탄성', { samples: 4, notes: 2 })])
+    expect(check!.say).toContain('경고')
+    expect(names(check)).toEqual(['점탄성'])
+  })
+
+  it('둘 다인 카드를 두 번 세지 않는다', () => {
+    const check = judge('review_cards', 'read', [card('점탄성', { samples: 1, notes: 1 })])
+    expect(names(check)).toEqual(['점탄성'])
+  })
+
+  it('막지는 않는다 — 읽었는지는 화면이 알 수 없다', () => {
+    const check = judge('review_cards', 'read', [card('인장 TD', { samples: 1 })])
+    expect(check!.ok).toBe(true)
+  })
+})
+
 describe('다른 시나리오도 같은 사실로 본다', () => {
 
   it('초안이 섞인 묶음은 말해 주되 막지 않는다', () => {
