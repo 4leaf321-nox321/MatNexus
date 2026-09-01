@@ -5,6 +5,7 @@
  *
  *   무엇을 할지 먼저 고른다      워크플로 목록이 곧 「무엇을 할 수 있나」 다
  *   남은 일을 이름으로 말한다     세기만 하면 어느 것인지 찾으러 다녀야 한다
+ *   할 자리로 데려간다           「그 목록 화면에 있습니다」 만 적으면 사람이 찾아야 한다
  *   이어서 하기가 먼저 보인다     어제 것이 아래에 묻히면 서버에 둔 뜻이 없다
  *   사라진 것도 줄을 지킨다       조용히 빠지면 「여덟이 왜 일곱이지」 가 된다
  *   모르는 워크플로는 밀지 않는다  반쯤 읽어 이어서 미는 것이 더 나쁘다
@@ -128,6 +129,7 @@ function run말고(over: Record<string, unknown>) {
     label,
     detail: 'parsed',
     facts: { master_curves: curves, temperature_steps: 5 },
+    material_id: 'm1',
     missing: false,
     note: null,
     added_at: '2026-09-01T00:00:00Z',
@@ -194,6 +196,53 @@ describe('남은 일을 말한다', () => {
     // 여기가 못 보는 경우가 늘 있다.
     await openAt(run말고({ steps: { at: 'master', done: ['pick'] } }))
     expect(screen.getByRole('button', { name: /다음: 글로벌 피팅/ })).toBeEnabled()
+  })
+})
+
+describe('할 자리로 데려간다', () => {
+  const openAt = async (detail: Record<string, unknown>) => {
+    run.mockResolvedValue(detail)
+    runs.mockResolvedValue([detail])
+    show()
+    await userEvent.click(await screen.findByText('EPDM 도어씰 2026-09'))
+    await screen.findByLabelText('단계')
+  }
+
+  it('담는 단계는 그 목록으로 가는 링크를 준다', async () => {
+    // **「담는 단추는 그 목록 화면에 있습니다」 만 적으면 그 화면을 사람이 찾아야
+    // 한다.** 그러면 안 담는다 — 실제로 그렇게 걸렸다.
+    await openAt(run말고({ steps: { at: 'pick', done: [] }, items: [], item_count: 0 }))
+    expect(screen.getByRole('link', { name: '시험 목록' })).toHaveAttribute('href', '/tests')
+    // 조사도 표에서 읽은 낱말에 맞춘다 — 「시험 를 담습니다」 가 나오면 안 된다.
+    expect(screen.getAllByText(/시험을/).length).toBeGreaterThan(0)
+  })
+
+  it('남은 시험을 누르면 그 시험으로 간다', async () => {
+    await openAt(run말고({ steps: { at: 'master', done: ['pick'] } }))
+    const status = within(await screen.findByLabelText('이 단계 상태'))
+    expect(status.getByRole('link', { name: '시편 B' })).toHaveAttribute(
+      'href',
+      '/test-runs/시편 B'
+    )
+  })
+
+  it('글로벌 피팅은 그 시험의 재료로 데려간다', async () => {
+    // 피팅은 재료 화면에 있는데(ADR 0020) 바구니에는 시험이 담긴다 — 서버가 준
+    // `material_id` 가 없으면 사람이 재료를 이름으로 찾아 들어가야 한다.
+    await openAt(run말고({ steps: { at: 'fit', done: ['pick', 'master'] } }))
+    expect(await screen.findByRole('link', { name: /이 시험의 재료로/ })).toHaveAttribute(
+      'href',
+      '/materials/m1'
+    )
+  })
+
+  it('바구니의 줄에서 그 대상으로 간다', async () => {
+    await openAt(run말고({ steps: { at: 'pick', done: [] } }))
+    const basket = within(screen.getByLabelText('바구니'))
+    expect(basket.getByRole('link', { name: '시편 A' })).toHaveAttribute(
+      'href',
+      '/test-runs/시편 A'
+    )
   })
 })
 

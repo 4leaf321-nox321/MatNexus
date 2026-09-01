@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { workflowOf } from '@/modules/workbench/workflows'
+import type { StepCheck } from '@/modules/workbench/workflows'
 import type { BasketItem } from '@/shared/api/basket'
 
 function item(over: Partial<BasketItem> & { facts?: Record<string, number> }): BasketItem {
@@ -27,6 +28,11 @@ function item(over: Partial<BasketItem> & { facts?: Record<string, number> }): B
     added_at: '2026-09-01T00:00:00Z',
     ...over,
   } as BasketItem
+}
+
+/** 남은 것들의 이름. **줄 자체를 돌려주므로** 화면이 링크를 걸 수 있다. */
+function names(check: StepCheck | null): string[] {
+  return (check?.blocking ?? []).map((one) => one.label)
 }
 
 function judge(flowKey: string, stepKey: string, items: BasketItem[]) {
@@ -47,13 +53,13 @@ describe('점탄성 — 마스터커브 갖추기', () => {
     ])
     expect(check).toMatchObject({ ok: false })
     expect(check!.say).toContain('2건')
-    expect(check!.blocking).toEqual(['시편 B', '시편 C'])
+    expect(names(check)).toEqual(['시편 B', '시편 C'])
   })
 
   it('다 갖췄으면 됐다고 한다', () => {
     const check = judge('viscoelastic_set', 'master', [swept('시편 A', 1), swept('시편 B', 2)])
     expect(check).toMatchObject({ ok: true })
-    expect(check!.blocking).toEqual([])
+    expect(names(check)).toEqual([])
   })
 
   it('온도가 한 단인 것은 남은 일로 세지 않는다', () => {
@@ -62,7 +68,7 @@ describe('점탄성 — 마스터커브 갖추기', () => {
       swept('시편 A', 1),
       item({ label: '변형률 스윕', facts: { master_curves: 0, temperature_steps: 1 } }),
     ])
-    expect(check!.blocking).toEqual([])
+    expect(names(check)).toEqual([])
     expect(check!.say).toContain('겹칠 수 없습니다')
     // **여기서 더 할 수 있는 일이 없으므로 이 단계는 끝난 것이다.** 말은 해 주되
     // 「아직 남았다」 로 세우면 영원히 안 끝나는 단계가 된다.
@@ -76,7 +82,7 @@ describe('점탄성 — 마스터커브 갖추기', () => {
       item({ label: '옛 시험', facts: { master_curves: 0, temperature_steps: -1 } }),
     ])
     expect(check!.say).toContain('안 세어 봤습니다')
-    expect(check!.blocking).toEqual([])
+    expect(names(check)).toEqual([])
   })
 
   it('사라진 줄은 세지 않는다', () => {
@@ -117,7 +123,8 @@ describe('다른 시나리오도 같은 사실로 본다', () => {
       item({ label: '오늘-1', facts: { adopted: 1 } }),
       item({ label: '오늘-2', facts: { adopted: 0 } }),
     ])
-    expect(check).toMatchObject({ ok: false, blocking: ['오늘-2'] })
+    expect(check).toMatchObject({ ok: false })
+    expect(names(check)).toEqual(['오늘-2'])
   })
 
   it('초안이 섞인 묶음은 말해 주되 막지 않는다', () => {
@@ -125,7 +132,8 @@ describe('다른 시나리오도 같은 사실로 본다', () => {
       item({ kind: 'card', label: '인장 MD', facts: { published: 1 } }),
       item({ kind: 'card', label: '점탄성', facts: { published: 0 } }),
     ])
-    expect(check).toMatchObject({ ok: false, blocking: ['점탄성'] })
+    expect(check).toMatchObject({ ok: false })
+    expect(names(check)).toEqual(['점탄성'])
     expect(check!.say).toContain('내보낼 수는 있지만')
   })
 })

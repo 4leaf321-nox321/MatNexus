@@ -27,8 +27,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { basketApi } from '@/shared/api/basket'
-import type { BasketRun, BasketRunDetail } from '@/shared/api/basket'
-import { WORKFLOWS, workflowOf } from '@/modules/workbench/workflows'
+import type { BasketItem, BasketRun, BasketRunDetail } from '@/shared/api/basket'
+import { withJosa } from '@/shared/korean'
+import { COLLECT_AT, WORKFLOWS, workflowOf } from '@/modules/workbench/workflows'
 import type { StepCheck, Workflow } from '@/modules/workbench/workflows'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -36,6 +37,17 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { useResource } from '@/shared/hooks/useResource'
+
+/**
+ * 담긴 것 하나로 가는 자리. `null` 이면 링크를 안 건다 — **사라진 것과 카드**가 그렇다
+ * (카드는 목록 안에서 펼쳐 보므로 그 카드만의 주소가 없다).
+ */
+function hrefOf(item: BasketItem): string | null {
+  if (item.missing) return null
+  if (item.kind === 'test_run') return `/test-runs/${item.target_id}`
+  if (item.kind === 'material') return `/materials/${item.target_id}`
+  return null
+}
 
 const KIND_LABELS: Record<string, string> = {
   test_run: '시험',
@@ -319,15 +331,24 @@ function RunView({
               {step.where && (
                 <Button size="sm" variant="outline" asChild>
                   <Link to={step.where}>
-                    그 화면으로 <ArrowRight className="size-3.5" />
+                    {/* **어디로 가는지 적는다.** 「그 화면으로」 는 누르기 전에는 모른다. */}
+                    {step.whereLabel ?? '그 화면으로'} <ArrowRight className="size-3.5" />
                   </Link>
                 </Button>
               )}
 
+              {/* **담는 자리로 데려간다.** 「담는 단추는 그 목록 화면에 있습니다」 만
+                  적어 두면 그 화면을 사람이 찾아야 한다 — 그러면 안 담는다. */}
               {step.collects && (
                 <p className="text-muted-foreground mt-2 text-xs">
-                  이 단계에서는 <b>{KIND_LABELS[step.collects]}</b> 를 담습니다. 담는 단추는
-                  그 목록 화면에 있습니다.
+                  이 단계에서는 <b>{withJosa(KIND_LABELS[step.collects], '을/를')}</b> 담습니다.{' '}
+                  <Link
+                    to={COLLECT_AT[step.collects]}
+                    className="text-foreground underline underline-offset-2"
+                  >
+                    {KIND_LABELS[step.collects]} 목록
+                  </Link>
+                  에서 고른 뒤 「담기」 를 누르면 여기 모입니다.
                 </p>
               )}
 
@@ -374,14 +395,34 @@ function StepStatus({ check }: { check: StepCheck }) {
         )}
         <span>{check.say}</span>
       </span>
-      {/* **이름을 적는다.** 세기만 하면 어느 것인지 찾으러 다녀야 한다. */}
+      {/* **이름을 적고, 그리로 데려간다.** 세기만 하면 어느 것인지 찾으러 다녀야 한다. */}
       {check.blocking && check.blocking.length > 0 && (
         <span className="mt-2 flex flex-wrap gap-1">
-          {check.blocking.map((label) => (
-            <span key={label} className="bg-muted rounded px-1.5 py-0.5 text-xs">
-              {label}
-            </span>
-          ))}
+          {check.blocking.map((item) => {
+            const href = hrefOf(item)
+            return href ? (
+              <Link
+                key={item.id}
+                to={href}
+                className="bg-muted rounded px-1.5 py-0.5 text-xs underline underline-offset-2"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <span key={item.id} className="bg-muted rounded px-1.5 py-0.5 text-xs">
+                {item.label}
+              </span>
+            )
+          })}
+        </span>
+      )}
+      {check.go && (
+        <span className="mt-2 block">
+          <Button size="sm" variant="outline" asChild>
+            <Link to={check.go.href}>
+              {check.go.label} <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
         </span>
       )}
     </div>
@@ -424,9 +465,16 @@ function Basket({
               </Badge>
               {/* **사라진 것도 줄을 지킨다.** 조용히 빠지면 「여덟이 왜 일곱이지」 가
                   된다(ADR 0025). */}
-              <span className={item.missing ? 'text-muted-foreground italic' : 'font-mono'}>
-                {item.label}
-              </span>
+              {/* 담아 둔 것을 열어 보는 길. 사라진 것은 갈 데가 없다. */}
+              {hrefOf(item) ? (
+                <Link to={hrefOf(item)!} className="font-mono underline underline-offset-2">
+                  {item.label}
+                </Link>
+              ) : (
+                <span className={item.missing ? 'text-muted-foreground italic' : 'font-mono'}>
+                  {item.label}
+                </span>
+              )}
               {item.detail && <span className="text-muted-foreground">{item.detail}</span>}
               <Button
                 size="icon"

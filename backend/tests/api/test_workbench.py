@@ -118,6 +118,31 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         assert item["facts"]["prony_fits"] == 0
         assert item["facts"]["adopted"] == 0
 
+    def test_시험은_어느_재료의_것인지_달고_온다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """글로벌 피팅은 **재료 화면에** 있는데(ADR 0020) 바구니에는 시험이 담긴다.
+        이것이 없으면 사람이 재료를 이름으로 찾아 들어가야 한다.
+
+        **주소가 아니라 id 를 준다** — 화면의 주소 체계를 서버가 알면 라우팅을 고칠
+        때마다 서버도 고쳐야 한다."""
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        ).json()
+        specimen = client.get(
+            f"/api/specimens/{dma_run['specimen_id']}", headers=admin_headers
+        ).json()
+        sample = client.get(
+            f"/api/samples/{specimen['sample_id']}", headers=admin_headers
+        ).json()
+        assert item["material_id"] == sample["material_id"]
+
     def test_안_세어_본_것은_모른다고_한다(
         self,
         client: TestClient,

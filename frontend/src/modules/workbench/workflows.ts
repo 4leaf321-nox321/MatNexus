@@ -20,6 +20,7 @@
  */
 
 import type { BasketItem } from '@/shared/api/basket'
+import { withJosa } from '@/shared/korean'
 import { masterCurveGap } from '@/shared/masterCurveGap'
 
 /** 담을 수 있는 것. 서버의 `ITEM_KINDS` 와 같은 말이다. */
@@ -36,8 +37,20 @@ export interface StepCheck {
   ok: boolean
   /** 한 줄. 「2건이 아직 안 겹쳤습니다」 처럼 남은 일을 세어 말한다. */
   say: string
-  /** 아직인 것들의 이름. 세기만 하면 어느 것인지 찾으러 다녀야 한다. */
-  blocking?: string[]
+  /**
+   * 아직인 것들. **이름만이 아니라 그 줄 자체를 준다** — 화면이 링크를 건다.
+   * 「2건 남음」 만 읽고 목록을 뒤지게 두면 단계를 읽는 값이 없다.
+   */
+  blocking?: BasketItem[]
+  /** 여기서 할 일이 있는 자리. 담긴 것에 따라 달라지는 주소(그 재료·그 시험). */
+  go?: { href: string; label: string }
+}
+
+/** 담는 자리 — **담는 단추가 사는 목록 화면**. 종류마다 하나뿐이다. */
+export const COLLECT_AT: Record<ItemKind, string> = {
+  test_run: '/tests',
+  material: '/materials',
+  card: '/cards',
 }
 
 /** 담긴 것으로 판정한다. `null` 은 「이 단계는 판정하지 않는다」 — 모르면 침묵한다. */
@@ -50,8 +63,10 @@ export interface WorkflowStep {
   what: string
   /** 이 단계가 담는 것. 없으면 담지 않는 단계(고르기만·내보내기만). */
   collects?: ItemKind
-  /** 어디서 하나. 화면 밖에서 해도 되는 일이면 그 자리를 가리킨다. */
+  /** 어디서 하나. **담는 단추도 거기 있다** — 여기서 담지 않는다. */
   where?: string
+  /** 그 자리의 이름. 「그 화면으로」 만 적으면 어디로 가는지 모른 채 누른다. */
+  whereLabel?: string
   /**
    * 이 단계가 끝났나. **담긴 것의 사실(`facts`)로만 본다** — 서버가 세어 준 숫자다
    * (`ItemOut.facts`). 여기서 도메인 API 를 따로 부르면 워크벤치가 남의 도메인을
@@ -92,14 +107,20 @@ function collected(items: BasketItem[], kind: ItemKind, noun: string): StepCheck
     ok: found.length > 0,
     say:
       found.length > 0
-        ? `${noun} ${found.length}건을 담았습니다.`
-        : `아직 담은 ${noun}이 없습니다.`,
+        ? `${withJosa(noun, '을/를')} ${found.length}건 담았습니다.`
+        : `아직 담은 ${withJosa(noun, '이/가')} 없습니다.`,
   }
 }
 
-/** 아직 안 한 것을 이름과 함께. 세기만 하면 어느 것인지 찾으러 다녀야 한다. */
-function pendingOf(rows: BasketItem[], done: (item: BasketItem) => boolean): string[] {
-  return rows.filter((one) => !done(one)).map((one) => one.label)
+/** 아직 안 한 것들. 세기만 하면 어느 것인지 찾으러 다녀야 한다. */
+function pendingOf(rows: BasketItem[], done: (item: BasketItem) => boolean): BasketItem[] {
+  return rows.filter((one) => !done(one))
+}
+
+/** 담긴 것이 딸린 재료. **글로벌 피팅은 재료 화면에 있다**(ADR 0020). */
+function materialHref(items: BasketItem[]): string | null {
+  const owner = items.find((one) => !one.missing && one.material_id)?.material_id
+  return owner ? `/materials/${owner}` : null
 }
 
 export const WORKFLOWS: Workflow[] = [
@@ -117,12 +138,26 @@ export const WORKFLOWS: Workflow[] = [
         where: '/settings/connectors',
         judge: (items) => collected(items, 'test_run', '시험'),
       },
-      { key: 'attach', title: '시편에 붙이기', what: '어느 시편의 것인지 사람이 정합니다(ADR 0021).' },
-      { key: 'process', title: '처리', what: '레시피를 걸어 한 번에 돌립니다.' },
+      {
+        key: 'attach',
+        title: '시편에 붙이기',
+        what: '어느 시편의 것인지 사람이 정합니다(ADR 0021).',
+        where: '/tests',
+        whereLabel: '시험 목록으로',
+      },
+      {
+        key: 'process',
+        title: '처리',
+        what: '레시피를 걸어 한 번에 돌립니다.',
+        where: '/tests',
+        whereLabel: '시험 목록으로',
+      },
       {
         key: 'adopt',
         title: '채택',
         what: '시험마다 값 하나를 고릅니다 — 그것이 재료 통계로 갑니다.',
+        where: '/tests',
+        whereLabel: '시험 목록으로',
         judge: (items) => {
           const runs = live(items, 'test_run')
           if (runs.length === 0) return null
@@ -150,6 +185,8 @@ export const WORKFLOWS: Workflow[] = [
         title: '시험 고르기',
         what: '그 재료의 DMA 시험을 담습니다.',
         collects: 'test_run',
+        where: '/tests',
+        whereLabel: '시험 목록으로',
         judge: (items) => {
           const runs = live(items, 'test_run')
           if (runs.length === 0) return { ok: false, say: '아직 담은 시험이 없습니다.' }
@@ -166,7 +203,9 @@ export const WORKFLOWS: Workflow[] = [
       {
         key: 'master',
         title: '마스터커브 갖추기',
-        what: '겹치거나, 장비가 만든 것을 가져옵니다. 대표를 정합니다.',
+        what: '시험 상세의 「점탄성」 탭에서 겹칩니다. 장비가 만든 것은 가져오면 됩니다.',
+        where: '/tests',
+        whereLabel: '시험 목록으로',
         judge: (items) => {
           const runs = live(items, 'test_run')
           if (runs.length === 0) return null
@@ -181,11 +220,9 @@ export const WORKFLOWS: Workflow[] = [
             })),
             []
           )
-          const left = runs
-            .filter(
-              (one) => fact(one, 'master_curves') === 0 && fact(one, 'temperature_steps') >= 2
-            )
-            .map((one) => one.label)
+          const left = runs.filter(
+            (one) => fact(one, 'master_curves') === 0 && fact(one, 'temperature_steps') >= 2
+          )
           const say: string[] = []
           if (gap.pending > 0) say.push(`${gap.pending}건이 아직 안 겹쳤습니다.`)
           // **할 수 없는 일을 남은 일로 세지 않는다** — 온도 한 단은 겹칠 것이 없다.
@@ -211,12 +248,14 @@ export const WORKFLOWS: Workflow[] = [
           const runs = live(items, 'test_run')
           if (runs.length === 0) return null
           const fitted = runs.filter((one) => fact(one, 'prony_fits') > 0)
+          const href = materialHref(runs)
           return {
             ok: fitted.length > 0,
             say:
               fitted.length > 0
                 ? `${fitted.length}건에 맞춘 계수가 있습니다.`
-                : '아직 맞춘 계수가 없습니다.',
+                : '아직 맞춘 계수가 없습니다. 재료 화면의 「묶음」 에서 한 번에 적합합니다.',
+            go: href ? { href, label: '이 시험의 재료로' } : undefined,
           }
         },
       },
@@ -225,6 +264,8 @@ export const WORKFLOWS: Workflow[] = [
         title: '카드 만들기',
         what: '그 계수로 물성 카드를 만듭니다. 만든 카드를 여기 담아 두면 다음에 찾기 쉽습니다.',
         collects: 'card',
+        where: '/cards',
+        whereLabel: '카드 목록으로',
         judge: (items) => collected(items, 'card', '카드'),
       },
     ],
@@ -240,6 +281,8 @@ export const WORKFLOWS: Workflow[] = [
         title: '무엇에 쓰나',
         what: '적용 제품·파트로 재료를 찾습니다.',
         collects: 'material',
+        where: '/materials',
+        whereLabel: '재료 목록으로',
         judge: (items) => collected(items, 'material', '재료'),
       },
       { key: 'survey', title: '무엇이 있나', what: '재료마다 카드가 있는지, 초안인지 확정인지 봅니다.' },
@@ -299,11 +342,19 @@ export const WORKFLOWS: Workflow[] = [
         where: '/cards',
         judge: (items) => collected(items, 'card', '카드'),
       },
-      { key: 'read', title: '근거 보기', what: '어느 시험·표본 수·경고를 봅니다.' },
+      {
+        key: 'read',
+        title: '근거 보기',
+        what: '어느 시험·표본 수·경고를 봅니다.',
+        where: '/cards',
+        whereLabel: '카드 목록으로',
+      },
       {
         key: 'decide',
         title: '확정 또는 반려',
         what: '부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
+        where: '/cards',
+        whereLabel: '카드 목록으로',
         judge: (items) => {
           const cards = live(items, 'card')
           if (cards.length === 0) return null

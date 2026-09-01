@@ -6518,6 +6518,18 @@
             "title": "Label",
             "type": "string"
           },
+          "material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
           "missing": {
             "default": false,
             "title": "Missing",

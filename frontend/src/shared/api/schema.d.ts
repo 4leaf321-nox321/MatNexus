@@ -7015,6 +7015,8 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+            /** Material Id */
+            material_id?: string | null;
             /**
              * Missing
              * @default false

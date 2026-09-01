@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
-from app.modules.materials.models import Material
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests.models import TestRun
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workbench.models import WorkbenchItem
@@ -45,6 +45,7 @@ class Resolved:
     label: str
     detail: str = ""
     facts: dict[str, int] = field(default_factory=dict)
+    material_id: uuid.UUID | None = None
 
 
 def _count_by_run(
@@ -58,6 +59,24 @@ def _count_by_run(
         .group_by(column)
     )
     return {run_id: int(count) for run_id, count in rows}
+
+
+def _material_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, uuid.UUID]:
+    """시험이 어느 재료의 것인가 — **시편 → 시료 → 재료**.
+
+    화면이 「이 시험의 재료로 가기」 를 그릴 수 있어야 한다. 글로벌 피팅은 재료 화면에
+    있는데(ADR 0020), 바구니에는 시험만 담기기 때문이다. **주소가 아니라 id 를 준다** —
+    화면의 주소 체계를 서버가 알면 라우팅을 고칠 때마다 서버도 고쳐야 한다.
+    """
+    if not runs:
+        return {}
+    rows = db.execute(
+        select(TestRun.id, Sample.material_id)
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .where(TestRun.id.in_([one.id for one in runs]))
+    )
+    return {run_id: material_id for run_id, material_id in rows}
 
 
 def _prony_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, int]:
@@ -85,11 +104,13 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     # **한 번에 센다.** 담긴 것이 스무 건이면 스무 번 부르는 것이 N+1 이다.
     curves = _count_by_run(db, MasterCurve.test_run_id, MasterCurve, live)
     fits = _prony_by_run(db, live)
+    owners = _material_by_run(db, live)
     return {
         row.id: Resolved(
             label=row.record_name,
             # **상태가 곧 다음 할 일이다** — 읽기 실패인지, 채택까지 끝났는지.
             detail="채택됨" if row.adopted_result_id else row.status,
+            material_id=owners.get(row.id),
             # **판정의 재료는 서버가 준다.** 화면이 도메인 API 를 따로 부르면
             # 워크벤치가 남의 도메인을 알게 되고, 그 방향은 되돌리기 어렵다.
             facts={
@@ -114,7 +135,7 @@ def _materials(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
         list(db.scalars(select(Material).where(Material.id.in_(ids)))) if ids else []
     )
     return {
-        row.id: Resolved(label=row.record_name, detail=row.category or "")
+        row.id: Resolved(label=row.record_name, detail=row.category or "", material_id=row.id)
         for row in rows
         if row.deleted_at is None
     }
@@ -143,6 +164,7 @@ def _cards(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
             detail=f"{name} · {row.status}",
             # 확정 여부는 「내보내도 되나」 를 가르는 사실이라 숫자로도 준다.
             facts={"published": 1 if row.status == "published" else 0},
+            material_id=row.material_id,
         )
     return found
 
@@ -177,6 +199,7 @@ def resolve(db: Session, items: Sequence[WorkbenchItem]) -> list[ItemOut]:
                 label=hit.label if hit else GONE,
                 detail=hit.detail if hit else None,
                 facts=dict(hit.facts) if hit else {},
+                material_id=hit.material_id if hit else None,
                 missing=hit is None,
                 note=item.note,
                 added_at=item.added_at,
