@@ -9,7 +9,7 @@
  *   기억해 둔 작업이 없어졌으면   진행 중인 것으로 갈아탄다 — 끝난 작업에 담지 않는다
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -95,9 +95,55 @@ describe('담을 데가 없을 때', () => {
     expect(screen.queryByRole('button', { name: /담기/ })).toBeNull()
   })
 
-  it('고른 것이 없으면 못 누른다', async () => {
+  it('고른 것이 없으면 아예 안 뜬다', () => {
+    // **떠 있는 것은 무언가를 가린다.** 할 일이 없는데 떠 있으면 그냥 방해물이다.
     show([])
-    expect(await screen.findByRole('button', { name: /담기/ })).toBeDisabled()
+    expect(screen.queryByLabelText('담기')).toBeNull()
+  })
+})
+
+describe('끌어서 옮긴다', () => {
+  // 떠 있는 패널은 **하필 지금 보려는 줄을 가릴 수 있다.** 못 치우면 방해물이 된다.
+  /** 손잡이를 잡고 `dx·dy` 만큼 끈다. 끌기 전 자리를 함께 돌려준다. */
+  const drag = async (dx: number, dy: number) => {
+    const panel = await screen.findByLabelText('담기')
+    const from = { x: Number.parseInt(panel.style.left), y: Number.parseInt(panel.style.top) }
+    fireEvent.pointerDown(screen.getByLabelText('끌어서 옮기기'), { clientX: 500, clientY: 500 })
+    fireEvent.pointerMove(window, { clientX: 500 + dx, clientY: 500 + dy })
+    fireEvent.pointerUp(window)
+    return from
+  }
+
+  it('끈 만큼만 움직인다', async () => {
+    // **손잡이를 쥔 지점을 유지한다** — 잡는 순간 패널이 커서로 튀면 옮기기 어렵다.
+    show()
+    const from = await drag(-200, -150)
+    expect(screen.getByLabelText('담기')).toHaveStyle({
+      left: `${from.x - 200}px`,
+      top: `${from.y - 150}px`,
+    })
+  })
+
+  it('다음에도 그 자리에서 뜬다', async () => {
+    // 매번 같은 데로 돌아오면 매번 다시 치워야 한다.
+    show()
+    const from = await drag(-120, -90)
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem('matnexus.basket.spot')!)).toMatchObject({
+        x: from.x - 120,
+        y: from.y - 90,
+      })
+    )
+  })
+
+  it('창 밖의 자리는 안으로 되돌린다', async () => {
+    // 창을 줄였거나 큰 화면에서 옮겨 뒀으면 기억한 자리가 화면 밖이다 —
+    // **그대로 쓰면 패널이 안 보이고, 그것은 없어진 것과 구별이 안 된다.**
+    window.localStorage.setItem('matnexus.basket.spot', JSON.stringify({ x: 9000, y: 9000 }))
+    show()
+    const panel = await screen.findByLabelText('담기')
+    expect(Number.parseInt(panel.style.left)).toBeLessThan(window.innerWidth)
+    expect(Number.parseInt(panel.style.top)).toBeLessThan(window.innerHeight)
   })
 })
 

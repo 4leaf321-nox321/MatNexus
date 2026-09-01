@@ -148,12 +148,9 @@ export default function CardsPage() {
       </div>
 
       {/* **담기와 내보내기는 다른 일이다.** 담는 것은 나중에 이어서 하려는 것이고,
-          내보내기는 지금 받는 것이다 — 같은 줄에 둬서 고른 것을 둘 다 쓸 수 있게 한다. */}
-      {picked.size > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <AddToBasket kind="card" ids={[...picked]} onError={setError} />
-        </div>
-      )}
+          내보내기는 지금 받는 것이다. 담기는 떠 있는 패널로 화면 위에 뜨고(아래 띠와
+          자리를 다투지 않는다), 내보내기 띠는 목록 끝에 그대로 붙는다. */}
+      <AddToBasket kind="card" ids={[...picked]} onError={setError} />
 
       <BundleBar
         ids={[...picked]}
