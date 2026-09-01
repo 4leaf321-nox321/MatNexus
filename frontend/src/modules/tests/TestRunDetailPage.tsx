@@ -11,7 +11,17 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, Circle, Download, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Circle,
+  Download,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { backTarget, materialTarget } from '@/modules/tests/backTarget'
@@ -110,6 +120,20 @@ export default function TestRunDetailPage() {
   /** 지금 켠 탭. **진행 띠가 눌러서 데려간다** — 「채택하러 가기」 가 말만 하고
    *  사람이 탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다. */
   const [tab, setTab] = useState('source')
+  // **전체 화면.** 곡선과 표를 나란히 보는 화면이라 폭이 곧 읽히는 양이다 —
+  // 사이드바·머리말이 덮는 자리를 잠시 걷는다. 탭은 그대로 두고 자리만 넓히므로
+  // 들어가고 나올 때 보던 것을 잃지 않는다.
+  const [full, setFull] = useState(false)
+
+  useEffect(() => {
+    if (!full) return
+    // Esc 로 나온다 — 화면을 덮는 것에는 늘 손쉬운 출구가 있어야 한다.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFull(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [full])
 
   const definition = useMemo(
     () => (types.data ?? []).find((t) => t.key === item?.test_type_key),
@@ -482,7 +506,17 @@ export default function TestRunDetailPage() {
         )}
 
         {item && (
-          <Tabs value={tab} onValueChange={setTab}>
+          <Tabs
+            value={tab}
+            onValueChange={setTab}
+            className={
+              full
+                ? 'bg-background fixed inset-0 z-50 space-y-2 overflow-auto p-4'
+                : undefined
+            }
+          >
+            {/* 탭 줄의 오른쪽 끝에 둔다 — 탭을 고르는 손이 이미 그 줄에 있다. */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
             <TabsList>
               <TabsTrigger value="source">원본</TabsTrigger>
               <TabsTrigger value="process" disabled={item.status !== 'parsed'}>
@@ -505,6 +539,18 @@ export default function TestRunDetailPage() {
                 )}
               </TabsTrigger>
             </TabsList>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFull((now) => !now)}
+              aria-label={full ? '전체 화면 나가기' : '전체 화면'}
+              title={full ? '나가기 (Esc)' : '이 탭을 화면 전체로 봅니다'}
+            >
+              {full ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              {full ? '나가기' : '전체 화면'}
+            </Button>
+            </div>
 
             <TabsContent value="source">
               {/* **곡선을 오른쪽에, 읽는 값을 왼쪽에.** 세로로 쌓으면 곡선을 보다가
