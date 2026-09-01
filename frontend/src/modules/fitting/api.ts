@@ -184,7 +184,15 @@ export const fittingApi = {
 
   publish: (id: string) => api.post<PropertyCard>(`/fitting/cards/${id}/publish`, {}),
 
-  /** 내리기 — **지우지 않는다.** 이 값으로 해석이 돌았을 수 있다. */
+  /**
+   * 사용 중지한 카드를 **초안으로** 되살린다. 부서 관리자만.
+   *
+   * 확정으로 바로 안 돌아가는 이유: 틀려서 중지한 카드가 확정 상태로 되살아나면
+   * 그 값이 조용히 다시 쓰인다. 값은 그대로 살리되 「쓰겠다」 는 선언은 다시 받는다.
+   */
+  restore: (id: string) => api.post<PropertyCard>(`/fitting/cards/${id}/restore`, {}),
+
+  /** 사용 중지 — **지우지 않는다.** 이 값으로 해석이 돌았을 수 있다. */
   deprecate: (id: string) => api.post<PropertyCard>(`/fitting/cards/${id}/deprecate`, {}),
 
   /** 초안만 지울 수 있다. */
@@ -240,5 +248,7 @@ export function filename(label: string): string {
 export const STATUS_LABELS: Record<string, string> = {
   draft: '초안',
   published: '확정',
-  deprecated: '내림',
+  // 「내림」 이었다. **무엇을 내린다는 것인지 안 읽힌다** — 게시물을 내리는 것과
+  // 헷갈리고, 지운다는 뜻으로도 읽힌다. 이 상태의 뜻은 하나다: 앞으로 쓰지 않는다.
+  deprecated: '사용 중지',
 }

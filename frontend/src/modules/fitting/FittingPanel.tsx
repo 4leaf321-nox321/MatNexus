@@ -36,6 +36,7 @@ import { ApiError } from '@/shared/api/client'
 import { CreatedOn } from '@/shared/components/CreatedOn'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -735,6 +736,9 @@ function CardList({
   const blocks = useResource(() => fittingApi.blocks(), [])
   const specs = blocks.data ?? []
   const [renaming, setRenaming] = useState<string | null>(null)
+  // **사용 중지는 한 번 묻는다.** 확정된 값을 쓰지 못하게 만드는 일이고, 되살려도
+  // 초안으로만 돌아온다 — 확정을 다시 받아야 한다.
+  const [stopping, setStopping] = useState<PropertyCard | null>(null)
 
   async function act(action: () => Promise<unknown>) {
     try {
@@ -833,10 +837,22 @@ function CardList({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => act(() => fittingApi.deprecate(card.id))}
-                  title="내리기 — 지우지 않습니다. 이 값으로 해석이 돌았을 수 있습니다."
+                  onClick={() => setStopping(card)}
+                  title="사용 중지 — 지우지 않습니다. 이 값으로 해석이 돌았을 수 있습니다."
                 >
-                  내리기
+                  사용 중지
+                </Button>
+              )}
+              {/* **되살릴 길을 둔다.** 없으면 남는 방법이 같은 값으로 카드를 새로
+                  만드는 것뿐인데, 그러면 만든 사람·만든 때가 실제와 달라진다. */}
+              {card.status === 'deprecated' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => act(() => fittingApi.restore(card.id))}
+                  title="초안으로 되살립니다 — 값은 그대로이고, 확정은 다시 받습니다."
+                >
+                  초안으로 되살리기
                 </Button>
               )}
             </div>
@@ -847,6 +863,29 @@ function CardList({
           <CardBlocks specs={specs} card={card} />
         </div>
       ))}
+
+      {/* **한 번 묻는다.** 확정된 값을 앞으로 쓰지 않겠다는 결정이고, 되살려도
+          초안으로만 돌아온다 — 확정을 다시 받아야 한다. 창은 목록 밖에 하나만
+          둔다: 카드마다 그리면 같은 창이 수십 개 뜬다. */}
+      <ConfirmDialog
+        open={stopping !== null}
+        title={`「${stopping?.label ?? ''}」 를 사용 중지합니다`}
+        confirmLabel="사용 중지"
+        body={
+          <>
+            앞으로 이 카드를 쓰지 않는다는 표시입니다. <b>지우지 않습니다</b> — 이미 이
+            값으로 해석이 돌았을 수 있어 내보내기는 계속 됩니다.
+            <br />
+            되살릴 수 있지만 <b>초안으로</b> 돌아오고, 쓰려면 확정을 다시 받아야 합니다.
+          </>
+        }
+        onConfirm={() => {
+          const card = stopping
+          setStopping(null)
+          if (card) void act(() => fittingApi.deprecate(card.id))
+        }}
+        onClose={() => setStopping(null)}
+      />
     </div>
   )
 }

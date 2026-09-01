@@ -125,7 +125,7 @@ export function OverviewPanel({
             )}
             {data.card_deprecated > 0 && (
               <Badge variant="outline" className="text-[11px]">
-                내림 {data.card_deprecated}
+                사용 중지 {data.card_deprecated}
               </Badge>
             )}
           </div>

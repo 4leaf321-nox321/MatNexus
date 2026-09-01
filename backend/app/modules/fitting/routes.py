@@ -2286,7 +2286,7 @@ def export_card(
 STATUS_NOTES = {
     "draft": "초안 — 아직 확정되지 않았습니다",
     "published": "확정",
-    "deprecated": "내려진 카드 — 쓰지 마세요",
+    "deprecated": "사용 중지된 카드 — 쓰지 마세요",
 }
 
 
@@ -2330,7 +2330,7 @@ def publish(
     """초안을 확정한다. **부서 관리자만**(D12).
 
     올린 뒤에는 값을 바꿀 수 없다 — 그 값으로 해석이 돌았을 수 있다. 고치려면
-    내리고(`deprecated`) 새 카드를 만든다.
+    사용 중지하고(`deprecated`) 새 카드를 만든다.
 
     **리뷰 큐는 없다**(D8). 상태만 두고, 절차는 운영 규칙이 보인 뒤에 만든다 —
     절차를 먼저 만들면 그 절차가 일을 정의해 버린다.
@@ -2382,13 +2382,65 @@ def _require_publisher(db: Session, user: User, item: PropertyCard) -> None:
     permissions.require_manager(db, workspace=workspace, user=user)
 
 
+@router.post("/cards/{card_id}/restore", response_model=PropertyCardOut)
+def restore(
+    card_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """사용 중지한 카드를 **초안으로** 되살린다. 부서 관리자만.
+
+    ## 왜 초안까지만인가
+
+    확정으로 바로 되돌리면 **틀려서 중지한 카드가 조용히 다시 쓰이게 된다.** 중지한
+    이유는 기록에 안 남고(상태 하나뿐이다), 되살리는 사람이 그 이유를 안다는 보장도
+    없다. 초안으로 두면 값은 그대로 살아나되 「쓰겠다」 는 선언은 다시 받는다.
+
+    ## 왜 필요한가
+
+    실수로 누를 수 있는 자리다. 여기까지 막아 두면 남는 길은 **같은 값으로 카드를
+    새로 만드는 것**뿐인데, 그러면 만든 사람·만든 때가 실제와 달라지고 이력이 한 줄
+    더 늘어난다 — 실수를 지우려다 기록을 더 흐린다.
+    """
+    item = _visible_card(db, user, card_id)
+    _require_publisher(db, user, item)
+
+    if item.status != "deprecated":
+        raise AppError(
+            "MNX-FITTING-0028", "사용 중지된 카드만 되살릴 수 있습니다.", status=409
+        )
+    item.status = "draft"
+    # **누가 확정했는지는 지운다.** 다시 받아야 하는 승인이라, 옛 서명이 남아 있으면
+    # 「이미 확정된 것」 으로 읽힌다.
+    item.published_by_id = None
+    item.published_at = None
+    audit.record(
+        db,
+        action=audit.CARD_RESTORED,
+        actor=user,
+        target_table="property_cards",
+        target_id=item.id,
+        target_label=item.label,
+        workspace_id=_card_workspace(db, item),
+        changes={"status": {"before": "deprecated", "after": "draft"}},
+    )
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item)
+
+
 @router.post("/cards/{card_id}/deprecate", response_model=PropertyCardOut)
 def deprecate(
     card_id: uuid.UUID,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PropertyCardOut:
-    """카드를 내린다. **지우지 않는다** — 이 값으로 해석이 돌았을 수 있다."""
+    """카드를 **사용 중지**한다. 지우지 않는다 — 이 값으로 해석이 돌았을 수 있다.
+
+    되돌릴 수 있다(`/restore`). **다만 초안으로만 돌아간다** — 틀려서 중지한 카드가
+    확정 상태로 되살아나면 그 값이 조용히 다시 쓰이게 된다. 되살린 뒤에는 확정을
+    한 번 더 받는다.
+    """
     item = _visible_card(db, user, card_id)
     if item.status == "published":
         # 올린 사람과 같은 권한으로만 내린다. 확정된 값을 아무나 무를 수 있으면

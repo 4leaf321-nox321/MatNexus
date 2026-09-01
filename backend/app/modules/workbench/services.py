@@ -83,7 +83,7 @@ def _cards_by_run(
     for (sources,) in db.execute(
         select(PropertyCard.source["test_run_ids"]).where(
             PropertyCard.material_id.in_(materials),
-            # **내려진 카드는 「있다」 가 아니다** — `deprecated` 는 쓰지 말라는 표시다.
+            # **사용 중지된 카드는 「있다」 가 아니다** — 쓰지 말라는 표시다.
             PropertyCard.status != "deprecated",
         )
     ):
@@ -224,7 +224,7 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
 def _cards_by_material(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, tuple[int, int]]:
     """재료마다 (카드 수, 확정 수). **해석에 넘기기 전에 뭐가 비었나** 를 이걸로 센다.
 
-    내려진 카드(`deprecated`)는 세지 않는다 — 쓰지 말라는 표시다. 세는 것이 목록이
+    사용 중지된 카드(`deprecated`)는 세지 않는다 — 쓰지 말라는 표시다. 세는 것이 목록이
     아니라 수뿐이므로 `blocks` 를 읽지 않는다(카드 하나의 표가 수천 점이다).
     """
     if not ids:

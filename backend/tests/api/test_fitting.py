@@ -813,6 +813,39 @@ class Test상태:
         assert remains.status_code == 200
         assert values(remains.json(), "hardening")["family"] == "voce"
 
+    def test_사용_중지한_카드를_초안으로_되살린다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """**실수로 누를 수 있는 자리다.** 되살릴 길이 없으면 남는 방법은 같은 값으로
+        카드를 새로 만드는 것뿐인데, 그러면 만든 사람·만든 때가 실제와 달라진다 —
+        실수를 지우려다 기록을 더 흐린다."""
+        client.post(f"/api/fitting/cards/{card['id']}/publish", headers=admin_headers)
+        client.post(f"/api/fitting/cards/{card['id']}/deprecate", headers=admin_headers)
+
+        back = client.post(f"/api/fitting/cards/{card['id']}/restore", headers=admin_headers)
+        assert back.status_code == 200, back.text
+        # **확정이 아니라 초안으로 돌아온다.** 틀려서 중지한 카드가 확정 상태로
+        # 되살아나면 그 값이 조용히 다시 쓰인다.
+        assert back.json()["status"] == "draft"
+        # 옛 확정 서명은 지운다 — 남아 있으면 「이미 확정된 것」 으로 읽힌다.
+        assert back.json()["published_at"] is None
+        # 값은 그대로다.
+        assert values(back.json(), "hardening")["family"] == "voce"
+
+    def test_중지되지_않은_카드는_되살릴_것이_없다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """초안·확정 카드에 되살리기를 부르면 **조용히 초안으로 떨어뜨리지 않는다** —
+        확정을 무르는 뒷문이 된다."""
+        refused = client.post(
+            f"/api/fitting/cards/{card['id']}/restore", headers=admin_headers
+        )
+        assert refused.status_code == 409, refused.text
+
+        client.post(f"/api/fitting/cards/{card['id']}/publish", headers=admin_headers)
+        again = client.post(f"/api/fitting/cards/{card['id']}/restore", headers=admin_headers)
+        assert again.status_code == 409, again.text
+
     def test_확정은_부서_관리자만(
         self,
         client: TestClient,

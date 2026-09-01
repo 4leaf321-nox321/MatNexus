@@ -34,6 +34,7 @@ from app.shared.request_context import get_request_id
 #: 안 넣는 편이 낫다.
 CARD_PUBLISHED = "card.published"
 CARD_DEPRECATED = "card.deprecated"
+CARD_RESTORED = "card.restored"
 CARD_DELETED = "card.deleted"
 MATERIAL_DELETED = "material.deleted"
 TEST_RUN_DELETED = "test_run.deleted"

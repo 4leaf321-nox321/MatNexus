@@ -5,6 +5,7 @@
  *
  *   늘리기 칸은 늘릴 수 있는 식에서만 열린다
  *   축 이름은 식이 정한다 — 화면이 하드코딩하지 않는다
+ *   확정한 값을 못 쓰게 만드는 일은 **한 번 묻고**, 되살릴 길을 둔다
  *
  * 왜 시험으로 두는가. 초탄성은 저장이 422 로 거절한다(소성 표를 만드는 식이
  * 아니다). 그런데 화면이 칸을 열어 두면 사람은 숫자를 넣고 곡선을 보고 정한 뒤
@@ -21,12 +22,18 @@ import { FittingPanel } from '@/modules/fitting/FittingPanel'
 const preview = vi.fn()
 const cards = vi.fn()
 const forMaterial = vi.fn()
+const deprecate = vi.fn()
+const restore = vi.fn()
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
     preview: (...args: unknown[]) => preview(...args),
     cards: (...args: unknown[]) => cards(...args),
+    deprecate: (...args: unknown[]) => deprecate(...args),
+    restore: (...args: unknown[]) => restore(...args),
+    // 카드 줄에는 내보내기 메뉴가 딸려 있다 — 그 안이 단위계를 읽는다.
+    unitSystems: () => Promise.resolve([{ key: 'si', label: 'SI', is_default: true }]),
     // 카드 목록이 비어 있어도 화면은 형식·블록 선언을 먼저 읽는다.
     formats: () => Promise.resolve([]),
     blocks: () => Promise.resolve([]),
@@ -120,6 +127,62 @@ async function compare() {
   await userEvent.click(await screen.findByRole('button', { name: /경화식 맞춰 보기/ }))
   await waitFor(() => expect(preview).toHaveBeenCalled())
 }
+
+/** 카드 한 장이 있는 화면. 상태를 바꿔 가며 단추를 본다. */
+function withCard(status: string) {
+  // **실제 응답과 같은 모양이어야 한다.** 칸이 빠지면 화면이 그것을 읽다 죽는데,
+  // 그 죽음은 빈 화면으로만 보여서 원인을 못 찾는다 — 실제로 여기서 겪었다.
+  cards.mockResolvedValue({
+    total: 1,
+    limit: 50,
+    offset: 0,
+    items: [
+      {
+        id: 'c1',
+        material_id: 'm1',
+        material_name: 'SECC_MDOI_1.0',
+        test_type_key: 'tensile',
+        orientation: 'MD',
+        label: '인장 MD',
+        status,
+        source: { sample_count: 3 },
+        blocks: {},
+        available_formats: ['abaqus'],
+        problem: null,
+        point_count: 120,
+        note: null,
+        owner_workspace_name: '재료연구팀',
+        is_global: false,
+        published_at: status === 'published' ? '2026-09-01T00:00:00Z' : null,
+        created_at: '2026-08-25T00:00:00Z',
+      },
+    ],
+  })
+}
+
+describe('확정한 값을 못 쓰게 만들 때', () => {
+  it('한 번 묻고, 확인해야 중지한다', async () => {
+    // **되돌려도 초안으로만 온다** — 확정을 다시 받아야 하므로 가벼운 누름이 아니다.
+    withCard('published')
+    deprecate.mockResolvedValue({})
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: '사용 중지' }))
+    expect(deprecate).not.toHaveBeenCalled()
+
+    await userEvent.click(await screen.findByRole('button', { name: '사용 중지', hidden: false }))
+    await waitFor(() => expect(deprecate).toHaveBeenCalledWith('c1'))
+  })
+
+  it('사용 중지한 카드는 초안으로 되살린다', async () => {
+    // 되살릴 길이 없으면 남는 방법은 같은 값으로 새 카드를 만드는 것뿐이고,
+    // 그러면 만든 사람·만든 때가 실제와 달라진다.
+    withCard('deprecated')
+    restore.mockResolvedValue({})
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: '초안으로 되살리기' }))
+    await waitFor(() => expect(restore).toHaveBeenCalledWith('c1'))
+  })
+})
 
 describe('늘리기 칸', () => {
   it('금속 경화식에서는 열린다', async () => {
