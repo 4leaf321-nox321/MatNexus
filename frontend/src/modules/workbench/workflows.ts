@@ -117,10 +117,16 @@ function pendingOf(rows: BasketItem[], done: (item: BasketItem) => boolean): Bas
   return rows.filter((one) => !done(one))
 }
 
-/** 담긴 것이 딸린 재료. **글로벌 피팅은 재료 화면에 있다**(ADR 0020). */
-function materialHref(items: BasketItem[]): string | null {
+/**
+ * 담긴 것이 딸린 재료의 **그 탭**.
+ *
+ * 탭까지 적는 이유: 재료 화면은 탭이 셋이고(시료·시편 / 물성 / CAE 카드) 주소에 안
+ * 담으면 늘 첫 탭이 열린다. 「그 재료의 CAE 카드로」 라고 해 놓고 시료 목록에
+ * 떨어뜨리면 그 안내는 없느니만 못하다.
+ */
+function materialHref(items: BasketItem[], tab: 'properties' | 'cards'): string | null {
   const owner = items.find((one) => !one.missing && one.material_id)?.material_id
-  return owner ? `/materials/${owner}` : null
+  return owner ? `/materials/${owner}?tab=${tab}` : null
 }
 
 export const WORKFLOWS: Workflow[] = [
@@ -281,14 +287,14 @@ export const WORKFLOWS: Workflow[] = [
           const runs = live(items, 'test_run')
           if (runs.length === 0) return null
           const fitted = runs.filter((one) => fact(one, 'prony_fits') > 0)
-          const href = materialHref(runs)
+          const href = materialHref(runs, 'properties')
           return {
             ok: fitted.length > 0,
             say:
               fitted.length > 0
                 ? `${fitted.length}건에 맞춘 계수가 있습니다.`
-                : '아직 맞춘 계수가 없습니다. 재료 화면의 「묶음」 에서 한 번에 적합합니다.',
-            go: href ? { href, label: '이 시험의 재료로' } : undefined,
+                : '아직 맞춘 계수가 없습니다. 재료 화면의 「물성」 탭에서 시편 여럿을 한 번에 적합합니다.',
+            go: href ? { href, label: '그 재료의 물성 탭으로' } : undefined,
           }
         },
       },
@@ -383,6 +389,7 @@ export const WORKFLOWS: Workflow[] = [
         title: '묶음 내보내기',
         what: 'manifest·체크섬과 함께 한 번에 받습니다.',
         where: '/cards',
+        whereLabel: '카드 목록으로',
         judge: (items) => {
           const cards = live(items, 'card')
           if (cards.length === 0) return null
@@ -406,9 +413,9 @@ export const WORKFLOWS: Workflow[] = [
     when: '새 장비의 출력 파일을 읽게 만들고, 한 벌 올려 확인합니다.',
     cadence: '이따금',
     steps: [
-      { key: 'sample', title: '예제 파일', what: '한 벌 올려 구조를 읽습니다.', where: '/settings/formats' },
-      { key: 'tables', title: '표 고르기', what: '측정과 처리결과를 가릅니다.', where: '/settings/formats' },
-      { key: 'columns', title: '열 매핑', what: '이 열이 무슨 채널인지 정합니다.', where: '/settings/formats' },
+      { key: 'sample', title: '예제 파일', what: '한 벌 올려 구조를 읽습니다.', where: '/settings/formats', whereLabel: '장비 파일 정의로' },
+      { key: 'tables', title: '표 고르기', what: '측정과 처리결과를 가릅니다.', where: '/settings/formats', whereLabel: '장비 파일 정의로' },
+      { key: 'columns', title: '열 매핑', what: '이 열이 무슨 채널인지 정합니다.', where: '/settings/formats', whereLabel: '장비 파일 정의로' },
       {
         key: 'verify',
         title: '한 벌 올려 확인',
@@ -454,12 +461,13 @@ export const WORKFLOWS: Workflow[] = [
         what: '확정 대기 카드를 담습니다.',
         collects: 'card',
         where: '/cards',
+        whereLabel: '카드 목록으로',
         judge: (items) => collected(items, 'card', '카드'),
       },
       {
         key: 'read',
         title: '근거 보기',
-        what: '어느 시험에서 나왔는지, 표본이 몇인지, 경고가 붙었는지 봅니다 — 재료 화면의 물성 패널에서.',
+        what: '어느 시험에서 나왔는지, 표본이 몇인지, 경고가 붙었는지 봅니다 — 재료 화면의 「CAE 카드」 탭에서.',
         where: '/cards',
         whereLabel: '카드 목록으로',
         judge: (items) => {
@@ -479,8 +487,8 @@ export const WORKFLOWS: Workflow[] = [
             blocking: [...new Set([...thin, ...noted])],
             // **근거는 재료 화면의 물성 패널에 있다.** 카드 목록은 내보내는 자리이지
             // 근거를 펴 보는 자리가 아니다.
-            go: materialHref(cards)
-              ? { href: materialHref(cards)!, label: '그 재료의 물성으로' }
+            go: materialHref(cards, 'cards')
+              ? { href: materialHref(cards, 'cards')!, label: '그 재료의 CAE 카드로' }
               : undefined,
           }
         },
@@ -488,12 +496,12 @@ export const WORKFLOWS: Workflow[] = [
       {
         key: 'decide',
         title: '확정 또는 반려',
-        what: '재료 화면의 물성 패널에서 부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
+        what: '재료 화면의 「CAE 카드」 탭에서 부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
         judge: (items) => {
           const cards = live(items, 'card')
           if (cards.length === 0) return null
           const left = pendingOf(cards, (one) => fact(one, 'published') > 0)
-          const href = materialHref(left.length > 0 ? left : cards)
+          const href = materialHref(left.length > 0 ? left : cards, 'cards')
           return {
             ok: left.length === 0,
             say:
@@ -503,7 +511,7 @@ export const WORKFLOWS: Workflow[] = [
             blocking: left,
             // **「확정」 단추는 카드 목록에 없다.** 거기로 보내면 막다른 길이다 —
             // 눌러야 할 것이 없는 화면에 도착하면 사람은 기능이 없다고 결론 낸다.
-            go: href ? { href, label: '그 재료의 물성으로' } : undefined,
+            go: href ? { href, label: '그 재료의 CAE 카드로' } : undefined,
           }
         },
       },

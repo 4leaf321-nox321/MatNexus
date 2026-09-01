@@ -24,7 +24,7 @@
 
 import { AlertTriangle, Globe2, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { BundleBar } from '@/modules/fitting/BundleBar'
 import { CardFilterPanel } from '@/modules/fitting/CardFilterPanel'
@@ -43,7 +43,10 @@ import { useResource } from '@/shared/hooks/useResource'
 const PAGE = 50
 
 export default function CardsPage() {
-  const [status, setStatus] = useState<string | null>(null)
+  // 홈의 「확정 대기 N」 이 `?status=draft` 로 보낸다 — 안 읽으면 그 숫자가
+  // 가리킨 목록이 아니라 전체가 뜬다.
+  const [search] = useSearchParams()
+  const [status, setStatus] = useState<string | null>(search.get('status'))
   const [testType, setTestType] = useState<string | null>(null)
   const [owner, setOwner] = useState<string | null>(null)
   const [typed, setTyped] = useState('')

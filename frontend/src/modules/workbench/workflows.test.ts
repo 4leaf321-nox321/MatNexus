@@ -302,7 +302,8 @@ describe('확정 전 근거 훑기 — 근거의 두께', () => {
     const check = judge('review_cards', 'decide', [
       item({ kind: 'card', label: '인장 TD', material_id: 'm7', facts: { published: 0 } }),
     ])
-    expect(check!.go).toMatchObject({ href: '/materials/m7' })
+    // 확정 단추는 재료 화면의 **「CAE 카드」 탭**에 있다 — 탭까지 적어야 그리로 열린다.
+    expect(check!.go).toMatchObject({ href: '/materials/m7?tab=cards' })
   })
 
   it('막지는 않는다 — 읽었는지는 화면이 알 수 없다', () => {

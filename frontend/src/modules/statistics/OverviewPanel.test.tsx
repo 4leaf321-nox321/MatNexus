@@ -146,7 +146,9 @@ describe('붙일 파일', () => {
   it('붙일 것이 있으면 홈이 말하고 커넥터로 보낸다', () => {
     panel({ inbox_waiting: 7 })
     const chip = screen.getByText(/붙일 파일 7/)
-    expect(chip.closest('a')).toHaveAttribute('href', '/settings/connectors')
+    // **숫자가 가리킨 목록으로 보낸다.** 수집함은 커넥터 화면의 한 탭이라,
+    // 탭을 안 적으면 「전체」 가 열리고 방금 센 것과 다른 목록을 본다.
+    expect(chip.closest('a')).toHaveAttribute('href', '/settings/connectors?tab=inbox')
   })
 
   it('0 이면 안 보인다 — 0 을 그리면 그것도 상태처럼 읽힌다', () => {

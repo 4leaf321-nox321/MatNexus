@@ -70,15 +70,21 @@ export function OverviewPanel({
               성격이라 같은 줄에 세운다. 시편을 못 정한 것과 승인을 기다리는 것을
               함께 센다: 둘 다 사람이 한 번 봐야 한다. */}
           {data.inbox_waiting > 0 && (
-            <Pending to="/settings/connectors">붙일 파일 {data.inbox_waiting}</Pending>
+            <Pending to="/settings/connectors?tab=inbox">
+              붙일 파일 {data.inbox_waiting}
+            </Pending>
           )}
           {data.waiting_to_process > 0 && (
             <Pending to={`/w/${workspaceSlug}/tests`}>처리 대기 {data.waiting_to_process}</Pending>
           )}
           {data.card_draft > 0 && (
-            <Pending to="/materials">
+            <Pending to="/cards?status=draft">
               {/* **확정 안 된 카드는 "이 값으로 해석이 돌 수 있다" 는 승인을
-                  못 받은 것이다.** 홈에 없으면 아무도 안 본다. */}
+                  못 받은 것이다.** 홈에 없으면 아무도 안 본다.
+
+                  재료 목록으로 보냈었다 — 거기엔 초안 거르개도 확정 단추도 없어서
+                  **재료 아흔넷 중 어느 것이 초안인지 알 길이 없었다.** 초안만 걸러
+                  놓은 카드 목록으로 보내고, 확정은 거기서 재료로 넘어가 누른다. */}
               확정 대기 {data.card_draft}
             </Pending>
           )}

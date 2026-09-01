@@ -18,7 +18,7 @@ import {
   RightPanelHost,
   RightPanelProvider,
 } from '@/shared/layout/SidePanel'
-import { Sidebar } from '@/shared/layout/Sidebar'
+import { Sidebar, SidebarDrawer } from '@/shared/layout/Sidebar'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 import { cn } from '@/shared/lib/utils'
 
@@ -53,6 +53,7 @@ export const FULL_HEIGHT = [/^\/materials\/[^/]+$/]
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
+  const [drawer, setDrawer] = useState(false)
   const { slug } = useParams<{ slug?: string }>()
   const { pathname } = useLocation()
   const tall = FULL_HEIGHT.some((one) => one.test(pathname))
@@ -71,13 +72,22 @@ export function AppShell() {
       <LeftPanelProvider>
       <div className="flex h-svh overflow-hidden">
       <Sidebar collapsed={collapsed} workspaceSlug={workspaceSlug} />
+      <SidebarDrawer open={drawer} onOpenChange={setDrawer} workspaceSlug={workspaceSlug} />
 
       {/* 화면이 채우는 왼쪽 영역 — **사이드바 바로 옆**이다. 재료 상세가 다른
           재료 목록을 여기 넣는다. 아무도 안 쓰면 폭이 0 이다. */}
       <LeftPanelHost />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
-          onToggleSidebar={() => setCollapsed((value) => !value)}
+          // **같은 단추가 화면 폭에 따라 다른 일을 한다.** 넓으면 붙박이 사이드바를
+          // 접고, 좁으면(`md` 미만, 사이드바가 아예 없다) 서랍을 연다.
+          onToggleSidebar={() => {
+            if (window.matchMedia('(min-width: 768px)').matches) {
+              setCollapsed((value) => !value)
+            } else {
+              setDrawer(true)
+            }
+          }}
           workspaceSlug={workspaceSlug}
         />
         <main className={cn('flex-1 p-6', tall ? 'min-h-0 overflow-hidden' : 'overflow-auto')}>

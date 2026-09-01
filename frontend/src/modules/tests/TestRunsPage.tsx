@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
@@ -161,7 +161,14 @@ export default function TestRunsPage() {
   const all = size === 'all'
   // **거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이 없는
   // 시험이 된다 — 이 화면의 머리말이 그 이야기다.
-  const [filters, setFilters] = useState<Record<string, string | undefined>>({})
+  // **주소로 걸러서 들어올 수 있다.** 홈의 「읽기 실패 N」 이 `?status=failed` 로
+  // 보내는데 그것을 안 읽으면 거르개 없는 전체 목록이 뜬다 — 누른 사람은 그 숫자가
+  // 가리킨 것을 다시 찾아야 하고, 단추가 안 먹은 것처럼 보인다.
+  const [askedIn] = useSearchParams()
+  const [filters, setFilters] = useState<Record<string, string | undefined>>(() => {
+    const status = askedIn.get('status')
+    return status ? { status } : {}
+  })
   /**
    * 찾기 상자에 **치는 중**인 글자와 **적용된** 글자를 가른다.
    *

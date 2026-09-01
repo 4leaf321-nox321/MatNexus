@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Globe2, ListTree, Pencil, Plus } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { DeleteMaterialDialog } from '@/modules/materials/DeleteMaterialDialog'
 import { materialsApi } from '@/modules/materials/api'
@@ -21,6 +21,7 @@ import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { GroupsPanel } from '@/modules/materials/GroupsPanel'
+import { tabOf } from '@/modules/materials/tabs'
 import { MasterCurveNotice } from '@/modules/materials/MasterCurveNotice'
 import { groupsApi } from '@/modules/materials/api.groups'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
@@ -37,7 +38,18 @@ export default function MaterialDetailPage() {
   const material = useResource(() => materialsApi.get(id), [id])
   /** 지금 켠 탭. **안내가 눌러서 데려간다** — 「그 시험 보기」 가 말만 하고 사람이
    *  탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다. */
-  const [tab, setTab] = useState('samples')
+  // **탭을 주소에 담는다.** 「그 재료의 CAE 카드로」 같은 안내가 링크로 보내는데
+  // 탭이 주소에 없으면 늘 첫 탭이 열리고, 사람은 안내가 말한 자리를 스스로 찾아야
+  // 한다 — 그러면 그 안내는 없느니만 못하다.
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('tab')
+  const tab = tabOf(asked)
+  const setTab = (next: string) => {
+    // 되돌아가기로 탭을 되짚는 것은 자연스럽다 — 히스토리에 쌓는다.
+    const copy = new URLSearchParams(params)
+    copy.set('tab', next)
+    setParams(copy)
+  }
 
   const samples = useResource(() => materialsApi.samples(id), [id])
   // 시료를 더하거나 지우면 수가 달라진다 — 같은 신호로 다시 읽는다.

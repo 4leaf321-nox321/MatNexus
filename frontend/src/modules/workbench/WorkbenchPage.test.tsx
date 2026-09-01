@@ -296,9 +296,11 @@ describe('할 자리로 데려간다', () => {
     // 피팅은 재료 화면에 있는데(ADR 0020) 바구니에는 시험이 담긴다 — 서버가 준
     // `material_id` 가 없으면 사람이 재료를 이름으로 찾아 들어가야 한다.
     await openAt(run말고({ steps: { at: 'fit', done: ['pick', 'master'] } }))
-    expect(await screen.findByRole('link', { name: /이 시험의 재료로/ })).toHaveAttribute(
+    // **탭까지 적는다.** 재료 화면은 탭이 셋이라 주소에 안 담으면 늘 첫 탭
+    // (시료·시편)이 열리고, 사람은 안내가 말한 자리를 스스로 찾아야 한다.
+    expect(await screen.findByRole('link', { name: /그 재료의 물성 탭으로/ })).toHaveAttribute(
       'href',
-      '/materials/m1'
+      '/materials/m1?tab=properties'
     )
   })
 

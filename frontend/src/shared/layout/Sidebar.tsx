@@ -11,6 +11,12 @@ import { UNKNOWN_VERSION, systemApi } from '@/shared/api/system'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { cn } from '@/shared/lib/utils'
 import { isAnyManager, isSystemAdmin } from '@/shared/auth/roles'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/shared/components/ui/sheet'
 import { itemHref, visibleGroups } from '@/shared/layout/navigation'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -117,6 +123,36 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
   )
 }
 
+/**
+ * 좁은 화면의 메뉴 — **서랍으로 연다.**
+ *
+ * 옆의 `<aside>` 는 `md` 미만에서 아예 안 그려진다(`hidden md:flex`). 상단의 접기
+ * 단추는 폭만 `w-60↔w-0` 으로 바꾸므로, **좁은 화면에서는 눌러도 아무 일이 없고
+ * 메뉴로 가는 길이 하나도 없었다** — 주소를 직접 치지 않으면 다른 화면에 못 간다.
+ *
+ * 고르면 닫는다(`onNavigate`). 서랍이 덮은 채로 두면 방금 연 화면을 못 본다.
+ */
+export function SidebarDrawer({
+  open,
+  onOpenChange,
+  workspaceSlug,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workspaceSlug: string
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="left" className="bg-sidebar w-72 p-0 md:hidden">
+        <SheetHeader className="sr-only">
+          <SheetTitle>메뉴</SheetTitle>
+        </SheetHeader>
+        <SidebarBody workspaceSlug={workspaceSlug} onNavigate={() => onOpenChange(false)} />
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 export function Sidebar({ collapsed, workspaceSlug }: SidebarProps) {
   return (
     <aside
@@ -134,4 +170,5 @@ export function Sidebar({ collapsed, workspaceSlug }: SidebarProps) {
   )
 }
 
-export { SidebarBody }
+// `SidebarBody` 는 서랍과 붙박이 사이드바가 함께 쓴다. 밖으로 내보내지 않는다 —
+// 내보내 두면 「어디서 쓰는지 모르는 export」 가 되고, 실제로 그렇게 남아 있었다.

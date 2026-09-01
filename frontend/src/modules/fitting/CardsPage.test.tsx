@@ -76,9 +76,9 @@ const FACETS = {
   ],
 }
 
-function page() {
+function page(at = '/cards') {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[at]}>
       <LeftPanelProvider>
         <LeftPanelHost />
         <CardsPage />
@@ -86,6 +86,17 @@ function page() {
     </MemoryRouter>
   )
 }
+
+describe('주소로 걸러서 들어온다', () => {
+  it('홈의 「확정 대기」 가 보낸 초안만 연다', async () => {
+    // **숫자가 가리킨 목록을 열어야 한다.** 안 읽으면 전체가 뜨고, 누른 사람은
+    // 그 숫자가 가리킨 것을 다시 찾아야 한다 — 단추가 안 먹은 것처럼 보인다.
+    page('/cards?status=draft')
+    await waitFor(() =>
+      expect(cards).toHaveBeenCalledWith(expect.objectContaining({ status: 'draft' }))
+    )
+  })
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
