@@ -443,6 +443,29 @@ class TestArea:
         assert payload["area"] is None
         assert payload["area_problem"]
 
+    def test_값이_있으면_무엇이_있는지_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**「폭·두께가 없습니다」 만 적으면 화면이 틀린 것처럼 보인다.**
+
+        지름을 채워 둔 사람은 화면에 값이 보이는데 없다고 하니 어디를 봐야 할지
+        모른다 — 실제로 그 물음이 나왔다(2026-09-02). 있는 것을 세어 주면 무엇이
+        모자란지가 드러난다: 단면 모양을 안 골랐다는 것.
+        """
+        make_standard(
+            client,
+            admin_headers,
+            "사내 환봉",
+            extra_fields=[ROUND_FIELD],
+            attributes={"diameter": 0.008},
+        )
+        specimen = make_specimen(client, admin_headers, standard="사내 환봉")
+
+        payload = dimensions_of(client, admin_headers, specimen["id"])
+        assert payload["area"] is None
+        assert "직경 8 mm" in payload["area_problem"]
+        assert "단면 모양" in payload["area_problem"]
+
 
 class TestOnlyNumbers:
     def test_판과_모드는_시편_치수가_아니다(

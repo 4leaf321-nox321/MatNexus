@@ -18,6 +18,7 @@
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -25,6 +26,7 @@ import {
   ChevronRight,
   Columns2,
   FileText,
+  FileUp,
   Pencil,
   Plus,
   Rows3,
@@ -512,15 +514,30 @@ export function SampleExplorer({
                   없어도 쓸 수 있으므로 머리에 늘 둔다. */}
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-muted-foreground text-xs font-medium">시험</p>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  onClick={() => setImporting(true)}
-                >
-                  <Table2 className="size-3.5" />
-                  표로 시험 넣기
-                </Button>
+                <span className="flex items-center gap-1">
+                  {/* **파일이 여럿일 때 하나씩 찍지 않는다.** 시편마다 하나씩
+                      붙이는 것도, 한 시편에 여러 개 붙이는 것도 그 화면이 한다 —
+                      여기서 그리로 데려가되 재료·시료를 들려 보낸다. */}
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" asChild>
+                    <Link
+                      to={`/tests/upload?material=${materialId}${
+                        active ? `&sample=${active.id}` : ''
+                      }`}
+                    >
+                      <FileUp className="size-3.5" />
+                      파일 여러 개 올리기
+                    </Link>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => setImporting(true)}
+                  >
+                    <Table2 className="size-3.5" />
+                    표로 시험 넣기
+                  </Button>
+                </span>
               </div>
               {picked ? (
                 <SpecimenTests specimenId={picked.id} specimenName={picked.record_name} />

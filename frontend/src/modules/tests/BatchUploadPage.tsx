@@ -34,7 +34,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
@@ -140,6 +140,10 @@ function isReady(row: Row): boolean {
 }
 
 export default function BatchUploadPage() {
+  // 재료 화면이 `?material=&sample=` 로 보낸다. 없으면 전과 같다.
+  const [asked] = useSearchParams()
+  const askedMaterial = asked.get('material')
+  const askedSample = asked.get('sample')
   const { slug } = useParams<{ slug?: string }>()
   const navigate = useNavigate()
   const types = useResource(() => testsApi.types(), [])
@@ -216,8 +220,11 @@ export default function BatchUploadPage() {
       // 사용자는 인식이 안 된 줄 안다.
       typeKey: guessType(file, availableTypes),
       typeSource: (guessType(file, availableTypes) ? 'extension' : null) as TypeSource,
-      materialId: null,
-      sampleId: null,
+      // **어디서 왔는지 이어받는다.** 재료 화면에서 「파일 여러 개 올리기」 로
+      // 오면 그 재료·시료가 정해져 있다 — 줄마다 다시 고르게 하면 열 줄부터 일이
+      // 되고, 그것이 이 화면을 만든 이유다.
+      materialId: askedMaterial,
+      sampleId: askedSample,
       specimen: null,
       standard: '',
       division: '',

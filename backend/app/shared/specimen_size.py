@@ -319,6 +319,17 @@ def area_detail(
     thickness = sizes.get("thickness")
     if width and thickness:
         return Area(width * thickness, None)
+    # **무엇이 있는지 말해 준다.** 「폭·두께가 없습니다」 만 적으면, 지름을 채워 둔
+    # 사람은 화면에 값이 보이는데 없다고 하니 화면이 틀렸다고 여긴다 — 실제로 그
+    # 물음이 나왔다(2026-09-02). 있는 것을 세어 주면 무엇이 모자란지가 드러난다.
+    have = [f"{one.label} {one.value * 1000:g} mm" for one in sizes.items if one.value]
+    if have:
+        return Area(
+            None,
+            f"이 시편에 있는 값은 {', '.join(have)} 뿐이라 단면적을 낼 수 없습니다. "
+            "기준정보 > 시편 규격에서 단면 모양을 고르면 그 값으로 넓이를 냅니다 "
+            "(폭·두께 둘 다 있으면 모양 없이도 냅니다).",
+        )
     return Area(
         None,
         "단면적 식을 안 골랐고 폭·두께도 없습니다. "

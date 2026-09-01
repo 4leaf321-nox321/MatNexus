@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Upload } from 'lucide-react'
+import { Loader2, Upload } from 'lucide-react'
 
 import { SpecimenPicker } from '@/modules/materials/SpecimenPicker'
 import type { Specimen } from '@/modules/materials/api'
@@ -245,9 +245,15 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             취소
           </Button>
+          {/* **도는 동안 도는 것이 보여야 한다.** 파일을 올리고 읽는 데 몇 초가
+              걸리는데 단추 글자만 바뀌면 「눌렸나」 를 확신 못 해 다시 누른다. */}
           <Button onClick={submit} disabled={saving || !file || !selected || !targetId}>
-            <Upload className="size-4" />
-            {saving ? '올리는 중…' : '올리기'}
+            {saving ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Upload className="size-4" />
+            )}
+            {saving ? '올리고 읽는 중…' : '올리기'}
           </Button>
         </DialogFooter>
       </DialogContent>
