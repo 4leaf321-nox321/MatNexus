@@ -400,6 +400,48 @@ def _window_from_displacement(
     )
 
 
+#: 참고로만 내는 기울기의 키. **`youngs_modulus` 와 다른 이름이어야 한다** —
+#: 같은 이름이면 항복강도·카드·덱이 그대로 물어 가고, 그것이 이 가드를 만든 이유다.
+REFERENCE_SLOPE = "elastic_slope_reference"
+
+
+def _reference_slope(
+    strain: np.ndarray, stress: np.ndarray, band_low: float, band_high: float
+) -> tuple[tuple[Scalar, ...], str]:
+    """믿을 수 없는 구간의 기울기를 **참고값으로** 낸다.
+
+    「점이 몇 개 없어도 일단 그 기울기는 계산해 줄 수 있지 않나」 — 맞는 말이다
+    (2026-09-02). 사람이 그 숫자를 보면 **맞는지 아닌지 대개 안다**: 강판인데 1.8
+    GPa 가 나오면 구간이 틀린 것이고, 190 GPa 면 점이 둘이어도 쓸 만하다.
+
+    **다른 이름으로 낸다.** `youngs_modulus` 로 내면 항복강도가 그것을 물어 가고
+    카드와 덱까지 흘러간다 — 값을 못 믿는다고 판단해 놓고 뒷문으로 내보내는 셈이다.
+    쓰기로 했으면 사람이 「직접 입력」 에 옮겨 적는다. 그 한 번의 손이 「이 값을
+    쓰겠다」 는 결정이고, 결과에도 그렇게 남는다.
+
+    점이 둘도 없으면 기울기 자체가 없다 — 그때는 아무것도 안 낸다.
+    """
+    peak = float(np.max(stress)) if stress.size else 0.0
+    if peak <= 0:
+        return (), ""
+    mask = (stress >= peak * band_low) & (stress <= peak * band_high)
+    if int(np.sum(mask)) < 2:
+        # 띠가 너무 좁으면 상승 구간 앞쪽으로 넓혀 본다 — **참고값이라** 구간이
+        # 넓어도 되고, 아무 숫자도 없는 것보다 낫다.
+        rising = int(np.argmax(stress)) + 1
+        mask = np.zeros_like(stress, dtype=bool)
+        mask[: max(2, min(rising, 5))] = True
+    x, y = strain[mask], stress[mask]
+    if x.size < 2 or float(np.ptp(x)) <= 0:
+        return (), ""
+    slope = float(np.polyfit(x, y, 1)[0])
+    return (
+        (Scalar(REFERENCE_SLOPE, "참고 기울기(믿을 수 없음)", slope, "Pa"),),
+        f" 그 구간의 기울기는 **{slope / 1e9:.4g} GPa** 입니다 — 참고값입니다. "
+        f"맞다고 보시면 방법을 「직접 입력」 으로 두고 이 값을 넣으세요.",
+    )
+
+
 def _auto_window(
     strain: Any,
     stress: Any,
@@ -592,6 +634,16 @@ def _auto_window(
             ),
         ),
         Produced(
+            key=REFERENCE_SLOPE,
+            label="참고 기울기(믿을 수 없음)",
+            si_unit="Pa",
+            help=(
+                "점이 모자라거나 직선이 아니어서 **탄성계수로는 안 낸** 구간의 기울기입니다. "
+                "**이 값은 뒤 단계로 안 갑니다** — 쓰기로 했으면 「직접 입력」 에 옮겨 "
+                "적으세요. 그 한 번의 손이 「이 값을 쓰겠다」 는 결정입니다."
+            ),
+        ),
+        Produced(
             key="elastic_point_count",
             label="탄성 구간 점 수",
             si_unit="1",
@@ -658,6 +710,7 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             # **왜 없는지를 값으로도 남긴다.** 고정 구간 쪽이 그렇게 하고 있고
             # (「값이 없다」 만으로는 고칠 데를 모른다), 자동만 안 남기면 사람이
             # 곡선을 직접 열어 점을 세게 된다 — 실측 2026-08-31 에 그 일을 했다.
+            hint, hint_note = _reference_slope(strain, stress, band_low, band_high)
             return StepResult(
                 frame,
                 notes=(
@@ -670,10 +723,11 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                     "「탄성계수 값」 칸에 `@declared_youngs_modulus` 를 적으면 "
                     "그 값으로 돌고, 결과에는 "
                     "잰 값이 아니라 적은 값이라고 남습니다. 구간을 아는 경우에는 "
-                    "「최소제곱 회귀」 로 바꿔 직접 지정하세요.",
+                    "「최소제곱 회귀」 로 바꿔 직접 지정하세요." + hint_note,
                 ),
                 scalars=(
                     Scalar("elastic_point_count", "탄성 구간 점 수", float(in_band), "1"),
+                    *hint,
                 ),
             )
         low, high = found
@@ -749,6 +803,10 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 f"**재료에 적어 둔 탄성계수를 쓰세요** — 방법을 「직접 입력」 으로 두고 "
                 f"「탄성계수 값」 칸에 `@declared_youngs_modulus` 를 적으면 그 값으로 돕니다"
                 f"(재료 > 물성에 적어 두어야 합니다). "
+                # **숫자를 보여 준다.** 사람은 그 값을 보면 맞는지 대개 안다 —
+                # 강판인데 1.8 GPa 면 구간이 틀린 것이고, 190 GPa 면 점이 둘이어도
+                # 쓸 만하다. 쓰기로 했으면 「직접 입력」 에 옮겨 적는다.
+                f"그 구간의 기울기는 **{modulus / 1e9:.4g} GPa** 입니다 — 참고값입니다. "
                 f"{observed}"
             )
         elif math.isfinite(r_squared) and r_squared < MIN_TRUSTWORTHY_R_SQUARED:
@@ -769,6 +827,13 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             # 남기는 것은 **거절의 근거**뿐이다. 점이 모자라 거절했으면 R² 는 안
             # 남긴다 — 2점의 R²=1 이 화면에 뜨면 「완벽한데 왜 값이 없지」 가 된다.
             scalars = [Scalar("elastic_point_count", "탄성 구간 점 수", float(count), "1")]
+            # **참고 기울기는 다른 이름으로 낸다.** `youngs_modulus` 로 내면
+            # 항복강도가 물어 가고 카드와 덱까지 간다 — 못 믿는다고 판단해 놓고
+            # 뒷문으로 내보내는 셈이다.
+            if math.isfinite(modulus):
+                scalars.append(
+                    Scalar(REFERENCE_SLOPE, "참고 기울기(믿을 수 없음)", float(modulus), "Pa")
+                )
             if count >= MIN_TRUSTWORTHY_POINTS and math.isfinite(r_squared):
                 scalars.append(
                     Scalar("elastic_r_squared", "탄성 구간 R²", float(r_squared), "1")

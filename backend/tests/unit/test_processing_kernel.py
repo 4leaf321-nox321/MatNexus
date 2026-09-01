@@ -208,6 +208,57 @@ class Test탄성계수:
         assert scalar(result, "elastic_point_count") == pytest.approx(2.0)
         assert any("탄성계수를 내지 않았습니다" in note for note in result.notes)
 
+    def test_점이_모자라도_그_구간의_기울기는_보여_준다(self) -> None:
+        """**「일단 거기 기울기는 계산해 줄 수 있지 않나」 — 맞는 말이다**(2026-09-02).
+
+        사람은 그 숫자를 보면 맞는지 대개 안다: 강판인데 1.8 GPa 면 구간이 틀린
+        것이고, 190 GPa 면 점이 둘이어도 쓸 만하다. 그러니 **보여는 준다.**
+
+        다만 **다른 이름으로** 낸다. `youngs_modulus` 로 내면 항복강도가 물어 가고
+        카드와 덱까지 흘러간다 — 못 믿는다고 판단해 놓고 뒷문으로 내보내는 셈이다.
+        """
+        strain = np.array([0.0, 0.0008, 0.0012, 0.05])
+        sparse = Frame(
+            {"strain_engineering": strain, "stress_engineering": strain * E_TRUE},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {"minimum_strain": 0.0005, "maximum_strain": 0.0015},
+                )
+            ],
+            sparse,
+        )
+        keys = {item.key for item in result.scalars}
+        assert "youngs_modulus" not in keys, "믿을 수 없는 값을 그 이름으로 내면 안 된다"
+        assert scalar(result, "elastic_slope_reference") == pytest.approx(E_TRUE, rel=1e-6)
+        assert any("참고값" in note for note in result.notes)
+
+    def test_참고_기울기는_뒤_단계로_안_간다(self) -> None:
+        """**뒷문을 만들지 않는다.** 참고값이 `@youngs_modulus` 를 채우면 그 값이
+        항복강도로, 카드로, 덱으로 그대로 간다 — 사람이 「쓰겠다」 고 한 적이 없다."""
+        strain = np.array([0.0, 0.0008, 0.0012, 0.05])
+        sparse = Frame(
+            {"strain_engineering": strain, "stress_engineering": strain * E_TRUE},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.elastic_modulus",
+                        {"minimum_strain": 0.0005, "maximum_strain": 0.0015},
+                    ),
+                    Step(
+                        "tensile.proof_stress",
+                        {"offset_strain": 0.002, "youngs_modulus": "@youngs_modulus"},
+                    ),
+                ],
+                sparse,
+            )
+
     def test_그_값을_쓰려던_단계가_이유를_그대로_전한다(self) -> None:
         """**목록만 보여 주면 사람은 단계를 빼 버린다.**
 
