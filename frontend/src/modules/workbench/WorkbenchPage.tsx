@@ -29,6 +29,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { basketApi } from '@/shared/api/basket'
 import type { BasketItem, BasketRun, BasketRunDetail } from '@/shared/api/basket'
 import { withJosa } from '@/shared/korean'
+import { BundleBar } from '@/modules/fitting/BundleBar'
+import { fittingApi } from '@/modules/fitting/api'
 import { COLLECT_AT, WORKFLOWS, workflowOf } from '@/modules/workbench/workflows'
 import type { StepCheck, Workflow } from '@/modules/workbench/workflows'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -266,6 +268,9 @@ function RunView({
     steps.findIndex((one) => one.key === at)
   )
   const step = steps[index]
+  const cardIds = run.items
+    .filter((one) => one.kind === 'card' && !one.missing)
+    .map((one) => one.target_id)
   // 판정은 담긴 것으로 한다 — 서버가 세어 준 사실(`facts`)이 그 안에 있다.
   const checks = new Map<string, StepCheck>()
   for (const one of steps) {
@@ -339,6 +344,13 @@ function RunView({
 
               {checks.has(step.key) && <StepStatus check={checks.get(step.key)!} />}
 
+              {/* **담아 둔 것으로 바로 내보낸다.** 카드 목록으로 보내 다시 고르게
+                  하면, 담아 둔 값이 그 자리에서 버려진다. 띠는 카드 화면의 것을
+                  그대로 세운다 — 여기서 다시 만들면 형식·단위계 안내가 두 벌로 갈린다. */}
+              {step.key === 'export' && cardIds.length > 0 && (
+                <ExportStep ids={cardIds} onError={onError} />
+              )}
+
               {/* **일은 그 도메인 화면이 한다.** 여기서 복제하면 두 벌이 갈린다. */}
               {step.where && (
                 <Button size="sm" variant="outline" asChild>
@@ -388,6 +400,24 @@ function RunView({
         </div>
       </div>
     </section>
+  )
+}
+
+/**
+ * 묶음 내보내기 — **카드 목록의 그 띠를 그대로 세운다**(`BundleBar`).
+ *
+ * 형식 목록은 서버가 준다. 화면이 적어 두면 새 덱 형식을 붙일 때 두 곳을 고쳐야 한다.
+ */
+function ExportStep({ ids, onError }: { ids: string[]; onError: (error: Error) => void }) {
+  const formats = useResource(() => fittingApi.formats(), [])
+  return (
+    <BundleBar
+      ids={ids}
+      formats={formats.data ?? []}
+      // 바구니에서 빼는 것은 바구니의 일이다 — 여기서 비우면 담은 기록이 조용히 사라진다.
+      onClear={() => {}}
+      onError={onError}
+    />
   )
 }
 

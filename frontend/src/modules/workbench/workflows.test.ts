@@ -23,6 +23,7 @@ function item(over: Partial<BasketItem> & { facts?: Record<string, number> }): B
     label: '시편 A',
     detail: null,
     facts: {},
+    material_id: null,
     missing: false,
     note: null,
     added_at: '2026-09-01T00:00:00Z',
@@ -125,6 +126,67 @@ describe('점탄성 — 나머지 단계', () => {
     expect(
       judge('viscoelastic_set', 'fit', [item({ facts: { master_curves: 1, prony_fits: 1 } })])
     ).toMatchObject({ ok: true })
+  })
+})
+
+describe('해석 물성 — 무엇이 비었나', () => {
+  const material = (label: string, cards: number, published = 0) =>
+    item({
+      kind: 'material',
+      label,
+      material_id: label,
+      facts: { cards, published_cards: published },
+    })
+
+  it('카드가 없는 재료의 이름을 댄다', () => {
+    // **이 판정이 이 시나리오의 산출물이다** — 「해석에 넘기기 전에 뭐가 비었나」.
+    // 지금까지는 재료를 하나씩 열어 봐야 알 수 있었다.
+    const check = judge('analysis_deck', 'survey', [
+      material('EPDM-70', 2, 2),
+      material('PP-GF30', 0),
+    ])
+    expect(check).toMatchObject({ ok: false })
+    expect(check!.say).toContain('1건에 카드가 없습니다')
+    expect(names(check)).toEqual(['PP-GF30'])
+  })
+
+  it('초안뿐인 재료는 따로 말한다', () => {
+    // 만들 것이 아니라 **확정할 것**이다 — 같은 말로 세면 할 일이 뒤섞인다.
+    const check = judge('analysis_deck', 'survey', [
+      material('EPDM-70', 2, 2),
+      material('PP-GF30', 1, 0),
+    ])
+    expect(check!.say).toContain('초안뿐입니다')
+    expect(names(check)).toEqual(['PP-GF30'])
+    // 카드는 있으므로 이 단계는 끝났다. 확정은 다음 사람(부서 관리자)의 일이다.
+    expect(check!.ok).toBe(true)
+  })
+
+  it('다 갖췄으면 됐다고 한다', () => {
+    const check = judge('analysis_deck', 'survey', [material('EPDM-70', 2, 1)])
+    expect(check).toMatchObject({ ok: true })
+  })
+})
+
+describe('해석 물성 — 빠뜨린 재료', () => {
+  it('재료는 셋인데 카드가 한 재료 것뿐이면 짚어 준다', () => {
+    // **담았다는 사실만으로 「다 골랐다」 고 하면 누락이 안 보인다.** 해석에 재료
+    // 하나가 빠지면 그 부품만 딴 물성으로 돈다.
+    const check = judge('analysis_deck', 'collect', [
+      item({ kind: 'material', label: 'EPDM-70', material_id: 'm1', facts: { cards: 1 } }),
+      item({ kind: 'material', label: 'PP-GF30', material_id: 'm2', facts: { cards: 1 } }),
+      item({ kind: 'card', label: '점탄성', material_id: 'm1', facts: { published: 1 } }),
+    ])
+    expect(check).toMatchObject({ ok: false })
+    expect(names(check)).toEqual(['PP-GF30'])
+  })
+
+  it('재료마다 카드가 담겼으면 넘어간다', () => {
+    const check = judge('analysis_deck', 'collect', [
+      item({ kind: 'material', label: 'EPDM-70', material_id: 'm1', facts: { cards: 1 } }),
+      item({ kind: 'card', label: '점탄성', material_id: 'm1', facts: { published: 1 } }),
+    ])
+    expect(check).toMatchObject({ ok: true })
   })
 })
 

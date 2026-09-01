@@ -28,6 +28,12 @@ const MODULES = path.join(SRC, 'modules')
  * 것은 도메인상 자연스럽다 — 재료 모듈이 그 선택기를 제공하고 시험이 조립한다.
  */
 const ALLOWED: Record<string, { to: string; why: string }[]> = {
+  workbench: [
+    {
+      to: 'fitting',
+      why: '워크벤치는 조립만 한다(AGENTS.md). 「묶음 내보내기」 단계는 카드 목록의 그 띠(BundleBar)를 그대로 세운다 — 내보내는 일은 fitting 의 것이고, 여기서 다시 만들면 형식·단위계·manifest 안내가 두 벌로 갈린다. 바구니에 담아 둔 카드를 목록 화면에서 **다시 고르게 하지 않으려고** 이 예외를 둔다.',
+    },
+  ],
   vocabulary: [
     {
       to: 'units',

@@ -218,6 +218,39 @@ describe('담고 나서 돌아오면', () => {
   })
 })
 
+describe('담아 둔 카드로 바로 내보낸다', () => {
+  it('내보내기 단계에 묶음 띠가 선다', async () => {
+    // **카드 목록으로 보내 다시 고르게 하면 담아 둔 값이 그 자리에서 버려진다.**
+    // 띠는 카드 화면의 것을 그대로 세운다 — 여기서 다시 만들면 형식·단위계 안내가
+    // 두 벌로 갈린다.
+    const detail = {
+      ...DETAIL,
+      steps: { at: 'export', done: ['scope', 'survey', 'collect'] },
+      item_count: 1,
+      items: [
+        {
+          id: 'i1',
+          kind: 'card',
+          target_id: 'c1',
+          label: '점탄성 Prony',
+          detail: 'EPDM · published',
+          facts: { published: 1 },
+          material_id: 'm1',
+          missing: false,
+          note: null,
+          added_at: '2026-09-01T00:00:00Z',
+        },
+      ],
+    }
+    run.mockResolvedValue(detail)
+    runs.mockResolvedValue([detail])
+    show()
+    await userEvent.click(await screen.findByText('EPDM 도어씰 2026-09'))
+    expect(await screen.findByLabelText('묶음 내보내기')).toBeInTheDocument()
+    expect(screen.getByText(/1장 골랐습니다/)).toBeInTheDocument()
+  })
+})
+
 describe('할 자리로 데려간다', () => {
   const openAt = async (detail: Record<string, unknown>) => {
     run.mockResolvedValue(detail)

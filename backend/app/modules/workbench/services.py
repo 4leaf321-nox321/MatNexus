@@ -167,14 +167,46 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     }
 
 
+def _cards_by_material(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, tuple[int, int]]:
+    """재료마다 (카드 수, 확정 수). **해석에 넘기기 전에 뭐가 비었나** 를 이걸로 센다.
+
+    내려진 카드(`deprecated`)는 세지 않는다 — 쓰지 말라는 표시다. 세는 것이 목록이
+    아니라 수뿐이므로 `blocks` 를 읽지 않는다(카드 하나의 표가 수천 점이다).
+    """
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(
+            PropertyCard.material_id,
+            func.count(),
+            func.count().filter(PropertyCard.status == "published"),
+        )
+        .where(PropertyCard.material_id.in_(ids), PropertyCard.status != "deprecated")
+        .group_by(PropertyCard.material_id)
+    )
+    return {
+        material_id: (int(total), int(published)) for material_id, total, published in rows
+    }
+
+
 def _materials(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     rows: list[Material] = (
         list(db.scalars(select(Material).where(Material.id.in_(ids)))) if ids else []
     )
+    live = [row for row in rows if row.deleted_at is None]
+    cards = _cards_by_material(db, {row.id for row in live})
     return {
-        row.id: Resolved(label=row.record_name, detail=row.category or "", material_id=row.id)
-        for row in rows
-        if row.deleted_at is None
+        row.id: Resolved(
+            label=row.record_name,
+            detail=row.category or "",
+            material_id=row.id,
+            # 해석 덱을 갖출 때 묻는 것은 둘이다 — 카드가 있나, 확정됐나.
+            facts={
+                "cards": cards.get(row.id, (0, 0))[0],
+                "published_cards": cards.get(row.id, (0, 0))[1],
+            },
+        )
+        for row in live
     }
 
 

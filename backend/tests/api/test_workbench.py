@@ -222,6 +222,57 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         ).json()
         assert item["facts"]["cards"] == 0
 
+    def test_재료는_카드가_몇_장인지_달고_온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        material: dict[str, Any],
+    ) -> None:
+        """해석 덱을 갖출 때 묻는 것은 둘이다 — **카드가 있나, 확정됐나.**
+
+        이 수가 없으면 사람이 재료를 하나씩 열어 봐야 「뭐가 비었나」 를 안다.
+        """
+        for label, status in [
+            ("확정 카드", "published"),
+            ("초안", "draft"),
+            ("옛것", "deprecated"),
+        ]:
+            db.add(
+                PropertyCard(
+                    material_id=uuid.UUID(material["id"]),
+                    label=label,
+                    status=status,
+                    source={},
+                )
+            )
+        db.commit()
+
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "material", "target_ids": [material["id"]]},
+            headers=admin_headers,
+        ).json()
+        # **내려진 카드는 「있다」 가 아니다** — 쓰지 말라는 표시다.
+        assert item["facts"] == {"cards": 2, "published_cards": 1}
+
+    def test_카드가_없는_재료는_0으로_온다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        material: dict[str, Any],
+    ) -> None:
+        """**이것이 이 시나리오가 찾는 것이다.** 비었다는 사실이 안 오면 화면이
+        「다 갖췄다」 고 말한다."""
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "material", "target_ids": [material["id"]]},
+            headers=admin_headers,
+        ).json()
+        assert item["facts"] == {"cards": 0, "published_cards": 0}
+
     def test_안_세어_본_것은_모른다고_한다(
         self,
         client: TestClient,

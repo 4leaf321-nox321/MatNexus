@@ -298,14 +298,52 @@ export const WORKFLOWS: Workflow[] = [
         whereLabel: '재료 목록으로',
         judge: (items) => collected(items, 'material', '재료'),
       },
-      { key: 'survey', title: '무엇이 있나', what: '재료마다 카드가 있는지, 초안인지 확정인지 봅니다.' },
+      {
+        key: 'survey',
+        title: '무엇이 있나',
+        what: '재료마다 카드가 있는지, 초안인지 확정인지 봅니다.',
+        // **이 시나리오의 산출물이 이 판정이다** — 「해석에 넘기기 전에 뭐가 비었나」.
+        // 지금까지는 재료를 하나씩 열어 봐야 알 수 있었다.
+        judge: (items) => {
+          const found = live(items, 'material')
+          if (found.length === 0) return null
+          const empty = pendingOf(found, (one) => fact(one, 'cards') > 0)
+          const draftOnly = found.filter(
+            (one) => fact(one, 'cards') > 0 && fact(one, 'published_cards') === 0
+          )
+          const say: string[] = []
+          if (empty.length > 0) say.push(`${empty.length}건에 카드가 없습니다.`)
+          if (draftOnly.length > 0) say.push(`${draftOnly.length}건은 초안뿐입니다.`)
+          return {
+            ok: empty.length === 0,
+            say: say.length > 0 ? say.join(' ') : `담은 재료 ${found.length}건 모두 카드가 있습니다.`,
+            // 카드가 아예 없는 것이 먼저다 — 초안뿐인 것은 만들 것이 아니라 확정할 것이다.
+            blocking: [...empty, ...draftOnly],
+          }
+        },
+      },
       {
         key: 'collect',
         title: '골라 담기',
         what: '해석에 쓸 카드를 담습니다.',
         collects: 'card',
         where: '/cards',
-        judge: (items) => collected(items, 'card', '카드'),
+        whereLabel: '카드 목록으로',
+        judge: (items) => {
+          const check = collected(items, 'card', '카드')
+          // 담은 재료 수와 견준다. **재료가 셋인데 카드가 하나면 빠뜨린 것이다** —
+          // 카드를 담았다는 사실만으로 「다 골랐다」 고 하면 그 누락이 안 보인다.
+          const owners = new Set(live(items, 'card').map((one) => one.material_id))
+          const materials = live(items, 'material')
+          if (check.ok && materials.length > owners.size) {
+            return {
+              ok: false,
+              say: `${check.say} 담은 재료 ${materials.length}건 중 ${owners.size}건의 카드만 담겼습니다.`,
+              blocking: materials.filter((one) => !owners.has(one.material_id)),
+            }
+          }
+          return check
+        },
       },
       {
         key: 'export',
