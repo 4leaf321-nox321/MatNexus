@@ -187,7 +187,7 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
     carried: dict[str, Scalar] = {item.key: item for item in given}
     for index, step in enumerate(steps):
         plugin = _plugin(step.plugin)
-        options = _resolve_references(step.options, carried, index)
+        options = _resolve_references(step.options, carried, index, stages)
         try:
             result = plugin.fn(current, options)
         except ProcessingError as exc:
@@ -214,8 +214,29 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
 REFERENCE_PREFIX = "@"
 
 
+def _why_missing(name: str, stages: Sequence[Stage]) -> str:
+    """그 값을 **내기로 되어 있던 단계**가 남긴 말.
+
+    값을 못 내는 단계는 실패하지 않고 근거를 남긴다(탄성계수: 「3점밖에 없어 내지
+    않았습니다」). 그 말을 뒤 단계의 오류로 옮기지 않으면 사람은 「쓸 수 있는 값
+    목록」 만 보고 **무엇을 고쳐야 하는지 모른다** — 실사용에서 그 물음이 나왔다
+    (2026-09-02, `6단계: '@youngs_modulus' …`).
+    """
+    for stage in reversed(stages):
+        try:
+            plugin = registry.get(stage.plugin)
+        except KeyError:  # 등록이 사라진 옛 결과를 다시 그릴 때
+            continue
+        if name in {one.key for one in plugin.makes_values} and stage.notes:
+            return " ".join(stage.notes)
+    return ""
+
+
 def _resolve_references(
-    options: dict[str, Any], carried: dict[str, Scalar], index: int
+    options: dict[str, Any],
+    carried: dict[str, Scalar],
+    index: int,
+    stages: Sequence[Stage] = (),
 ) -> dict[str, Any]:
     """`"@youngs_modulus"` 를 앞 단계가 낸 값으로 바꾼다.
 
@@ -237,9 +258,13 @@ def _resolve_references(
         scalar = carried.get(name)
         if scalar is None:
             available = ", ".join(sorted(carried)) or "(아직 없음)"
+            # **왜 안 나왔는지는 그 단계가 이미 적어 두었다.** 목록만 보여 주면
+            # 사람은 무엇을 고쳐야 하는지 모른 채 단계를 빼 버린다.
+            because = _why_missing(name, stages)
+            hint = f" 그 단계가 남긴 말: {because}" if because else ""
             raise ProcessingError(
-                f"{index + 1}단계: '{value}' 가 가리키는 값을 앞 단계가 내지 않았습니다. "
-                f"지금 쓸 수 있는 값: {available}. 그 값을 내는 단계를 앞에 두거나, "
+                f"{index + 1}단계: '{value}' 가 가리키는 값을 앞 단계가 내지 않았습니다."
+                f"{hint} 지금 쓸 수 있는 값: {available}. 그 값을 내는 단계를 앞에 두거나, "
                 f"시편 치수라면 시편 기록에 그 값이 있는지 확인하세요."
             )
         resolved[key] = scalar.value

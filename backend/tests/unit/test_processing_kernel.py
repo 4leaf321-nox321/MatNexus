@@ -147,6 +147,38 @@ class Test탄성계수:
         assert scalar(result, "elastic_point_count") == pytest.approx(2.0)
         assert any("탄성계수를 내지 않았습니다" in note for note in result.notes)
 
+    def test_그_값을_쓰려던_단계가_이유를_그대로_전한다(self) -> None:
+        """**목록만 보여 주면 사람은 단계를 빼 버린다.**
+
+        탄성계수가 없으면 항복강도 단계가 `@youngs_modulus` 를 못 푼다. 그때
+        「쓸 수 있는 값: elastic_point_count, …」 만 적으면 무엇을 고쳐야 하는지
+        알 수 없다 — 실사용에서 그 물음이 나왔다(2026-09-02). 앞 단계가 이미 적어
+        둔 거절 사유를 그 오류에 함께 싣는다.
+        """
+        strain = np.array([0.0, 0.0008, 0.0012, 0.05])
+        sparse = Frame(
+            {"strain_engineering": strain, "stress_engineering": strain * E_TRUE},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError) as caught:
+            processing.apply(
+                [
+                    Step(
+                        "tensile.elastic_modulus",
+                        {"minimum_strain": 0.0005, "maximum_strain": 0.0015},
+                    ),
+                    Step(
+                        "tensile.proof_stress",
+                        {"offset_strain": 0.002, "youngs_modulus": "@youngs_modulus"},
+                    ),
+                ],
+                sparse,
+            )
+        said = str(caught.value)
+        assert "탄성계수를 내지 않았습니다" in said, said
+        # 쓸 수 있는 값 목록도 그대로 둔다 — 참조 이름을 잘못 적은 경우엔 그것이 답이다.
+        assert "elastic_point_count" in said
+
     def test_자동은_토우와_항복_사이를_잡는다(self) -> None:
         """**고정 구간이 매 곡선에 안 맞는 것**이 이 방법의 이유다. 곡선마다 토우
         길이와 항복 시점이 달라, 변형률 절대값으로 박아 두면 어떤 곡선에서는
