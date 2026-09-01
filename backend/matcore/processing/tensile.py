@@ -597,8 +597,12 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                     f"없어 **탄성계수를 내지 않았습니다**(상승 구간 전체가 {rising}점). "
                     f"{MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 — {in_band}점을 지나는 "
                     "직선은 거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. "
-                    "**곡선이 성깁니다** — 더 조밀한 원본을 쓰거나, 구간을 아는 경우 "
-                    "방법을 「최소제곱 회귀」 로 바꿔 직접 지정하세요.",
+                    "**곡선이 성깁니다.** 이미 찍힌 파일이면 다시 잴 수 없으므로 "
+                    "**재료에 적어 둔 탄성계수를 씁니다** — 방법을 「직접 입력」 으로 두고 "
+                    "「탄성계수 값」 칸에 `@declared_youngs_modulus` 를 적으면 "
+                    "그 값으로 돌고, 결과에는 "
+                    "잰 값이 아니라 적은 값이라고 남습니다. 구간을 아는 경우에는 "
+                    "「최소제곱 회귀」 로 바꿔 직접 지정하세요.",
                 ),
                 scalars=(
                     Scalar("elastic_point_count", "탄성 구간 점 수", float(in_band), "1"),
@@ -673,8 +677,10 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             refused = (
                 f"{window}에 {count}점밖에 없어 **탄성계수를 내지 않았습니다.** "
                 f"{MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 — {count}점을 지나는 직선은 "
-                f"거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. 구간을 넓히거나, 더 "
-                f"조밀한 곡선을 쓰거나, 값을 아는 경우 방법을 「직접 입력」 으로 바꾸세요. "
+                f"거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. 구간을 넓히거나, "
+                f"**재료에 적어 둔 탄성계수를 쓰세요** — 방법을 「직접 입력」 으로 두고 "
+                f"「탄성계수 값」 칸에 `@declared_youngs_modulus` 를 적으면 그 값으로 돕니다"
+                f"(재료 > 물성에 적어 두어야 합니다). "
                 f"{observed}"
             )
         elif math.isfinite(r_squared) and r_squared < MIN_TRUSTWORTHY_R_SQUARED:

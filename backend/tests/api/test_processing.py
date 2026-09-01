@@ -74,7 +74,112 @@ def run_id(client: TestClient, admin_headers: dict[str, str], db: Session) -> st
         headers=admin_headers,
     ).json()
     assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    MADE["material_id"] = str(material["id"])
     return str(created["id"])
+
+
+#: `run_id` 가 만든 재료. **시험끼리 값을 주고받는 자리는 여기뿐이다** — 픽스처를
+#: 하나 더 두면 재료가 둘 생겨서 「어느 재료에 적었나」 가 갈린다.
+MADE: dict[str, str] = {}
+
+
+@pytest.fixture
+def material_id(run_id: str) -> str:
+    return MADE["material_id"]
+
+
+class Test재료에_적은_값으로_돈다:
+    """**탄성 구간에 점이 적은 곡선이 실제로 있다.**
+
+    장비가 성기게 찍었거나 재료가 거의 곧바로 항복한다 — 그러면 탄성계수 단계가
+    값을 거절하고(그것이 맞다), 항복강도가 그 값을 못 받아 처리가 통째로 막힌다.
+    이미 찍힌 파일은 다시 잴 수 없으니 **아는 값을 쓴다** — 강판의 탄성계수는
+    재료에 적혀 있고, 그것이 선언 물성이 있는 이유다(ADR 0016).
+    """
+
+    def test_선언_탄성계수를_참조할_수_있다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run_id: str,
+        material_id: str,
+    ) -> None:
+        # 물성 항목 목록은 기준정보가 정한다(D7) — 씨앗이 있어야 적을 수 있다.
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        db.commit()
+
+        saved = client.patch(
+            f"/api/materials/{material_id}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "points": [{"value": 206}],
+                        "input_unit": "GPa",
+                        "source": "standard",
+                        "reference": "KS D 3512",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+        done = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    *STEPS,
+                    {
+                        "plugin": "tensile.elastic_modulus",
+                        # **잰 값과 한 글자도 안 겹치는 이름이다** — 결과를 보는
+                        # 사람이 잰 값인지 적은 값인지 구별할 수 있어야 한다.
+                        "options": {
+                            "method": "manual",
+                            "manual_modulus": "@declared_youngs_modulus",
+                        },
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert done.status_code == 201, done.text
+        values = {one["key"]: one["value"] for one in done.json()["scalars"]}
+        assert values["youngs_modulus"] == pytest.approx(206e9)
+
+    def test_안_적어_뒀으면_그_참조가_실패한다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**0 이 조용히 섞이는 것보다 실패가 낫다.** 탄성계수가 0 이면 항복선의
+        기울기가 0 이 되고, 그 결과는 숫자로만 보면 그럴듯하다."""
+        refused = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    *STEPS,
+                    {
+                        "plugin": "tensile.elastic_modulus",
+                        "options": {
+                            "method": "manual",
+                            "manual_modulus": "@declared_youngs_modulus",
+                        },
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
 
 
 class Test단계목록:

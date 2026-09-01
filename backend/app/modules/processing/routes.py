@@ -149,6 +149,9 @@ def _run_pipeline(
             given=[
                 *curvedata.specimen_scalars(db, run),
                 *curvedata.condition_scalars(db, run),
+                # **재료에 적어 둔 값**도 넘긴다(ADR 0016). 탄성 구간이 성긴 곡선은
+                # 탄성계수를 못 재는데, 그 값은 대개 재료에 적혀 있다.
+                *curvedata.declared_scalars(db, run),
             ],
         )
     except processing.ProcessingError as exc:

@@ -21,7 +21,7 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import Specimen
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests.models import Curve, TestChannel, TestRun
 from app.modules.vocabulary.services import Field
 from app.shared import filestore, specimen_size
@@ -88,6 +88,69 @@ def load_frame(
         for name, values in raw.items()
     }
     return processing.Frame(columns, {name: units.get(name, "1") for name in columns}), curve
+
+
+#: 파이프라인이 `@declared_…` 로 참조할 수 있는 선언 물성. **이름을 여기 적는다** —
+#: 기준정보의 항목 이름(사람이 고치는 말)과 참조 키(레시피에 적히는 말)를 잇는 자리다.
+DECLARED_KEYS = {"탄성계수": "youngs_modulus", "포아송비": "poisson_ratio", "밀도": "density"}
+
+
+def declared_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
+    """재료에 **사람이 적어 둔** 물성을 파이프라인에 넘긴다(ADR 0016).
+
+    ## 왜 필요한가
+
+    탄성 구간에 점이 몇 개 없는 곡선이 있다. 장비가 성기게 찍었거나, 그 재료가
+    거의 곧바로 항복한다 — 그러면 탄성계수 단계가 **값을 거절한다**(그것이 맞다:
+    두어 점을 지나는 직선은 언제나 R²≈1 이라 맞았는지 알 수 없다). 그런데 항복강도는
+    탄성계수가 있어야 그을 수 있어서, 거기서 처리가 통째로 막힌다.
+
+    실사용에서 그 막다른 길이 나왔다(2026-09-02: 「자동으로 해도 안 된다. 탄성구간에
+    점이 실제로 적을 수도 있잖아?」). 답은 **아는 값을 쓰는 것**이다 — 강판의
+    탄성계수는 재료에 적혀 있고, 그것이 선언 물성이 있는 이유다.
+
+    레시피에 이렇게 적는다:
+
+        {"plugin": "tensile.elastic_modulus",
+         "options": {"method": "manual", "youngs_modulus": "@declared_youngs_modulus"}}
+
+    **잰 값과 한 글자도 안 겹치는 이름을 준다**(`declared_` 접두어). 결과를 보는
+    사람이 잰 값인지 적은 값인지 구별할 수 있어야 하고, 그 구별이 카드에 근거를
+    박는 이유 전부다.
+
+    없는 값은 넘기지 않는다 — 참조가 「그 값이 없습니다」 로 실패하는 편이,
+    0 이 조용히 섞이는 것보다 낫다.
+    """
+    specimen = db.get(Specimen, run.specimen_id)
+    if specimen is None:
+        return []
+    sample = db.get(Sample, specimen.sample_id)
+    material = db.get(Material, sample.material_id) if sample else None
+    if material is None:
+        return []
+
+    given: list[processing.Scalar] = []
+    for row in material.declared_properties or []:
+        key = DECLARED_KEYS.get(str(row.get("item")))
+        if key is None:
+            continue
+        # **대푯값은 첫 점이다.** 온도를 타는 값이면 가장 낮은 온도(대개 상온)다.
+        points = [
+            point
+            for point in (row.get("points") or [])
+            if isinstance(point.get("value_si"), int | float)
+        ]
+        if not points:
+            continue
+        given.append(
+            processing.Scalar(
+                f"declared_{key}",
+                f"재료에 적은 {row.get('item')}",
+                float(points[0]["value_si"]),
+                str(row.get("si_unit") or ""),
+            )
+        )
+    return given
 
 
 def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
