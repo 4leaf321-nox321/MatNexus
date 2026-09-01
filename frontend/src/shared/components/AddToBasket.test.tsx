@@ -114,6 +114,17 @@ describe('끌어서 옮긴다', () => {
     return from
   }
 
+  it('처음에는 한가운데 뜬다', async () => {
+    // **구석에 두면 「떠 있다」 는 것부터 못 알아본다** — 줄 안의 단추를 두 번 못
+    // 찾은 것이 그 이유였다. 가려서 거슬리면 끌어서 치우면 된다.
+    show()
+    const panel = await screen.findByLabelText('담기')
+    const left = Number.parseInt(panel.style.left)
+    const top = Number.parseInt(panel.style.top)
+    expect(Math.abs(left + 320 / 2 - window.innerWidth / 2)).toBeLessThan(2)
+    expect(Math.abs(top + 150 / 2 - window.innerHeight / 2)).toBeLessThan(2)
+  })
+
   it('끈 만큼만 움직인다', async () => {
     // **손잡이를 쥔 지점을 유지한다** — 잡는 순간 패널이 커서로 튀면 옮기기 어렵다.
     show()

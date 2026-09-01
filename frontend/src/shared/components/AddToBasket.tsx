@@ -84,8 +84,12 @@ function firstSpot(): Spot {
   } catch {
     // 못 읽으면 기본 자리로. 기억은 편의이지 조건이 아니다.
   }
-  // 오른쪽 아래 — 목록은 왼쪽부터 읽는다.
-  return inView({ x: window.innerWidth, y: window.innerHeight })
+  // **처음에는 한가운데.** 구석에 두면 「떠 있다」 는 것부터 못 알아본다 — 그것이
+  // 줄 안의 단추를 두 번 못 찾은 이유였다. 가려서 거슬리면 끌어서 치우면 된다.
+  return inView({
+    x: (window.innerWidth - PANEL.width) / 2,
+    y: (window.innerHeight - PANEL.height) / 2,
+  })
 }
 
 export function AddToBasket({
@@ -190,14 +194,14 @@ export function AddToBasket({
 
   const panel = (
     <div
-      className="fixed z-50 w-80 overflow-hidden rounded-xl border border-violet-300/60 bg-white shadow-2xl ring-1 ring-violet-500/20 dark:border-violet-400/30 dark:bg-neutral-900"
+      className="fixed z-50 w-80 overflow-hidden rounded-xl border border-sky-300 bg-white shadow-2xl ring-1 ring-sky-400/25 dark:border-sky-500/40 dark:bg-neutral-900"
       style={{ left: spot.x, top: spot.y }}
       role="region"
       aria-label="담기"
     >
       {/* 손잡이. **끌어서 옮긴다** — 하필 지금 보려는 줄을 가리면 방해물이 된다. */}
       <div
-        className="flex cursor-grab items-center gap-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 px-3 py-2 text-white select-none active:cursor-grabbing"
+        className="flex cursor-grab items-center gap-2 border-b border-sky-200 bg-gradient-to-r from-sky-100 via-sky-100 to-blue-100 px-3 py-2 text-sky-900 select-none active:cursor-grabbing dark:border-sky-500/30 dark:from-sky-950 dark:via-sky-900 dark:to-blue-950 dark:text-sky-100"
         aria-label="끌어서 옮기기"
         onPointerDown={(event) => {
           grab.current = { dx: event.clientX - spot.x, dy: event.clientY - spot.y }
@@ -212,7 +216,7 @@ export function AddToBasket({
         {/* **작업이 없으면 만들라고 말한다.** 꺼진 단추만 두면 고장으로 읽힌다. */}
         {runs !== null && runs.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            <Link to={home} className="font-medium text-violet-600 underline underline-offset-2">
+            <Link to={home} className="font-medium text-sky-700 underline underline-offset-2 dark:text-sky-400">
               워크벤치에서 작업을 시작
             </Link>
             하면 여기서 담을 수 있습니다.
@@ -222,7 +226,7 @@ export function AddToBasket({
             <div className="flex items-center gap-1">
               {/* **어디에 담기는지 늘 적는다.** 숨기면 담고 나서 찾아야 한다. */}
               <Button
-                className="min-w-0 flex-1 justify-start bg-violet-600 text-white hover:bg-violet-700"
+                className="min-w-0 flex-1 justify-start bg-sky-600 text-white hover:bg-sky-700"
                 size="sm"
                 disabled={busy || target === null}
                 onClick={() => void add()}
