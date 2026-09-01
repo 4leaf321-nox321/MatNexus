@@ -262,11 +262,24 @@ export const WORKFLOWS: Workflow[] = [
       {
         key: 'card',
         title: '카드 만들기',
-        what: '그 계수로 물성 카드를 만듭니다. 만든 카드를 여기 담아 두면 다음에 찾기 쉽습니다.',
-        collects: 'card',
+        what: '맞춘 계수에서 물성 카드를 만듭니다 — 시험 상세의 「점탄성」 탭, 또는 재료의 묶음에서.',
         where: '/cards',
         whereLabel: '카드 목록으로',
-        judge: (items) => collected(items, 'card', '카드'),
+        // **담아 달라고 하지 않는다.** 카드가 자기 근거로 어느 시험에서 나왔는지를
+        // 들고 있어서(`source.test_run_ids`) 서버가 세어 준다. 다 한 일을 바구니에
+        // 도로 담아 신고하게 만들면, 담기가 「모아 두는 일」 이 아니라 절차가 된다.
+        judge: (items) => {
+          const runs = live(items, 'test_run')
+          if (runs.length === 0) return null
+          const made = runs.reduce((sum, one) => sum + fact(one, 'cards'), 0)
+          return {
+            ok: made > 0,
+            say:
+              made > 0
+                ? `담은 시험에서 나온 카드가 ${made}장 있습니다.`
+                : '아직 이 시험들로 만든 카드가 없습니다.',
+          }
+        },
       },
     ],
   },

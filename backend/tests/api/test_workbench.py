@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.auth import security
+from app.modules.fitting.models import PropertyCard
 from app.modules.tests import models as test_models
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
@@ -142,6 +143,84 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
             f"/api/samples/{specimen['sample_id']}", headers=admin_headers
         ).json()
         assert item["material_id"] == sample["material_id"]
+
+    def test_그_시험에서_나온_카드를_센다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """**카드를 바구니에 도로 담아 달라고 하지 않는다.**
+
+        카드가 자기 근거로 어느 시험에서 나왔는지 들고 있다(`source.test_run_ids`).
+        다 한 일을 신고하게 만들면 담기가 「모아 두는 일」 이 아니라 절차가 된다.
+        """
+        specimen = client.get(
+            f"/api/specimens/{dma_run['specimen_id']}", headers=admin_headers
+        ).json()
+        sample = client.get(
+            f"/api/samples/{specimen['sample_id']}", headers=admin_headers
+        ).json()
+        db.add(
+            PropertyCard(
+                material_id=uuid.UUID(sample["material_id"]),
+                label="점탄성 Prony",
+                status="draft",
+                source={"test_run_ids": [dma_run["id"]]},
+            )
+        )
+        db.add(
+            PropertyCard(
+                material_id=uuid.UUID(sample["material_id"]),
+                label="옛 카드",
+                # **내려진 카드는 「있다」 가 아니다** — 쓰지 말라는 표시다.
+                status="deprecated",
+                source={"test_run_ids": [dma_run["id"]]},
+            )
+        )
+        db.commit()
+
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        ).json()
+        assert item["facts"]["cards"] == 1
+
+    def test_남의_시험에서_나온_카드는_안_센다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """같은 재료 아래 카드가 여럿이다. **근거를 안 보고 재료로만 세면** 남의
+        시험으로 만든 카드가 이 단계를 끝난 것으로 만든다."""
+        specimen = client.get(
+            f"/api/specimens/{dma_run['specimen_id']}", headers=admin_headers
+        ).json()
+        sample = client.get(
+            f"/api/samples/{specimen['sample_id']}", headers=admin_headers
+        ).json()
+        db.add(
+            PropertyCard(
+                material_id=uuid.UUID(sample["material_id"]),
+                label="인장 MD",
+                status="draft",
+                source={"test_run_ids": [str(uuid.uuid4())]},
+            )
+        )
+        db.commit()
+
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        ).json()
+        assert item["facts"]["cards"] == 0
 
     def test_안_세어_본_것은_모른다고_한다(
         self,

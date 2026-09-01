@@ -107,6 +107,17 @@ describe('점탄성 — 나머지 단계', () => {
     ).toMatchObject({ ok: true })
   })
 
+  it('카드는 담아 달라고 하지 않고 근거로 센다', () => {
+    // **다 한 일을 바구니에 도로 담아 신고하게 만들지 않는다.** 카드가 어느
+    // 시험에서 나왔는지 스스로 들고 있어서 서버가 세어 준다.
+    expect(
+      judge('viscoelastic_set', 'card', [item({ facts: { prony_fits: 1, cards: 0 } })])
+    ).toMatchObject({ ok: false })
+    expect(
+      judge('viscoelastic_set', 'card', [item({ facts: { prony_fits: 1, cards: 2 } })])
+    ).toMatchObject({ ok: true })
+  })
+
   it('맞춘 계수가 하나라도 있어야 피팅이 끝난다', () => {
     expect(
       judge('viscoelastic_set', 'fit', [item({ facts: { master_curves: 1, prony_fits: 0 } })])

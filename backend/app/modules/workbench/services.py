@@ -61,6 +61,41 @@ def _count_by_run(
     return {run_id: int(count) for run_id, count in rows}
 
 
+def _cards_by_run(
+    db: Session, runs: list[TestRun], owners: dict[uuid.UUID, uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """이 시험에서 나온 물성 카드가 몇인가.
+
+    **카드가 자기 근거를 들고 있어서**(`source.test_run_ids`) 셀 수 있다 — 사람이
+    만든 카드를 바구니에 도로 담아 줘야 「만들었다」 를 아는 구조가 아니다. 담기는
+    나중에 이어서 하려고 모아 두는 일이지, 다 한 일을 신고하는 절차가 아니다.
+
+    재료로 좁혀 읽는다. 카드 표 전체를 훑으면 재료가 늘수록 느려지고, 담긴 시험의
+    카드는 그 시험의 재료 아래에만 있다. `blocks` 는 카드 하나가 수천 점이라
+    **읽지 않는다** — 근거 한 칸만 꺼낸다.
+    """
+    wanted = {one.id for one in runs}
+    materials = {owners[one.id] for one in runs if one.id in owners}
+    if not wanted or not materials:
+        return {}
+    counts: dict[uuid.UUID, int] = {}
+    for (sources,) in db.execute(
+        select(PropertyCard.source["test_run_ids"]).where(
+            PropertyCard.material_id.in_(materials),
+            # **내려진 카드는 「있다」 가 아니다** — `deprecated` 는 쓰지 말라는 표시다.
+            PropertyCard.status != "deprecated",
+        )
+    ):
+        for raw in sources if isinstance(sources, list) else []:
+            try:
+                made_from = uuid.UUID(str(raw))
+            except ValueError:
+                continue
+            if made_from in wanted:
+                counts[made_from] = counts.get(made_from, 0) + 1
+    return counts
+
+
 def _material_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, uuid.UUID]:
     """시험이 어느 재료의 것인가 — **시편 → 시료 → 재료**.
 
@@ -105,6 +140,7 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     curves = _count_by_run(db, MasterCurve.test_run_id, MasterCurve, live)
     fits = _prony_by_run(db, live)
     owners = _material_by_run(db, live)
+    made = _cards_by_run(db, live, owners)
     return {
         row.id: Resolved(
             label=row.record_name,
@@ -116,6 +152,7 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
             facts={
                 "master_curves": curves.get(row.id, 0),
                 "prony_fits": fits.get(row.id, 0),
+                "cards": made.get(row.id, 0),
                 "adopted": 1 if row.adopted_result_id else 0,
                 # 1이면 겹칠 것이 없다(변형률 스윕). 0 은 「안 세어 봤다」 가 아니라
                 # 여기서는 「모른다」 를 뜻하므로 `-1` 로 구분한다.
