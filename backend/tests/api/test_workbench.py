@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.modules.accounts.models import User
 from app.modules.auth import security
 from app.modules.fitting.models import PropertyCard
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests import models as test_models
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
@@ -118,6 +119,54 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         assert item["facts"]["temperature_steps"] >= 2
         assert item["facts"]["prony_fits"] == 0
         assert item["facts"]["adopted"] == 0
+
+    def test_읽혔는지_처리됐는지도_달고_온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """오늘 들어온 것을 미는 데 필요한 둘 — **읽혔나, 처리됐나.**
+
+        이 둘이 없으면 화면이 「안 읽힌 시험」 과 「처리 전 시험」 을 구별 못 하고,
+        읽기가 실패한 시험에 레시피를 걸어 한 바퀴를 더 돌게 된다.
+        """
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        ).json()
+        assert item["facts"]["parsed"] == 1
+        assert item["facts"]["results"] == 0
+
+        db.add(
+            ProcessingResult(
+                test_run_id=uuid.UUID(dma_run["id"]),
+                source_curve_key="raw",
+                steps_snapshot=[],
+                stages=[],
+                scalars=[],
+                storage_path="x/y.parquet",
+                row_count=0,
+                sha256="0" * 64,
+                byte_size=0,
+            )
+        )
+        db.commit()
+
+        detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
+        assert detail["items"][0]["facts"]["results"] == 1
+
+        # **읽기가 실패한 시험은 그렇게 온다.** 늘 「읽혔다」 로 보내면 화면이 그
+        # 시험에 레시피를 걸라고 하고, 「처리했는데 값이 안 나온다」 로 한 바퀴 돈다.
+        row = db.get(test_models.TestRun, uuid.UUID(dma_run["id"]))
+        assert row is not None
+        row.status = "failed"
+        db.commit()
+        detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
+        assert detail["items"][0]["facts"]["parsed"] == 0
 
     def test_시험은_어느_재료의_것인지_달고_온다(
         self,

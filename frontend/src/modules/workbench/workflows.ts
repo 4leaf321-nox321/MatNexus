@@ -127,30 +127,60 @@ export const WORKFLOWS: Workflow[] = [
   {
     key: 'daily_intake',
     title: '오늘 들어온 것 처리하기',
-    when: '장비에서 올라온 파일을 시편에 붙이고, 처리해서 채택까지.',
+    when: '오늘 올라온 시험을 읽기 확인 → 처리 → 채택까지 한 줄기로.',
     cadence: '매일',
     steps: [
       {
         key: 'pick',
-        title: '파일 고르기',
-        what: '커넥터 수집함에서 담습니다.',
+        title: '오늘 것 담기',
+        what: '올라온 시험을 담습니다. 커넥터가 물어 온 파일은 시편에 붙이면 여기 목록에 섭니다(ADR 0021).',
         collects: 'test_run',
-        where: '/settings/connectors',
+        where: '/tests',
+        whereLabel: '시험 목록으로',
         judge: (items) => collected(items, 'test_run', '시험'),
       },
       {
-        key: 'attach',
-        title: '시편에 붙이기',
-        what: '어느 시편의 것인지 사람이 정합니다(ADR 0021).',
+        key: 'read',
+        title: '읽혔나 보기',
+        what: '열이 안 맞거나 형식이 다르면 읽기가 실패합니다 — 그 시험은 뒤 단계가 다 헛돕니다.',
         where: '/tests',
         whereLabel: '시험 목록으로',
+        judge: (items) => {
+          const runs = live(items, 'test_run')
+          if (runs.length === 0) return null
+          // **실패한 것을 먼저 골라낸다.** 안 읽힌 시험을 그대로 두고 레시피를
+          // 걸면, 「처리했는데 값이 안 나온다」 로 한 바퀴를 더 돈다.
+          const failed = pendingOf(runs, (one) => fact(one, 'parsed') > 0)
+          return {
+            ok: failed.length === 0,
+            say:
+              failed.length === 0
+                ? `담은 ${runs.length}건이 모두 읽혔습니다.`
+                : `${failed.length}건이 아직 안 읽혔거나 실패했습니다.`,
+            blocking: failed,
+          }
+        },
       },
       {
         key: 'process',
         title: '처리',
-        what: '레시피를 걸어 한 번에 돌립니다.',
+        what: '레시피를 걸어 한 번에 돌립니다. 시험 목록에서 고른 채로 「레시피 적용」 을 누릅니다.',
         where: '/tests',
         whereLabel: '시험 목록으로',
+        judge: (items) => {
+          const runs = live(items, 'test_run').filter((one) => fact(one, 'parsed') > 0)
+          if (runs.length === 0) return null
+          // 읽힌 것만 센다 — 안 읽힌 시험은 앞 단계가 이미 말했다.
+          const left = pendingOf(runs, (one) => fact(one, 'results') > 0)
+          return {
+            ok: left.length === 0,
+            say:
+              left.length === 0
+                ? `읽힌 ${runs.length}건이 모두 처리됐습니다.`
+                : `${left.length}건이 아직 처리 전입니다.`,
+            blocking: left,
+          }
+        },
       },
       {
         key: 'adopt',
@@ -159,14 +189,17 @@ export const WORKFLOWS: Workflow[] = [
         where: '/tests',
         whereLabel: '시험 목록으로',
         judge: (items) => {
-          const runs = live(items, 'test_run')
+          // **처리된 것만 센다.** 처리 결과가 없으면 채택할 것 자체가 없다 —
+          // 그 시험을 「채택 안 했다」 로 세우면 앞 단계와 같은 말을 두 번 하게 되고,
+          // 사람은 어느 쪽을 봐야 하는지 모른다.
+          const runs = live(items, 'test_run').filter((one) => fact(one, 'results') > 0)
           if (runs.length === 0) return null
           const left = pendingOf(runs, (one) => fact(one, 'adopted') > 0)
           return {
             ok: left.length === 0,
             say:
               left.length === 0
-                ? `담은 ${runs.length}건 모두 채택했습니다.`
+                ? `처리된 ${runs.length}건 모두 채택했습니다.`
                 : `${left.length}건이 아직 채택 전입니다.`,
             blocking: left,
           }

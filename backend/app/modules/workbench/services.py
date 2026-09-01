@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workbench.models import WorkbenchItem
@@ -114,6 +115,12 @@ def _material_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, uuid.U
     return {run_id: material_id for run_id, material_id in rows}
 
 
+def _results_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, int]:
+    """처리 결과 수. **레시피가 돌았나** 를 이걸로 본다 — 결과는 불변이라 다시
+    돌리면 행이 는다(그래서 「몇 번 돌았나」 가 아니라 「돌았나」 로 읽는다)."""
+    return _count_by_run(db, ProcessingResult.test_run_id, ProcessingResult, runs)
+
+
 def _prony_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, int]:
     """맞춘 계수 수. **마스터커브를 거쳐 시험에 매달린다.**"""
     if not runs:
@@ -141,6 +148,7 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     fits = _prony_by_run(db, live)
     owners = _material_by_run(db, live)
     made = _cards_by_run(db, live, owners)
+    processed = _results_by_run(db, live)
     return {
         row.id: Resolved(
             label=row.record_name,
@@ -154,6 +162,9 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
                 "prony_fits": fits.get(row.id, 0),
                 "cards": made.get(row.id, 0),
                 "adopted": 1 if row.adopted_result_id else 0,
+                # 오늘 들어온 것을 미는 데 필요한 둘 — 읽혔나, 처리됐나.
+                "parsed": 1 if row.status == "parsed" else 0,
+                "results": processed.get(row.id, 0),
                 # 1이면 겹칠 것이 없다(변형률 스윕). 0 은 「안 세어 봤다」 가 아니라
                 # 여기서는 「모른다」 를 뜻하므로 `-1` 로 구분한다.
                 "temperature_steps": (

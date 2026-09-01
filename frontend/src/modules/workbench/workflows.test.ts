@@ -190,15 +190,59 @@ describe('해석 물성 — 빠뜨린 재료', () => {
   })
 })
 
-describe('다른 시나리오도 같은 사실로 본다', () => {
-  it('채택 안 한 시험의 이름을 댄다', () => {
-    const check = judge('daily_intake', 'adopt', [
-      item({ label: '오늘-1', facts: { adopted: 1 } }),
-      item({ label: '오늘-2', facts: { adopted: 0 } }),
+describe('오늘 들어온 것 — 앞 단계가 말한 것을 두 번 말하지 않는다', () => {
+  const run = (label: string, facts: Record<string, number>) => item({ label, facts })
+
+  it('안 읽힌 시험을 먼저 골라낸다', () => {
+    // **읽기가 실패한 시험에 레시피를 걸면** 「처리했는데 값이 안 나온다」 로 한
+    // 바퀴를 더 돈다.
+    const check = judge('daily_intake', 'read', [
+      run('오늘-1', { parsed: 1 }),
+      run('오늘-2', { parsed: 0 }),
     ])
     expect(check).toMatchObject({ ok: false })
     expect(names(check)).toEqual(['오늘-2'])
   })
+
+  it('처리 단계는 읽힌 것만 센다', () => {
+    // 안 읽힌 시험까지 「처리 전」 으로 세우면 **같은 시험을 두 단계가 동시에
+    // 가리킨다** — 사람은 어느 쪽을 봐야 하는지 모른다.
+    const check = judge('daily_intake', 'process', [
+      run('오늘-1', { parsed: 1, results: 1 }),
+      run('안읽힘', { parsed: 0, results: 0 }),
+    ])
+    expect(check).toMatchObject({ ok: true })
+    expect(names(check)).toEqual([])
+  })
+
+  it('처리 안 된 것의 이름을 댄다', () => {
+    const check = judge('daily_intake', 'process', [
+      run('오늘-1', { parsed: 1, results: 1 }),
+      run('오늘-2', { parsed: 1, results: 0 }),
+    ])
+    expect(names(check)).toEqual(['오늘-2'])
+  })
+
+  it('채택 단계는 처리된 것만 센다', () => {
+    // 처리 결과가 없으면 **채택할 것 자체가 없다.**
+    const check = judge('daily_intake', 'adopt', [
+      run('오늘-1', { parsed: 1, results: 1, adopted: 1 }),
+      run('처리전', { parsed: 1, results: 0, adopted: 0 }),
+    ])
+    expect(check).toMatchObject({ ok: true })
+  })
+
+  it('채택 안 한 시험의 이름을 댄다', () => {
+    const check = judge('daily_intake', 'adopt', [
+      run('오늘-1', { results: 1, adopted: 1 }),
+      run('오늘-2', { results: 1, adopted: 0 }),
+    ])
+    expect(check).toMatchObject({ ok: false })
+    expect(names(check)).toEqual(['오늘-2'])
+  })
+})
+
+describe('다른 시나리오도 같은 사실로 본다', () => {
 
   it('초안이 섞인 묶음은 말해 주되 막지 않는다', () => {
     const check = judge('analysis_deck', 'export', [
