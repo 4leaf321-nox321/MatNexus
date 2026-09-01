@@ -148,6 +148,15 @@ class ProcessingPreviewOut(BaseModel):
     scalars: list[ProcessingScalarOut]
     notes: list[str]
     points: list[tuple[float, float]]
+    problem: str | None = None
+    """**멈춘 자리.** 값이 있으면 이 미리보기는 거기까지만 돈 것이다.
+
+    다섯 중 넷이 돌고 다섯째가 멈추면 그 넷의 곡선은 멀쩡히 나와 있다. 그것을
+    버리고 오류만 돌려주면 사람은 어디가 어긋났는지 **눈으로 못 보고** 단계를
+    하나씩 지워 가며 다시 돌린다(실사용, 2026-09-02).
+
+    **저장은 여전히 막는다** — 반쯤 돈 결과가 채택되면 카드까지 간다."""
+
     stage_index: int | None = None
     """`points`·`columns`·`units` 가 **어느 단계의 것인가.** `None` 이면 마지막.
 

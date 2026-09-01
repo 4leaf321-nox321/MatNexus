@@ -427,6 +427,44 @@ describe('돌려 보기가 막힐 때', () => {
     })
   })
 
+  it('멈춰도 여기까지의 곡선을 보여 주고, 저장은 막는다', async () => {
+    // **그 곡선이 없으면 사람은 단계를 하나씩 지워 가며 다시 돌린다** — 실제로
+    // 그렇게 했다(2026-09-02). 다만 「다 됐다」 로 읽히면 안 되므로 무엇이
+    // 멈췄는지 먼저 적고, 반쯤 돈 것은 저장하지 못하게 한다.
+    preview.mockResolvedValue({
+      source_curve_key: 'curve-1',
+      source_row_count: 100,
+      row_count: 100,
+      columns: ['strain_engineering'],
+      units: { strain_engineering: '1' },
+      stages: [
+        {
+          index: 0,
+          plugin: 'tensile.engineering',
+          label: '공칭 응력-변형률',
+          version: '1',
+          options: {},
+          notes: [],
+          row_count: 100,
+          columns: ['strain_engineering'],
+          scalars: [],
+        },
+      ],
+      scalars: [],
+      notes: [],
+      points: [[0, 0]],
+      problem: "4단계 '탄성계수': 구간 [9, 10] 안에 0점이 있습니다.",
+    })
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(screen.getByRole('button', { name: /돌려 보기/ }))
+
+    expect(await screen.findByText(/여기까지만 돌았습니다/)).toBeInTheDocument()
+    expect(screen.getByText(/구간 \[9, 10\] 안에 0점/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /저장/ })).toBeDisabled()
+  })
+
   it('누르기 전에는 조용하다', async () => {
     // 단계를 쌓는 동안 미리 붉게 물들어 있으면 그건 경고가 아니라 배경이 된다.
     const user = userEvent.setup()

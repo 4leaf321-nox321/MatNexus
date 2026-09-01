@@ -531,7 +531,14 @@ export function ProcessingPanel({
             <Play className="size-3.5" />
             돌려 보기
           </Button>
-          <Button size="sm" onClick={save} disabled={busy || !result}>
+          {/* **멈춘 결과는 저장 못 한다.** 서버도 거절하지만, 눌러 놓고 거절당하는
+              것과 처음부터 못 누르는 것은 다르다 — 앞의 것은 「고장」 으로 읽힌다. */}
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={busy || !result || Boolean(result.problem)}
+            title={result?.problem ? '멈춘 자리를 고친 뒤 저장할 수 있습니다.' : undefined}
+          >
             <Save className="size-3.5" />
             결과 저장
           </Button>
@@ -1109,6 +1116,17 @@ export function ProcessingPanel({
                   {result.row_count.toLocaleString('ko-KR')}행
                 </span>
               </div>
+
+              {/* **멈췄어도 여기까지는 보여 준다.** 그 곡선이 없으면 사람은 단계를
+                  하나씩 지워 가며 다시 돌려야 한다 — 실제로 그렇게 했다.
+                  다만 「다 됐다」 로 읽히면 안 되므로 무엇이 멈췄는지 먼저 적는다. */}
+              {result.problem && (
+                <p className="mb-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs">
+                  <b>여기까지만 돌았습니다.</b> {result.problem}
+                  <br />
+                  아래 그림과 값은 <b>멈추기 전까지</b>의 것입니다 — 저장은 되지 않습니다.
+                </p>
+              )}
 
               {/* **중간을 보고 있다는 것을 말한다.** 안 적으면 그 그림을
                   최종 결과로 읽고, 「값이 왜 다르지」 로 이어진다. 서버가

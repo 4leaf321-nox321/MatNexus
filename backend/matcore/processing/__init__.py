@@ -46,7 +46,20 @@ class ProcessingError(Exception):
 
     메시지는 **사용자가 읽는다.** "무엇을 기대했는데 무엇이 왔는지" 를 적는다 —
     '처리 실패' 만 남기면 다음 사람이 숫자를 직접 들여다봐야 한다.
+
+    ## 여기까지 된 것을 함께 든다 (`done`)
+
+    다섯 단계 중 넷이 돌고 다섯째가 멈추면, **그 넷의 곡선은 멀쩡히 나와 있다.**
+    그것을 버리면 사람은 실패 메시지만 보고 어디가 어긋났는지 눈으로 못 본다 —
+    단계를 하나씩 지워 가며 다시 돌리게 된다(실사용에서 나왔다, 2026-09-02).
+
+    **저장은 여전히 막는다.** 반쯤 돈 결과를 저장하면 그것이 채택되고 카드까지
+    간다. 여기 실린 것은 **보여 주기 위한 것**이다.
     """
+
+    def __init__(self, message: str, *, done: PipelineResult | None = None) -> None:
+        super().__init__(message)
+        self.done = done
 
 
 @dataclass(frozen=True)
@@ -187,11 +200,17 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
     carried: dict[str, Scalar] = {item.key: item for item in given}
     for index, step in enumerate(steps):
         plugin = _plugin(step.plugin)
-        options = _resolve_references(step.options, carried, index, stages)
+        try:
+            options = _resolve_references(step.options, carried, index, stages)
+        except ProcessingError as exc:
+            raise ProcessingError(str(exc), done=PipelineResult(tuple(stages))) from exc
         try:
             result = plugin.fn(current, options)
         except ProcessingError as exc:
-            raise ProcessingError(f"{index + 1}단계 '{plugin.label}': {exc}") from exc
+            # **여기까지 된 것을 들려 보낸다.** 앞 단계들의 곡선은 멀쩡히 나와 있다.
+            raise ProcessingError(
+                f"{index + 1}단계 '{plugin.label}': {exc}", done=PipelineResult(tuple(stages))
+            ) from exc
         stages.append(
             Stage(
                 index=index,

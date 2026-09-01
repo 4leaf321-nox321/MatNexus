@@ -8577,6 +8577,17 @@
             "title": "Points",
             "type": "array"
           },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
           "row_count": {
             "title": "Row Count",
             "type": "integer"

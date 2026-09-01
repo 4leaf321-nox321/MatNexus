@@ -157,7 +157,11 @@ def _run_pipeline(
     except processing.ProcessingError as exc:
         # **처리 실패는 사용자 오류다.** 500 으로 내면 로그를 뒤져야 알 수 있고,
         # 메시지에는 이미 어느 단계에서 무엇이 어긋났는지 적혀 있다.
-        raise AppError("MNX-PROCESSING-0004", str(exc), status=422) from exc
+        failure = AppError("MNX-PROCESSING-0004", str(exc), status=422)
+        # 여기까지 된 것을 함께 든다 — 미리보기가 그것을 그린다(저장은 안 쓴다).
+        failure.done = exc.done  # type: ignore[attr-defined]
+        failure.curve = curve  # type: ignore[attr-defined]
+        raise failure from exc
     return result, curve
 
 
@@ -351,7 +355,17 @@ def preview(
     말하는 것이라 고른 단계에 따라 달라지면 안 된다.
     """
     run = get_run(db, user, payload.test_run_id)
-    result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
+    # **미리보기는 멈춰도 여기까지를 보여 준다.** 저장(`/results`)은 그대로 거절한다 —
+    # 반쯤 돈 결과가 채택되면 카드와 덱까지 간다.
+    problem: str | None = None
+    try:
+        result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
+    except AppError as exc:
+        done = getattr(exc, "done", None)
+        if done is None or not done.stages:
+            raise
+        result, curve = done, exc.curve  # type: ignore[attr-defined]
+        problem = exc.message
 
     shown: int | None = None
     frame = result.frame
@@ -377,6 +391,7 @@ def preview(
         notes=list(result.notes),
         points=_points(frame, x or "", y or ""),
         stage_index=shown,
+        problem=problem,
     )
 
 

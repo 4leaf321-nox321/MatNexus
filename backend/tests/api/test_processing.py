@@ -88,6 +88,77 @@ def material_id(run_id: str) -> str:
     return MADE["material_id"]
 
 
+class Test멈춰도_거기까지는_본다:
+    """**앞 단계들의 곡선은 멀쩡히 나와 있다.**
+
+    다섯 중 넷이 돌고 다섯째가 멈추면, 그것을 버리고 오류만 돌려주는 것은 사람에게
+    단계를 하나씩 지워 가며 다시 돌리라는 말이다 — 실사용에서 그렇게 했다
+    (2026-09-02: 「중간에 실패해도 그전까지 진행된 곡선을 볼 수 있었으면」).
+    """
+
+    def test_미리보기는_멈춘_자리까지_그린다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        shown = client.post(
+            "/api/processing/preview?x=strain_engineering&y=stress_engineering",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    *STEPS,
+                    # 있을 리 없는 값을 가리킨다 — 여기서 멈춘다.
+                    {
+                        "plugin": "tensile.proof_stress",
+                        "options": {"offset_strain": 0.002, "youngs_modulus": "@없는값"},
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert shown.status_code == 200, shown.text
+        body = shown.json()
+        # **무엇이 멈췄는지 함께 온다.** 곡선만 오면 다 된 줄 안다.
+        assert body["problem"], body
+        assert "없는값" in body["problem"]
+        # 앞 단계들의 곡선과 값은 그대로 있다.
+        assert body["points"], "여기까지의 곡선이 있어야 한다"
+        assert len(body["stages"]) == len(STEPS)
+        assert any(one["key"] == "tensile_strength" for one in body["scalars"])
+
+    def test_저장은_그래도_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**반쯤 돈 결과가 채택되면 카드와 덱까지 간다.**"""
+        refused = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    *STEPS,
+                    {
+                        "plugin": "tensile.proof_stress",
+                        "options": {"offset_strain": 0.002, "youngs_modulus": "@없는값"},
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+
+    def test_첫_단계가_멈추면_그릴_것이_없다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """돌린 단계가 하나도 없으면 **오류만 낸다** — 빈 그림은 「됐다」 로 읽힌다."""
+        refused = client.post(
+            "/api/processing/preview",
+            json={
+                "test_run_id": run_id,
+                "steps": [{"plugin": "tensile.engineering", "options": {"area": -1.0}}],
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+
+
 class Test재료에_적은_값으로_돈다:
     """**탄성 구간에 점이 적은 곡선이 실제로 있다.**
 
@@ -375,10 +446,15 @@ class Test미리보기:
         assert response.status_code == 422, response.text
         assert str(len(STEPS)) in response.json()["error"]["message"]
 
-    def test_실패는_422_이고_어느_단계인지_말한다(
+    def test_멈추면_어느_단계인지_말한다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:
-        # 500 으로 내면 로그를 뒤져야 안다. 메시지에는 이미 이유가 적혀 있다.
+        """**어느 단계에서 왜 멈췄는지가 답이다.**
+
+        전에는 422 로 냈다(500 이면 로그를 뒤져야 하므로 그것도 옳았다). 지금은
+        미리보기가 **여기까지의 곡선과 함께** 그 말을 싣는다 — 사람이 눈으로 보고
+        고치라고. 저장 쪽은 그대로 422 다(`test_저장은_그래도_거절한다`).
+        """
         response = client.post(
             "/api/processing/preview",
             json={
@@ -393,8 +469,8 @@ class Test미리보기:
             },
             headers=admin_headers,
         )
-        assert response.status_code == 422, response.text
-        assert "4단계" in response.json()["error"]["message"]
+        assert response.status_code == 200, response.text
+        assert "4단계" in response.json()["problem"]
 
     def test_시편_치수가_없으면_추측하지_않는다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str

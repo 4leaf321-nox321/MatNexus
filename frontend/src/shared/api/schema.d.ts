@@ -7846,6 +7846,8 @@ export interface components {
                 number,
                 number
             ][];
+            /** Problem */
+            problem?: string | null;
             /** Row Count */
             row_count: number;
             /** Scalars */
