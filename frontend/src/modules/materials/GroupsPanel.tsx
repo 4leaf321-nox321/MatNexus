@@ -39,7 +39,7 @@ import { useState } from 'react'
 import { Layers } from 'lucide-react'
 
 import { groupsApi } from '@/modules/materials/api.groups'
-import { masterCurveGap } from '@/modules/materials/masterCurveGap'
+import { masterCurveGap } from '@/shared/masterCurveGap'
 import type { GroupResult, GroupingSpec } from '@/modules/materials/api.groups'
 import { testsApi } from '@/modules/tests/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'

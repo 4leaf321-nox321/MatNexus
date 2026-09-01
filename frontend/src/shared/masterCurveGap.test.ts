@@ -8,8 +8,8 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { masterCurveGap } from '@/modules/materials/masterCurveGap'
-import type { GapRun } from '@/modules/materials/masterCurveGap'
+import { masterCurveGap } from '@/shared/masterCurveGap'
+import type { GapRun } from '@/shared/masterCurveGap'
 
 const run = (over: Partial<GapRun> = {}): GapRun => ({
   test_type_key: 'dma_sweep',

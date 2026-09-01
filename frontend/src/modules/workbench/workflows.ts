@@ -19,8 +19,29 @@
  * 된다(ADR 0024 「지켜야 유지되는 것」).
  */
 
+import type { BasketItem } from '@/shared/api/basket'
+import { masterCurveGap } from '@/shared/masterCurveGap'
+
 /** 담을 수 있는 것. 서버의 `ITEM_KINDS` 와 같은 말이다. */
 export type ItemKind = 'test_run' | 'material' | 'card'
+
+/**
+ * 단계 판정 — **안내지 잠금이 아니다.**
+ *
+ * 「다음」 은 언제나 눌린다. 워크벤치는 진행자이지 문지기가 아니고(ADR 0024), 사람이
+ * 화면 밖에서 이미 한 일을 여기가 못 보는 경우가 늘 있다 — 그때 막으면 도구가 일을
+ * 막는 것이 된다. 대신 **무엇이 남았는지 이름으로** 말한다.
+ */
+export interface StepCheck {
+  ok: boolean
+  /** 한 줄. 「2건이 아직 안 겹쳤습니다」 처럼 남은 일을 세어 말한다. */
+  say: string
+  /** 아직인 것들의 이름. 세기만 하면 어느 것인지 찾으러 다녀야 한다. */
+  blocking?: string[]
+}
+
+/** 담긴 것으로 판정한다. `null` 은 「이 단계는 판정하지 않는다」 — 모르면 침묵한다. */
+export type StepJudge = (items: BasketItem[]) => StepCheck | null
 
 export interface WorkflowStep {
   key: string
@@ -31,6 +52,12 @@ export interface WorkflowStep {
   collects?: ItemKind
   /** 어디서 하나. 화면 밖에서 해도 되는 일이면 그 자리를 가리킨다. */
   where?: string
+  /**
+   * 이 단계가 끝났나. **담긴 것의 사실(`facts`)로만 본다** — 서버가 세어 준 숫자다
+   * (`ItemOut.facts`). 여기서 도메인 API 를 따로 부르면 워크벤치가 남의 도메인을
+   * 알게 되고, 그 방향은 되돌리기 어렵다.
+   */
+  judge?: StepJudge
 }
 
 export interface Workflow {
@@ -46,10 +73,35 @@ export interface Workflow {
 /**
  * 발굴한 시나리오(ADR 0024). **여기 있는 것이 곧 화면의 목록**이다.
  *
- * 지금은 얼개까지다 — 각 단계가 실제 화면을 끼우는 것은 시나리오마다 따로 붙인다
- * (계획의 3단계부터). 그때까지도 이 목록은 「무엇을 할 수 있나」 와 「어디서 하나」 를
- * 말해 주므로, 흩어진 화면을 오가는 사람에게 지도 역할을 한다.
+ * 단계는 「어디서 하나」(`where`)로 데려가고, 「끝났나」(`judge`)를 담긴 것의 사실로
+ * 말한다. 판정을 안 붙인 단계는 침묵한다 — **모르면서 됐다고 하지 않는다.**
  */
+/** 살아 있는 것만 본다. **사라진 줄은 세지 않는다** — 그것은 이미 그 줄이 말한다. */
+function live(items: BasketItem[], kind: ItemKind): BasketItem[] {
+  return items.filter((one) => one.kind === kind && !one.missing)
+}
+
+function fact(item: BasketItem, key: string): number {
+  return (item.facts as Record<string, number> | undefined)?.[key] ?? 0
+}
+
+/** 「담긴 게 있나」 — 여러 단계가 같은 말을 한다. */
+function collected(items: BasketItem[], kind: ItemKind, noun: string): StepCheck {
+  const found = live(items, kind)
+  return {
+    ok: found.length > 0,
+    say:
+      found.length > 0
+        ? `${noun} ${found.length}건을 담았습니다.`
+        : `아직 담은 ${noun}이 없습니다.`,
+  }
+}
+
+/** 아직 안 한 것을 이름과 함께. 세기만 하면 어느 것인지 찾으러 다녀야 한다. */
+function pendingOf(rows: BasketItem[], done: (item: BasketItem) => boolean): string[] {
+  return rows.filter((one) => !done(one)).map((one) => one.label)
+}
+
 export const WORKFLOWS: Workflow[] = [
   {
     key: 'daily_intake',
@@ -57,10 +109,34 @@ export const WORKFLOWS: Workflow[] = [
     when: '장비에서 올라온 파일을 시편에 붙이고, 처리해서 채택까지.',
     cadence: '매일',
     steps: [
-      { key: 'pick', title: '파일 고르기', what: '커넥터 수집함에서 담습니다.', collects: 'test_run', where: '/settings/connectors' },
+      {
+        key: 'pick',
+        title: '파일 고르기',
+        what: '커넥터 수집함에서 담습니다.',
+        collects: 'test_run',
+        where: '/settings/connectors',
+        judge: (items) => collected(items, 'test_run', '시험'),
+      },
       { key: 'attach', title: '시편에 붙이기', what: '어느 시편의 것인지 사람이 정합니다(ADR 0021).' },
       { key: 'process', title: '처리', what: '레시피를 걸어 한 번에 돌립니다.' },
-      { key: 'adopt', title: '채택', what: '시험마다 값 하나를 고릅니다 — 그것이 재료 통계로 갑니다.' },
+      {
+        key: 'adopt',
+        title: '채택',
+        what: '시험마다 값 하나를 고릅니다 — 그것이 재료 통계로 갑니다.',
+        judge: (items) => {
+          const runs = live(items, 'test_run')
+          if (runs.length === 0) return null
+          const left = pendingOf(runs, (one) => fact(one, 'adopted') > 0)
+          return {
+            ok: left.length === 0,
+            say:
+              left.length === 0
+                ? `담은 ${runs.length}건 모두 채택했습니다.`
+                : `${left.length}건이 아직 채택 전입니다.`,
+            blocking: left,
+          }
+        },
+      },
     ],
   },
   {
@@ -69,10 +145,88 @@ export const WORKFLOWS: Workflow[] = [
     when: '시편 여럿의 DMA 를 겹쳐 Prony 계수 한 벌을 만들고 카드까지.',
     cadence: '자주',
     steps: [
-      { key: 'pick', title: '시험 고르기', what: '그 재료의 DMA 시험을 담습니다.', collects: 'test_run' },
-      { key: 'master', title: '마스터커브 갖추기', what: '겹치거나, 장비가 만든 것을 가져옵니다. 대표를 정합니다.' },
-      { key: 'fit', title: '글로벌 피팅', what: '담은 시편을 한 번에 적합해 계수 한 벌을 냅니다.' },
-      { key: 'card', title: '카드 만들기', what: '그 계수로 물성 카드를 만듭니다.' },
+      {
+        key: 'pick',
+        title: '시험 고르기',
+        what: '그 재료의 DMA 시험을 담습니다.',
+        collects: 'test_run',
+        judge: (items) => {
+          const runs = live(items, 'test_run')
+          if (runs.length === 0) return { ok: false, say: '아직 담은 시험이 없습니다.' }
+          // **둘부터가 「한 벌」 이다.** 한 건이면 그 시험 화면에서 하는 편이 빠르다.
+          return {
+            ok: runs.length >= 2,
+            say:
+              runs.length >= 2
+                ? `시험 ${runs.length}건을 담았습니다.`
+                : '아직 1건입니다. 글로벌 피팅은 시편 여럿을 한 번에 적합할 때 값이 있습니다.',
+          }
+        },
+      },
+      {
+        key: 'master',
+        title: '마스터커브 갖추기',
+        what: '겹치거나, 장비가 만든 것을 가져옵니다. 대표를 정합니다.',
+        judge: (items) => {
+          const runs = live(items, 'test_run')
+          if (runs.length === 0) return null
+          // **세는 규칙은 재료 화면과 한 벌이다**(`shared/masterCurveGap`). 각자 세면
+          // 두 화면이 같은 시험을 놓고 다른 말을 한다.
+          const gap = masterCurveGap(
+            runs.map((one) => ({
+              test_type_key: '',
+              master_curve_count: fact(one, 'master_curves'),
+              temperature_step_count:
+                fact(one, 'temperature_steps') < 0 ? null : fact(one, 'temperature_steps'),
+            })),
+            []
+          )
+          const left = runs
+            .filter(
+              (one) => fact(one, 'master_curves') === 0 && fact(one, 'temperature_steps') >= 2
+            )
+            .map((one) => one.label)
+          const say: string[] = []
+          if (gap.pending > 0) say.push(`${gap.pending}건이 아직 안 겹쳤습니다.`)
+          // **할 수 없는 일을 남은 일로 세지 않는다** — 온도 한 단은 겹칠 것이 없다.
+          if (gap.cannot > 0) {
+            say.push(
+              `${gap.cannot}건은 온도가 한 단이라 겹칠 수 없습니다 — 장비가 만든 커브를 가져오거나 바구니에서 빼세요.`
+            )
+          }
+          if (gap.unknown > 0) say.push(`${gap.unknown}건은 온도 단 수를 아직 안 세어 봤습니다.`)
+          if (gap.ready === 0 && say.length === 0) say.push('담은 시험에 마스터커브가 없습니다.')
+          return {
+            ok: gap.ready > 0 && gap.pending === 0,
+            say: say.length > 0 ? say.join(' ') : `${gap.ready}건에 마스터커브가 있습니다.`,
+            blocking: left,
+          }
+        },
+      },
+      {
+        key: 'fit',
+        title: '글로벌 피팅',
+        what: '담은 시편을 한 번에 적합해 계수 한 벌을 냅니다.',
+        judge: (items) => {
+          const runs = live(items, 'test_run')
+          if (runs.length === 0) return null
+          const fitted = runs.filter((one) => fact(one, 'prony_fits') > 0)
+          return {
+            ok: fitted.length > 0,
+            say:
+              fitted.length > 0
+                ? `${fitted.length}건에 맞춘 계수가 있습니다.`
+                : '아직 맞춘 계수가 없습니다.',
+          }
+        },
+      },
+      {
+        key: 'card',
+        title: '카드 만들기',
+        what: '그 계수로 물성 카드를 만듭니다. 만든 카드를 여기 담아 두면 다음에 찾기 쉽습니다.',
+        collects: 'card',
+        judge: (items) => collected(items, 'card', '카드'),
+      },
     ],
   },
   {
@@ -81,10 +235,42 @@ export const WORKFLOWS: Workflow[] = [
     when: '제품군에 쓰이는 재료의 카드를 모아 한 덱 묶음으로 내보냅니다.',
     cadence: '프로젝트마다',
     steps: [
-      { key: 'scope', title: '무엇에 쓰나', what: '적용 제품·파트로 재료를 찾습니다.', collects: 'material' },
+      {
+        key: 'scope',
+        title: '무엇에 쓰나',
+        what: '적용 제품·파트로 재료를 찾습니다.',
+        collects: 'material',
+        judge: (items) => collected(items, 'material', '재료'),
+      },
       { key: 'survey', title: '무엇이 있나', what: '재료마다 카드가 있는지, 초안인지 확정인지 봅니다.' },
-      { key: 'collect', title: '골라 담기', what: '해석에 쓸 카드를 담습니다.', collects: 'card', where: '/cards' },
-      { key: 'export', title: '묶음 내보내기', what: 'manifest·체크섬과 함께 한 번에 받습니다.', where: '/cards' },
+      {
+        key: 'collect',
+        title: '골라 담기',
+        what: '해석에 쓸 카드를 담습니다.',
+        collects: 'card',
+        where: '/cards',
+        judge: (items) => collected(items, 'card', '카드'),
+      },
+      {
+        key: 'export',
+        title: '묶음 내보내기',
+        what: 'manifest·체크섬과 함께 한 번에 받습니다.',
+        where: '/cards',
+        judge: (items) => {
+          const cards = live(items, 'card')
+          if (cards.length === 0) return null
+          const draft = pendingOf(cards, (one) => fact(one, 'published') > 0)
+          return {
+            ok: draft.length === 0,
+            // **막지 않는다.** 초안도 내보내진다 — 다만 해석에 쓰기 전에 알아야 한다.
+            say:
+              draft.length === 0
+                ? `담은 카드 ${cards.length}건이 모두 확정입니다.`
+                : `${draft.length}건이 초안입니다. 내보낼 수는 있지만 해석에 쓰기 전에 확정하세요.`,
+            blocking: draft,
+          }
+        },
+      },
     ],
   },
   {
@@ -105,9 +291,33 @@ export const WORKFLOWS: Workflow[] = [
     when: '초안 카드의 근거를 보고 확정하거나 반려합니다.',
     cadence: '이따금',
     steps: [
-      { key: 'pick', title: '초안 고르기', what: '확정 대기 카드를 담습니다.', collects: 'card', where: '/cards' },
+      {
+        key: 'pick',
+        title: '초안 고르기',
+        what: '확정 대기 카드를 담습니다.',
+        collects: 'card',
+        where: '/cards',
+        judge: (items) => collected(items, 'card', '카드'),
+      },
       { key: 'read', title: '근거 보기', what: '어느 시험·표본 수·경고를 봅니다.' },
-      { key: 'decide', title: '확정 또는 반려', what: '부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.' },
+      {
+        key: 'decide',
+        title: '확정 또는 반려',
+        what: '부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
+        judge: (items) => {
+          const cards = live(items, 'card')
+          if (cards.length === 0) return null
+          const left = pendingOf(cards, (one) => fact(one, 'published') > 0)
+          return {
+            ok: left.length === 0,
+            say:
+              left.length === 0
+                ? `담은 ${cards.length}건이 모두 확정됐습니다.`
+                : `${left.length}건이 아직 초안입니다.`,
+            blocking: left,
+          }
+        },
+      },
     ],
   },
 ]

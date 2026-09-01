@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -20,8 +22,15 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.auth import security
+from app.modules.tests import models as test_models
+from app.modules.tests import services as test_services
+from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared import dependents
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
 
 
 @pytest.fixture
@@ -44,6 +53,120 @@ def run(client: TestClient, admin_headers: dict[str, str]) -> dict[str, Any]:
     assert made.status_code == 201, made.text
     body: dict[str, Any] = made.json()
     return body
+
+
+@pytest.fixture
+def dma_run(client: TestClient, db: Session, admin_headers: dict[str, str]) -> dict[str, Any]:
+    """DMA 파일 하나를 올려 읽힌 시험. **읽자마자 마스터커브가 등록된다**(ADR 0023)."""
+    ensure_builtin_test_types(db)
+    ensure_builtin_format_profiles(db)
+    db.commit()
+    material = client.post(
+        "/api/materials",
+        json={
+            "family": "Polymer",
+            "category": "EPDM",
+            "grade": "WB-VE",
+            "spec_thickness": 1.0,
+        },
+        headers=admin_headers,
+    ).json()
+    sample = client.post(
+        f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+    ).json()
+    specimen = client.post(
+        f"/api/samples/{sample['id']}/specimens",
+        json={"orientation": "MD"},
+        headers=admin_headers,
+    ).json()
+    created = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+        files={"file": ("Example FreqTemp2.csv", FREQ_TEMP.read_bytes())},
+        headers=admin_headers,
+    ).json()
+    assert test_services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    run: dict[str, Any] = created
+    return run
+
+
+class Test담긴_것이_무엇을_갖췄는지_센다:
+    """**판정의 재료는 서버가 준다.**
+
+    화면이 「이 단계는 끝났나」 를 말하려면 마스터커브가 몇인지, 온도가 몇 단인지가
+    필요하다. 그것을 화면이 도메인 API 로 따로 가져오면 워크벤치가 남의 도메인을
+    알게 되고, 그 방향은 되돌리기 어렵다(ADR 0024) — 그래서 담긴 줄에 실어 보낸다.
+    """
+
+    def test_시험은_마스터커브와_온도_단_수를_달고_온다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        response = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        )
+        assert response.status_code == 201, response.text
+        [item] = response.json()
+        assert item["facts"]["master_curves"] == 1
+        # 겹칠 수 있는 시험이다 — 한 단이면 화면이 「겹칠 수 없다」 고 말해야 한다.
+        assert item["facts"]["temperature_steps"] >= 2
+        assert item["facts"]["prony_fits"] == 0
+        assert item["facts"]["adopted"] == 0
+
+    def test_안_세어_본_것은_모른다고_한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """**`0` 이 아니라 `-1` 이다.** 이 칸이 생기기 전에 읽은 시험은 「온도가 한
+        단」 이 아니라 「안 세어 봤다」 다 — 0으로 보내면 화면이 「겹칠 수 없다」 고
+        단정하고, 진짜 남은 일이 숨는다."""
+        row = db.get(test_models.TestRun, uuid.UUID(dma_run["id"]))
+        assert row is not None
+        row.temperature_step_count = None
+        db.commit()
+
+        client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        )
+        detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
+        [item] = detail["items"]
+        assert item["facts"]["temperature_steps"] == -1
+
+    def test_사라진_것에는_사실이_없다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """세는 대상이 없으면 **비워 보낸다.** 0 으로 채우면 화면이 「마스터커브가
+        없다」 로 읽고, 지워진 시험을 남은 일로 재촉한다."""
+        client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "test_run", "target_ids": [dma_run["id"]]},
+            headers=admin_headers,
+        )
+        row = db.get(test_models.TestRun, uuid.UUID(dma_run["id"]))
+        assert row is not None
+        row.deleted_at = datetime.now(UTC)
+        db.commit()
+
+        detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
+        [item] = detail["items"]
+        assert item["missing"] is True
+        assert item["facts"] == {}
 
 
 class Test작업을_시작한다:

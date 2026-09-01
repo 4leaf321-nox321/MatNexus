@@ -7000,6 +7000,13 @@ export interface components {
             /** Detail */
             detail?: string | null;
             /**
+             * Facts
+             * @default {}
+             */
+            facts: {
+                [key: string]: number;
+            };
+            /**
              * Id
              * Format: uuid
              */

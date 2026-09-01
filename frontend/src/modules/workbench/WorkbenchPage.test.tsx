@@ -4,6 +4,7 @@
  * 여기서 지키는 것은 넷이다.
  *
  *   무엇을 할지 먼저 고른다      워크플로 목록이 곧 「무엇을 할 수 있나」 다
+ *   남은 일을 이름으로 말한다     세기만 하면 어느 것인지 찾으러 다녀야 한다
  *   이어서 하기가 먼저 보인다     어제 것이 아래에 묻히면 서버에 둔 뜻이 없다
  *   사라진 것도 줄을 지킨다       조용히 빠지면 「여덟이 왜 일곱이지」 가 된다
  *   모르는 워크플로는 밀지 않는다  반쯤 읽어 이어서 미는 것이 더 나쁘다
@@ -116,6 +117,83 @@ describe('이어서 하기', () => {
     await userEvent.click(await screen.findByText('EPDM 도어씰 2026-09'))
     await waitFor(() => expect(run).toHaveBeenCalledWith('r1'))
     expect(await screen.findByLabelText('바구니')).toBeInTheDocument()
+  })
+})
+
+function run말고(over: Record<string, unknown>) {
+  const sweep = (label: string, curves: number) => ({
+    id: label,
+    kind: 'test_run',
+    target_id: label,
+    label,
+    detail: 'parsed',
+    facts: { master_curves: curves, temperature_steps: 5 },
+    missing: false,
+    note: null,
+    added_at: '2026-09-01T00:00:00Z',
+  })
+  return {
+    ...DETAIL,
+    workflow_key: 'viscoelastic_set',
+    item_count: 2,
+    items: [sweep('시편 A', 1), sweep('시편 B', 0)],
+    ...over,
+  }
+}
+
+describe('남은 일을 말한다', () => {
+  const openAt = async (detail: Record<string, unknown>) => {
+    run.mockResolvedValue(detail)
+    runs.mockResolvedValue([detail])
+    show()
+    await userEvent.click(await screen.findByText('EPDM 도어씰 2026-09'))
+    await screen.findByLabelText('단계')
+  }
+
+  it('안 겹친 시험의 이름을 댄다', async () => {
+    // 「1건 남음」 만 적으면 사람은 그 한 건을 찾으러 목록을 뒤져야 한다.
+    await openAt(run말고({ steps: { at: 'master', done: ['pick'] } }))
+    const status = within(await screen.findByLabelText('이 단계 상태'))
+    expect(status.getByText(/1건이 아직 안 겹쳤습니다/)).toBeInTheDocument()
+    expect(status.getByText('시편 B')).toBeInTheDocument()
+  })
+
+  it('다 갖추면 됐다고 한다', async () => {
+    await openAt(
+      run말고({
+        steps: { at: 'master', done: ['pick'] },
+        items: [
+          {
+            id: 'i1',
+            kind: 'test_run',
+            target_id: 't1',
+            label: '시편 A',
+            detail: 'parsed',
+            facts: { master_curves: 1, temperature_steps: 5 },
+            missing: false,
+            note: null,
+            added_at: '2026-09-01T00:00:00Z',
+          },
+        ],
+      })
+    )
+    expect(
+      within(await screen.findByLabelText('이 단계 상태')).getByText(/마스터커브가 있습니다/)
+    ).toBeInTheDocument()
+  })
+
+  it('됨으로 표시했어도 안 끝났으면 그렇게 적는다', async () => {
+    // **조용히 넘어가는 것이 이 화면에서 가장 나쁘다** — 표시만 보고 다음 사람이
+    // 이어받으면 안 겹친 시험이 그대로 피팅으로 간다.
+    await openAt(run말고({ steps: { at: 'fit', done: ['pick', 'master'] } }))
+    expect(await screen.findByText('아직 남았습니다')).toBeInTheDocument()
+  })
+
+  it('막지는 않는다', async () => {
+    // 워크벤치는 진행자이지 문지기가 아니다(ADR 0024). 화면 밖에서 이미 한 일을
+    // 여기가 못 보는 경우가 늘 있다.
+    await openAt(run말고({ steps: { at: 'master', done: ['pick'] } }))
+    expect(screen.getByRole('button', { name: /다음: 글로벌 피팅/ })).toBeEnabled()
   })
 })
 

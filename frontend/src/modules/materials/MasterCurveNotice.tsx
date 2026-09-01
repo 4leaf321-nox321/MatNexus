@@ -11,7 +11,7 @@
  */
 
 import { groupsApi } from '@/modules/materials/api.groups'
-import { masterCurveGap } from '@/modules/materials/masterCurveGap'
+import { masterCurveGap } from '@/shared/masterCurveGap'
 import { testsApi } from '@/modules/tests/api'
 import { Button } from '@/shared/components/ui/button'
 import { useResource } from '@/shared/hooks/useResource'

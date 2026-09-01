@@ -6497,6 +6497,14 @@
             ],
             "title": "Detail"
           },
+          "facts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Facts",
+            "type": "object"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

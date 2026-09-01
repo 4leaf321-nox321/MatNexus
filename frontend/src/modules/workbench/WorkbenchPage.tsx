@@ -22,14 +22,14 @@
  * 있다.
  */
 
-import { ArrowRight, Check, Circle, Layers, Plus, X } from 'lucide-react'
+import { ArrowRight, Check, Circle, CircleAlert, Layers, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { basketApi } from '@/shared/api/basket'
 import type { BasketRun, BasketRunDetail } from '@/shared/api/basket'
 import { WORKFLOWS, workflowOf } from '@/modules/workbench/workflows'
-import type { Workflow } from '@/modules/workbench/workflows'
+import type { StepCheck, Workflow } from '@/modules/workbench/workflows'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -242,6 +242,12 @@ function RunView({
     steps.findIndex((one) => one.key === at)
   )
   const step = steps[index]
+  // 판정은 담긴 것으로 한다 — 서버가 세어 준 사실(`facts`)이 그 안에 있다.
+  const checks = new Map<string, StepCheck>()
+  for (const one of steps) {
+    const judged = one.judge?.(run.items)
+    if (judged) checks.set(one.key, judged)
+  }
 
   return (
     <section aria-label="작업">
@@ -288,6 +294,10 @@ function RunView({
                       {position + 1}. {one.title}
                     </span>
                     <span className="text-muted-foreground block">{one.what}</span>
+                    {/* **표시는 됐는데 실제로는 안 끝난 것**을 조용히 넘기지 않는다. */}
+                    {done && checks.get(one.key)?.ok === false && (
+                      <span className="block text-amber-600">아직 남았습니다</span>
+                    )}
                   </span>
                 </button>
               </li>
@@ -302,6 +312,8 @@ function RunView({
                 {index + 1}. {step.title}
               </h2>
               <p className="text-muted-foreground mb-3 text-sm">{step.what}</p>
+
+              {checks.has(step.key) && <StepStatus check={checks.get(step.key)!} />}
 
               {/* **일은 그 도메인 화면이 한다.** 여기서 복제하면 두 벌이 갈린다. */}
               {step.where && (
@@ -343,6 +355,36 @@ function RunView({
         </div>
       </div>
     </section>
+  )
+}
+
+function StepStatus({ check }: { check: StepCheck }) {
+  return (
+    <div
+      className={`mb-3 rounded-md border p-2 text-sm ${
+        check.ok ? 'border-emerald-600/40 bg-emerald-500/5' : 'border-amber-500/40 bg-amber-500/5'
+      }`}
+      aria-label="이 단계 상태"
+    >
+      <span className="flex items-start gap-2">
+        {check.ok ? (
+          <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+        ) : (
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+        )}
+        <span>{check.say}</span>
+      </span>
+      {/* **이름을 적는다.** 세기만 하면 어느 것인지 찾으러 다녀야 한다. */}
+      {check.blocking && check.blocking.length > 0 && (
+        <span className="mt-2 flex flex-wrap gap-1">
+          {check.blocking.map((label) => (
+            <span key={label} className="bg-muted rounded px-1.5 py-0.5 text-xs">
+              {label}
+            </span>
+          ))}
+        </span>
+      )}
+    </div>
   )
 }
 
