@@ -186,7 +186,28 @@ class PropertyCardSaveRequest(BaseModel):
     그것을 결정이라고 인식하지 않는다.
 
     식을 안 골랐으면(`family` 가 비었으면) 늘릴 근거가 없으므로 거절한다."""
+
+    resample_method: str | None = None
+    """소성 표의 점을 다시 고를 방법(`matcore.resample.METHODS`). **비우면 안 고른다.**
+
+    앞 단계에서 점 수를 맞추기는 어렵다 — 장비마다 샘플링이 다르고 처리 구간도
+    시험마다 다르다. 다 만들어진 곡선에서 마지막에 한 번 고르고, **카드에 굳힌다**:
+    내보낼 때마다 다시 뽑으면 같은 카드가 형식마다 다른 표를 낸다."""
+
+    resample_points: int | None = Field(default=None, ge=2, le=2000)
+    """몇 점으로. 방법과 **함께** 줘야 한다 — 하나만 오면 나머지를 서버가 정하게
+    되는데, 그 기본값이 곧 결정이 되고 아무도 그것을 결정이라 인식하지 않는다."""
+
     note: str | None = None
+
+
+class ResampleMethodOut(BaseModel):
+    """점을 다시 고르는 방법 하나. **뜻은 서버가 적는다** — 화면이 베껴 두면
+    새 방법을 더할 때 두 곳을 고치게 된다."""
+
+    key: str
+    label: str
+    help: str
 
 
 class ExportFormatOut(BaseModel):

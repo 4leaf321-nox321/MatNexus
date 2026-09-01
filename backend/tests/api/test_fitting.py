@@ -813,6 +813,62 @@ class Test상태:
         assert remains.status_code == 200
         assert values(remains.json(), "hardening")["family"] == "voce"
 
+    def test_점_수를_맞춰_굳힌다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**카드를 만들 때 한 번 걸고 굳힌다.** 내보낼 때마다 다시 뽑으면 같은
+        카드가 형식마다 다른 표를 내고, 「내가 받은 덱의 그 숫자」 를 못 되짚는다."""
+        made = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "점 맞춘 카드",
+                "family": "voce",
+                "resample_method": "uniform",
+                "resample_points": 15,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        body = made.json()
+        assert body["point_count"] == 15
+        # **무엇을 썼는지 카드가 들고 있다.** 점 수만 남으면 반년 뒤에 이 표가
+        # 측정 그대로인지 다시 고른 것인지 알 수 없다.
+        assert body["source"]["resample"]["method"] == "uniform"
+        assert body["source"]["resample"]["asked"] == 15
+        assert body["source"]["resample"]["from"] > 0
+
+    def test_방법만_주면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**서버가 점 수를 정하지 않는다.** 기본값을 두면 그 값이 곧 결정이 되는데,
+        아무도 그것을 결정이라고 인식하지 않는다."""
+        refused = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "반쪽",
+                "family": "voce",
+                "resample_method": "uniform",
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+
+    def test_고르는_방법은_서버가_알려_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """화면이 목록을 적어 두면 새 방법을 더할 때 두 곳을 고치고, 한 곳을 빠뜨린다."""
+        rows = client.get("/api/fitting/resample-methods", headers=admin_headers).json()
+        keys = [one["key"] for one in rows]
+        assert keys[0] == "curvature", "차례가 곧 추천 순서다"
+        assert {"keep_source", "log", "uniform"} <= set(keys)
+        assert all(one["help"] for one in rows), "무엇을 하는 방법인지 서버가 적는다"
+
     def test_사용_중지한_카드를_초안으로_되살린다(
         self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
     ) -> None:

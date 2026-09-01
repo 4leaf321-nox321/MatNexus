@@ -909,6 +909,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/resample-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resample Methods
+         * @description 소성 표의 점을 다시 고르는 방법들.
+         *
+         *     **화면이 적어 두지 않는다** — 새 방법을 더할 때 두 곳을 고치게 되고, 그때 한 곳을
+         *     빠뜨린다(형식 프로파일·덱 정의·레지스트리에서 반복해 내린 판단이다).
+         */
+        get: operations["resample_methods_api_fitting_resample_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/unit-systems": {
         parameters: {
             query?: never;
@@ -8241,6 +8264,10 @@ export interface components {
             orientation: string;
             /** Poisson Ratio */
             poisson_ratio?: number | null;
+            /** Resample Method */
+            resample_method?: string | null;
+            /** Resample Points */
+            resample_points?: number | null;
             /** Test Run Ids */
             test_run_ids?: string[] | null;
             /** Test Type Key */
@@ -8510,6 +8537,19 @@ export interface components {
         ReparseRequest: {
             /** Profile Key */
             profile_key?: string | null;
+        };
+        /**
+         * ResampleMethodOut
+         * @description 점을 다시 고르는 방법 하나. **뜻은 서버가 적는다** — 화면이 베껴 두면
+         *     새 방법을 더할 때 두 곳을 고치게 된다.
+         */
+        ResampleMethodOut: {
+            /** Help */
+            help: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /** ResolveIn */
         ResolveIn: {
@@ -12501,6 +12541,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resample_methods_api_fitting_resample_methods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResampleMethodOut"][];
                 };
             };
         };

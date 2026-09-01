@@ -24,6 +24,7 @@ const cards = vi.fn()
 const forMaterial = vi.fn()
 const deprecate = vi.fn()
 const restore = vi.fn()
+const create = vi.fn()
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
@@ -34,6 +35,13 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     restore: (...args: unknown[]) => restore(...args),
     // 카드 줄에는 내보내기 메뉴가 딸려 있다 — 그 안이 단위계를 읽는다.
     unitSystems: () => Promise.resolve([{ key: 'si', label: 'SI', is_default: true }]),
+    create: (...args: unknown[]) => create(...args),
+    // 방법 목록은 서버가 준다 — 차례가 곧 추천 순서다.
+    resampleMethods: () =>
+      Promise.resolve([
+        { key: 'curvature', label: '꺾이는 곳에 촘촘히', help: '무릎에 점을 몰아 줍니다.' },
+        { key: 'uniform', label: '등간격', help: '같은 폭으로 나눕니다.' },
+      ]),
     // 카드 목록이 비어 있어도 화면은 형식·블록 선언을 먼저 읽는다.
     formats: () => Promise.resolve([]),
     blocks: () => Promise.resolve([]),
@@ -159,6 +167,52 @@ function withCard(status: string) {
     ],
   })
 }
+
+describe('점 수 맞추기', () => {
+  const openSave = async () => {
+    // 비교 화면은 **후보가 있어야** 뜬다 — 그 안에 저장 단추가 있다.
+    preview.mockResolvedValue(body([fit()]))
+    panel()
+    await compare()
+    await userEvent.click(await screen.findByRole('button', { name: /이 값으로 카드 만들기/ }))
+  }
+
+  it('안 켜면 안 건다 — 측정 그대로 나간다', async () => {
+    // **서버가 기본값을 두면 그 값이 곧 결정이 된다.** 아무도 그것을 결정이라고
+    // 인식하지 않는다.
+    create.mockResolvedValue({})
+    await openSave()
+    await userEvent.click(await screen.findByRole('button', { name: '초안으로 저장' }))
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({
+      resample_method: null,
+      resample_points: null,
+    })
+  })
+
+  it('켜면 방법과 점 수를 함께 보낸다', async () => {
+    create.mockResolvedValue({})
+    await openSave()
+    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 맞추기'))
+    await userEvent.selectOptions(screen.getByLabelText('어떻게 고를까'), 'uniform')
+    const points = screen.getByLabelText('점 수')
+    await userEvent.clear(points)
+    await userEvent.type(points, '25')
+    await userEvent.click(screen.getByRole('button', { name: '초안으로 저장' }))
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({
+      resample_method: 'uniform',
+      resample_points: 25,
+    })
+  })
+
+  it('무엇을 하는 방법인지 서버가 적은 설명을 보여 준다', async () => {
+    // 화면이 베껴 두면 새 방법이 붙을 때 설명만 옛것으로 남는다.
+    await openSave()
+    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 맞추기'))
+    expect(screen.getByText('무릎에 점을 몰아 줍니다.')).toBeInTheDocument()
+  })
+})
 
 describe('확정한 값을 못 쓰게 만들 때', () => {
   it('한 번 묻고, 확인해야 중지한다', async () => {

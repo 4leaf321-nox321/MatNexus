@@ -9536,6 +9536,30 @@
             ],
             "title": "Poisson Ratio"
           },
+          "resample_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resample Method"
+          },
+          "resample_points": {
+            "anyOf": [
+              {
+                "maximum": 2000.0,
+                "minimum": 2.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resample Points"
+          },
           "test_run_ids": {
             "anyOf": [
               {
@@ -10206,6 +10230,30 @@
           }
         },
         "title": "ReparseRequest",
+        "type": "object"
+      },
+      "ResampleMethodOut": {
+        "description": "점을 다시 고르는 방법 하나. **뜻은 서버가 적는다** — 화면이 베껴 두면\n새 방법을 더할 때 두 곳을 고치게 된다.",
+        "properties": {
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "help"
+        ],
+        "title": "ResampleMethodOut",
         "type": "object"
       },
       "ResolveIn": {
@@ -19102,6 +19150,32 @@
           }
         },
         "summary": "Preview",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/resample-methods": {
+      "get": {
+        "description": "소성 표의 점을 다시 고르는 방법들.\n\n**화면이 적어 두지 않는다** — 새 방법을 더할 때 두 곳을 고치게 되고, 그때 한 곳을\n빠뜨린다(형식 프로파일·덱 정의·레지스트리에서 반복해 내린 판단이다).",
+        "operationId": "resample_methods_api_fitting_resample_methods_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResampleMethodOut"
+                  },
+                  "title": "Response Resample Methods Api Fitting Resample Methods Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Resample Methods",
         "tags": [
           "fitting"
         ]

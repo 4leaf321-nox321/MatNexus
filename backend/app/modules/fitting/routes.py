@@ -53,6 +53,7 @@ from app.modules.fitting.schemas import (
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
+    ResampleMethodOut,
     UnitSystemOut,
     ViscoelasticCardSaveRequest,
 )
@@ -72,7 +73,7 @@ from app.shared.permissions import (
     resolve_owner_workspace,
     visible_owner_clause,
 )
-from matcore import cards, export, fitting, prony, runtime, statistics
+from matcore import cards, export, fitting, prony, resample, runtime, statistics
 from matcore.export import scan, template
 from matcore.fitting import hyperelastic
 from matcore.registry import Produced
@@ -1106,6 +1107,41 @@ def create_card(
         {"plastic_strain": float(x), "true_stress": float(y)}
         for x, y in zip(strain, stress, strict=True)
     ]
+    # ── 점을 다시 고를까 ────────────────────────────────────────────────
+    #
+    # **늘리기 전에 고른다.** 늘린 뒤에 고르면 외삽 구간까지 같은 규칙으로 나뉘어,
+    # 측정한 자리와 지어낸 자리가 표에서 구별되지 않는다.
+    resampled: dict[str, Any] = {}
+    if payload.resample_method is not None or payload.resample_points is not None:
+        if payload.resample_method is None or payload.resample_points is None:
+            raise AppError(
+                "MNX-FITTING-0029", "다시 고를 방법과 점 수를 함께 주세요.", status=422
+            )
+        if spec is not None and spec.block != "hardening":
+            raise AppError(
+                "MNX-FITTING-0029",
+                f"'{spec.label}' 은 소성 표를 만드는 식이 아닙니다.",
+                status=422,
+            )
+        try:
+            picked = resample.resample(
+                [(row["plastic_strain"], row["true_stress"]) for row in table_rows],
+                method=payload.resample_method,
+                count=payload.resample_points,
+            )
+        except resample.ResampleError as exc:
+            raise AppError("MNX-FITTING-0029", str(exc), status=422) from exc
+        table_rows = [{"plastic_strain": float(x), "true_stress": float(y)} for x, y in picked]
+        # **무엇을 썼는지 카드가 들고 있어야 한다.** 점 수만 남으면 반년 뒤에 이 표가
+        # 측정 그대로인지 다시 고른 것인지 알 수 없다.
+        resampled = {
+            "method": payload.resample_method,
+            "method_label": resample.METHODS[payload.resample_method].label,
+            "asked": payload.resample_points,
+            "from": len(strain),
+            "to": len(table_rows),
+        }
+
     if payload.extrapolate_to is not None:
         if spec is None:
             raise AppError(
@@ -1195,6 +1231,7 @@ def create_card(
             # **카드가 자기 근거를 들고 있다** 는 원칙의 나머지 절반이다 —
             # 값이 무엇에서 나왔는지에 더해 **무엇 위에서 계산됐는지**.
             "runtime": runtime.manifest(),
+            **({"resample": resampled} if resampled else {}),
         },
         blocks={
             **_temperature_aware("elastic", elastic, elastic_rows),
@@ -2319,6 +2356,16 @@ def update_card(
     db.commit()
     db.refresh(item)
     return _card_out(db, item)
+
+
+@router.get("/resample-methods", response_model=list[ResampleMethodOut])
+def resample_methods() -> list[ResampleMethodOut]:
+    """소성 표의 점을 다시 고르는 방법들.
+
+    **화면이 적어 두지 않는다** — 새 방법을 더할 때 두 곳을 고치게 되고, 그때 한 곳을
+    빠뜨린다(형식 프로파일·덱 정의·레지스트리에서 반복해 내린 판단이다).
+    """
+    return [ResampleMethodOut(**one) for one in resample.describe()]
 
 
 @router.post("/cards/{card_id}/publish", response_model=PropertyCardOut)

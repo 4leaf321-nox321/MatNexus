@@ -942,6 +942,16 @@ function SaveDialog({
       : `${Number(row.value.toPrecision(6))} (물려받음)`
   }
   const [note, setNote] = useState('')
+  // **안 고르면 안 건다.** 측정 그대로가 기본이고, 점 수를 맞추는 것은 해석 쪽
+  // 요구라 사람이 켠다.
+  const [resampleOn, setResampleOn] = useState(false)
+  const [resampleMethod, setResampleMethod] = useState('')
+  const [resamplePoints, setResamplePoints] = useState('40')
+  // 방법 목록은 서버가 준다 — 차례가 곧 추천 순서라 첫 것을 기본으로 든다.
+  const methods = useResource(() => fittingApi.resampleMethods(), [])
+  useEffect(() => {
+    if (resampleMethod === '' && methods.data?.length) setResampleMethod(methods.data[0].key)
+  }, [methods.data, resampleMethod])
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -968,6 +978,10 @@ function SaveDialog({
         blend_with: blendWith === '' ? null : blendWith,
         blend_weight: blendWith === '' ? null : blendWeight,
         extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
+        // **점 수는 안 고르면 안 건다.** 서버가 기본값을 두면 그 값이 곧 결정이
+        // 되는데, 아무도 그것을 결정이라고 인식하지 않는다.
+        resample_method: resampleOn ? resampleMethod : null,
+        resample_points: resampleOn ? Number(resamplePoints) : null,
         note: note === '' ? null : note,
       })
       onSaved()
@@ -1062,6 +1076,71 @@ function SaveDialog({
               바꾸려면 이 창을 닫고 <b>비교 화면</b>에서 조정하세요 — 곡선이 함께
               움직이는 것을 보고 정하는 값입니다.
             </p>
+          </div>
+
+          {/* ── 점 수 맞추기 ─────────────────────────────────────────────
+              **다 만들어진 곡선에서 마지막에 한 번 고른다.** 앞 단계에서 맞추려면
+              읽는 규칙에 「몇 점으로 낼까」 를 넣어야 하는데, 그 값은 해석이 요구하는
+              것이지 측정의 성질이 아니다.
+
+              카드에 굳힌다 — 내보낼 때마다 다시 뽑으면 같은 카드가 형식마다 다른
+              표를 낸다. */}
+          <div className="space-y-2 rounded-md border p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={resampleOn}
+                onChange={(event) => setResampleOn(event.target.checked)}
+              />
+              소성 표의 점 수 맞추기
+            </label>
+            {!resampleOn && (
+              <p className="text-muted-foreground text-xs">
+                안 걸면 <b>측정 그대로</b> 나갑니다. 시험마다 점 수가 다른 것이
+                거슬리거나, 솔버가 받을 표를 가볍게 하고 싶을 때 켜세요.
+              </p>
+            )}
+            {resampleOn && (
+              <div className="space-y-2">
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="resample-method">어떻게 고를까</Label>
+                    <select
+                      id="resample-method"
+                      className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+                      value={resampleMethod}
+                      onChange={(event) => setResampleMethod(event.target.value)}
+                    >
+                      {(methods.data ?? []).map((one) => (
+                        <option key={one.key} value={one.key}>
+                          {one.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="resample-points">점 수</Label>
+                    <Input
+                      id="resample-points"
+                      type="number"
+                      min={2}
+                      max={2000}
+                      value={resamplePoints}
+                      onChange={(event) => setResamplePoints(event.target.value)}
+                    />
+                  </div>
+                </div>
+                {/* **무엇을 하는 방법인지 서버가 적어 준다.** 화면이 베껴 두면 새
+                    방법이 붙을 때 설명만 옛것으로 남는다. */}
+                <p className="text-muted-foreground text-xs">
+                  {(methods.data ?? []).find((one) => one.key === resampleMethod)?.help}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  측정 구간 <b>안에서만</b> 고릅니다 — 늘리는 것은 위의 「늘릴 한계」 가
+                  하는 다른 일입니다.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">

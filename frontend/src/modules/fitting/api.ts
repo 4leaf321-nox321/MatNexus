@@ -21,6 +21,7 @@ export type UnitSystem = components['schemas']['UnitSystemOut']
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']
 type PropertyCardUpdate = components['schemas']['PropertyCardUpdateRequest']
 export type ExportFormat = components['schemas']['ExportFormatOut']
+export type ResampleMethod = components['schemas']['ResampleMethodOut']
 export type BlockSpec = components['schemas']['BlockSpecOut']
 export type Produced = components['schemas']['CardValueOut']
 export type ViscoelasticCardSaveRequest =
@@ -181,6 +182,12 @@ export const fittingApi = {
    */
   update: (id: string, body: PropertyCardUpdate) =>
     api.patch<PropertyCard>(`/fitting/cards/${id}`, body),
+
+  /**
+   * 소성 표의 점을 다시 고르는 방법들. **화면이 적어 두지 않는다** — 새 방법이
+   * 붙어도 이 파일은 안 고친다.
+   */
+  resampleMethods: () => api.get<ResampleMethod[]>('/fitting/resample-methods'),
 
   publish: (id: string) => api.post<PropertyCard>(`/fitting/cards/${id}/publish`, {}),
 
