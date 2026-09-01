@@ -114,6 +114,67 @@ class Test탄성계수:
         assert scalar(result, "elastic_r_squared") < 0.99
         assert any("R²" in note for note in result.notes)
 
+    def test_구간을_변위로_적을_수_있다(self) -> None:
+        """**사람이 보는 그래프로 적게 한다.**
+
+        원본 화면은 하중-변위인데 구간은 변형률로만 적을 수 있었다 — 눈으로 고른
+        직선 구간을 게이지 길이로 나눠 옮겨 적어야 하고, 그 자리에서 틀린다
+        (2026-09-02: 「몇으로 해야 할지 모르겠다」).
+
+        게이지 길이를 다시 받지 않는다 — **곡선에 남은 변위 열**로 옮긴다. 앞
+        단계가 무엇으로 나눴든 그것과 어긋나지 않는다.
+        """
+        gauge = 0.05
+        displacement = np.linspace(0.0, 0.005, 201)  # 0 ~ 5 mm
+        strain = displacement / gauge
+        frame = Frame(
+            {
+                "displacement": displacement,
+                "strain_engineering": strain,
+                "stress_engineering": strain * E_TRUE,
+            },
+            {"displacement": "m", "strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {
+                        "method": "linear_regression",
+                        "window_basis": "displacement",
+                        # 변형률 0.0005~0.0025 와 같은 구간이다(게이지 50 mm).
+                        "minimum_displacement": 0.025,
+                        "maximum_displacement": 0.125,
+                    },
+                )
+            ],
+            frame,
+        )
+        assert scalar(result, "youngs_modulus") == pytest.approx(E_TRUE, rel=1e-6)
+        # **무엇으로 적었는지 남는다.** 결과를 보는 사람은 변형률만 보게 되는데
+        # 사람이 적은 것은 mm 였다.
+        assert any("mm 로 적은 구간" in note for note in result.notes)
+
+    def test_변위로_적기로_해_놓고_안_주면_거절한다(self) -> None:
+        frame = Frame(
+            {
+                "displacement": np.linspace(0.0, 0.005, 51),
+                "strain_engineering": np.linspace(0.0, 0.1, 51),
+                "stress_engineering": np.linspace(0.0, 0.1, 51) * E_TRUE,
+            },
+            {"displacement": "m", "strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.elastic_modulus",
+                        {"method": "linear_regression", "window_basis": "displacement"},
+                    )
+                ],
+                frame,
+            )
+
     def test_점이_모자라면_탄성계수를_아예_안_낸다(self) -> None:
         """**여기가 진짜 지키는 것이다 — 나쁜 값을 내보내지 않는다.**
 

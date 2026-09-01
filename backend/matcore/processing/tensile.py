@@ -367,6 +367,39 @@ _AUTO_STRESS_LOW = 0.10
 _AUTO_STRESS_HIGH = 0.40
 
 
+def _window_from_displacement(
+    frame: Frame, options: dict[str, Any], strain: np.ndarray
+) -> tuple[float, float, str]:
+    """변위로 적은 구간을 **그 곡선 위에서** 변형률로 옮긴다.
+
+    사람이 보는 원본 그래프는 하중-변위다. 거기서 직선 구간을 눈으로 고른 뒤
+    변형률로 적으려면 게이지 길이를 손으로 나눠야 하고, **그 자리에서 틀린다** —
+    실사용에서 나왔다(2026-09-02: 「f-delta 그래프를 보고 구간을 입력해야 하는데
+    strain 기준으로 입력하다 보니 몇으로 해야 할지 모르겠다」).
+
+    **게이지 길이를 다시 받지 않는다.** 곡선에 변위 열이 그대로 남아 있으므로
+    같은 행의 변형률을 보간해 쓴다 — 앞 단계가 무엇으로 나눴든 그것과 어긋나지
+    않는다(따로 받으면 두 값이 갈리는 순간이 온다).
+    """
+    displacement = frame.require("displacement", what="변위")
+    low_mm = option_float(options, "minimum_displacement", float("nan"))
+    high_mm = option_float(options, "maximum_displacement", float("nan"))
+    if not (math.isfinite(low_mm) and math.isfinite(high_mm)):
+        raise ProcessingError("구간을 변위로 적기로 했으면 시작과 끝을 둘 다 주세요(mm).")
+    if low_mm >= high_mm:
+        raise ProcessingError(f"변위 구간이 뒤집혔습니다: {low_mm} ≥ {high_mm} mm")
+
+    order = np.argsort(displacement, kind="stable")
+    low = float(np.interp(low_mm / 1000.0, displacement[order], strain[order]))
+    high = float(np.interp(high_mm / 1000.0, displacement[order], strain[order]))
+    return (
+        low,
+        high,
+        f"변위 {low_mm:.4g}~{high_mm:.4g} mm 로 적은 구간을 "
+        f"변형률 {low:.5g}~{high:.5g} 로 옮겼습니다.",
+    )
+
+
 def _auto_window(
     strain: Any,
     stress: Any,
@@ -491,6 +524,37 @@ def _auto_window(
             ),
         ),
         ParamSpec(
+            name="window_basis",
+            label="구간을 무엇으로 적나",
+            type="choice",
+            choices=("strain", "displacement"),
+            default="strain",
+            when={"method": ("linear_regression", "chord", "secant")},
+            help=(
+                "**사람이 보는 그래프로 적게 한다.** 원본 화면은 하중-변위이고, "
+                "거기서 직선 구간을 눈으로 고른 뒤 변형률로 환산해 적으려면 "
+                "게이지 길이를 손으로 나눠야 한다 — 그 자리에서 틀린다."
+            ),
+        ),
+        ParamSpec(
+            name="minimum_displacement",
+            dimension="length",
+            label="구간 시작(변위)",
+            type="float",
+            unit="mm",
+            when={"window_basis": ("displacement",)},
+            help="원본 곡선의 x 축 그대로입니다. 그 값들 사이의 점으로 직선을 얹습니다.",
+        ),
+        ParamSpec(
+            name="maximum_displacement",
+            dimension="length",
+            label="구간 끝(변위)",
+            type="float",
+            unit="mm",
+            when={"window_basis": ("displacement",)},
+            help="항복 전이어야 합니다 — 넘으면 기울기가 눕습니다.",
+        ),
+        ParamSpec(
             name="manual_modulus",
             label="직접 입력",
             type="float",
@@ -574,6 +638,10 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
     low = option_float(options, "minimum_strain", 0.0005)
     high = option_float(options, "maximum_strain", 0.0025)
+    basis_note: str | None = None
+    # 기본은 변형률 — `option_text` 는 목록의 첫 값을 기본으로 쓴다.
+    if option_text(options, "window_basis", ("strain", "displacement")) == "displacement":
+        low, high, basis_note = _window_from_displacement(frame, options, strain)
 
     auto_note: str | None = None
     if method == "auto":
@@ -733,6 +801,10 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         # **사람이 안 고른 구간이다.** 무엇을 골랐는지 메모에 남지 않으면
         # 검토할 근거가 없다.
         note = f"{auto_note} {note}"
+    if basis_note is not None:
+        # 변위로 적은 값을 변형률로 옮겼다는 사실을 남긴다 — 나중에 이 결과를 보는
+        # 사람은 변형률만 보게 되는데, 사람이 적은 것은 mm 였다.
+        note = f"{basis_note} {note}"
     notes = [note]
     if math.isfinite(r_squared) and r_squared < 0.995:
         # **경고이지 실패가 아니다.** 0.98 미만은 위에서 이미 막았다 — 여기는 그
