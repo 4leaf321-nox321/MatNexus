@@ -193,8 +193,11 @@ def sizes_for(
             # **숫자 칸만 치수다.** 규격은 판(문자)·모드(선택)도 갖는데, 그것은
             # 그 규격의 성질이지 이 시편을 잰 값이 아니다 — 시편 화면에 입력
             # 칸으로 나오면 사람은 거기에 무엇을 적어야 하는지 알 수 없다.
-            fields = tuple(
-                item for item in attribute_fields(db, axis, term) if item.kind == "number"
+            fields = _with_needs(
+                tuple(
+                    item for item in attribute_fields(db, axis, term) if item.kind == "number"
+                ),
+                term.cross_section,
             )
             keys = {item.key for item in fields}
             schema[term.id] = (
@@ -216,6 +219,40 @@ def sizes_for(
         )
         for specimen in specimens
     }
+
+
+def _with_needs(fields: tuple[Field, ...], cross_section: str | None) -> tuple[Field, ...]:
+    """단면 모양이 요구하는 칸을 **없으면 보탠다.**
+
+    규격이 「평판」 을 골라 놓고 두께 칸을 선언하지 않으면, 시편 폼에 두께를 적을
+    자리가 없다 — 값은 시편마다 다른데 넣을 데가 없으니 **단면적을 영영 못 낸다.**
+    실사용에서 그 막다른 길이 나왔다(2026-09-02): 「평판인데 두께가 없다고 나온다」.
+
+    규격이 공칭을 적어 두는 자리와 시편이 실측을 적는 자리는 같은 칸이다. 그러니
+    식이 요구하는 칸은 **늘 있어야 한다** — 공칭을 안 적었어도 시편이 채울 수 있게.
+    """
+    if not cross_section:
+        return fields
+    shape = specimen_kit.CROSS_SECTIONS.get(cross_section)
+    if shape is None:
+        return fields
+    known = {item.key for item in fields}
+    added = [
+        Field(
+            key=need.key,
+            label=need.label,
+            dimension=need.dimension,
+            si_unit=need.si_unit,
+            is_required=False,
+            help="단면적을 내는 데 쓰는 값입니다.",
+            # **규격에서 지울 수 있는 칸이 아니다** — 식이 요구하는 것이라,
+            # 지우면 그 규격은 단면적을 못 내게 된다.
+            inherited=True,
+        )
+        for need in shape.needs
+        if need.key not in known
+    ]
+    return (*fields, *added)
 
 
 def _sizes(

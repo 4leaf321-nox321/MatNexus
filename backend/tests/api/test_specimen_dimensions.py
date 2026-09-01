@@ -31,6 +31,7 @@ from app.modules.vocabulary.definitions import (
     ensure_builtin_specimen_categories,
     ensure_builtin_vocabularies,
 )
+from app.modules.vocabulary.models import VocabularyTerm
 
 MM = 0.001
 
@@ -465,6 +466,26 @@ class TestArea:
         assert payload["area"] is None
         assert "직경 8 mm" in payload["area_problem"]
         assert "단면 모양" in payload["area_problem"]
+
+    def test_단면_모양이_요구하는_칸은_늘_있다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**규격이 칸을 안 선언했어도 시편은 그 값을 적을 수 있어야 한다.**
+
+        고르는 자리에서는 막는다(`check_cross_section`). 하지만 가져오기로 들어온
+        규격은 그 문을 안 지나므로, 「평판인데 두께 칸이 없는」 규격이 생길 수 있다 —
+        그러면 값은 시편마다 다른데 적을 데가 없어 **단면적을 영영 못 낸다.**
+        """
+        made = make_standard(client, admin_headers, "가져온 평판", attributes={})
+        term = db.get(VocabularyTerm, uuid.UUID(made["id"]))
+        assert term is not None
+        term.cross_section = "rectangle"  # 가져오기가 이렇게 넣는다
+        db.commit()
+
+        specimen = make_specimen(client, admin_headers, standard="가져온 평판")
+        payload = dimensions_of(client, admin_headers, specimen["id"])
+        keys = {one["key"] for one in payload["fields"]}
+        assert {"width", "thickness"} <= keys
 
 
 class TestOnlyNumbers:
