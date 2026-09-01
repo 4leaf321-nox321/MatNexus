@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
+import { display } from '@/shared/units'
 
 const propertyItems = vi.fn()
 
@@ -227,6 +228,24 @@ describe('선언 물성 편집', () => {
       points: [{ value: 210 }],
       input_unit: 'GPa',
     })
+  })
+
+  it('온도 기호를 손으로 안 적는다 — 표에서 읽는다', async () => {
+    // **표만 바꾸면 라벨이 옛 단위를 적은 채 새 값을 받는다**(AGENTS.md). 값은
+    // 이미 표로 환산해 오므로, 기호만 손으로 적으면 둘이 갈린다.
+    panel([
+      {
+        item: '탄성계수',
+        points: [{ value_si: 170e9, value: 170, temperature_k: 673.15 }],
+        input_unit: 'GPa',
+        scale: null,
+        source: 'datasheet',
+        reference: 'MTC',
+        note: null,
+      },
+    ])
+    const shown = await screen.findByText(new RegExp(`@ .*${display('K', 'temperature').unit}`))
+    expect(shown).toBeInTheDocument()
   })
 
   it('척도로 재는 물성은 단위 대신 척도를 고르게 한다', async () => {

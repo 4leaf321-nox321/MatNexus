@@ -45,7 +45,7 @@ import type {
   PropertyItem,
 } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { fromDisplay, significant, toDisplay } from '@/shared/units'
+import { display, fromDisplay, significant, toDisplay } from '@/shared/units'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
@@ -142,6 +142,9 @@ function toDraft(row: DeclaredProperty): Draft {
     note: row.note ?? '',
   }
 }
+
+/** 온도 표시 단위 — **값 환산과 같은 표에서 읽는다.** */
+const TEMPERATURE = display('K', 'temperature')
 
 export function DeclaredPropertiesCard({
   level,
@@ -409,7 +412,11 @@ export function DeclaredPropertiesCard({
                             {point.temperature !== '' && (
                               <span className="text-muted-foreground">
                                 {' @ '}
-                                {shown(point.temperature)} °C
+                                {/* **단위를 손으로 적지 않는다**(AGENTS.md). 값은
+                                    이미 표에서 환산해 왔다(`toDisplay(…, 'K', …)`) —
+                                    기호만 손으로 적으면 표를 바꾼 날 라벨이 옛 단위를
+                                    적은 채 새 값을 받는다. */}
+                                {shown(point.temperature)} {TEMPERATURE.unit}
                               </span>
                             )}
                           </div>

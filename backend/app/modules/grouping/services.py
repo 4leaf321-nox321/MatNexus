@@ -163,15 +163,24 @@ def _material_of(db: Session, runs: Sequence[TestRun]) -> Material:
     다른 재료의 시편을 묶으면 그 계수가 어느 재료의 것인지 말할 수 없다 —
     카드는 재료에 붙는다.
     """
+    # **한 번에 읽는다**(AGENTS.md: N+1 은 명시적 join 으로 막는다). 시편마다
+    # 두 번씩 부르면 여덟 시편을 묶을 때 열여섯 번을 왕복한다.
+    owners = {
+        specimen_id: material_id
+        for specimen_id, material_id in db.execute(
+            select(Specimen.id, Sample.material_id)
+            .join(Sample, Sample.id == Specimen.sample_id)
+            .where(Specimen.id.in_([run.specimen_id for run in runs]))
+        )
+    }
     materials: set[uuid.UUID] = set()
     for run in runs:
-        specimen = db.get(Specimen, run.specimen_id)
-        sample = db.get(Sample, specimen.sample_id) if specimen else None
-        if sample is None:
+        material_id = owners.get(run.specimen_id)
+        if material_id is None:
             raise NotFound(
                 "MNX-GROUPING-0003", f"{run.record_name} 의 시료를 찾을 수 없습니다."
             )
-        materials.add(sample.material_id)
+        materials.add(material_id)
     if len(materials) != 1:
         raise AppError(
             "MNX-GROUPING-0004",
