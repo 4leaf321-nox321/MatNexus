@@ -36,7 +36,7 @@ from sqlalchemy import select  # noqa: E402
 # 배포용 스크립트에서만 터진다.
 import app.all_models  # noqa: E402,F401
 from app.database import SessionLocal  # noqa: E402
-from app.modules.tests.models import Curve, TestRun  # noqa: E402
+from app.modules.tests.models import Curve, TestRun, TestType  # noqa: E402
 from app.shared import filestore  # noqa: E402
 from matcore import curves as curvekit  # noqa: E402
 from matcore import viscoelastic  # noqa: E402
@@ -89,18 +89,38 @@ def main() -> None:
         )
         print(f"안 세어 본 시험 {len(runs)}건")
 
+        # 시험종류 이름을 미리 읽어 둔다. **건너뛴 것을 종류별로 말하기 위해서다** —
+        # 「채울 수 있는 것 0건」 만 적으면 인장뿐이라 0인지, DMA 인데 온도 열을 못
+        # 찾아 0인지 구별할 수 없다. 앞은 정상이고 뒤는 프로파일 문제다.
+        kinds = {row.id: (row.key, row.label) for row in db.scalars(select(TestType))}
+
         counted = 0
+        skipped: dict[str, int] = {}
         for run in runs:
             db_curves = list(db.scalars(select(Curve).where(Curve.test_run_id == run.id)))
             steps = steps_of(db_curves)
             if steps is None:
-                # 온도를 안 재는 시험(인장 등)이 대부분이다. 조용히 넘긴다 —
-                # 그 시험에는 이 값이 뜻이 없다.
+                # 온도를 안 재는 시험(인장 등)이 대부분이다. 그 시험에는 이 값이
+                # 뜻이 없으므로 넘기되, **무엇을 넘겼는지는 세어 둔다.**
+                key, label = kinds.get(run.test_type_id, ("?", "종류 모름"))
+                skipped[f"{label}({key})"] = skipped.get(f"{label}({key})", 0) + 1
                 continue
             print(f"  {run.record_name}: {steps}단")
             if args.apply:
                 run.temperature_step_count = steps
             counted += 1
+
+        if skipped:
+            print("온도 열이 없어 건너뛴 시험:")
+            for name, count in sorted(skipped.items(), key=lambda one: -one[1]):
+                print(f"  {name}: {count}건")
+            # 온도를 재는 시험이 여기 있으면 그것은 **읽기 설정 문제**다.
+            suspects = [name for name in skipped if "dma" in name.lower() or "점탄성" in name]
+            if suspects:
+                print(
+                    "  ! 위 중 온도를 재는 종류가 있습니다 — 장비 파일 정의에서 온도 열이"
+                    " `temperature` 로 매핑됐는지 보세요."
+                )
 
         if args.apply:
             db.commit()
