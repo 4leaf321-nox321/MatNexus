@@ -49,6 +49,7 @@ const term = (over: Record<string, unknown> = {}) => ({
   extra_fields: [],
   field_count: 0,
   field_symbols: {},
+  attribute_list: [],
   ratio_checks: [],
   ...over,
 })

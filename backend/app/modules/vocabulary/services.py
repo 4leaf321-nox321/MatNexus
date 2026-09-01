@@ -1102,6 +1102,64 @@ def axis_fields(vocabulary: Vocabulary) -> list[Field]:
     return [_as_field(item, inherited=True) for item in (vocabulary.base_fields or [])]
 
 
+def attribute_fields_many(
+    db: Session, vocabulary: Vocabulary, terms: Sequence[VocabularyTerm]
+) -> dict[uuid.UUID, list[Field]]:
+    """여러 값의 칸을 **한 번에** 푼다. 규칙은 `attribute_fields` 와 같다.
+
+    **목록이 이것을 쓴다.** 줄마다 `attribute_fields` 를 부르면 값 하나에 두
+    번씩(자기 칸 + 상위 칸) 질의가 나가, 100줄짜리 한 화면에 200번이 된다.
+    여기서는 자기 id 와 상위 id 를 모아 한 번에 읽는다.
+    """
+    if not terms:
+        return {}
+    wanted = {term.id for term in terms}
+    wanted |= {term.parent_term_id for term in terms if term.parent_term_id}
+    rows = db.scalars(
+        select(SpecimenField)
+        .where(SpecimenField.category_term_id.in_(wanted))
+        .order_by(SpecimenField.sort_order)
+    )
+    by_owner: dict[uuid.UUID, list[Any]] = {}
+    for row in rows:
+        by_owner.setdefault(row.category_term_id, []).append(row)
+
+    return {
+        term.id: _resolve_fields(
+            vocabulary,
+            term,
+            own=[_as_field(row, inherited=False) for row in by_owner.get(term.id, [])],
+            parent=[
+                _as_field(row, inherited=True) for row in by_owner.get(term.parent_term_id, [])
+            ]
+            if term.parent_term_id
+            else [],
+        )
+        for term in terms
+    }
+
+
+def _resolve_fields(
+    vocabulary: Vocabulary,
+    term: VocabularyTerm,
+    *,
+    own: list[Field],
+    parent: list[Field],
+) -> list[Field]:
+    """읽어 온 칸을 규칙대로 합친다. **질의를 안 한다** — 두 길이 같은 규칙을
+    쓰게 하려고 갈라 둔 자리다(`attribute_fields` 와 `attribute_fields_many`).
+    """
+    extra = [_as_field(item, inherited=False) for item in (term.extra_fields or [])]
+    fields = axis_fields(vocabulary) + own + parent + extra
+    overrides = term.field_symbols or {}
+    if not overrides:
+        return fields
+    return [
+        replace(item, symbol=str(overrides[item.key])) if item.key in overrides else item
+        for item in fields
+    ]
+
+
 def attribute_fields(
     db: Session, vocabulary: Vocabulary, term: VocabularyTerm | None
 ) -> list[Field]:
@@ -1122,22 +1180,19 @@ def attribute_fields(
     """
     if term is None:
         return []
-    own = category_fields(db, term.id)
-    parent = (
-        [replace(item, inherited=True) for item in category_fields(db, term.parent_term_id)]
-        if term.parent_term_id
-        else []
+    return _resolve_fields(
+        vocabulary,
+        term,
+        own=category_fields(db, term.id),
+        parent=(
+            [
+                replace(item, inherited=True)
+                for item in category_fields(db, term.parent_term_id)
+            ]
+            if term.parent_term_id
+            else []
+        ),
     )
-    extra = [_as_field(item, inherited=False) for item in (term.extra_fields or [])]
-    fields = axis_fields(vocabulary) + own + parent + extra
-
-    overrides = term.field_symbols or {}
-    if not overrides:
-        return fields
-    return [
-        replace(item, symbol=str(overrides[item.key])) if item.key in overrides else item
-        for item in fields
-    ]
 
 
 #: 칸이 쓸 수 있는 차원 — **단위표에 있는 것 전부.**

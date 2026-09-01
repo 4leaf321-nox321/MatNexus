@@ -1108,3 +1108,110 @@ class TestHeaderPaste:
         listed = fields_of(client, admin_headers, SLUG, term_id)
         diameter = next(one for one in listed if one["key"] == "diameter")
         assert diameter["label"] == "바깥지름"  # 안 덮였다
+
+
+class TestAttributeList:
+    """목록이 **무엇이 들어 있는지**까지 말한다.
+
+    전에는 「치수 3개」 뿐이었다. 그 말로는 확인하려면 줄마다 수정 창을 열어야
+    했고, 규격이 스무 개면 스무 번이다.
+    """
+
+    def test_이름과_기호와_단위를_붙여_준다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        made = make(
+            client,
+            admin_headers,
+            value="시험용 판형",
+            parent_value="인장",
+            attributes={"gauge_length": 0.05, "total_length": 0.2},
+        )
+        assert made.status_code == 201, made.text
+
+        listed = client.get(
+            f"/api/vocabularies/{SLUG}/terms?q=시험용 판형", headers=admin_headers
+        )
+        assert listed.status_code == 200, listed.text
+        row = next(one for one in listed.json()["items"] if one["value"] == "시험용 판형")
+
+        # **화면이 칸을 다시 묻지 않아도 그릴 수 있어야 한다.** 키는
+        # `gauge_length` 이고 값은 SI 라, 이름도 단위도 칸 선언에 있다.
+        by_key = {one["key"]: one for one in row["attribute_list"]}
+        assert by_key["gauge_length"]["label"] == "게이지 길이"
+        assert by_key["gauge_length"]["value"] == pytest.approx(0.05)
+        assert by_key["gauge_length"]["si_unit"] == "m"
+        assert by_key["gauge_length"]["dimension"] == "length"
+
+        # `attributes` 는 그대로 둔다 — 저장·수정은 그쪽을 쓴다.
+        assert row["attributes"]["gauge_length"] == pytest.approx(0.05)
+
+    def test_칸_선언_순서로_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**넣은 순서가 아니라 선언 순서다.** 규격마다 순서가 다르면 목록에서
+        같은 자리를 눈으로 못 따라간다."""
+        made = make(
+            client,
+            admin_headers,
+            value="순서 확인용",
+            parent_value="인장",
+            # 선언과 **거꾸로** 넣는다.
+            attributes={"total_length": 0.2, "gauge_length": 0.05},
+        )
+        assert made.status_code == 201, made.text
+        term_id = item_id(client, admin_headers, "순서 확인용")
+        declared = [one["key"] for one in fields_of(client, admin_headers, SLUG, term_id)]
+
+        listed = client.get(
+            f"/api/vocabularies/{SLUG}/terms?q=순서 확인용", headers=admin_headers
+        )
+        got = [one["key"] for one in listed.json()["items"][0]["attribute_list"]]
+        assert got == [key for key in declared if key in set(got)]
+        assert got == ["gauge_length", "total_length"]
+
+    def test_치수가_없으면_빈_목록이다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        made = make(client, admin_headers, value="이름만 있는 규격", parent_value="인장")
+        assert made.status_code == 201, made.text
+        listed = client.get(
+            f"/api/vocabularies/{SLUG}/terms?q=이름만 있는 규격", headers=admin_headers
+        )
+        assert listed.json()["items"][0]["attribute_list"] == []
+
+    def test_칸이_없어진_값도_감추지_않는다(self) -> None:
+        """**감추면 그 값은 화면 어디에도 없으면서 계속 저장돼 있다.**
+
+        칸을 지웠는데 값이 남는 일이 생긴다 — 지금은 등록이 막지만, 막기 전에
+        들어간 것과 칸을 나중에 지운 것이 남는다. 이름을 지어내지 않고 키를
+        그대로 적고, **아는 것 뒤에** 붙인다.
+
+        API 로는 만들 수 없는 상태라(등록이 거절한다) 함수를 직접 부른다.
+        """
+        from app.modules.vocabulary import routes as vocabulary_routes
+        from app.modules.vocabulary.models import VocabularyTerm
+        from app.modules.vocabulary.services import Field
+
+        term = VocabularyTerm(attributes={"없어진_칸": 3.0, "gauge_length": 0.05})
+        rows = vocabulary_routes._attributes_out(
+            term,
+            [
+                Field(
+                    key="gauge_length",
+                    label="게이지 길이",
+                    dimension="length",
+                    si_unit="m",
+                    is_required=False,
+                    help=None,
+                    inherited=True,
+                    kind="number",
+                    choices=(),
+                    symbol="G",
+                )
+            ],
+        )
+        assert [one.key for one in rows] == ["gauge_length", "없어진_칸"]
+        ghost = rows[-1]
+        assert ghost.label == "없어진_칸"
+        assert ghost.si_unit is None

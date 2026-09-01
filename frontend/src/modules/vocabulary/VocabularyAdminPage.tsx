@@ -40,6 +40,7 @@ import { SpecimenStandardDialog } from '@/modules/vocabulary/SpecimenStandardDia
 import { StandardCatalogDialog } from '@/modules/vocabulary/StandardCatalogDialog'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type {
+  Attribute,
   BulkResult,
   DeleteResult,
   DriftReport,
@@ -47,6 +48,7 @@ import type {
   Vocabulary,
 } from '@/modules/vocabulary/api'
 import { ApiError } from '@/shared/api/client'
+import { formatScalar } from '@/shared/units'
 import { fetchAll } from '@/shared/api/paging'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -133,6 +135,40 @@ export default function VocabularyAdminPage() {
  *
  * 접어 둔다. 평소에는 0 이고, 0 인 것을 매번 크게 보여 줄 이유가 없다.
  */
+/**
+ * 규격이 들고 있는 치수 — **이름과 값을 다 적는다.**
+ *
+ * 전에는 「치수 3개」 라고만 적었다. 그 말로는 무엇이 들어 있는지 알 수 없어,
+ * 확인하려면 줄마다 수정 창을 열어야 했다 — 규격이 스무 개면 스무 번이다.
+ * 이 화면은 **어느 규격에 무엇이 있나** 를 보는 자리다.
+ *
+ * **단위는 표에서 읽는다**(`shared/units`). 서버가 SI(0.05 m)로 주고 여기서
+ * 화면 단위(50 mm)로 바꾼다 — 라벨에 손으로 적으면 표를 바꿨을 때 옛 단위를
+ * 적은 채 새 값을 받는다.
+ *
+ * **기호가 있으면 기호를 쓴다.** 규격서를 옆에 놓고 보는 사람에게는 `G` 가
+ * 「게이지 길이」 보다 빠르다. 이름은 도구 팁에 남긴다.
+ */
+function Dimensions({ items }: { items: Attribute[] }) {
+  return (
+    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+      {items.map((one) => {
+        const number = typeof one.value === 'number'
+        const shown = number
+          ? formatScalar(one.value as number, one.si_unit ?? '1', one.dimension ?? null)
+          : String(one.value)
+        return (
+          <span key={one.key} className="text-xs whitespace-nowrap" title={`${one.label} · ${one.key}`}>
+            <span className="text-muted-foreground">{one.symbol || one.label}</span>{' '}
+            <span className="font-mono">{shown}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+
 function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
   const [open, setOpen] = useState(false)
   const [report, setReport] = useState<DriftReport | null>(null)
@@ -634,14 +670,14 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                     <>
                       {/* 치수가 비어 있으면 **그 사실을 말한다.** 규격 이름만
                           있는 값은 시편 치수를 아무것도 못 채워 준다. */}
-                      {Object.keys(item.attributes ?? {}).length > 0 ? (
-                        `치수 ${Object.keys(item.attributes).length}개`
+                      {(item.attribute_list ?? []).length > 0 ? (
+                        <Dimensions items={item.attribute_list} />
                       ) : (
                         <span className="text-destructive">치수 없음</span>
                       )}
                       {(item.extra_fields ?? []).length > 0 && (
-                        <span className="text-muted-foreground ml-1.5 text-xs">
-                          · 이 규격 칸 {item.extra_fields.length}개
+                        <span className="text-muted-foreground mt-0.5 block text-xs">
+                          이 규격 칸 {item.extra_fields.length}개
                         </span>
                       )}
                     </>

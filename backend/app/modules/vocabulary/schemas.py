@@ -27,6 +27,30 @@ class VocabularyOut(BaseModel):
     그 종류가 선언한 시편 규격 칸이 속성 스키마다. 화면이 그 칸을 그린다."""
 
 
+class AttributeOut(BaseModel):
+    """이 값이 실제로 들고 있는 치수 하나 — **이름·기호·단위까지 붙여서.**
+
+    `attributes` 만으로는 화면이 아무것도 못 그린다. 키는 `gauge_length` 이고
+    값은 SI(0.05)라, 이름도 단위도 칸 선언(`SpecimenField`)에 있다. 화면이 그
+    셋을 따로 맞추게 두면 목록 한 줄마다 칸을 다시 물어야 하고, 그러면 100줄에
+    200번이다 — 서버가 한 번에 풀어서 붙인다.
+
+    **칸 선언이 없는 키도 낸다.** 칸을 지웠는데 값이 남은 경우가 그것인데,
+    감추면 그 값은 화면 어디에도 없으면서 계속 저장돼 있다. 그때는 키를 이름
+    자리에 그대로 적는다 — **지어내지 않는다.**
+    """
+
+    key: str
+    label: str
+    """사람이 읽는 이름. 칸 선언이 없으면 `key` 그대로."""
+    symbol: str | None
+    """규격이 쓰는 글자. 같은 게이지 길이라도 E8 은 `G`, ISO 527-2 는 `L₀` 다."""
+    value: float | str
+    """숫자면 **SI 그대로** 낸다. 화면 단위로 바꾸는 것은 표(`shared/units`)의 일이다."""
+    si_unit: str | None
+    dimension: str | None
+
+
 class TermOut(BaseModel):
     id: uuid.UUID
     value: str
@@ -43,6 +67,10 @@ class TermOut(BaseModel):
     (edition) 처럼 문자인 것과, 모드처럼 목록에서 고르는 것도 함께 담긴다."""
     field_symbols: dict[str, str] = {}
     """이 규격이 그 칸을 **어느 글자로 부르는가.** 위에서 온 칸의 글자를 덮는다."""
+    attribute_list: list[AttributeOut] = []
+    """`attributes` 를 화면이 바로 그릴 수 있게 푼 것. **순서는 칸 선언 순서**다.
+
+    `attributes` 는 그대로 둔다 — 저장·수정은 그쪽을 쓴다. 이것은 읽기용이다."""
     extra_fields: list[SpecimenFieldOut] = []
     """이 값만 갖는 칸. 상위 분류의 기본 칸에 더해진다."""
     cross_section: str | None = None

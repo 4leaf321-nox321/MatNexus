@@ -395,6 +395,73 @@
         "title": "AssignIn",
         "type": "object"
       },
+      "AttributeOut": {
+        "description": "이 값이 실제로 들고 있는 치수 하나 — **이름·기호·단위까지 붙여서.**\n\n`attributes` 만으로는 화면이 아무것도 못 그린다. 키는 `gauge_length` 이고\n값은 SI(0.05)라, 이름도 단위도 칸 선언(`SpecimenField`)에 있다. 화면이 그\n셋을 따로 맞추게 두면 목록 한 줄마다 칸을 다시 물어야 하고, 그러면 100줄에\n200번이다 — 서버가 한 번에 풀어서 붙인다.\n\n**칸 선언이 없는 키도 낸다.** 칸을 지웠는데 값이 남은 경우가 그것인데,\n감추면 그 값은 화면 어디에도 없으면서 계속 저장돼 있다. 그때는 키를 이름\n자리에 그대로 적는다 — **지어내지 않는다.**",
+        "properties": {
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "symbol",
+          "value",
+          "si_unit",
+          "dimension"
+        ],
+        "title": "AttributeOut",
+        "type": "object"
+      },
       "AuditEntryOut": {
         "properties": {
           "action": {
@@ -13659,6 +13726,14 @@
       },
       "TermOut": {
         "properties": {
+          "attribute_list": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AttributeOut"
+            },
+            "title": "Attribute List",
+            "type": "array"
+          },
           "attributes": {
             "additionalProperties": {
               "anyOf": [

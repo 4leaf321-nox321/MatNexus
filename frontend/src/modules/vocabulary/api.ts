@@ -13,6 +13,14 @@ import type { components } from '@/shared/api/schema'
 
 export type Vocabulary = components['schemas']['VocabularyOut']
 export type Term = components['schemas']['TermOut']
+/**
+ * 이 값이 들고 있는 치수 하나 — **이름·기호·단위까지 서버가 붙여서 준다.**
+ *
+ * `attributes` 만으로는 화면이 못 그린다: 키는 `gauge_length` 이고 값은
+ * SI(0.05)라, 이름도 단위도 칸 선언에 있다. 화면이 그 셋을 따로 맞추면 목록
+ * 한 줄마다 칸을 다시 물어야 한다.
+ */
+export type Attribute = components['schemas']['AttributeOut']
 export type Alias = components['schemas']['TermAliasOut']
 /**
  * 시편 규격이 갖는 치수 칸 하나. **시험 종류가 선언한다.**

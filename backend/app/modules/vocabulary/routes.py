@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -24,6 +25,7 @@ from app.modules.vocabulary.models import (
     VocabularyTerm,
 )
 from app.modules.vocabulary.schemas import (
+    AttributeOut,
     BulkDeleteItemOut,
     BulkDeleteOut,
     BulkDeleteRequest,
@@ -62,7 +64,47 @@ router = APIRouter(prefix="/vocabularies", tags=["vocabulary"])
 SEARCH_LIMIT = 100
 
 
-def _term_out(db: Session, item: VocabularyTerm, field_count: int | None = None) -> TermOut:
+def _attributes_out(
+    item: VocabularyTerm, fields: Sequence[services.Field] | None
+) -> list[AttributeOut]:
+    """들고 있는 치수를 **칸 선언 순서로** 편다. 선언에 없는 키는 뒤에 붙인다.
+
+    **감추지 않는다.** 칸을 지웠는데 값이 남은 경우가 있고, 그때 안 보여 주면
+    그 값은 화면 어디에도 없으면서 계속 저장돼 있다.
+    """
+    held = dict(item.attributes or {})
+    if not held:
+        return []
+    out: list[AttributeOut] = []
+    for slot in fields or ():
+        if slot.key not in held:
+            continue
+        out.append(
+            AttributeOut(
+                key=slot.key,
+                label=slot.label,
+                symbol=slot.symbol,
+                value=held.pop(slot.key),
+                si_unit=slot.si_unit,
+                dimension=slot.dimension,
+            )
+        )
+    # 남은 것 — 칸 선언이 없는 값. 이름을 지어내지 않고 키를 그대로 적는다.
+    out.extend(
+        AttributeOut(
+            key=key, label=key, symbol=None, value=value, si_unit=None, dimension=None
+        )
+        for key, value in held.items()
+    )
+    return out
+
+
+def _term_out(
+    db: Session,
+    item: VocabularyTerm,
+    field_count: int | None = None,
+    fields: Sequence[services.Field] | None = None,
+) -> TermOut:
     """값 하나를 응답 모양으로. **한 곳에서만 만든다.**
 
     네 군데서 손으로 만들고 있었는데, 필드를 하나 더하니 그중 하나를 빠뜨렸다.
@@ -77,6 +119,7 @@ def _term_out(db: Session, item: VocabularyTerm, field_count: int | None = None)
         status=item.status,
         attributes=dict(item.attributes or {}),
         field_symbols=dict(item.field_symbols or {}),
+        attribute_list=_attributes_out(item, fields),
         ratio_checks=[RatioCheckOut(**row) for row in (item.ratio_checks or [])],
         cross_section=item.cross_section,
         # **이 값이 직접 선언한 칸 수.** 분류 축에서 "이 분류는 칸이 몇 개" 를
@@ -485,8 +528,10 @@ def save_category_fields(
     ]
 
 
-def _terms_out(db: Session, items: list[VocabularyTerm]) -> list[TermOut]:
-    """목록용. **칸 수를 한 번에 센다** — 줄마다 세면 N+1 이다."""
+def _terms_out(
+    db: Session, items: list[VocabularyTerm], vocabulary: Vocabulary | None = None
+) -> list[TermOut]:
+    """목록용. **칸 수도 칸 선언도 한 번에 읽는다** — 줄마다 물으면 N+1 이다."""
     if not items:
         return []
     counts = {
@@ -497,7 +542,12 @@ def _terms_out(db: Session, items: list[VocabularyTerm]) -> list[TermOut]:
             .group_by(SpecimenField.category_term_id)
         )
     }
-    return [_term_out(db, item, counts.get(item.id, 0)) for item in items]
+    # 축을 주면 치수에 이름·단위를 붙여 낸다. 안 주면 붙이지 않는다 — 이 목록을
+    # 부르는 자리가 여럿이고, 치수를 안 쓰는 축에서 질의를 늘릴 이유가 없다.
+    fields = (
+        services.attribute_fields_many(db, vocabulary, items) if vocabulary is not None else {}
+    )
+    return [_term_out(db, item, counts.get(item.id, 0), fields.get(item.id)) for item in items]
 
 
 @router.get("/{slug}/terms", response_model=Page[TermOut])
@@ -535,7 +585,7 @@ def search_terms(
         parent=parent,
     )
     return Page(
-        items=_terms_out(db, found),
+        items=_terms_out(db, found, vocabulary),
         total=services.count(
             db, vocabulary, q=q, include_hidden=include_hidden, parent=parent
         ),

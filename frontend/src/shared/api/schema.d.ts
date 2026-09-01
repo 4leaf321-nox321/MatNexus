@@ -4459,6 +4459,33 @@ export interface components {
              */
             test_type?: string | null;
         };
+        /**
+         * AttributeOut
+         * @description 이 값이 실제로 들고 있는 치수 하나 — **이름·기호·단위까지 붙여서.**
+         *
+         *     `attributes` 만으로는 화면이 아무것도 못 그린다. 키는 `gauge_length` 이고
+         *     값은 SI(0.05)라, 이름도 단위도 칸 선언(`SpecimenField`)에 있다. 화면이 그
+         *     셋을 따로 맞추게 두면 목록 한 줄마다 칸을 다시 물어야 하고, 그러면 100줄에
+         *     200번이다 — 서버가 한 번에 풀어서 붙인다.
+         *
+         *     **칸 선언이 없는 키도 낸다.** 칸을 지웠는데 값이 남은 경우가 그것인데,
+         *     감추면 그 값은 화면 어디에도 없으면서 계속 저장돼 있다. 그때는 키를 이름
+         *     자리에 그대로 적는다 — **지어내지 않는다.**
+         */
+        AttributeOut: {
+            /** Dimension */
+            dimension: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Value */
+            value: number | string;
+        };
         /** AuditEntryOut */
         AuditEntryOut: {
             /** Action */
@@ -9706,6 +9733,11 @@ export interface components {
         };
         /** TermOut */
         TermOut: {
+            /**
+             * Attribute List
+             * @default []
+             */
+            attribute_list: components["schemas"]["AttributeOut"][];
             /**
              * Attributes
              * @default {}

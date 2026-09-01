@@ -53,6 +53,7 @@ function term(id: string, value: string, usage = 0): Term {
     extra_fields: [],
     field_count: 0,
     field_symbols: {},
+    attribute_list: [],
     ratio_checks: [],
     status: 'active',
   }
