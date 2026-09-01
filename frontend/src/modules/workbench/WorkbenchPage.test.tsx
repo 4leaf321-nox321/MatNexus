@@ -22,9 +22,9 @@ const create = vi.fn()
 const patch = vi.fn()
 const remove = vi.fn()
 
-vi.mock('@/modules/workbench/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/modules/workbench/api')>()),
-  workbenchApi: {
+vi.mock('@/shared/api/basket', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/basket')>()),
+  basketApi: {
     runs: (...args: unknown[]) => runs(...args),
     run: (...args: unknown[]) => run(...args),
     create: (...args: unknown[]) => create(...args),

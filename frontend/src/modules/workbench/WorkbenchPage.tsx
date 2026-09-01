@@ -26,8 +26,8 @@ import { ArrowRight, Check, Circle, Layers, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { workbenchApi } from '@/modules/workbench/api'
-import type { WorkbenchRun, WorkbenchRunDetail } from '@/modules/workbench/api'
+import { basketApi } from '@/shared/api/basket'
+import type { BasketRun, BasketRunDetail } from '@/shared/api/basket'
 import { WORKFLOWS, workflowOf } from '@/modules/workbench/workflows'
 import type { Workflow } from '@/modules/workbench/workflows'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -44,13 +44,13 @@ const KIND_LABELS: Record<string, string> = {
 }
 
 export default function WorkbenchPage() {
-  const running = useResource(() => workbenchApi.runs('running'), [])
-  const [open, setOpen] = useState<WorkbenchRunDetail | null>(null)
+  const running = useResource(() => basketApi.runs('running'), [])
+  const [open, setOpen] = useState<BasketRunDetail | null>(null)
   const [error, setError] = useState<Error | null>(null)
 
   async function reload(id: string) {
     try {
-      setOpen(await workbenchApi.run(id))
+      setOpen(await basketApi.run(id))
       running.reload()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('작업을 읽지 못했습니다.'))
@@ -110,7 +110,7 @@ export default function WorkbenchPage() {
   )
 }
 
-function ResumeRow({ run, onOpen }: { run: WorkbenchRun; onOpen: () => void }) {
+function ResumeRow({ run, onOpen }: { run: BasketRun; onOpen: () => void }) {
   const flow = workflowOf(run.workflow_key)
   return (
     <button
@@ -137,7 +137,7 @@ function StartCard({
   onError,
 }: {
   flow: Workflow
-  onStarted: (run: WorkbenchRunDetail) => void
+  onStarted: (run: BasketRunDetail) => void
   onError: (error: Error) => void
 }) {
   const [title, setTitle] = useState('')
@@ -148,7 +148,7 @@ function StartCard({
     try {
       // **이름은 사람이 짓는다.** 「작업 3」 같은 이름이면 목록에서 어제 것을 못 찾는다.
       onStarted(
-        await workbenchApi.create({
+        await basketApi.create({
           workflow_key: flow.key,
           title: title.trim() || `${flow.title} ${new Date().toLocaleDateString('ko-KR')}`,
         })
@@ -204,7 +204,7 @@ function RunView({
   onChanged,
   onError,
 }: {
-  run: WorkbenchRunDetail
+  run: BasketRunDetail
   onBack: () => void
   onChanged: () => void
   onError: (error: Error) => void
@@ -220,7 +220,7 @@ function RunView({
   async function goTo(key: string, markDone?: string) {
     try {
       const done = markDone ? [...new Set([...doneKeys, markDone])] : [...doneKeys]
-      await workbenchApi.patch(run.id, { steps: { ...(run.steps ?? {}), at: key, done } })
+      await basketApi.patch(run.id, { steps: { ...(run.steps ?? {}), at: key, done } })
       onChanged()
     } catch (caught) {
       onError(caught instanceof Error ? caught : new Error('진행을 적지 못했습니다.'))
@@ -229,7 +229,7 @@ function RunView({
 
   async function finish() {
     try {
-      await workbenchApi.patch(run.id, { status: 'finished' })
+      await basketApi.patch(run.id, { status: 'finished' })
       onBack()
     } catch (caught) {
       onError(caught instanceof Error ? caught : new Error('끝내지 못했습니다.'))
@@ -351,13 +351,13 @@ function Basket({
   onChanged,
   onError,
 }: {
-  run: WorkbenchRunDetail
+  run: BasketRunDetail
   onChanged: () => void
   onError: (error: Error) => void
 }) {
   async function remove(itemId: string) {
     try {
-      await workbenchApi.remove(run.id, itemId)
+      await basketApi.remove(run.id, itemId)
       onChanged()
     } catch (caught) {
       onError(caught instanceof Error ? caught : new Error('빼지 못했습니다.'))

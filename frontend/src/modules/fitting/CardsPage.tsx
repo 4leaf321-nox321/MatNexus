@@ -31,6 +31,7 @@ import { CardFilterPanel } from '@/modules/fitting/CardFilterPanel'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type { PropertyCard } from '@/modules/fitting/api'
+import { AddToBasket } from '@/shared/components/AddToBasket'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -145,6 +146,14 @@ export default function CardsPage() {
           />
         ))}
       </div>
+
+      {/* **담기와 내보내기는 다른 일이다.** 담는 것은 나중에 이어서 하려는 것이고,
+          내보내기는 지금 받는 것이다 — 같은 줄에 둬서 고른 것을 둘 다 쓸 수 있게 한다. */}
+      {picked.size > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <AddToBasket kind="card" ids={[...picked]} onError={setError} />
+        </div>
+      )}
 
       <BundleBar
         ids={[...picked]}

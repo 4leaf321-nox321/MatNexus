@@ -22,6 +22,7 @@ import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
+import { AddToBasket } from '@/shared/components/AddToBasket'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { SortButton } from '@/shared/components/ColumnFilter'
 import type { SortHandle } from '@/shared/components/ColumnFilter'
@@ -361,7 +362,10 @@ export default function TestRunsPage() {
               만들어집니다. 종류별로 나눠 거세요.
             </span>
           )}
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex items-center gap-2">
+            {/* **담아 두면 화면을 오가지 않아도 된다**(ADR 0024). 여기서 고른 것을
+                워크벤치가 이어받는다 — 담는 것은 처리·삭제와 달리 되돌릴 일이 없다. */}
+            <AddToBasket kind="test_run" ids={[...picked]} workspaceSlug={slug} />
             <Button size="sm" variant="ghost" onClick={() => selection.clear()}>
               선택 해제
             </Button>
