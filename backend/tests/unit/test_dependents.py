@@ -102,4 +102,26 @@ def test_covers_every_foreign_key_in_the_schema() -> None:
 
     # 스키마에 FK 가 있는데 수집 대상 테이블이 비어 있으면 의미가 없다.
     assert expected, "FK 가 하나도 없다 — 모델이 로드되지 않았을 수 있다"
-    assert dependents.EXTRA_CHECKS == [], "수동 보충이 생겼다면 사유를 주석에 남길 것"
+
+    # **손으로 보탠 검사는 이름이 여기 적혀 있어야 한다.**
+    #
+    # 전에는 `EXTRA_CHECKS == []` 였다. 「수동 보충이 생겼다면 사유를 주석에
+    # 남길 것」 이라고 적어 두었는데, 실제로 하나가 생기자(워크벤치 바구니)
+    # **시험을 어떻게 고칠지가 안 적혀 있었다** — 지우거나 목록으로 바꾸거나였고,
+    # 지우면 「자동 수집을 좁히지 마라」 는 원래 뜻까지 사라진다.
+    #
+    # 그래서 목록으로 둔다: 새 보충은 여기 한 줄과 사유를 요구받고, 자동 수집을
+    # 좁히는 변경은 여전히 이 파일이 막는다.
+    allowed = {
+        "basket_references": (
+            "워크벤치 바구니는 담은 대상에 FK 를 안 건다(ADR 0025) — 걸면 담겼다는 "
+            "이유로 못 지우거나(RESTRICT), 지웠을 때 담긴 줄이 조용히 사라진다(CASCADE)."
+        ),
+    }
+    names = {check.__name__ for check in dependents.EXTRA_CHECKS}
+    assert names <= set(allowed), (
+        f"사유 없는 수동 보충: {sorted(names - set(allowed))}. "
+        f"이 시험의 `allowed` 에 이름과 사유를 적으세요."
+    )
+    for check in dependents.EXTRA_CHECKS:
+        assert (check.__doc__ or "").strip(), f"{check.__name__} 에 사유가 없습니다"

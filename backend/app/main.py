@@ -41,6 +41,7 @@ from app.modules.viscoelastic import (  # noqa: F401  (파싱 훅을 등록시�
 from app.modules.viscoelastic import routes as viscoelastic_routes
 from app.modules.voc import routes as voc_routes
 from app.modules.vocabulary import routes as vocabulary_routes
+from app.modules.workbench import routes as workbench_routes
 from app.modules.workspaces import routes as workspaces_routes
 from app.schema_version import warn_if_behind
 from app.shared.access_log import AccessLogMiddleware
@@ -80,6 +81,7 @@ def _api_router() -> APIRouter:
     router.include_router(tests_formats.router)
     router.include_router(processing_routes.router)
     router.include_router(viscoelastic_routes.router)
+    router.include_router(workbench_routes.router)
     router.include_router(statistics_routes.router)
     router.include_router(fitting_routes.router)
     router.include_router(grouping_routes.router)

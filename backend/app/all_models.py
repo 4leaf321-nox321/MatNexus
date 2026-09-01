@@ -42,6 +42,7 @@ from app.modules.tests.models import (
     TestType,
 )
 from app.modules.voc.models import VocItem
+from app.modules.workbench.models import WorkbenchItem, WorkbenchRun
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 
 __all__ = [
@@ -80,6 +81,8 @@ __all__ = [
     "TestType",
     "User",
     "VocItem",
+    "WorkbenchItem",
+    "WorkbenchRun",
     "Workspace",
     "WorkspaceMember",
 ]

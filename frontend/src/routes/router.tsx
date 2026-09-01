@@ -42,6 +42,7 @@ import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
  * 늘 밟는 길에서 그 대가를 치를 이유가 없다 — 둘을 합쳐도 예산의 절반이다.
  */
 const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
+const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
 const CardsPage = lazy(() => import('@/modules/fitting/CardsPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
@@ -170,10 +171,7 @@ export const router = createBrowserRouter([
               { index: true, element: <WorkspaceHomePage /> },
               { path: 'tests', element: <TestRunsPage /> },
               { path: 'tests/upload', element: <BatchUploadPage /> },
-              {
-                path: 'workbench',
-                ...stub('워크벤치', 'Phase 3~4', 'Data → Process → Stats → Fit → Export.'),
-              },
+              { path: 'workbench', element: <WorkbenchPage /> },
               // 부서 스코프 `statistics`·`exports` 는 뺐다. 워크벤치의 3번·5번
               // 탭과 같은 것이고, 결과 열람은 재료 상세의 '물성'·'CAE 카드' 다
               // — 같은 이름의 빈 화면이 남아 있으면 어느 쪽이 진짜인지 알 수 없다.

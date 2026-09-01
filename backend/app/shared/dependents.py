@@ -35,6 +35,7 @@ TABLE_LABELS: dict[str, str] = {
     "samples": "시료",
     "specimens": "시편",
     "test_runs": "시험",
+    "workbench_items": "워크벤치 작업에 담긴 것",
     "curves": "곡선",
     "test_summaries": "시험 요약값",
     "pipeline_connectors": "장비 커넥터",

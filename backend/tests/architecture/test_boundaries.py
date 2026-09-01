@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -92,7 +93,10 @@ def test_modules_do_not_import_each_other(module: str) -> None:
 FRONTEND_MODULES = REPO / "frontend" / "src" / "modules"
 
 #: R2 — 백엔드가 없어도 되는 프론트 모듈. 늘릴 때는 ADR에 근거를 남긴다.
-FRONTEND_ONLY = {"workbench", "profile"}
+#: `workbench` 가 여기 있었다. **v1.173.0 에 서버 짝이 생겨 예외가 없어졌다** —
+#: 바구니(담아 둔 것)와 진행이 서버에 살아야 「어제 하던 것을 오늘 다른 사람이」 가
+#: 된다(ADR 0025). 예외 목록이 줄어드는 쪽이 맞는 방향이다.
+FRONTEND_ONLY = {"profile"}
 
 #: R3 — 아직 프론트 짝이 없는 백엔드 모듈과 그 사유.
 #: 화면이 생기면 같은 이름의 프론트 모듈을 만들고 여기서 지운다. 사유를 함께
@@ -131,20 +135,44 @@ def test_module_names_match() -> None:
     )
 
 
+#: 워크벤치가 부를 수 있는 주소. **자기 자원만이다.**
+WORKBENCH_OWN_PATHS = ("/workbench/",)
+
+
 @pytest.mark.skipif(
     not (FRONTEND_MODULES / "workbench").exists(), reason="workbench 아직 없음"
 )
 def test_workbench_only_assembles() -> None:
-    """R5 — 탭의 도메인 로직은 각 도메인 모듈에 산다.
+    """R5 — **남의 도메인 로직을 여기서 다시 쓰지 않는다.**
 
     65는 워크벤치마다 약 1,200줄을 다시 썼다. 조립 셸에 로직이 쌓이면 같은 길이다.
+
+    ## 규칙을 좁혔다 (2026-09-01)
+
+    전에는 `shared/api` 를 부르기만 해도 걸렸다. 그때 워크벤치는 **자기 자원이
+    없었다** — 담아 두는 자리가 브라우저에 있었기 때문이다.
+
+    바구니가 서버로 오면서(ADR 0025) 워크벤치에도 제 자원이 생겼다(`/workbench/…`).
+    자기 것을 부르는 것은 「남의 도메인을 다시 쓰는 것」 이 아니다. 그래서 **주소로**
+    가른다 — 자기 것은 되고, 남의 도메인 주소를 직접 부르면 걸린다.
+
+    `fetch(` 는 그대로 막는다. 토큰 갱신·오류 규약을 안 타는 요청이 생기면 그 화면만
+    조용히 401 을 받는다(`shared/api/client` 의 머리말이 그 사고를 적어 두었다).
     """
     offenders = []
     for path in (FRONTEND_MODULES / "workbench").rglob("*.ts*"):
         text = path.read_text(encoding="utf-8")
-        if "shared/api" in text or "fetch(" in text:
-            offenders.append(str(path.relative_to(REPO)))
+        if "fetch(" in text:
+            offenders.append(f"{path.relative_to(REPO)}: fetch() 직접 호출")
+            continue
+        for line in text.splitlines():
+            if "api." not in line or "/" not in line:
+                continue
+            # `api.get<T>('/무엇')` 처럼 주소가 든 줄만 본다.
+            for quoted in re.findall(r"[`'\"](/[a-z0-9/_{}$-]+)", line):
+                if not quoted.startswith(WORKBENCH_OWN_PATHS):
+                    offenders.append(f"{path.relative_to(REPO)}: {quoted}")
     assert not offenders, (
-        f"workbench 가 직접 API를 부른다: {offenders}. "
-        f"탭 컴포넌트는 각 도메인 모듈에서 가져올 것"
+        f"워크벤치가 남의 도메인 API 를 직접 부릅니다: {offenders}. "
+        f"그 일은 도메인 모듈의 화면·API 에서 가져오세요 — 여기는 조립만 합니다."
     )

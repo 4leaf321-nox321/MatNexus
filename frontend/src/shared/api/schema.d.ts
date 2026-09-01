@@ -4180,6 +4180,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workbench/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Runs
+         * @description 내 부서의 작업들. **진행 중인 것이 먼저다** — 「이어서 하기」 가 이 목록이다.
+         */
+        get: operations["list_runs_api_workbench_runs_get"];
+        put?: never;
+        /**
+         * Create Run
+         * @description 작업을 시작한다. **부서가 있어야 한다** — 공유의 단위가 부서다.
+         */
+        post: operations["create_run_api_workbench_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workbench/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_workbench_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Run
+         * @description 이름·상태·진행을 고친다.
+         *
+         *     **안 보낸 것은 안 고친다.** 진행만 밀었는데 제목이 지워지면 사람은 무엇이
+         *     지웠는지 모른다.
+         */
+        patch: operations["patch_run_api_workbench_runs__run_id__patch"];
+        trace?: never;
+    };
+    "/api/workbench/runs/{run_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Items
+         * @description 담는다. **이미 담긴 것은 조용히 넘어간다** — 두 번 담기는 실수이지 오류가
+         *     아니고, 여럿을 한 번에 담을 때 하나가 겹쳤다고 전부를 실패시키면 사람은 무엇이
+         *     들어갔는지 모른다.
+         */
+        post: operations["add_items_api_workbench_runs__run_id__items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workbench/runs/{run_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Item */
+        delete: operations["remove_item_api_workbench_runs__run_id__items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -6891,6 +6978,49 @@ export interface components {
              */
             specimen_id: string;
         };
+        /**
+         * ItemAddRequest
+         * @description 담기. **여럿을 한 번에** — 목록에서 골라 담는 일이라 한 건씩이면 왕복이 는다.
+         */
+        ItemAddRequest: {
+            /** Kind */
+            kind: string;
+            /** Note */
+            note?: string | null;
+            /** Target Ids */
+            target_ids: string[];
+        };
+        /** ItemOut */
+        ItemOut: {
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /** Detail */
+            detail?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /**
+             * Missing
+             * @default false
+             */
+            missing: boolean;
+            /** Note */
+            note?: string | null;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -8498,6 +8628,15 @@ export interface components {
             /** Value */
             value?: string | null;
         };
+        /** RunCreateRequest */
+        RunCreateRequest: {
+            /** Note */
+            note?: string | null;
+            /** Title */
+            title: string;
+            /** Workflow Key */
+            workflow_key: string;
+        };
         /**
          * RunDeleteOut
          * @description 무엇이 지워졌고 무엇이 안 지워졌나.
@@ -8519,6 +8658,51 @@ export interface components {
         RunDeleteRequest: {
             /** Run Ids */
             run_ids: string[];
+        };
+        /** RunDetailOut */
+        RunDetailOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Count */
+            item_count: number;
+            /** Items */
+            items: components["schemas"]["ItemOut"][];
+            /** Note */
+            note: string | null;
+            /** Owner Id */
+            owner_id: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Status */
+            status: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            };
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Workflow Key */
+            workflow_key: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
         };
         /**
          * RunFacetOut
@@ -8557,6 +8741,66 @@ export interface components {
             test_types: components["schemas"]["RunFacetOut"][];
             /** Testing Groups */
             testing_groups: components["schemas"]["RunFacetOut"][];
+        };
+        /** RunOut */
+        RunOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Count */
+            item_count: number;
+            /** Note */
+            note: string | null;
+            /** Owner Id */
+            owner_id: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Status */
+            status: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            };
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Workflow Key */
+            workflow_key: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * RunPatchRequest
+         * @description 부분 수정. **안 보낸 것과 비운 것을 구별한다** — 안 그러면 저장할 때마다
+         *     값이 지워진다(CLAUDE.md 의 규칙).
+         */
+        RunPatchRequest: {
+            /** Note */
+            note?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Steps */
+            steps?: {
+                [key: string]: unknown;
+            } | null;
+            /** Title */
+            title?: string | null;
         };
         /** SampleCreateRequest */
         SampleCreateRequest: {
@@ -17663,6 +17907,202 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TermOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_workbench_runs_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_run_api_workbench_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_workbench_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_run_api_workbench_runs__run_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_items_api_workbench_runs__run_id__items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_item_api_workbench_runs__run_id__items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
