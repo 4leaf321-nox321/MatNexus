@@ -7,7 +7,7 @@
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { MasterCurveNotice } from '@/modules/materials/MasterCurveNotice'
@@ -34,9 +34,11 @@ const dma = (over: Record<string, unknown> = {}) => ({
 })
 
 function show() {
-  const onGo = vi.fn()
-  render(<MasterCurveNotice materialId="m1" onGoToTests={onGo} />)
-  return onGo
+  render(
+    <MemoryRouter>
+      <MasterCurveNotice materialId="m1" />
+    </MemoryRouter>
+  )
 }
 
 beforeEach(() => {
@@ -46,11 +48,15 @@ beforeEach(() => {
 })
 
 describe('말해야 할 때', () => {
-  it('안 겹친 시험 수를 적고 데려간다', async () => {
-    const onGo = show()
+  it('안 겹친 시험 수를 적고 그 재료의 시험 목록으로 데려간다', async () => {
+    // **탭만 바꿔 주면 안 겹친 시험을 시료 목록에서 다시 찾아야 한다** — 세어 준
+    // 값을 도로 버리는 셈이다. 그 재료로 걸러진 목록을 연다.
+    show()
     expect(await screen.findByText(/겹칠 수 있는데 아직 안 만든 시험/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '그 시험 보기' }))
-    expect(onGo).toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: '그 시험 보기' })).toHaveAttribute(
+      'href',
+      '/tests?material=m1'
+    )
   })
 
   it('이미 만든 것도 함께 센다', async () => {
@@ -87,6 +93,6 @@ describe('조용해야 할 때', () => {
     show()
     const line = await screen.findByLabelText('마스터커브 현황')
     expect(line.textContent).toMatch(/겹칠 수 없는 시험 1건은 뺐습니다/)
-    expect(screen.queryByRole('button', { name: '그 시험 보기' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '그 시험 보기' })).toBeNull()
   })
 })

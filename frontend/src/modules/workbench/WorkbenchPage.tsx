@@ -41,13 +41,17 @@ import { Input } from '@/shared/components/ui/input'
 import { useResource } from '@/shared/hooks/useResource'
 
 /**
- * 담긴 것 하나로 가는 자리. `null` 이면 링크를 안 건다 — **사라진 것과 카드**가 그렇다
- * (카드는 목록 안에서 펼쳐 보므로 그 카드만의 주소가 없다).
+ * 담긴 것 하나로 가는 자리. `null` 이면 링크를 안 건다 — 사라진 것이 그렇다.
+ *
+ * **카드는 자기 주소가 없다.** 카드 상세 화면이 따로 없고 재료의 「CAE 카드」 탭에서
+ * 펼쳐 본다 — 그래서 그 재료로 데려간다. 링크를 안 걸어 두면 「이름을 적고 그리로
+ * 데려간다」 고 해 놓고 카드만 못 가는데, 확정 훑기는 담긴 것이 전부 카드다.
  */
 function hrefOf(item: BasketItem): string | null {
   if (item.missing) return null
   if (item.kind === 'test_run') return `/test-runs/${item.target_id}`
   if (item.kind === 'material') return `/materials/${item.target_id}`
+  if (item.kind === 'card' && item.material_id) return `/materials/${item.material_id}?tab=cards`
   return null
 }
 

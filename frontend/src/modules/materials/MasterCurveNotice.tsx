@@ -10,6 +10,8 @@
  * 그 줄은 소음이고, 소음이 한 번 생기면 사람은 그 자리를 다시 안 읽는다.
  */
 
+import { Link } from 'react-router-dom'
+
 import { groupsApi } from '@/modules/materials/api.groups'
 import { masterCurveGap } from '@/shared/masterCurveGap'
 import { testsApi } from '@/modules/tests/api'
@@ -18,11 +20,8 @@ import { useResource } from '@/shared/hooks/useResource'
 
 export function MasterCurveNotice({
   materialId,
-  onGoToTests,
 }: {
   materialId: string
-  /** 시료·시편 탭으로 데려간다. 말만 하고 찾아가게 두지 않는다. */
-  onGoToTests?: () => void
 }) {
   // **쓸 수 있는 시험종류는 서버가 푼다.** 선언에 적힌 키만 보면 부서가 만든
   // DMA 종류가 빠진다(`registry.fits`).
@@ -61,9 +60,11 @@ export function MasterCurveNotice({
           <span className="opacity-70"> · 온도 단 수를 아직 안 센 시험 {gap.unknown}건</span>
         )}
       </span>
-      {gap.pending > 0 && onGoToTests && (
-        <Button variant="link" className="h-auto p-0 text-xs" onClick={onGoToTests}>
-          그 시험 보기
+      {/* **그 재료의 시험만 걸러 연다.** 탭만 바꿔 주던 자리였는데, 그러면 안 겹친
+          시험을 시료 목록에서 사람이 다시 찾아야 한다 — 세어 준 값을 도로 버린다. */}
+      {gap.pending > 0 && (
+        <Button variant="link" className="h-auto p-0 text-xs" asChild>
+          <Link to={`/tests?material=${materialId}`}>그 시험 보기</Link>
         </Button>
       )}
     </p>

@@ -166,8 +166,15 @@ export default function TestRunsPage() {
   // 가리킨 것을 다시 찾아야 하고, 단추가 안 먹은 것처럼 보인다.
   const [askedIn] = useSearchParams()
   const [filters, setFilters] = useState<Record<string, string | undefined>>(() => {
+    // 재료 화면의 「그 시험 보기」 가 `?material=` 로, 홈의 「읽기 실패 N」 이
+    // `?status=` 로 보낸다. 안 읽으면 거르개 없는 전체가 떠서, 세어 준 값을 사람이
+    // 다시 찾아야 한다.
+    const asked: Record<string, string | undefined> = {}
     const status = askedIn.get('status')
-    return status ? { status } : {}
+    const material = askedIn.get('material')
+    if (status) asked.status = status
+    if (material) asked.material_id = material
+    return asked
   })
   /**
    * 찾기 상자에 **치는 중**인 글자와 **적용된** 글자를 가른다.

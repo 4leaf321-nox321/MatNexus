@@ -413,9 +413,29 @@ export const WORKFLOWS: Workflow[] = [
     when: '새 장비의 출력 파일을 읽게 만들고, 한 벌 올려 확인합니다.',
     cadence: '이따금',
     steps: [
-      { key: 'sample', title: '예제 파일', what: '한 벌 올려 구조를 읽습니다.', where: '/settings/formats', whereLabel: '장비 파일 정의로' },
-      { key: 'tables', title: '표 고르기', what: '측정과 처리결과를 가릅니다.', where: '/settings/formats', whereLabel: '장비 파일 정의로' },
-      { key: 'columns', title: '열 매핑', what: '이 열이 무슨 채널인지 정합니다.', where: '/settings/formats', whereLabel: '장비 파일 정의로' },
+      // 아래 셋은 **정의 편집기 안에서** 이어서 하는 일이다. 처음 만들 때는 새
+      // 정의를 여는 것이 첫 걸음이고, 고칠 때는 목록에서 그 정의를 고른다.
+      {
+        key: 'sample',
+        title: '예제 파일',
+        what: '한 벌 올려 구조를 읽습니다. 고치는 중이면 목록에서 그 정의를 여세요.',
+        where: '/settings/formats/new',
+        whereLabel: '새 정의 만들기',
+      },
+      {
+        key: 'tables',
+        title: '표 고르기',
+        what: '측정과 처리결과를 가릅니다 — 정의 편집기의 같은 화면에서 이어서.',
+        where: '/settings/formats',
+        whereLabel: '정의 목록으로',
+      },
+      {
+        key: 'columns',
+        title: '열 매핑',
+        what: '이 열이 무슨 채널인지 정합니다 — 같은 편집기의 다음 칸입니다.',
+        where: '/settings/formats',
+        whereLabel: '정의 목록으로',
+      },
       {
         key: 'verify',
         title: '한 벌 올려 확인',

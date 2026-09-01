@@ -304,6 +304,35 @@ describe('할 자리로 데려간다', () => {
     )
   })
 
+  it('카드 줄은 그 재료의 CAE 카드 탭으로 간다', async () => {
+    // **카드는 자기 주소가 없다** — 재료의 「CAE 카드」 탭에서 펼쳐 본다. 링크를
+    // 안 걸면 확정 훑기는 담긴 것이 전부 카드라 한 번도 못 데려간다.
+    await openAt(
+      run말고({
+        steps: { at: 'pick', done: [] },
+        items: [
+          {
+            id: 'i1',
+            kind: 'card',
+            target_id: 'c1',
+            label: '점탄성 Prony',
+            detail: 'EPDM · draft',
+            facts: { published: 0 },
+            material_id: 'm9',
+            missing: false,
+            note: null,
+            added_at: '2026-09-01T00:00:00Z',
+          },
+        ],
+      })
+    )
+    const basket = within(screen.getByLabelText('바구니'))
+    expect(basket.getByRole('link', { name: '점탄성 Prony' })).toHaveAttribute(
+      'href',
+      '/materials/m9?tab=cards'
+    )
+  })
+
   it('바구니의 줄에서 그 대상으로 간다', async () => {
     await openAt(run말고({ steps: { at: 'pick', done: [] } }))
     const basket = within(screen.getByLabelText('바구니'))

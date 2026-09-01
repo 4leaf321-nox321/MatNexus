@@ -250,7 +250,7 @@ export default function MaterialDetailPage() {
               groupKinds={groupKinds.data ?? []}
               groupSlot={<GroupsPanel materialId={id} list={false} />}
               notice={
-                <MasterCurveNotice materialId={id} onGoToTests={() => setTab('samples')} />
+                <MasterCurveNotice materialId={id} />
               }
               header={
                 item && (
