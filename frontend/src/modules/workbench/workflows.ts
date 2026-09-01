@@ -459,7 +459,7 @@ export const WORKFLOWS: Workflow[] = [
       {
         key: 'read',
         title: '근거 보기',
-        what: '어느 시험에서 나왔는지, 표본이 몇인지, 경고가 붙었는지 봅니다.',
+        what: '어느 시험에서 나왔는지, 표본이 몇인지, 경고가 붙었는지 봅니다 — 재료 화면의 물성 패널에서.',
         where: '/cards',
         whereLabel: '카드 목록으로',
         judge: (items) => {
@@ -477,19 +477,23 @@ export const WORKFLOWS: Workflow[] = [
             ok: true,
             say: say.length > 0 ? say.join(' ') : `카드 ${cards.length}장의 근거를 보세요.`,
             blocking: [...new Set([...thin, ...noted])],
+            // **근거는 재료 화면의 물성 패널에 있다.** 카드 목록은 내보내는 자리이지
+            // 근거를 펴 보는 자리가 아니다.
+            go: materialHref(cards)
+              ? { href: materialHref(cards)!, label: '그 재료의 물성으로' }
+              : undefined,
           }
         },
       },
       {
         key: 'decide',
         title: '확정 또는 반려',
-        what: '부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
-        where: '/cards',
-        whereLabel: '카드 목록으로',
+        what: '재료 화면의 물성 패널에서 부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
         judge: (items) => {
           const cards = live(items, 'card')
           if (cards.length === 0) return null
           const left = pendingOf(cards, (one) => fact(one, 'published') > 0)
+          const href = materialHref(left.length > 0 ? left : cards)
           return {
             ok: left.length === 0,
             say:
@@ -497,6 +501,9 @@ export const WORKFLOWS: Workflow[] = [
                 ? `담은 ${cards.length}건이 모두 확정됐습니다.`
                 : `${left.length}건이 아직 초안입니다.`,
             blocking: left,
+            // **「확정」 단추는 카드 목록에 없다.** 거기로 보내면 막다른 길이다 —
+            // 눌러야 할 것이 없는 화면에 도착하면 사람은 기능이 없다고 결론 낸다.
+            go: href ? { href, label: '그 재료의 물성으로' } : undefined,
           }
         },
       },

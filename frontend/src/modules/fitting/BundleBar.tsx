@@ -32,7 +32,12 @@ export function BundleBar({
 }: {
   ids: string[]
   formats: ExportFormat[]
-  onClear: () => void
+  /**
+   * 고른 것을 비우는 자리. **없으면 그 단추를 안 그린다** — 워크벤치에서는 고른
+   * 것이 바구니라 여기서 비울 수 없고, 눌러도 아무 일이 없는 단추는 「기능이
+   * 고장났다」 로 읽힌다.
+   */
+  onClear?: () => void
   onError: (error: Error) => void
 }) {
   const systems = useResource(() => fittingApi.unitSystems(), [])
@@ -106,10 +111,12 @@ export function BundleBar({
         적힙니다.
       </span>
 
-      <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
-        <X className="size-3.5" />
-        고른 것 비우기
-      </Button>
+      {onClear && (
+        <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
+          <X className="size-3.5" />
+          고른 것 비우기
+        </Button>
+      )}
     </div>
   )
 }

@@ -263,10 +263,11 @@ function RunView({
   }
 
   const steps = flow?.steps ?? []
-  const index = Math.max(
-    0,
-    steps.findIndex((one) => one.key === at)
-  )
+  const found = steps.findIndex((one) => one.key === at)
+  const index = Math.max(0, found)
+  // **모르는 단계로 조용히 옮기지 않는다.** 단계 이름이 바뀐 뒤 이어서 연 작업이
+  // 아무 말 없이 1단계로 되돌아오면, 사람은 자기가 잘못 눌렀다고 여긴다.
+  const movedBack = flow !== undefined && at !== '' && found < 0
   const step = steps[index]
   const cardIds = run.items
     .filter((one) => one.kind === 'card' && !one.missing)
@@ -296,6 +297,13 @@ function RunView({
         <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
           이 작업의 워크플로(<code>{run.workflow_key}</code>)를 지금 화면이 모릅니다. 담긴
           것은 그대로 있으니 아래에서 보고, 진행은 새 작업으로 다시 시작하세요.
+        </div>
+      )}
+
+      {movedBack && (
+        <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+          저장된 단계(<code>{at}</code>)를 지금 화면이 모릅니다 — 단계 구성이 바뀌었습니다.
+          담긴 것은 그대로이니 처음 단계부터 다시 보세요.
         </div>
       )}
 
@@ -414,8 +422,9 @@ function ExportStep({ ids, onError }: { ids: string[]; onError: (error: Error) =
     <BundleBar
       ids={ids}
       formats={formats.data ?? []}
-      // 바구니에서 빼는 것은 바구니의 일이다 — 여기서 비우면 담은 기록이 조용히 사라진다.
-      onClear={() => {}}
+      // 「고른 것 비우기」 를 안 그린다. 여기서 고른 것은 바구니이고, 바구니에서
+      // 빼는 것은 아래 바구니의 일이다 — 눌러도 아무 일이 없는 단추를 두면 사람은
+      // 「기능이 고장났다」 로 읽는다.
       onError={onError}
     />
   )

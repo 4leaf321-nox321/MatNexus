@@ -156,6 +156,27 @@ def _prony_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, int]:
 #: 사라진 대상에 붙는 이름. 화면이 그대로 보여 준다.
 GONE = "사라졌습니다"
 
+#: 담긴 종류마다 실어 보내는 **사실의 이름**. 화면의 단계 판정이 이 이름으로 읽는다
+#: (`modules/workbench/workflows.ts`).
+#:
+#: **이름이 어긋나면 양쪽 시험이 다 통과하면서 화면만 조용히 틀린다** — 없는 키를
+#: 읽으면 0이 되고, 0은 「아직 안 했다」 로 읽히므로 영원히 안 끝나는 단계가 된다.
+#: 그래서 목록을 여기 못 박고 양쪽에서 검사한다.
+FACT_KEYS = {
+    "test_run": {
+        "master_curves",
+        "prony_fits",
+        "cards",
+        "adopted",
+        "parsed",
+        "results",
+        "channels",
+        "temperature_steps",
+    },
+    "material": {"cards", "published_cards"},
+    "card": {"published", "samples", "notes"},
+}
+
 
 def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     rows: list[TestRun] = (

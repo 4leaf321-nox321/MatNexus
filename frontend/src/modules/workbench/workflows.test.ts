@@ -296,6 +296,15 @@ describe('확정 전 근거 훑기 — 근거의 두께', () => {
     expect(names(check)).toEqual(['점탄성'])
   })
 
+  it('확정하러 갈 자리를 준다 — 카드 목록에는 그 단추가 없다', () => {
+    // **막다른 길을 만들지 않는다.** 확정은 재료 화면의 물성 패널에서 누른다.
+    // 눌러야 할 것이 없는 화면에 도착하면 사람은 기능이 없다고 결론 낸다.
+    const check = judge('review_cards', 'decide', [
+      item({ kind: 'card', label: '인장 TD', material_id: 'm7', facts: { published: 0 } }),
+    ])
+    expect(check!.go).toMatchObject({ href: '/materials/m7' })
+  })
+
   it('막지는 않는다 — 읽었는지는 화면이 알 수 없다', () => {
     const check = judge('review_cards', 'read', [card('인장 TD', { samples: 1 })])
     expect(check!.ok).toBe(true)

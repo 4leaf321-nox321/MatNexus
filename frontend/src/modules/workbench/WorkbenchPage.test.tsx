@@ -199,6 +199,20 @@ describe('남은 일을 말한다', () => {
   })
 })
 
+describe('단계 구성이 바뀌었을 때', () => {
+  it('모르는 단계로 조용히 옮기지 않는다', async () => {
+    // 단계 이름이 바뀐 뒤 이어서 연 작업이 **아무 말 없이 1단계로 되돌아오면**
+    // 사람은 자기가 잘못 눌렀다고 여긴다. 담긴 것은 그대로 두고 사실만 말한다.
+    const detail = { ...DETAIL, steps: { at: '없어진단계', done: ['scope'] } }
+    run.mockResolvedValue(detail)
+    runs.mockResolvedValue([detail])
+    show()
+    await userEvent.click(await screen.findByText('EPDM 도어씰 2026-09'))
+    expect(await screen.findByText(/지금 화면이 모릅니다/)).toBeInTheDocument()
+    expect(screen.getByLabelText('바구니')).toBeInTheDocument()
+  })
+})
+
 describe('담고 나서 돌아오면', () => {
   it('그 작업이 열린다', async () => {
     // **목록으로 떨어뜨리면 방금 담은 작업을 다시 골라야 한다** — 진행 중인 것이

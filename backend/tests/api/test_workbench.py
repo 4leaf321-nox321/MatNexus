@@ -28,6 +28,7 @@ from app.modules.tests import models as test_models
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
+from app.modules.workbench import services
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared import dependents
 
@@ -99,6 +100,39 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
     필요하다. 그것을 화면이 도메인 API 로 따로 가져오면 워크벤치가 남의 도메인을
     알게 되고, 그 방향은 되돌리기 어렵다(ADR 0024) — 그래서 담긴 줄에 실어 보낸다.
     """
+
+    def test_사실의_이름이_계약대로_온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        material: dict[str, Any],
+        dma_run: dict[str, Any],
+    ) -> None:
+        """**이 이름들이 화면 판정의 입력이다**(`workflows.ts` 의 `fact(one, ...)`).
+
+        하나가 어긋나면 화면은 없는 키를 읽어 0을 얻고, 0은 「아직 안 했다」 로
+        읽힌다 — **영원히 안 끝나는 단계**가 되는데 양쪽 시험은 다 통과한다.
+        그래서 이름 자체를 시험한다.
+        """
+        card = PropertyCard(
+            material_id=uuid.UUID(material["id"]), label="인장 MD", status="draft", source={}
+        )
+        db.add(card)
+        db.commit()
+
+        for kind, target in [
+            ("test_run", dma_run["id"]),
+            ("material", material["id"]),
+            ("card", str(card.id)),
+        ]:
+            [item] = client.post(
+                f"/api/workbench/runs/{run['id']}/items",
+                json={"kind": kind, "target_ids": [target]},
+                headers=admin_headers,
+            ).json()
+            assert set(item["facts"]) == services.FACT_KEYS[kind], kind
 
     def test_시험은_마스터커브와_온도_단_수를_달고_온다(
         self,
