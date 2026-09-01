@@ -27,6 +27,11 @@ vi.mock('@/shared/api/basket', async (importOriginal) => ({
   },
 }))
 
+// 부서는 「내 부서」 로 정해진다 — 이 단추가 부서 스코프 밖 화면에도 붙기 때문이다.
+vi.mock('@/shared/auth/AuthContext', () => ({
+  useMaybeAuth: () => ({ user: { home_workspace_slug: 'metal', memberships: [] } }),
+}))
+
 const RUN = {
   id: 'r1',
   title: 'EPDM 도어씰 2026-09',
@@ -68,7 +73,7 @@ describe('어디에 담기는지', () => {
     show(['c1', 'c2'])
     await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
     await waitFor(() => expect(add).toHaveBeenCalledWith('r1', 'card', ['c1', 'c2']))
-    expect(screen.getByText('2건 담았습니다')).toBeInTheDocument()
+    expect(screen.getByText(/2건 담았습니다/)).toBeInTheDocument()
   })
 
   it('여럿이면 고를 수 있다', async () => {
@@ -104,6 +109,16 @@ describe('기억해 둔 작업', () => {
     show()
     await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
     await waitFor(() => expect(add).toHaveBeenCalledWith('r1', 'card', ['c1']))
+  })
+
+  it('담고 나면 그 작업으로 돌아가는 길을 준다', async () => {
+    // **담아 놓고 어디로 갈지 모른 채 서지 않게 한다.** 워크벤치 첫 화면으로
+    // 보내면 방금 담은 작업을 다시 골라야 한다 — 진행 중인 것이 여럿이면 어느
+    // 것이었는지 헷갈린다.
+    show()
+    await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
+    const back = await screen.findByRole('link', { name: '워크벤치로' })
+    expect(back).toHaveAttribute('href', '/w/metal/workbench?run=r1')
   })
 
   it('담고 나면 그 작업을 기억한다', async () => {

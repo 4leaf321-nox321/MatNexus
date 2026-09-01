@@ -195,7 +195,10 @@ describe('미구현 표시', () => {
       .filter((item) => item.pending)
       .map((item) => item.label)
     // router.tsx 의 stub() 목록과 짝이다. 화면을 만들었으면 여기서 빼야 한다.
-    expect(pending.sort()).toEqual(['내 작업함', '워크벤치'])
+    //
+    // 워크벤치를 뺐다(v1.177) — 목록에서 담을 수 있게 된 뒤에도 배지가 남아 있어서
+    // **담고 나서 돌아올 자리로 안 읽혔다.** 「미구현」 은 눌러도 소용없다는 말이다.
+    expect(pending.sort()).toEqual(['내 작업함'])
   })
 
   it('서버는 이제 화면이 있다 — 저장소 정리를 그 아래 탭으로 품는다', () => {

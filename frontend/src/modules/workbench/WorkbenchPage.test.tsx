@@ -52,9 +52,9 @@ const DETAIL = {
   items: [],
 }
 
-function show() {
+function show(at = '/w/metal/workbench') {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[at]}>
       <WorkbenchPage />
     </MemoryRouter>
   )
@@ -196,6 +196,25 @@ describe('남은 일을 말한다', () => {
     // 여기가 못 보는 경우가 늘 있다.
     await openAt(run말고({ steps: { at: 'master', done: ['pick'] } }))
     expect(screen.getByRole('button', { name: /다음: 글로벌 피팅/ })).toBeEnabled()
+  })
+})
+
+describe('담고 나서 돌아오면', () => {
+  it('그 작업이 열린다', async () => {
+    // **목록으로 떨어뜨리면 방금 담은 작업을 다시 골라야 한다** — 진행 중인 것이
+    // 여럿이면 어느 것이었는지 헷갈린다. 목록 화면의 「워크벤치로」 가 이 주소를 준다.
+    run.mockResolvedValue(DETAIL)
+    runs.mockResolvedValue([DETAIL, { ...DETAIL, id: 'r2', title: '도어트림 검토' }])
+    show('/w/metal/workbench?run=r1')
+    expect(await screen.findByLabelText('바구니')).toBeInTheDocument()
+    expect(run).toHaveBeenCalledWith('r1')
+  })
+
+  it('모르는 작업이면 목록을 보여 준다', async () => {
+    // 남이 끝냈거나 지운 작업의 주소를 눌렀을 수 있다. **빈 화면으로 두지 않는다.**
+    run.mockRejectedValue(new Error('없습니다'))
+    show('/w/metal/workbench?run=없는것')
+    expect(await screen.findByText('해석에 쓸 물성 갖추기')).toBeInTheDocument()
   })
 })
 

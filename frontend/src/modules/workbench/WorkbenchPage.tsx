@@ -23,8 +23,8 @@
  */
 
 import { ArrowRight, Check, Circle, CircleAlert, Layers, Plus, X } from 'lucide-react'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { basketApi } from '@/shared/api/basket'
 import type { BasketItem, BasketRun, BasketRunDetail } from '@/shared/api/basket'
@@ -59,6 +59,18 @@ export default function WorkbenchPage() {
   const running = useResource(() => basketApi.runs('running'), [])
   const [open, setOpen] = useState<BasketRunDetail | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  // **담고 나서 돌아오면 그 작업이 열려야 한다.** 목록으로 떨어뜨리면 방금 담은
+  // 작업을 사람이 다시 골라야 하고, 진행 중인 것이 여럿이면 어느 것이었는지 헷갈린다.
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('run')
+
+  useEffect(() => {
+    if (!asked || open?.id === asked) return
+    void reload(asked)
+    // 주소는 한 번 쓰고 지운다 — 남겨 두면 목록으로 나가려 할 때 다시 열린다.
+    setParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked])
 
   async function reload(id: string) {
     try {

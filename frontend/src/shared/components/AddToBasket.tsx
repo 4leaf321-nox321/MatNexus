@@ -9,6 +9,11 @@
  * 적는다. 숨겨 두면 **담고 나서 어디 갔는지 찾아야 한다** — 그런 단추는 한 번 잘못
  * 담긴 뒤로 아무도 안 쓴다.
  *
+ * ## 담고 나면 돌아갈 길을 준다
+ *
+ * 「2건 담았습니다」 로 끝내면 사람은 담아 놓고 **어디로 가야 하는지 모른 채** 선다 —
+ * 실제로 그 자리에서 걸렸다. 담은 것이 모이는 자리로 가는 링크를 그 줄에 붙인다.
+ *
  * ## 작업은 여기서 만들지 않는다
  *
  * 진행 중인 작업이 없으면 워크벤치로 보낸다. 목록 화면에서 작업을 만들게 하면
@@ -27,7 +32,9 @@ import { Link } from 'react-router-dom'
 
 import { activeRun, basketApi, setActiveRun } from '@/shared/api/basket'
 import type { BasketRun, ItemKind } from '@/shared/api/basket'
+import { useMaybeAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
+import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,9 +54,19 @@ export function AddToBasket({
   /** 담을 것. 비어 있으면 단추가 꺼진다. */
   ids: string[]
   onError?: (error: Error) => void
-  /** 워크벤치로 보내는 링크에 쓴다. 없으면 링크를 안 건다. */
+  /**
+   * 워크벤치로 보내는 링크에 쓴다. **안 주면 내 부서로 정한다** — 부서 스코프가
+   * 아닌 화면(재료·카드 목록)에서도 돌아갈 자리는 있어야 하고, `default` 로 두면
+   * 자기 부서가 아닌 곳을 가리켜 작업 목록이 비어 보인다(`AppShell` 과 같은 규칙).
+   */
   workspaceSlug?: string
 }) {
+  // **로그인 정보가 없어도 단추는 선다.** 이 단추는 여러 화면에 얹히는 곁들이라,
+  // 제공자를 요구하면 그것을 품은 화면 전부가 같이 무거워진다.
+  const user = useMaybeAuth()?.user
+  const slug =
+    workspaceSlug ?? user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
+  const home = `/w/${slug}/workbench`
   const [runs, setRuns] = useState<BasketRun[] | null>(null)
   const [chosen, setChosen] = useState<string | null>(activeRun())
   const [added, setAdded] = useState(0)
@@ -91,13 +108,9 @@ export function AddToBasket({
   if (runs !== null && runs.length === 0) {
     return (
       <span className="text-muted-foreground text-xs">
-        {workspaceSlug ? (
-          <Link to={`/w/${workspaceSlug}/workbench`} className="underline underline-offset-2">
-            워크벤치에서 작업을 시작
-          </Link>
-        ) : (
-          '워크벤치에서 작업을 시작'
-        )}
+        <Link to={home} className="underline underline-offset-2">
+          워크벤치에서 작업을 시작
+        </Link>
         하면 여기서 담을 수 있습니다.
       </span>
     )
@@ -145,8 +158,17 @@ export function AddToBasket({
         </DropdownMenu>
       )}
 
+      {/* **담아 놓고 어디로 갈지 모른 채 서지 않게 한다.** */}
       {added > 0 && (
-        <span className="text-muted-foreground text-xs">{added}건 담았습니다</span>
+        <span className="text-muted-foreground text-xs">
+          {added}건 담았습니다 ·{' '}
+          <Link
+            to={target ? `${home}?run=${target.id}` : home}
+            className="text-foreground underline underline-offset-2"
+          >
+            워크벤치로
+          </Link>
+        </span>
       )}
     </span>
   )

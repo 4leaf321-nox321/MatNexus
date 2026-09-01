@@ -95,3 +95,17 @@ export function useAuth(): AuthContextValue {
   if (!value) throw new Error('useAuth 는 AuthProvider 안에서만 쓸 수 있습니다')
   return value
 }
+
+/**
+ * 로그인 정보를 **있으면 쓰고 없으면 넘어간다.**
+ *
+ * `useAuth` 가 던지는 것은 옳다 — 로그인해야 보이는 화면이 제공자 밖에 있으면 그것은
+ * 조립 실수다. 다만 **곁들이 위젯**은 다르다: 「담기」 처럼 여러 화면에 얹히는 것이
+ * 로그인 정보를 쓰는 순간, 그 단추를 품은 화면 전부가 제공자를 요구하게 된다. 실제로
+ * 카드·시험 목록의 시험이 그것으로 깨졌다 — 화면의 잘못이 아니라 위젯이 옮긴 짐이다.
+ *
+ * 없을 때 무엇으로 대신할지는 부르는 쪽이 정한다.
+ */
+export function useMaybeAuth(): AuthContextValue | null {
+  return useContext(AuthContext) ?? null
+}
