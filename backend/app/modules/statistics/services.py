@@ -20,6 +20,7 @@ from app.modules.tests.models import TestRun, TestType
 from app.shared import curvedata, filestore, permissions
 from app.shared.errors import NotFound
 from matcore import curves, statistics
+from matcore.processing import tensile
 
 #: 평균이 뜻이 없는 값. **차원으로 거르고 남는 예외들이다.**
 #:
@@ -28,7 +29,10 @@ from matcore import curves, statistics
 #:   *_index           배열 위치다. 평균 14.0 은 아무 뜻이 없다.
 #:   elastic_r_squared 적합도다. 평균보다 최솟값이 중요하다.
 SETTING_KEYS = frozenset({"proof_offset"})
-SKIP_KEYS = frozenset({"elastic_r_squared"})
+# 참고 기울기(`tensile.REFERENCE_SLOPE`)는 **못 믿는다고 적어 놓고 낸 값**이다 —
+# 여기서 평균되면 「참고 기울기(믿을 수 없음)」 가 재료 물성으로 서고, 그 통계가
+# 카드 곁에 선다. 뒤 단계로 안 보낸다는 약속은 통계에도 적용된다.
+SKIP_KEYS = frozenset({"elastic_r_squared", tensile.REFERENCE_SLOPE})
 
 
 def _is_averageable(scalar: dict[str, Any]) -> bool:

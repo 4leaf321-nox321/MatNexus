@@ -92,7 +92,14 @@ def load_frame(
 
 #: 파이프라인이 `@declared_…` 로 참조할 수 있는 선언 물성. **이름을 여기 적는다** —
 #: 기준정보의 항목 이름(사람이 고치는 말)과 참조 키(레시피에 적히는 말)를 잇는 자리다.
-DECLARED_KEYS = {"탄성계수": "youngs_modulus", "포아송비": "poisson_ratio", "밀도": "density"}
+#: (참조 키, SI 단위). 단위를 여기 적는 이유: 선언 행은 단위를 안 들고 있는데
+#: (환산해 저장하므로), 화면의 자동 연결은 **단위가 같은 것만** 후보로 낸다 —
+#: 단위가 비면 목록에 안 뜨고, 사람은 이 값이 있는 줄도 모른다.
+DECLARED_KEYS = {
+    "탄성계수": ("youngs_modulus", "Pa"),
+    "포아송비": ("poisson_ratio", "1"),
+    "밀도": ("density", "kg/m3"),
+}
 
 
 def declared_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
@@ -131,9 +138,10 @@ def declared_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
 
     given: list[processing.Scalar] = []
     for row in material.declared_properties or []:
-        key = DECLARED_KEYS.get(str(row.get("item")))
-        if key is None:
+        found = DECLARED_KEYS.get(str(row.get("item")))
+        if found is None:
             continue
+        key, si_unit = found
         # **대푯값은 첫 점이다.** 온도를 타는 값이면 가장 낮은 온도(대개 상온)다.
         points = [
             point
@@ -147,7 +155,7 @@ def declared_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
                 f"declared_{key}",
                 f"재료에 적은 {row.get('item')}",
                 float(points[0]["value_si"]),
-                str(row.get("si_unit") or ""),
+                si_unit,
             )
         )
     return given

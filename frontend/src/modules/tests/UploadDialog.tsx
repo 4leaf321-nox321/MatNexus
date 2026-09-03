@@ -253,7 +253,10 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
             ) : (
               <Upload className="size-4" />
             )}
-            {saving ? '올리고 읽는 중…' : '올리기'}
+            {/* 「읽는 중」 이라고 안 적는다 — 읽기는 올린 뒤 서버가 이어서
+                하고, 그 진행은 목록의 상태 열이 보여 준다. 여기서 읽는다고 하면
+                창이 닫힌 뒤 「읽는 중」 인 줄을 보고 고장으로 여긴다. */}
+            {saving ? '올리는 중…' : '올리기'}
           </Button>
         </DialogFooter>
       </DialogContent>

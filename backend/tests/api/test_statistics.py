@@ -113,6 +113,23 @@ def _adopt(client: TestClient, headers: dict[str, str], run_id: str) -> None:
     client.post(f"/api/processing/results/{stored['id']}/adopt", headers=headers)
 
 
+class Test통계에_못_들어가는_값:
+    """**못 믿는다고 적어 놓고 낸 값이 평균되면 안 된다.**
+
+    참고 기울기는 점이 모자란 구간에서 「보라고만」 내는 값이다(v1.197). 단위가 Pa 라
+    걸러지지 않으면 「참고 기울기(믿을 수 없음)」 가 재료 물성으로 서고, 그 평균이
+    카드 곁에 선다 — 뒤 단계로 안 보낸다는 약속이 통계에서 깨진다.
+    """
+
+    def test_참고_기울기는_평균되지_않는다(self) -> None:
+        from app.modules.statistics.services import _is_averageable
+        from matcore.processing.tensile import REFERENCE_SLOPE
+
+        assert not _is_averageable({"key": REFERENCE_SLOPE, "value": 2.0e11, "si_unit": "Pa"})
+        # 진짜 탄성계수는 들어간다 — 거르개가 넓어지면 물성이 통째로 사라진다.
+        assert _is_averageable({"key": "youngs_modulus", "value": 2.0e11, "si_unit": "Pa"})
+
+
 class Test묶음:
     def test_방향을_섞지_않는다(
         self,

@@ -228,6 +228,57 @@ class Test재료에_적은_값으로_돈다:
         values = {one["key"]: one["value"] for one in done.json()["scalars"]}
         assert values["youngs_modulus"] == pytest.approx(206e9)
 
+    def test_적은_값이_입력_목록에_뜬다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run_id: str,
+        material_id: str,
+    ) -> None:
+        """**목록에 없으면 그 길이 있는 줄도 모른다.** 파이프라인은 선언값을 이미
+        받는데, `/processing/inputs` 에 안 실려서 화면의 「자동 연결」 후보에 안 떴다 —
+        성긴 곡선 앞에서 사람이 쓸 수 있는 길을 화면이 숨긴 셈이다.
+
+        단위도 함께 본다: 자동 연결은 **단위가 같은 것만** 후보로 내므로, 단위가
+        비면 실려도 안 뜬다(선언 행은 환산해 저장해서 단위를 안 들고 있다).
+        """
+        from app.modules.vocabulary.definitions import (
+            ensure_builtin_axis_fields,
+            ensure_builtin_property_items,
+            ensure_builtin_vocabularies,
+        )
+
+        ensure_builtin_vocabularies(db)
+        ensure_builtin_axis_fields(db)
+        ensure_builtin_property_items(db)
+        db.commit()
+        saved = client.patch(
+            f"/api/materials/{material_id}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "points": [{"value": 206}],
+                        "input_unit": "GPa",
+                        "source": "standard",
+                        "reference": "KS D 3512",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+        rows = client.get(
+            f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        by_key = {one["key"]: one for one in rows}
+        told = by_key["declared_youngs_modulus"]
+        assert told["value"] == pytest.approx(206e9)
+        assert told["si_unit"] == "Pa", "단위가 비면 자동 연결 후보에 안 뜬다"
+        assert told["source"] == "declared"
+
     def test_안_적어_뒀으면_그_참조가_실패한다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:

@@ -309,15 +309,20 @@ def list_inputs(
     """
     run = get_run(db, user, test_run_id)
     conditions = curvedata.condition_scalars(db, run)
+    # **재료에 적어 둔 값도 여기 선다.** 파이프라인은 이미 받는데(`declared_…`)
+    # 이 목록에 없으면 화면의 자동 연결 후보에 안 떠서, 사람은 그 길이 있는 줄도
+    # 모른 채 성긴 곡선 앞에 선다.
+    declared = curvedata.declared_scalars(db, run)
     # **조건도 어디서 왔는지 말한다.** 같은 줄에 서는데 하나만 출처가 없으면
     # 사람은 그것이 빠뜨려진 것인지 다른 것인지 알 수 없다.
     sources = {
         **curvedata.specimen_sources(db, run),
         **{item.key: "condition" for item in conditions},
+        **{item.key: "declared" for item in declared},
     }
     return [
         _scalar_out(item, sources)
-        for item in (*curvedata.specimen_scalars(db, run), *conditions)
+        for item in (*curvedata.specimen_scalars(db, run), *conditions, *declared)
     ]
 
 
