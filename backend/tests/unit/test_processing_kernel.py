@@ -142,9 +142,10 @@ class Test탄성계수:
                     {
                         "method": "linear_regression",
                         "window_basis": "displacement",
-                        # 변형률 0.0005~0.0025 와 같은 구간이다(게이지 50 mm).
-                        "minimum_displacement": 0.025,
-                        "maximum_displacement": 0.125,
+                        # **SI(m)로 보낸다** — 화면이 mm 를 받아 환산해 보내는 것과
+                        # 같다. 변형률 0.0005~0.0025 와 같은 구간이다(게이지 50 mm).
+                        "minimum_displacement": 2.5e-5,
+                        "maximum_displacement": 1.25e-4,
                     },
                 )
             ],

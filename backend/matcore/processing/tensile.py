@@ -382,20 +382,23 @@ def _window_from_displacement(
     않는다(따로 받으면 두 값이 갈리는 순간이 온다).
     """
     displacement = frame.require("displacement", what="변위")
-    low_mm = option_float(options, "minimum_displacement", float("nan"))
-    high_mm = option_float(options, "maximum_displacement", float("nan"))
-    if not (math.isfinite(low_mm) and math.isfinite(high_mm)):
-        raise ProcessingError("구간을 변위로 적기로 했으면 시작과 끝을 둘 다 주세요(mm).")
-    if low_mm >= high_mm:
-        raise ProcessingError(f"변위 구간이 뒤집혔습니다: {low_mm} ≥ {high_mm} mm")
+    # SI(m)로 온다 — 화면이 mm 를 받아 환산해 보낸다. 여기서 또 나누면 1000배 틀어진다.
+    low_m = option_float(options, "minimum_displacement", float("nan"))
+    high_m = option_float(options, "maximum_displacement", float("nan"))
+    if not (math.isfinite(low_m) and math.isfinite(high_m)):
+        raise ProcessingError("구간을 변위로 적기로 했으면 시작과 끝을 둘 다 주세요.")
+    if low_m >= high_m:
+        raise ProcessingError(
+            f"변위 구간이 뒤집혔습니다: {low_m * 1e3:.4g} ≥ {high_m * 1e3:.4g} mm"
+        )
 
     order = np.argsort(displacement, kind="stable")
-    low = float(np.interp(low_mm / 1000.0, displacement[order], strain[order]))
-    high = float(np.interp(high_mm / 1000.0, displacement[order], strain[order]))
+    low = float(np.interp(low_m, displacement[order], strain[order]))
+    high = float(np.interp(high_m, displacement[order], strain[order]))
     return (
         low,
         high,
-        f"변위 {low_mm:.4g}~{high_mm:.4g} mm 로 적은 구간을 "
+        f"변위 {low_m * 1e3:.4g}~{high_m * 1e3:.4g} mm 로 적은 구간을 "
         f"변형률 {low:.5g}~{high:.5g} 로 옮겼습니다.",
     )
 
@@ -582,12 +585,15 @@ def _auto_window(
                 "게이지 길이를 손으로 나눠야 한다 — 그 자리에서 틀린다."
             ),
         ),
+        # **단위는 SI(m)다 — 다른 모든 칸과 같은 규약.** 화면이 mm 로 바꿔 보여
+        # 준다(`shared/units.ts` 의 표). 여기 mm 라고 적으면 지금은 표에 mm 가
+        # 없어서 우연히 맞지만, 표에 등재되는 날 값이 조용히 1000배 틀어진다.
         ParamSpec(
             name="minimum_displacement",
             dimension="length",
             label="구간 시작(변위)",
             type="float",
-            unit="mm",
+            unit="m",
             when={"window_basis": ("displacement",)},
             help="원본 곡선의 x 축 그대로입니다. 그 값들 사이의 점으로 직선을 얹습니다.",
         ),
@@ -596,7 +602,7 @@ def _auto_window(
             dimension="length",
             label="구간 끝(변위)",
             type="float",
-            unit="mm",
+            unit="m",
             when={"window_basis": ("displacement",)},
             help="항복 전이어야 합니다 — 넘으면 기울기가 눕습니다.",
         ),
