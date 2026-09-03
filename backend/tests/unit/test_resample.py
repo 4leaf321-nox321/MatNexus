@@ -73,6 +73,13 @@ class Test방법마다_하는_일:
         picked = resample.resample(knee(), method="curvature", count=12)
         assert sum(1 for x, _ in picked if x > 0.05) >= 3
 
+    def test_로그_두_점이면_양_끝만_남는다(self) -> None:
+        """count=2 에 0 이 섞이면 로그로 나눌 「나머지」 가 한 점뿐이다 — geomspace 가
+        시작점 하나만 돌려줘서 **표의 끝(관측 최대)이 조용히 사라졌다.** 관측 범위가
+        [0, 0.2] 인 표가 [0, 0.001] 로 줄어드는데 숫자는 그럴듯해 보인다."""
+        got = resample.resample(line(), method="log", count=2)
+        assert [x for x, _ in got] == [0.0, 0.2]
+
     def test_0에서_시작해도_로그로_나눈다(self) -> None:
         # 소성 변형률은 0에서 시작하는 일이 흔하다. **첫 점을 버리면 솔버가 항복점을
         # 읽는 줄이 사라진다.**

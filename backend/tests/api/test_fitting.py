@@ -840,6 +840,41 @@ class Test상태:
         assert body["source"]["resample"]["asked"] == 15
         assert body["source"]["resample"]["from"] > 0
 
+    def test_늘리기와_같이_써도_고른_점이_살아_있다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**늘리기가 다시 고른 표를 버렸다.** 외삽이 원본 배열에서 다시 만들어서,
+        둘을 같이 쓰면 재샘플링이 조용히 사라지는데 `source.resample` 은 했다고
+        남는다 — 기록이 거짓말을 하는 부류라 사보타주 등급이다."""
+        made = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "고르고 늘린 카드",
+                "family": "voce",
+                "resample_method": "uniform",
+                "resample_points": 12,
+                "extrapolate_to": 0.5,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        body = made.json()
+        table = body["blocks"]["table"]
+        measured_max = float(table["values"]["measured_max"])
+        measured = [
+            row
+            for row in table["rows"]
+            if float(row["plastic_strain"]) <= measured_max + 1e-12
+        ]
+        # 측정부가 고른 12점 그대로여야 한다. 원본 밀도로 돌아왔다면 늘리기가 버린 것.
+        assert len(measured) == 12, len(measured)
+        # 외삽부는 그 뒤에 붙는다.
+        assert len(table["rows"]) > 12
+        assert body["source"]["resample"]["to"] == 12
+
     def test_방법만_주면_거절한다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
     ) -> None:

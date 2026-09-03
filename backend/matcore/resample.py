@@ -65,7 +65,11 @@ def _log(x: np.ndarray, y: np.ndarray, count: int) -> np.ndarray:
     if start >= high:
         raise ResampleError("로그 간격으로 나눌 만큼 구간이 넓지 않습니다.")
     if low <= 0:
-        # 첫 점(0)을 지키고 나머지를 로그로 나눈다.
+        # 첫 점(0)을 지키고 나머지를 로그로 나눈다. **나머지가 한 점뿐이면 로그로
+        # 나눌 것이 없다** — geomspace(start, high, 1) 은 시작점 하나만 돌려줘서
+        # 표의 끝(관측 최대)이 조용히 사라진다. 그때는 양 끝만 남긴다.
+        if count <= 2:
+            return np.asarray([low, high], dtype=np.float64)
         return np.concatenate(([low], np.geomspace(start, high, count - 1)))
     return np.geomspace(start, high, count)
 

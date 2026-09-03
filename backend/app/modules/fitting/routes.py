@@ -1156,7 +1156,16 @@ def create_card(
                 status=422,
             )
         try:
-            extended = fitting.extend_table(curve, strain, stress, to=payload.extrapolate_to)
+            # **다시 고른 표 위에서 늘린다.** 원본 배열로 늘리면 방금 고른 점들이
+            # 조용히 사라지는데 `source.resample` 은 했다고 남는다 — 기록이 거짓말을
+            # 한다. 측정부는 `extend_table` 이 그대로 두므로, 고른 점이 곧 측정부다.
+            base = np.asarray(
+                [(row["plastic_strain"], row["true_stress"]) for row in table_rows],
+                dtype=np.float64,
+            )
+            extended = fitting.extend_table(
+                curve, base[:, 0], base[:, 1], to=payload.extrapolate_to
+            )
         except fitting.FittingError as exc:
             raise AppError("MNX-FITTING-0014", str(exc), status=422) from exc
         table_rows = [

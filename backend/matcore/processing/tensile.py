@@ -422,7 +422,9 @@ def _reference_slope(
     점이 둘도 없으면 기울기 자체가 없다 — 그때는 아무것도 안 낸다.
     """
     peak = float(np.max(stress)) if stress.size else 0.0
-    if peak <= 0:
+    # NaN 은 모든 비교에서 False 라 `peak <= 0` 을 **통과해 버린다** — 빠진 칸이
+    # 섞인 곡선에서 NaN 기울기가 JSON 까지 흘러간다.
+    if not math.isfinite(peak) or peak <= 0:
         return (), ""
     mask = (stress >= peak * band_low) & (stress <= peak * band_high)
     if int(np.sum(mask)) < 2:
@@ -435,6 +437,8 @@ def _reference_slope(
     if x.size < 2 or float(np.ptp(x)) <= 0:
         return (), ""
     slope = float(np.polyfit(x, y, 1)[0])
+    if not math.isfinite(slope):
+        return (), ""
     return (
         (Scalar(REFERENCE_SLOPE, "참고 기울기(믿을 수 없음)", slope, "Pa"),),
         f" 그 구간의 기울기는 **{slope / 1e9:.4g} GPa** 입니다 — 참고값입니다. "

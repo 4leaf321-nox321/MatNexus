@@ -236,6 +236,17 @@ class Test탄성계수:
         assert scalar(result, "elastic_slope_reference") == pytest.approx(E_TRUE, rel=1e-6)
         assert any("참고값" in note for note in result.notes)
 
+    def test_참고_기울기는_NaN_이면_안_낸다(self) -> None:
+        """**NaN 은 모든 비교를 통과한다.** 빠진 칸이 섞인 곡선에서 `peak <= 0` 이
+        False 가 되어 NaN 기울기가 JSON 응답까지 흘러간다 — JSON 에 NaN 은 없다."""
+        from matcore.processing import tensile as tensile_kit
+
+        strain = np.array([0.0, 0.001, 0.002, 0.003])
+        stress = np.array([0.0, np.nan, 2.0e8, 3.0e8])
+        scalars, note = tensile_kit._reference_slope(strain, stress, 0.1, 0.4)
+        assert scalars == ()
+        assert note == ""
+
     def test_참고_기울기는_뒤_단계로_안_간다(self) -> None:
         """**뒷문을 만들지 않는다.** 참고값이 `@youngs_modulus` 를 채우면 그 값이
         항복강도로, 카드로, 덱으로 그대로 간다 — 사람이 「쓰겠다」 고 한 적이 없다."""
