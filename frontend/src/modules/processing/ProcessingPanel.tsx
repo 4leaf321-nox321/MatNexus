@@ -1231,8 +1231,12 @@ function VariablesSidebar({ vocabulary }: { vocabulary: ReturnType<typeof vocabu
       <p className="font-mono text-xs break-all">{item.key}</p>
       <p className="text-sm">
         {item.label}
-        {item.si_unit !== '1' && (
-          <span className="text-muted-foreground ml-1 text-xs">({item.si_unit})</span>
+        {/* **표시 단위로 적는다.** 화면의 모든 값이 MPa·mm 로 보이는데 이
+            목록만 저장 단위(Pa·m)를 적으면, 같은 것을 두 이름으로 부르게 된다. */}
+        {display(item.si_unit).unit && (
+          <span className="text-muted-foreground ml-1 text-xs">
+            ({display(item.si_unit).unit})
+          </span>
         )}
       </p>
       {item.help && <p className="text-muted-foreground mt-0.5 text-xs">{item.help}</p>}
@@ -1499,7 +1503,7 @@ function ParamField({
                     {info && (
                       <span className="text-muted-foreground text-xs">
                         {info.label}
-                        {info.si_unit !== '1' && ` (${info.si_unit})`}
+                        {display(info.si_unit).unit && ` (${display(info.si_unit).unit})`}
                       </span>
                     )}
                   </span>
