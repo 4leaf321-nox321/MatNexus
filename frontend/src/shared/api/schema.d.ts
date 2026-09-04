@@ -4344,6 +4344,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Workspaces
+         * @description 미리보기와 **같은 코드**로 판정해 만든다. 한 트랜잭션이다 — 절반만 들어간
+         *     조직도는 없느니만 못하다.
+         */
+        post: operations["import_workspaces_api_workspaces_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Import
+         * @description ReportArchive 부서 내보내기 CSV 로 **무엇이 만들어질지** 먼저 보여 준다.
+         *
+         *     바로 만들지 않는 이유: 조직도는 한 번 잘못 들어가면 지우기 어렵다(부서마다
+         *     재료·시험이 매달리기 시작한다). 계획을 보고 사람이 누른다.
+         */
+        post: operations["preview_import_api_workspaces_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/options": {
         parameters: {
             query?: never;
@@ -4795,6 +4839,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_import_workspaces_api_workspaces_import_post */
+        Body_import_workspaces_api_workspaces_import_post: {
+            /** File */
+            file: string;
+        };
         /** Body_preview_api_formats_preview_post */
         Body_preview_api_formats_preview_post: {
             /** File */
@@ -4804,6 +4853,11 @@ export interface components {
              * @default 1
              */
             header_rows: number;
+        };
+        /** Body_preview_import_api_workspaces_import_preview_post */
+        Body_preview_import_api_workspaces_import_preview_post: {
+            /** File */
+            file: string;
         };
         /** Body_try_profile_api_formats_try_post */
         Body_try_profile_api_formats_try_post: {
@@ -6831,6 +6885,35 @@ export interface components {
             os: string;
             /** Uptime Seconds */
             uptime_seconds: number | null;
+        };
+        /** ImportResultOut */
+        ImportResultOut: {
+            /** Created */
+            created: number;
+            /** Errors */
+            errors: number;
+            /** Rows */
+            rows: components["schemas"]["ImportRowOut"][];
+            /** Skipped */
+            skipped: number;
+        };
+        /**
+         * ImportRowOut
+         * @description 가져오기 한 행의 운명. **줄 번호를 든다** — 오류를 파일에서 되짚을 수 있게.
+         */
+        ImportRowOut: {
+            /** Action */
+            action: string;
+            /** Line */
+            line: number;
+            /** Name */
+            name: string;
+            /** Parent Slug */
+            parent_slug: string | null;
+            /** Reason */
+            reason: string;
+            /** Slug */
+            slug: string;
         };
         /**
          * ImportableCurveOut
@@ -18304,6 +18387,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_workspaces_api_workspaces_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_workspaces_api_workspaces_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_import_api_workspaces_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_import_api_workspaces_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResultOut"];
                 };
             };
             /** @description Validation Error */

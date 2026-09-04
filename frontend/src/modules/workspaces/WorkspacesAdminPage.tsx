@@ -26,6 +26,7 @@ import {
   Building2,
   ChevronDown,
   ChevronUp,
+  FileUp,
   Loader2,
   Pencil,
   Plus,
@@ -41,6 +42,7 @@ import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { CopyId } from '@/shared/components/CopyId'
 import { WorkspaceTree } from '@/modules/workspaces/WorkspaceTree'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { ImportWorkspacesDialog } from '@/modules/workspaces/ImportWorkspacesDialog'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -58,6 +60,7 @@ import { useResource } from '@/shared/hooks/useResource'
 
 export default function WorkspacesAdminPage() {
   const workspaces = useResource(() => workspacesApi.list(true), [])
+  const [importing, setImporting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Workspace | null>(null)
   const [deleting, setDeleting] = useState<Workspace | null>(null)
@@ -97,14 +100,29 @@ export default function WorkspacesAdminPage() {
         title="부서 관리"
         description="조직도 그대로 봅니다. 끌어 놓아 옮기고, 개편해도 자료는 따라 움직이지 않습니다."
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus className="size-4" />
-            부서 만들기
-          </Button>
+          <span className="flex items-center gap-2">
+            {/* **조직도를 두 번 치지 않는다.** ReportArchive 에 이미 있는 트리를
+                내보내기 한 장으로 들여온다 — 양쪽에 손으로 치면 오타 하나로
+                「같은 부서가 다른 이름」 이 된다. */}
+            <Button variant="outline" onClick={() => setImporting(true)}>
+              <FileUp className="size-4" />
+              가져오기
+            </Button>
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="size-4" />
+              부서 만들기
+            </Button>
+          </span>
         }
       />
 
       <ErrorNotice error={error ?? workspaces.error} className="mb-4" />
+
+      <ImportWorkspacesDialog
+        open={importing}
+        onClose={() => setImporting(false)}
+        onDone={() => workspaces.reload()}
+      />
 
       <div className="mb-3 flex items-center gap-2">
         <div className="relative">

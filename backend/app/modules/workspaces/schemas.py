@@ -102,3 +102,22 @@ class MemberAddRequest(BaseModel):
 
 class MemberRoleRequest(BaseModel):
     role: str
+
+
+class ImportRowOut(BaseModel):
+    """가져오기 한 행의 운명. **줄 번호를 든다** — 오류를 파일에서 되짚을 수 있게."""
+
+    line: int
+    slug: str
+    name: str
+    parent_slug: str | None
+    action: str
+    """`create` | `skip_exists` | `skip_kind` | `error`."""
+    reason: str
+
+
+class ImportResultOut(BaseModel):
+    rows: list[ImportRowOut]
+    created: int
+    skipped: int
+    errors: int

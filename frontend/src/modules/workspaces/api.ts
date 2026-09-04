@@ -8,7 +8,27 @@ export type WorkspaceOption = components['schemas']['WorkspaceOption']
 export type Member = components['schemas']['MemberOut']
 export type Reference = components['schemas']['WorkspaceReferenceOut']
 
+export type WorkspaceImportResult = components['schemas']['ImportResultOut']
+export type WorkspaceImportRow = components['schemas']['ImportRowOut']
+
 export const workspacesApi = {
+  /**
+   * ReportArchive 부서 내보내기 CSV 로 무엇이 만들어질지 먼저 본다.
+   * 조직도는 한 번 잘못 들어가면 지우기 어렵다 — 계획을 보고 사람이 누른다.
+   */
+  previewImport: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.postForm<WorkspaceImportResult>('/workspaces/import/preview', form)
+  },
+
+  /** 미리보기와 같은 코드로 판정해 만든다. */
+  runImport: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.postForm<WorkspaceImportResult>('/workspaces/import', form)
+  },
+
   /** 가입 화면용. 로그인 전에 부른다. */
   options: () => api.get<WorkspaceOption[]>('/workspaces/options'),
 

@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.workspaces import services
+from app.modules.workspaces import imports, services
 from app.modules.workspaces.schemas import (
+    ImportResultOut,
+    ImportRowOut,
     MemberAddRequest,
     MemberOut,
     MemberRoleRequest,
@@ -66,6 +68,54 @@ def create_workspace(
         parent_slug=payload.parent_slug,
     )
     return services.workspace_out(db, workspace, admin)
+
+
+@router.post("/import/preview", response_model=ImportResultOut)
+def preview_import(
+    file: UploadFile,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> ImportResultOut:
+    """ReportArchive 부서 내보내기 CSV 로 **무엇이 만들어질지** 먼저 보여 준다.
+
+    바로 만들지 않는 이유: 조직도는 한 번 잘못 들어가면 지우기 어렵다(부서마다
+    재료·시험이 매달리기 시작한다). 계획을 보고 사람이 누른다.
+    """
+    rows = imports.parse(file.file.read())
+    return _import_out(imports.plan(db, rows))
+
+
+@router.post("/import", response_model=ImportResultOut)
+def import_workspaces(
+    file: UploadFile,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> ImportResultOut:
+    """미리보기와 **같은 코드**로 판정해 만든다. 한 트랜잭션이다 — 절반만 들어간
+    조직도는 없느니만 못하다."""
+    rows = imports.parse(file.file.read())
+    planned = imports.apply(db, rows, creator=admin)
+    db.commit()
+    return _import_out(planned)
+
+
+def _import_out(planned: list[imports.Planned]) -> ImportResultOut:
+    return ImportResultOut(
+        rows=[
+            ImportRowOut(
+                line=one.line,
+                slug=one.slug,
+                name=one.name,
+                parent_slug=one.parent_slug,
+                action=one.action,
+                reason=one.reason,
+            )
+            for one in planned
+        ],
+        created=sum(1 for one in planned if one.action == "create"),
+        skipped=sum(1 for one in planned if one.action.startswith("skip")),
+        errors=sum(1 for one in planned if one.action == "error"),
+    )
 
 
 @router.patch("/{slug}", response_model=WorkspaceOut)

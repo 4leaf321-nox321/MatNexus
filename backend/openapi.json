@@ -775,6 +775,20 @@
         "title": "Body_detect_test_type_api_test_types_detect_post",
         "type": "object"
       },
+      "Body_import_workspaces_api_workspaces_import_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_workspaces_api_workspaces_import_post",
+        "type": "object"
+      },
       "Body_preview_api_formats_preview_post": {
         "properties": {
           "file": {
@@ -794,6 +808,20 @@
           "file"
         ],
         "title": "Body_preview_api_formats_preview_post",
+        "type": "object"
+      },
+      "Body_preview_import_api_workspaces_import_preview_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_import_api_workspaces_import_preview_post",
         "type": "object"
       },
       "Body_try_profile_api_formats_try_post": {
@@ -5863,6 +5891,83 @@
           "uptime_seconds"
         ],
         "title": "HostOut",
+        "type": "object"
+      },
+      "ImportResultOut": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ImportRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows",
+          "created",
+          "skipped",
+          "errors"
+        ],
+        "title": "ImportResultOut",
+        "type": "object"
+      },
+      "ImportRowOut": {
+        "description": "가져오기 한 행의 운명. **줄 번호를 든다** — 오류를 파일에서 되짚을 수 있게.",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Slug"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "slug",
+          "name",
+          "parent_slug",
+          "action",
+          "reason"
+        ],
+        "title": "ImportRowOut",
         "type": "object"
       },
       "ImportableCurveOut": {
@@ -28227,6 +28332,90 @@
           }
         },
         "summary": "Create Workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/import": {
+      "post": {
+        "description": "미리보기와 **같은 코드**로 판정해 만든다. 한 트랜잭션이다 — 절반만 들어간\n조직도는 없느니만 못하다.",
+        "operationId": "import_workspaces_api_workspaces_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_workspaces_api_workspaces_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Workspaces",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/import/preview": {
+      "post": {
+        "description": "ReportArchive 부서 내보내기 CSV 로 **무엇이 만들어질지** 먼저 보여 준다.\n\n바로 만들지 않는 이유: 조직도는 한 번 잘못 들어가면 지우기 어렵다(부서마다\n재료·시험이 매달리기 시작한다). 계획을 보고 사람이 누른다.",
+        "operationId": "preview_import_api_workspaces_import_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_import_api_workspaces_import_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Import",
         "tags": [
           "workspaces"
         ]
