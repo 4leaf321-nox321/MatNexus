@@ -29,6 +29,15 @@ const CANDIDATES = [
   SOURCE,
   { slug: 'new-team', name: '새 팀', is_active: true } as Workspace,
   { slug: 'sleepy', name: '보관된 팀', is_active: false } as Workspace,
+  // 원본의 하위와 그 아래 — 서버가 거절하지만, 고를 수 있는데 눌러 봐야
+  // 실패하는 목록이 가장 나쁘다.
+  { slug: 'old-child', name: '옛 팀 산하', is_active: true, parent_slug: 'old-team' } as Workspace,
+  {
+    slug: 'old-grand',
+    name: '옛 팀 손자',
+    is_active: true,
+    parent_slug: 'old-child',
+  } as Workspace,
 ]
 
 const MOVED = [
@@ -74,6 +83,9 @@ describe('무엇이 옮겨지는지 보고 누른다', () => {
     await userEvent.click(await screen.findByLabelText('합칠 대상 부서'))
     expect(screen.queryByRole('option', { name: /옛 팀/ })).toBeNull()
     expect(screen.queryByRole('option', { name: /보관된 팀/ })).toBeNull()
+    // 하위와 그 아래까지 — 한 단계만 거르면 손자가 남는다.
+    expect(screen.queryByRole('option', { name: /옛 팀 산하/ })).toBeNull()
+    expect(screen.queryByRole('option', { name: /옛 팀 손자/ })).toBeNull()
     expect(screen.getByRole('option', { name: /새 팀/ })).toBeInTheDocument()
   })
 

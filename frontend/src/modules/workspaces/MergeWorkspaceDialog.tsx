@@ -86,9 +86,23 @@ export function MergeWorkspaceDialog({
   }
 
   const total = (references ?? []).reduce((sum, one) => sum + one.count, 0)
-  const options = candidates.filter(
-    (one) => one.slug !== workspace?.slug && one.is_active
-  )
+  // **원본의 하위도 후보에서 뺀다.** 서버가 거절하긴 하지만(순환), 고를 수 있는데
+  // 눌러 봐야 실패하는 목록이 가장 나쁘다 — 트리를 따라 내려가며 거른다.
+  const descendants = new Set<string>()
+  if (workspace) {
+    descendants.add(workspace.slug)
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const one of candidates) {
+        if (one.parent_slug && descendants.has(one.parent_slug) && !descendants.has(one.slug)) {
+          descendants.add(one.slug)
+          grew = true
+        }
+      }
+    }
+  }
+  const options = candidates.filter((one) => !descendants.has(one.slug) && one.is_active)
 
   return (
     <Dialog open={workspace !== null} onOpenChange={(next) => !next && onClose()}>

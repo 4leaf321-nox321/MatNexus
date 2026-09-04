@@ -129,6 +129,34 @@ class Test멤버는_병합이다:
         assert mine[0].role == "manager", "합쳤다고 강등되면 안 된다"
 
 
+class Test기록은_고쳐_쓰지_않는다:
+    def test_가입_신청서의_부서는_그대로다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """「어느 부서로 신청했나」 는 역사다 — 합치기가 옮기면 신청서가 거짓말을
+        한다. 소속(`home_workspace_id`)은 「지금」 이라 옮기는 것이 맞고, 그 차이가
+        이 시험이 지키는 것이다."""
+        make(client, admin_headers, "asked", "신청받은 팀")
+        make(client, admin_headers, "sink", "받는 팀")
+        asked = db.scalar(select(Workspace).where(Workspace.slug == "asked"))
+        sink = db.scalar(select(Workspace).where(Workspace.slug == "sink"))
+        assert asked is not None and sink is not None
+        person = User(
+            email="applicant@example.com",
+            display_name="신청자",
+            password_hash=security.hash_password("pw12345678"),
+            requested_workspace_id=asked.id,
+            home_workspace_id=asked.id,
+        )
+        db.add(person)
+        db.commit()
+
+        assert merge(client, admin_headers, "asked", "sink").status_code == 200
+        db.refresh(person)
+        assert person.requested_workspace_id == asked.id, "신청 기록은 역사다"
+        assert person.home_workspace_id == sink.id, "소속은 지금이라 따라간다"
+
+
 class Test트리:
     def test_하위_부서가_대상_아래로_선다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]

@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -30,7 +31,7 @@ from app.modules.workspaces.schemas import (
     WorkspaceUpdateRequest,
 )
 from app.shared.auth import current_user, require_system_admin
-from app.shared.errors import Forbidden
+from app.shared.errors import AppError, Conflict, Forbidden
 from app.shared.permissions import require_manager, require_member, workspace_by_slug
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -82,7 +83,7 @@ def preview_import(
     바로 만들지 않는 이유: 조직도는 한 번 잘못 들어가면 지우기 어렵다(부서마다
     재료·시험이 매달리기 시작한다). 계획을 보고 사람이 누른다.
     """
-    rows = imports.parse(file.file.read())
+    rows = imports.parse(_read_limited(file))
     return _import_out(imports.plan(db, rows))
 
 
@@ -94,10 +95,36 @@ def import_workspaces(
 ) -> ImportResultOut:
     """미리보기와 **같은 코드**로 판정해 만든다. 한 트랜잭션이다 — 절반만 들어간
     조직도는 없느니만 못하다."""
-    rows = imports.parse(file.file.read())
+    rows = imports.parse(_read_limited(file))
     planned = imports.apply(db, rows, creator=admin)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # 같은 순간에 다른 관리자가 같은 slug 를 만들었다. 미리보기 검사와 commit
+        # 사이의 틈이라 미리 못 막는다 — 500 대신 다시 시도하라고 말한다.
+        db.rollback()
+        raise Conflict(
+            "MNX-WORKSPACES-0022",
+            "같은 순간에 다른 관리자가 부서를 만들고 있습니다. 다시 시도해 주세요.",
+        ) from exc
     return _import_out(planned)
+
+
+#: 부서 CSV 의 크기 상한. 막는 값이 아니라 **실수를 막는 값**이다 — 조직도
+#: CSV 는 커야 수백 KB 인데, 엉뚱한 파일(측정 데이터 덤프)을 올리면 메모리로
+#: 통째로 읽는다.
+IMPORT_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _read_limited(file: UploadFile) -> bytes:
+    raw = file.file.read(IMPORT_MAX_BYTES + 1)
+    if len(raw) > IMPORT_MAX_BYTES:
+        raise AppError(
+            "MNX-WORKSPACES-0023",
+            "파일이 5MB 를 넘습니다 — 부서 내보내기 CSV 가 아닌 것 같습니다.",
+            status=422,
+        )
+    return raw
 
 
 def _import_out(planned: list[imports.Planned]) -> ImportResultOut:

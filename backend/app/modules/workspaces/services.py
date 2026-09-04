@@ -281,6 +281,10 @@ def references(db: Session, *, slug: str) -> list[WorkspaceReferenceOut]:
     ]
 
 
+#: 합치기가 건드리면 안 되는 역사 컬럼. (표, 컬럼) — FK 걷기에서 뺀다.
+_HISTORY_COLUMNS = {("users", "requested_workspace_id")}
+
+
 def merge_into(
     db: Session, *, source_slug: str, target_slug: str, actor: User
 ) -> list[dependents.Reference]:
@@ -380,6 +384,12 @@ def merge_into(
         if table.name in ("workspaces", "workspace_members"):
             continue  # 위에서 손으로 다뤘다
         for column in table.columns:
+            if (table.name, column.name) in _HISTORY_COLUMNS:
+                # **기록은 고쳐 쓰지 않는다.** 가입 신청서의 「어느 부서로 신청했나」
+                # 는 감사 이력과 같은 역사다 — 옮기면 신청서가 거짓말을 한다.
+                # 원본을 나중에 지우면 SET NULL 로 비는데, 그것은 삭제의 뜻
+                # 그대로다(부서가 없어졌다).
+                continue
             if any(fk.column.table.name == "workspaces" for fk in column.foreign_keys):
                 db.execute(
                     sa_update(table).where(column == source.id).values({column: target.id})
