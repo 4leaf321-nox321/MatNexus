@@ -16838,6 +16838,20 @@
         "title": "WorkspaceMembershipOut",
         "type": "object"
       },
+      "WorkspaceMergeRequest": {
+        "description": "어느 부서로 합칠까. 원본은 주소(URL)가 든다.",
+        "properties": {
+          "target_slug": {
+            "title": "Target Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_slug"
+        ],
+        "title": "WorkspaceMergeRequest",
+        "type": "object"
+      },
       "WorkspaceMoveRequest": {
         "description": "상위 부서 바꾸기. `null` 이면 뿌리로 올린다.\n\n이름 변경(PATCH)과 분리한 이유: PATCH 로 받으면 \"안 바꿈\"과 \"뿌리로 올림\"이\n둘 다 `null` 이라 구분할 수 없다.",
         "properties": {
@@ -28729,6 +28743,63 @@
           }
         },
         "summary": "Set Member Role",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/{slug}/merge": {
+      "post": {
+        "description": "이 부서의 데이터를 전부 다른 부서로 옮기고 원본을 보관한다.\n\n무엇이 옮겨질지는 `GET /{slug}/references` 가 먼저 보여 준다 — 화면이 그\n목록을 띄우고 사람이 누른다. 응답은 **실제로 옮긴 것**의 같은 목록이다.",
+        "operationId": "merge_workspace_api_workspaces__slug__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceMergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceReferenceOut"
+                  },
+                  "title": "Response Merge Workspace Api Workspaces  Slug  Merge Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Workspace",
         "tags": [
           "workspaces"
         ]

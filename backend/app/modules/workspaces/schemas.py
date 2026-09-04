@@ -104,6 +104,12 @@ class MemberRoleRequest(BaseModel):
     role: str
 
 
+class WorkspaceMergeRequest(BaseModel):
+    """어느 부서로 합칠까. 원본은 주소(URL)가 든다."""
+
+    target_slug: str
+
+
 class ImportRowOut(BaseModel):
     """가져오기 한 행의 운명. **줄 번호를 든다** — 오류를 파일에서 되짚을 수 있게."""
 

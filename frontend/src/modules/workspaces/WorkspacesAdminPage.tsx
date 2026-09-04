@@ -43,6 +43,7 @@ import { CopyId } from '@/shared/components/CopyId'
 import { WorkspaceTree } from '@/modules/workspaces/WorkspaceTree'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { ImportWorkspacesDialog } from '@/modules/workspaces/ImportWorkspacesDialog'
+import { MergeWorkspaceDialog } from '@/modules/workspaces/MergeWorkspaceDialog'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -61,6 +62,7 @@ import { useResource } from '@/shared/hooks/useResource'
 export default function WorkspacesAdminPage() {
   const workspaces = useResource(() => workspacesApi.list(true), [])
   const [importing, setImporting] = useState(false)
+  const [merging, setMerging] = useState<Workspace | null>(null)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Workspace | null>(null)
   const [deleting, setDeleting] = useState<Workspace | null>(null)
@@ -121,6 +123,13 @@ export default function WorkspacesAdminPage() {
       <ImportWorkspacesDialog
         open={importing}
         onClose={() => setImporting(false)}
+        onDone={() => workspaces.reload()}
+      />
+
+      <MergeWorkspaceDialog
+        workspace={merging}
+        candidates={workspaces.data ?? []}
+        onClose={() => setMerging(null)}
         onDone={() => workspaces.reload()}
       />
 
@@ -228,6 +237,18 @@ export default function WorkspacesAdminPage() {
                   onClick={() => setMoving(workspace)}
                 >
                   상위 바꾸기
+                </Button>
+
+                {/* **자료가 매달려 못 지우는 부서의 출구.** 자료·멤버를 다른
+                    부서로 옮기고 이 부서는 보관한다 — 기준정보의 병합과 같은
+                    무늬다. */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setMerging(workspace)}
+                >
+                  합치기
                 </Button>
 
                 <Button size="sm" variant="outline" asChild>

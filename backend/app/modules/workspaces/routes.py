@@ -21,6 +21,7 @@ from app.modules.workspaces.schemas import (
     MemberOut,
     MemberRoleRequest,
     WorkspaceCreateRequest,
+    WorkspaceMergeRequest,
     WorkspaceMoveRequest,
     WorkspaceOption,
     WorkspaceOut,
@@ -149,6 +150,34 @@ def move_workspace(
         before_slug=payload.before_slug,
     )
     return services.workspace_out(db, workspace, admin)
+
+
+@router.post("/{slug}/merge", response_model=list[WorkspaceReferenceOut])
+def merge_workspace(
+    slug: str,
+    payload: WorkspaceMergeRequest,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[WorkspaceReferenceOut]:
+    """이 부서의 데이터를 전부 다른 부서로 옮기고 원본을 보관한다.
+
+    무엇이 옮겨질지는 `GET /{slug}/references` 가 먼저 보여 준다 — 화면이 그
+    목록을 띄우고 사람이 누른다. 응답은 **실제로 옮긴 것**의 같은 목록이다.
+    """
+    moved = services.merge_into(
+        db, source_slug=slug, target_slug=payload.target_slug, actor=admin
+    )
+    return [
+        WorkspaceReferenceOut(
+            table=one.table,
+            column=one.column,
+            label=one.label,
+            count=one.count,
+            on_delete=one.on_delete,
+            blocks_delete=one.blocks_delete,
+        )
+        for one in moved
+    ]
 
 
 @router.get("/{slug}/references", response_model=list[WorkspaceReferenceOut])

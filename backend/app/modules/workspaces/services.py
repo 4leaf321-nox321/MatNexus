@@ -21,7 +21,7 @@ from app.modules.workspaces.schemas import (
     WorkspaceOut,
     WorkspaceReferenceOut,
 )
-from app.shared import dependents
+from app.shared import audit, dependents
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import membership_of, workspace_by_slug
 
@@ -279,6 +279,131 @@ def references(db: Session, *, slug: str) -> list[WorkspaceReferenceOut]:
         )
         for item in dependents.references_to(db, table="workspaces", pk=workspace.id)
     ]
+
+
+def merge_into(
+    db: Session, *, source_slug: str, target_slug: str, actor: User
+) -> list[dependents.Reference]:
+    """`source` 의 데이터를 전부 `target` 으로 옮기고 원본을 보관한다.
+
+    ## 왜 필요한가
+
+    부서에 자료가 매달리면 지울 수 없다(그것이 맞다 — 삭제 검사가 막는다). 그런데
+    조직 개편은 실제로 일어난다: 두 팀이 한 팀이 되고, 잘못 만든 부서에 자료가
+    먼저 쌓인다. 그때 필요한 것이 **이관**이다 — 기준정보의 병합과 같은 무늬다.
+
+    ## 목록을 손으로 관리하지 않는다
+
+    옮길 테이블을 여기 적어 두면 새 테이블이 생길 때 빠뜨린다 — RA 의 부서 삭제
+    500 버그가 정확히 그것이었다. 삭제 검사(`dependents`)와 같은 방식으로 **FK
+    메타데이터를 걷는다.** 새 모듈이 workspace_id 를 달면 자동으로 옮겨진다.
+
+    ## 손으로 다루는 둘
+
+        멤버        (부서, 사람) 유일 제약이 있어 붙여넣기가 아니라 병합이다.
+                   양쪽에 다 있으면 한 줄만 남기고, **관리자였던 사람은 관리자로**
+                   남는다 — 합쳤다고 강등되면 안 된다
+        하위 부서    대상 아래로 옮긴다(순서는 뒤에). 대상이 원본의 하위면 순환이라
+                   거절한다
+
+    ## 원본은 지우지 않고 보관한다
+
+    합치기가 곧 삭제면 실수를 되돌릴 수 없다. 빈 부서가 된 원본은 보관되고,
+    지우는 것은 그다음에 사람이 따로 누른다 — 이제 막는 참조가 없으니 지워진다.
+
+    감사 이력은 **옮기지 않는다**(workspace_id 에 FK 가 없어 걷기에 안 잡힌다).
+    「그 일이 어느 부서에서 있었나」 는 역사이고, 역사를 고쳐 쓰면 안 된다.
+    """
+    source = workspace_by_slug(db, source_slug)
+    target = workspace_by_slug(db, target_slug)
+    if source.id == target.id:
+        raise AppError("MNX-WORKSPACES-0021", "자기 자신과는 합칠 수 없습니다.", status=422)
+    if not target.is_active:
+        raise AppError(
+            "MNX-WORKSPACES-0021",
+            "보관된 부서로는 합칠 수 없습니다. 대상 부서를 먼저 되살리세요.",
+            status=422,
+        )
+    # 대상이 원본의 하위면, 자식을 대상 아래로 옮기는 순간 트리가 순환한다.
+    node = target
+    while node.parent_id is not None:
+        if node.parent_id == source.id:
+            raise AppError(
+                "MNX-WORKSPACES-0021",
+                "하위 부서로는 합칠 수 없습니다 — 트리가 순환합니다. "
+                "그 부서를 먼저 다른 곳으로 옮기세요.",
+                status=422,
+            )
+        node = db.get(Workspace, node.parent_id)  # type: ignore[assignment]
+
+    # 무엇을 옮겼는지 — 옮기기 **전에** 센다. 뒤에 세면 전부 0이다.
+    moved = dependents.references_to(db, table="workspaces", pk=source.id)
+
+    # ── 멤버: 유일 제약(부서, 사람)이 있어 병합이다 ─────────────────────────
+    target_members = {
+        member.user_id: member
+        for member in db.scalars(
+            select(WorkspaceMember).where(WorkspaceMember.workspace_id == target.id)
+        )
+    }
+    for member in list(
+        db.scalars(select(WorkspaceMember).where(WorkspaceMember.workspace_id == source.id))
+    ):
+        already = target_members.get(member.user_id)
+        if already is None:
+            member.workspace_id = target.id
+            continue
+        if member.role == "manager" and already.role != "manager":
+            # **합쳤다고 강등되면 안 된다.** 원본의 관리자는 대상에서도 관리자다.
+            already.role = "manager"
+        db.delete(member)
+    db.flush()
+
+    # ── 하위 부서: 대상 아래로, 순서는 뒤에 ────────────────────────────────
+    order = _next_sort_order(db, target.id)
+    for child in db.scalars(
+        select(Workspace)
+        .where(Workspace.parent_id == source.id)
+        .order_by(Workspace.sort_order)
+    ):
+        child.parent_id = target.id
+        child.sort_order = order
+        order += 1
+
+    # ── 나머지 전부: FK 메타데이터를 걷는다 ────────────────────────────────
+    from sqlalchemy import update as sa_update
+
+    import app.all_models  # noqa: F401  (metadata 를 채운다)
+    from app.database import Base
+
+    for table in Base.metadata.sorted_tables:
+        if table.name in ("workspaces", "workspace_members"):
+            continue  # 위에서 손으로 다뤘다
+        for column in table.columns:
+            if any(fk.column.table.name == "workspaces" for fk in column.foreign_keys):
+                db.execute(
+                    sa_update(table).where(column == source.id).values({column: target.id})
+                )
+
+    source.is_active = False
+    audit.record(
+        db,
+        action=audit.WORKSPACE_MERGED,
+        actor=actor,
+        target_table="workspaces",
+        target_id=source.id,
+        target_label=f"{source.name} → {target.name}",
+        workspace_id=target.id,
+        changes={
+            "source": source.slug,
+            "target": target.slug,
+            "moved": [
+                {"table": one.table, "column": one.column, "count": one.count} for one in moved
+            ],
+        },
+    )
+    db.commit()
+    return moved
 
 
 def delete(db: Session, *, slug: str) -> None:

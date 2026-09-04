@@ -4468,6 +4468,29 @@ export interface paths {
         patch: operations["set_member_role_api_workspaces__slug__members__user_id__patch"];
         trace?: never;
     };
+    "/api/workspaces/{slug}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Workspace
+         * @description 이 부서의 데이터를 전부 다른 부서로 옮기고 원본을 보관한다.
+         *
+         *     무엇이 옮겨질지는 `GET /{slug}/references` 가 먼저 보여 준다 — 화면이 그
+         *     목록을 띄우고 사람이 누른다. 응답은 **실제로 옮긴 것**의 같은 목록이다.
+         */
+        post: operations["merge_workspace_api_workspaces__slug__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{slug}/move": {
         parameters: {
             query?: never;
@@ -11060,6 +11083,14 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * WorkspaceMergeRequest
+         * @description 어느 부서로 합칠까. 원본은 주소(URL)가 든다.
+         */
+        WorkspaceMergeRequest: {
+            /** Target Slug */
+            target_slug: string;
         };
         /**
          * WorkspaceMoveRequest
@@ -18669,6 +18700,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_workspace_api_workspaces__slug__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceMergeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceReferenceOut"][];
                 };
             };
             /** @description Validation Error */

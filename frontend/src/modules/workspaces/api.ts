@@ -13,6 +13,13 @@ export type WorkspaceImportRow = components['schemas']['ImportRowOut']
 
 export const workspacesApi = {
   /**
+   * 이 부서의 자료를 전부 다른 부서로 옮기고 원본을 보관한다.
+   * 무엇이 옮겨질지는 `references` 가 먼저 보여 준다 — 같은 목록이 돌아온다.
+   */
+  merge: (slug: string, targetSlug: string) =>
+    api.post<Reference[]>(`/workspaces/${slug}/merge`, { target_slug: targetSlug }),
+
+  /**
    * ReportArchive 부서 내보내기 CSV 로 무엇이 만들어질지 먼저 본다.
    * 조직도는 한 번 잘못 들어가면 지우기 어렵다 — 계획을 보고 사람이 누른다.
    */
