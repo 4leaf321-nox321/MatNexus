@@ -7,7 +7,7 @@
  * 정렬은 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
  */
 
-import { FileCode2 } from 'lucide-react'
+import { FileCode2, GitCompare, Grid3X3, ScatterChart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -36,7 +36,10 @@ export default function CatalogPage() {
   const initial = params.get('q') ?? ''
   const [typed, setTyped] = useState(initial)
   const [q, setQ] = useState(initial)
-  const [subsystem, setSubsystem] = useState<string | undefined>()
+  // 커버리지 격자가 계통을 들고 들어온다 — '' 는 「미분류」다.
+  const [subsystem, setSubsystem] = useState<string | undefined>(
+    params.get('subsystem') ?? undefined
+  )
   const [category, setCategory] = useState<string | undefined>()
   const [limit, setLimit] = useState(STEP)
 
@@ -63,12 +66,32 @@ export default function CatalogPage() {
         title="문헌 물성"
         description="문헌·데이터시트에서 채굴된 물성 카탈로그입니다. 모든 값에 출처와 품질 등급이 붙어 있고, 여기서는 값을 만들거나 고칠 수 없습니다."
         actions={
-          <Button variant="outline" asChild>
-            <Link to="/catalog/deck">
-              <FileCode2 className="size-4" />
-              문헌 덱 만들기
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/catalog/compare">
+                <GitCompare className="size-4" />
+                비교
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/catalog/ashby">
+                <ScatterChart className="size-4" />
+                Ashby
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/catalog/coverage">
+                <Grid3X3 className="size-4" />
+                커버리지
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/catalog/deck">
+                <FileCode2 className="size-4" />
+                문헌 덱 만들기
+              </Link>
+            </Button>
+          </div>
         }
       />
 

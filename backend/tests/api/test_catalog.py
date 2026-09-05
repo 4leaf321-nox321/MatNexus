@@ -251,6 +251,87 @@ class Test읽기_API:
         assert gone.json()["error"]["code"] == "MNX-CATALOG-0001"
 
 
+class Test활용_화면_API:
+    """비교·Ashby·커버리지 — 전부 대표값 기준이고 상세 화면과 같은 선택이다."""
+
+    def _loaded(self, db: Session, tmp_path: Path) -> tuple[str, str]:
+        importer.run(db, make_snapshot(tmp_path))
+        db.commit()
+        sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
+        fr4 = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 2))
+        assert sus is not None and fr4 is not None
+        return str(sus.id), str(fr4.id)
+
+    def test_비교_표가_대표값과_후보_수를_준다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        sus_id, fr4_id = self._loaded(db, tmp_path)
+        got = client.get(f"/api/catalog/compare?ids={sus_id},{fr4_id}", headers=admin_headers)
+        assert got.status_code == 200, got.text
+        body = got.json()
+        assert [one["name"] for one in body["materials"]] == ["SUS304", "FR-4 generic"]
+        rows = {one["property_key"]: one for one in body["rows"]}
+        youngs = rows["mechanical.youngs_modulus"]
+        # SUS 칸: 대표(tier1, 193e9)와 후보 수 2. FR-4 칸: 빈 칸.
+        assert youngs["cells"][0]["value_num"] == 193e9
+        assert youngs["cells"][0]["quality_tier"] == 1
+        assert youngs["cells"][0]["n_candidates"] == 2
+        assert youngs["cells"][1]["value_num"] is None
+        # 도메인 차례 — mechanical 이 physical·thermal 앞이 아니어도 되지만
+        # 같은 도메인끼리 붙어 있어야 한다.
+        domains = [one["domain"] for one in body["rows"]]
+        assert domains == sorted(domains)
+
+    def test_비교는_2에서_8종이다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        sus_id, _ = self._loaded(db, tmp_path)
+        alone = client.get(f"/api/catalog/compare?ids={sus_id}", headers=admin_headers)
+        assert alone.status_code == 422
+
+    def test_Ashby_는_두_축을_다_가진_재료만_점이_된다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        self._loaded(db, tmp_path)
+        got = client.get(
+            "/api/catalog/ashby?x=mechanical.youngs_modulus&y=physical.density",
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        body = got.json()
+        assert body["x_unit"] == "Pa" and body["y_unit"] == "kg/m^3"
+        # FR-4 는 밀도가 없어 점이 못 된다. SUS 점은 대표값 좌표다.
+        assert len(body["points"]) == 1
+        point = body["points"][0]
+        assert point["name"] == "SUS304"
+        assert point["x"] == 193e9 and point["y"] == 7930
+        assert point["group"] == "metal"
+
+    def test_커버리지_격자가_계통과_도메인으로_센다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        self._loaded(db, tmp_path)
+        got = client.get("/api/catalog/coverage", headers=admin_headers)
+        assert got.status_code == 200, got.text
+        body = got.json()
+        # SUS(housing): 기계 3(E 둘+포아송비) + 물리 1(밀도). FR-4(미분류 ""): 열 1(Tg).
+        assert body["cells"]["housing"]["mechanical"] == 3
+        assert body["cells"]["housing"]["physical"] == 1
+        assert body["cells"][""]["thermal"] == 1
+        # 미분류는 맨 뒤에 선다.
+        assert body["subsystems"][-1] == ""
+
+    def test_축_후보는_재료_5종_미만이면_안_선다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        """시험 데이터는 물성마다 재료 1~2종뿐이라 축이 하나도 안 선다 —
+        바닥값(5종)이 실제로 거르는지를 이것으로 문다."""
+        self._loaded(db, tmp_path)
+        got = client.get("/api/catalog/axes", headers=admin_headers)
+        assert got.status_code == 200
+        assert got.json() == []
+
+
 class Test덱_만들기:
     """BOM 붙여넣기 → 매칭 → 덱. **쓰인 값마다 출처 각주가 덱에 적힌다.**"""
 

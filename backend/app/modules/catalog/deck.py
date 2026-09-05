@@ -30,7 +30,7 @@ from app.modules.catalog.models import (
     CatalogSource,
     CatalogValue,
 )
-from matcore import export
+from matcore import cards, export
 from matcore.export import dyna as _dyna  # noqa: F401  (스칼라 렌더러를 등록시킨다)
 
 #: MT 물성 키 → Deck 블록 자리. 매핑에 없는 값은 덱에 안 실린다.
@@ -200,6 +200,9 @@ def build(
     모자란 재료는 **거르지 않고 알린다** — 조용히 빠진 재료는 해석에서 갑자기
     없는 재료다. MID 는 덱 안에서 유일해야 한다(솔버는 중복을 조용히 덮는다).
     """
+    # 블록의 단위 선언이 있어야 to_system 이 환산한다 — 없으면 mm 계 덱이
+    # **오류 없이 SI 숫자로** 나간다(2026-09-06 실측). 멱등이라 매번 불러도 된다.
+    cards.load_builtin()
     if format_key not in FORMATS:
         raise export.ExportError(
             f"카탈로그에서 낼 수 있는 형식이 아닙니다: {format_key}. "

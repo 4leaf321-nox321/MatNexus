@@ -134,6 +134,63 @@ class DeckBuiltOut(BaseModel):
     notes: list[str]
 
 
+class CatalogCompareCellOut(BaseModel):
+    """비교 표의 칸 하나 — 그 재료의 그 물성 대표값. 없으면 None 칸."""
+
+    value_num: float | None = None
+    value_text: str | None = None
+    quality_tier: int | None = None
+    n_candidates: int = 0
+    conditions: dict[str, Any] | None = None
+
+
+class CatalogCompareRowOut(BaseModel):
+    property_key: str
+    name: str
+    domain: str
+    symbol: str | None
+    unit: str | None
+    cells: list[CatalogCompareCellOut]
+
+
+class CatalogCompareOut(BaseModel):
+    materials: list[CatalogMaterialOut]
+    rows: list[CatalogCompareRowOut]
+    """도메인·키 차례. ≥1 재료가 값을 가진 물성만."""
+
+
+class AshbyAxisOut(BaseModel):
+    key: str
+    name: str
+    domain: str
+    unit: str | None
+    material_count: int
+    """이 물성의 수치 대표값을 가진 재료 수 — 축으로 쓸 만한지의 근거."""
+
+
+class AshbyPointOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    group: str
+    x: float
+    y: float
+
+
+class AshbyOut(BaseModel):
+    x_unit: str | None
+    y_unit: str | None
+    points: list[AshbyPointOut]
+
+
+class CatalogCoverageOut(BaseModel):
+    """계통-도메인 값 수 격자. 빈 계통은 「미분류」("") 로 온다."""
+
+    domains: list[str]
+    subsystems: list[str]
+    cells: dict[str, dict[str, int]]
+    """subsystem → domain → 값 수."""
+
+
 class CatalogMaterialDetailOut(BaseModel):
     id: uuid.UUID
     name: str

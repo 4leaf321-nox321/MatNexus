@@ -26,6 +26,13 @@ from app.modules.catalog.models import (
     CatalogValue,
 )
 from app.modules.catalog.schemas import (
+    AshbyAxisOut,
+    AshbyOut,
+    AshbyPointOut,
+    CatalogCompareCellOut,
+    CatalogCompareOut,
+    CatalogCompareRowOut,
+    CatalogCoverageOut,
     CatalogLinkIn,
     CatalogLinkOut,
     CatalogMaterialDetailOut,
@@ -226,6 +233,251 @@ def delete_link(
     if row is not None:
         db.delete(row)
         db.commit()
+
+
+#: 비교에 세울 수 있는 재료 수. 그 이상은 표가 옆으로 무너진다(MT 실측 8).
+COMPARE_MAX = 8
+
+
+def _representative_values(
+    db: Session, material_ids: list[uuid.UUID], keys: list[str] | None = None
+) -> dict[tuple[uuid.UUID, str], CatalogValue]:
+    """재료별·물성별 대표값 — 상세 화면과 **같은 선택**이다.
+
+    한 쿼리로 값을 다 받아 재료 단위로 갈라 대표를 고른다 — 재료마다 쿼리를
+    치면 Ashby(2,663종)에서 N+1 이 된다.
+    """
+    query = select(CatalogValue).where(CatalogValue.material_id.in_(material_ids))
+    if keys is not None:
+        query = query.where(CatalogValue.property_key.in_(keys))
+    by_material: dict[uuid.UUID, list[CatalogValue]] = {}
+    for value in db.scalars(query):
+        by_material.setdefault(value.material_id, []).append(value)
+    out: dict[tuple[uuid.UUID, str], CatalogValue] = {}
+    for material_id, values in by_material.items():
+        marks = representative.annotate(values)
+        for value in values:
+            if marks[value.id].representative:
+                out[(material_id, value.property_key)] = value
+    return out
+
+
+def _candidate_counts(
+    db: Session, material_ids: list[uuid.UUID]
+) -> dict[tuple[uuid.UUID, str], int]:
+    rows = db.execute(
+        select(
+            CatalogValue.material_id,
+            CatalogValue.property_key,
+            func.count(),
+        )
+        .where(CatalogValue.material_id.in_(material_ids))
+        .group_by(CatalogValue.material_id, CatalogValue.property_key)
+    )
+    return {(material_id, key): count for material_id, key, count in rows}
+
+
+@router.get("/compare", response_model=CatalogCompareOut)
+def compare(
+    ids: str = Query(description="쉼표로 이은 카탈로그 재료 id (2~8)"),
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogCompareOut:
+    """재료 나란히 보기 — 물성마다 각 재료의 대표값 한 줄.
+
+    **후보 수를 함께 준다.** 칸의 숫자가 N개 중 하나라는 사실 자체가 사용자가
+    알아야 할 정보다(상세 화면과 같은 원칙).
+    """
+    try:
+        material_ids = [uuid.UUID(one.strip()) for one in ids.split(",") if one.strip()]
+    except ValueError:
+        raise AppError(
+            "MNX-CATALOG-0006", "재료 id 가 올바르지 않습니다.", status=422
+        ) from None
+    if not 2 <= len(material_ids) <= COMPARE_MAX:
+        raise AppError(
+            "MNX-CATALOG-0006",
+            f"비교는 2~{COMPARE_MAX}종입니다 — 지금 {len(material_ids)}종.",
+            status=422,
+        )
+    found = {
+        one.id: one
+        for one in db.scalars(
+            select(CatalogMaterial).where(CatalogMaterial.id.in_(material_ids))
+        )
+    }
+    missing = [str(one) for one in material_ids if one not in found]
+    if missing:
+        raise NotFound("MNX-CATALOG-0001", f"카탈로그에 없는 재료입니다: {', '.join(missing)}")
+
+    reps = _representative_values(db, material_ids)
+    counts = _candidate_counts(db, material_ids)
+    keys = sorted({key for _, key in reps})
+    definitions = {
+        one.key: one
+        for one in db.scalars(select(CatalogDefinition).where(CatalogDefinition.key.in_(keys)))
+    }
+    rows = [
+        CatalogCompareRowOut(
+            property_key=key,
+            name=definitions[key].name,
+            domain=definitions[key].domain,
+            symbol=definitions[key].symbol,
+            unit=definitions[key].si_unit,
+            cells=[
+                (
+                    CatalogCompareCellOut(
+                        value_num=rep.value_num,
+                        value_text=rep.value_text,
+                        quality_tier=rep.quality_tier,
+                        n_candidates=counts.get((material_id, key), 0),
+                        conditions=representative.semantic_conditions(rep.conditions) or None,
+                    )
+                    if (rep := reps.get((material_id, key))) is not None
+                    else CatalogCompareCellOut()
+                )
+                for material_id in material_ids
+            ],
+        )
+        for key in sorted(keys, key=lambda one: (definitions[one].domain, one))
+    ]
+    return CatalogCompareOut(
+        materials=[
+            CatalogMaterialOut.model_validate(
+                {**found[one].__dict__, "value_count": 0}, from_attributes=False
+            )
+            for one in material_ids
+        ],
+        rows=rows,
+    )
+
+
+@router.get("/axes", response_model=list[AshbyAxisOut])
+def axes(
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[AshbyAxisOut]:
+    """Ashby 축 후보 — 수치값을 가진 재료 수가 많은 물성부터.
+
+    재료 5종 미만인 축은 뺀다 — 점 서넛으로는 지도가 아니라 소음이다.
+    """
+    rows = db.execute(
+        select(
+            CatalogValue.property_key,
+            func.count(func.distinct(CatalogValue.material_id)),
+        )
+        .where(CatalogValue.value_num.is_not(None))
+        .group_by(CatalogValue.property_key)
+        .having(func.count(func.distinct(CatalogValue.material_id)) >= 5)
+    ).all()
+    definitions = {
+        one.key: one
+        for one in db.scalars(
+            select(CatalogDefinition).where(
+                CatalogDefinition.key.in_([key for key, _ in rows])
+            )
+        )
+    }
+    return sorted(
+        (
+            AshbyAxisOut(
+                key=key,
+                name=definitions[key].name,
+                domain=definitions[key].domain,
+                unit=definitions[key].si_unit,
+                material_count=count,
+            )
+            for key, count in rows
+        ),
+        key=lambda one: -one.material_count,
+    )
+
+
+@router.get("/ashby", response_model=AshbyOut)
+def ashby(
+    x: str = Query(),
+    y: str = Query(),
+    color: str = Query(default="category", pattern="^(category|subsystem)$"),
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> AshbyOut:
+    """물성-물성 산점도 — 두 축의 수치 대표값을 다 가진 재료만 점이 된다."""
+    definitions = {
+        one.key: one
+        for one in db.scalars(
+            select(CatalogDefinition).where(CatalogDefinition.key.in_([x, y]))
+        )
+    }
+    for key in (x, y):
+        if key not in definitions:
+            raise NotFound("MNX-CATALOG-0007", f"모르는 물성입니다: {key}")
+
+    material_ids = list(
+        db.scalars(
+            select(CatalogValue.material_id)
+            .where(CatalogValue.property_key.in_([x, y]), CatalogValue.value_num.is_not(None))
+            .group_by(CatalogValue.material_id)
+            .having(func.count(func.distinct(CatalogValue.property_key)) == 2)
+        )
+    )
+    reps = _representative_values(db, material_ids, keys=[x, y])
+    materials = {
+        one.id: one
+        for one in db.scalars(
+            select(CatalogMaterial).where(CatalogMaterial.id.in_(material_ids))
+        )
+    }
+    points = []
+    for material_id in material_ids:
+        x_rep = reps.get((material_id, x))
+        y_rep = reps.get((material_id, y))
+        if x_rep is None or y_rep is None:
+            continue
+        if x_rep.value_num is None or y_rep.value_num is None:
+            continue
+        one = materials[material_id]
+        group = (one.category if color == "category" else one.subsystem) or "미분류"
+        points.append(
+            AshbyPointOut(
+                id=material_id,
+                name=one.name,
+                group=group,
+                x=x_rep.value_num,
+                y=y_rep.value_num,
+            )
+        )
+    return AshbyOut(
+        x_unit=definitions[x].si_unit, y_unit=definitions[y].si_unit, points=points
+    )
+
+
+@router.get("/coverage", response_model=CatalogCoverageOut)
+def coverage(
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogCoverageOut:
+    """계통-도메인 값 수 격자 — 이 카탈로그가 어디에 두껍고 어디가 비었나."""
+    rows = db.execute(
+        select(
+            CatalogMaterial.subsystem,
+            CatalogDefinition.domain,
+            func.count(),
+        )
+        .select_from(CatalogValue)
+        .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
+        .join(CatalogDefinition, CatalogDefinition.key == CatalogValue.property_key)
+        .group_by(CatalogMaterial.subsystem, CatalogDefinition.domain)
+    ).all()
+    cells: dict[str, dict[str, int]] = {}
+    for subsystem, domain, count in rows:
+        cells.setdefault(subsystem or "", {})[domain] = count
+    domains = sorted({domain for _, domain, _ in rows})
+    # 값 많은 계통부터 — 미분류("")는 맨 뒤.
+    subsystems = sorted(
+        cells,
+        key=lambda one: (one == "", -sum(cells[one].values())),
+    )
+    return CatalogCoverageOut(domains=domains, subsystems=subsystems, cells=cells)
 
 
 @router.post("/deck/match", response_model=list[DeckMatchRowOut])

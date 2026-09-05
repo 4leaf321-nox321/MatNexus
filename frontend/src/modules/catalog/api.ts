@@ -170,7 +170,20 @@ export const DECK_UNITS = [
   { key: 'mm_n_tonne', label: 'mm · N · tonne (MPa)' },
 ] as const
 
+export type CompareResult = components['schemas']['CatalogCompareOut']
+export type AshbyAxis = components['schemas']['AshbyAxisOut']
+export type AshbyResult = components['schemas']['AshbyOut']
+export type CoverageResult = components['schemas']['CatalogCoverageOut']
+
 export const catalogApi = {
+  compare: (ids: string[]) =>
+    api.get<CompareResult>(`/catalog/compare?ids=${ids.join(',')}`),
+  axes: () => api.get<AshbyAxis[]>('/catalog/axes'),
+  ashby: (x: string, y: string, color: 'category' | 'subsystem') =>
+    api.get<AshbyResult>(
+      `/catalog/ashby?x=${encodeURIComponent(x)}&y=${encodeURIComponent(y)}&color=${color}`
+    ),
+  coverage: () => api.get<CoverageResult>('/catalog/coverage'),
   deckMatch: (text: string) => api.post<DeckMatchRow[]>('/catalog/deck/match', { text }),
   deckBuild: (body: {
     items: { mid: number; catalog_material_id: string }[]
