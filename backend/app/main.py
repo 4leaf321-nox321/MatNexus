@@ -49,6 +49,7 @@ from app.shared.access_log import AccessLogMiddleware
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
 from matcore import extensions
+from matcore.export import dyna as _dyna  # noqa: F401  (LS-DYNA 렌더러를 등록시킨다)
 
 logger = logging.getLogger(__name__)
 
