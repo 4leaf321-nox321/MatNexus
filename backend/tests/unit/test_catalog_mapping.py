@@ -10,9 +10,11 @@ from app.modules.catalog.mapping import (
     CATEGORY_MAP,
     COLUMN_TARGETS,
     PROPERTY_ITEM_MAP,
+    SI_UNIT_EQUIV,
 )
 from app.modules.materials.models import Material
 from app.modules.vocabulary.definitions import BUILTIN_PROPERTY_ITEMS
+from matcore.units import SI_UNITS
 
 
 class Test물성_매핑:
@@ -37,6 +39,36 @@ class Test물성_매핑:
     def test_자리는_셋뿐이다(self) -> None:
         places = {target.place for target in PROPERTY_ITEM_MAP.values()}
         assert places <= {"declared", "column", "measured"}
+
+
+class Test단위_등가:
+    """**값은 양쪽 다 SI 다 — 숫자 변환은 0건이어야 한다.**
+
+    카탈로그 단위 표기(`J/(kg*K)`)와 matcore 정본(`J/(kg.K)`)은 철자만 다르다.
+    채택은 SI 값을 그대로 보내므로(`input_unit` 비움 = 정본 SI), 이 등가가
+    깨지면 — 어느 쪽이 단위를 바꾸면 — **숫자가 조용히 다른 단위로 저장된다.**
+    그것을 여기서 막는다.
+    """
+
+    def test_declared_자리의_단위가_대상_차원의_정본과_같다(self) -> None:
+        dimensions = {value: dimension for value, dimension, *_ in BUILTIN_PROPERTY_ITEMS}
+        for key, target in PROPERTY_ITEM_MAP.items():
+            if target.place != "declared":
+                continue
+            matcore_si = SI_UNITS[dimensions[target.label]]
+            assert SI_UNIT_EQUIV.get(target.mt_unit) == matcore_si, (
+                f"{key}: MT {target.mt_unit!r} 가 {target.label} 차원의 "
+                f"정본 {matcore_si!r} 와 등가가 아니다"
+            )
+
+    def test_column_자리의_단위도_등가다(self) -> None:
+        # density_si 는 kg/m3, poisson_ratio 는 무차원 — 컬럼 이름이 SI 를 못
+        # 박으므로 여기서 못 박는다.
+        expected = {"밀도": SI_UNITS["density"], "포아송비": "1"}
+        for key, target in PROPERTY_ITEM_MAP.items():
+            if target.place != "column":
+                continue
+            assert SI_UNIT_EQUIV.get(target.mt_unit) == expected[target.label], key
 
 
 class Test분류_매핑:

@@ -28,26 +28,44 @@ class Target:
     """우리 쪽 표시 이름 — 기준정보 property_item 값 또는 컬럼의 한글 라벨."""
     place: str
     """declared · column · measured — 위 모듈 주석 참고."""
+    mt_unit: str = "1"
+    """카탈로그 정의(MT taxonomy)의 단위 표기. **값은 양쪽 다 SI 라 숫자 변환은
+    없다** — 표기만 다르다(MT `J/(kg*K)`·`kg/m^3` vs matcore `J/(kg.K)`·`kg/m3`).
+    계약 테스트가 이 표기가 대상 차원의 matcore 정본과 물리적으로 같은 단위인지
+    `SI_UNIT_EQUIV` 로 검사한다."""
 
 
 #: MT 물성 키 → 우리 자리. **MT key 는 안정 id 다**(`domain.name` 꼴) — 이름이
 #: 개명돼도 매핑은 안 깨진다. 우리 쪽 이름 개명(열전도도→열전도율 등)이 확정되면
 #: 이 표의 label 만 따라 바꾼다.
 PROPERTY_ITEM_MAP: dict[str, Target] = {
-    "mechanical.youngs_modulus": Target("탄성계수", "declared"),
-    "mechanical.shear_modulus": Target("전단탄성계수", "declared"),
-    "mechanical.yield_strength": Target("항복강도", "declared"),
-    "mechanical.tensile_strength": Target("인장강도", "declared"),
-    "mechanical.elongation_at_break": Target("연신율", "declared"),
-    "thermal.specific_heat": Target("비열", "declared"),
+    "mechanical.youngs_modulus": Target("탄성계수", "declared", "Pa"),
+    "mechanical.shear_modulus": Target("전단탄성계수", "declared", "Pa"),
+    "mechanical.yield_strength": Target("항복강도", "declared", "Pa"),
+    "mechanical.tensile_strength": Target("인장강도", "declared", "Pa"),
+    "mechanical.elongation_at_break": Target("연신율", "declared", "1"),
+    "thermal.specific_heat": Target("비열", "declared", "J/(kg*K)"),
     # 이름 정비 예정(사용자 결정 2026-09-05): 열전도도→열전도율,
     # 열팽창계수→선팽창계수(CTE). 개명은 기준정보 개명 기계(별칭 흡수)로 별도
     # 진행하고, 확정되면 여기 label 을 따라 바꾼다.
-    "thermal.conductivity": Target("열전도도", "declared"),
-    "thermal.expansion_linear": Target("열팽창계수", "declared"),
+    "thermal.conductivity": Target("열전도도", "declared", "W/(m*K)"),
+    "thermal.expansion_linear": Target("열팽창계수", "declared", "1/K"),
     # 재료의 기본 칸 — 선언 물성 항목이 아니다.
-    "physical.density": Target("밀도", "column"),
-    "mechanical.poisson_ratio": Target("포아송비", "column"),
+    "physical.density": Target("밀도", "column", "kg/m^3"),
+    "mechanical.poisson_ratio": Target("포아송비", "column", "1"),
+}
+
+#: MT 단위 표기 → matcore 정본 표기. **계수는 전부 1 이다** — 양쪽 다 SI 저장이라
+#: 숫자는 그대로 흐르고, 이 표는 「같은 단위인가」 를 검증하는 등가표다. 여기
+#: 없는 표기(HV·ShoreA·전기 차원 등)는 채택 경로에 오르지 못한다.
+SI_UNIT_EQUIV: dict[str, str] = {
+    "Pa": "Pa",
+    "1": "1",
+    "1/K": "1/K",
+    "K": "K",
+    "kg/m^3": "kg/m3",
+    "J/(kg*K)": "J/(kg.K)",
+    "W/(m*K)": "W/(m.K)",
 }
 
 #: 자리 → 검증 근거. column 은 Material 의 실제 컬럼 이름.

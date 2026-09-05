@@ -9,7 +9,11 @@
  * 데이터다(2026-09-06 사용자 결정).
  */
 
+import { PackagePlus } from 'lucide-react'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
+
+import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
 
 import {
   CATEGORY_LABELS,
@@ -23,6 +27,7 @@ import type { CatalogValue } from '@/modules/catalog/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 import {
   Table,
   TableBody,
@@ -73,6 +78,7 @@ export default function CatalogMaterialPage() {
   const { id = '' } = useParams()
   const detail = useResource(() => catalogApi.material(id), [id])
   const item = detail.data
+  const [adopting, setAdopting] = useState(false)
 
   const byDomain = new Map<string, CatalogValue[]>()
   for (const value of item?.values ?? []) {
@@ -92,6 +98,10 @@ export default function CatalogMaterialPage() {
 
       {item && (
         <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => setAdopting(true)} disabled={item.values.length === 0}>
+            <PackagePlus className="size-4" />
+            사내 재료에 채우기
+          </Button>
           <Badge variant="outline">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
           <Badge variant="outline">{item.subsystem ?? '미분류'}</Badge>
           {item.role && <Badge variant="secondary">{item.role}</Badge>}
@@ -168,6 +178,8 @@ export default function CatalogMaterialPage() {
           </div>
         </section>
       ))}
+
+      {item && <AdoptDialog detail={item} open={adopting} onClose={() => setAdopting(false)} />}
     </div>
   )
 }

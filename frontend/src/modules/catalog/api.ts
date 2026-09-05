@@ -107,6 +107,53 @@ export function fmtConditions(conditions: Record<string, unknown> | null | undef
   return `${parts.slice(0, 4).join(' · ')} 외 ${parts.length - 4}`
 }
 
+/**
+ * 채택 가능한 물성 — backend catalog/mapping.py 의 PROPERTY_ITEM_MAP 과 짝.
+ *
+ * **단위 변환은 없다.** 카탈로그 값은 SI 로 저장돼 있고, 선언 물성은
+ * `input_unit` 을 비우면 정본 SI 로 받는다 — 숫자가 그대로 흐른다. 표기 등가
+ * (`J/(kg*K)` ↔ `J/(kg.K)`)는 백엔드 계약 테스트가 지킨다. 이 표에 없는
+ * 물성(비SI 눈금·matcore 밖 차원)은 채택 목록에 오르지 않는다.
+ */
+export const ADOPTABLE: Record<
+  string,
+  { item: string; place: 'declared' } | { item: string; place: 'column'; field: 'density' | 'poisson_ratio' }
+> = {
+  'mechanical.youngs_modulus': { item: '탄성계수', place: 'declared' },
+  'mechanical.shear_modulus': { item: '전단탄성계수', place: 'declared' },
+  'mechanical.yield_strength': { item: '항복강도', place: 'declared' },
+  'mechanical.tensile_strength': { item: '인장강도', place: 'declared' },
+  'mechanical.elongation_at_break': { item: '연신율', place: 'declared' },
+  'thermal.specific_heat': { item: '비열', place: 'declared' },
+  'thermal.conductivity': { item: '열전도도', place: 'declared' },
+  'thermal.expansion_linear': { item: '열팽창계수', place: 'declared' },
+  'physical.density': { item: '밀도', place: 'column', field: 'density' },
+  'mechanical.poisson_ratio': { item: '포아송비', place: 'column', field: 'poisson_ratio' },
+}
+
+/** 카탈로그 출처 종류 → 선언 물성의 source 어휘. */
+export function adoptionSource(value: CatalogValue): string {
+  if (value.quality_tier === 4 || value.method === 'estimated' || value.method === 'computed') {
+    return 'estimate'
+  }
+  const kind = value.source?.kind
+  if (kind === 'datasheet') return 'datasheet'
+  if (kind === 'standard') return 'standard'
+  return 'literature'
+}
+
+/** 채택 시 값에 붙일 참고문헌 문자열 — 제목·연도·DOI 까지, 등급 표기와 함께. */
+export function adoptionReference(value: CatalogValue): string {
+  const source = value.source
+  const parts = [
+    source?.title ?? source?.publisher ?? '카탈로그',
+    source?.year ? String(source.year) : null,
+    source?.doi ? `doi:${source.doi}` : null,
+    value.source_detail,
+  ].filter(Boolean)
+  return `${parts.join(' · ')} (문헌 물성 카탈로그, ${TIER_LABELS[value.quality_tier] ?? `t${value.quality_tier}`})`
+}
+
 export const catalogApi = {
   summary: () => api.get<CatalogSummary>('/catalog/summary'),
   materials: (params: {

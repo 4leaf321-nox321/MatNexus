@@ -1,0 +1,196 @@
+/**
+ * 카탈로그에서 채우기 — **병합이 정확해야 한다.**
+ *
+ *   기존 선언 줄은 살아남는다        통째 교체 PATCH 라 되보내야 한다
+ *   온도별 값은 한 줄의 점들이 된다    CTE 2개 → 항목 1줄 · 점 2개
+ *   SI 그대로 · input_unit 비움      변환 규칙이 화면에 생기면 안 된다
+ *   출처·등급이 따라간다             reference 에 문헌·tier 표기
+ *   못 담는 값은 목록에 없다          음의 포아송비(서버 제약 밖)
+ */
+
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
+import type { CatalogMaterialDetail } from '@/modules/catalog/api'
+
+const get = vi.fn()
+const patch = vi.fn()
+
+vi.mock('@/shared/api/client', () => ({
+  api: {
+    get: (...args: unknown[]) => get(...args),
+    patch: (...args: unknown[]) => patch(...args),
+  },
+}))
+
+function value(over: Record<string, unknown>) {
+  return {
+    id: crypto.randomUUID(),
+    property_name: '',
+    domain: 'mechanical',
+    symbol: null,
+    value_text: null,
+    unit: 'Pa',
+    uncertainty: null,
+    conditions: null,
+    method: 'measured',
+    quality_tier: 1,
+    source: {
+      id: crypto.randomUUID(),
+      kind: 'journal',
+      doi: '10.1/x',
+      url: null,
+      title: '어느 논문',
+      year: 2020,
+      publisher: null,
+      license: null,
+    },
+    source_detail: null,
+    notes: null,
+    representative: true,
+    n_candidates: 1,
+    separated_by: null,
+    ...over,
+  }
+}
+
+const DETAIL = {
+  id: crypto.randomUUID(),
+  name: 'SUS304',
+  material_code: null,
+  category: 'metal',
+  description: null,
+  subsystem: null,
+  role: null,
+  manufacturer: null,
+  material_class: null,
+  grade: null,
+  attributes: {},
+  values: [
+    value({
+      property_key: 'mechanical.youngs_modulus',
+      value_num: 1.93e11,
+      conditions: { temperature_k: 296.15 },
+    }),
+    value({
+      property_key: 'thermal.expansion_linear',
+      value_num: 1.7e-5,
+      unit: '1/K',
+      conditions: { temperature_k: 373.15 },
+      n_candidates: 2,
+    }),
+    value({
+      property_key: 'thermal.expansion_linear',
+      value_num: 1.9e-5,
+      unit: '1/K',
+      conditions: { temperature_k: 473.15 },
+      representative: false,
+      separated_by: '온도',
+      n_candidates: 2,
+    }),
+    value({ property_key: 'physical.density', value_num: 7930, unit: 'kg/m^3' }),
+    // 음의 포아송비 — 서버 제약(0 ≤ ν < 0.5) 밖이라 목록에 오르면 안 된다.
+    value({ property_key: 'mechanical.poisson_ratio', value_num: -0.2, unit: '1' }),
+  ],
+} as unknown as CatalogMaterialDetail
+
+const TARGET = {
+  id: '33333333-3333-3333-3333-333333333333',
+  record_name: 'SGARC440 1.2t',
+  alias: null,
+  density: null,
+  poisson_ratio: null,
+  declared_properties: [
+    {
+      item: '비열',
+      points: [{ temperature_k: null, value_si: 460, value: 460 }],
+      input_unit: null,
+      scale: null,
+      source: 'literature',
+      reference: '기존 핸드북',
+      note: null,
+    },
+  ],
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  get.mockResolvedValue({ total: 1, limit: 8, offset: 0, items: [TARGET] })
+  patch.mockResolvedValue(TARGET)
+})
+
+async function pickTarget() {
+  render(<AdoptDialog detail={DETAIL} open onClose={() => {}} />)
+  await userEvent.click(await screen.findByRole('button', { name: /SGARC440/ }))
+}
+
+describe('병합이 정확해야 한다', () => {
+  it('기존 줄을 되보내고, 온도별 값은 한 줄의 점들로 담는다', async () => {
+    await pickTarget()
+    // CTE 대안(473.15K)도 골라 넣는다 — 온도점이 둘이 된다.
+    const boxes = screen.getAllByRole('checkbox')
+    for (const box of boxes) {
+      if (!(box as HTMLInputElement).checked) await userEvent.click(box)
+    }
+    await userEvent.click(screen.getByRole('button', { name: /담기/ }))
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    const [path, body] = patch.mock.calls[0] as [string, Record<string, unknown>]
+    expect(path).toBe(`/materials/${TARGET.id}`)
+
+    const rows = body.declared_properties as Array<Record<string, unknown>>
+    // 기존 비열 줄이 살아 있다.
+    expect(rows.some((row) => row.item === '비열' && row.reference === '기존 핸드북')).toBe(true)
+    // CTE 는 항목 1줄 · 온도점 2개(오름차순).
+    const cte = rows.find((row) => row.item === '열팽창계수') as {
+      points: Array<{ temperature_k: number | null; value: number }>
+      input_unit?: string | null
+      reference: string
+    }
+    expect(cte.points).toEqual([
+      { temperature_k: 373.15, value: 1.7e-5 },
+      { temperature_k: 473.15, value: 1.9e-5 },
+    ])
+    // input_unit 비움 = 정본 SI — 변환 없이 그대로.
+    expect(cte.input_unit).toBeUndefined()
+    expect(cte.reference).toContain('어느 논문')
+    expect(cte.reference).toContain('실측')
+    // 밀도는 기본 칸으로, SI 단위 명시.
+    expect(body.density).toBe(7930)
+    expect(body.density_unit).toBe('kg/m3')
+    // 음의 포아송비는 애초에 목록에 없었으니 patch 에도 없다.
+    expect(body.poisson_ratio).toBeUndefined()
+  })
+
+  it('기본 선택은 대표값이고, 못 담는 값(음의 포아송비)은 목록에 없다', async () => {
+    await pickTarget()
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+    // 대표 3개(영률·CTE 373K·밀도)만 기본 체크, CTE 대안은 해제 상태.
+    expect(boxes).toHaveLength(4)
+    expect(boxes.filter((box) => box.checked)).toHaveLength(3)
+    expect(screen.queryByText('포아송비')).toBeNull()
+  })
+
+  it('이미 있는 항목이면 「담으면 교체」 를 말한다', async () => {
+    const withYoungs = {
+      ...TARGET,
+      declared_properties: [
+        ...TARGET.declared_properties,
+        {
+          item: '탄성계수',
+          points: [{ temperature_k: null, value_si: 2e11, value: 200 }],
+          input_unit: 'GPa',
+          scale: null,
+          source: 'datasheet',
+          reference: '밀시트',
+          note: null,
+        },
+      ],
+    }
+    get.mockResolvedValue({ total: 1, limit: 8, offset: 0, items: [withYoungs] })
+    await pickTarget()
+    expect(await screen.findByText(/이미 있음 — 담으면 교체/)).toBeInTheDocument()
+  })
+})
