@@ -125,6 +125,39 @@ describe('Ashby', () => {
     expect(await screen.findByText(/1종 표시/)).toBeInTheDocument()
     expect(screen.getByText(/0·음수 1점 제외/)).toBeInTheDocument()
   })
+
+  it('양 축에 물성 이름과 단위가 적힌다', async () => {
+    axes.mockResolvedValue([
+      {
+        key: 'mechanical.youngs_modulus',
+        name: '영률',
+        domain: 'mechanical',
+        unit: 'Pa',
+        material_count: 100,
+      },
+      {
+        key: 'physical.density',
+        name: '밀도',
+        domain: 'physical',
+        unit: 'kg/m^3',
+        material_count: 90,
+      },
+    ])
+    ashby.mockResolvedValue({
+      x_unit: 'Pa',
+      y_unit: 'kg/m^3',
+      points: [{ id: A, name: 'SUS304', group: 'metal', x: 1.93e11, y: 7930 }],
+    })
+    render(
+      <MemoryRouter
+        initialEntries={['/catalog/ashby?x=mechanical.youngs_modulus&y=physical.density']}
+      >
+        <CatalogAshbyPage />
+      </MemoryRouter>
+    )
+    expect(await screen.findByText('영률 (Pa)')).toBeInTheDocument()
+    expect(screen.getByText('밀도 (kg/m^3)')).toBeInTheDocument()
+  })
 })
 
 describe('커버리지', () => {

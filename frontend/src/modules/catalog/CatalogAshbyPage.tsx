@@ -19,8 +19,9 @@ import { PageHeader } from '@/shared/components/PageHeader'
 import { useResource } from '@/shared/hooks/useResource'
 
 const WIDTH = 860
-const HEIGHT = 520
-const PAD = { left: 64, right: 16, top: 12, bottom: 44 }
+const HEIGHT = 480
+//: 왼쪽·아래 여백에 축 라벨(물성 이름 + 단위)이 들어간다.
+const PAD = { left: 88, right: 16, top: 12, bottom: 64 }
 
 //: 그룹 색 — 색약 안전(Okabe–Ito) 팔레트.
 const PALETTE = [
@@ -59,11 +60,15 @@ function Scatter({
   data,
   logX,
   logY,
+  xLabel,
+  yLabel,
   onPick,
 }: {
   data: AshbyResult
   logX: boolean
   logY: boolean
+  xLabel: string
+  yLabel: string
   onPick: (id: string) => void
 }) {
   const visible = data.points.filter(
@@ -101,12 +106,14 @@ function Scatter({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-md border">
+      <div className="rounded-md border">
+        {/* **한 화면에 들어온다.** 뷰포트 높이에 맞춰 줄어들고(viewBox 비율 유지),
+            머리글·조작줄·범례 몫을 뺀 만큼만 차지한다 — 지도는 스크롤 없이 한눈이다. */}
         <svg
           role="img"
           aria-label="Ashby 산점도"
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          className="min-w-[640px]"
+          className="h-[max(320px,calc(100vh-380px))] w-full"
         >
           {xTicks.map((tick) => (
             <g key={`x${tick}`}>
@@ -152,6 +159,28 @@ function Scatter({
               </text>
             </g>
           ))}
+          {/* 축 라벨 — 단위가 없는 지도는 숫자가 아니라 그림이다. */}
+          <text
+            x={PAD.left + plotW / 2}
+            y={HEIGHT - 8}
+            textAnchor="middle"
+            fontSize={13}
+            fontWeight={600}
+            fill="currentColor"
+          >
+            {xLabel}
+          </text>
+          <text
+            x={14}
+            y={PAD.top + plotH / 2}
+            textAnchor="middle"
+            fontSize={13}
+            fontWeight={600}
+            fill="currentColor"
+            transform={`rotate(-90 14 ${PAD.top + plotH / 2})`}
+          >
+            {yLabel}
+          </text>
           {visible.map((point) => (
             <circle
               key={point.id}
@@ -219,6 +248,12 @@ export default function CatalogAshbyPage() {
     byDomain.set(axis.domain, list)
   }
 
+  /** 축 라벨 — 「물성 이름 (단위)」. 무차원(`1`)은 단위를 생략한다. */
+  function axisLabel(key: string, unit: string | null | undefined): string {
+    const name = (axes.data ?? []).find((axis) => axis.key === key)?.name ?? key
+    return unit && unit !== '1' ? `${name} (${unit.replaceAll('*', '·')})` : name
+  }
+
   const axisSelect = (label: string, value: string, key: string) => (
     <select
       aria-label={label}
@@ -281,6 +316,8 @@ export default function CatalogAshbyPage() {
             data={chart.data}
             logX={logX}
             logY={logY}
+            xLabel={axisLabel(x, chart.data.x_unit)}
+            yLabel={axisLabel(y, chart.data.y_unit)}
             onPick={(id) => navigate(`/catalog/${id}`)}
           />
         )
