@@ -9,11 +9,12 @@
  * 데이터다(2026-09-06 사용자 결정).
  */
 
-import { PackagePlus } from 'lucide-react'
+import { FilePlus2, PackagePlus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
+import { CreateMaterialDialog } from '@/modules/catalog/CreateMaterialDialog'
 
 import {
   CATEGORY_LABELS,
@@ -89,6 +90,7 @@ export default function CatalogMaterialPage() {
   )
   const item = detail.data
   const [adopting, setAdopting] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [units, setUnits] = useUnitMode()
 
   if (stale) {
@@ -121,6 +123,10 @@ export default function CatalogMaterialPage() {
           <Button size="sm" onClick={() => setAdopting(true)} disabled={item.values.length === 0}>
             <PackagePlus className="size-4" />
             사내 재료에 채우기
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
+            <FilePlus2 className="size-4" />
+            사내 재료로 등록
           </Button>
           <Badge variant="outline">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
           <Badge variant="outline">{item.subsystem ?? '미분류'}</Badge>
@@ -212,6 +218,9 @@ export default function CatalogMaterialPage() {
       ))}
 
       {item && <AdoptDialog detail={item} open={adopting} onClose={() => setAdopting(false)} />}
+      {item && (
+        <CreateMaterialDialog detail={item} open={creating} onClose={() => setCreating(false)} />
+      )}
     </div>
   )
 }
