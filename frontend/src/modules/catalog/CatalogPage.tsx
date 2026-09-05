@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { CATEGORY_LABELS, catalogApi } from '@/modules/catalog/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -30,8 +30,11 @@ const STEP = 50
 const MAX = 200
 
 export default function CatalogPage() {
-  const [typed, setTyped] = useState('')
-  const [q, setQ] = useState('')
+  // 재료 목록의 「문헌 물성 전부 보기」 가 검색어를 들고 들어온다.
+  const [params] = useSearchParams()
+  const initial = params.get('q') ?? ''
+  const [typed, setTyped] = useState(initial)
+  const [q, setQ] = useState(initial)
   const [subsystem, setSubsystem] = useState<string | undefined>()
   const [category, setCategory] = useState<string | undefined>()
   const [limit, setLimit] = useState(STEP)
