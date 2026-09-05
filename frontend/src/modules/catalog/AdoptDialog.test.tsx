@@ -115,9 +115,28 @@ const TARGET = {
   ],
 }
 
+/** 기준정보의 물성 항목 층 — 항복강도·인장강도는 시료에 붙는다(실물 규율). */
+const PROPERTY_ITEMS = [
+  { item: '탄성계수', level: '재료' },
+  { item: '전단탄성계수', level: '재료' },
+  { item: '열팽창계수', level: '재료' },
+  { item: '열전도도', level: '재료' },
+  { item: '비열', level: '재료' },
+  { item: '항복강도', level: '시료' },
+  { item: '인장강도', level: '시료' },
+]
+
+function mockGets(searchItems: unknown[] = [TARGET]) {
+  get.mockImplementation((url: unknown) =>
+    String(url).startsWith('/materials/property-items')
+      ? Promise.resolve(PROPERTY_ITEMS)
+      : Promise.resolve({ total: 1, limit: 8, offset: 0, items: searchItems })
+  )
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  get.mockResolvedValue({ total: 1, limit: 8, offset: 0, items: [TARGET] })
+  mockGets()
   patch.mockResolvedValue(TARGET)
 })
 
@@ -189,8 +208,37 @@ describe('병합이 정확해야 한다', () => {
         },
       ],
     }
-    get.mockResolvedValue({ total: 1, limit: 8, offset: 0, items: [withYoungs] })
+    mockGets([withYoungs])
     await pickTarget()
     expect(await screen.findByText(/이미 있음 — 담으면 교체/)).toBeInTheDocument()
+  })
+
+  it('시료 층 항목(항복강도)은 잠기고, 담기에서 통째로 빠진다', async () => {
+    // 실측(2026-09-06): 항복강도 하나가 섞이자 PATCH 전체가 422 — 9건이 무산됐다.
+    const withYield = {
+      ...DETAIL,
+      values: [
+        ...DETAIL.values,
+        value({ property_key: 'mechanical.yield_strength', value_num: 2.05e8 }),
+      ],
+    } as unknown as CatalogMaterialDetail
+    render(<AdoptDialog detail={withYield} open onClose={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: /SGARC440/ }))
+
+    expect(
+      await screen.findByText(/시료에 붙는 물성 — 재료에는 못 담습니다/)
+    ).toBeInTheDocument()
+    const row = screen.getByText('항복강도').closest('label') as HTMLElement
+    const box = row.querySelector('input') as HTMLInputElement
+    expect(box.disabled).toBe(true)
+    expect(box.checked).toBe(false)
+
+    await userEvent.click(screen.getByRole('button', { name: /담기/ }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    const [, body] = patch.mock.calls[0] as [string, Record<string, unknown>]
+    const rows = body.declared_properties as Array<Record<string, unknown>>
+    expect(rows.some((one) => one.item === '항복강도')).toBe(false)
+    // 나머지 재료 층 항목은 그대로 담긴다.
+    expect(rows.some((one) => one.item === '열팽창계수')).toBe(true)
   })
 })

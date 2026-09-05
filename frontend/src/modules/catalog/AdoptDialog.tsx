@@ -14,6 +14,13 @@
  *
  * PATCH 의 declared_properties 는 전체 교체다 — 기존 줄을 그대로 되보내고,
  * 담는 항목만 더하거나(없던 것) 바꾼다(이미 있던 것 — 기본은 안 담는다).
+ *
+ * ## 항목의 층을 기준정보에 묻는다
+ *
+ * 항복강도·인장강도는 기준정보에서 **시료에 붙는 물성**이다(로트마다 달라서).
+ * 재료 PATCH 는 재료 층 항목만 받으므로, 한 건이라도 섞이면 **요청 전체가
+ * 422 로 거부돼 아무것도 안 담긴다** — 실측(2026-09-06, SAC305 9건 담기가
+ * 통째로 무산). 그래서 층이 다른 항목은 숨기지 않고 이유와 함께 잠근다.
  */
 
 import { Loader2, PackagePlus } from 'lucide-react'
@@ -45,6 +52,7 @@ import { Input } from '@/shared/components/ui/input'
 type MaterialOut = components['schemas']['MaterialOut']
 type MaterialPage = components['schemas']['Page_MaterialOut_']
 type DeclaredIn = components['schemas']['DeclaredPropertyIn']
+type PropertyItem = components['schemas']['PropertyItemOut']
 
 /** 담을 수 있는 값인가 — 매핑에 있고, 수치이며, 서버 제약을 넘지 않는 것. */
 function adoptable(value: CatalogValue): boolean {
@@ -96,9 +104,46 @@ export function AdoptDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [doneCount, setDoneCount] = useState<number | null>(null)
+  const [levels, setLevels] = useState<Map<string, string> | null>(null)
   const [units] = useUnitMode()
 
   const candidates = detail.values.filter(adoptable)
+
+  // 항목의 층은 기준정보가 정한다 — 코드에 박으면 부서가 층을 옮긴 날 어긋난다.
+  useEffect(() => {
+    if (!open) return
+    api
+      .get<PropertyItem[]>('/materials/property-items')
+      .then((items) => setLevels(new Map(items.map((one) => [one.item, one.level]))))
+      // 못 읽으면 잠그지 않는다 — 서버 검증이 최종 방어라 조용히 틀리지는 않는다.
+      .catch(() => setLevels(null))
+  }, [open])
+
+  /** 재료에 못 담는 항목인가 — 담으면 요청 전체가 거부되므로 미리 잠근다. */
+  function blockedReason(value: CatalogValue): string | null {
+    const slot = ADOPTABLE[value.property_key]
+    if (!slot || slot.place !== 'declared' || levels === null) return null
+    const level = levels.get(slot.item)
+    if (level === undefined) return "기준정보 '물성 항목' 축에 없어 못 담습니다"
+    if (level !== '재료') return `${level}에 붙는 물성 — 재료에는 못 담습니다`
+    return null
+  }
+
+  // 층 정보가 도착하면 기본 선택에서 잠긴 항목을 뺀다(fixedTarget 은 층 정보보다
+  // 먼저 기본 선택을 만든다).
+  useEffect(() => {
+    if (levels === null) return
+    setPicked((now) => {
+      const next = new Set(
+        [...now].filter((id) => {
+          const found = candidates.find((one) => one.id === id)
+          return found !== undefined && blockedReason(found) === null
+        })
+      )
+      return next.size === now.size ? now : next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 층 정보 도착 시 한 번이면 된다
+  }, [levels])
 
   useEffect(() => {
     if (!open) {
@@ -165,7 +210,9 @@ export function AdoptDialog({
     setBusy(true)
     setError(null)
     try {
-      const chosen = candidates.filter((value) => picked.has(value.id))
+      const chosen = candidates.filter(
+        (value) => picked.has(value.id) && blockedReason(value) === null
+      )
 
       // 선언 항목별로 묶는다 — 항목 하나가 온도점 여러 개를 든다.
       const byItem = new Map<string, CatalogValue[]>()
@@ -241,8 +288,6 @@ export function AdoptDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <ErrorNotice error={error} />
-
           {doneCount !== null ? (
             <p className="text-sm">
               <b className="text-emerald-700 dark:text-emerald-500">담았습니다.</b> {doneCount}건이
@@ -298,15 +343,19 @@ export function AdoptDialog({
                 {candidates.map((value) => {
                   const slot = ADOPTABLE[value.property_key]
                   const already = taken(value)
+                  const blocked = blockedReason(value)
                   return (
                     <label
                       key={value.id}
-                      className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                        blocked ? 'opacity-70' : ''
+                      }`}
                     >
                       <input
                         type="checkbox"
                         className="accent-primary size-4"
-                        checked={picked.has(value.id)}
+                        disabled={blocked !== null}
+                        checked={blocked === null && picked.has(value.id)}
                         onChange={(event) => {
                           const checked = event.target.checked
                           setPicked((now) => {
@@ -326,10 +375,16 @@ export function AdoptDialog({
                         {value.representative && value.n_candidates > 1 && ' · 대표값'}
                         {!value.representative && ' · 대안'}
                       </span>
-                      {already && (
+                      {blocked ? (
                         <span className="text-xs text-amber-700 dark:text-amber-500">
-                          이미 있음 — 담으면 교체
+                          {blocked}
                         </span>
+                      ) : (
+                        already && (
+                          <span className="text-xs text-amber-700 dark:text-amber-500">
+                            이미 있음 — 담으면 교체
+                          </span>
+                        )
                       )}
                     </label>
                   )
@@ -337,6 +392,10 @@ export function AdoptDialog({
               </div>
             </>
           )}
+
+          {/* 오류는 담기 버튼 바로 위에 — 목록이 길면 상단은 스크롤 밖이라
+              사람이 실패를 모른 채 닫는다(실측 2026-09-06). */}
+          <ErrorNotice error={error} />
         </div>
 
         <DialogFooter>
