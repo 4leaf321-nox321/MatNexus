@@ -14,6 +14,12 @@ from app.jobs.models import Job
 from app.modules.accounts.models import User
 from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
+from app.modules.catalog.models import (
+    CatalogDefinition,
+    CatalogMaterial,
+    CatalogSource,
+    CatalogValue,
+)
 from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.guide.models import (
@@ -48,6 +54,10 @@ from app.modules.workspaces.models import Workspace, WorkspaceMember
 __all__ = [
     "AccessLog",
     "Base",
+    "CatalogDefinition",
+    "CatalogMaterial",
+    "CatalogSource",
+    "CatalogValue",
     "Curve",
     "EnsembleResult",
     "ExportProfile",
