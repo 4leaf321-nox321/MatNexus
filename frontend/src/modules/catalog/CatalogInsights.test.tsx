@@ -155,8 +155,9 @@ describe('Ashby', () => {
         <CatalogAshbyPage />
       </MemoryRouter>
     )
+    // 단위는 시스템 철자다 — kg/m^3 이 아니라 kg/m3 (2026-09-06 사용자 요청).
     expect(await screen.findByText('영률 (Pa)')).toBeInTheDocument()
-    expect(screen.getByText('밀도 (kg/m^3)')).toBeInTheDocument()
+    expect(screen.getByText('밀도 (kg/m3)')).toBeInTheDocument()
   })
 })
 

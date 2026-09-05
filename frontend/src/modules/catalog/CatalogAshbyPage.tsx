@@ -12,7 +12,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { CATEGORY_LABELS, DOMAIN_LABELS, catalogApi } from '@/modules/catalog/api'
+import { CATEGORY_LABELS, DOMAIN_LABELS, catalogApi, systemUnit } from '@/modules/catalog/api'
 import type { AshbyResult } from '@/modules/catalog/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -248,10 +248,10 @@ export default function CatalogAshbyPage() {
     byDomain.set(axis.domain, list)
   }
 
-  /** 축 라벨 — 「물성 이름 (단위)」. 무차원(`1`)은 단위를 생략한다. */
+  /** 축 라벨 — 「물성 이름 (단위)」, 단위는 시스템 철자. 무차원(`1`)은 생략. */
   function axisLabel(key: string, unit: string | null | undefined): string {
     const name = (axes.data ?? []).find((axis) => axis.key === key)?.name ?? key
-    return unit && unit !== '1' ? `${name} (${unit.replaceAll('*', '·')})` : name
+    return unit && unit !== '1' ? `${name} (${systemUnit(unit)})` : name
   }
 
   const axisSelect = (label: string, value: string, key: string) => (
@@ -267,7 +267,8 @@ export default function CatalogAshbyPage() {
           {list.map((axis) => (
             <option key={axis.key} value={axis.key}>
               {axis.name}
-              {axis.unit && axis.unit !== '1' ? ` (${axis.unit})` : ''} · {axis.material_count}종
+              {axis.unit && axis.unit !== '1' ? ` (${systemUnit(axis.unit)})` : ''} ·{' '}
+              {axis.material_count}종
             </option>
           ))}
         </optgroup>

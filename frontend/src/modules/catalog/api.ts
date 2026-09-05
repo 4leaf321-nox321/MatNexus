@@ -54,8 +54,18 @@ export const DOMAIN_LABELS: Record<string, string> = {
 }
 
 /**
+ * 단위를 시스템 철자로 — MT `kg/m^3`·`J/(kg*K)` 를 matcore 정본 스타일
+ * `kg/m3`·`J/(kg.K)` 로 적는다(2026-09-06 사용자 요청). **표기만이다** — 저장은
+ * 원본 그대로(무손실)고, 이 변환은 지수 캐럿 제거·곱 기호 통일이라 물리량이
+ * 바뀌지 않는다. 시스템에 없는 눈금(HV·ShoreA)도 스타일만 따라간다.
+ */
+export function systemUnit(unit: string): string {
+  return unit.replaceAll('^', '').replaceAll('*', '.')
+}
+
+/**
  * 값 표기 — 공학 표기. 아주 크거나 작은 값은 지수, 나머지는 유효숫자 5자리에서
- * 끝 0을 지운다. 단위의 `*` 는 `·` 로, 무차원(`1`)은 숨긴다.
+ * 끝 0을 지운다. 단위는 시스템 철자로, 무차원(`1`)은 숨긴다.
  */
 export function fmtValue(value: number | null | undefined, unit?: string | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
@@ -64,7 +74,7 @@ export function fmtValue(value: number | null | undefined, unit?: string | null)
     magnitude !== 0 && (magnitude >= 1e5 || magnitude < 1e-3)
       ? value.toExponential(3)
       : String(Number(value.toPrecision(5)))
-  const pretty = unit && unit !== '1' ? ` ${unit.replaceAll('*', '·')}` : ''
+  const pretty = unit && unit !== '1' ? ` ${systemUnit(unit)}` : ''
   return `${number}${pretty}`
 }
 
