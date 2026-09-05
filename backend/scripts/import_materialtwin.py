@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import app.all_models  # noqa: F401  (DB 를 만지는 스크립트의 규칙)
 from app.database import SessionLocal
 from app.modules.catalog import importer
+from app.modules.metrology import importer as metrology_importer
 
 
 def main() -> int:
@@ -35,6 +36,10 @@ def main() -> int:
     db = SessionLocal()
     try:
         report = importer.run(db, args.db)
+        # 측정법은 카탈로그 다음이다 — 능력의 property_key 가 정의를 가리킨다.
+        metrology = metrology_importer.run(db, args.db)
+        report.tables.update(metrology.tables)
+        report.problems.extend(metrology.problems)
         print(report.line())
         if report.problems:
             print("\n검산 실패 — 적재하지 않습니다:")

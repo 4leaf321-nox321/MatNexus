@@ -11,16 +11,15 @@
               개발 DB 를 운영으로 복사하는 경로는 만들지 않는다 — 개발 DB 에는
               테스트 임시 데이터가 섞여 있다.
 
+공통 부품(스키마 대조·멱등 upsert·수치 비교)은 `app/shared/mt_import.py` 에
+산다 — 측정법 이관기와 나눠 쓰는데 모듈끼리는 직접 못 부르기 때문이다.
 쓰는 쪽은 `scripts/import_materialtwin.py` (드라이런이 기본, `--apply` 라야
 커밋한다 — 원본 파이프라인의 규율 그대로).
 """
 
 from __future__ import annotations
 
-import json
 import sqlite3
-from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +32,22 @@ from app.modules.catalog.models import (
     CatalogMaterial,
     CatalogSource,
     CatalogValue,
+)
+from app.shared.mt_import import (
+    ImportRefused as ImportRefused,  # 재수출 — 테스트·스크립트가 여기서 부른다
+)
+from app.shared.mt_import import (
+    Report as Report,
+)
+from app.shared.mt_import import (
+    TableReport as TableReport,
+)
+from app.shared.mt_import import (
+    check_schema,
+    existing,
+    parse_dt,
+    parse_json,
+    upsert,
 )
 
 #: 원본 표의 컬럼 전수 — 여기 없는 컬럼이 나타나면 거부한다.
@@ -109,50 +124,8 @@ EXPECTED_COLUMNS: dict[str, frozenset[str]] = {
 FACET_KEYS = ("subsystem", "role", "manufacturer", "material_class", "grade")
 
 
-class ImportRefused(Exception):
-    """이관을 시작할 수 없는 상태 — 파일이 아는 스키마가 아니다."""
-
-
-@dataclass
-class TableReport:
-    added: int = 0
-    updated: int = 0
-    unchanged: int = 0
-
-    @property
-    def total(self) -> int:
-        return self.added + self.updated + self.unchanged
-
-
-@dataclass
-class Report:
-    tables: dict[str, TableReport] = field(default_factory=dict)
-    problems: list[str] = field(default_factory=list)
-
-    def line(self) -> str:
-        parts = [
-            f"{name}: 추가 {t.added} · 갱신 {t.updated} · 동일 {t.unchanged}"
-            for name, t in self.tables.items()
-        ]
-        return "\n".join(parts)
-
-
 def _check_schema(con: sqlite3.Connection) -> None:
-    """컬럼 전수 대조 — 모르는 컬럼도, 빠진 컬럼도 거부."""
-    for table, expected in EXPECTED_COLUMNS.items():
-        rows = con.execute(f'PRAGMA table_info("{table}")').fetchall()
-        if not rows:
-            raise ImportRefused(f"원본에 {table} 표가 없습니다 — 카탈로그 DB 가 맞습니까?")
-        actual = {row[1] for row in rows}
-        extra = actual - expected
-        missing = expected - actual
-        if extra or missing:
-            raise ImportRefused(
-                f"{table} 표의 컬럼이 아는 스키마와 다릅니다 — "
-                f"모르는 컬럼 {sorted(extra)}, 빠진 컬럼 {sorted(missing)}. "
-                "새 스냅샷에 컬럼이 생겼다면 매핑을 늘린 뒤 다시 돌리세요 — "
-                "조용히 버리는 것보다 멈추는 것이 낫습니다."
-            )
+    check_schema(con, EXPECTED_COLUMNS)
     stray = con.execute("select count(*) from material where owner_id is not null").fetchone()[
         0
     ]
@@ -161,72 +134,6 @@ def _check_schema(con: sqlite3.Connection) -> None:
             f"material.owner_id 가 채워진 행이 {stray}건 — 원본에서 안 쓰던 자리에 "
             "값이 생겼습니다. 무엇인지 확인 전에는 나르지 않습니다."
         )
-
-
-def _dt(raw: Any) -> datetime | None:
-    if raw is None or raw == "":
-        return None
-    return datetime.fromisoformat(str(raw))
-
-
-def _json(raw: Any) -> Any:
-    if raw is None or raw == "":
-        return None
-    if isinstance(raw, (dict, list)):
-        return raw
-    return json.loads(raw)
-
-
-def _same(a: Any, b: Any) -> bool:
-    """숫자는 수치로 비교한다 — PG JSONB 는 `1e+23` 을 정확한 정수(10²³)로
-    정규화해 돌려주는데, 파이썬 float 1e23 과는 `==` 가 어긋난다(이진 표현 차).
-    이 차이를 「갱신」 으로 읽으면 재실행마다 같은 행을 다시 쓴다 — 실측
-    (springer2020 Prony 조건의 tau_s=1e23)에서 잡았다."""
-    if (
-        isinstance(a, (int, float))
-        and isinstance(b, (int, float))
-        and not isinstance(a, bool)
-        and not isinstance(b, bool)
-    ):
-        return float(a) == float(b)
-    if isinstance(a, dict) and isinstance(b, dict):
-        return a.keys() == b.keys() and all(_same(a[key], b[key]) for key in a)
-    if isinstance(a, list) and isinstance(b, list):
-        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b, strict=True))
-    return bool(a == b)
-
-
-def _existing(db: Session, model: Any) -> dict[int, Any]:
-    """mt_id → 행 선적재 — 42,209건에 행마다 SELECT 를 치지 않는다."""
-    return {row.mt_id: row for row in db.scalars(select(model))}
-
-
-def _upsert(
-    db: Session,
-    cache: dict[int, Any],
-    model: Any,
-    mt_id: int,
-    fields: dict[str, Any],
-    report: TableReport,
-) -> Any:
-    """mt_id 로 대응행을 찾아 넣거나 갱신한다. 지우지 않는다."""
-    row = cache.get(mt_id)
-    if row is None:
-        row = model(mt_id=mt_id, **fields)
-        db.add(row)
-        cache[mt_id] = row
-        report.added += 1
-        return row
-    changed = False
-    for name, value in fields.items():
-        if not _same(getattr(row, name), value):
-            setattr(row, name, value)
-            changed = True
-    if changed:
-        report.updated += 1
-    else:
-        report.unchanged += 1
-    return row
 
 
 def run(db: Session, sqlite_path: str | Path) -> Report:
@@ -244,9 +151,9 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
         report = Report()
 
         defs = report.tables.setdefault("정의", TableReport())
-        def_cache = _existing(db, CatalogDefinition)
+        def_cache = existing(db, CatalogDefinition)
         for row in con.execute("select * from property_definition"):
-            _upsert(
+            upsert(
                 db,
                 def_cache,
                 CatalogDefinition,
@@ -260,18 +167,18 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     "value_type": row["value_type"],
                     "description": row["description"],
                     "test_standard": row["test_standard"],
-                    "condition_axes": _json(row["condition_axes"]),
-                    "source_created_at": _dt(row["created_at"]),
+                    "condition_axes": parse_json(row["condition_axes"]),
+                    "source_created_at": parse_dt(row["created_at"]),
                 },
                 defs,
             )
         db.flush()
 
         sources = report.tables.setdefault("출처", TableReport())
-        source_cache = _existing(db, CatalogSource)
+        source_cache = existing(db, CatalogSource)
         source_ids: dict[int, Any] = {}
         for row in con.execute("select * from source"):
-            item = _upsert(
+            item = upsert(
                 db,
                 source_cache,
                 CatalogSource,
@@ -288,8 +195,8 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     "license": row["license"],
                     "local_path": row["local_path"],
                     "content_hash": row["content_hash"],
-                    "source_retrieved_at": _dt(row["retrieved_at"]),
-                    "source_created_at": _dt(row["created_at"]),
+                    "source_retrieved_at": parse_dt(row["retrieved_at"]),
+                    "source_created_at": parse_dt(row["created_at"]),
                 },
                 sources,
             )
@@ -297,12 +204,12 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
         db.flush()
 
         materials = report.tables.setdefault("재료", TableReport())
-        material_cache = _existing(db, CatalogMaterial)
+        material_cache = existing(db, CatalogMaterial)
         material_ids: dict[int, Any] = {}
         for row in con.execute("select * from material"):
-            attributes = _json(row["attributes"])
+            attributes = parse_json(row["attributes"])
             facets = {key: (attributes or {}).get(key) or None for key in FACET_KEYS}
-            item = _upsert(
+            item = upsert(
                 db,
                 material_cache,
                 CatalogMaterial,
@@ -314,8 +221,8 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     "description": row["description"],
                     "attributes": attributes,
                     **facets,
-                    "source_created_at": _dt(row["created_at"]),
-                    "source_updated_at": _dt(row["updated_at"]),
+                    "source_created_at": parse_dt(row["created_at"]),
+                    "source_updated_at": parse_dt(row["updated_at"]),
                 },
                 materials,
             )
@@ -323,7 +230,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
         db.flush()
 
         values = report.tables.setdefault("값", TableReport())
-        value_cache = _existing(db, CatalogValue)
+        value_cache = existing(db, CatalogValue)
         known_keys = {one.key for one in def_cache.values()}
         for row in con.execute("select * from property_value"):
             if row["property_key"] not in known_keys:
@@ -335,7 +242,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     f"물성값 #{row['id']} 의 quality_tier={row['quality_tier']!r} 는 "
                     "아는 등급(1~4)이 아닙니다."
                 )
-            _upsert(
+            upsert(
                 db,
                 value_cache,
                 CatalogValue,
@@ -347,7 +254,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     "value_text": row["value_text"],
                     "unit": row["unit"],
                     "uncertainty": row["uncertainty"],
-                    "conditions": _json(row["conditions"]),
+                    "conditions": parse_json(row["conditions"]),
                     "method": row["method"],
                     "quality_tier": row["quality_tier"],
                     "source_id": (
@@ -357,7 +264,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     ),
                     "source_detail": row["source_detail"],
                     "notes": row["notes"],
-                    "source_created_at": _dt(row["created_at"]),
+                    "source_created_at": parse_dt(row["created_at"]),
                 },
                 values,
             )

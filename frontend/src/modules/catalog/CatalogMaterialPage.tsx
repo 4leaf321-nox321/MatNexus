@@ -11,7 +11,7 @@
 
 import { PackagePlus } from 'lucide-react'
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
 
@@ -178,6 +178,15 @@ export default function CatalogMaterialPage() {
                         <Badge variant="outline" className="text-muted-foreground ml-2">
                           대안 · {value.separated_by}
                         </Badge>
+                      )}
+                      {value.representative && (
+                        <Link
+                          to={`/metrology?key=${encodeURIComponent(value.property_key)}`}
+                          className="text-muted-foreground hover:text-foreground ml-2 text-xs underline"
+                          title="이 물성을 재는 기법과 장비"
+                        >
+                          측정법
+                        </Link>
                       )}
                     </TableCell>
                     <TableCell className="text-sm tabular-nums">

@@ -173,6 +173,19 @@ MaterialTwin 의 방법론 문서(1MB+)는 코드와 별개의 자산이니 폴�
 
 ## 진행 기록
 
+- **2026-09-06 — 4단계 완료** (측정법 모듈). `app/modules/metrology` — 장비
+  (`instruments`, 보유/카탈로그 구별이 핵심 칸) · 측정 능력
+  (`instrument_capabilities`, 물성 FK + 기법·규격·범위·확신도) 2표, 이관
+  (카탈로그 다음 순서 — 능력이 정의·출처를 가리킴), 읽기 API 3본(summary·
+  coverage(covered/gaps)·by-property), 화면 /metrology(?key= 딥링크, 좌 피커
+  「잴 수 있다/장비 없다」 분리, 우 기법별 표, 확신도≠high ⚠) + 카탈로그 상세
+  물성 행 → 측정법 링크. 실이관 장비 218 · 능력 532, 재드라이런 전량 동일.
+  이관 공통부품은 `app/shared/mt_import.py` 로 — 모듈 간 import 금지라
+  카탈로그 이관기와 나눠 쓴다(기존 공개명은 재수출로 유지). 실측 함정: sqlite
+  동적 타입이 FLOAT 컬럼(resolution)을 float 로 돌려줘 String 컬럼과 매번
+  어긋남(30건) + 정수값 float(`1.0`)는 PG varchar 캐스팅이 `'1'` 로 적어 4건
+  잔류 — 이관기 `_text()` 가 문자열로 고정, 픽스처가 둘 다 문다. **다음**:
+  합류 대기 항목(개명·고유 id·혼합 덱) 또는 5단계.
 - **2026-09-06 — 3단계 완료** (비교·Ashby·커버리지). API 4본(compare·axes·ashby·
   coverage — 전부 대표값 기준, 재료별 일괄 선택으로 N+1 없음) + 화면 3장
   (/catalog/compare·ashby·coverage, 목록 머리에 입구 버튼). Ashby 는 SVG 직접
