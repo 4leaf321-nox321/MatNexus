@@ -154,8 +154,17 @@ export function adoptionReference(value: CatalogValue): string {
   return `${parts.join(' · ')} (문헌 물성 카탈로그, ${TIER_LABELS[value.quality_tier] ?? `t${value.quality_tier}`})`
 }
 
+export type CatalogLink = components['schemas']['CatalogLinkOut']
+
 export const catalogApi = {
   summary: () => api.get<CatalogSummary>('/catalog/summary'),
+  /** 사내 재료의 문헌 연결. 없어도 200 — catalog_material_id 가 null 이다. */
+  link: (materialId: string) => api.get<CatalogLink>(`/catalog/links/${materialId}`),
+  setLink: (materialId: string, catalogMaterialId: string) =>
+    api.put<CatalogLink>(`/catalog/links/${materialId}`, {
+      catalog_material_id: catalogMaterialId,
+    }),
+  clearLink: (materialId: string) => api.delete<void>(`/catalog/links/${materialId}`),
   materials: (params: {
     q?: string
     subsystem?: string

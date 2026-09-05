@@ -93,6 +93,34 @@ class CatalogMaterial(Base):
     )
 
 
+class CatalogLink(Base):
+    """사내 재료 ↔ 문헌 재료 연결 — **재료당 하나.**
+
+    사내 재료가 「문헌에서는 이 등급이다」 를 가리키는 가벼운 참조다. 재료 상세가
+    이 연결로 문헌 값을 나란히 보여 주고, 채택(채우기)의 기본 대상이 된다.
+    materials 표는 건드리지 않는다(ADR 0027) — 연결은 카탈로그 쪽 표다.
+    """
+
+    __tablename__ = "catalog_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("materials.id", ondelete="CASCADE"),
+        unique=True,
+    )
+    catalog_material_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("catalog_materials.id", ondelete="CASCADE"),
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class CatalogSource(Base):
     """출처 — 논문·데이터시트·핸드북. **출처 없는 값은 원본에 0건이다.**"""
 

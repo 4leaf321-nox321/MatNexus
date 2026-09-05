@@ -16,6 +16,7 @@ from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.catalog.models import (
     CatalogDefinition,
+    CatalogLink,
     CatalogMaterial,
     CatalogSource,
     CatalogValue,
@@ -55,6 +56,7 @@ __all__ = [
     "AccessLog",
     "Base",
     "CatalogDefinition",
+    "CatalogLink",
     "CatalogMaterial",
     "CatalogSource",
     "CatalogValue",

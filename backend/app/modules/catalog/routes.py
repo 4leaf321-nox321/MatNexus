@@ -19,11 +19,14 @@ from app.modules.accounts.models import User
 from app.modules.catalog import representative
 from app.modules.catalog.models import (
     CatalogDefinition,
+    CatalogLink,
     CatalogMaterial,
     CatalogSource,
     CatalogValue,
 )
 from app.modules.catalog.schemas import (
+    CatalogLinkIn,
+    CatalogLinkOut,
     CatalogMaterialDetailOut,
     CatalogMaterialOut,
     CatalogMaterialPage,
@@ -31,9 +34,11 @@ from app.modules.catalog.schemas import (
     CatalogSummaryOut,
     CatalogValueOut,
 )
+from app.modules.materials.models import Material
 from app.shared.auth import current_user
 from app.shared.errors import NotFound
 from app.shared.pagination import clamp_limit
+from app.shared.permissions import require_owner_edit, visible_materials
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -119,6 +124,100 @@ def list_materials(
             for one, count in rows
         ],
     )
+
+
+def _my_material(db: Session, user: User, material_id: uuid.UUID) -> Material:
+    """보이는 사내 재료 — 가시 범위(전역+열린 부서+내 부서)를 지킨다."""
+    item = db.scalar(visible_materials(db, user).where(Material.id == material_id))
+    if item is None:
+        raise NotFound("MNX-CATALOG-0002", "재료를 찾을 수 없습니다.")
+    return item
+
+
+@router.get("/links/{material_id}", response_model=CatalogLinkOut)
+def get_link(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogLinkOut:
+    """이 사내 재료의 문헌 연결. **없어도 200 이다** — 비어 있는 상태가 정상이라
+    404 로 만들면 화면이 오류와 「아직 없음」 을 구별 못 한다."""
+    _my_material(db, user, material_id)
+    row = db.execute(
+        select(CatalogLink, CatalogMaterial)
+        .join(CatalogMaterial, CatalogMaterial.id == CatalogLink.catalog_material_id)
+        .where(CatalogLink.material_id == material_id)
+    ).first()
+    if row is None:
+        return CatalogLinkOut()
+    _link, linked = row
+    count = (
+        db.scalar(
+            select(func.count())
+            .select_from(CatalogValue)
+            .where(CatalogValue.material_id == linked.id)
+        )
+        or 0
+    )
+    return CatalogLinkOut(
+        catalog_material_id=linked.id,
+        name=linked.name,
+        category=linked.category,
+        subsystem=linked.subsystem,
+        value_count=count,
+    )
+
+
+@router.put("/links/{material_id}", response_model=CatalogLinkOut)
+def put_link(
+    material_id: uuid.UUID,
+    payload: CatalogLinkIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogLinkOut:
+    """연결하거나 바꾼다 — 재료당 하나라 다시 걸면 교체다.
+
+    권한은 재료 편집과 같다(부서 관리자, 전역은 시스템 관리자) — 연결이 채택의
+    기본 대상이 되므로 아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다.
+    """
+    material = _my_material(db, user, material_id)
+    require_owner_edit(
+        db,
+        user,
+        material.owner_workspace_id,
+        what="재료의 문헌 연결",
+        code="MNX-CATALOG-0003",
+    )
+    linked = db.get(CatalogMaterial, payload.catalog_material_id)
+    if linked is None:
+        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
+    row = db.scalar(select(CatalogLink).where(CatalogLink.material_id == material_id))
+    if row is None:
+        db.add(CatalogLink(material_id=material_id, catalog_material_id=linked.id))
+    else:
+        row.catalog_material_id = linked.id
+    db.commit()
+    return get_link(material_id, user, db)
+
+
+@router.delete("/links/{material_id}", status_code=204)
+def delete_link(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    material = _my_material(db, user, material_id)
+    require_owner_edit(
+        db,
+        user,
+        material.owner_workspace_id,
+        what="재료의 문헌 연결",
+        code="MNX-CATALOG-0003",
+    )
+    row = db.scalar(select(CatalogLink).where(CatalogLink.material_id == material_id))
+    if row is not None:
+        db.delete(row)
+        db.commit()
 
 
 @router.get("/materials/{material_id}", response_model=CatalogMaterialDetailOut)

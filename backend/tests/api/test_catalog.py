@@ -229,3 +229,80 @@ class Test읽기_API:
         )
         assert gone.status_code == 404
         assert gone.json()["error"]["code"] == "MNX-CATALOG-0001"
+
+
+class Test문헌_연결:
+    """사내 재료 ↔ 문헌 재료 — 재료당 하나, 다시 걸면 교체, 비어도 200."""
+
+    def _material(self, client: TestClient, headers: dict[str, str]) -> str:
+        made = client.post(
+            "/api/workspaces", json={"slug": "link-team", "name": "링크팀"}, headers=headers
+        )
+        assert made.status_code == 201, made.text
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "LK01",
+                "spec_thickness": 1.0,
+                "workspace_slug": "link-team",
+            },
+            headers=headers,
+        )
+        assert material.status_code == 201, material.text
+        return str(material.json()["id"])
+
+    def test_걸고_바꾸고_푼다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        importer.run(db, make_snapshot(tmp_path))
+        db.commit()
+        material_id = self._material(client, admin_headers)
+        sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
+        fr4 = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 2))
+        assert sus is not None and fr4 is not None
+
+        # 비어 있어도 200 — 「아직 없음」 은 오류가 아니다.
+        empty = client.get(f"/api/catalog/links/{material_id}", headers=admin_headers)
+        assert empty.status_code == 200 and empty.json()["catalog_material_id"] is None
+
+        linked = client.put(
+            f"/api/catalog/links/{material_id}",
+            json={"catalog_material_id": str(sus.id)},
+            headers=admin_headers,
+        )
+        assert linked.status_code == 200, linked.text
+        assert linked.json()["name"] == "SUS304" and linked.json()["value_count"] == 2
+
+        # 다시 걸면 교체 — 두 줄이 되지 않는다.
+        swapped = client.put(
+            f"/api/catalog/links/{material_id}",
+            json={"catalog_material_id": str(fr4.id)},
+            headers=admin_headers,
+        )
+        assert swapped.status_code == 200 and swapped.json()["name"] == "FR-4 generic"
+
+        gone = client.delete(f"/api/catalog/links/{material_id}", headers=admin_headers)
+        assert gone.status_code == 204
+        after = client.get(f"/api/catalog/links/{material_id}", headers=admin_headers)
+        assert after.json()["catalog_material_id"] is None
+
+    def test_없는_대상은_404_다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        importer.run(db, make_snapshot(tmp_path))
+        db.commit()
+        material_id = self._material(client, admin_headers)
+        bogus = client.put(
+            f"/api/catalog/links/{material_id}",
+            json={"catalog_material_id": "00000000-0000-0000-0000-000000000000"},
+            headers=admin_headers,
+        )
+        assert bogus.status_code == 404
+        missing = client.get(
+            "/api/catalog/links/00000000-0000-0000-0000-000000000000",
+            headers=admin_headers,
+        )
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "MNX-CATALOG-0002"

@@ -77,10 +77,16 @@ export function AdoptDialog({
   detail,
   open,
   onClose,
+  fixedTarget,
+  onDone,
 }: {
   detail: CatalogMaterialDetail
   open: boolean
   onClose: () => void
+  /** 사내 재료 상세에서 열 때 — 대상이 정해져 있어 검색 단계를 건너뛴다. */
+  fixedTarget?: MaterialOut
+  /** 담기가 끝났을 때 — 부모 화면이 재료를 다시 읽는 데 쓴다. */
+  onDone?: () => void
 }) {
   const [typed, setTyped] = useState('')
   const [found, setFound] = useState<MaterialOut[]>([])
@@ -100,8 +106,11 @@ export function AdoptDialog({
       setError(null)
       setTyped('')
       setFound([])
+    } else if (fixedTarget) {
+      chooseTarget(fixedTarget)
     }
-  }, [open])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 열릴 때 한 번이면 된다
+  }, [open, fixedTarget])
 
   // 대상 재료 검색 — 250ms 디바운스.
   useEffect(() => {
@@ -210,6 +219,7 @@ export function AdoptDialog({
 
       await api.patch<MaterialOut>(`/materials/${target.id}`, patch)
       setDoneCount(chosen.length)
+      onDone?.()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('담지 못했습니다.'))
     } finally {

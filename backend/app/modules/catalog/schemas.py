@@ -74,6 +74,20 @@ class CatalogValueOut(BaseModel):
     """대표에게 밀린 자리(상태·등급·수치·온도·조건 수·입력 순서). 대표는 None."""
 
 
+class CatalogLinkIn(BaseModel):
+    catalog_material_id: uuid.UUID
+
+
+class CatalogLinkOut(BaseModel):
+    """사내 재료의 문헌 연결 — 비면 전부 None. 화면이 한 번에 그릴 요약까지."""
+
+    catalog_material_id: uuid.UUID | None = None
+    name: str | None = None
+    category: str | None = None
+    subsystem: str | None = None
+    value_count: int = 0
+
+
 class CatalogMaterialDetailOut(BaseModel):
     id: uuid.UUID
     name: str
