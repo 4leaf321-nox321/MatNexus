@@ -74,11 +74,29 @@ function SourceCell({ value }: { value: CatalogValue }) {
   )
 }
 
+//: 재료 상세는 UUID 만 받는다. UUID 가 아닌 주소가 여기 닿는 것은 **옛 번들**이
+//: /catalog/compare 같은 새 경로를 :id 로 잘못 잡은 것이다(2026-09-06 실측 두 번).
+//: API 를 불러 422 를 보여 주면 사람은 데이터 문제로 읽는다 — 여기서 말한다.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default function CatalogMaterialPage() {
   const { id = '' } = useParams()
-  const detail = useResource(() => catalogApi.material(id), [id])
+  const stale = !UUID_PATTERN.test(id)
+  const detail = useResource(
+    () => (stale ? Promise.resolve(null) : catalogApi.material(id)),
+    [id]
+  )
   const item = detail.data
   const [adopting, setAdopting] = useState(false)
+
+  if (stale) {
+    return (
+      <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
+        이 화면 주소(/catalog/{id})는 새 버전에 있는 화면입니다 — 브라우저를
+        새로고침(Ctrl+F5)한 뒤 다시 눌러 주세요.
+      </div>
+    )
+  }
 
   const byDomain = new Map<string, CatalogValue[]>()
   for (const value of item?.values ?? []) {
