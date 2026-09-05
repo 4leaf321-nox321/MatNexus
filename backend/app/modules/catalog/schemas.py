@@ -88,6 +88,52 @@ class CatalogLinkOut(BaseModel):
     value_count: int = 0
 
 
+class DeckMatchIn(BaseModel):
+    text: str
+    """붙여넣은 줄들 — `MID, 이름` 또는 `이름`."""
+
+
+class DeckCandidateOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    category: str
+    value_count: int
+    score: int
+    """정확 일치 3 > 앞부분 2 > 포함 1. 고르는 것은 사람이다."""
+
+
+class DeckMatchRowOut(BaseModel):
+    query: str
+    mid: int | None
+    candidates: list[DeckCandidateOut]
+
+
+class DeckBuildItemIn(BaseModel):
+    mid: int
+    catalog_material_id: uuid.UUID
+
+
+class DeckBuildIn(BaseModel):
+    items: list[DeckBuildItemIn]
+    format: str = "dyna_elastic"
+    units: str | None = None
+    """단위계 key. 비우면 SI."""
+
+
+class DeckSkippedOut(BaseModel):
+    mid: int
+    name: str
+    missing: list[str]
+
+
+class DeckBuiltOut(BaseModel):
+    filename: str
+    text: str
+    material_count: int
+    skipped: list[DeckSkippedOut]
+    notes: list[str]
+
+
 class CatalogMaterialDetailOut(BaseModel):
     id: uuid.UUID
     name: str

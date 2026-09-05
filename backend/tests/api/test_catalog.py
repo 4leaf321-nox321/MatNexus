@@ -80,6 +80,16 @@ def make_snapshot(path: Path) -> Path:
         "'2026-07-01 00:00:00')"
     )
     con.execute(
+        "insert into property_definition values (3, 'mechanical.poisson_ratio', "
+        "'mechanical', '포아송비', 'nu', '1', 'numeric', null, null, null, "
+        "'2026-07-01 00:00:00')"
+    )
+    con.execute(
+        "insert into property_definition values (4, 'physical.density', "
+        "'physical', '밀도', 'rho', 'kg/m^3', 'numeric', null, null, null, "
+        "'2026-07-01 00:00:00')"
+    )
+    con.execute(
         "insert into property_value values (1, 1, 'mechanical.youngs_modulus', "
         "193e9, null, 'Pa', null, "
         '\'{"temperature_k": 296.15, "value_before_correction": 190e9, '
@@ -98,6 +108,16 @@ def make_snapshot(path: Path) -> Path:
         "408.15, null, 'K', null, '{\"tau_s\": 1e+23}', 'handbook', 2, 2, null, null, "
         "'2026-08-01 00:00:00')"
     )
+    con.execute(
+        "insert into property_value values (4, 1, 'mechanical.poisson_ratio', "
+        "0.29, null, '1', null, null, 'handbook', 2, 2, null, null, "
+        "'2026-08-01 00:00:00')"
+    )
+    con.execute(
+        "insert into property_value values (5, 1, 'physical.density', "
+        "7930, null, 'kg/m^3', null, null, 'measured', 1, 1, null, null, "
+        "'2026-08-01 00:00:00')"
+    )
     con.commit()
     con.close()
     return db
@@ -108,10 +128,10 @@ class Test무손실:
         report = importer.run(db, make_snapshot(tmp_path))
         assert report.problems == []
         assert {name: t.added for name, t in report.tables.items()} == {
-            "정의": 2,
+            "정의": 4,
             "출처": 2,
             "재료": 2,
-            "값": 3,
+            "값": 5,
         }
         sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
         assert sus is not None and sus.name == "SUS304"
@@ -193,7 +213,7 @@ class Test읽기_API:
         listed = client.get("/api/catalog/materials?q=SUS", headers=admin_headers)
         assert listed.status_code == 200, listed.text
         page = listed.json()
-        assert page["total"] == 1 and page["items"][0]["value_count"] == 2
+        assert page["total"] == 1 and page["items"][0]["value_count"] == 4
 
         detail = client.get(
             f"/api/catalog/materials/{page['items'][0]['id']}", headers=admin_headers
@@ -204,7 +224,7 @@ class Test읽기_API:
         keys = [one["property_key"] for one in body["values"]]
         assert keys.count("mechanical.youngs_modulus") == 2
         tiers = {one["quality_tier"] for one in body["values"]}
-        assert tiers == {1, 4}
+        assert tiers == {1, 2, 4}
         # 대표는 실측(tier1)이고 먼저 선다. 진 후보는 밀린 자리를 들고 온다.
         youngs = [
             one for one in body["values"] if one["property_key"] == "mechanical.youngs_modulus"
@@ -218,7 +238,7 @@ class Test읽기_API:
 
         summary = client.get("/api/catalog/summary", headers=admin_headers)
         assert summary.status_code == 200
-        assert summary.json()["values"] == 3
+        assert summary.json()["values"] == 5
 
     def test_없는_재료는_404_다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -229,6 +249,106 @@ class Test읽기_API:
         )
         assert gone.status_code == 404
         assert gone.json()["error"]["code"] == "MNX-CATALOG-0001"
+
+
+class Test덱_만들기:
+    """BOM 붙여넣기 → 매칭 → 덱. **쓰인 값마다 출처 각주가 덱에 적힌다.**"""
+
+    def test_매칭이_줄과_MID_를_읽고_후보를_준다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        importer.run(db, make_snapshot(tmp_path))
+        db.commit()
+        matched = client.post(
+            "/api/catalog/deck/match",
+            json={"text": "101, SUS\n\nFR-4"},
+            headers=admin_headers,
+        )
+        assert matched.status_code == 200, matched.text
+        rows = matched.json()
+        assert len(rows) == 2
+        assert rows[0]["mid"] == 101 and rows[0]["candidates"][0]["name"] == "SUS304"
+        assert rows[1]["mid"] is None
+        assert rows[1]["candidates"][0]["name"] == "FR-4 generic"
+
+    def test_덱에_값과_출처_각주가_실린다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        importer.run(db, make_snapshot(tmp_path))
+        db.commit()
+        sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
+        fr4 = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 2))
+        assert sus is not None and fr4 is not None
+
+        built = client.post(
+            "/api/catalog/deck/build",
+            json={
+                "items": [
+                    {"mid": 101, "catalog_material_id": str(sus.id)},
+                    {"mid": 102, "catalog_material_id": str(fr4.id)},
+                ],
+                "format": "dyna_elastic",
+            },
+            headers=admin_headers,
+        )
+        assert built.status_code == 200, built.text
+        body = built.json()
+        assert "*MAT_ELASTIC" in body["text"]
+        # 대표값(tier1, 193e9)이 실리고 — tier4 가정값이 아니다.
+        assert "1.930E+11" in body["text"]
+        # 값마다 출처 각주: 논문 제목·doi·등급까지 덱 주석으로.
+        assert "어느 논문" in body["text"]
+        assert "doi:10.1000/x" in body["text"]
+        assert "tier 1" in body["text"]
+        # FR-4 는 탄성 셋이 없어 덱에 못 실리고 — 조용히 빠지지 않는다.
+        assert body["material_count"] == 1
+        assert body["skipped"][0]["name"] == "FR-4 generic"
+        assert body["skipped"][0]["missing"]
+
+    def test_단위계를_고르면_MPa_로_적힌다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        importer.run(db, make_snapshot(tmp_path))
+        db.commit()
+        sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
+        assert sus is not None
+        built = client.post(
+            "/api/catalog/deck/build",
+            json={
+                "items": [{"mid": 1, "catalog_material_id": str(sus.id)}],
+                "format": "dyna_elastic",
+                "units": "mm_n_tonne",
+            },
+            headers=admin_headers,
+        )
+        assert built.status_code == 200, built.text
+        text = built.json()["text"]
+        assert "Consistent units: tonne, mm, s, MPa" in text
+        assert "1.930E+05" in text  # 193 GPa → MPa
+        assert "7.930E-09" in text  # 7930 kg/m3 → tonne/mm3
+
+    def test_MID_중복과_모르는_형식은_거절한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        importer.run(db, make_snapshot(tmp_path))
+        db.commit()
+        sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
+        assert sus is not None
+        item = {"mid": 7, "catalog_material_id": str(sus.id)}
+        doubled = client.post(
+            "/api/catalog/deck/build",
+            json={"items": [item, item], "format": "dyna_elastic"},
+            headers=admin_headers,
+        )
+        assert doubled.status_code == 422
+        assert "두 번" in doubled.json()["error"]["message"]
+        odd = client.post(
+            "/api/catalog/deck/build",
+            json={"items": [item], "format": "abaqus"},
+            headers=admin_headers,
+        )
+        assert odd.status_code == 422
+        assert "시험" in odd.json()["error"]["message"]
 
 
 class Test문헌_연결:
@@ -273,7 +393,7 @@ class Test문헌_연결:
             headers=admin_headers,
         )
         assert linked.status_code == 200, linked.text
-        assert linked.json()["name"] == "SUS304" and linked.json()["value_count"] == 2
+        assert linked.json()["name"] == "SUS304" and linked.json()["value_count"] == 4
 
         # 다시 걸면 교체 — 두 줄이 되지 않는다.
         swapped = client.put(

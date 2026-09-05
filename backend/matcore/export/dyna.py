@@ -51,6 +51,34 @@ def _units_comment(deck: Deck) -> list[str]:
 
 
 @register_renderer(
+    key="dyna_elastic",
+    label="LS-DYNA (탄성)",
+    extension="k",
+    suffix="_elastic",
+    describe="*MAT_ELASTIC(001) — 선형 탄성. 소성 표가 없는 재료(문헌 스칼라)용.",
+    keywords=("*KEYWORD", "*MAT_ELASTIC", "*END"),
+    needs=(Need("elastic", values=("youngs_modulus", "poisson_ratio", "density")),),
+)
+def render_dyna_elastic(deck: Deck) -> Rendered:
+    """LS-DYNA `*MAT_001` — E·ν·밀도 셋이면 나온다.
+
+    문헌 카탈로그의 스칼라 재료가 주 고객이다 — 소성 표가 없어도 강성·모드
+    해석에는 이것으로 충분하다. 표가 있는 카드는 `dyna`(*MAT_024)가 맞다.
+    """
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    assert youngs is not None and poisson is not None and density is not None
+
+    lines = ["*KEYWORD", *_header(deck, "$"), *_units_comment(deck)]
+    lines.append("*MAT_ELASTIC")
+    lines.append("$      mid        ro         e        pr        da        db         k")
+    lines.append(_i10(deck.solver_id) + _f10(density) + _f10(youngs) + _f10(poisson))
+    lines.append("*END")
+    return Rendered(text="\n".join(lines) + "\n")
+
+
+@register_renderer(
     key="dyna",
     label="LS-DYNA",
     extension="k",

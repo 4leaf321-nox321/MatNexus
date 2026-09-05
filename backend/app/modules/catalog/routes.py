@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.catalog import deck as deck_builder
 from app.modules.catalog import representative
 from app.modules.catalog.models import (
     CatalogDefinition,
@@ -33,12 +34,19 @@ from app.modules.catalog.schemas import (
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueOut,
+    DeckBuildIn,
+    DeckBuiltOut,
+    DeckCandidateOut,
+    DeckMatchIn,
+    DeckMatchRowOut,
+    DeckSkippedOut,
 )
 from app.modules.materials.models import Material
 from app.shared.auth import current_user
-from app.shared.errors import NotFound
+from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
 from app.shared.permissions import require_owner_edit, visible_materials
+from matcore import export
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -218,6 +226,67 @@ def delete_link(
     if row is not None:
         db.delete(row)
         db.commit()
+
+
+@router.post("/deck/match", response_model=list[DeckMatchRowOut])
+def deck_match(
+    payload: DeckMatchIn,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[DeckMatchRowOut]:
+    """BOM 붙여넣기 → 줄마다 문헌 재료 후보. **고르는 것은 사람이다.**"""
+    try:
+        lines = deck_builder.parse_lines(payload.text)
+    except export.ExportError as refused:
+        raise AppError("MNX-CATALOG-0004", str(refused), status=422) from refused
+    return [
+        DeckMatchRowOut(
+            query=line.query,
+            mid=line.mid,
+            candidates=[
+                DeckCandidateOut(
+                    id=one.id,
+                    name=one.name,
+                    category=one.category,
+                    value_count=count,
+                    score=score,
+                )
+                for one, count, score in deck_builder.candidates(db, line.query)
+            ],
+        )
+        for line in lines
+    ]
+
+
+@router.post("/deck/build", response_model=DeckBuiltOut)
+def deck_build(
+    payload: DeckBuildIn,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckBuiltOut:
+    """확정된 목록 → LS-DYNA 덱 한 파일. 쓰인 값마다 출처 각주가 $ 주석으로
+    들어간다. 모자란 재료는 거르지 않고 알린다."""
+    try:
+        built = deck_builder.build(
+            db,
+            [(item.mid, item.catalog_material_id) for item in payload.items],
+            payload.format,
+            payload.units,
+        )
+    except export.ExportError as refused:
+        raise AppError("MNX-CATALOG-0005", str(refused), status=422) from refused
+    suffix = "" if payload.format == "dyna_elastic" else "_thermal"
+    units_key = payload.units or "si"
+    return DeckBuiltOut(
+        filename=f"matnexus_catalog{suffix}_{units_key}.k",
+        text=built.text,
+        material_count=built.material_count,
+        skipped=[
+            DeckSkippedOut(mid=one.mid, name=one.name, missing=list(one.missing))
+            for one in built.skipped
+        ],
+        notes=list(built.notes),
+    )
 
 
 @router.get("/materials/{material_id}", response_model=CatalogMaterialDetailOut)

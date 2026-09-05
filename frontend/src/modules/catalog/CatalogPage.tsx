@@ -7,6 +7,7 @@
  * 정렬은 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
  */
 
+import { FileCode2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -61,6 +62,14 @@ export default function CatalogPage() {
       <PageHeader
         title="문헌 물성"
         description="문헌·데이터시트에서 채굴된 물성 카탈로그입니다. 모든 값에 출처와 품질 등급이 붙어 있고, 여기서는 값을 만들거나 고칠 수 없습니다."
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/catalog/deck">
+              <FileCode2 className="size-4" />
+              문헌 덱 만들기
+            </Link>
+          </Button>
+        }
       />
 
       <ErrorNotice error={summary.error} />
