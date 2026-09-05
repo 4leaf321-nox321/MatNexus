@@ -12,11 +12,13 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { CATEGORY_LABELS, DOMAIN_LABELS, catalogApi, systemUnit } from '@/modules/catalog/api'
+import { CATEGORY_LABELS, DOMAIN_LABELS, catalogApi, systemUnit, unitLabelAs } from '@/modules/catalog/api'
 import type { AshbyResult } from '@/modules/catalog/api'
+import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { useResource } from '@/shared/hooks/useResource'
+import { display } from '@/shared/units'
 
 const WIDTH = 860
 const HEIGHT = 480
@@ -228,12 +230,30 @@ export default function CatalogAshbyPage() {
     | 'subsystem'
   const [logX, setLogX] = useState(true)
   const [logY, setLogY] = useState(true)
+  const [units, setUnits] = useUnitMode()
 
   const axes = useResource(() => catalogApi.axes(), [])
   const chart = useResource<AshbyResult | null>(
     () => (x && y ? catalogApi.ashby(x, y, color) : Promise.resolve(null)),
     [x, y, color]
   )
+
+  // 표시용 모드면 점·눈금을 공용 표로 환산해 그린다 — 축 라벨과 숫자가 같은
+  // 단위여야 한다. 오프셋 단위(°C)는 로그가 무의미하므로 그 축만 선형으로.
+  const xShow = units === 'display' ? display(systemUnit(chart.data?.x_unit ?? '')) : null
+  const yShow = units === 'display' ? display(systemUnit(chart.data?.y_unit ?? '')) : null
+  const shown: AshbyResult | null = chart.data
+    ? {
+        ...chart.data,
+        points: chart.data.points.map((point) => ({
+          ...point,
+          x: xShow ? point.x * xShow.factor + xShow.offset : point.x,
+          y: yShow ? point.y * yShow.factor + yShow.offset : point.y,
+        })),
+      }
+    : null
+  const xHasOffset = (xShow?.offset ?? 0) !== 0
+  const yHasOffset = (yShow?.offset ?? 0) !== 0
 
   function set(key: string, value: string) {
     const next = new URLSearchParams(params)
@@ -248,10 +268,11 @@ export default function CatalogAshbyPage() {
     byDomain.set(axis.domain, list)
   }
 
-  /** 축 라벨 — 「물성 이름 (단위)」, 단위는 시스템 철자. 무차원(`1`)은 생략. */
+  /** 축 라벨 — 「물성 이름 (단위)」, 단위는 고른 모드로. 무차원(`1`)은 생략. */
   function axisLabel(key: string, unit: string | null | undefined): string {
     const name = (axes.data ?? []).find((axis) => axis.key === key)?.name ?? key
-    return unit && unit !== '1' ? `${name} (${systemUnit(unit)})` : name
+    const label = unitLabelAs(units, unit)
+    return label ? `${name} (${label})` : name
   }
 
   const axisSelect = (label: string, value: string, key: string) => (
@@ -297,14 +318,31 @@ export default function CatalogAshbyPage() {
           <option value="category">분류로 색</option>
           <option value="subsystem">계통으로 색</option>
         </select>
-        <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={logX} onChange={(e) => setLogX(e.target.checked)} />
+        <label
+          className="flex items-center gap-1 text-sm"
+          title={xHasOffset ? '°C 처럼 원점이 다른 단위는 로그축이 무의미합니다' : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={logX && !xHasOffset}
+            disabled={xHasOffset}
+            onChange={(e) => setLogX(e.target.checked)}
+          />
           가로 로그
         </label>
-        <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={logY} onChange={(e) => setLogY(e.target.checked)} />
+        <label
+          className="flex items-center gap-1 text-sm"
+          title={yHasOffset ? '°C 처럼 원점이 다른 단위는 로그축이 무의미합니다' : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={logY && !yHasOffset}
+            disabled={yHasOffset}
+            onChange={(e) => setLogY(e.target.checked)}
+          />
           세로 로그
         </label>
+        <UnitModeToggle mode={units} onChange={setUnits} />
       </div>
 
       {!x || !y ? (
@@ -312,13 +350,13 @@ export default function CatalogAshbyPage() {
           가로축과 세로축 물성을 고르면 지도가 섭니다 — 목록은 재료 수가 많은 물성부터입니다.
         </p>
       ) : (
-        chart.data && (
+        shown && (
           <Scatter
-            data={chart.data}
-            logX={logX}
-            logY={logY}
-            xLabel={axisLabel(x, chart.data.x_unit)}
-            yLabel={axisLabel(y, chart.data.y_unit)}
+            data={shown}
+            logX={logX && !xHasOffset}
+            logY={logY && !yHasOffset}
+            xLabel={axisLabel(x, shown.x_unit)}
+            yLabel={axisLabel(y, shown.y_unit)}
             onPick={(id) => navigate(`/catalog/${id}`)}
           />
         )

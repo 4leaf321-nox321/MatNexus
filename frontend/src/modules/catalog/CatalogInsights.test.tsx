@@ -37,6 +37,8 @@ const B = '22222222-2222-2222-2222-222222222222'
 beforeEach(() => {
   vi.clearAllMocks()
   materials.mockResolvedValue({ total: 0, limit: 8, offset: 0, items: [] })
+  // 단위 모드가 브라우저에 남는다 — 시험끼리 새지 않게 지운다.
+  localStorage.clear()
 })
 
 describe('비교', () => {
@@ -156,7 +158,13 @@ describe('Ashby', () => {
         <CatalogAshbyPage />
       </MemoryRouter>
     )
-    // 단위는 시스템 철자다 — kg/m^3 이 아니라 kg/m3 (2026-09-06 사용자 요청).
+    // 기본은 표시용 단위(공용 표) — Pa→MPa, kg/m3→tonne/mm³ (CAE 관행).
+    expect(await screen.findByText('영률 (MPa)')).toBeInTheDocument()
+    expect(screen.getByText('밀도 (tonne/mm³)')).toBeInTheDocument()
+
+    // SI 로 바꾸면 정본 철자로.
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.change(screen.getByLabelText('단위 모드'), { target: { value: 'si' } })
     expect(await screen.findByText('영률 (Pa)')).toBeInTheDocument()
     expect(screen.getByText('밀도 (kg/m3)')).toBeInTheDocument()
   })
