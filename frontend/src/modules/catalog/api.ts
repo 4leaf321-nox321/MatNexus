@@ -8,6 +8,7 @@
 
 import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
+import { display } from '@/shared/units'
 
 export type CatalogSummary = components['schemas']['CatalogSummaryOut']
 export type CatalogMaterial = components['schemas']['CatalogMaterialOut']
@@ -63,19 +64,49 @@ export function systemUnit(unit: string): string {
   return unit.replaceAll('^', '').replaceAll('*', '.')
 }
 
-/**
- * 값 표기 — 공학 표기. 아주 크거나 작은 값은 지수, 나머지는 유효숫자 5자리에서
- * 끝 0을 지운다. 단위는 시스템 철자로, 무차원(`1`)은 숨긴다.
- */
+/** 숫자만 — 공학 표기. 아주 크거나 작으면 지수, 아니면 유효숫자 5자리. */
+function fmtNumber(value: number): string {
+  const magnitude = Math.abs(value)
+  return magnitude !== 0 && (magnitude >= 1e5 || magnitude < 1e-3)
+    ? value.toExponential(3)
+    : String(Number(value.toPrecision(5)))
+}
+
+/** 값 표기(SI) — 단위는 시스템 철자로, 무차원(`1`)은 숨긴다. */
 export function fmtValue(value: number | null | undefined, unit?: string | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
-  const magnitude = Math.abs(value)
-  const number =
-    magnitude !== 0 && (magnitude >= 1e5 || magnitude < 1e-3)
-      ? value.toExponential(3)
-      : String(Number(value.toPrecision(5)))
   const pretty = unit && unit !== '1' ? ` ${systemUnit(unit)}` : ''
-  return `${number}${pretty}`
+  return `${fmtNumber(value)}${pretty}`
+}
+
+/** 단위 모드 — 시스템 나머지 화면과 같은 표시용(실무 단위)이 기본이다. */
+export type UnitMode = 'display' | 'si'
+
+/**
+ * 값 표기(모드 선택) — 표시용이면 공용 표(`shared/units.ts`)로 환산해 그린다.
+ * 저장·API 는 언제나 SI 고, 환산은 화면에서만 한다(ADR 0004). 표에 없는
+ * 단위(HV·전기 차원 등)는 SI 철자 그대로 남는다.
+ */
+export function fmtValueAs(
+  mode: UnitMode,
+  value: number | null | undefined,
+  unit?: string | null
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  if (mode === 'si' || !unit || unit === '1') return fmtValue(value, unit)
+  const si = systemUnit(unit)
+  const shown = display(si)
+  if (shown.factor === 1 && shown.offset === 0) return fmtValue(value, unit)
+  const converted = value * shown.factor + shown.offset
+  return `${fmtNumber(converted)}${shown.unit ? ` ${shown.unit}` : ''}`
+}
+
+/** 단위 라벨(모드 선택) — 표시용이면 공용 표의 단위, 아니면 시스템 철자. */
+export function unitLabelAs(mode: UnitMode, unit?: string | null): string {
+  if (!unit || unit === '1') return ''
+  const si = systemUnit(unit)
+  if (mode === 'si') return si
+  return display(si).unit || si
 }
 
 /** 조건이 아니라 관리 기록인 키 — 화면 조건 줄에서 뺀다 (서버와 같은 규칙). */

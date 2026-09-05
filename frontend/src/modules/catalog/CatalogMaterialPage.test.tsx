@@ -114,6 +114,8 @@ const DETAIL = {
 beforeEach(() => {
   vi.clearAllMocks()
   material.mockResolvedValue(DETAIL)
+  // 단위 모드가 브라우저에 남는다 — 시험끼리 새지 않게 지운다.
+  localStorage.clear()
 })
 
 function show() {
@@ -136,8 +138,16 @@ describe('진 후보를 숨기지 않는다', () => {
   it('가정값은 「가정」 배지를 달고 그대로 보인다 — 제외하지 않는다', async () => {
     show()
     expect(await screen.findByText('가정')).toBeInTheDocument()
-    // 값 자체도 표에 있다.
-    expect(screen.getByText(/2\.000e\+11 Pa/)).toBeInTheDocument()
+    // 값 자체도 표에 있다 — 기본은 표시용 단위(Pa→MPa)다.
+    expect(screen.getByText(/2\.000e\+5 MPa/)).toBeInTheDocument()
+  })
+
+  it('단위 모드를 SI 로 바꾸면 Pa 로 보인다', async () => {
+    show()
+    await screen.findByText('가정')
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.change(screen.getByLabelText('단위 모드'), { target: { value: 'si' } })
+    expect(await screen.findByText(/2\.000e\+11 Pa/)).toBeInTheDocument()
   })
 
   it('도메인으로 갈라 서고, 조건과 출처가 값 옆에 있다', async () => {

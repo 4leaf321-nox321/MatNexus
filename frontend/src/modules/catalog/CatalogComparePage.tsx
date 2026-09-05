@@ -16,8 +16,9 @@ import {
   TIER_LABELS,
   catalogApi,
   fmtConditions,
-  fmtValue,
+  fmtValueAs,
 } from '@/modules/catalog/api'
+import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
 import type { CompareResult } from '@/modules/catalog/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -34,6 +35,7 @@ export default function CatalogComparePage() {
   const [typed, setTyped] = useState('')
   const [found, setFound] = useState<{ id: string; name: string }[]>([])
   const [error, setError] = useState<Error | null>(null)
+  const [units, setUnits] = useUnitMode()
 
   const result = useResource<CompareResult | null>(
     () => (ids.length >= 2 ? catalogApi.compare(ids) : Promise.resolve(null)),
@@ -92,6 +94,7 @@ export default function CatalogComparePage() {
             </button>
           </Badge>
         ))}
+        <UnitModeToggle mode={units} onChange={setUnits} />
         {ids.length < MAX && (
           <div className="relative">
             <Input
@@ -176,7 +179,7 @@ export default function CatalogComparePage() {
                           <>
                             <div className="tabular-nums">
                               {cell.value_num !== null && cell.value_num !== undefined
-                                ? fmtValue(cell.value_num, row.unit)
+                                ? fmtValueAs(units, cell.value_num, row.unit)
                                 : cell.value_text}
                             </div>
                             {top > 0 &&

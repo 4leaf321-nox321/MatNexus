@@ -21,8 +21,9 @@ import {
   TIER_LABELS,
   catalogApi,
   fmtConditions,
-  fmtValue,
+  fmtValueAs,
 } from '@/modules/catalog/api'
+import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
 import type { CatalogValue } from '@/modules/catalog/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -88,6 +89,7 @@ export default function CatalogMaterialPage() {
   )
   const item = detail.data
   const [adopting, setAdopting] = useState(false)
+  const [units, setUnits] = useUnitMode()
 
   if (stale) {
     return (
@@ -127,6 +129,9 @@ export default function CatalogMaterialPage() {
             <span className="text-muted-foreground text-sm">{item.manufacturer}</span>
           )}
           {item.grade && <span className="text-muted-foreground text-sm">{item.grade}</span>}
+          <span className="ml-auto">
+            <UnitModeToggle mode={units} onChange={setUnits} />
+          </span>
         </div>
       )}
       {item?.description && <p className="text-muted-foreground text-sm">{item.description}</p>}
@@ -177,7 +182,7 @@ export default function CatalogMaterialPage() {
                     </TableCell>
                     <TableCell className="text-sm tabular-nums">
                       {value.value_num !== null && value.value_num !== undefined
-                        ? fmtValue(value.value_num, value.unit)
+                        ? fmtValueAs(units, value.value_num, value.unit)
                         : (value.value_text ?? '—')}
                     </TableCell>
                     <TableCell className="text-muted-foreground max-w-64 text-xs">

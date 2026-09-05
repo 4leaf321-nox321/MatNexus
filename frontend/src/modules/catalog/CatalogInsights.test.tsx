@@ -71,7 +71,8 @@ describe('비교', () => {
         <CatalogComparePage />
       </MemoryRouter>
     )
-    expect(await screen.findByText(/1\.930e\+11 Pa/)).toBeInTheDocument()
+    // 기본은 표시용 단위 — Pa 가 MPa 로 보인다.
+    expect(await screen.findByText(/1\.930e\+5 MPa/)).toBeInTheDocument()
     expect(screen.getByText(/실측 · 후보 2/)).toBeInTheDocument()
     // FR-4 칸은 빈 칸으로 보인다.
     expect(screen.getByText('—')).toBeInTheDocument()

@@ -24,8 +24,9 @@ import {
   TIER_LABELS,
   adoptionReference,
   adoptionSource,
-  fmtValue,
+  fmtValueAs,
 } from '@/modules/catalog/api'
+import { useUnitMode } from '@/modules/catalog/unitMode'
 import type { CatalogMaterialDetail, CatalogValue } from '@/modules/catalog/api'
 import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
@@ -95,6 +96,7 @@ export function AdoptDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [doneCount, setDoneCount] = useState<number | null>(null)
+  const [units] = useUnitMode()
 
   const candidates = detail.values.filter(adoptable)
 
@@ -316,7 +318,9 @@ export function AdoptDialog({
                         }}
                       />
                       <span className="min-w-24 font-medium">{slot?.item}</span>
-                      <span className="tabular-nums">{fmtValue(value.value_num, value.unit)}</span>
+                      <span className="tabular-nums">
+                        {fmtValueAs(units, value.value_num, value.unit)}
+                      </span>
                       <span className="text-muted-foreground text-xs">
                         {TIER_LABELS[value.quality_tier] ?? `t${value.quality_tier}`}
                         {value.representative && value.n_candidates > 1 && ' · 대표값'}
