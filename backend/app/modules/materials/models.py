@@ -33,6 +33,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Sequence,
     String,
     Text,
     UniqueConstraint,
@@ -47,6 +48,15 @@ from app.database import Base
 
 #: 시편 방향. 등방성 재료(수지 등)는 `NA`.
 ORIENTATIONS = ("MD", "TD", "DD", "NA")
+
+#: 재료 고유 번호의 채번기. metadata 에 붙어 `create_all`(테스트)도 만든다 —
+#: 운영은 마이그레이션이 만들고 백필 뒤 setval 한다.
+#:
+#: **maxvalue 를 두는 이유**: 번호는 `lpad(n, 6, '0')` 로 적는데 lpad 는 6자리를
+#: 넘으면 **조용히 자른다** — `M-1000000` 이 `M-100000` 이 되어 중복 유니크
+#: 충돌로도 안 잡힐 수 있다. 넘치면 nextval 이 시끄럽게 실패하는 쪽을 고른다.
+#: 그날이 오면 자릿수를 늘리는 마이그레이션 한 장이면 된다.
+MATERIAL_CODE_SEQ = Sequence("material_code_seq", metadata=Base.metadata, maxvalue=999_999)
 
 
 class Material(Base):
@@ -126,6 +136,19 @@ class Material(Base):
     )
     """NULL = 전역. 삭제는 막는다(NO ACTION) — 부서를 지운다고 시험 데이터가
     사라지면 안 된다. 어떤 것이 걸려 있는지는 `shared/dependents.py` 가 알려준다."""
+
+    code: Mapped[str] = mapped_column(
+        String(20),
+        unique=True,
+        server_default=text("'M-' || lpad(nextval('material_code_seq')::text, 6, '0')"),
+    )
+    """**불변 고유 번호** — `M-000123`. DB 가 채번하고, 만든 뒤 절대 안 바뀐다.
+
+    `record_name` 은 기준정보(Grade 등) 개명이 이름을 연쇄로 바꾸는 설계라(ADR
+    0004) 문서·라벨·구두로 재료를 지칭할 **안 바뀌는 손잡이**가 따로 필요했다
+    (사용자 결정 2026-09-05, MaterialTwin 이식에서 — 저쪽 카탈로그 재료의
+    `material_code` 와는 별개다). 삭제된 재료의 번호도 재사용하지 않는다 —
+    옛 문서가 그 번호로 이 재료를 가리키고 있다."""
 
     record_name: Mapped[str] = mapped_column(String(200), index=True)
     """`SECC_MDOI_1.0`. `matcore.naming.material_name` 이 만든다. 사람용이다."""

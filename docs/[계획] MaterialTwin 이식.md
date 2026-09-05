@@ -173,6 +173,14 @@ MaterialTwin 의 방법론 문서(1MB+)는 코드와 별개의 자산이니 폴�
 
 ## 진행 기록
 
+- **2026-09-06 — 합류 대기 중 가능분: 재료 고유 번호** (`materials.code`,
+  M-000123). DB 시퀀스 + server default 채번이라 **서비스 코드를 안 고치고**
+  모든 생성 경로가 번호를 받는다 — routes·schemas·화면 노출은 다른 세션
+  합류 후. 기존 139건 created_at 순 백필, 번호 재사용 없음(소프트 삭제 포함),
+  lpad 의 조용한 잘림 대신 시퀀스 maxvalue 로 시끄러운 실패. **개명(열전도율·
+  선팽창계수(CTE))은 여전히 합류 후** — 항목 기준정보→키 연결(curvedata
+  declared_keys)을 다른 세션이 지금 만드는 중이고, 라벨이 사는 파일(fitting
+  routes·units.ts)도 그쪽 미커밋 작업에 물려 있다.
 - **2026-09-06 — 4단계 완료** (측정법 모듈). `app/modules/metrology` — 장비
   (`instruments`, 보유/카탈로그 구별이 핵심 칸) · 측정 능력
   (`instrument_capabilities`, 물성 FK + 기법·규격·범위·확신도) 2표, 이관
