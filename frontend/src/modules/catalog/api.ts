@@ -23,6 +23,20 @@ export const TIER_LABELS: Record<number, string> = {
   4: '추정',
 }
 
+/**
+ * MT category → 우리 family 축 표기 (backend catalog/mapping.py 와 짝).
+ * 저장은 원본 그대로(무손실) 두고 **표기만** 우리 체계로 잇는다.
+ */
+export const CATEGORY_LABELS: Record<string, string> = {
+  metal: 'Metal',
+  polymer: 'Polymer',
+  ceramic: 'Ceramic',
+  composite: 'Composite',
+  rubber: 'Rubber',
+  foam: 'Foam',
+  molecular: 'Molecular',
+}
+
 export const catalogApi = {
   summary: () => api.get<CatalogSummary>('/catalog/summary'),
   materials: (params: {
