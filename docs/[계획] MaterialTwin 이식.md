@@ -162,6 +162,15 @@ MaterialTwin 의 방법론 문서(1MB+)는 코드와 별개의 자산이니 폴�
 
 ## 진행 기록
 
+- **2026-09-06 — 1단계 완료** (화면·채택·연결·통합 검색). ① 문헌 물성 목록·상세
+  화면(tier 배지·대표값/대안값 — 대표 선택은 고체상→등급→기준온도 근접, 진 후보는
+  밀린 자리와 함께). ② 채택 「카탈로그에서 채우기」 — 선언 물성·기본 칸으로
+  스냅샷 복사, 기존 선언 줄 병합, 온도별 값은 한 항목의 온도점으로, tier4 도
+  동등(배지만). ③ 문헌 연결(catalog_links, 재료당 하나, 권한은 재료 편집과 동일)
+  — 재료 상세 물성 탭에 연결 섹션. ④ 통합 검색 — 재료 목록 검색이 문헌도 함께
+  (CatalogHits). 미커밋 잔여: 다른 세션 파일들에 얹은 꽂기 줄들(router·navigation·
+  MaterialDetailPage·MaterialsPage·MaterialListPanel·boundaries ALLOWED) — 그쪽
+  커밋에 실리거나 트리 정리 후 별도 커밋. **다음**: 2단계 LS-DYNA 렌더러.
 - **2026-09-05 — 0단계·1단계 데이터층 완료.** ADR 0027 채택. `app/modules/catalog`
   신설(표 4개 + 마이그레이션 d8a3f61c07b2), 이관기
   (`scripts/import_materialtwin.py`, 드라이런 기본) 완성. 실측:
