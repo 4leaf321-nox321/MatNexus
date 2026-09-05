@@ -34,7 +34,7 @@ import { Input } from '@/shared/components/ui/input'
 
 type MaterialOut = components['schemas']['MaterialOut']
 
-/** material_class 가 짧은 형식명(PA66-GF25)일 때만 분류 칸에 프리필한다 —
+/** material_class 가 짧은 형식명(PA66-GF25)일 때만 Category 칸에 프리필한다 —
  *  자유 문장은 분류가 아니라 설명이다(서버 상한 50자도 같은 이유로 못 받는다). */
 function classPrefill(materialClass: string | null): string {
   if (!materialClass) return ''
@@ -138,12 +138,12 @@ export function CreateMaterialDialog({
                 <Input value={family} onChange={(e) => setFamily(e.target.value)} maxLength={50} />
               </label>
               <label className="block text-sm">
-                <span className="text-muted-foreground mb-1 block text-xs">분류</span>
+                <span className="text-muted-foreground mb-1 block text-xs">Category</span>
                 <Input
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   maxLength={50}
-                  placeholder="예: PA66-GF25, 냉연"
+                  placeholder="예: Steel, PA66-GF25"
                 />
               </label>
               <label className="block text-sm">
