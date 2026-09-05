@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.catalog import representative
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogMaterial,
@@ -143,6 +144,19 @@ def get_material(
         .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
     ).all()
 
+    # 같은 물성의 후보들 중 대표를 고르고 — 진 후보는 이유와 함께 그대로 낸다.
+    marks = representative.annotate([value for value, _, _ in rows])
+    # 무리 안에서 대표가 먼저 서도록 정렬만 바꾼다(도메인·키 차례는 유지).
+    rows = sorted(
+        rows,
+        key=lambda row: (
+            row[1].domain,
+            row[1].key,
+            0 if marks[row[0].id].representative else 1,
+            row[0].mt_id,
+        ),
+    )
+
     values = [
         CatalogValueOut(
             id=value.id,
@@ -164,6 +178,9 @@ def get_material(
             ),
             source_detail=value.source_detail,
             notes=value.notes,
+            representative=marks[value.id].representative,
+            n_candidates=marks[value.id].n_candidates,
+            separated_by=marks[value.id].separated_by,
         )
         for value, definition, source in rows
     ]

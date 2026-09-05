@@ -66,6 +66,12 @@ class CatalogValueOut(BaseModel):
     source: CatalogSourceOut | None
     source_detail: str | None
     notes: str | None
+    representative: bool = False
+    """같은 물성의 후보 중 대표로 뽑힌 값인가. **진 후보도 함께 온다** — 화면이
+    이유와 같이 보여 준다."""
+    n_candidates: int = 1
+    separated_by: str | None = None
+    """대표에게 밀린 자리(상태·등급·수치·온도·조건 수·입력 순서). 대표는 None."""
 
 
 class CatalogMaterialDetailOut(BaseModel):

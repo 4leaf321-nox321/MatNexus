@@ -37,6 +37,76 @@ export const CATEGORY_LABELS: Record<string, string> = {
   molecular: 'Molecular',
 }
 
+/** 물성 도메인 12종의 화면 라벨. */
+export const DOMAIN_LABELS: Record<string, string> = {
+  mechanical: '기계',
+  thermal: '열',
+  physical: '물리',
+  chemical: '화학',
+  optical: '광학',
+  electrical: '전기',
+  interface: '계면',
+  structure: '구조',
+  rheological: '유변',
+  magnetic: '자성',
+  surface: '표면',
+  acoustic: '음향',
+}
+
+/**
+ * 값 표기 — 공학 표기. 아주 크거나 작은 값은 지수, 나머지는 유효숫자 5자리에서
+ * 끝 0을 지운다. 단위의 `*` 는 `·` 로, 무차원(`1`)은 숨긴다.
+ */
+export function fmtValue(value: number | null | undefined, unit?: string | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  const magnitude = Math.abs(value)
+  const number =
+    magnitude !== 0 && (magnitude >= 1e5 || magnitude < 1e-3)
+      ? value.toExponential(3)
+      : String(Number(value.toPrecision(5)))
+  const pretty = unit && unit !== '1' ? ` ${unit.replaceAll('*', '·')}` : ''
+  return `${number}${pretty}`
+}
+
+/** 조건이 아니라 관리 기록인 키 — 화면 조건 줄에서 뺀다 (서버와 같은 규칙). */
+export function isBookkeeping(key: string): boolean {
+  return (
+    key.startsWith('verdict_') ||
+    key.endsWith('_before_correction') ||
+    [
+      'corrected_by',
+      'correction_reason',
+      'correction_evidence',
+      'moved_from_material',
+      'moved_from_source',
+      'merge_verdict',
+      'direction_verbatim',
+    ].includes(key)
+  )
+}
+
+const CONDITION_SYMBOLS: Record<string, (v: unknown) => string> = {
+  temperature_k: (v) => `T ${String(v)} K`,
+  temperature_c: (v) => `T ${String(v)} ℃`,
+  wavelength_nm: (v) => `λ ${String(v)} nm`,
+  humidity_pct: (v) => `RH ${String(v)}%`,
+  frequency_hz: (v) => `f ${String(v)} Hz`,
+}
+
+/** 조건을 짧게 — 아는 키는 기호로, 나머지는 key=value 로. 길면 「외 n」. */
+export function fmtConditions(conditions: Record<string, unknown> | null | undefined): string {
+  if (!conditions) return ''
+  const entries = Object.entries(conditions).filter(([key]) => !isBookkeeping(key))
+  const parts = entries.map(([key, value]) => {
+    const known = CONDITION_SYMBOLS[key]
+    if (known) return known(value)
+    const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    return `${key}=${text.length > 24 ? `${text.slice(0, 24)}…` : text}`
+  })
+  if (parts.length <= 4) return parts.join(' · ')
+  return `${parts.slice(0, 4).join(' · ')} 외 ${parts.length - 4}`
+}
+
 export const catalogApi = {
   summary: () => api.get<CatalogSummary>('/catalog/summary'),
   materials: (params: {

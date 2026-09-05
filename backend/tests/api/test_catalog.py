@@ -205,6 +205,14 @@ class Test읽기_API:
         assert keys.count("mechanical.youngs_modulus") == 2
         tiers = {one["quality_tier"] for one in body["values"]}
         assert tiers == {1, 4}
+        # 대표는 실측(tier1)이고 먼저 선다. 진 후보는 밀린 자리를 들고 온다.
+        youngs = [
+            one for one in body["values"] if one["property_key"] == "mechanical.youngs_modulus"
+        ]
+        assert youngs[0]["representative"] and youngs[0]["quality_tier"] == 1
+        assert not youngs[1]["representative"]
+        assert youngs[1]["separated_by"] == "등급"
+        assert {one["n_candidates"] for one in youngs} == {2}
         sourced = [one for one in body["values"] if one["source"]]
         assert sourced and sourced[0]["source"]["kind"] in ("journal", "datasheet")
 
