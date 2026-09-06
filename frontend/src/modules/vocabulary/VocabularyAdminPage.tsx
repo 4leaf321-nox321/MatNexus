@@ -1145,6 +1145,10 @@ function MergeCandidates({
   const groups = useResource(() => vocabularyApi.mergeCandidates(slug), [slug])
   const [error, setError] = useState<Error | null>(null)
   const found = groups.data ?? []
+  // **한 번 묻는다.** 병합은 되돌리기가 없다 — 「포스코」 에 「포스코케미칼」 을 합치면
+  // 옮겨진 참조 수백 건을 손으로 갈라야 한다. 값 하나 창은 이미 묻는데 이 목록은
+  // 단추 하나로 바로 합쳤다(2026-09-05 점검). 몇 건이 옮겨지는지 보고 누른다.
+  const [asking, setAsking] = useState<{ from: Term; into: Term } | null>(null)
 
   async function guarded(action: () => Promise<unknown>) {
     setError(null)
@@ -1168,6 +1172,35 @@ function MergeCandidates({
   return (
     <div className="space-y-2">
       <ErrorNotice error={groups.error ?? error} />
+      <Dialog open={asking !== null} onOpenChange={(next) => !next && setAsking(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              '{asking?.from.value}' 를 '{asking?.into.value}' 로 합칠까요?
+            </DialogTitle>
+            <DialogDescription>
+              이 값을 쓰는 <b>{asking?.from.usage_count ?? 0}곳</b>이 '{asking?.into.value}' 로
+              옮겨지고, '{asking?.from.value}' 는 별칭으로 남습니다. <b>되돌리기가 없습니다</b>
+              — 서로 다른 것이면 「다른 값」 으로 표시하세요.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAsking(null)}>
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const pair = asking
+                setAsking(null)
+                if (pair) void guarded(() => vocabularyApi.merge(slug, pair.from.id, pair.into.id))
+              }}
+            >
+              {asking?.from.usage_count ?? 0}곳 옮기고 합치기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {found.map((group) => {
         // 많이 쓰이는 것이 앞이다 — 그것을 생존값으로 추천한다.
         const [survivor, ...rest] = group
@@ -1189,11 +1222,7 @@ function MergeCandidates({
                   key={item.id}
                   size="sm"
                   variant="outline"
-                  onClick={() =>
-                    void guarded(() =>
-                      vocabularyApi.merge(slug, item.id, survivor.id)
-                    )
-                  }
+                  onClick={() => setAsking({ from: item, into: survivor })}
                 >
                   '{item.value}' 를 '{survivor.value}' 로 합치기
                 </Button>

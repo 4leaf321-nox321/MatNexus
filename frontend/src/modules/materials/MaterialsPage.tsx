@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { CatalogHits } from '@/modules/catalog/CatalogHits'
 import { materialsApi } from '@/modules/materials/api'
 import type { BulkDeletePlan } from '@/modules/materials/api'
 import { categoriesOf, familiesOf } from '@/modules/materials/classification'
@@ -232,6 +233,9 @@ export default function MaterialsPage() {
 
       <ErrorNotice error={materials.error} className="mb-4" />
       <ErrorNotice error={failure} className="mb-4" />
+      {/* 통합 검색 — 같은 검색어로 문헌 카탈로그도 함께 친다(ADR 0027).
+          저장은 갈라져 있어도 검색은 하나여야 두 체계를 따로 뒤지지 않는다. */}
+      <CatalogHits q={applied} className="mb-4" />
       {notice && <p className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm">{notice}</p>}
 
       {picked.size > 0 && (

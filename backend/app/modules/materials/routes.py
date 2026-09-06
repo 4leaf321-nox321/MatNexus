@@ -53,6 +53,7 @@ from app.modules.materials.schemas import (
     SampleCreateRequest,
     SampleOut,
     SampleUpdateRequest,
+    SimilarNameOut,
     SpecimenBriefSizeOut,
     SpecimenBulkUpdateOut,
     SpecimenBulkUpdateRequest,
@@ -102,7 +103,11 @@ def _material_out(
 ) -> MaterialOut:
     """`uses` 는 **밖에서 미리 읽어 넘긴다** — 목록이 재료마다 물으면 N+1 이다."""
     unit = material.input_units.get("spec_thickness", LENGTH_UNIT)
-    density_unit = material.input_units.get("density", DENSITY_UNIT)
+    # **밀도는 늘 표시 단위로 낸다**(2026-09-05). 넣은 단위를 되돌려 줬더니 API 로
+    # kg/m3 로 넣은 재료는 「7850 kg/m3」, 화면에서 넣은 재료는 「7.85e-9 tonne/mm3」
+    # 로 한 목록에 섞여 보였다 — 그리고 수정 창은 라벨이 tonne/mm³ 라 그 7850 을
+    # 그대로 tonne/mm3 로 되보냈다. 넣은 단위는 `input_units` 에 남는다.
+    density_unit = DENSITY_UNIT
     return MaterialOut(
         id=material.id,
         record_name=material.record_name,
@@ -246,7 +251,8 @@ def _sample_out(
     runs: RunTally = (0, 0, 0),
     registered_by: str | None = None,
 ) -> SampleOut:
-    unit = sample.input_units.get("density", DENSITY_UNIT)
+    # 재료와 같은 이유로 늘 표시 단위(`material_out` 참고).
+    unit = DENSITY_UNIT
     return SampleOut(
         test_run_count=runs[0],
         adopted_count=runs[1],
@@ -353,6 +359,10 @@ def preview_name(
         taken=services.name_taken(
             db, owner_workspace_id=workspace.id, record_name=record_name
         ),
+        similar=[
+            SimilarNameOut(id=row.id, record_name=row.record_name)
+            for row in services.similar_names(db, user, record_name=record_name)
+        ],
     )
 
 
@@ -1060,7 +1070,7 @@ def property_sources(
         )
     )
 
-    density_unit = material.input_units.get("density", DENSITY_UNIT)
+    density_unit = DENSITY_UNIT
     lot = {s.density_si for s in samples if s.density_si is not None}
     if len(lot) == 1:
         value, level, origin, status = (
@@ -1158,7 +1168,9 @@ def update_material(
         material.declared_properties = declared.check(db, data["declared_properties"] or [])
 
     if "density" in data or "density_unit" in data:
-        unit = data.get("density_unit") or material.input_units.get("density", DENSITY_UNIT)
+        # 응답이 늘 표시 단위이므로, 단위 없이 값만 보낸 것도 표시 단위로 읽는다 —
+        # 넣었던 단위(kg/m3)로 읽으면 화면에서 본 7.85e-9 가 kg/m3 로 저장된다.
+        unit = data.get("density_unit") or DENSITY_UNIT
         value = (
             data["density"]
             if "density" in data
@@ -1572,7 +1584,8 @@ def update_sample(
         )
 
     if "density" in data or "density_unit" in data:
-        unit = data.get("density_unit") or sample.input_units.get("density", DENSITY_UNIT)
+        # 응답이 늘 표시 단위이므로 단위 없는 값도 표시 단위로 읽는다(재료와 같다).
+        unit = data.get("density_unit") or DENSITY_UNIT
         value = (
             data["density"] if "density" in data else services.from_si(sample.density_si, unit)
         )

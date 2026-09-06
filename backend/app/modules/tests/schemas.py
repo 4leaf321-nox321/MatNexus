@@ -464,6 +464,9 @@ class StorageReportOut(BaseModel):
     retention_days: int
     live_count: int
     live_bytes: int
+    processing_bytes: int = 0
+    """살아 있는 시험의 처리 결과 파일. 다시 돌릴 때마다 새 파일이라 가장 빨리 쌓인다."""
+    master_curve_bytes: int = 0
     orphans: list[StorageItemOut]
     """DB 에 행이 없는 폴더. 트랜잭션이 파일시스템까지 덮지 못해 생긴다."""
     incomplete: list[IncompleteOut]

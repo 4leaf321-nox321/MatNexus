@@ -29,4 +29,11 @@ export const groupsApi = {
     options?: Record<string, unknown>
     note?: string
   }) => api.post<GroupResult>('/groups', input),
+
+  /** 메모만. 값·멤버·옵션은 그때 계산의 스냅샷이라 안 바뀐다. */
+  updateNote: (id: string, note: string | null) =>
+    api.patch<GroupResult>(`/groups/${id}`, { note }),
+
+  /** 카드가 이 묶음에서 나왔으면 서버가 409 로 막는다 — 카드를 먼저 지운다. */
+  remove: (id: string) => api.delete<void>(`/groups/${id}`),
 }

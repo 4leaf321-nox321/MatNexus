@@ -117,6 +117,11 @@ def test_covers_every_foreign_key_in_the_schema() -> None:
             "워크벤치 바구니는 담은 대상에 FK 를 안 건다(ADR 0025) — 걸면 담겼다는 "
             "이유로 못 지우거나(RESTRICT), 지웠을 때 담긴 줄이 조용히 사라진다(CASCADE)."
         ),
+        "format_profile_references": (
+            "자동으로 고른 형식 프로파일은 시험이 `parser_version` 에 `profile:<key>` 로만 "
+            "적는다 — 사람이 고른 것(`parse_profile_id`)만 FK 다. FK 만 세면 그 형식으로 "
+            "읽은 시험이 백 건 있어도 지워진다(2026-09-05 순환 점검)."
+        ),
     }
     names = {check.__name__ for check in dependents.EXTRA_CHECKS}
     assert names <= set(allowed), (

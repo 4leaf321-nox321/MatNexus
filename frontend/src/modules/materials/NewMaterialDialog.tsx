@@ -205,6 +205,16 @@ export function NewMaterialDialog({
               같은 이름의 재료가 이미 있습니다. Details 로 구분하세요.
             </p>
           )}
+          {/* **막지 않고 보여 준다.** grade 오타(`SGARC 440` vs `SGARC440`)로 같은
+              실물이 두 줄 되는 것을 아무도 못 잡았다(2026-09-05). 등록은 열어 둔다 —
+              사후 수습은 기준정보의 용어 병합이 맡는다. */}
+          {!preview?.taken && (preview?.similar.length ?? 0) > 0 && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
+              비슷한 재료가 이미 있습니다:{' '}
+              {preview?.similar.map((one) => one.record_name).join(' · ')} — 같은 것이면
+              그것을 쓰세요.
+            </p>
+          )}
         </div>
 
         <ErrorNotice error={error} />

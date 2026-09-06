@@ -19,12 +19,15 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.modules.accounts.models import User
+from app.modules.guide.models import GuideAsset
 from app.modules.materials.models import Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import (
     Curve,
     FormatProfile,
@@ -35,6 +38,7 @@ from app.modules.tests.models import (
     TestType,
 )
 from app.modules.tests.schemas import RECORD_FIELDS
+from app.modules.viscoelastic.models import MasterCurve
 from app.modules.vocabulary import services as vocabulary_services
 from app.shared import (
     audit,
@@ -889,6 +893,7 @@ def _who_could_read(db: Session, run: TestRun, data: bytes) -> str | None:
             .where(
                 FormatProfile.test_type_id != run.test_type_id,
                 FormatProfile.is_active.is_(True),
+                FormatProfile.deleted_at.is_(None),
                 or_(
                     FormatProfile.owner_workspace_id.is_(None),
                     FormatProfile.owner_workspace_id == run.workspace_id,
@@ -937,7 +942,10 @@ def _pick_reader(
     # 없고, 「분명 그걸로 지정했는데」 를 설명할 길도 없다.
     if run.parse_profile_id is not None:
         chosen = db.get(FormatProfile, run.parse_profile_id)
-        if chosen is None or not chosen.is_active:
+        # **지운 것도 안 쓴다.** 소프트 삭제라 행은 남는데, 그것이 계속 읽으면
+        # 「지웠다」 는 화면에만 있는 말이 된다(2026-09-05 순환 점검에서 실측 —
+        # 지운 프로파일이 다음 업로드를 읽고, 다른 종류 안내에도 그 이름이 나왔다).
+        if chosen is None or not chosen.is_active or chosen.deleted_at is not None:
             return None
         return (
             f"profile:{chosen.key}",
@@ -950,6 +958,7 @@ def _pick_reader(
             .where(
                 FormatProfile.test_type_id == test_type.id,
                 FormatProfile.is_active.is_(True),
+                FormatProfile.deleted_at.is_(None),
                 or_(
                     FormatProfile.owner_workspace_id.is_(None),
                     FormatProfile.owner_workspace_id == run.workspace_id,
@@ -1235,12 +1244,50 @@ def storage_report(db: Session, *, retention_days: int | None = None) -> dict[st
         for path, size, age in filestore.incomplete_files()
     ]
 
+    # **곁 폴더도 같은 규칙으로.** 처리 결과(`processing/{run}`)와 마스터커브
+    # (`master-curves/{run}`)는 세지도 지우지도 않았다(2026-09-05 점검) — 폴더
+    # 이름이 곧 run_id 라 시험 폴더와 같은 판정이 그대로 통한다.
+    side_bytes: dict[str, int] = dict.fromkeys(filestore.SIDE_DIRS, 0)
+    for kind, relative in filestore.existing_side_dirs():
+        try:
+            run_id = uuid.UUID(relative.rsplit("/", 1)[-1])
+        except ValueError:
+            logger.warning("곁 폴더 이름이 UUID 가 아닙니다: %s", relative)
+            continue
+        size = filestore.directory_size(relative)
+        run = db.get(TestRun, run_id)
+        if run is None:
+            orphans.append({"path": relative, "bytes": size})
+        elif run.deleted_at is not None and run.deleted_at < cutoff:
+            expired.append(
+                {
+                    "path": relative,
+                    "bytes": size,
+                    "run_id": str(run.id),
+                    "record_name": run.record_name,
+                    "deleted_at": run.deleted_at,
+                }
+            )
+        else:
+            side_bytes[kind] += size
+
+    # 안내서 그림 — 행 없는 폴더만 오펀. 보존기간은 없다(안내서는 영구 삭제로 간다).
+    for relative in filestore.existing_guide_dirs():
+        try:
+            asset_id = uuid.UUID(relative.rsplit("/", 1)[-1])
+        except ValueError:
+            continue
+        if db.get(GuideAsset, asset_id) is None:
+            orphans.append({"path": relative, "bytes": filestore.directory_size(relative)})
+
     return {
         "root": str(filestore.root()),
         "total_bytes": filestore.total_size(),
         "retention_days": keep_days,
         "live_count": live_count,
         "live_bytes": live_bytes,
+        "processing_bytes": side_bytes["processing"],
+        "master_curve_bytes": side_bytes["master-curves"],
         "orphans": orphans,
         "incomplete": incomplete,
         "expired": expired,
@@ -1284,6 +1331,13 @@ def cleanup_storage(
             # 가리키던 파일이 사라졌으므로 포인터를 지운다. 행 자체는 남긴다.
             for curve in db.scalars(select(Curve).where(Curve.test_run_id == run.id)):
                 db.delete(curve)
+            # 처리 결과·마스터커브 행도 파일이 없으면 뜻이 없다 — 시험 행만 남긴다.
+            if str(item["path"]).startswith("processing/"):
+                db.execute(
+                    sa_delete(ProcessingResult).where(ProcessingResult.test_run_id == run.id)
+                )
+            if str(item["path"]).startswith("master-curves/"):
+                db.execute(sa_delete(MasterCurve).where(MasterCurve.test_run_id == run.id))
             run.source_path = None
             days = report["retention_days"]
             purged = f"※ 보존기간({days}일)이 지나 파일을 정리했습니다."

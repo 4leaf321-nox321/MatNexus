@@ -254,6 +254,39 @@ class Test영영_지운다:
         assert response.status_code == 200, response.text
         assert not _trash(client, admin_headers)
 
+    def test_카드가_있는_재료도_통째로_지운다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**실측(2026-09-05 순환 점검).** 카드를 만든 재료만 영구 삭제가 500 이었다 —
+        카드가 재료를 FK 로 가리키는데 나무(재료-시료-시편-시험)에 없어서 재료를
+        지우는 순간 FK 가 막았다. 재료가 영영 사라지는데 카드만 남을 이유가 없다."""
+        from app.modules.fitting.models import PropertyCard
+
+        made = _tree(client, admin_headers, details="CARD")
+        card = PropertyCard(
+            material_id=uuid.UUID(made["material"]["id"]),
+            orientation="MD",
+            label="지워질 카드",
+            status="published",
+            blocks={"elastic": {"values": {"youngs_modulus": 2e11, "poisson_ratio": 0.3}}},
+        )
+        db.add(card)
+        db.commit()
+        client.post(
+            f"/api/materials/{made['material']['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+
+        response = client.delete(
+            f"/api/trash/material/{made['material']['id']}?confirm=true", headers=admin_headers
+        )
+        assert response.status_code == 200, response.text
+        # 몇 장이 함께 갔는지 말한다.
+        assert "물성 카드 1건" in response.json()["said"]
+        db.expire_all()
+        assert db.get(PropertyCard, card.id) is None
+
     def test_살아_있는_것은_못_지운다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

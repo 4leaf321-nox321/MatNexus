@@ -16,6 +16,7 @@ Parquet 파일에 있고, 단위는 시험종류 정의에 있고, 시편 치수
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 from sqlalchemy import select
@@ -95,11 +96,66 @@ def load_frame(
 #: (참조 키, SI 단위). 단위를 여기 적는 이유: 선언 행은 단위를 안 들고 있는데
 #: (환산해 저장하므로), 화면의 자동 연결은 **단위가 같은 것만** 후보로 낸다 —
 #: 단위가 비면 목록에 안 뜨고, 사람은 이 값이 있는 줄도 모른다.
+#: 기준정보에 `measured_key` 가 없는 항목의 참조 키. 기준정보의 물성 항목은 한글
+#: 이름이라 `@declared_…` 뒤에 붙일 영문 키가 따로 필요하다 — 잰 값이 있는 항목은
+#: 그 키(`measured_key`)를 그대로 쓰고, 없는 항목은 여기서 찾고, 그래도 없으면
+#: 기호(`symbol`)를 쓴다.
 DECLARED_KEYS = {
     "탄성계수": ("youngs_modulus", "Pa"),
     "포아송비": ("poisson_ratio", "1"),
+    "푸아송비": ("poisson_ratio", "1"),
     "밀도": ("density", "kg/m3"),
+    "전단탄성계수": ("shear_modulus", "Pa"),
+    "항복강도": ("yield_strength", "Pa"),
+    "인장강도": ("tensile_strength", "Pa"),
+    "열팽창계수": ("thermal_expansion", "1/K"),
+    "열전도도": ("thermal_conductivity", "W/(m.K)"),
+    "비열": ("specific_heat", "J/(kg.K)"),
 }
+
+
+@dataclass(frozen=True)
+class DeclaredKey:
+    """선언 물성 항목 하나를 파이프라인·비교가 어떻게 부르는가."""
+
+    key: str
+    """`@declared_<key>` 의 그 키."""
+    si_unit: str
+    measured_key: str | None
+    """같은 물성을 처리 결과가 낸다면 그 스칼라 키. 선언↔측정을 **이것으로 잇는다**."""
+
+
+def declared_keys(db: Session) -> dict[str, DeclaredKey]:
+    """기준정보의 물성 항목 전부 → 참조 키(2026-09-05).
+
+    전에는 위 표의 셋(탄성계수·포아송비·밀도)만 파이프라인에 들어갔고, 나머지는 적어
+    둬도 **오류 없이 조용히 무시**됐다 — 사람은 「적어 놨는데 왜 안 쓰나」 를 알 길이
+    없었다. 이제 기준정보의 항목이면 전부 들어간다.
+
+    선언과 측정을 잇는 열쇠도 여기서 온다. 라벨 문자열로 이으면 용어를 개명하거나
+    플러그인이 라벨을 바꿀 때 오류 없이 「매칭 안 됨」 으로 빠진다 — 항목의
+    `measured_key` 가 정본이다.
+    """
+    from app.modules.materials.declared import catalog
+
+    found: dict[str, DeclaredKey] = {}
+    for item, spec in catalog(db).items():
+        measured = spec.get("measured_key") or None
+        builtin = DECLARED_KEYS.get(item)
+        symbol = str(spec.get("symbol") or "").strip()
+        key = (
+            measured
+            or (builtin[0] if builtin else None)
+            or (symbol.lower() if symbol.isascii() and symbol.isidentifier() else None)
+        )
+        if key is None:
+            continue
+        si_unit = str(spec.get("si_unit") or (builtin[1] if builtin else "1"))
+        found[item] = DeclaredKey(key=key, si_unit=si_unit, measured_key=measured)
+    # 기준정보에 아직 없는 옛 이름(씨앗을 안 심은 DB)도 표의 것은 읽힌다.
+    for item, (key, si_unit) in DECLARED_KEYS.items():
+        found.setdefault(item, DeclaredKey(key=key, si_unit=si_unit, measured_key=None))
+    return found
 
 
 def declared_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
@@ -137,11 +193,12 @@ def declared_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
         return []
 
     given: list[processing.Scalar] = []
+    keys = declared_keys(db)
     for row in material.declared_properties or []:
-        found = DECLARED_KEYS.get(str(row.get("item")))
+        found = keys.get(str(row.get("item")))
         if found is None:
             continue
-        key, si_unit = found
+        key, si_unit = found.key, found.si_unit
         # **대푯값은 첫 점이다.** 온도를 타는 값이면 가장 낮은 온도(대개 상온)다.
         points = [
             point

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from sqlalchemy import select
@@ -28,21 +28,32 @@ from sqlalchemy.orm import Session
 from app.modules.accounts.models import User
 from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
-from app.shared import filestore, permissions
+from app.shared import filestore, permissions, specimen_size
 from app.shared.errors import AppError, NotFound
 from matcore import curves as curvekit
 from matcore import groups
 from matcore import prony as pronykit
 from matcore.groups import prony as _prony_group  # noqa: F401  (등록시킨다)
+from matcore.groups import rate as rate_group
+from matcore.processing.tensile import PLASTIC_STRAIN, TRUE_STRESS
 
 #: 구성원을 모으는 법. 플러그인 id → 함수.
 _COLLECTORS: dict[str, Callable[[Session, list[TestRun]], list[groups.Member]]] = {}
 
+#: 구성원이 시험에서 **무엇을 갖고 있어야** 하는가. 플러그인 id → 이름.
+#:
+#: 화면이 후보를 거르는 근거다. Prony 는 마스터커브가 있는 시험만, 속도별 묶음은
+#: 채택된 처리 결과가 있는 시험만 받는데, 화면이 그것을 플러그인 id 로 알아맞히면
+#: 새 묶음이 생길 때마다 화면을 고쳐야 한다(D7). 여기서 선언하고 API 가 준다.
+Needs = Literal["master_curve", "adopted_result"]
+_NEEDS: dict[str, Needs] = {}
+
 
 def collector(
-    plugin_id: str,
+    plugin_id: str, *, needs: Needs
 ) -> Callable[
     [Callable[[Session, list[TestRun]], list[groups.Member]]],
     Callable[[Session, list[TestRun]], list[groups.Member]],
@@ -51,9 +62,16 @@ def collector(
         fn: Callable[[Session, list[TestRun]], list[groups.Member]],
     ) -> Callable[[Session, list[TestRun]], list[groups.Member]]:
         _COLLECTORS[plugin_id] = fn
+        _NEEDS[plugin_id] = needs
         return fn
 
     return wrap
+
+
+def member_needs(plugin_id: str) -> Needs:
+    """이 묶음의 구성원이 갖고 있어야 하는 것. 모르는 묶음은 마스터커브로 본다 —
+    그쪽이 더 좁아서, 틀려도 후보가 덜 뜰 뿐 잘못된 시험이 뜨지는 않는다."""
+    return _NEEDS.get(plugin_id, "master_curve")
 
 
 def _read_points(relative: str) -> dict[str, np.ndarray]:
@@ -95,7 +113,7 @@ def _prony_columns(raw: dict[str, np.ndarray], label: str) -> dict[str, np.ndarr
     return found
 
 
-@collector("viscoelastic.prony_group")
+@collector("viscoelastic.prony_group", needs="master_curve")
 def _prony_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
     """마스터커브와 (있으면) 맞춰 둔 Prony 를 꺼낸다.
 
@@ -152,6 +170,104 @@ def _prony_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
                 columns=columns,
                 values={"reference_temperature_k": curve.reference_temperature_k},
                 meta=meta,
+            )
+        )
+    return members
+
+
+def _strain_rate_of(db: Session, run: TestRun, specimen: Specimen) -> float:
+    """이 시험의 변형률 속도(1/s).
+
+    **조건에 `strain_rate` 가 있으면 그것**, 없으면 소성역 속도(`speed_plastic`, m/s)를
+    게이지 길이로 나눈다. 게이지 길이는 시편 → 규격 공칭 순으로 온다(치수 3층,
+    `specimen_size`). 둘 다 없으면 묶을 수 없다 — 속도를 모르는 시편을 「느린 쪽」
+    에 조용히 넣으면 그 묶음이 거짓말이 된다.
+    """
+    conditions = run.conditions or {}
+    direct = conditions.get("strain_rate")
+    if isinstance(direct, int | float) and direct > 0:
+        return float(direct)
+    speed = conditions.get("speed_plastic")
+    if not isinstance(speed, int | float) or speed <= 0:
+        raise AppError(
+            "MNX-GROUPING-0007",
+            f"{run.record_name} 의 시험 조건에 소성역 속도(speed_plastic)가 없습니다. "
+            f"속도로 묶으려면 조건에 속도가 적혀 있어야 합니다 — 시험 수정에서 넣으세요.",
+            status=422,
+        )
+    gauge = specimen_size.sizes_of(db, specimen, run_measured=run.dimensions or None).get(
+        "gauge_length"
+    )
+    if gauge is None or gauge <= 0:
+        raise AppError(
+            "MNX-GROUPING-0008",
+            f"{run.record_name} 의 게이지 길이를 모릅니다 — 시편에도 규격에도 없습니다. "
+            f"속도(m/s)를 변형률 속도(1/s)로 바꾸려면 게이지 길이가 필요합니다.",
+            status=422,
+        )
+    return float(speed) / float(gauge)
+
+
+@collector("tensile.rate_family", needs="adopted_result")
+def _rate_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
+    """채택된 결과의 진응력·진소성변형률 곡선과 변형률 속도를 꺼낸다.
+
+    **채택된 것만 본다.** 처리 결과가 여럿이면 어느 것이 이 시험의 답인지는
+    채택이 말한다 — 「가장 최근 것」 을 쓰면 다시 처리만 하고 채택을 안 옮긴 시험이
+    조용히 바뀐다(Prony 묶음이 대표 마스터커브를 읽는 것과 같은 판단).
+    """
+    # **한 번에 읽는다**(N+1). 시편·결과를 시험마다 따로 부르지 않는다.
+    specimens = {
+        one.id: one
+        for one in db.scalars(
+            select(Specimen).where(Specimen.id.in_({run.specimen_id for run in runs}))
+        )
+    }
+    results = {
+        one.id: one
+        for one in db.scalars(
+            select(ProcessingResult).where(
+                ProcessingResult.id.in_(
+                    {run.adopted_result_id for run in runs if run.adopted_result_id}
+                )
+            )
+        )
+    }
+    members: list[groups.Member] = []
+    for run in runs:
+        result = results.get(run.adopted_result_id) if run.adopted_result_id else None
+        if result is None:
+            raise AppError(
+                "MNX-GROUPING-0009",
+                f"{run.record_name} 에 채택된 처리 결과가 없습니다. 먼저 처리하고 "
+                f"「결과」 탭에서 채택하세요.",
+                status=422,
+            )
+        specimen = specimens.get(run.specimen_id)
+        if specimen is None:
+            raise NotFound(
+                "MNX-GROUPING-0003", f"{run.record_name} 의 시편을 찾을 수 없습니다."
+            )
+        columns = _read_points(result.storage_path)
+        if PLASTIC_STRAIN not in columns or TRUE_STRESS not in columns:
+            raise AppError(
+                "MNX-GROUPING-0010",
+                f"{run.record_name} 의 채택된 결과에 진응력·진소성변형률이 없습니다. "
+                f"「진응력·진소성변형률」 단계를 거친 결과를 채택하세요.",
+                status=422,
+            )
+        values: dict[str, float] = {rate_group.RATE: _strain_rate_of(db, run, specimen)}
+        temperature = (run.conditions or {}).get("temperature")
+        if isinstance(temperature, int | float):
+            values[rate_group.TEMPERATURE] = float(temperature)
+        members.append(
+            groups.Member(
+                label=run.record_name,
+                columns={
+                    PLASTIC_STRAIN: columns[PLASTIC_STRAIN],
+                    TRUE_STRESS: columns[TRUE_STRESS],
+                },
+                values=values,
             )
         )
     return members

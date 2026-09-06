@@ -19,8 +19,8 @@ import { SampleExplorer } from '@/modules/materials/SampleExplorer'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { LinkedCatalogSection } from '@/modules/catalog/LinkedCatalogSection'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
-import { GroupsPanel } from '@/modules/materials/GroupsPanel'
 import { tabOf } from '@/modules/materials/tabs'
 import { MasterCurveNotice } from '@/modules/materials/MasterCurveNotice'
 import { groupsApi } from '@/modules/materials/api.groups'
@@ -30,6 +30,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
+import { formatScalar, fromDisplay } from '@/shared/units'
 import { RecordName } from '@/shared/components/RecordName'
 
 export default function MaterialDetailPage() {
@@ -149,7 +150,17 @@ export default function MaterialDetailPage() {
                 : `${item.spec_thickness} ${item.spec_thickness_unit}`
             }
           />
-          <Field label="밀도" value={item.density == null ? '—' : `${item.density} ${item.density_unit}`} />
+          {/* **표시 단위로, 표의 기호로.** 서버가 밀도를 늘 표시 단위(tonne/mm3)로 주므로
+              값을 SI 로 되돌려 다른 화면과 같은 함수로 적는다 — 넣은 단위를 그대로 붙였더니
+              「7850 kg/m3」 과 「7.85e-9 tonne/mm3」 이 한 목록에 섞였다(2026-09-05). */}
+          <Field
+            label="밀도"
+            value={
+              item.density == null
+                ? '—'
+                : formatScalar(fromDisplay(item.density, 'kg/m3'), 'kg/m3', 'density')
+            }
+          />
           <Field label="푸아송비" value={item.poisson_ratio == null ? '—' : String(item.poisson_ratio)} />
           <Field
             label="소속"
@@ -248,23 +259,30 @@ export default function MaterialDetailPage() {
               onEditDeclared={setEditingDeclared}
               groupResults={groupRows.data ?? []}
               groupKinds={groupKinds.data ?? []}
-              groupSlot={<GroupsPanel materialId={id} list={false} />}
               notice={
                 <MasterCurveNotice materialId={id} />
               }
               header={
                 item && (
-                  <DeclaredPropertiesCard
-                    level="재료"
-                    list={false}
-                    openItem={editingDeclared}
-                    onOpenChange={setEditingDeclared}
-                    rows={item.declared_properties}
-                    onSave={async (rows) => {
-                      await materialsApi.update(item.id, { declared_properties: rows })
-                      material.reload()
-                    }}
-                  />
+                  <>
+                    {/* 문헌 연결 — 이 재료가 카탈로그의 어느 등급인지 잇고,
+                        문헌 값으로 빈 물성칸을 채운다(스냅샷). */}
+                    <LinkedCatalogSection
+                      material={item}
+                      onChanged={() => material.reload()}
+                    />
+                    <DeclaredPropertiesCard
+                      level="재료"
+                      list={false}
+                      openItem={editingDeclared}
+                      onOpenChange={setEditingDeclared}
+                      rows={item.declared_properties}
+                      onSave={async (rows) => {
+                        await materialsApi.update(item.id, { declared_properties: rows })
+                        material.reload()
+                      }}
+                    />
+                  </>
                 )
               }
             />

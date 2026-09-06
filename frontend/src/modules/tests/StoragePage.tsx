@@ -111,6 +111,13 @@ export default function StoragePage() {
               </dd>
             </div>
             <div>
+              {/* 처리 결과는 다시 돌릴 때마다 새 파일이라 가장 빨리 쌓인다 — 보여야 안다. */}
+              <dt className="text-muted-foreground text-xs">처리 · 마스터커브</dt>
+              <dd className="mt-0.5 tabular-nums">
+                {mb(data.processing_bytes)} · {mb(data.master_curve_bytes)}
+              </dd>
+            </div>
+            <div>
               <dt className="text-muted-foreground text-xs">치울 수 있음</dt>
               <dd
                 className={`mt-0.5 tabular-nums ${

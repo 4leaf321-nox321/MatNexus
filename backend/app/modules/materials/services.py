@@ -146,6 +146,38 @@ def material_record_name(
     )
 
 
+#: 이보다 닮으면 「비슷한 재료」 로 띄운다. pg_trgm 의 기본 문턱(0.3)보다 조금 높다 —
+#: 같은 등급 계열(`SGARC440` vs `SGARC340`)은 걸리고, 두께만 다른 다른 재료는 덜 걸린다.
+SIMILAR_THRESHOLD = 0.45
+SIMILAR_LIMIT = 3
+
+
+def similar_names(
+    db: Session, user: User, *, record_name: str, limit: int = SIMILAR_LIMIT
+) -> list[Material]:
+    """비슷한 이름으로 **살아 있는** 재료. 같은 이름은 뺀다(그것은 `taken` 이 말한다).
+
+    막지 않고 보여 준다 — grade 는 열린 축이라 새 값이 생기는 것이 맞고, 등록 병목을
+    만들면 안 된다. 사후 수습은 기준정보의 용어 병합이 이미 맡는다.
+    검색용 trigram GIN 인덱스가 있어 `%` 연산자가 그것을 탄다.
+    """
+    if not record_name.strip():
+        return []
+    score = func.similarity(Material.record_name, record_name)
+    rows = db.scalars(
+        select(Material)
+        .where(
+            Material.id.in_(permissions.visible_material_ids(db, user)),
+            Material.deleted_at.is_(None),
+            Material.record_name != record_name,
+            score >= SIMILAR_THRESHOLD,
+        )
+        .order_by(score.desc(), Material.record_name)
+        .limit(limit)
+    )
+    return list(rows)
+
+
 def name_taken(
     db: Session,
     *,

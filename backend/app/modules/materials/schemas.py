@@ -337,10 +337,18 @@ class NamePreviewRequest(BaseModel):
     spec_thickness_unit: str = LENGTH_UNIT
 
 
+class SimilarNameOut(BaseModel):
+    id: uuid.UUID
+    record_name: str
+
+
 class NamePreviewOut(BaseModel):
     record_name: str
     taken: bool
     """이미 쓰이고 있는 이름인가. 등록 버튼을 누르기 전에 알려 준다."""
+    similar: list[SimilarNameOut] = []
+    """비슷한 이름의 살아 있는 재료(같은 이름은 뺀다). `SGARC440` 과 `SGARC 440` 처럼
+    grade 오타로 같은 실물이 두 줄 되는 것을 **막지 않고 보여 준다**(2026-09-05)."""
 
 
 # --- 시료 -------------------------------------------------------------------

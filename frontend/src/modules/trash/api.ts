@@ -46,6 +46,10 @@ export const TRASH_GROUPS = [
       { key: 'export_profile', label: '해석용 물성 정의' },
     ],
   },
+  {
+    label: '문서',
+    kinds: [{ key: 'guide_document', label: '안내서' }],
+  },
 ] as const
 
 export const TRASH_KINDS = TRASH_GROUPS.flatMap((group) =>

@@ -35,6 +35,7 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.shared import dependents
 
 #: 채널·조건이 가질 수 있는 물리 차원. 단위 변환이 이것을 기준으로 한다.
 DIMENSIONS = (
@@ -626,3 +627,39 @@ class FormatProfile(Base):
     key 를 붙들어, 같은 key 로 다시 만들 때 「이미 있습니다」 가 나오는데 화면
     어디에도 그것이 없다 — 재료에서 그대로 터졌다(2026-08-28 이관 사고).
     """
+
+
+def format_profile_references(db: Any, table: str, pk: Any) -> list[Any]:
+    """**자동으로 고른 프로파일은 FK 가 없다.** 시험은 `parser_version` 에
+    `profile:<key>` 로만 적는다 — 사람이 고른 것(`parse_profile_id`)만 FK 다.
+
+    FK 만 세면 그 형식으로 읽은 시험이 백 건 있어도 「매달린 것 없음」 이 되어
+    지워진다(2026-09-05 순환 점검에서 실측). 지우면 그 시험을 다시 읽을 길이 없다.
+    """
+    from sqlalchemy import func, select
+
+    from app.shared.dependents import Reference
+
+    if table != "format_profiles":
+        return []
+    profile = db.get(FormatProfile, pk)
+    if profile is None:
+        return []
+    count = (
+        db.scalar(
+            select(func.count())
+            .select_from(TestRun)
+            .where(
+                TestRun.parser_version == f"profile:{profile.key}",
+                TestRun.deleted_at.is_(None),
+                TestRun.parse_profile_id.is_(None),
+            )
+        )
+        or 0
+    )
+    if not count:
+        return []
+    return [Reference(table="test_runs", column="parser_version", count=count, on_delete=None)]
+
+
+dependents.EXTRA_CHECKS.append(format_profile_references)

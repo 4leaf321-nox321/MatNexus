@@ -128,6 +128,58 @@ def two_runs(client: TestClient, db: Session, admin_headers: dict[str, str]) -> 
     return {"material": material, "runs": runs}
 
 
+class Test고치고_지운다:
+    def _group(self, client: TestClient, headers: dict[str, str], two: dict[str, Any]) -> str:
+        made = client.post(
+            "/api/groups",
+            json={
+                "plugin_id": PLUGIN,
+                "run_ids": [run["id"] for run in two["runs"]],
+                "options": {"method": "pooled"},
+            },
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        return str(made.json()["id"])
+
+    def test_메모만_고친다(
+        self, client: TestClient, admin_headers: dict[str, str], two_runs: dict[str, Any]
+    ) -> None:
+        group = self._group(client, admin_headers, two_runs)
+        changed = client.patch(
+            f"/api/groups/{group}", json={"note": "  상온 기준  "}, headers=admin_headers
+        )
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["note"] == "상온 기준"
+        assert changed.json()["values"]["equilibrium_pa"] > 0  # 값은 그대로
+
+    def test_지우면_목록에서_사라진다(
+        self, client: TestClient, admin_headers: dict[str, str], two_runs: dict[str, Any]
+    ) -> None:
+        group = self._group(client, admin_headers, two_runs)
+        gone = client.delete(f"/api/groups/{group}", headers=admin_headers)
+        assert gone.status_code == 204, gone.text
+        listed = client.get(
+            f"/api/groups/materials/{two_runs['material']['id']}", headers=admin_headers
+        ).json()
+        assert group not in [one["id"] for one in listed]
+
+    def test_카드가_나온_묶음은_못_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], two_runs: dict[str, Any]
+    ) -> None:
+        """카드의 근거가 사라진다 — 카드를 먼저 지우라고 말한다."""
+        group = self._group(client, admin_headers, two_runs)
+        card = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"group_result_id": group, "label": "묶음 카드"},
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        blocked = client.delete(f"/api/groups/{group}", headers=admin_headers)
+        assert blocked.status_code == 409, blocked.text
+        assert "묶음 카드" in blocked.json()["error"]["message"]
+
+
 class Test고를_수_있는_묶음:
     def test_레지스트리가_목록을_준다(
         self, client: TestClient, admin_headers: dict[str, str]

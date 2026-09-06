@@ -1955,3 +1955,70 @@ class Test파일이_시험_칸을_채운다:
         # 무슨 일이 있었는지 남긴다 — 조용히 비면 사람이 원인을 못 찾는다.
         # `_warnings` 는 상세 응답에서 `warnings` 로 갈라 나온다.
         assert "장비" in " ".join(detail["warnings"])
+
+
+class Test지운_프로파일:
+    """**지운 것은 읽지도 안내하지도 않는다**(2026-09-05 순환 점검).
+
+    소프트 삭제라 행이 남는데 그것이 계속 읽으면 「지웠다」 는 화면에만 있는 말이
+    된다 — 실측: 지운 프로파일이 다음 업로드를 읽었고, 다른 종류로 잘못 올린 파일의
+    안내에도 그 이름이 나왔다.
+    """
+
+    def test_지운_프로파일은_읽지_않고_안내에도_안_나온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        gone = client.delete("/api/formats/ta_dma850", headers=admin_headers)
+        assert gone.status_code == 204, gone.text
+
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "failed"
+        stored = db.get(TestRun, uuid.UUID(run["id"]))
+        assert stored is not None and stored.parse_error
+        assert "ta_dma850" not in stored.parse_error
+
+        # 인장으로 잘못 올린 DMA 파일 — 지운 프로파일을 「이쪽이 읽는다」 고 안내하면 안 된다.
+        wrong = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        services.parse_run(db, uuid.UUID(wrong["id"]))
+        said = db.get(TestRun, uuid.UUID(wrong["id"]))
+        assert said is not None and said.parse_error
+        assert "ta_dma850" not in said.parse_error
+
+        detected = client.post(
+            "/api/test-types/detect",
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert detected["profile_key"] != "ta_dma850"
+
+    def test_자동으로_고른_프로파일도_매달린_것으로_센다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """사람이 고른 것만 FK 다. 자동으로 고른 시험은 `parser_version` 에만 적히는데,
+        그것을 안 세면 백 건이 읽은 형식도 「매달린 것 없음」 으로 지워진다."""
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        stored = db.get(TestRun, uuid.UUID(run["id"]))
+        assert stored is not None
+        assert stored.parser_version == "profile:ta_dma850"
+        assert stored.parse_profile_id is None
+
+        response = client.delete("/api/formats/ta_dma850", headers=admin_headers)
+        assert response.status_code == 409, response.text
+        assert "시험" in response.json()["error"]["message"]

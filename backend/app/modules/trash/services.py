@@ -43,10 +43,13 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
-from app.modules.fitting.models import ExportProfile
+from app.modules.fitting.models import ExportProfile, PropertyCard
+from app.modules.grouping.models import GroupResult
+from app.modules.guide.models import GuideAsset, GuideDocument, GuideRevision, GuideSection
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.pipelines.models import PipelineConnector
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult
+from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import Curve, FormatProfile, TestRun, TestSummary, TestType
 from app.modules.vocabulary import services as vocabulary_services
 from app.shared import audit, filestore
@@ -62,7 +65,17 @@ TREE_KINDS = ("material", "sample", "specimen", "test_run")
 #: 이 시험의 채널이 무엇을 재는 것이었나, 그 파일을 무엇으로 읽었나. 그래서
 #: 지우는 자리를 소프트로 바꾸고 여기로 들여보낸다.
 #:
-FLAT_KINDS = ("test_type", "format_profile", "recipe", "connector", "export_profile")
+#: 안내서 문서도 여기다(2026-09-05). 소프트 삭제는 됐는데 복구·영구삭제 화면이 없어
+#: 지운 안내서가 DB 에 영원히 「지워진 채」 남았다. 절·리비전·그림은 문서에
+#: 딸려 있어 되살리면 그대로 돌아오고, 영구 삭제하면 함께 사라진다.
+FLAT_KINDS = (
+    "test_type",
+    "format_profile",
+    "recipe",
+    "connector",
+    "export_profile",
+    "guide_document",
+)
 
 #: 다루는 것 전부. 계정은 뺐다: 성격이 달라(권한·소속) 같은 표에 섞으면 읽히지
 #: 않고, 계정 관리 화면이 이미 따로 있다.
@@ -83,6 +96,7 @@ _MODELS: dict[str, tuple[Any, str]] = {
     "recipe": (ProcessingRecipe, "레시피"),
     "connector": (PipelineConnector, "장비 커넥터"),
     "export_profile": (ExportProfile, "해석용 물성 정의"),
+    "guide_document": (GuideDocument, "안내서"),
 }
 
 #: **자리를 다투는 칸.** 되살릴 때 살아 있는 것이 이미 그 값을 쓰고 있으면 막는다 —
@@ -94,6 +108,8 @@ _UNIQUE_COLUMNS = {
     "recipe": ("owner_workspace_id", "key"),
     "connector": ("workspace_id", "hostname"),
     "export_profile": ("owner_workspace_id", "key"),
+    # 전사 유일. 주소에 쓰는 이름이라 부서 범위가 없다.
+    "guide_document": ("key",),
 }
 
 #: 이름을 담은 칸. 종류마다 다르다 — 없으면 `record_name` 을 본다.
@@ -103,6 +119,7 @@ _NAME_COLUMNS = {
     "recipe": "label",
     "connector": "name",
     "export_profile": "label",
+    "guide_document": "title",
 }
 
 #: 되살릴 때 되돌려 놓을 기준정보 연결. 지울 때 `release_bindings` 가 뺀 것을
@@ -443,6 +460,12 @@ def _purge_row(
     item_id = row.id
     tree = _tree(db, kind, row)
     counts = {_MODELS[one][1]: len(tree[one]) for one in KINDS if tree[one]}
+    # **재료에서 나온 것들도 함께 간다.** 카드·대표 곡선·글로벌 피팅 결과는 재료를
+    # FK 로 가리키는데 나무(재료-시료-시편-시험)에는 없어서, 재료를 지우는 순간 FK 가
+    # 막고 500 이 났다(2026-09-05 순환 점검 — 카드를 만든 재료만 그랬다). 재료가
+    # 영영 사라지는데 그 재료의 카드만 남을 이유가 없다. 몇 장인지는 적는다.
+    derived = _derived_of_materials(db, [one.id for one in tree["material"]])
+    counts.update({label: len(rows) for label, (_, rows) in derived.items() if rows})
     done = Done(name=_name(kind, row), counts=counts)
 
     audit.record(
@@ -468,6 +491,21 @@ def _purge_row(
                 .where(ProcessingResult.recipe_id == row.id)
                 .values(recipe_id=None)
             )
+        if kind == "guide_document":
+            # 절 → 리비전 → 그림. FK 에 ondelete 가 없으니 아래부터 손으로.
+            sections = list(
+                db.scalars(select(GuideSection.id).where(GuideSection.document_id == row.id))
+            )
+            if sections:
+                db.execute(delete(GuideRevision).where(GuideRevision.section_id.in_(sections)))
+                db.execute(delete(GuideSection).where(GuideSection.id.in_(sections)))
+            for asset in list(
+                db.scalars(select(GuideAsset).where(GuideAsset.document_id == row.id))
+            ):
+                with contextlib.suppress(OSError):
+                    filestore.delete_dir(str(asset.path).rsplit("/", 1)[0])
+                db.delete(asset)
+            db.flush()
         db.delete(row)
         return done, tree
 
@@ -475,6 +513,11 @@ def _purge_row(
     for run in runs:
         _purge_run(db, run)
     db.flush()
+    # 카드 → 대표 곡선 → 글로벌 피팅 결과. 카드가 대표 곡선을 가리키므로 카드가 먼저다.
+    for _label, (_model, rows) in derived.items():
+        for target in rows:
+            db.delete(target)
+        db.flush()
     for one in ("specimen", "sample", "material"):
         for target in tree[one]:
             db.delete(target)
@@ -486,6 +529,23 @@ def _purge_row(
         # 안 걸렸다.
         db.flush()
     return done, tree
+
+
+def _derived_of_materials(
+    db: Session, material_ids: Sequence[uuid.UUID]
+) -> dict[str, tuple[type[Any], list[Any]]]:
+    """재료에서 나온 행들 — 지우는 차례대로. 비면 빈 목록."""
+    if not material_ids:
+        return {}
+    found: dict[str, tuple[type[Any], list[Any]]] = {}
+    for label, model in (
+        ("물성 카드", PropertyCard),
+        ("대표 곡선", EnsembleResult),
+        ("글로벌 피팅 결과", GroupResult),
+    ):
+        rows = list(db.scalars(select(model).where(model.material_id.in_(material_ids))))
+        found[label] = (model, rows)
+    return found
 
 
 @dataclass(frozen=True)
@@ -551,13 +611,24 @@ def purge_many(
 
 
 def _purge_run(db: Session, run: Any) -> None:
-    """시험 하나와 그 곡선·요약값·파일."""
+    """시험 하나와 그 곡선·요약값·처리 결과·파일.
+
+    **처리 결과도 함께 지운다.** `processing_results.test_run_id` 에는 ondelete 가
+    없어서, 결과를 한 번이라도 저장한 시험을 영구 삭제하면 FK 위반으로 500 이었고
+    `purge_many` 는 한 트랜잭션이라 함께 고른 것까지 전부 안 지워졌다(2026-09-05
+    점검). 결과는 그 시험의 파생물이라 남길 이유가 없다 — 채택 요약도 같이 간다.
+    마스터커브 행은 CASCADE 로 사라지지만 **파일은 남았다** — 곁 폴더도 지운다.
+    """
     db.execute(delete(Curve).where(Curve.test_run_id == run.id))
     db.execute(delete(TestSummary).where(TestSummary.test_run_id == run.id))
+    db.execute(delete(ProcessingResult).where(ProcessingResult.test_run_id == run.id))
     # **파일 실패로 멈추지 않는다.** 이미 사라진 파일이 흔하다(정리 잡이 먼저
     # 치웠을 수 있다). 행은 지워야 하고, 남은 파일은 저장소 정리가 다시 잡는다.
     source = getattr(run, "source_path", None)
     if source:
         with contextlib.suppress(OSError):
             filestore.delete_dir(str(source).rsplit("/", 1)[0])
+    for kind in filestore.SIDE_DIRS:
+        with contextlib.suppress(OSError):
+            filestore.delete_dir(filestore.side_dir(kind, run.id))
     db.delete(run)

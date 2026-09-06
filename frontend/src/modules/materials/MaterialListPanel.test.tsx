@@ -36,9 +36,9 @@ function material(id: string, name: string, alias: string | null = null) {
   return { id, record_name: name, alias }
 }
 
-function panel(currentId?: string) {
+function panel(currentId?: string, at = '/materials/m1') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[at]}>
       <LeftPanelProvider>
         {/* 껍데기가 자리를 먼저 그려야 포털이 찾는다. */}
         <LeftPanelHost />
@@ -82,6 +82,14 @@ describe('재료 목록 옆패널', () => {
     panel('m1')
     const link = await screen.findByRole('link', { name: /DP780/ })
     expect(link).toHaveAttribute('href', '/materials/m2')
+  })
+
+  it('켜 둔 탭을 갖고 간다', async () => {
+    // CAE 카드를 보며 재료를 갈아타는데 매번 첫 탭으로 떨어지면 탭을 다시 눌러야
+    // 한다. 그 재료에 없는 탭이면 상세 쪽 `tabOf` 가 첫 탭으로 돌린다.
+    panel('m1', '/materials/m1?tab=cards')
+    const link = await screen.findByRole('link', { name: /DP780/ })
+    expect(link).toHaveAttribute('href', '/materials/m2?tab=cards')
   })
 
   it('검색은 서버가 한다', async () => {

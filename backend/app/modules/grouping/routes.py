@@ -11,6 +11,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -22,12 +23,14 @@ from app.modules.grouping.schemas import (
     GroupingParamOut,
     GroupingProducedOut,
     GroupingSpecOut,
+    GroupNoteRequest,
     GroupResultOut,
 )
 from app.modules.materials.models import Material
-from app.shared import permissions, test_type_channels
+from app.modules.workspaces.models import Workspace
+from app.shared import audit, permissions, test_type_channels
 from app.shared.auth import current_user
-from app.shared.errors import NotFound
+from app.shared.errors import Conflict, NotFound
 from matcore import groups, registry
 
 router = APIRouter(prefix="/groups", tags=["grouping"])
@@ -77,6 +80,7 @@ def list_kinds(
                 key for key, channels in known.items() if registry.fits(plugin, key, channels)
             ),
             requires_channels=[list(one) for one in plugin.requires_channels],
+            needs=services.member_needs(plugin.id),
             params=[
                 GroupingParamOut(
                     name=item.name,
@@ -118,6 +122,71 @@ def create_group(
     )
     db.commit()
     return _out(row)
+
+
+def _editable(db: Session, user: User, group_id: uuid.UUID) -> GroupResult:
+    """그 묶음을 만든 부서의 멤버(또는 시스템 관리자)만 고치고 지운다."""
+    row = db.get(GroupResult, group_id)
+    if row is None:
+        raise NotFound("MNX-GROUPING-0011", "그 묶음을 찾을 수 없습니다.")
+    workspace = db.get(Workspace, row.workspace_id)
+    if workspace is None:
+        raise NotFound("MNX-GROUPING-0011", "그 묶음을 찾을 수 없습니다.")
+    permissions.require_member(db, workspace=workspace, user=user)
+    return row
+
+
+@router.patch("/{group_id}", response_model=GroupResultOut)
+def update_note(
+    group_id: uuid.UUID,
+    payload: GroupNoteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> GroupResultOut:
+    """메모만 고친다. **값은 안 바뀐다** — 묶음은 그때 계산의 스냅샷이다(2026-09-05)."""
+    row = _editable(db, user, group_id)
+    row.note = (payload.note or "").strip() or None
+    db.commit()
+    db.refresh(row)
+    return _out(row)
+
+
+@router.delete("/{group_id}", status_code=204)
+def delete_group(
+    group_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """묶음을 지운다. **카드가 이 묶음에서 나왔으면 못 지운다** — 카드의 근거가 사라진다.
+
+    카드는 근거를 스냅샷으로 들고 있지만(`source.group_result_id`), 「어느 묶음에서
+    나왔나」 를 되짚는 길은 이 행뿐이다. 카드를 먼저 지우면 지울 수 있다.
+    """
+    row = _editable(db, user, group_id)
+    from app.modules.fitting.models import PropertyCard
+
+    cards = db.scalars(
+        select(PropertyCard.label).where(
+            PropertyCard.source["group_result_id"].as_string() == str(row.id)
+        )
+    ).all()
+    if cards:
+        raise Conflict(
+            "MNX-GROUPING-0012",
+            f"이 묶음으로 만든 카드가 {len(cards)}장 있어 지울 수 없습니다: "
+            f"{', '.join(str(one) for one in cards[:5])}. 카드를 먼저 지우세요.",
+        )
+    audit.record(
+        db,
+        action=audit.GROUP_RESULT_DELETED,
+        actor=user,
+        target_table="group_results",
+        target_id=row.id,
+        target_label=f"{row.plugin_id} · {len(row.members)}건",
+        workspace_id=row.workspace_id,
+    )
+    db.delete(row)
+    db.commit()
 
 
 @router.get("/materials/{material_id}", response_model=list[GroupResultOut])

@@ -52,8 +52,18 @@ class GroupingSpecOut(BaseModel):
     requires_channels: list[list[str]] = []
     """필요한 채널. **안쪽 묶음은 「그중 하나」.** 시험 종류를 만드는 화면이 이것을
     읽어 「이 채널을 넣으면 무엇이 열리나」 를 보여 준다."""
+    needs: str = "master_curve"
+    """구성원이 시험에서 갖고 있어야 하는 것 — `master_curve` 또는 `adopted_result`.
+    화면이 후보 시험을 이것으로 거른다. 플러그인 id 로 알아맞히면 새 묶음마다 화면을
+    고쳐야 한다."""
     params: list[GroupingParamOut]
     makes_values: list[GroupingProducedOut]
+
+
+class GroupNoteRequest(BaseModel):
+    """묶음 결과에서 고칠 수 있는 것은 메모뿐이다. 값·멤버·옵션은 그때의 계산 그대로 남는다."""
+
+    note: str | None = Field(default=None, max_length=500)
 
 
 class GroupCreateRequest(BaseModel):

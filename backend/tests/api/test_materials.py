@@ -134,6 +134,39 @@ class TestUnits:
         assert stored is not None
         assert stored.density_si == pytest.approx(7850.0)
 
+    def test_어느_단위로_넣었든_늘_표시_단위로_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """API 로 kg/m3 로 넣은 재료가 「7850 kg/m3」 로, 화면에서 넣은 재료가
+        「7.85e-9 tonne/mm3」 로 한 목록에 섞여 보였다(2026-09-05). 넣은 단위는
+        `input_units` 에 남고, 응답은 늘 표시 단위다."""
+        material = _create_material(client, admin_headers, density=7850, density_unit="kg/m3")
+        assert material["density_unit"] == "tonne/mm3"
+        assert material["density"] == pytest.approx(7.85e-9)
+
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"lot_no": "L1", "density": 7.9, "density_unit": "g/cm3"},
+            headers=admin_headers,
+        )
+        assert sample.status_code == 201, sample.text
+        assert sample.json()["density_unit"] == "tonne/mm3"
+        assert sample.json()["density"] == pytest.approx(7.9e-9)
+
+    def test_단위_없이_고친_값은_표시_단위로_읽는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """응답이 표시 단위이므로, 그 값을 보고 단위 없이 되보낸 것도 표시 단위다 —
+        넣었던 단위(kg/m3)로 읽으면 화면에서 본 7.85e-9 가 kg/m3 로 저장된다."""
+        material = _create_material(client, admin_headers, density=7850, density_unit="kg/m3")
+        changed = client.patch(
+            f"/api/materials/{material['id']}", json={"density": 7.8e-9}, headers=admin_headers
+        )
+        assert changed.status_code == 200, changed.text
+        stored = db.scalar(select(Material).where(Material.id == material["id"]))
+        assert stored is not None
+        assert stored.density_si == pytest.approx(7800.0)
+
     def test_모르는_단위는_거절한다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

@@ -235,6 +235,42 @@ def delete_file(relative: str) -> bool:
     return True
 
 
+#: 시험 id 로 이름 지은 **곁 폴더**. 처리 결과와 마스터커브가 여기 쌓인다 —
+#: `test-runs/` 와 달리 연/월 층이 없고 폴더 이름이 곧 run_id 다.
+#:
+#: 전에는 아무도 안 걸었다(2026-09-05 점검). 영구 삭제도 `source/` 만 지우고, 오펀
+#: 스캔도 `test-runs/` 만 봐서 이 파일들은 세지도 지우지도 않았다 — 처리 결과는
+#: 다시 돌릴 때마다 새 파일이라 쌓이는 속도가 가장 빠른 축이다.
+SIDE_DIRS = ("processing", "master-curves")
+
+
+def side_dir(kind: str, run_id: uuid.UUID | str) -> str:
+    return f"{kind}/{run_id}"
+
+
+def existing_side_dirs() -> list[tuple[str, str]]:
+    """(종류, 상대경로). 오펀 정리 잡이 쓴다 — `existing_run_dirs` 와 같은 방향."""
+    base = root()
+    found: list[tuple[str, str]] = []
+    for kind in SIDE_DIRS:
+        top = base / kind
+        if not top.is_dir():
+            continue
+        found.extend(
+            (kind, f"{kind}/{run.name}") for run in sorted(top.iterdir()) if run.is_dir()
+        )
+    return found
+
+
+def existing_guide_dirs() -> list[str]:
+    """안내서 그림 폴더(`guide/{asset id}`). 행 없는 폴더가 오펀이다."""
+    base = root()
+    top = base / "guide"
+    if not top.is_dir():
+        return []
+    return [f"guide/{asset.name}" for asset in sorted(top.iterdir()) if asset.is_dir()]
+
+
 def existing_run_dirs() -> list[str]:
     """저장소에 실제로 있는 시험 폴더. **오펀 정리 잡이 쓴다.**
 

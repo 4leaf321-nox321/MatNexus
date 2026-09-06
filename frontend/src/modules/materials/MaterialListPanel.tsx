@@ -27,8 +27,9 @@
 
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
+import { CatalogHits } from '@/modules/catalog/CatalogHits'
 import { materialsApi } from '@/modules/materials/api'
 import type { Material } from '@/modules/materials/api'
 import { categoriesOf, familiesOf } from '@/modules/materials/classification'
@@ -43,6 +44,7 @@ import { RecordName } from '@/shared/components/RecordName'
 const LIMIT = 50
 
 export function MaterialListPanel({ currentId }: { currentId: string | undefined }) {
+  const { search } = useLocation()
   const panel = useLeftPanel()
   const [query, setQuery] = useState('')
   const [family, setFamily] = useState('')
@@ -163,7 +165,10 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
             return (
               <Link
                 key={material.id}
-                to={`/materials/${material.id}`}
+                // **켜 둔 탭을 갖고 간다.** CAE 카드를 보며 재료를 갈아타는데 매번
+                // 시료·시편으로 떨어지면 탭을 다시 눌러야 한다. 그 재료에 없는
+                // 탭이면 `tabOf` 가 첫 탭으로 돌린다.
+                to={{ pathname: `/materials/${material.id}`, search }}
                 aria-current={here ? 'page' : undefined}
                 className={`block border-b px-3 py-2 text-sm ${
                   here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
@@ -184,6 +189,9 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
           {!loading && rows.length === 0 && (
             <p className="text-muted-foreground p-3 text-sm">찾는 재료가 없습니다.</p>
           )}
+
+          {/* 같은 검색어로 문헌 카탈로그도 함께 — 검색은 하나다(ADR 0027). */}
+          <CatalogHits q={query} className="m-2" />
         </div>
 
         {/* **잘렸으면 잘렸다고 말한다.** 표시도 없이 앞 50개만 보이면 뒤엣것은
