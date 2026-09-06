@@ -40,9 +40,9 @@ if (-not (Test-Path $venvPython)) {
 # --- 백엔드 주소 --------------------------------------------------------------
 # .env 의 PORT 를 그대로 따른다. 손으로 적어 두면 개발(8011)과 운영(8010) 사이에서
 # 한쪽이 반드시 낡는다.
+$envFile = Join-Path $repo 'backend\.env'
 if (-not $ApiBase) {
     $backendPort = 8010
-    $envFile = Join-Path $repo 'backend\.env'
     if (Test-Path $envFile) {
         $line = Select-String -Path $envFile -Pattern '^\s*PORT\s*=\s*(\d+)' | Select-Object -First 1
         if ($line) { $backendPort = [int]$line.Matches[0].Groups[1].Value }
@@ -67,6 +67,12 @@ if ($Stdio) {
     return
 }
 
+# .env 의 MCP_* 도 읽는다 — 배포본 run_mcp.ps1 과 같은 규칙이라, 개발에서 쓰던
+# 설정이 운영에서도 그대로 통한다.
+if ((-not $env:MATNEXUS_MCP_PORT) -and (Test-Path $envFile)) {
+    $line = Select-String -Path $envFile -Pattern '^\s*MCP_PORT\s*=\s*(\d+)' | Select-Object -First 1
+    if ($line) { $env:MATNEXUS_MCP_PORT = $line.Matches[0].Groups[1].Value }
+}
 if ($Port -gt 0) { $env:MATNEXUS_MCP_PORT = "$Port" }
 $mcpPort = if ($env:MATNEXUS_MCP_PORT) { $env:MATNEXUS_MCP_PORT } else { '8012' }
 
