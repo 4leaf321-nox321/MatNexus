@@ -351,13 +351,18 @@ export const WORKFLOWS: Workflow[] = [
             (one) => fact(one, 'cards') > 0 && fact(one, 'published_cards') === 0
           )
           const say: string[] = []
-          if (empty.length > 0) say.push(`${empty.length}건에 카드가 없습니다.`)
+          if (empty.length > 0)
+            say.push(
+              `${empty.length}건에 카드가 없습니다 — 문헌 물성으로 메꿀 수 있습니다(BOM 혼합 덱).`
+            )
           if (draftOnly.length > 0) say.push(`${draftOnly.length}건은 초안뿐입니다.`)
           return {
             ok: empty.length === 0,
             say: say.length > 0 ? say.join(' ') : `담은 재료 ${found.length}건 모두 카드가 있습니다.`,
             // 카드가 아예 없는 것이 먼저다 — 초안뿐인 것은 만들 것이 아니라 확정할 것이다.
             blocking: [...empty, ...draftOnly],
+            // 카드 없는 재료의 답이 이제 있다 — 실측이 없으면 문헌 스칼라로(이식 2.5단계).
+            go: empty.length > 0 ? { href: '/cards/bom-deck', label: 'BOM 혼합 덱으로' } : undefined,
           }
         },
       },
