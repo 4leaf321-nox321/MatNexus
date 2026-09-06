@@ -76,14 +76,15 @@ class Test탄소성_024:
 
 class Test점탄성_076:
     def viscoelastic(self, rows: list[dict[str, float]], **values: float) -> Deck:
+        block: dict[str, object] = {
+            "rows": rows,
+            "values": {"reference_temperature_k": 296.15, **values},
+        }
         return deck(
             elastic={
                 "values": {"youngs_modulus": 2.8e9, "poisson_ratio": 0.4, "density": 1200.0}
             },
-            viscoelastic={
-                "rows": rows,
-                "values": {"reference_temperature_k": 296.15, **values},
-            },
+            viscoelastic=block,
         )
 
     def test_유도식과_값이_덱에_적힌다(self) -> None:

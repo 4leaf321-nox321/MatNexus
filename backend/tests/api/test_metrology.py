@@ -14,11 +14,12 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from test_catalog import make_snapshot  # 같은 폴더 — pytest·mypy 가 같은 이름으로 본다
 
 from app.modules.catalog import importer as catalog_importer
 from app.modules.metrology import importer
 from app.modules.metrology.models import Instrument, InstrumentCapability
-from tests.api.test_catalog import make_snapshot
+from app.shared.mt_import import ImportRefused
 
 
 def add_metrology(snapshot: Path) -> Path:
@@ -126,7 +127,7 @@ class Test모르면_멈춘다:
         snapshot = add_metrology(make_snapshot(tmp_path))
         try:
             importer.run(db, snapshot)
-        except importer.ImportRefused as refused:
+        except ImportRefused as refused:
             assert "카탈로그" in str(refused)
         else:
             raise AssertionError("카탈로그 정의가 없는데 통과했다")
@@ -140,7 +141,7 @@ class Test모르면_멈춘다:
         con.close()
         try:
             importer.run(db, snapshot)
-        except importer.ImportRefused as refused:
+        except ImportRefused as refused:
             assert "new_field" in str(refused)
         else:
             raise AssertionError("모르는 컬럼인데 통과했다")
@@ -156,7 +157,7 @@ class Test모르면_멈춘다:
         con.close()
         try:
             importer.run(db, snapshot)
-        except importer.ImportRefused as refused:
+        except ImportRefused as refused:
             assert "no.such_key" in str(refused)
         else:
             raise AssertionError("정의에 없는 물성 키인데 통과했다")
