@@ -17,8 +17,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.workbench import services
-from app.modules.workbench.models import WorkbenchItem, WorkbenchRun
+from app.modules.workbench.models import BomAlias, WorkbenchItem, WorkbenchRun
 from app.modules.workbench.schemas import (
+    BomAliasIn,
+    BomAliasLookupOut,
+    BomAliasLookupRequest,
+    BomAliasOut,
     ItemAddRequest,
     ItemOut,
     RunCreateRequest,
@@ -29,6 +33,7 @@ from app.modules.workbench.schemas import (
 from app.shared import permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
+from app.shared.text import clean, compare_key
 
 router = APIRouter(prefix="/workbench", tags=["workbench"])
 
@@ -218,3 +223,64 @@ def remove_item(
     db.delete(item)
     run.updated_at = datetime.now(UTC)
     db.commit()
+
+
+# ── BOM 매칭 기억 ──────────────────────────────────────────────────────────────
+#
+# 혼합 덱(BOM 붙여넣기)의 「한 번 고른 매칭」 저장소다. 도메인이 아니라 기억이라
+# 워크벤치에 산다 — 매칭 후보를 내는 것은 재료·카탈로그의 기존 API 이고, 화면이
+# 그것들을 조립한다(ADR 0024).
+
+
+def _alias_out(row: BomAlias) -> BomAliasOut:
+    return BomAliasOut(
+        query=row.query,
+        material_id=row.material_id,
+        catalog_material_id=row.catalog_material_id,
+    )
+
+
+@router.post("/bom-aliases/lookup", response_model=BomAliasLookupOut)
+def bom_alias_lookup(
+    payload: BomAliasLookupRequest,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BomAliasLookupOut:
+    keys = [compare_key(clean(one) or "") for one in payload.queries]
+    rows = {
+        row.normalized: row
+        for row in db.scalars(select(BomAlias).where(BomAlias.normalized.in_(keys)))
+    }
+    return BomAliasLookupOut(
+        found=[(_alias_out(rows[key]) if key in rows else None) for key in keys]
+    )
+
+
+@router.put("/bom-aliases", response_model=BomAliasOut)
+def bom_alias_put(
+    payload: BomAliasIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BomAliasOut:
+    """기억 하나를 넣거나 갱신한다 — 마지막 판단이 이긴다.
+
+    사내·문헌 어느 쪽도 없으면 **기억을 지운다**(그 이름은 다시 물어보라는 뜻).
+    """
+    cleaned = clean(payload.query)
+    if cleaned is None:
+        raise AppError("MNX-WORKBENCH-0010", "빈 이름은 기억할 수 없습니다.", status=422)
+    key = compare_key(cleaned)
+    row = db.scalar(select(BomAlias).where(BomAlias.normalized == key))
+    if payload.material_id is None and payload.catalog_material_id is None:
+        if row is not None:
+            db.delete(row)
+            db.commit()
+        return BomAliasOut(query=cleaned, material_id=None, catalog_material_id=None)
+    if row is None:
+        row = BomAlias(normalized=key, query=cleaned, created_by_id=user.id)
+        db.add(row)
+    row.query = cleaned
+    row.material_id = payload.material_id
+    row.catalog_material_id = payload.catalog_material_id
+    db.commit()
+    return _alias_out(row)

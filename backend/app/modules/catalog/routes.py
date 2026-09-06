@@ -16,8 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.catalog import deck as deck_builder
-from app.modules.catalog import representative
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -49,6 +47,8 @@ from app.modules.catalog.schemas import (
     DeckSkippedOut,
 )
 from app.modules.materials.models import Material
+from app.shared import litdeck as deck_builder
+from app.shared import representative
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit

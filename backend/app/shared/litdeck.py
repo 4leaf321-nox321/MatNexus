@@ -1,4 +1,7 @@
-"""카탈로그 → 솔버 덱 — **BOM 붙여넣기의 서버 절반** (MaterialTwin 이식 2단계).
+"""문헌 카탈로그 → 솔버 덱 — **BOM 붙여넣기의 서버 절반** (MaterialTwin 이식 2단계).
+
+`shared` 에 사는 이유: 카탈로그의 문헌 덱과 워크벤치의 혼합 덱(사내 카드 우선 +
+문헌 보충)이 같은 조립 부품을 쓰는데, 모듈끼리는 직접 못 부른다(경계 규칙).
 
 문헌 카탈로그의 대표값을 렌더러 틀의 `Deck` 으로 조립한다. 흐름:
 
@@ -23,13 +26,13 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.catalog import representative
 from app.modules.catalog.models import (
     QUALITY_TIERS,
     CatalogMaterial,
     CatalogSource,
     CatalogValue,
 )
+from app.shared import representative
 from matcore import cards, export
 from matcore.export import dyna as _dyna  # noqa: F401  (스칼라 렌더러를 등록시킨다)
 
@@ -179,8 +182,12 @@ class Built:
     material_count: int
 
 
-def _combine(rendered: list[str]) -> str:
-    """재료별 덱을 한 파일로 — *KEYWORD/*END 는 한 번만."""
+def combine(rendered: list[str]) -> str:
+    """재료별 덱을 한 파일로 — *KEYWORD/*END 는 한 번만.
+
+    문헌 덱과 혼합 덱(워크벤치)이 같이 쓴다 — LS-DYNA 는 한 파일에 서로 다른
+    *MAT_ 카드가 섞이는 것이 정상이라(재료마다 다른 법칙) 텍스트 합본으로 된다.
+    """
     bodies: list[str] = []
     for text in rendered:
         lines = text.rstrip("\n").split("\n")
@@ -251,7 +258,7 @@ def build(
             + "; ".join(f"{one.name}({', '.join(one.missing)})" for one in skipped)
         )
     return Built(
-        text=_combine(rendered),
+        text=combine(rendered),
         skipped=tuple(skipped),
         notes=tuple(dict.fromkeys(notes)),
         material_count=len(rendered),

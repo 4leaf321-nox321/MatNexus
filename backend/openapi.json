@@ -1210,6 +1210,274 @@
         "title": "Body_upload_test_run_api_test_runs_post",
         "type": "object"
       },
+      "BomAliasIn": {
+        "description": "매칭 하나를 기억한다. 사내·문헌 어느 쪽이든(둘 다여도) 된다.",
+        "properties": {
+          "catalog_material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Material Id"
+          },
+          "material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
+          "query": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "BomAliasIn",
+        "type": "object"
+      },
+      "BomAliasLookupOut": {
+        "description": "질문 순서 그대로. 기억이 없으면 그 자리는 null 이다.",
+        "properties": {
+          "found": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/BomAliasOut"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Found",
+            "type": "array"
+          }
+        },
+        "required": [
+          "found"
+        ],
+        "title": "BomAliasLookupOut",
+        "type": "object"
+      },
+      "BomAliasLookupRequest": {
+        "description": "붙여넣은 줄들의 기억을 한 번에 묻는다 — 줄마다 물으면 왕복이 는다.",
+        "properties": {
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Queries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "title": "BomAliasLookupRequest",
+        "type": "object"
+      },
+      "BomAliasOut": {
+        "properties": {
+          "catalog_material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Material Id"
+          },
+          "material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "material_id",
+          "catalog_material_id"
+        ],
+        "title": "BomAliasOut",
+        "type": "object"
+      },
+      "BomDeckIn": {
+        "properties": {
+          "lit_format": {
+            "default": "dyna_elastic",
+            "title": "Lit Format",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BomDeckRowIn"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          },
+          "units": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "title": "BomDeckIn",
+        "type": "object"
+      },
+      "BomDeckOut": {
+        "properties": {
+          "card_count": {
+            "title": "Card Count",
+            "type": "integer"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "literature_count": {
+            "title": "Literature Count",
+            "type": "integer"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/BomDeckSkippedOut"
+            },
+            "title": "Skipped",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "filename",
+          "skipped",
+          "notes",
+          "card_count",
+          "literature_count"
+        ],
+        "title": "BomDeckOut",
+        "type": "object"
+      },
+      "BomDeckRowIn": {
+        "description": "BOM 한 줄의 확정 — 사내 카드가 있으면 그것, 없으면 문헌 재료.",
+        "properties": {
+          "card_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "catalog_material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Material Id"
+          },
+          "mid": {
+            "title": "Mid",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mid",
+          "name"
+        ],
+        "title": "BomDeckRowIn",
+        "type": "object"
+      },
+      "BomDeckSkippedOut": {
+        "properties": {
+          "mid": {
+            "title": "Mid",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mid",
+          "name",
+          "why"
+        ],
+        "title": "BomDeckSkippedOut",
+        "type": "object"
+      },
       "BulkApproveIn": {
         "properties": {
           "ids": {
@@ -22010,6 +22278,48 @@
         ]
       }
     },
+    "/api/fitting/decks/bom": {
+      "post": {
+        "description": "확정된 BOM 줄들 → 혼합 덱 한 파일.\n\n모자란 줄은 **거르지 않고 알린다**(문헌 덱과 같은 규율) — 조용히 빠진\n부품은 해석에서 갑자기 없는 재료다. MID 는 파일 안에서 유일해야 한다.",
+        "operationId": "build_bom_deck_api_fitting_decks_bom_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BomDeckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomDeckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Build Bom Deck",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
     "/api/fitting/export-profiles": {
       "get": {
         "description": "내 부서 것 + 전역. 시스템 관리자는 전부.",
@@ -31424,6 +31734,89 @@
         "summary": "Merge Term",
         "tags": [
           "vocabulary"
+        ]
+      }
+    },
+    "/api/workbench/bom-aliases": {
+      "put": {
+        "description": "기억 하나를 넣거나 갱신한다 — 마지막 판단이 이긴다.\n\n사내·문헌 어느 쪽도 없으면 **기억을 지운다**(그 이름은 다시 물어보라는 뜻).",
+        "operationId": "bom_alias_put_api_workbench_bom_aliases_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BomAliasIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomAliasOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bom Alias Put",
+        "tags": [
+          "workbench"
+        ]
+      }
+    },
+    "/api/workbench/bom-aliases/lookup": {
+      "post": {
+        "operationId": "bom_alias_lookup_api_workbench_bom_aliases_lookup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BomAliasLookupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomAliasLookupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bom Alias Lookup",
+        "tags": [
+          "workbench"
         ]
       }
     },

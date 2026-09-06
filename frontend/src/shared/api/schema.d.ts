@@ -1065,6 +1065,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/decks/bom": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build Bom Deck
+         * @description 확정된 BOM 줄들 → 혼합 덱 한 파일.
+         *
+         *     모자란 줄은 **거르지 않고 알린다**(문헌 덱과 같은 규율) — 조용히 빠진
+         *     부품은 해석에서 갑자기 없는 재료다. MID 는 파일 안에서 유일해야 한다.
+         */
+        post: operations["build_bom_deck_api_fitting_decks_bom_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/export-profiles": {
         parameters: {
             query?: never;
@@ -4774,6 +4797,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workbench/bom-aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Bom Alias Put
+         * @description 기억 하나를 넣거나 갱신한다 — 마지막 판단이 이긴다.
+         *
+         *     사내·문헌 어느 쪽도 없으면 **기억을 지운다**(그 이름은 다시 물어보라는 뜻).
+         */
+        put: operations["bom_alias_put_api_workbench_bom_aliases_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workbench/bom-aliases/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bom Alias Lookup */
+        post: operations["bom_alias_lookup_api_workbench_bom_aliases_lookup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workbench/runs": {
         parameters: {
             query?: never;
@@ -5581,6 +5643,93 @@ export interface components {
             test_type: string;
             /** Tested At */
             tested_at?: string | null;
+        };
+        /**
+         * BomAliasIn
+         * @description 매칭 하나를 기억한다. 사내·문헌 어느 쪽이든(둘 다여도) 된다.
+         */
+        BomAliasIn: {
+            /** Catalog Material Id */
+            catalog_material_id?: string | null;
+            /** Material Id */
+            material_id?: string | null;
+            /** Query */
+            query: string;
+        };
+        /**
+         * BomAliasLookupOut
+         * @description 질문 순서 그대로. 기억이 없으면 그 자리는 null 이다.
+         */
+        BomAliasLookupOut: {
+            /** Found */
+            found: (components["schemas"]["BomAliasOut"] | null)[];
+        };
+        /**
+         * BomAliasLookupRequest
+         * @description 붙여넣은 줄들의 기억을 한 번에 묻는다 — 줄마다 물으면 왕복이 는다.
+         */
+        BomAliasLookupRequest: {
+            /** Queries */
+            queries: string[];
+        };
+        /** BomAliasOut */
+        BomAliasOut: {
+            /** Catalog Material Id */
+            catalog_material_id: string | null;
+            /** Material Id */
+            material_id: string | null;
+            /** Query */
+            query: string;
+        };
+        /** BomDeckIn */
+        BomDeckIn: {
+            /**
+             * Lit Format
+             * @default dyna_elastic
+             */
+            lit_format: string;
+            /** Rows */
+            rows: components["schemas"]["BomDeckRowIn"][];
+            /** Units */
+            units?: string | null;
+        };
+        /** BomDeckOut */
+        BomDeckOut: {
+            /** Card Count */
+            card_count: number;
+            /** Filename */
+            filename: string;
+            /** Literature Count */
+            literature_count: number;
+            /** Notes */
+            notes: string[];
+            /** Skipped */
+            skipped: components["schemas"]["BomDeckSkippedOut"][];
+            /** Text */
+            text: string;
+        };
+        /**
+         * BomDeckRowIn
+         * @description BOM 한 줄의 확정 — 사내 카드가 있으면 그것, 없으면 문헌 재료.
+         */
+        BomDeckRowIn: {
+            /** Card Id */
+            card_id?: string | null;
+            /** Catalog Material Id */
+            catalog_material_id?: string | null;
+            /** Mid */
+            mid: number;
+            /** Name */
+            name: string;
+        };
+        /** BomDeckSkippedOut */
+        BomDeckSkippedOut: {
+            /** Mid */
+            mid: number;
+            /** Name */
+            name: string;
+            /** Why */
+            why: string;
         };
         /** BulkApproveIn */
         BulkApproveIn: {
@@ -14282,6 +14431,39 @@ export interface operations {
             };
         };
     };
+    build_bom_deck_api_fitting_decks_bom_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BomDeckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BomDeckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_export_profiles_api_fitting_export_profiles_get: {
         parameters: {
             query?: never;
@@ -20347,6 +20529,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TermOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bom_alias_put_api_workbench_bom_aliases_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BomAliasIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BomAliasOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bom_alias_lookup_api_workbench_bom_aliases_lookup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BomAliasLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BomAliasLookupOut"];
                 };
             };
             /** @description Validation Error */

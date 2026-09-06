@@ -408,6 +408,35 @@ export const WORKFLOWS: Workflow[] = [
     ],
   },
   {
+    key: 'bom_deck',
+    title: 'BOM 혼합 덱',
+    when: '부품표(BOM)로 해석 덱 한 파일을 만듭니다 — 사내 확정 카드(실측)가 우선이고, 없는 부품은 문헌 물성으로 메꿉니다.',
+    cadence: '프로젝트마다',
+    steps: [
+      {
+        key: 'paste',
+        title: '부품표 붙여넣기',
+        what: 'MID·재료명 줄들(엑셀 표 통째도 됩니다)을 붙여넣고 매칭을 돌립니다. 지난번에 고른 매칭은 자동으로 맞습니다.',
+        where: '/cards/bom-deck',
+        whereLabel: 'BOM 혼합 덱 화면',
+      },
+      {
+        key: 'match',
+        title: '매칭 확인',
+        what: '부품마다 사내 재료(확정 카드 유무)와 문헌 재료를 확인합니다. 카드가 있으면 곡선 덱, 없으면 문헌 스칼라입니다. 사내와 문헌을 함께 고르면 문헌 연결도 그 자리에서 걸립니다.',
+        where: '/cards/bom-deck',
+        whereLabel: 'BOM 혼합 덱 화면',
+      },
+      {
+        key: 'export',
+        title: '한 파일로 내보내기',
+        what: '단위계를 고르고 덱 한 파일을 받습니다. 값마다 출처(사내 카드 / 논문·tier)가 각주로 남고, 건너뛴 부품은 이유와 함께 보입니다.',
+        where: '/cards/bom-deck',
+        whereLabel: 'BOM 혼합 덱 화면',
+      },
+    ],
+  },
+  {
     key: 'new_instrument',
     title: '새 장비 파일 붙이기',
     when: '새 장비의 출력 파일을 읽게 만들고, 한 벌 올려 확인합니다.',

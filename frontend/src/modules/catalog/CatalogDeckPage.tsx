@@ -106,6 +106,15 @@ export default function CatalogDeckPage() {
       />
       <ErrorNotice error={error} />
 
+      {/* 혼합 덱이 이 화면의 확장판이다 — 문헌 전용이 필요한 경우(열물성 덱 등)만 여기. */}
+      <p className="text-muted-foreground rounded-md border border-dashed p-2 text-xs">
+        사내 시험 카드(실측)가 있는 재료는{' '}
+        <a className="underline" href="/cards/bom-deck">
+          워크벤치의 BOM 혼합 덱
+        </a>
+        이 실측을 우선으로 싣습니다 — 이 화면은 문헌값 전용입니다.
+      </p>
+
       <section className="space-y-2 rounded-md border p-3">
         <p className="text-sm font-semibold">
           ① 붙여넣기

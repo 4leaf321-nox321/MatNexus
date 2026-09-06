@@ -169,3 +169,50 @@ def basket_references(db: Session, table: str, pk: object) -> list[dependents.Re
 
 
 dependents.EXTRA_CHECKS.append(basket_references)
+
+
+class BomAlias(Base):
+    """BOM 이름 → 우리 재료 — **한 번 고른 매칭을 기억한다.**
+
+    부품표의 재료 이름은 회사 관행이라(`SUS304-CSP`·`스텐304`) 우리 이름과 안
+    맞고, 같은 BOM 이 다음 달에 또 온다. 매칭은 사람의 판단이므로 판단을
+    저장한다 — 다음 붙여넣기에서 그 줄이 자동으로 맞는다.
+
+    **전사 하나다**(부서 스코프 없음). BOM 이름은 회사의 말이지 부서의 말이
+    아니고, 부서마다 따로 기억하면 같은 이름을 부서 수만큼 다시 고른다.
+
+    다른 워크벤치 표와 달리 **외래키를 건다**(CASCADE) — 담긴 줄이 아니라 매핑
+    데이터라서, 재료가 지워지면 매핑도 뜻을 잃는다(남으면 고아 매칭이 다음
+    사람을 엉뚱한 데로 보낸다).
+    """
+
+    __tablename__ = "bom_aliases"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    normalized: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    """비교 열쇠(`shared.text.compare_key`). 대소문자·공백 차이로 두 줄이 되면 안 된다."""
+    query: Mapped[str] = mapped_column(String(200))
+    """사람이 붙여넣은 원문 — 화면이 그대로 보여 준다."""
+
+    material_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("materials.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
+    catalog_material_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("catalog_materials.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
+    """문헌만 고른 줄의 기억. 사내 재료와 둘 다 있으면 사내가 우선이다."""
+
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -88,3 +88,29 @@ class RunOut(BaseModel):
 
 class RunDetailOut(RunOut):
     items: list[ItemOut]
+
+
+class BomAliasIn(BaseModel):
+    """매칭 하나를 기억한다. 사내·문헌 어느 쪽이든(둘 다여도) 된다."""
+
+    query: str = Field(min_length=1, max_length=200)
+    material_id: uuid.UUID | None = None
+    catalog_material_id: uuid.UUID | None = None
+
+
+class BomAliasOut(BaseModel):
+    query: str
+    material_id: uuid.UUID | None
+    catalog_material_id: uuid.UUID | None
+
+
+class BomAliasLookupRequest(BaseModel):
+    """붙여넣은 줄들의 기억을 한 번에 묻는다 — 줄마다 물으면 왕복이 는다."""
+
+    queries: list[str] = Field(min_length=1, max_length=200)
+
+
+class BomAliasLookupOut(BaseModel):
+    """질문 순서 그대로. 기억이 없으면 그 자리는 null 이다."""
+
+    found: list[BomAliasOut | None]

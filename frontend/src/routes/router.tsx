@@ -43,6 +43,7 @@ import { DEFAULT_WORKSPACE, realmGroups } from '@/shared/layout/navigation'
  */
 const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
 const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
+const BomDeckPage = lazy(() => import('@/modules/fitting/BomDeckPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
 const CatalogPage = lazy(() => import('@/modules/catalog/CatalogPage'))
 const CatalogMaterialPage = lazy(() => import('@/modules/catalog/CatalogMaterialPage'))
@@ -133,6 +134,8 @@ export const router = createBrowserRouter([
           // **재료를 거치지 않고 카드를 찾는 자리.** 재료 상세의 'CAE 카드'
           // 탭은 그 재료의 것만 본다.
           { path: 'cards', element: <CardsPage /> },
+          // BOM 혼합 덱 — 사내 카드 우선 + 문헌 보충 (이식 2.5단계). 입구는 워크벤치 워크플로.
+          { path: 'cards/bom-deck', element: <BomDeckPage /> },
           { path: 'materials/:id', element: <MaterialDetailPage /> },
           { path: 'test-runs/:id', element: <TestRunDetailPage /> },
           { path: 'compare', element: <AnalysisPage /> },

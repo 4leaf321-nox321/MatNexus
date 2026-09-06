@@ -25,10 +25,14 @@ from sqlalchemy.orm import Session
 from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.catalog.models import CatalogMaterial
 from app.modules.fitting import bundle, renderers
 from app.modules.fitting.models import ExportProfile, PropertyCard, UnitSystemDef
 from app.modules.fitting.schemas import (
     BlockSpecOut,
+    BomDeckIn,
+    BomDeckOut,
+    BomDeckSkippedOut,
     CardBundleRequest,
     CardFacetOut,
     CardFacetsOut,
@@ -73,7 +77,7 @@ from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestRun, TestType
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, display, filestore, pagination, permissions
+from app.shared import audit, display, filestore, litdeck, pagination, permissions
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from app.shared.pagination import Page
@@ -3183,3 +3187,141 @@ def remove_card(
     db.delete(item)
     db.commit()
     return Response(status_code=204)
+
+
+# ── BOM 혼합 덱 — 사내 카드 우선 + 문헌 보충 (MaterialTwin 이식 2.5단계) ────────
+#
+# 부품표 한 벌을 한 파일로: 카드가 있는 부품은 곡선 덱(*MAT_024 등)으로, 없는
+# 부품은 문헌 대표값(스칼라)으로 메꾼다. LS-DYNA 는 한 파일에 재료마다 다른
+# *MAT_ 카드가 서는 것이 정상이라 텍스트 합본으로 성립한다(litdeck.combine).
+# 매칭·기억·연결은 워크벤치 화면이 각 도메인 API 를 조립한다(ADR 0024).
+
+#: 카드가 낼 형식의 우선순위 — 가장 곡선다운 것부터. 실측을 스칼라로 뭉개면
+#: 카드를 만든 이유가 사라진다.
+_BOM_CARD_FORMATS = ("dyna", "dyna_viscoelastic", "dyna_elastic")
+
+
+@router.post("/decks/bom", response_model=BomDeckOut)
+def build_bom_deck(
+    payload: BomDeckIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BomDeckOut:
+    """확정된 BOM 줄들 → 혼합 덱 한 파일.
+
+    모자란 줄은 **거르지 않고 알린다**(문헌 덱과 같은 규율) — 조용히 빠진
+    부품은 해석에서 갑자기 없는 재료다. MID 는 파일 안에서 유일해야 한다.
+    """
+    cards.load_builtin()  # 블록 단위 선언 — 없으면 mm 계가 SI 숫자로 나간다(실측)
+    if payload.lit_format not in litdeck.FORMATS:
+        raise AppError(
+            "MNX-FITTING-0031",
+            f"문헌 재료에 쓸 수 없는 형식입니다: {payload.lit_format}. "
+            f"있는 것: {', '.join(litdeck.FORMATS)}",
+            status=422,
+        )
+    try:
+        system = export.systems.get(payload.units)
+    except KeyError:
+        raise AppError(
+            "MNX-FITTING-0032", f"모르는 단위계입니다: {payload.units}", status=422
+        ) from None
+
+    seen: set[int] = set()
+    for row in payload.rows:
+        if not 1 <= row.mid <= export.MAX_SOLVER_ID:
+            raise AppError(
+                "MNX-FITTING-0033",
+                f"MID {row.mid} — 1~{export.MAX_SOLVER_ID} 이어야 합니다.",
+                status=422,
+            )
+        if row.mid in seen:
+            raise AppError(
+                "MNX-FITTING-0033",
+                f"MID {row.mid} 가 두 번 있습니다 — 솔버는 중복 MID 를 조용히 덮습니다.",
+                status=422,
+            )
+        seen.add(row.mid)
+
+    rendered: list[str] = []
+    skipped: list[BomDeckSkippedOut] = []
+    notes: list[str] = []
+    card_count = 0
+    literature_count = 0
+    for row in payload.rows:
+        if row.card_id is not None:
+            deck = replace(_deck_for_card(db, user, row.card_id), solver_id=row.mid)
+            target = next(
+                (key for key in _BOM_CARD_FORMATS if not export.missing_for(deck, key)),
+                None,
+            )
+            if target is None:
+                skipped.append(
+                    BomDeckSkippedOut(
+                        mid=row.mid,
+                        name=row.name,
+                        why="카드로 낼 수 있는 형식이 없습니다 — "
+                        + "; ".join(export.missing_for(deck, _BOM_CARD_FORMATS[0])),
+                    )
+                )
+                continue
+            try:
+                made = export.render(target, deck, system)
+            except export.ExportError as refused:
+                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
+                continue
+            rendered.append(made.text)
+            notes.extend(made.notes)
+            card_count += 1
+            continue
+
+        if row.catalog_material_id is not None:
+            material = db.get(CatalogMaterial, row.catalog_material_id)
+            if material is None:
+                skipped.append(
+                    BomDeckSkippedOut(
+                        mid=row.mid, name=row.name, why="카탈로그에 없는 재료입니다."
+                    )
+                )
+                continue
+            made_blocks = litdeck.assemble(db, material)
+            deck = export.Deck(
+                name=export.sanitize_name(material.grade or material.name, fallback="MAT"),
+                solver_id=row.mid,
+                blocks=made_blocks.blocks,
+                provenance=tuple(made_blocks.provenance),
+            )
+            missing = export.missing_for(deck, payload.lit_format)
+            if missing:
+                skipped.append(
+                    BomDeckSkippedOut(
+                        mid=row.mid,
+                        name=row.name,
+                        why="문헌값이 모자랍니다: " + ", ".join(missing),
+                    )
+                )
+                continue
+            made = export.render(payload.lit_format, deck, system)
+            rendered.append(made.text)
+            notes.extend(made.notes)
+            literature_count += 1
+            continue
+
+        skipped.append(
+            BomDeckSkippedOut(mid=row.mid, name=row.name, why="매칭이 확정되지 않았습니다.")
+        )
+
+    if not rendered:
+        raise AppError(
+            "MNX-FITTING-0034",
+            "덱에 실을 수 있는 부품이 없습니다 — 건너뛴 이유를 보세요.",
+            status=422,
+        )
+    return BomDeckOut(
+        text=litdeck.combine(rendered),
+        filename=f"bom_deck_{system.key}.k",
+        skipped=skipped,
+        notes=notes,
+        card_count=card_count,
+        literature_count=literature_count,
+    )

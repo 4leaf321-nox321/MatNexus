@@ -655,3 +655,37 @@ class PropertyCardUpdateRequest(BaseModel):
 
     label: str | None = Field(default=None, min_length=1, max_length=120)
     note: str | None = None
+
+
+class BomDeckRowIn(BaseModel):
+    """BOM 한 줄의 확정 — 사내 카드가 있으면 그것, 없으면 문헌 재료."""
+
+    mid: int
+    name: str = Field(min_length=1, max_length=200)
+    """부품표의 원문 이름 — 건너뛴 줄을 사람이 알아보는 데 쓴다."""
+    card_id: uuid.UUID | None = None
+    catalog_material_id: uuid.UUID | None = None
+
+
+class BomDeckIn(BaseModel):
+    rows: list[BomDeckRowIn] = Field(min_length=1, max_length=200)
+    units: str | None = None
+    """단위계 key. 비우면 SI."""
+    lit_format: str = "dyna_elastic"
+    """문헌 재료(스칼라)에 쓸 형식. 카드는 낼 수 있는 가장 곡선다운 형식을 스스로 고른다."""
+
+
+class BomDeckSkippedOut(BaseModel):
+    mid: int
+    name: str
+    why: str
+
+
+class BomDeckOut(BaseModel):
+    text: str
+    filename: str
+    skipped: list[BomDeckSkippedOut]
+    notes: list[str]
+    card_count: int
+    """사내 카드로 실린 부품 수 — 문헌 수와 갈라 보여야 혼합이 보인다."""
+    literature_count: int

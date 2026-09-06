@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.modules.catalog.representative import annotate, semantic_conditions
+from app.shared.representative import annotate, semantic_conditions
 
 
 @dataclass
