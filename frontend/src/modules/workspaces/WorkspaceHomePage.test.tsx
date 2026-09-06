@@ -27,14 +27,6 @@ vi.mock('@/modules/materials/api', () => ({
   materialsApi: { list: (query: Record<string, unknown>) => materials(query) },
 }))
 
-vi.mock('@/shared/auth/AuthContext', () => ({
-  useAuth: () => ({
-    user: {
-      memberships: [{ slug: 'metal', name: '금속재료팀', path: '개발본부 / 금속재료팀' }],
-    },
-  }),
-}))
-
 interface Page {
   items: unknown[]
   total: number
@@ -93,14 +85,27 @@ describe('부서 홈', () => {
       expect(await screen.findByText(title)).toBeInTheDocument()
     }
 
-    // 1·2단계는 **내 부서**로 간다. `default` 로 가면 목록이 비어 보이고,
-    // 데이터가 없는 것과 구별이 안 된다.
+    // **업로드만 내 부서로 간다** — 올린 시험이 어느 부서 것이 되는가는 여기서
+    // 정해진다. 처리는 전역 목록이다: 가입자 전원이 모든 부서의 시험을 보므로,
+    // 부서로 좁히면 「이것뿐인가」 로 읽힌다.
     const upload = (await screen.findByText('업로드')).closest('a')
     expect(upload).toHaveAttribute('href', '/w/metal/tests/upload')
-    expect((await screen.findByText('처리')).closest('a')).toHaveAttribute(
-      'href',
-      '/w/metal/tests'
-    )
+    expect((await screen.findByText('처리')).closest('a')).toHaveAttribute('href', '/tests')
+  })
+
+  it('부서 이름을 제목에 세우지 않는다 — 어느 부서를 골라도 같은 화면이다', async () => {
+    // 제목에 부서 이름·경로·ID 가 서 있어서 「기본 부서의 화면」 으로 읽혔다.
+    // 재료는 전사 카탈로그고 시험도 그렇다 — 부서가 뜻을 갖는 곳은 업로드뿐이다.
+    answer({ recent: [RUN], total: 1 })
+    show()
+
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('재료 물성')
+    expect(screen.queryByText(/부서 ID/)).not.toBeInTheDocument()
+    expect(screen.queryByText('금속재료팀')).not.toBeInTheDocument()
+    // 숫자도 부서로 안 좁힌다.
+    for (const call of runs.mock.calls) {
+      expect(call[0]).not.toHaveProperty('workspace')
+    }
   })
 
   it('처리 대기는 서버가 센 수를 그대로 보여 준다', async () => {

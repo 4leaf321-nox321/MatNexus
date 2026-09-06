@@ -62,6 +62,16 @@ class Workspace(Base):
     """형제 사이의 순서. 조직도 순서는 이름순도 생성순도 아니다 — 사람이 정한다."""
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    restricted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    """이 부서의 재료(와 그 아래 시료·시편·시험)를 **멤버에게만** 보이나.
+
+    기본은 `false` — **가입자 전원이 모든 부서의 물성을 본다.** 전에는 「전역 + 내
+    부서」 만 보여서, 시스템 관리자가 아닌 계정은 다른 사업부의 물성이 통째로 없는
+    것처럼 보였다(2026-09-05 실사용 보고). 물성은 사업부 간 공유가 목적인 데이터라
+    가리는 쪽이 예외여야 한다.
+
+    `true` 는 예외를 위한 손잡이다 — 전략과제처럼 열람을 제한해야 하는 부서. 쓰기는
+    이 값과 무관하게 여전히 소유 부서의 관리자만 한다(`require_writable`)."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

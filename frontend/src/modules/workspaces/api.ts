@@ -7,6 +7,8 @@ export type Workspace = components['schemas']['WorkspaceOut']
 export type WorkspaceOption = components['schemas']['WorkspaceOption']
 export type Member = components['schemas']['MemberOut']
 export type Reference = components['schemas']['WorkspaceReferenceOut']
+/** 합치면 자리를 다투게 되는 이름들 — 한 종류. */
+export type MergeConflict = components['schemas']['MergeConflictOut']
 
 export type WorkspaceImportResult = components['schemas']['ImportResultOut']
 export type WorkspaceImportRow = components['schemas']['ImportRowOut']
@@ -44,7 +46,7 @@ export const workspacesApi = {
   create: (slug: string, name: string, parentSlug?: string | null) =>
     api.post<Workspace>('/workspaces', { slug, name, parent_slug: parentSlug ?? null }),
 
-  update: (slug: string, payload: { name?: string; is_active?: boolean }) =>
+  update: (slug: string, payload: { name?: string; is_active?: boolean; restricted?: boolean }) =>
     api.patch<Workspace>(`/workspaces/${slug}`, payload),
 
   /** 상위 부서 바꾸기(조직 개편). `null` 이면 뿌리로 올린다.
@@ -59,6 +61,12 @@ export const workspacesApi = {
 
   /** 무엇이 이 부서를 가리키는가. **삭제 버튼을 누르기 전에 보여 준다.** */
   references: (slug: string) => api.get<Reference[]>(`/workspaces/${slug}/references`),
+
+  /** 합치면 같은 이름이 자리를 다투는 것. **누르기 전에 보여 준다** — 서버는 있으면 거절한다. */
+  mergeConflicts: (slug: string, targetSlug: string) =>
+    api.get<MergeConflict[]>(
+      `/workspaces/${slug}/merge-conflicts?target_slug=${encodeURIComponent(targetSlug)}`
+    ),
 
   /** 막는 참조가 하나라도 있으면 서버가 거절한다. 보관이 여전히 기본 수단이다. */
   remove: (slug: string) => api.delete<void>(`/workspaces/${slug}`),

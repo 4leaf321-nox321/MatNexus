@@ -14,7 +14,7 @@ import { Loader2, Merge } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { workspacesApi } from '@/modules/workspaces/api'
-import type { Reference, Workspace } from '@/modules/workspaces/api'
+import type { MergeConflict, Reference, Workspace } from '@/modules/workspaces/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -48,6 +48,9 @@ export function MergeWorkspaceDialog({
 }) {
   const [target, setTarget] = useState('')
   const [references, setReferences] = useState<Reference[] | null>(null)
+  // **같은 이름이 양쪽에 있으면 서버가 거절한다**(부서 범위 유일). 눌러 봐야 알면
+  // 늦으니 대상을 고르는 순간 물어본다.
+  const [conflicts, setConflicts] = useState<MergeConflict[] | null>(null)
   const [moved, setMoved] = useState<Reference[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -70,6 +73,19 @@ export function MergeWorkspaceDialog({
       alive = false
     }
   }, [workspace])
+
+  useEffect(() => {
+    setConflicts(null)
+    if (!workspace || !target) return
+    let alive = true
+    void workspacesApi
+      .mergeConflicts(workspace.slug, target)
+      .then((rows) => alive && setConflicts(rows))
+      .catch(() => alive && setConflicts([]))
+    return () => {
+      alive = false
+    }
+  }, [workspace, target])
 
   async function run() {
     if (!workspace || !target) return
@@ -148,6 +164,22 @@ export function MergeWorkspaceDialog({
                 </p>
               )}
 
+              {conflicts && conflicts.length > 0 && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs text-amber-800 dark:text-amber-400"
+                >
+                  <p className="font-medium">양쪽에 같은 이름이 있어 합칠 수 없습니다.</p>
+                  {conflicts.map((one) => (
+                    <p key={one.label}>
+                      {one.label} {one.names.length}건: {one.names.slice(0, 5).join(', ')}
+                      {one.names.length > 5 && ' …'}
+                    </p>
+                  ))}
+                  <p className="mt-1">먼저 한쪽을 지우거나 이름을 바꾼 뒤 다시 합치세요.</p>
+                </div>
+              )}
+
               <Select value={target} onValueChange={setTarget}>
                 <SelectTrigger aria-label="합칠 대상 부서">
                   <SelectValue placeholder="어느 부서로 합칠까요" />
@@ -170,7 +202,10 @@ export function MergeWorkspaceDialog({
             {moved ? '닫기' : '취소'}
           </Button>
           {!moved && (
-            <Button onClick={() => void run()} disabled={busy || !target}>
+            <Button
+              onClick={() => void run()}
+              disabled={busy || !target || (conflicts?.length ?? 0) > 0}
+            >
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Merge className="size-4" />}
               {total > 0 ? `${total.toLocaleString('ko-KR')}건을 옮기고 합치기` : '합치기'}
             </Button>

@@ -149,8 +149,28 @@ def my_workspace_ids(db: Session, user: User) -> list[uuid.UUID]:
     )
 
 
+def _material_visibility(user: User) -> ColumnElement[bool]:
+    """재료를 볼 수 있는 조건 — **전역 + 열린 부서 + 내 부서.**
+
+    전에는 「전역 + 내 부서」 였다. 그러면 시스템 관리자가 아닌 계정에게 다른
+    사업부의 물성이 통째로 없는 것처럼 보인다(2026-09-05 실사용 보고) — 물성은
+    사업부 간 공유가 목적인 데이터라 **가리는 쪽이 예외**여야 한다. 그래서 부서가
+    `restricted` 를 켠 경우에만 멤버로 좁힌다.
+
+    쓰기는 여기와 무관하다. 보이는 것과 고칠 수 있는 것은 다른 축이고, 고치는 쪽은
+    여전히 소유 부서의 관리자다(`require_writable`).
+    """
+    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+    opened = select(Workspace.id).where(Workspace.restricted.is_(False))
+    return or_(
+        Material.owner_workspace_id.is_(None),
+        Material.owner_workspace_id.in_(opened),
+        Material.owner_workspace_id.in_(mine),
+    )
+
+
 def visible_materials(db: Session, user: User) -> Select[tuple[Material]]:
-    """내 부서 재료 + 전역 재료(`owner_workspace_id IS NULL`).
+    """전역 재료 + 열린 부서의 재료 + 내 부서 재료.
 
     전역을 처음부터 함께 보게 짜는 것이 ADR 0004 가 지금 요구하는 둘 중 하나다.
     나중에 붙이면 모든 목록·상세·검색 쿼리를 다시 손봐야 한다.
@@ -158,21 +178,15 @@ def visible_materials(db: Session, user: User) -> Select[tuple[Material]]:
     query = select(Material).where(Material.deleted_at.is_(None))
     if user.is_system_admin:
         return query
-    mine = my_workspace_ids(db, user)
-    return query.where(
-        or_(Material.owner_workspace_id.is_(None), Material.owner_workspace_id.in_(mine))
-    )
+    return query.where(_material_visibility(user))
 
 
 def visible_material_ids(db: Session, user: User) -> Select[tuple[uuid.UUID]]:
-    """하위 계층 쿼리에 끼워 넣을 서브쿼리."""
+    """하위 계층 쿼리에 끼워 넣을 서브쿼리. `visible_materials` 와 **같은 조건**이다."""
     query = select(Material.id).where(Material.deleted_at.is_(None))
     if user.is_system_admin:
         return query
-    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
-    return query.where(
-        or_(Material.owner_workspace_id.is_(None), Material.owner_workspace_id.in_(mine))
-    )
+    return query.where(_material_visibility(user))
 
 
 def visible_specimen(db: Session, user: User, specimen_id: uuid.UUID) -> Specimen:

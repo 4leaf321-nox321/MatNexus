@@ -15,12 +15,14 @@ import type { Workspace } from '@/modules/workspaces/api'
 
 const references = vi.fn()
 const merge = vi.fn()
+const mergeConflicts = vi.fn()
 
 vi.mock('@/modules/workspaces/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/workspaces/api')>()),
   workspacesApi: {
     references: (...args: unknown[]) => references(...args),
     merge: (...args: unknown[]) => merge(...args),
+    mergeConflicts: (...args: unknown[]) => mergeConflicts(...args),
   },
 }))
 
@@ -61,6 +63,21 @@ beforeEach(() => {
   vi.clearAllMocks()
   references.mockResolvedValue(MOVED)
   merge.mockResolvedValue(MOVED)
+  mergeConflicts.mockResolvedValue([])
+})
+
+describe('같은 이름이 양쪽에 있으면', () => {
+  it('대상을 고르는 순간 보여 주고 단추를 잠근다', async () => {
+    // 부서 범위 유일 제약이라 서버가 거절한다 — 눌러 봐야 알면 늦다(2026-09-05).
+    mergeConflicts.mockResolvedValue([{ label: '재료', names: ['SECC_MDOI_1.0'] }])
+    show()
+    await userEvent.click(await screen.findByLabelText('합칠 대상 부서'))
+    await userEvent.click(screen.getByRole('option', { name: /새 팀/ }))
+    await waitFor(() => expect(mergeConflicts).toHaveBeenCalledWith('old-team', 'new-team'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('재료 1건: SECC_MDOI_1.0')
+    expect(screen.getByRole('button', { name: /옮기고 합치기/ })).toBeDisabled()
+    expect(merge).not.toHaveBeenCalled()
+  })
 })
 
 describe('무엇이 옮겨지는지 보고 누른다', () => {

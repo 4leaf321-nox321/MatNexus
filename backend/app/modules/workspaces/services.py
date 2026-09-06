@@ -9,11 +9,18 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
+from app.modules.fitting.models import ExportProfile
+from app.modules.materials.models import Material
+from app.modules.pipelines.models import PipelineConnector
+from app.modules.processing.models import ProcessingRecipe
+from app.modules.tests.models import FormatProfile
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.modules.workspaces.schemas import (
     MemberOut,
@@ -37,6 +44,16 @@ def _member_count(db: Session, workspace_id: uuid.UUID) -> int:
         )
         or 0
     )
+
+
+def _managers_only_system_admin(db: Session, workspace_id: uuid.UUID) -> bool:
+    """manager 전원이 시스템 관리자인가 — 곧 「부서장이 아직 없다」."""
+    roles = db.execute(
+        select(User.is_system_admin)
+        .join(WorkspaceMember, WorkspaceMember.user_id == User.id)
+        .where(WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.role == "manager")
+    ).all()
+    return bool(roles) and all(bool(row[0]) for row in roles)
 
 
 def workspace_out(
@@ -73,9 +90,11 @@ def workspace_out(
         depth=depth or 0,
         path=path or workspace.name,
         sort_order=workspace.sort_order,
+        restricted=workspace.restricted,
         is_active=workspace.is_active,
         created_at=workspace.created_at,
         member_count=_member_count(db, workspace.id),
+        managers_only_system_admin=_managers_only_system_admin(db, workspace.id),
         my_role=membership.role if membership else None,
     )
 
@@ -224,7 +243,14 @@ def _next_sort_order(db: Session, parent_id: uuid.UUID | None) -> int:
     return (highest or 0) + 10
 
 
-def update(db: Session, *, slug: str, name: str | None, is_active: bool | None) -> Workspace:
+def update(
+    db: Session,
+    *,
+    slug: str,
+    name: str | None,
+    is_active: bool | None,
+    restricted: bool | None = None,
+) -> Workspace:
     workspace = workspace_by_slug(db, slug)
     if name is not None:
         workspace.name = name.strip()
@@ -232,6 +258,9 @@ def update(db: Session, *, slug: str, name: str | None, is_active: bool | None) 
         if not is_active:
             _ensure_no_active_children(db, workspace)
         workspace.is_active = is_active
+    if restricted is not None:
+        # 「안 보낸 것」 과 「끈 것」 을 가른다 — None 은 그대로 둔다.
+        workspace.restricted = restricted
     db.commit()
     return workspace
 
@@ -283,6 +312,62 @@ def references(db: Session, *, slug: str) -> list[WorkspaceReferenceOut]:
 
 #: 합치기가 건드리면 안 되는 역사 컬럼. (표, 컬럼) — FK 걷기에서 뺀다.
 _HISTORY_COLUMNS = {("users", "requested_workspace_id")}
+
+
+#: 부서 범위 유일 제약이 있는 표 — (모델, 자리를 다투는 칸, 부서 칸, 사람이 읽는 이름).
+#: **DB 의 부분 유니크 인덱스와 같은 칸이어야 한다**(`trash/services._UNIQUE_COLUMNS`
+#: 와 같은 목록). 합치기는 이 칸들을 일괄 UPDATE 하므로 양쪽에 같은 값이 있으면
+#: IntegrityError 로 터지고, 잡는 곳이 없어 500 이었다(2026-09-05 점검).
+MERGE_UNIQUE: tuple[tuple[Any, str, str, str], ...] = (
+    (Material, "record_name", "owner_workspace_id", "재료"),
+    (FormatProfile, "key", "owner_workspace_id", "장비 파일 정의"),
+    (ProcessingRecipe, "key", "owner_workspace_id", "레시피"),
+    (ExportProfile, "key", "owner_workspace_id", "해석용 물성 정의"),
+    (PipelineConnector, "hostname", "workspace_id", "장비 커넥터"),
+)
+
+
+@dataclass(frozen=True)
+class MergeConflict:
+    """합치면 자리를 다투게 되는 이름들 — 한 종류."""
+
+    label: str
+    names: list[str]
+
+
+def merge_conflicts(
+    db: Session, *, source: Workspace, target: Workspace
+) -> list[MergeConflict]:
+    """양쪽 부서에 **같은 이름으로 살아 있는** 것. 지운 것은 부분 유니크 밖이라 안 센다.
+
+    재료 이름은 등급+details+두께로 만들어지므로, 두 부서가 같은 재료를 각자 등록해
+    쓰다가 합치는 — 합치기를 하는 바로 그 상황에서 — 겹칠 개연성이 낮지 않다.
+    """
+    found: list[MergeConflict] = []
+    for model, column, scope, label in MERGE_UNIQUE:
+        name = getattr(model, column)
+        owner = getattr(model, scope)
+        mine = select(name).where(owner == source.id, model.deleted_at.is_(None))
+        clash = sorted(
+            db.scalars(
+                select(name)
+                .where(owner == target.id, model.deleted_at.is_(None), name.in_(mine))
+                .distinct()
+            )
+        )
+        if clash:
+            found.append(MergeConflict(label=label, names=[str(one) for one in clash]))
+    return found
+
+
+def merge_conflicts_by_slug(
+    db: Session, *, source_slug: str, target_slug: str
+) -> list[MergeConflict]:
+    return merge_conflicts(
+        db,
+        source=workspace_by_slug(db, source_slug),
+        target=workspace_by_slug(db, target_slug),
+    )
 
 
 def merge_into(
@@ -339,6 +424,25 @@ def merge_into(
                 status=422,
             )
         node = db.get(Workspace, node.parent_id)  # type: ignore[assignment]
+
+    # **겹치는 이름은 옮기기 전에 막는다.** UPDATE 가 부분 유니크 인덱스에 걸리면
+    # IntegrityError 라 잡아도 「무엇이 겹쳤는지」 를 사람에게 말할 수 없다.
+    clashes = merge_conflicts(db, source=source, target=target)
+    if clashes:
+        said = " / ".join(
+            f"{one.label} {len(one.names)}건: {', '.join(one.names[:5])}"
+            + (" …" if len(one.names) > 5 else "")
+            for one in clashes
+        )
+        raise AppError(
+            "MNX-WORKSPACES-0023",
+            f"양쪽 부서에 같은 이름이 있어 합칠 수 없습니다 — {said}. "
+            "먼저 한쪽을 지우거나 이름을 바꿔 주세요.",
+            status=422,
+            details={
+                "conflicts": [{"label": one.label, "names": one.names} for one in clashes]
+            },
+        )
 
     # 무엇을 옮겼는지 — 옮기기 **전에** 센다. 뒤에 세면 전부 0이다.
     moved = dependents.references_to(db, table="workspaces", pk=source.id)

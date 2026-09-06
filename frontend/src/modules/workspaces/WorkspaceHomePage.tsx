@@ -20,9 +20,6 @@ import { Link, useParams } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import { RUN_STATUS_LABEL, testsApi } from '@/modules/tests/api'
-import { useAuth } from '@/shared/auth/AuthContext'
-import { workspacesApi } from '@/modules/workspaces/api'
-import { CopyId } from '@/shared/components/CopyId'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Skeleton } from '@/shared/components/ui/skeleton'
@@ -84,34 +81,28 @@ function Step({ index, icon: Icon, title, detail, to, action, count, loading }: 
 }
 
 export default function WorkspaceHomePage() {
+  // **부서는 올리는 자리에만 남는다.** 이 화면은 어느 부서를 골라도 같은 것을
+  // 보여 준다 — 재료는 전사 카탈로그고, 이제 시험도 그렇다(가입자 전원이 모든
+  // 부서의 물성을 본다, `permissions.py`). 그런데 제목에 부서 이름·경로·ID 가
+  // 서 있어서 「기본 부서의 화면」 으로 읽혔다. 부서가 실제로 뜻을 갖는 곳은
+  // 업로드 하나다 — 올린 시험이 어느 부서 것이 되는가.
   const { slug } = useParams<{ slug?: string }>()
   const workspaceSlug = slug ?? DEFAULT_WORKSPACE
-  const { user } = useAuth()
-  const here = user?.memberships.find((item) => item.slug === workspaceSlug)
 
   // 최근 목록과 총 건수를 한 번에 받는다(`total` 이 함께 온다).
-  const recent = useResource(
-    () => testsApi.runs({ workspace: workspaceSlug, limit: RECENT }),
-    [workspaceSlug]
-  )
+  const recent = useResource(() => testsApi.runs({ limit: RECENT }), [])
   // **읽힌 것 중 아직 아무것도 안 한 것.** 이것이 2단계에 남은 일이다.
   const waiting = useResource(
-    () => testsApi.runs({ workspace: workspaceSlug, status: 'parsed', adopted: false, limit: 1 }),
-    [workspaceSlug]
+    () => testsApi.runs({ status: 'parsed', adopted: false, limit: 1 }),
+    []
   )
-  const failed = useResource(
-    () => testsApi.runs({ workspace: workspaceSlug, status: 'failed', limit: 1 }),
-    [workspaceSlug]
-  )
+  const failed = useResource(() => testsApi.runs({ status: 'failed', limit: 1 }), [])
   // 재료는 **전사 카탈로그**다. 부서로 안 좁히는 것이 맞다 — 남의 부서가 잰
   // 물성도 보라고 만든 자리다.
   const materials = useResource(() => materialsApi.list({ limit: 1 }), [])
   // **세는 일은 서버가 한다.** 재료 94개를 세려고 94행을 받을 이유가 없다.
   const summary = useResource(() => statisticsApi.overview(), [])
-  // 부서 id — 장비 커넥터 마법사가 요구한다. 멤버십에는 slug 만 있어서 따로 읽는다.
-  const details = useResource(() => workspacesApi.list(), [])
   const divisions = useResource(() => statisticsApi.divisions(), [])
-  const workspaceId = details.data?.find((row) => row.slug === workspaceSlug)?.id
 
   const rows = recent.data?.items ?? []
   const loading = recent.loading || waiting.loading || failed.loading || materials.loading
@@ -120,19 +111,11 @@ export default function WorkspaceHomePage() {
   return (
     <div className="space-y-6">
       <div>
-        {/* 시스템 관리자는 자기 소속이 아닌 부서도 연다 — 그때는 이름을 모르니
-            slug 라도 적는다. '부서' 라고만 쓰면 어디에 있는지 알 수 없다. */}
-        <h1 className="text-xl font-semibold">{here?.name ?? workspaceSlug}</h1>
+        <h1 className="text-xl font-semibold">재료 물성</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          {here?.path ? <span className="mr-1">{here.path} ·</span> : null}
           시험 파일이 물성이 되고, 물성이 솔버 카드가 됩니다.{' '}
           <strong>아래 순서대로 갑니다.</strong>
         </p>
-        {workspaceId && (
-          <p className="text-muted-foreground mt-1 text-xs">
-            부서 ID <CopyId value={workspaceId} label="부서 ID" />
-          </p>
-        )}
       </div>
 
       <ErrorNotice error={recent.error ?? materials.error ?? summary.error} />
@@ -163,7 +146,7 @@ export default function WorkspaceHomePage() {
           icon={SlidersHorizontal}
           title="처리"
           detail="원본 곡선을 다듬고(단위·토우 보정·평활) 어느 결과를 쓸지 채택합니다. 채택한 것만 물성으로 올라갑니다."
-          to={`/w/${workspaceSlug}/tests`}
+          to="/tests"
           action="시험"
           count={{
             value: waiting.data?.total ?? 0,
@@ -201,7 +184,7 @@ export default function WorkspaceHomePage() {
           믿고 있다 — 목록에 들어가 봐야만 알 수 있으면 안 본다. */}
       {failedCount > 0 && (
         <Link
-          to={`/w/${workspaceSlug}/tests`}
+          to="/tests"
           className="border-destructive/40 bg-destructive/5 text-destructive flex items-center gap-2 rounded-md border p-3 text-sm"
         >
           <strong>읽지 못한 파일 {failedCount}건.</strong>
@@ -216,7 +199,7 @@ export default function WorkspaceHomePage() {
         <div className="mb-2 flex items-baseline gap-2">
           <h2 className="font-medium">최근 올라온 시험</h2>
           <Link
-            to={`/w/${workspaceSlug}/tests`}
+            to="/tests"
             className="text-muted-foreground hover:text-foreground ml-auto text-xs"
           >
             전부 보기

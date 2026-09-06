@@ -34,8 +34,14 @@ class WorkspaceOut(BaseModel):
     path: str
     sort_order: int
     is_active: bool
+    restricted: bool
+    """재료를 멤버에게만 보이나. 기본 `false` — 가입자 전원이 본다."""
     created_at: datetime
     member_count: int
+    managers_only_system_admin: bool = False
+    """부서장이 아직 없다는 뜻. 부서를 만들면(가져오기 포함) 만든 시스템 관리자가 manager
+    로 들어가는데, RA 트리 수십 개를 가져오면 그 부서 전부가 그렇다(2026-09-05). 실제
+    부서장을 manager 로 지정하고 임시 manager 는 빠져야 한다."""
     my_role: str | None
     """요청한 사람의 역할. 화면이 버튼을 보일지 정하는 데 쓴다."""
 
@@ -84,6 +90,8 @@ class WorkspaceUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     is_active: bool | None = None
     """false 로 두면 보관 상태. 자료는 남기고 새 활동만 막는다(삭제하지 않는다)."""
+    restricted: bool | None = None
+    """true 로 두면 이 부서의 재료·시험을 **멤버에게만** 보인다. 안 보내면 그대로."""
 
 
 class MemberOut(BaseModel):
@@ -102,6 +110,13 @@ class MemberAddRequest(BaseModel):
 
 class MemberRoleRequest(BaseModel):
     role: str
+
+
+class MergeConflictOut(BaseModel):
+    """합치면 자리를 다투게 되는 이름들 — 누르기 전에 보여 준다."""
+
+    label: str
+    names: list[str]
 
 
 class WorkspaceMergeRequest(BaseModel):

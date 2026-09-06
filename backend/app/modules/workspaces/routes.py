@@ -21,6 +21,7 @@ from app.modules.workspaces.schemas import (
     MemberAddRequest,
     MemberOut,
     MemberRoleRequest,
+    MergeConflictOut,
     WorkspaceCreateRequest,
     WorkspaceMergeRequest,
     WorkspaceMoveRequest,
@@ -153,7 +154,13 @@ def update_workspace(
     admin: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ) -> WorkspaceOut:
-    workspace = services.update(db, slug=slug, name=payload.name, is_active=payload.is_active)
+    workspace = services.update(
+        db,
+        slug=slug,
+        name=payload.name,
+        is_active=payload.is_active,
+        restricted=payload.restricted,
+    )
     return services.workspace_out(db, workspace, admin)
 
 
@@ -191,9 +198,17 @@ def merge_workspace(
     무엇이 옮겨질지는 `GET /{slug}/references` 가 먼저 보여 준다 — 화면이 그
     목록을 띄우고 사람이 누른다. 응답은 **실제로 옮긴 것**의 같은 목록이다.
     """
-    moved = services.merge_into(
-        db, source_slug=slug, target_slug=payload.target_slug, actor=admin
-    )
+    try:
+        moved = services.merge_into(
+            db, source_slug=slug, target_slug=payload.target_slug, actor=admin
+        )
+    except IntegrityError as exc:
+        # 미리 검사와 UPDATE 사이에 누가 같은 이름을 만들었다 — 500 대신 말한다.
+        db.rollback()
+        raise Conflict(
+            "MNX-WORKSPACES-0024",
+            "합치는 사이에 같은 이름이 생겼습니다. 목록을 다시 확인하고 시도해 주세요.",
+        ) from exc
     return [
         WorkspaceReferenceOut(
             table=one.table,
@@ -204,6 +219,22 @@ def merge_workspace(
             blocks_delete=one.blocks_delete,
         )
         for one in moved
+    ]
+
+
+@router.get("/{slug}/merge-conflicts", response_model=list[MergeConflictOut])
+def merge_conflicts(
+    slug: str,
+    target_slug: str = Query(...),
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[MergeConflictOut]:
+    """합치면 자리를 다투게 되는 이름 — **누르기 전에 아는 것**이 이 저장소의 무늬다."""
+    return [
+        MergeConflictOut(label=one.label, names=one.names)
+        for one in services.merge_conflicts_by_slug(
+            db, source_slug=slug, target_slug=target_slug
+        )
     ]
 
 
