@@ -16,7 +16,18 @@
  * 0 을 그리면 「한가하다」 로 읽힌다.
  */
 
-import { AlertTriangle, Cpu, Database, HardDrive, MemoryStick, Server } from 'lucide-react'
+import { useState } from 'react'
+import {
+  AlertTriangle,
+  Archive,
+  Cpu,
+  Database,
+  HardDrive,
+  ListChecks,
+  MemoryStick,
+  RotateCcw,
+  Server,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -26,6 +37,7 @@ import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { SubTabs } from '@/shared/components/SubTabs'
 import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { useResource } from '@/shared/hooks/useResource'
 import { cn } from '@/shared/lib/utils'
@@ -149,6 +161,23 @@ export default function ServerPage() {
 function Body() {
   const server = useResource(() => serverApi.info(), [])
   const data = server.data
+  // **실패한 작업은 여기 아니면 아무 데도 안 보인다.** 파싱 실패는 시험 목록에라도
+  // 뜨지만 알림 발송·드리프트 점검은 야간에 조용히 죽는다(2026-09-05).
+  const queue = useResource(() => serverApi.queue(), [])
+  const [retrying, setRetrying] = useState<string | null>(null)
+  const [queueError, setQueueError] = useState<Error | null>(null)
+  async function retry(jobId: string) {
+    setRetrying(jobId)
+    setQueueError(null)
+    try {
+      await serverApi.retry(jobId)
+      queue.reload()
+    } catch (caught) {
+      setQueueError(caught instanceof Error ? caught : new Error('다시 시도하지 못했습니다.'))
+    } finally {
+      setRetrying(null)
+    }
+  }
 
   if (server.loading && !data) {
     return (
@@ -166,6 +195,22 @@ function Body() {
   return (
     <div className="space-y-4">
       <ErrorNotice error={server.error} />
+
+      {/* **백업이 없으면 붉게.** 휴지통·보관·감사가 아무리 잘 돼 있어도 전부 같은 DB
+          안이다 — 영구 삭제가 진짜로 「영구」 인 시스템은 백업이 있는 시스템뿐이다.
+          안 보이면 없는 것과 같다(2026-09-05). */}
+      {data.backup.problem && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/40"
+        >
+          <Archive className="size-4 shrink-0 text-red-600" />
+          <span className="font-medium">
+            {data.backup.last_at ? '백업이 밀렸습니다' : '백업이 없습니다'}
+          </span>
+          <span className="text-muted-foreground text-xs">{data.backup.problem}</span>
+        </div>
+      )}
 
       {/* **막힌 것부터.** 홈의 「남은 일」 과 같은 자리다 — 0 이면 줄이 사라진다. */}
       {tight.length > 0 && (
@@ -226,6 +271,22 @@ function Body() {
           )}
         </Card>
 
+        <Card icon={Archive} title="백업">
+          <Row
+            label="마지막 백업"
+            value={
+              data.backup.last_at
+                ? `${new Date(data.backup.last_at).toLocaleString('ko-KR')} (${Math.round(
+                    data.backup.age_hours ?? 0
+                  )}시간 전)`
+                : data.backup.configured
+                  ? '없음'
+                  : '설정 없음'
+            }
+          />
+          <Row label="폴더" value={data.backup.path ?? '—'} />
+        </Card>
+
         <Card icon={Database} title="데이터베이스">
           <Row label="PostgreSQL" value={data.database.version} />
           <Row label="크기" value={bytes(data.database.size_bytes)} />
@@ -240,6 +301,58 @@ function Body() {
           />
         </Card>
       </div>
+
+      {/* **큐 — 실패 목록과 다시 시도.** 재시도 3회·백오프·멈춘 작업 회수는 이미
+          있다. 없던 것은 3회 다 실패해 `failed` 가 된 작업을 **보는 자리**다. */}
+      <section className="rounded-md border" aria-label="작업 큐">
+        <div className="flex flex-wrap items-center gap-3 border-b px-3 py-2 text-sm">
+          <ListChecks className="text-muted-foreground size-4" />
+          <span className="font-medium">작업 큐</span>
+          {queue.data && (
+            <span className="text-muted-foreground text-xs">
+              대기 {queue.data.queued} · 도는 중 {queue.data.running} · 지난 24시간 완료{' '}
+              {queue.data.done_last_24h} ·{' '}
+              <span className={queue.data.failed > 0 ? 'font-medium text-red-600' : ''}>
+                실패 {queue.data.failed}
+              </span>
+            </span>
+          )}
+        </div>
+        <div className="p-3">
+          <ErrorNotice error={queue.error ?? queueError} />
+          {queue.data && queue.data.failures.length === 0 && (
+            <p className="text-muted-foreground text-xs">실패한 작업이 없습니다.</p>
+          )}
+          {queue.data && queue.data.failures.length > 0 && (
+            <ul className="space-y-2">
+              {queue.data.failures.map((job) => (
+                <li key={job.id} className="flex flex-wrap items-start gap-2 text-sm">
+                  <span className="font-medium">{job.kind_label}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {job.attempts}/{job.max_attempts}회 ·{' '}
+                    {new Date(job.finished_at ?? job.created_at).toLocaleString('ko-KR')}
+                  </span>
+                  {job.last_error && (
+                    <span className="text-muted-foreground basis-full font-mono text-xs break-all">
+                      {job.last_error}
+                    </span>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto"
+                    disabled={retrying === job.id}
+                    onClick={() => void retry(job.id)}
+                  >
+                    <RotateCcw className="size-3.5" />
+                    다시 시도
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
 
       <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         <span className="flex items-center gap-1">

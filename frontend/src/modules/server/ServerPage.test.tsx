@@ -7,7 +7,8 @@
  * 있는 것이 없는 것보다 나쁘다.
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -15,7 +16,15 @@ import ServerPage, { bytes, duration } from '@/modules/server/ServerPage'
 import { LeftPanelProvider } from '@/shared/layout/SidePanel'
 
 const info = vi.fn()
-vi.mock('@/modules/server/api', () => ({ serverApi: { info: () => info() } }))
+const queue = vi.fn()
+const retry = vi.fn()
+vi.mock('@/modules/server/api', () => ({
+  serverApi: {
+    info: () => info(),
+    queue: () => queue(),
+    retry: (...args: unknown[]) => retry(...args),
+  },
+}))
 
 const GB = 1024 ** 3
 
@@ -54,9 +63,19 @@ function reply(over: Record<string, unknown> = {}) {
     process: { pid: 1234, rss_bytes: 70 * 1024 ** 2, python_version: '3.13.15' },
     database: { version: '17.5', size_bytes: 26 * 1024 ** 2, pool: { size: 5, checkedout: 1 } },
     app_version: 'v1.163.0',
+    backup: {
+      configured: true,
+      path: 'D:\\MatNexus-backup',
+      last_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+      age_hours: 3,
+      stale: false,
+      problem: null,
+    },
     ...over,
   }
 }
+
+const QUEUE = { queued: 2, running: 1, failed: 0, done_last_24h: 40, failures: [] }
 
 function mount() {
   render(
@@ -71,6 +90,64 @@ function mount() {
 beforeEach(() => {
   vi.clearAllMocks()
   info.mockResolvedValue(reply())
+  queue.mockResolvedValue(QUEUE)
+  retry.mockResolvedValue({})
+})
+
+describe('백업', () => {
+  it('마지막 백업 시각을 적고, 정상이면 경고가 없다', async () => {
+    mount()
+    expect(await screen.findByText(/3시간 전/)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('백업이 없으면 붉게 말한다 — 안 보이면 없는 것과 같다', async () => {
+    info.mockResolvedValue(
+      reply({
+        backup: {
+          configured: true,
+          path: 'D:\\MatNexus-backup',
+          last_at: null,
+          age_hours: null,
+          stale: true,
+          problem: '백업 폴더에 덤프가 없습니다.',
+        },
+      })
+    )
+    mount()
+    expect(await screen.findByRole('alert')).toHaveTextContent('백업이 없습니다')
+  })
+})
+
+describe('작업 큐', () => {
+  it('실패한 작업을 오류와 함께 보이고 다시 시도한다', async () => {
+    queue.mockResolvedValue({
+      ...QUEUE,
+      failed: 1,
+      failures: [
+        {
+          id: 'j1',
+          kind: 'notifications.deliver',
+          kind_label: '알림 보내기',
+          attempts: 3,
+          max_attempts: 3,
+          last_error: 'SMTP 연결 거부',
+          created_at: '2026-09-05T00:00:00Z',
+          finished_at: '2026-09-05T01:00:00Z',
+        },
+      ],
+    })
+    mount()
+    expect(await screen.findByText('알림 보내기')).toBeInTheDocument()
+    expect(screen.getByText('SMTP 연결 거부')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /다시 시도/ }))
+    await waitFor(() => expect(retry).toHaveBeenCalledWith('j1'))
+  })
+
+  it('실패가 없으면 없다고 말한다', async () => {
+    mount()
+    expect(await screen.findByText('실패한 작업이 없습니다.')).toBeInTheDocument()
+  })
 })
 
 describe('디스크', () => {

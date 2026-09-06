@@ -8,6 +8,7 @@ RA는 refresh 를 stateless 로 두어 폐기 목록이 없고, 비교표는 그
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -117,14 +118,101 @@ def test_refresh_rotates_and_old_token_is_revoked(client: TestClient, db: Sessio
     second_cookie = client.cookies.get("mnx_refresh")
     assert second_cookie != first_cookie
 
+    # 회전 직후 몇 초는 동시 갱신으로 봐 준다(아래 시험). 여기서는 그 유예를 지나
+    # 보낸 것으로 두고 **재사용 탐지**를 본다.
+    _age_rotations(db)
+
     # 폐기된 토큰을 다시 쓰면 탈취로 보고 그 사용자의 세션을 전부 끊는다.
+    client.cookies.clear()
     client.cookies.set("mnx_refresh", first_cookie)
     reuse = client.post("/api/auth/refresh")
     assert reuse.status_code == 401
     assert reuse.json()["error"]["code"] == "MNX-AUTH-0005"
 
+    client.cookies.clear()
     client.cookies.set("mnx_refresh", second_cookie)
     assert client.post("/api/auth/refresh").status_code == 401
+
+
+def _age_rotations(db: Session) -> None:
+    """회전 시각을 유예 밖으로 밀어 둔다 — 「방금 회전됨」 이 아니게."""
+    from datetime import timedelta
+
+    from app.modules.auth.models import RefreshToken
+    from app.modules.auth.services import REFRESH_GRACE
+
+    # **유예는 초 단위여야 한다.** 여기서 상수만큼 밀어 두므로, 상수가 며칠로 늘어나면
+    # 이 시험은 그대로 통과하면서 탈취 탐지가 사실상 꺼진다 — 그것을 이 단언이 막는다.
+    assert timedelta(minutes=2) >= REFRESH_GRACE, REFRESH_GRACE
+
+    for token in db.scalars(select(RefreshToken).where(RefreshToken.revoked_at.is_not(None))):
+        if token.revoked_at is not None:
+            token.revoked_at = token.revoked_at - REFRESH_GRACE - timedelta(seconds=1)
+    db.commit()
+
+
+def test_유예_안이라도_후속_토큰이_죽어_있으면_안_이어_준다(
+    client: TestClient, db: Session
+) -> None:
+    """로그아웃(또는 전체 폐기) 직후에 옛 값이 오면 그건 동시 갱신이 아니다 — 사슬이
+    이미 끊겼다. 유예는 **살아 있는 후속 토큰**으로 갈아탈 때만 쓴다."""
+    make_user(db)
+    login(client)
+    first_cookie = client.cookies.get("mnx_refresh")
+    assert client.post("/api/auth/refresh").status_code == 200
+    # 후속 토큰으로 로그아웃 — 사슬의 머리가 죽는다.
+    assert client.post("/api/auth/logout").status_code == 204
+
+    client.cookies.clear()
+    client.cookies.set("mnx_refresh", first_cookie)
+    assert client.post("/api/auth/refresh").status_code == 401
+
+
+def test_회전_직후의_옛_값은_동시_갱신으로_보고_세션을_안_끊는다(
+    client: TestClient, db: Session
+) -> None:
+    """**실측(2026-09-05).** 한 페이지 로드에서 refresh 가 둘 나가고(StrictMode), 서버가
+    둘을 순서대로 처리하면 둘째는 방금 회전된 값을 든다. 그것을 탈취로 보고 admin 의
+    세션 1,200개를 한꺼번에 끊었다 — 다시 로그인해도 다음 로드에서 또 끊긴다.
+
+    회전한 지 몇 초 안이고 후속 토큰이 살아 있으면 같은 사람이다. 후속 토큰을 회전시켜
+    사슬을 하나로 유지한다."""
+    make_user(db)
+    login(client)
+    first_cookie = client.cookies.get("mnx_refresh")
+
+    assert client.post("/api/auth/refresh").status_code == 200
+    second_cookie = client.cookies.get("mnx_refresh")
+
+    # 둘째 요청 — 회전 직후, 옛 값으로. (httpx 는 같은 이름의 쿠키가 둘이면 막으므로
+    # 병을 비우고 하나만 둔다.)
+    client.cookies.clear()
+    client.cookies.set("mnx_refresh", first_cookie)
+    late = client.post("/api/auth/refresh")
+    assert late.status_code == 200, late.text
+    third_cookie = late.cookies.get("mnx_refresh")
+    assert third_cookie and third_cookie not in (first_cookie, second_cookie)
+
+    # 사슬은 하나다 — 셋째가 살아 있고, 그것으로 이어 간다.
+    client.cookies.clear()
+    client.cookies.set("mnx_refresh", third_cookie)
+    assert client.post("/api/auth/refresh").status_code == 200
+
+
+def test_유예가_지난_옛_값은_여전히_재사용으로_본다(client: TestClient, db: Session) -> None:
+    """유예는 동시 갱신을 위한 것이지 탈취를 봐주는 것이 아니다."""
+    make_user(db)
+    login(client)
+    first_cookie = client.cookies.get("mnx_refresh")
+    assert client.post("/api/auth/refresh").status_code == 200
+
+    _age_rotations(db)
+
+    client.cookies.clear()
+    client.cookies.set("mnx_refresh", first_cookie)
+    reuse = client.post("/api/auth/refresh")
+    assert reuse.status_code == 401
+    assert reuse.json()["error"]["code"] == "MNX-AUTH-0005"
 
 
 def test_logout_revokes_refresh(client: TestClient, db: Session) -> None:

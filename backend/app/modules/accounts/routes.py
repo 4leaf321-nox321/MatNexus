@@ -17,6 +17,7 @@ from app.modules.accounts import services
 from app.modules.accounts.models import User
 from app.modules.accounts.schemas import (
     AccountOut,
+    AccountSummaryOut,
     ApproveRequest,
     CreateAccountRequest,
     DeleteAccountRequest,
@@ -44,6 +45,14 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> AccountOut:
         workspace_slug=payload.workspace_slug,
     )
     return services.account_out(db, user)
+
+
+@router.get("/summary", response_model=AccountSummaryOut)
+def account_summary(
+    _: User = Depends(require_system_admin), db: Session = Depends(get_db)
+) -> AccountSummaryOut:
+    """활성 시스템 관리자가 몇 명인가. 1명이면 계정 화면이 안내 한 줄을 띄운다."""
+    return AccountSummaryOut(active_system_admins=services.active_system_admin_count(db))
 
 
 @router.get("", response_model=list[AccountOut])

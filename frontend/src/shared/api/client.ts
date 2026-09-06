@@ -115,16 +115,69 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
   })
 }
 
+/** refresh 한 번의 결과 — 본문은 한 번만 읽히므로 읽어서 나눠 준다. */
+interface RefreshOutcome {
+  ok: boolean
+  status: number
+  body: unknown
+}
+
+let refreshing: Promise<RefreshOutcome> | null = null
+
+/**
+ * **refresh 는 한 번에 하나만 나간다.**
+ *
+ * 실측(2026-09-05): 앱이 뜰 때 `AuthProvider` 의 effect 가 StrictMode 에서 두 번
+ * 돌아 `/auth/refresh` 가 **같은 쿠키로 둘** 나갔다. 서버는 refresh 를 회전시키고
+ * 옛 값의 재사용을 탈취로 본다 — 둘째 요청이 첫째 뒤에 처리되는 순간 그 사용자의
+ * 세션이 **전부** 끊겼고, 다시 로그인해도 다음 로드에서 또 끊겼다.
+ *
+ * 서버도 회전 직후의 옛 값을 봐 주게 고쳤지만(유예 창), 애초에 둘을 보내지 않는
+ * 것이 맞다. 진행 중인 요청이 있으면 그 약속을 같이 기다린다.
+ */
+function refreshOnce(): Promise<RefreshOutcome> {
+  if (!refreshing) {
+    refreshing = fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'same-origin' })
+      .then(async (response) => {
+        let body: unknown = null
+        try {
+          body = await response.json()
+        } catch {
+          // 본문 없는 401 등. 아래에서 상태만으로 판단한다.
+        }
+        if (response.ok && body && typeof (body as { access_token?: unknown }).access_token === 'string') {
+          accessToken = (body as { access_token: string }).access_token
+        }
+        return { ok: response.ok, status: response.status, body }
+      })
+      .finally(() => {
+        refreshing = null
+      })
+  }
+  return refreshing
+}
+
 /** 조용한 갱신. 성공하면 새 access 토큰을 보관한다. */
 export async function tryRefresh(): Promise<boolean> {
-  const response = await fetch(`${BASE}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'same-origin',
-  })
-  if (!response.ok) return false
-  const body = (await response.json()) as { access_token: string }
-  accessToken = body.access_token
-  return true
+  return (await refreshOnce()).ok
+}
+
+/**
+ * 앱 기동 때의 갱신 — 세션(사용자 정보)까지 돌려준다. 실패는 `ApiError` 로 던진다.
+ * `api.post('/auth/refresh')` 와 같은 일이지만 **동시 호출을 하나로 합친다.**
+ */
+export async function refreshSession<T>(): Promise<T> {
+  const outcome = await refreshOnce()
+  if (!outcome.ok) {
+    if (isEnvelope(outcome.body)) throw new ApiError(outcome.status, outcome.body)
+    throw new ApiError(outcome.status, {
+      error: {
+        code: 'MNX-CLIENT-0001',
+        message: `세션을 되살리지 못했습니다 (HTTP ${outcome.status})${said(outcome.body)}`,
+      },
+    })
+  }
+  return outcome.body as T
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

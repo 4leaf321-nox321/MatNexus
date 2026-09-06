@@ -55,6 +55,21 @@ class Settings(BaseSettings):
     사람이 각자 물성을 붙여도 같은 줄을 서로 고치지 않는다."""
     """곡선 Parquet와 장비 원본이 사는 곳. DB에는 경로와 해시만 둔다(D10)."""
 
+    backup_dir: Path | None = None
+    """백업 스크립트(`scripts/deploy/backup.ps1`)가 덤프를 남기는 폴더. 서버 화면이
+    여기서 **마지막 백업 시각**을 읽는다 — 안 보이면 없는 것과 같다(2026-09-05)."""
+
+    disk_alert_percent: int = 85
+    """파일 저장소 드라이브 사용률이 이 위면 홈의 「남은 일」 에 경고가 선다."""
+
+    login_delay_after: int = 5
+    """같은 계정의 로그인 실패가 이 횟수부터 응답을 늦춘다. **잠그지 않는다** —
+    관리자 복구가 외길인 시스템에서 잠금은 자해다."""
+    login_delay_step_seconds: int = 2
+    login_delay_max_seconds: int = 30
+    login_failure_window_minutes: int = 15
+    """이 시간 안의 실패만 센다. 지나면 처음부터."""
+
     filestore_retention_days: int = 30
     """소프트 삭제한 시험의 **파일**을 며칠 뒤에 지울지.
 

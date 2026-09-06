@@ -33,12 +33,19 @@ from typing import Any
 if sys.platform == "win32":  # pragma: no cover - 리눅스에서는 이 모듈이 없다
     from ctypes import wintypes
 
+import uuid
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import version
 from app.config import get_settings
 from app.database import engine
+from app.jobs import kinds
+from app.jobs.models import Job
+from app.shared import ops
+from app.shared.errors import AppError, NotFound
 
 _KB = 1024
 
@@ -278,8 +285,96 @@ def _database(db: Session) -> dict[str, Any]:
     }
 
 
-def info(db: Session) -> dict[str, Any]:
+#: 작업 종류 → 사람이 읽는 이름. `app/jobs/kinds.py` 와 같이 간다 — 새 종류를 더하면 여기도.
+KIND_LABELS: dict[str, str] = {
+    kinds.NOTIFY_DELIVER: "알림 보내기",
+    kinds.NOTIFY_ENSURE_RULES: "알림 규칙 맞추기",
+    kinds.TESTS_PARSE_UPLOAD: "올린 파일 읽기",
+    kinds.TESTS_CLEANUP_STORAGE: "저장소 정리",
+    kinds.VOCABULARY_CHECK_DRIFT: "기준정보 어긋남 점검",
+    kinds.PIPELINES_PARSE_INBOX: "수집함 파일 읽기",
+}
+
+
+def queue_status(db: Session, *, failures_limit: int = 50) -> dict[str, Any]:
+    """대기·도는 중·실패 수와 실패 목록. 실패는 최근 것부터, 상한을 서버가 건다."""
+    by_status = {
+        str(status): int(count)
+        for status, count in db.execute(
+            select(Job.status, func.count()).group_by(Job.status)
+        ).all()
+    }
+    since = datetime.now(UTC) - timedelta(hours=24)
+    done_recent = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Job)
+            .where(
+                Job.status == "done", Job.finished_at.is_not(None), Job.finished_at >= since
+            )
+        )
+        or 0
+    )
+    failures = db.scalars(
+        select(Job)
+        .where(Job.status == "failed")
+        .order_by(Job.finished_at.desc().nulls_last(), Job.created_at.desc())
+        .limit(failures_limit)
+    ).all()
     return {
+        "queued": by_status.get("queued", 0),
+        "running": by_status.get("running", 0),
+        "failed": by_status.get("failed", 0),
+        "done_last_24h": done_recent,
+        "failures": [
+            {
+                "id": job.id,
+                "kind": job.kind,
+                "kind_label": KIND_LABELS.get(job.kind, job.kind),
+                "attempts": job.attempts,
+                "max_attempts": job.max_attempts,
+                "last_error": job.last_error,
+                "created_at": job.created_at,
+                "finished_at": job.finished_at,
+            }
+            for job in failures
+        ],
+    }
+
+
+def retry_job(db: Session, job_id: uuid.UUID) -> Job:
+    """실패한 작업을 처음부터 다시. **실패한 것만** — 도는 중인 것을 되돌리면 두 번 돈다."""
+    job = db.get(Job, job_id)
+    if job is None:
+        raise NotFound("MNX-SERVER-0001", "그 작업을 찾을 수 없습니다.")
+    if job.status != "failed":
+        raise AppError(
+            "MNX-SERVER-0002",
+            "실패한 작업만 다시 시도할 수 있습니다.",
+            status=422,
+        )
+    job.status = "queued"
+    job.attempts = 0
+    job.run_after = datetime.now(UTC)
+    job.locked_at = None
+    job.locked_by = None
+    job.finished_at = None
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def info(db: Session) -> dict[str, Any]:
+    backup = ops.backup_status()
+    return {
+        "backup": {
+            "configured": backup.configured,
+            "path": backup.path,
+            "last_at": backup.last_at,
+            "age_hours": backup.age_hours,
+            "stale": backup.stale,
+            "problem": backup.problem,
+        },
         "host": {
             "hostname": platform.node(),
             "os": f"{platform.system()} {platform.release()}",

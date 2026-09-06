@@ -88,6 +88,10 @@ export default function AccountsAdminPage() {
     [tab],
   )
   const workspaces = useResource(() => workspacesApi.options(), [])
+  // **시스템 관리자가 1명뿐이면 그 사람이 잠기는 순간 복구 경로는 서버 콘솔뿐이다**
+  // (2026-08 말에 실제로 겪었다). 코드로 강제하지는 않는다 — 도입 초기에 1인일 수밖에
+  // 없는 기간이 있다. 대신 여기서 한 줄로 말한다.
+  const summary = useResource(() => accountsApi.summary(), [accounts.data])
 
   /** 시스템 관리자 권한 — **주는 것은 되돌리기 어려운 일이라 한 번 묻는다.**
    *
@@ -154,6 +158,18 @@ export default function AccountsAdminPage() {
         </div>
       )}
 
+      {summary.data && summary.data.active_system_admins <= 1 && (
+        <div
+          role="note"
+          className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40"
+        >
+          <span className="font-medium">시스템 관리자가 {summary.data.active_system_admins}명뿐입니다.</span>
+          <span className="text-muted-foreground text-xs">
+            이 계정이 잠기면 복구 경로가 서버 콘솔(`scripts/set_admin.py`)뿐입니다 — 한 명
+            더 시스템 관리자로 두세요. 절차는 운영 핸드북 「잠겼을 때」 에 있습니다.
+          </span>
+        </div>
+      )}
       <ErrorNotice error={error ?? accounts.error} className="mb-4" />
 
       <div className="rounded-md border">

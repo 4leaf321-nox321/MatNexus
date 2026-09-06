@@ -22,17 +22,32 @@
 그때 실수로 살아 있는 DB 를 덮으면 되돌릴 데가 없다. 정말 덮으려면 -Force 를
 쓰되, 그때도 무엇을 지우는지 먼저 적는다.
 
-사용:
-  # 백업 하나를 새 DB 로 되돌려 본다 (리허설)
-  .\restore.ps1 -BackupPath 'D:\backup\matnexus\20260825-020000' -DbName matnexus_restore_check
+## 두 배치를 다 읽는다 (2026-09-05)
 
-  # 파일스토어까지 되돌린다 (실제 복구)
-  .\restore.ps1 -BackupPath 'D:\backup\matnexus\20260825-020000' -DbName matnexus `
-                -AppPath 'C:\Server\MatNexus' -Force
+`backup.ps1` 이 세대 정책으로 바뀌면서 배치가 달라졌다:
+
+    새 배치  <BackupRoot>\db\db-<시각>.dump + <BackupRoot>\filestore\ (미러) + <BackupRoot>\env\.env
+    옛 배치  <BackupPath>\db.dump + <BackupPath>\filestore\ + <BackupPath>\.env
+
+`-BackupRoot` 를 주면 가장 최근 덤프(또는 `-DumpFile` 로 고른 것)를, `-BackupPath` 를
+주면 옛 배치 폴더 하나를 쓴다.
+
+사용:
+  # 백업을 새 DB 로 되돌려 본다 (리허설) — 가장 최근 덤프
+  .\restore.ps1 -BackupRoot 'D:\MatNexus-backup' -DbName matnexus_restore_check
+
+  # 특정 시점 덤프로, 파일스토어까지 (실제 복구)
+  .\restore.ps1 -BackupRoot 'D:\MatNexus-backup' -DumpFile 'D:\MatNexus-backup\db\db-20260901-030000.dump' `
+                -DbName matnexus -AppPath 'C:\Server\MatNexus' -Force
+
+  # 옛 배치(타임스탬프 폴더)
+  .\restore.ps1 -BackupPath 'D:\backup\matnexus\20260825-020000' -DbName matnexus_restore_check
 #>
 
 param(
-    [Parameter(Mandatory = $true)][string]$BackupPath,
+    [string]$BackupRoot,
+    [string]$DumpFile,
+    [string]$BackupPath,
     [Parameter(Mandatory = $true)][string]$DbName,
     [string]$AppPath,
     [switch]$Force,
@@ -54,6 +69,8 @@ PowerShell 매개변수는 대시가 하나입니다:  -$name '<값>'
     }
 }
 
+Assert-NotFlag $BackupRoot 'BackupRoot'
+Assert-NotFlag $DumpFile 'DumpFile'
 Assert-NotFlag $BackupPath 'BackupPath'
 Assert-NotFlag $DbName 'DbName'
 Assert-NotFlag $AppPath 'AppPath'
@@ -80,12 +97,31 @@ function Invoke-Native([string]$exe, [string[]]$arguments, [string]$what) {
 }
 
 # --- 백업 확인 ----------------------------------------------------------------
-if (-not (Test-Path $BackupPath)) { throw "백업 폴더를 찾을 수 없습니다: $BackupPath" }
-$dumpPath = Join-Path $BackupPath 'db.dump'
-if (-not (Test-Path $dumpPath)) { throw "db.dump 가 없습니다: $dumpPath" }
-
-$envFile = Join-Path $BackupPath '.env'
+if (-not $BackupRoot -and -not $BackupPath) {
+    throw '-BackupRoot(새 배치) 또는 -BackupPath(옛 배치) 중 하나를 주세요.'
+}
+if ($BackupRoot) {
+    if (-not (Test-Path $BackupRoot)) { throw "백업 폴더를 찾을 수 없습니다: $BackupRoot" }
+    if ($DumpFile) {
+        $dumpPath = $DumpFile
+    } else {
+        # **가장 최근 덤프.** 이름의 시각으로 고른다 — mtime 은 복사하면 바뀐다.
+        $latest = Get-ChildItem (Join-Path $BackupRoot 'db') -Filter 'db-*.dump' -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $latest) { throw "덤프가 없습니다: $(Join-Path $BackupRoot 'db')" }
+        $dumpPath = $latest.FullName
+    }
+    $envFile = Join-Path $BackupRoot 'env\.env'
+    $storeSource = Join-Path $BackupRoot 'filestore'
+} else {
+    if (-not (Test-Path $BackupPath)) { throw "백업 폴더를 찾을 수 없습니다: $BackupPath" }
+    $dumpPath = Join-Path $BackupPath 'db.dump'
+    $envFile = Join-Path $BackupPath '.env'
+    $storeSource = Join-Path $BackupPath 'filestore'
+}
+if (-not (Test-Path $dumpPath)) { throw "덤프가 없습니다: $dumpPath" }
 if (-not (Test-Path $envFile)) { throw "백업에 .env 가 없습니다: $envFile" }
+Write-Log "덤프: $dumpPath"
 
 # 접속 정보는 **백업이 들고 온 것**을 쓴다. 여기서 따로 받으면 백업을 받은
 # 서버와 다른 DB 에 되돌리는 사고가 난다.
@@ -162,7 +198,6 @@ try {
     Write-Log "표 $tables 개"
 
     # --- 파일스토어 ------------------------------------------------------------
-    $storeSource = Join-Path $BackupPath 'filestore'
     $storeTarget = $null
     if ($AppPath) {
         $storeTarget = Join-Path ($AppPath + '_data') 'filestore'

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -19,6 +20,7 @@ from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.auth.schemas import PatOut, UserOut, WorkspaceMembershipOut
 from app.modules.workspaces import services as workspaces
 from app.modules.workspaces.models import Workspace, WorkspaceMember
+from app.shared import audit
 from app.shared.errors import AppError, Forbidden, NotFound
 
 _INVALID_LOGIN = "이메일 또는 비밀번호가 올바르지 않습니다."
@@ -47,6 +49,51 @@ def ensure_can_sign_in(user: User) -> None:
 # --- 로그인 -----------------------------------------------------------------
 
 
+#: 시험이 갈아 끼운다 — 실제로 자면 시험이 30초씩 선다.
+_sleep = time.sleep
+
+
+def login_delay_seconds(failures: int) -> float:
+    """이번 실패가 몇 번째인가 → 몇 초 늦출까. 문턱 전은 0.
+
+    5회부터 2초씩 늘어 최대 30초(기본값). **잠금은 없다** — 관리자 복구가 서버 콘솔
+    뿐인 시스템에서 잠금은 자해라고 계획 문서가 적었다. 늦추기만 해도 무차별 시도는
+    시간당 몇 번으로 줄고, 비밀번호를 아는 사람은 한 번 기다리면 된다.
+    """
+    settings = get_settings()
+    over = failures - settings.login_delay_after + 1
+    if over <= 0:
+        return 0.0
+    return float(
+        min(settings.login_delay_step_seconds * over, settings.login_delay_max_seconds)
+    )
+
+
+def _note_failure(db: Session, user: User) -> float:
+    """실패를 세고 이번에 늦출 초를 돌려준다. 창이 지났으면 처음부터."""
+    settings = get_settings()
+    now = _now()
+    window = timedelta(minutes=settings.login_failure_window_minutes)
+    if user.last_failed_login_at is None or now - user.last_failed_login_at > window:
+        user.failed_logins = 0
+    user.failed_logins += 1
+    user.last_failed_login_at = now
+    delay = login_delay_seconds(user.failed_logins)
+    if user.failed_logins == settings.login_delay_after:
+        # 문턱을 넘는 순간 한 번만 — 실패마다 남기면 감사 기록이 넘친다.
+        audit.record(
+            db,
+            action=audit.LOGIN_THROTTLED,
+            actor=None,
+            target_table="users",
+            target_id=user.id,
+            target_label=user.email,
+            changes={"failed_logins": user.failed_logins},
+        )
+    db.commit()
+    return delay
+
+
 def authenticate(db: Session, email: str, password: str) -> User:
     user = db.scalar(select(User).where(User.email == email.lower()))
 
@@ -57,9 +104,17 @@ def authenticate(db: Session, email: str, password: str) -> User:
         raise AppError("MNX-AUTH-0001", _INVALID_LOGIN, status=401)
 
     if not security.verify_password(password, user.password_hash):
+        # **늦추고 나서 거절한다.** 거절부터 하면 다음 시도가 바로 온다.
+        delay = _note_failure(db, user)
+        if delay > 0:
+            _sleep(delay)
         raise AppError("MNX-AUTH-0001", _INVALID_LOGIN, status=401)
 
     ensure_can_sign_in(user)
+    if user.failed_logins:
+        user.failed_logins = 0
+        user.last_failed_login_at = None
+        db.commit()
     return user
 
 
@@ -80,6 +135,11 @@ def issue_session(db: Session, user: User, user_agent: str | None) -> tuple[str,
     return access, expires_in, raw
 
 
+#: 회전한 옛 토큰을 **동시 갱신**으로 봐 주는 시간. 이보다 지나서 오면 재사용(탈취)이다.
+#: 같은 페이지 로드의 두 요청은 밀리초 차이고, 탭 둘이 번갈아 갱신해도 초 단위다.
+REFRESH_GRACE = timedelta(seconds=30)
+
+
 def rotate_refresh(
     db: Session, raw: str, user_agent: str | None
 ) -> tuple[User, str, int, str]:
@@ -97,14 +157,31 @@ def rotate_refresh(
         )
 
     if token.revoked_at is not None:
-        # 폐기된 토큰의 재사용 — 탈취 가능성. 해당 사용자의 세션을 전부 끊는다.
-        revoke_all_for_user(db, token.user_id)
-        raise AppError(
-            "MNX-AUTH-0005",
-            "세션이 무효화되었습니다. 다시 로그인해 주세요.",
-            status=401,
-            details={"reason": "reuse_of_revoked_token"},
+        # ── 회전 직후의 옛 값인가 — 같은 브라우저의 **동시 갱신**이다 ──────────
+        #
+        # 실측(2026-09-05): 한 페이지 로드에서 refresh 가 둘 나갔다(React StrictMode
+        # 가 effect 를 두 번 돌린다). 서버가 둘을 순서대로 처리하면 첫째가 회전하고
+        # 둘째는 **방금 회전된 값**을 들고 온다 — 그것을 탈취로 보고 admin 의 세션
+        # 1,200개를 한꺼번에 끊었다. 탭이 둘이어도 같은 일이 난다.
+        #
+        # 탈취와 동시 갱신은 겉이 같다. 가르는 것은 **시간과 사슬**이다: 회전한 지
+        # 몇 초 안이고 그 후속 토큰이 살아 있으면 같은 사람의 두 요청이다. 그때는
+        # 후속 토큰을 회전시켜 사슬을 하나로 유지한다 — 옛 값을 되살리지 않는다.
+        replacement = (
+            db.get(RefreshToken, token.replaced_by_id) if token.replaced_by_id else None
         )
+        just_rotated = _now() - token.revoked_at <= REFRESH_GRACE
+        if replacement is not None and just_rotated and replacement.revoked_at is None:
+            token = replacement
+        else:
+            # 폐기된 토큰의 재사용 — 탈취 가능성. 해당 사용자의 세션을 전부 끊는다.
+            revoke_all_for_user(db, token.user_id)
+            raise AppError(
+                "MNX-AUTH-0005",
+                "세션이 무효화되었습니다. 다시 로그인해 주세요.",
+                status=401,
+                details={"reason": "reuse_of_revoked_token"},
+            )
 
     if token.expires_at <= _now():
         raise AppError(

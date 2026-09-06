@@ -8,13 +8,15 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.server import services
-from app.modules.server.schemas import ServerInfoOut
+from app.modules.server.schemas import FailedJobOut, QueueOut, ServerInfoOut
 from app.shared.auth import require_system_admin
 
 router = APIRouter(prefix="/server", tags=["server"])
@@ -30,3 +32,31 @@ def server_info(
     것은 아니다.
     """
     return ServerInfoOut.model_validate(services.info(db))
+
+
+@router.get("/queue", response_model=QueueOut)
+def queue(
+    user: User = Depends(require_system_admin), db: Session = Depends(get_db)
+) -> QueueOut:
+    """큐 현황과 실패 목록. 도는 것은 문제없다 — 보이지 않는 것이 문제였다(2026-09-05)."""
+    return QueueOut.model_validate(services.queue_status(db))
+
+
+@router.post("/queue/{job_id}/retry", response_model=FailedJobOut)
+def retry(
+    job_id: uuid.UUID,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> FailedJobOut:
+    """실패한 작업을 처음부터 다시. 워커가 다음 틱에 집어 간다."""
+    job = services.retry_job(db, job_id)
+    return FailedJobOut(
+        id=job.id,
+        kind=job.kind,
+        kind_label=services.KIND_LABELS.get(job.kind, job.kind),
+        attempts=job.attempts,
+        max_attempts=job.max_attempts,
+        last_error=job.last_error,
+        created_at=job.created_at,
+        finished_at=job.finished_at,
+    )

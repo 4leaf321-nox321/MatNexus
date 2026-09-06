@@ -9,7 +9,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
-import { api, session } from '@/shared/api/client'
+import { api, refreshSession, session } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type CurrentUser = components['schemas']['UserOut']
@@ -39,12 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // 앱 기동 시 1회 — 쿠키가 살아 있으면 세션을 되살린다.
+  //
+  // **`api.post` 가 아니라 `refreshSession` 이다.** StrictMode 가 이 effect 를 두 번
+  // 돌리므로 `api.post` 면 refresh 가 같은 쿠키로 둘 나가고, 서버가 둘째를 탈취로
+  // 봐 세션을 전부 끊었다(2026-09-05 실측). `refreshSession` 은 진행 중인 요청을
+  // 같이 기다린다 — 요청은 하나다.
   useEffect(() => {
     let cancelled = false
     session.onLost(clear)
 
-    api
-      .post<LoginResponse>('/auth/refresh')
+    refreshSession<LoginResponse>()
       .then((body) => {
         if (cancelled) return
         session.setToken(body.access_token)

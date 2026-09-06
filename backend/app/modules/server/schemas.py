@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -55,6 +58,17 @@ class DatabaseOut(BaseModel):
     pool: dict[str, int]
 
 
+class BackupOut(BaseModel):
+    """마지막 백업이 언제였나. **안 보이면 없는 것과 같다**(2026-09-05)."""
+
+    configured: bool
+    path: str | None
+    last_at: datetime | None
+    age_hours: float | None
+    stale: bool
+    problem: str | None
+
+
 class ServerInfoOut(BaseModel):
     host: HostOut
     cpu: CpuOut
@@ -63,3 +77,30 @@ class ServerInfoOut(BaseModel):
     process: ProcessOut
     database: DatabaseOut
     app_version: str
+    backup: BackupOut
+
+
+class FailedJobOut(BaseModel):
+    id: uuid.UUID
+    kind: str
+    kind_label: str
+    attempts: int
+    max_attempts: int
+    last_error: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class QueueOut(BaseModel):
+    """큐 현황. 도는 것은 문제없다 — **보이지 않는 것이 문제였다.**
+
+    재시도 3회를 다 쓰고 `failed` 가 된 작업을 보는 화면도 API 도 없었다. 파싱 실패는
+    시험 목록에 상태로라도 보이지만 알림 발송·드리프트 점검은 야간에 조용히 죽고, 알림이
+    안 온 사람은 알림이 없었다고 여긴다.
+    """
+
+    queued: int
+    running: int
+    failed: int
+    done_last_24h: int
+    failures: list[FailedJobOut]

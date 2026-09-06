@@ -110,22 +110,27 @@ cd C:\Server\tools\MatNexus
 .\install.ps1  -AppPath 'C:\Server\MatNexus' -DbPassword '...'
 
 # 갱신할 때 — 앱을 먼저 중지하고, 백업부터
-.\backup.ps1   -AppPath 'C:\Server\MatNexus' -BackupRoot 'D:\backup\matnexus'
+.\backup.ps1   -AppPath 'C:\Server\MatNexus' -BackupRoot 'D:\MatNexus-backup'
 .\deploy.ps1   -AppPath 'C:\Server\MatNexus'
 .\rollback.ps1 -AppPath 'C:\Server\MatNexus'
 
 # 백업이 살아 있는지 확인 — 옆에 띄워 보기만 한다 (지금 DB 를 안 건드린다)
-.\restore.ps1  -BackupPath 'D:\backup\matnexus\20260825-020000' -DbName matnexus_restore_check
+.\restore.ps1  -BackupRoot 'D:\MatNexus-backup' -DbName matnexus_restore_check
 ```
 
 ### 백업
 
 **DB와 파일스토어를 같은 시각에 함께 받는다.** DB에는 곡선의 경로와 해시가,
 파일스토어에는 그 내용이 있어서 한쪽만 되돌리면 "DB에는 있는데 파일이 없는" 행이
-생긴다. 받은 폴더의 `MANIFEST.txt` 에 복구 절차가 함께 적혀 있다.
+생긴다. 백업 폴더의 `LAST_BACKUP.txt` 에 복구 절차가 함께 적혀 있다.
 
 **한 번은 실제로 복구해 보라** — 받아만 두고 복구해 본 적 없는 백업은 백업이 아니다.
-65도 RA도 이 절차 자체가 없었다. 정기 실행은 작업 스케줄러에 등록한다.
+65도 RA도 이 절차 자체가 없었다.
+
+매일 03:00 에 돌도록 작업 스케줄러에 등록하고(명령은 스크립트 머리말과
+[운영 핸드북](docs/운영-핸드북.md)), `backend\.env` 에 `BACKUP_DIR` 을 적으면 서버
+화면과 홈이 마지막 백업 시각을 보인다. DB 덤프는 일 7벌 + 일요일분 4벌, 파일스토어는
+미러 한 벌이다(불변 파일이라 세대가 필요 없다).
 
 ### 복구
 
@@ -133,10 +138,10 @@ cd C:\Server\tools\MatNexus
 
 ```powershell
 # ① 확인만 — 새 DB 로 되돌려 본다. 지금 DB 도 파일스토어도 안 건드린다
-.\restore.ps1 -BackupPath 'D:\backup\matnexus\<시각>' -DbName matnexus_restore_check
+.\restore.ps1 -BackupRoot 'D:\MatNexus-backup' -DbName matnexus_restore_check
 
-# ② 실제 복구 — 앱을 먼저 중지한다
-.\restore.ps1 -BackupPath 'D:\backup\matnexus\<시각>' -DbName matnexus `
+# ② 실제 복구 — 앱을 먼저 중지한다. 특정 시점은 -DumpFile 로 고른다
+.\restore.ps1 -BackupRoot 'D:\MatNexus-backup' -DbName matnexus `
               -AppPath 'C:\Server\MatNexus' -Force
 ```
 

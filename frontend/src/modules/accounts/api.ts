@@ -16,6 +16,7 @@ type DeleteResult = components['schemas']['DeleteAccountResponse']
 type TemporaryPassword = components['schemas']['TemporaryPasswordResponse']
 type SignupRequest = components['schemas']['SignupRequest']
 type CreateAccountRequest = components['schemas']['CreateAccountRequest']
+export type AccountSummary = components['schemas']['AccountSummaryOut']
 type SystemAdminRequest = components['schemas']['SystemAdminRequest']
 
 export const accountsApi = {
@@ -23,6 +24,9 @@ export const accountsApi = {
 
   list: (status?: AccountStatus) =>
     api.get<Account[]>(status ? `/accounts?status=${status}` : '/accounts'),
+
+  /** 활성 시스템 관리자 수. **서버가 센다** — 목록은 쪽 단위라 화면이 세면 틀린다. */
+  summary: () => api.get<AccountSummary>('/accounts/summary'),
 
   create: (payload: CreateAccountRequest) =>
     api.post<TemporaryPassword>('/accounts', payload),

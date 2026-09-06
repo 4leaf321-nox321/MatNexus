@@ -546,6 +546,17 @@ def dependents_of(db: Session, *, user_id: uuid.UUID) -> list[Reference]:
     return references_to(db, table="users", pk=user.id)
 
 
+def active_system_admin_count(db: Session) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(User.is_system_admin.is_(True), User.status == "active")
+        )
+        or 0
+    )
+
+
 def list_accounts(db: Session, *, status: str | None, limit: int, offset: int) -> list[User]:
     query = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
     if status:

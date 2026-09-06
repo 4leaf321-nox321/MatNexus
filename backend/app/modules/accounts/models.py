@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -60,6 +60,12 @@ class User(Base):
         Boolean, default=False, server_default="false"
     )
     """초기 관리자와 관리자 발급 계정의 시드 비밀번호가 그대로 남는 사고를 막는다."""
+
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """창(`login_failure_window_minutes`) 안의 연속 실패 수. 성공하면 0."""
+    last_failed_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     home_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True

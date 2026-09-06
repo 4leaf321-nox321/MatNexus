@@ -102,3 +102,72 @@ describe('fetchWithAuth 가 만드는 주소', () => {
     expect(spy.mock.calls[0][0]).toBe('/api/guide/documents')
   })
 })
+
+describe('refresh 는 한 번에 하나만 나간다', () => {
+  /**
+   * 실측(2026-09-05): 앱이 뜰 때 StrictMode 가 effect 를 두 번 돌려 `/auth/refresh`
+   * 가 같은 쿠키로 둘 나갔다. 서버는 회전된 옛 값의 재사용을 탈취로 보고 그 사용자의
+   * 세션을 **전부** 끊었다 — 다시 로그인해도 다음 로드에서 또 끊겼다.
+   */
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('동시에 둘이 불러도 fetch 는 한 번이고 둘 다 같은 답을 받는다', async () => {
+    const { refreshSession, tryRefresh } = await import('@/shared/api/client')
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve(
+                new Response(JSON.stringify({ access_token: 'A', user: { id: 'u' } }), {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/json' },
+                })
+              ),
+            10
+          )
+        )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const [first, second, third] = await Promise.all([
+      refreshSession<{ access_token: string }>(),
+      refreshSession<{ access_token: string }>(),
+      tryRefresh(),
+    ])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(first.access_token).toBe('A')
+    expect(second.access_token).toBe('A')
+    expect(third).toBe(true)
+  })
+
+  it('끝난 뒤에 다시 부르면 새로 나간다', async () => {
+    const { tryRefresh } = await import('@/shared/api/client')
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ access_token: 'B' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    await tryRefresh()
+    await tryRefresh()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('실패하면 봉투를 ApiError 로 던진다', async () => {
+    const { refreshSession } = await import('@/shared/api/client')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: 'MNX-AUTH-0003', message: '세션이 없습니다.' } }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    )
+    const caught = await refreshSession().catch((error: unknown) => error)
+    expect(caught).toBeInstanceOf(ApiError)
+    expect((caught as ApiError).code).toBe('MNX-AUTH-0003')
+  })
+})

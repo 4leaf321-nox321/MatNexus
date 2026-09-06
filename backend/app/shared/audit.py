@@ -45,6 +45,10 @@ ACCOUNT_SUSPENDED = "account.suspended"
 ACCOUNT_HOME_CHANGED = "account.home_changed"
 ACCOUNT_ADMIN_CHANGED = "account.admin_changed"
 ACCOUNT_DELETED = "account.deleted"
+GROUP_RESULT_DELETED = "group_result.deleted"
+LOGIN_THROTTLED = "auth.login_throttled"
+"""같은 계정의 실패가 문턱을 넘어 응답을 늦추기 시작했다. 실패마다 남기면 넘치므로
+문턱을 넘는 순간 한 번만."""
 #: 휴지통에서 되살리거나 영영 지운 일. **삭제와 짝이다** — 지운 기록만 남고
 #: 되살린 기록이 없으면, 지금 살아 있는 행이 왜 살아 있는지 설명이 안 된다.
 TRASH_RESTORED = "trash.restored"

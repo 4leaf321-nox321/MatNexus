@@ -21,6 +21,13 @@ class SignupRequest(BaseModel):
     """희망 부서. 승인 시 이 부서의 멤버가 된다."""
 
 
+class AccountSummaryOut(BaseModel):
+    """활성 시스템 관리자 수. **1명이면 그 사람이 잠기는 순간 복구 경로가 서버 콘솔뿐이다**
+    (2026-08 말에 실제로 겪었다). 목록은 쪽 단위라 화면이 세면 틀린다 — 서버가 센다."""
+
+    active_system_admins: int
+
+
 class AccountOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
