@@ -42,6 +42,8 @@ interface Row {
   cardLabel: string | null
   /** 문헌 매칭 — 사내가 없으면 이걸로 메꾸고, 둘 다면 연결도 건다. */
   catalog: { id: string; name: string } | null
+  /** 문헌 스칼라로 곡선을 지어 *MAT_024 까지 — 사람이 켜야 켜진다(합성 표지 필수). */
+  synthesize: boolean
   fromMemory: boolean
 }
 
@@ -80,6 +82,7 @@ function parseRows(cells: string[][], midCol: number | null, nameCol: number): R
       cardId: null,
       cardLabel: null,
       catalog: null,
+      synthesize: false,
       fromMemory: false,
     })
   }
@@ -184,6 +187,7 @@ export default function BomDeckPage() {
           // 사내 카드가 있으면 그것 — 없으면 문헌으로 메꾼다.
           card_id: row.cardId,
           catalog_material_id: row.cardId ? null : (row.catalog?.id ?? null),
+          synthesize: !row.cardId && row.synthesize,
         })),
         units: units === 'si' ? null : units,
       })
@@ -359,6 +363,7 @@ export default function BomDeckPage() {
               </Button>
               <span className="text-muted-foreground text-xs">
                 사내 카드 {built.card_count} · 문헌 {built.literature_count}
+                {built.synthetic_count > 0 && ` · 합성 곡선 ${built.synthetic_count}`}
                 {built.skipped.length > 0 && ` · 건너뜀 ${built.skipped.length}`}
               </span>
             </>
@@ -504,12 +509,28 @@ function MatchRow({
             </option>
           ))}
         </select>
+        {/* 곡선 합성 — 지어낸 곡선은 지어냈다고 말한다. 사내 카드가 있으면 실측이 이긴다. */}
+        {row.catalog && !row.cardId && (
+          <label className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
+            <input
+              type="checkbox"
+              className="accent-primary size-3"
+              checked={row.synthesize}
+              onChange={(event) => onChange({ ...row, synthesize: event.target.checked })}
+            />
+            곡선 합성(*MAT_024) — 실측 아님, 덱에 합성 표지
+          </label>
+        )}
       </td>
       <td className="p-2 text-xs">
         {row.cardId ? (
           <span className="text-emerald-700 dark:text-emerald-500">사내 카드 (곡선)</span>
         ) : row.catalog ? (
-          <span>문헌 스칼라</span>
+          row.synthesize ? (
+            <span className="text-amber-700 dark:text-amber-500">문헌 합성 곡선</span>
+          ) : (
+            <span>문헌 스칼라</span>
+          )
         ) : (
           <span className="text-muted-foreground">건너뜀 — 매칭 없음</span>
         )}

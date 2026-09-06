@@ -1394,6 +1394,11 @@
             "title": "Skipped",
             "type": "array"
           },
+          "synthetic_count": {
+            "default": 0,
+            "title": "Synthetic Count",
+            "type": "integer"
+          },
           "text": {
             "title": "Text",
             "type": "string"
@@ -1446,6 +1451,11 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "synthesize": {
+            "default": false,
+            "title": "Synthesize",
+            "type": "boolean"
           }
         },
         "required": [

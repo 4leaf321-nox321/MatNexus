@@ -665,6 +665,9 @@ class BomDeckRowIn(BaseModel):
     """부품표의 원문 이름 — 건너뛴 줄을 사람이 알아보는 데 쓴다."""
     card_id: uuid.UUID | None = None
     catalog_material_id: uuid.UUID | None = None
+    synthesize: bool = False
+    """문헌 스칼라로 곡선을 **지어** *MAT_024 까지 낸다 — 사람이 켜야 켜진다.
+    지은 곡선은 덱 각주에 「합성 — 실측이 아니다」 와 모델·주의가 실린다."""
 
 
 class BomDeckIn(BaseModel):
@@ -689,3 +692,5 @@ class BomDeckOut(BaseModel):
     card_count: int
     """사내 카드로 실린 부품 수 — 문헌 수와 갈라 보여야 혼합이 보인다."""
     literature_count: int
+    synthetic_count: int = 0
+    """합성 곡선으로 실린 부품 수 — 문헌 스칼라 수와도 갈라 보인다."""

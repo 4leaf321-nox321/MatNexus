@@ -76,6 +76,7 @@ function mockApis({
         notes: [],
         card_count: 1,
         literature_count: 0,
+        synthetic_count: 0,
       })
     throw new Error(`뜻밖의 POST: ${path}`)
   })
@@ -159,6 +160,28 @@ describe('BOM 혼합 덱', () => {
       card_id: null,
       catalog_material_id: CATALOG_ID,
     })
+  })
+
+  it('곡선 합성을 켜면 표지가 서고 payload 에 실린다', async () => {
+    mockApis({ cards: [] })
+    const user = userEvent.setup()
+    await pasteAndMatch(user)
+
+    const pickers = screen.getAllByRole('combobox')
+    await user.selectOptions(pickers[0], CATALOG_ID)
+    // 문헌만 매칭된 줄에만 합성 스위치가 있다 — 사내 카드가 있으면 실측이 이긴다.
+    await user.click(screen.getByRole('checkbox'))
+    expect(screen.getByText('문헌 합성 곡선')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '덱 만들기' }))
+    await waitFor(() =>
+      expect(post.mock.calls.some(([url]) => String(url) === '/fitting/decks/bom')).toBe(true)
+    )
+    const [, body] = post.mock.calls.find(([url]) => String(url) === '/fitting/decks/bom') as [
+      string,
+      { rows: Array<Record<string, unknown>> },
+    ]
+    expect(body.rows[0]).toMatchObject({ catalog_material_id: CATALOG_ID, synthesize: true })
   })
 
   it('엑셀 다열이면 열 매핑을 물어본다', async () => {

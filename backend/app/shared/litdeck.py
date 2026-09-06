@@ -33,7 +33,7 @@ from app.modules.catalog.models import (
     CatalogValue,
 )
 from app.shared import representative
-from matcore import cards, export
+from matcore import cards, export, synth
 from matcore.export import dyna as _dyna  # noqa: F401  (스칼라 렌더러를 등록시킨다)
 
 #: MT 물성 키 → Deck 블록 자리. 매핑에 없는 값은 덱에 안 실린다.
@@ -263,3 +263,123 @@ def build(
         notes=tuple(dict.fromkeys(notes)),
         material_count=len(rendered),
     )
+
+
+# ── 합성 곡선 — 문헌 스칼라로 소성 표까지 (이식 5단계) ─────────────────────────
+
+#: 합성에 쓰는 스칼라 넷. MT key 는 안정 id 라 개명에 안 깨진다.
+STRENGTH_KEYS = (
+    "mechanical.youngs_modulus",
+    "mechanical.yield_strength",
+    "mechanical.tensile_strength",
+    "mechanical.elongation_at_break",
+)
+
+
+@dataclass(frozen=True)
+class SyntheticAssembly:
+    curve: synth.SyntheticCurve
+    provenance: tuple[str, ...]
+    """스칼라별 출처 각주 + 합성 모델·주의 — 덱 머리에 그대로 실린다."""
+
+
+def _strength_candidates(
+    db: Session, material: CatalogMaterial
+) -> tuple[dict[str, list[tuple[float, int]]], dict[str, str]]:
+    """키마다 (값, tier) 후보 전부(대표가 먼저) + 대표값의 출처 각주."""
+    rows = list(
+        db.execute(
+            select(CatalogValue, CatalogSource)
+            .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
+            .where(
+                CatalogValue.material_id == material.id,
+                CatalogValue.property_key.in_(STRENGTH_KEYS),
+                CatalogValue.value_num.is_not(None),
+            )
+        )
+    )
+    marks = representative.annotate([value for value, _ in rows])
+    found: dict[str, list[tuple[float, int]]] = {key: [] for key in STRENGTH_KEYS}
+    cites: dict[str, str] = {}
+    for value, source in sorted(rows, key=lambda pair: not marks[pair[0].id].representative):
+        found[value.property_key].append((float(value.value_num), value.quality_tier))
+        if marks[value.id].representative:
+            parts = [
+                part
+                for part in (
+                    source.title if source else None,
+                    str(source.year) if source and source.year else None,
+                    value.source_detail,
+                )
+                if part
+            ]
+            cites[value.property_key] = (
+                f"{' · '.join(parts) or '출처 미상'} [tier {value.quality_tier}]"
+            )
+    return found, cites
+
+
+def synthetic_assembly(db: Session, material: CatalogMaterial) -> SyntheticAssembly | None:
+    """재료의 대표 스칼라로 곡선을 합성한다 — 근거가 모자라면 None.
+
+    **항복 > 인장강도 모순은 정합 조합으로 바꾼다**(MT 원본의 판단): 대표값은
+    물성마다 독립으로 뽑혀 서로 다른 출처·제품에서 올 수 있고, 그대로 합성하면
+    물리적으로 불가능한 곡선이 된다. tier 합이 가장 좋은 정합(항복 ≤ 인장)
+    조합으로 바꾸고 **그 사실을 각주로 말한다.**
+    """
+    candidates, cites = _strength_candidates(db, material)
+
+    def top(key: str) -> float | None:
+        rows = candidates.get(key) or []
+        return rows[0][0] if rows else None
+
+    E = top(STRENGTH_KEYS[0])
+    sigy = top(STRENGTH_KEYS[1])
+    uts = top(STRENGTH_KEYS[2])
+    elongation = top(STRENGTH_KEYS[3])
+
+    fix_note: str | None = None
+    if sigy is not None and uts is not None and sigy > uts:
+        best: tuple[tuple[int, int, int], float, float] | None = None
+        for ys, tier_y in candidates[STRENGTH_KEYS[1]]:
+            for ut, tier_u in candidates[STRENGTH_KEYS[2]]:
+                if ys <= ut:
+                    score = (tier_y + tier_u, tier_y, tier_u)
+                    if best is None or score < best[0]:
+                        best = (score, ys, ut)
+        if best is None:
+            fix_note = (
+                f"항복({sigy / 1e6:.0f} MPa)이 인장강도({uts / 1e6:.0f} MPa)보다 커서"
+                " (출처 불일치) 인장강도를 빼고 합성했다."
+            )
+            uts = None
+        else:
+            _, ys, ut = best
+            if (ys, ut) != (sigy, uts):
+                fix_note = (
+                    f"대표값 조합이 물리적으로 모순(항복 {sigy / 1e6:.0f} >"
+                    f" 인장 {uts / 1e6:.0f} MPa)이라, 정합한 조합(항복 {ys / 1e6:.0f} /"
+                    f" 인장 {ut / 1e6:.0f} MPa)으로 바꿔 합성했다."
+                )
+            sigy, uts = ys, ut
+
+    curve = synth.synthesize(E, sigy, uts, elongation)
+    if curve is None:
+        return None
+
+    labels = {
+        STRENGTH_KEYS[0]: "탄성계수",
+        STRENGTH_KEYS[1]: "항복강도",
+        STRENGTH_KEYS[2]: "인장강도",
+        STRENGTH_KEYS[3]: "연신율",
+    }
+    provenance = [
+        f"합성 곡선 — 실측이 아니다. 모델: {curve.model}",
+        f"  {curve.note}",
+    ]
+    if fix_note:
+        provenance.append(f"  {fix_note}")
+    for key in STRENGTH_KEYS:
+        if key in cites:
+            provenance.append(f"{labels[key]} — {cites[key]}")
+    return SyntheticAssembly(curve=curve, provenance=tuple(provenance))

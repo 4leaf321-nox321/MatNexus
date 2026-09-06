@@ -5705,6 +5705,11 @@ export interface components {
             notes: string[];
             /** Skipped */
             skipped: components["schemas"]["BomDeckSkippedOut"][];
+            /**
+             * Synthetic Count
+             * @default 0
+             */
+            synthetic_count: number;
             /** Text */
             text: string;
         };
@@ -5721,6 +5726,11 @@ export interface components {
             mid: number;
             /** Name */
             name: string;
+            /**
+             * Synthesize
+             * @default false
+             */
+            synthesize: boolean;
         };
         /** BomDeckSkippedOut */
         BomDeckSkippedOut: {

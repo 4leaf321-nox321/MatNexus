@@ -3248,6 +3248,7 @@ def build_bom_deck(
     notes: list[str] = []
     card_count = 0
     literature_count = 0
+    synthetic_count = 0
     for row in payload.rows:
         if row.card_id is not None:
             deck = replace(_deck_for_card(db, user, row.card_id), solver_id=row.mid)
@@ -3285,13 +3286,31 @@ def build_bom_deck(
                 )
                 continue
             made_blocks = litdeck.assemble(db, material)
+            blocks = dict(made_blocks.blocks)
+            provenance = list(made_blocks.provenance)
+            target_format = payload.lit_format
+            if row.synthesize:
+                # 문헌 스칼라로 곡선을 짓는다 — 소성 표가 나와야 뜻이 있다.
+                made_synth = litdeck.synthetic_assembly(db, material)
+                if made_synth is None or not made_synth.curve.table_rows:
+                    why = (
+                        "곡선을 합성할 스칼라가 모자랍니다 — 탄성계수와 항복강도"
+                        "(또는 인장강도)가 있어야 합니다."
+                        if made_synth is None
+                        else f"소성 표가 안 나오는 재료입니다({made_synth.curve.model})."
+                    )
+                    skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=why))
+                    continue
+                blocks["table"] = {"rows": [dict(one) for one in made_synth.curve.table_rows]}
+                provenance.extend(made_synth.provenance)
+                target_format = "dyna"  # 곡선 덱(*MAT_024)
             deck = export.Deck(
                 name=export.sanitize_name(material.grade or material.name, fallback="MAT"),
                 solver_id=row.mid,
-                blocks=made_blocks.blocks,
-                provenance=tuple(made_blocks.provenance),
+                blocks=blocks,
+                provenance=tuple(provenance),
             )
-            missing = export.missing_for(deck, payload.lit_format)
+            missing = export.missing_for(deck, target_format)
             if missing:
                 skipped.append(
                     BomDeckSkippedOut(
@@ -3301,10 +3320,13 @@ def build_bom_deck(
                     )
                 )
                 continue
-            made = export.render(payload.lit_format, deck, system)
+            made = export.render(target_format, deck, system)
             rendered.append(made.text)
             notes.extend(made.notes)
-            literature_count += 1
+            if row.synthesize:
+                synthetic_count += 1
+            else:
+                literature_count += 1
             continue
 
         skipped.append(
@@ -3324,4 +3346,5 @@ def build_bom_deck(
         notes=notes,
         card_count=card_count,
         literature_count=literature_count,
+        synthetic_count=synthetic_count,
     )

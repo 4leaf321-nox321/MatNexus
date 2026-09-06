@@ -153,6 +153,95 @@ class Test혼합_한_파일:
         assert "MID 7" in refused.json()["error"]["message"]
 
 
+class Test합성_곡선:
+    def add_yield(self, db: Session, material_id: Any) -> None:
+        """스냅샷에는 강도 스칼라가 없다 — 항복강도 정의와 값을 심는다."""
+        from app.modules.catalog.models import CatalogDefinition, CatalogValue
+
+        db.add(
+            CatalogDefinition(
+                mt_id=901,
+                key="mechanical.yield_strength",
+                domain="mechanical",
+                name="항복강도",
+                symbol="sigy",
+                si_unit="Pa",
+                value_type="numeric",
+            )
+        )
+        db.flush()
+        db.add(
+            CatalogValue(
+                mt_id=901,
+                material_id=material_id,
+                property_key="mechanical.yield_strength",
+                value_num=215e6,
+                unit="Pa",
+                quality_tier=2,
+            )
+        )
+        db.commit()
+
+    def test_합성을_켜면_문헌_스칼라로_곡선_덱이_나온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tmp_path: Path,
+    ) -> None:
+        ids = catalog_ids(db, tmp_path)
+        self.add_yield(db, ids["sus"])
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "rows": [
+                    {
+                        "mid": 5,
+                        "name": "SUS304",
+                        "catalog_material_id": str(ids["sus"]),
+                        "synthesize": True,
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        made = body.json()
+        assert made["synthetic_count"] == 1 and made["literature_count"] == 0
+        # 곡선 덱(*MAT_024)으로 나가고, 지어냈다는 사실이 각주에 있다.
+        assert "*MAT_PIECEWISE_LINEAR_PLASTICITY" in made["text"]
+        assert "합성 곡선" in made["text"] and "실측이 아니다" in made["text"]
+        # 어느 스칼라의 어느 출처였는지도 각주로 남는다.
+        assert "항복강도" in made["text"]
+
+    def test_스칼라가_모자라면_합성하지_않고_이유를_말한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tmp_path: Path,
+    ) -> None:
+        """지어낼 근거가 없으면 지어내지 않는다 — FR-4 는 유리전이온도뿐이다."""
+        ids = catalog_ids(db, tmp_path)
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "rows": [
+                    {"mid": 1, "name": "SUS304", "catalog_material_id": str(ids["sus"])},
+                    {
+                        "mid": 2,
+                        "name": "FR-4",
+                        "catalog_material_id": str(ids["fr4"]),
+                        "synthesize": True,
+                    },
+                ]
+            },
+            headers=admin_headers,
+        ).json()
+        whys = {row["mid"]: row["why"] for row in body["skipped"]}
+        assert "합성할 스칼라가 모자랍니다" in whys[2]
+
+
 class Test매칭_기억:
     def test_넣은_대로_돌아오고_비우면_지워진다(
         self,
