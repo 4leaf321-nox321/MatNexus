@@ -100,6 +100,30 @@ async def _get(ctx: Context, path: str, params: dict[str, Any] | None = None) ->
     return got.json()
 
 
+async def _send(
+    ctx: Context, method: str, path: str, body: dict[str, Any] | None = None
+) -> Any:
+    """POST·PATCH 하나. **쓰기는 이 함수만 지난다** — 오류 모양을 한 곳에 둔다."""
+    try:
+        async with httpx.AsyncClient(base_url=API_BASE, timeout=60.0) as client:
+            got = await client.request(
+                method, path, json=body or {}, headers=_headers(ctx)
+            )
+    except httpx.RequestError as failed:
+        return {"error": f"백엔드에 닿지 못했습니다({API_BASE}): {failed}"}
+    if got.status_code == 401:
+        return {"error": "인증에 실패했습니다 — 개인 토큰(mnx_pat_…)을 확인하세요."}
+    if got.status_code == 403:
+        return {"error": "권한이 없습니다 — 이 자료는 당신 계정으로 고칠 수 없습니다."}
+    if got.status_code >= 400:
+        try:
+            body_json = got.json()["error"]
+            return {"error": f"{body_json.get('message')} ({body_json.get('code')})"}
+        except Exception:
+            return {"error": f"요청이 실패했습니다(HTTP {got.status_code})."}
+    return got.json() if got.content else {"ok": True}
+
+
 # ── 값에 근거를 붙인다 (D8) ────────────────────────────────────────────────────
 
 
@@ -648,6 +672,330 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
         "test_run_ids": (card.get("source") or {}).get("test_run_ids"),
         "notes": (card.get("source") or {}).get("notes"),
     }
+    return out
+
+# ── 덱 (3단계) ────────────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def match_bom(ctx: Context, text: str) -> dict[str, Any]:
+    """부품표(BOM)를 붙여넣어 **문헌 재료 후보**를 찾는다.
+
+    한 줄이 `101, SUS304` 또는 `SUS304` 다(앞 숫자는 솔버의 재료 번호 MID).
+    돌려주는 것은 **후보**지 확정이 아니다 — 어느 것을 쓸지는 사람이 정하고,
+    그 결정을 `build_deck` 에 넘긴다.
+
+    사내 재료(실측 카드)를 쓰려면 `search_materials` 로 찾아 그 카드 id 를
+    `build_deck` 에 넘긴다 — **실측이 있으면 실측이 먼저다.**
+    """
+    got = await _send(ctx, "POST", "/catalog/deck/match", {"text": text})
+    if "error" in got:
+        return got
+    return {
+        "rows": [
+            {
+                "query": one.get("query"),
+                "mid": one.get("mid"),
+                "candidates": [
+                    {
+                        "catalog_material_id": c.get("id"),
+                        "name": c.get("name"),
+                        "value_count": c.get("value_count"),
+                        "score": c.get("score"),
+                    }
+                    for c in one.get("candidates", [])
+                ],
+            }
+            for one in got
+        ],
+        "hint": (
+            "score 3=정확 일치 · 2=앞부분 · 1=포함. 후보가 없으면 이름이 다른 것이니"
+            " 사람에게 확인한다 — 비슷한 이름을 임의로 고르지 않는다."
+        ),
+    }
+
+
+@mcp.tool()
+async def build_deck(
+    ctx: Context,
+    rows: list[dict[str, Any]],
+    units: str | None = None,
+    synthesize_missing_curves: bool = False,
+) -> dict[str, Any]:
+    """확정된 부품 목록 → **해석용 덱 한 파일**(LS-DYNA).
+
+    `rows` 는 부품마다 하나씩, 이렇게 준다:
+
+        {"mid": 1, "name": "도어 이너", "card_id": "<사내 카드 id>"}
+        {"mid": 2, "name": "힌지", "catalog_material_id": "<문헌 재료 id>"}
+
+    사내 카드가 있으면 **곡선 덱**(*MAT_024)으로, 문헌만 있으면 스칼라 덱으로
+    나가고 한 파일로 합쳐진다. 값마다 출처 각주가 파일 안에 들어간다.
+
+    `units` 는 `list_unit_systems()` 의 key 다. **안 주면 SI 로 나간다** —
+    받는 쪽 모델이 mm·tonne 계면 그대로 쓰면 안 되니 어느 계로 뽑았는지 사람에게
+    반드시 말한다.
+
+    `synthesize_missing_curves=True` 면 문헌 스칼라로 **곡선을 지어** 소성 덱까지
+    낸다 — 지어낸 곡선은 덱 각주에 「합성 — 실측이 아니다」 로 남고, 사람에게도
+    그렇게 전해야 한다. 기본은 끄여 있다.
+    """
+    payload = {
+        "rows": [
+            {
+                "mid": one.get("mid"),
+                "name": one.get("name") or "",
+                "card_id": one.get("card_id"),
+                "catalog_material_id": one.get("catalog_material_id"),
+                "synthesize": bool(synthesize_missing_curves and not one.get("card_id")),
+            }
+            for one in rows
+        ],
+        "units": units,
+    }
+    got = await _send(ctx, "POST", "/fitting/decks/bom", payload)
+    if "error" in got:
+        return got
+    text = got.get("text", "")
+    return {
+        "filename": got.get("filename"),
+        "line_count": len(text.splitlines()),
+        "card_count": got.get("card_count"),
+        "literature_count": got.get("literature_count"),
+        "synthetic_count": got.get("synthetic_count", 0),
+        "skipped": got.get("skipped", []),
+        # **덱 본문을 통째로 내지 않는다.** 수백 줄이면 대화가 그것으로 찬다 —
+        # 머리(출처 각주)만 보이고, 파일이 필요하면 화면에서 받는다.
+        "header": "\n".join(
+            line for line in text.splitlines()[:40] if line.startswith(("$", "*"))
+        ),
+        "note": (
+            "덱 본문은 화면(카드 → BOM 혼합 덱)에서 받는다. 여기서는 무엇이"
+            " 실렸는지와 출처 각주만 본다."
+        ),
+        **(
+            {"caveat": f"합성 곡선 {got.get('synthetic_count')}건이 실렸다 — 실측이 아니다"}
+            if got.get("synthetic_count")
+            else {}
+        ),
+    }
+
+
+# ── 제한적 쓰기 (3단계) ───────────────────────────────────────────────────────
+#
+# **확정·삭제·게시는 도구를 안 낸다.** 되돌리기 비싸고, 사람이 화면에서 하는
+# 편이 낫다. 여기 있는 둘은 초안까지만 만든다.
+
+
+@mcp.tool()
+async def adopt_catalog_values(
+    ctx: Context,
+    material_id: str,
+    catalog_material_id: str,
+    property_keys: list[str],
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """문헌 값을 **사내 재료의 선언 물성으로 담는다**(스냅샷).
+
+    담은 값은 복사본이라 카탈로그를 다시 이관해도 조용히 안 바뀌고, 출처·등급이
+    참고문헌 문자열로 따라간다.
+
+    **기본이 미리보기(dry_run=True)다** — 무엇이 담길지 먼저 보이고, 사람이
+    확인한 뒤에 `dry_run=False` 로 다시 부른다. 이미 있는 항목은 **덮어쓴다**.
+
+    `property_keys` 는 `get_catalog_material` 의 `property_key` 들이다.
+    tier 4(추정) 값도 담을 수 있지만, 담기 전에 그 사실을 사람에게 말한다.
+    """
+    detail = await _get(ctx, f"/catalog/materials/{catalog_material_id}")
+    if "error" in detail:
+        return detail
+    material = await _get(ctx, f"/materials/{material_id}")
+    if "error" in material:
+        return material
+
+    wanted = set(property_keys)
+    picked = [
+        row
+        for row in detail.get("values", [])
+        if row.get("property_key") in wanted
+        and row.get("representative")
+        and row.get("value_num") is not None
+    ]
+    if not picked:
+        return {
+            "error": (
+                "담을 값이 없습니다 — property_key 가 맞는지, 그 물성에 수치 대표값이"
+                " 있는지 get_catalog_material 로 확인하세요."
+            )
+        }
+
+    # 매핑은 백엔드 mapping.PROPERTY_ITEM_MAP 이 정본이다. 여기서는 그 표를
+    # 다시 쓰지 않고 **채택 가능한 것만** 추려 화면과 같은 PATCH 를 만든다.
+    items = {
+        "mechanical.youngs_modulus": ("declared", "탄성계수"),
+        "mechanical.shear_modulus": ("declared", "전단탄성계수"),
+        "mechanical.yield_strength": ("declared", "항복강도"),
+        "mechanical.tensile_strength": ("declared", "인장강도"),
+        "mechanical.elongation_at_break": ("declared", "연신율"),
+        "thermal.specific_heat": ("declared", "비열"),
+        "thermal.conductivity": ("declared", "열전도율"),
+        "thermal.expansion_linear": ("declared", "선팽창계수(CTE)"),
+        "physical.density": ("column", "density"),
+        "mechanical.poisson_ratio": ("column", "poisson_ratio"),
+    }
+    kinds = {"journal": "literature", "book": "literature", "database": "literature",
+             "web": "literature", "other": "literature", "standard": "standard",
+             "datasheet": "datasheet"}
+
+    planned: list[dict[str, Any]] = []
+    declared: list[dict[str, Any]] = []
+    patch: dict[str, Any] = {}
+    for row in picked:
+        target = items.get(row["property_key"])
+        if target is None:
+            planned.append({"property_key": row["property_key"], "skipped": "담을 자리가 없는 물성"})
+            continue
+        place, name = target
+        source = row.get("source") or {}
+        origin = "estimate" if row.get("quality_tier") == 4 else kinds.get(source.get("kind"), "literature")
+        reference = " · ".join(
+            part
+            for part in (source.get("title"), str(source.get("year") or "") or None,
+                         row.get("source_detail"))
+            if part
+        ) or "문헌 카탈로그"
+        reference = f"{reference} [tier {row.get('quality_tier')}]"
+        if place == "column":
+            if name == "density":
+                patch["density"], patch["density_unit"] = row["value_num"], "kg/m3"
+            elif 0 <= row["value_num"] < 0.5:
+                patch["poisson_ratio"] = row["value_num"]
+            else:
+                planned.append({"property": name, "skipped": "서버 제약 밖의 값(0 ≤ ν < 0.5)"})
+                continue
+        else:
+            declared.append(
+                {
+                    "item": name,
+                    "points": [{"value": row["value_num"]}],
+                    "source": origin,
+                    "reference": reference,
+                    "note": "문헌 물성 카탈로그에서 채택 (스냅샷)",
+                }
+            )
+        planned.append(
+            {
+                "property": name,
+                "value_si": row["value_num"],
+                "unit": row.get("unit"),
+                "quality_tier": row.get("quality_tier"),
+                "source": reference,
+                **({"caveat": "tier 4 — 추정·가정값이다"} if row.get("quality_tier") == 4 else {}),
+            }
+        )
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "material": material.get("record_name"),
+            "will_adopt": planned,
+            "note": "이대로 담으려면 dry_run=False 로 다시 부르세요. 이미 있는 항목은 덮어씁니다.",
+        }
+
+    if declared:
+        # **선언 물성은 통째 교체다** — 기존 줄을 되보내고 담는 것만 더한다.
+        keep = {one["item"] for one in declared}
+        merged = [
+            {
+                "item": row["item"],
+                "points": [
+                    {"temperature_k": p.get("temperature_k"), "value": p.get("value")}
+                    for p in row.get("points", [])
+                ],
+                "input_unit": row.get("input_unit"),
+                "scale": row.get("scale"),
+                "source": row.get("source"),
+                "reference": row.get("reference"),
+                "note": row.get("note"),
+            }
+            for row in material.get("declared_properties", [])
+            if row.get("item") not in keep
+        ]
+        patch["declared_properties"] = merged + declared
+
+    done = await _send(ctx, "PATCH", f"/materials/{material_id}", patch)
+    if "error" in done:
+        return done
+    return {
+        "ok": True,
+        "material": done.get("record_name"),
+        "adopted": planned,
+        "note": "담은 값은 스냅샷이다 — 카탈로그를 다시 이관해도 안 바뀐다.",
+    }
+
+
+@mcp.tool()
+async def create_declared_card(
+    ctx: Context,
+    material_id: str,
+    label: str,
+    synthesize_plastic: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """적어 둔 값만으로 **물성 카드(초안)** 를 만든다 — 시험이 없는 재료의 길.
+
+    **언제나 초안(draft)으로 만들어진다.** 확정은 사람이 화면에서 한다 —
+    확정된 카드로는 해석이 돌아가므로 그 결정을 AI 가 대신하지 않는다.
+
+    `synthesize_plastic=True` 면 선언 스칼라(항복·인장·연신율)로 **소성 곡선을
+    지어** 싣는다. 지어낸 표라는 사실이 카드 근거와 덱 각주에 남지만, 사람에게도
+    반드시 그렇게 전한다.
+
+    **기본이 미리보기(dry_run=True)다** — 무엇이 실릴지 먼저 본다.
+    """
+    preview = await _get(
+        ctx,
+        "/fitting/cards/declared/preview",
+        {"material_id": material_id, "synthesize_plastic": synthesize_plastic},
+    )
+    if "error" in preview:
+        return preview
+    synthetic = preview.get("synthetic") or {}
+    plan = {
+        "material": preview.get("material_name"),
+        "blocks": preview.get("blocks"),
+        "values": [
+            {"label": one.get("label"), "value_si": one.get("value"), "origin": one.get("source")}
+            for one in preview.get("values", [])
+        ],
+    }
+    if synthesize_plastic:
+        if not synthetic.get("ok"):
+            return {"error": f"소성 표를 합성할 수 없습니다: {synthetic.get('why')}"}
+        plan["synthetic_plastic"] = {
+            "model": synthetic.get("model"),
+            "points": synthetic.get("points"),
+            "caveat": f"합성 — 실측이 아니다. {synthetic.get('note')}",
+        }
+    if dry_run:
+        plan["dry_run"] = True
+        plan["note"] = "이대로 만들려면 dry_run=False 로 다시 부르세요. 카드는 초안으로 생깁니다."
+        return plan
+
+    made = await _send(
+        ctx,
+        "POST",
+        "/fitting/cards/declared",
+        {
+            "material_id": material_id,
+            "label": label,
+            "synthesize_plastic": synthesize_plastic,
+        },
+    )
+    if "error" in made:
+        return made
+    out = _card_summary(made)
+    out["note"] = "초안으로 만들어졌다 — 확정은 사람이 화면에서 한다."
     return out
 
 # ── 리소스 (MaterialTwin 에서 — 도구 목록에 상주 비용을 안 얹는다) ─────────────
