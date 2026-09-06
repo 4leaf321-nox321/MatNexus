@@ -172,6 +172,20 @@ def check(
     로트의 값이 그 Grade 전체의 값이 되고, 두 번째 로트가 들어오는 순간 둘 중
     하나가 조용히 진다.
 
+    ## 층을 가르는 것은 항목이 아니라 값의 성격이다 (2026-09-06)
+
+    ADR 0016 의 표가 원래 그렇게 적혀 있다 — 「문헌·규격은 Grade 가 같으면
+    같다 → 재료 / 밀시트는 로트마다 다르다 → 시료」. 항복강도라도 **문헌의
+    공칭값**(규격 최소값·핸드북 typical)은 Grade 의 속성이라 재료감이다 —
+    문헌 카탈로그 채택에서 실측으로 걸렸다(강도값 2,837건이 전부 공칭인데
+    항목 층 때문에 재료에 못 담겼다).
+
+    그래서 시료 층 항목을 재료에 적는 것은 **출처가 가른다**: `datasheet`
+    (밀시트·데이터시트 — 로트 증명 문서일 수 있다)만 시료로 안내하며 막고,
+    `literature`·`standard`·`estimate` 는 공칭값으로 받는다. 반대 방향
+    (재료 층 항목을 시료에)은 그대로 막는다 — 탄성계수는 로트마다 다르지 않다.
+    카드·밀시트 대조는 밀도와 같은 규칙이다: 시료 값이 먼저, 없으면 재료 공칭.
+
     사람이 적은 단위(`input_unit`)는 그대로 남기고 값은 정본 SI 로 담는다 —
     시험 채널과 같은 규칙이다. `GPa` 로 적어도 저장은 `Pa` 이고, 화면이 적은
     단위로 되돌려 보여 준다.
@@ -211,25 +225,47 @@ def check(
         if spec is None:
             # **다른 층의 항목인지 먼저 본다.** "등록된 항목이 아닙니다" 만
             # 말하면 기준정보에 뻔히 있는 이름을 두고 사람이 그것을 또 만든다.
-            elsewhere = catalog(db).get(name)
-            if elsewhere is not None:
+            everywhere = catalog(db)
+            elsewhere = everywhere.get(name) or next(
+                (
+                    item
+                    for value, item in everywhere.items()
+                    if compare_key(value) == compare_key(name)
+                ),
+                None,
+            )
+            if (
+                elsewhere is not None
+                and level == "재료"
+                and elsewhere["level"] == "시료"
+                and str(row.get("source") or "") != "datasheet"
+            ):
+                # 문헌·규격의 공칭값 — Grade 의 속성이라 재료에 받는다(위 docstring).
+                spec = elsewhere
+            elif elsewhere is not None:
                 why = (
                     "로트마다 다른 값이라 시료에 적습니다"
                     if elsewhere["level"] == "시료"
                     else "Grade 가 같으면 같은 값이라 재료에 적습니다"
                 )
+                hint = (
+                    " 제품 공칭 시트의 값이면 출처를 문헌·규격으로 적으세요."
+                    if level == "재료" and elsewhere["level"] == "시료"
+                    else ""
+                )
                 raise AppError(
                     "MNX-MATERIALS-0021",
                     f"'{name}' 은 {elsewhere['level']} 에 붙는 물성입니다. {why} — "
-                    f"지금 적으려는 곳은 {level} 입니다.",
+                    f"지금 적으려는 곳은 {level} 입니다.{hint}",
                     status=422,
                 )
-            raise AppError(
-                "MNX-MATERIALS-0021",
-                f"'{name}' 은 {level}에 넣을 수 있는 물성 항목이 아닙니다. 기준정보의 "
-                f"'물성 항목' 축에 먼저 넣으세요 — 있는 것: {', '.join(sorted(known))}",
-                status=422,
-            )
+            else:
+                raise AppError(
+                    "MNX-MATERIALS-0021",
+                    f"'{name}' 은 {level}에 넣을 수 있는 물성 항목이 아닙니다. 기준정보의 "
+                    f"'물성 항목' 축에 먼저 넣으세요 — 있는 것: {', '.join(sorted(known))}",
+                    status=422,
+                )
         key = compare_key(name)
         if key in seen:
             raise AppError(

@@ -213,32 +213,50 @@ describe('병합이 정확해야 한다', () => {
     expect(await screen.findByText(/이미 있음 — 담으면 교체/)).toBeInTheDocument()
   })
 
-  it('시료 층 항목(항복강도)은 잠기고, 담기에서 통째로 빠진다', async () => {
+  it('시료 층 항목도 문헌 공칭값은 담기고, 데이터시트 출처만 잠긴다', async () => {
     // 실측(2026-09-06): 항복강도 하나가 섞이자 PATCH 전체가 422 — 9건이 무산됐다.
-    const withYield = {
+    // 서버 규칙(ADR 0016): 층을 가르는 것은 값의 성격 — 문헌 공칭값은 재료에.
+    const withStrength = {
       ...DETAIL,
       values: [
         ...DETAIL.values,
+        // journal 출처 — 공칭값이라 담긴다.
         value({ property_key: 'mechanical.yield_strength', value_num: 2.05e8 }),
+        // datasheet 출처 — 로트 값일 수 있어 잠긴다.
+        value({
+          property_key: 'mechanical.tensile_strength',
+          value_num: 5.2e8,
+          source: {
+            id: crypto.randomUUID(),
+            kind: 'datasheet',
+            doi: null,
+            url: null,
+            title: '벤더 시트',
+            year: null,
+            publisher: 'Vendor',
+            license: null,
+          },
+        }),
       ],
     } as unknown as CatalogMaterialDetail
-    render(<AdoptDialog detail={withYield} open onClose={() => {}} />)
+    render(<AdoptDialog detail={withStrength} open onClose={() => {}} />)
     await userEvent.click(await screen.findByRole('button', { name: /SGARC440/ }))
 
-    expect(
-      await screen.findByText(/시료에 붙는 물성 — 재료에는 못 담습니다/)
-    ).toBeInTheDocument()
-    const row = screen.getByText('항복강도').closest('label') as HTMLElement
-    const box = row.querySelector('input') as HTMLInputElement
-    expect(box.disabled).toBe(true)
-    expect(box.checked).toBe(false)
+    expect(await screen.findByText(/데이터시트 출처 — 로트 값일 수 있어/)).toBeInTheDocument()
+    const locked = screen.getByText('인장강도').closest('label') as HTMLElement
+    const lockedBox = locked.querySelector('input') as HTMLInputElement
+    expect(lockedBox.disabled).toBe(true)
+    expect(lockedBox.checked).toBe(false)
+    const open_ = screen.getByText('항복강도').closest('label') as HTMLElement
+    expect((open_.querySelector('input') as HTMLInputElement).disabled).toBe(false)
 
     await userEvent.click(screen.getByRole('button', { name: /담기/ }))
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
     const [, body] = patch.mock.calls[0] as [string, Record<string, unknown>]
     const rows = body.declared_properties as Array<Record<string, unknown>>
-    expect(rows.some((one) => one.item === '항복강도')).toBe(false)
-    // 나머지 재료 층 항목은 그대로 담긴다.
-    expect(rows.some((one) => one.item === '열팽창계수')).toBe(true)
+    const yield_ = rows.find((one) => one.item === '항복강도')
+    expect(yield_).toBeDefined()
+    expect(yield_?.source).toBe('literature')
+    expect(rows.some((one) => one.item === '인장강도')).toBe(false)
   })
 })
