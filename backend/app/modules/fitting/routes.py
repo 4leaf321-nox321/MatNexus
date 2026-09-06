@@ -533,9 +533,11 @@ def _synthetic_plastic(
         return "항복강도(또는 인장강도)가 없습니다 — 지어낼 근거가 없습니다."
     if not curve.table_rows:
         return f"소성 표가 안 나오는 재료입니다({curve.model})."
+    # 첫 줄에 모델, 둘째 줄에 주의 — 둘 다 "합성" 으로 시작해야 덱 각주까지
+    # 따라간다(네킹 줄과 같은 규칙). 접두어는 여기서 한 번만 붙인다.
     notes = [
         f"합성 소성 표 — 실측이 아니다. 모델: {curve.model}",
-        f"합성 주의: {curve.note}",
+        f"합성 주의 — {curve.note}",
     ]
     for item in SYNTH_ITEMS:
         one = scalars[item]
@@ -1484,7 +1486,11 @@ def preview_declared_card(
     else:
         rows, notes = made
         synthetic = SyntheticPlasticOut(
-            ok=True, model=notes[0].split("모델: ", 1)[-1], note=notes[1], points=len(rows)
+            ok=True,
+            model=notes[0].split("모델: ", 1)[-1],
+            # 화면은 접두어 없이 주의만 읽는다 — 라벨은 화면이 붙인다.
+            note=notes[1].split("합성 주의 — ", 1)[-1],
+            points=len(rows),
         )
     return DeclaredCardPreviewOut(
         material_name=material.record_name,
@@ -1571,7 +1577,7 @@ def create_declared_card(
                 {
                     "synthetic_plastic": {
                         "model": synthetic_notes[0].split("모델: ", 1)[-1],
-                        "note": synthetic_notes[1],
+                        "note": synthetic_notes[1].split("합성 주의 — ", 1)[-1],
                         "points": len(synthetic_rows),
                     }
                 }
