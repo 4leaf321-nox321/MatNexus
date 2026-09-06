@@ -26,7 +26,29 @@ const RUN_ID = `E2EMT${Date.now().toString().slice(-8)}`
 
 test.describe.configure({ mode: 'serial' })
 
-test('문헌 물성부터 혼합 덱까지', async ({ page }) => {
+test('문헌 물성부터 혼합 덱까지', async ({ page, request }) => {
+  // **카탈로그가 비어 있으면 건너뛰고 이유를 말한다** — smoke.spec 의 준비물
+  // 규율 그대로다. 문헌 데이터는 이관 스크립트로만 들어오므로(ADR 0027) CI 의
+  // 새 DB 에는 없다 — 조용히 실패하면 「스모크가 빨간데 코드는 멀쩡」 이 된다.
+  // 실측(2026-09-06): v1.200.0 CI 가 정확히 그렇게 빨갰다.
+  //
+  // `page.request` 가 아니라 **독립 `request` 픽스처**로 묻는다 — page.request 로
+  // 로그인하면 refresh 쿠키가 브라우저에 심겨, 아래 「로그인」 단계가 로그인
+  // 화면 대신 앱을 만난다(실측: '아이디' 라벨 대기로 90초 타임아웃).
+  const signed = await request.post('/api/auth/login', {
+    data: { email: EMAIL, password: PASSWORD },
+  })
+  expect(signed.ok()).toBe(true)
+  const token = (await signed.json()).access_token
+  const summary = await request.get('/api/catalog/summary', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(summary.ok()).toBe(true)
+  test.skip(
+    (await summary.json()).materials === 0,
+    '문헌 카탈로그가 비어 있습니다 — materialtwin.db 이관 후에만 도는 줄기입니다.'
+  )
+
   await test.step('로그인', async () => {
     await page.goto('/')
     await page.getByLabel('아이디').fill(EMAIL)
