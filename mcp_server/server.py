@@ -336,6 +336,320 @@ async def list_unit_systems(ctx: Context) -> dict[str, Any]:
     }
 
 
+# ── 문헌 카탈로그 (2단계) ─────────────────────────────────────────────────────
+
+
+def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
+    """문헌 값 하나 → **등급과 출처가 붙은 값.**
+
+    tier 4 는 계산·추정·가정이다 — 이 표지가 빠지면 AI 가 그 숫자를 실측처럼
+    옮긴다. 대표가 아닌 값도 숨기지 않는다(왜 밀렸는지 함께 낸다).
+    """
+    tier = row.get("quality_tier")
+    source = row.get("source") or {}
+    caveats: list[str] = []
+    if tier == 4:
+        caveats.append("tier 4 — 계산·추정·가정이다. 실측이 아니다")
+    if (row.get("conditions") or {}).get("assumption") is True:
+        caveats.append("가정값으로 표시돼 있다")
+    if not row.get("representative"):
+        caveats.append(f"대표값이 아니다(밀린 자리: {row.get('separated_by')})")
+    return {
+        "property": row.get("property_name"),
+        "property_key": row.get("property_key"),
+        "domain": row.get("domain"),
+        "value": (
+            row.get("value_num") if row.get("value_num") is not None else row.get("value_text")
+        ),
+        "unit": row.get("unit"),
+        "uncertainty": row.get("uncertainty"),
+        "conditions": row.get("conditions"),
+        "method": row.get("method"),
+        "quality_tier": tier,
+        "origin": "catalog",
+        "source": (
+            {
+                "title": source.get("title"),
+                "year": source.get("year"),
+                "doi": source.get("doi"),
+                "kind": source.get("kind"),
+                "detail": row.get("source_detail"),
+            }
+            if source
+            else None
+        ),
+        "representative": row.get("representative"),
+        **({"caveat": " · ".join(caveats)} if caveats else {}),
+    }
+
+
+@mcp.tool()
+async def search_catalog(
+    ctx: Context, query: str, category: str | None = None, limit: int = 10
+) -> dict[str, Any]:
+    """**문헌 물성 카탈로그**에서 재료를 찾는다(42,209건 · 출처와 등급이 붙어 있다).
+
+    사내 재료(`search_materials`)와 **다른 세계**다 — 여기는 실물 없이 문헌·
+    데이터시트에서 채굴한 값이고, 사내 재료와는 연결·채택으로 만난다.
+
+    값은 안 실린다(재료마다 수십 건이다) — `get_catalog_material(id)` 로 본다.
+    """
+    got = await _get(
+        ctx,
+        "/catalog/materials",
+        {"q": query, "category": category, "limit": max(1, min(limit, MAX_LIMIT))},
+    )
+    if "error" in got:
+        return got
+    return {
+        "total": got.get("total", 0),
+        "materials": [
+            {
+                "id": one["id"],
+                "name": one.get("name"),
+                "category": one.get("category"),
+                "subsystem": one.get("subsystem"),
+                "manufacturer": one.get("manufacturer"),
+                "grade": one.get("grade"),
+                "value_count": one.get("value_count"),
+            }
+            for one in got.get("items", [])
+        ],
+        "hint": "값이 많은 재료가 먼저 온다 — 쓸 것이 많다는 뜻이다.",
+    }
+
+
+@mcp.tool()
+async def get_catalog_material(
+    ctx: Context, catalog_material_id: str, domain: str | None = None
+) -> dict[str, Any]:
+    """문헌 재료 하나의 **물성 전부** — 값·조건·등급·출처.
+
+    같은 물성에 값이 여럿이면 **대표값이 먼저** 오고 밀린 후보도 이유와 함께
+    온다(`representative`·`separated_by`). 값이 많은 재료는 `domain` 으로 좁혀라
+    (`mechanical`·`thermal`·`physical`·`electrical`·`optical` …).
+
+    **tier 4 는 추정·가정이다.** `caveat` 가 붙은 값을 실측처럼 옮기지 않는다.
+    """
+    got = await _get(ctx, f"/catalog/materials/{catalog_material_id}")
+    if "error" in got:
+        return got
+    values = [
+        _catalog_value(row)
+        for row in got.get("values", [])
+        if not domain or row.get("domain") == domain
+    ]
+    tiers: dict[str, int] = {}
+    for one in values:
+        key = f"tier{one['quality_tier']}"
+        tiers[key] = tiers.get(key, 0) + 1
+    return {
+        "id": got["id"],
+        "name": got.get("name"),
+        "category": got.get("category"),
+        "subsystem": got.get("subsystem"),
+        "manufacturer": got.get("manufacturer"),
+        "material_class": got.get("material_class"),
+        "grade": got.get("grade"),
+        "description": got.get("description"),
+        "shown_values": len(values),
+        "tier_counts": tiers,
+        "values": values,
+    }
+
+
+# ── 측정법 (2단계) ────────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def how_to_measure(ctx: Context, property_key: str) -> dict[str, Any]:
+    """**이 물성은 무엇으로 어떻게 재는가** — 기법·시험 규격·장비.
+
+    `property_key` 는 카탈로그 물성 키다(`mechanical.youngs_modulus` 처럼 —
+    `get_catalog_material` 응답의 `property_key` 를 그대로 넘긴다).
+
+    **장비 카탈로그에 있는 것과 우리가 보유한 것은 다르다** — `owned` 를 보고
+    말한다. 「잴 수 있다」 와 「그런 장비가 세상에 있다」 는 다른 말이다.
+    """
+    got = await _get(ctx, f"/metrology/by-property/{property_key}")
+    if "error" in got:
+        return got
+    techniques = []
+    for group in got.get("techniques", []):
+        rows = []
+        for one in group.get("capabilities", []):
+            instrument = one.get("instrument") or {}
+            rows.append(
+                {
+                    "instrument": f"{instrument.get('vendor')} {instrument.get('model')}",
+                    "owned": instrument.get("owned"),
+                    "owner": instrument.get("owner_name"),
+                    "standard": one.get("standard"),
+                    "range": [
+                        one.get("range_min"),
+                        one.get("range_max"),
+                        one.get("range_unit"),
+                    ],
+                    "specimen_temperature_k": [
+                        one.get("temperature_min_k"),
+                        one.get("temperature_max_k"),
+                    ],
+                    "resolution": one.get("resolution"),
+                    "accuracy": one.get("accuracy"),
+                    **(
+                        {"caveat": "물성-장비 매핑 확신도가 낮다 — 확인이 필요하다"}
+                        if one.get("mapping_confidence") not in (None, "high")
+                        else {}
+                    ),
+                }
+            )
+        techniques.append(
+            {"technique": group.get("technique") or "기법 미정", "instruments": rows}
+        )
+    owned = sum(1 for group in techniques for one in group["instruments"] if one.get("owned"))
+    return {
+        "property": got.get("name"),
+        "property_key": got.get("property_key"),
+        "si_unit": got.get("si_unit"),
+        "test_standard": got.get("test_standard"),
+        "owned_instrument_count": owned,
+        "techniques": techniques,
+        **(
+            {"caveat": "보유 장비가 없다 — 이 물성은 외주하거나 문헌값을 써야 한다"}
+            if owned == 0
+            else {}
+        ),
+    }
+
+
+# ── 시험과 카드 (2단계) ───────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def list_test_runs(
+    ctx: Context,
+    material_id: str | None = None,
+    query: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """시험 목록 — 재료로 좁히거나 이름으로 찾는다.
+
+    `adopted` 가 참인 시험만 「그 시험의 물성이 정해진」 것이다(ADR 0007) —
+    채택 안 된 결과를 물성으로 옮기지 않는다.
+    """
+    got = await _get(
+        ctx,
+        "/test-runs",
+        {"material_id": material_id, "q": query, "limit": max(1, min(limit, MAX_LIMIT))},
+    )
+    if "error" in got:
+        return got
+    return {
+        "total": got.get("total", 0),
+        "runs": [
+            {
+                "id": one["id"],
+                "name": one.get("record_name"),
+                "test_type": one.get("test_type_key"),
+                "status": one.get("status"),
+                "adopted": bool(one.get("adopted_result_id")),
+                "result_count": one.get("result_count"),
+                "master_curve_count": one.get("master_curve_count"),
+                **(
+                    {"caveat": "읽기에 실패한 시험이다 — 값이 없다"}
+                    if one.get("status") == "failed"
+                    else {}
+                ),
+            }
+            for one in got.get("items", [])
+        ],
+    }
+
+
+@mcp.tool()
+async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
+    """시험 하나 — 조건과 **채택된 처리 결과의 물성값**.
+
+    처리 결과가 여럿이면 **채택된 것만** 값으로 옮긴다 — 나머지는 「시험해 본
+    것」이지 「결론」이 아니다. 곡선 점은 안 낸다(수천 점이다).
+    """
+    run = await _get(ctx, f"/test-runs/{test_run_id}")
+    if "error" in run:
+        return run
+    results = await _get(ctx, "/processing/results", {"test_run_id": test_run_id})
+    scalars: list[dict[str, Any]] = []
+    adopted_label = None
+    if isinstance(results, list):
+        for one in results:
+            if not one.get("is_adopted"):
+                continue
+            adopted_label = one.get("recipe_label") or one.get("recipe_key")
+            for value in one.get("scalars", []):
+                scalars.append(
+                    {
+                        "key": value.get("key"),
+                        "label": value.get("label"),
+                        "value": value.get("value"),
+                        "unit": value.get("si_unit"),
+                        "origin": "measured",
+                    }
+                )
+    return {
+        "id": run["id"],
+        "name": run.get("record_name"),
+        "test_type": run.get("test_type_key"),
+        "status": run.get("status"),
+        "conditions": run.get("conditions"),
+        "material_id": run.get("material_id"),
+        "adopted_recipe": adopted_label,
+        "measured_values_si": scalars,
+        **(
+            {"caveat": "채택된 처리 결과가 없다 — 이 시험의 물성은 아직 정해지지 않았다"}
+            if not scalars
+            else {}
+        ),
+    }
+
+
+@mcp.tool()
+async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
+    """물성 카드 하나 — **덱에 실릴 값 그대로.**
+
+    블록(`elastic`·`table`·`hardening`·`thermal` …)의 값이 SI 로 들어 있다.
+    소성 표는 점이 많아 **개수와 앞뒤 몇 점만** 낸다.
+
+    `caveat` 를 반드시 함께 전한다 — 초안 카드나 합성 소성 표를 확정된 실측처럼
+    옮기면 그 값으로 해석이 돌아간다.
+    """
+    card = await _get(ctx, f"/fitting/cards/{card_id}")
+    if "error" in card:
+        return card
+    blocks: dict[str, Any] = {}
+    for name, payload in (card.get("blocks") or {}).items():
+        if not isinstance(payload, dict):
+            continue
+        one: dict[str, Any] = {}
+        if payload.get("values"):
+            one["values_si"] = payload["values"]
+        rows = payload.get("rows") or []
+        if rows:
+            # **표는 통째로 안 낸다.** 수천 점이면 대화가 그것으로 찬다.
+            one["rows"] = {
+                "count": len(rows),
+                "first": rows[0],
+                "last": rows[-1],
+                "note": "표 전체가 필요하면 덱으로 받아라",
+            }
+        blocks[name] = one
+    out = _card_summary(card)
+    out["material"] = card.get("material_name")
+    out["blocks_detail"] = blocks
+    out["source"] = {
+        "test_run_ids": (card.get("source") or {}).get("test_run_ids"),
+        "notes": (card.get("source") or {}).get("notes"),
+    }
+    return out
+
 # ── 리소스 (MaterialTwin 에서 — 도구 목록에 상주 비용을 안 얹는다) ─────────────
 
 
