@@ -998,6 +998,170 @@ async def create_declared_card(
     out["note"] = "초안으로 만들어졌다 — 확정은 사람이 화면에서 한다."
     return out
 
+# ── 보강 (점검에서 드러난 누락) ───────────────────────────────────────────────
+
+
+@mcp.tool()
+async def list_cards(
+    ctx: Context,
+    material_id: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """물성 카드 목록 — 재료를 안 거치고 카드를 찾는다.
+
+    `status` 는 `published`(확정) · `draft`(초안) · `deprecated`(중지). **확정된
+    카드만 해석에 쓴다** — 초안은 만들어 본 것이지 결론이 아니다.
+
+    `available_formats` 로 그 카드가 지금 낼 수 있는 덱 형식을 알 수 있다.
+    """
+    got = await _get(
+        ctx,
+        "/fitting/cards",
+        {
+            "material_id": material_id,
+            "status": status,
+            "limit": max(1, min(limit, MAX_LIMIT)),
+        },
+    )
+    if "error" in got:
+        return got
+    return {
+        "total": got.get("total", 0),
+        "cards": [_card_summary(one) | {"material": one.get("material_name")}
+                  for one in got.get("items", [])],
+    }
+
+
+@mcp.tool()
+async def compare_catalog_materials(
+    ctx: Context, catalog_material_ids: list[str]
+) -> dict[str, Any]:
+    """문헌 재료 여럿을 **한 표로 견준다**(최대 8종).
+
+    물성마다 재료별 대표값이 한 줄로 오고, 값이 없는 칸은 빈 칸이다 — **빈 칸을
+    0 으로 읽지 않는다**(그 재료에 그 물성 데이터가 없다는 뜻이다).
+
+    각 칸의 `quality_tier` 와 `n_candidates`(후보 수)를 함께 본다 — tier 가 다른
+    값을 나란히 놓고 「A 가 B 보다 크다」 고 말할 때는 그 사실을 밝힌다.
+    """
+    if not catalog_material_ids:
+        return {"error": "재료 id 를 하나 이상 주세요."}
+    got = await _get(ctx, "/catalog/compare", {"ids": ",".join(catalog_material_ids[:8])})
+    if "error" in got:
+        return got
+    names = [one.get("name") for one in got.get("materials", [])]
+    rows = []
+    for row in got.get("rows", []):
+        cells = []
+        for cell in row.get("cells", []):
+            value = cell.get("value_num")
+            cells.append(
+                None
+                if value is None and not cell.get("value_text")
+                else {
+                    "value": value if value is not None else cell.get("value_text"),
+                    "quality_tier": cell.get("quality_tier"),
+                    "n_candidates": cell.get("n_candidates"),
+                }
+            )
+        rows.append(
+            {
+                "property": row.get("name"),
+                "property_key": row.get("property_key"),
+                "unit": row.get("unit"),
+                "values": cells,
+            }
+        )
+    return {
+        "materials": names,
+        "note": "values 의 차례는 materials 차례와 같다. null 은 그 재료에 그 물성이 없다는 뜻이다.",
+        "rows": rows,
+    }
+
+
+@mcp.tool()
+async def measurement_gaps(ctx: Context) -> dict[str, Any]:
+    """**우리가 못 재는 물성이 무엇인가** — 측정 능력의 빈 칸.
+
+    카탈로그 물성 정의 전수를 훑어, 측정 능력이 이어진 것(`covered`)과 장비가
+    하나도 없는 것(`gaps`)을 가른다. `owned_instrument_count` 가 0 이면 **장비
+    카탈로그에는 있지만 우리는 못 잰다**는 뜻이다.
+
+    응답이 길어지므로 빈 칸은 값이 많은 순으로 앞쪽만 낸다 — 전부 필요하면
+    화면(측정법)에서 본다.
+    """
+    got = await _get(ctx, "/metrology/coverage")
+    if "error" in got:
+        return got
+    covered = got.get("covered", [])
+    gaps = got.get("gaps", [])
+    not_owned = [one for one in covered if not one.get("owned_instrument_count")]
+    gaps_sorted = sorted(gaps, key=lambda one: -(one.get("value_count") or 0))[:15]
+    return {
+        "covered_count": len(covered),
+        "gap_count": len(gaps),
+        "owned_none_count": len(not_owned),
+        "gaps_top": [
+            {
+                "property": one.get("name"),
+                "property_key": one.get("property_key"),
+                "domain": one.get("domain"),
+                "catalog_value_count": one.get("value_count"),
+            }
+            for one in gaps_sorted
+        ],
+        "covered_but_not_owned": [
+            {"property": one.get("name"), "instruments_in_catalog": one.get("instrument_count")}
+            for one in not_owned[:10]
+        ],
+        "note": (
+            "gaps 는 장비 정보가 아예 없는 물성이고, covered_but_not_owned 는"
+            " 장비는 알지만 우리가 보유하지 않은 물성이다 — 둘 다 「지금은 못 잰다」."
+        ),
+    }
+
+
+@mcp.tool()
+async def platform_summary(ctx: Context) -> dict[str, Any]:
+    """플랫폼에 **무엇이 얼마나 있나** — 먼저 규모를 알고 시작한다.
+
+    사내 재료·시험·카드, 문헌 카탈로그(재료·값·출처·등급 분포), 측정법(장비·
+    보유)을 한 번에 센다.
+    """
+    catalog = await _get(ctx, "/catalog/summary")
+    metrology = await _get(ctx, "/metrology/summary")
+    materials = await _get(ctx, "/materials", {"limit": 1})
+    runs = await _get(ctx, "/test-runs", {"limit": 1})
+    cards = await _get(ctx, "/fitting/cards", {"limit": 1})
+    out: dict[str, Any] = {}
+    if isinstance(materials, dict) and "error" not in materials:
+        out["materials"] = materials.get("total")
+    if isinstance(runs, dict) and "error" not in runs:
+        out["test_runs"] = runs.get("total")
+    if isinstance(cards, dict) and "error" not in cards:
+        out["cards"] = cards.get("total")
+    if isinstance(catalog, dict) and "error" not in catalog:
+        out["catalog"] = {
+            "materials": catalog.get("materials"),
+            "values": catalog.get("values"),
+            "sources": catalog.get("sources"),
+            "properties": catalog.get("definitions"),
+            "tier_counts": catalog.get("tiers"),
+        }
+    if isinstance(metrology, dict) and "error" not in metrology:
+        out["metrology"] = {
+            "instruments_in_catalog": metrology.get("instruments"),
+            "instruments_owned": metrology.get("instruments_owned"),
+            "properties_covered": metrology.get("properties_covered"),
+            "properties_total": metrology.get("properties_total"),
+        }
+    out["note"] = (
+        "카탈로그 tier_counts 의 4 는 추정·가정값 수다 — 그 비중을 사람에게 말할 때"
+        " 함께 밝힌다."
+    )
+    return out
+
 # ── 리소스 (MaterialTwin 에서 — 도구 목록에 상주 비용을 안 얹는다) ─────────────
 
 
@@ -1008,6 +1172,79 @@ def guide_resource() -> str:
         return GUIDE_PATH.read_text(encoding="utf-8")
     except OSError as failed:
         return f"안내 문서를 읽지 못했습니다: {failed}"
+
+
+@mcp.tool()
+async def get_taxonomy(ctx: Context) -> str:
+    """재료 분류 체계와 **지금 DB 의 분포** — 무엇으로 좁힐 수 있는지 안다.
+
+    라이브다. 화면의 필터가 쓰는 것과 같은 값이라, 여기 없는 분류로 좁히면
+    아무것도 안 나온다.
+
+    **리소스가 아니라 도구인 이유**(실측 2026-09-06): MCP 2.x 는 URI 템플릿이
+    없는 정적 리소스에 Context 를 주입하지 않는다 — 그러면 호출자의 토큰을 못
+    날라 401 이 된다. 분포는 로그인해야 보이는 자료라 도구여야 한다.
+    """
+    data = await _get(ctx, "/catalog/summary")
+    if "error" in data:
+        return data["error"]
+    lines = ["# 재료 분류와 분포", "", "## 문헌 카탈로그", ""]
+    for name, rows in (
+        ("분류(category)", data.get("categories") or {}),
+        ("계통(subsystem)", data.get("subsystems") or {}),
+        ("물성 도메인", data.get("domains") or {}),
+    ):
+        lines.append(f"### {name}")
+        for key, count in sorted(rows.items(), key=lambda one: -one[1])[:12]:
+            lines.append(f"- {key or '(미분류)'}: {count}")
+        lines.append("")
+    tiers = data.get("tiers") or {}
+    if tiers:
+        lines += ["### 품질 등급 분포", ""]
+        for key in sorted(tiers):
+            lines.append(f"- tier {key}: {tiers[key]}")
+        lines.append("")
+        lines.append("tier 4 는 계산·추정·가정이다 — 실측처럼 옮기지 않는다.")
+    return "\n".join(lines)
+
+
+# ── 프롬프트 (MaterialTwin 에서 — 「무엇부터 물어야 하나」) ────────────────────
+
+
+@mcp.prompt()
+def pick_material(requirement: str) -> str:
+    """요구조건에 맞는 재료 고르기 — 후보 찾기부터 근거 확인까지."""
+    return (
+        f"요구조건: {requirement}\n\n"
+        "다음 차례로 진행하세요.\n"
+        "1. get_guide() 로 값의 무게 규약(origin·tier·caveat)을 먼저 확인합니다.\n"
+        "2. 사내에 이미 있는지 봅니다 — search_materials 로 찾고, 있으면\n"
+        "   get_material 로 선언 물성과 카드를 확인합니다. **실측이 있으면\n"
+        "   실측이 먼저입니다.**\n"
+        "3. 없거나 모자라면 search_catalog 로 문헌 후보를 찾고,\n"
+        "   compare_catalog_materials 로 나란히 견줍니다.\n"
+        "4. 고른 값의 quality_tier 와 출처를 **반드시 함께** 보고합니다 —\n"
+        "   tier 4 는 추정이고, 그 사실을 빼고 말하면 그 값으로 해석이 돌아갑니다.\n"
+        "5. 그 물성을 직접 재야 한다면 how_to_measure 로 장비 보유 여부를 봅니다."
+    )
+
+
+@mcp.prompt()
+def build_deck_for_bom(bom: str) -> str:
+    """부품표로 해석용 덱 만들기 — 매칭부터 단위계까지."""
+    return (
+        f"부품표:\n{bom}\n\n"
+        "다음 차례로 진행하세요.\n"
+        "1. match_bom 으로 문헌 후보를 봅니다. **후보가 애매하면 임의로 고르지\n"
+        "   말고 사람에게 확인합니다.**\n"
+        "2. 사내 실측 카드가 있는 부품은 그것을 씁니다 — search_materials →\n"
+        "   get_material 로 카드 id 를 찾아 card_id 로 넘깁니다.\n"
+        "3. list_unit_systems 로 단위계를 고릅니다. 받는 쪽 해석 모델이 mm·tonne\n"
+        "   계인지 반드시 사람에게 물어봅니다 — 계가 섞이면 조용히 1000배\n"
+        "   틀립니다.\n"
+        "4. build_deck 으로 만들고, 건너뛴 부품과 합성 곡선 수를 그대로\n"
+        "   보고합니다. 합성이 있으면 「실측이 아니다」 를 반드시 말합니다."
+    )
 
 
 def main() -> None:

@@ -272,3 +272,21 @@ BOM 매칭·덱(텍스트 반환) · 문헌 채택 · 선언 카드(초안). 쓰
 
 - **남은 것**: 4단계 배포(`run_mcp.ps1` · `deploy.ps1` 통합 · 배포 문서) ·
   백엔드가 `X-Client: mcp` 를 감사 로그에 남기는 자리.
+
+- **2026-09-06 — 점검에서 드러난 누락 보강.** 계획(D4·D7)과 대조해 다섯을 채웠다:
+  `list_cards`(재료를 안 거치고 카드 찾기) · `compare_catalog_materials`(문헌
+  재료 견주기) · `measurement_gaps`(우리가 못 재는 물성) · `platform_summary`
+  (무엇이 얼마나 있나) · `get_taxonomy`(분류와 분포) + 프롬프트 둘
+  (`pick_material` · `build_deck_for_bom`).
+
+  **`set_declared_properties` 는 안 만들기로 한다** — 계획에 있었지만, AI 가 임의
+  값을 적는 길은 「값에는 출처가 있어야 한다」 는 이 저장소의 뿌리와 어긋난다.
+  문헌 채택(`adopt_catalog_values`)이 출처를 달고 담는 경로이고, 손으로 적는
+  것은 화면에서 사람이 한다.
+
+  실측: **정적 리소스에는 Context 가 주입되지 않는다**(mcp 2.x) — URI 템플릿
+  변수가 없으면 호출자의 토큰을 못 날라 401 이 된다. `matnexus://taxonomy` 를
+  리소스로 두려다 그것으로 막혀 **도구로 옮겼다.** 안내(`matnexus://guide`)는
+  로그인 없이 읽는 정적 문서라 리소스로 남는다.
+
+  **최종 규모: 도구 19 · 리소스 1 · 프롬프트 2.**
