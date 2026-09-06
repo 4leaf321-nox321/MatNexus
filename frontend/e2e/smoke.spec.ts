@@ -193,10 +193,10 @@ test('재료 화면이 물성을 보여 준다', async ({ page }) => {
   await page.goto('/materials')
   await expect(page.locator('tbody tr').first()).toBeVisible()
   await page.locator('tbody tr').first().getByRole('link').first().click()
-  await expect(page.getByRole('tab', { name: '물성' })).toBeVisible()
-  await page.getByRole('tab', { name: '물성' }).click()
+  await expect(page.getByRole('tab', { name: '물성', exact: true })).toBeVisible()
+  await page.getByRole('tab', { name: '물성', exact: true }).click()
   // 표본이 없어도 화면은 뜨고 이유를 말해야 한다.
-  await expect(page.getByRole('tab', { name: '물성' })).toHaveAttribute('data-state', 'active')
+  await expect(page.getByRole('tab', { name: '물성', exact: true })).toHaveAttribute('data-state', 'active')
 })
 
 test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) => {
@@ -285,7 +285,9 @@ test('덱을 뽑는 길이 열려 있다', async ({ page }) => {
 
   await cards.first().click()
   await expect(page.getByText('덱의 단위계')).toBeVisible()
-  // 덱에 그대로 적힐 줄. 기본은 SI 다.
+  // **마지막 선택이 기억된다**(사용자 정의 덱 단위계, 2026-09-05) — 「기본은
+  // SI」 를 가정하면 앞 실행이 남긴 선택에 따라 흔들린다. 먼저 SI 로 만든다.
+  await page.getByRole('button', { name: /SI \(kg/ }).click()
   await expect(page.getByText('kg, m, s, Pa')).toBeVisible()
 
   await page.getByRole('button', { name: /mm · N · tonne/ }).click()
@@ -294,12 +296,14 @@ test('덱을 뽑는 길이 열려 있다', async ({ page }) => {
   await expect(page.getByText('tonne, mm, s, MPa')).toBeVisible()
 
   // 고른 계로 실제로 받아진다. 파일 이름에 계가 들어간다.
+  //
+  // **형식을 못 박지 않는다.** 목록 첫 카드가 무엇을 낼 수 있는지는 데이터가
+  // 정한다 — Abaqus 로 못 내는 카드가 첫 자리에 오자 disabled 항목을 눌러
+  // 다운로드가 영영 안 왔다(실측 2026-09-06, 형식이 늘며 드러남). 여기서 보는
+  // 것은 단위계이므로 **낼 수 있는 형식 아무거나**면 된다.
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page
-      .getByRole('menuitem', { name: /Abaqus/ })
-      .first()
-      .click(),
+    page.getByRole('menuitem', { disabled: false }).first().click(),
   ])
   expect(download.suggestedFilename()).toContain('mm_n_tonne')
 })
