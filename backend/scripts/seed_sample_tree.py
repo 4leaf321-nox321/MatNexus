@@ -35,9 +35,12 @@ sys.path.insert(0, str(BACKEND_DIR))
 from sqlalchemy import select  # noqa: E402
 
 import app.all_models  # noqa: E402,F401
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
 from app.modules.auth.security import create_access_token  # noqa: E402
+
+survive_cp949()
 
 #: 방향은 돌려 가며 준다. **같은 시료의 MD/TD/DD 를 묶어 r값·이방성을 낸다**
 #: (ADR 0004) — 한 방향만 만들면 그 화면에서 볼 것이 없다.

@@ -30,6 +30,10 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from _console import survive_cp949
+
+survive_cp949()
+
 OUT = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 
 # --- 정답 -------------------------------------------------------------------

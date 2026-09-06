@@ -33,11 +33,13 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import math
 import random
-import sys
 from pathlib import Path
+
+from _console import survive_cp949
+
+survive_cp949()
 
 #: 목표 물성. 공개 자료의 DP590 범위 안에서 고른 값이다.
 E_PA = 206e9
@@ -159,13 +161,6 @@ def write_tra(
     # 는 줄 끝을 플랫폼에 맞춰 바꿔서, 실제 파일과 다른 것이 나온다.
     body = "\r\n".join(lines) + "\r\n"
     path.write_bytes(body.encode("utf-8"))
-
-
-# **콘솔 인코딩에 걸려 죽지 않게 한다.** 운영·개발 모두 Windows 이고 기본 콘솔이
-# CP949 라, 요약에 쓰는 `≈` 하나가 `UnicodeEncodeError` 를 내며 스크립트를 끝낸다
-# — 파일은 이미 다 만들어 놓고 마지막 줄에서 죽는다(실측 2026-08-31).
-with contextlib.suppress(AttributeError, OSError):  # 파이프로 넘길 때는 이미 안전하다
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def main() -> None:

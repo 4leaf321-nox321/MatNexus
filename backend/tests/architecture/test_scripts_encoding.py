@@ -30,6 +30,21 @@ _SKIP_ANYWHERE = {"node_modules"}
 #: 스크립트 5개가 조용히 제외된다(실측). 그래서 최상위 경로로 판정한다.
 _SKIP_TOP_LEVEL = {"deploy"}
 
+#: 저장소가 관리하지 않는 최상위 폴더. `materialtwin-*` 는 이관 원본 스냅샷이라
+#: `.gitignore` 에 있다 — **우리가 쓴 파일이 아니다.** 남의 파일을 우리 규칙으로
+#: 검사하면 CI 가 우리 잘못이 아닌 것으로 실패한다(venv 에서 같은 일이 있었다).
+_SKIP_TOP_PREFIX = ("materialtwin-",)
+
+
+def _outside(path: Path) -> bool:
+    """검사 대상 밖인가."""
+    parts = path.relative_to(REPO).parts
+    if _SKIP_ANYWHERE & set(parts):
+        return True
+    if parts[0] in _SKIP_TOP_LEVEL or parts[0].startswith(_SKIP_TOP_PREFIX):
+        return True
+    return _in_venv(path)
+
 
 def _in_venv(path: Path) -> bool:
     """venv 안인가. **이름이 아니라 `pyvenv.cfg` 로 판정한다.**
@@ -50,17 +65,7 @@ def _in_venv(path: Path) -> bool:
 
 
 def _scripts() -> list[Path]:
-    found = []
-    for path in REPO.rglob("*.ps1"):
-        parts = path.relative_to(REPO).parts
-        if _SKIP_ANYWHERE & set(parts):
-            continue
-        if parts[0] in _SKIP_TOP_LEVEL:
-            continue
-        if _in_venv(path):
-            continue
-        found.append(path)
-    return found
+    return [path for path in REPO.rglob("*.ps1") if not _outside(path)]
 
 
 @pytest.mark.parametrize("path", _scripts(), ids=lambda p: p.name)
@@ -92,15 +97,46 @@ def _text_files() -> list[Path]:
     for path in REPO.rglob("*"):
         if not path.is_file() or path.suffix not in _TEXT_SUFFIXES:
             continue
-        parts = path.relative_to(REPO).parts
-        if _SKIP_ANYWHERE & set(parts):
+        if path.relative_to(REPO).parts[0] in {".git", "dist", "filestore", "logs"}:
             continue
-        if parts[0] in _SKIP_TOP_LEVEL or parts[0] in {".git", "dist", "filestore", "logs"}:
-            continue
-        if _in_venv(path):
+        if _outside(path):
             continue
         found.append(path)
     return found
+
+
+#: `scripts/` 의 공통 부품 자신. 스스로를 부를 이유가 없다.
+_CONSOLE = "_console.py"
+
+
+def _python_scripts() -> list[Path]:
+    found = REPO / "backend" / "scripts"
+    return sorted(path for path in found.glob("*.py") if path.name != _CONSOLE)
+
+
+@pytest.mark.parametrize("path", _python_scripts(), ids=lambda p: p.name)
+def test_스크립트는_출력_인코딩을_먼저_푼다(path: Path) -> None:
+    """`survive_cp949()` 를 부르는가.
+
+    **네 번 따로 밟고 네 번 따로 고친 함정이다**(2026-08-31 셋, 2026-09-02 하나).
+    운영은 Windows 이고, 출력이 콘솔이 아니라 파이프로 가면 파이썬이 CP949 로
+    인코딩한다. 한글은 멀쩡히 나가는데 `—`(em dash)·`≈` 가 안 나가고, 우리
+    스크립트는 그 글자를 **전부** 쓴다.
+
+    실측(2026-09-06): `import_materialtwin.py` 가 카탈로그 42,209건을 다 읽고
+    검산까지 끝낸 뒤 마지막 성공 줄에서 `UnicodeEncodeError` 로 죽었다. 화면에는
+    수가 다 찍히고 그 아래 traceback 이 붙으며 exit 1 이 된다 — **성공을 실패로
+    읽게 만드는 모양**이고, 그때 사람은 되돌리려 든다.
+
+    argparse 가 모듈 docstring 을 그대로 `--help` 로 찍으므로, 아무것도 출력하지
+    않는 것처럼 보이는 스크립트도 예외가 아니다.
+    """
+    source = path.read_text(encoding="utf-8")
+    assert "survive_cp949()" in source, (
+        f"{path.name} 이 `survive_cp949()` 를 부르지 않습니다. "
+        f"`from _console import survive_cp949` 한 뒤 import 블록 다음에서 부르세요 — "
+        f"출력이 파이프로 갈 때 `—` 한 글자에 UnicodeEncodeError 로 죽습니다."
+    )
 
 
 CR = b"\x0d"
@@ -131,4 +167,35 @@ def test_홀로_있는_CR_이_없다() -> None:
         "홀로 있는 CR 이 든 파일: "
         + ", ".join(offenders)
         + ". git 이 바이너리로 보아 줄바꿈 정규화가 꺼지고, 이후 diff 가 파일 전체가 됩니다."
+    )
+
+
+#: 텍스트에 있어서는 안 되는 제어문자. 탭(09)·LF(0a)·CR(0d)만 뺀다.
+_CONTROL = bytes(range(0x00, 0x09)) + b"\x0b\x0c" + bytes(range(0x0E, 0x20))
+
+
+def test_보이지_않는_제어문자가_없다() -> None:
+    """CR 말고도 **이스케이프가 먹혀 진짜 바이트가 되는** 자리가 있다.
+
+    실측(2026-09-06): `deploy.ps1` 의 안내 문구에 `$AppPath\\backend` 를 적으려다
+    `\\b` 가 **백스페이스 한 바이트(0x08)** 로 들어갔다. 파일에서는 안 보이고,
+    문법 검사도 통과하고, 화면에는 `C:\\Server\\MatNexuackend` 로 나온다 — 사람은
+    그 경로로 옮겨 가려다 실패하고 무엇이 틀렸는지 모른다.
+
+    같은 사고가 CR 로 두 번, 백스페이스로 한 번 났다. 셋 다 눈에 안 보이는
+    바이트가 소스에 앉은 것이라 한 가지로 검사한다.
+
+    바이트를 16진수로 적는 이유는 위와 같다 — 소스에 이스케이프로 적으면 이
+    파일을 고치는 다음 도구가 또 진짜 제어문자로 바꿔 놓는다.
+    """
+    offenders = []
+    for path in _text_files():
+        found = {f"0x{byte:02x}" for byte in path.read_bytes() if byte in _CONTROL}
+        if found:
+            offenders.append(f"{path.relative_to(REPO)} ({', '.join(sorted(found))})")
+    assert not offenders, (
+        "보이지 않는 제어문자가 든 파일: "
+        + ", ".join(offenders)
+        + ". 이스케이프(`\\b`·`\\f` 등)를 적으려다 진짜 바이트가 된 자리입니다 — "
+        "파일에서는 안 보이고 화면에서만 글자가 사라집니다."
     )

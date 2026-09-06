@@ -20,8 +20,11 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))  # `python scripts/export_openapi.py` 로도 돌게
 
+from _console import survive_cp949  # noqa: E402
 from app import version  # noqa: E402
 from app.main import create_app  # noqa: E402
+
+survive_cp949()
 
 OUTPUT = BACKEND_DIR / "openapi.json"
 

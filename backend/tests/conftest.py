@@ -23,7 +23,16 @@ import os
 # 알고리즘·전처리·경로는 그대로다. 라운드는 얼마나 오래 걸리게 할지만 정한다.
 os.environ.setdefault("MNX_BCRYPT_ROUNDS", "4")
 
+import sys
 from collections.abc import Iterator
+from pathlib import Path
+
+# **`scripts/` 는 그 자체가 import 뿌리다.** 스크립트를 `python scripts/foo.py` 로
+# 돌리면 그 폴더가 `sys.path[0]` 이 되므로 이웃 모듈(`_console`)을 그냥 부른다.
+# 그런데 시험은 스크립트를 **경로로 읽어** 실행하므로(`spec_from_file_location`)
+# 그 폴더가 경로에 안 올라가고, 그러면 실제로는 잘 도는 스크립트가 시험에서만
+# `ModuleNotFoundError` 로 죽는다. 여기서 실행 조건을 맞춰 준다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import psycopg
 import pytest

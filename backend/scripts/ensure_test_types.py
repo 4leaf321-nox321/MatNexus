@@ -9,19 +9,11 @@
 
 from __future__ import annotations
 
-import contextlib
 import sys
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
-
-# **콘솔 인코딩에 걸려 죽지 않게 한다.** 운영은 Windows 이고 기본 콘솔이 CP949 라,
-# 부서 이름이나 줄표 하나가 `UnicodeEncodeError` 를 내며 스크립트를 끝낸다
-# (실측 2026-08-31). 보정 스크립트가 출력 때문에 멈추면 **정작 한 일이 커밋됐는지도
-# 알 수 없다** — 여기서는 목록을 찍기 전에 이미 commit 했으므로 더 헷갈린다.
-with contextlib.suppress(AttributeError, OSError):  # 파이프로 넘길 때는 이미 안전하다
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from sqlalchemy import select  # noqa: E402
 
@@ -30,6 +22,7 @@ from sqlalchemy import select  # noqa: E402
 # (실측: `test_types.owner_workspace_id` 가 'workspaces' 를 못 찾음). 앱은
 # main 이 전부 부르므로 안 드러나고, **배포용 스크립트에서만 터진다.**
 import app.all_models  # noqa: E402,F401
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.tests.definitions import ensure_builtin_test_types  # noqa: E402
 from app.modules.tests.legacy_profiles import (  # noqa: E402
@@ -37,6 +30,8 @@ from app.modules.tests.legacy_profiles import (  # noqa: E402
 )
 from app.modules.tests.models import TestChannel, TestConditionField, TestType  # noqa: E402
 from app.modules.workspaces.models import Workspace  # noqa: E402
+
+survive_cp949()
 
 
 def main() -> None:

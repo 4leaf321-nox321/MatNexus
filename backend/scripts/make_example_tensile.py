@@ -35,17 +35,13 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import math
-import sys
 from pathlib import Path
 
-# **콘솔 인코딩에 걸려 죽지 않게 한다.** Windows 기본 콘솔이 CP949 라, 물결 기호 하나가
-# `UnicodeEncodeError` 를 내며 스크립트를 끝낸다 — 파일은 이미 다 썼는데 마지막
-# 안내에서 죽으므로 성공한 것인지 아닌지가 안 보인다(실측 2026-09-02).
-with contextlib.suppress(AttributeError, OSError):  # 파이프로 넘길 때는 이미 안전하다
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+from _console import survive_cp949
+
+survive_cp949()
 
 OUT = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 

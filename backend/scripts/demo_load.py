@@ -34,11 +34,14 @@ sys.path.insert(0, str(BACKEND_DIR))  # `python scripts/demo_load.py` 로도 돌
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app.all_models  # noqa: E402, F401  (외래키가 가리키는 표를 전부 등록시킨다)
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
 from app.modules.tests import services as test_services  # noqa: E402
 from app.shared.auth import current_user  # noqa: E402
+
+survive_cp949()
 
 #: 예시 재료. **이름에 DEMO 를 넣는다** — 목록에서 한눈에 갈린다.
 MATERIAL = {

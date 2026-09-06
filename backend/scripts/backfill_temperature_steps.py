@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import statistics
 import sys
 from pathlib import Path
@@ -23,23 +22,20 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-# **콘솔 인코딩에 걸려 죽지 않게 한다.** 운영은 Windows 이고 기본 콘솔이 CP949 라,
-# 줄표(—) 하나가 `UnicodeEncodeError` 를 내며 스크립트를 끝낸다(실측 2026-08-31).
-# 보정 스크립트가 출력 때문에 멈추면, 정작 한 일이 커밋됐는지도 알 수 없다.
-with contextlib.suppress(AttributeError, OSError):  # 파이프로 넘길 때는 이미 안전하다
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 from sqlalchemy import select  # noqa: E402
 
 # **모델을 전부 등록시킨다.** 스크립트가 손대는 모델만 import 하면 외래키가
 # 가리키는 테이블이 메타데이터에 없어 매핑을 못 푼다. 앱에서는 안 드러나고
 # 배포용 스크립트에서만 터진다.
 import app.all_models  # noqa: E402,F401
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.tests.models import Curve, TestRun, TestType  # noqa: E402
 from app.shared import filestore  # noqa: E402
 from matcore import curves as curvekit  # noqa: E402
 from matcore import viscoelastic  # noqa: E402
+
+survive_cp949()
 
 
 def steps_of(db_curves: list[Curve]) -> int | None:

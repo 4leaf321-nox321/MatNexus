@@ -425,8 +425,40 @@ if ($SkipMigrations) {
         Write-Log "핸드북 씨앗 실패 (배포는 계속합니다): $_"
         Write-Host ''
         Write-Host '가이드 화면이 비어 보일 수 있습니다. 서버에서 직접 돌려 보세요:'
-        Write-Host "  cd '$AppPathackend'"
+        Write-Host "  cd '$AppPath\backend'"
         Write-Host "  & '$backendPython' scripts\import_guides.py"
+    }
+    Pop-Location
+}
+
+# --- 문헌 카탈로그 씨앗 -------------------------------------------------------
+#
+# 문헌 물성 42,209건과 측정법 750건도 **행이라 `alembic upgrade` 로는 안 들어간다**
+# — 핸드북과 같은 사정이다. 전에는 사람이 원본 84MB 를 서버로 반입해 손으로
+# 돌려야 했는데, 그러면 언젠가 아무도 안 한다(핸드북이 실제로 그랬다). 지금은
+# 깎아 낸 원본이 패키지에 실려 있어 반입할 것이 없다.
+#
+# **다시 돌려도 된다.** mt_id 로 멱등이라 두 번째부터는 전량 「동일」 이고 5초에
+# 끝난다. 원본 스키마가 아는 것과 다르면 아무것도 안 쓰고 거절한다 — 조용히
+# 절반만 들어가는 일은 없다. 처음 한 번은 몇 분 걸린다.
+#
+# **실패해도 배포는 세우지 않는다** — 핸드북과 같은 이유. 문헌 물성이 비는 것은
+# 불편이지 장애가 아닌데, 여기서 세우면 앱이 통째로 안 올라간다.
+if ($SkipMigrations) {
+    Write-Log '문헌 카탈로그 씨앗 건너뜀 (마이그레이션과 함께)'
+} else {
+    Write-Log '문헌 카탈로그 씨앗 적재 (처음 한 번은 몇 분 걸립니다)'
+    Push-Location (Join-Path $AppPath 'backend')
+    try {
+        Invoke-Native '카탈로그 적재 실패' { & $backendPython scripts\import_materialtwin.py --apply }
+        Write-Log '문헌 카탈로그 씨앗 완료'
+    } catch {
+        Write-Log "문헌 카탈로그 씨앗 실패 (배포는 계속합니다): $_"
+        Write-Host ''
+        Write-Host '문헌 물성 화면이 비어 보일 수 있습니다. 서버에서 직접 돌려 보세요:'
+        Write-Host "  cd '$AppPath\backend'"
+        Write-Host "  & '$backendPython' scripts\import_materialtwin.py           # 드라이런"
+        Write-Host "  & '$backendPython' scripts\import_materialtwin.py --apply"
     }
     Pop-Location
 }

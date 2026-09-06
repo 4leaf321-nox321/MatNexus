@@ -84,6 +84,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 import app.all_models  # noqa: E402, F401  (외래키가 가리키는 표를 전부 등록시킨다)
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
@@ -93,6 +94,8 @@ from app.shared.auth import current_user  # noqa: E402
 from matcore.parsers import ParseError  # noqa: E402
 from matcore.readers import profile as profiles  # noqa: E402
 from matcore.readers import sniff  # noqa: E402
+
+survive_cp949()
 
 #: 처리 단계. 화면에서 고르는 것과 같은 순서이고, 이유는
 #: `frontend/src/modules/processing/standard.ts` 의 머리말에 있다.

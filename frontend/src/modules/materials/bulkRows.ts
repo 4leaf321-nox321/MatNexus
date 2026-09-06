@@ -662,7 +662,9 @@ export interface Tally {
 function materialKey(node: MaterialNode): string {
   return [node.family, node.category, node.grade, node.details ?? '', node.spec_thickness ?? '']
     .map((one) => String(one ?? '').trim().toLowerCase())
-    .join(' ')
+    // **NUL 로 잇는다.** 값 안에 나올 수 없는 글자라서다 — 공백으로 이으면
+    // ('A B', 'C') 와 ('A', 'B C') 가 같은 재료가 된다.
+    .join('\u0000')
 }
 
 /**

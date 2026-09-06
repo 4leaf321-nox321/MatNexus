@@ -45,6 +45,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from sqlalchemy import select  # noqa: E402
 
 import app.all_models  # noqa: E402,F401
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.guide.models import (  # noqa: E402
     GuideAsset,
@@ -52,6 +53,8 @@ from app.modules.guide.models import (  # noqa: E402
     GuideSection,
 )
 from app.shared import filestore  # noqa: E402
+
+survive_cp949()
 
 SEEDS = BACKEND_DIR / "seeds" / "guide"
 

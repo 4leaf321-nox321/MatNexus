@@ -17,3 +17,4 @@
 *.parquet binary
 *.xlsx binary
 *.zip binary
+*.gz binary

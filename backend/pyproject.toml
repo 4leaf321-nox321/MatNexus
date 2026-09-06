@@ -10,6 +10,10 @@ requires-python = ">=3.13,<3.14"
 [tool.ruff]
 line-length = 95
 target-version = "py312"
+# `scripts/` 는 그 자체가 import 뿌리다 — 스크립트를 직접 실행하면 그 폴더가
+# sys.path[0] 이 되므로 이웃 모듈(`_console`)을 그냥 부를 수 있다. 여기 적지
+# 않으면 isort 가 그것을 서드파티로 보아 엉뚱한 자리에 정렬한다.
+src = [".", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

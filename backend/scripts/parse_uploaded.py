@@ -18,9 +18,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select
 
 import app.all_models  # noqa: F401  (DB 를 만지는 스크립트는 전부 import 한다 — AGENTS.md)
+from _console import survive_cp949
 from app.database import SessionLocal
 from app.modules.tests import services
 from app.modules.tests.models import TestRun
+
+survive_cp949()
 
 
 def main(argv: list[str]) -> int:

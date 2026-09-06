@@ -25,9 +25,12 @@ from sqlalchemy import select  # noqa: E402
 # (실측: `test_types.owner_workspace_id` 가 'workspaces' 를 못 찾음). 앱은
 # main 이 전부 부르므로 안 드러나고, **배포용 스크립트에서만 터진다.**
 import app.all_models  # noqa: E402,F401
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
 from app.modules.notifications import services  # noqa: E402
+
+survive_cp949()
 
 
 def main() -> None:

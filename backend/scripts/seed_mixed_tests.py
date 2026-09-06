@@ -49,11 +49,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 import app.all_models  # noqa: E402,F401
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
 from app.modules.tests import services as test_services  # noqa: E402
 from app.shared.auth import current_user  # noqa: E402
+
+survive_cp949()
 
 FIXTURES = BACKEND_DIR / "tests" / "fixtures"
 TENSILE = FIXTURES / "Example.tra"

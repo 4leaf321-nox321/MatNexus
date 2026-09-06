@@ -36,6 +36,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from sqlalchemy import select  # noqa: E402
 
 import app.all_models  # noqa: E402,F401
+from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.accounts.models import User  # noqa: E402
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult  # noqa: E402
@@ -43,6 +44,8 @@ from app.modules.processing.routes import _store  # noqa: E402
 from app.modules.tests.models import TestRun  # noqa: E402
 from app.shared.errors import AppError  # noqa: E402
 from matcore.processing import ProcessingError  # noqa: E402
+
+survive_cp949()
 
 WATCH = ("youngs_modulus", "elastic_intercept", "elastic_r_squared")
 
