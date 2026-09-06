@@ -166,8 +166,8 @@ export const ADOPTABLE: Record<
   'mechanical.tensile_strength': { item: '인장강도', place: 'declared' },
   'mechanical.elongation_at_break': { item: '연신율', place: 'declared' },
   'thermal.specific_heat': { item: '비열', place: 'declared' },
-  'thermal.conductivity': { item: '열전도도', place: 'declared' },
-  'thermal.expansion_linear': { item: '열팽창계수', place: 'declared' },
+  'thermal.conductivity': { item: '열전도율', place: 'declared' },
+  'thermal.expansion_linear': { item: '선팽창계수(CTE)', place: 'declared' },
   'physical.density': { item: '밀도', place: 'column', field: 'density' },
   'mechanical.poisson_ratio': { item: '포아송비', place: 'column', field: 'poisson_ratio' },
 }

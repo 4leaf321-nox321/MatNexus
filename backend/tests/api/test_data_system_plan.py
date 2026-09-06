@@ -218,8 +218,8 @@ class Test5_6_선언_물성_열쇠:
     def test_기준정보의_항목이_전부_파이프라인_키를_갖는다(self, db: Session) -> None:
         keys = curvedata.declared_keys(db)
         assert keys["탄성계수"].key == "youngs_modulus"
-        assert keys["열팽창계수"].key == "thermal_expansion"
-        assert keys["열팽창계수"].si_unit == "1/K"
+        assert keys["선팽창계수(CTE)"].key == "thermal_expansion"
+        assert keys["선팽창계수(CTE)"].si_unit == "1/K"
         assert keys["비열"].key == "specific_heat"
 
     def test_잰_값이_있는_항목은_그_키로_잇는다(self, db: Session) -> None:
@@ -255,7 +255,7 @@ class Test5_6_선언_물성_열쇠:
             json={
                 "declared_properties": [
                     {
-                        "item": "열팽창계수",
+                        "item": "선팽창계수(CTE)",
                         "points": [{"value": 1.2e-5}],
                         "source": "literature",
                         "reference": "예시",

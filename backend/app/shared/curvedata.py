@@ -108,9 +108,13 @@ DECLARED_KEYS = {
     "전단탄성계수": ("shear_modulus", "Pa"),
     "항복강도": ("yield_strength", "Pa"),
     "인장강도": ("tensile_strength", "Pa"),
+    "선팽창계수(CTE)": ("thermal_expansion", "1/K"),
+    "열전도율": ("thermal_conductivity", "W/(m.K)"),
+    "비열": ("specific_heat", "J/(kg.K)"),
+    # 옛 이름(2026-09-06 개명 전) — 마이그레이션이 저장 줄을 바꿔 주지만,
+    # 씨앗을 안 심었거나 백업에서 복원한 DB 의 옛 줄도 계속 읽혀야 한다.
     "열팽창계수": ("thermal_expansion", "1/K"),
     "열전도도": ("thermal_conductivity", "W/(m.K)"),
-    "비열": ("specific_heat", "J/(kg.K)"),
 }
 
 

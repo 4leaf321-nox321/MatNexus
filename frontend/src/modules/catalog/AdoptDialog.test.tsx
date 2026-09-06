@@ -119,8 +119,8 @@ const TARGET = {
 const PROPERTY_ITEMS = [
   { item: '탄성계수', level: '재료' },
   { item: '전단탄성계수', level: '재료' },
-  { item: '열팽창계수', level: '재료' },
-  { item: '열전도도', level: '재료' },
+  { item: '선팽창계수(CTE)', level: '재료' },
+  { item: '열전도율', level: '재료' },
   { item: '비열', level: '재료' },
   { item: '항복강도', level: '시료' },
   { item: '인장강도', level: '시료' },
@@ -163,7 +163,7 @@ describe('병합이 정확해야 한다', () => {
     // 기존 비열 줄이 살아 있다.
     expect(rows.some((row) => row.item === '비열' && row.reference === '기존 핸드북')).toBe(true)
     // CTE 는 항목 1줄 · 온도점 2개(오름차순).
-    const cte = rows.find((row) => row.item === '열팽창계수') as {
+    const cte = rows.find((row) => row.item === '선팽창계수(CTE)') as {
       points: Array<{ temperature_k: number | null; value: number }>
       input_unit?: string | null
       reference: string

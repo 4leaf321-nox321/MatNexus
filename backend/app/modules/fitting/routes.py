@@ -316,9 +316,9 @@ def _declared_row(material: Material, item: str) -> dict[str, Any] | None:
 #: 지우거나 이름을 바꾸면 그냥 이 블록이 비는 것이고, 그것이 맞는 결과다 —
 #: **틀린 값이 실리는 것보다 안 실리는 것이 낫다.**
 THERMAL_ITEMS = {
-    "thermal_expansion": "열팽창계수",
+    "thermal_expansion": "선팽창계수(CTE)",
     "specific_heat": "비열",
-    "thermal_conductivity": "열전도도",
+    "thermal_conductivity": "열전도율",
 }
 
 
@@ -2808,9 +2808,9 @@ def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
         (elastic, "youngs_modulus", "탄성계수"),
         (elastic, "poisson_ratio", "푸아송비"),
         (elastic, "density", "밀도"),
-        (thermal, "thermal_expansion", "열팽창계수"),
+        (thermal, "thermal_expansion", "선팽창계수(CTE)"),
         (thermal, "specific_heat", "비열"),
-        (thermal, "thermal_conductivity", "열전도도"),
+        (thermal, "thermal_conductivity", "열전도율"),
     ):
         origin = _origin(str(values.get(f"{key}_source", "")))
         if values.get(key) is None or not origin:

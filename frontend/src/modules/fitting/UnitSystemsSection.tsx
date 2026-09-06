@@ -49,7 +49,7 @@ const SHOWN: ReadonlyArray<[si: string, label: string]> = [
   ['kg/m3', '밀도'],
   ['s', '시간'],
   ['J/(kg.K)', '비열'],
-  ['W/(m.K)', '열전도도'],
+  ['W/(m.K)', '열전도율'],
 ]
 
 export function UnitSystemsSection({ canEdit }: { canEdit: boolean }) {
@@ -83,7 +83,7 @@ export function UnitSystemsSection({ canEdit }: { canEdit: boolean }) {
           </h2>
           <p className="text-muted-foreground text-sm">
             덱을 내려받을 때 고르는 계입니다. 질량·길이·시간 셋만 정하면 응력·밀도·비열·
-            열전도도는 그 셋에서 따라옵니다 — 인수를 손으로 적지 않습니다.
+            열전도율은 그 셋에서 따라옵니다 — 인수를 손으로 적지 않습니다.
           </p>
         </div>
         {canEdit ? (

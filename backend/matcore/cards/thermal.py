@@ -1,7 +1,7 @@
 """열물성 블록 — **인장시험이 하나도 안 주는 것들.**
 
-탄성계수는 인장시험이 주기도 한다(대표 곡선의 탄성 구간). 열팽창계수·비열·
-열전도도는 **아예 안 준다** — 따로 재거나 핸드북·규격에서 온다. 그래서 이
+탄성계수는 인장시험이 주기도 한다(대표 곡선의 탄성 구간). 선팽창계수(CTE)·비열·
+열전도율은 **아예 안 준다** — 따로 재거나 핸드북·규격에서 온다. 그래서 이
 블록의 값은 대개 선언 물성에서 온다(ADR 0016).
 
 ## 왜 `elastic` 에 안 넣는가
@@ -32,14 +32,14 @@ THERMAL = register_block(
         key="thermal",
         label="열물성",
         help=(
-            "열팽창계수·비열·열전도도. **인장시험이 하나도 안 준다** — "
+            "선팽창계수(CTE)·비열·열전도율. **인장시험이 하나도 안 준다** — "
             "핸드북·규격에서 오거나 따로 잰다. 셋 중 하나만 있어도 그 값에 "
             "해당하는 솔버 키워드는 나간다."
         ),
         produces=(
             Produced(
                 key="thermal_expansion",
-                label="열팽창계수",
+                label="선팽창계수(CTE)",
                 si_unit="1/K",
                 help=(
                     "선팽창계수 α. 열응력 해석에 필요하다. **기준 온도가 함께 "
@@ -54,26 +54,28 @@ THERMAL = register_block(
             ),
             Produced(
                 key="thermal_conductivity",
-                label="열전도도",
+                label="열전도율",
                 si_unit="W/(m.K)",
-                help="열전도도 k. 정상·과도 열해석에 모두 필요하다.",
+                help="열전도율 k. 정상·과도 열해석에 모두 필요하다.",
             ),
             Produced(
                 key="reference_temperature",
                 label="기준 온도",
                 si_unit="K",
                 help=(
-                    "값들을 잰 온도. 비면 상온으로 본다. 열팽창계수는 이 온도가 "
+                    "값들을 잰 온도. 비면 상온으로 본다. 선팽창계수(CTE)는 이 온도가 "
                     "없으면 `ΔT` 의 기준을 모른다."
                 ),
             ),
         ),
         rows=(
             Produced(key="temperature", label="온도", si_unit="K", help=None),
-            Produced(key="thermal_expansion", label="열팽창계수", si_unit="1/K", help=None),
+            Produced(
+                key="thermal_expansion", label="선팽창계수(CTE)", si_unit="1/K", help=None
+            ),
             Produced(key="specific_heat", label="비열", si_unit="J/(kg.K)", help=None),
             Produced(
-                key="thermal_conductivity", label="열전도도", si_unit="W/(m.K)", help=None
+                key="thermal_conductivity", label="열전도율", si_unit="W/(m.K)", help=None
             ),
         ),
         # 열물성은 **키워드가 셋으로 갈리므로 각자 자기 표를 갖는다.** 한 줄에

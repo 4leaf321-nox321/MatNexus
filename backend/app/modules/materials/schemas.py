@@ -132,6 +132,9 @@ class PropertyItemOut(BaseModel):
 
 class MaterialOut(BaseModel):
     id: uuid.UUID
+    code: str
+    """불변 고유 번호(`M-000123`) — 이름은 기준정보 개명에 따라 바뀌지만 이건
+    안 바뀐다. 문서·라벨이 재료를 지칭하는 손잡이."""
     record_name: str
     alias: str | None
     owner_workspace_id: uuid.UUID | None
@@ -160,7 +163,7 @@ class MaterialOut(BaseModel):
     """인장시험이 주지 않는 값이다 — 대개 문헌값이고 재료 등급에 붙는다."""
 
     declared_properties: list[DeclaredPropertyOut] = []
-    """**시험이 주지 않는 물성.** 탄성계수·열팽창계수·비열·열전도도처럼 핸드북·
+    """**시험이 주지 않는 물성.** 탄성계수·선팽창계수(CTE)·비열·열전도율처럼 핸드북·
     규격·밀시트에서 오는 값들이다. 밀도·푸아송비가 컬럼으로 있는 것과 같은
     성격인데, **항목을 부서가 정하므로** 컬럼이 아니라 목록이다."""
 

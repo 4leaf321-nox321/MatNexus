@@ -77,7 +77,19 @@ export default function MaterialDetailPage() {
       <MaterialListPanel currentId={id} />
 
       <PageHeader
-        title={item ? <RecordName name={item.record_name} /> : '재료'}
+        title={
+          item ? (
+            <span className="inline-flex items-baseline gap-2">
+              <RecordName name={item.record_name} />
+              {/* 불변 고유 번호 — 문서·라벨이 이 번호로 재료를 가리킨다. */}
+              <span className="text-muted-foreground font-mono text-sm font-normal">
+                {item.code}
+              </span>
+            </span>
+          ) : (
+            '재료'
+          )
+        }
         description={item?.alias ?? undefined}
         created={item?.created_at}
         actions={

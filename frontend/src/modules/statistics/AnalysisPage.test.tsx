@@ -199,11 +199,11 @@ describe('사양 대비', () => {
           gap_ratio: 0.55,
         },
       ],
-      unmatched_items: ['열전도도'],
+      unmatched_items: ['열전도율'],
     })
     mount('spec')
     expect(await screen.findByText('+55.0%')).toBeInTheDocument()
-    expect(screen.getByText(/못 견준 항목: 열전도도/)).toBeInTheDocument()
+    expect(screen.getByText(/못 견준 항목: 열전도율/)).toBeInTheDocument()
   })
 })
 

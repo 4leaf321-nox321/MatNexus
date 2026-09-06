@@ -8500,6 +8500,8 @@ export interface components {
             applied_products?: string[];
             /** Category */
             category: string;
+            /** Code */
+            code: string;
             /**
              * Created At
              * Format: date-time

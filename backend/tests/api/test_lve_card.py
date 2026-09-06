@@ -177,7 +177,7 @@ class Test카드가_선다:
         admin_headers: dict[str, str],
         sample: dict[str, Any],
     ) -> None:
-        """선형탄성구간 카드 한 장으로 열응력 해석까지 — 비열·열전도도가 따라온다."""
+        """선형탄성구간 카드 한 장으로 열응력 해석까지 — 비열·열전도율이 따라온다."""
         from app.modules.vocabulary.definitions import ensure_builtin_property_items
 
         _adopted_sweep(client, db, admin_headers, sample["id"])
@@ -189,7 +189,7 @@ class Test카드가_선다:
             json={
                 "declared_properties": [
                     {
-                        "item": "열전도도",
+                        "item": "열전도율",
                         "points": [{"value": 0.25}],
                         "source": "literature",
                         "reference": "예시",

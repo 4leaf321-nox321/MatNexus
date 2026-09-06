@@ -1119,14 +1119,14 @@ def render_openradioss_thermal(deck: Deck) -> Rendered:
     else:
         # **0 을 넣지 않는다.** 전도도 0 은 열이 안 퍼지는 재료다.
         raise ExportError(
-            "열전도도가 없습니다. /HEAT/MAT 의 AS 는 자리 있는 필드라 비울 수 없고, "
+            "열전도율이 없습니다. /HEAT/MAT 의 AS 는 자리 있는 필드라 비울 수 없고, "
             "0 을 넣으면 열이 안 퍼지는 재료가 됩니다."
         )
 
     expansion = _thermal_points(deck, "thermal_expansion")
     if expansion:
         notes.append(
-            "열팽창계수는 /HEAT/MAT 에 자리가 없습니다 — Radioss 에서는 역학 법칙 쪽이 "
+            "선팽창계수(CTE)는 /HEAT/MAT 에 자리가 없습니다 — Radioss 에서는 역학 법칙 쪽이 "
             "받습니다. 이 덱에는 안 실렸습니다."
         )
         lines.append(

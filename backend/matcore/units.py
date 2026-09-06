@@ -52,7 +52,7 @@ SI_UNITS = {
     "inverse_temperature": "1/K",
     # **열해석 물성.** 시험이 주지 않고 핸드북·규격에서 온다 — 그래서 「선언
     # 물성」으로 들어온다(v1.71.0). 차원을 여기 적어 두면 값을 넣을 때 단위가
-    # 검사되고, 「비열 자리에 열전도도」 같은 것이 막힌다.
+    # 검사되고, 「비열 자리에 열전도율」 같은 것이 막힌다.
     "specific_heat": "J/(kg.K)",
     "thermal_conductivity": "W/(m.K)",
     "compliance": "1/Pa",
@@ -129,7 +129,7 @@ UNITS: dict[str, Unit] = {
         _u("mJ/(tonne.K)", "specific_heat", "0.000001"),
         _u("W/(m.K)", "thermal_conductivity", "1"),
         _u("W/mK", "thermal_conductivity", "1"),
-        # **mm·N·tonne 계의 열전도도.** 그 계에서 일률은 mW, 길이는 mm 이라
+        # **mm·N·tonne 계의 열전도율.** 그 계에서 일률은 mW, 길이는 mm 이라
         # 1 W/(m·K) = 1e3 mW / (1e3 mm · K) = 1 mW/(mm·K) — **인수가 1 이다.**
         # 값이 같아도 기호는 달라야 한다. 덱에 `W/(m.K)` 라고 적어 두면 받는
         # 사람이 그 덱을 SI 로 읽는다.

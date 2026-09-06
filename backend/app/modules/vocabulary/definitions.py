@@ -67,12 +67,12 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     # **용도는 재료의 성질이다**(전에는 시료에 있었다). "도어 이너용 재료가 뭐가
     # 있나" 가 집계 질문이 되려면 자유 문자열이면 안 된다 — `도어`/`Door`/`도어 `
     # 가 갈리면 그 질문에 답이 셋 나온다.
-    # **시험이 주지 않는 물성.** 탄성계수·열팽창계수·비열은 인장시험이 안 준다 —
+    # **시험이 주지 않는 물성.** 탄성계수·선팽창계수(CTE)·비열은 인장시험이 안 준다 —
     # 핸드북·규격·밀시트에서 온다. 어떤 항목을 받을지는 **부서가 정한다**(D7):
     # 열해석을 안 하는 부서에 비열 칸이 뜰 이유가 없고, 반대로 우리가 목록을
     # 코드에 박으면 필요한 항목을 넣으려고 배포를 기다려야 한다.
     #
-    # 값마다 **차원**을 든다. 그래야 「비열 자리에 열전도도」가 막힌다 —
+    # 값마다 **차원**을 든다. 그래야 「비열 자리에 열전도율」이 막힌다 —
     # ADR 0013 이 "밀도 자리에 온도를 넣어도 아무도 모른다" 고 적어 둔 구멍이다.
     ("property_item", "물성 항목", "open", 55, None, None),
     ("product", "적용 제품", "open", 60, None, None),
@@ -148,7 +148,7 @@ BUILTIN_AXIS_FIELDS: dict[str, list[dict[str, Any]]] = {
             kind="choice",
             choices=sorted(DIMENSIONS),
             help="이 물성이 무엇의 차원인가. 값을 넣을 때 단위가 이것으로 검사됩니다 — "
-            "「비열 자리에 열전도도」 같은 것이 여기서 막힙니다.",
+            "「비열 자리에 열전도율」 같은 것이 여기서 막힙니다.",
         ),
         _field(
             "symbol",
@@ -284,9 +284,9 @@ BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
 BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None]] = [
     ("탄성계수", "stress", "E", "재료", None, None),
     ("전단탄성계수", "stress", "G", "재료", None, None),
-    ("열팽창계수", "inverse_temperature", "alpha", "재료", None, None),
+    ("선팽창계수(CTE)", "inverse_temperature", "alpha", "재료", None, None),
     ("비열", "specific_heat", "Cp", "재료", None, None),
-    ("열전도도", "thermal_conductivity", "k", "재료", None, None),
+    ("열전도율", "thermal_conductivity", "k", "재료", None, None),
     # 밀시트가 주는 것들. 앞의 둘은 **우리가 잰 값에 대응이 있다** — 그래서
     # 「밀시트가 말한 값과 우리가 잰 값이 맞나」를 물을 수 있다.
     ("항복강도", "stress", "Rp", "시료", "proof_stress", None),

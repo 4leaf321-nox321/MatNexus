@@ -502,6 +502,8 @@ export default function MaterialsPage() {
                     >
                       <RecordName name={material.record_name} />
                     </Link>
+                    {/* 불변 고유 번호 — 이름은 기준정보 개명에 따라 바뀌지만 이건 안 바뀐다. */}
+                    <div className="text-muted-foreground">{material.code}</div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{material.alias ?? '—'}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{material.family}</TableCell>

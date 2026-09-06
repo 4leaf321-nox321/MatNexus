@@ -219,7 +219,7 @@ class Test사양_대비:
         material.declared_properties = [
             {"item": "인장강도", "points": [{"temperature_k": 293.15, "value_si": 200.0}]},
             # 잰 적 없는 항목 — **숨기면 「차이가 없다」 로 읽힌다.**
-            {"item": "열전도도", "points": [{"temperature_k": 293.15, "value_si": 50.0}]},
+            {"item": "열전도율", "points": [{"temperature_k": 293.15, "value_si": 50.0}]},
         ]
         db.commit()
 
@@ -230,7 +230,7 @@ class Test사양_대비:
         assert row["declared_si"] == pytest.approx(200.0)
         assert row["measured_mean"] == pytest.approx(310.0)
         assert row["gap_ratio"] == pytest.approx(0.55)
-        assert body["unmatched_items"] == ["열전도도"]
+        assert body["unmatched_items"] == ["열전도율"]
 
 
 class Test추이:

@@ -36,8 +36,7 @@ class Target:
 
 
 #: MT 물성 키 → 우리 자리. **MT key 는 안정 id 다**(`domain.name` 꼴) — 이름이
-#: 개명돼도 매핑은 안 깨진다. 우리 쪽 이름 개명(열전도도→열전도율 등)이 확정되면
-#: 이 표의 label 만 따라 바꾼다.
+#: 개명돼도 매핑은 안 깨진다.
 PROPERTY_ITEM_MAP: dict[str, Target] = {
     "mechanical.youngs_modulus": Target("탄성계수", "declared", "Pa"),
     "mechanical.shear_modulus": Target("전단탄성계수", "declared", "Pa"),
@@ -45,11 +44,10 @@ PROPERTY_ITEM_MAP: dict[str, Target] = {
     "mechanical.tensile_strength": Target("인장강도", "declared", "Pa"),
     "mechanical.elongation_at_break": Target("연신율", "declared", "1"),
     "thermal.specific_heat": Target("비열", "declared", "J/(kg*K)"),
-    # 이름 정비 예정(사용자 결정 2026-09-05): 열전도도→열전도율,
-    # 열팽창계수→선팽창계수(CTE). 개명은 기준정보 개명 기계(별칭 흡수)로 별도
-    # 진행하고, 확정되면 여기 label 을 따라 바꾼다.
-    "thermal.conductivity": Target("열전도도", "declared", "W/(m*K)"),
-    "thermal.expansion_linear": Target("열팽창계수", "declared", "1/K"),
+    # 2026-09-06 개명 완료(열전도도→열전도율, 열팽창계수→선팽창계수(CTE)) —
+    # 마이그레이션 d47e91b0c3a8 이 기준정보·저장 줄을 바꿨고 옛 이름은 별칭이다.
+    "thermal.conductivity": Target("열전도율", "declared", "W/(m*K)"),
+    "thermal.expansion_linear": Target("선팽창계수(CTE)", "declared", "1/K"),
     # 재료의 기본 칸 — 선언 물성 항목이 아니다.
     "physical.density": Target("밀도", "column", "kg/m^3"),
     "mechanical.poisson_ratio": Target("포아송비", "column", "1"),

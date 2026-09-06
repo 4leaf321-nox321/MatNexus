@@ -481,7 +481,7 @@ class TestOpenRadioss열물성:
         """**AS 는 자리 있는 필드다.** 0 을 넣으면 열이 안 퍼지는 재료가 된다."""
         with pytest.raises(export.ExportError) as caught:
             export.render("openradioss_thermal", heat_deck(values={"specific_heat": 462.0}))
-        assert "열전도도" in str(caught.value)
+        assert "열전도율" in str(caught.value)
 
     def test_전도도를_직선으로_맞춘다(self) -> None:
         """`/HEAT/MAT` 은 표를 안 받는다 — `AS + BS·T` 두 계수다."""
@@ -526,7 +526,7 @@ class TestOpenRadioss열물성:
             "openradioss_thermal",
             heat_deck(values={**BASE, "thermal_expansion": 1.17e-05}),
         )
-        assert any("열팽창계수" in note for note in rendered.notes)
+        assert any("선팽창계수(CTE)" in note for note in rendered.notes)
         assert "EXPANSION" in rendered.text
 
     def test_비열이_표면_어느_온도를_썼는지_말한다(self) -> None:

@@ -79,7 +79,7 @@ export function LveCardDialog({
       suggestedLabel={`${group.test_type_label} 선형탄성구간(LVE) · ${group.orientation}`}
       declaredOption={{
         label: '재료 기본 정보 함께 싣기',
-        help: '재료에 적어 둔 열팽창계수·열전도도·비열이 열물성 블록으로 따라옵니다. 저장 탄성률은 잰 값 그대로입니다.',
+        help: '재료에 적어 둔 선팽창계수(CTE)·열전도율·비열이 열물성 블록으로 따라옵니다. 저장 탄성률은 잰 값 그대로입니다.',
         carried:
           carried === null ? null : carried.length > 0 ? (
             <span className="flex flex-wrap items-center gap-1">

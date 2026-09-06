@@ -8711,6 +8711,10 @@
             "title": "Category",
             "type": "string"
           },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -8856,6 +8860,7 @@
         },
         "required": [
           "id",
+          "code",
           "record_name",
           "alias",
           "owner_workspace_id",

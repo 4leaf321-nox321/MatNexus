@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -49,6 +50,19 @@ class Test채번:
         with pytest.raises(IntegrityError):
             db.flush()
         db.rollback()
+
+    def test_번호로_검색이_닿는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """`M-140` 처럼 패딩 없이 쳐도 `M-000140` 에 닿는다 — 사람은 0 을 안 센다."""
+        made = make_material(db, "SECC_CODEQ_1.0")
+        db.commit()
+        bare = str(int(made.code[2:]))  # 'M-000007' -> '7'
+        for typed in (made.code, f"M-{bare}", f"m{bare}"):
+            page = client.get(f"/api/materials?q={typed}", headers=admin_headers).json()
+            assert any(row["code"] == made.code for row in page["items"]), typed
+        # 응답이 번호를 든다 — 화면·문서가 이 번호로 지칭한다.
+        assert all("code" in row for row in page["items"])
 
     def test_지워도_번호는_돌아오지_않는다(self, db: Session) -> None:
         """소프트 삭제된 재료의 번호가 다음 재료에게 가면, 옛 문서의 지칭이

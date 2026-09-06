@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -110,6 +111,7 @@ def _material_out(
     density_unit = DENSITY_UNIT
     return MaterialOut(
         id=material.id,
+        code=material.code,
         record_name=material.record_name,
         alias=material.alias,
         owner_workspace_id=material.owner_workspace_id,
@@ -422,6 +424,12 @@ def _search_terms(db: Session, q: str | None) -> list[Any]:
     conditions: list[Any] = []
     for word in q.split():
         branches: list[Any] = [column.ilike(f"%{word}%") for column in _SEARCH_TEXT]
+        # **재료번호 꼴이면 번호로도 찾는다.** `M-140` 처럼 패딩 없이 쳐도
+        # `M-000140` 에 닿게 보정한다 — 정확 일치라 유니크 B-tree 를 그대로 탄다
+        # (trgm 없는 ILIKE 가지를 늘리면 전 행을 훑는 함정이 있어, 등호만 더한다).
+        code_shape = re.fullmatch(r"[Mm]-?(\d{1,6})", word)
+        if code_shape is not None:
+            branches.append(Material.code == f"M-{int(code_shape.group(1)):06d}")
         # **기준정보를 먼저 찾고 그 id 로 재료를 찾는다.** 상관 서브쿼리
         # (`IN (SELECT ...)`) 로 쓰면 안 된다 — 그건 인덱스 조건이 아니라 필터로
         # 강등돼서 BitmapOr 에 못 낀다. 값이 박힌 `IN (id, ...)` 만 낀다.
@@ -1164,7 +1172,7 @@ def update_material(
 
     if "declared_properties" in data:
         # **통째로 갈아 끼운다.** 검사·단위 변환은 `declared.check` 가 한다 —
-        # 차원이 안 맞으면 거기서 막힌다(비열 자리에 열전도도 같은 것).
+        # 차원이 안 맞으면 거기서 막힌다(비열 자리에 열전도율 같은 것).
         material.declared_properties = declared.check(db, data["declared_properties"] or [])
 
     if "density" in data or "density_unit" in data:

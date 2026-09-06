@@ -417,7 +417,7 @@ describe('시험 종류에 맞는 길만 연다', () => {
       material_name: 'X',
       blocks: ['thermal'],
       values: [
-        { key: 'thermal_conductivity', label: '열전도도', value: 50, source: 'declared:literature', detail: '' },
+        { key: 'thermal_conductivity', label: '열전도율', value: 50, source: 'declared:literature', detail: '' },
         { key: 'specific_heat', label: '비열', value: 470, source: 'declared:literature', detail: '' },
         { key: 'youngs_modulus', label: '탄성계수', value: 2e11, source: 'declared:literature', detail: '' },
       ],
@@ -431,7 +431,7 @@ describe('시험 종류에 맞는 길만 연다', () => {
           help: '',
           order: 15,
           produces: [
-            { key: 'thermal_conductivity', label: '열전도도', si_unit: 'W/(m.K)', help: null },
+            { key: 'thermal_conductivity', label: '열전도율', si_unit: 'W/(m.K)', help: null },
             { key: 'specific_heat', label: '비열', si_unit: 'J/(kg.K)', help: null },
           ],
           rows: [],
@@ -441,7 +441,7 @@ describe('시험 종류에 맞는 길만 연다', () => {
     await userEvent.click(await screen.findByRole('button', { name: /선형탄성구간\(LVE\) 카드/ }))
     const said = (await screen.findByText('함께 실리는 것')).parentElement as HTMLElement
     // 값마다 표 하나 — 한 줄 글이 아니다.
-    expect(said).toHaveTextContent('열전도도50 W/(m.K)')
+    expect(said).toHaveTextContent('열전도율50 W/(m.K)')
     expect(said).toHaveTextContent('비열470 J/(kg.K)')
     // 탄성계수는 열물성 블록이 아니다 — 잰 E′ 를 덮지 않는다.
     expect(said).not.toHaveTextContent('탄성계수')

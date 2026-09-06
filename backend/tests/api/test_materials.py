@@ -1163,7 +1163,7 @@ class Test시편규격:
 class Test선언물성:
     """**시험이 주지 않는 물성을 사람이 적는다.**
 
-    탄성계수는 처리 결과에서만 왔고 열팽창계수·비열·열전도도는 자리가 아예
+    탄성계수는 처리 결과에서만 왔고 선팽창계수(CTE)·비열·열전도율은 자리가 아예
     없었다 — 그런데 인장시험이 안 주는 값들이다. 시험을 안 한 재료가 대부분인데
     그 재료로는 해석용 카드를 만들 수 없었다.
 
@@ -1242,7 +1242,7 @@ class Test선언물성:
     ) -> None:
         """**이것이 이 기능의 절반이다.**
 
-        비열 자리에 열전도도를 넣어도 숫자는 그럴듯하다 — 값은 멀쩡한데 뜻이
+        비열 자리에 열전도율을 넣어도 숫자는 그럴듯하다 — 값은 멀쩡한데 뜻이
         다르다. ADR 0013 이 *"밀도 자리에 온도를 넣어도 아무도 모른다"* 고
         적어 둔 구멍이 이 축에서는 막혀 있다.
         """
@@ -1372,7 +1372,7 @@ class Test선언물성:
             json={
                 "declared_properties": [
                     {
-                        "item": "열팽창계수",
+                        "item": "선팽창계수(CTE)",
                         "points": [{"value": 1.17e-5}],
                         "input_unit": "1/K",
                         "source": "standard",
@@ -1390,7 +1390,7 @@ class Test선언물성:
             headers=admin_headers,
         ).json()
         assert [row["item"] for row in saved["declared_properties"]] == [
-            "열팽창계수",
+            "선팽창계수(CTE)",
             "탄성계수",
         ]
 
@@ -2617,7 +2617,7 @@ class Test모르는_단위:
         # 표가 모르는 기호 — 가운뎃점.
         row.declared_properties = [
             {
-                "item": "열전도도",
+                "item": "열전도율",
                 "points": [{"temperature_k": 293.15, "value_si": 50.0}],
                 "input_unit": "W/(m·K)",
                 "source": "literature",

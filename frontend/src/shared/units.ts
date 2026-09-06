@@ -59,9 +59,9 @@ const BY_SI: Record<string, Display> = {
   // 길이가 그랬다 — mm 로 정해 두고도 여러 화면이 SI 를 보이고 있었는데,
   // 표만 봐서는 그것이 결정인지 누락인지 알 수 없었다. **적어 둔다.**
   'rad/s': { unit: 'rad/s', factor: 1, offset: 0 },
-  // 열팽창계수. 규격서·핸드북이 `1/K` 로 적는다.
+  // 선팽창계수(CTE). 규격서·핸드북이 `1/K` 로 적는다.
   '1/K': { unit: '1/K', factor: 1, offset: 0 },
-  // 비열·열전도도. 폴리머 자료가 `kJ/(kg.K)` 로도 오지만 규격서는 SI 다.
+  // 비열·열전도율. 폴리머 자료가 `kJ/(kg.K)` 로도 오지만 규격서는 SI 다.
   'J/(kg.K)': { unit: 'J/(kg.K)', factor: 1, offset: 0 },
   'W/(m.K)': { unit: 'W/(m.K)', factor: 1, offset: 0 },
 
@@ -281,7 +281,7 @@ export const DIMENSION_LABELS: Record<string, string> = {
   angular_frequency: '각주파수',
   inverse_temperature: '온도 역수',
   specific_heat: '비열',
-  thermal_conductivity: '열전도도',
+  thermal_conductivity: '열전도율',
   compliance: '컴플라이언스',
   mass: '질량',
   density: '밀도',

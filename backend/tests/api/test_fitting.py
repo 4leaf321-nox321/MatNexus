@@ -1703,7 +1703,7 @@ class Test선언물성이_덱까지:
             ready["id"],
             [
                 {
-                    "item": "열팽창계수",
+                    "item": "선팽창계수(CTE)",
                     "points": [{"value": 1.17e-05, "temperature_k": 293.15}],
                     "input_unit": "1/K",
                     "source": "standard",
@@ -1760,7 +1760,7 @@ class Test선언물성이_덱까지:
                     "reference": "A",
                 },
                 {
-                    "item": "열전도도",
+                    "item": "열전도율",
                     "points": [{"value": 45, "temperature_k": 373.15}],
                     "input_unit": "W/(m.K)",
                     "source": "standard",
@@ -1791,7 +1791,7 @@ class Test선언물성이_덱까지:
             ready["id"],
             [
                 {
-                    "item": "열전도도",
+                    "item": "열전도율",
                     "points": [{"value": 45}],
                     "input_unit": "W/(m.K)",
                     "source": "literature",
@@ -1858,7 +1858,7 @@ class Test시험_없이_카드:
                     "reference": "ASM Handbook Vol.1 p.12",
                 },
                 {
-                    "item": "열전도도",
+                    "item": "열전도율",
                     "points": [{"value": 45}],
                     "input_unit": "W/(m.K)",
                     "source": "literature",
@@ -2269,7 +2269,7 @@ class Test온도표:
             material["id"],
             [
                 {
-                    "item": "열팽창계수",
+                    "item": "선팽창계수(CTE)",
                     "points": [
                         {"value": 1.17e-05, "temperature_k": 293.15},
                         {"value": 1.42e-05, "temperature_k": 773.15},
@@ -2430,7 +2430,7 @@ class Test되짚어_찾은_것:
             material["id"],
             [
                 {
-                    "item": "열팽창계수",
+                    "item": "선팽창계수(CTE)",
                     "points": [
                         {"value": 1.17e-05, "temperature_k": 293.15},
                         {"value": 1.55e-05, "temperature_k": 873.15},
@@ -2473,7 +2473,7 @@ class Test되짚어_찾은_것:
             material["id"],
             [
                 {
-                    "item": "열팽창계수",
+                    "item": "선팽창계수(CTE)",
                     "points": [{"value": 1.17e-05, "temperature_k": 293.15}],
                     "input_unit": "1/K",
                     "source": "standard",
@@ -2564,7 +2564,7 @@ class Test되짚어_찾은_것:
                     "reference": "A",
                 },
                 {
-                    "item": "열전도도",
+                    "item": "열전도율",
                     "points": [{"value": 45}],
                     "input_unit": "W/(m.K)",
                     "source": "standard",
@@ -3303,7 +3303,11 @@ class Test단위계_만들기:
 
 class Test휴지통_재료의_카드:
     def test_지운_재료의_카드는_목록에서_빠진다(
-        self, client: TestClient, db: Session, admin_headers: dict[str, str], ready: dict[str, Any]
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        ready: dict[str, Any],
     ) -> None:
         """재료를 지웠는데 카드가 목록에 남아 「재료가 있다」 로 읽혔다(2026-09-05)."""
         from app.modules.fitting.models import PropertyCard

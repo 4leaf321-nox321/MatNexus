@@ -600,7 +600,7 @@ class LveCardSaveRequest(BaseModel):
     density: float | None = Field(default=None, gt=0)
     note: str | None = Field(default=None, max_length=2000)
     include_declared: bool = False
-    """재료에 적어 둔 열물성(열팽창·열전도도·비열)을 `thermal` 블록으로 함께 싣는다
+    """재료에 적어 둔 열물성(열팽창·열전도율·비열)을 `thermal` 블록으로 함께 싣는다
     (2026-09-05). 선형탄성구간 카드 한 장으로 진동·열응력 해석이 돌게 — 따로 재료 기본
     정보 카드를 만들어 둘을 이어 붙이지 않아도 된다. 탄성 블록의 E′ 는 그대로다."""
 

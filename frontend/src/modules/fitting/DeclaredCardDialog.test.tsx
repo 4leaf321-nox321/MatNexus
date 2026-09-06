@@ -46,7 +46,7 @@ const BLOCKS = [
     help: null,
     in_deck: true,
     produces: [
-      { key: 'thermal_conductivity', label: '열전도도', si_unit: 'W/(m.K)', help: null },
+      { key: 'thermal_conductivity', label: '열전도율', si_unit: 'W/(m.K)', help: null },
     ],
     rows: [],
   },

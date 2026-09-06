@@ -19,7 +19,7 @@ from matcore.units import SI_UNITS
 
 class Test물성_매핑:
     def test_declared_자리는_기본_물성_항목에_실재한다(self) -> None:
-        """개명(열전도도→열전도율 등)이 확정되면 기본 목록과 이 표를 **함께**
+        """개명(열전도율→열전도율 등)이 확정되면 기본 목록과 이 표를 **함께**
         바꿔야 한다 — 한쪽만 바꾸면 여기서 걸린다."""
         builtin = {value for value, *_ in BUILTIN_PROPERTY_ITEMS}
         declared = {

@@ -45,7 +45,7 @@ const ITEMS = [
     scales: [],
   },
   {
-    item: '열전도도',
+    item: '열전도율',
     dimension: 'thermal_conductivity',
     si_unit: 'W/(m.K)',
     symbol: 'k',

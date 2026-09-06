@@ -177,11 +177,11 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
                 <div className="truncate">
                   <RecordName name={material.record_name} />
                 </div>
-                {material.alias && (
-                  <div className="text-muted-foreground truncate text-xs">
-                    {material.alias}
-                  </div>
-                )}
+                {/* 번호는 불변 손잡이 — 이름이 개명돼도 이걸로 찾는다. */}
+                <div className="text-muted-foreground truncate text-xs">
+                  {material.code}
+                  {material.alias ? ` · ${material.alias}` : ''}
+                </div>
               </Link>
             )
           })}
