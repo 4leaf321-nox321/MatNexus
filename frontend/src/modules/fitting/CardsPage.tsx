@@ -257,7 +257,12 @@ function Row({
             비어 있으면 `· · 시편 0개` 로 보이는데, 그것은 "시험이 지워졌다" 로
             읽힌다(ADR 0016). */}
         {card.test_type_key === null ? (
-          <span className="text-amber-700 dark:text-amber-500">시험 없음 · 적어 둔 값</span>
+          <span className="text-amber-700 dark:text-amber-500">
+            시험 없음 · 적어 둔 값
+            {/* 지어낸 소성 표가 실렸다는 사실은 목록에서도 보여야 한다 —
+                열어 봐야 아는 표기는 표기가 아니다. */}
+            {Boolean(card.source.synthetic_plastic) && ' · 합성 소성'}
+          </span>
         ) : (
           <>
             {card.test_type_key} · {card.orientation} · 시편{' '}

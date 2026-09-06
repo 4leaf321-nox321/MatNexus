@@ -7031,6 +7031,7 @@ export interface components {
             blocks: string[];
             /** Material Name */
             material_name: string;
+            synthetic?: components["schemas"]["SyntheticPlasticOut"] | null;
             /** Values */
             values: components["schemas"]["InheritedValueOut"][];
         };
@@ -7045,6 +7046,10 @@ export interface components {
          *     **적합이 없으므로 식도 표도 없다.** 여기서 나오는 카드는 `elastic` 과
          *     `thermal` 블록만 든다 — 소성 표가 필요한 형식은 `available_formats` 에서
          *     저절로 빠진다(렌더러가 `Need` 로 선언한다).
+         *
+         *     예외가 `synthesize_plastic` 이다 — 선언 스칼라(항복·인장·연신율)로 소성
+         *     표를 **지어** 싣는다. 사람이 켜야 켜지고, 카드 근거와 덱 각주에
+         *     「합성 — 실측이 아니다」 가 반드시 남는다.
          */
         DeclaredCardSaveRequest: {
             /** Density */
@@ -7060,6 +7065,11 @@ export interface components {
             note?: string | null;
             /** Poisson Ratio */
             poisson_ratio?: number | null;
+            /**
+             * Synthesize Plastic
+             * @default false
+             */
+            synthesize_plastic: boolean;
         };
         /** DeclaredPointIn */
         DeclaredPointIn: {
@@ -11620,6 +11630,25 @@ export interface components {
             temperature_k: number;
         };
         /**
+         * SyntheticPlasticOut
+         * @description 합성 소성 표의 미리보기 — 켜기 전에 무엇이 지어지는지 안다.
+         */
+        SyntheticPlasticOut: {
+            /** Model */
+            model?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Ok */
+            ok: boolean;
+            /**
+             * Points
+             * @default 0
+             */
+            points: number;
+            /** Why */
+            why?: string | null;
+        };
+        /**
          * SystemAdminRequest
          * @description 시스템 관리자 권한을 주거나 뺀다.
          *
@@ -13999,6 +14028,7 @@ export interface operations {
         parameters: {
             query: {
                 material_id: string;
+                synthesize_plastic?: boolean;
             };
             header?: never;
             path?: never;

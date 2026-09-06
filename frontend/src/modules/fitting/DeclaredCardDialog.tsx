@@ -72,6 +72,7 @@ export function DeclaredCardDialog({
   }, [specs.data])
 
   const [label, setLabel] = useState('')
+  const [synthesize, setSynthesize] = useState(false)
   const [poisson, setPoisson] = useState('')
   const [density, setDensity] = useState('')
   const [note, setNote] = useState('')
@@ -81,6 +82,7 @@ export function DeclaredCardDialog({
   useEffect(() => {
     if (open) {
       setLabel('재료 기본 정보')
+      setSynthesize(false)
       setPoisson('')
       setDensity('')
       setNote('')
@@ -95,6 +97,7 @@ export function DeclaredCardDialog({
       const card = await fittingApi.createDeclaredCard({
         material_id: materialId,
         label,
+        synthesize_plastic: synthesize,
         poisson_ratio: poisson === '' ? null : Number(poisson),
         density: densityToSi(density),
         note: note || null,
@@ -143,6 +146,35 @@ export function DeclaredCardDialog({
             </ul>
           )}
         </div>
+
+        {/* 합성 소성 표 — **지어낸 곡선은 지어냈다고 말한다.** 켜기 전에 무엇이
+            지어지는지(모델·점 수) 서버가 말해 주고, 카드 근거와 덱 각주에
+            「합성 — 실측이 아니다」 가 박힌다. */}
+        {found.data?.synthetic && (
+          <div className="rounded-md border border-dashed p-3 text-sm">
+            {found.data.synthetic.ok ? (
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="accent-primary mt-0.5 size-4"
+                  checked={synthesize}
+                  onChange={(event) => setSynthesize(event.target.checked)}
+                />
+                <span>
+                  소성 곡선 합성 — <b className="text-amber-700 dark:text-amber-500">실측 아님</b>
+                  <span className="text-muted-foreground block text-xs">
+                    {found.data.synthetic.model} · {found.data.synthetic.points}점.{' '}
+                    {found.data.synthetic.note}
+                  </span>
+                </span>
+              </label>
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                소성 곡선 합성 불가 — {found.data.synthetic.why}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">

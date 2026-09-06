@@ -165,4 +165,35 @@ describe('재료 기본 정보로 카드 만들기', () => {
     await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
     expect(createDeclaredCard.mock.calls[0][0]).toMatchObject({ poisson_ratio: 0.29 })
   })
+
+  it('합성 스위치 — 켜면 payload 에 실리고, 실측 아님이 보인다', async () => {
+    declaredPreview.mockResolvedValue({
+      ...PREVIEW,
+      synthetic: {
+        ok: true,
+        model: 'elastic + Hollomon hardening (n=0.150)',
+        note: '합성한 근사 곡선 — 실측이 아니다.',
+        points: 49,
+        why: null,
+      },
+    })
+    const user = userEvent.setup()
+    render(<DeclaredCardDialog materialId="m-1" open onClose={() => {}} onSaved={() => {}} />)
+    expect(await screen.findByText('실측 아님')).toBeInTheDocument()
+    expect(screen.getByText(/Hollomon/)).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: '만들기' }))
+    await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
+    expect(createDeclaredCard.mock.calls[0][0]).toMatchObject({ synthesize_plastic: true })
+  })
+
+  it('합성 불가면 이유가 보이고 스위치가 없다', async () => {
+    declaredPreview.mockResolvedValue({
+      ...PREVIEW,
+      synthetic: { ok: false, model: null, note: null, points: 0, why: '항복강도가 없습니다.' },
+    })
+    render(<DeclaredCardDialog materialId="m-1" open onClose={() => {}} onSaved={() => {}} />)
+    expect(await screen.findByText(/합성 불가/)).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
 })

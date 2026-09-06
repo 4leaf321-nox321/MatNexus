@@ -63,6 +63,7 @@ from app.modules.fitting.schemas import (
     PropertyCardUpdateRequest,
     RateCardSaveRequest,
     ResampleMethodOut,
+    SyntheticPlasticOut,
     UnitSystemBaseUnitsOut,
     UnitSystemCreate,
     UnitSystemDeriveIn,
@@ -86,7 +87,18 @@ from app.shared.permissions import (
     resolve_owner_workspace,
     visible_owner_clause,
 )
-from matcore import cards, curves, export, fitting, prony, resample, runtime, statistics, units
+from matcore import (
+    cards,
+    curves,
+    export,
+    fitting,
+    prony,
+    resample,
+    runtime,
+    statistics,
+    synth,
+    units,
+)
 from matcore.export import scan, template
 from matcore.export.systems import UnitSystem
 from matcore.fitting import hyperelastic
@@ -493,6 +505,48 @@ def _declared_blocks(
         if one.value is not None
     ]
     return elastic, thermal, found
+
+
+#: 합성 소성 표의 재료가 되는 선언 항목들 — 기준정보 이름(2026-09-06 개명 후).
+SYNTH_ITEMS = ("항복강도", "인장강도", "연신율")
+
+
+def _synthetic_plastic(
+    material: Material, elastic: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[str]] | str:
+    """선언 스칼라로 소성 표를 짓는다 — 못 지으면 **이유 문자열**을 돌려준다.
+
+    E 는 elastic 블록에 이미 선 값(선언 탄성계수)을 그대로 쓴다 — 합성이 다른
+    E 를 쓰면 카드 안에서 탄성과 소성이 서로 다른 재료가 된다.
+    """
+    E = elastic.get("youngs_modulus")
+    if not isinstance(E, (int, float)):
+        return "탄성계수가 없습니다 — 선언 물성에 먼저 적으세요."
+    scalars = {item: _declared(material, item) for item in SYNTH_ITEMS}
+    curve = synth.synthesize(
+        float(E),
+        scalars["항복강도"].value,
+        scalars["인장강도"].value,
+        scalars["연신율"].value,
+    )
+    if curve is None:
+        return "항복강도(또는 인장강도)가 없습니다 — 지어낼 근거가 없습니다."
+    if not curve.table_rows:
+        return f"소성 표가 안 나오는 재료입니다({curve.model})."
+    notes = [
+        f"합성 소성 표 — 실측이 아니다. 모델: {curve.model}",
+        f"합성 주의: {curve.note}",
+    ]
+    for item in SYNTH_ITEMS:
+        one = scalars[item]
+        if one.value is None:
+            continue
+        row = _declared_row(material, item) or {}
+        reference = str(row.get("reference") or "").strip()
+        notes.append(
+            f"합성 입력 {item}: {one.source}" + (f" — {reference}" if reference else "")
+        )
+    return [dict(one) for one in curve.table_rows], notes
 
 
 def _declared_table(
@@ -1411,6 +1465,7 @@ def deck_keys(
 @router.get("/cards/declared/preview", response_model=DeclaredCardPreviewOut)
 def preview_declared_card(
     material_id: uuid.UUID,
+    synthesize_plastic: bool = Query(default=False),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> DeclaredCardPreviewOut:
@@ -1422,13 +1477,24 @@ def preview_declared_card(
     """
     material = _visible_material(db, user, material_id)
     elastic, thermal, found = _declared_blocks(db, material, None, None)
+    synthetic: SyntheticPlasticOut | None = None
+    made = _synthetic_plastic(material, elastic)
+    if isinstance(made, str):
+        synthetic = SyntheticPlasticOut(ok=False, why=made)
+    else:
+        rows, notes = made
+        synthetic = SyntheticPlasticOut(
+            ok=True, model=notes[0].split("모델: ", 1)[-1], note=notes[1], points=len(rows)
+        )
     return DeclaredCardPreviewOut(
         material_name=material.record_name,
         values=found,
         blocks=[
             *(["elastic"] if elastic else []),
             *(["thermal"] if thermal else []),
+            *(["table"] if synthesize_plastic and synthetic.ok else []),
         ],
+        synthetic=synthetic,
     )
 
 
@@ -1467,6 +1533,18 @@ def create_declared_card(
     elastic_rows = _declared_table(material, ELASTIC_COLUMNS, constants=_constants(elastic))
     thermal_rows = _declared_table(material, THERMAL_COLUMNS)
 
+    synthetic_rows: list[dict[str, Any]] = []
+    synthetic_notes: list[str] = []
+    if payload.synthesize_plastic:
+        made_synth = _synthetic_plastic(material, elastic)
+        if isinstance(made_synth, str):
+            # 켰는데 못 지으면 조용히 빼지 않는다 — 만들어진 카드가 「소성까지
+            # 있는 카드」 인 줄 알고 쓰게 된다.
+            raise AppError(
+                "MNX-FITTING-0035", f"소성 표를 합성할 수 없습니다: {made_synth}", status=422
+            )
+        synthetic_rows, synthetic_notes = made_synth
+
     if not elastic and not thermal:
         raise AppError(
             "MNX-FITTING-0016",
@@ -1489,8 +1567,20 @@ def create_declared_card(
             # **이 한 줄이 이 카드의 정체다.** 덱만 받은 사람이 표본 0 을 보고
             # "시험이 지워졌나" 를 묻지 않게 문장으로 적는다.
             "declared_only": True,
+            **(
+                {
+                    "synthetic_plastic": {
+                        "model": synthetic_notes[0].split("모델: ", 1)[-1],
+                        "note": synthetic_notes[1],
+                        "points": len(synthetic_rows),
+                    }
+                }
+                if synthetic_rows
+                else {}
+            ),
             "notes": [
                 "시험에서 나온 값이 하나도 없습니다 — 재료에 적어 둔 값으로만 만들었습니다.",
+                *synthetic_notes,
                 *[f"{item.label}: {item.detail}" for item in found if item.detail],
             ],
             "runtime": runtime.manifest(),
@@ -1498,8 +1588,9 @@ def create_declared_card(
         blocks={
             **_temperature_aware("elastic", elastic, elastic_rows),
             **_temperature_aware("thermal", thermal, thermal_rows),
+            **({"table": {"rows": synthetic_rows}} if synthetic_rows else {}),
         },
-        point_count=0,
+        point_count=len(synthetic_rows),
         note=payload.note,
         created_by_id=user.id,
     )
@@ -2804,7 +2895,11 @@ def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
     # **네킹을 안 잘랐다는 사실은 덱까지 따라가야 한다.** 소성 표만 봐서는
     # 구별할 방법이 없다 — 점이 나란히 있을 뿐이다.
     provenance.extend(
-        line for line in item.source.get("notes", []) if str(line).startswith("네킹을 안 자른")
+        line
+        for line in item.source.get("notes", [])
+        # 합성 소성 표라는 사실도 덱까지 따라가야 한다 — 표만 봐서는 실측과
+        # 구별이 안 된다(점이 나란히 있을 뿐이다).
+        if str(line).startswith(("네킹을 안 자른", "합성"))
     )
     # 값마다 어디서 왔는지 한 줄씩. 없는 값은 애초에 카드에 없다.
     thermal = cards.values_of(item.blocks.get("thermal"))

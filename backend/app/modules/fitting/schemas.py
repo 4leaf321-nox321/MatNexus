@@ -525,6 +525,19 @@ class DeclaredCardPreviewOut(BaseModel):
     """실릴 값들. 선언 물성과 물려받은 푸아송비·밀도가 함께 온다."""
     blocks: list[str]
     """생길 블록 이름. 비면 카드를 만들 수 없다."""
+    synthetic: SyntheticPlasticOut | None = None
+    """소성 표를 합성하면 무엇이 지어지는가 — 화면이 스위치 옆에 보여 준다."""
+
+
+class SyntheticPlasticOut(BaseModel):
+    """합성 소성 표의 미리보기 — 켜기 전에 무엇이 지어지는지 안다."""
+
+    ok: bool
+    model: str | None = None
+    note: str | None = None
+    points: int = 0
+    why: str | None = None
+    """ok=False 인 이유 — 근거가 모자라면 지어내지 않고 이것을 말한다."""
 
 
 class DeclaredCardSaveRequest(BaseModel):
@@ -537,9 +550,14 @@ class DeclaredCardSaveRequest(BaseModel):
     **적합이 없으므로 식도 표도 없다.** 여기서 나오는 카드는 `elastic` 과
     `thermal` 블록만 든다 — 소성 표가 필요한 형식은 `available_formats` 에서
     저절로 빠진다(렌더러가 `Need` 로 선언한다).
+
+    예외가 `synthesize_plastic` 이다 — 선언 스칼라(항복·인장·연신율)로 소성
+    표를 **지어** 싣는다. 사람이 켜야 켜지고, 카드 근거와 덱 각주에
+    「합성 — 실측이 아니다」 가 반드시 남는다.
     """
 
     material_id: uuid.UUID
+    synthesize_plastic: bool = False
     label: str = Field(min_length=1, max_length=120)
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
     """비우면 재료에 적힌 값을 쓴다. **없으면 없는 채로 둔다.**"""

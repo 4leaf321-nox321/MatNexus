@@ -4798,6 +4798,16 @@
             "title": "Material Name",
             "type": "string"
           },
+          "synthetic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyntheticPlasticOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "values": {
             "items": {
               "$ref": "#/components/schemas/InheritedValueOut"
@@ -4815,7 +4825,7 @@
         "type": "object"
       },
       "DeclaredCardSaveRequest": {
-        "description": "**시험 없이** 선언 물성만으로 카드를 만든다(ADR 0016).\n\n시험이 하나도 없는 재료는 대표 곡선이 없어서 `POST /cards` 를 탈 수 없었다.\n그런데 탄성계수·열물성은 인장시험이 주지 않는 값이고, 그것만으로도 열해석·\n선형 정적 해석의 덱은 나간다.\n\n**적합이 없으므로 식도 표도 없다.** 여기서 나오는 카드는 `elastic` 과\n`thermal` 블록만 든다 — 소성 표가 필요한 형식은 `available_formats` 에서\n저절로 빠진다(렌더러가 `Need` 로 선언한다).",
+        "description": "**시험 없이** 선언 물성만으로 카드를 만든다(ADR 0016).\n\n시험이 하나도 없는 재료는 대표 곡선이 없어서 `POST /cards` 를 탈 수 없었다.\n그런데 탄성계수·열물성은 인장시험이 주지 않는 값이고, 그것만으로도 열해석·\n선형 정적 해석의 덱은 나간다.\n\n**적합이 없으므로 식도 표도 없다.** 여기서 나오는 카드는 `elastic` 과\n`thermal` 블록만 든다 — 소성 표가 필요한 형식은 `available_formats` 에서\n저절로 빠진다(렌더러가 `Need` 로 선언한다).\n\n예외가 `synthesize_plastic` 이다 — 선언 스칼라(항복·인장·연신율)로 소성\n표를 **지어** 싣는다. 사람이 켜야 켜지고, 카드 근거와 덱 각주에\n「합성 — 실측이 아니다」 가 반드시 남는다.",
         "properties": {
           "density": {
             "anyOf": [
@@ -4863,6 +4873,11 @@
               }
             ],
             "title": "Poisson Ratio"
+          },
+          "synthesize_plastic": {
+            "default": false,
+            "title": "Synthesize Plastic",
+            "type": "boolean"
           }
         },
         "required": [
@@ -16623,6 +16638,58 @@
         "title": "SweepOut",
         "type": "object"
       },
+      "SyntheticPlasticOut": {
+        "description": "합성 소성 표의 미리보기 — 켜기 전에 무엇이 지어지는지 안다.",
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "points": {
+            "default": 0,
+            "title": "Points",
+            "type": "integer"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "SyntheticPlasticOut",
+        "type": "object"
+      },
       "SystemAdminRequest": {
         "description": "시스템 관리자 권한을 주거나 뺀다.\n\n**한 엔드포인트에 참·거짓을 실어 보낸다.** 정지/활성처럼 둘로 가르지 않는\n이유는, 이 값이 상태가 아니라 **권한 한 칸**이기 때문이다 — 화면이 지금 값을\n보고 반대를 보내면 되고, 「지정」과 「해제」가 따로 있으면 지금 값을 모르는\n쪽이 둘 중 하나를 골라야 한다.",
         "properties": {
@@ -21662,6 +21729,16 @@
               "format": "uuid",
               "title": "Material Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "synthesize_plastic",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Synthesize Plastic",
+              "type": "boolean"
             }
           }
         ],
