@@ -29,9 +29,13 @@ function Write-Log([string]$m) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $m
 
 $venvRoot = $AppPath + '_venvs'
 
-# 지금은 backend 하나뿐이지만 목록으로 둔다. 워커를 별도 venv 로 분리하거나
-# MCP 서버가 붙으면 여기에 이름만 더하면 된다.
-$components = @('backend')
+# 워커는 backend venv 를 함께 쓴다. **MCP 서버만 따로다** — SDK 가 언제든
+# 프레임워크 판을 올릴 수 있고(ReportArchive 는 그것으로 FastAPI 와 충돌했다),
+# 그때 앱이 인질이 되면 안 된다.
+#
+# **MCP 는 없어도 된다.** requirements.txt 가 없으면 위 루프가 건너뛰므로,
+# 이 서버를 안 쓰는 설치에서는 아무 일도 일어나지 않는다.
+$components = @('backend', 'mcp_server')
 $synced = @()
 
 foreach ($component in $components) {

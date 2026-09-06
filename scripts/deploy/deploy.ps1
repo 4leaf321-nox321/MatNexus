@@ -443,6 +443,7 @@ Write-Host '시작 — 창 두 개:'
 Write-Host "  cd '$AppPath'"
 Write-Host '  .\run_server.ps1     # 창 1'
 Write-Host '  .\run_worker.ps1     # 창 2'
+Write-Host '  .\run_mcp.ps1        # 창 3 (AI 연결 — 안 쓰면 생략)'
 Write-Host ''
 # **워커도 반드시 다시 띄운다.** 워커는 코드를 다시 읽지 않는다 — 옛 워커가 남아
 # 있으면 새 작업 종류를 몰라 실패로 닫는다(2026-08-28 실측: 배포 전 워커가
