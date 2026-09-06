@@ -42,6 +42,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Account Summary
+         * @description 활성 시스템 관리자가 몇 명인가. 1명이면 계정 화면이 안내 한 줄을 띄운다.
+         */
+        get: operations["account_summary_api_accounts_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{account_id}": {
         parameters: {
             query?: never;
@@ -361,6 +381,224 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/ashby": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ashby
+         * @description 물성-물성 산점도 — 두 축의 수치 대표값을 다 가진 재료만 점이 된다.
+         */
+        get: operations["ashby_api_catalog_ashby_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/axes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Axes
+         * @description Ashby 축 후보 — 수치값을 가진 재료 수가 많은 물성부터.
+         *
+         *     재료 5종 미만인 축은 뺀다 — 점 서넛으로는 지도가 아니라 소음이다.
+         */
+        get: operations["axes_api_catalog_axes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compare
+         * @description 재료 나란히 보기 — 물성마다 각 재료의 대표값 한 줄.
+         *
+         *     **후보 수를 함께 준다.** 칸의 숫자가 N개 중 하나라는 사실 자체가 사용자가
+         *     알아야 할 정보다(상세 화면과 같은 원칙).
+         */
+        get: operations["compare_api_catalog_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coverage
+         * @description 계통-도메인 값 수 격자 — 이 카탈로그가 어디에 두껍고 어디가 비었나.
+         */
+        get: operations["coverage_api_catalog_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/deck/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deck Build
+         * @description 확정된 목록 → LS-DYNA 덱 한 파일. 쓰인 값마다 출처 각주가 $ 주석으로
+         *     들어간다. 모자란 재료는 거르지 않고 알린다.
+         */
+        post: operations["deck_build_api_catalog_deck_build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/deck/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deck Match
+         * @description BOM 붙여넣기 → 줄마다 문헌 재료 후보. **고르는 것은 사람이다.**
+         */
+        post: operations["deck_match_api_catalog_deck_match_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/links/{material_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Link
+         * @description 이 사내 재료의 문헌 연결. **없어도 200 이다** — 비어 있는 상태가 정상이라
+         *     404 로 만들면 화면이 오류와 「아직 없음」 을 구별 못 한다.
+         */
+        get: operations["get_link_api_catalog_links__material_id__get"];
+        /**
+         * Put Link
+         * @description 연결하거나 바꾼다 — 재료당 하나라 다시 걸면 교체다.
+         *
+         *     권한은 재료 편집과 같다(부서 관리자, 전역은 시스템 관리자) — 연결이 채택의
+         *     기본 대상이 되므로 아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다.
+         */
+        put: operations["put_link_api_catalog_links__material_id__put"];
+        post?: never;
+        /** Delete Link */
+        delete: operations["delete_link_api_catalog_links__material_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Materials
+         * @description 카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
+         */
+        get: operations["list_materials_api_catalog_materials_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/materials/{material_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Material
+         * @description 재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.
+         *
+         *     **후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을
+         *     대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.
+         */
+        get: operations["get_material_api_catalog_materials__material_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summary
+         * @description 전체 규모와 패싯 분포 — 목록 화면의 필터 축이 여기서 나온다.
+         */
+        get: operations["summary_api_catalog_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/blocks": {
         parameters: {
             query?: never;
@@ -544,6 +782,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/inherited": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inherited Values
+         * @description 카드가 빈칸으로 두면 **물려받을** 푸아송비·밀도.
+         *
+         *     모달이 「재료에 있으면 비워 두세요」 라고만 하면 사람은 그 값이 무엇인지 모른
+         *     채 비운다(2026-09-05). 카드를 만드는 계산과 같은 함수(`_inherit_*`)가 낸다 —
+         *     화면이 재료 API 를 읽어 나름대로 판정하면 규칙이 두 벌이 된다.
+         *
+         *     밀도는 재료의 **지우지 않은 시료 전부**를 본다. 묶음으로 만드는 카드는 그
+         *     묶음의 시료만 보므로, 로트마다 밀도가 다른 재료에서는 여기의 「시료마다
+         *     다릅니다」 가 묶음 쪽에서는 한 값으로 정해질 수 있다 — 그때는 저장 응답의
+         *     근거가 정본이다.
+         */
+        get: operations["inherited_values_api_fitting_cards_inherited_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/lve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Lve Card
+         * @description DMA 변형률 스윕의 선형 구간 탄성률 카드 — **통계 묶음에서.**
+         *
+         *     「선형점탄성 탄성률」 단계가 낸 E′ 와 한계 변형률을 시편들에서 평균한다. 전에는
+         *     이 값이 처리 결과에서 끝났다 — 카드로 나갈 자리가 없어서 소변형·진동 해석에 쓸
+         *     탄성계수를 사람이 손으로 옮겨 적었다.
+         *
+         *     **주파수·온도를 함께 싣는다.** 스윕은 한 주파수·한 온도에서 도니까 그 값은 거기서만
+         *     유효하다. 채택 결과의 열에서 평균을 읽는다.
+         */
+        post: operations["create_lve_card_api_fitting_cards_lve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/rate-dependent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Rate Card
+         * @description 속도 의존 소성 카드 — **속도별 묶음에서.**
+         *
+         *     `table` 에는 기준 속도(가장 느린 묶음)의 곡선을, `rate_table` 에는 속도 전부를
+         *     싣는다. 그래서 속도를 안 받는 솔버(보통 Abaqus·OpenRadioss)는 기준 곡선으로
+         *     덱을 내고, 받는 솔버(Abaqus 속도 의존)는 표 전부를 낸다 — 카드 하나가 두 길을
+         *     다 연다.
+         *
+         *     탄성계수는 구성원의 채택 결과가 낸 `youngs_modulus` 의 평균이고, 그것이 없으면
+         *     재료에 적어 둔 값이다. **어느 쪽인지 출처를 남긴다.**
+         */
+        post: operations["create_rate_card_api_fitting_cards_rate_dependent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/viscoelastic": {
         parameters: {
             query?: never;
@@ -606,6 +928,26 @@ export interface paths {
          *     적합을 다시 돌리게 하는 것은 그 원칙이 지키려던 것과 무관하다.
          */
         patch: operations["update_card_api_fitting_cards__card_id__patch"];
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}/deck-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deck Keys
+         * @description 이 카드로 덱을 그릴 때 집히는 값과 표. **미리보기와 같은 덱, 같은 조회 규칙.**
+         */
+        get: operations["deck_keys_api_fitting_cards__card_id__deck_keys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/fitting/cards/{card_id}/deprecate": {
@@ -948,8 +1290,72 @@ export interface paths {
          */
         get: operations["list_unit_systems_api_fitting_unit_systems_get"];
         put?: never;
+        /**
+         * Create Unit System
+         * @description 단위계를 만든다 — 시스템 관리자. **덱의 계는 전사가 같은 것을 봐야 한다.**
+         */
+        post: operations["create_unit_system_api_fitting_unit_systems_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/unit-systems/base-units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unit System Base Units
+         * @description 계를 만들 때 고를 기본 단위. 표가 정본이라 화면이 적어 두지 않는다.
+         */
+        get: operations["unit_system_base_units_api_fitting_unit_systems_base_units_get"];
+        put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/unit-systems/derive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Derive Unit System
+         * @description 저장하지 않고 **무엇이 어떻게 적힐지** 먼저 보인다 — 응력이 GPa 인지 MPa 인지.
+         */
+        post: operations["derive_unit_system_api_fitting_unit_systems_derive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/unit-systems/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Unit System
+         * @description 사용자가 만든 계만. 이미 받은 덱은 파일 머리의 선언이 정본이라 지워도 안 흔들린다.
+         */
+        delete: operations["delete_unit_system_api_fitting_unit_systems__key__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1125,6 +1531,33 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Group
+         * @description 묶음을 지운다. **카드가 이 묶음에서 나왔으면 못 지운다** — 카드의 근거가 사라진다.
+         *
+         *     카드는 근거를 스냅샷으로 들고 있지만(`source.group_result_id`), 「어느 묶음에서
+         *     나왔나」 를 되짚는 길은 이 행뿐이다. 카드를 먼저 지우면 지울 수 있다.
+         */
+        delete: operations["delete_group_api_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Note
+         * @description 메모만 고친다. **값은 안 바뀐다** — 묶음은 그때 계산의 스냅샷이다(2026-09-05).
+         */
+        patch: operations["update_note_api_groups__group_id__patch"];
         trace?: never;
     };
     "/api/guide/assets": {
@@ -1715,6 +2148,66 @@ export interface paths {
          *     셋을 물으면 한 화면에 수백 질의가 나간다. 상세에서만 한 번 부른다.
          */
         get: operations["material_summary_api_materials__material_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/metrology/by-property/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * By Property
+         * @description 물성 하나의 측정 지도 — 기법별로 묶고, 보유 장비를 앞세운다.
+         */
+        get: operations["by_property_api_metrology_by_property__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/metrology/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coverage
+         * @description 카탈로그 정의 전수 대비 측정 능력 — 빈 칸(gaps)도 그대로 보인다.
+         */
+        get: operations["coverage_api_metrology_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/metrology/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summary
+         * @description 규모 한눈 — 장비 수와 보유 수를 **반드시 갈라** 센다.
+         */
+        get: operations["summary_api_metrology_summary_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2464,6 +2957,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/server/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Queue
+         * @description 큐 현황과 실패 목록. 도는 것은 문제없다 — 보이지 않는 것이 문제였다(2026-09-05).
+         */
+        get: operations["queue_api_server_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/queue/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry
+         * @description 실패한 작업을 처음부터 다시. 워커가 다음 틱에 집어 간다.
+         */
+        post: operations["retry_api_server_queue__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/specimens": {
         parameters: {
             query?: never;
@@ -2688,9 +3221,11 @@ export interface paths {
          * Analysis Spec Gap
          * @description 선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**
          *
-         *     잇는 열쇠는 **이름**이다 — 선언은 기준정보 항목(`탄성계수`)이고 잰 값은 처리
-         *     결과의 라벨(`탄성계수`)이라 코드가 겹치지 않는다. 이름이 다르면 못 견주므로
-         *     그 항목을 `unmatched_items` 로 돌려준다 — 숨기면 「차이가 없다」 로 읽힌다.
+         *     잇는 열쇠는 기준정보 항목의 `measured_key` 다 — 선언은 항목 이름(`탄성계수`)이고
+         *     잰 값은 처리 결과의 스칼라 키(`youngs_modulus`)라, 항목이 「우리가 재는 값」 으로
+         *     그 키를 들고 있다. 전에는 라벨 문자열로 이었는데(2026-09-05 점검) 용어를 개명하거나
+         *     플러그인이 라벨을 바꾸면 오류 없이 「매칭 안 됨」 으로 빠졌다. 키가 없는 항목은
+         *     전처럼 라벨로 잇는다 — 못 견주는 항목은 `unmatched_items` 로 돌려준다.
          */
         get: operations["analysis_spec_gap_api_statistics_analysis_spec_gap_get"];
         put?: never;
@@ -4491,6 +5026,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{slug}/merge-conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Merge Conflicts
+         * @description 합치면 자리를 다투게 되는 이름 — **누르기 전에 아는 것**이 이 저장소의 무늬다.
+         */
+        get: operations["merge_conflicts_api_workspaces__slug__merge_conflicts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{slug}/move": {
         parameters: {
             query?: never;
@@ -4596,6 +5151,15 @@ export interface components {
             status: string;
         };
         /**
+         * AccountSummaryOut
+         * @description 활성 시스템 관리자 수. **1명이면 그 사람이 잠기는 순간 복구 경로가 서버 콘솔뿐이다**
+         *     (2026-08 말에 실제로 겪었다). 목록은 쪽 단위라 화면이 세면 틀린다 — 서버가 센다.
+         */
+        AccountSummaryOut: {
+            /** Active System Admins */
+            active_system_admins: number;
+        };
+        /**
          * AliasOut
          * @description 같은 단위의 다른 표기. **장비마다 다르게 적는다.**
          *
@@ -4690,6 +5254,44 @@ export interface components {
             /** Workspace Slug */
             workspace_slug?: string | null;
         };
+        /** AshbyAxisOut */
+        AshbyAxisOut: {
+            /** Domain */
+            domain: string;
+            /** Key */
+            key: string;
+            /** Material Count */
+            material_count: number;
+            /** Name */
+            name: string;
+            /** Unit */
+            unit: string | null;
+        };
+        /** AshbyOut */
+        AshbyOut: {
+            /** Points */
+            points: components["schemas"]["AshbyPointOut"][];
+            /** X Unit */
+            x_unit: string | null;
+            /** Y Unit */
+            y_unit: string | null;
+        };
+        /** AshbyPointOut */
+        AshbyPointOut: {
+            /** Group */
+            group: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** AssetOut */
         AssetOut: {
             /** Content Type */
@@ -4781,6 +5383,24 @@ export interface components {
             /** Workspace Id */
             workspace_id: string | null;
         };
+        /**
+         * BackupOut
+         * @description 마지막 백업이 언제였나. **안 보이면 없는 것과 같다**(2026-09-05).
+         */
+        BackupOut: {
+            /** Age Hours */
+            age_hours: number | null;
+            /** Configured */
+            configured: boolean;
+            /** Last At */
+            last_at: string | null;
+            /** Path */
+            path: string | null;
+            /** Problem */
+            problem: string | null;
+            /** Stale */
+            stale: boolean;
+        };
         /** BatchItemOut */
         BatchItemOut: {
             /**
@@ -4844,6 +5464,8 @@ export interface components {
          *     마이그레이션 0·화면 0 으로 만드는 자리다.
          */
         BlockSpecOut: {
+            /** Curve */
+            curve?: string[] | null;
             /** Help */
             help: string;
             /** In Deck */
@@ -5374,6 +5996,262 @@ export interface components {
              */
             include_test_runs: boolean;
         };
+        /**
+         * CatalogCompareCellOut
+         * @description 비교 표의 칸 하나 — 그 재료의 그 물성 대표값. 없으면 None 칸.
+         */
+        CatalogCompareCellOut: {
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * N Candidates
+             * @default 0
+             */
+            n_candidates: number;
+            /** Quality Tier */
+            quality_tier?: number | null;
+            /** Value Num */
+            value_num?: number | null;
+            /** Value Text */
+            value_text?: string | null;
+        };
+        /** CatalogCompareOut */
+        CatalogCompareOut: {
+            /** Materials */
+            materials: components["schemas"]["CatalogMaterialOut"][];
+            /** Rows */
+            rows: components["schemas"]["CatalogCompareRowOut"][];
+        };
+        /** CatalogCompareRowOut */
+        CatalogCompareRowOut: {
+            /** Cells */
+            cells: components["schemas"]["CatalogCompareCellOut"][];
+            /** Domain */
+            domain: string;
+            /** Name */
+            name: string;
+            /** Property Key */
+            property_key: string;
+            /** Symbol */
+            symbol: string | null;
+            /** Unit */
+            unit: string | null;
+        };
+        /**
+         * CatalogCoverageOut
+         * @description 계통-도메인 값 수 격자. 빈 계통은 「미분류」("") 로 온다.
+         */
+        CatalogCoverageOut: {
+            /** Cells */
+            cells: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Domains */
+            domains: string[];
+            /** Subsystems */
+            subsystems: string[];
+        };
+        /** CatalogLinkIn */
+        CatalogLinkIn: {
+            /**
+             * Catalog Material Id
+             * Format: uuid
+             */
+            catalog_material_id: string;
+        };
+        /**
+         * CatalogLinkOut
+         * @description 사내 재료의 문헌 연결 — 비면 전부 None. 화면이 한 번에 그릴 요약까지.
+         */
+        CatalogLinkOut: {
+            /** Catalog Material Id */
+            catalog_material_id?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Subsystem */
+            subsystem?: string | null;
+            /**
+             * Value Count
+             * @default 0
+             */
+            value_count: number;
+        };
+        /** CatalogMaterialDetailOut */
+        CatalogMaterialDetailOut: {
+            /** Attributes */
+            attributes: {
+                [key: string]: unknown;
+            } | null;
+            /** Category */
+            category: string;
+            /** Description */
+            description: string | null;
+            /** Grade */
+            grade: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /** Material Class */
+            material_class: string | null;
+            /** Material Code */
+            material_code: string | null;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string | null;
+            /** Subsystem */
+            subsystem: string | null;
+            /** Values */
+            values: components["schemas"]["CatalogValueOut"][];
+        };
+        /** CatalogMaterialOut */
+        CatalogMaterialOut: {
+            /** Category */
+            category: string;
+            /** Grade */
+            grade: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /** Material Class */
+            material_class: string | null;
+            /** Material Code */
+            material_code: string | null;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string | null;
+            /** Subsystem */
+            subsystem: string | null;
+            /**
+             * Value Count
+             * @default 0
+             */
+            value_count: number;
+        };
+        /** CatalogMaterialPage */
+        CatalogMaterialPage: {
+            /** Items */
+            items: components["schemas"]["CatalogMaterialOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** CatalogSourceOut */
+        CatalogSourceOut: {
+            /** Doi */
+            doi: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** License */
+            license: string | null;
+            /** Publisher */
+            publisher: string | null;
+            /** Title */
+            title: string | null;
+            /** Url */
+            url: string | null;
+            /** Year */
+            year: number | null;
+        };
+        /** CatalogSummaryOut */
+        CatalogSummaryOut: {
+            /** Categories */
+            categories: {
+                [key: string]: number;
+            };
+            /** Definitions */
+            definitions: number;
+            /** Domains */
+            domains: {
+                [key: string]: number;
+            };
+            /** Materials */
+            materials: number;
+            /** Sources */
+            sources: number;
+            /** Subsystems */
+            subsystems: {
+                [key: string]: number;
+            };
+            /** Tiers */
+            tiers: {
+                [key: string]: number;
+            };
+            /** Values */
+            values: number;
+        };
+        /** CatalogValueOut */
+        CatalogValueOut: {
+            /** Conditions */
+            conditions: {
+                [key: string]: unknown;
+            } | null;
+            /** Domain */
+            domain: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Method */
+            method: string | null;
+            /**
+             * N Candidates
+             * @default 1
+             */
+            n_candidates: number;
+            /** Notes */
+            notes: string | null;
+            /** Property Key */
+            property_key: string;
+            /** Property Name */
+            property_name: string;
+            /** Quality Tier */
+            quality_tier: number;
+            /**
+             * Representative
+             * @default false
+             */
+            representative: boolean;
+            /** Separated By */
+            separated_by?: string | null;
+            source: components["schemas"]["CatalogSourceOut"] | null;
+            /** Source Detail */
+            source_detail: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Uncertainty */
+            uncertainty: number | null;
+            /** Unit */
+            unit: string | null;
+            /** Value Num */
+            value_num: number | null;
+            /** Value Text */
+            value_text: string | null;
+        };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
             /** Current Password */
@@ -5776,6 +6654,111 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** DeckBuildIn */
+        DeckBuildIn: {
+            /**
+             * Format
+             * @default dyna_elastic
+             */
+            format: string;
+            /** Items */
+            items: components["schemas"]["DeckBuildItemIn"][];
+            /** Units */
+            units?: string | null;
+        };
+        /** DeckBuildItemIn */
+        DeckBuildItemIn: {
+            /**
+             * Catalog Material Id
+             * Format: uuid
+             */
+            catalog_material_id: string;
+            /** Mid */
+            mid: number;
+        };
+        /** DeckBuiltOut */
+        DeckBuiltOut: {
+            /** Filename */
+            filename: string;
+            /** Material Count */
+            material_count: number;
+            /** Notes */
+            notes: string[];
+            /** Skipped */
+            skipped: components["schemas"]["DeckSkippedOut"][];
+            /** Text */
+            text: string;
+        };
+        /** DeckCandidateOut */
+        DeckCandidateOut: {
+            /** Category */
+            category: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Score */
+            score: number;
+            /** Value Count */
+            value_count: number;
+        };
+        /**
+         * DeckKeyOut
+         * @description 덱 정의가 집을 수 있는 값 하나 — `elastic.density` 처럼 **블록.값**.
+         */
+        DeckKeyOut: {
+            /** Block */
+            block: string;
+            /** Block Label */
+            block_label: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Value */
+            value: number;
+        };
+        /**
+         * DeckKeysOut
+         * @description 이 카드로 덱을 그릴 때 **실제로 집히는 것**(2026-09-05).
+         *
+         *     정의 편집기가 `elastic.youngs_modulus` 를 손으로 적게 했고, 고른 카드에 무엇이 들어
+         *     있는지는 미리보기의 「없는 값」 으로만 드러났다. 미리보기와 같은 덱(`_deck_for_card`)
+         *     에서 같은 조회 규칙(`Deck.number`·`Deck.rows`)으로 세므로, 여기 있는 것은 정의에 적으면
+         *     반드시 집힌다.
+         */
+        DeckKeysOut: {
+            /**
+             * Card Id
+             * Format: uuid
+             */
+            card_id: string;
+            /** Tables */
+            tables: components["schemas"]["DeckTableOut"][];
+            /** Values */
+            values: components["schemas"]["DeckKeyOut"][];
+        };
+        /** DeckMatchIn */
+        DeckMatchIn: {
+            /** Text */
+            text: string;
+        };
+        /** DeckMatchRowOut */
+        DeckMatchRowOut: {
+            /** Candidates */
+            candidates: components["schemas"]["DeckCandidateOut"][];
+            /** Mid */
+            mid: number | null;
+            /** Query */
+            query: string;
+        };
         /**
          * DeckPreviewIn
          * @description 저장하기 **전에** 돌려 볼 것. 정의 한 벌 + 카드 하나.
@@ -5819,6 +6802,11 @@ export interface components {
              * @default []
              */
             notes: string[];
+            /**
+             * Spans
+             * @default []
+             */
+            spans: number[][];
             /** Text */
             text?: string | null;
         };
@@ -5844,6 +6832,29 @@ export interface components {
              * @default []
              */
             notes: string[];
+        };
+        /** DeckSkippedOut */
+        DeckSkippedOut: {
+            /** Mid */
+            mid: number;
+            /** Missing */
+            missing: string[];
+            /** Name */
+            name: string;
+        };
+        /**
+         * DeckTableOut
+         * @description 덱 정의가 `rows` 로 반복할 수 있는 표 하나.
+         */
+        DeckTableOut: {
+            /** Block */
+            block: string;
+            /** Block Label */
+            block_label: string;
+            /** Columns */
+            columns: components["schemas"]["CardValueOut"][];
+            /** Row Count */
+            row_count: number;
         };
         /**
          * DeclaredCardPreviewOut
@@ -6452,6 +7463,31 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** FailedJobOut */
+        FailedJobOut: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Kind Label */
+            kind_label: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Max Attempts */
+            max_attempts: number;
+        };
         /** FamilyOut */
         FamilyOut: {
             /**
@@ -6699,11 +7735,24 @@ export interface components {
             run_ids: string[];
         };
         /**
+         * GroupNoteRequest
+         * @description 묶음 결과에서 고칠 수 있는 것은 메모뿐이다. 값·멤버·옵션은 그때의 계산 그대로 남는다.
+         */
+        GroupNoteRequest: {
+            /** Note */
+            note?: string | null;
+        };
+        /**
          * GroupOut
          * @description 묶음 하나 — **재료 + 시험종류 + 방향.**
          */
         GroupOut: {
             curve: components["schemas"]["CurveStatsOut"] | null;
+            /**
+             * Fittable
+             * @default false
+             */
+            fittable: boolean;
             /** Notes */
             notes: string[];
             /** Orientation */
@@ -6821,6 +7870,11 @@ export interface components {
             label: string;
             /** Makes Values */
             makes_values: components["schemas"]["GroupingProducedOut"][];
+            /**
+             * Needs
+             * @default master_curve
+             */
+            needs: string;
             /** Params */
             params: components["schemas"]["GroupingParamOut"][];
             /**
@@ -7211,6 +8265,40 @@ export interface components {
             user: components["schemas"]["UserOut"];
         };
         /**
+         * LveCardSaveRequest
+         * @description DMA 변형률 스윕의 선형 구간 탄성률 카드 — **통계 묶음(재료·종류·방향)에서.**
+         *
+         *     `youngs_modulus`(선형 구간 E′)와 `lve_strain_limit` 를 낸 채택 결과들의 평균이다.
+         *     시편 수와 변동계수를 카드에 박는다 — 1건이면 평균이 아니라 그 시편의 값이다.
+         */
+        LveCardSaveRequest: {
+            /** Density */
+            density?: number | null;
+            /**
+             * Include Declared
+             * @default false
+             */
+            include_declared: boolean;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Note */
+            note?: string | null;
+            /** Orientation */
+            orientation: string;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /**
          * MasterCurveImportRequest
          * @description **장비가 이미 겹쳐 준 곡선**을 그대로 등록한다.
          *
@@ -7580,6 +8668,16 @@ export interface components {
             /** Used Bytes */
             used_bytes: number | null;
         };
+        /**
+         * MergeConflictOut
+         * @description 합치면 자리를 다투게 되는 이름들 — 누르기 전에 보여 준다.
+         */
+        MergeConflictOut: {
+            /** Label */
+            label: string;
+            /** Names */
+            names: string[];
+        };
         /** MergeRequest */
         MergeRequest: {
             /**
@@ -7587,6 +8685,128 @@ export interface components {
              * Format: uuid
              */
             into_id: string;
+        };
+        /** MetrologyCapabilityOut */
+        MetrologyCapabilityOut: {
+            /** Accuracy */
+            accuracy: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            instrument: components["schemas"]["MetrologyInstrumentOut"];
+            /** Mapping Confidence */
+            mapping_confidence: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Range Max */
+            range_max: number | null;
+            /** Range Min */
+            range_min: number | null;
+            /** Range Unit */
+            range_unit: string | null;
+            /** Resolution */
+            resolution: string | null;
+            /** Source Detail */
+            source_detail: string | null;
+            /** Specimen */
+            specimen: string | null;
+            /** Standard */
+            standard: string | null;
+            /** Temperature Max K */
+            temperature_max_k: number | null;
+            /** Temperature Min K */
+            temperature_min_k: number | null;
+        };
+        /** MetrologyCoverageOut */
+        MetrologyCoverageOut: {
+            /** Covered */
+            covered: components["schemas"]["MetrologyCoverageRowOut"][];
+            /** Gaps */
+            gaps: components["schemas"]["MetrologyCoverageRowOut"][];
+        };
+        /** MetrologyCoverageRowOut */
+        MetrologyCoverageRowOut: {
+            /** Domain */
+            domain: string;
+            /** Instrument Count */
+            instrument_count: number;
+            /** Name */
+            name: string;
+            /** Owned Instrument Count */
+            owned_instrument_count: number;
+            /** Property Key */
+            property_key: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Technique Count */
+            technique_count: number;
+            /** Value Count */
+            value_count: number;
+        };
+        /** MetrologyInstrumentOut */
+        MetrologyInstrumentOut: {
+            /** Category */
+            category: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model */
+            model: string;
+            /** Owned */
+            owned: boolean;
+            /** Owned Note */
+            owned_note: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Vendor */
+            vendor: string;
+        };
+        /** MetrologyPropertyOut */
+        MetrologyPropertyOut: {
+            /** Domain */
+            domain: string;
+            /** Name */
+            name: string;
+            /** Property Key */
+            property_key: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Techniques */
+            techniques: components["schemas"]["MetrologyTechniqueGroupOut"][];
+            /** Test Standard */
+            test_standard: string | null;
+        };
+        /** MetrologySummaryOut */
+        MetrologySummaryOut: {
+            /** Capabilities */
+            capabilities: number;
+            /** Categories */
+            categories: {
+                [key: string]: number;
+            };
+            /** Instruments */
+            instruments: number;
+            /** Instruments Owned */
+            instruments_owned: number;
+            /** Properties Covered */
+            properties_covered: number;
+            /** Properties Total */
+            properties_total: number;
+        };
+        /** MetrologyTechniqueGroupOut */
+        MetrologyTechniqueGroupOut: {
+            /** Capabilities */
+            capabilities: components["schemas"]["MetrologyCapabilityOut"][];
+            /** Technique */
+            technique: string | null;
         };
         /**
          * MillCheckOut
@@ -7635,6 +8855,11 @@ export interface components {
         NamePreviewOut: {
             /** Record Name */
             record_name: string;
+            /**
+             * Similar
+             * @default []
+             */
+            similar: components["schemas"]["SimilarNameOut"][];
             /** Taken */
             taken: boolean;
         };
@@ -7745,6 +8970,26 @@ export interface components {
             value: number | null;
         };
         /**
+         * OpsWarningsOut
+         * @description 운영 경고 셋 — **시스템 관리자에게만.** 다른 사람에게는 할 수 없는 경고다.
+         *
+         *     각자 자기 화면 안에만 있던 것들(2026-09-05): 디스크는 서버 화면, 보존기간 지난
+         *     삭제는 저장소 리포트, 실패한 작업은 아무 데도. 홈이 「밀리고 있다」 는 사실만 말한다 —
+         *     자동 영구삭제는 하지 않는다. 지우는 결정은 사람이 한다.
+         */
+        OpsWarningsOut: {
+            /** Backup Problem */
+            backup_problem: string | null;
+            /** Disk Alert Percent */
+            disk_alert_percent: number;
+            /** Disk Percent Used */
+            disk_percent_used: number | null;
+            /** Expired Deleted Count */
+            expired_deleted_count: number;
+            /** Failed Jobs */
+            failed_jobs: number;
+        };
+        /**
          * OutlierOut
          * @description 이상치 **후보**. 버려지지 않았다.
          */
@@ -7791,6 +9036,7 @@ export interface components {
             material_count: number;
             /** Materials With Card */
             materials_with_card: number;
+            ops?: components["schemas"]["OpsWarningsOut"] | null;
             /** Parse Failed */
             parse_failed: number;
             /** Run Count */
@@ -8431,6 +9677,52 @@ export interface components {
             material_name: string;
             /** Rows */
             rows: components["schemas"]["ValueSourceOut"][];
+        };
+        /**
+         * QueueOut
+         * @description 큐 현황. 도는 것은 문제없다 — **보이지 않는 것이 문제였다.**
+         *
+         *     재시도 3회를 다 쓰고 `failed` 가 된 작업을 보는 화면도 API 도 없었다. 파싱 실패는
+         *     시험 목록에 상태로라도 보이지만 알림 발송·드리프트 점검은 야간에 조용히 죽고, 알림이
+         *     안 온 사람은 알림이 없었다고 여긴다.
+         */
+        QueueOut: {
+            /** Done Last 24H */
+            done_last_24h: number;
+            /** Failed */
+            failed: number;
+            /** Failures */
+            failures: components["schemas"]["FailedJobOut"][];
+            /** Queued */
+            queued: number;
+            /** Running */
+            running: number;
+        };
+        /**
+         * RateCardSaveRequest
+         * @description 속도 의존 소성 카드 — **속도별 묶음(`tensile.rate_family`)에서.**
+         *
+         *     묶음이 재료·시험 종류·방향·구성원을 다 들고 있으므로 그 id 하나면 된다.
+         *     탄성계수는 구성원의 채택 결과(`youngs_modulus`)를 평균하고, 없으면 재료에 적어
+         *     둔 값을 쓴다. 푸아송비·밀도는 다른 카드와 같은 규칙으로 물려받는다.
+         */
+        RateCardSaveRequest: {
+            /** Density */
+            density?: number | null;
+            /**
+             * Group Result Id
+             * Format: uuid
+             */
+            group_result_id: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
         };
         /**
          * RatioCheckOut
@@ -9329,6 +10621,7 @@ export interface components {
         ServerInfoOut: {
             /** App Version */
             app_version: string;
+            backup: components["schemas"]["BackupOut"];
             cpu: components["schemas"]["CpuOut"];
             database: components["schemas"]["DatabaseOut"];
             /** Disks */
@@ -9362,6 +10655,16 @@ export interface components {
             password: string;
             /** Workspace Slug */
             workspace_slug: string;
+        };
+        /** SimilarNameOut */
+        SimilarNameOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Record Name */
+            record_name: string;
         };
         /**
          * SpecGapOut
@@ -10000,8 +11303,18 @@ export interface components {
             live_bytes: number;
             /** Live Count */
             live_count: number;
+            /**
+             * Master Curve Bytes
+             * @default 0
+             */
+            master_curve_bytes: number;
             /** Orphans */
             orphans: components["schemas"]["StorageItemOut"][];
+            /**
+             * Processing Bytes
+             * @default 0
+             */
+            processing_bytes: number;
             /** Reclaimable Bytes */
             reclaimable_bytes: number;
             /** Retention Days */
@@ -10860,6 +12173,43 @@ export interface components {
             symbol: string;
         };
         /**
+         * UnitSystemBaseUnitsOut
+         * @description 계를 만들 때 고를 수 있는 기본 단위 — `matcore.units` 표가 정본이다.
+         */
+        UnitSystemBaseUnitsOut: {
+            /** Length */
+            length: string[];
+            /** Mass */
+            mass: string[];
+            /** Time */
+            time: string[];
+        };
+        /**
+         * UnitSystemCreate
+         * @description 질량·길이·시간 셋으로 계를 만든다. 나머지는 서버가 유도한다.
+         */
+        UnitSystemCreate: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Length */
+            length: string;
+            /** Mass */
+            mass: string;
+            /** Time */
+            time: string;
+        };
+        /** UnitSystemDeriveIn */
+        UnitSystemDeriveIn: {
+            /** Length */
+            length: string;
+            /** Mass */
+            mass: string;
+            /** Time */
+            time: string;
+        };
+        /**
          * UnitSystemOut
          * @description 덱을 쓸 수 있는 단위계 하나.
          *
@@ -10868,6 +12218,11 @@ export interface components {
          *     생긴다 — 단위계가 섞인 덱은 조용히 1000배 틀린 답을 낸다.
          */
         UnitSystemOut: {
+            /**
+             * Builtin
+             * @default true
+             */
+            builtin: boolean;
             /** Declaration */
             declaration: string;
             /** Is Default */
@@ -10876,6 +12231,28 @@ export interface components {
             key: string;
             /** Label */
             label: string;
+            /**
+             * Length
+             * @default
+             */
+            length: string;
+            /**
+             * Mass
+             * @default
+             */
+            mass: string;
+            /**
+             * Symbols
+             * @default {}
+             */
+            symbols: {
+                [key: string]: string;
+            };
+            /**
+             * Time
+             * @default
+             */
+            time: string;
         };
         /** UnitsOut */
         UnitsOut: {
@@ -11137,6 +12514,11 @@ export interface components {
             is_active: boolean;
             /** Kind */
             kind: string;
+            /**
+             * Managers Only System Admin
+             * @default false
+             */
+            managers_only_system_admin: boolean;
             /** Member Count */
             member_count: number;
             /** My Role */
@@ -11147,6 +12529,8 @@ export interface components {
             parent_slug: string | null;
             /** Path */
             path: string;
+            /** Restricted */
+            restricted: boolean;
             /** Slug */
             slug: string;
             /** Sort Order */
@@ -11185,6 +12569,8 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
+            /** Restricted */
+            restricted?: boolean | null;
         };
         /**
          * YearTallyOut
@@ -11346,6 +12732,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    account_summary_api_accounts_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSummaryOut"];
                 };
             };
         };
@@ -11920,6 +13326,358 @@ export interface operations {
             };
         };
     };
+    ashby_api_catalog_ashby_get: {
+        parameters: {
+            query: {
+                x: string;
+                y: string;
+                color?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AshbyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    axes_api_catalog_axes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AshbyAxisOut"][];
+                };
+            };
+        };
+    };
+    compare_api_catalog_compare_get: {
+        parameters: {
+            query: {
+                /** @description 쉼표로 이은 카탈로그 재료 id (2~8) */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogCompareOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coverage_api_catalog_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogCoverageOut"];
+                };
+            };
+        };
+    };
+    deck_build_api_catalog_deck_build_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeckBuildIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckBuiltOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deck_match_api_catalog_deck_match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeckMatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckMatchRowOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_api_catalog_links__material_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_link_api_catalog_links__material_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_link_api_catalog_links__material_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_materials_api_catalog_materials_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                subsystem?: string | null;
+                category?: string | null;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogMaterialPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_material_api_catalog_materials__material_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogMaterialDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summary_api_catalog_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSummaryOut"];
+                };
+            };
+        };
+    };
     list_blocks_api_fitting_blocks_get: {
         parameters: {
             query?: never;
@@ -12138,6 +13896,103 @@ export interface operations {
             };
         };
     };
+    inherited_values_api_fitting_cards_inherited_get: {
+        parameters: {
+            query: {
+                material_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InheritedValueOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_lve_card_api_fitting_cards_lve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LveCardSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_rate_card_api_fitting_cards_rate_dependent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateCardSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_viscoelastic_card_api_fitting_cards_viscoelastic_post: {
         parameters: {
             query?: never;
@@ -12253,6 +14108,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deck_keys_api_fitting_cards__card_id__deck_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckKeysOut"];
                 };
             };
             /** @description Validation Error */
@@ -12701,6 +14587,121 @@ export interface operations {
             };
         };
     };
+    create_unit_system_api_fitting_unit_systems_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitSystemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitSystemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unit_system_base_units_api_fitting_unit_systems_base_units_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitSystemBaseUnitsOut"];
+                };
+            };
+        };
+    };
+    derive_unit_system_api_fitting_unit_systems_derive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitSystemDeriveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitSystemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_unit_system_api_fitting_unit_systems__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_profiles_api_formats_get: {
         parameters: {
             query?: {
@@ -12977,6 +14978,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GroupResultOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_group_api_groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_note_api_groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -14167,6 +16232,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    by_property_api_metrology_by_property__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetrologyPropertyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coverage_api_metrology_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetrologyCoverageOut"];
+                };
+            };
+        };
+    };
+    summary_api_metrology_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetrologySummaryOut"];
                 };
             };
         };
@@ -15544,6 +17680,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerInfoOut"];
+                };
+            };
+        };
+    };
+    queue_api_server_queue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueOut"];
+                };
+            };
+        };
+    };
+    retry_api_server_queue__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FailedJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -18735,6 +20922,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceReferenceOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_conflicts_api_workspaces__slug__merge_conflicts_get: {
+        parameters: {
+            query: {
+                target_slug: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeConflictOut"][];
                 };
             };
             /** @description Validation Error */
