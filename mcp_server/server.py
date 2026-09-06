@@ -304,6 +304,38 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     return out
 
 
+@mcp.tool()
+async def list_unit_systems(ctx: Context) -> dict[str, Any]:
+    """덱을 낼 수 있는 **단위계 목록** — 덱을 뽑기 전에 먼저 고른다.
+
+    솔버 덱은 단위를 선언하지 않는다(LS-DYNA 가 그렇다). 그래서 **한 덱 안의
+    모든 재료가 같은 계여야 하고**, 계가 섞이면 조용히 1000배 틀린 답이 나온다 —
+    이 목록의 `key` 를 덱 도구에 그대로 넘긴다.
+
+    `declaration` 은 덱 머리에 적히는 줄이다(`tonne, mm, s, MPa`). 사용자가 만든
+    계도 함께 나온다(`builtin=false`).
+    """
+    got = await _get(ctx, "/fitting/unit-systems")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    return {
+        "systems": [
+            {
+                "key": one.get("key"),
+                "label": one.get("label"),
+                "declaration": one.get("declaration"),
+                "is_default": one.get("is_default"),
+                "builtin": one.get("builtin"),
+            }
+            for one in got
+        ],
+        "hint": (
+            "덱 도구의 units 인자에 key 를 넘긴다. 안 고르면 SI 로 나가는데,"
+            " 받는 쪽 해석 모델이 mm·tonne 계면 그대로 쓰면 안 된다."
+        ),
+    }
+
+
 # ── 리소스 (MaterialTwin 에서 — 도구 목록에 상주 비용을 안 얹는다) ─────────────
 
 

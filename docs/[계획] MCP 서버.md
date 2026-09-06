@@ -136,8 +136,9 @@ BOM 덱 만들기(**텍스트만 반환** — 파일을 서버에 안 쓴다).
 4. *"이 재료 시험 결과 어때?"* → `list_test_runs` · `get_test_run` · `list_cards` · `get_card`
 5. *"이 BOM 으로 덱 뽑아 줘"* → `match_bom` · `build_bom_deck`
 
-여기에 안내(`get_guide`)와 쓰기 셋(`adopt_catalog_values` ·
-`create_declared_card` · `set_declared_properties`)을 더해 **14개**로 시작한다.
+여기에 안내(`get_guide`) · 단위계(`list_unit_systems`) · 쓰기 셋
+(`adopt_catalog_values` · `create_declared_card` · `set_declared_properties`)을
+더해 **15개**로 시작한다.
 
 ### D5. 안내는 서버가 들고 있는다
 
@@ -179,12 +180,26 @@ RA 는 도구만 냈지만 MT 는 MCP 표준의 **리소스**(`materialtwin://gu
 `origin` 과 `caveat` 는 우리가 더한 것이다 — MT 에는 합성 곡선·카드 수명주기가
 없었다.
 
+### D9. 단위 — 조회는 SI, 덱은 골라서 (2026-09-06 사용자 지적)
+
+두 자리를 나눈다:
+
+- **조회는 SI 로 낸다.** MCP 가 환산하면 환산 규칙이 화면·백엔드·MCP 세 벌이
+  된다 — 갈라지는 날 AI 가 1000배 틀린 숫자를 말한다. 대신 **단위를 값과 함께
+  싣고**(재료 기본 칸처럼 SI 가 아닌 것이 있다) 안내가 「어느 단위로 말하는지
+  반드시 밝혀라」 를 못 박는다.
+- **덱은 단위계를 고른다.** 솔버 덱은 단위를 선언하지 않아 계가 섞이면 조용히
+  1000배 틀린다. `list_unit_systems()` 로 고를 수 있는 계(내장 SI·mm_n_tonne +
+  부서가 만든 계)를 보이고, 덱 도구는 `units` 인자를 받는다. **안 고르면 SI 로
+  나가고, 어느 계로 뽑았는지 사람에게 말한다.**
+
 ## 단계
 
 ### 1단계 — 뼈대 (0.5일)
 
 `mcp_server/` 생성 · PAT 헤더 전달 · `get_guide` · `search_materials` ·
-`get_material`. 로컬에서 Claude Code 에 등록해 실제로 물어본다.
+`get_material` · `list_unit_systems`. 로컬에서 Claude Code 에 등록해 실제로
+물어본다.
 
 **확인 항목**: `mcp` SDK 를 우리 백엔드 venv 에 설치했을 때 의존성이 깨지는지
 (깨지면 D1 의 근거가 하나 더 생긴다 — 어느 쪽이든 별도 venv 로 간다).
