@@ -1317,7 +1317,11 @@ class Test선언물성:
 
         항복강도는 로트마다 다르다 — 재료에 적으면 첫 로트의 값이 그 Grade
         전체의 값이 되고, 두 번째 로트가 들어오는 순간 둘 중 하나가 조용히
-        진다(ADR 0016)."""
+        진다(ADR 0016).
+
+        **가르는 것은 항목이 아니라 출처다**(2026-09-06): 문헌·규격·제품
+        데이터시트의 공칭값은 Grade 의 속성이라 재료에 담기고, 로트를 증명하는
+        `millsheet` 만 시료로 보낸다."""
         refused = client.patch(
             f"/api/materials/{material['id']}",
             json={
@@ -1326,7 +1330,7 @@ class Test선언물성:
                         "item": "항복강도",
                         "points": [{"value": 295}],
                         "input_unit": "MPa",
-                        "source": "datasheet",
+                        "source": "millsheet",
                         "reference": "MTC-2024-0812",
                     }
                 ]

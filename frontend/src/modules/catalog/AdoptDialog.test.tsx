@@ -213,7 +213,7 @@ describe('병합이 정확해야 한다', () => {
     expect(await screen.findByText(/이미 있음 — 담으면 교체/)).toBeInTheDocument()
   })
 
-  it('시료 층 항목도 문헌 공칭값은 담기고, 데이터시트 출처만 잠긴다', async () => {
+  it('시료 층 항목도 문헌 공칭값은 담긴다 — 벤더 시트까지(밀시트만 잠긴다)', async () => {
     // 실측(2026-09-06): 항복강도 하나가 섞이자 PATCH 전체가 422 — 9건이 무산됐다.
     // 서버 규칙(ADR 0016): 층을 가르는 것은 값의 성격 — 문헌 공칭값은 재료에.
     const withStrength = {
@@ -222,7 +222,7 @@ describe('병합이 정확해야 한다', () => {
         ...DETAIL.values,
         // journal 출처 — 공칭값이라 담긴다.
         value({ property_key: 'mechanical.yield_strength', value_num: 2.05e8 }),
-        // datasheet 출처 — 로트 값일 수 있어 잠긴다.
+        // 벤더 데이터시트 — Grade 스펙이라 담긴다(2026-09-06 출처 분리 후).
         value({
           property_key: 'mechanical.tensile_strength',
           value_num: 5.2e8,
@@ -242,13 +242,11 @@ describe('병합이 정확해야 한다', () => {
     render(<AdoptDialog detail={withStrength} open onClose={() => {}} />)
     await userEvent.click(await screen.findByRole('button', { name: /SGARC440/ }))
 
-    expect(await screen.findByText(/데이터시트 출처 — 로트 값일 수 있어/)).toBeInTheDocument()
-    const locked = screen.getByText('인장강도').closest('label') as HTMLElement
-    const lockedBox = locked.querySelector('input') as HTMLInputElement
-    expect(lockedBox.disabled).toBe(true)
-    expect(lockedBox.checked).toBe(false)
-    const open_ = screen.getByText('항복강도').closest('label') as HTMLElement
-    expect((open_.querySelector('input') as HTMLInputElement).disabled).toBe(false)
+    // 둘 다 열려 있다 — 문헌(journal)도, 벤더 제품시트(datasheet)도 Grade 공칭값.
+    for (const label of ['항복강도', '인장강도']) {
+      const row = screen.getByText(label).closest('label') as HTMLElement
+      expect((row.querySelector('input') as HTMLInputElement).disabled).toBe(false)
+    }
 
     await userEvent.click(screen.getByRole('button', { name: /담기/ }))
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
@@ -257,6 +255,7 @@ describe('병합이 정확해야 한다', () => {
     const yield_ = rows.find((one) => one.item === '항복강도')
     expect(yield_).toBeDefined()
     expect(yield_?.source).toBe('literature')
-    expect(rows.some((one) => one.item === '인장강도')).toBe(false)
+    const uts = rows.find((one) => one.item === '인장강도')
+    expect(uts?.source).toBe('datasheet')
   })
 })

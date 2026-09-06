@@ -81,7 +81,11 @@ import { useResource } from '@/shared/hooks/useResource'
 export const SOURCES: { value: string; label: string; hint: string }[] = [
   { value: 'literature', label: '문헌', hint: '핸드북·논문·교과서' },
   { value: 'standard', label: '규격', hint: 'KS·ASTM·EN 등' },
-  { value: 'datasheet', label: '밀시트·데이터시트', hint: '공급사가 준 문서' },
+  // **한 칸이었다가 갈렸다**(2026-09-06). 성격이 정반대다 — 제품 데이터시트는
+  // Grade 의 스펙(재료에 붙는다)이고, 밀시트는 그 로트의 증명(시료에 붙는다).
+  // 한 칸일 때는 안전을 위해 둘 다 시료로 막아, 벤더 공칭값이 통째로 잠겼다.
+  { value: 'datasheet', label: '제품 데이터시트', hint: '벤더 카탈로그의 Grade 스펙' },
+  { value: 'millsheet', label: '밀시트(성적서)', hint: '이 로트를 증명하는 문서' },
   { value: 'estimate', label: '추정', hint: '비슷한 재료에서 미룬 값' },
 ]
 

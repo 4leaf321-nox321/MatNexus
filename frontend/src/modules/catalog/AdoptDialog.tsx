@@ -19,9 +19,9 @@
  *
  * 항복강도·인장강도는 기준정보에서 **시료에 붙는 물성**이지만, 문헌의 공칭값은
  * Grade 의 속성이라 서버가 재료에 받는다(ADR 0016 — 층을 가르는 것은 값의
- * 성격이다). 예외는 출처가 datasheet 인 값 — 로트 증명 문서(밀시트)일 수 있어
- * 서버가 거부하고, 한 건이라도 섞이면 **요청 전체가 422 로 무산된다**(실측
- * 2026-09-06, SAC305 9건). 그래서 그 값만 숨기지 않고 이유와 함께 잠근다.
+ * 성격이다). 막히는 것은 로트를 증명하는 밀시트(`millsheet`)뿐이고, 문헌
+ * 카탈로그에는 그 출처가 없다 — 벤더 제품 데이터시트는 Grade 스펙이라 담긴다
+ * (2026-09-06 출처 분리 전에는 둘이 한 칸이라 1,197건이 잠겨 있었다).
  */
 
 import { Loader2, PackagePlus } from 'lucide-react'
@@ -126,10 +126,10 @@ export function AdoptDialog({
     if (!slot || slot.place !== 'declared' || levels === null) return null
     const level = levels.get(slot.item)
     if (level === undefined) return "기준정보 '물성 항목' 축에 없어 못 담습니다"
-    // 시료 층 항목도 문헌 공칭값은 재료에 담긴다 — 데이터시트 출처만 로트 값일
-    // 수 있어 서버가 시료로 보낸다.
-    if (level !== '재료' && adoptionSource(value) === 'datasheet') {
-      return `데이터시트 출처 — 로트 값일 수 있어 ${level} 층으로만 받습니다`
+    // 시료 층 항목도 문헌 공칭값은 재료에 담긴다 — 로트를 증명하는 밀시트만
+    // 서버가 시료로 보낸다(카탈로그에는 그 출처가 없어 사실상 전부 담긴다).
+    if (level !== '재료' && adoptionSource(value) === 'millsheet') {
+      return `밀시트 출처 — 그 로트의 값이라 ${level} 층으로만 받습니다`
     }
     return null
   }

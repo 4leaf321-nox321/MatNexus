@@ -45,7 +45,8 @@ const SOURCE_LABELS: Record<string, string> = {
 const DECLARED_LABELS: Record<string, string> = {
   literature: '문헌',
   standard: '규격',
-  datasheet: '밀시트',
+  datasheet: '제품 시트',
+  millsheet: '밀시트',
   estimate: '추정',
 }
 

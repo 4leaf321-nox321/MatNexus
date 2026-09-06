@@ -83,7 +83,8 @@ class DeclaredPropertyOut(BaseModel):
 
     `input_unit` 과 **둘 중 하나만** 채워진다."""
     source: str
-    """`literature` · `standard` · `datasheet` · `estimate`. **필수다** — 값만
+    """`literature` · `standard` · `datasheet`(제품 시트) · `millsheet`(로트
+    성적서) · `estimate`. **필수다** — 값만
     있고 어디서 왔는지 모르면 그 값으로 돌린 해석의 근거를 되짚을 수 없다."""
     reference: str
     """어느 문서인가. `'문헌'` 만으로는 어느 핸드북 몇 판인지 알 수 없다."""

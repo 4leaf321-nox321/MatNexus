@@ -217,7 +217,8 @@ class Material(Base):
         item        물성 항목(기준정보 `property_item`)의 값. `"탄성계수"`
         value_si    **언제나 정본 SI.** 사람이 GPa 로 적어도 저장은 Pa 다
         input_unit  사람이 적은 단위. 화면이 그대로 되돌려 보여 준다
-        source      `literature` · `datasheet` · `standard` · `estimate`
+        source      `literature` · `standard` · `datasheet`(제품 시트) ·
+                    `millsheet`(로트 성적서) · `estimate`
         reference   **어느 문서인가.** "KS D 3512 표 3", "MTC-2024-0812"
         temperature_k  잰 온도. 비면 상온으로 본다
 
