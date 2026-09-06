@@ -30,3 +30,7 @@ backend/logs/
 .vscode/
 .claude/
 *.local
+
+# MaterialTwin 원본 스냅샷 - 저장소 밖 보관 (ADR 0027: 파일이 문)
+materialtwin-*/
+materialtwin-*.tar.gz
