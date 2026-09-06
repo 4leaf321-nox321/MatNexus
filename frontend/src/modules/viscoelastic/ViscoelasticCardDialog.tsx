@@ -13,10 +13,10 @@
  * 채우면 그것이 측정값인지 덱만 봐서는 알 수 없다.
  */
 
-import { display } from '@/shared/units'
 import { useState } from 'react'
 
 import { fittingApi } from '@/modules/fitting/api'
+import { InheritedFields, densityToSi } from '@/modules/fitting/InheritedFields'
 import type { PronyFit } from '@/modules/viscoelastic/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -32,16 +32,18 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 
 /** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
-const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function ViscoelasticCardDialog({
   fit,
   suggestedLabel,
+  materialId,
   onClose,
   onDone,
 }: {
   fit: PronyFit
   suggestedLabel: string
+  /** 비워 둔 푸아송비·밀도가 어디서 올지 물어볼 재료. 모르면 묻지 않는다. */
+  materialId?: string
   onClose: () => void
   onDone: () => void
 }) {
@@ -61,7 +63,7 @@ export function ViscoelasticCardDialog({
         label,
         // **빈 칸은 안 보낸다.** 0 을 보내면 그것이 잰 값인지 알 수 없다.
         poisson_ratio: poisson.trim() ? Number(poisson) : null,
-        density: density.trim() ? Number(density) : null,
+        density: densityToSi(density),
         note: note.trim() || null,
       })
       onDone()
@@ -96,26 +98,14 @@ export function ViscoelasticCardDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="vc-poisson">푸아송비</Label>
-              <Input
-                id="vc-poisson"
-                value={poisson}
-                placeholder="비우면 재료에서"
-                onChange={(event) => setPoisson(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="vc-density">밀도 ({DENSITY_SYMBOL})</Label>
-              <Input
-                id="vc-density"
-                value={density}
-                placeholder="비우면 재료에서"
-                onChange={(event) => setDensity(event.target.value)}
-              />
-            </div>
-          </div>
+          <InheritedFields
+            materialId={materialId}
+            idPrefix="vc"
+            poisson={poisson}
+            density={density}
+            onPoisson={setPoisson}
+            onDensity={setDensity}
+          />
           {/* **DMA 는 푸아송비를 재지 않는다.** 없으면 없는 채로 둔다. */}
           <p className="text-muted-foreground text-xs">
             DMA 는 푸아송비와 밀도를 재지 않습니다. 재료·시료에 있으면 그것을 쓰고,

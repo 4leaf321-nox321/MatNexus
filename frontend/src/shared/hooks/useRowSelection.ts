@@ -40,6 +40,8 @@ export interface RowSelection {
   toggle: (id: string, event?: { shiftKey?: boolean }) => void
   /** 이 쪽 전부 켜기/끄기. */
   setAll: (on: boolean) => void
+  /** 이것들로 갈아 끼운다. 옛 결과의 시편을 그대로 채워 다시 맞출 때 — 목록에 없는 id 는 안 보이지만 남는다. */
+  replace: (next: Iterable<string>) => void
   /** 비운다. 거르기를 바꾸거나 일을 끝냈을 때. */
   clear: () => void
   /** 머리 칸의 상태 — 전부 켜졌나. */
@@ -103,11 +105,17 @@ export function useRowSelection(ids: string[]): RowSelection {
     anchor.current = null
   }, [])
 
+  const replace = useCallback((next: Iterable<string>) => {
+    setRaw(new Set(next))
+    anchor.current = null
+  }, [])
+
   return {
     picked,
     chosen,
     toggle,
     setAll,
+    replace,
     clear,
     allOn: ids.length > 0 && picked.size === ids.length,
     someOn: picked.size > 0 && picked.size < ids.length,

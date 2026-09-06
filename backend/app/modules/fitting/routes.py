@@ -26,17 +26,20 @@ from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.fitting import bundle, renderers
-from app.modules.fitting.models import ExportProfile, PropertyCard
+from app.modules.fitting.models import ExportProfile, PropertyCard, UnitSystemDef
 from app.modules.fitting.schemas import (
     BlockSpecOut,
     CardBundleRequest,
     CardFacetOut,
     CardFacetsOut,
     CardValueOut,
+    DeckKeyOut,
+    DeckKeysOut,
     DeckPreviewIn,
     DeckPreviewOut,
     DeckScanIn,
     DeckScanOut,
+    DeckTableOut,
     DeclaredCardPreviewOut,
     DeclaredCardSaveRequest,
     ExportFormatOut,
@@ -49,23 +52,29 @@ from app.modules.fitting.schemas import (
     FitPreviewRequest,
     FittedParameterOut,
     InheritedValueOut,
+    LveCardSaveRequest,
     MemberCurveOut,
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
+    RateCardSaveRequest,
     ResampleMethodOut,
+    UnitSystemBaseUnitsOut,
+    UnitSystemCreate,
+    UnitSystemDeriveIn,
     UnitSystemOut,
     ViscoelasticCardSaveRequest,
 )
 from app.modules.grouping.models import GroupResult
 from app.modules.materials import declared
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.statistics import services as statistics_services
-from app.modules.tests.models import TestType
+from app.modules.tests.models import TestRun, TestType
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, display, pagination, permissions
-from app.shared.auth import current_user
+from app.shared import audit, display, filestore, pagination, permissions
+from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from app.shared.pagination import Page
 from app.shared.permissions import (
@@ -73,9 +82,12 @@ from app.shared.permissions import (
     resolve_owner_workspace,
     visible_owner_clause,
 )
-from matcore import cards, export, fitting, prony, resample, runtime, statistics
+from matcore import cards, curves, export, fitting, prony, resample, runtime, statistics, units
 from matcore.export import scan, template
+from matcore.export.systems import UnitSystem
 from matcore.fitting import hyperelastic
+from matcore.processing import dma
+from matcore.processing.tensile import PLASTIC_STRAIN, TRUE_STRESS
 from matcore.registry import Produced
 
 router = APIRouter(prefix="/fitting", tags=["fitting"])
@@ -141,6 +153,7 @@ def list_blocks(user: User = Depends(current_user)) -> list[BlockSpecOut]:
             produces=[_produced(one) for one in spec.produces],
             rows=[_produced(one) for one in spec.rows],
             in_deck=spec.key in in_decks,
+            curve=list(spec.curve) if spec.curve else None,
         )
         for spec in cards.list_blocks()
     ]
@@ -895,8 +908,30 @@ def _deck(item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()) ->
     )
 
 
+def _table_problem(deck: export.Deck) -> str | None:
+    """소성 표가 덱에 실릴 수 있나 — **내려받기를 누르기 전에** 말한다.
+
+    `available_formats` 는 「표가 있나」 만 본다. 표가 있어도 응력이 떨어지거나 첫 점이
+    0 이 아니면 렌더러가 거절하는데, 그때 사람은 메뉴에서 「가능」 을 보고 눌렀다가
+    422 를 본다(2026-09-05 순환 점검 — 네킹 뒤를 안 자른 곡선이 그랬다).
+    """
+    rows = deck.rows("table")
+    if not rows or "plastic_strain" not in rows[0] or "true_stress" not in rows[0]:
+        return None
+    try:
+        export.prepare(deck.pairs("table", "plastic_strain", "true_stress"))
+    except export.ExportError as exc:
+        return f"소성 표를 덱에 못 싣습니다 — {exc}"
+    return None
+
+
 def _card_out(
-    db: Session, item: PropertyCard, *, material: Material | None = None
+    db: Session,
+    item: PropertyCard,
+    *,
+    material: Material | None = None,
+    workspace_id: uuid.UUID | None = None,
+    targets: list[export.Renderer] | None = None,
 ) -> PropertyCardOut:
     """카드 하나를 응답 모양으로.
 
@@ -927,7 +962,15 @@ def _card_out(
         if strays
         else None
     )
-    formats = list(export.available_formats(_deck(item, name="CARD")))
+    deck = _deck(item, name="CARD")
+    # **정의로 만든 형식도 센다.** 코드 렌더러만 세면 사람이 만든 「해석용 물성
+    # 정의」 는 내려받기 메뉴에서 늘 회색이다 — 만들 수는 있는데 쓸 수는 없는 것이
+    # 됐다(2026-09-05 순환 점검). 목록은 한 번 만든 것을 돌려 쓴다(N+1).
+    if targets is None:
+        targets = renderers.all_renderers(db, workspace_id)
+    formats = [one.key for one in targets if not export.missing_for(deck, one)]
+    if problem is None:
+        problem = _table_problem(deck)
     return PropertyCardOut(
         id=item.id,
         material_id=item.material_id,
@@ -1261,7 +1304,104 @@ def create_card(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
+
+
+@router.get("/cards/inherited", response_model=list[InheritedValueOut])
+def inherited_values(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[InheritedValueOut]:
+    """카드가 빈칸으로 두면 **물려받을** 푸아송비·밀도.
+
+    모달이 「재료에 있으면 비워 두세요」 라고만 하면 사람은 그 값이 무엇인지 모른
+    채 비운다(2026-09-05). 카드를 만드는 계산과 같은 함수(`_inherit_*`)가 낸다 —
+    화면이 재료 API 를 읽어 나름대로 판정하면 규칙이 두 벌이 된다.
+
+    밀도는 재료의 **지우지 않은 시료 전부**를 본다. 묶음으로 만드는 카드는 그
+    묶음의 시료만 보므로, 로트마다 밀도가 다른 재료에서는 여기의 「시료마다
+    다릅니다」 가 묶음 쪽에서는 한 값으로 정해질 수 있다 — 그때는 저장 응답의
+    근거가 정본이다.
+    """
+    material = _visible_material(db, user, material_id)
+    samples = list(
+        db.scalars(
+            select(Sample).where(
+                Sample.material_id == material.id, Sample.deleted_at.is_(None)
+            )
+        )
+    )
+    return [
+        InheritedValueOut(
+            key=key, label=label, value=one.value, source=one.source, detail=one.detail
+        )
+        for key, label, one in (
+            ("poisson_ratio", "푸아송비", _inherit_poisson(material, None)),
+            ("density", "밀도", _inherit_density(material, samples, None)),
+        )
+    ]
+
+
+@router.get("/cards/{card_id}/deck-keys", response_model=DeckKeysOut)
+def deck_keys(
+    card_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckKeysOut:
+    """이 카드로 덱을 그릴 때 집히는 값과 표. **미리보기와 같은 덱, 같은 조회 규칙.**"""
+    cards.load_builtin()
+    deck = _deck_for_card(db, user, card_id)
+    values: list[DeckKeyOut] = []
+    tables: list[DeckTableOut] = []
+    for block_key in deck.blocks:
+        try:
+            spec = cards.block(block_key)
+        except KeyError:
+            spec = None
+        block_label = spec.label if spec else block_key
+        produced = {one.key: one for one in (spec.produces if spec else ())}
+        for key in sorted(deck.values(block_key)):
+            number = deck.number(block_key, key)
+            if number is None:
+                continue  # 출처·참고 같은 글자 값은 덱 자리에 못 꽂는다
+            known = produced.get(key)
+            values.append(
+                DeckKeyOut(
+                    path=f"{block_key}.{key}",
+                    block=block_key,
+                    block_label=block_label,
+                    key=key,
+                    label=known.label if known else key,
+                    si_unit=known.si_unit if known else None,
+                    value=float(number),
+                )
+            )
+        rows = deck.rows(block_key)
+        if rows:
+            declared = {one.key: one for one in (spec.rows if spec else ())}
+            seen: list[str] = []
+            for row in rows:
+                for column in row:
+                    if column not in seen:
+                        seen.append(str(column))
+            tables.append(
+                DeckTableOut(
+                    block=block_key,
+                    block_label=block_label,
+                    row_count=len(rows),
+                    columns=[
+                        CardValueOut(
+                            key=column,
+                            label=declared[column].label if column in declared else column,
+                            si_unit=declared[column].si_unit if column in declared else "1",
+                            help=declared[column].help if column in declared else None,
+                        )
+                        for column in seen
+                    ],
+                )
+            )
+    return DeckKeysOut(card_id=card_id, values=values, tables=tables)
 
 
 @router.get("/cards/declared/preview", response_model=DeclaredCardPreviewOut)
@@ -1362,7 +1502,7 @@ def create_declared_card(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
 
 
 @dataclass(frozen=True)
@@ -1640,7 +1780,389 @@ def create_viscoelastic_card(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
+
+
+@dataclass(frozen=True)
+class _Lineage:
+    """묶음이 가리키는 시험들의 계보 — 재료·시편·시료·방향·종류. **하나여야 한다.**"""
+
+    material: Material
+    runs: list[TestRun]
+    specimens: list[Specimen]
+    samples: list[Sample]
+    test_type_id: uuid.UUID
+    orientation: str
+
+
+def _lineage_of_group(db: Session, user: User, row: GroupResult) -> _Lineage:
+    """묶음의 구성원을 시험 → 시편 → 시료로 따라간다. 방향·종류가 섞이면 막는다 —
+    한 카드는 방향 하나·종류 하나의 물성이다."""
+    material = db.scalar(
+        permissions.visible_materials(db, user).where(Material.id == row.material_id)
+    )
+    if material is None:
+        raise NotFound("MNX-FITTING-0011", "이 묶음의 재료를 볼 수 없습니다.")
+    used = set(row.used)
+    runs = [
+        permissions.get_run(db, user, uuid.UUID(str(item["test_run_id"])))
+        for item in row.members
+        if not used or item.get("label") in used
+    ]
+    if not runs:
+        raise NotFound("MNX-FITTING-0011", "묶음의 시험을 따라갈 수 없습니다.")
+    specimens = [db.get(Specimen, run.specimen_id) for run in runs]
+    if any(one is None for one in specimens):
+        raise NotFound("MNX-FITTING-0011", "묶음의 시편을 따라갈 수 없습니다.")
+    found = [one for one in specimens if one is not None]
+    orientations = {one.orientation for one in found}
+    if len(orientations) != 1:
+        raise AppError(
+            "MNX-FITTING-0013",
+            f"방향이 {len(orientations)}가지 섞여 있습니다"
+            f"({', '.join(sorted(orientations))}). 카드는 방향 하나의 물성입니다.",
+            status=422,
+        )
+    types = {run.test_type_id for run in runs}
+    if len(types) != 1:
+        raise AppError("MNX-FITTING-0013", "시험 종류가 섞여 있습니다.", status=422)
+    samples = [
+        one for one in (db.get(Sample, item.sample_id) for item in found) if one is not None
+    ]
+    return _Lineage(
+        material=material,
+        runs=runs,
+        specimens=found,
+        samples=samples,
+        test_type_id=types.pop(),
+        orientation=orientations.pop(),
+    )
+
+
+def _mean_scalar_of_runs(
+    db: Session, runs: list[TestRun], key: str
+) -> tuple[float | None, int]:
+    """구성원의 채택 결과에서 스칼라 하나의 평균과 그 수. **없는 시험은 센 수에서 뺀다.**"""
+    ids = [run.adopted_result_id for run in runs if run.adopted_result_id]
+    if not ids:
+        return None, 0
+    found: list[float] = []
+    for result in db.scalars(select(ProcessingResult).where(ProcessingResult.id.in_(ids))):
+        for scalar in result.scalars:
+            if str(scalar.get("key")) == key and isinstance(scalar.get("value"), int | float):
+                found.append(float(scalar["value"]))
+                break
+    if not found:
+        return None, 0
+    return float(np.mean(found)), len(found)
+
+
+@router.post("/cards/rate-dependent", response_model=PropertyCardOut, status_code=201)
+def create_rate_card(
+    payload: RateCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """속도 의존 소성 카드 — **속도별 묶음에서.**
+
+    `table` 에는 기준 속도(가장 느린 묶음)의 곡선을, `rate_table` 에는 속도 전부를
+    싣는다. 그래서 속도를 안 받는 솔버(보통 Abaqus·OpenRadioss)는 기준 곡선으로
+    덱을 내고, 받는 솔버(Abaqus 속도 의존)는 표 전부를 낸다 — 카드 하나가 두 길을
+    다 연다.
+
+    탄성계수는 구성원의 채택 결과가 낸 `youngs_modulus` 의 평균이고, 그것이 없으면
+    재료에 적어 둔 값이다. **어느 쪽인지 출처를 남긴다.**
+    """
+    cards.load_builtin()
+    row = db.get(GroupResult, payload.group_result_id)
+    if row is None:
+        raise NotFound("MNX-FITTING-0011", "묶음을 찾을 수 없습니다.")
+    if row.plugin_id != "tensile.rate_family":
+        raise AppError(
+            "MNX-FITTING-0016",
+            f"이 묶음은 '{row.plugin_id}' 입니다. 속도 의존 카드는 「속도별 소성 곡선」 "
+            f"묶음에서만 만듭니다.",
+            status=422,
+        )
+    bins = list(row.detail.get("rates") or [])
+    if not bins:
+        raise AppError("MNX-FITTING-0016", "이 묶음에 속도별 곡선이 없습니다.", status=422)
+
+    lineage = _lineage_of_group(db, user, row)
+    material = lineage.material
+    modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
+    modulus_source = "statistics"
+    if modulus is None:
+        stated = _declared(material, "탄성계수")
+        modulus, modulus_source = stated.value, stated.source
+    poisson = _inherit_poisson(material, payload.poisson_ratio)
+    density = _inherit_density(material, lineage.samples, payload.density)
+
+    def rows_of(one: dict[str, Any]) -> list[dict[str, float]]:
+        curve = one.get("curve") or {}
+        xs = curve.get(PLASTIC_STRAIN) or []
+        ys = curve.get(TRUE_STRESS) or []
+        return [
+            {
+                "strain_rate": float(one["rate"]),
+                "plastic_strain": float(x),
+                "true_stress": float(y),
+            }
+            for x, y in zip(xs, ys, strict=True)
+        ]
+
+    reference_rows = rows_of(bins[0])
+    all_rows = [entry for one in bins for entry in rows_of(one)]
+    model = str(row.detail.get("model") or "none")
+    fit = dict(row.detail.get("fit") or {})
+    notes = [
+        f"속도별 묶음 {len(bins)}개 · 시편 {len(lineage.runs)}건에서 만들었습니다. "
+        f"`table` 은 기준 속도 {float(bins[0]['rate']):.3g} 1/s 의 곡선입니다.",
+        (
+            f"탄성계수: 채택 결과 {modulus_count}건의 평균입니다."
+            if modulus_source == "statistics"
+            else f"탄성계수: 재료에 적어 둔 값입니다({modulus_source})."
+        ),
+        f"푸아송비: {poisson.detail}" if poisson.detail else "",
+        f"밀도: {density.detail}" if density.detail else "",
+        *row.warnings,
+    ]
+
+    item = PropertyCard(
+        material_id=material.id,
+        test_type_id=lineage.test_type_id,
+        orientation=lineage.orientation,
+        label=payload.label,
+        status="draft",
+        source={
+            "sample_count": len(lineage.runs),
+            "test_run_ids": [str(run.id) for run in lineage.runs],
+            "record_names": [run.record_name for run in lineage.runs],
+            "group_result_id": str(row.id),
+            "plugin_id": row.plugin_id,
+            "notes": [line for line in notes if line],
+            "runtime": runtime.manifest(),
+        },
+        blocks={
+            "elastic": {
+                "values": {
+                    **(
+                        {"youngs_modulus": modulus, "youngs_modulus_source": modulus_source}
+                        if modulus is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "poisson_ratio": poisson.value,
+                            "poisson_ratio_source": poisson.source,
+                        }
+                        if poisson.value is not None
+                        else {}
+                    ),
+                    **(
+                        {"density": density.value, "density_source": density.source}
+                        if density.value is not None
+                        else {}
+                    ),
+                }
+            },
+            "table": {
+                "values": {
+                    "source": "rate_family",
+                    "measured_max": max(
+                        (r["plastic_strain"] for r in reference_rows), default=0.0
+                    ),
+                },
+                "rows": [
+                    {"plastic_strain": r["plastic_strain"], "true_stress": r["true_stress"]}
+                    for r in reference_rows
+                ],
+            },
+            "rate_table": {
+                "values": {
+                    "source": "rate_family",
+                    "rate_count": len(bins),
+                    "reference_rate": float(bins[0]["rate"]),
+                    "model": model,
+                    **{key: float(value) for key, value in fit.items()},
+                },
+                "rows": all_rows,
+                "notes": list(row.warnings),
+            },
+        },
+        point_count=len(reference_rows),
+        note=payload.note,
+        created_by_id=user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
+
+
+@router.post("/cards/lve", response_model=PropertyCardOut, status_code=201)
+def create_lve_card(
+    payload: LveCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """DMA 변형률 스윕의 선형 구간 탄성률 카드 — **통계 묶음에서.**
+
+    「선형점탄성 탄성률」 단계가 낸 E′ 와 한계 변형률을 시편들에서 평균한다. 전에는
+    이 값이 처리 결과에서 끝났다 — 카드로 나갈 자리가 없어서 소변형·진동 해석에 쓸
+    탄성계수를 사람이 손으로 옮겨 적었다.
+
+    **주파수·온도를 함께 싣는다.** 스윕은 한 주파수·한 온도에서 도니까 그 값은 거기서만
+    유효하다. 채택 결과의 열에서 평균을 읽는다.
+    """
+    cards.load_builtin()
+    _, groups = statistics_services.groups_for_material(db, user, payload.material_id)
+    group = next(
+        (
+            one
+            for one in groups
+            if one.test_type.key == payload.test_type_key
+            and one.orientation == payload.orientation
+        ),
+        None,
+    )
+    if group is None or not group.members:
+        raise NotFound(
+            "MNX-FITTING-0017",
+            f"{payload.test_type_key} · {payload.orientation} 에 채택된 결과가 없습니다.",
+        )
+
+    moduli, labels, _, _ = statistics_services.scalar_values(group, dma.LVE_MODULUS)
+    limits, _, _, _ = statistics_services.scalar_values(group, dma.LVE_LIMIT)
+    kept = [
+        (label, e, g)
+        for label, e, g in zip(labels, moduli, limits, strict=True)
+        if e is not None and g is not None
+    ]
+    if not kept:
+        raise AppError(
+            "MNX-FITTING-0017",
+            "선형 구간 탄성률을 낸 결과가 없습니다. 변형률 스윕을 「선형점탄성 탄성률」 "
+            "단계로 처리하고 채택하세요.",
+            status=422,
+        )
+    skipped = [
+        label
+        for label, e, g in zip(labels, moduli, limits, strict=True)
+        if e is None or g is None
+    ]
+    modulus_values = [e for _, e, _ in kept]
+    limit_values = [g for _, _, g in kept]
+    modulus = float(np.mean(modulus_values))
+    limit = float(np.mean(limit_values))
+    cv: float | None = None
+    if len(modulus_values) >= 2:
+        cv = statistics.scalar_stats(modulus_values).coefficient_of_variation
+
+    # 스윕이 돈 주파수·온도 — 채택 결과의 열 평균. 없으면 안 적는다.
+    frequencies: list[float] = []
+    temperatures: list[float] = []
+    for member in group.members:
+        raw = curves.read_columns(filestore.read_bytes(member.result.storage_path))
+        if "frequency" in raw:
+            frequencies.extend(float(v) for v in raw["frequency"] if v is not None)
+        elif "angular_frequency" in raw:
+            frequencies.extend(
+                float(v) / (2 * math.pi) for v in raw["angular_frequency"] if v is not None
+            )
+        if "temperature" in raw:
+            temperatures.extend(float(v) for v in raw["temperature"] if v is not None)
+
+    material = group.material
+    samples = list({one.specimen.sample_id: one for one in group.members}.values())
+    sample_rows = [
+        one
+        for one in (db.get(Sample, m.specimen.sample_id) for m in samples)
+        if one is not None
+    ]
+    poisson = _inherit_poisson(material, payload.poisson_ratio)
+    density = _inherit_density(material, sample_rows, payload.density)
+    notes = [
+        (
+            f"시편 {len(kept)}건의 선형 구간 E′ 평균입니다."
+            if len(kept) > 1
+            else f"시편 {kept[0][0]} 한 건의 값입니다 — 평균이 아니라 그 시편의 값입니다."
+        ),
+        f"{', '.join(skipped)} 은 선형 구간을 못 내 뺐습니다." if skipped else "",
+        f"푸아송비: {poisson.detail}" if poisson.detail else "",
+        f"밀도: {density.detail}" if density.detail else "",
+    ]
+
+    # **재료 기본 정보를 함께 싣는다**(선택). 열물성은 시험이 안 주는 값이라 재료에 적힌
+    # 것뿐이고, 이 카드 한 장으로 열응력 해석까지 돌게 하려면 여기서 데려와야 한다.
+    # 탄성 블록은 건드리지 않는다 — E′ 는 잰 값이고, 적은 탄성계수가 그것을 덮으면 안 된다.
+    thermal_values: dict[str, Any] = {}
+    thermal_rows: list[dict[str, Any]] = []
+    if payload.include_declared:
+        thermal_values = _thermal_block(material)
+        thermal_rows = _declared_table(material, THERMAL_COLUMNS)
+        notes.append(
+            "재료 기본 정보(열물성)를 함께 실었습니다."
+            if thermal_values
+            else "재료 기본 정보를 함께 싣도록 했지만, 재료에 적어 둔 열물성이 없습니다."
+        )
+
+    item = PropertyCard(
+        material_id=material.id,
+        test_type_id=group.test_type.id,
+        orientation=group.orientation,
+        label=payload.label,
+        status="draft",
+        source={
+            "sample_count": len(kept),
+            "test_run_ids": [str(m.run.id) for m in group.members],
+            "record_names": [m.run.record_name for m in group.members],
+            "notes": [line for line in notes if line],
+            "runtime": runtime.manifest(),
+            "include_declared": payload.include_declared,
+        },
+        blocks={
+            **_temperature_aware("thermal", thermal_values, thermal_rows),
+            "elastic": {
+                "values": {
+                    "youngs_modulus": modulus,
+                    "youngs_modulus_source": "lve",
+                    **(
+                        {
+                            "poisson_ratio": poisson.value,
+                            "poisson_ratio_source": poisson.source,
+                        }
+                        if poisson.value is not None
+                        else {}
+                    ),
+                    **(
+                        {"density": density.value, "density_source": density.source}
+                        if density.value is not None
+                        else {}
+                    ),
+                }
+            },
+            "lve": {
+                "values": {
+                    "youngs_modulus": modulus,
+                    "lve_strain_limit": limit,
+                    "sample_count": len(kept),
+                    **({"coefficient_of_variation": cv} if cv is not None else {}),
+                    **({"frequency_hz": float(np.mean(frequencies))} if frequencies else {}),
+                    **(
+                        {"temperature_k": float(np.mean(temperatures))} if temperatures else {}
+                    ),
+                }
+            },
+        },
+        point_count=0,
+        note=payload.note,
+        created_by_id=user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
 
 
 #: 시험 없이 만든 카드를 가리키는 값(ADR 0016). **`null` 을 쿼리로 못 보낸다.**
@@ -1657,8 +2179,12 @@ GLOBAL_OWNER = "global"
 def _cards_query(db: Session, user: User, material_id: uuid.UUID | None) -> Select[Any]:
     """볼 수 있는 카드. **재료를 안 주면 볼 수 있는 재료의 것만** 준다 —
     안 그러면 남의 부서 재료의 물성이 목록에 섞인다."""
-    query = select(PropertyCard, Material).join(
-        Material, Material.id == PropertyCard.material_id
+    # **휴지통에 든 재료의 카드는 안 보인다.** 재료를 지웠는데 그 카드가 목록에
+    # 남아 「재료가 있다」 로 읽히던 자리다(2026-09-05 순환 점검). 되살리면 다시 보인다.
+    query = (
+        select(PropertyCard, Material)
+        .join(Material, Material.id == PropertyCard.material_id)
+        .where(Material.deleted_at.is_(None))
     )
     if material_id:
         statistics_services.groups_for_material(db, user, material_id)  # 가시성 판정
@@ -1792,8 +2318,11 @@ def list_cards(
     rows = db.execute(
         query.order_by(PropertyCard.created_at.desc()).limit(size).offset(offset)
     ).all()
+    targets = renderers.all_renderers(db, user.home_workspace_id)
     return Page(
-        items=[_card_out(db, card, material=material) for card, material in rows],
+        items=[
+            _card_out(db, card, material=material, targets=targets) for card, material in rows
+        ],
         total=total,
         limit=size,
         offset=offset,
@@ -1807,7 +2336,7 @@ def get_card(
     db: Session = Depends(get_db),
 ) -> PropertyCardOut:
     item = _visible_card(db, user, card_id)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
 
 
 def _card_workspace(db: Session, item: PropertyCard) -> uuid.UUID | None:
@@ -1825,22 +2354,147 @@ def _visible_card(db: Session, user: User, card_id: uuid.UUID) -> PropertyCard:
 
 
 @router.get("/unit-systems", response_model=list[UnitSystemOut])
-def list_unit_systems(user: User = Depends(current_user)) -> list[UnitSystemOut]:
+def list_unit_systems(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> list[UnitSystemOut]:
     """덱을 쓸 수 있는 단위계. **화면이 목록을 손으로 적지 않게 한다.**
 
     적어 두면 계를 하나 더할 때 화면이 뒤처지고, 그때 사람은 그 계로 못 낸다는
     것을 목록에 없다는 사실로만 안다 — 오류가 아니라 부재라서 원인을 못 찾는다.
     """
     del user
+    return [_system_out(item) for item in _all_systems(db)]
+
+
+def _system_out(item: UnitSystem) -> UnitSystemOut:
+    return UnitSystemOut(
+        key=item.key,
+        label=item.label,
+        declaration=item.declaration,
+        # **기본은 CAE 계(mm·N·tonne)다**(2026-09-05). 화면이 그 계로 보여 주는데
+        # 덱만 SI 로 나가니 「단위가 이상하다」 가 됐다. API 인자를 안 준 옛 호출은
+        # 여전히 SI 다 — 스크립트가 전과 다른 것을 받으면 안 된다.
+        is_default=item is export.systems.MM_N_TONNE,
+        builtin=item.builtin,
+        mass=item.mass,
+        length=item.length,
+        time=item.time,
+        symbols=dict(item.symbols),
+    )
+
+
+def _custom_systems(db: Session) -> list[UnitSystem]:
+    """사용자가 만든 계. 읽을 때마다 유도한다 — 인수를 저장하지 않는다."""
     return [
-        UnitSystemOut(
-            key=item.key,
-            label=item.label,
-            declaration=item.declaration,
-            is_default=item is export.systems.SI,
+        export.systems.derive(
+            row.key, row.label, mass=row.mass, length=row.length, time=row.time
         )
-        for item in export.SYSTEMS
+        for row in db.scalars(select(UnitSystemDef).order_by(UnitSystemDef.key))
     ]
+
+
+def _all_systems(db: Session) -> list[UnitSystem]:
+    return [*export.SYSTEMS, *_custom_systems(db)]
+
+
+def _unit_system(db: Session, key: str | None) -> UnitSystem:
+    """붙박이 먼저, 그다음 사용자 계. 모르면 422 — 쓸 수 있는 것을 함께 말한다."""
+    try:
+        return export.systems.get(key)
+    except KeyError:
+        pass
+    for item in _custom_systems(db):
+        if item.key == key:
+            return item
+    known = ", ".join(one.key for one in _all_systems(db))
+    raise AppError(
+        "MNX-FITTING-0023",
+        f"모르는 단위계입니다: {key!r}. 쓸 수 있는 것: {known}",
+        status=422,
+    )
+
+
+@router.get("/unit-systems/base-units", response_model=UnitSystemBaseUnitsOut)
+def unit_system_base_units(user: User = Depends(current_user)) -> UnitSystemBaseUnitsOut:
+    """계를 만들 때 고를 기본 단위. 표가 정본이라 화면이 적어 두지 않는다."""
+    del user
+
+    def plain(dimension: str) -> list[str]:
+        # 오프셋이 있는 것(섭씨)과 ASCII 가 아닌 별칭은 뺀다 — 기본 단위가 못 된다.
+        return [
+            symbol
+            for symbol in units.units_for(dimension)
+            if units.unit_of(symbol).offset == 0 and symbol.isascii()
+        ]
+
+    return UnitSystemBaseUnitsOut(
+        mass=plain("mass"), length=plain("length"), time=plain("time")
+    )
+
+
+@router.post("/unit-systems/derive", response_model=UnitSystemOut)
+def derive_unit_system(
+    payload: UnitSystemDeriveIn, user: User = Depends(current_user)
+) -> UnitSystemOut:
+    """저장하지 않고 **무엇이 어떻게 적힐지** 먼저 보인다 — 응력이 GPa 인지 MPa 인지."""
+    del user
+    try:
+        made = export.systems.derive(
+            "preview", "미리보기", mass=payload.mass, length=payload.length, time=payload.time
+        )
+    except (ValueError, units.UnknownUnit) as exc:
+        raise AppError("MNX-FITTING-0024", str(exc), status=422) from exc
+    return _system_out(made)
+
+
+@router.post("/unit-systems", response_model=UnitSystemOut, status_code=201)
+def create_unit_system(
+    payload: UnitSystemCreate,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> UnitSystemOut:
+    """단위계를 만든다 — 시스템 관리자. **덱의 계는 전사가 같은 것을 봐야 한다.**"""
+    if any(one.key == payload.key for one in _all_systems(db)):
+        raise Conflict(
+            "MNX-FITTING-0025", f"같은 key 의 단위계가 이미 있습니다: {payload.key}"
+        )
+    try:
+        made = export.systems.derive(
+            payload.key,
+            payload.label,
+            mass=payload.mass,
+            length=payload.length,
+            time=payload.time,
+        )
+    except (ValueError, units.UnknownUnit) as exc:
+        raise AppError("MNX-FITTING-0024", str(exc), status=422) from exc
+    db.add(
+        UnitSystemDef(
+            key=payload.key,
+            label=payload.label,
+            mass=payload.mass,
+            length=payload.length,
+            time=payload.time,
+            created_by_id=user.id,
+        )
+    )
+    db.commit()
+    return _system_out(made)
+
+
+@router.delete("/unit-systems/{key}", status_code=204)
+def delete_unit_system(
+    key: str, user: User = Depends(require_system_admin), db: Session = Depends(get_db)
+) -> None:
+    """사용자가 만든 계만. 이미 받은 덱은 파일 머리의 선언이 정본이라 지워도 안 흔들린다."""
+    del user
+    if any(one.key == key for one in export.SYSTEMS):
+        raise AppError("MNX-FITTING-0026", "붙박이 단위계는 지울 수 없습니다.", status=422)
+    row = db.scalar(select(UnitSystemDef).where(UnitSystemDef.key == key))
+    if row is None:
+        raise NotFound("MNX-FITTING-0027", "그 단위계를 찾을 수 없습니다.")
+    db.delete(row)
+    db.commit()
 
 
 @router.get("/formats", response_model=list[ExportFormatOut])
@@ -2070,15 +2724,7 @@ def preview_deck(
     띄우고, 사람은 정의의 어느 줄이 문제인지 모른 채 돌아간다.
     """
     deck = _deck_for_card(db, user, payload.card_id)
-    try:
-        system = export.systems.get(payload.units)
-    except KeyError as exc:
-        known = ", ".join(one.key for one in export.SYSTEMS)
-        raise AppError(
-            "MNX-FITTING-0023",
-            f"모르는 단위계입니다: {payload.units!r}. 쓸 수 있는 것: {known}",
-            status=422,
-        ) from exc
+    system = _unit_system(db, payload.units)
 
     try:
         target = template.renderer_from_definition({"key": "preview", **payload.definition})
@@ -2092,7 +2738,12 @@ def preview_deck(
         made = export.render(target, deck, system)
     except export.ExportError as exc:
         return DeckPreviewOut(error=str(exc), missing=missing)
-    return DeckPreviewOut(text=made.text, notes=list(made.notes), missing=missing)
+    return DeckPreviewOut(
+        text=made.text,
+        notes=list(made.notes),
+        missing=missing,
+        spans=[list(one) for one in made.spans],
+    )
 
 
 def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
@@ -2226,15 +2877,7 @@ def export_bundle(
         target = renderers.renderer_for(db, user.home_workspace_id, payload.format)
     except export.ExportError as exc:
         raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
-    try:
-        export.systems.get(payload.units)
-    except KeyError as exc:
-        known = ", ".join(one.key for one in export.SYSTEMS)
-        raise AppError(
-            "MNX-FITTING-0023",
-            f"모르는 단위계입니다: {payload.units!r}. 쓸 수 있는 것: {known}",
-            status=422,
-        ) from exc
+    system = _unit_system(db, payload.units)
 
     items: list[bundle.BundleCard] = []
     for card_id in payload.card_ids:
@@ -2254,7 +2897,7 @@ def export_bundle(
         made = bundle.build(
             items,
             target=target,
-            units=payload.units,
+            system=system,
             exported_by=user.email,
             app_version=version.current(),
             now=datetime.now(UTC),
@@ -2298,15 +2941,7 @@ def export_card(
     생긴다.
     """
     deck = _deck_for_card(db, user, card_id)
-    try:
-        system = export.systems.get(units)
-    except KeyError as exc:
-        known = ", ".join(one.key for one in export.SYSTEMS)
-        raise AppError(
-            "MNX-FITTING-0023",
-            f"모르는 단위계입니다: {units!r}. 쓸 수 있는 것: {known}",
-            status=422,
-        ) from exc
+    system = _unit_system(db, units)
     try:
         target = renderers.renderer_for(db, user.home_workspace_id, format)
         rendered = export.render(target, deck, system)
@@ -2364,7 +2999,7 @@ def update_card(
             setattr(item, field, data[field])
     db.commit()
     db.refresh(item)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
 
 
 @router.get("/resample-methods", response_model=list[ResampleMethodOut])
@@ -2413,7 +3048,7 @@ def publish(
     )
     db.commit()
     db.refresh(item)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
 
 
 def _require_publisher(db: Session, user: User, item: PropertyCard) -> None:
@@ -2482,7 +3117,7 @@ def restore(
     )
     db.commit()
     db.refresh(item)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
 
 
 @router.post("/cards/{card_id}/deprecate", response_model=PropertyCardOut)
@@ -2516,7 +3151,7 @@ def deprecate(
     )
     db.commit()
     db.refresh(item)
-    return _card_out(db, item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
 
 
 @router.delete("/cards/{card_id}", status_code=204)

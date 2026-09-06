@@ -180,3 +180,37 @@ export function CardBlocks({ specs, card }: { specs: BlockSpec[]; card: Property
     </div>
   )
 }
+
+/**
+ * 카드 한 장의 **요약 칩** — 접힌 카드가 무엇을 들고 있는지 한 줄로.
+ *
+ * 카드마다 블록 값을 전부 펼치면 한 장이 화면 절반을 먹는다(2026-09-05 실사용:
+ * 「한 카드가 차지하는 공간이 너무 넓다」). 블록마다 이름과 **첫 숫자 값 하나**만
+ * 적고, 표는 행 수만 적는다. 펼치면 `CardBlocks` 가 전부 보인다.
+ */
+export function BlockChips({ specs, card }: { specs: BlockSpec[]; card: PropertyCard }) {
+  const blocks = card.blocks as Record<string, { values?: Record<string, unknown>; rows?: unknown[] }>
+  const present = specs.filter((spec) => blocks[spec.key])
+  if (present.length === 0) return null
+  return (
+    <span className="flex flex-wrap gap-1">
+      {present.map((spec) => {
+        const payload = blocks[spec.key]
+        const values = payload.values ?? {}
+        const first = spec.produces.find((one) => typeof values[one.key] === 'number')
+        const rows = payload.rows?.length ?? 0
+        const said = first
+          ? `${first.label} ${formatScalar(values[first.key] as number, first.si_unit)}`
+          : rows > 0
+            ? `${rows}행`
+            : ''
+        return (
+          <Badge key={spec.key} variant="outline" className="font-normal">
+            {spec.label}
+            {said && <span className="text-muted-foreground ml-1">{said}</span>}
+          </Badge>
+        )
+      })}
+    </span>
+  )
+}

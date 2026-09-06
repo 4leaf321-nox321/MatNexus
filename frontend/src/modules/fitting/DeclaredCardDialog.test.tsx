@@ -88,7 +88,7 @@ beforeEach(() => {
   createDeclaredCard.mockResolvedValue({ id: 'c-1' })
 })
 
-describe('적어 둔 값으로 카드 만들기', () => {
+describe('재료 기본 정보로 카드 만들기', () => {
   it('무엇이 실릴지 먼저 보인다', async () => {
     // **만들기를 누른 뒤에 "적어 둔 물성이 없습니다" 를 보는 것은 늦다.**
     dialog()
@@ -100,7 +100,8 @@ describe('적어 둔 값으로 카드 만들기', () => {
     // **시료 실측 밀도와 문헌 탄성계수가 한 카드에 섞여 들어간다.**
     dialog()
     expect(await screen.findByText(/ASM Handbook Vol.1 p.12/)).toBeInTheDocument()
-    expect(screen.getByText(/시료에서 잰 값/)).toBeInTheDocument()
+    // 실릴 값 목록과 밀도 칸 아래 둘 다에 선다 — 칸 아래 것은 「비우면 이 값」 이다.
+    expect(screen.getAllByText(/시료에서 잰 값/).length).toBeGreaterThan(0)
   })
 
   it('단위를 블록 선언에서 가져온다', async () => {
@@ -144,6 +145,16 @@ describe('적어 둔 값으로 카드 만들기', () => {
       poisson_ratio: null,
       density: null,
     })
+  })
+
+  it('밀도는 표시 단위로 받아 SI 로 보낸다', async () => {
+    // 라벨이 tonne/mm³ 인데 값이 kg/m³ 로 그대로 나갔다 — 조용히 틀리는 환산이었다.
+    dialog()
+    await waitFor(() => expect(screen.getByText('탄성계수')).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText(/밀도/), '7.85e-9')
+    await userEvent.click(screen.getByRole('button', { name: '만들기' }))
+    await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
+    expect(createDeclaredCard.mock.calls[0][0].density).toBeCloseTo(7850, 3)
   })
 
   it('넣은 값은 보낸다', async () => {

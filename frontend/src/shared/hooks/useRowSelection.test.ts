@@ -160,3 +160,17 @@ describe('목록이 바뀔 때', () => {
     expect(result.current.chosen).toEqual(['a', 'd'])
   })
 })
+
+describe('갈아 끼우기', () => {
+  it('준 것만 켜지고, 목록에 없는 id 는 보이지 않지만 남는다', () => {
+    const { result, rerender } = renderHook(({ ids }) => useRowSelection(ids), {
+      initialProps: { ids: ['a', 'b', 'c'] },
+    })
+    act(() => result.current.toggle('a'))
+    act(() => result.current.replace(['b', 'z']))
+    expect([...result.current.picked]).toEqual(['b'])
+    // 목록이 넓어지면 남아 있던 것이 보인다.
+    rerender({ ids: ['a', 'b', 'c', 'z'] })
+    expect([...result.current.picked]).toEqual(['b', 'z'])
+  })
+})

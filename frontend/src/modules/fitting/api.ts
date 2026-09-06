@@ -18,6 +18,8 @@ export type FittedParameter = components['schemas']['FittedParameterOut']
 export type PropertyCard = components['schemas']['PropertyCardOut']
 /** 덱을 쓸 단위계. **목록은 서버가 준다** — 화면이 적어 두면 계가 늘 때 뒤처진다. */
 export type UnitSystem = components['schemas']['UnitSystemOut']
+export type UnitSystemCreate = components['schemas']['UnitSystemCreate']
+export type UnitSystemBaseUnits = components['schemas']['UnitSystemBaseUnitsOut']
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']
 type PropertyCardUpdate = components['schemas']['PropertyCardUpdateRequest']
 export type ExportFormat = components['schemas']['ExportFormatOut']
@@ -26,6 +28,8 @@ export type BlockSpec = components['schemas']['BlockSpecOut']
 export type Produced = components['schemas']['CardValueOut']
 export type ViscoelasticCardSaveRequest =
   components['schemas']['ViscoelasticCardSaveRequest']
+export type RateCardSaveRequest = components['schemas']['RateCardSaveRequest']
+export type LveCardSaveRequest = components['schemas']['LveCardSaveRequest']
 export type DeclaredCardSaveRequest = components['schemas']['DeclaredCardSaveRequest']
 export type DeclaredCardPreview = components['schemas']['DeclaredCardPreviewOut']
 export type CardPage = components['schemas']['Page_PropertyCardOut_']
@@ -34,6 +38,8 @@ export type ExportProfile = components['schemas']['ExportProfileOut']
 export type ExportProfileSave = components['schemas']['ExportProfileSaveRequest']
 export type ExportProfileCreate = components['schemas']['ExportProfileCreateRequest']
 export type DeckPreview = components['schemas']['DeckPreviewOut']
+/** 카드 한 장으로 덱을 그릴 때 실제로 집히는 값·표. 정의 편집기의 「이 카드에 든 것」. */
+export type DeckKeys = components['schemas']['DeckKeysOut']
 export type DeckScan = components['schemas']['DeckScanOut']
 /** 거를 수 있는 값들과 **각각 몇 장인가.** 개수는 서버가 센다. */
 export type CardFacets = components['schemas']['CardFacetsOut']
@@ -101,6 +107,9 @@ export const fittingApi = {
    * **못 냈어도 200 이다** — 못 낸 이유가 응답 안에 있다. 그래서 이것을 부르는
    * 화면은 `catch` 가 아니라 `error` 필드를 봐야 한다.
    */
+  /** 이 카드로 덱을 그릴 때 집히는 값·표 — 미리보기와 같은 덱, 같은 조회 규칙. */
+  deckKeys: (cardId: string) => api.get<DeckKeys>(`/fitting/cards/${cardId}/deck-keys`),
+
   previewDeck: (definition: unknown, cardId: string, units = 'si') =>
     api.post<DeckPreview>('/fitting/export-profiles/preview', {
       definition,
@@ -152,6 +161,20 @@ export const fittingApi = {
     api.post<PropertyCard>('/fitting/cards/viscoelastic', body),
 
   /**
+   * 속도별 묶음(`tensile.rate_family`)에서 속도 의존 소성 카드를 만든다.
+   * `table` 에는 기준 속도의 곡선, `rate_table` 에는 속도 전부가 실린다.
+   */
+  createRateCard: (body: RateCardSaveRequest) =>
+    api.post<PropertyCard>('/fitting/cards/rate-dependent', body),
+
+  /**
+   * DMA 변형률 스윕의 선형 구간 탄성률 카드. 통계 묶음(재료·종류·방향)의 채택
+   * 결과에서 E′·한계 변형률을 평균한다.
+   */
+  createLveCard: (body: LveCardSaveRequest) =>
+    api.post<PropertyCard>('/fitting/cards/lve', body),
+
+  /**
    * **시험 없이** 적어 둔 값만으로 카드를 만든다(ADR 0016).
    *
    * `create` 는 대표 곡선에서 시작하므로 시험이 하나도 없는 재료는 탈 수 없다.
@@ -168,6 +191,10 @@ export const fittingApi = {
    * 되면 어긋나는 순간 화면이 거짓말을 한다. 카드를 만들 때 실제로 쓰는
    * 계산과 **같은 코드**가 이 답을 낸다.
    */
+  /** 카드가 빈칸으로 두면 물려받을 푸아송비·밀도. **카드를 만드는 계산과 같은 코드**가 낸다. */
+  inherited: (materialId: string) =>
+    api.get<InheritedValue[]>(`/fitting/cards/inherited?material_id=${materialId}`),
+
   declaredPreview: (materialId: string) =>
     api.get<DeclaredCardPreview>(
       `/fitting/cards/declared/preview?material_id=${materialId}`
@@ -215,6 +242,19 @@ export const fittingApi = {
    * 여는 링크에는 실리지 않고, 401 이 새 탭에서 나므로 화면에 아무 표시도 안 뜬다.
    */
   unitSystems: () => api.get<UnitSystem[]>('/fitting/unit-systems'),
+
+  /**
+   * 단위계를 만든다 — **질량·길이·시간 셋만 고르면** 응력·밀도·비열·전도도의 기호와
+   * 인수는 서버가 차원식으로 유도한다(2026-09-05). 두 계가 코드에 박혀 있어 LS-DYNA
+   * 의 mm·ms·kg 같은 조합은 배포가 필요했다.
+   */
+  unitSystemBaseUnits: () => api.get<UnitSystemBaseUnits>('/fitting/unit-systems/base-units'),
+  /** 저장하지 않고 무엇이 어떻게 적힐지 본다 — 응력이 GPa 인지 MPa 인지. */
+  deriveUnitSystem: (body: { mass: string; length: string; time: string }) =>
+    api.post<UnitSystem>('/fitting/unit-systems/derive', body),
+  createUnitSystem: (body: UnitSystemCreate) =>
+    api.post<UnitSystem>('/fitting/unit-systems', body),
+  removeUnitSystem: (key: string) => api.delete<void>(`/fitting/unit-systems/${key}`),
 
   /**
    * 덱을 내려받는다. **파일 이름에 단위계를 적는다.**

@@ -17,9 +17,24 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, BookOpen, Check, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  FileDown,
+  Info,
+  Layers,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 
 import { DeclaredCardDialog } from '@/modules/fitting/DeclaredCardDialog'
+import { GroupsPanel } from '@/modules/materials/GroupsPanel'
+import { groupsApi } from '@/modules/materials/api.groups'
+import { InheritedFields, densityToSi } from '@/modules/fitting/InheritedFields'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import { RunPicker } from '@/modules/fitting/RunPicker'
@@ -31,6 +46,7 @@ import type {
   PropertyCard,
 } from '@/modules/fitting/api'
 import { statisticsApi } from '@/modules/statistics/api'
+import type { StatisticsGroup } from '@/modules/statistics/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { ApiError } from '@/shared/api/client'
 import { CreatedOn } from '@/shared/components/CreatedOn'
@@ -48,9 +64,12 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import { CardBlocks } from '@/modules/fitting/CardBlocks'
+import { BlockChips, CardBlocks } from '@/modules/fitting/CardBlocks'
+import { cardKind } from '@/modules/fitting/cardKind'
+import { LveCardDialog } from '@/modules/fitting/LveCardDialog'
+import { hasLve } from '@/modules/fitting/lve'
 import { useResource } from '@/shared/hooks/useResource'
-import { axisLabel, display, formatScalar, toDisplay } from '@/shared/units'
+import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 
 /** 이 이상 어긋나면 눈에 띄게 한다. 커널이 같은 값에서 경고를 단다. */
 const NOTABLE_RMSE = 0.05
@@ -62,12 +81,13 @@ interface Props {
 interface GroupKey {
   test_type_key: string
   test_type_label: string
+  /** 경화식·초탄성에 넣을 수 있나 — 서버가 채택 결과의 열로 판단한다. */
+  fittable: boolean
   orientation: string
   sample_count: number
 }
 
 /** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
-const DENSITY_SYMBOL = display('kg/m3').unit
 
 /**
  * 몇 번째 일인가. **차례가 화면에 없으면 사람은 위에서부터 누른다** — 실제로
@@ -92,6 +112,50 @@ function Step({
       <span className="text-sm font-medium">{label}</span>
     </span>
   )
+}
+
+/** 「정보」 가 보이는 표. 단추가 하나 늘면 여기도 한 줄 — 단추와 표가 갈리면 표가 거짓말한다. */
+const CARD_KINDS: { name: string; input: string; output: string; deck: string }[] = [
+  {
+    name: '재료 기본 정보 카드',
+    input: '재료에 적어 둔 값(문헌·규격·밀시트) + 밀도·푸아송비. 시험이 없어도 됩니다.',
+    output: '탄성 · 열물성 블록',
+    deck: '*ELASTIC · *EXPANSION 등',
+  },
+  {
+    name: '탄소성 카드',
+    input: '인장 채택 곡선들의 대표 곡선(진소성변형률–진응력)',
+    output: '탄성계수 + 경화식 계수(Voce·Swift…) + 소성 표',
+    deck: '*ELASTIC + *PLASTIC',
+  },
+  {
+    name: '선형탄성구간(LVE) 카드',
+    input: 'DMA 변형률 스윕의 선형 구간',
+    output: '저장 탄성률 E′ + 선형 한계 변형률 (+ 켜면 열물성)',
+    deck: '*ELASTIC',
+  },
+  {
+    name: '점탄성 카드',
+    input: '마스터커브의 Prony 적합 — 시편 하나 또는 글로벌 피팅 묶음',
+    output: 'Prony 계수 한 벌 + 순간 탄성률 (기준 온도 하나)',
+    deck: '*ELASTIC + *VISCOELASTIC',
+  },
+  {
+    name: '속도 의존 카드',
+    input: '변형률 속도가 다른 인장 시험들의 글로벌 피팅 묶음',
+    output: '기준 속도 소성 표 + 속도별 소성 표 (+ Cowper-Symonds·Johnson-Cook)',
+    deck: '*PLASTIC, RATE=…',
+  },
+]
+
+/**
+ * 글로벌 피팅 방법 → 단추 이름. 방법의 이름(「Prony 글로벌 피팅」)은 계산의 이름이라
+ * 단추에 그대로 쓰면 다른 단추(재료 기본 정보 카드·탄소성 카드)와 층이 안 맞는다.
+ * 모르는 방법은 `<방법 이름> 카드` 로 선다 — 새 방법이 붙어도 단추는 선다.
+ */
+const GROUP_CARD_LABELS: Record<string, string> = {
+  'viscoelastic.prony_group': '점탄성 카드',
+  'tensile.rate_family': '속도 의존 카드',
 }
 
 export function FittingPanel({ materialId }: Props) {
@@ -119,6 +183,8 @@ export function FittingPanel({ materialId }: Props) {
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
   const [declaring, setDeclaring] = useState(false)
+  // 탄소성 카드 만들기 모달. 위의 「탄소성 카드」 단추가 연다.
+  const [fitting, setFitting] = useState(false)
 
   const groups: GroupKey[] = (stats.data?.groups ?? [])
     // **채택된 것이 있으면 적합할 수 있다.** 1건이면 그 곡선이 곧 입력이다 —
@@ -134,7 +200,31 @@ export function FittingPanel({ materialId }: Props) {
       test_type_label: item.test_type_label,
       orientation: item.orientation,
       sample_count: item.sample_count,
+      // 옛 응답(칸이 없음)은 된다고 본다 — 서버가 늘 보내므로 실제로는 안 걸린다.
+      fittable: item.fittable ?? true,
     }))
+  // **경화식·초탄성 길은 적합할 곡선이 있는 묶음에만 연다.** DMA 묶음에 「경화식
+  // 맞춰 보기」 가 떠서 누르면 422 였다(2026-09-05 실사용).
+  const fittableGroups = groups.filter((item) => item.fittable)
+  // 선형탄성구간(LVE) 길 — 선형 한계 변형률을 낸 DMA 묶음.
+  const lveGroups = (stats.data?.groups ?? []).filter(
+    (item) => item.sample_count >= 1 && hasLve(item)
+  )
+  const [lveFor, setLveFor] = useState<StatisticsGroup | null>(null)
+  // **글로벌 피팅도 단추 하나다**(2026-09-05). 절로 펼쳐 두면 탭이 「단추 줄 + 카드 목록」
+  // 이라는 한 층이 못 된다. 방법마다 단추 하나 — 점탄성(Prony 묶음)·속도 의존(속도별
+  // 묶음) — 이고, 그 재료에 그 방법이 붙는 시험종류가 있을 때만 선다. 단추 안 모달에
+  // 글로벌 피팅과 그 결과, 결과마다 카드 만들기가 있다.
+  const groupKinds = useResource(() => groupsApi.kinds(), [])
+  const testTypeKeys = new Set((stats.data?.groups ?? []).map((item) => item.test_type_key))
+  const groupWays = (groupKinds.data ?? [])
+    .map((spec) => ({
+      spec,
+      appliesTo: spec.applies_to.find((key) => testTypeKeys.has(key)) ?? null,
+    }))
+    .filter((one) => one.appliesTo !== null)
+  const [groupsFor, setGroupsFor] = useState<(typeof groupWays)[number] | null>(null)
+  const [showingKinds, setShowingKinds] = useState(false)
 
   // 재료가 바뀌면 고른 묶음을 버린다. 라우트 파라미터만 바뀌면 이 컴포넌트는
   // 다시 마운트되지 않아, 남겨 두면 **다른 재료의 묶음을 적합하려 든다.**
@@ -153,8 +243,8 @@ export function FittingPanel({ materialId }: Props) {
   }, [group?.test_type_key, group?.orientation])
 
   useEffect(() => {
-    if (!group && groups.length > 0) setGroup(groups[0])
-  }, [group, groups])
+    if (!group && fittableGroups.length > 0) setGroup(fittableGroups[0])
+  }, [group, fittableGroups])
 
   async function run(target: GroupKey, keep = false) {
     setBusy(true)
@@ -231,7 +321,140 @@ export function FittingPanel({ materialId }: Props) {
 
   return (
     <section>
-      <ErrorNotice error={stats.error ?? cards.error ?? error} className="mb-4" />
+      {/* 적합 오류는 모달이 연 동안 모달 안에만 — 두 곳에 같은 상자가 뜬다. */}
+      <ErrorNotice error={stats.error ?? cards.error ?? (fitting ? null : error)} className="mb-4" />
+      {/* **만들기가 위, 목록이 아래**(2026-09-05). 목록을 먼저 뒀더니 카드가 몇 장
+          쌓인 뒤로는 만드는 자리가 화면 아래로 밀려 「어디서 만드나」 가 됐다.
+          머리는 늘 선다 — 시험이 없어도 적어 둔 값으로 만드는 길은 있다. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h3 className="font-medium">새 카드 만들기</h3>
+        {/* **재료 기본 정보가 맨 앞이다.** 시험이 없어도 열리는 길이고, 다른 카드가 이것을 함께 싣기도 한다(2026-09-05). 「적어 둔 값으로」 라는 이름으로
+            따로 아래 두었더니 만드는 자리가 둘로 읽혔다(2026-09-05). 시험에서 나온
+            값이 하나도 안 들어간다는 것은 대화상자가 말한다. */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setDeclaring(true)}
+          title="시험 없이, 재료에 적어 둔 값(문헌·규격·밀시트)과 밀도·푸아송비만으로 카드를 만듭니다."
+        >
+          <BookOpen className="size-3.5" />
+          재료 기본 정보 카드
+        </Button>
+        {/* **시험 종류에 맞는 길만 보인다.** 경화식·초탄성은 응력–변형률 곡선, LVE 는
+            변형률 스윕, 점탄성은 마스터커브에서 온다 — 없는 길을 보여 주면 눌러 보고
+            422 로 배운다. */}
+        {fittableGroups.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setFitting(true)}
+            title="채택된 응력–변형률 곡선에 경화식을 맞춰 탄성계수 + 소성 표 + 식 계수(탄소성)를 카드로 만듭니다. 덱에서는 *ELASTIC + *PLASTIC 입니다."
+          >
+            <FileDown className="size-3.5" />
+            탄소성 카드
+          </Button>
+        )}
+        {lveGroups.map((item) => (
+          <Button
+            key={`${item.test_type_key}-${item.orientation}`}
+            size="sm"
+            variant="outline"
+            onClick={() => setLveFor(item)}
+            title="변형률 스윕의 선형 구간 저장 탄성률과 한계 변형률을 카드로 만듭니다."
+          >
+            <FileDown className="size-3.5" />
+            선형탄성구간(LVE) 카드 · {item.orientation}
+          </Button>
+        ))}
+        {groupWays.map((way) => (
+          <Button
+            key={way.spec.id}
+            size="sm"
+            variant="outline"
+            onClick={() => setGroupsFor(way)}
+            title={`${way.spec.label} — 시편 여럿의 결과를 하나로 묶고(글로벌 피팅), 그 묶음으로 카드를 만듭니다.`}
+          >
+            <Layers className="size-3.5" />
+            {GROUP_CARD_LABELS[way.spec.id] ?? `${way.spec.label} 카드`}
+          </Button>
+        ))}
+        {/* **어느 단추가 무엇을 만드는지.** 다섯 종류가 한 줄에 서면 이름만으로는 입력과
+            결과가 안 읽힌다 — 표 하나로 답한다(2026-09-05). */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto"
+          aria-label="카드 종류 설명"
+          title="어느 단추가 무엇으로 무엇을 만드는지"
+          onClick={() => setShowingKinds(true)}
+        >
+          <Info className="size-4" />
+          정보
+        </Button>
+      </div>
+      <Dialog open={showingKinds} onOpenChange={(next) => !next && setShowingKinds(false)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>카드 종류</DialogTitle>
+            <DialogDescription>
+              위 단추 하나가 카드 한 종류입니다. 그 재료에 입력이 있는 단추만 섭니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-muted-foreground border-b text-left text-xs">
+                  <th className="py-1.5 pr-3 font-medium">카드</th>
+                  <th className="py-1.5 pr-3 font-medium">입력</th>
+                  <th className="py-1.5 pr-3 font-medium">나오는 것</th>
+                  <th className="py-1.5 font-medium">덱</th>
+                </tr>
+              </thead>
+              <tbody className="align-top">
+                {CARD_KINDS.map((one) => (
+                  <tr key={one.name} className="border-b last:border-0">
+                    <td className="py-2 pr-3 font-medium whitespace-nowrap">{one.name}</td>
+                    <td className="text-muted-foreground py-2 pr-3">{one.input}</td>
+                    <td className="py-2 pr-3">{one.output}</td>
+                    <td className="text-muted-foreground py-2 font-mono text-xs whitespace-nowrap">
+                      {one.deck}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            탄소성 카드의 「경화식 맞춰 보기」 후보에는 고무용 초탄성 식도 섞여 있습니다 — 그것을
+            고르면 카드는 「초탄성」 으로 분류됩니다. 점탄성·속도 의존은 먼저 글로벌 피팅으로
+            시편들을 하나로 묶고, 그 묶음을 카드로 만듭니다.
+          </p>
+        </DialogContent>
+      </Dialog>
+      {groupsFor && (
+        <Dialog open onOpenChange={(next) => !next && setGroupsFor(null)}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>
+                {GROUP_CARD_LABELS[groupsFor.spec.id] ?? `${groupsFor.spec.label} 카드`}
+              </DialogTitle>
+              <DialogDescription>
+                시편 여럿의 결과를 하나로 묶는 <b>글로벌 피팅</b>과 그 결과입니다. 결과마다
+                「카드」 단추가 그 묶음을 카드로 만듭니다. 묶음 결과는 물성 탭의 표에도
+                [묶음] 으로 섭니다.
+              </DialogDescription>
+            </DialogHeader>
+            <GroupsPanel
+              materialId={materialId}
+              appliesTo={groupsFor.appliesTo ?? undefined}
+              onCardMade={() => {
+                setGroupsFor(null)
+                void cards.reload()
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* **카드가 있으면 이 말은 거짓이다.** 점탄성 카드는 통계 묶음 없이
           만들어진다(Prony 는 시험 1건에 매달린다) — 전에는 묶음이 없으면 카드도
@@ -248,110 +471,136 @@ export function FittingPanel({ materialId }: Props) {
         </div>
       )}
 
-      {groups.length > 0 && (
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          {/* **「묶음」만으로는 무엇을 고르는지 알 수 없다.** 재료의 어느
-              시험·어느 방향을 볼지 고르는 자리이고, 그 안의 채택된 곡선들이
-              평균 나서 대표 곡선이 된다. */}
-          <Step n={1} label="무엇으로" hint="시험 종류 · 방향으로 묶습니다. n 은 평균 낸 시편 수입니다." />
-          {groups.map((item) => {
-            const key = `${item.test_type_key}-${item.orientation}`
-            const active =
-              group?.test_type_key === item.test_type_key &&
-              group?.orientation === item.orientation
-            return (
-              <Button
-                key={key}
-                size="sm"
-                variant={active ? 'default' : 'outline'}
-                onClick={() => {
-                  setGroup(item)
-                  setPreview(null)
-                  setChosen(null)
-                }}
-              >
-                {item.test_type_label} · {item.orientation}
-                <span className="opacity-70">n={item.sample_count}</span>
-              </Button>
-            )
-          })}
+      {/* **경화식은 모달에서 만든다**(2026-09-05). 1~3단계와 그래프가 탭 본문에 늘
+          펼쳐져 있어서, 카드 목록이 그 아래로 밀리고 「이 탭이 뭘 하는 자리인가」 가
+          흐려졌다. 재료 기본 정보·선형탄성구간과 같은 모양 — 위의 단추가 열고, 만들면
+          닫힌다. */}
+      {fitting && (
+        <Dialog open onOpenChange={(next) => !next && setFitting(false)}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>탄소성 카드 만들기</DialogTitle>
+              <DialogDescription>
+                채택된 응력–변형률 곡선을 평균 낸 대표 곡선에 여러 경화식을 맞춰 나란히 놓고,
+                하나를 골라 소성 표와 식 계수를 카드로 만듭니다. 「만들기」 전까지는 아무것도
+                저장되지 않습니다.
+              </DialogDescription>
+            </DialogHeader>
+            <ErrorNotice error={error} />
+            <div className="space-y-3">
+            {fittableGroups.length > 0 && (
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                {/* **「묶음」만으로는 무엇을 고르는지 알 수 없다.** 재료의 어느
+                    시험·어느 방향을 볼지 고르는 자리이고, 그 안의 채택된 곡선들이
+                    평균 나서 대표 곡선이 된다. */}
+                <Step n={1} label="무엇으로" hint="시험 종류 · 방향으로 묶습니다. n 은 평균 낸 시편 수입니다." />
+                {fittableGroups.map((item) => {
+                  const key = `${item.test_type_key}-${item.orientation}`
+                  const active =
+                    group?.test_type_key === item.test_type_key &&
+                    group?.orientation === item.orientation
+                  return (
+                    <Button
+                      key={key}
+                      size="sm"
+                      variant={active ? 'default' : 'outline'}
+                      onClick={() => {
+                        setGroup(item)
+                        setPreview(null)
+                        setChosen(null)
+                      }}
+                    >
+                      {item.test_type_label} · {item.orientation}
+                      <span className="opacity-70">n={item.sample_count}</span>
+                    </Button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* **차례가 일의 차례와 같아야 한다.** 전에는 「맞춰 보기」 단추가 쓸
+                시험을 고르는 자리보다 위에 있었다 — 고르기 전에 누르라고 놓인 셈이다.
+                그리고 시험과 상관없는 「적어 둔 값으로」 가 맨 위에 있어서 그것이
+                1단계처럼 읽혔다. */}
+            {fittableGroups.length > 0 && runChoices.length > 1 && (
+              <div className="mt-3">
+                <Step n={2} label="어느 시험으로" className="mb-1" />
+                <RunPicker runs={runChoices} used={usedRuns} onChange={setUsedRuns} />
+              </div>
+            )}
+
+            {fittableGroups.length > 0 && (
+              <div className="mt-3 mb-4">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <Step n={3} label="어느 식에 맞출까" />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="ml-auto"
+                    disabled={!group || busy}
+                    onClick={() => group && run(group)}
+                  >
+                    {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. '견주기'
+                        는 무엇과 무엇을 견주는지가 안 보였다 — 이 버튼이 하는 일은
+                        **여러 경화식을 같은 곡선에 맞춰 나란히 놓고, 시험 구간 밖을
+                        얼마나 늘릴지 정하게 하는 것**이다. 저장은 아직 아니다. */}
+                    {busy ? '맞춰 보는 중…' : '경화식 맞춰 보기'}
+                  </Button>
+                </div>
+                {/* **한 줄로 무엇을 하는 자리인지 말한다.** 단추 이름만으로는 담기지
+                    않는다 — 맞추는 것과 늘리는 것이 한 화면에서 일어난다. */}
+                <p className="text-muted-foreground text-xs">
+                  여러 <b>경화식</b>(Voce · Swift · Hockett-Sherby …)을 같은 곡선에 맞춰{' '}
+                  <b>나란히 놓습니다.</b> 측정 구간에서는 거의 겹치는 식들이 그 밖에서 크게
+                  갈리므로, <b>해석에 필요한 변형률까지 얼마나 늘릴지</b>를 그림을 보고
+                  정합니다. 누른다고 저장되지 않습니다.
+                </p>
+              </div>
+            )}
+
+            {preview && (
+              <FitComparison
+                extrapolate={extrapolate}
+                onExtrapolate={setExtrapolate}
+                blendWith={blendWith}
+                onBlendWith={setBlendWith}
+                blendWeight={blendWeight}
+                onBlendWeight={setBlendWeight}
+                preview={preview}
+                chosen={chosen}
+                onChoose={setChosen}
+                onSave={() => setSaving(true)}
+              />
+            )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 만든 카드. 없을 때는 위의 빈 안내가 이미 말했으므로 상자를 안 그린다. */}
+      {!nothing && (
+        <div className="mt-6 border-t pt-4">
+          <CardList
+            cards={cardRows}
+            loading={cards.loading}
+            onChanged={() => cards.reload()}
+            onError={setError}
+          />
         </div>
       )}
 
-      {/* **차례가 일의 차례와 같아야 한다.** 전에는 「맞춰 보기」 단추가 쓸
-          시험을 고르는 자리보다 위에 있었다 — 고르기 전에 누르라고 놓인 셈이다.
-          그리고 시험과 상관없는 「적어 둔 값으로」 가 맨 위에 있어서 그것이
-          1단계처럼 읽혔다. */}
-      {groups.length > 0 && runChoices.length > 1 && (
-        <div className="mt-3">
-          <Step n={2} label="어느 시험으로" className="mb-1" />
-          <RunPicker runs={runChoices} used={usedRuns} onChange={setUsedRuns} />
-        </div>
-      )}
 
-      {groups.length > 0 && (
-        <div className="mt-3 mb-4">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <Step n={3} label="어느 식에 맞출까" />
-            <Button
-              size="sm"
-              variant="secondary"
-              className="ml-auto"
-              disabled={!group || busy}
-              onClick={() => group && run(group)}
-            >
-              {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. '견주기'
-                  는 무엇과 무엇을 견주는지가 안 보였다 — 이 버튼이 하는 일은
-                  **여러 경화식을 같은 곡선에 맞춰 나란히 놓고, 시험 구간 밖을
-                  얼마나 늘릴지 정하게 하는 것**이다. 저장은 아직 아니다. */}
-              {busy ? '맞춰 보는 중…' : '경화식 맞춰 보기'}
-            </Button>
-          </div>
-          {/* **한 줄로 무엇을 하는 자리인지 말한다.** 단추 이름만으로는 담기지
-              않는다 — 맞추는 것과 늘리는 것이 한 화면에서 일어난다. */}
-          <p className="text-muted-foreground text-xs">
-            여러 <b>경화식</b>(Voce · Swift · Hockett-Sherby …)을 같은 곡선에 맞춰{' '}
-            <b>나란히 놓습니다.</b> 측정 구간에서는 거의 겹치는 식들이 그 밖에서 크게
-            갈리므로, <b>해석에 필요한 변형률까지 얼마나 늘릴지</b>를 그림을 보고
-            정합니다. 누른다고 저장되지 않습니다.
-          </p>
-        </div>
-      )}
-
-      {preview && (
-        <FitComparison
-          extrapolate={extrapolate}
-          onExtrapolate={setExtrapolate}
-          blendWith={blendWith}
-          onBlendWith={setBlendWith}
-          blendWeight={blendWeight}
-          onBlendWeight={setBlendWeight}
-          preview={preview}
-          chosen={chosen}
-          onChoose={setChosen}
-          onSave={() => setSaving(true)}
+      {lveFor && (
+        <LveCardDialog
+          materialId={materialId}
+          group={lveFor}
+          onClose={() => setLveFor(null)}
+          onDone={() => {
+            setLveFor(null)
+            void cards.reload()
+          }}
         />
       )}
-
-      {/* **다른 길이다.** 시험에서 나온 값이 하나도 안 들어가므로 위 흐름과
-          섞으면 안 된다 — 맨 위에 두었더니 「쓸 시험」 을 고른 사람이 그 다음
-          단추로 이것을 눌렀다.
-
-          그래도 **시험이 없으면 이것이 유일한 길**이라(ADR 0016) 그때는 위로
-          올린다. 묶음 줄 안에 두면 그 줄 자체가 안 떠서 사라진다. */}
-      <div className={groups.length === 0 ? 'mb-4' : 'mt-6 border-t pt-4'}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setDeclaring(true)}>
-            <BookOpen className="size-4" />
-            적어 둔 값으로 카드 만들기
-          </Button>
-          <span className="text-muted-foreground text-xs">
-            <b>위 흐름과 다른 길입니다.</b> 시험에서 나온 값이 하나도 안 들어갑니다 —
-            재료의 <b>물성</b> 탭에 적은 값만 싣습니다.
-          </span>
-        </div>
-      </div>
-
       <DeclaredCardDialog
         materialId={materialId}
         open={declaring}
@@ -359,14 +608,6 @@ export function FittingPanel({ materialId }: Props) {
         onSaved={() => void cards.reload()}
       />
 
-      {!nothing && (
-        <CardList
-          cards={cardRows}
-          loading={cards.loading}
-          onChanged={() => cards.reload()}
-          onError={setError}
-        />
-      )}
 
       {group && (
         <SaveDialog
@@ -383,6 +624,7 @@ export function FittingPanel({ materialId }: Props) {
           onClose={() => setSaving(false)}
           onSaved={() => {
             setSaving(false)
+            setFitting(false)
             cards.reload()
           }}
         />
@@ -719,6 +961,29 @@ function FitCard({
   )
 }
 
+function KindChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      className={`rounded-full border px-2 py-0.5 text-xs ${
+        active ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'
+      }`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
 function CardList({
   cards,
   loading,
@@ -739,6 +1004,27 @@ function CardList({
   // **사용 중지는 한 번 묻는다.** 확정된 값을 쓰지 못하게 만드는 일이고, 되살려도
   // 초안으로만 돌아온다 — 확정을 다시 받아야 한다.
   const [stopping, setStopping] = useState<PropertyCard | null>(null)
+  // **기본은 접힌다.** 카드마다 블록 값을 전부 펼치면 한 장이 화면 절반을 먹는다.
+  const [opened, setOpened] = useState<Set<string>>(new Set())
+  // **종류로 가른다.** 경화식·선형탄성구간·점탄성·재료 기본 정보가 한 목록에 섞이면
+  // 이름만으로는 안 보인다(2026-09-05). 칩은 카드가 실제로 든 종류만 선다.
+  const [kind, setKind] = useState<string | null>(null)
+  const kinds = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const card of cards) {
+      const one = cardKind(card, specs)
+      counts.set(one, (counts.get(one) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+  }, [cards, specs])
+  const shown = kind === null ? cards : cards.filter((card) => cardKind(card, specs) === kind)
+  const toggle = (id: string) =>
+    setOpened((now) => {
+      const copy = new Set(now)
+      if (copy.has(id)) copy.delete(id)
+      else copy.add(id)
+      return copy
+    })
 
   async function act(action: () => Promise<unknown>) {
     try {
@@ -760,8 +1046,22 @@ function CardList({
 
   return (
     <div className="space-y-2">
-      <h3 className="font-medium">물성 카드</h3>
-      {cards.map((card) => (
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="font-medium">물성 카드</h3>
+        {kinds.length > 1 && (
+          <div role="group" aria-label="카드 종류" className="flex flex-wrap gap-1">
+            <KindChip active={kind === null} onClick={() => setKind(null)}>
+              전체 {cards.length}
+            </KindChip>
+            {kinds.map(([one, count]) => (
+              <KindChip key={one} active={kind === one} onClick={() => setKind(one)}>
+                {one} {count}
+              </KindChip>
+            ))}
+          </div>
+        )}
+      </div>
+      {shown.map((card) => (
         <div key={card.id} className="rounded-md border p-3">
           <RenameCardDialog
             card={card}
@@ -773,6 +1073,19 @@ function CardList({
             }}
           />
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-6"
+              aria-label={`${card.label} ${opened.has(card.id) ? '접기' : '펴기'}`}
+              onClick={() => toggle(card.id)}
+            >
+              {opened.has(card.id) ? (
+                <ChevronDown className="size-4" />
+              ) : (
+                <ChevronRight className="size-4" />
+              )}
+            </Button>
             <span className="font-medium">{card.label}</span>
             {/* **이 카드가 언제 것인가.** 같은 재료에 카드가 쌓이면 그 물음이
                 먼저 온다 — 어느 것이 최신인지 이름만으로는 안 보인다. */}
@@ -860,7 +1173,15 @@ function CardList({
 
           {/* **화면이 물성의 이름을 모른다.** 선언이 무엇을 그릴지 정한다 —
               새 물성이 붙어도 이 파일은 안 고친다. */}
-          <CardBlocks specs={specs} card={card} />
+          {opened.has(card.id) ? (
+            <div className="mt-2">
+              <CardBlocks specs={specs} card={card} />
+            </div>
+          ) : (
+            <div className="mt-1 pl-8">
+              <BlockChips specs={specs} card={card} />
+            </div>
+          )}
         </div>
       ))}
 
@@ -928,19 +1249,6 @@ function SaveDialog({
   const [label, setLabel] = useState('')
   const [poisson, setPoisson] = useState('')
   const [density, setDensity] = useState('')
-  // **빈칸으로 두면 사람이 또 적는다.** 재료·시료에 이미 있는 값을 모달이
-  // 모르면 같은 값을 두 번 적게 되고, 두 곳이 갈리면 어느 쪽이 맞는지 알 수
-  // 없다. 여기서는 보여 주기만 한다 — 빈칸으로 보내면 서버가 물려받는다.
-  //
-  // 값은 **적합 응답이 준다.** 재료 API 를 따로 부르면 상속 규칙이 두 벌이 되고,
-  // 어긋나는 순간 모달이 거짓말을 한다.
-  const inherited = (key: string) => elastic.find((row) => row.key === key)
-  const inheritedPlaceholder = (key: string) => {
-    const row = inherited(key)
-    return row?.value == null
-      ? '비워 두면 넣지 않음'
-      : `${Number(row.value.toPrecision(6))} (물려받음)`
-  }
   const [note, setNote] = useState('')
   // **안 고르면 안 건다.** 측정 그대로가 기본이고, 점 수를 맞추는 것은 해석 쪽
   // 요구라 사람이 켠다.
@@ -974,7 +1282,7 @@ function SaveDialog({
         // **빈칸은 보내지 않는다.** 0.3 으로 채우면 그것이 측정값인지 기본값인지
         // 나중에 알 수 없다.
         poisson_ratio: poisson === '' ? null : Number(poisson),
-        density: density === '' ? null : Number(density),
+        density: densityToSi(density),
         blend_with: blendWith === '' ? null : blendWith,
         blend_weight: blendWith === '' ? null : blendWeight,
         extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
@@ -1013,40 +1321,16 @@ function SaveDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* **빈칸이 곧 '물려받는다' 는 뜻이다.**
-                재료·시료에 이미 있는 값을 여기서 또 적게 하면 두 곳이 갈리고,
-                그때 어느 쪽이 맞는지 판정할 근거가 없다. 그래서 모달은 값을
-                복사해 채우지 않고, **어디서 무엇이 올지**를 보여 준다. */}
-            <div className="space-y-1.5">
-              <Label htmlFor="poisson">푸아송비</Label>
-              <Input
-                id="poisson"
-                inputMode="decimal"
-                placeholder={inheritedPlaceholder('poisson_ratio')}
-                value={poisson}
-                onChange={(event) => setPoisson(event.target.value)}
-              />
-              <InheritNote row={inherited('poisson_ratio')} overridden={poisson !== ''} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="density">밀도 ({DENSITY_SYMBOL})</Label>
-              <Input
-                id="density"
-                inputMode="decimal"
-                placeholder={inheritedPlaceholder('density')}
-                value={density}
-                onChange={(event) => setDensity(event.target.value)}
-              />
-              <InheritNote row={inherited('density')} overridden={density !== ''} />
-            </div>
-          </div>
-
-          <p className="text-muted-foreground text-xs">
-            값은 <b>재료·시료에서 물려받습니다</b> — 비워 두면 그 값이 들어갑니다.
-            여기 적으면 그 값이 이기고, 카드에 '직접 입력' 으로 남습니다. 어느 쪽이든
-            카드는 <b>값과 출처를 함께</b> 박아 둡니다.
-          </p>
+          {/* **빈칸이 곧 '물려받는다' 는 뜻이다.** 값은 적합 응답이 준다 — 재료 API
+              를 따로 부르면 상속 규칙이 두 벌이 된다. */}
+          <InheritedFields
+            rows={elastic}
+            idPrefix="save"
+            poisson={poisson}
+            density={density}
+            onPoisson={setPoisson}
+            onDensity={setDensity}
+          />
 
           {/* **여기서는 확인만 한다.** 늘린 한계도 섞는 비중도 그래프를 보며
               정하는 값이라, 곡선이 없는 이 자리에서 숫자만 바꾸면 무엇이 달라지는지
@@ -1179,26 +1463,6 @@ function SaveDialog({
  * **없다는 사실만 알려 주고 길을 안 주면 결국 다시 헤맨다.** 그래서 어디에
  * 채우면 되는지까지 적는다.
  */
-function InheritNote({ row, overridden }: { row?: InheritedValue; overridden: boolean }) {
-  if (overridden) {
-    return <p className="text-muted-foreground text-xs">직접 입력한 값을 씁니다.</p>
-  }
-  if (!row) return null
-  if (row.value !== null) {
-    return (
-      <p className="text-muted-foreground text-xs">
-        {row.source === 'sample' ? '시료에서 잰 값' : '재료의 공칭값'}을 씁니다.
-      </p>
-    )
-  }
-  // 못 물려받는 이유는 서버가 안다 — 화면이 다시 판정하지 않는다.
-  return (
-    <p className="text-xs text-amber-700 dark:text-amber-500">
-      {row.detail ?? '물려받을 값이 없습니다.'}
-    </p>
-  )
-}
-
 /**
  * 초안 카드의 이름·메모 고치기.
  *

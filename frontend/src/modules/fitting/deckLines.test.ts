@@ -124,9 +124,17 @@ describe('정의 → 폼', () => {
         rows: 'viscoelastic',
         fields: [{ value: 'relative_modulus', format: 'free' }, { const: '0.0' }],
       },
+      // 식 칸과 글자 줄(2026-09-05) — 옵션 숫자 줄은 `plain` 으로 묶음 몸에 붙는다.
+      { rows: 'table', fields: [{ expr: 'true_stress / 1000', format: 'free' }] },
+      { text: '1, 0, 0', plain: true },
     ]
     const round = original.map((one) => toDefinitionLine(fromDefinitionLine(one)))
     expect(round).toEqual(original)
+  })
+
+  it('글자 줄은 비어도 보낸다 — 빈 줄이 곧 그 자리다', () => {
+    expect(toDefinitionLine({ kind: 'plain', text: '' })).toEqual({ text: '', plain: true })
+    expect(fromDefinitionLine({ text: '', plain: true }).kind).toBe('plain')
   })
 })
 

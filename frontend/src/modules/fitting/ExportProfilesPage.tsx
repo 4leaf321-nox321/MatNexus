@@ -15,6 +15,7 @@ import { Download, FileOutput, Globe2, Pencil, Plus, Trash2, Upload } from 'luci
 import { Link } from 'react-router-dom'
 
 import { ImportProfilesDialog } from '@/modules/fitting/ImportProfilesDialog'
+import { UnitSystemsSection } from '@/modules/fitting/UnitSystemsSection'
 import { fittingApi } from '@/modules/fitting/api'
 import type { ExportProfile } from '@/modules/fitting/api'
 import {
@@ -27,7 +28,7 @@ import {
 } from '@/modules/fitting/profileFile'
 import type { ProfileInFile } from '@/modules/fitting/profileFile'
 import { useAuth } from '@/shared/auth/AuthContext'
-import { isAnyManager } from '@/shared/auth/roles'
+import { isAnyManager, isSystemAdmin } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -43,7 +44,8 @@ import {
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function ExportProfilesPage() {
-  const canEdit = isAnyManager(useAuth().user)
+  const { user } = useAuth()
+  const canEdit = isAnyManager(user)
   const profiles = useResource(() => fittingApi.exportProfiles(), [])
   const [error, setError] = useState<Error | null>(null)
   const [said, setSaid] = useState<string | null>(null)
@@ -227,6 +229,10 @@ export default function ExportProfilesPage() {
           </TableBody>
         </Table>
       )}
+
+      {/* **단위계는 전사가 같은 것을 봐야 한다** — 만드는 것은 시스템 관리자다.
+          정의(솔버 형식)와 한 화면에 두는 이유: 덱을 내려받을 때 둘을 함께 고른다. */}
+      <UnitSystemsSection canEdit={isSystemAdmin(user)} />
 
       <ImportProfilesDialog
         incoming={incoming}

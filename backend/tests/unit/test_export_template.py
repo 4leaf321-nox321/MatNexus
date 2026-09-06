@@ -283,3 +283,28 @@ class Test곡선이_들어가는_물성:
             template.render(spec, viscoelastic_deck())
         assert "없는열" in str(caught.value)
         assert "relative_modulus" in str(caught.value)
+
+
+class Test정의_줄과_덱_줄을_잇는다:
+    def test_줄마다_몇_줄이_됐는지_남긴다(self) -> None:
+        """편집기가 묶음에 마우스를 올리면 그 줄을 강조한다 — `when` 으로 빠진 줄은 빈 구간."""
+        spec = {
+            "lines": [
+                {"text": "*MATERIAL, NAME={name}"},
+                {
+                    "fields": [
+                        {"value": "elastic.youngs_modulus"},
+                        {"value": "elastic.poisson_ratio"},
+                    ]
+                },
+                {"text": "*DENSITY", "when": "elastic.density"},
+                {
+                    "rows": "table",
+                    "x": "plastic_strain",
+                    "y": "true_stress",
+                    "fields": [{"value": "true_stress"}, {"value": "plastic_strain"}],
+                },
+            ]
+        }
+        made = template.render(spec, deck(density=None, points=((0.0, 2.5e8), (0.1, 3.0e8))))
+        assert made.spans == ((0, 0, 1), (1, 1, 2), (2, 2, 2), (3, 2, 4))

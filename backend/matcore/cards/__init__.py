@@ -81,6 +81,12 @@ class BlockSpec:
     order: int = 100
     """화면에 보이는 순서. **작을수록 앞.**"""
 
+    curve: tuple[str, str] | None = None
+    """표가 **점 곡선**이면 (x 열, y 열). 덱 정의가 `rows` 에 x·y 를 걸어 중복을 묶고
+    단조성을 보게 하는 근거다 — 소성 표가 그렇다. Prony 항은 점이 아니라 비워 둔다.
+    편집기가 열 수로 짐작하면(두 열 = 점 표) 두 열짜리 Prony 표를 정렬해 다른 재료로
+    만든다(2026-09-05)."""
+
     meta: dict[str, Any] = field(default_factory=dict)
 
 

@@ -79,10 +79,24 @@ describe('어디에 담기는지', () => {
   it('여럿이면 고를 수 있다', async () => {
     runs.mockResolvedValue([RUN, { ...RUN, id: 'r2', title: '도어트림 검토' }])
     show()
-    await userEvent.click(await screen.findByLabelText('담을 작업 고르기'))
-    await userEvent.click(await screen.findByText('도어트림 검토'))
+    // 작업 목록은 나중에 온다 — 고를 항목이 생길 때까지 기다린다.
+    await screen.findByRole('option', { name: '도어트림 검토' })
+    await userEvent.selectOptions(screen.getByLabelText('담을 작업'), 'r2')
     await userEvent.click(screen.getByRole('button', { name: /「도어트림 검토」에 담기/ }))
     await waitFor(() => expect(add).toHaveBeenCalledWith('r2', 'card', ['c1']))
+  })
+
+  it('작업이 하나뿐이어도 무엇에 담는지 말하고 고르는 칸을 둔다', async () => {
+    // 「test11에 담기」 만 떠서 「test11 이 뭔데」 가 됐다(2026-09-05). 진행 중인
+    // 워크벤치 작업이라는 말과 목록이 늘 보여야 한다.
+    show()
+    expect(await screen.findByText(/워크벤치 작업에 담기/)).toBeInTheDocument()
+    // 작업 목록은 나중에 온다 — 단추에 이름이 실릴 때까지 기다린다.
+    await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 담기/ })
+    expect(screen.getByText(/진행 중인/)).toBeInTheDocument()
+    const picker = screen.getByLabelText('담을 작업') as HTMLSelectElement
+    expect(picker.options).toHaveLength(1)
+    expect(picker.value).toBe('r1')
   })
 })
 
@@ -139,7 +153,7 @@ describe('끌어서 옮긴다', () => {
     const left = Number.parseInt(panel.style.left)
     const top = Number.parseInt(panel.style.top)
     expect(Math.abs(left + 320 / 2 - window.innerWidth / 2)).toBeLessThan(2)
-    expect(Math.abs(top + 150 / 2 - window.innerHeight / 2)).toBeLessThan(2)
+    expect(Math.abs(top + 230 / 2 - window.innerHeight / 2)).toBeLessThan(2)
   })
 
   it('끈 만큼만 움직인다', async () => {

@@ -706,7 +706,9 @@ class Test내보내기:
         rows = client.get("/api/fitting/unit-systems", headers=admin_headers).json()
         by_key = {row["key"]: row for row in rows}
         assert {"si", "mm_n_tonne"} <= set(by_key)
-        assert by_key["si"]["is_default"] is True
+        # 화면이 고르지 않았을 때 쓰는 계 — 화면과 같은 mm·N·tonne 이다(2026-09-05).
+        assert by_key["mm_n_tonne"]["is_default"] is True
+        assert by_key["si"]["is_default"] is False
         assert by_key["mm_n_tonne"]["declaration"] == "tonne, mm, s, MPa"
 
     def test_초안이면_덱에_그렇게_적는다(
@@ -3140,3 +3142,298 @@ class Test예제_덱_읽기:
             headers=admin_headers,
         )
         assert db.query(ExportProfile).count() == before
+
+
+class Test단위계_만들기:
+    """질량·길이·시간 셋으로 계를 만든다(2026-09-05).
+
+    두 계가 코드에 박혀 있어 LS-DYNA 의 mm·ms·kg 같은 조합은 배포가 필요했다.
+    만든 계는 **붙박이 계와 같은 자리**에서 골라지고, 덱 머리와 파일 이름에 들어간다.
+    """
+
+    @pytest.fixture
+    def card(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> dict[str, Any]:
+        created: dict[str, Any] = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "단위계 시험",
+                "family": "voce",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+                "density_unit": "kg/m3",
+            },
+            headers=admin_headers,
+        ).json()
+        return created
+
+    def test_만들기_전에_무엇이_어떻게_적힐지_본다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """응력이 GPa 인지 MPa 인지는 저장하기 전에 알아야 한다."""
+        bases = client.get(
+            "/api/fitting/unit-systems/base-units", headers=admin_headers
+        ).json()
+        assert {"kg", "tonne", "g"} <= set(bases["mass"])
+        assert "degC" not in bases["time"] and "mm" in bases["length"]
+        shown = client.post(
+            "/api/fitting/unit-systems/derive",
+            json={"mass": "kg", "length": "mm", "time": "ms"},
+            headers=admin_headers,
+        )
+        assert shown.status_code == 200, shown.text
+        assert shown.json()["symbols"]["Pa"] == "GPa"
+        assert shown.json()["symbols"]["kg/m3"] == "kg/mm3"
+        assert shown.json()["declaration"] == "kg, mm, ms, GPa"
+
+    def test_만든_계로_덱이_나간다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        made = client.post(
+            "/api/fitting/unit-systems",
+            json={
+                "key": "mm_ms_kg",
+                "label": "LS-DYNA (GPa)",
+                "mass": "kg",
+                "length": "mm",
+                "time": "ms",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["builtin"] is False
+
+        rows = client.get("/api/fitting/unit-systems", headers=admin_headers).json()
+        by_key = {row["key"]: row for row in rows}
+        assert "mm_ms_kg" in by_key and by_key["si"]["builtin"] is True
+
+        deck = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=mm_ms_kg",
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        assert "kg, mm, ms, GPa" in deck.text
+        assert "_mm_ms_kg." in deck.headers["content-disposition"]
+        # **숫자가 그 계다.** 밀도 7850 kg/m3 → 7.85e-6 kg/mm3.
+        assert "7.850000000000E-06" in deck.text
+
+        # 같은 key 는 두 번 못 만든다 — 붙박이 key 도 마찬가지다.
+        again = client.post(
+            "/api/fitting/unit-systems",
+            json={"key": "mm_ms_kg", "label": "x", "mass": "kg", "length": "mm", "time": "ms"},
+            headers=admin_headers,
+        )
+        assert again.status_code == 409
+        builtin = client.post(
+            "/api/fitting/unit-systems",
+            json={"key": "si", "label": "x", "mass": "kg", "length": "m", "time": "s"},
+            headers=admin_headers,
+        )
+        assert builtin.status_code == 409
+
+    def test_묶음_내보내기도_만든_계로_나간다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        """낱장은 되는데 묶음은 500 이었다 — 묶음이 붙박이 목록에서만 계를 찾았다
+        (2026-09-05 순환 점검)."""
+        client.post(
+            "/api/fitting/unit-systems",
+            json={
+                "key": "bundle_sys",
+                "label": "x",
+                "mass": "kg",
+                "length": "mm",
+                "time": "ms",
+            },
+            headers=admin_headers,
+        )
+        response = client.post(
+            "/api/fitting/cards/bundle",
+            json={"card_ids": [card["id"]], "format": "abaqus", "units": "bundle_sys"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        with zipfile.ZipFile(io.BytesIO(response.content)) as bag:
+            manifest = json.loads(bag.read("manifest.json"))
+            assert manifest["units"] == "bundle_sys"
+            assert any(name.endswith("_bundle_sys.inp") for name in bag.namelist())
+
+    def test_붙박이는_못_지우고_만든_것은_지운다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        assert (
+            client.delete("/api/fitting/unit-systems/si", headers=admin_headers).status_code
+            == 422
+        )
+        client.post(
+            "/api/fitting/unit-systems",
+            json={"key": "cm_g_s", "label": "cgs", "mass": "g", "length": "cm", "time": "s"},
+            headers=admin_headers,
+        )
+        gone = client.delete("/api/fitting/unit-systems/cm_g_s", headers=admin_headers)
+        assert gone.status_code == 204
+        keys = {
+            row["key"]
+            for row in client.get("/api/fitting/unit-systems", headers=admin_headers).json()
+        }
+        assert "cm_g_s" not in keys
+        assert (
+            client.delete(
+                "/api/fitting/unit-systems/cm_g_s", headers=admin_headers
+            ).status_code
+            == 404
+        )
+
+    def test_기본_단위가_아니면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """MPa 를 질량 자리에 넣으면 조용히 이상한 계가 되지 않는다."""
+        bad = client.post(
+            "/api/fitting/unit-systems",
+            json={"key": "odd", "label": "x", "mass": "MPa", "length": "mm", "time": "s"},
+            headers=admin_headers,
+        )
+        assert bad.status_code == 422, bad.text
+        assert "mass" in bad.json()["error"]["message"]
+
+
+class Test휴지통_재료의_카드:
+    def test_지운_재료의_카드는_목록에서_빠진다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """재료를 지웠는데 카드가 목록에 남아 「재료가 있다」 로 읽혔다(2026-09-05)."""
+        from app.modules.fitting.models import PropertyCard
+
+        item = PropertyCard(
+            material_id=uuid.UUID(ready["id"]),
+            orientation="MD",
+            label="지운 재료의 카드",
+            status="draft",
+            blocks={"elastic": {"values": {"youngs_modulus": 2e11, "poisson_ratio": 0.3}}},
+        )
+        db.add(item)
+        db.commit()
+        before = client.get("/api/fitting/cards", headers=admin_headers).json()["items"]
+        assert any(one["id"] == str(item.id) for one in before)
+        gone = client.delete(f"/api/materials/{ready['id']}", headers=admin_headers)
+        assert gone.status_code in (204, 409), gone.text
+        if gone.status_code == 409:
+            # 시험이 매달려 있으면 통째 삭제로 간다.
+            assert (
+                client.post(
+                    f"/api/materials/{ready['id']}/delete-cascade",
+                    json={"include_test_runs": True},
+                    headers=admin_headers,
+                ).status_code
+                == 200
+            )
+        after = client.get("/api/fitting/cards", headers=admin_headers).json()["items"]
+        assert not any(one["id"] == str(item.id) for one in after)
+
+
+class Test정의_형식도_카드가_안다:
+    """`available_formats` 가 코드 렌더러만 세면 사람이 만든 「해석용 물성 정의」 는
+    내려받기 메뉴에서 늘 회색이다 — 만들 수는 있는데 쓸 수는 없었다(2026-09-05 순환 점검).
+    """
+
+    @pytest.fixture
+    def card(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> dict[str, Any]:
+        created: dict[str, Any] = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "정의 형식 시험",
+                "family": "voce",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+                "density_unit": "kg/m3",
+            },
+            headers=admin_headers,
+        ).json()
+        return created
+
+    def test_정의_형식이_available_formats_에_든다(
+        self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
+    ) -> None:
+        made = client.post(
+            "/api/fitting/export-profiles",
+            json={
+                "key": "mydyna",
+                "label": "내 LS-DYNA",
+                "definition": {
+                    "extension": "k",
+                    "describe": "x",
+                    "needs": [{"block": "elastic", "values": ["youngs_modulus"]}],
+                    "lines": [
+                        {"text": "*KEYWORD"},
+                        {"fields": [{"value": "elastic.youngs_modulus"}]},
+                    ],
+                },
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        # 정의가 요구하는 것이 없는 형식은 여전히 빠진다.
+        strict = client.post(
+            "/api/fitting/export-profiles",
+            json={
+                "key": "needs_thermal",
+                "label": "열물성 필요",
+                "definition": {
+                    "extension": "k",
+                    "describe": "x",
+                    "needs": [{"block": "thermal", "values": ["specific_heat"]}],
+                    "lines": [{"text": "*KEYWORD"}],
+                },
+            },
+            headers=admin_headers,
+        )
+        assert strict.status_code == 201, strict.text
+
+        one = client.get(f"/api/fitting/cards/{card['id']}", headers=admin_headers).json()
+        assert "mydyna" in one["available_formats"]
+        assert "needs_thermal" not in one["available_formats"]
+        listed = client.get("/api/fitting/cards", headers=admin_headers).json()["items"]
+        mine = next(item for item in listed if item["id"] == card["id"])
+        assert "mydyna" in mine["available_formats"]
+
+    def test_표가_덱에_못_실리면_카드가_먼저_말한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        ready: dict[str, Any],
+    ) -> None:
+        """메뉴에서 「가능」 을 보고 눌렀다가 422 를 보는 것은 늦다 — 네킹 뒤를 안 자른
+        곡선이 그랬다(2026-09-05 순환 점검)."""
+        from app.modules.fitting.models import PropertyCard
+
+        item = PropertyCard(
+            material_id=uuid.UUID(ready["id"]),
+            orientation="MD",
+            label="응력이 떨어지는 표",
+            status="draft",
+            blocks={
+                "elastic": {"values": {"youngs_modulus": 200e9, "poisson_ratio": 0.3}},
+                "table": {
+                    "rows": [
+                        {"plastic_strain": 0.0, "true_stress": 250e6},
+                        {"plastic_strain": 0.01, "true_stress": 300e6},
+                        {"plastic_strain": 0.02, "true_stress": 280e6},
+                    ]
+                },
+            },
+            point_count=3,
+        )
+        db.add(item)
+        db.commit()
+        shown = client.get(f"/api/fitting/cards/{item.id}", headers=admin_headers).json()
+        assert shown["problem"] and "응력이 떨어집니다" in shown["problem"]

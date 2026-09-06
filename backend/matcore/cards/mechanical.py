@@ -155,6 +155,57 @@ TABLE = register_block(
             Produced(key="plastic_strain", label="진소성변형률", si_unit="1"),
             Produced(key="true_stress", label="진응력", si_unit="Pa"),
         ),
+        curve=("plastic_strain", "true_stress"),
         order=30,
+    )
+)
+
+
+RATE_TABLE = register_block(
+    BlockSpec(
+        key="rate_table",
+        label="속도별 소성 표",
+        help=(
+            "변형률 속도마다 진소성변형률·진응력의 표. **`table` 은 기준 속도(가장 느린 "
+            "것) 하나이고, 이 블록이 나머지 속도를 든다** — 속도 의존을 안 받는 솔버는 "
+            "`table` 만 읽고, 받는 솔버는 이 표를 속도별로 나눠 싣는다(Abaqus *PLASTIC, "
+            "RATE=). 행은 속도 순, 같은 속도 안에서 변형률 순이다."
+        ),
+        produces=(
+            Produced(
+                key="source",
+                label="표를 만든 방법",
+                si_unit="1",
+                help="`rate_family` — 속도 묶음별로 시편 곡선을 공통 구간에 보간해 평균한 것.",
+            ),
+            Produced(key="rate_count", label="속도 묶음 수", si_unit="1"),
+            Produced(
+                key="reference_rate",
+                label="기준 속도",
+                si_unit="1/s",
+                help="응력비의 분모가 되는 속도. 가장 느린 묶음이다.",
+            ),
+            Produced(
+                key="model",
+                label="속도 민감도 식",
+                si_unit="1",
+                help="`none`·`cowper_symonds`·`johnson_cook`. 표와 별개로, 요약한 식이다.",
+            ),
+            Produced(key="cs_d", label="Cowper-Symonds D", si_unit="1/s"),
+            Produced(key="cs_p", label="Cowper-Symonds p", si_unit="1"),
+            Produced(key="jc_c", label="Johnson-Cook C", si_unit="1"),
+            Produced(
+                key="model_r_squared",
+                label="식의 R²",
+                si_unit="1",
+                help="응력비 점들에 대한 결정계수. 묶음이 적으면 1 에 가까워도 뜻이 없다.",
+            ),
+        ),
+        rows=(
+            Produced(key="strain_rate", label="변형률 속도", si_unit="1/s"),
+            Produced(key="plastic_strain", label="진소성변형률", si_unit="1"),
+            Produced(key="true_stress", label="진응력", si_unit="Pa"),
+        ),
+        order=35,
     )
 )

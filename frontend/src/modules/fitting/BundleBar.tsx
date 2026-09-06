@@ -29,9 +29,15 @@ export function BundleBar({
   formats,
   onClear,
   onError,
+  embedded = false,
 }: {
   ids: string[]
   formats: ExportFormat[]
+  /**
+   * 다른 띠 안에 끼워 넣는다(`SelectionBar`). 제 띠·고른 수·비우기 단추를 안 그리고
+   * 단위계·형식·주석만 낸다 — 바깥 띠가 그것들을 이미 든다.
+   */
+  embedded?: boolean
   /**
    * 고른 것을 비우는 자리. **없으면 그 단추를 안 그린다** — 워크벤치에서는 고른
    * 것이 바구니라 여기서 비울 수 없고, 눌러도 아무 일이 없는 단추는 「기능이
@@ -68,10 +74,14 @@ export function BundleBar({
 
   return (
     <div
-      className="bg-background sticky bottom-0 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-md border p-3"
+      className={
+        embedded
+          ? 'flex flex-wrap items-center gap-2'
+          : 'bg-background sticky bottom-0 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-md border p-3'
+      }
       aria-label="묶음 내보내기"
     >
-      <span className="text-sm font-medium">{ids.length}장 골랐습니다</span>
+      {!embedded && <span className="text-sm font-medium">{ids.length}장 골랐습니다</span>}
 
       <div className="flex items-center gap-1">
         {available.map((one) => (
@@ -111,7 +121,7 @@ export function BundleBar({
         적힙니다.
       </span>
 
-      {onClear && (
+      {onClear && !embedded && (
         <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
           <X className="size-3.5" />
           고른 것 비우기

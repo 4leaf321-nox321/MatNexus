@@ -26,12 +26,11 @@ import { AlertTriangle, Globe2, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import { BundleBar } from '@/modules/fitting/BundleBar'
 import { CardFilterPanel } from '@/modules/fitting/CardFilterPanel'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type { PropertyCard } from '@/modules/fitting/api'
-import { AddToBasket } from '@/shared/components/AddToBasket'
+import { SelectionBar } from '@/modules/fitting/SelectionBar'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -45,8 +44,11 @@ const PAGE = 50
 export default function CardsPage() {
   // 홈의 「확정 대기 N」 이 `?status=draft` 로 보낸다 — 안 읽으면 그 숫자가
   // 가리킨 목록이 아니라 전체가 뜬다.
-  const [search] = useSearchParams()
+  const [search, setSearch] = useSearchParams()
   const [status, setStatus] = useState<string | null>(search.get('status'))
+  // **재료로 걸러 들어오는 길.** 재료 화면에서 카드를 만들고 여기로 오면 그 재료의
+  // 것만 보여야 한다 — 전에는 이 값을 읽지 않아 전체 목록이 떴다(2026-09-05 실사용).
+  const materialId = search.get('material_id')
   const [testType, setTestType] = useState<string | null>(null)
   const [owner, setOwner] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
@@ -68,18 +70,19 @@ export default function CardsPage() {
   // 걸었을 때 빈 화면을 본다.**
   useEffect(() => {
     setLimit(PAGE)
-  }, [status, testType, owner, q])
+  }, [status, testType, owner, q, materialId])
 
   const page = useResource(
     () =>
       fittingApi.cards({
+        material_id: materialId ?? undefined,
         status: status ?? undefined,
         test_type_key: testType ?? undefined,
         owner: owner ?? undefined,
         q: q || undefined,
         limit,
       }),
-    [status, testType, owner, q, limit]
+    [status, testType, owner, q, limit, materialId]
   )
   // **거르기 목록은 필터와 함께 안 바뀐다.** 「무엇이 있나」를 답하는 자리라
   // 한 번만 읽는다.
@@ -120,6 +123,27 @@ export default function CardsPage() {
         <span className="text-muted-foreground text-sm">
           {page.loading ? '찾는 중…' : `${total}장`}
         </span>
+        {materialId && (
+          // **걸려 있다는 것을 보이고, 풀 수 있게.** 조용히 걸어 두면 「카드가 이것뿐인가」
+          // 로 읽힌다.
+          <Badge variant="secondary" className="gap-1">
+            재료: {rows[0]?.material_name ?? materialId}
+            <button
+              type="button"
+              aria-label="재료 거르기 풀기"
+              className="hover:text-foreground ml-0.5 opacity-70"
+              onClick={() =>
+                setSearch((now) => {
+                  const copy = new URLSearchParams(now)
+                  copy.delete('material_id')
+                  return copy
+                })
+              }
+            >
+              ×
+            </button>
+          </Badge>
+        )}
       </div>
 
       <ErrorNotice error={page.error ?? facets.error ?? error} className="mb-4" />
@@ -150,18 +174,13 @@ export default function CardsPage() {
         ))}
       </div>
 
-      {/* **담기와 내보내기는 다른 일이다.** 담는 것은 나중에 이어서 하려는 것이고,
-          내보내기는 지금 받는 것이다. 담기는 떠 있는 패널로 화면 위에 뜨고(아래 띠와
-          자리를 다투지 않는다), 내보내기 띠는 목록 끝에 그대로 붙는다. */}
-      <AddToBasket
-        kind="card"
+      {/* **담기와 내보내기는 다른 일이지만, 띠는 하나다.** 담는 것은 나중에 이어서
+          하려는 것이고 내보내기는 지금 받는 것이라 한때 떠 있는 패널과 하단 띠로
+          갈랐는데, 체크 한 번에 둘이 뜨니 「팝업이 두 개」 로 읽혔다(2026-09-05).
+          띠 하나 안에서 탭으로 가른다. */}
+      <SelectionBar
         ids={[...picked]}
         labels={rows.filter((one) => picked.has(one.id)).map((one) => one.label)}
-        onError={setError}
-      />
-
-      <BundleBar
-        ids={[...picked]}
         formats={formats.data ?? []}
         onClear={() => setPicked(new Set())}
         onError={setError}

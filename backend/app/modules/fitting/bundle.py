@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from matcore import export
+from matcore.export.systems import UnitSystem
 
 #: 압축 항목의 고정 시각. 같은 내용이면 같은 바이트가 되도록.
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
@@ -86,7 +87,7 @@ def build(
     cards: list[BundleCard],
     *,
     target: export.Renderer,
-    units: str,
+    system: UnitSystem,
     exported_by: str,
     app_version: str,
     now: datetime,
@@ -96,9 +97,9 @@ def build(
     **정렬해서 담는다** — 재료·이름·id 순. 고른 순서대로 담으면 같은 묶음도 화면에서
     고른 순서에 따라 파일 차례가 달라져, diff 가 매번 통째로 바뀐다.
     """
-    # **렌더러는 부르는 쪽이 고른다.** DB 정의로 만든 렌더러도 있어서
-    # (`fitting/renderers.py`) 키만으로는 여기서 못 찾는다.
-    system = export.systems.get(units)
+    # **렌더러도 단위계도 부르는 쪽이 고른다.** DB 정의로 만든 렌더러와 사용자가
+    # 만든 단위계가 있어서 키만으로는 여기서 못 찾는다 — 전에는 여기서
+    # `systems.get(units)` 를 불러 사용자 단위계면 500 이었다(2026-09-05).
 
     ordered = sorted(cards, key=lambda one: (one.material, one.label, one.card_id))
     entries: list[dict[str, object]] = []

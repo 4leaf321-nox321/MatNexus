@@ -79,3 +79,55 @@ VISCOELASTIC = register_block(
         order=40,
     )
 )
+
+
+LVE = register_block(
+    BlockSpec(
+        key="lve",
+        label="선형탄성구간(LVE) 탄성률",
+        help=(
+            "DMA 변형률 스윕의 **선형 구간**에서 읽은 저장 탄성률과 그 한계. 진동·소변형 "
+            "해석의 탄성계수로 쓴다 — 한계 변형률 너머에서는 이 값이 유효하지 않다. "
+            "Prony(점탄성 블록)와 달리 시간 의존이 없다: **한 주파수·한 온도의 값**이다."
+        ),
+        produces=(
+            Produced(
+                key="youngs_modulus",
+                label="저장 탄성률 (선형 구간)",
+                si_unit="Pa",
+                help="선형 구간 점들의 평균 E′. 여러 시편이면 그 시편 평균들의 평균.",
+            ),
+            Produced(
+                key="lve_strain_limit",
+                label="선형 한계 변형률",
+                si_unit="1",
+                help="여기까지 E′ 가 평탄하다. **이 카드가 유효한 변형률 범위다.**",
+            ),
+            Produced(
+                key="sample_count",
+                label="시편 수",
+                si_unit="1",
+                help="평균에 들어간 시편 수. 1 이면 평균이 아니라 그 시편의 값이다.",
+            ),
+            Produced(
+                key="coefficient_of_variation",
+                label="E′ 변동계수",
+                si_unit="1",
+                help="시편 간 흩어짐. 시편이 하나면 없다.",
+            ),
+            Produced(
+                key="frequency_hz",
+                label="주파수",
+                si_unit="Hz",
+                help="스윕을 돌린 주파수. **이 주파수에서의 값이다.**",
+            ),
+            Produced(
+                key="temperature_k",
+                label="온도",
+                si_unit="K",
+                help="스윕을 돌린 온도. **이 온도에서의 값이다.**",
+            ),
+        ),
+        order=45,
+    )
+)

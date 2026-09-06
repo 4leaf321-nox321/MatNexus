@@ -175,6 +175,10 @@ class Test표정리:
         """
         with pytest.raises(export.ExportError, match="네킹") as caught:
             export.prepare(((0.0, 250e6), (0.01, 300e6), (0.02, 280e6)))
+        # **숫자에 단위를 안 붙인다.** 이 함수는 단위 환산 뒤에 불려 값이 이미 덱의
+        # 계다 — `/1e6 MPa` 로 적으니 255 MPa 가 「0.000255 MPa」 로 나왔다(2026-09-05).
+        assert "MPa" not in str(caught.value)
+        assert "3e+08" in str(caught.value) and "2.8e+08" in str(caught.value)
         assert "실제와 다른 재료" in str(caught.value)
 
     def test_너무_길면_거부한다(self) -> None:

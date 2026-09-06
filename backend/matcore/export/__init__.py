@@ -87,6 +87,9 @@ class Need:
     """이 블록에서 반드시 있어야 하는 값."""
     rows_min: int = 0
     """이 블록의 표에 최소 몇 줄이 있어야 하는가."""
+    at_least: tuple[tuple[str, float], ...] = ()
+    """값이 이만큼은 돼야 한다 — `(("rate_count", 2),)`. 있느냐만 보면 「낼 수 있다」 고
+    말해 놓고 렌더러가 거절한다(2026-09-05 실측: 속도가 하나뿐인 카드에 abaqus_rate)."""
     optional: bool = False
     """없어도 덱은 나온다. **다만 덱에 그 사실을 적는다** — 밀도가 그렇다."""
 
@@ -153,6 +156,9 @@ class Rendered:
     text: str
     notes: tuple[str, ...] = field(default=())
     """내보내면서 한 일. **조용히 하지 않았다는 증거다.**"""
+    spans: tuple[tuple[int, int, int], ...] = field(default=())
+    """정의의 줄 → 덱의 줄. `(정의 줄 번호, 시작 줄, 끝 줄)` — 끝은 포함하지 않는다.
+    코드 렌더러는 비워 둔다. 정의 편집기가 「어느 정의가 어느 줄이 됐나」 를 잇는 데 쓴다."""
 
 
 def sanitize_name(raw: str, *, fallback: str = "MATERIAL") -> str:
@@ -211,7 +217,7 @@ def prepare(
         keep = zeros[-1]
         notes.append(
             f"소성변형률이 0 인 점이 {len(zeros)}개였습니다. 탄성 구간을 0 으로 자른 "
-            f"자국이라, 그중 마지막(항복점, {ordered[keep][1] / 1e6:.4g} MPa)만 남기고 "
+            f"자국이라, 그중 마지막(항복점, 응력 {ordered[keep][1]:.5g})만 남기고 "
             f"앞의 {len(zeros) - 1}점을 뺐습니다."
         )
         ordered = ordered[keep:]
@@ -224,7 +230,7 @@ def prepare(
         notes.append(
             f"첫 점의 소성변형률이 {ordered[0][0]:.3g} 였습니다 — "
             f"{YIELD_ANCHOR_TOLERANCE:.0e} 이하라 0 으로 맞췄습니다(응력 "
-            f"{ordered[0][1] / 1e6:.4g} MPa 는 그대로). 솔버는 첫 점을 항복점으로 읽습니다."
+            f"{ordered[0][1]:.5g} 는 그대로). 솔버는 첫 점을 항복점으로 읽습니다."
         )
         ordered[0] = (0.0, ordered[0][1])
 
@@ -247,9 +253,12 @@ def prepare(
         if ordered[index][1] < ordered[index - 1][1]:
             # **연화를 숨기지 않는다.** 값을 눕혀서 내보내면 그 덱은 실제와 다른
             # 재료가 되고, 아무도 그 사실을 모른다.
+            #
+            # 숫자에 단위를 안 붙인다. 이 함수는 `to_system` 뒤에 불려 값이 이미 덱의
+            # 계라, `/1e6 MPa` 로 적으면 255 MPa 가 「0.000255 MPa」 로 나왔다(2026-09-05).
             raise ExportError(
                 f"{index}번째 점에서 응력이 떨어집니다 "
-                f"({ordered[index - 1][1] / 1e6:.5g} → {ordered[index][1] / 1e6:.5g} MPa). "
+                f"({ordered[index - 1][1]:.6g} → {ordered[index][1]:.6g}, 덱의 응력 단위). "
                 f"네킹 뒤 구간이 섞였을 수 있습니다 — 'tensile.necking_candidate' 가 "
                 f"제시한 위치에서 자르고 다시 처리하세요. 여기서 눕혀 내보내면 그 덱은 "
                 f"실제와 다른 재료가 됩니다."
@@ -317,6 +326,10 @@ def missing_for(deck: Deck, format_key: str | Renderer) -> tuple[str, ...]:
         )
         if need.rows_min and len(deck.rows(need.block)) < need.rows_min:
             missing.append(f"{_label(need.block)}(표 {need.rows_min}줄 이상)")
+        for key, floor in need.at_least:
+            found = values.get(key)
+            if found is None or float(found) < floor:
+                missing.append(f"{_label(need.block, key)} {floor:g} 이상")
     return tuple(missing)
 
 
@@ -1130,6 +1143,157 @@ def render_openradioss_thermal(deck: Deck) -> Rendered:
     lines.append(f"#{'T0':>19}{'RHOCP':>20}{'AS':>20}{'BS':>20}")
     lines.append(_fixed(initial) + _fixed(volumetric) + _fixed(intercept) + _fixed(slope))
     lines.append("/END")
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+@register_renderer(
+    key="abaqus_rate",
+    label="Abaqus (속도 의존)",
+    extension="inp",
+    suffix="_rate",
+    describe="*ELASTIC + 속도별 *PLASTIC, RATE= — 변형률 속도 의존 소성 표.",
+    keywords=("*MATERIAL", "*ELASTIC", "*PLASTIC"),
+    needs=(
+        Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        Need("elastic", values=("density",), optional=True),
+        Need("thermal", optional=True),
+        # 속도가 하나뿐이면 이 덱을 낼 이유가 없다 — 그건 `abaqus` 가 한다. **미리
+        # 말한다**: 있느냐만 보면 메뉴는 「가능」 인데 내려받기가 422 였다(2026-09-05).
+        Need(
+            "rate_table",
+            values=("rate_count",),
+            at_least=(("rate_count", 2),),
+            rows_min=2 * MIN_POINTS,
+        ),
+    ),
+)
+def render_abaqus_rate(deck: Deck) -> Rendered:
+    """Abaqus 속도 의존 소성 — **속도마다 `*PLASTIC, RATE=` 한 벌.**
+
+    Abaqus 는 `*PLASTIC` 을 속도별로 반복해 주면 그 사이를 보간한다. 식(Cowper-
+    Symonds·Johnson-Cook)으로도 줄 수 있지만(`*RATE DEPENDENT`), **표가 잰 것이고
+    식은 요약**이다 — 표를 싣고 식은 주석으로 적는다. 표 밖 속도는 Abaqus 가
+    가장자리 값을 쓴다(`EXTRAPOLATION=CONSTANT` 와 같은 태도).
+
+    행은 `rate_table` 을 속도로 나눈다. **속도가 하나뿐이면 거부한다** — 그 덱은
+    `abaqus` 가 낼 것이고, 여기서 내면 속도 의존이 있는 척이 된다.
+    """
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+
+    by_rate: dict[float, list[tuple[float, float]]] = {}
+    for row in deck.rows("rate_table"):
+        try:
+            rate = float(row["strain_rate"])
+            by_rate.setdefault(rate, []).append(
+                (float(row["plastic_strain"]), float(row["true_stress"]))
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ExportError(
+                "속도별 소성 표의 행에 속도·변형률·응력이 다 있어야 합니다."
+            ) from exc
+    if len(by_rate) < 2:
+        raise ExportError(
+            "속도가 하나뿐입니다. 속도 의존 덱은 둘 이상의 속도가 있어야 합니다 — "
+            "하나면 Abaqus 형식을 쓰세요."
+        )
+
+    notes: list[str] = []
+    lines = _header(deck, "**")
+    lines.append(f"** Consistent units: {deck.units.declaration}")
+    rates = sorted(by_rate)
+    lines.append(
+        f"** Rate dependent plasticity: {len(rates)} strain rates "
+        f"({_free(rates[0])} ~ {_free(rates[-1])} 1/s), tabular, interpolated by Abaqus"
+    )
+    model = deck.values("rate_table").get("model")
+    if model == "cowper_symonds":
+        d, p = deck.number("rate_table", "cs_d"), deck.number("rate_table", "cs_p")
+        if d is not None and p is not None:
+            lines.append(
+                "** Cowper-Symonds summary (not used by this deck): "
+                f"D={_free(d)} 1/s, p={_free(p)}"
+            )
+    elif model == "johnson_cook":
+        c = deck.number("rate_table", "jc_c")
+        if c is not None:
+            lines.append(f"** Johnson-Cook summary (not used by this deck): C={_free(c)}")
+    if density is None:
+        notes.append("밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다.")
+        lines.append(
+            "** DENSITY: 측정값이 없어 비웠습니다. "
+            "동적 해석에는 이 덱이 그대로 쓰이지 못합니다."
+        )
+    lines.append(f"*MATERIAL, NAME={deck.name}")
+    if density is not None:
+        lines.append("*DENSITY")
+        lines.append(f"{_free(density)},")
+    lines.extend(_elastic_lines(deck, youngs, poisson))
+    lines.extend(_thermal_lines(deck))
+    for rate in rates:
+        points, said = prepare(tuple(sorted(by_rate[rate])))
+        notes.extend(f"속도 {rate:.3g} 1/s: {line}" for line in said)
+        lines.append(
+            f"*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT, RATE={_free(rate)}"
+        )
+        lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+@register_renderer(
+    key="abaqus_lve",
+    label="Abaqus (선형탄성구간 · DMA)",
+    extension="inp",
+    suffix="_lve",
+    describe="*ELASTIC 만 — DMA 변형률 스윕의 선형 구간 저장 탄성률. 소성 없음.",
+    keywords=("*MATERIAL", "*ELASTIC"),
+    needs=(
+        Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        Need("elastic", values=("density",), optional=True),
+        Need("thermal", optional=True),
+        Need("lve", values=("youngs_modulus", "lve_strain_limit")),
+    ),
+)
+def render_abaqus_lve(deck: Deck) -> Rendered:
+    """Abaqus 선형 탄성 덱 — **DMA 저장 탄성률을 E 로.**
+
+    소성 표가 없으므로 `abaqus` 형식은 이 카드를 못 낸다. 그런데 소변형·진동 해석은
+    `*ELASTIC` 만으로 돌고, DMA 의 선형 구간 E′ 가 그 자리에 맞는 값이다. **유효 범위가
+    있다** — 한계 변형률과 재던 주파수·온도를 덱에 적는다. 그 밖에서 이 덱을 쓰면
+    조용히 틀린다.
+    """
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    limit = deck.number("lve", "lve_strain_limit")
+    frequency = deck.number("lve", "frequency_hz")
+    temperature = deck.number("lve", "temperature_k")
+    count = deck.number("lve", "sample_count")
+
+    notes: list[str] = []
+    lines = _header(deck, "**")
+    lines.append(f"** Consistent units: {deck.units.declaration}")
+    lines.append(
+        "** ELASTIC is the DMA storage modulus in the linear viscoelastic range"
+        + (f", valid up to strain {_free(limit)}" if limit is not None else "")
+        + (f", at {_free(frequency)} Hz" if frequency is not None else "")
+        + (f", {_free(temperature)} K" if temperature is not None else "")
+        + (f", from {int(count)} specimen(s)" if count is not None else "")
+    )
+    lines.append("** No plasticity: use for small-strain / vibration analyses only")
+    if density is None:
+        notes.append("밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다.")
+        lines.append(
+            "** DENSITY: 측정값이 없어 비웠습니다. "
+            "동적 해석에는 이 덱이 그대로 쓰이지 못합니다."
+        )
+    lines.append(f"*MATERIAL, NAME={deck.name}")
+    if density is not None:
+        lines.append("*DENSITY")
+        lines.append(f"{_free(density)},")
+    lines.extend(_elastic_lines(deck, youngs, poisson))
+    lines.extend(_thermal_lines(deck))
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 

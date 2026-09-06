@@ -308,6 +308,41 @@ class DeckPreviewIn(BaseModel):
     units: str = "si"
 
 
+class DeckKeyOut(BaseModel):
+    """덱 정의가 집을 수 있는 값 하나 — `elastic.density` 처럼 **블록.값**."""
+
+    path: str
+    block: str
+    block_label: str
+    key: str
+    label: str
+    si_unit: str | None
+    value: float
+
+
+class DeckTableOut(BaseModel):
+    """덱 정의가 `rows` 로 반복할 수 있는 표 하나."""
+
+    block: str
+    block_label: str
+    row_count: int
+    columns: list[CardValueOut]
+
+
+class DeckKeysOut(BaseModel):
+    """이 카드로 덱을 그릴 때 **실제로 집히는 것**(2026-09-05).
+
+    정의 편집기가 `elastic.youngs_modulus` 를 손으로 적게 했고, 고른 카드에 무엇이 들어
+    있는지는 미리보기의 「없는 값」 으로만 드러났다. 미리보기와 같은 덱(`_deck_for_card`)
+    에서 같은 조회 규칙(`Deck.number`·`Deck.rows`)으로 세므로, 여기 있는 것은 정의에 적으면
+    반드시 집힌다.
+    """
+
+    card_id: uuid.UUID
+    values: list[DeckKeyOut]
+    tables: list[DeckTableOut]
+
+
 class DeckPreviewOut(BaseModel):
     """미리보기 결과. **덱이 안 나와도 200 이다.**
 
@@ -325,8 +360,36 @@ class DeckPreviewOut(BaseModel):
     """이 카드에 모자라서 못 낸 값. **정의가 틀린 것과 카드가 빈 것은 다르다** —
     구별이 안 되면 정의를 고치며 시간을 버린다."""
 
+    spans: list[list[int]] = []
+    """`[정의 줄 번호, 시작 줄, 끝 줄]` — 정의의 어느 줄이 덱의 어느 줄이 됐나. 편집기가
+    묶음에 마우스를 올리면 그 줄을 강조한다."""
+
     notes: list[str] = []
     """덱을 만들며 한 일. 조용히 하지 않았다는 증거다."""
+
+
+class UnitSystemCreate(BaseModel):
+    """질량·길이·시간 셋으로 계를 만든다. 나머지는 서버가 유도한다."""
+
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{1,49}$")
+    label: str = Field(min_length=1, max_length=100)
+    mass: str
+    length: str
+    time: str
+
+
+class UnitSystemDeriveIn(BaseModel):
+    mass: str
+    length: str
+    time: str
+
+
+class UnitSystemBaseUnitsOut(BaseModel):
+    """계를 만들 때 고를 수 있는 기본 단위 — `matcore.units` 표가 정본이다."""
+
+    mass: list[str]
+    length: list[str]
+    time: list[str]
 
 
 class UnitSystemOut(BaseModel):
@@ -342,6 +405,13 @@ class UnitSystemOut(BaseModel):
     declaration: str
     """덱 머리에 그대로 들어가는 줄. `tonne, mm, s, MPa`."""
     is_default: bool
+    builtin: bool = True
+    """코드에 박힌 계인가. 사용자가 만든 계만 지울 수 있다."""
+    mass: str = ""
+    length: str = ""
+    time: str = ""
+    symbols: dict[str, str] = {}
+    """SI 단위 → 이 계의 기호. 만들기 전에 무엇이 어떻게 적힐지 보여 준다."""
     """고르지 않으면 이것으로 나간다."""
 
 
@@ -375,6 +445,8 @@ class BlockSpecOut(BaseModel):
     """표의 열 선언. 비어 있으면 이 블록에는 표가 없다."""
     in_deck: bool
     """덱에 실리는가. 경화식은 안 실린다 — 표로 나가고 식은 주석에만 남는다."""
+    curve: list[str] | None = None
+    """표가 점 곡선이면 `[x 열, y 열]`. 덱 정의의 표 줄이 이것으로 x·y 를 건다."""
 
 
 class PropertyCardOut(BaseModel):
@@ -496,6 +568,41 @@ class CardBundleRequest(BaseModel):
 
     units: str = "si"
     """덱의 단위계. 파일 이름과 덱 머리에 들어간다."""
+
+
+class RateCardSaveRequest(BaseModel):
+    """속도 의존 소성 카드 — **속도별 묶음(`tensile.rate_family`)에서.**
+
+    묶음이 재료·시험 종류·방향·구성원을 다 들고 있으므로 그 id 하나면 된다.
+    탄성계수는 구성원의 채택 결과(`youngs_modulus`)를 평균하고, 없으면 재료에 적어
+    둔 값을 쓴다. 푸아송비·밀도는 다른 카드와 같은 규칙으로 물려받는다.
+    """
+
+    group_result_id: uuid.UUID
+    label: str = Field(default="", max_length=200)
+    poisson_ratio: float | None = Field(default=None, gt=-1, lt=0.5)
+    density: float | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class LveCardSaveRequest(BaseModel):
+    """DMA 변형률 스윕의 선형 구간 탄성률 카드 — **통계 묶음(재료·종류·방향)에서.**
+
+    `youngs_modulus`(선형 구간 E′)와 `lve_strain_limit` 를 낸 채택 결과들의 평균이다.
+    시편 수와 변동계수를 카드에 박는다 — 1건이면 평균이 아니라 그 시편의 값이다.
+    """
+
+    material_id: uuid.UUID
+    test_type_key: str
+    orientation: str
+    label: str = Field(default="", max_length=200)
+    poisson_ratio: float | None = Field(default=None, gt=-1, lt=0.5)
+    density: float | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=2000)
+    include_declared: bool = False
+    """재료에 적어 둔 열물성(열팽창·열전도도·비열)을 `thermal` 블록으로 함께 싣는다
+    (2026-09-05). 선형탄성구간 카드 한 장으로 진동·열응력 해석이 돌게 — 따로 재료 기본
+    정보 카드를 만들어 둘을 이어 붙이지 않아도 된다. 탄성 블록의 E′ 는 그대로다."""
 
 
 class ViscoelasticCardSaveRequest(BaseModel):

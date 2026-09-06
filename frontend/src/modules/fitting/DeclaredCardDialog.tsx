@@ -29,13 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
+import { InheritedFields, densityToSi } from '@/modules/fitting/InheritedFields'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { useResource } from '@/shared/hooks/useResource'
-import { display, formatScalar } from '@/shared/units'
+import { formatScalar } from '@/shared/units'
 
-/** 밀도를 보여 줄 기호. **표가 정한다** — 손으로 적으면 표만 바뀌었을 때 어긋난다. */
-const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function DeclaredCardDialog({
   materialId,
@@ -81,7 +80,7 @@ export function DeclaredCardDialog({
 
   useEffect(() => {
     if (open) {
-      setLabel('문헌값')
+      setLabel('재료 기본 정보')
       setPoisson('')
       setDensity('')
       setNote('')
@@ -97,7 +96,7 @@ export function DeclaredCardDialog({
         material_id: materialId,
         label,
         poisson_ratio: poisson === '' ? null : Number(poisson),
-        density: density === '' ? null : Number(density),
+        density: densityToSi(density),
         note: note || null,
       })
       onSaved(card)
@@ -113,10 +112,10 @@ export function DeclaredCardDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>적어 둔 값으로 카드 만들기</DialogTitle>
+          <DialogTitle>재료 기본 정보로 카드 만들기</DialogTitle>
           <DialogDescription>
-            시험에서 나온 값이 하나도 안 들어갑니다. 재료의 <b>물성</b> 탭에 적어 둔 값만
-            싣고, 덱에는 「사람이 적은 값」이라고 근거 문서와 함께 나갑니다.
+            시험에서 나온 값은 들어가지 않습니다. 재료에 적어 둔 값(문헌·규격·밀시트)과
+            밀도·푸아송비만 싣고, 덱에는 「사람이 적은 값」이라고 근거와 함께 나갑니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -156,30 +155,17 @@ export function DeclaredCardDialog({
               onChange={(event) => setLabel(event.target.value)}
             />
           </div>
-          <div>
-            <Label htmlFor="declared-poisson" className="mb-1">
-              푸아송비
-            </Label>
-            {/* 재료에 있으면 비워 둔다 — 두 곳에 적으면 어느 쪽이 맞는지
-                판정할 근거가 없다. */}
-            <Input
-              id="declared-poisson"
-              value={poisson}
-              inputMode="decimal"
-              placeholder="재료에 있으면 비워 두세요"
-              onChange={(event) => setPoisson(event.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="declared-density" className="mb-1">
-              밀도 ({DENSITY_SYMBOL})
-            </Label>
-            <Input
-              id="declared-density"
-              value={density}
-              inputMode="decimal"
-              placeholder="시료·재료에 있으면 비워 두세요"
-              onChange={(event) => setDensity(event.target.value)}
+          <div className="sm:col-span-2">
+            {/* **비우면 무엇이 오는지 보인다.** 「재료에 있으면 비워 두세요」 만으로는
+                그 값이 무엇인지 모른 채 비우게 된다(2026-09-05). 미리보기가 같은
+                계산으로 낸 값이라 서버를 또 부르지 않는다. */}
+            <InheritedFields
+              rows={rows.filter((row) => row.key === 'poisson_ratio' || row.key === 'density')}
+              idPrefix="declared"
+              poisson={poisson}
+              density={density}
+              onPoisson={setPoisson}
+              onDensity={setDensity}
             />
           </div>
           <div className="sm:col-span-2">

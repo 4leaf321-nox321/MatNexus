@@ -8,13 +8,19 @@
  */
 
 /** 줄 한 종류. `kind` 는 화면 안에서만 쓰는 딱지 — 저장할 때는 벗긴다. */
-export type LineKind = 'text' | 'block' | 'fields' | 'rows'
+export type LineKind = 'text' | 'plain' | 'block' | 'fields' | 'rows'
 
 export type FieldSpec = {
   /** `블록.값` 또는 표의 열 이름. `const` 가 있으면 안 쓴다. */
   value?: string
   /** 값 대신 늘 이 글자. Prony 의 체적항처럼 **안 잰 자리**가 그렇다. */
   const?: string
+  /**
+   * 값·열을 **계산해서** 적는 칸. `true_stress / 1000` · `elastic.youngs_modulus /
+   * (2 * (1 + elastic.poisson_ratio))`. 사칙연산·`^`·괄호·sqrt/abs/exp/log/log10/min/max.
+   * 열 이름은 표 줄에서만, `블록.값` 은 어디서나.
+   */
+  expr?: string
   format?: string | [string, number, number]
 }
 
@@ -42,6 +48,11 @@ export type DeckLine = {
 /** 사람이 읽는 이름과 「무엇에 쓰나」. **드롭다운에 설명이 없으면 못 고른다.** */
 export const LINE_KINDS: { key: LineKind; label: string; hint: string }[] = [
   { key: 'text', label: '글자', hint: '키워드 줄. {name}·{units} 를 쓸 수 있습니다.' },
+  {
+    key: 'plain',
+    label: '글자 줄',
+    hint: '카드 값이 안 드는 줄 — 옵션 숫자·플래그·주석. 적은 그대로 나갑니다.',
+  },
   {
     key: 'fields',
     label: '값',
@@ -82,6 +93,13 @@ export function blank(kind: LineKind): DeckLine {
   return { kind, text: '' }
 }
 
+/** 이 칸이 사람에게 보이는 이름 — 편집기의 딱지와 고급 목록이 같이 쓴다. */
+export function fieldLabel(field: FieldSpec, at: number): string {
+  if (field.const !== undefined) return `"${field.const}"`
+  if (field.expr !== undefined) return `= ${field.expr || '…'}`
+  return field.value || `${at + 1}번 칸`
+}
+
 /**
  * 화면의 줄 → 저장할 줄. **빈 칸을 안 보낸다.**
  *
@@ -95,6 +113,11 @@ export function toDefinitionLine(line: DeckLine): Record<string, unknown> {
     if (value !== undefined && value !== null && value !== '') out[key] = value
   }
   if (line.kind === 'text') put('text', line.text)
+  if (line.kind === 'plain') {
+    // **빈 글자 줄도 보낸다.** 빈 줄이 곧 그 자리다 — Nastran 의 빈 계속 줄처럼.
+    out.text = line.text ?? ''
+    out.plain = true
+  }
   if (line.kind === 'block') put('block', line.block)
   if (line.kind === 'rows') {
     put('rows', line.rows)
@@ -107,6 +130,7 @@ export function toDefinitionLine(line: DeckLine): Record<string, unknown> {
       // **빈 상수도 보낸다.** `''` 는 「비운 칸」 이고 자리를 차지한다 —
       // 안 보내면 그 자리가 사라져 뒤 값이 한 칸씩 당겨진다.
       if (field.const !== undefined) one.const = field.const
+      else if (field.expr !== undefined) one.expr = field.expr
       else one.value = field.value ?? ''
       if (field.format) one.format = field.format
       return one
@@ -124,7 +148,15 @@ export function toDefinitionLine(line: DeckLine): Record<string, unknown> {
 /** 저장된 줄 → 화면의 줄. 고치러 들어올 때 쓴다. */
 export function fromDefinitionLine(raw: Record<string, unknown>): DeckLine {
   const kind: LineKind =
-    'block' in raw ? 'block' : 'rows' in raw ? 'rows' : 'fields' in raw ? 'fields' : 'text'
+    'block' in raw
+      ? 'block'
+      : 'rows' in raw
+        ? 'rows'
+        : 'fields' in raw
+          ? 'fields'
+          : raw.plain === true
+            ? 'plain'
+            : 'text'
   return {
     kind,
     text: typeof raw.text === 'string' ? raw.text : undefined,

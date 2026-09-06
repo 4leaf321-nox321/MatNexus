@@ -23,6 +23,11 @@ const cardFacets = vi.fn()
 const formats = vi.fn()
 const downloadBundle = vi.fn()
 
+vi.mock('@/shared/api/basket', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/basket')>()),
+  basketApi: { runs: () => Promise.resolve([]), add: () => Promise.resolve([]) },
+}))
+
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
@@ -239,7 +244,23 @@ describe('묶음 내보내기', () => {
     two()
     page()
     await screen.findByText('둘째 카드')
-    expect(screen.queryByLabelText('묶음 내보내기')).toBeNull()
+    expect(screen.queryByLabelText('고른 카드')).toBeNull()
+  })
+
+  it('띠는 하나이고 담기가 기본 탭이다', async () => {
+    // 체크 한 번에 떠 있는 패널과 하단 띠가 같이 떠서 「팝업이 두 개」 로 읽혔다
+    // (2026-09-05). 이제 띠 하나 안에서 탭으로 가른다.
+    two()
+    page()
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    const bar = within(screen.getByLabelText('고른 카드'))
+    expect(bar.getByRole('tab', { name: /워크벤치 작업에 담기/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(await bar.findByText(/워크벤치 작업이 없습니다|담을 작업/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '담기' })).toBeNull()
+    expect(bar.queryByLabelText('묶음 내보내기')).toBeNull()
   })
 
   it('고른 수를 말하고 형식을 고르면 그것으로 내보낸다', async () => {
@@ -248,8 +269,9 @@ describe('묶음 내보내기', () => {
     await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
     await userEvent.click(screen.getByLabelText('둘째 카드 묶음에 담기'))
 
-    const bar = within(screen.getByLabelText('묶음 내보내기'))
+    const bar = within(screen.getByLabelText('고른 카드'))
     expect(bar.getByText('2장 골랐습니다')).toBeInTheDocument()
+    await userEvent.click(bar.getByRole('tab', { name: /묶음 내보내기/ }))
 
     await userEvent.click(bar.getByRole('button', { name: /Abaqus/ }))
     await waitFor(() => expect(downloadBundle).toHaveBeenCalled())
@@ -264,9 +286,9 @@ describe('묶음 내보내기', () => {
     two()
     page()
     await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
-    const bar = within(screen.getByLabelText('묶음 내보내기'))
+    const bar = within(screen.getByLabelText('고른 카드'))
     await userEvent.click(bar.getByRole('button', { name: /고른 것 비우기/ }))
-    expect(screen.queryByLabelText('묶음 내보내기')).toBeNull()
+    expect(screen.queryByLabelText('고른 카드')).toBeNull()
   })
 
   it('무엇이 함께 들어가는지 미리 말한다', async () => {
@@ -275,8 +297,30 @@ describe('묶음 내보내기', () => {
     two()
     page()
     await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    const outer = within(screen.getByLabelText('고른 카드'))
+    await userEvent.click(outer.getByRole('tab', { name: /묶음 내보내기/ }))
     const bar = within(screen.getByLabelText('묶음 내보내기'))
     expect(bar.getByText(/manifest.json/)).toBeInTheDocument()
     expect(bar.getByText(/SHA256SUMS/)).toBeInTheDocument()
+  })
+})
+
+describe('재료로 걸러 들어온다', () => {
+  /**
+   * 재료 화면에서 카드를 만들고 여기로 오면 **그 재료의 것만** 보여야 한다. 전에는 이
+   * 값을 읽지 않아 전체 목록이 떴고, 사람은 방금 만든 카드가 어디 있는지 찾아야 했다
+   * (2026-09-05 실사용).
+   */
+  it('material_id 를 서버에 넘기고, 걸려 있다는 것을 보이고, 풀 수 있다', async () => {
+    page('/cards?material_id=m1')
+    await waitFor(() =>
+      expect(cards).toHaveBeenCalledWith(expect.objectContaining({ material_id: 'm1' }))
+    )
+    expect(await screen.findByText(/재료: SECC_MDOI_1.0/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '재료 거르기 풀기' }))
+    await waitFor(() =>
+      expect(cards).toHaveBeenLastCalledWith(expect.not.objectContaining({ material_id: 'm1' }))
+    )
   })
 })

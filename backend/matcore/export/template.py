@@ -38,6 +38,8 @@ Abaqus·OptiStruct·Radioss·ANSYS Mechanical·LS-DYNA… 로 늘면 그 사슬�
     {"rows": "table", "x": ..., "y": ..., "fields": [...]}   점 표를 정리해 반복
     {"rows": "viscoelastic", "fields": [...]}          표를 **있는 그대로** 반복
     {"const": 0.0, "format": "free"}                   값 대신 상수 (Prony 의 체적항)
+    {"expr": "true_stress / 1000"}                     값·열을 **계산해서** (`expr.py`)
+    {"text": "1, 0, 0", "plain": true}                 카드 값이 안 드는 줄 — 옵션 숫자
     {"when": "elastic.density"}                        그 값이 있을 때만
     {"when": "missing:elastic.density", "note": "..."} 없을 때만 + 사람에게 할 말
 """
@@ -46,6 +48,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, NoReturn
+
+from matcore.export import expr as expressions
 
 if TYPE_CHECKING:  # 순환을 피한다 — 그쪽이 이 모듈을 쓴다
     from matcore.export import Rendered
@@ -103,7 +107,32 @@ def _lookup(deck: Any, path: str) -> float | None:
     return None if found is None else float(found)
 
 
-def _cell(row: Mapping[str, Any], field: Mapping[str, Any]) -> str:
+def _compute(deck: Any, field: Mapping[str, Any], row: Mapping[str, Any] | None) -> float:
+    """`expr` 칸 — 열 이름은 그 줄에서, `블록.값` 은 덱에서 찾아 계산한다.
+
+    열에 상수를 나누거나(`true_stress / 1000`) 값 둘을 엮는(`E / (2*(1+nu))`) 자리.
+    **덱에 없는 이름은 값 칸과 같은 말로 거절한다** — `when` 으로 걸러야 하는 줄이다.
+    """
+    text = str(field["expr"])
+
+    def resolve(name: str) -> float | None:
+        if "." in name:
+            return _lookup(deck, name)
+        if row is None:
+            _fail(f"값 줄의 식에서는 '블록.값' 으로 적어야 합니다: {name} ({text})")
+        if name not in row:
+            _fail(f"표에 없는 열입니다: {name} ({text}). 있는 것: {', '.join(map(str, row))}")
+        return float(row[name])
+
+    try:
+        return expressions.evaluate(text, resolve)
+    except expressions.MissingName as exc:
+        _fail(f"값이 없습니다: {exc.name} ({text}). `when` 으로 걸러야 하는 줄입니다.")
+    except expressions.BadExpression as exc:
+        _fail(str(exc))
+
+
+def _cell(row: Mapping[str, Any], field: Mapping[str, Any], deck: Any = None) -> str:
     """표 한 줄에서 칸 하나.
 
     **상수 칸이 있다.** Abaqus 의 Prony 는 `g, k, τ` 셋인데 `k`(체적)는 DMA 가
@@ -111,6 +140,8 @@ def _cell(row: Mapping[str, Any], field: Mapping[str, Any]) -> str:
     물성은 전부 코드로 남는다.
     """
     fmt = field.get("format", "free")
+    if "expr" in field:
+        return _format(_compute(deck, field, row), fmt)
     if "const" in field:
         # **글자로 주면 글자 그대로 나간다.** Prony 의 체적항을 코드가
         # `0.000000000000E+00` 이 아니라 `0.0` 으로 적는다 — 덱에는 그런 리터럴이
@@ -163,7 +194,11 @@ def render(spec: Mapping[str, Any], deck: Any) -> Rendered:
             # 돌고 결과도 그럴듯하다.
             tables[rows_of] = deck.rows(rows_of)
 
+    # **정의 줄마다 덱의 몇 줄이 됐는지 남긴다.** 줄은 뒤에만 붙으므로 이번 줄의
+    # 시작이 곧 앞 줄의 끝이다 — `when` 으로 걸러진 줄은 빈 구간이다.
+    starts: list[int] = []
     for item in spec.get("lines", ()):
+        starts.append(len(lines))
         if not _keep(deck, item.get("when")):
             continue
         say = item.get("note")
@@ -184,7 +219,9 @@ def render(spec: Mapping[str, Any], deck: Any) -> Rendered:
             join = str(item.get("join", ", "))
             prefix = str(item.get("prefix", ""))
             for row in tables[str(item["rows"])]:
-                lines.append(prefix + join.join(_cell(row, field) for field in item["fields"]))
+                lines.append(
+                    prefix + join.join(_cell(row, field, deck) for field in item["fields"])
+                )
             continue
 
         if "fields" in item:
@@ -202,6 +239,11 @@ def render(spec: Mapping[str, Any], deck: Any) -> Rendered:
                         else _format(float(const), field.get("format", "free"))
                     )
                     continue
+                if "expr" in field:
+                    parts.append(
+                        _format(_compute(deck, field, None), field.get("format", "free"))
+                    )
+                    continue
                 value = _lookup(deck, str(field["value"]))
                 if value is None:
                     _fail(
@@ -216,10 +258,25 @@ def render(spec: Mapping[str, Any], deck: Any) -> Rendered:
             )
             continue
 
+        # 글자 줄 — 키워드도, 카드 값이 안 드는 옵션 줄(`plain`)도 여기다. 렌더러에게
+        # 둘은 같다. 구분은 편집기가 묶음으로 접을 때만 쓴다.
         text = str(item.get("text", ""))
-        lines.append(text.format(name=deck.name, units=deck.units.declaration))
+        try:
+            lines.append(text.format(name=deck.name, units=deck.units.declaration))
+        except (KeyError, IndexError, ValueError) as exc:
+            # **모르는 자리표는 이름을 대며 멈춘다.** `KeyError: 'id'` 로 나가면 정의의
+            # 어느 줄인지 못 찾는다. 글자 그대로의 중괄호는 `{{` 로 적는다.
+            _fail(
+                f"글자 줄의 자리표를 모릅니다: {text!r} ({exc!r}). "
+                "쓸 수 있는 것은 {name}·{units} 이고, 중괄호 자체는 {{ }} 로 적습니다."
+            )
 
-    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+    ends = [*starts[1:], len(lines)]
+    spans = tuple(
+        (index, start, end)
+        for index, (start, end) in enumerate(zip(starts, ends, strict=True))
+    )
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes), spans=spans)
 
 
 #: 정의에 반드시 있어야 하는 것. 없으면 **저장 전에** 막는다 — 기동이나 내려받기
@@ -245,6 +302,15 @@ def renderer_from_definition(definition: Mapping[str, Any]) -> Any:
     lines = definition["lines"]
     if not isinstance(lines, list):
         _fail("`lines` 는 줄의 목록이어야 합니다.")
+    # **식은 저장 전에 읽어 본다.** 값이 있는지는 카드마다 다르지만 문법과 허용 범위는
+    # 지금 알 수 있고, 내려받을 때 터지면 그 자리에 고칠 사람이 없다.
+    for at, line in enumerate(lines, start=1):
+        for field in line.get("fields", ()) if isinstance(line, Mapping) else ():
+            if isinstance(field, Mapping) and "expr" in field:
+                try:
+                    expressions.parse(str(field["expr"]))
+                except expressions.BadExpression as exc:
+                    _fail(f"{at}번 줄의 식: {exc}")
 
     needs = []
     for raw in definition.get("needs", ()):

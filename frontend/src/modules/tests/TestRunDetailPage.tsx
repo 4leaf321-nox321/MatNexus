@@ -791,7 +791,7 @@ export default function TestRunDetailPage() {
 
             {isViscoelastic && (
               <TabsContent value="viscoelastic">
-                <ViscoelasticPanel testRunId={item.id} />
+                <ViscoelasticPanel testRunId={item.id} materialId={item.material_id ?? undefined} />
               </TabsContent>
             )}
 

@@ -131,6 +131,33 @@ class PropertyCard(Base):
     )
 
 
+class UnitSystemDef(Base):
+    """사용자가 만든 덱 단위계 — **질량·길이·시간 셋만 저장한다.**
+
+    나머지 기호·인수는 읽을 때마다 `matcore.export.systems.derive` 가 만든다(2026-09-05).
+    인수를 저장하면 `matcore.units` 표가 고쳐졌을 때 저장된 것이 낡는다 — 저장소가 여섯
+    군데에서 걷어낸 그 함정이다. 붙박이 계(SI · mm·N·tonne)는 여기 없다.
+    """
+
+    __tablename__ = "unit_systems"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    key: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    """파일 이름과 API 인자에 들어가는 이름. `mm_kg_ms`."""
+    label: Mapped[str] = mapped_column(String(100))
+    mass: Mapped[str] = mapped_column(String(20))
+    length: Mapped[str] = mapped_column(String(20))
+    time: Mapped[str] = mapped_column(String(20))
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class ExportProfile(Base):
     """솔버 덱을 **어떻게 적을지** 를 담은 규칙. 코드가 아니라 데이터다(ADR 0023).
 

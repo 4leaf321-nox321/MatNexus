@@ -194,3 +194,23 @@ class Test고르기:
     def test_모르는_key_는_거절한다(self) -> None:
         with pytest.raises(KeyError):
             export.systems.get("mks")
+
+
+def test_붙박이_계는_블록의_단위를_전부_안다() -> None:
+    """**블록에 새 단위가 생기면 계의 기호 표가 따라와야 한다.** 실측(2026-09-05): 속도
+    의존(`1/s`)·선형탄성구간(`Hz`) 카드는 기본 계(mm·N·tonne)로 내려받기가 전부 422
+    였고, 기본 계를 SI 에서 바꾼 날 드러났다 — SI 는 기호가 곧 단위라 안 걸렸다."""
+    from matcore import cards
+
+    cards.load_builtin()
+    used = {
+        produced.si_unit
+        for spec in cards.list_blocks()
+        for produced in (*spec.produces, *spec.rows)
+        if produced.si_unit
+    }
+    for system in export.SYSTEMS:
+        lacking = sorted(unit for unit in used if unit not in system.symbols)
+        assert not lacking, f"{system.key} 에 기호가 없는 단위: {lacking}"
+        for unit in used:
+            system.convert(1.0, unit)  # 표에 없는 기호면 여기서 난다

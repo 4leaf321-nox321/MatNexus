@@ -610,7 +610,19 @@ export default function TestRunsPage() {
                   )}
                 </TableCell>
                 <TableCell className="text-muted-foreground font-mono text-xs">
-                  {run.material_name ?? '—'}
+                  {/* **재료로도 들어간다**(2026-09-05). 시험을 보다가 「이 재료가 뭐였지」 로
+                      가는 길이 없어 재료 목록에서 이름을 다시 찾아야 했다. */}
+                  {run.material_id ? (
+                    <Link
+                      to={`/materials/${run.material_id}`}
+                      state={{ from: { to: pathname, label: '시험 데이터' } }}
+                      className="hover:text-primary hover:underline"
+                    >
+                      {run.material_name ?? run.material_id}
+                    </Link>
+                  ) : (
+                    (run.material_name ?? '—')
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{run.orientation ?? '—'}</Badge>

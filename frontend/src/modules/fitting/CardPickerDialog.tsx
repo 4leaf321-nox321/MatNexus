@@ -84,7 +84,7 @@ export function CardPickerDialog({ open, onOpenChange, onPick, specs, current }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>미리보기에 쓸 카드 고르기</DialogTitle>
           <DialogDescription>

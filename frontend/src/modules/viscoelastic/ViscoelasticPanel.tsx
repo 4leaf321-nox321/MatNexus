@@ -93,7 +93,14 @@ function Step({ n, title, done }: { n: string; title: string; done?: boolean }) 
   )
 }
 
-export function ViscoelasticPanel({ testRunId }: { testRunId: string }) {
+export function ViscoelasticPanel({
+  testRunId,
+  materialId,
+}: {
+  testRunId: string
+  /** 카드 대화상자가 물려받을 밀도·푸아송비를 물어볼 재료. */
+  materialId?: string
+}) {
   const sweeps = useResource(() => viscoelasticApi.sweeps(testRunId), [testRunId])
   const [curves, setCurves] = useState<MasterCurve[]>([])
   const [selected, setSelected] = useState<MasterCurve | null>(null)
@@ -298,7 +305,7 @@ export function ViscoelasticPanel({ testRunId }: { testRunId: string }) {
         }}
       />
 
-      {selected && <MasterCurveView curve={selected} />}
+      {selected && <MasterCurveView materialId={materialId} curve={selected} />}
     </section>
   )
 }
@@ -531,7 +538,7 @@ function manualShifts(
   return shifts
 }
 
-function MasterCurveView({ curve }: { curve: MasterCurve }) {
+function MasterCurveView({ curve, materialId }: { curve: MasterCurve; materialId?: string }) {
   const points = useResource<MasterCurvePoints>(() => viscoelasticApi.points(curve.id), [curve.id])
   const [fits, setFits] = useState<PronyFit[]>([])
   const [busy, setBusy] = useState(false)
@@ -690,6 +697,7 @@ function MasterCurveView({ curve }: { curve: MasterCurve }) {
           {latest ? (
             <PronyView
               fit={latest}
+              materialId={materialId}
               busy={busy}
               onPick={(terms) => void fit(terms)}
               // **기준 온도가 이름에 든다.** 같은 재료의 카드가 여럿이면 어느
@@ -709,11 +717,13 @@ function MasterCurveView({ curve }: { curve: MasterCurve }) {
 
 function PronyView({
   fit,
+  materialId,
   busy,
   onPick,
   cardLabel,
 }: {
   fit: PronyFit
+  materialId?: string
   busy: boolean
   onPick: (terms: number) => void
   /** 카드 이름의 첫 제안. 재료·시편에서 온다. */
@@ -727,6 +737,7 @@ function PronyView({
       {making && (
         <ViscoelasticCardDialog
           fit={fit}
+          materialId={materialId}
           suggestedLabel={cardLabel}
           onClose={() => setMaking(false)}
           onDone={() => {

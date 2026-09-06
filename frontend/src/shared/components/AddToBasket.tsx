@@ -21,11 +21,16 @@
  * 그 사이에 스크롤이 어긋나 있으면 확인이 안 된다. 고른 것의 이름을 패널이 들고 있는다.
  * 길면 앞의 몇만 적고 나머지는 수로 접는다.
  *
- * ## 어디에 담기는지 늘 적는다
+ * ## 어디에 담기는지 늘 적는다 — 그리고 그것이 무엇인지도
  *
  * 「지금 작업」 은 이 브라우저가 기억하지만(`shared/api/basket`), 그 이름을 패널에
  * 적는다. 숨겨 두면 **담고 나서 어디 갔는지 찾아야 한다** — 그런 단추는 한 번 잘못
  * 담긴 뒤로 아무도 안 쓴다.
+ *
+ * 이름만 적어서는 모자랐다(2026-09-05). 「test11에 담기」 가 불쑥 떠서 「test11 이
+ * 뭔데」 가 됐다 — 그것이 **진행 중인 워크벤치 작업**이라는 말과, 고를 수 있는 작업
+ * 목록을 늘 보인다. 작업이 하나뿐이어도 고르는 칸을 둔다: 그래야 이것이 「작업」이고
+ * 바꿀 수 있는 것임을 안다.
  *
  * ## 담고 나면 돌아갈 길을 준다
  *
@@ -44,7 +49,7 @@
  * 가로지르는 배관이라, 이 파일도 아무 도메인 모듈을 import 하지 않는다.
  */
 
-import { Check, GripHorizontal, Inbox } from 'lucide-react'
+import { GripHorizontal, Inbox } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
@@ -53,20 +58,12 @@ import { activeRun, basketApi, setActiveRun } from '@/shared/api/basket'
 import type { BasketRun, ItemKind } from '@/shared/api/basket'
 import { useMaybeAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/dropdown-menu'
 import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 
 /** 옮겨 둔 자리. **기억한다** — 매번 같은 데로 돌아오면 매번 다시 치워야 한다. */
 const SPOT = 'matnexus.basket.spot'
 
-const PANEL = { width: 320, height: 150, margin: 16 }
+const PANEL = { width: 320, height: 230, margin: 16 }
 
 interface Spot {
   x: number
@@ -98,13 +95,7 @@ function firstSpot(): Spot {
   })
 }
 
-export function AddToBasket({
-  kind,
-  ids,
-  labels,
-  onError,
-  workspaceSlug,
-}: {
+interface BasketProps {
   kind: ItemKind
   /** 담을 것. 비어 있으면 패널이 안 뜬다. */
   ids: string[]
@@ -117,36 +108,11 @@ export function AddToBasket({
    * 자기 부서가 아닌 곳을 가리켜 작업 목록이 비어 보인다(`AppShell` 과 같은 규칙).
    */
   workspaceSlug?: string
-}) {
-  // **로그인 정보가 없어도 패널은 뜬다.** 이 위젯은 여러 화면에 얹히는 곁들이라,
-  // 제공자를 요구하면 그것을 품은 화면 전부가 같이 무거워진다.
-  const user = useMaybeAuth()?.user
-  const slug =
-    workspaceSlug ?? user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
-  const home = `/w/${slug}/workbench`
+}
 
-  const [runs, setRuns] = useState<BasketRun[] | null>(null)
-  const [chosen, setChosen] = useState<string | null>(activeRun())
-  const [added, setAdded] = useState(0)
-  const [busy, setBusy] = useState(false)
+export function AddToBasket({ kind, ids, labels, onError, workspaceSlug }: BasketProps) {
   const [spot, setSpot] = useState<Spot>(() => firstSpot())
   const grab = useRef<{ dx: number; dy: number } | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    void basketApi
-      .runs('running')
-      .then((found) => {
-        if (!alive) return
-        setRuns(found)
-        // 기억해 둔 작업이 끝났거나 남의 부서 것이면 그 값은 못 쓴다.
-        setChosen((now) => (found.some((one) => one.id === now) ? now : (found[0]?.id ?? null)))
-      })
-      .catch(() => alive && setRuns([]))
-    return () => {
-      alive = false
-    }
-  }, [])
 
   // 창이 줄면 패널이 밖으로 나간다 — 되돌린다.
   useEffect(() => {
@@ -182,22 +148,6 @@ export function AddToBasket({
     }
   }, [stopDrag])
 
-  const target = (runs ?? []).find((one) => one.id === chosen) ?? null
-
-  async function add() {
-    if (!target || ids.length === 0) return
-    setBusy(true)
-    try {
-      await basketApi.add(target.id, kind, ids)
-      setActiveRun(target.id)
-      setAdded(ids.length)
-    } catch (caught) {
-      onError?.(caught instanceof Error ? caught : new Error('담지 못했습니다.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   // **고른 게 없으면 안 뜬다.** 떠 있는 것은 무언가를 가리므로, 할 일이 있을 때만 뜬다.
   if (ids.length === 0) return null
 
@@ -218,10 +168,80 @@ export function AddToBasket({
       >
         <GripHorizontal className="size-4 shrink-0 opacity-80" />
         <Inbox className="size-4 shrink-0" />
-        <span className="text-sm font-semibold">{ids.length}건 담기</span>
+        <span className="text-sm font-semibold">워크벤치 작업에 담기</span>
+        <span className="ml-auto text-xs font-medium opacity-80">{ids.length}건</span>
       </div>
 
-      <div className="space-y-2 p-3">
+      <div className="p-3">
+        <BasketForm
+          kind={kind}
+          ids={ids}
+          labels={labels}
+          onError={onError}
+          workspaceSlug={workspaceSlug}
+        />
+      </div>
+    </div>
+  )
+
+  // **본문 밖에 그린다.** 목록이 스크롤되거나 접혀도 패널은 제자리에 떠 있어야 한다.
+  return createPortal(panel, document.body)
+}
+
+/**
+ * 담기의 몸통 — **떠 있는 패널과 카드 목록의 띠가 같은 것을 쓴다.**
+ *
+ * 카드 목록에서는 내보내기 띠와 나란히 뜨는 것이 「팝업 두 개」 로 읽혀서, 그 화면은
+ * 띠 하나에 탭으로 가른다(`fitting/SelectionBar`). 담는 규칙이 두 벌이 되지 않도록
+ * 몸통을 여기서 하나로 둔다.
+ */
+export function BasketForm({ kind, ids, labels, onError, workspaceSlug }: BasketProps) {
+  // **로그인 정보가 없어도 패널은 뜬다.** 이 위젯은 여러 화면에 얹히는 곁들이라,
+  // 제공자를 요구하면 그것을 품은 화면 전부가 같이 무거워진다.
+  const user = useMaybeAuth()?.user
+  const slug =
+    workspaceSlug ?? user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
+  const home = `/w/${slug}/workbench`
+
+  const [runs, setRuns] = useState<BasketRun[] | null>(null)
+  const [chosen, setChosen] = useState<string | null>(activeRun())
+  const [added, setAdded] = useState(0)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void basketApi
+      .runs('running')
+      .then((found) => {
+        if (!alive) return
+        setRuns(found)
+        // 기억해 둔 작업이 끝났거나 남의 부서 것이면 그 값은 못 쓴다.
+        setChosen((now) => (found.some((one) => one.id === now) ? now : (found[0]?.id ?? null)))
+      })
+      .catch(() => alive && setRuns([]))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const target = (runs ?? []).find((one) => one.id === chosen) ?? null
+
+  async function add() {
+    if (!target || ids.length === 0) return
+    setBusy(true)
+    try {
+      await basketApi.add(target.id, kind, ids)
+      setActiveRun(target.id)
+      setAdded(ids.length)
+    } catch (caught) {
+      onError?.(caught instanceof Error ? caught : new Error('담지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+      <div className="space-y-2">
         {/* **무엇을 담는지 보여 준다.** 수만 적으면 고른 것이 맞는지 확인하려고
             목록으로 눈을 되돌려야 한다. */}
         {labels && labels.length > 0 && (
@@ -237,6 +257,7 @@ export function AddToBasket({
         {/* **작업이 없으면 만들라고 말한다.** 꺼진 단추만 두면 고장으로 읽힌다. */}
         {runs !== null && runs.length === 0 ? (
           <p className="text-muted-foreground text-xs">
+            진행 중인 워크벤치 작업이 없습니다.{' '}
             <Link to={home} className="font-medium text-sky-700 underline underline-offset-2 dark:text-sky-400">
               워크벤치에서 작업을 시작
             </Link>
@@ -244,46 +265,41 @@ export function AddToBasket({
           </p>
         ) : (
           <>
-            <div className="flex items-center gap-1">
-              {/* **어디에 담기는지 늘 적는다.** 숨기면 담고 나서 찾아야 한다. */}
-              <Button
-                className="min-w-0 flex-1 justify-start bg-sky-600 text-white hover:bg-sky-700"
-                size="sm"
-                disabled={busy || target === null}
-                onClick={() => void add()}
+            {/* **무엇에 담기는지 말한다.** 작업 이름만 뜨면 「그게 뭔데」 가 된다. */}
+            <p className="text-muted-foreground text-xs">
+              진행 중인 <b>워크벤치 작업</b> 하나를 골라 담습니다. 담은 것은 그 작업의
+              워크벤치에서 한 번에 씁니다.
+            </p>
+            {/* **늘 고르는 칸이다.** 하나뿐일 때 숨기면 그것이 작업이라는 것도, 바꿀 수
+                있다는 것도 안 보인다. */}
+            <label className="block space-y-1 text-xs">
+              <span className="text-muted-foreground">담을 작업</span>
+              <select
+                aria-label="담을 작업"
+                className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm"
+                value={chosen ?? ''}
+                onChange={(event) => {
+                  setChosen(event.target.value)
+                  setActiveRun(event.target.value)
+                }}
               >
-                <Inbox className="size-4 shrink-0" />
-                <span className="truncate">{target ? `「${target.title}」에 담기` : '담기'}</span>
-              </Button>
-
-              {(runs ?? []).length > 1 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="ghost" aria-label="담을 작업 고르기">
-                      ▾
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel className="text-xs font-normal">
-                      어느 작업에 담을까요
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {(runs ?? []).map((one) => (
-                      <DropdownMenuItem
-                        key={one.id}
-                        onSelect={() => {
-                          setChosen(one.id)
-                          setActiveRun(one.id)
-                        }}
-                      >
-                        {one.id === chosen && <Check className="size-3.5" />}
-                        {one.title}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
+                {(runs ?? []).map((one) => (
+                  <option key={one.id} value={one.id}>
+                    {one.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {/* **어디에 담기는지 늘 적는다.** 숨기면 담고 나서 찾아야 한다. */}
+            <Button
+              className="w-full min-w-0 justify-start bg-sky-600 text-white hover:bg-sky-700"
+              size="sm"
+              disabled={busy || target === null}
+              onClick={() => void add()}
+            >
+              <Inbox className="size-4 shrink-0" />
+              <span className="truncate">{target ? `「${target.title}」에 담기` : '담기'}</span>
+            </Button>
 
             {added > 0 && (
               <p className="text-xs font-medium text-emerald-700 dark:text-emerald-500">
@@ -299,9 +315,5 @@ export function AddToBasket({
           </>
         )}
       </div>
-    </div>
   )
-
-  // **본문 밖에 그린다.** 목록이 스크롤되거나 접혀도 패널은 제자리에 떠 있어야 한다.
-  return createPortal(panel, document.body)
 }

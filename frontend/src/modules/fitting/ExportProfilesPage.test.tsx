@@ -25,6 +25,19 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     createExportProfile: (...args: unknown[]) => createExportProfile(...args),
     saveExportProfile: (...args: unknown[]) => saveExportProfile(...args),
     removeExportProfile: vi.fn(),
+    unitSystems: () =>
+      Promise.resolve([
+        {
+          key: 'si',
+          label: 'SI',
+          declaration: 'kg, m, s, Pa',
+          is_default: false,
+          builtin: true,
+          symbols: { Pa: 'Pa' },
+        },
+      ]),
+    unitSystemBaseUnits: () => Promise.resolve({ mass: ['kg'], length: ['mm'], time: ['ms'] }),
+    deriveUnitSystem: () => new Promise(() => {}),
   },
 }))
 
