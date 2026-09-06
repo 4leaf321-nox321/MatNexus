@@ -49,8 +49,45 @@ export function OverviewPanel({
     ? Math.round((data.materials_with_card / data.material_count) * 100)
     : 0
 
+  // **운영 경고 — 시스템 관리자에게만 실린다(`ops`).** 디스크는 서버 화면에, 보존기간
+  // 지난 삭제는 저장소 리포트에, 실패한 작업은 아무 데도 없었다(2026-09-05). 홈은
+  // 「밀리고 있다」 는 사실만 말한다 — 자동 영구삭제는 하지 않는다.
+  const ops = data.ops ?? null
+  const diskOver =
+    ops?.disk_percent_used != null && ops.disk_percent_used >= ops.disk_alert_percent
+  const opsItems = ops
+    ? [
+        diskOver,
+        ops.expired_deleted_count > 0,
+        ops.failed_jobs > 0,
+        Boolean(ops.backup_problem),
+      ].filter(Boolean).length
+    : 0
+
   return (
     <div className="space-y-3">
+      {opsItems > 0 && ops && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/40"
+        >
+          <AlertTriangle className="size-4 shrink-0 text-red-600" />
+          <span className="text-muted-foreground text-xs">운영</span>
+          {ops.backup_problem && <Pending to="/server">백업 — {ops.backup_problem}</Pending>}
+          {diskOver && (
+            <Pending to="/server">
+              디스크 {ops.disk_percent_used}% (임계 {ops.disk_alert_percent}%)
+            </Pending>
+          )}
+          {ops.expired_deleted_count > 0 && (
+            <Pending to="/admin/storage">
+              보존기간 지난 삭제 {ops.expired_deleted_count}건
+            </Pending>
+          )}
+          {ops.failed_jobs > 0 && <Pending to="/server">실패한 작업 {ops.failed_jobs}</Pending>}
+        </div>
+      )}
+
       {/* **막힌 것부터.** 0 이면 그 줄이 통째로 사라진다 — 0을 그리면 그것도
           상태처럼 읽히고, "지금 막힌 게 없다" 가 한눈에 안 온다. */}
       {(data.waiting_to_process > 0 ||

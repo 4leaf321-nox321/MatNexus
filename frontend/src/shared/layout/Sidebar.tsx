@@ -5,7 +5,7 @@
  * 찌그러지지 않고 그대로 잘려 나간다.
  */
 
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 
 import { UNKNOWN_VERSION, systemApi } from '@/shared/api/system'
 import { useAuth } from '@/shared/auth/AuthContext'
@@ -17,7 +17,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/shared/components/ui/sheet'
-import { itemHref, visibleGroups } from '@/shared/layout/navigation'
+import { REALMS, REALM_ORDER, itemHref, visibleGroups } from '@/shared/layout/navigation'
+import { rememberRealm, useRealm } from '@/shared/layout/realm'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface SidebarProps {
@@ -42,10 +43,19 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
     release !== __APP_VERSION__
   // **볼 수 있는 것만 보여 준다.** 눌러야 403 을 아는 메뉴는 "할 수 있는 일" 을
   // 알려 주지 못한다. 권한은 서버가 판정한다 — 여기는 표시일 뿐이다.
-  const groups = visibleGroups({
-    isSystemAdmin: isSystemAdmin(user),
-    isAnyManager: isAnyManager(user),
-  })
+  //
+  // **그리고 지금 서 있는 영역의 것만.** 재료 물성과 복합 물성은 메뉴를 나눠
+  // 갖는다 — 한 목록에 같이 세우면 시편·시험이 두 번 나오고, 사람이 어느 쪽에
+  // 있는지 헷갈린다(navigation.ts 의 `NavRealm`).
+  const realm = useRealm()
+  const navigate = useNavigate()
+  const groups = visibleGroups(
+    {
+      isSystemAdmin: isSystemAdmin(user),
+      isAnyManager: isAnyManager(user),
+    },
+    realm
+  )
 
   return (
     <div className="flex h-full w-60 flex-col">
@@ -81,9 +91,49 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
         </span>
       </div>
 
+      {/* **영역 스위치.** 맨 위에서 갈라진다 — 그룹 하나를 더 두는 것이 아니라
+          아래 메뉴 전체가 바뀐다. 누르면 그 영역의 홈으로 간다: 공용 화면(알림)에
+          서 있을 때 스위치만 바뀌고 화면은 그대로면 「아무 일도 안 일어났다」 로
+          읽힌다. */}
+      <div
+        role="tablist"
+        aria-label="영역"
+        className="bg-muted mx-2 mt-3 grid grid-cols-2 gap-0.5 rounded-md p-0.5"
+      >
+        {REALM_ORDER.map((key) => {
+          const active = key === realm
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              title={REALMS[key].hint}
+              onClick={() => {
+                rememberRealm(key)
+                navigate(REALMS[key].home(workspaceSlug))
+                onNavigate?.()
+              }}
+              className={cn(
+                'rounded px-2 py-1 text-xs font-medium transition-colors',
+                active
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {REALMS[key].label}
+            </button>
+          )
+        })}
+      </div>
+
       <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
+        {/* **영역까지 키에 넣는다.** 재료·복합 물성 영역이 각자 「홈」 을 갖는데,
+            제목 없는 그룹은 첫 항목 이름이 키라 둘이 같은 키가 된다 — 한 영역만
+            그려서 지금은 안 겹치지만, 그 전제가 깨지는 순간(HMR 로 옛 사이드바에
+            새 메뉴가 물리는 때처럼) React 가 「같은 키」 를 경고한다. */}
         {groups.map((group) => (
-          <div key={group.title ?? group.items[0]?.label}>
+          <div key={`${group.realm ?? 'shared'}:${group.title ?? group.items[0]?.label}`}>
             {/* **제목이 없으면 자리도 안 남긴다.** 빈 <p> 를 두면 홈 위에 설명
                 없는 여백이 생겨 「뭔가 안 나온다」 로 읽힌다. */}
             {group.title && (

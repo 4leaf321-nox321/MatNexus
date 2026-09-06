@@ -12,29 +12,75 @@ import {
   Bell,
   BookOpen,
   Boxes,
+  BookMarked,
   Building2,
+  ClipboardList,
   FileCode2,
   FileOutput,
   FileDown,
   FlaskConical,
+  Gauge,
   GitCompare,
   Home,
+  Layers,
   ListTree,
+  Lock,
   Megaphone,
+  Package,
   Plug,
+  Ruler,
   ScrollText,
   Server,
+  ShieldCheck,
+  Sigma,
   SlidersHorizontal,
+  Split,
   Tags,
   Trash2,
   User,
   UserCog,
   Users,
+  Workflow,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /** 부서 모델이 없는 동안 쓰는 임시 slug. Phase 1에서 실제 소속 부서로 대체된다. */
 export const DEFAULT_WORKSPACE = 'default'
+
+/**
+ * 영역 — 사이드바 맨 위에서 갈라지는 두 세계.
+ *
+ * **재료 물성**은 재료 → 시료 → 시편 → 시험의 사슬이고, **복합 물성**은 여러
+ * 층·재료가 결합된 부품 단품에서 나오는 것이다 — 층별 물성을 따로 잴 수 없어
+ * 복합체를 시험하고 역공학으로 뽑는 값, 층 하나가 바뀌었을 때의 거동 차이, 시장
+ * 불량을 재현하는 시험법(ADR 0026).
+ *
+ * **한 틀에 넣지 않는다.** 시편 층위에서 이미 이름 규칙·필수 칸(방향)·치수 해석이
+ * 다르다. 같은 메뉴에 두면 구성체 시편에 「방향」 을 억지로 채우거나 `NA` 로 두게
+ * 된다 — 이관에서 이미 겪은 냄새다. 대신 **엔진**(파일 읽기·곡선·처리·카드·
+ * 기준정보·권한)만 공유하고, 화면과 계층은 갈라선다.
+ *
+ * 영역이 없는 그룹(내 활동·공통·데이터 체계·내 부서·관리)은 양쪽에 다 선다.
+ */
+export type NavRealm = 'material' | 'composite'
+
+export const REALM_ORDER: NavRealm[] = ['material', 'composite']
+
+export const REALMS: Record<
+  NavRealm,
+  { label: string; hint: string; home: (slug: string) => string }
+> = {
+  material: {
+    label: '재료 물성',
+    hint: '재료 → 시료 → 시편 → 시험 — 잰 값',
+    home: (slug) => `/w/${slug}`,
+  },
+  composite: {
+    label: '복합 물성',
+    hint: '부품 → 구성체 → 시험법 → 역공학 — 추정값',
+    home: () => '/composite',
+  },
+}
 
 /**
  * 누구에게 보이는가.
@@ -62,6 +108,11 @@ export interface NavItem {
   /** 아직 화면이 없다(stub). 사이드바가 「미구현」 표를 단다 — **자리는 보이되
    *  눌러 보고 알게 하지 않는다.** 화면이 생기면 이 표시를 지운다. */
   pending?: boolean
+  /** `pending` 인 것이 로드맵의 어느 단계에서 들어오는가. 복합 물성 개요 화면이
+   *  이것으로 「무엇이 언제 오는지」 를 그린다 — 사이드바가 곧 로드맵이다. */
+  phase?: string
+  /** 한 줄 설명. 개요 화면과 stub 화면이 같은 말을 하도록 여기 한 번만 적는다. */
+  summary?: string
 }
 
 export interface NavGroup {
@@ -71,6 +122,8 @@ export interface NavGroup {
   items: NavItem[]
   /** 그룹 전체가 안 보이는 조건. 항목이 하나도 안 보이면 제목도 지운다. */
   audience?: NavAudience
+  /** 어느 영역의 것인가. 없으면 양쪽 영역에 다 선다. */
+  realm?: NavRealm
 }
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -79,12 +132,14 @@ export const NAV_GROUPS: NavGroup[] = [
     // 부서의 것이 아니었다 — 시험은 카탈로그의 사슬이고 워크벤치는 개인 작업대다.
     // 둘을 옮기고 나니 홈만 남았고, 하나짜리에 제목을 달면 「여기 더 있다」 로
     // 읽힌다.
+    realm: 'material',
     items: [{ label: '홈', icon: Home, resolve: (s) => `/w/${s}`, end: true }],
   },
   {
     // **데이터 사슬.** 재료 → 시편 → 시험 → 물성 카드 순으로 선다 — 화면의
     // 차례가 데이터가 만들어지는 차례여야 사람이 「다음에 어디로」 를 안 묻는다.
     title: '카탈로그',
+    realm: 'material',
     items: [
       { label: '재료', icon: Boxes, to: '/materials' },
       // **규격으로 찾는 자리다.** 규격·방향·치수는 시편에 붙는데(ADR 0010)
@@ -103,8 +158,150 @@ export const NAV_GROUPS: NavGroup[] = [
       // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
       { label: '물성 카드', icon: FileDown, to: '/cards' },
       { label: '물성 분석', icon: GitCompare, to: '/compare' },
+      // **문헌 물성 — 실물 없는 재료의 물성 저수지**(ADR 0027, MaterialTwin 이관).
+      // 사슬(재료→시편→시험→카드)의 마디가 아니라 사슬 밖의 참고 자료라 맨 뒤에
+      // 선다. 사내 재료와는 연결·채택으로 잇는다.
+      { label: '문헌 물성', icon: BookMarked, to: '/catalog' },
+      // 측정법 — 물성마다 어떤 기법·장비로 재는지. 문헌 물성의 옆 답이다.
+      { label: '측정법', icon: Ruler, to: '/metrology' },
     ],
   },
+
+  // ── 복합 물성 영역 ────────────────────────────────────────────────────
+  //
+  // **동선이 곧 그룹 순서다.** 불량 모드·구성체를 정하고(대상) → 시험법을 만들어
+  // 부품을 시험하고(시험 운영) → 역공학과 방법론으로 기준을 세운다(해석). 그룹은
+  // 넷을 넘기지 않는다 — 늘어나면 동선이 안 보인다.
+  //
+  // **전부 「미구현」 이다**(2026-09-05). 화면 자리를 먼저 세워 두고 관계자와 개발
+  // 방향을 논의한다 — 스키마(ADR 0026)는 MX 의 현행 시험 데이터 체계를 확인한
+  // 뒤 확정된다(플랫폼-요구사항-MX확인요청). 그 전에 만든 화면은 짐작이다.
+  {
+    realm: 'composite',
+    items: [{ label: '홈', icon: Home, to: '/composite', end: true }],
+  },
+  {
+    title: '대상',
+    realm: 'composite',
+    items: [
+      {
+        label: '부품',
+        icon: Package,
+        to: '/composite/parts',
+        pending: true,
+        phase: '1단계',
+        summary: '부품 코드(기준정보) 아래 구성체 목록. 시장 불량과 조인되는 키.',
+      },
+      {
+        // **재료와 나란한 두 번째 뿌리다**(ADR 0026 D1). 층 순서·두께·접합, 그리고
+        // 변형체 — 부모와 「무엇이 다른가」 가 1급 데이터다. 판별의 질문이 여기서 선다.
+        label: '구성체',
+        icon: Layers,
+        to: '/composite/stacks',
+        pending: true,
+        phase: '1단계',
+        summary: '층 구조와 변형체 트리. 변형체 노드에 「무엇이 다른가」 배지.',
+      },
+    ],
+  },
+  {
+    title: '시험 운영',
+    realm: 'composite',
+    items: [
+      {
+        // **시험 종류 위의 개념이다**(ADR 0026 D4). 종류는 데이터의 모양이고,
+        // 시험법은 그 종류로 무엇을 어떻게 하는가 — 목적(불량 모드)·시나리오·
+        // 지그·판정·성숙도·개정.
+        label: '시험법',
+        icon: ClipboardList,
+        to: '/composite/methods',
+        pending: true,
+        phase: '1단계',
+        summary: '성숙도(초안·시범·검증·규격)별 목록, 버전, 재현율. 시험이 곧 증거.',
+      },
+      {
+        label: '부품 시험',
+        icon: FlaskConical,
+        to: '/composite/part-tests',
+        pending: true,
+        phase: '1단계',
+        summary: '시험법 버전에 묶인 시험. 시나리오·관찰(사진)·재현 판정.',
+      },
+      {
+        label: '시료 배분',
+        icon: Split,
+        to: '/composite/allocation',
+        pending: true,
+        phase: '2단계',
+        summary: '해석으로 리스크를 도출하고 제한된 시료를 의미 있는 시험에 배분.',
+      },
+    ],
+  },
+  {
+    title: '해석',
+    realm: 'composite',
+    items: [
+      {
+        label: '역공학 실행',
+        icon: Sigma,
+        to: '/composite/inverse',
+        pending: true,
+        phase: '2단계',
+        summary: '시험 집합 → 층 물성 추정. 자유·고정 파라미터, 적합도, 잔차 곡선.',
+      },
+      {
+        // **측정값과 다른 칸이다**(ADR 0026 D3). 어느 실행에서, 무엇을 고정하고,
+        // 불확실성이 얼마인지가 값에 붙는다. 재료 카드에는 배지로만 나간다.
+        label: '추정 물성',
+        icon: Gauge,
+        to: '/composite/estimated',
+        pending: true,
+        phase: '2단계',
+        summary: '층별 추정값. 출처·가정·불확실성·유효 범위·등급.',
+      },
+      {
+        label: '시뮬레이션 방법론',
+        icon: Workflow,
+        to: '/composite/methodologies',
+        pending: true,
+        phase: '2단계',
+        summary: '모델링·경계조건·물성 할당의 버전. 어느 시험 집합으로 검증됐나.',
+      },
+      {
+        label: '비교·판별',
+        icon: GitCompare,
+        to: '/composite/comparison',
+        pending: true,
+        phase: '2단계',
+        summary: '기준 구성체 vs 변형체 — 어느 특징이 갈라놓는가.',
+      },
+    ],
+  },
+  {
+    // **데이터 체계가 아니라 여기다.** 둘 다 복합 물성 쪽의 규칙이고, 데이터 체계
+    // 그룹은 「장비 파일이 어떻게 물성이 되는가」 의 사슬이라 성격이 다르다.
+    title: '규칙',
+    realm: 'composite',
+    items: [
+      {
+        label: '시험법 승격 기준',
+        icon: ShieldCheck,
+        to: '/composite/rules/method-gates',
+        pending: true,
+        phase: '1단계',
+        summary: '초안 → 시범 → 검증(N건·재현율 r) → 규격(승인). 숫자는 부서 설정.',
+      },
+      {
+        label: '등급·출처 규칙',
+        icon: Lock,
+        to: '/composite/rules/classification',
+        pending: true,
+        phase: '1단계',
+        summary: '공개·사업부·전략과제 등급, 내부·업체·문헌 출처. 사업부 간 공유 범위.',
+      },
+    ],
+  },
+
   {
     title: '내 활동',
     items: [
@@ -298,13 +495,25 @@ export function canSee(
   return true
 }
 
-/** 볼 수 있는 것만 남긴 메뉴. 빈 그룹은 제목까지 지운다. */
-export function visibleGroups(viewer: {
-  isSystemAdmin: boolean
-  isAnyManager: boolean
-}): NavGroup[] {
-  return NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => canSee(item.audience, viewer)),
-  })).filter((group) => canSee(group.audience, viewer) && group.items.length > 0)
+/**
+ * 볼 수 있는 것만 남긴 메뉴. 빈 그룹은 제목까지 지운다.
+ *
+ * `realm` 은 **지금 서 있는 영역**이다. 그 영역의 그룹과 영역이 없는 그룹만
+ * 남는다 — 다른 영역의 그룹은 숨기는 것이 아니라 **다른 세계**라서 안 보인다.
+ */
+export function visibleGroups(
+  viewer: { isSystemAdmin: boolean; isAnyManager: boolean },
+  realm: NavRealm = 'material'
+): NavGroup[] {
+  return NAV_GROUPS.filter((group) => !group.realm || group.realm === realm)
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canSee(item.audience, viewer)),
+    }))
+    .filter((group) => canSee(group.audience, viewer) && group.items.length > 0)
+}
+
+/** 한 영역의 그룹만. 개요 화면이 「이 영역에 무엇이 오는가」 를 그릴 때 쓴다. */
+export function realmGroups(realm: NavRealm): NavGroup[] {
+  return NAV_GROUPS.filter((group) => group.realm === realm)
 }

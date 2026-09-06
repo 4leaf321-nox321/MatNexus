@@ -85,6 +85,12 @@ class GroupOut(BaseModel):
     sample_count: int
     skipped_unadopted: int
     """채택되지 않아 빠진 시험 수. **조용히 빼면 n 이 왜 이 수인지 모른다.**"""
+    fittable: bool = False
+    """경화식·초탄성 적합에 넣을 수 있나 — 채택 결과에 진소성변형률·진응력 열이 있는가.
+
+    화면이 시험 종류 이름으로 짐작하면(「인장이면 된다」) 부서가 만든 종류에서 틀리고,
+    DMA 묶음에 「경화식 맞춰 보기」 가 떠서 누르면 422 가 났다(2026-09-05 실사용).
+    적합이 실제로 읽는 열이 있는지를 서버가 말한다."""
     test_run_ids: list[uuid.UUID]
     record_names: list[str]
     scalars: list[ScalarStatsOut]
@@ -409,6 +415,22 @@ class DivisionOverviewOut(BaseModel):
     yearly: list[YearTallyOut]
 
 
+class OpsWarningsOut(BaseModel):
+    """운영 경고 셋 — **시스템 관리자에게만.** 다른 사람에게는 할 수 없는 경고다.
+
+    각자 자기 화면 안에만 있던 것들(2026-09-05): 디스크는 서버 화면, 보존기간 지난
+    삭제는 저장소 리포트, 실패한 작업은 아무 데도. 홈이 「밀리고 있다」 는 사실만 말한다 —
+    자동 영구삭제는 하지 않는다. 지우는 결정은 사람이 한다.
+    """
+
+    disk_percent_used: float | None
+    disk_alert_percent: int
+    expired_deleted_count: int
+    failed_jobs: int
+    backup_problem: str | None
+    """백업이 없거나 밀렸으면 그 말. 정상이면 비어 있다."""
+
+
 class OverviewOut(BaseModel):
     """홈에 뿌리는 요약.
 
@@ -443,6 +465,8 @@ class OverviewOut(BaseModel):
     parse_failed: int
     """읽기에 실패한 시험. 0 이면 화면이 안 보인다 — 0을 보이면 그것도 상태처럼
     읽힌다."""
+    ops: OpsWarningsOut | None = None
+    """시스템 관리자에게만 실린다. 아니면 `None` — 0 으로 두면 「문제없다」 로 읽힌다."""
     inbox_waiting: int
     """장비가 보냈는데 **사람이 붙여야** 하는 파일. 시편을 못 정한 것과 후보가
     정해져 승인을 기다리는 것을 함께 센다 — 둘 다 사람이 한 번 봐야 한다.

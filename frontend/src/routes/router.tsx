@@ -23,7 +23,7 @@ import { useAuth } from '@/shared/auth/AuthContext'
 import { ProtectedRoute } from '@/shared/auth/ProtectedRoute'
 import { Placeholder } from '@/shared/components/Placeholder'
 import { AppShell } from '@/shared/layout/AppShell'
-import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
+import { DEFAULT_WORKSPACE, realmGroups } from '@/shared/layout/navigation'
 
 /**
  * **화면 대부분을 나눠 싣는다.**
@@ -44,6 +44,13 @@ import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
 const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
+const CatalogPage = lazy(() => import('@/modules/catalog/CatalogPage'))
+const CatalogMaterialPage = lazy(() => import('@/modules/catalog/CatalogMaterialPage'))
+const CatalogDeckPage = lazy(() => import('@/modules/catalog/CatalogDeckPage'))
+const CatalogComparePage = lazy(() => import('@/modules/catalog/CatalogComparePage'))
+const CatalogAshbyPage = lazy(() => import('@/modules/catalog/CatalogAshbyPage'))
+const CatalogCoveragePage = lazy(() => import('@/modules/catalog/CatalogCoveragePage'))
+const MetrologyPage = lazy(() => import('@/modules/metrology/MetrologyPage'))
 const CardsPage = lazy(() => import('@/modules/fitting/CardsPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
 const FormatProfileEditorPage = lazy(() => import('@/modules/tests/FormatProfileEditorPage'))
@@ -69,10 +76,24 @@ const VocabularyPage = lazy(() => import('@/modules/vocabulary/VocabularyPage'))
 const VocPage = lazy(() => import('@/modules/voc/VocPage'))
 const WorkspaceHomePage = lazy(() => import('@/modules/workspaces/WorkspaceHomePage'))
 const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
+const CompositeOverviewPage = lazy(() => import('@/modules/composite/CompositeOverviewPage'))
 
 const stub = (title: string, phase: string, description?: string) => ({
   element: <Placeholder title={title} phase={phase} description={description} />,
 })
+
+/**
+ * 복합 물성 영역의 stub 들 — **사이드바 항목이 정본이다.** 제목·단계·설명을 여기
+ * 다시 적으면 메뉴와 화면이 다른 말을 하게 된다. 화면이 생기면 그 항목의
+ * `pending` 을 지우고 여기서 빼서 진짜 element 로 바꾼다.
+ */
+const compositeStubs = realmGroups('composite')
+  .flatMap((group) => group.items)
+  .filter((item) => item.pending && item.to)
+  .map((item) => ({
+    path: item.to!.replace(/^\//, ''),
+    ...stub(item.label, item.phase ?? '—', item.summary),
+  }))
 
 /**
  * 첫 화면 — **내 부서로 보낸다.**
@@ -115,6 +136,20 @@ export const router = createBrowserRouter([
           { path: 'materials/:id', element: <MaterialDetailPage /> },
           { path: 'test-runs/:id', element: <TestRunDetailPage /> },
           { path: 'compare', element: <AnalysisPage /> },
+          // **문헌 물성 저수지.** 사내 재료(materials)와 별도 세계다(ADR 0027) —
+          // 실물 없이 문헌·데이터시트에서 온 값이라 수명주기가 다르다.
+          { path: 'catalog', element: <CatalogPage /> },
+          { path: 'catalog/deck', element: <CatalogDeckPage /> },
+          { path: 'catalog/compare', element: <CatalogComparePage /> },
+          { path: 'catalog/ashby', element: <CatalogAshbyPage /> },
+          { path: 'catalog/coverage', element: <CatalogCoveragePage /> },
+          { path: 'catalog/:id', element: <CatalogMaterialPage /> },
+          // 측정법 — 「그 물성은 무엇으로 재는가」 (MaterialTwin 이식 4단계).
+          { path: 'metrology', element: <MetrologyPage /> },
+
+          // 복합 물성 영역 — 개요 하나만 진짜 화면이고 나머지는 자리다(ADR 0026).
+          { path: 'composite', element: <CompositeOverviewPage /> },
+          ...compositeStubs,
 
           // 내 활동
           { path: 'personal', ...stub('내 작업함', 'Phase 1') },

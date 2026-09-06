@@ -39,6 +39,15 @@ const REAL: Overview = {
   waiting_to_process: 71,
   parse_failed: 0,
   inbox_waiting: 0,
+  ops: null,
+}
+
+const OPS = {
+  disk_percent_used: 40,
+  disk_alert_percent: 85,
+  expired_deleted_count: 0,
+  failed_jobs: 0,
+  backup_problem: null,
 }
 
 function panel(overrides: Partial<Overview> = {}) {
@@ -48,6 +57,39 @@ function panel(overrides: Partial<Overview> = {}) {
     </MemoryRouter>
   )
 }
+
+describe('운영 경고', () => {
+  it('시스템 관리자가 아니면(ops 없음) 줄이 없다', () => {
+    panel()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('전부 정상이면 줄이 없다 — 늘 떠 있으면 아무도 안 본다', () => {
+    panel({ ops: OPS })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('디스크·보존기간·실패 작업·백업을 한 줄에 세우고 막힌 곳으로 데려간다', () => {
+    panel({
+      ops: {
+        ...OPS,
+        disk_percent_used: 91,
+        expired_deleted_count: 12,
+        failed_jobs: 2,
+        backup_problem: '백업 폴더에 덤프가 없습니다.',
+      },
+    })
+    const row = screen.getByRole('alert')
+    expect(row).toHaveTextContent('디스크 91% (임계 85%)')
+    expect(row).toHaveTextContent('보존기간 지난 삭제 12건')
+    expect(row).toHaveTextContent('실패한 작업 2')
+    expect(row).toHaveTextContent('백업 — 백업 폴더에 덤프가 없습니다.')
+    expect(screen.getByRole('link', { name: /보존기간 지난 삭제/ })).toHaveAttribute(
+      'href',
+      '/admin/storage'
+    )
+  })
+})
 
 describe('홈 요약', () => {
   it('세어 준 것을 보인다', () => {

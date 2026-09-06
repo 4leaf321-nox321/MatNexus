@@ -10,7 +10,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { DivisionPanel } from '@/modules/statistics/DivisionPanel'
-import { divisionRank, yearRows } from '@/modules/statistics/divisionColors'
+import { divisionRank, foldYears, yearRows } from '@/modules/statistics/divisionColors'
 import type { DivisionOverview } from '@/modules/statistics/api'
 
 const DATA: DivisionOverview = {
@@ -82,5 +82,47 @@ describe('yearRows', () => {
 
   it('비면 빈 줄 — 그래프가 「아직 시험이 없습니다」 를 보인다', () => {
     expect(yearRows([])).toEqual([])
+  })
+})
+
+describe('foldYears', () => {
+  /** 2015~2026 열두 해. MX 는 매년 10건, VD 는 2020 부터만. */
+  const TWELVE = yearRows(
+    Array.from({ length: 12 }, (_, i) => 2015 + i).flatMap((year) => [
+      { year, division: 'MX', run_count: 10 },
+      ...(year >= 2020 ? [{ year, division: 'VD', run_count: 1 }] : []),
+    ])
+  )
+
+  it('여섯 해를 넘으면 최근 여섯 해만 두고 앞은 한 묶음으로 접는다', () => {
+    // 홈은 현황판이다. 해가 쌓여도 그래프 높이가 늘지 않아야 한다.
+    const rows = foldYears(TWELVE)
+    expect(rows.map((row) => row.year)).toEqual([
+      '~2020',
+      '2021',
+      '2022',
+      '2023',
+      '2024',
+      '2025',
+      '2026',
+    ])
+  })
+
+  it('접힌 묶음은 사업부별로 더하고, 없던 사업부의 키는 안 만든다', () => {
+    const [older] = foldYears(TWELVE)
+    // 2015~2020 여섯 해: MX 60, VD 는 2020 한 해 1.
+    expect(older).toEqual({ year: '~2020', 합계: 61, MX: 60, VD: 1 })
+    // 2015~2019 만 접히는 경우 VD 키가 있으면 0건으로 서게 된다.
+    const [olderStill] = foldYears(TWELVE.slice(0, 5 + 6))
+    expect('VD' in olderStill).toBe(false)
+  })
+
+  it('여섯 해 이하면 그대로다', () => {
+    expect(foldYears(TWELVE.slice(-6))).toEqual(TWELVE.slice(-6))
+  })
+
+  it('접힐 해가 하나뿐이면 접지 않는다 — 한 해를 「~그 해」 로 부를 이유가 없다', () => {
+    const seven = TWELVE.slice(-7)
+    expect(foldYears(seven)).toEqual(seven)
   })
 })

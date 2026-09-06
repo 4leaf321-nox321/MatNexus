@@ -178,6 +178,7 @@ export function PropertiesPanel({
     }
   }
 
+
   return (
     // **왼쪽은 결론, 오른쪽은 근거다.** 「이 재료 물성이 얼마인가」 와 「그게
     // 어디서 나왔나」 는 다른 물음이고, 앞엣것을 훨씬 자주 묻는다.
@@ -187,6 +188,7 @@ export function PropertiesPanel({
     <section className="grid h-full min-h-0 gap-6 xl:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
       <div className="min-h-0 space-y-4 overflow-y-auto pr-2">
       <ErrorNotice error={stats.error ?? error} className="mb-4" />
+
 
       {saved && (
         <div className="mb-4 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
@@ -586,6 +588,9 @@ function GroupCard({
             <AlertTriangle className="size-3" />볼 것 있음
           </Badge>
         )}
+        {/* **카드는 여기서 안 만든다.** 물성 탭은 값을 보는 자리고, 카드(경화식·
+            LVE·점탄성·선언)는 CAE 카드 탭 한 곳에서 만든다 — 두 곳에 두면 「어디서
+            만드나」 가 둘이 된다. */}
         {enough && (
           <Button size="sm" variant="outline" className="ml-auto" onClick={onSave}>
             <Save className="size-3.5" />이 통계 남기기

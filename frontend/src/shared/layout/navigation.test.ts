@@ -15,14 +15,15 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { NAV_GROUPS, visibleGroups } from '@/shared/layout/navigation'
+import { NAV_GROUPS, realmGroups, visibleGroups } from '@/shared/layout/navigation'
+import type { NavRealm } from '@/shared/layout/navigation'
 
 const MEMBER = { isSystemAdmin: false, isAnyManager: false }
 const MANAGER = { isSystemAdmin: false, isAnyManager: true }
 const ADMIN = { isSystemAdmin: true, isAnyManager: false }
 
-function labels(viewer: typeof MEMBER): string[] {
-  return visibleGroups(viewer).flatMap((group) => group.items.map((item) => item.label))
+function labels(viewer: typeof MEMBER, realm: NavRealm = 'material'): string[] {
+  return visibleGroups(viewer, realm).flatMap((group) => group.items.map((item) => item.label))
 }
 
 describe('사이드바 메뉴', () => {
@@ -198,7 +199,14 @@ describe('미구현 표시', () => {
     //
     // 워크벤치를 뺐다(v1.177) — 목록에서 담을 수 있게 된 뒤에도 배지가 남아 있어서
     // **담고 나서 돌아올 자리로 안 읽혔다.** 「미구현」 은 눌러도 소용없다는 말이다.
-    expect(pending.sort()).toEqual(['내 작업함'])
+    //
+    // **복합 물성 영역은 홈 빼고 전부다**(2026-09-05). 화면 자리를 먼저 세워 관계자와
+    // 개발 방향을 논의하는 단계라서다 — 화면이 생기면 하나씩 여기서 빠진다.
+    const composite = realmGroups('composite')
+      .flatMap((group) => group.items)
+      .filter((item) => item.label !== '홈')
+      .map((item) => item.label)
+    expect(pending.sort()).toEqual(['내 작업함', ...composite].sort())
   })
 
   it('서버는 이제 화면이 있다 — 저장소 정리를 그 아래 탭으로 품는다', () => {
@@ -207,6 +215,60 @@ describe('미구현 표시', () => {
     const seen = labels(ADMIN)
     expect(seen).toContain('서버')
     expect(seen).not.toContain('저장소 정리')
+  })
+})
+
+describe('영역 — 재료 물성과 복합 물성', () => {
+  /**
+   * **한 틀에 넣지 않는다**(ADR 0026). 시편 층위에서 이미 이름 규칙·필수 칸·치수
+   * 해석이 다르다. 그래서 사이드바가 맨 위에서 갈라지고, 각 영역은 자기 그룹만
+   * 본다 — 다른 영역의 그룹은 숨긴 것이 아니라 다른 세계라서 안 보인다.
+   */
+  it('재료 물성 영역에는 복합 물성 그룹이 없다 — 그 반대도', () => {
+    const material = visibleGroups(MEMBER, 'material').map((group) => group.title)
+    const composite = visibleGroups(MEMBER, 'composite').map((group) => group.title)
+    expect(material).toContain('카탈로그')
+    expect(material).not.toContain('대상')
+    expect(composite).toContain('대상')
+    expect(composite).not.toContain('카탈로그')
+  })
+
+  it('영역이 없는 그룹은 양쪽에 다 선다', () => {
+    // 알림·기준정보·데이터 체계는 어느 세계에서도 필요하다. 한쪽에서만 보이면
+    // 사람은 스위치를 눌러 가며 찾는다.
+    for (const shared of ['내 활동', '공통', '데이터 체계']) {
+      expect(visibleGroups(MEMBER, 'material').map((g) => g.title), shared).toContain(shared)
+      expect(visibleGroups(MEMBER, 'composite').map((g) => g.title), shared).toContain(shared)
+    }
+  })
+
+  it('영역을 안 주면 재료 물성이다 — 지금까지의 사이드바 그대로', () => {
+    expect(labels(MEMBER)).toEqual(labels(MEMBER, 'material'))
+  })
+
+  it('복합 물성은 동선 순서로 넷을 넘기지 않는다', () => {
+    // 불량 모드·구성체를 정하고 → 시험법으로 부품을 시험하고 → 역공학·방법론으로
+    // 기준을 세운다. 그룹이 늘면 동선이 안 보인다.
+    const titles = realmGroups('composite').map((group) => group.title).filter(Boolean)
+    expect(titles).toEqual(['대상', '시험 운영', '해석', '규칙'])
+  })
+
+  it('복합 물성 영역도 홈으로 시작한다 — 스위치를 누르면 거기로 간다', () => {
+    const [first] = realmGroups('composite')
+    expect(first.title).toBeUndefined()
+    expect(first.items.map((item) => item.label)).toEqual(['홈'])
+    expect(first.items[0].to).toBe('/composite')
+  })
+
+  it('복합 물성의 stub 은 전부 단계와 한 줄 설명을 든다', () => {
+    // 개요 화면이 「어느 단계에 무엇이 오는가」 를 이것으로 그린다. 하나라도
+    // 비면 그 화면은 로드맵에서 사라진다.
+    for (const item of realmGroups('composite').flatMap((group) => group.items)) {
+      if (!item.pending) continue
+      expect(item.phase, item.label).toMatch(/^\d단계$/)
+      expect(item.summary, item.label).toBeTruthy()
+      expect(item.to, item.label).toMatch(/^\/composite\//)
+    }
   })
 })
 

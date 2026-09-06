@@ -61,3 +61,32 @@ export function yearRows(yearly: DivisionOverview['yearly']): YearRow[] {
     return row
   })
 }
+
+/** 홈에서 기본으로 펼치는 해의 수. 그 너머는 「이전」 한 묶음으로 접는다. */
+export const RECENT_YEARS = 6
+
+/**
+ * 오래된 해를 **한 묶음으로 접는다** — 최근 `recent` 해는 그대로, 그 앞은 `~2019`
+ * 처럼 마지막 해를 이름으로 단 한 줄로.
+ *
+ * 홈은 현황판이라 옛날 해를 늘 볼 이유가 없는데, 해가 쌓이면 그래프가 해마다
+ * 자리를 먹었다(한 해 44px — 10년이면 500px). 접으면 높이가 고정되고, 「전체 보기」
+ * 로 펼칠 수 있다.
+ *
+ * 접힌 줄도 **빠진 사업부의 키를 안 만든다**(`yearRows` 와 같은 이유). 접는 해가
+ * 하나뿐이면 접지 않는다 — 한 해를 「~그 해」 로 바꿔 부르는 것은 감추는 것만
+ * 있고 얻는 게 없다.
+ */
+export function foldYears(rows: YearRow[], recent: number = RECENT_YEARS): YearRow[] {
+  if (rows.length <= recent + 1) return rows
+  const older = rows.slice(0, rows.length - recent)
+  const kept = rows.slice(rows.length - recent)
+  const folded: YearRow = { year: `~${older[older.length - 1].year}`, 합계: 0 }
+  for (const row of older) {
+    for (const [key, value] of Object.entries(row)) {
+      if (key === 'year' || typeof value !== 'number') continue
+      folded[key] = ((folded[key] as number | undefined) ?? 0) + value
+    }
+  }
+  return [folded, ...kept]
+}

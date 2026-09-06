@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
@@ -51,6 +52,7 @@ from app.modules.statistics.schemas import (
     MaterialStatisticsOut,
     MemberCurveOut,
     ObservationOut,
+    OpsWarningsOut,
     OutlierOut,
     OverviewOut,
     ScalarStatsOut,
@@ -62,11 +64,12 @@ from app.modules.statistics.schemas import (
     YearTallyOut,
 )
 from app.modules.tests.models import TestRun, TestType
+from app.shared import curvedata, ops, permissions
 from app.shared import divisions as divisions_order
-from app.shared import permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from matcore import distributions, statistics
+from matcore.processing.tensile import PLASTIC_STRAIN, TRUE_STRESS
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
@@ -129,10 +132,17 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
     # **1건이어도 값은 낸다.** 전에는 2건 미만이면 표를 통째로 비웠는데, 그러면
     # 처리하고 채택까지 한 사람이 빈 카드를 본다.
     scalars = services.scalar_table(group, threshold=threshold) if group.members else []
+    # **적합이 읽는 열이 있는가.** 종류 이름이 아니라 채택 결과의 열로 판단한다 —
+    # 경화식은 진소성변형률·진응력을 맞추므로 그 둘이 없으면 어떤 시험이든 못 넣는다.
+    fittable = any(
+        PLASTIC_STRAIN in member.result.columns and TRUE_STRESS in member.result.columns
+        for member in group.members
+    )
     return GroupOut(
         test_type_key=group.test_type.key,
         test_type_label=group.test_type.label,
         orientation=group.orientation,
+        fittable=fittable,
         sample_count=len(group.members),
         skipped_unadopted=group.skipped_unadopted,
         test_run_ids=[member.run.id for member in group.members],
@@ -555,14 +565,19 @@ def analysis_spec_gap(
 ) -> AnalysisSpecGapOut:
     """선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**
 
-    잇는 열쇠는 **이름**이다 — 선언은 기준정보 항목(`탄성계수`)이고 잰 값은 처리
-    결과의 라벨(`탄성계수`)이라 코드가 겹치지 않는다. 이름이 다르면 못 견주므로
-    그 항목을 `unmatched_items` 로 돌려준다 — 숨기면 「차이가 없다」 로 읽힌다.
+    잇는 열쇠는 기준정보 항목의 `measured_key` 다 — 선언은 항목 이름(`탄성계수`)이고
+    잰 값은 처리 결과의 스칼라 키(`youngs_modulus`)라, 항목이 「우리가 재는 값」 으로
+    그 키를 들고 있다. 전에는 라벨 문자열로 이었는데(2026-09-05 점검) 용어를 개명하거나
+    플러그인이 라벨을 바꾸면 오류 없이 「매칭 안 됨」 으로 빠졌다. 키가 없는 항목은
+    전처럼 라벨로 잇는다 — 못 견주는 항목은 `unmatched_items` 로 돌려준다.
     """
     collected = analysis.collect(db, user)
     measured: dict[tuple[uuid.UUID, str], list[analysis.Observation]] = {}
+    by_label: dict[tuple[uuid.UUID, str], list[analysis.Observation]] = {}
     for one in collected.observations:
-        measured.setdefault((one.material_id, one.scalar_label.strip()), []).append(one)
+        measured.setdefault((one.material_id, one.scalar_key), []).append(one)
+        by_label.setdefault((one.material_id, one.scalar_label.strip()), []).append(one)
+    keys = curvedata.declared_keys(db)
 
     rows: list[SpecGapOut] = []
     unmatched: set[str] = set()
@@ -587,7 +602,12 @@ def analysis_spec_gap(
             declared_si = point.get("value_si")
             if not isinstance(declared_si, int | float) or declared_si == 0:
                 continue
-            items = measured.get((material.id, item))
+            spec = keys.get(item)
+            items = (
+                measured.get((material.id, spec.measured_key))
+                if spec and spec.measured_key
+                else by_label.get((material.id, item))
+            )
             if not items:
                 unmatched.add(item)
                 continue
@@ -812,6 +832,18 @@ def overview(
             )
         ),
         parse_failed=count(select(runs.c.id).where(runs.c.status == "failed")),
+        # **운영 경고는 시스템 관리자에게만.** 다른 사람에게는 할 수 없는 경고다.
+        ops=(
+            OpsWarningsOut(
+                disk_percent_used=ops.disk_percent_used(),
+                disk_alert_percent=get_settings().disk_alert_percent,
+                expired_deleted_count=ops.expired_deleted_run_count(db),
+                failed_jobs=ops.failed_job_count(db),
+                backup_problem=ops.backup_status().problem,
+            )
+            if user.is_system_admin
+            else None
+        ),
         # **커넥터의 가시성을 그대로 쓴다.** 여기서 범위 규칙을 새로 만들면 홈의
         # 숫자와 커넥터 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 수 없다.
         inbox_waiting=count(

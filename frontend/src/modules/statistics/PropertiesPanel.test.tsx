@@ -21,6 +21,13 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
+import { MemoryRouter } from 'react-router-dom'
+import type { ReactElement } from 'react'
+
+/** 두 패널은 카드를 만든 뒤 `/cards` 로 가므로 라우터 안에서 그린다. */
+function mount(ui: ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>)
+}
 
 const forMaterial = vi.fn()
 
@@ -37,6 +44,12 @@ vi.mock('@/modules/statistics/api', async () => {
     },
   }
 })
+
+const createLveCard = vi.fn()
+vi.mock('@/modules/fitting/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
+  fittingApi: { createLveCard: (...args: unknown[]) => createLveCard(...args) },
+}))
 
 vi.mock('@/modules/statistics/DistributionPanel', () => ({
   DistributionPanel: () => <div>분포</div>,
@@ -79,7 +92,7 @@ const group = (orientation: string, yieldMpa: number, over: Record<string, unkno
 })
 
 function show() {
-  render(<PropertiesPanel materialId="m1" />)
+  mount(<PropertiesPanel materialId="m1" />)
 }
 
 /**
@@ -178,7 +191,7 @@ describe('요약', () => {
   it('적어 둔 값도 같은 표에 온다', async () => {
     // 카드는 「잰 값 > 적은 값」 으로 말없이 한쪽을 싣는다 — **그 둘이 어긋나는
     // 것을 볼 자리**가 어디에도 없었다.
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         declared={
@@ -201,7 +214,7 @@ describe('요약', () => {
         group('MD', 285, { scalars: [scalar('elastic_modulus', '탄성계수', 206e9, 3e9)] }),
       ],
     })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         declared={
@@ -438,7 +451,7 @@ describe('선언과 계산', () => {
     forMaterial.mockResolvedValue({
       groups: [group('MD', 285, { scalars: [scalar('elastic_modulus', '탄성계수', 206e9, 3e9)] })],
     })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         declared={
@@ -500,7 +513,7 @@ describe('선언과 계산', () => {
   it('창을 열 수 없는 자리에서는 편집 단추를 안 만든다', async () => {
     // 시료 화면처럼 그 창을 들 수 없는 자리도 있다.
     forMaterial.mockResolvedValue({ groups: [group('MD', 285)] })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         declared={[{ item: '밀도', input_unit: 'g/cm^3', points: [{ value: 7.85 }] }] as never}
@@ -513,7 +526,7 @@ describe('선언과 계산', () => {
   it('잰 값이 하나도 없어도 적은 값은 보인다', async () => {
     // **시험을 안 한 재료가 대부분이다.** 요약이 안 뜨면 그 재료는 물성 탭이 빈다.
     forMaterial.mockResolvedValue({ groups: [] })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         declared={[{ item: '밀도', input_unit: 'g/cm^3', points: [{ value: 7.85 }] }] as never}
@@ -553,7 +566,7 @@ describe('글로벌 피팅 결과', () => {
   }
 
   const withGroups = () =>
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         groupResults={[RESULT] as never}
@@ -602,7 +615,7 @@ describe('글로벌 피팅 자리', () => {
    */
   it('물성 상자 머리에 온다', async () => {
     forMaterial.mockResolvedValue({ groups: [group('MD', 285)] })
-    render(<PropertiesPanel materialId="m1" groupSlot={<button>글로벌 피팅</button>} />)
+    mount(<PropertiesPanel materialId="m1" groupSlot={<button>글로벌 피팅</button>} />)
     const box = await screen.findByLabelText('물성')
     const button = within(box).getByRole('button', { name: '글로벌 피팅' })
     // 표 안이 아니라 그 상자 머리에 — 카드를 펴지 않아도 보인다.
@@ -613,7 +626,7 @@ describe('글로벌 피팅 자리', () => {
     // **차례가 일의 차례다.** 적어 두는 것이 먼저이고(시험 없이도 할 수 있다),
     // 통합 적합은 시험이 여럿 쌓인 뒤의 일이다.
     forMaterial.mockResolvedValue({ groups: [group('MD', 285)] })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         header={<button>선언 물성 추가</button>}
@@ -629,7 +642,7 @@ describe('글로벌 피팅 자리', () => {
     // **`ml-auto` 만 주면 그 안이 block 이라 단추가 위아래로 쌓인다**
     // (2026-08-30). 머리 줄이 두 줄이 되면 그만큼 표가 아래로 밀린다.
     forMaterial.mockResolvedValue({ groups: [group('MD', 285)] })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         header={<button>선언 물성 추가</button>}
@@ -646,7 +659,7 @@ describe('글로벌 피팅 자리', () => {
 
   it('접힌 상세와 무관하게 보인다', async () => {
     forMaterial.mockResolvedValue({ groups: [group('MD', 285)] })
-    render(<PropertiesPanel materialId="m1" groupSlot={<button>글로벌 피팅</button>} />)
+    mount(<PropertiesPanel materialId="m1" groupSlot={<button>글로벌 피팅</button>} />)
     await screen.findByLabelText('물성 요약')
     // 카드는 접혀 있다. **붙기를 기다린다** — 부하에서 요약보다 늦게 온다.
     expect(await screen.findByRole('button', { name: /인장시험 MD 펴기/ })).toBeInTheDocument()
@@ -670,7 +683,7 @@ describe('시험이 없을 때', () => {
    */
   it('안내가 근거 쪽에 뜬다', async () => {
     forMaterial.mockResolvedValue({ groups: [] })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         declared={[{ item: '밀도', input_unit: 'g/cm^3', points: [{ value: 7.85 }] }] as never}
@@ -684,12 +697,38 @@ describe('시험이 없을 때', () => {
 
   it('적어 둔 값은 그대로 보인다', async () => {
     forMaterial.mockResolvedValue({ groups: [] })
-    render(
+    mount(
       <PropertiesPanel
         materialId="m1"
         declared={[{ item: '밀도', input_unit: 'g/cm^3', points: [{ value: 7.85 }] }] as never}
       />
     )
     expect((await card('밀도')).getByText('선언')).toBeInTheDocument()
+  })
+})
+
+describe('물성 탭은 카드를 안 만든다', () => {
+  /**
+   * 한때 여기에 「선형탄성구간(LVE) 카드」 단추가 있었다. 카드를 만드는 자리가 물성
+   * 탭과 CAE 카드 탭 둘이 되니 「어디서 만드나」 가 둘이 됐다 — CAE 카드 탭 한 곳으로
+   * 모았다. 이 탭은 값을 보는 자리다.
+   */
+  it('선형 한계 변형률을 낸 DMA 묶음에도 카드 단추가 없다', async () => {
+    forMaterial.mockResolvedValue({
+      groups: [
+        group('NA', 0, {
+          test_type_key: 'dma_sweep',
+          test_type_label: 'DMA 스윕',
+          sample_count: 2,
+          scalars: [
+            { ...scalar('lve_strain_limit', '선형 한계 변형률', 1.65e-4, 1e-6), si_unit: '1' },
+          ],
+        }),
+      ],
+    })
+    mount(<PropertiesPanel materialId="m1" />)
+    await screen.findByText('DMA 스윕')
+    expect(screen.queryByRole('button', { name: /카드/ })).not.toBeInTheDocument()
+    expect(createLveCard).not.toHaveBeenCalled()
   })
 })
