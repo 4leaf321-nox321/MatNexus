@@ -32,7 +32,12 @@ const COLUMNS: (Column & { field: string })[] = [
     help: '이미 있는 부서 이름 또는 slug. 없으면 그 줄이 걸립니다',
   },
   { key: 'lab', field: 'lab', header: '시험실' },
-  { key: 'location_detail', field: 'location_detail', header: '방 안 위치', help: '3번 벤치' },
+  {
+    key: 'location_detail',
+    field: 'location_detail',
+    header: '세부 위치',
+    help: '시험실 안 어디인가 — 3번 벤치 / 창가 / A열 4번 랙 …',
+  },
   { key: 'vendor', field: 'vendor', header: '제조사' },
   { key: 'model', field: 'model', header: '모델' },
   { key: 'serial_no', field: 'serial_no', header: '시리얼' },

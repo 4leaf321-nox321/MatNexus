@@ -272,11 +272,14 @@ export function EquipmentForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
+        {/* **어떻게 적는지를 자리표시가 보여 준다.** 「세부 위치」 라는 이름만으로는
+            방 번호를 적는지 층을 적는지 사람마다 다르게 적는다. 기존 관례대로
+            `/` 로 여럿 늘어놓고 `…` 로 「이런 식」 을 나타낸다. */}
         <Text
           label="세부 위치"
           value={draft.location_detail}
           onChange={(next) => set('location_detail', next)}
-          placeholder="3번 벤치 · 창가"
+          placeholder="3번 벤치 / 창가 / A열 4번 랙 …"
         />
         <div className="space-y-1.5">
           <Label>상태</Label>
@@ -338,6 +341,7 @@ export function EquipmentForm({
           label="연락처"
           value={draft.owner_contact}
           onChange={(next) => set('owner_contact', next)}
+          placeholder="내선 1234 / 010-… …"
         />
         <Text
           label="도입일"
