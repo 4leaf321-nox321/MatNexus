@@ -43,10 +43,12 @@ from app.modules.equipment.schemas import (
     EquipmentUnitCreate,
     EquipmentUnitOut,
     EquipmentUnitUpdate,
+    EquipmentWorkspaceRef,
 )
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import dependents
+from app.modules.workspaces.models import Workspace
+from app.shared import audit, dependents
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page
@@ -134,6 +136,44 @@ def _calibration_map(
     return {row[0]: (row[1], row[2]) for row in rows}
 
 
+def _workspace_refs(
+    db: Session, ids: set[uuid.UUID]
+) -> dict[uuid.UUID, EquipmentWorkspaceRef]:
+    """부서와 **그 트리의 꼭대기**를 함께 준다.
+
+    사업부별 현황이 꼭대기로 묶인다. 장비에 상위 조직을 따로 안 적으므로 여기서
+    타고 올라간다 — 같은 답을 두 번 저장하지 않는 대신 한 번 더 읽는다.
+
+    **트리 전체를 한 번에 읽는다.** 부서는 많아야 수백이고, 줄마다 부모를 따라
+    올라가면 목록 한 장에 N+1 이 난다.
+    """
+    if not ids:
+        return {}
+    rows = {row.id: row for row in db.scalars(select(Workspace)).all()}
+
+    def root(one: Workspace) -> Workspace:
+        seen: set[uuid.UUID] = set()
+        while one.parent_id and one.parent_id in rows and one.parent_id not in seen:
+            seen.add(one.id)  # 순환은 없어야 하지만, 있으면 여기서 멈춘다
+            one = rows[one.parent_id]
+        return one
+
+    found: dict[uuid.UUID, EquipmentWorkspaceRef] = {}
+    for one in ids:
+        row = rows.get(one)
+        if row is None:
+            continue
+        top = root(row)
+        found[one] = EquipmentWorkspaceRef(
+            id=row.id,
+            slug=row.slug,
+            label=row.name,
+            root_id=top.id if top.id != row.id else None,
+            root_label=top.name if top.id != row.id else None,
+        )
+    return found
+
+
 def _part_counts(db: Session, unit_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     if not unit_ids:
         return {}
@@ -148,6 +188,7 @@ def _part_counts(db: Session, unit_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]
 def _to_out(
     unit: EquipmentUnit,
     terms: dict[uuid.UUID, VocabularyTerm],
+    workspaces: dict[uuid.UUID, EquipmentWorkspaceRef],
     calibrations: dict[uuid.UUID, tuple[date, date | None]],
     parts: dict[uuid.UUID, int],
 ) -> EquipmentUnitOut:
@@ -169,7 +210,7 @@ def _to_out(
         instrument_id=unit.instrument_id,
         instrument_type=ref(unit.type_term_id),
         instrument_term=ref(unit.instrument_term_id),
-        org=ref(unit.org_term_id),
+        org=workspaces.get(unit.workspace_id) if unit.workspace_id else None,
         lab=ref(unit.lab_term_id),
         location_detail=unit.location_detail,
         workspace_id=unit.workspace_id,
@@ -192,19 +233,16 @@ def _load_out(db: Session, units: list[EquipmentUnit]) -> list[EquipmentUnitOut]
     term_ids = {
         one
         for unit in units
-        for one in (
-            unit.type_term_id,
-            unit.instrument_term_id,
-            unit.org_term_id,
-            unit.lab_term_id,
-        )
+        for one in (unit.type_term_id, unit.instrument_term_id, unit.lab_term_id)
         if one is not None
     }
     terms = _terms_by_id(db, term_ids)
-    return [
-        _to_out(unit, terms, _calibration_map(db, ids), _part_counts(db, ids))
-        for unit in units
-    ]
+    workspaces = _workspace_refs(
+        db, {unit.workspace_id for unit in units if unit.workspace_id}
+    )
+    calibrations = _calibration_map(db, ids)
+    parts = _part_counts(db, ids)
+    return [_to_out(unit, terms, workspaces, calibrations, parts) for unit in units]
 
 
 def _get(db: Session, unit_id: uuid.UUID) -> EquipmentUnit:
@@ -236,7 +274,7 @@ def list_units(
     q: str | None = Query(default=None),
     status: str | None = Query(default=None),
     ownership: str | None = Query(default=None),
-    org_term_id: uuid.UUID | None = Query(default=None),
+    workspace_id: uuid.UUID | None = Query(default=None),
     lab_term_id: uuid.UUID | None = Query(default=None),
     type_term_id: uuid.UUID | None = Query(default=None),
     calibration_due: bool = Query(default=False),
@@ -258,7 +296,7 @@ def list_units(
     if ownership:
         query = query.where(EquipmentUnit.ownership == ownership)
     for column, value in (
-        (EquipmentUnit.org_term_id, org_term_id),
+        (EquipmentUnit.workspace_id, workspace_id),
         (EquipmentUnit.lab_term_id, lab_term_id),
         (EquipmentUnit.type_term_id, type_term_id),
     ):
@@ -304,18 +342,16 @@ def list_units(
 def summary(
     _user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> EquipmentSummaryOut:
-    """사업부별·조직별·시험실별 현황.
+    """상위 조직별·부서별·시험실별 현황.
 
-    **사업부는 조직의 부모를 타고 나온다** — 장비에 사업부를 따로 안 적기 때문이다.
+    **상위 조직은 부서 트리를 타고 나온다** — 장비에 상위 조직을 따로 안 적기
+    때문이다(`Workspace.parent_id`). 같은 답을 두 번 저장하면 언젠가 갈린다.
     """
     units = list(db.scalars(select(EquipmentUnit)).all())
-    term_ids = {
-        one
-        for unit in units
-        for one in (unit.org_term_id, unit.lab_term_id)
-        if one is not None
-    }
-    terms = _terms_by_id(db, term_ids)
+    terms = _terms_by_id(db, {unit.lab_term_id for unit in units if unit.lab_term_id})
+    workspaces = _workspace_refs(
+        db, {unit.workspace_id for unit in units if unit.workspace_id}
+    )
     edge = date.today() + timedelta(days=DUE_SOON_DAYS)
     calibrations = _calibration_map(db, [unit.id for unit in units])
 
@@ -332,7 +368,7 @@ def summary(
             "calibration_due": 0,
         }
 
-    buckets: dict[str, dict[str, dict[str, Any]]] = {"division": {}, "org": {}, "lab": {}}
+    buckets: dict[str, dict[str, dict[str, Any]]] = {"root": {}, "org": {}, "lab": {}}
 
     def add(axis: str, key: str, label: str, unit: EquipmentUnit) -> None:
         row = buckets[axis].setdefault(key, blank(key, label))
@@ -345,16 +381,13 @@ def summary(
             row["calibration_due"] += 1
 
     for unit in units:
-        org = terms.get(unit.org_term_id) if unit.org_term_id else None
-        division = terms.get(org.parent_term_id) if org and org.parent_term_id else None
+        org = workspaces.get(unit.workspace_id) if unit.workspace_id else None
+        # 꼭대기가 자기 자신이면 `root_*` 가 비어 온다 — 그때는 그 부서가 곧 상위다.
+        root_key = str(org.root_id or org.id) if org else ""
+        root_label = (org.root_label or org.label) if org else "미지정"
         lab = terms.get(unit.lab_term_id) if unit.lab_term_id else None
-        add(
-            "division",
-            str(division.id) if division else "",
-            division.value if division else "미지정",
-            unit,
-        )
-        add("org", str(org.id) if org else "", org.value if org else "미지정", unit)
+        add("root", root_key, root_label, unit)
+        add("org", str(org.id) if org else "", org.label if org else "미지정", unit)
         add("lab", str(lab.id) if lab else "", lab.value if lab else "미지정", unit)
 
     def rows(axis: str) -> list[EquipmentSummaryRow]:
@@ -365,7 +398,7 @@ def summary(
 
     return EquipmentSummaryOut(
         total=len(units),
-        by_division=rows("division"),
+        by_root_org=rows("root"),
         by_org=rows("org"),
         by_lab=rows("lab"),
     )
@@ -469,6 +502,15 @@ def delete_unit(
             f"{dependents.describe(blocking)}. "
             "쓰지 않는 장비라면 상태를 '폐기' 로 바꾸세요.",
         )
+    audit.record(
+        db,
+        action=audit.EQUIPMENT_DELETED,
+        actor=user,
+        target_table="equipment_units",
+        target_id=unit.id,
+        target_label=f"{unit.name} ({unit.asset_no or '자산번호 없음'})",
+        workspace_id=unit.workspace_id,
+    )
     db.delete(unit)
     db.commit()
 
@@ -629,6 +671,24 @@ def bulk_create(
 
             values = row.model_dump()
             names = {field: values.pop(field) for field in BOUND_FIELDS}
+            # **부서는 만들지 않는다.** 기준정보는 없으면 만들지만 부서는 권한이
+            # 붙는 자리다 — 붙여넣기 한 번으로 조직이 생기면 안 된다. 못 찾으면
+            # 그 줄만 걸리고, 사람이 조직 화면에서 만든 뒤 다시 붙인다.
+            wanted = values.pop("workspace", None)
+            if wanted:
+                found = db.scalars(
+                    select(Workspace).where(
+                        or_(Workspace.slug == wanted, Workspace.name == wanted)
+                    )
+                ).first()
+                if found is None:
+                    raise AppError(
+                        "MNX-EQUIPMENT-0007",
+                        f"'{wanted}' 라는 부서가 없습니다. 조직 화면에서 먼저 만드세요 — "
+                        "붙여넣기로는 부서를 만들지 않습니다.",
+                        status=422,
+                    )
+                values["workspace_id"] = found.id
             # **새로 생길 값을 먼저 센다.** 드라이런이 보여 줄 것이 이것이고,
             # 오타 하나가 새 조직을 만드는 사고를 여기서 막는다.
             for field, name in names.items():

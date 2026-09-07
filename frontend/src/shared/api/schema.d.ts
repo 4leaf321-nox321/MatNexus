@@ -626,9 +626,10 @@ export interface paths {
         };
         /**
          * Summary
-         * @description 사업부별·조직별·시험실별 현황.
+         * @description 상위 조직별·부서별·시험실별 현황.
          *
-         *     **사업부는 조직의 부모를 타고 나온다** — 장비에 사업부를 따로 안 적기 때문이다.
+         *     **상위 조직은 부서 트리를 타고 나온다** — 장비에 상위 조직을 따로 안 적기
+         *     때문이다(`Workspace.parent_id`). 같은 답을 두 번 저장하면 언젠가 갈린다.
          */
         get: operations["summary_api_equipment_summary_get"];
         put?: never;
@@ -7703,8 +7704,9 @@ export interface components {
          * EquipmentBulkRow
          * @description 붙여넣기 표 한 줄.
          *
-         *     등록 요청과 같은 모양이다 — 기준정보를 이름으로 받는 것이 이제 양쪽 공통이라
-         *     따로 둘 칸이 없다.
+         *     기준정보는 이름으로 받고 없으면 만든다. **부서는 다르다** — `workspace` 에
+         *     적은 이름·slug 가 부서 목록에 없으면 **그 줄이 걸린다.** 붙여넣기로 조직을
+         *     새로 만들 수는 없다: 부서는 권한이 붙는 자리라 사람이 조직 화면에서 만든다.
          */
         EquipmentBulkRow: {
             /** Asset No */
@@ -7731,8 +7733,6 @@ export interface components {
             name: string;
             /** Notes */
             notes?: string | null;
-            /** Org */
-            org?: string | null;
             /** Owner Contact */
             owner_contact?: string | null;
             /** Owner Name */
@@ -7753,6 +7753,8 @@ export interface components {
             status: string;
             /** Vendor */
             vendor?: string | null;
+            /** Workspace */
+            workspace?: string | null;
             /** Workspace Id */
             workspace_id?: string | null;
         };
@@ -7915,12 +7917,12 @@ export interface components {
         };
         /** EquipmentSummaryOut */
         EquipmentSummaryOut: {
-            /** By Division */
-            by_division: components["schemas"]["EquipmentSummaryRow"][];
             /** By Lab */
             by_lab: components["schemas"]["EquipmentSummaryRow"][];
             /** By Org */
             by_org: components["schemas"]["EquipmentSummaryRow"][];
+            /** By Root Org */
+            by_root_org: components["schemas"]["EquipmentSummaryRow"][];
             /** Total */
             total: number;
         };
@@ -7994,8 +7996,6 @@ export interface components {
             name: string;
             /** Notes */
             notes?: string | null;
-            /** Org */
-            org?: string | null;
             /** Owner Contact */
             owner_contact?: string | null;
             /** Owner Name */
@@ -8059,7 +8059,7 @@ export interface components {
             name: string;
             /** Notes */
             notes: string | null;
-            org?: components["schemas"]["EquipmentTermRef"] | null;
+            org?: components["schemas"]["EquipmentWorkspaceRef"] | null;
             /** Owner Contact */
             owner_contact: string | null;
             /** Owner Name */
@@ -8116,8 +8116,6 @@ export interface components {
             name?: string | null;
             /** Notes */
             notes?: string | null;
-            /** Org */
-            org?: string | null;
             /** Owner Contact */
             owner_contact?: string | null;
             /** Owner Name */
@@ -8134,6 +8132,29 @@ export interface components {
             vendor?: string | null;
             /** Workspace Id */
             workspace_id?: string | null;
+        };
+        /**
+         * EquipmentWorkspaceRef
+         * @description 장비를 들고 있는 부서 — **상위 조직까지 함께.**
+         *
+         *     부서는 본부→팀 트리라(`Workspace.parent_id`) 「어느 본부의 팀인가」 가 목록
+         *     한 줄에서 보여야 한다. 화면이 부서 목록을 따로 받아 잇게 두면 줄마다 그 일을
+         *     한다.
+         */
+        EquipmentWorkspaceRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Root Id */
+            root_id?: string | null;
+            /** Root Label */
+            root_label?: string | null;
+            /** Slug */
+            slug: string;
         };
         /** ExpiredOut */
         ExpiredOut: {
@@ -14583,7 +14604,7 @@ export interface operations {
                 q?: string | null;
                 status?: string | null;
                 ownership?: string | null;
-                org_term_id?: string | null;
+                workspace_id?: string | null;
                 lab_term_id?: string | null;
                 type_term_id?: string | null;
                 calibration_due?: boolean;

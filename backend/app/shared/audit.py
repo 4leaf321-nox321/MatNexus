@@ -46,6 +46,10 @@ ACCOUNT_HOME_CHANGED = "account.home_changed"
 ACCOUNT_ADMIN_CHANGED = "account.admin_changed"
 ACCOUNT_DELETED = "account.deleted"
 GROUP_RESULT_DELETED = "group_result.deleted"
+#: 장비를 **실제로 지운** 일. 폐기(`status`)는 여기 안 남긴다 — 그건 되돌릴 수
+#: 있고 행도 살아 있다. 실삭제는 되돌릴 수 없으므로 누가 언제 왜 지웠는지가
+#: 반년 뒤에 물어질 수 있는 유일한 자리다.
+EQUIPMENT_DELETED = "equipment.deleted"
 LOGIN_THROTTLED = "auth.login_throttled"
 """같은 계정의 실패가 문턱을 넘어 응답을 늦추기 시작했다. 실패마다 남기면 넘치므로
 문턱을 넘는 순간 한 번만."""

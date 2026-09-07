@@ -97,34 +97,56 @@ class Test이름으로_찾기:
         assert [item["name"] for item in found["items"]] == ["생기연 DMA"]
 
 
-class Test조직_계층:
-    def test_사업부는_부모를_타고_나온다(
-        self, client: TestClient, admin_headers: dict[str, str], db: Session
-    ) -> None:
-        """**장비에 사업부를 안 적는다.** 조직의 부모가 사업부다.
+class Test조직은_부서에서_온다:
+    """**기준정보에 조직 축을 두지 않는다.**
 
-        둘 다 적게 하면 같은 답을 두 번 저장하고 언젠가 갈린다.
-        """
-        division = term(db, "division", "모빌리티")
-        term(db, "org", "생기연", parent=division)
-        made = make(client, admin_headers, org="생기연")
+    부서가 이미 조직 트리다(`Workspace.parent_id`: *"본부 아래 팀이 있고, 같은
+    이름의 팀이 본부마다 있을 수 있다"*). 축을 하나 더 두면 같은 조직이 두 목록에
+    쌓이고 합칠 방법이 없다 — 실제로 한 번 그렇게 만들었다가 걷어냈다.
+    """
+
+    def test_상위_조직은_부서_트리를_타고_나온다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session, workspace: Any
+    ) -> None:
+        """**장비에 상위 조직을 안 적는다.** 부모를 타고 올라가서 낸다."""
+        from app.modules.workspaces.models import Workspace
+
+        team = Workspace(slug="lab-eng", name="생기연", parent_id=workspace.id)
+        db.add(team)
+        db.commit()
+        made = make(client, admin_headers, workspace_id=str(team.id))
         assert made["org"]["label"] == "생기연"
-        assert made["org"]["parent_label"] == "모빌리티", "사업부가 함께 와야 한다"
+        assert made["org"]["root_label"] == "금속재료팀", "꼭대기가 함께 와야 한다"
 
     def test_현황이_두_층으로_나온다(
-        self, client: TestClient, admin_headers: dict[str, str], db: Session
+        self, client: TestClient, admin_headers: dict[str, str], db: Session, workspace: Any
     ) -> None:
-        division = term(db, "division", "모빌리티")
-        term(db, "org", "생기연", parent=division)
-        term(db, "org", "재료연구팀", parent=division)
-        make(client, admin_headers, name="DMA", org="생기연")
-        make(client, admin_headers, name="UTM", org="재료연구팀")
+        from app.modules.workspaces.models import Workspace
+
+        first = Workspace(slug="lab-a", name="생기연", parent_id=workspace.id)
+        second = Workspace(slug="lab-b", name="재료연구팀", parent_id=workspace.id)
+        db.add_all([first, second])
+        db.commit()
+        make(client, admin_headers, name="DMA", workspace_id=str(first.id))
+        make(client, admin_headers, name="UTM", workspace_id=str(second.id))
 
         got = client.get("/api/equipment/summary", headers=admin_headers).json()
-        by_division = {row["label"]: row["total"] for row in got["by_division"]}
+        by_root = {row["label"]: row["total"] for row in got["by_root_org"]}
         by_org = {row["label"]: row["total"] for row in got["by_org"]}
-        assert by_division["모빌리티"] == 2, "사업부에서는 둘이 합쳐진다"
+        assert by_root["금속재료팀"] == 2, "상위 조직에서는 둘이 합쳐진다"
         assert by_org["생기연"] == 1 and by_org["재료연구팀"] == 1
+
+    def test_붙여넣기는_부서를_만들지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """기준정보는 없으면 만들지만 **부서는 권한이 붙는 자리다.**"""
+        got = client.post(
+            f"{UNITS}/bulk",
+            json={"dry_run": False, "rows": [{"name": "새 DMA", "workspace": "없는팀"}]},
+            headers=admin_headers,
+        ).json()
+        assert got["errors"] == 1
+        assert "부서가 없습니다" in got["rows"][0]["reason"]
 
 
 class Test상태:
@@ -261,7 +283,7 @@ class Test붙여넣기:
             f"{UNITS}/bulk",
             json={
                 "rows": [
-                    {"name": "생기연 DMA", "asset_no": "A-1", "org": "생기연"},
+                    {"name": "생기연 DMA", "asset_no": "A-1", "instrument_type": "DMA"},
                     {"name": "대형 챔버", "asset_no": "A-2", "lab": "2공장 3층"},
                 ]
             },
@@ -270,7 +292,7 @@ class Test붙여넣기:
         assert got["dry_run"] is True
         assert got["created"] == 2
         made = {one for row in got["rows"] for one in row["new_terms"]}
-        assert made == {"조직: 생기연", "시험실: 2공장 3층"}
+        assert made == {"장비 유형: DMA", "시험실: 2공장 3층"}
         assert db.scalar(select(EquipmentUnit)) is None, "드라이런은 아무것도 안 쓴다"
 
     def test_적용하면_기준정보까지_만들어진다(
@@ -280,13 +302,15 @@ class Test붙여넣기:
             f"{UNITS}/bulk",
             json={
                 "dry_run": False,
-                "rows": [{"name": "생기연 DMA", "asset_no": "A-1", "org": "생기연"}],
+                "rows": [{"name": "생기연 DMA", "asset_no": "A-1", "lab": "2공장 3층"}],
             },
             headers=admin_headers,
         ).json()
         assert got["created"] == 1 and got["dry_run"] is False
         unit = db.scalar(select(EquipmentUnit))
-        assert unit is not None and unit.org_term_id is not None
+        assert unit is not None
+        assert unit.lab == "2공장 3층", "문자열 짝이 채워진다"
+        assert unit.lab_term_id is not None, "FK 도 함께 — apply_bindings 가 한다"
 
     def test_이미_있는_자산번호는_건너뛴다(
         self, client: TestClient, admin_headers: dict[str, str]

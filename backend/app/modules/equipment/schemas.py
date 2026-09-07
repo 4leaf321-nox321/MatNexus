@@ -29,6 +29,22 @@ def _one_of(value: str, allowed: tuple[str, ...], what: str) -> str:
     return value
 
 
+class EquipmentWorkspaceRef(BaseModel):
+    """장비를 들고 있는 부서 — **상위 조직까지 함께.**
+
+    부서는 본부→팀 트리라(`Workspace.parent_id`) 「어느 본부의 팀인가」 가 목록
+    한 줄에서 보여야 한다. 화면이 부서 목록을 따로 받아 잇게 두면 줄마다 그 일을
+    한다.
+    """
+
+    id: uuid.UUID
+    slug: str
+    label: str
+    #: 트리의 꼭대기. 사업부별 현황이 이것으로 묶인다.
+    root_id: uuid.UUID | None = None
+    root_label: str | None = None
+
+
 class EquipmentTermRef(BaseModel):
     """기준정보 값 하나 — id 와 함께 **보여 줄 이름**을 싣는다.
 
@@ -143,8 +159,11 @@ class EquipmentUnitOut(BaseModel):
     #: 기준정보들. 이름까지 실어 화면이 축을 따로 안 부르게 한다.
     instrument_type: EquipmentTermRef | None = None
     instrument_term: EquipmentTermRef | None = None
-    org: EquipmentTermRef | None = None
     lab: EquipmentTermRef | None = None
+
+    #: 장비를 들고 있는 조직 = 부서. **상위 조직을 함께 싣는다** — 부서 트리를
+    #: 타고 올라간 것이라 화면이 또 물을 필요가 없다.
+    org: EquipmentWorkspaceRef | None = None
 
     location_detail: str | None
     workspace_id: uuid.UUID | None
@@ -179,7 +198,6 @@ class EquipmentUnitCreate(BaseModel):
     #: 없는 이름이면 만든다(`open` 축). 사람이 폼에 id 를 적지 않는다.
     instrument_type: str | None = None
     instrument: str | None = None
-    org: str | None = None
     lab: str | None = None
 
     vendor: str | None = None
@@ -217,7 +235,6 @@ class EquipmentUnitUpdate(BaseModel):
 
     instrument_type: str | None = None
     instrument: str | None = None
-    org: str | None = None
     lab: str | None = None
 
     vendor: str | None = None
@@ -245,9 +262,12 @@ class EquipmentUnitUpdate(BaseModel):
 class EquipmentBulkRow(EquipmentUnitCreate):
     """붙여넣기 표 한 줄.
 
-    등록 요청과 같은 모양이다 — 기준정보를 이름으로 받는 것이 이제 양쪽 공통이라
-    따로 둘 칸이 없다.
+    기준정보는 이름으로 받고 없으면 만든다. **부서는 다르다** — `workspace` 에
+    적은 이름·slug 가 부서 목록에 없으면 **그 줄이 걸린다.** 붙여넣기로 조직을
+    새로 만들 수는 없다: 부서는 권한이 붙는 자리라 사람이 조직 화면에서 만든다.
     """
+
+    workspace: str | None = None
 
 
 class EquipmentBulkRequest(BaseModel):
@@ -294,6 +314,8 @@ class EquipmentSummaryRow(BaseModel):
 
 class EquipmentSummaryOut(BaseModel):
     total: int
-    by_division: list[EquipmentSummaryRow]
+    #: 부서 트리의 꼭대기로 묶은 것. 사업부·본부 층이다.
+    by_root_org: list[EquipmentSummaryRow]
+    #: 장비를 들고 있는 부서 그대로.
     by_org: list[EquipmentSummaryRow]
     by_lab: list[EquipmentSummaryRow]

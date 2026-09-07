@@ -24,7 +24,13 @@ const COLUMNS: (Column & { field: string })[] = [
   { key: 'name', field: 'name', header: '장비명', help: '필수. 「생기연 DMA」 처럼 부르는 이름' },
   { key: 'asset_no', field: 'asset_no', header: '자산번호', help: '스티커에 적힌 그대로. 없으면 비움' },
   { key: 'instrument_type', field: 'instrument_type', header: '장비 유형', help: 'UTM · DSC · 항온항습기' },
-  { key: 'org', field: 'org', header: '조직', help: '장비를 들고 있는 단위' },
+  {
+    key: 'workspace',
+    field: 'workspace',
+    header: '조직(부서)',
+    // **없으면 그 줄이 걸린다** — 붙여넣기로 부서를 만들지 않는다.
+    help: '이미 있는 부서 이름 또는 slug. 없으면 그 줄이 걸립니다',
+  },
   { key: 'lab', field: 'lab', header: '시험실' },
   { key: 'location_detail', field: 'location_detail', header: '방 안 위치', help: '3번 벤치' },
   { key: 'vendor', field: 'vendor', header: '제조사' },
@@ -76,7 +82,8 @@ export function EquipmentBulkDialog({ onDone }: { onDone: () => void }) {
       <p className="text-muted-foreground text-sm">
         엑셀에서 표를 복사해 아래 칸에 붙여 넣으세요. <b>장비명만 필수</b>이고 나머지는
         비워도 됩니다. 장비 유형·조직·시험실은 <b>이름으로 적으면 됩니다</b> — 없는
-        이름이면 기준정보에 새로 만들어집니다.
+        이름이면 기준정보에 새로 만들어집니다. <b>다만 조직(부서)은 만들지
+        않습니다</b> — 이미 있는 부서만 적을 수 있습니다.
       </p>
 
       {error != null && <ErrorNotice error={error} />}

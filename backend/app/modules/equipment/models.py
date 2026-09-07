@@ -129,7 +129,6 @@ class EquipmentUnit(Base):
     #: 「쓰는 곳 N건」 이 조용히 틀려진다). 재료·시료·시편이 전부 이 모양이다.
     instrument_type: Mapped[str | None] = mapped_column(String(120))
     instrument: Mapped[str | None] = mapped_column(String(120))
-    org: Mapped[str | None] = mapped_column(String(120))
     lab: Mapped[str | None] = mapped_column(String(120))
 
     #: 기준정보 「장비」 값. **`TestRun.instrument_term_id` 와 이어지는 고리다** —
@@ -163,24 +162,15 @@ class EquipmentUnit(Base):
     ownership: Mapped[str] = mapped_column(String(20), default="internal", index=True)
     """`OWNERSHIPS` 중 하나. 사내 장비인가, 위탁 기관 장비인가."""
 
-    #: 기준정보 「조직」. 장비를 실제로 들고 있는 단위 — 「생기연」·「재료연구팀」.
+    #: **장비를 들고 있는 조직.**
     #:
-    #: **사업부를 따로 적지 않는다.** 조직 축의 부모가 사업부라, 사업부별 현황은
-    #: 부모를 타고 올라가면 나온다. 둘 다 적게 하면 같은 답을 두 번 저장하고
-    #: 언젠가 갈린다(`grade` 가 `family` 를 안 적는 것과 같다).
+    #: 기준정보에 조직 축을 따로 두려다 걷어냈다(2026-09-07) — 부서가 이미 조직
+    #: 트리다(`Workspace.parent_id`: *"조직은 평면이 아니다 — 본부 아래 팀이 있고,
+    #: 같은 이름의 팀이 본부마다 있을 수 있다"*). 축을 하나 더 두면 같은 조직이 두
+    #: 목록에 쌓이고 합칠 방법이 없다.
     #:
-    #: 위탁 기관도 이 축의 값이다 — 사업부 부모가 없을 뿐이다.
-    org_term_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey("vocabulary_terms.id", ondelete="SET NULL"),
-        index=True,
-    )
-
-    #: 관리 부서. **누가 고칠 수 있는가**를 정한다(보는 것은 모두가 한다).
-    #:
-    #: 조직(`org_term_id`)과 다르다 — 조직은 **누가 들고 있나**(현황 집계의 축)이고
-    #: 부서는 **누가 고칠 수 있나**(권한)다. 부서 하나가 여러 조직의 장비를 관리하는
-    #: 일이 있고, 그때 둘을 한 칸으로는 못 적는다.
+    #: 그래서 **사업부별 현황은 이 트리를 타고 올라가서** 낸다. 장비에 상위 조직을
+    #: 따로 적지 않는다 — 같은 답을 두 번 저장하면 언젠가 갈린다.
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), index=True
     )

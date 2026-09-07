@@ -35,12 +35,12 @@ const dash = <span className="text-muted-foreground">—</span>
 
 function Facts({ unit }: { unit: EquipmentUnit }) {
   const org = unit.org
-    ? [unit.org.parent_label, unit.org.label].filter(Boolean).join(' › ')
+    ? [unit.org.root_label, unit.org.label].filter(Boolean).join(' › ')
     : null
   const rows: [string, string | null][] = [
     ['자산번호', unit.asset_no],
     ['장비 유형', unit.instrument_type?.label ?? null],
-    ['조직', org],
+    ['조직(부서)', org],
     ['시험실', [unit.lab?.label, unit.location_detail].filter(Boolean).join(' · ') || null],
     ['제조사·모델', [unit.vendor, unit.model].filter(Boolean).join(' ') || null],
     ['시리얼', unit.serial_no],

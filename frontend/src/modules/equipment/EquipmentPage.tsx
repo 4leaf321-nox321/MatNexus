@@ -80,8 +80,9 @@ function SummaryTable({ title, rows }: { title: string; rows: EquipmentSummaryRo
 function UnitRow({ unit }: { unit: EquipmentUnit }) {
   const calibration = calibrationState(unit.calibration_valid_until)
   const place = [unit.lab?.label, unit.location_detail].filter(Boolean).join(' · ')
+  // 부서 트리의 꼭대기가 있으면 함께 — 「어느 본부의 팀인가」 가 한 줄에서 보인다.
   const org = unit.org
-    ? [unit.org.parent_label, unit.org.label].filter(Boolean).join(' › ')
+    ? [unit.org.root_label, unit.org.label].filter(Boolean).join(' › ')
     : null
   return (
     <tr className="border-b align-top last:border-0">
@@ -240,8 +241,8 @@ export default function EquipmentPage() {
           {summary.error && <ErrorNotice error={summary.error} />}
           {summary.data && (
             <div className="flex flex-wrap gap-6">
-              <SummaryTable title="사업부" rows={summary.data.by_division} />
-              <SummaryTable title="조직" rows={summary.data.by_org} />
+              <SummaryTable title="상위 조직" rows={summary.data.by_root_org} />
+              <SummaryTable title="부서" rows={summary.data.by_org} />
               <SummaryTable title="시험실" rows={summary.data.by_lab} />
             </div>
           )}

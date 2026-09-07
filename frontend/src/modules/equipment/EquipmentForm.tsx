@@ -13,6 +13,8 @@ import { useEffect, useState } from 'react'
 import { OWNERSHIP_LABELS, STATUS_LABELS, equipmentApi } from '@/modules/equipment/api'
 import type { EquipmentUnit } from '@/modules/equipment/api'
 import { vocabularyApi } from '@/modules/vocabulary/api'
+import { workspacesApi } from '@/modules/workspaces/api'
+import type { Workspace } from '@/modules/workspaces/api'
 import type { SpecimenField } from '@/modules/vocabulary/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { ApiError } from '@/shared/api/client'
@@ -29,7 +31,7 @@ interface Draft {
   status: string
   instrument_type: string
   instrument: string
-  org: string
+  workspace_id: string
   lab: string
   location_detail: string
   vendor: string
@@ -48,7 +50,7 @@ const EMPTY: Draft = {
   status: 'active',
   instrument_type: '',
   instrument: '',
-  org: '',
+  workspace_id: '',
   lab: '',
   location_detail: '',
   vendor: '',
@@ -69,7 +71,7 @@ function draftOf(unit: EquipmentUnit | null): Draft {
     status: unit.status,
     instrument_type: unit.instrument_type?.label ?? '',
     instrument: unit.instrument_term?.label ?? '',
-    org: unit.org?.label ?? '',
+    workspace_id: unit.org?.id ?? '',
     lab: unit.lab?.label ?? '',
     location_detail: unit.location_detail ?? '',
     vendor: unit.vendor ?? '',
@@ -120,6 +122,8 @@ export function EquipmentForm({
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(unit))
   const [fields, setFields] = useState<SpecimenField[]>([])
+  /** 부서 목록. **여기서 만들지 않는다** — 조직은 권한이 붙는 자리다. */
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [attributes, setAttributes] = useState<Record<string, string>>({})
   const [error, setError] = useState<ApiError | Error | null>(null)
   const [saving, setSaving] = useState(false)
@@ -131,6 +135,13 @@ export function EquipmentForm({
       Object.fromEntries(Object.entries(found).map(([key, value]) => [key, String(value ?? '')]))
     )
   }, [unit])
+
+  useEffect(() => {
+    workspacesApi
+      .list(true)
+      .then(setWorkspaces)
+      .catch(() => setWorkspaces([]))
+  }, [])
 
   // **장비 유형이 칸을 정한다.** UTM 에 「승온 속도」 칸이 있으면 안 되고 DSC 에
   // 「제어 방식: 변위」 가 있으면 안 된다 — 무엇을 그릴지는 서버가 안다.
@@ -213,12 +224,28 @@ export function EquipmentForm({
           value={draft.instrument_type}
           onChange={(next) => set('instrument_type', next)}
         />
-        <VocabularyField
-          slug="org"
-          label="조직"
-          value={draft.org}
-          onChange={(next) => set('org', next)}
-        />
+        {/* **조직은 부서에서 온다.** 기준정보에 축을 두려다 걷어냈다 — 부서가
+            이미 본부→팀 트리이고, 축을 하나 더 두면 같은 조직이 두 목록에 쌓인다.
+            여기서 새로 만들 수 없는 것도 그래서다(조직 화면에서 만든다). */}
+        <div className="space-y-1.5">
+          <Label>조직 (부서)</Label>
+          <select
+            className="h-9 w-full rounded-md border px-2 text-sm"
+            value={draft.workspace_id}
+            onChange={(event) => set('workspace_id', event.target.value)}
+          >
+            <option value="">고르지 않음</option>
+            {workspaces
+              .filter((one) => one.kind === 'org')
+              .map((one) => (
+                <option key={one.id} value={one.id}>
+                  {/* `path` 가 트리 위치를 그대로 준다 — 같은 이름의 팀이 본부마다
+                      있을 수 있어 이름만으로는 못 고른다. */}
+                  {one.path || one.name}
+                </option>
+              ))}
+          </select>
+        </div>
         <VocabularyField
           slug="lab"
           label="시험실"

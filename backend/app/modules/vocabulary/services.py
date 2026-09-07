@@ -491,14 +491,13 @@ USE_BINDINGS = (Binding("product", "value", "term_id"), Binding("part", "value",
 #: 자리가 있어서(`drift`) 이름을 박아 둘 수 없다.
 #: 보유 장비. **부모부터 적는다** — 장비 유형이 장비의 부모다.
 #:
-#: 조직(`org`)의 부모는 사업부인데 장비는 사업부를 안 든다(조직의 부모를 타고
-#: 나온다). 그래서 여기 `parent_field` 가 없다 — 이 폼에서 새로 만든 조직은
-#: 부모가 빈 채로 생기고, 사업부는 기준정보 화면에서 잇는다. 부모를 모르는 값이
-#: 있어도 시스템은 멈추지 않는다(`VocabularyTerm.parent_term_id` 주석).
+#: **조직은 여기 없다.** 장비를 들고 있는 단위는 부서(`workspaces`)이고, 그것은
+#: 이미 본부→팀 트리다(`Workspace.parent_id`). 기준정보에 조직 축을 따로 두면
+#: 같은 조직이 두 목록에 쌓이고 합칠 방법이 없다 — 실제로 한 번 그렇게 만들었다가
+#: 걷어냈다(2026-09-07).
 EQUIPMENT_BINDINGS = (
     Binding("instrument_type", "instrument_type", "type_term_id"),
     Binding("instrument", "instrument", "instrument_term_id", parent_field="instrument_type"),
-    Binding("org", "org", "org_term_id"),
     Binding("lab", "lab", "lab_term_id"),
 )
 

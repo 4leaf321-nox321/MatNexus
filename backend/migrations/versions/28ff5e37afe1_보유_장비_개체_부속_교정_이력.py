@@ -37,7 +37,6 @@ def upgrade() -> None:
         sa.Column("lab_term_id", sa.UUID(), nullable=True),
         sa.Column("location_detail", sa.String(length=200), nullable=True),
         sa.Column("ownership", sa.String(length=20), nullable=False),
-        sa.Column("org_term_id", sa.UUID(), nullable=True),
         sa.Column("workspace_id", sa.UUID(), nullable=True),
         sa.Column("owner_name", sa.String(length=120), nullable=True),
         sa.Column("owner_contact", sa.String(length=120), nullable=True),
@@ -88,11 +87,6 @@ def upgrade() -> None:
             ondelete="SET NULL",
         ),
         sa.ForeignKeyConstraint(
-            ["org_term_id"],
-            ["vocabulary_terms.id"],
-            ondelete="SET NULL",
-        ),
-        sa.ForeignKeyConstraint(
             ["workspace_id"],
             ["workspaces.id"],
             name=op.f("fk_equipment_units_workspace_id_workspaces"),
@@ -128,12 +122,6 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_equipment_units_ownership"), "equipment_units", ["ownership"], unique=False
-    )
-    op.create_index(
-        op.f("ix_equipment_units_org_term_id"),
-        "equipment_units",
-        ["org_term_id"],
-        unique=False,
     )
     op.create_index(
         op.f("ix_equipment_units_type_term_id"),
@@ -267,19 +255,6 @@ def upgrade() -> None:
             ),
             {"slug": slug, "label": label, "order": order},
         )
-
-    # **조직 축은 부모가 있다.** 장비를 들고 있는 단위이고, 부모가 사업부라
-    # 사업부별 현황이 부모를 타고 나온다 — 장비에 사업부를 따로 안 적는 이유다.
-    bind.execute(
-        sa.text(
-            """
-            INSERT INTO vocabularies (id, slug, label, entry_policy, sort_order,
-                                      parent_slug, base_fields, created_at)
-            VALUES (gen_random_uuid(), 'org', '조직', 'open', 46, 'division', '[]', now())
-            ON CONFLICT (slug) DO NOTHING
-            """
-        )
-    )
 
     # **「장비」 축이 「장비 유형」 을 부모로 갖는다.** 유형이 `base_fields` 로 그
     # 유형의 장비가 갖는 칸을 정한다 — UTM 에 「승온 속도」 칸이 있으면 안 되고

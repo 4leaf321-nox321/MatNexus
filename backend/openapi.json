@@ -6179,7 +6179,7 @@
         "type": "object"
       },
       "EquipmentBulkRow": {
-        "description": "붙여넣기 표 한 줄.\n\n등록 요청과 같은 모양이다 — 기준정보를 이름으로 받는 것이 이제 양쪽 공통이라\n따로 둘 칸이 없다.",
+        "description": "붙여넣기 표 한 줄.\n\n기준정보는 이름으로 받고 없으면 만든다. **부서는 다르다** — `workspace` 에\n적은 이름·slug 가 부서 목록에 없으면 **그 줄이 걸린다.** 붙여넣기로 조직을\n새로 만들 수는 없다: 부서는 권한이 붙는 자리라 사람이 조직 화면에서 만든다.",
         "properties": {
           "asset_no": {
             "anyOf": [
@@ -6293,17 +6293,6 @@
             ],
             "title": "Notes"
           },
-          "org": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Org"
-          },
           "owner_contact": {
             "anyOf": [
               {
@@ -6369,6 +6358,17 @@
               }
             ],
             "title": "Vendor"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
           },
           "workspace_id": {
             "anyOf": [
@@ -6987,13 +6987,6 @@
       },
       "EquipmentSummaryOut": {
         "properties": {
-          "by_division": {
-            "items": {
-              "$ref": "#/components/schemas/EquipmentSummaryRow"
-            },
-            "title": "By Division",
-            "type": "array"
-          },
           "by_lab": {
             "items": {
               "$ref": "#/components/schemas/EquipmentSummaryRow"
@@ -7008,6 +7001,13 @@
             "title": "By Org",
             "type": "array"
           },
+          "by_root_org": {
+            "items": {
+              "$ref": "#/components/schemas/EquipmentSummaryRow"
+            },
+            "title": "By Root Org",
+            "type": "array"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -7015,7 +7015,7 @@
         },
         "required": [
           "total",
-          "by_division",
+          "by_root_org",
           "by_org",
           "by_lab"
         ],
@@ -7232,17 +7232,6 @@
               }
             ],
             "title": "Notes"
-          },
-          "org": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Org"
           },
           "owner_contact": {
             "anyOf": [
@@ -7476,7 +7465,7 @@
           "org": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EquipmentTermRef"
+                "$ref": "#/components/schemas/EquipmentWorkspaceRef"
               },
               {
                 "type": "null"
@@ -7721,17 +7710,6 @@
             ],
             "title": "Notes"
           },
-          "org": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Org"
-          },
           "owner_contact": {
             "anyOf": [
               {
@@ -7824,6 +7802,54 @@
           }
         },
         "title": "EquipmentUnitUpdate",
+        "type": "object"
+      },
+      "EquipmentWorkspaceRef": {
+        "description": "장비를 들고 있는 부서 — **상위 조직까지 함께.**\n\n부서는 본부→팀 트리라(`Workspace.parent_id`) 「어느 본부의 팀인가」 가 목록\n한 줄에서 보여야 한다. 화면이 부서 목록을 따로 받아 잇게 두면 줄마다 그 일을\n한다.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id"
+          },
+          "root_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Label"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "label"
+        ],
+        "title": "EquipmentWorkspaceRef",
         "type": "object"
       },
       "ExpiredOut": {
@@ -23250,7 +23276,7 @@
     },
     "/api/equipment/summary": {
       "get": {
-        "description": "사업부별·조직별·시험실별 현황.\n\n**사업부는 조직의 부모를 타고 나온다** — 장비에 사업부를 따로 안 적기 때문이다.",
+        "description": "상위 조직별·부서별·시험실별 현황.\n\n**상위 조직은 부서 트리를 타고 나온다** — 장비에 상위 조직을 따로 안 적기\n때문이다(`Workspace.parent_id`). 같은 답을 두 번 저장하면 언젠가 갈린다.",
         "operationId": "summary_api_equipment_summary_get",
         "responses": {
           "200": {
@@ -23325,7 +23351,7 @@
           },
           {
             "in": "query",
-            "name": "org_term_id",
+            "name": "workspace_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -23337,7 +23363,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Org Term Id"
+              "title": "Workspace Id"
             }
           },
           {

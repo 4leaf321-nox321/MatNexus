@@ -7,7 +7,8 @@
  * 화면이 지킬 것 둘:
  *   ① **얼굴은 장비명이다.** 사람은 「생기연 DMA」·「대형 챔버」 로 부르지
  *      자산번호로 부르지 않는다. 자산번호는 스티커와 대조할 때 쓴다.
- *   ② **사업부를 따로 안 적는다.** 조직의 부모가 사업부라 서버가 함께 실어 준다.
+ *   ② **조직은 부서다.** 기준정보에 조직 축을 두려다 걷어냈다 — 부서가 이미
+ *      본부→팀 트리라, 상위 조직은 그 트리를 타고 나온다.
  */
 
 import { api } from '@/shared/api/client'
@@ -72,7 +73,7 @@ export interface UnitQuery {
   q?: string
   status?: string
   ownership?: string
-  org_term_id?: string
+  workspace_id?: string
   lab_term_id?: string
   type_term_id?: string
   calibration_due?: boolean

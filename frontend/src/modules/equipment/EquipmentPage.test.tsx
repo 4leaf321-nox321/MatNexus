@@ -2,7 +2,7 @@
  * 보유 장비 화면.
  *
  *   얼굴은 장비명 — 자산번호는 아래 작게, 없으면 「자산번호 없음」
- *   조직은 사업부와 함께 보인다(부모를 타고 나온 것)
+ *   조직은 상위 조직과 함께 보인다(부서 트리를 타고 나온 것)
  *   교정은 「모른다」 를 「만료」 로 안 적는다
  *   붙여넣기는 드라이런이 먼저고, **새로 생길 기준정보를 경고로 보여 준다**
  */
@@ -41,7 +41,7 @@ const DMA = {
   instrument_id: null,
   instrument_type: null,
   instrument_term: null,
-  org: { id: 'o1', label: '생기연', parent_id: 'd1', parent_label: '모빌리티' },
+  org: { id: 'o1', slug: 'lab-eng', label: '생기연', root_id: 'w1', root_label: '금속재료팀' },
   lab: { id: 'l1', label: '2공장 3층', parent_id: null, parent_label: null },
   location_detail: '3번 벤치',
   workspace_id: null,
@@ -70,7 +70,7 @@ function show() {
 beforeEach(() => {
   vi.clearAllMocks()
   units.mockResolvedValue({ items: [DMA, CHAMBER], total: 2, limit: 100, offset: 0 })
-  summary.mockResolvedValue({ total: 2, by_division: [], by_org: [], by_lab: [] })
+  summary.mockResolvedValue({ total: 2, by_root_org: [], by_org: [], by_lab: [] })
 })
 
 describe('목록', () => {
@@ -86,10 +86,10 @@ describe('목록', () => {
     expect(await screen.findByText('자산번호 없음')).toBeInTheDocument()
   })
 
-  it('조직에 사업부가 함께 보인다', async () => {
-    // 장비는 조직만 가리키고 사업부는 부모를 타고 나온다.
+  it('조직에 상위 조직이 함께 보인다', async () => {
+    // **조직은 부서다.** 장비는 부서만 가리키고 상위는 부서 트리를 타고 나온다.
     show()
-    expect(await screen.findByText('모빌리티 › 생기연')).toBeInTheDocument()
+    expect(await screen.findByText('금속재료팀 › 생기연')).toBeInTheDocument()
   })
 })
 
@@ -115,12 +115,12 @@ describe('붙여넣기', () => {
       created: 1,
       skipped: 0,
       errors: 0,
-      rows: [{ index: 0, name: '생기연 DMA', outcome: 'create', new_terms: ['조직: 생기연'] }],
+      rows: [{ index: 0, name: '생기연 DMA', outcome: 'create', new_terms: ['장비 유형: DMA'] }],
     })
     render(<EquipmentBulkDialog onDone={vi.fn()} />)
 
     await userEvent.click(screen.getByRole('button', { name: /먼저 확인/ }))
-    expect(await screen.findByText('조직: 생기연')).toBeInTheDocument()
+    expect(await screen.findByText('장비 유형: DMA')).toBeInTheDocument()
     expect(screen.getByText(/기준정보에 새로 생깁니다/)).toBeInTheDocument()
     expect(bulk).toHaveBeenCalledWith(expect.anything(), true)
   })
