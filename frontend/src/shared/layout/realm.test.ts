@@ -13,7 +13,7 @@ import { realmOf } from '@/shared/layout/realm'
 describe('realmOf', () => {
   it('/composite 아래는 기억과 무관하게 복합 물성이다', () => {
     expect(realmOf('/composite', 'material')).toBe('composite')
-    expect(realmOf('/composite/stacks', null)).toBe('composite')
+    expect(realmOf('/composite/assemblies', null)).toBe('composite')
   })
 
   it('재료 쪽 주소는 기억과 무관하게 재료 물성이다', () => {
