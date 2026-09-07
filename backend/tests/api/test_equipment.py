@@ -114,7 +114,7 @@ class Test조직은_부서에서_온다:
         team = Workspace(slug="lab-eng", name="생기연", parent_id=workspace.id)
         db.add(team)
         db.commit()
-        made = make(client, admin_headers, workspace_id=str(team.id))
+        made = make(client, admin_headers, workspace=team.slug)
         assert made["org"]["label"] == "생기연"
         assert made["org"]["root_label"] == "금속재료팀", "꼭대기가 함께 와야 한다"
 
@@ -127,8 +127,8 @@ class Test조직은_부서에서_온다:
         second = Workspace(slug="lab-b", name="재료연구팀", parent_id=workspace.id)
         db.add_all([first, second])
         db.commit()
-        make(client, admin_headers, name="DMA", workspace_id=str(first.id))
-        make(client, admin_headers, name="UTM", workspace_id=str(second.id))
+        make(client, admin_headers, name="DMA", workspace=first.slug)
+        make(client, admin_headers, name="UTM", workspace=second.slug)
 
         got = client.get("/api/equipment/summary", headers=admin_headers).json()
         by_root = {row["label"]: row["total"] for row in got["by_root_org"]}

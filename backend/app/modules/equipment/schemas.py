@@ -191,7 +191,11 @@ class EquipmentUnitCreate(BaseModel):
     status: str = "active"
 
     instrument_id: uuid.UUID | None = None
-    workspace_id: uuid.UUID | None = None
+
+    #: 장비를 들고 있는 부서 — **slug 나 이름으로 받는다.** 화면의 부서 피커가
+    #: slug 로 움직인다(`WorkspacePicker`). **없으면 만들지 않고 거절한다** —
+    #: 기준정보와 다른 점이고, 부서는 권한이 붙는 자리이기 때문이다.
+    workspace: str | None = None
 
     #: **기준정보는 이름으로 받는다.** 화면의 피커가 이름으로 움직이고
     #: (`VocabularyField`), 서버가 `apply_bindings` 로 해석해 FK 까지 채운다 —
@@ -231,7 +235,7 @@ class EquipmentUnitUpdate(BaseModel):
     status: str | None = None
 
     instrument_id: uuid.UUID | None = None
-    workspace_id: uuid.UUID | None = None
+    workspace: str | None = None
 
     instrument_type: str | None = None
     instrument: str | None = None
@@ -262,12 +266,8 @@ class EquipmentUnitUpdate(BaseModel):
 class EquipmentBulkRow(EquipmentUnitCreate):
     """붙여넣기 표 한 줄.
 
-    기준정보는 이름으로 받고 없으면 만든다. **부서는 다르다** — `workspace` 에
-    적은 이름·slug 가 부서 목록에 없으면 **그 줄이 걸린다.** 붙여넣기로 조직을
-    새로 만들 수는 없다: 부서는 권한이 붙는 자리라 사람이 조직 화면에서 만든다.
+    등록 요청과 같은 모양이다 — 부서를 slug·이름으로 받는 것이 이제 양쪽 공통이다.
     """
-
-    workspace: str | None = None
 
 
 class EquipmentBulkRequest(BaseModel):

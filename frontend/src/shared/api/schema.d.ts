@@ -7704,9 +7704,7 @@ export interface components {
          * EquipmentBulkRow
          * @description 붙여넣기 표 한 줄.
          *
-         *     기준정보는 이름으로 받고 없으면 만든다. **부서는 다르다** — `workspace` 에
-         *     적은 이름·slug 가 부서 목록에 없으면 **그 줄이 걸린다.** 붙여넣기로 조직을
-         *     새로 만들 수는 없다: 부서는 권한이 붙는 자리라 사람이 조직 화면에서 만든다.
+         *     등록 요청과 같은 모양이다 — 부서를 slug·이름으로 받는 것이 이제 양쪽 공통이다.
          */
         EquipmentBulkRow: {
             /** Asset No */
@@ -7755,8 +7753,6 @@ export interface components {
             vendor?: string | null;
             /** Workspace */
             workspace?: string | null;
-            /** Workspace Id */
-            workspace_id?: string | null;
         };
         /** EquipmentBulkRowResult */
         EquipmentBulkRowResult: {
@@ -8016,8 +8012,8 @@ export interface components {
             status: string;
             /** Vendor */
             vendor?: string | null;
-            /** Workspace Id */
-            workspace_id?: string | null;
+            /** Workspace */
+            workspace?: string | null;
         };
         /**
          * EquipmentUnitOut
@@ -8130,8 +8126,8 @@ export interface components {
             status?: string | null;
             /** Vendor */
             vendor?: string | null;
-            /** Workspace Id */
-            workspace_id?: string | null;
+            /** Workspace */
+            workspace?: string | null;
         };
         /**
          * EquipmentWorkspaceRef

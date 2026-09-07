@@ -13,8 +13,10 @@ import { useEffect, useState } from 'react'
 import { OWNERSHIP_LABELS, STATUS_LABELS, equipmentApi } from '@/modules/equipment/api'
 import type { EquipmentUnit } from '@/modules/equipment/api'
 import { vocabularyApi } from '@/modules/vocabulary/api'
+import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
+import { WorkspaceTreeDialog } from '@/modules/workspaces/WorkspaceTreeDialog'
+import type { TreeWorkspace } from '@/modules/workspaces/WorkspaceTreeDialog'
 import { workspacesApi } from '@/modules/workspaces/api'
-import type { Workspace } from '@/modules/workspaces/api'
 import type { SpecimenField } from '@/modules/vocabulary/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { ApiError } from '@/shared/api/client'
@@ -31,7 +33,7 @@ interface Draft {
   status: string
   instrument_type: string
   instrument: string
-  workspace_id: string
+  workspace: string
   lab: string
   location_detail: string
   vendor: string
@@ -50,7 +52,7 @@ const EMPTY: Draft = {
   status: 'active',
   instrument_type: '',
   instrument: '',
-  workspace_id: '',
+  workspace: '',
   lab: '',
   location_detail: '',
   vendor: '',
@@ -71,7 +73,7 @@ function draftOf(unit: EquipmentUnit | null): Draft {
     status: unit.status,
     instrument_type: unit.instrument_type?.label ?? '',
     instrument: unit.instrument_term?.label ?? '',
-    workspace_id: unit.org?.id ?? '',
+    workspace: unit.org?.slug ?? '',
     lab: unit.lab?.label ?? '',
     location_detail: unit.location_detail ?? '',
     vendor: unit.vendor ?? '',
@@ -123,7 +125,9 @@ export function EquipmentForm({
   const [draft, setDraft] = useState<Draft>(() => draftOf(unit))
   const [fields, setFields] = useState<SpecimenField[]>([])
   /** 부서 목록. **여기서 만들지 않는다** — 조직은 권한이 붙는 자리다. */
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [workspaces, setWorkspaces] = useState<TreeWorkspace[]>([])
+  /** 조직도 모달. 이름을 모를 때 훑어 내려가는 길이다. */
+  const [tree, setTree] = useState(false)
   const [attributes, setAttributes] = useState<Record<string, string>>({})
   const [error, setError] = useState<ApiError | Error | null>(null)
   const [saving, setSaving] = useState(false)
@@ -139,7 +143,7 @@ export function EquipmentForm({
   useEffect(() => {
     workspacesApi
       .list(true)
-      .then(setWorkspaces)
+      .then((found) => setWorkspaces(found.filter((one) => one.kind === 'org')))
       .catch(() => setWorkspaces([]))
   }, [])
 
@@ -202,6 +206,15 @@ export function EquipmentForm({
     <div className="space-y-4">
       {error != null && <ErrorNotice error={error} />}
 
+      {tree && (
+        <WorkspaceTreeDialog
+          workspaces={workspaces}
+          value={draft.workspace || null}
+          onChange={(next) => set('workspace', next)}
+          onClose={() => setTree(false)}
+        />
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Text
           label="장비명 (필수)"
@@ -226,32 +239,25 @@ export function EquipmentForm({
         />
         {/* **조직은 부서에서 온다.** 기준정보에 축을 두려다 걷어냈다 — 부서가
             이미 본부→팀 트리이고, 축을 하나 더 두면 같은 조직이 두 목록에 쌓인다.
-            여기서 새로 만들 수 없는 것도 그래서다(조직 화면에서 만든다). */}
+            여기서 새로 만들 수 없는 것도 그래서다(조직 화면에서 만든다).
+
+            **길이 둘이다.** 이름을 알면 검색이 빠르고, 모르면 조직도를 훑는다 —
+            조직이 수백이면 검색만으로는 「어느 본부 밑이더라」 를 못 푼다. */}
         <div className="space-y-1.5">
           <Label>조직 (부서)</Label>
-          <select
-            className="h-9 w-full rounded-md border px-2 text-sm"
-            value={draft.workspace_id}
-            onChange={(event) => set('workspace_id', event.target.value)}
-          >
-            <option value="">고르지 않음</option>
-            {workspaces
-              .filter((one) => one.kind === 'org')
-              .map((one) => (
-                <option key={one.id} value={one.id}>
-                  {/* `path` 가 트리 위치를 그대로 준다 — 같은 이름의 팀이 본부마다
-                      있을 수 있어 이름만으로는 못 고른다. */}
-                  {one.path || one.name}
-                </option>
-              ))}
-          </select>
+          <div className="flex gap-1">
+            <WorkspacePicker
+              className="flex-1"
+              workspaces={workspaces}
+              value={draft.workspace || null}
+              onChange={(next) => set('workspace', next)}
+              placeholder="부서 고르기"
+            />
+            <Button type="button" variant="outline" onClick={() => setTree(true)}>
+              상세
+            </Button>
+          </div>
         </div>
-        <VocabularyField
-          slug="lab"
-          label="시험실"
-          value={draft.lab}
-          onChange={(next) => set('lab', next)}
-        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

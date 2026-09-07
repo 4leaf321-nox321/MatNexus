@@ -252,6 +252,27 @@ def _get(db: Session, unit_id: uuid.UUID) -> EquipmentUnit:
     return unit
 
 
+def _workspace_id(db: Session, wanted: str | None) -> uuid.UUID | None:
+    """slug 나 이름으로 부서를 찾는다. **없으면 만들지 않고 거절한다.**
+
+    기준정보는 없으면 만들지만 부서는 권한이 붙는 자리다 — 폼이나 붙여넣기 한
+    번으로 조직이 생기면 안 된다. 사람이 조직 화면에서 만든 뒤 다시 고른다.
+    """
+    if not wanted:
+        return None
+    found = db.scalars(
+        select(Workspace).where(or_(Workspace.slug == wanted, Workspace.name == wanted))
+    ).first()
+    if found is None:
+        raise AppError(
+            "MNX-EQUIPMENT-0007",
+            f"'{wanted}' 라는 부서가 없습니다. 조직 화면에서 먼저 만드세요 — "
+            "여기서는 부서를 만들지 않습니다.",
+            status=422,
+        )
+    return found.id
+
+
 def _assert_asset_free(db: Session, key: str | None, *, skip: uuid.UUID | None = None) -> None:
     if key is None:
         return
@@ -427,6 +448,7 @@ def create_unit(
     _assert_asset_free(db, key)
     data = payload.model_dump()
     names = {field: data.pop(field) for field in BOUND_FIELDS}
+    data["workspace_id"] = _workspace_id(db, data.pop("workspace"))
     unit = EquipmentUnit(**data, asset_key=key)
     db.add(unit)
     # **기준정보는 기계가 해석한다** — 없는 이름은 만들고, FK 와 문자열을 함께
@@ -461,6 +483,8 @@ def update_unit(
     # **보낸 것만 넘긴다.** `apply_bindings` 는 `values` 에 없는 필드를 안 건드린다 —
     # 그것이 「안 보낸 것」 과 「비운 것」 의 구별이다.
     names = {field: data.pop(field) for field in BOUND_FIELDS if field in data}
+    if "workspace" in data:
+        unit.workspace_id = _workspace_id(db, data.pop("workspace"))
     for field, value in data.items():
         setattr(unit, field, value)
     if names:
@@ -671,24 +695,7 @@ def bulk_create(
 
             values = row.model_dump()
             names = {field: values.pop(field) for field in BOUND_FIELDS}
-            # **부서는 만들지 않는다.** 기준정보는 없으면 만들지만 부서는 권한이
-            # 붙는 자리다 — 붙여넣기 한 번으로 조직이 생기면 안 된다. 못 찾으면
-            # 그 줄만 걸리고, 사람이 조직 화면에서 만든 뒤 다시 붙인다.
-            wanted = values.pop("workspace", None)
-            if wanted:
-                found = db.scalars(
-                    select(Workspace).where(
-                        or_(Workspace.slug == wanted, Workspace.name == wanted)
-                    )
-                ).first()
-                if found is None:
-                    raise AppError(
-                        "MNX-EQUIPMENT-0007",
-                        f"'{wanted}' 라는 부서가 없습니다. 조직 화면에서 먼저 만드세요 — "
-                        "붙여넣기로는 부서를 만들지 않습니다.",
-                        status=422,
-                    )
-                values["workspace_id"] = found.id
+            values["workspace_id"] = _workspace_id(db, values.pop("workspace"))
             # **새로 생길 값을 먼저 센다.** 드라이런이 보여 줄 것이 이것이고,
             # 오타 하나가 새 조직을 만드는 사고를 여기서 막는다.
             for field, name in names.items():
