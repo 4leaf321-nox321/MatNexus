@@ -9,8 +9,10 @@
  */
 
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
+import { EquipmentBulkDialog } from '@/modules/equipment/EquipmentBulkDialog'
+import { EquipmentForm } from '@/modules/equipment/EquipmentForm'
 import {
   OWNERSHIP_LABELS,
   STATUS_LABELS,
@@ -20,6 +22,7 @@ import {
 import type { EquipmentSummaryRow, EquipmentUnit } from '@/modules/equipment/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { Button } from '@/shared/components/ui/button'
 import { useResource } from '@/shared/hooks/useResource'
 
 const dash = <span className="text-muted-foreground">—</span>
@@ -83,7 +86,9 @@ function UnitRow({ unit }: { unit: EquipmentUnit }) {
   return (
     <tr className="border-b align-top last:border-0">
       <td className="py-2 pr-3">
-        <div className="font-medium">{unit.name}</div>
+        <Link className="font-medium hover:underline" to={`/settings/equipment/${unit.id}`}>
+          {unit.name}
+        </Link>
         {/* 자산번호는 **부르는 이름이 아니라 대조용**이라 작게 아래 붙인다. */}
         <div className="text-muted-foreground text-xs">
           {unit.asset_no ?? '자산번호 없음'}
@@ -117,6 +122,8 @@ export default function EquipmentPage() {
   const status = params.get('status') ?? ''
   const due = params.get('calibration_due') === '1'
   const [open, setOpen] = useState(false)
+  /** 지금 무엇을 열어 두었나 — 폼과 붙여넣기는 함께 뜨지 않는다. */
+  const [pane, setPane] = useState<'none' | 'form' | 'bulk'>('none')
 
   const units = useResource(
     () =>
@@ -142,7 +149,48 @@ export default function EquipmentPage() {
       <PageHeader
         title="보유 장비"
         description="우리가 가진 설비 한 대 한 대 — 어디 있고, 언제 교정했는지."
+        actions={
+          <div className="flex gap-2">
+            <Button
+              variant={pane === 'form' ? 'secondary' : 'outline'}
+              onClick={() => setPane((was) => (was === 'form' ? 'none' : 'form'))}
+            >
+              장비 추가
+            </Button>
+            {/* **몇 대인지 모르는 상태에서 세는 일 자체가 이 화면으로 된다.** */}
+            <Button
+              variant={pane === 'bulk' ? 'secondary' : 'outline'}
+              onClick={() => setPane((was) => (was === 'bulk' ? 'none' : 'bulk'))}
+            >
+              엑셀에서 붙여넣기
+            </Button>
+          </div>
+        }
       />
+
+      {pane === 'form' && (
+        <div className="rounded border p-3">
+          <EquipmentForm
+            unit={null}
+            onDone={() => {
+              setPane('none')
+              units.reload()
+            }}
+            onCancel={() => setPane('none')}
+          />
+        </div>
+      )}
+
+      {pane === 'bulk' && (
+        <div className="rounded border p-3">
+          <EquipmentBulkDialog
+            onDone={() => {
+              setPane('none')
+              units.reload()
+            }}
+          />
+        </div>
+      )}
 
       {/* **찾는 한 칸이 먼저다.** 이름은 부분 일치, 자산번호는 어떻게 쳐도 닿는다. */}
       <form

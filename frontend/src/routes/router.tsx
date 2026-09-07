@@ -52,6 +52,7 @@ const CatalogComparePage = lazy(() => import('@/modules/catalog/CatalogComparePa
 const CatalogAshbyPage = lazy(() => import('@/modules/catalog/CatalogAshbyPage'))
 const CatalogCoveragePage = lazy(() => import('@/modules/catalog/CatalogCoveragePage'))
 const EquipmentPage = lazy(() => import('@/modules/equipment/EquipmentPage'))
+const EquipmentDetailPage = lazy(() => import('@/modules/equipment/EquipmentDetailPage'))
 const MetrologyPage = lazy(() => import('@/modules/metrology/MetrologyPage'))
 const CardsPage = lazy(() => import('@/modules/fitting/CardsPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
@@ -152,6 +153,7 @@ export const router = createBrowserRouter([
           { path: 'metrology', element: <MetrologyPage /> },
           // 보유 장비 — 측정법이 「무엇으로 재나」 라면 여기는 「우리 것은 어디 있나」.
           { path: 'settings/equipment', element: <EquipmentPage /> },
+          { path: 'settings/equipment/:id', element: <EquipmentDetailPage /> },
 
           // 복합 물성 영역 — 개요 하나만 진짜 화면이고 나머지는 자리다(ADR 0026).
           { path: 'composite', element: <CompositeOverviewPage /> },

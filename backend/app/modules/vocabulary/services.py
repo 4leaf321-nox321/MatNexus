@@ -489,6 +489,19 @@ USE_BINDINGS = (Binding("product", "value", "term_id"), Binding("part", "value",
 #:
 #: 세 번째 칸은 WHERE 조각이고 `{t}` 가 그 표를 가리킨다. 표를 별칭으로 읽는
 #: 자리가 있어서(`drift`) 이름을 박아 둘 수 없다.
+#: 보유 장비. **부모부터 적는다** — 장비 유형이 장비의 부모다.
+#:
+#: 조직(`org`)의 부모는 사업부인데 장비는 사업부를 안 든다(조직의 부모를 타고
+#: 나온다). 그래서 여기 `parent_field` 가 없다 — 이 폼에서 새로 만든 조직은
+#: 부모가 빈 채로 생기고, 사업부는 기준정보 화면에서 잇는다. 부모를 모르는 값이
+#: 있어도 시스템은 멈추지 않는다(`VocabularyTerm.parent_term_id` 주석).
+EQUIPMENT_BINDINGS = (
+    Binding("instrument_type", "instrument_type", "type_term_id"),
+    Binding("instrument", "instrument", "instrument_term_id", parent_field="instrument_type"),
+    Binding("org", "org", "org_term_id"),
+    Binding("lab", "lab", "lab_term_id"),
+)
+
 _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
     ("materials", MATERIAL_BINDINGS, " AND {t}.deleted_at IS NULL"),
     ("samples", SAMPLE_BINDINGS, " AND {t}.deleted_at IS NULL"),
@@ -496,6 +509,9 @@ _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
     ("test_runs", TEST_RUN_BINDINGS, " AND {t}.deleted_at IS NULL"),
     # 용도는 재료에 매달려 있다. **지운 재료의 용도가 남으면** 「쓰는 곳」 이
     # 실제보다 커지고, 안 쓰는 용어가 피커 위쪽에 계속 앉아 있다.
+    # 장비는 소프트 삭제가 없다 — 폐기가 상태이고 행은 산다. 다만 **폐기한
+    # 장비도 그 값을 쓰고 있다**(지난 시험이 가리킨다). 그래서 안 거른다.
+    ("equipment_units", EQUIPMENT_BINDINGS, ""),
     (
         "material_uses",
         USE_BINDINGS,

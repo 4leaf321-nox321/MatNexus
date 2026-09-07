@@ -124,6 +124,14 @@ class EquipmentUnit(Base):
     instrument_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("instruments.id", ondelete="SET NULL"), index=True
     )
+    #: 기준정보 값의 **문자열 짝.** FK 만 두면 `apply_bindings` 기계를 못 탄다 —
+    #: 그러면 사용수 집계·개명 전파·어긋남 검사가 이 표만 비껴간다(피커의
+    #: 「쓰는 곳 N건」 이 조용히 틀려진다). 재료·시료·시편이 전부 이 모양이다.
+    instrument_type: Mapped[str | None] = mapped_column(String(120))
+    instrument: Mapped[str | None] = mapped_column(String(120))
+    org: Mapped[str | None] = mapped_column(String(120))
+    lab: Mapped[str | None] = mapped_column(String(120))
+
     #: 기준정보 「장비」 값. **`TestRun.instrument_term_id` 와 이어지는 고리다** —
     #: 시험 기록을 한 줄도 안 고치고 「이 물성을 낸 장비가 어느 방 몇 번인가」 가 풀린다.
     instrument_term_id: Mapped[uuid.UUID | None] = mapped_column(

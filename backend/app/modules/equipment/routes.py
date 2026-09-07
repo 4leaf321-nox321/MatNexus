@@ -57,11 +57,9 @@ router = APIRouter(prefix="/equipment", tags=["equipment"])
 #: 교정 만료가 임박했다고 볼 날 수. 30일이면 다음 달 계획에 넣을 수 있다.
 DUE_SOON_DAYS = 30
 
-#: 기준정보 축 이름. 한곳에 모아 둔다 — 흩어 적으면 오타가 조용히 새 축을 찾는다.
-AXIS_TYPE = "instrument_type"
-AXIS_INSTRUMENT = "instrument"
-AXIS_ORG = "org"
-AXIS_LAB = "lab"
+#: 기준정보로 해석되는 칸. **목록을 여기 적지 않는다** — 축이 늘면
+#: `vocabulary_services.EQUIPMENT_BINDINGS` 한 곳만 고친다.
+BOUND_FIELDS = tuple(one.field for one in vocabulary_services.EQUIPMENT_BINDINGS)
 
 
 def _require_manager(db: Session, user: User) -> None:
@@ -394,8 +392,19 @@ def create_unit(
     _require_manager(db, user)
     key = models.asset_key(payload.asset_no)
     _assert_asset_free(db, key)
-    unit = EquipmentUnit(**payload.model_dump(), asset_key=key)
+    data = payload.model_dump()
+    names = {field: data.pop(field) for field in BOUND_FIELDS}
+    unit = EquipmentUnit(**data, asset_key=key)
     db.add(unit)
+    # **기준정보는 기계가 해석한다** — 없는 이름은 만들고, FK 와 문자열을 함께
+    # 채우고, 사용수까지 옮긴다. 라우트가 직접 하면 축마다 같은 코드가 생긴다.
+    vocabulary_services.apply_bindings(
+        db,
+        unit,
+        vocabulary_services.EQUIPMENT_BINDINGS,
+        names,
+        created_by_id=user.id,
+    )
     db.commit()
     db.refresh(unit)
     return _load_out(db, [unit])[0]
@@ -416,8 +425,19 @@ def update_unit(
         key = models.asset_key(data["asset_no"])
         _assert_asset_free(db, key, skip=unit.id)
         unit.asset_key = key
+    # **보낸 것만 넘긴다.** `apply_bindings` 는 `values` 에 없는 필드를 안 건드린다 —
+    # 그것이 「안 보낸 것」 과 「비운 것」 의 구별이다.
+    names = {field: data.pop(field) for field in BOUND_FIELDS if field in data}
     for field, value in data.items():
         setattr(unit, field, value)
+    if names:
+        vocabulary_services.apply_bindings(
+            db,
+            unit,
+            vocabulary_services.EQUIPMENT_BINDINGS,
+            names,
+            created_by_id=user.id,
+        )
     db.commit()
     db.refresh(unit)
     return _load_out(db, [unit])[0]
@@ -579,9 +599,8 @@ def bulk_create(
     """
     _require_manager(db, user)
     axes = {
-        AXIS_TYPE: vocabulary_services.get_vocabulary(db, AXIS_TYPE),
-        AXIS_ORG: vocabulary_services.get_vocabulary(db, AXIS_ORG),
-        AXIS_LAB: vocabulary_services.get_vocabulary(db, AXIS_LAB),
+        one.field: vocabulary_services.get_vocabulary(db, one.slug)
+        for one in vocabulary_services.EQUIPMENT_BINDINGS
     }
     results: list[EquipmentBulkRowResult] = []
     created = skipped = errors = 0
@@ -608,22 +627,13 @@ def bulk_create(
                 skipped += 1
                 continue
 
-            values = row.model_dump(exclude={"type_name", "org_name", "lab_name"})
-            for name, slug, field in (
-                (row.type_name, AXIS_TYPE, "type_term_id"),
-                (row.org_name, AXIS_ORG, "org_term_id"),
-                (row.lab_name, AXIS_LAB, "lab_term_id"),
-            ):
-                if not name:
-                    continue
-                axis = axes[slug]
-                if vocabulary_services.resolve(db, axis, name) is None:
-                    fresh.append(f"{axis.label}: {name}")
-                if not payload.dry_run:
-                    term = vocabulary_services.resolve_or_create(
-                        db, axis, name, created_by_id=user.id
-                    )
-                    values[field] = term.id if term else None
+            values = row.model_dump()
+            names = {field: values.pop(field) for field in BOUND_FIELDS}
+            # **새로 생길 값을 먼저 센다.** 드라이런이 보여 줄 것이 이것이고,
+            # 오타 하나가 새 조직을 만드는 사고를 여기서 막는다.
+            for field, name in names.items():
+                if name and vocabulary_services.resolve(db, axes[field], name) is None:
+                    fresh.append(f"{axes[field].label}: {name}")
 
             if payload.dry_run:
                 results.append(
@@ -636,6 +646,13 @@ def bulk_create(
 
             unit = EquipmentUnit(**values, asset_key=key)
             db.add(unit)
+            vocabulary_services.apply_bindings(
+                db,
+                unit,
+                vocabulary_services.EQUIPMENT_BINDINGS,
+                names,
+                created_by_id=user.id,
+            )
             db.flush()
             if key:
                 seen.add(key)

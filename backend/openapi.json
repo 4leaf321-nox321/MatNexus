@@ -6179,7 +6179,7 @@
         "type": "object"
       },
       "EquipmentBulkRow": {
-        "description": "붙여넣기 표 한 줄. 기준정보는 **이름으로 온다** — 사람이 엑셀에 id 를 적지 않는다.",
+        "description": "붙여넣기 표 한 줄.\n\n등록 요청과 같은 모양이다 — 기준정보를 이름으로 받는 것이 이제 양쪽 공통이라\n따로 둘 칸이 없다.",
         "properties": {
           "asset_no": {
             "anyOf": [
@@ -6209,6 +6209,17 @@
             ],
             "title": "Commissioned On"
           },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
           "instrument_id": {
             "anyOf": [
               {
@@ -6221,19 +6232,18 @@
             ],
             "title": "Instrument Id"
           },
-          "instrument_term_id": {
+          "instrument_type": {
             "anyOf": [
               {
-                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Instrument Term Id"
+            "title": "Instrument Type"
           },
-          "lab_name": {
+          "lab": {
             "anyOf": [
               {
                 "type": "string"
@@ -6242,19 +6252,7 @@
                 "type": "null"
               }
             ],
-            "title": "Lab Name"
-          },
-          "lab_term_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lab Term Id"
+            "title": "Lab"
           },
           "location_detail": {
             "anyOf": [
@@ -6295,7 +6293,7 @@
             ],
             "title": "Notes"
           },
-          "org_name": {
+          "org": {
             "anyOf": [
               {
                 "type": "string"
@@ -6304,19 +6302,7 @@
                 "type": "null"
               }
             ],
-            "title": "Org Name"
-          },
-          "org_term_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Org Term Id"
+            "title": "Org"
           },
           "owner_contact": {
             "anyOf": [
@@ -6372,29 +6358,6 @@
             "default": "active",
             "title": "Status",
             "type": "string"
-          },
-          "type_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Type Name"
-          },
-          "type_term_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Type Term Id"
           },
           "vendor": {
             "anyOf": [
@@ -7186,6 +7149,17 @@
             ],
             "title": "Commissioned On"
           },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
           "instrument_id": {
             "anyOf": [
               {
@@ -7198,29 +7172,27 @@
             ],
             "title": "Instrument Id"
           },
-          "instrument_term_id": {
+          "instrument_type": {
             "anyOf": [
               {
-                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Instrument Term Id"
+            "title": "Instrument Type"
           },
-          "lab_term_id": {
+          "lab": {
             "anyOf": [
               {
-                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Lab Term Id"
+            "title": "Lab"
           },
           "location_detail": {
             "anyOf": [
@@ -7261,17 +7233,16 @@
             ],
             "title": "Notes"
           },
-          "org_term_id": {
+          "org": {
             "anyOf": [
               {
-                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Org Term Id"
+            "title": "Org"
           },
           "owner_contact": {
             "anyOf": [
@@ -7327,18 +7298,6 @@
             "default": "active",
             "title": "Status",
             "type": "string"
-          },
-          "type_term_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Type Term Id"
           },
           "vendor": {
             "anyOf": [
@@ -7673,6 +7632,17 @@
             ],
             "title": "Commissioned On"
           },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
           "instrument_id": {
             "anyOf": [
               {
@@ -7685,29 +7655,27 @@
             ],
             "title": "Instrument Id"
           },
-          "instrument_term_id": {
+          "instrument_type": {
             "anyOf": [
               {
-                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Instrument Term Id"
+            "title": "Instrument Type"
           },
-          "lab_term_id": {
+          "lab": {
             "anyOf": [
               {
-                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Lab Term Id"
+            "title": "Lab"
           },
           "location_detail": {
             "anyOf": [
@@ -7753,17 +7721,16 @@
             ],
             "title": "Notes"
           },
-          "org_term_id": {
+          "org": {
             "anyOf": [
               {
-                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Org Term Id"
+            "title": "Org"
           },
           "owner_contact": {
             "anyOf": [
@@ -7831,18 +7798,6 @@
               }
             ],
             "title": "Status"
-          },
-          "type_term_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Type Term Id"
           },
           "vendor": {
             "anyOf": [

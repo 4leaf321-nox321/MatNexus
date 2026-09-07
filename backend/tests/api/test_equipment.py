@@ -106,8 +106,8 @@ class Test조직_계층:
         둘 다 적게 하면 같은 답을 두 번 저장하고 언젠가 갈린다.
         """
         division = term(db, "division", "모빌리티")
-        org = term(db, "org", "생기연", parent=division)
-        made = make(client, admin_headers, org_term_id=str(org.id))
+        term(db, "org", "생기연", parent=division)
+        made = make(client, admin_headers, org="생기연")
         assert made["org"]["label"] == "생기연"
         assert made["org"]["parent_label"] == "모빌리티", "사업부가 함께 와야 한다"
 
@@ -115,10 +115,10 @@ class Test조직_계층:
         self, client: TestClient, admin_headers: dict[str, str], db: Session
     ) -> None:
         division = term(db, "division", "모빌리티")
-        first = term(db, "org", "생기연", parent=division)
-        second = term(db, "org", "재료연구팀", parent=division)
-        make(client, admin_headers, name="DMA", org_term_id=str(first.id))
-        make(client, admin_headers, name="UTM", org_term_id=str(second.id))
+        term(db, "org", "생기연", parent=division)
+        term(db, "org", "재료연구팀", parent=division)
+        make(client, admin_headers, name="DMA", org="생기연")
+        make(client, admin_headers, name="UTM", org="재료연구팀")
 
         got = client.get("/api/equipment/summary", headers=admin_headers).json()
         by_division = {row["label"]: row["total"] for row in got["by_division"]}
@@ -261,8 +261,8 @@ class Test붙여넣기:
             f"{UNITS}/bulk",
             json={
                 "rows": [
-                    {"name": "생기연 DMA", "asset_no": "A-1", "org_name": "생기연"},
-                    {"name": "대형 챔버", "asset_no": "A-2", "lab_name": "2공장 3층"},
+                    {"name": "생기연 DMA", "asset_no": "A-1", "org": "생기연"},
+                    {"name": "대형 챔버", "asset_no": "A-2", "lab": "2공장 3층"},
                 ]
             },
             headers=admin_headers,
@@ -280,7 +280,7 @@ class Test붙여넣기:
             f"{UNITS}/bulk",
             json={
                 "dry_run": False,
-                "rows": [{"name": "생기연 DMA", "asset_no": "A-1", "org_name": "생기연"}],
+                "rows": [{"name": "생기연 DMA", "asset_no": "A-1", "org": "생기연"}],
             },
             headers=admin_headers,
         ).json()

@@ -7701,7 +7701,10 @@ export interface components {
         };
         /**
          * EquipmentBulkRow
-         * @description 붙여넣기 표 한 줄. 기준정보는 **이름으로 온다** — 사람이 엑셀에 id 를 적지 않는다.
+         * @description 붙여넣기 표 한 줄.
+         *
+         *     등록 요청과 같은 모양이다 — 기준정보를 이름으로 받는 것이 이제 양쪽 공통이라
+         *     따로 둘 칸이 없다.
          */
         EquipmentBulkRow: {
             /** Asset No */
@@ -7712,14 +7715,14 @@ export interface components {
             };
             /** Commissioned On */
             commissioned_on?: string | null;
+            /** Instrument */
+            instrument?: string | null;
             /** Instrument Id */
             instrument_id?: string | null;
-            /** Instrument Term Id */
-            instrument_term_id?: string | null;
-            /** Lab Name */
-            lab_name?: string | null;
-            /** Lab Term Id */
-            lab_term_id?: string | null;
+            /** Instrument Type */
+            instrument_type?: string | null;
+            /** Lab */
+            lab?: string | null;
             /** Location Detail */
             location_detail?: string | null;
             /** Model */
@@ -7728,10 +7731,8 @@ export interface components {
             name: string;
             /** Notes */
             notes?: string | null;
-            /** Org Name */
-            org_name?: string | null;
-            /** Org Term Id */
-            org_term_id?: string | null;
+            /** Org */
+            org?: string | null;
             /** Owner Contact */
             owner_contact?: string | null;
             /** Owner Name */
@@ -7750,10 +7751,6 @@ export interface components {
              * @default active
              */
             status: string;
-            /** Type Name */
-            type_name?: string | null;
-            /** Type Term Id */
-            type_term_id?: string | null;
             /** Vendor */
             vendor?: string | null;
             /** Workspace Id */
@@ -7981,12 +7978,14 @@ export interface components {
             };
             /** Commissioned On */
             commissioned_on?: string | null;
+            /** Instrument */
+            instrument?: string | null;
             /** Instrument Id */
             instrument_id?: string | null;
-            /** Instrument Term Id */
-            instrument_term_id?: string | null;
-            /** Lab Term Id */
-            lab_term_id?: string | null;
+            /** Instrument Type */
+            instrument_type?: string | null;
+            /** Lab */
+            lab?: string | null;
             /** Location Detail */
             location_detail?: string | null;
             /** Model */
@@ -7995,8 +7994,8 @@ export interface components {
             name: string;
             /** Notes */
             notes?: string | null;
-            /** Org Term Id */
-            org_term_id?: string | null;
+            /** Org */
+            org?: string | null;
             /** Owner Contact */
             owner_contact?: string | null;
             /** Owner Name */
@@ -8015,8 +8014,6 @@ export interface components {
              * @default active
              */
             status: string;
-            /** Type Term Id */
-            type_term_id?: string | null;
             /** Vendor */
             vendor?: string | null;
             /** Workspace Id */
@@ -8103,12 +8100,14 @@ export interface components {
             } | null;
             /** Commissioned On */
             commissioned_on?: string | null;
+            /** Instrument */
+            instrument?: string | null;
             /** Instrument Id */
             instrument_id?: string | null;
-            /** Instrument Term Id */
-            instrument_term_id?: string | null;
-            /** Lab Term Id */
-            lab_term_id?: string | null;
+            /** Instrument Type */
+            instrument_type?: string | null;
+            /** Lab */
+            lab?: string | null;
             /** Location Detail */
             location_detail?: string | null;
             /** Model */
@@ -8117,8 +8116,8 @@ export interface components {
             name?: string | null;
             /** Notes */
             notes?: string | null;
-            /** Org Term Id */
-            org_term_id?: string | null;
+            /** Org */
+            org?: string | null;
             /** Owner Contact */
             owner_contact?: string | null;
             /** Owner Name */
@@ -8131,8 +8130,6 @@ export interface components {
             serial_no?: string | null;
             /** Status */
             status?: string | null;
-            /** Type Term Id */
-            type_term_id?: string | null;
             /** Vendor */
             vendor?: string | null;
             /** Workspace Id */

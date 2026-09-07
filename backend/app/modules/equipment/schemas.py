@@ -172,11 +172,15 @@ class EquipmentUnitCreate(BaseModel):
     status: str = "active"
 
     instrument_id: uuid.UUID | None = None
-    instrument_term_id: uuid.UUID | None = None
-    type_term_id: uuid.UUID | None = None
-    org_term_id: uuid.UUID | None = None
-    lab_term_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
+
+    #: **기준정보는 이름으로 받는다.** 화면의 피커가 이름으로 움직이고
+    #: (`VocabularyField`), 서버가 `apply_bindings` 로 해석해 FK 까지 채운다 —
+    #: 없는 이름이면 만든다(`open` 축). 사람이 폼에 id 를 적지 않는다.
+    instrument_type: str | None = None
+    instrument: str | None = None
+    org: str | None = None
+    lab: str | None = None
 
     vendor: str | None = None
     model: str | None = None
@@ -209,11 +213,12 @@ class EquipmentUnitUpdate(BaseModel):
     status: str | None = None
 
     instrument_id: uuid.UUID | None = None
-    instrument_term_id: uuid.UUID | None = None
-    type_term_id: uuid.UUID | None = None
-    org_term_id: uuid.UUID | None = None
-    lab_term_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
+
+    instrument_type: str | None = None
+    instrument: str | None = None
+    org: str | None = None
+    lab: str | None = None
 
     vendor: str | None = None
     model: str | None = None
@@ -238,11 +243,11 @@ class EquipmentUnitUpdate(BaseModel):
 
 
 class EquipmentBulkRow(EquipmentUnitCreate):
-    """붙여넣기 표 한 줄. 기준정보는 **이름으로 온다** — 사람이 엑셀에 id 를 적지 않는다."""
+    """붙여넣기 표 한 줄.
 
-    type_name: str | None = None
-    org_name: str | None = None
-    lab_name: str | None = None
+    등록 요청과 같은 모양이다 — 기준정보를 이름으로 받는 것이 이제 양쪽 공통이라
+    따로 둘 칸이 없다.
+    """
 
 
 class EquipmentBulkRequest(BaseModel):
