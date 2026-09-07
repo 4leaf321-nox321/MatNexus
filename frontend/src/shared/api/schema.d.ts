@@ -16974,6 +16974,8 @@ export interface operations {
                 name?: string | null;
                 /** @description 별칭만 부분 일치 */
                 alias?: string | null;
+                /** @description 재료번호. 패딩 없이 쳐도 된다 */
+                code?: string | null;
                 family?: string | null;
                 category?: string | null;
                 scope?: string;

@@ -392,6 +392,9 @@ _SEARCH_TEXT = (
 #: 느려지는 첫 번째 이유가 된다.
 MATERIAL_SORTS = {
     "created_at": Material.created_at,
+    # 재료번호. **채번 순서라 사실상 등록 순이다** — 그래도 따로 두는 이유는
+    # 사람이 목록에서 번호로 줄을 세우려 하기 때문이다(`M-000038` 을 찾을 때).
+    "code": Material.code,
     "record_name": Material.record_name,
     "alias": Material.alias,
     "family": Material.family,
@@ -519,6 +522,7 @@ def list_materials(
     ),
     name: str | None = Query(default=None, description="이름만 부분 일치"),
     alias: str | None = Query(default=None, description="별칭만 부분 일치"),
+    code: str | None = Query(default=None, description="재료번호. 패딩 없이 쳐도 된다"),
     family: str | None = None,
     category: str | None = None,
     scope: str = Query(default="all", pattern="^(all|mine|global)$"),
@@ -540,6 +544,17 @@ def list_materials(
         query = query.where(Material.record_name.ilike(f"%{name}%"))
     if alias:
         query = query.where(Material.alias.ilike(f"%{alias}%"))
+    if code:
+        # **`%...%` 로 훑지 않는다.** 번호는 유니크 B-tree 가 있고, 앞을 여는
+        # 패턴은 그 색인을 못 탄다 — 5만 행에서 전수 훑기가 된다(검색 쪽에서
+        # 이미 재 본 함정이다, `tests/architecture/test_search_index.py`).
+        #
+        # `M-38` 처럼 패딩 없이 쳐도 닿게 보정하고, 그 꼴이 아니면 앞 일치로 둔다.
+        shape = re.fullmatch(r"[Mm]-?(\d{1,6})", code.strip())
+        if shape is not None:
+            query = query.where(Material.code == f"M-{int(shape.group(1)):06d}")
+        else:
+            query = query.where(Material.code.ilike(f"{code.strip()}%"))
     # **없는 값으로 거르면 0건이어야 한다.** `== None` 으로 두면 그 축이 비어 있는
     # 재료가 전부 걸린다 — 조용히 틀리는 쪽이다.
     for value, slug, column in (

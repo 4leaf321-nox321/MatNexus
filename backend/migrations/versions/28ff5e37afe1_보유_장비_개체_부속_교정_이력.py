@@ -255,6 +255,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     for slug, label, order in (
         ("instrument_type", "장비 유형", 48),
+        ("instrument_maker", "장비 제조사", 49),
         ("lab", "시험실", 52),
     ):
         bind.execute(

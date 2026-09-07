@@ -327,7 +327,7 @@ export function EquipmentForm({
             만든다(3M·듀폰). 축을 나누면 같은 이름이 두 목록에 따로 쌓인다.
             기준정보의 「거래처」 가 아니라 「제조사」 인 것도 그래서다. */}
         <VocabularyField
-          slug="manufacturer"
+          slug="instrument_maker"
           label="제조사"
           value={draft.manufacturer}
           onChange={(next) => set('manufacturer', next)}

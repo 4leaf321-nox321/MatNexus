@@ -499,8 +499,9 @@ EQUIPMENT_BINDINGS = (
     Binding("instrument_type", "instrument_type", "type_term_id"),
     Binding("instrument", "instrument", "instrument_term_id", parent_field="instrument_type"),
     Binding("lab", "lab", "lab_term_id"),
-    # 재료·시료와 **같은 제조사 축**이다 — 같은 회사가 재료도 팔고 장비도 만든다.
-    Binding("manufacturer", "manufacturer", "manufacturer_term_id"),
+    # **재료 제조사와 다른 축이다**(`instrument_maker`). 칸 이름은 `manufacturer`
+    # 그대로다 — 장비를 만든 회사가 맞고, 다른 것은 어느 목록에서 고르냐다.
+    Binding("instrument_maker", "manufacturer", "manufacturer_term_id"),
 )
 
 _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (

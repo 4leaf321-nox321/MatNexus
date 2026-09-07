@@ -75,6 +75,7 @@ export default function MaterialsPage() {
   // 열 머리에서 거르는 것들. `q` 와 달리 **그 열만** 본다.
   const [name, setName] = useState('')
   const [alias, setAlias] = useState('')
+  const [code, setCode] = useState('')
   // **소속은 부서다.** 「전역인가 아닌가」 만 갈랐더니 부서가 여럿인 곳에서
   // 「고분자팀 재료」 를 못 찾았다(실사용 지적). 값은 `global` 이거나 부서 slug.
   const [scope, setScope] = useState('')
@@ -87,7 +88,15 @@ export default function MaterialsPage() {
     remember: 'materials',
     // **저장된 열이 지금도 정렬 가능한지 확인한다.** 표에서 열을 빼면
     // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
-    allowed: ['created_at', 'record_name', 'alias', 'family', 'category', 'spec_thickness'],
+    allowed: [
+      'created_at',
+      'code',
+      'record_name',
+      'alias',
+      'family',
+      'category',
+      'spec_thickness',
+    ],
   })
   const [removing, setRemoving] = useState(false)
   // 아래(시료·시편·시험)까지 함께 지울지. **기본은 안 지우는 쪽이다** — 고르고
@@ -111,6 +120,7 @@ export default function MaterialsPage() {
     q: applied,
     name,
     alias,
+    code,
     family,
     category,
     // 값이 `global` 이면 전역만, 부서 slug 면 그 부서만. 서버가 둘을 다른 칸으로
@@ -129,7 +139,7 @@ export default function MaterialsPage() {
       all
         ? fetchAll((limit, from) => materialsApi.list({ ...filters, limit, offset: from }))
         : materialsApi.list({ ...filters, limit: size, offset }),
-    [applied, name, alias, family, category, scope, sort, size, offset, all]
+    [applied, name, alias, code, family, category, scope, sort, size, offset, all]
   )
 
   async function removePicked() {
@@ -394,6 +404,21 @@ export default function MaterialsPage() {
                 {/* **열마다 그 열을 거른다.** 서버가 거르므로 다음 쪽까지
                     걸러진다 — 화면에서 거르면 이 쪽에 실린 것만 걸러지고,
                     사람은 그것을 「없다」 로 읽는다. */}
+                {/* **번호를 제 열로 뺐다.** 이름 아래 작게 붙여 두었더니 번호로
+                    줄을 세우거나 좁힐 수가 없었다 — 이름이 개명돼도 안 바뀌는
+                    유일한 손잡이인데 정작 그것으로는 못 찾았다. */}
+                <TableHead className={`w-[7.5rem] ${FILTER_HEAD}`}>
+                  <ColumnFilter
+                    label="번호"
+                    sort={handle('code')}
+                    value={code}
+                    onChange={(next) => {
+                      setCode(next)
+                      setOffset(0)
+                    }}
+                    placeholder="M-38"
+                  />
+                </TableHead>
                 <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
                   <ColumnFilter
                     label="이름"
@@ -495,6 +520,10 @@ export default function MaterialsPage() {
                       onChange={() => {}}
                     />
                   </TableCell>
+                  {/* 불변 고유 번호 — 이름은 기준정보 개명에 따라 바뀌지만 이건 안 바뀐다. */}
+                  <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">
+                    {material.code}
+                  </TableCell>
                   <TableCell className="font-mono text-xs">
                     <Link
                       to={`/materials/${material.id}`}
@@ -502,8 +531,6 @@ export default function MaterialsPage() {
                     >
                       <RecordName name={material.record_name} />
                     </Link>
-                    {/* 불변 고유 번호 — 이름은 기준정보 개명에 따라 바뀌지만 이건 안 바뀐다. */}
-                    <div className="text-muted-foreground">{material.code}</div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{material.alias ?? '—'}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{material.family}</TableCell>

@@ -26839,6 +26839,24 @@
             }
           },
           {
+            "description": "재료번호. 패딩 없이 쳐도 된다",
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "재료번호. 패딩 없이 쳐도 된다",
+              "title": "Code"
+            }
+          },
+          {
             "in": "query",
             "name": "family",
             "required": false,

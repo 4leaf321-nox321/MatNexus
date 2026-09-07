@@ -103,6 +103,8 @@ export interface MaterialQuery {
    *  「이름」 칸에 친 글자가 별칭에 걸려 나오면 그 칸이 무엇을 거르는지 알 수 없다. */
   name?: string
   alias?: string
+  /** 재료번호. `M-38` 처럼 패딩 없이 쳐도 서버가 보정한다. */
+  code?: string
   /** 분류로 좁힌다. 서버가 정확히 일치로 거른다. */
   family?: string
   category?: string

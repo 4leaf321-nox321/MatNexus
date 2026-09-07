@@ -52,6 +52,15 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     # 「제어 방식: 변위」 가 있으면 안 된다 — 유형마다 적을 것이 다르다. 시편 분류가
     # 규격의 칸을 정하는 것과 같은 자리다(`attribute_source="parent"`).
     ("instrument_type", "장비 유형", "open", 48, None, None),
+    # **재료 제조사와 가른다.** 「제조사」 축에 함께 두었다가 걷어냈다(2026-09-08).
+    # 합친 근거는 *"같은 회사가 재료도 팔고 장비도 만든다"* 였는데 실측하니
+    # **겹치는 회사가 0곳**이었다 — 포스코·현대제철과 ZwickRoell·ESPEC 은 다른
+    # 무리다. 거래처 축이 유통사와 주 벤더를 한 축에 두는 것은 **한 행이 두 역할을
+    # 오가기** 때문인데, 여기는 그렇지 않다.
+    #
+    # 잃는 것: 정말 둘 다 하는 회사가 나오면 두 목록에 따로 쌓이고 「그 회사와
+    # 얼마나 거래하나」 는 못 묻는다. 그 질문이 생기면 합치는 쪽으로 되돌린다.
+    ("instrument_maker", "장비 제조사", "open", 49, None, None),
     # **장비 이름.** 부모가 유형이다. 부모는 비워 둘 수 있으므로(`parent_term_id` 가
     # nullable) 이미 들어 있는 값들이 그대로 산다 — 유형은 나중에 채운다.
     ("instrument", "장비", "open", 50, "instrument_type", "parent"),
