@@ -93,3 +93,44 @@ def test_열쇠는_한_군데에만_있다() -> None:
     # 못 준다 — 그러면 이관이 재료를 못 찾는다.
     assert "material_grade" in IDENTITY_FIELDS
     assert "sample_lot_no" in IDENTITY_FIELDS
+
+
+#: 폼이 안 그려도 되는 칸과 그 사유. **비면 그 칸은 화면에서 영영 못 채운다.**
+_EQUIPMENT_NOT_IN_FORM = {
+    # 유형이 선언한 칸의 값. 폼이 따로 그린다(`fields` 절) — Draft 에 안 든다.
+    "attributes": "장비 유형이 정한 칸을 따로 그린다",
+    # 문헌 장비 카탈로그의 모델을 잇는 자리. **아직 화면이 없다** — 측정법 쪽에서
+    # 고르는 흐름이 필요하고, 그 화면이 생기면 여기서 지운다.
+    "instrument_id": "문헌 모델 잇기 화면이 아직 없다",
+}
+
+
+def test_장비_폼이_서버_칸을_다_그린다() -> None:
+    """**실측(2026-09-08): 시험실 칸이 화면에서 사라져 있었다.**
+
+    조직 칸을 부서 피커로 바꾸면서 잘라낸 범위가 넓어 옆의 시험실까지 지웠는데,
+    빌드도 시험도 통과했다 — 서버는 그 칸을 여전히 받고, 화면만 조용히 못 채우는
+    상태였다. 폐기일도 같은 이유로 처음부터 빠져 있었다.
+
+    **칸이 없어진 것은 오류로 안 보인다.** 그래서 기계가 센다.
+    """
+    from app.modules.equipment.schemas import EquipmentUnitCreate
+
+    form = (
+        Path(__file__).resolve().parents[3]
+        / "frontend"
+        / "src"
+        / "modules"
+        / "equipment"
+        / "EquipmentForm.tsx"
+    ).read_text(encoding="utf-8")
+    draft = re.search(r"interface Draft \{(.*?)\n\}", form, re.S)
+    assert draft is not None, "EquipmentForm 의 Draft 를 찾지 못했습니다."
+    drawn = {one.group(1) for one in re.finditer(r"^\s+(\w+):", draft.group(1), re.M)}
+
+    missing = set(EquipmentUnitCreate.model_fields) - drawn - set(_EQUIPMENT_NOT_IN_FORM)
+    assert not missing, (
+        f"서버는 받는데 폼이 안 그리는 칸: {sorted(missing)}. "
+        "화면에서 채울 수 없는 칸이 생겼습니다 — 그릴 자리를 넣거나, "
+        "안 그릴 이유를 `_EQUIPMENT_NOT_IN_FORM` 에 적으세요."
+    )

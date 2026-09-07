@@ -47,6 +47,8 @@ function Facts({ unit }: { unit: EquipmentUnit }) {
     ['상태', `${STATUS_LABELS[unit.status] ?? unit.status} · ${OWNERSHIP_LABELS[unit.ownership]}`],
     ['담당자', [unit.owner_name, unit.owner_contact].filter(Boolean).join(' · ') || null],
     ['도입일', unit.commissioned_on],
+    // 폐기일은 폐기한 장비에만 뜻이 있다 — 없으면 이 줄 자체가 안 선다.
+    ...((unit.retired_on ? [['폐기일', unit.retired_on]] : []) as [string, string][]),
     ['장비 파일 이름', unit.instrument_term?.label ?? null],
     ['비고', unit.notes],
   ]

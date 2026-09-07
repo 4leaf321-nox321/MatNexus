@@ -42,6 +42,7 @@ interface Draft {
   owner_name: string
   owner_contact: string
   commissioned_on: string
+  retired_on: string
   notes: string
 }
 
@@ -61,6 +62,7 @@ const EMPTY: Draft = {
   owner_name: '',
   owner_contact: '',
   commissioned_on: '',
+  retired_on: '',
   notes: '',
 }
 
@@ -82,6 +84,7 @@ function draftOf(unit: EquipmentUnit | null): Draft {
     owner_name: unit.owner_name ?? '',
     owner_contact: unit.owner_contact ?? '',
     commissioned_on: unit.commissioned_on ?? '',
+    retired_on: unit.retired_on ?? '',
     notes: unit.notes ?? '',
   }
 }
@@ -258,14 +261,22 @@ export function EquipmentForm({
             </Button>
           </div>
         </div>
+        {/* **시험실과 세부 위치는 짝이다.** 방 이름만으로는 큰 시험실에서 못
+            찾고, 세부 위치만으로는 어느 방인지 모른다. 그래서 나란히 둔다. */}
+        <VocabularyField
+          slug="lab"
+          label="시험실"
+          value={draft.lab}
+          onChange={(next) => set('lab', next)}
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Text
-          label="방 안 위치"
+          label="세부 위치"
           value={draft.location_detail}
           onChange={(next) => set('location_detail', next)}
-          placeholder="3번 벤치"
+          placeholder="3번 벤치 · 창가"
         />
         <div className="space-y-1.5">
           <Label>상태</Label>
@@ -335,6 +346,18 @@ export function EquipmentForm({
           onChange={(next) => set('commissioned_on', next)}
         />
       </div>
+
+      {/* **폐기일은 폐기일 때만 묻는다.** 늘 보이면 가동 중인 장비 폼에 빈 칸이
+          하나 더 있는 셈이고, 그 빈 칸은 「안 적은 것」 인지 「해당 없는 것」 인지
+          구별되지 않는다. */}
+      {draft.status === 'retired' && (
+        <Text
+          label="폐기일"
+          type="date"
+          value={draft.retired_on}
+          onChange={(next) => set('retired_on', next)}
+        />
+      )}
 
       {/* **유형이 선언한 칸만 그린다.** 자유 JSON 이 되면 같은 것을 사람마다
           다른 키로 적는다. 유형을 아직 안 고른 장비에는 이 절이 안 뜬다. */}
