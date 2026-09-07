@@ -28,6 +28,16 @@ const MODULES = path.join(SRC, 'modules')
  * 것은 도메인상 자연스럽다 — 재료 모듈이 그 선택기를 제공하고 시험이 조립한다.
  */
 const ALLOWED: Record<string, { to: string; why: string }[]> = {
+  equipment: [
+    {
+      to: 'vocabulary',
+      why: '장비 유형·시험실·제조사가 기준정보 값이다. 피커를 여기서 다시 만들면 `search`·`onCreate` 를 베껴 쓰게 되고 그중 하나만 고쳐지는 날이 온다 — `VocabularyField` 가 그것을 한곳으로 모으려고 있는 부품이고(그 파일 머리말), 시험 모듈도 같은 이유로 이 예외를 쓴다.',
+    },
+    {
+      to: 'workspaces',
+      why: '**조직이 곧 부서다.** 기준정보에 조직 축을 두려다 걷어냈다(2026-09-08) — 부서가 이미 본부→팀 트리라(`Workspace.parent_id`) 축을 하나 더 두면 같은 조직이 두 목록에 쌓이고 합칠 방법이 없다. 그러면 부서를 고르는 부품도 그쪽 것을 써야 한다(`WorkspacePicker`·`WorkspaceTreeDialog`). 여기서 다시 만들면 경로 표시와 트리 펴기가 두 벌로 갈린다.',
+    },
+  ],
   workbench: [
     {
       to: 'fitting',
