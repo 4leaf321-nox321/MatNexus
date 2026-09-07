@@ -96,7 +96,7 @@ function UnitRow({ unit }: { unit: EquipmentUnit }) {
         </div>
       </td>
       <td className="py-2 pr-3 text-sm">
-        {[unit.vendor, unit.model].filter(Boolean).join(' ') || dash}
+        {[unit.manufacturer, unit.model].filter(Boolean).join(' ') || dash}
       </td>
       <td className="py-2 pr-3 text-sm">{org ?? dash}</td>
       <td className="py-2 pr-3 text-sm">{place || dash}</td>

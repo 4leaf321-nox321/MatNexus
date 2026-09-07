@@ -35,7 +35,7 @@ const DMA = {
   name: '생기연 DMA',
   ownership: 'internal',
   status: 'active',
-  vendor: 'TA Instruments',
+  manufacturer: 'TA Instruments',
   model: 'Q800',
   serial_no: null,
   instrument_id: null,

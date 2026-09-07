@@ -95,7 +95,7 @@ class EquipmentPartOut(BaseModel):
     kind: str
     label: str
     asset_no: str | None
-    vendor: str | None
+    manufacturer: str | None
     model: str | None
     serial_no: str | None
     capacity: str | None
@@ -110,7 +110,7 @@ class EquipmentPartCreate(BaseModel):
     kind: str = "other"
     label: str = Field(min_length=1, max_length=120)
     asset_no: str | None = None
-    vendor: str | None = None
+    manufacturer: str | None = None
     model: str | None = None
     serial_no: str | None = None
     capacity: str | None = None
@@ -128,7 +128,7 @@ class EquipmentPartUpdate(BaseModel):
     kind: str | None = None
     label: str | None = None
     asset_no: str | None = None
-    vendor: str | None = None
+    manufacturer: str | None = None
     model: str | None = None
     serial_no: str | None = None
     capacity: str | None = None
@@ -151,7 +151,7 @@ class EquipmentUnitOut(BaseModel):
     ownership: str
     status: str
 
-    vendor: str | None
+    manufacturer: str | None
     model: str | None
     serial_no: str | None
     instrument_id: uuid.UUID | None
@@ -204,7 +204,7 @@ class EquipmentUnitCreate(BaseModel):
     instrument: str | None = None
     lab: str | None = None
 
-    vendor: str | None = None
+    manufacturer: str | None = None
     model: str | None = None
     serial_no: str | None = None
     location_detail: str | None = None
@@ -241,7 +241,7 @@ class EquipmentUnitUpdate(BaseModel):
     instrument: str | None = None
     lab: str | None = None
 
-    vendor: str | None = None
+    manufacturer: str | None = None
     model: str | None = None
     serial_no: str | None = None
     location_detail: str | None = None

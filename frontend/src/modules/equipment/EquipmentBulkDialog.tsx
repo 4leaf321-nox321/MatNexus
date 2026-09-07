@@ -38,7 +38,7 @@ const COLUMNS: (Column & { field: string })[] = [
     header: '세부 위치',
     help: '시험실 안 어디인가 — 3번 벤치 / 창가 / A열 4번 랙 …',
   },
-  { key: 'vendor', field: 'vendor', header: '제조사' },
+  { key: 'manufacturer', field: 'manufacturer', header: '제조사' },
   { key: 'model', field: 'model', header: '모델' },
   { key: 'serial_no', field: 'serial_no', header: '시리얼' },
   { key: 'owner_name', field: 'owner_name', header: '담당자' },

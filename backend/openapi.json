@@ -6265,6 +6265,17 @@
             ],
             "title": "Location Detail"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -6347,17 +6358,6 @@
             "default": "active",
             "title": "Status",
             "type": "string"
-          },
-          "vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vendor"
           },
           "workspace": {
             "anyOf": [
@@ -6664,6 +6664,17 @@
             "title": "Label",
             "type": "string"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -6708,17 +6719,6 @@
               }
             ],
             "title": "Serial No"
-          },
-          "vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vendor"
           }
         },
         "required": [
@@ -6776,6 +6776,17 @@
             "title": "Label",
             "type": "string"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -6825,17 +6836,6 @@
             "format": "uuid",
             "title": "Unit Id",
             "type": "string"
-          },
-          "vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vendor"
           }
         },
         "required": [
@@ -6844,7 +6844,7 @@
           "kind",
           "label",
           "asset_no",
-          "vendor",
+          "manufacturer",
           "model",
           "serial_no",
           "capacity",
@@ -6913,6 +6913,17 @@
             ],
             "title": "Label"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -6957,17 +6968,6 @@
               }
             ],
             "title": "Serial No"
-          },
-          "vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vendor"
           }
         },
         "title": "EquipmentPartUpdate",
@@ -7193,6 +7193,17 @@
             ],
             "title": "Location Detail"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -7275,17 +7286,6 @@
             "default": "active",
             "title": "Status",
             "type": "string"
-          },
-          "vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vendor"
           },
           "workspace": {
             "anyOf": [
@@ -7423,6 +7423,17 @@
             ],
             "title": "Location Detail"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -7522,17 +7533,6 @@
             "title": "Updated At",
             "type": "string"
           },
-          "vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vendor"
-          },
           "workspace_id": {
             "anyOf": [
               {
@@ -7552,7 +7552,7 @@
           "name",
           "ownership",
           "status",
-          "vendor",
+          "manufacturer",
           "model",
           "serial_no",
           "instrument_id",
@@ -7664,6 +7664,17 @@
             ],
             "title": "Location Detail"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -7763,17 +7774,6 @@
               }
             ],
             "title": "Status"
-          },
-          "vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vendor"
           },
           "workspace": {
             "anyOf": [

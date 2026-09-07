@@ -204,7 +204,7 @@ def _to_out(
         name=unit.name,
         ownership=unit.ownership,
         status=unit.status,
-        vendor=unit.vendor,
+        manufacturer=unit.manufacturer,
         model=unit.model,
         serial_no=unit.serial_no,
         instrument_id=unit.instrument_id,

@@ -7725,6 +7725,8 @@ export interface components {
             lab?: string | null;
             /** Location Detail */
             location_detail?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
             /** Model */
             model?: string | null;
             /** Name */
@@ -7749,8 +7751,6 @@ export interface components {
              * @default active
              */
             status: string;
-            /** Vendor */
-            vendor?: string | null;
             /** Workspace */
             workspace?: string | null;
         };
@@ -7844,6 +7844,8 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+            /** Manufacturer */
+            manufacturer?: string | null;
             /** Model */
             model?: string | null;
             /** Notes */
@@ -7852,8 +7854,6 @@ export interface components {
             removed_on?: string | null;
             /** Serial No */
             serial_no?: string | null;
-            /** Vendor */
-            vendor?: string | null;
         };
         /** EquipmentPartOut */
         EquipmentPartOut: {
@@ -7872,6 +7872,8 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+            /** Manufacturer */
+            manufacturer: string | null;
             /** Model */
             model: string | null;
             /** Notes */
@@ -7885,8 +7887,6 @@ export interface components {
              * Format: uuid
              */
             unit_id: string;
-            /** Vendor */
-            vendor: string | null;
         };
         /** EquipmentPartUpdate */
         EquipmentPartUpdate: {
@@ -7900,6 +7900,8 @@ export interface components {
             kind?: string | null;
             /** Label */
             label?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
             /** Model */
             model?: string | null;
             /** Notes */
@@ -7908,8 +7910,6 @@ export interface components {
             removed_on?: string | null;
             /** Serial No */
             serial_no?: string | null;
-            /** Vendor */
-            vendor?: string | null;
         };
         /** EquipmentSummaryOut */
         EquipmentSummaryOut: {
@@ -7986,6 +7986,8 @@ export interface components {
             lab?: string | null;
             /** Location Detail */
             location_detail?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
             /** Model */
             model?: string | null;
             /** Name */
@@ -8010,8 +8012,6 @@ export interface components {
              * @default active
              */
             status: string;
-            /** Vendor */
-            vendor?: string | null;
             /** Workspace */
             workspace?: string | null;
         };
@@ -8049,6 +8049,8 @@ export interface components {
             last_calibrated_on?: string | null;
             /** Location Detail */
             location_detail: string | null;
+            /** Manufacturer */
+            manufacturer: string | null;
             /** Model */
             model: string | null;
             /** Name */
@@ -8078,8 +8080,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Vendor */
-            vendor: string | null;
             /** Workspace Id */
             workspace_id: string | null;
         };
@@ -8106,6 +8106,8 @@ export interface components {
             lab?: string | null;
             /** Location Detail */
             location_detail?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
             /** Model */
             model?: string | null;
             /** Name */
@@ -8124,8 +8126,6 @@ export interface components {
             serial_no?: string | null;
             /** Status */
             status?: string | null;
-            /** Vendor */
-            vendor?: string | null;
             /** Workspace */
             workspace?: string | null;
         };

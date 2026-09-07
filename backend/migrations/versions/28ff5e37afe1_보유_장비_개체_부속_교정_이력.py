@@ -31,9 +31,10 @@ def upgrade() -> None:
         sa.Column("instrument_id", sa.UUID(), nullable=True),
         sa.Column("instrument_term_id", sa.UUID(), nullable=True),
         sa.Column("type_term_id", sa.UUID(), nullable=True),
-        sa.Column("vendor", sa.String(length=200), nullable=True),
+        sa.Column("manufacturer", sa.String(length=200), nullable=True),
         sa.Column("model", sa.String(length=200), nullable=True),
         sa.Column("serial_no", sa.String(length=120), nullable=True),
+        sa.Column("manufacturer_term_id", sa.UUID(), nullable=True),
         sa.Column("lab_term_id", sa.UUID(), nullable=True),
         sa.Column("location_detail", sa.String(length=200), nullable=True),
         sa.Column("ownership", sa.String(length=20), nullable=False),
@@ -81,6 +82,12 @@ def upgrade() -> None:
             ondelete="SET NULL",
         ),
         sa.ForeignKeyConstraint(
+            ["manufacturer_term_id"],
+            ["vocabulary_terms.id"],
+            name=op.f("fk_equipment_units_manufacturer_term_id_vocabulary_terms"),
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
             ["type_term_id"],
             ["vocabulary_terms.id"],
             name=op.f("fk_equipment_units_type_term_id_vocabulary_terms"),
@@ -116,6 +123,12 @@ def upgrade() -> None:
         ["lab_term_id"],
         unique=False,
     )
+    op.create_index(
+        op.f("ix_equipment_units_manufacturer_term_id"),
+        "equipment_units",
+        ["manufacturer_term_id"],
+        unique=False,
+    )
     op.create_index("ix_equipment_units_name", "equipment_units", ["name"], unique=False)
     op.create_index(
         op.f("ix_equipment_units_status"), "equipment_units", ["status"], unique=False
@@ -142,7 +155,7 @@ def upgrade() -> None:
         sa.Column("kind", sa.String(length=40), nullable=False),
         sa.Column("label", sa.String(length=120), nullable=False),
         sa.Column("asset_no", sa.String(length=80), nullable=True),
-        sa.Column("vendor", sa.String(length=200), nullable=True),
+        sa.Column("manufacturer", sa.String(length=200), nullable=True),
         sa.Column("model", sa.String(length=200), nullable=True),
         sa.Column("serial_no", sa.String(length=120), nullable=True),
         sa.Column("capacity", sa.String(length=120), nullable=True),
@@ -297,6 +310,9 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_equipment_units_status"), table_name="equipment_units")
     op.drop_index("ix_equipment_units_name", table_name="equipment_units")
     op.drop_index(op.f("ix_equipment_units_lab_term_id"), table_name="equipment_units")
+    op.drop_index(
+        op.f("ix_equipment_units_manufacturer_term_id"), table_name="equipment_units"
+    )
     op.drop_index(op.f("ix_equipment_units_instrument_term_id"), table_name="equipment_units")
     op.drop_index(op.f("ix_equipment_units_instrument_id"), table_name="equipment_units")
     op.drop_index(op.f("ix_equipment_units_asset_key"), table_name="equipment_units")

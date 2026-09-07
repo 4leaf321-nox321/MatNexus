@@ -42,7 +42,7 @@ function Facts({ unit }: { unit: EquipmentUnit }) {
     ['장비 유형', unit.instrument_type?.label ?? null],
     ['조직(부서)', org],
     ['시험실', [unit.lab?.label, unit.location_detail].filter(Boolean).join(' · ') || null],
-    ['제조사·모델', [unit.vendor, unit.model].filter(Boolean).join(' ') || null],
+    ['제조사·모델', [unit.manufacturer, unit.model].filter(Boolean).join(' ') || null],
     ['시리얼', unit.serial_no],
     ['상태', `${STATUS_LABELS[unit.status] ?? unit.status} · ${OWNERSHIP_LABELS[unit.ownership]}`],
     ['담당자', [unit.owner_name, unit.owner_contact].filter(Boolean).join(' · ') || null],

@@ -146,9 +146,21 @@ class EquipmentUnit(Base):
     )
 
     #: 모델 참조가 없을 때 직접 적는다. 있으면 비워 두고 그쪽을 읽는다.
-    vendor: Mapped[str | None] = mapped_column(String(200))
+    #:
+    #: **`vendor` 가 아니라 `manufacturer` 다.** 기준정보에는 축이 둘 있고 뜻이
+    #: 다르다 — 「제조사」(만든 회사)와 「거래처」(사고파는 회사). 장비를 만든 곳은
+    #: 제조사이고, 이름을 `vendor` 로 두면 재료 쪽 거래처 축과 헷갈린다.
+    manufacturer: Mapped[str | None] = mapped_column(String(200))
     model: Mapped[str | None] = mapped_column(String(200))
     serial_no: Mapped[str | None] = mapped_column(String(120))
+
+    #: 기준정보 「제조사」. 재료·시료가 쓰는 그 축이다 — 같은 회사가 재료도 팔고
+    #: 장비도 만든다(3M·듀폰). 축을 나누면 같은 이름이 두 목록에 쌓인다.
+    manufacturer_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("vocabulary_terms.id", ondelete="SET NULL"),
+        index=True,
+    )
 
     #: 기준정보 「시험실」.
     lab_term_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -228,7 +240,7 @@ class EquipmentPart(Base):
     asset_no: Mapped[str | None] = mapped_column(String(80))
     """부속에도 스티커가 붙는다. 다만 **유일 제약을 걸지 않는다** — 부속 번호 규칙이
     장비와 다른 곳이 있고, 없는 규칙을 강제하면 입력이 막힌다."""
-    vendor: Mapped[str | None] = mapped_column(String(200))
+    manufacturer: Mapped[str | None] = mapped_column(String(200))
     model: Mapped[str | None] = mapped_column(String(200))
     serial_no: Mapped[str | None] = mapped_column(String(120))
 

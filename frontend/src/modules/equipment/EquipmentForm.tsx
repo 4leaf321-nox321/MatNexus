@@ -36,7 +36,7 @@ interface Draft {
   workspace: string
   lab: string
   location_detail: string
-  vendor: string
+  manufacturer: string
   model: string
   serial_no: string
   owner_name: string
@@ -56,7 +56,7 @@ const EMPTY: Draft = {
   workspace: '',
   lab: '',
   location_detail: '',
-  vendor: '',
+  manufacturer: '',
   model: '',
   serial_no: '',
   owner_name: '',
@@ -78,7 +78,7 @@ function draftOf(unit: EquipmentUnit | null): Draft {
     workspace: unit.org?.slug ?? '',
     lab: unit.lab?.label ?? '',
     location_detail: unit.location_detail ?? '',
-    vendor: unit.vendor ?? '',
+    manufacturer: unit.manufacturer ?? '',
     model: unit.model ?? '',
     serial_no: unit.serial_no ?? '',
     owner_name: unit.owner_name ?? '',
@@ -218,7 +218,7 @@ export function EquipmentForm({
         />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <Text
           label="장비명 (필수)"
           value={draft.name}
@@ -233,36 +233,18 @@ export function EquipmentForm({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* **셋을 한 줄에 두면 좁은 화면에서 겹친다.** 피커는 트리거에 고른 값을
+          그리므로 최소 너비가 있고, 그것이 세 개면 640px 에서 서로 밀어낸다.
+          두 개씩 끊고, 무너지는 지점을 `sm`(640) 이 아니라 `md`(768) 로 늦춘다. */}
+      <div className="grid gap-3 md:grid-cols-2">
         <VocabularyField
           slug="instrument_type"
           label="장비 유형"
           value={draft.instrument_type}
           onChange={(next) => set('instrument_type', next)}
         />
-        {/* **조직은 부서에서 온다.** 기준정보에 축을 두려다 걷어냈다 — 부서가
-            이미 본부→팀 트리이고, 축을 하나 더 두면 같은 조직이 두 목록에 쌓인다.
-            여기서 새로 만들 수 없는 것도 그래서다(조직 화면에서 만든다).
-
-            **길이 둘이다.** 이름을 알면 검색이 빠르고, 모르면 조직도를 훑는다 —
-            조직이 수백이면 검색만으로는 「어느 본부 밑이더라」 를 못 푼다. */}
-        <div className="space-y-1.5">
-          <Label>조직 (부서)</Label>
-          <div className="flex gap-1">
-            <WorkspacePicker
-              className="flex-1"
-              workspaces={workspaces}
-              value={draft.workspace || null}
-              onChange={(next) => set('workspace', next)}
-              placeholder="부서 고르기"
-            />
-            <Button type="button" variant="outline" onClick={() => setTree(true)}>
-              상세
-            </Button>
-          </div>
-        </div>
         {/* **시험실과 세부 위치는 짝이다.** 방 이름만으로는 큰 시험실에서 못
-            찾고, 세부 위치만으로는 어느 방인지 모른다. 그래서 나란히 둔다. */}
+            찾고, 세부 위치만으로는 어느 방인지 모른다. */}
         <VocabularyField
           slug="lab"
           label="시험실"
@@ -271,7 +253,33 @@ export function EquipmentForm({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        {/* **조직은 부서에서 온다.** 기준정보에 축을 두려다 걷어냈다 — 부서가
+            이미 본부→팀 트리이고, 축을 하나 더 두면 같은 조직이 두 목록에 쌓인다.
+
+            **길이 둘이다.** 이름을 알면 검색이 빠르고, 모르면 조직도를 훑는다. */}
+        <div className="space-y-1.5">
+          <Label>조직 (부서)</Label>
+          {/* `min-w-0` 이 없으면 피커가 자기 내용 너비를 고집해 옆 칸을 밀어낸다 —
+              flex 자식의 기본 `min-width: auto` 때문이다. */}
+          <div className="flex min-w-0 gap-1">
+            <WorkspacePicker
+              className="min-w-0 flex-1"
+              workspaces={workspaces}
+              value={draft.workspace || null}
+              onChange={(next) => set('workspace', next)}
+              placeholder="부서 고르기"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => setTree(true)}
+            >
+              상세
+            </Button>
+          </div>
+        </div>
         {/* **어떻게 적는지를 자리표시가 보여 준다.** 「세부 위치」 라는 이름만으로는
             방 번호를 적는지 층을 적는지 사람마다 다르게 적는다. 기존 관례대로
             `/` 로 여럿 늘어놓고 `…` 로 「이런 식」 을 나타낸다. */}
@@ -281,6 +289,9 @@ export function EquipmentForm({
           onChange={(next) => set('location_detail', next)}
           placeholder="3번 벤치 / 창가 / A열 4번 랙 …"
         />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label>상태</Label>
           <select
@@ -311,8 +322,16 @@ export function EquipmentForm({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Text label="제조사" value={draft.vendor} onChange={(next) => set('vendor', next)} />
+      <div className="grid gap-3 md:grid-cols-3">
+        {/* **재료·시료와 같은 제조사 축이다** — 같은 회사가 재료도 팔고 장비도
+            만든다(3M·듀폰). 축을 나누면 같은 이름이 두 목록에 따로 쌓인다.
+            기준정보의 「거래처」 가 아니라 「제조사」 인 것도 그래서다. */}
+        <VocabularyField
+          slug="manufacturer"
+          label="제조사"
+          value={draft.manufacturer}
+          onChange={(next) => set('manufacturer', next)}
+        />
         <Text label="모델" value={draft.model} onChange={(next) => set('model', next)} />
         <Text
           label="시리얼"
@@ -331,7 +350,7 @@ export function EquipmentForm({
         onChange={(next) => set('instrument', next)}
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3">
         <Text
           label="담당자"
           value={draft.owner_name}
@@ -370,7 +389,7 @@ export function EquipmentForm({
           <div className="text-muted-foreground mb-2 text-xs">
             {draft.instrument_type} 이(가) 갖는 칸
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-3">
             {fields.map((field) => (
               <Text
                 key={field.key}
