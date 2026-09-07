@@ -599,6 +599,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/equipment/parts/{part_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Part */
+        delete: operations["delete_part_api_equipment_parts__part_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Part */
+        patch: operations["update_part_api_equipment_parts__part_id__patch"];
+        trace?: never;
+    };
+    "/api/equipment/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summary
+         * @description 사업부별·조직별·시험실별 현황.
+         *
+         *     **사업부는 조직의 부모를 타고 나온다** — 장비에 사업부를 따로 안 적기 때문이다.
+         */
+        get: operations["summary_api_equipment_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/equipment/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Units
+         * @description **서버가 상한을 강제한다**(AGENTS.md) — `le=200`.
+         *
+         *     폐기 장비는 기본으로 뺀다. 목록의 주 쓰임이 「지금 쓸 수 있는 것」 이라
+         *     폐기까지 섞이면 세는 숫자가 틀린다 — `status=retired` 로 골라 보면 나온다.
+         */
+        get: operations["list_units_api_equipment_units_get"];
+        put?: never;
+        /** Create Unit */
+        post: operations["create_unit_api_equipment_units_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/equipment/units/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Create
+         * @description 엑셀에서 복사해 붙인 표를 받는다 — **드라이런이 기본이다.**
+         *
+         *     기준정보는 **이름으로 온다**(사람이 엑셀에 id 를 적지 않는다). 없는 이름은
+         *     새 값이 되는데, 그것이 이 화면에서 가장 흔한 사고다(오타 하나가 새 조직을
+         *     만든다). 그래서 드라이런이 **무엇이 새로 생기는지 먼저 보여 준다.**
+         */
+        post: operations["bulk_create_api_equipment_units_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/equipment/units/{unit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Unit */
+        get: operations["get_unit_api_equipment_units__unit_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Unit
+         * @description **가리키는 것이 있으면 못 지운다.**
+         *
+         *     부속·교정은 함께 지워진다(장비를 떠나 살지 않는다). 그 밖의 참조가 있으면
+         *     거절하고 무엇이 가리키는지 말해 준다 — 폐기하려는 것이면 `status='retired'` 다.
+         */
+        delete: operations["delete_unit_api_equipment_units__unit_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Unit
+         * @description **보낸 것만 바꾼다.** 안 보낸 것과 비운 것을 구별한다(AGENTS.md).
+         */
+        patch: operations["update_unit_api_equipment_units__unit_id__patch"];
+        trace?: never;
+    };
+    "/api/equipment/units/{unit_id}/calibrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Calibrations
+         * @description 최근 것이 위로. **이력이라 지우지 않는다** — 고칠 일이 있으면 한 줄 더 넣는다.
+         */
+        get: operations["list_calibrations_api_equipment_units__unit_id__calibrations_get"];
+        put?: never;
+        /** Create Calibration */
+        post: operations["create_calibration_api_equipment_units__unit_id__calibrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/equipment/units/{unit_id}/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Parts */
+        get: operations["list_parts_api_equipment_units__unit_id__parts_get"];
+        put?: never;
+        /** Create Part */
+        post: operations["create_part_api_equipment_units__unit_id__parts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/blocks": {
         parameters: {
             query?: never;
@@ -7521,6 +7676,468 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /** EquipmentBulkRequest */
+        EquipmentBulkRequest: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Rows */
+            rows: components["schemas"]["EquipmentBulkRow"][];
+        };
+        /** EquipmentBulkResult */
+        EquipmentBulkResult: {
+            /** Created */
+            created: number;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Errors */
+            errors: number;
+            /** Rows */
+            rows: components["schemas"]["EquipmentBulkRowResult"][];
+            /** Skipped */
+            skipped: number;
+        };
+        /**
+         * EquipmentBulkRow
+         * @description 붙여넣기 표 한 줄. 기준정보는 **이름으로 온다** — 사람이 엑셀에 id 를 적지 않는다.
+         */
+        EquipmentBulkRow: {
+            /** Asset No */
+            asset_no?: string | null;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Commissioned On */
+            commissioned_on?: string | null;
+            /** Instrument Id */
+            instrument_id?: string | null;
+            /** Instrument Term Id */
+            instrument_term_id?: string | null;
+            /** Lab Name */
+            lab_name?: string | null;
+            /** Lab Term Id */
+            lab_term_id?: string | null;
+            /** Location Detail */
+            location_detail?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Org Name */
+            org_name?: string | null;
+            /** Org Term Id */
+            org_term_id?: string | null;
+            /** Owner Contact */
+            owner_contact?: string | null;
+            /** Owner Name */
+            owner_name?: string | null;
+            /**
+             * Ownership
+             * @default internal
+             */
+            ownership: string;
+            /** Retired On */
+            retired_on?: string | null;
+            /** Serial No */
+            serial_no?: string | null;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
+            /** Type Name */
+            type_name?: string | null;
+            /** Type Term Id */
+            type_term_id?: string | null;
+            /** Vendor */
+            vendor?: string | null;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /** EquipmentBulkRowResult */
+        EquipmentBulkRowResult: {
+            /** Index */
+            index: number;
+            /** Name */
+            name: string;
+            /** New Terms */
+            new_terms?: string[];
+            /** Outcome */
+            outcome: string;
+            /** Reason */
+            reason?: string | null;
+            /** Unit Id */
+            unit_id?: string | null;
+        };
+        /** EquipmentCalibrationCreate */
+        EquipmentCalibrationCreate: {
+            /** Agency */
+            agency?: string | null;
+            /** Certificate No */
+            certificate_no?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Part Id */
+            part_id?: string | null;
+            /**
+             * Performed On
+             * Format: date
+             */
+            performed_on: string;
+            /**
+             * Result
+             * @default pass
+             */
+            result: string;
+            /** Valid Until */
+            valid_until?: string | null;
+        };
+        /** EquipmentCalibrationOut */
+        EquipmentCalibrationOut: {
+            /** Agency */
+            agency: string | null;
+            /** Certificate No */
+            certificate_no: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Notes */
+            notes: string | null;
+            /** Part Id */
+            part_id: string | null;
+            /**
+             * Performed On
+             * Format: date
+             */
+            performed_on: string;
+            /** Result */
+            result: string;
+            /** Storage Path */
+            storage_path: string | null;
+            /**
+             * Unit Id
+             * Format: uuid
+             */
+            unit_id: string;
+            /** Valid Until */
+            valid_until: string | null;
+        };
+        /** EquipmentPartCreate */
+        EquipmentPartCreate: {
+            /** Asset No */
+            asset_no?: string | null;
+            /** Capacity */
+            capacity?: string | null;
+            /** Installed On */
+            installed_on?: string | null;
+            /**
+             * Kind
+             * @default other
+             */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Model */
+            model?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Removed On */
+            removed_on?: string | null;
+            /** Serial No */
+            serial_no?: string | null;
+            /** Vendor */
+            vendor?: string | null;
+        };
+        /** EquipmentPartOut */
+        EquipmentPartOut: {
+            /** Asset No */
+            asset_no: string | null;
+            /** Capacity */
+            capacity: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Installed On */
+            installed_on: string | null;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Model */
+            model: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Removed On */
+            removed_on: string | null;
+            /** Serial No */
+            serial_no: string | null;
+            /**
+             * Unit Id
+             * Format: uuid
+             */
+            unit_id: string;
+            /** Vendor */
+            vendor: string | null;
+        };
+        /** EquipmentPartUpdate */
+        EquipmentPartUpdate: {
+            /** Asset No */
+            asset_no?: string | null;
+            /** Capacity */
+            capacity?: string | null;
+            /** Installed On */
+            installed_on?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Removed On */
+            removed_on?: string | null;
+            /** Serial No */
+            serial_no?: string | null;
+            /** Vendor */
+            vendor?: string | null;
+        };
+        /** EquipmentSummaryOut */
+        EquipmentSummaryOut: {
+            /** By Division */
+            by_division: components["schemas"]["EquipmentSummaryRow"][];
+            /** By Lab */
+            by_lab: components["schemas"]["EquipmentSummaryRow"][];
+            /** By Org */
+            by_org: components["schemas"]["EquipmentSummaryRow"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * EquipmentSummaryRow
+         * @description 현황 한 줄. 사업부·조직 어느 층으로도 묶인다.
+         */
+        EquipmentSummaryRow: {
+            /** Active */
+            active: number;
+            /** Calibration Due */
+            calibration_due: number;
+            /** External */
+            external: number;
+            /** Idle */
+            idle: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Maintenance */
+            maintenance: number;
+            /** Retired */
+            retired: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EquipmentTermRef
+         * @description 기준정보 값 하나 — id 와 함께 **보여 줄 이름**을 싣는다.
+         *
+         *     화면이 이름을 얻으려고 축 목록을 따로 부르지 않게 한다. 부모(사업부)를 함께
+         *     싣는 이유도 같다 — 조직만 오면 「어느 사업부인가」 를 화면이 또 물어야 한다.
+         */
+        EquipmentTermRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Parent Label */
+            parent_label?: string | null;
+        };
+        /** EquipmentUnitCreate */
+        EquipmentUnitCreate: {
+            /** Asset No */
+            asset_no?: string | null;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Commissioned On */
+            commissioned_on?: string | null;
+            /** Instrument Id */
+            instrument_id?: string | null;
+            /** Instrument Term Id */
+            instrument_term_id?: string | null;
+            /** Lab Term Id */
+            lab_term_id?: string | null;
+            /** Location Detail */
+            location_detail?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Org Term Id */
+            org_term_id?: string | null;
+            /** Owner Contact */
+            owner_contact?: string | null;
+            /** Owner Name */
+            owner_name?: string | null;
+            /**
+             * Ownership
+             * @default internal
+             */
+            ownership: string;
+            /** Retired On */
+            retired_on?: string | null;
+            /** Serial No */
+            serial_no?: string | null;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
+            /** Type Term Id */
+            type_term_id?: string | null;
+            /** Vendor */
+            vendor?: string | null;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
+         * EquipmentUnitOut
+         * @description 목록과 상세가 같은 모양을 쓴다 — 목록에서 본 것이 상세에 없으면 놀란다.
+         */
+        EquipmentUnitOut: {
+            /** Asset No */
+            asset_no: string | null;
+            /** Attributes */
+            attributes: {
+                [key: string]: unknown;
+            };
+            /** Calibration Valid Until */
+            calibration_valid_until?: string | null;
+            /** Commissioned On */
+            commissioned_on: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instrument Id */
+            instrument_id: string | null;
+            instrument_term?: components["schemas"]["EquipmentTermRef"] | null;
+            instrument_type?: components["schemas"]["EquipmentTermRef"] | null;
+            lab?: components["schemas"]["EquipmentTermRef"] | null;
+            /** Last Calibrated On */
+            last_calibrated_on?: string | null;
+            /** Location Detail */
+            location_detail: string | null;
+            /** Model */
+            model: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string | null;
+            org?: components["schemas"]["EquipmentTermRef"] | null;
+            /** Owner Contact */
+            owner_contact: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Ownership */
+            ownership: string;
+            /**
+             * Part Count
+             * @default 0
+             */
+            part_count: number;
+            /** Retired On */
+            retired_on: string | null;
+            /** Serial No */
+            serial_no: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Vendor */
+            vendor: string | null;
+            /** Workspace Id */
+            workspace_id: string | null;
+        };
+        /**
+         * EquipmentUnitUpdate
+         * @description **전부 선택이다.** 보낸 것만 바꾼다(`exclude_unset`).
+         */
+        EquipmentUnitUpdate: {
+            /** Asset No */
+            asset_no?: string | null;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Commissioned On */
+            commissioned_on?: string | null;
+            /** Instrument Id */
+            instrument_id?: string | null;
+            /** Instrument Term Id */
+            instrument_term_id?: string | null;
+            /** Lab Term Id */
+            lab_term_id?: string | null;
+            /** Location Detail */
+            location_detail?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Org Term Id */
+            org_term_id?: string | null;
+            /** Owner Contact */
+            owner_contact?: string | null;
+            /** Owner Name */
+            owner_name?: string | null;
+            /** Ownership */
+            ownership?: string | null;
+            /** Retired On */
+            retired_on?: string | null;
+            /** Serial No */
+            serial_no?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Type Term Id */
+            type_term_id?: string | null;
+            /** Vendor */
+            vendor?: string | null;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
         /** ExpiredOut */
         ExpiredOut: {
             /** Bytes */
@@ -9220,6 +9837,17 @@ export interface components {
             test_types: components["schemas"]["TallyOut"][];
             /** Waiting To Process */
             waiting_to_process: number;
+        };
+        /** Page[EquipmentUnitOut] */
+        Page_EquipmentUnitOut_: {
+            /** Items */
+            items: components["schemas"]["EquipmentUnitOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /** Page[InboxItemOut] */
         Page_InboxItemOut_: {
@@ -13864,6 +14492,422 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogSummaryOut"];
+                };
+            };
+        };
+    };
+    delete_part_api_equipment_parts__part_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_part_api_equipment_parts__part_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentPartUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentPartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summary_api_equipment_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentSummaryOut"];
+                };
+            };
+        };
+    };
+    list_units_api_equipment_units_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                status?: string | null;
+                ownership?: string | null;
+                org_term_id?: string | null;
+                lab_term_id?: string | null;
+                type_term_id?: string | null;
+                calibration_due?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_EquipmentUnitOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_unit_api_equipment_units_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentUnitCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentUnitOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_create_api_equipment_units_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentBulkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentBulkResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_unit_api_equipment_units__unit_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentUnitOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_unit_api_equipment_units__unit_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_unit_api_equipment_units__unit_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentUnitUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentUnitOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_calibrations_api_equipment_units__unit_id__calibrations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentCalibrationOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_calibration_api_equipment_units__unit_id__calibrations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentCalibrationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentCalibrationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_parts_api_equipment_units__unit_id__parts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentPartOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_part_api_equipment_units__unit_id__parts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentPartCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentPartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,0 +1,294 @@
+"""보유 장비 API 의 입출력.
+
+**「안 보낸 것」과 「비운 것」을 구별한다**(AGENTS.md). 수정은 `exclude_unset` 으로
+받으므로, 담당자를 안 보내면 그대로 두고 `null` 을 보내면 지운다. 안 구별하면
+장비명만 고쳐 저장할 때마다 나머지 칸이 지워진다.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
+
+from app.modules.equipment.models import (
+    CALIBRATION_RESULTS,
+    OWNERSHIPS,
+    PART_KINDS,
+    STATUSES,
+)
+
+
+def _one_of(value: str, allowed: tuple[str, ...], what: str) -> str:
+    if value not in allowed:
+        raise ValueError(
+            f"{what} 는 {', '.join(allowed)} 중 하나여야 합니다 (받은 값: {value})"
+        )
+    return value
+
+
+class EquipmentTermRef(BaseModel):
+    """기준정보 값 하나 — id 와 함께 **보여 줄 이름**을 싣는다.
+
+    화면이 이름을 얻으려고 축 목록을 따로 부르지 않게 한다. 부모(사업부)를 함께
+    싣는 이유도 같다 — 조직만 오면 「어느 사업부인가」 를 화면이 또 물어야 한다.
+    """
+
+    id: uuid.UUID
+    label: str
+    parent_id: uuid.UUID | None = None
+    parent_label: str | None = None
+
+
+class EquipmentCalibrationOut(BaseModel):
+    id: uuid.UUID
+    unit_id: uuid.UUID
+    part_id: uuid.UUID | None
+    performed_on: date
+    valid_until: date | None
+    agency: str | None
+    certificate_no: str | None
+    result: str
+    storage_path: str | None
+    notes: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentCalibrationCreate(BaseModel):
+    part_id: uuid.UUID | None = None
+    performed_on: date
+    valid_until: date | None = None
+    agency: str | None = None
+    certificate_no: str | None = None
+    result: str = "pass"
+    notes: str | None = None
+
+    @field_validator("result")
+    @classmethod
+    def _result(cls, value: str) -> str:
+        return _one_of(value, CALIBRATION_RESULTS, "교정 결과")
+
+
+class EquipmentPartOut(BaseModel):
+    id: uuid.UUID
+    unit_id: uuid.UUID
+    kind: str
+    label: str
+    asset_no: str | None
+    vendor: str | None
+    model: str | None
+    serial_no: str | None
+    capacity: str | None
+    installed_on: date | None
+    removed_on: date | None
+    notes: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentPartCreate(BaseModel):
+    kind: str = "other"
+    label: str = Field(min_length=1, max_length=120)
+    asset_no: str | None = None
+    vendor: str | None = None
+    model: str | None = None
+    serial_no: str | None = None
+    capacity: str | None = None
+    installed_on: date | None = None
+    removed_on: date | None = None
+    notes: str | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def _kind(cls, value: str) -> str:
+        return _one_of(value, PART_KINDS, "부속 종류")
+
+
+class EquipmentPartUpdate(BaseModel):
+    kind: str | None = None
+    label: str | None = None
+    asset_no: str | None = None
+    vendor: str | None = None
+    model: str | None = None
+    serial_no: str | None = None
+    capacity: str | None = None
+    installed_on: date | None = None
+    removed_on: date | None = None
+    notes: str | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def _kind(cls, value: str | None) -> str | None:
+        return None if value is None else _one_of(value, PART_KINDS, "부속 종류")
+
+
+class EquipmentUnitOut(BaseModel):
+    """목록과 상세가 같은 모양을 쓴다 — 목록에서 본 것이 상세에 없으면 놀란다."""
+
+    id: uuid.UUID
+    asset_no: str | None
+    name: str
+    ownership: str
+    status: str
+
+    vendor: str | None
+    model: str | None
+    serial_no: str | None
+    instrument_id: uuid.UUID | None
+
+    #: 기준정보들. 이름까지 실어 화면이 축을 따로 안 부르게 한다.
+    instrument_type: EquipmentTermRef | None = None
+    instrument_term: EquipmentTermRef | None = None
+    org: EquipmentTermRef | None = None
+    lab: EquipmentTermRef | None = None
+
+    location_detail: str | None
+    workspace_id: uuid.UUID | None
+    owner_name: str | None
+    owner_contact: str | None
+    commissioned_on: date | None
+    retired_on: date | None
+    attributes: dict[str, Any]
+    notes: str | None
+
+    #: 최근 교정과 그 유효기간. **목록에서 만료를 보려면 여기 있어야 한다** —
+    #: 장비마다 교정 목록을 따로 부르면 목록 한 장에 N+1 이 난다.
+    last_calibrated_on: date | None = None
+    calibration_valid_until: date | None = None
+    part_count: int = 0
+
+    created_at: datetime
+    updated_at: datetime
+
+
+class EquipmentUnitCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    asset_no: str | None = None
+    ownership: str = "internal"
+    status: str = "active"
+
+    instrument_id: uuid.UUID | None = None
+    instrument_term_id: uuid.UUID | None = None
+    type_term_id: uuid.UUID | None = None
+    org_term_id: uuid.UUID | None = None
+    lab_term_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID | None = None
+
+    vendor: str | None = None
+    model: str | None = None
+    serial_no: str | None = None
+    location_detail: str | None = None
+    owner_name: str | None = None
+    owner_contact: str | None = None
+    commissioned_on: date | None = None
+    retired_on: date | None = None
+    attributes: dict[str, Any] = Field(default_factory=dict)
+    notes: str | None = None
+
+    @field_validator("ownership")
+    @classmethod
+    def _ownership(cls, value: str) -> str:
+        return _one_of(value, OWNERSHIPS, "소속 구분")
+
+    @field_validator("status")
+    @classmethod
+    def _status(cls, value: str) -> str:
+        return _one_of(value, STATUSES, "상태")
+
+
+class EquipmentUnitUpdate(BaseModel):
+    """**전부 선택이다.** 보낸 것만 바꾼다(`exclude_unset`)."""
+
+    name: str | None = None
+    asset_no: str | None = None
+    ownership: str | None = None
+    status: str | None = None
+
+    instrument_id: uuid.UUID | None = None
+    instrument_term_id: uuid.UUID | None = None
+    type_term_id: uuid.UUID | None = None
+    org_term_id: uuid.UUID | None = None
+    lab_term_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID | None = None
+
+    vendor: str | None = None
+    model: str | None = None
+    serial_no: str | None = None
+    location_detail: str | None = None
+    owner_name: str | None = None
+    owner_contact: str | None = None
+    commissioned_on: date | None = None
+    retired_on: date | None = None
+    attributes: dict[str, Any] | None = None
+    notes: str | None = None
+
+    @field_validator("ownership")
+    @classmethod
+    def _ownership(cls, value: str | None) -> str | None:
+        return None if value is None else _one_of(value, OWNERSHIPS, "소속 구분")
+
+    @field_validator("status")
+    @classmethod
+    def _status(cls, value: str | None) -> str | None:
+        return None if value is None else _one_of(value, STATUSES, "상태")
+
+
+class EquipmentBulkRow(EquipmentUnitCreate):
+    """붙여넣기 표 한 줄. 기준정보는 **이름으로 온다** — 사람이 엑셀에 id 를 적지 않는다."""
+
+    type_name: str | None = None
+    org_name: str | None = None
+    lab_name: str | None = None
+
+
+class EquipmentBulkRequest(BaseModel):
+    rows: list[EquipmentBulkRow]
+    dry_run: bool = True
+    """**드라이런이 기본이다.** 붙여넣기는 한 번에 수십 줄이 들어오는 자리라,
+    무엇이 만들어지고 무엇이 걸리는지 보고 나서 누르게 한다(이관기와 같은 규율)."""
+
+
+class EquipmentBulkRowResult(BaseModel):
+    index: int
+    name: str
+    outcome: str
+    """`create` · `skip` · `error`."""
+    reason: str | None = None
+    unit_id: uuid.UUID | None = None
+    #: 이 줄이 새로 만들 기준정보 값. **미리 보여 준다** — 오타가 새 값을 만드는
+    #: 것이 이 화면에서 가장 흔한 사고다.
+    new_terms: list[str] = Field(default_factory=list)
+
+
+class EquipmentBulkResult(BaseModel):
+    dry_run: bool
+    created: int
+    skipped: int
+    errors: int
+    rows: list[EquipmentBulkRowResult]
+
+
+class EquipmentSummaryRow(BaseModel):
+    """현황 한 줄. 사업부·조직 어느 층으로도 묶인다."""
+
+    key: str
+    label: str
+    total: int
+    active: int
+    maintenance: int
+    idle: int
+    retired: int
+    external: int
+    calibration_due: int
+    """교정 유효기간이 지났거나 30일 안에 끝나는 대수."""
+
+
+class EquipmentSummaryOut(BaseModel):
+    total: int
+    by_division: list[EquipmentSummaryRow]
+    by_org: list[EquipmentSummaryRow]
+    by_lab: list[EquipmentSummaryRow]

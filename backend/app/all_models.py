@@ -21,6 +21,11 @@ from app.modules.catalog.models import (
     CatalogSource,
     CatalogValue,
 )
+from app.modules.equipment.models import (
+    EquipmentCalibration,
+    EquipmentPart,
+    EquipmentUnit,
+)
 from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.guide.models import (
@@ -64,6 +69,9 @@ __all__ = [
     "CatalogValue",
     "Curve",
     "EnsembleResult",
+    "EquipmentCalibration",
+    "EquipmentPart",
+    "EquipmentUnit",
     "ExportProfile",
     "FormatProfile",
     "GroupResult",

@@ -22,6 +22,7 @@ from app.modules.accounts import routes as accounts_routes
 from app.modules.audit import routes as audit_routes
 from app.modules.auth import routes as auth_routes
 from app.modules.catalog import routes as catalog_routes
+from app.modules.equipment import routes as equipment_routes
 from app.modules.fitting import routes as fitting_routes
 from app.modules.grouping import routes as grouping_routes
 from app.modules.guide import routes as guide_routes
@@ -88,6 +89,7 @@ def _api_router() -> APIRouter:
     router.include_router(viscoelastic_routes.router)
     router.include_router(workbench_routes.router)
     router.include_router(statistics_routes.router)
+    router.include_router(equipment_routes.router)
     router.include_router(fitting_routes.router)
     router.include_router(grouping_routes.router)
     router.include_router(units_routes.router)
