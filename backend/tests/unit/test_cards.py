@@ -76,13 +76,22 @@ class TestDeck:
         assert cards.unknown({"elastic": {}, "viscoelastic": {}}) == ()
 
     def test_덱에_실리는_블록은_렌더러가_정한다(self) -> None:
-        """**경화식은 덱에 안 실린다** — 표로 나가고 식은 주석에만 남는다.
+        """**등록된 솔버가 실제로 요구하는 것에서 나온다** — 블록이 스스로 선언하지 않는다.
 
-        전에는 블록이 스스로 그렇게 선언했는데, 실제로 쓰이는지와 어긋날 수
-        있었다. 지금은 등록된 솔버들이 실제로 요구하는 것에서 나온다."""
+        전에는 블록이 스스로 그렇게 선언했는데, 실제로 쓰이는지와 어긋날 수 있었다.
+
+        ## 「경화식은 덱에 안 실린다」 를 여기서 단정하지 않는다
+
+        오래 참이었다 — 표로 나가고 식은 주석에만 남았다(`*MAT_024`·Abaqus
+        `*PLASTIC` 둘 다 표를 받는다). 그런데 **매개변수 모델은 표가 아니라 계수를
+        받는다**: `*MAT_098`(Simplified Johnson-Cook)은 A·B·n·C 를 직접 먹으므로
+        경화 블록이 덱으로 간다(`extensions/johnson_cook_static`, 2026-09-07).
+
+        그 렌더러는 **확장**이라 이 목록은 무엇이 읽혔느냐에 따라 달라진다. 여기서
+        참·거짓을 단정하면 워커에 무엇이 먼저 실렸느냐로 시험이 갈린다 — 실제로
+        갈렸다. 확장이 실린 상태의 단정은 그 확장의 시험이 한다."""
         in_decks = export.blocks_in_decks()
         assert {"elastic", "table", "viscoelastic", "hyperelastic"} <= in_decks
-        assert "hardening" not in in_decks
 
 
 class TestFormats:

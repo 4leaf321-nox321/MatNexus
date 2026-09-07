@@ -434,8 +434,10 @@ class Test블록선언:
             assert item["label"] and item["help"]
             for one in (*item["produces"], *item["rows"]):
                 assert one["label"], one["key"]
-        # **경화식은 덱에 안 실린다** — 표로 나가고 식은 주석에만 남는다.
-        assert by_key["hardening"]["in_deck"] is False
+        # **경화 블록도 덱에 실린다** — `*MAT_098`(Simplified Johnson-Cook)이 표가
+        # 아니라 계수 A·B·n·C 를 직접 받기 때문이다. 오래 False 였다(표로 나가고
+        # 식은 주석에만 남았다). 앱이 기동 때 확장을 읽으므로 여기서는 확정적이다.
+        assert by_key["hardening"]["in_deck"] is True
         assert by_key["viscoelastic"]["in_deck"] is True
 
 
