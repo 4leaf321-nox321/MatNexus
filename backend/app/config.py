@@ -107,6 +107,29 @@ class Settings(BaseSettings):
     )
     """개발 서버(Vite)용. 배포에서는 동일 출처라 필요 없다."""
 
+    # --- 의미 검색 --------------------------------------------------------
+    #
+    # **셋 다 없어도 검색은 돈다.** 「일치·포함·비슷」 은 DB 만으로 돌고, 여기 것들이
+    # 갖춰지면 「비슷」 에 **뜻이 비슷한 것**이 얹힌다. 선택 부품을 필수로 만들면
+    # 엔진이 죽는 날 검색이 통째로 죽는다.
+
+    embedding_backend: str = "off"
+    """`off` · `mock` · `ollama`.
+
+    기본이 `off` 인 이유: 설치 안 한 곳에서 켜져 있으면 매 검색이 11434 를 두드리다
+    타임아웃한다 — 느려진 이유를 아무도 모른다. 켜는 것은 명시적이어야 한다.
+    `mock` 은 텍스트 해시로 결정적 벡터를 만든다(시험·CI 용, 뜻은 없다)."""
+
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    embedding_model: str = "bge-m3"
+    embedding_dim: int = 1024
+    """**모델이 내는 차원과 같아야 한다.** 다르면 저장할 때 거절한다 — 섞이면
+    거리 계산이 조용히 엉뚱해진다. `setup_ollama.ps1` 이 실제 차원을 찍어 준다."""
+
+    embedding_timeout_s: float = 30.0
+    embedding_batch: int = 16
+    """한 번에 보낼 청크 수. 크게 잡으면 한 번의 실패로 잃는 것이 많아진다."""
+
 
 class RuntimeSettingProvider(Protocol):
     """DB 기반 런타임 설정의 자리. Phase 1에서 runtime_settings 테이블이 구현한다."""

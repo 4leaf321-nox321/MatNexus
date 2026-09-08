@@ -1265,6 +1265,40 @@ async def find_by_property(
 
 
 @mcp.tool()
+async def search_all(
+    ctx: Context,
+    q: str,
+    mode: str = "contains",
+    kind: str | None = None,
+) -> dict[str, Any]:
+    """**한 칸으로 무엇이든 찾는다** — 이름·번호를 아는 게 없을 때 첫 손잡이.
+
+    재료·시료·시편·시험·장비·문헌 물성·핸드북까지 한 번에 본다. 어느 종류인지
+    모른 채 물어도 된다 — 그게 이 도구의 목적이다.
+
+    ## 방식 셋
+
+        exact      정확히 그 이름. 번호·코드를 알 때
+        contains   그 말이 들어간 것 (기본)
+        similar    오타·표기 흔들림 + **뜻이 가까운 것**
+
+    `similar` 는 의미 검색이 켜져 있으면 뜻까지 본다 — 응답의 `meaning` 이 그것을
+    말한다. **거짓이면 글자만 본 것이다**: 못 찾았을 때 「그런 자료가 없다」 고
+    단정하지 말고, 뜻 검색이 꺼져 있었다고 함께 말해라.
+
+    ## 결과를 읽을 때
+
+    `matched` 가 왜 걸렸는지다 — `exact` · `prefix` · `contains` · `similar`(글자가
+    비슷) · `meaning`(뜻이 가까움) · `both`. **`meaning` 으로만 걸린 것은 낱말이
+    하나도 안 겹친다** — 사람에게 옮길 때 그 점을 밝혀라.
+
+    `kind` 로 한 종류만 좁히면 더 많이 준다. 종류 목록은 `get_ontology` 에 있고,
+    거기서 나온 `id` 로 `related`·`find_path` 를 이어 부를 수 있다.
+    """
+    return await _get(ctx, "/search", {"q": q, "mode": mode, "kind": kind})
+
+
+@mcp.tool()
 async def get_ontology(ctx: Context) -> dict[str, Any]:
     """**이 시스템의 지도** — 무엇이 있고 무엇이 무엇과 이어지나.
 

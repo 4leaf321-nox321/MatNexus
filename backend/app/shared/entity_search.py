@@ -44,7 +44,7 @@ from app.database import Base
 from app.modules.accounts.models import User
 from app.modules.materials.models import Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.shared import graph, relations
+from app.shared import graph, relations, semantic
 
 #: 모드 셋.
 MODES = ("exact", "contains", "similar")
@@ -62,6 +62,9 @@ PER_KIND_FOCUSED = 50
 
 #: 두 글자 이하는 트라이그램이 안 나온다(세 글자씩 쪼개므로). 「포함」 으로 떨어뜨린다.
 TRIGRAM_MIN = 3
+
+#: RRF 상수. 순위 하나가 점수를 독점하지 않게 누르는 값으로, 60 이 통용된다.
+RRF_K = 60
 
 
 @dataclass(frozen=True)
@@ -284,5 +287,82 @@ def search(
             )
     # 가장 잘 맞은 것이 있는 묶음이 위로. 종류 차례를 고정하면 재료가 늘 위에
     # 서고, 장비를 찾는 사람은 매번 아래로 훑어야 한다.
+    if mode == "similar":
+        made = _fuse_meaning(db, user, needle, made, wanted)
+
     made.sort(key=lambda one: -max(hit.score for hit in one.hits))
     return made
+
+
+def _fuse_meaning(
+    db: Session,
+    user: User,
+    needle: str,
+    groups: list[Group],
+    wanted: list[str],
+) -> list[Group]:
+    """**뜻이 가까운 것**을 「비슷」 에 얹는다(3단계).
+
+    새 모드를 만들지 않는다 — 사람에게 「비슷」 은 이미 하나의 뜻이고, 모드가 넷이
+    되면 무엇을 고를지가 새 문제가 된다.
+
+    ## RRF 로 합친다
+
+    두 순위(글자·뜻)는 점수의 단위가 다르다. 트라이그램 0.42 와 코사인 0.71 을
+    직접 견주면 어느 쪽이 나은지 말할 근거가 없다. **순위만 본다** —
+    `1/(60+등수)` 를 더하면 한쪽에만 걸린 것도 위로 올라온다.
+
+    ## 못 쓰면 조용히 넘어간다
+
+    엔진이 죽었다고 검색 화면이 오류를 띄우면 사람은 **검색이 고장 났다**고 읽는다.
+    """
+    matches = semantic.search(db, needle)
+    if not matches:
+        return groups
+
+    by_kind: dict[str, Group] = {one.kind: one for one in groups}
+    for rank, match in enumerate(matches):
+        if match.kind not in relations.KINDS or match.kind not in wanted:
+            continue
+        kind = relations.KINDS[match.kind]
+        # **권한을 다시 건다.** 조각 표에는 부서가 없다 — 여기서 안 걸면 색인이
+        # 곧 유출 통로가 된다.
+        if not graph.fetch(db, user, match.kind, [match.entity_id]):
+            continue
+
+        group = by_kind.get(match.kind)
+        if group is None:
+            group = Group(kind=kind.slug, label=kind.label, module=kind.module)
+            by_kind[match.kind] = group
+            groups.append(group)
+
+        bonus = 1.0 / (RRF_K + rank)
+        for at, hit in enumerate(group.hits):
+            if hit.id == match.entity_id:
+                # 양쪽에 걸린 것 — 두 순위를 더해 위로 올린다.
+                group.hits[at] = Hit(
+                    kind=hit.kind,
+                    id=hit.id,
+                    name=hit.name,
+                    score=hit.score + bonus,
+                    matched="both",
+                    parent_kind=hit.parent_kind,
+                    parent_id=hit.parent_id,
+                )
+                break
+        else:
+            group.hits.append(
+                Hit(
+                    kind=match.kind,
+                    id=match.entity_id,
+                    name=match.title or match.snippet[:60],
+                    # 글자로는 안 걸린 것이다. 트라이그램 상위와 나란히 서되
+                    # 위로 서지는 않게 둔다 — 왜 떴는지 사람이 못 읽기 때문이다.
+                    score=0.35 + bonus,
+                    matched="meaning",
+                )
+            )
+    for group in groups:
+        group.hits.sort(key=lambda one: -one.score)
+        del group.hits[PER_KIND_FOCUSED:]
+    return groups

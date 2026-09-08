@@ -214,6 +214,24 @@ KINDS: dict[str, EntityKind] = {
             module="vocabulary",
             name_columns=("value",),
         ),
+        # 핸드북 — **의미 검색의 코퍼스가 여기다**(전체 검색 3단계). 이름으로도
+        # 찾히고(트라이그램), 본문은 뜻으로 찾힌다.
+        EntityKind(
+            slug="guide_document",
+            label="핸드북 문서",
+            table="guide_documents",
+            module="guide",
+            name_columns=("title",),
+            soft_delete=True,
+        ),
+        EntityKind(
+            slug="guide_section",
+            label="핸드북 절",
+            table="guide_sections",
+            module="guide",
+            name_columns=("title",),
+            soft_delete=True,
+        ),
         EntityKind(
             slug="workspace",
             label="조직",
@@ -324,6 +342,14 @@ RELATIONS: dict[str, RelationType] = {
             src="material",
             dst="catalog_material",
             source=via("catalog_links", "material_id", "catalog_material_id"),
+        ),
+        RelationType(
+            slug="section_of",
+            label="이 절이 든 문서",
+            inverse_label="이 문서의 절",
+            src="guide_section",
+            dst="guide_document",
+            source=fk("guide_sections", "document_id"),
         ),
         RelationType(
             slug="same_as",

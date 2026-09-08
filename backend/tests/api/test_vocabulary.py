@@ -1096,7 +1096,9 @@ class Test점검을_저절로_돌린다:
     def test_때가_되면_워커가_넣고_아니면_안_넣는다(self, db: Session) -> None:
         from app.jobs import kinds, schedule
 
-        assert schedule.enqueue_due(db) == [kinds.VOCABULARY_CHECK_DRIFT]
+        # 주기 작업은 여럿이다(검색 색인도 그중 하나) — 이 시험이 보는 것은
+        # 「어긋남 점검이 때가 되면 들어가나」 뿐이다.
+        assert kinds.VOCABULARY_CHECK_DRIFT in schedule.enqueue_due(db)
         db.commit()
 
         # **바로 또 넣지 않는다.** 워커는 콘솔 앱이라 자주 껐다 켜진다 — 재기동

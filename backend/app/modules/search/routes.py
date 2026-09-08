@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.search.schemas import SearchGroupOut, SearchHitOut, SearchOut
-from app.shared import entity_search, relations
+from app.shared import entity_search, relations, semantic
 from app.shared.auth import current_user
 from app.shared.errors import AppError
 
@@ -35,6 +35,9 @@ def search(
 
     `similar` 는 오타·표기 흔들림까지 본다(`pg_trgm`). 「비슷한 것」이 「그 말이 든
     것」보다 위에 서지 않도록 점수를 눌러 둔다.
+
+    **의미 검색이 켜져 있으면** `similar` 에 뜻이 가까운 것까지 얹힌다(RRF 융합).
+    응답의 `meaning` 이 그것을 말한다 — 꺼져 있어도 검색은 그대로 돈다.
     """
     if mode not in entity_search.MODES:
         raise AppError(
@@ -54,6 +57,7 @@ def search(
     return SearchOut(
         query=q,
         mode=mode,
+        meaning=mode == "similar" and semantic.available(db),
         total=sum(len(one.hits) for one in groups),
         groups=[
             SearchGroupOut(

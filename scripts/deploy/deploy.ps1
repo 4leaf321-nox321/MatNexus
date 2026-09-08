@@ -463,6 +463,27 @@ if ($SkipMigrations) {
     Pop-Location
 }
 
+# --- 의미 검색 표 (선택 부품) -------------------------------------------------
+#
+# **마이그레이션에 넣을 수 없다.** `search_chunks` 는 `vector` 열을 갖고, 그것은
+# pgvector 확장이 있어야 만들어진다 — 마이그레이션에 넣으면 확장을 아직 안 넣은
+# 서버에서 `alembic upgrade` 가 통째로 실패하고, 검색의 곁가지 때문에 릴리스가
+# 못 나간다.
+#
+# 그래서 **있으면 만들고 없으면 조용히 넘어가는** 스크립트를 매번 부른다. 나중에
+# `install_pgvector.ps1` 로 확장을 넣으면 그다음 배포에서 표가 저절로 생긴다.
+if ($SkipMigrations) {
+    Write-Log '의미 검색 표 건너뜀 (마이그레이션과 함께)'
+} else {
+    Push-Location (Join-Path $AppPath 'backend')
+    try {
+        Invoke-Native '의미 검색 표 준비 실패' { & $backendPython scripts\ensure_semantic_schema.py }
+    } catch {
+        Write-Log "의미 검색 표 준비 실패 (배포는 계속합니다): $_"
+    }
+    Pop-Location
+}
+
 # **무엇이 깔렸는지 남긴다.** 태그를 지정하지 않고 배포하면 나중에 되짚을 방법이
 # 없었다. 패키지가 자기 버전을 들고 오므로 여기서 읽어 적기만 하면 된다.
 $installed = Get-Content (Join-Path $AppPath 'BUILD_INFO.txt') -ErrorAction SilentlyContinue |

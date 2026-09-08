@@ -3322,6 +3322,9 @@ export interface paths {
          *
          *     `similar` 는 오타·표기 흔들림까지 본다(`pg_trgm`). 「비슷한 것」이 「그 말이 든
          *     것」보다 위에 서지 않도록 점수를 눌러 둔다.
+         *
+         *     **의미 검색이 켜져 있으면** `similar` 에 뜻이 가까운 것까지 얹힌다(RRF 융합).
+         *     응답의 `meaning` 이 그것을 말한다 — 꺼져 있어도 검색은 그대로 돈다.
          */
         get: operations["search_api_search_get"];
         put?: never;
@@ -11868,7 +11871,7 @@ export interface components {
             kind: string;
             /**
              * Matched
-             * @description 왜 걸렸나 — exact · prefix · contains · similar
+             * @description 왜 걸렸나 — exact · prefix · contains · similar · meaning · both
              */
             matched: string;
             /** Name */
@@ -11884,6 +11887,12 @@ export interface components {
         SearchOut: {
             /** Groups */
             groups: components["schemas"]["SearchGroupOut"][];
+            /**
+             * Meaning
+             * @description 뜻으로도 찾았나. 거짓이면 글자만 본 것이다 — 화면이 그것을 말해야 사람이 「왜 이건 안 나오지」 를 엔진 탓인지 데이터 탓인지 안다
+             * @default false
+             */
+            meaning: boolean;
             /** Mode */
             mode: string;
             /** Query */

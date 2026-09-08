@@ -26,6 +26,22 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+#: 앱이 직접 만드는 표 — **자동 생성이 건드리면 안 된다.**
+#:
+#: `search_chunks` 는 pgvector 가 있을 때만 생기는 선택 부품이라(`shared/semantic.py`)
+#: `Base.metadata` 에 없다. 그대로 두면 autogenerate 가 「메타데이터에 없는 표」 로
+#: 보고 **지우는 마이그레이션**을 만든다 — 그리고 그것은 확장이 있는 서버에서
+#: 조용히 색인을 날린다.
+APP_MANAGED_TABLES = {"search_chunks"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):  # type: ignore[no-untyped-def]
+    if type_ == "table" and name in APP_MANAGED_TABLES:
+        return False
+    if type_ == "index" and getattr(obj, "table", None) is not None:
+        return obj.table.name not in APP_MANAGED_TABLES
+    return True
+
 
 def run_migrations_offline() -> None:
     context.configure(
@@ -34,6 +50,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -50,6 +67,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

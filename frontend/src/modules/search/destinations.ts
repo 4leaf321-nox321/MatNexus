@@ -40,6 +40,13 @@ export function destinationOf(hit: SearchHit): Destination {
       return { href: `/catalog/${hit.id}` }
     case 'equipment_unit':
       return { href: `/settings/equipment/${hit.id}` }
+    case 'guide_document':
+      return { href: `/guide/${hit.id}`, approximate: true }
+    // 핸드북 절은 문서 키·절 키로 열린다(`/guide/:documentKey/:sectionKey`). 검색이
+    // 든 것은 UUID 라 그대로는 못 연다 — 목록에서 찾게 보낸다. 문서 키까지 실어
+    // 오게 하려면 서버가 절마다 문서를 한 번 더 읽어야 해서, 값에 비해 비싸다.
+    case 'guide_section':
+      return { href: '/guide', approximate: true }
 
     // 품은 것으로 데려간다 — 제 화면이 없다.
     case 'sample':
@@ -76,4 +83,7 @@ export const MATCH_LABELS: Record<string, string> = {
   prefix: '앞이 일치',
   contains: '포함',
   similar: '비슷함',
+  // 3단계 — 글자는 안 겹치는데 뜻이 가깝다. **이 표시가 없으면 엉뚱한 결과로 읽힌다.**
+  meaning: '뜻이 가까움',
+  both: '글자·뜻 둘 다',
 }

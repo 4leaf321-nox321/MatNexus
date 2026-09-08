@@ -23,7 +23,11 @@ from app.jobs.models import Job
 #:
 #: 6시간인 이유: 어긋남은 며칠 단위로 보는 것이라 분 단위로 볼 이유가 없고,
 #: 점검이 전 표를 훑으므로 자주 돌리면 그것대로 비용이다.
-PERIODIC: tuple[tuple[str, int], ...] = ((kinds.VOCABULARY_CHECK_DRIFT, 6 * 3600),)
+PERIODIC: tuple[tuple[str, int], ...] = (
+    (kinds.VOCABULARY_CHECK_DRIFT, 6 * 3600),
+    # 하루 한 번. 핸드북은 자주 안 바뀌고, 임베딩은 공짜가 아니다.
+    (kinds.SEARCH_REINDEX, 24 * 3600),
+)
 
 
 def enqueue_due(db: Session) -> list[str]:

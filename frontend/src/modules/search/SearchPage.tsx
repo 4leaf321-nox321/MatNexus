@@ -44,13 +44,14 @@ interface Answer {
   query: string
   mode: string
   total: number
+  meaning: boolean
   groups: Group[]
 }
 
 const MODES = [
   { key: 'exact', label: '일치', hint: '정확히 그 이름' },
   { key: 'contains', label: '포함', hint: '그 말이 들어간 것' },
-  { key: 'similar', label: '비슷', hint: '오타·표기 흔들림까지' },
+  { key: 'similar', label: '비슷', hint: '오타·표기 흔들림, 뜻이 가까운 것까지' },
 ] as const
 
 export default function SearchPage() {
@@ -130,6 +131,11 @@ export default function SearchPage() {
           ))}
         </div>
         <span className="text-muted-foreground text-xs">{active.hint}</span>
+        {/* **꺼져 있다는 것을 말한다.** 안 말하면 「왜 이건 안 나오지」 를 데이터
+            탓으로 돌리게 된다 — 실제로는 엔진이 없는 것이다. */}
+        {mode === 'similar' && data && !data.meaning && (
+          <span className="text-muted-foreground text-xs">· 뜻 검색 꺼짐(글자만 봅니다)</span>
+        )}
       </div>
 
       {focus && (

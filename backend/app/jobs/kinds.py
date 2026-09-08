@@ -42,3 +42,11 @@ VOCABULARY_CHECK_DRIFT = "vocabulary.check_drift"
 #: 반입 요청은 파일만 받고 끝낸다(업로드와 같은 이유). 워커가 종류를 감지하고
 #: 읽어서 시편 후보를 찾고, 하나면 시험을 만들고 아니면 사람을 기다린다.
 PIPELINES_PARSE_INBOX = "pipelines.parse_inbox"
+
+#: 검색 색인 다시 만들기 — payload 없음
+#:
+#: 산문(핸드북 절·문헌 재료 설명)을 임베딩해 `search_chunks` 를 채운다. **저장
+#: 요청 안에서 안 하는 이유**: 임베딩 왕복이 수백 ms 라 글 쓰는 사람이 그 대가를
+#: 매번 치르게 된다. 주기로도 돈다 — 절이 바뀌었는데 색인이 옛 글이면 검색이
+#: 조용히 옛 답을 준다.
+SEARCH_REINDEX = "search.reindex"

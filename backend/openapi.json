@@ -16933,7 +16933,7 @@
             "type": "string"
           },
           "matched": {
-            "description": "왜 걸렸나 — exact · prefix · contains · similar",
+            "description": "왜 걸렸나 — exact · prefix · contains · similar · meaning · both",
             "title": "Matched",
             "type": "string"
           },
@@ -16986,6 +16986,12 @@
             },
             "title": "Groups",
             "type": "array"
+          },
+          "meaning": {
+            "default": false,
+            "description": "뜻으로도 찾았나. 거짓이면 글자만 본 것이다 — 화면이 그것을 말해야 사람이 「왜 이건 안 나오지」 를 엔진 탓인지 데이터 탓인지 안다",
+            "title": "Meaning",
+            "type": "boolean"
           },
           "mode": {
             "title": "Mode",
@@ -31174,7 +31180,7 @@
     },
     "/api/search": {
       "get": {
-        "description": "**한 칸에 치면 무엇이든 찾는다.**\n\n사람은 「SECC180」 이 재료인지 시료인지 시험 이름인지 모른 채 친다. 대상은\n온톨로지 종류 전부이고, 안 보이는 것은 결과에도 없다 — **검색에 뜨는데 열면\n404** 가 되면 안 되기 때문이다.\n\n`similar` 는 오타·표기 흔들림까지 본다(`pg_trgm`). 「비슷한 것」이 「그 말이 든\n것」보다 위에 서지 않도록 점수를 눌러 둔다.",
+        "description": "**한 칸에 치면 무엇이든 찾는다.**\n\n사람은 「SECC180」 이 재료인지 시료인지 시험 이름인지 모른 채 친다. 대상은\n온톨로지 종류 전부이고, 안 보이는 것은 결과에도 없다 — **검색에 뜨는데 열면\n404** 가 되면 안 되기 때문이다.\n\n`similar` 는 오타·표기 흔들림까지 본다(`pg_trgm`). 「비슷한 것」이 「그 말이 든\n것」보다 위에 서지 않도록 점수를 눌러 둔다.\n\n**의미 검색이 켜져 있으면** `similar` 에 뜻이 가까운 것까지 얹힌다(RRF 융합).\n응답의 `meaning` 이 그것을 말한다 — 꺼져 있어도 검색은 그대로 돈다.",
         "operationId": "search_api_search_get",
         "parameters": [
           {

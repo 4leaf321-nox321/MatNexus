@@ -10,7 +10,9 @@ class SearchHitOut(BaseModel):
     id: str
     name: str
     score: float
-    matched: str = Field(description="왜 걸렸나 — exact · prefix · contains · similar")
+    matched: str = Field(
+        description="왜 걸렸나 — exact · prefix · contains · similar · meaning · both"
+    )
     parent_kind: str | None = None
     parent_id: str | None = None
 
@@ -30,3 +32,8 @@ class SearchOut(BaseModel):
     mode: str
     groups: list[SearchGroupOut]
     total: int
+    meaning: bool = Field(
+        default=False,
+        description="뜻으로도 찾았나. 거짓이면 글자만 본 것이다 — 화면이 그것을 말해야 "
+        "사람이 「왜 이건 안 나오지」 를 엔진 탓인지 데이터 탓인지 안다",
+    )
