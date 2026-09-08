@@ -554,3 +554,78 @@ class Specimen(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True, nullable=True
     )
+
+
+# --- 모델 파라미터 집합 (ADR 0029) -------------------------------------------
+#
+# **여럿이 한 벌이어야 뜻이 있는 값**이 사는 자리다 — Anand 9개·Prony 항·Ogden 계수.
+# 값 하나짜리(항복강도·밀도)는 선언 물성이 담고, 묶음은 이쪽이 담는다.
+#
+# **여기 있는 이유**: 모듈끼리는 `models` 만 서로 본다(AGENTS.md). 적합 모듈이 카드에
+# 실으려면 이 모델을 봐야 하는데, 별도 파일로 두었더니 경계 시험이 막았다 — 규칙이
+# 맞다. FK 는 본질적으로 서로를 참조하므로 예외가 `models` 하나인 것이다.
+#
+# **왜 카드가 아니라 재료에 두나**(ADR 0029 D3): 카드에 바로 넣으면 ① 물성 탭에서
+# 안 보이고 ② 논문마다 다른 벌을 나란히 못 두고 ③ 불변(파라미터)과 가변(카드)을
+# 섞는다. 처리 결과가 남고 카드가 채택하는 것과 같은 모양이다(ADR 0007).
+#
+# **단위를 환산하지 않는다**: 문헌의 이 값들은 SI 가 아니라 그 항의 원래 단위다
+# (h0 = 150000 MPa 이지 1.5e11 Pa 가 아니다). 대신 단위를 항마다 함께 적는다.
+
+#: 어디서 왔나. 선언 물성의 출처 목록과 뜻을 맞춘다.
+ORIGINS = ("catalog", "literature", "fitted", "manual")
+
+
+class MaterialParameterSet(Base):
+    """한 벌. **`A` 만 떼어 가면 뜻이 없으므로 이것이 최소 단위다.**"""
+
+    __tablename__ = "material_parameter_sets"
+    __table_args__ = (
+        # 같은 재료에 같은 출처의 같은 벌을 두 번 담지 않는다. 논문이 다르면
+        # `source_ref` 가 달라 둘 다 남는다 — **후보를 여럿 두는 것이 목적이다.**
+        UniqueConstraint(
+            "material_id", "model", "source_ref", name="uq_material_parameter_sets"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("materials.id", ondelete="CASCADE"), index=True
+    )
+
+    model: Mapped[str] = mapped_column(String(80), index=True)
+    """모델 이름 — `anand` · `prony` · `ogden`. 이것이 파라미터의 뜻을 정한다."""
+
+    label: Mapped[str] = mapped_column(String(200))
+    """사람에게 보일 이름 — 「Anand 점소성 상수」."""
+
+    property_key: Mapped[str | None] = mapped_column(String(120), index=True)
+    """어느 문헌 물성에서 왔나. **FK 를 안 건다** — 이관이 정의를 지웠다 넣으면
+    함께 지워진다(`property_aliases` 와 같은 판단)."""
+
+    origin: Mapped[str] = mapped_column(String(20), default="catalog")
+    """`ORIGINS` 중 하나."""
+    source_ref: Mapped[str] = mapped_column(String(200), default="")
+    """출처를 가리키는 손잡이 — 문헌이면 `set_id`, 손으로 적었으면 사람이 준 이름.
+    **같은 재료의 두 벌을 가르는 열쇠**라 빈 문자열도 값으로 쓴다."""
+    source_detail: Mapped[str | None] = mapped_column(Text)
+    """어느 논문·데이터시트인가. 값만 있고 근거가 없으면 나중에 되짚을 수 없다."""
+    quality_tier: Mapped[int | None] = mapped_column()
+
+    terms: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    """`[{term, value, unit, text}]`. **단위를 항마다 든다** — 한 벌 안에서
+    `1`·`1/s`·`MPa`·`K` 가 섞이기 때문이다."""
+
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

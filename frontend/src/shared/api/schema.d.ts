@@ -579,6 +579,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/materials/{material_id}/parameter-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catalog Parameter Sets
+         * @description 이 문헌 재료가 가진 **모델 파라미터 벌들**(ADR 0029).
+         *
+         *     Anand 9개처럼 여럿이 한 벌이어야 뜻이 있는 값을, 값 표에 낱개로 흩지 않고
+         *     묶어서 준다 — 사내 재료로 받아 갈 때도 이 한 벌이 단위다.
+         */
+        get: operations["catalog_parameter_sets_api_catalog_materials__material_id__parameter_sets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/properties/aliases/{alias_id}": {
         parameters: {
             query?: never;
@@ -6745,6 +6768,45 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * CatalogParameterSetOut
+         * @description 문헌 재료가 가진 모델 파라미터 한 벌(ADR 0029).
+         *
+         *     **한 벌이 채택의 단위다** — `A` 만 떼어 가면 모델이 못 쓴다.
+         */
+        CatalogParameterSetOut: {
+            /** Label */
+            label: string;
+            /** Model */
+            model: string;
+            /** Property Key */
+            property_key: string;
+            /** Quality Tier */
+            quality_tier?: number | null;
+            /** Set Id */
+            set_id: string;
+            /** Source Detail */
+            source_detail?: string | null;
+            /**
+             * Terms
+             * @default []
+             */
+            terms: components["schemas"]["CatalogParameterTermOut"][];
+        };
+        /** CatalogParameterTermOut */
+        CatalogParameterTermOut: {
+            /** Term */
+            term: string;
+            /** Text */
+            text?: string | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /** Value */
+            value?: number | null;
+        };
         /** CatalogSourceOut */
         CatalogSourceOut: {
             /** Doi */
@@ -7499,6 +7561,12 @@ export interface components {
             material_id: string;
             /** Note */
             note?: string | null;
+            /**
+             * Parameter Set Ids
+             * @description 함께 실을 **모델 파라미터 벌**(ADR 0029). 재료가 든 것 중에서 고른다 — 카드는 인용할 뿐 소유하지 않는다.
+             * @default []
+             */
+            parameter_set_ids: string[];
             /** Poisson Ratio */
             poisson_ratio?: number | null;
             /**
@@ -15194,6 +15262,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogMaterialDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_parameter_sets_api_catalog_materials__material_id__parameter_sets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogParameterSetOut"][];
                 };
             };
             /** @description Validation Error */

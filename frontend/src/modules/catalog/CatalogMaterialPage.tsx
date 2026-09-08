@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
+import { ParameterSetsSection } from '@/modules/catalog/ParameterSetsSection'
 import { CreateMaterialDialog } from '@/modules/catalog/CreateMaterialDialog'
 
 import {
@@ -156,21 +157,25 @@ export default function CatalogMaterialPage() {
               {values.length}건
             </span>
           </h2>
+          {/* **폭을 열마다 못 박는다.** 안 박으면 값 열이 남는 폭을 다 먹고
+              조건·등급·출처가 서로 겹친다 — 표가 자동으로 나누는 폭은 가장 긴
+              한 줄을 따라가는데, 여기서 가장 긴 것이 대개 값이기 때문이다.
+              값은 숫자와 단위라 넓을 이유가 없고, 조건이 길다. */}
           <div className="overflow-x-auto rounded-md border">
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead>물성</TableHead>
-                  <TableHead>값</TableHead>
-                  <TableHead>조건</TableHead>
-                  <TableHead>등급</TableHead>
-                  <TableHead>출처</TableHead>
+                  <TableHead className="w-[26%]">물성</TableHead>
+                  <TableHead className="w-[16%]">값</TableHead>
+                  <TableHead className="w-[34%]">조건</TableHead>
+                  <TableHead className="w-[8%]">등급</TableHead>
+                  <TableHead className="w-[16%]">출처</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {values.map((value) => (
                   <TableRow key={value.id} className={value.representative ? '' : 'opacity-80'}>
-                    <TableCell className="text-sm">
+                    <TableCell className="align-top text-sm break-words">
                       {value.property_name}
                       {/* **한 이름에 변수가 여럿인 물성이 있다**(ADR 0029). Anand
                           하나에 9개 상수가 들어 있어서, 이름만 적으면 표에 같은
@@ -201,7 +206,7 @@ export default function CatalogMaterialPage() {
                         </Link>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm tabular-nums">
+                    <TableCell className="align-top text-sm break-words tabular-nums">
                       {/* **변수마다 단위가 다르다.** 정의는 대개 `1`(무차원)이라고
                           적혀 있는데 실제로는 `MPa`·`1/s`·`K` 다. 그 값은 SI 로
                           저장돼 있지도 않아서 환산하지 않고 그대로 보여 준다 —
@@ -219,13 +224,13 @@ export default function CatalogMaterialPage() {
                         fmtValueAs(units, value.value_num, value.unit)
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground max-w-64 text-xs">
+                    <TableCell className="text-muted-foreground align-top text-xs break-words">
                       {fmtConditions(value.conditions as Record<string, unknown> | null) || '—'}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="align-top">
                       <TierBadge value={value} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="align-top break-words">
                       <SourceCell value={value} />
                     </TableCell>
                   </TableRow>
@@ -235,6 +240,10 @@ export default function CatalogMaterialPage() {
           </div>
         </section>
       ))}
+
+      {/* **묶음은 표 아래에 따로 선다.** 값 표에 낱개로 섞어 두면 같은 이름이
+          아홉 번 서고, 무엇이 한 벌인지 안 보인다(ADR 0029). */}
+      {id && <ParameterSetsSection materialId={id} />}
 
       {item && <AdoptDialog detail={item} open={adopting} onClose={() => setAdopting(false)} />}
       {item && (

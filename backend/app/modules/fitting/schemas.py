@@ -558,6 +558,13 @@ class DeclaredCardSaveRequest(BaseModel):
 
     material_id: uuid.UUID
     synthesize_plastic: bool = False
+    parameter_set_ids: list[uuid.UUID] = Field(
+        default=[],
+        description=(
+            "함께 실을 **모델 파라미터 벌**(ADR 0029). 재료가 든 것 중에서 고른다 — "
+            "카드는 인용할 뿐 소유하지 않는다."
+        ),
+    )
     label: str = Field(min_length=1, max_length=120)
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
     """비우면 재료에 적힌 값을 쓴다. **없으면 없는 채로 둔다.**"""

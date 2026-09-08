@@ -43,6 +43,8 @@ from app.modules.catalog.schemas import (
     CatalogMaterialDetailOut,
     CatalogMaterialOut,
     CatalogMaterialPage,
+    CatalogParameterSetOut,
+    CatalogParameterTermOut,
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueOut,
@@ -969,3 +971,42 @@ def search_by_property(
         ],
         notes=notes,
     )
+
+
+@router.get(
+    "/materials/{material_id}/parameter-sets", response_model=list[CatalogParameterSetOut]
+)
+def catalog_parameter_sets(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[CatalogParameterSetOut]:
+    """이 문헌 재료가 가진 **모델 파라미터 벌들**(ADR 0029).
+
+    Anand 9개처럼 여럿이 한 벌이어야 뜻이 있는 값을, 값 표에 낱개로 흩지 않고
+    묶어서 준다 — 사내 재료로 받아 갈 때도 이 한 벌이 단위다.
+    """
+    made: list[CatalogParameterSetOut] = []
+    keys = db.scalars(
+        select(CatalogValue.property_key)
+        .where(CatalogValue.material_id == material_id)
+        .distinct()
+    ).all()
+    for key in keys:
+        if not parameters.is_parameterized(db, key):
+            continue
+        definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
+        label = parameters.label(definition) if definition else key
+        for one in parameters.sets(db, key=key, material_id=material_id):
+            made.append(
+                CatalogParameterSetOut(
+                    property_key=key,
+                    label=label,
+                    model=one.model,
+                    set_id=one.set_id,
+                    quality_tier=one.quality_tier,
+                    source_detail=one.source,
+                    terms=[CatalogParameterTermOut(**term) for term in one.terms],
+                )
+            )
+    return made

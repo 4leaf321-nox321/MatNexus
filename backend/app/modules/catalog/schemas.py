@@ -315,3 +315,25 @@ class PropertySearchOut(BaseModel):
     total: int = 0
     hits: list[PropertyHitOut] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+class CatalogParameterTermOut(BaseModel):
+    term: str
+    value: float | None = None
+    text: str | None = None
+    unit: str = ""
+
+
+class CatalogParameterSetOut(BaseModel):
+    """문헌 재료가 가진 모델 파라미터 한 벌(ADR 0029).
+
+    **한 벌이 채택의 단위다** — `A` 만 떼어 가면 모델이 못 쓴다.
+    """
+
+    property_key: str
+    label: str
+    model: str
+    set_id: str
+    quality_tier: int | None = None
+    source_detail: str | None = None
+    terms: list[CatalogParameterTermOut] = []

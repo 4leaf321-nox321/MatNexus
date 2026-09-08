@@ -237,3 +237,80 @@ class TestAdopt:
             f"/api/materials/{material_id}/parameter-sets", headers=admin_headers
         )
         assert listed.json() == []
+
+
+class TestCardCites:
+    """카드는 벌을 **인용**한다 — 소유하지 않는다(ADR 0029 D3)."""
+
+    def test_카드가_벌을_싣는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        literature: tuple[CatalogMaterial, CatalogMaterial],
+    ) -> None:
+        """**원본은 재료가 계속 든다.** 카드에는 어디서 왔는지가 행마다 적힌다."""
+        _, single = literature
+        material_id = _material(client, admin_headers)
+        adopted = client.post(
+            f"/api/materials/{material_id}/parameter-sets",
+            json={"property_key": KEY, "catalog_material_id": str(single.id)},
+            headers=admin_headers,
+        )
+        assert adopted.status_code == 201, adopted.text
+
+        made = client.post(
+            "/api/fitting/cards/declared",
+            json={
+                "material_id": material_id,
+                "label": "파라미터 인용 카드",
+                "parameter_set_ids": [adopted.json()["id"]],
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code in (200, 201), made.text
+        block = made.json()["blocks"]["model_params"]
+        assert block["values"]["sets"] == 1
+        assert block["values"]["models"] == "anand"
+
+        rows = block["rows"]
+        assert {row["name"] for row in rows} == {t[0] for t in TERMS}
+        # **어디서 왔는지가 행마다 적힌다** — 카드만 봐도 되짚을 수 있어야 한다.
+        assert {row["set"] for row in rows} == {"anand/only"}
+        h0 = next(row for row in rows if row["name"] == "h0")
+        assert h0["value"] == pytest.approx(2640.75)
+        assert h0["unit"] == "MPa"
+
+        # 재료 쪽 원본은 그대로 남는다.
+        listed = client.get(
+            f"/api/materials/{material_id}/parameter-sets", headers=admin_headers
+        )
+        assert len(listed.json()) == 1
+
+    def test_남의_벌은_못_싣는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        literature: tuple[CatalogMaterial, CatalogMaterial],
+    ) -> None:
+        """다른 재료의 벌을 실으면 그 카드의 근거가 거짓이 된다."""
+        _, single = literature
+        mine = _material(client, admin_headers)
+        other = _material(client, admin_headers)
+        adopted = client.post(
+            f"/api/materials/{other}/parameter-sets",
+            json={"property_key": KEY, "catalog_material_id": str(single.id)},
+            headers=admin_headers,
+        )
+
+        made = client.post(
+            "/api/fitting/cards/declared",
+            json={
+                "material_id": mine,
+                "label": "남의 벌",
+                "parameter_set_ids": [adopted.json()["id"]],
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 422, made.text
+        assert made.json()["error"]["code"] == "MNX-FITTING-0036"

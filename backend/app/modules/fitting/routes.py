@@ -72,7 +72,7 @@ from app.modules.fitting.schemas import (
 )
 from app.modules.grouping.models import GroupResult
 from app.modules.materials import declared
-from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.materials.models import Material, MaterialParameterSet, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestRun, TestType
@@ -1504,6 +1504,61 @@ def preview_declared_card(
     )
 
 
+def _parameter_blocks(
+    db: Session, material_id: uuid.UUID, wanted: list[uuid.UUID]
+) -> tuple[dict[str, Any], list[str]]:
+    """고른 파라미터 벌을 카드 블록으로 — **인용이지 소유가 아니다**(ADR 0029).
+
+    원본은 재료가 계속 든다. 카드에는 어느 벌에서 왔는지(`set`)를 행마다 적어,
+    카드만 봐도 되짚을 수 있게 한다.
+
+    **환산하지 않는다.** 이 값들은 SI 가 아니라 그 항의 원래 단위다.
+    """
+    if not wanted:
+        return {}, []
+    rows_found = db.scalars(
+        select(MaterialParameterSet).where(
+            MaterialParameterSet.material_id == material_id,
+            MaterialParameterSet.id.in_(wanted),
+        )
+    ).all()
+    missing = set(wanted) - {one.id for one in rows_found}
+    if missing:
+        raise AppError(
+            "MNX-FITTING-0036",
+            "그 재료에 없는 파라미터 벌을 실으려 했습니다 — 재료의 물성 탭에서 먼저 담으세요.",
+            status=422,
+        )
+
+    rows: list[dict[str, Any]] = []
+    notes: list[str] = []
+    for one in rows_found:
+        where = f"{one.model}/{one.source_ref}" if one.source_ref else one.model
+        for term in one.terms or []:
+            rows.append(
+                {
+                    "set": where,
+                    "name": term.get("term"),
+                    "value": term.get("value"),
+                    "unit": term.get("unit") or "1",
+                }
+            )
+        notes.append(
+            f"{one.label}({where}) — 문헌에서 받은 값입니다"
+            + (f": {one.source_detail}" if one.source_detail else ".")
+        )
+    block = {
+        "model_params": {
+            "values": {
+                "sets": len(rows_found),
+                "models": " · ".join(sorted({one.model for one in rows_found})),
+            },
+            "rows": rows,
+        }
+    }
+    return block, notes
+
+
 @router.post("/cards/declared", response_model=PropertyCardOut, status_code=201)
 def create_declared_card(
     payload: DeclaredCardSaveRequest,
@@ -1551,7 +1606,11 @@ def create_declared_card(
             )
         synthetic_rows, synthetic_notes = made_synth
 
-    if not elastic and not thermal:
+    parameter_blocks, parameter_notes = _parameter_blocks(
+        db, material.id, payload.parameter_set_ids
+    )
+
+    if not elastic and not thermal and not parameter_blocks:
         raise AppError(
             "MNX-FITTING-0016",
             "이 재료에는 적어 둔 물성이 없습니다. 재료의 '물성' 탭에서 선언 물성을 "
@@ -1587,6 +1646,7 @@ def create_declared_card(
             "notes": [
                 "시험에서 나온 값이 하나도 없습니다 — 재료에 적어 둔 값으로만 만들었습니다.",
                 *synthetic_notes,
+                *parameter_notes,
                 *[f"{item.label}: {item.detail}" for item in found if item.detail],
             ],
             "runtime": runtime.manifest(),
@@ -1595,6 +1655,7 @@ def create_declared_card(
             **_temperature_aware("elastic", elastic, elastic_rows),
             **_temperature_aware("thermal", thermal, thermal_rows),
             **({"table": {"rows": synthetic_rows}} if synthetic_rows else {}),
+            **parameter_blocks,
         },
         point_count=len(synthetic_rows),
         note=payload.note,

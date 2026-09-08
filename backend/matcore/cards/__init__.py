@@ -161,7 +161,13 @@ def load_builtin() -> None:
     같은 이유다. 워커와 테스트가 같은 함수를 부르면 "테스트에서는 되는데 워커에서는
     블록이 없다" 는 어긋남이 생기지 않는다.
     """
-    from matcore.cards import hyperelastic, mechanical, thermal, viscoelastic  # noqa: F401
+    from matcore.cards import (  # noqa: F401
+        hyperelastic,
+        mechanical,
+        model_params,
+        thermal,
+        viscoelastic,
+    )
 
 
 __all__ = [

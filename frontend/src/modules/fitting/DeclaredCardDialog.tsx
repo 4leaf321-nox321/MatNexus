@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { fittingApi } from '@/modules/fitting/api'
+import { materialsApi } from '@/modules/materials/api'
 import type { PropertyCard } from '@/modules/fitting/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -77,6 +78,13 @@ export function DeclaredCardDialog({
   const [density, setDensity] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  // **카드는 파라미터 벌을 인용한다**(ADR 0029). 재료가 담아 둔 것 중에서 고른다 —
+  // 카드가 소유하지 않으므로 여기서 새로 만들 수는 없다.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const parameterSets = useResource(
+    () => (open ? materialsApi.parameterSets(materialId) : Promise.resolve([])),
+    [materialId, open]
+  )
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
@@ -86,6 +94,7 @@ export function DeclaredCardDialog({
       setPoisson('')
       setDensity('')
       setNote('')
+      setPicked(new Set())
       setError(null)
     }
   }, [open])
@@ -98,6 +107,7 @@ export function DeclaredCardDialog({
         material_id: materialId,
         label,
         synthesize_plastic: synthesize,
+        parameter_set_ids: [...picked],
         poisson_ratio: poisson === '' ? null : Number(poisson),
         density: densityToSi(density),
         note: note || null,
@@ -200,6 +210,38 @@ export function DeclaredCardDialog({
               onDensity={setDensity}
             />
           </div>
+          {/* **카드는 벌을 인용한다** — 재료가 담아 둔 것 중에서 고른다(ADR 0029).
+              여기서 새로 만들 수는 없다. 하나도 안 골라도 카드는 만들어진다. */}
+          {(parameterSets.data ?? []).length > 0 && (
+            <div className="space-y-1 sm:col-span-2">
+              <Label>모델 파라미터</Label>
+              <ul className="divide-y rounded-md border text-sm">
+                {(parameterSets.data ?? []).map((set) => (
+                  <li key={set.id} className="flex items-start gap-2 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      id={`pset-${set.id}`}
+                      checked={picked.has(set.id)}
+                      onChange={(event) => {
+                        const next = new Set(picked)
+                        if (event.target.checked) next.add(set.id)
+                        else next.delete(set.id)
+                        setPicked(next)
+                      }}
+                    />
+                    <label htmlFor={`pset-${set.id}`} className="min-w-0">
+                      <span className="font-medium">{set.label}</span>
+                      <span className="text-muted-foreground ml-2 text-xs">
+                        {[set.model, set.source_ref].filter(Boolean).join(' · ')} · 변수{' '}
+                        {set.terms?.length ?? 0}개
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="sm:col-span-2">
             <Label htmlFor="declared-note" className="mb-1">
               메모

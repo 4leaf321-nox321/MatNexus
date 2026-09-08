@@ -3017,6 +3017,105 @@
         "title": "CatalogMaterialPage",
         "type": "object"
       },
+      "CatalogParameterSetOut": {
+        "description": "문헌 재료가 가진 모델 파라미터 한 벌(ADR 0029).\n\n**한 벌이 채택의 단위다** — `A` 만 떼어 가면 모델이 못 쓴다.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "quality_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Tier"
+          },
+          "set_id": {
+            "title": "Set Id",
+            "type": "string"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "terms": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CatalogParameterTermOut"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "property_key",
+          "label",
+          "model",
+          "set_id"
+        ],
+        "title": "CatalogParameterSetOut",
+        "type": "object"
+      },
+      "CatalogParameterTermOut": {
+        "properties": {
+          "term": {
+            "title": "Term",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "unit": {
+            "default": "",
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "title": "CatalogParameterTermOut",
+        "type": "object"
+      },
       "CatalogSourceOut": {
         "properties": {
           "doi": {
@@ -4882,6 +4981,16 @@
               }
             ],
             "title": "Note"
+          },
+          "parameter_set_ids": {
+            "default": [],
+            "description": "함께 실을 **모델 파라미터 벌**(ADR 0029). 재료가 든 것 중에서 고른다 — 카드는 인용할 뿐 소유하지 않는다.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Parameter Set Ids",
+            "type": "array"
           },
           "poisson_ratio": {
             "anyOf": [
@@ -24143,6 +24252,54 @@
           }
         },
         "summary": "Get Material",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/materials/{material_id}/parameter-sets": {
+      "get": {
+        "description": "이 문헌 재료가 가진 **모델 파라미터 벌들**(ADR 0029).\n\nAnand 9개처럼 여럿이 한 벌이어야 뜻이 있는 값을, 값 표에 낱개로 흩지 않고\n묶어서 준다 — 사내 재료로 받아 갈 때도 이 한 벌이 단위다.",
+        "operationId": "catalog_parameter_sets_api_catalog_materials__material_id__parameter_sets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogParameterSetOut"
+                  },
+                  "title": "Response Catalog Parameter Sets Api Catalog Materials  Material Id  Parameter Sets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Catalog Parameter Sets",
         "tags": [
           "catalog"
         ]

@@ -24,8 +24,13 @@ from app.modules.accounts.models import User
 from app.modules.catalog import parameters as catalog_parameters
 from app.modules.catalog.models import CatalogDefinition
 from app.modules.materials import declared, services
-from app.modules.materials.models import ORIENTATIONS, Material, Sample, Specimen
-from app.modules.materials.parameter_models import MaterialParameterSet
+from app.modules.materials.models import (
+    ORIENTATIONS,
+    Material,
+    MaterialParameterSet,
+    Sample,
+    Specimen,
+)
 from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
