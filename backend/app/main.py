@@ -30,6 +30,7 @@ from app.modules.materials import routes as materials_routes
 from app.modules.metrology import routes as metrology_routes
 from app.modules.notices import routes as notices_routes
 from app.modules.notifications import routes as notifications_routes
+from app.modules.ontology import routes as ontology_routes
 from app.modules.pipelines import routes as pipelines_routes
 from app.modules.processing import routes as processing_routes
 from app.modules.server import routes as server_routes
@@ -93,6 +94,7 @@ def _api_router() -> APIRouter:
     router.include_router(fitting_routes.router)
     router.include_router(grouping_routes.router)
     router.include_router(units_routes.router)
+    router.include_router(ontology_routes.router)
     router.include_router(vocabulary_routes.router)
     router.include_router(audit_routes.router)
     router.include_router(trash_routes.router)

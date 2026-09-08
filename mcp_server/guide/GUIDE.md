@@ -115,6 +115,44 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 그래서 "SUS304 의 항복강도"(제품 카탈로그의 공칭값)는 재료에 있고, "이번 입고분의
 항복강도"(밀시트)는 시료에 있다. 둘이 다른 것은 정상이다.
 
+<!--@ ontology -->
+
+## 길 찾기 — **지도를 먼저 읽어라**
+
+너에게는 화면의 링크가 없다. 사람은 재료 상세에서 시료를 누르고 시험으로 가지만,
+너는 어느 것이 어느 것과 이어지는지 모른 채 시작한다. `get_ontology` 가 그 지도다.
+
+    kinds       material · sample · specimen · test_run · property · instrument …
+    relations   src 에서 dst 로 label 을 읽는다
+
+세 가지로 다닌다:
+
+1. **`get_ontology()`** — 무엇이 있고 무엇이 이어지나. 지도에 없는 종류·관계
+   이름을 지어내면 422 다.
+2. **`related(kind, id)`** — 이 마디 옆에 무엇이 있나. **`counts` 를 먼저 봐라** —
+   0인 관계는 안 실리므로, 거기 없는 관계로 더 파고들지 마라.
+3. **`find_path(...)`** — 두 마디가 어떻게 이어지나. `found` 가 거짓이면 길이
+   없는 것이다. **지어내지 마라.**
+
+전형적인 물음이 이 길로 답해진다:
+
+    「이 물성을 재는 장비는 뭐야」
+        resolve_property(「인장강도」) → related(kind="property", id=키, relation="measured_by")
+        → 나온 장비에서 related(kind="instrument", …) 로 보유 개체와 조직까지
+
+    「이 시험 값이 어느 재료에서 나왔어」
+        find_path(from_kind="test_run", …, to_kind="material", …)
+        → tested → part_of → derived_from
+
+**`property` 만 식별자가 문자열 키다**(`mechanical.yield_strength`).
+`resolve_property` 가 돌려주는 `key` 를 그대로 넣는다. 나머지는 UUID 다.
+
+### 안 보이는 것과 없는 것
+
+권한 밖의 마디에서는 **길이 끊긴다** — 「이어져 있는데 가려졌다」 가 아니라 아예
+없는 것처럼 온다. 그러니 「그런 자료가 없습니다」 라고 단정하지 말고, **내가 볼
+수 있는 범위에서는 없다**고 말해라.
+
 <!--@ workflow -->
 ## 전형적인 흐름
 

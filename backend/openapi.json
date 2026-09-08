@@ -8734,6 +8734,68 @@
         "title": "FormatProfileSaveRequest",
         "type": "object"
       },
+      "GraphEdgeOut": {
+        "properties": {
+          "dst_id": {
+            "title": "Dst Id",
+            "type": "string"
+          },
+          "dst_kind": {
+            "title": "Dst Kind",
+            "type": "string"
+          },
+          "label": {
+            "description": "이 방향으로 읽는 말",
+            "title": "Label",
+            "type": "string"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "src_id": {
+            "title": "Src Id",
+            "type": "string"
+          },
+          "src_kind": {
+            "title": "Src Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relation",
+          "label",
+          "src_kind",
+          "src_id",
+          "dst_kind",
+          "dst_id"
+        ],
+        "title": "GraphEdgeOut",
+        "type": "object"
+      },
+      "GraphNodeOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name"
+        ],
+        "title": "GraphNodeOut",
+        "type": "object"
+      },
       "GroupCreateRequest": {
         "properties": {
           "note": {
@@ -12153,6 +12215,109 @@
         "title": "ObservationOut",
         "type": "object"
       },
+      "OntologyKindOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "module": {
+            "description": "어느 모듈의 것인가 — 화면을 찾을 때 쓴다",
+            "title": "Module",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "label",
+          "module"
+        ],
+        "title": "OntologyKindOut",
+        "type": "object"
+      },
+      "OntologyOut": {
+        "description": "지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**",
+        "properties": {
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/OntologyKindOut"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/OntologyRelationOut"
+            },
+            "title": "Relations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kinds",
+          "relations"
+        ],
+        "title": "OntologyOut",
+        "type": "object"
+      },
+      "OntologyRelationOut": {
+        "properties": {
+          "directed": {
+            "title": "Directed",
+            "type": "boolean"
+          },
+          "dst": {
+            "title": "Dst",
+            "type": "string"
+          },
+          "inverse_label": {
+            "title": "Inverse Label",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "source": {
+            "description": "관계가 실린 자리 — `fk:…` · `table:…` · `edge`",
+            "title": "Source",
+            "type": "string"
+          },
+          "src": {
+            "title": "Src",
+            "type": "string"
+          },
+          "transitive": {
+            "title": "Transitive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slug",
+          "label",
+          "inverse_label",
+          "src",
+          "dst",
+          "directed",
+          "transitive",
+          "source"
+        ],
+        "title": "OntologyRelationOut",
+        "type": "object"
+      },
       "OpsWarningsOut": {
         "description": "운영 경고 셋 — **시스템 관리자에게만.** 다른 사람에게는 할 수 없는 경고다.\n\n각자 자기 화면 안에만 있던 것들(2026-09-05): 디스크는 서버 화면, 보존기간 지난\n삭제는 저장소 리포트, 실패한 작업은 아무 데도. 홈이 「밀리고 있다」 는 사실만 말한다 —\n자동 영구삭제는 하지 않는다. 지우는 결정은 사람이 한다.",
         "properties": {
@@ -12707,6 +12872,47 @@
           "revoked_at"
         ],
         "title": "PatOut",
+        "type": "object"
+      },
+      "PathOut": {
+        "description": "두 마디 사이의 길. **못 찾으면 `found=false`** — 지어내지 않는다.",
+        "properties": {
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "nodes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "steps": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphEdgeOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "found"
+        ],
+        "title": "PathOut",
         "type": "object"
       },
       "Person": {
@@ -14914,6 +15120,48 @@
           "note"
         ],
         "title": "RejectRequest",
+        "type": "object"
+      },
+      "RelatedOut": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "description": "관계별 이웃 수 — 0인 관계는 안 싣는다",
+            "title": "Counts",
+            "type": "object"
+          },
+          "edges": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphEdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "node": {
+            "$ref": "#/components/schemas/GraphNodeOut"
+          },
+          "nodes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "node"
+        ],
+        "title": "RelatedOut",
         "type": "object"
       },
       "ReparseOut": {
@@ -28962,6 +29210,212 @@
         "summary": "Mark Read",
         "tags": [
           "notifications"
+        ]
+      }
+    },
+    "/api/ontology": {
+      "get": {
+        "description": "**지도 전체.** 어떤 종류가 있고 무엇이 무엇과 어떤 사이인가.\n\nAI 가 길을 찾으려면 스키마를 먼저 알아야 한다 — 사람은 화면에서 링크를 눌러\n다니지만 AI 에게는 이 응답이 지도의 전부다.",
+        "operationId": "get_ontology_api_ontology_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ontology",
+        "tags": [
+          "ontology"
+        ]
+      }
+    },
+    "/api/ontology/path": {
+      "get": {
+        "description": "**이 둘 사이에 길이 있나** — 「이 값이 어느 장비로 나왔나」.\n\n사람이 사슬을 모를 때 쓴다. 가장 짧은 길 하나만 준다. 못 찾으면\n`found=false` 다 — **지어내지 않는다.**",
+        "operationId": "get_path_api_ontology_path_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from_kind",
+            "required": true,
+            "schema": {
+              "title": "From Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_id",
+            "required": true,
+            "schema": {
+              "title": "From Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_kind",
+            "required": true,
+            "schema": {
+              "title": "To Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_id",
+            "required": true,
+            "schema": {
+              "title": "To Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_depth",
+            "required": false,
+            "schema": {
+              "default": 4,
+              "maximum": 6,
+              "minimum": 1,
+              "title": "Max Depth",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Path",
+        "tags": [
+          "ontology"
+        ]
+      }
+    },
+    "/api/ontology/related": {
+      "get": {
+        "description": "**이 마디 옆에 무엇이 있나** — 관계 이름과 함께 준다.\n\n「왜 이어져 있나」 가 답의 절반이다. `counts` 로 관계별 개수를 먼저 주므로\nAI 는 **빈 길로 들어가지 않는다.**\n\n안 보이는 마디에서는 길이 끊긴다 — 이름만 가리고 계속 걸으면 「A 는 B 와\n이어져 있다」 는 사실 자체가 샌다.",
+        "operationId": "get_related_api_ontology_related_get",
+        "parameters": [
+          {
+            "description": "마디 종류 — `material` · `property` · `instrument` …",
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "description": "마디 종류 — `material` · `property` · `instrument` …",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "description": "식별자. `property` 만 문자열 키다",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "식별자. `property` 만 문자열 키다",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "이 관계만 따라간다",
+            "in": "query",
+            "name": "relation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 관계만 따라간다",
+              "title": "Relation"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "default": "both",
+              "pattern": "^(both|out|in)$",
+              "title": "Direction",
+              "type": "string"
+            }
+          },
+          {
+            "description": "몇 홉까지",
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "몇 홉까지",
+              "maximum": 3,
+              "minimum": 1,
+              "title": "Depth",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Related",
+        "tags": [
+          "ontology"
         ]
       }
     },

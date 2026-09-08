@@ -1264,6 +1264,103 @@ async def find_by_property(
     return await _get(ctx, "/catalog/properties/search", params)
 
 
+@mcp.tool()
+async def get_ontology(ctx: Context) -> dict[str, Any]:
+    """**이 시스템의 지도** — 무엇이 있고 무엇이 무엇과 이어지나.
+
+    길을 찾기 전에 여기부터 봐라. 사람은 화면에서 링크를 눌러 다니지만 너에게는
+    링크가 없다 — 이 응답이 지도의 전부다.
+
+    ## 읽는 법
+
+        kinds       마디 종류. `material`·`property`·`instrument` …
+        relations   사이. `src` 에서 `dst` 로 `label` 을 읽는다
+
+    `source` 는 그 관계가 DB 어디에 실려 있나다(`fk:…` · `table:…`). **답에 옮길
+    필요는 없다** — 네가 「이 길이 진짜 있나」 를 판단할 근거다.
+
+    이 지도의 종류·관계 이름을 그대로 `related` 와 `find_path` 에 넣어라. 지도에
+    없는 이름을 지어내면 422 로 돌아온다.
+    """
+    return await _get(ctx, "/ontology")
+
+
+@mcp.tool()
+async def related(
+    ctx: Context,
+    kind: str,
+    id: str,
+    relation: str | None = None,
+    direction: str = "both",
+    depth: int = 1,
+) -> dict[str, Any]:
+    """**이 마디 옆에 무엇이 있나** — 관계 이름과 함께 온다.
+
+    `kind` 와 `id` 는 `get_ontology` 의 종류와 그 마디의 식별자다. **`property`
+    만 식별자가 문자열 키**다(`mechanical.yield_strength`) — `resolve_property`
+    가 돌려주는 `key` 를 그대로 쓴다.
+
+    ## `counts` 를 먼저 봐라
+
+    관계별 이웃 수가 함께 온다. **0인 관계는 안 실린다** — 거기 없는 관계로 더
+    파고들지 마라. 없는 것을 「없다」 고 답하는 편이 낫다.
+
+    ## 깊이
+
+    `depth=1` 이 기본이고 3까지다. 넓히기 전에 `counts` 로 크기를 가늠해라 —
+    `truncated` 가 참이면 상한에서 잘린 것이고, 그때 답에 「일부만 봤다」 를
+    밝혀라.
+
+    ## 안 보이는 것은 안 온다
+
+    권한 밖의 마디에서는 **길이 끊긴다.** 「이어져 있는데 이름만 가려진 것」이
+    아니라 아예 없는 것처럼 온다 — 그러니 「자료가 없다」 와 「권한이 없다」 를
+    구분해서 단정하지 마라.
+    """
+    return await _get(
+        ctx,
+        "/ontology/related",
+        {
+            "kind": kind,
+            "id": id,
+            "relation": relation,
+            "direction": direction,
+            "depth": 1 if depth < 1 else (3 if depth > 3 else depth),
+        },
+    )
+
+
+@mcp.tool()
+async def find_path(
+    ctx: Context,
+    from_kind: str,
+    from_id: str,
+    to_kind: str,
+    to_id: str,
+    max_depth: int = 4,
+) -> dict[str, Any]:
+    """**이 둘이 어떻게 이어지나** — 「이 값이 어느 재료에서 나왔나」.
+
+    사슬을 모를 때 쓴다. 가장 짧은 길 하나가 `steps` 로 온다:
+
+        tested → part_of → derived_from        시험 → 시편 → 시료 → 재료
+
+    `found` 가 거짓이면 **길이 없는 것이다.** 지어내지 마라 — 양끝이 실제로 안
+    이어져 있거나, 가운데 마디를 볼 권한이 없다. `note` 에 그렇게 적혀 온다.
+    """
+    return await _get(
+        ctx,
+        "/ontology/path",
+        {
+            "from_kind": from_kind,
+            "from_id": from_id,
+            "to_kind": to_kind,
+            "to_id": to_id,
+            "max_depth": 1 if max_depth < 1 else (6 if max_depth > 6 else max_depth),
+        },
+    )
+
+
 @mcp.resource("matnexus://guide", mime_type="text/markdown")
 def guide_resource() -> str:
     """MatNexus 사용 규약 — 단위·값의 무게·층·흐름."""

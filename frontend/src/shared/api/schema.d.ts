@@ -2663,6 +2663,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ontology": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ontology
+         * @description **지도 전체.** 어떤 종류가 있고 무엇이 무엇과 어떤 사이인가.
+         *
+         *     AI 가 길을 찾으려면 스키마를 먼저 알아야 한다 — 사람은 화면에서 링크를 눌러
+         *     다니지만 AI 에게는 이 응답이 지도의 전부다.
+         */
+        get: operations["get_ontology_api_ontology_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ontology/path": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Path
+         * @description **이 둘 사이에 길이 있나** — 「이 값이 어느 장비로 나왔나」.
+         *
+         *     사람이 사슬을 모를 때 쓴다. 가장 짧은 길 하나만 준다. 못 찾으면
+         *     `found=false` 다 — **지어내지 않는다.**
+         */
+        get: operations["get_path_api_ontology_path_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ontology/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Related
+         * @description **이 마디 옆에 무엇이 있나** — 관계 이름과 함께 준다.
+         *
+         *     「왜 이어져 있나」 가 답의 절반이다. `counts` 로 관계별 개수를 먼저 주므로
+         *     AI 는 **빈 길로 들어가지 않는다.**
+         *
+         *     안 보이는 마디에서는 길이 끊긴다 — 이름만 가리고 계속 걸으면 「A 는 B 와
+         *     이어져 있다」 는 사실 자체가 샌다.
+         */
+        get: operations["get_related_api_ontology_related_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/pipelines/connectors": {
         parameters: {
             query?: never;
@@ -8641,6 +8713,33 @@ export interface components {
             /** Test Type Key */
             test_type_key: string;
         };
+        /** GraphEdgeOut */
+        GraphEdgeOut: {
+            /** Dst Id */
+            dst_id: string;
+            /** Dst Kind */
+            dst_kind: string;
+            /**
+             * Label
+             * @description 이 방향으로 읽는 말
+             */
+            label: string;
+            /** Relation */
+            relation: string;
+            /** Src Id */
+            src_id: string;
+            /** Src Kind */
+            src_kind: string;
+        };
+        /** GraphNodeOut */
+        GraphNodeOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+        };
         /** GroupCreateRequest */
         GroupCreateRequest: {
             /** Note */
@@ -9891,6 +9990,55 @@ export interface components {
             /** Value */
             value: number | null;
         };
+        /** OntologyKindOut */
+        OntologyKindOut: {
+            /** Label */
+            label: string;
+            /**
+             * Module
+             * @description 어느 모듈의 것인가 — 화면을 찾을 때 쓴다
+             */
+            module: string;
+            /** Slug */
+            slug: string;
+        };
+        /**
+         * OntologyOut
+         * @description 지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**
+         */
+        OntologyOut: {
+            /** Kinds */
+            kinds: components["schemas"]["OntologyKindOut"][];
+            /** Relations */
+            relations: components["schemas"]["OntologyRelationOut"][];
+        };
+        /** OntologyRelationOut */
+        OntologyRelationOut: {
+            /** Directed */
+            directed: boolean;
+            /** Dst */
+            dst: string;
+            /** Inverse Label */
+            inverse_label: string;
+            /** Label */
+            label: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Source
+             * @description 관계가 실린 자리 — `fk:…` · `table:…` · `edge`
+             */
+            source: string;
+            /** Src */
+            src: string;
+            /** Transitive */
+            transitive: boolean;
+        };
         /**
          * OpsWarningsOut
          * @description 운영 경고 셋 — **시스템 관리자에게만.** 다른 사람에게는 할 수 없는 경고다.
@@ -10100,6 +10248,26 @@ export interface components {
             prefix: string;
             /** Revoked At */
             revoked_at: string | null;
+        };
+        /**
+         * PathOut
+         * @description 두 마디 사이의 길. **못 찾으면 `found=false`** — 지어내지 않는다.
+         */
+        PathOut: {
+            /** Found */
+            found: boolean;
+            /**
+             * Nodes
+             * @default []
+             */
+            nodes: components["schemas"]["GraphNodeOut"][];
+            /** Note */
+            note?: string | null;
+            /**
+             * Steps
+             * @default []
+             */
+            steps: components["schemas"]["GraphEdgeOut"][];
         };
         /** Person */
         Person: {
@@ -11003,6 +11171,33 @@ export interface components {
         RejectRequest: {
             /** Note */
             note: string;
+        };
+        /** RelatedOut */
+        RelatedOut: {
+            /**
+             * Counts
+             * @description 관계별 이웃 수 — 0인 관계는 안 싣는다
+             * @default {}
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Edges
+             * @default []
+             */
+            edges: components["schemas"]["GraphEdgeOut"][];
+            node: components["schemas"]["GraphNodeOut"];
+            /**
+             * Nodes
+             * @default []
+             */
+            nodes: components["schemas"]["GraphNodeOut"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /** ReparseOut */
         ReparseOut: {
@@ -18349,6 +18544,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ontology_api_ontology_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OntologyOut"];
+                };
+            };
+        };
+    };
+    get_path_api_ontology_path_get: {
+        parameters: {
+            query: {
+                from_kind: string;
+                from_id: string;
+                to_kind: string;
+                to_id: string;
+                max_depth?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PathOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_related_api_ontology_related_get: {
+        parameters: {
+            query: {
+                /** @description 마디 종류 — `material` · `property` · `instrument` … */
+                kind: string;
+                /** @description 식별자. `property` 만 문자열 키다 */
+                id: string;
+                /** @description 이 관계만 따라간다 */
+                relation?: string[] | null;
+                direction?: string;
+                /** @description 몇 홉까지 */
+                depth?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatedOut"];
                 };
             };
             /** @description Validation Error */
