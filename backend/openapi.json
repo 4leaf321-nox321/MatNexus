@@ -13996,6 +13996,79 @@
         "title": "PropertyCardUpdateRequest",
         "type": "object"
       },
+      "PropertyHitOut": {
+        "description": "값 하나와 그것을 든 재료. **값과 단위를 함께 싣는다.**",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "quality_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Tier"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "value_si": {
+            "title": "Value Si",
+            "type": "number"
+          },
+          "world": {
+            "title": "World",
+            "type": "string"
+          }
+        },
+        "required": [
+          "world",
+          "material_id",
+          "material_name",
+          "value",
+          "unit",
+          "value_si"
+        ],
+        "title": "PropertyHitOut",
+        "type": "object"
+      },
       "PropertyItemOut": {
         "description": "넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다.",
         "properties": {
@@ -14158,6 +14231,86 @@
           "candidates"
         ],
         "title": "PropertyResolveOut",
+        "type": "object"
+      },
+      "PropertySearchOut": {
+        "description": "값 검색 결과.\n\n**후보가 갈렸으면 값을 안 찾고 되묻는다** — 어느 물성인지 모른 채 찾은 값은\n엉뚱한 물성의 정답이다.",
+        "properties": {
+          "ambiguous": {
+            "default": false,
+            "title": "Ambiguous",
+            "type": "boolean"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyHitOut"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "range_si": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range Si"
+          },
+          "resolved": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PropertyCandidateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "PropertySearchOut",
         "type": "object"
       },
       "PropertySourcesOut": {
@@ -23564,6 +23717,138 @@
           }
         },
         "summary": "Resolve Property",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/search": {
+      "get": {
+        "description": "**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.\n\n## 단위가 필수인 이유\n\n값은 SI 로 저장돼 있어 200MPa 는 `200,000,000` 이다. 사람은 「200」 이라고\n치는데 그대로 걸면 **8 Pa 짜리가 나온다.** 짐작해서 답하면 조용히 틀린다.\n\n## 갈리면 값을 안 찾는다\n\n「항복응력」 은 금속 항복강도(486건)와 유변학 항복응력(9건) 둘에 걸린다.\n어느 쪽인지 모른 채 찾은 값은 **엉뚱한 물성의 정답**이다 — 후보만 돌려주고\n부르는 쪽이 고르게 한다.",
+        "operationId": "search_by_property_api_catalog_properties_search_get",
+        "parameters": [
+          {
+            "description": "물성 이름 — 「항복응력」·「UTS」",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "물성 이름 — 「항복응력」·「UTS」",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "**필수.** 「MPa」·「GPa」",
+            "in": "query",
+            "name": "unit",
+            "required": true,
+            "schema": {
+              "description": "**필수.** 「MPa」·「GPa」",
+              "minLength": 1,
+              "title": "Unit",
+              "type": "string"
+            }
+          },
+          {
+            "description": "이 값 ±10%",
+            "in": "query",
+            "name": "near",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 값 ±10%",
+              "title": "Near"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max"
+            }
+          },
+          {
+            "description": "`all` · `catalog` · `internal`",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "`all` · `catalog` · `internal`",
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertySearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search By Property",
         "tags": [
           "catalog"
         ]

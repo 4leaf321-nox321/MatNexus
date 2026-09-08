@@ -267,3 +267,40 @@ class PropertyLinkCreate(BaseModel):
     """사내 물성 항목 **이름**으로 받는다 — 사람이 폼에 id 를 적지 않는다."""
     kind: str = "same_as"
     note: str | None = None
+
+
+class PropertyHitOut(BaseModel):
+    """값 하나와 그것을 든 재료. **값과 단위를 함께 싣는다.**"""
+
+    world: str
+    """`catalog`(문헌) · `internal`(사내)."""
+    material_id: uuid.UUID
+    material_name: str
+    value: float
+    """**물어본 단위로 되돌린 값.** SI 원본은 `value_si`."""
+    unit: str
+    value_si: float
+    quality_tier: int | None = None
+    source_detail: str | None = None
+    category: str | None = None
+
+
+class PropertySearchOut(BaseModel):
+    """값 검색 결과.
+
+    **후보가 갈렸으면 값을 안 찾고 되묻는다** — 어느 물성인지 모른 채 찾은 값은
+    엉뚱한 물성의 정답이다.
+    """
+
+    query: str
+    resolved: PropertyCandidateOut | None = None
+    ambiguous: bool = False
+    candidates: list[PropertyCandidateOut] = Field(default_factory=list)
+    """`ambiguous` 일 때만 채워진다 — 사용자가 고를 것들."""
+
+    unit: str | None = None
+    range_si: list[float] | None = None
+    """실제로 건 범위(SI). **AI 가 자기가 무엇을 물었는지 되짚을 수 있어야 한다.**"""
+    total: int = 0
+    hits: list[PropertyHitOut] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)

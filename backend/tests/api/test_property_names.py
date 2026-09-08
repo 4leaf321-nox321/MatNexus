@@ -104,14 +104,18 @@ class Test별칭이_이름을_이긴다:
         # **유변학 물성을 지우지 않는다** — 그것도 답일 수 있고, 사람이 고른다.
         assert YIELD_STRESS[0] in [one["key"] for one in got["candidates"]]
 
-    def test_갈리면_되물으라고_말한다(
+    def test_별칭으로_걸리면_되묻지_않는다(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
         db: Session,
         definitions: CatalogMaterial,
     ) -> None:
-        """도메인이 다른 후보가 나란히 서면 하나를 고르면 안 된다."""
+        """**사람이 이미 답해 둔 것이다.**
+
+        별칭은 「이 말은 이 물성이다」 라고 못 박아 둔 판단이다. 여기서 또 되물으면
+        별칭을 넣은 사람을 무시하는 셈이고, AI 는 매번 같은 것을 되묻는다.
+        """
         db.add(
             PropertyAlias(
                 property_key=YIELD_STRENGTH[0],
@@ -125,6 +129,23 @@ class Test별칭이_이름을_이긴다:
         add_values(db, definitions, YIELD_STRESS[0], 5)
 
         got = client.get(RESOLVE, params={"q": "항복응력"}, headers=admin_headers).json()
+        assert got["ambiguous"] is False
+        assert got["candidates"][0]["key"] == YIELD_STRENGTH[0]
+
+    def test_별칭이_없으면_갈린다고_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        """**부분 일치로 도메인이 다른 것이 나란히 서면 하나를 고르면 안 된다.**
+
+        「항복」 처럼 사람이 덜 적어 물었을 때가 그 경우다.
+        """
+        add_values(db, definitions, YIELD_STRENGTH[0], 5)
+        add_values(db, definitions, YIELD_STRESS[0], 5)
+        got = client.get(RESOLVE, params={"q": "항복"}, headers=admin_headers).json()
         assert got["ambiguous"] is True, "mechanical 과 rheological 이 함께 섰습니다."
 
 
@@ -250,3 +271,151 @@ class Test매핑:
         )
         assert bad.status_code == 404
         assert bad.json()["error"]["code"] == "MNX-CATALOG-0025"
+
+
+SEARCH = "/api/catalog/properties/search"
+
+
+class Test값으로_찾기:
+    """**「항복응력이 200MPa 근처인 재료」** — 이름 해소 + 단위 환산 + 범위."""
+
+    @pytest.fixture
+    def values(self, db: Session, definitions: CatalogMaterial) -> CatalogMaterial:
+        """**현실을 닮게 만든다** — 실제는 항복강도 486건 대 유변학 9건이라
+        갈리지 않는다. 값 개수와 사내 매핑이 순위를 가르는 것이 설계다."""
+        # 180 · 200 · 300 MPa. 앞 둘만 200±10% 안이다.
+        for at, pa in enumerate((180e6, 200e6, 300e6)):
+            db.add(
+                CatalogValue(
+                    mt_id=900_000 + at,
+                    material_id=definitions.id,
+                    property_key=YIELD_STRENGTH[0],
+                    value_num=pa,
+                    unit="Pa",
+                    quality_tier=2,
+                )
+            )
+        # 순위를 벌리는 채움값. **범위 밖이라 결과에는 안 낀다.**
+        for at in range(40):
+            db.add(
+                CatalogValue(
+                    mt_id=910_000 + at,
+                    material_id=definitions.id,
+                    property_key=YIELD_STRENGTH[0],
+                    value_num=900e6,
+                    unit="Pa",
+                    quality_tier=2,
+                )
+            )
+        db.add(
+            PropertyAlias(
+                property_key=YIELD_STRENGTH[0],
+                alias="항복응력",
+                normalized="항복응력",
+                source="seed",
+            )
+        )
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        term = VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도")
+        db.add(term)
+        db.flush()
+        db.add(PropertyLink(property_key=YIELD_STRENGTH[0], term_id=term.id))
+        db.commit()
+        return definitions
+
+    def test_단위를_환산해_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str], values: CatalogMaterial
+    ) -> None:
+        """**200MPa 는 200,000,000 Pa 다.** 「200」 을 그대로 걸면 8 Pa 가 나온다."""
+        got = client.get(
+            SEARCH,
+            params={"q": "항복응력", "unit": "MPa", "near": 200},
+            headers=admin_headers,
+        ).json()
+        assert got["resolved"]["key"] == YIELD_STRENGTH[0]
+        assert got["range_si"] == pytest.approx([180e6, 220e6]), "±10% 로 편다"
+        assert [one["value"] for one in got["hits"]] == [180.0, 200.0], (
+            "300 MPa 는 범위 밖이다"
+        )
+        assert got["hits"][0]["unit"] == "MPa", "물어본 단위로 되돌려 준다"
+
+    def test_min_max_로도_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str], values: CatalogMaterial
+    ) -> None:
+        got = client.get(
+            SEARCH,
+            params={"q": "항복응력", "unit": "MPa", "min": 250, "max": 400},
+            headers=admin_headers,
+        ).json()
+        assert [one["value"] for one in got["hits"]] == [300.0]
+
+    def test_범위를_안_주면_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], values: CatalogMaterial
+    ) -> None:
+        bad = client.get(
+            SEARCH, params={"q": "항복응력", "unit": "MPa"}, headers=admin_headers
+        )
+        assert bad.status_code == 422
+        assert bad.json()["error"]["code"] == "MNX-CATALOG-0030"
+
+    def test_차원이_다른_단위를_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], values: CatalogMaterial
+    ) -> None:
+        """**숫자는 나오지만 뜻이 없다.** 조용히 틀리는 쪽이다."""
+        bad = client.get(
+            SEARCH,
+            params={"q": "항복응력", "unit": "K", "near": 200},
+            headers=admin_headers,
+        )
+        assert bad.status_code == 422
+        assert bad.json()["error"]["code"] == "MNX-CATALOG-0032"
+
+    def test_갈리면_값을_안_찾는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        values: CatalogMaterial,
+    ) -> None:
+        """**어느 물성인지 모른 채 찾은 값은 엉뚱한 물성의 정답이다.**"""
+        # **나란히 서게 만든다.** 금속 쪽은 사내 매핑이 붙어 앞서 있으므로,
+        # 유변학 쪽 값이 그만큼 많아야 진짜로 갈린다 — 그것이 이 판정의 뜻이다.
+        for at in range(200):
+            db.add(
+                CatalogValue(
+                    mt_id=950_000 + at,
+                    material_id=values.id,
+                    property_key=YIELD_STRESS[0],
+                    value_num=200e6,
+                    unit="Pa",
+                    quality_tier=2,
+                )
+            )
+        db.commit()
+
+        # **별칭이 안 걸리는 말로 묻는다.** 「항복」 은 별칭 「항복응력」 에
+        # 부분으로 걸려 금속 쪽이 앞선다 — 그건 갈린 게 아니다.
+        got = client.get(
+            SEARCH,
+            params={"q": "yield", "unit": "MPa", "near": 200},
+            headers=admin_headers,
+        ).json()
+        assert got["ambiguous"] is True
+        assert got["hits"] == [], "갈렸으면 값을 안 찾는다"
+        assert len(got["candidates"]) >= 2
+
+    def test_사내와_안_이어졌으면_그렇다고_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], values: CatalogMaterial
+    ) -> None:
+        """**못 찾은 것과 안 본 것은 다르다.**
+
+        유변학 항복응력은 사내 물성 항목에 없다 — 키로 정확히 물어 갈림을 피한다.
+        """
+        got = client.get(
+            SEARCH,
+            params={"q": YIELD_STRESS[0], "unit": "MPa", "near": 200},
+            headers=admin_headers,
+        ).json()
+        assert got["resolved"]["key"] == YIELD_STRESS[0]
+        assert any("사내 재료는 안 봤습니다" in note for note in got["notes"])

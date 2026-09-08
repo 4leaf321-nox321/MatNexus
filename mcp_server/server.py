@@ -1165,6 +1165,11 @@ async def platform_summary(ctx: Context) -> dict[str, Any]:
 # ── 리소스 (MaterialTwin 에서 — 도구 목록에 상주 비용을 안 얹는다) ─────────────
 
 
+def max_limit(value: int) -> int:
+    """상한을 강제한다. 도구 인자 이름이 `max` 라 내장 함수를 못 쓴다."""
+    return MAX_LIMIT if value > MAX_LIMIT else (1 if value < 1 else value)
+
+
 @mcp.tool()
 async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
     """**물성 이름 → 물성 키.** 값을 묻기 전에 여기부터 거친다.
@@ -1203,6 +1208,60 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
             ),
         }
     return got
+
+
+@mcp.tool()
+async def find_by_property(
+    ctx: Context,
+    property: str,
+    unit: str,
+    near: float | None = None,
+    min: float | None = None,
+    max: float | None = None,
+    scope: str = "all",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.
+
+    `property` 는 사람이 부르는 이름 그대로 준다(「항복응력」·「UTS」·「탄성계수」).
+    서버가 `resolve_property` 와 같은 규칙으로 푼다.
+
+    ## `unit` 은 필수다 — 짐작하지 마라
+
+    값이 SI 로 저장돼 있어 200MPa 는 `200,000,000` 이다. 단위 없이 「200」 을
+    걸면 **8 Pa 짜리가 나온다.** 사용자가 단위를 안 말했으면 **물어봐라** —
+    문맥에서 짐작한 단위로 답하면 조용히 틀린다.
+
+    ## 범위
+
+        near=200          200 ±10% (180~220)
+        min=180, max=220  그 사이
+
+    ## 갈리면 값을 안 찾는다
+
+    `ambiguous` 가 참으로 오면 `candidates` 만 온다 — 어느 물성인지 모른 채 찾은
+    값은 **엉뚱한 물성의 정답**이다. 사용자에게 어느 쪽인지 물어라.
+
+    ## 결과를 읽을 때
+
+    `world` 가 `catalog` 면 문헌값, `internal` 이면 사내 재료의 선언 물성이다.
+    `quality_tier` 는 문헌값의 등급이고 **tier4 도 걸러 내지 않는다**(추정·가정값도
+    필요해서 모은 것이다) — 다만 답할 때 등급을 함께 말해라.
+    `range_si` 로 실제로 건 범위를 되짚을 수 있다.
+    """
+    params: dict[str, Any] = {
+        "q": property,
+        "unit": unit,
+        "scope": scope,
+        "limit": max_limit(limit),
+    }
+    if near is not None:
+        params["near"] = near
+    if min is not None:
+        params["min"] = min
+    if max is not None:
+        params["max"] = max
+    return await _get(ctx, "/catalog/properties/search", params)
 
 
 @mcp.resource("matnexus://guide", mime_type="text/markdown")

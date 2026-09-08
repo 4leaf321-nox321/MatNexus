@@ -150,7 +150,10 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
         symbol_key = compare_key(one.symbol)
 
         if alias_hit and alias_hit[0] == "alias":
-            matched, text_hit, base = "alias", alias_hit[1], 100.0
+            # **별칭이 이름을 이긴다.** 별칭은 사람이 「이 말은 이 물성이다」 라고
+            # 못 박아 둔 것이고, 이름이 맞는 것은 우연일 수 있다 — 「항복응력」 이
+            # 정확히 그 경우다(유변학 물성의 이름이 그것이다).
+            matched, text_hit, base = "alias", alias_hit[1], 120.0
         elif name_key == needle:
             matched, text_hit, base = "name", one.name, 100.0
         elif symbol_key and symbol_key == needle:
@@ -202,6 +205,11 @@ def ambiguous(candidates: list[Candidate]) -> bool:
     물성이 나란히 서는 경우가 여기 걸린다 — 그때 하나를 고르면 조용히 틀린다.
     """
     if len(candidates) < 2:
+        return False
+    # **별칭으로 걸렸으면 갈린 것이 아니다.** 사람이 「이 말은 이 물성이다」 라고
+    # 이미 답해 둔 것이다 — 그것이 별칭을 두는 이유다. 여기서 또 되물으면 별칭을
+    # 넣은 사람의 판단을 무시하는 셈이고, AI 는 매번 같은 것을 되묻는다.
+    if candidates[0].matched_by == "alias":
         return False
     top = candidates[0].score
     close = [one for one in candidates if one.score >= top * 0.8]

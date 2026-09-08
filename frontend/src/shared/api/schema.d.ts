@@ -643,6 +643,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search By Property
+         * @description **값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.
+         *
+         *     ## 단위가 필수인 이유
+         *
+         *     값은 SI 로 저장돼 있어 200MPa 는 `200,000,000` 이다. 사람은 「200」 이라고
+         *     치는데 그대로 걸면 **8 Pa 짜리가 나온다.** 짐작해서 답하면 조용히 틀린다.
+         *
+         *     ## 갈리면 값을 안 찾는다
+         *
+         *     「항복응력」 은 금속 항복강도(486건)와 유변학 항복응력(9건) 둘에 걸린다.
+         *     어느 쪽인지 모른 채 찾은 값은 **엉뚱한 물성의 정답**이다 — 후보만 돌려주고
+         *     부르는 쪽이 고르게 한다.
+         */
+        get: operations["search_by_property_api_catalog_properties_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/properties/{property_key}/aliases": {
         parameters: {
             query?: never;
@@ -10603,6 +10634,33 @@ export interface components {
             note?: string | null;
         };
         /**
+         * PropertyHitOut
+         * @description 값 하나와 그것을 든 재료. **값과 단위를 함께 싣는다.**
+         */
+        PropertyHitOut: {
+            /** Category */
+            category?: string | null;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Quality Tier */
+            quality_tier?: number | null;
+            /** Source Detail */
+            source_detail?: string | null;
+            /** Unit */
+            unit: string;
+            /** Value */
+            value: number;
+            /** Value Si */
+            value_si: number;
+            /** World */
+            world: string;
+        };
+        /**
          * PropertyItemOut
          * @description 넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다.
          */
@@ -10668,6 +10726,38 @@ export interface components {
             candidates: components["schemas"]["PropertyCandidateOut"][];
             /** Query */
             query: string;
+        };
+        /**
+         * PropertySearchOut
+         * @description 값 검색 결과.
+         *
+         *     **후보가 갈렸으면 값을 안 찾고 되묻는다** — 어느 물성인지 모른 채 찾은 값은
+         *     엉뚱한 물성의 정답이다.
+         */
+        PropertySearchOut: {
+            /**
+             * Ambiguous
+             * @default false
+             */
+            ambiguous: boolean;
+            /** Candidates */
+            candidates?: components["schemas"]["PropertyCandidateOut"][];
+            /** Hits */
+            hits?: components["schemas"]["PropertyHitOut"][];
+            /** Notes */
+            notes?: string[];
+            /** Query */
+            query: string;
+            /** Range Si */
+            range_si?: number[] | null;
+            resolved?: components["schemas"]["PropertyCandidateOut"] | null;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /** Unit */
+            unit?: string | null;
         };
         /** PropertySourcesOut */
         PropertySourcesOut: {
@@ -14782,6 +14872,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyResolveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_by_property_api_catalog_properties_search_get: {
+        parameters: {
+            query: {
+                /** @description 물성 이름 — 「항복응력」·「UTS」 */
+                q: string;
+                /** @description **필수.** 「MPa」·「GPa」 */
+                unit: string;
+                /** @description 이 값 ±10% */
+                near?: number | null;
+                min?: number | null;
+                max?: number | null;
+                /** @description `all` · `catalog` · `internal` */
+                scope?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertySearchOut"];
                 };
             };
             /** @description Validation Error */

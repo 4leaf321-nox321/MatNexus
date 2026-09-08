@@ -54,18 +54,20 @@ from app.modules.catalog.schemas import (
     PropertyAliasCreate,
     PropertyAliasOut,
     PropertyCandidateOut,
+    PropertyHitOut,
     PropertyLinkCreate,
     PropertyLinkOut,
     PropertyResolveOut,
+    PropertySearchOut,
 )
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
 from app.shared import litdeck as deck_builder
-from app.shared import property_names, representative
+from app.shared import property_names, property_search, representative
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
-from app.shared.permissions import require_owner_edit, visible_materials
+from app.shared.permissions import require_owner_edit, visible_material_ids, visible_materials
 from app.shared.text import clean, compare_key
 from matcore import export
 
@@ -824,4 +826,105 @@ def add_property_link(
         item=term.value,
         kind=found.kind,
         note=found.note,
+    )
+
+
+@router.get("/properties/search", response_model=PropertySearchOut)
+def search_by_property(
+    q: str = Query(min_length=1, description="물성 이름 — 「항복응력」·「UTS」"),
+    unit: str = Query(min_length=1, description="**필수.** 「MPa」·「GPa」"),
+    near: float | None = Query(default=None, description="이 값 ±10%"),
+    min_value: float | None = Query(default=None, alias="min"),
+    max_value: float | None = Query(default=None, alias="max"),
+    scope: str = Query(default="all", description="`all` · `catalog` · `internal`"),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertySearchOut:
+    """**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.
+
+    ## 단위가 필수인 이유
+
+    값은 SI 로 저장돼 있어 200MPa 는 `200,000,000` 이다. 사람은 「200」 이라고
+    치는데 그대로 걸면 **8 Pa 짜리가 나온다.** 짐작해서 답하면 조용히 틀린다.
+
+    ## 갈리면 값을 안 찾는다
+
+    「항복응력」 은 금속 항복강도(486건)와 유변학 항복응력(9건) 둘에 걸린다.
+    어느 쪽인지 모른 채 찾은 값은 **엉뚱한 물성의 정답**이다 — 후보만 돌려주고
+    부르는 쪽이 고르게 한다.
+    """
+    candidates = property_names.resolve(db, q, limit=5)
+    if not candidates:
+        return PropertySearchOut(query=q, notes=[f"'{q}' 로 물성을 찾지 못했습니다."])
+    if property_names.ambiguous(candidates):
+        return PropertySearchOut(
+            query=q,
+            ambiguous=True,
+            candidates=[
+                PropertyCandidateOut(**one)
+                for one in property_names.describe(candidates)["candidates"]
+            ],
+            notes=[
+                "물성이 갈립니다 — 어느 것인지 골라 주세요. 도메인이 다른 후보가 "
+                "나란히 섰습니다."
+            ],
+        )
+
+    chosen = candidates[0]
+    low, high = property_search.bounds(
+        unit=unit,
+        si_unit=chosen.si_unit,
+        minimum=min_value,
+        maximum=max_value,
+        near=near,
+    )
+
+    hits: list[property_search.Hit] = []
+    notes: list[str] = []
+    if scope in ("all", "catalog"):
+        hits += property_search.catalog_hits(
+            db, property_key=chosen.key, low=low, high=high, unit=unit, limit=limit
+        )
+    if scope in ("all", "internal"):
+        if chosen.items:
+            for item in chosen.items:
+                hits += property_search.internal_hits(
+                    db,
+                    item=item,
+                    low=low,
+                    high=high,
+                    unit=unit,
+                    limit=limit,
+                    visible=visible_material_ids(db, user),
+                )
+        else:
+            # **못 찾은 게 아니라 이어져 있지 않은 것이다.** 그 차이를 말한다.
+            notes.append(
+                "사내 재료는 안 봤습니다 — 이 문헌 물성이 사내 물성 항목과 아직 "
+                "이어져 있지 않습니다(물성 매핑에서 이을 수 있습니다)."
+            )
+
+    hits.sort(key=lambda one: one.value_si)
+    return PropertySearchOut(
+        query=q,
+        resolved=PropertyCandidateOut(**property_names.describe([chosen])["candidates"][0]),
+        unit=unit,
+        range_si=[low, high],
+        total=len(hits),
+        hits=[
+            PropertyHitOut(
+                world=one.world,
+                material_id=one.material_id,
+                material_name=one.material_name,
+                value=one.value_shown,
+                unit=one.unit_shown,
+                value_si=one.value_si,
+                quality_tier=one.quality_tier,
+                source_detail=one.source_detail,
+                category=one.category,
+            )
+            for one in hits[:limit]
+        ],
+        notes=notes,
     )
