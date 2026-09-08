@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.catalog import parameters
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -836,6 +837,9 @@ def search_by_property(
     near: float | None = Query(default=None, description="이 값 ±10%"),
     min_value: float | None = Query(default=None, alias="min"),
     max_value: float | None = Query(default=None, alias="max"),
+    term: str | None = Query(
+        default=None, description="파라미터형 물성에서 어느 변수인가 — 「A」·「h0」"
+    ),
     scope: str = Query(default="all", description="`all` · `catalog` · `internal`"),
     limit: int = Query(default=50, ge=1, le=200),
     user: User = Depends(current_user),
@@ -872,21 +876,56 @@ def search_by_property(
         )
 
     chosen = candidates[0]
+
+    # **한 키에 여러 변수가 든 물성이 있다**(ADR 0029). Anand 하나에 9개 상수가
+    # 들어 있고 단위도 `1`·`1/s`·`MPa`·`K` 로 제각각이라, 변수를 안 정하고 찾으면
+    # 그것들을 섞어서 답한다 — 그리고 틀렸다는 신호가 어디에도 안 남는다.
+    grouped = parameters.is_parameterized(db, chosen.key)
+    if grouped and not term:
+        found = parameters.terms(db, chosen.key)
+        raise AppError(
+            "MNX-CATALOG-0034",
+            f"'{chosen.name}' 은 변수 여러 개를 담고 있습니다 — 어느 변수인지 "
+            f"`term` 으로 정해 주세요: "
+            + " · ".join(f"{one.name}[{one.unit or '?'}]" for one in found[:12]),
+            status=422,
+        )
+    # 파라미터형은 저장된 값이 SI 가 아니라 그 항의 원래 단위다(D2) — 환산하지 않는다.
+    real_unit = parameters.unit_of(db, chosen.key, term) if grouped else chosen.si_unit
+    if grouped and term and real_unit and unit.strip().lower() != real_unit.strip().lower():
+        raise AppError(
+            "MNX-CATALOG-0035",
+            f"'{chosen.name} · {term}' 의 단위는 '{real_unit}' 입니다 — '{unit}' 로는 "
+            "비교할 수 없습니다(이 값은 SI 로 저장돼 있지 않아 환산하지 않습니다).",
+            status=422,
+        )
+
     low, high = property_search.bounds(
         unit=unit,
         si_unit=chosen.si_unit,
         minimum=min_value,
         maximum=max_value,
         near=near,
+        convert=not grouped,
     )
 
     hits: list[property_search.Hit] = []
     notes: list[str] = []
     if scope in ("all", "catalog"):
         hits += property_search.catalog_hits(
-            db, property_key=chosen.key, low=low, high=high, unit=unit, limit=limit
+            db,
+            property_key=chosen.key,
+            low=low,
+            high=high,
+            unit=unit,
+            limit=limit,
+            term=term,
+            convert=not grouped,
         )
-    if scope in ("all", "internal"):
+    if scope in ("all", "internal") and grouped:
+        # 파라미터 집합은 아직 사내로 받아 가는 길이 열리지 않았다(ADR 0029 2단계).
+        notes.append("사내 재료는 안 봤습니다 — 모델 파라미터는 아직 채택 경로가 없습니다.")
+    elif scope in ("all", "internal"):
         if chosen.items:
             for item in chosen.items:
                 hits += property_search.internal_hits(

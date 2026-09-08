@@ -10718,10 +10718,20 @@ export interface components {
             name: string;
             /** Notes */
             notes: string[];
+            /**
+             * Parameterized
+             * @default false
+             */
+            parameterized: boolean;
             /** Si Unit */
             si_unit: string;
             /** Symbol */
             symbol: string | null;
+            /**
+             * Terms
+             * @default []
+             */
+            terms: string[];
             /** Value Count */
             value_count: number;
         };
@@ -15175,6 +15185,8 @@ export interface operations {
                 near?: number | null;
                 min?: number | null;
                 max?: number | null;
+                /** @description 파라미터형 물성에서 어느 변수인가 — 「A」·「h0」 */
+                term?: string | null;
                 /** @description `all` · `catalog` · `internal` */
                 scope?: string;
                 limit?: number;

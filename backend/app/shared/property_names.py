@@ -35,6 +35,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogValue
 from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
@@ -61,6 +62,11 @@ class Candidate:
     value_count: int
     #: 사내 물성 항목 이름들(이어져 있으면). 「우리가 실제로 쓰는 물성인가」.
     items: tuple[str, ...] = ()
+    #: **한 키에 여러 변수가 들어 있나**(ADR 0029). 참이면 값을 묻기 전에 어느
+    #: 변수인지 정해야 한다 — Anand 하나에 9개 상수가 들어 있다.
+    parameterized: bool = False
+    #: 그 변수들(앞의 몇 개). 되물을 때 그대로 보여 준다.
+    terms: tuple[str, ...] = ()
     #: 왜 걸렸나 — `alias` · `name` · `symbol` · `key` · `partial`.
     matched_by: str = "partial"
     #: 걸린 그 문자열. 별칭으로 걸렸으면 그 별칭을 보여 준다.
@@ -167,7 +173,18 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
 
         linked = tuple(sorted(items.get(one.key, ())))
         count = counts.get(one.key, 0)
+        grouped = parameters.is_parameterized(db, one.key)
+        variables = (
+            tuple(item.name for item in parameters.terms(db, one.key, limit=12))
+            if grouped
+            else ()
+        )
         notes: list[str] = []
+        if grouped:
+            notes.append(
+                "**변수 여러 개가 한 이름에 들어 있습니다** — 값을 물으려면 어느 "
+                "변수인지(`term`) 정해야 합니다: " + " · ".join(variables[:8])
+            )
         if not count:
             notes.append("값이 없습니다 — 이 물성으로는 아무것도 못 찾습니다.")
         if linked:
@@ -185,6 +202,8 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
                 symbol=one.symbol,
                 value_count=count,
                 items=linked,
+                parameterized=grouped,
+                terms=variables,
                 matched_by=matched,
                 matched_text=text_hit,
                 # 사내에서 쓰는 물성이면 올린다. 값 개수는 로그로 눌러 — 486건과
@@ -237,6 +256,8 @@ def describe(candidates: list[Candidate]) -> dict[str, Any]:
                 "symbol": one.symbol,
                 "value_count": one.value_count,
                 "internal_items": list(one.items),
+                "parameterized": one.parameterized,
+                "terms": list(one.terms),
                 "matched_by": one.matched_by,
                 "matched_text": one.matched_text,
                 "notes": list(one.notes),

@@ -13840,6 +13840,11 @@
             "title": "Notes",
             "type": "array"
           },
+          "parameterized": {
+            "default": false,
+            "title": "Parameterized",
+            "type": "boolean"
+          },
           "si_unit": {
             "title": "Si Unit",
             "type": "string"
@@ -13854,6 +13859,14 @@
               }
             ],
             "title": "Symbol"
+          },
+          "terms": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Terms",
+            "type": "array"
           },
           "value_count": {
             "title": "Value Count",
@@ -24177,6 +24190,24 @@
                 }
               ],
               "title": "Max"
+            }
+          },
+          {
+            "description": "파라미터형 물성에서 어느 변수인가 — 「A」·「h0」",
+            "in": "query",
+            "name": "term",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "파라미터형 물성에서 어느 변수인가 — 「A」·「h0」",
+              "title": "Term"
             }
           },
           {

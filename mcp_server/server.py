@@ -1194,6 +1194,13 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
 
     `value_count` 가 0이면 그 물성으로는 아무것도 못 찾는다. `internal_items` 가
     있으면 사내에서 실제로 쓰는 물성이다.
+
+    ## `parameterized` 가 참이면 **변수를 먼저 골라야 한다**
+
+    한 이름에 변수 여럿이 들어 있다는 뜻이다 — 「Anand 점소성 상수」 하나에
+    `A`(1/s)·`h0`(MPa)·`Q/R`(K) 등 9개가 있다. `terms` 에서 고른 것을
+    `find_by_property(term=...)` 로 넘긴다. 안 고르고 값을 물으면 서로 다른
+    단위의 숫자를 섞어서 답하게 되므로 서버가 거절한다.
     """
     got = await _get(ctx, "/catalog/properties/resolve", {"q": name})
     if "error" in got:
@@ -1218,6 +1225,7 @@ async def find_by_property(
     near: float | None = None,
     min: float | None = None,
     max: float | None = None,
+    term: str | None = None,
     scope: str = "all",
     limit: int = 20,
 ) -> dict[str, Any]:
@@ -1237,6 +1245,16 @@ async def find_by_property(
         near=200          200 ±10% (180~220)
         min=180, max=220  그 사이
 
+    ## 한 이름에 변수가 여럿인 물성이 있다
+
+    「Anand 점소성 상수」 하나에 9개 상수가 들어 있다 — `A`(1/s)·`h0`(MPa)·
+    `Q/R`(K) 처럼 **단위까지 제각각**이다. 그런 물성은 `term` 으로 어느 변수인지
+    정해야 하고, 안 주면 서버가 변수 목록과 함께 거절한다(MNX-CATALOG-0034).
+
+    `resolve_property` 의 `parameterized` 가 참이면 그런 물성이고, `terms` 에
+    고를 것이 온다. **그때 `unit` 은 그 변수의 단위**여야 한다 — 이 값들은 SI 로
+    저장돼 있지 않아 서버가 환산하지 않는다.
+
     ## 갈리면 값을 안 찾는다
 
     `ambiguous` 가 참으로 오면 `candidates` 만 온다 — 어느 물성인지 모른 채 찾은
@@ -1252,6 +1270,7 @@ async def find_by_property(
     params: dict[str, Any] = {
         "q": property,
         "unit": unit,
+        "term": term,
         "scope": scope,
         "limit": max_limit(limit),
     }

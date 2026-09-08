@@ -222,6 +222,11 @@ class PropertyCandidateOut(BaseModel):
     """값이 몇 건인가. 0이면 이 물성으로는 아무것도 못 찾는다."""
     internal_items: list[str]
     """이어진 사내 물성 항목. 있으면 우리가 실제로 쓰는 물성이다."""
+    parameterized: bool = False
+    """**한 키에 여러 변수가 들어 있나**(ADR 0029). 참이면 값을 묻기 전에 어느
+    변수인지(`term`) 정해야 한다 — Anand 하나에 9개 상수가 들어 있다."""
+    terms: list[str] = []
+    """그 변수들(앞의 몇 개)."""
     matched_by: str
     """`alias` · `name` · `symbol` · `key` · `alias_partial` · `partial`."""
     matched_text: str | None

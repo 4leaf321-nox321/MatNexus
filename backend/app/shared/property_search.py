@@ -34,6 +34,7 @@ from sqlalchemy import Select, cast, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
+from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
 from app.modules.materials.models import Material
 from app.shared.errors import AppError
@@ -70,6 +71,7 @@ def bounds(
     minimum: float | None,
     maximum: float | None,
     near: float | None,
+    convert: bool = True,
 ) -> tuple[float, float]:
     """사람이 준 범위를 SI 로. **단위가 안 맞으면 거절한다.**
 
@@ -81,6 +83,18 @@ def bounds(
             "범위를 주세요 — `near`(근처) 또는 `min`/`max` 중 하나가 있어야 합니다.",
             status=422,
         )
+    if not convert:
+        # **파라미터형 물성은 환산하지 않는다**(ADR 0029 D2). 저장된 값이 SI 가
+        # 아니라 그 항의 원래 단위라, 환산하면 값이 상한다 — 그리고 그 사실은
+        # 숫자만 봐서는 안 드러난다.
+        if near is not None:
+            return near * (1 - NEAR_RATIO), near * (1 + NEAR_RATIO)
+        low = minimum if minimum is not None else float("-inf")
+        high = maximum if maximum is not None else float("inf")
+        if low > high:
+            raise AppError("MNX-CATALOG-0033", "최솟값이 최댓값보다 큽니다.", status=422)
+        return low, high
+
     canonical = units.canonical(unit)
     if canonical is None:
         raise AppError(
@@ -126,8 +140,14 @@ def catalog_hits(
     high: float,
     unit: str,
     limit: int,
+    term: str | None = None,
+    convert: bool = True,
 ) -> list[Hit]:
-    """문헌 값에서 찾는다."""
+    """문헌 값에서 찾는다.
+
+    `term` 은 **파라미터형 물성에서 어느 변수인가**다(ADR 0029). 안 주고 찾으면
+    Anand 의 `A`(1/s)와 `h0`(MPa)를 섞어서 답하게 된다.
+    """
     query: Select[Any] = (
         select(CatalogValue, CatalogMaterial)
         .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
@@ -140,6 +160,8 @@ def catalog_hits(
         .order_by(CatalogValue.value_num)
         .limit(limit)
     )
+    if term:
+        query = query.where(CatalogValue.conditions[parameters.TERM].astext == term)
     made: list[Hit] = []
     for value, material in db.execute(query).all():
         made.append(
@@ -148,7 +170,9 @@ def catalog_hits(
                 material_id=material.id,
                 material_name=material.name,
                 value_si=float(value.value_num),
-                value_shown=units.from_si(value.value_num, unit),
+                value_shown=float(value.value_num)
+                if not convert
+                else units.from_si(value.value_num, unit),
                 unit_shown=unit,
                 quality_tier=value.quality_tier,
                 source_detail=value.source_detail,
