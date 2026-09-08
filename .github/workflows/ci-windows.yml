@@ -3,6 +3,20 @@
 # 65는 검증 로직이 정교한데 .github 이 아예 없어 서버 측 강제가 0이었고, 게이트가
 # 로컬 git hook 전용이라 --no-verify 로 우회됐다. RA는 CI 인프라는 있는데 검증
 # 스텝이 없었다. 여기서는 처음부터 양쪽을 붙인다(개발계획 §8).
+#
+# **한 줄이었던 것을 셋으로 쪼갰다**(2026-09-08). 12분 28초가 걸렸고 사람이
+# 기다리다 물었다. 실측한 내역이 이랬다:
+#
+#     201s  브라우저(playwright)   ← 전부 Windows 기능 설치였다. 아래 참조
+#     191s  프론트 vitest
+#     147s  pytest
+#     193s  나머지 전부
+#
+# 셋은 서로를 안 기다린다 — 벽시계는 가장 긴 줄 하나로 줄고, 어디서 깨졌는지도
+# 목록에서 바로 보인다. 의존성 설치가 셋으로 늘지만 전부 캐시에서 온다.
+#
+# **Windows 를 유지한다.** 여기가 배포 대상이고, 이 CI 가 잡아 온 것들(러너
+# 콘솔 cp1252 로 죽는 스크립트, BOM 없는 .ps1)은 리눅스에서는 원리상 안 드러난다.
 
 name: CI - Windows
 
@@ -11,20 +25,21 @@ on:
     branches: [main, master]
   pull_request:
 
-jobs:
-  verify:
-    runs-on: windows-latest
-    env:
-      # conftest 가 여기서 <이름>_test 를 파생해 만든다. 개발 DB를 건드리지 않는
-      # 구조가 CI에서도 그대로 성립한다.
-      DATABASE_URL: postgresql+psycopg://postgres:root@localhost:5432/matnexus
-      # 러너 콘솔이 cp1252 라 스크립트가 한글을 찍는 순간 UnicodeEncodeError 로
-      # 죽는다. 한국어 서버(CP949)에서는 안 나므로 여기서만 드러난다.
-      PYTHONIOENCODING: utf-8
-      # 스모크가 쓰는 계정. CI 전용이라 값이 노출돼도 문제가 없다 —
-      # 운영 비밀번호는 `seed_install.py` 가 자동 생성한다.
-      SMOKE_PASSWORD: smoke-only-password-1
+env:
+  # conftest 가 여기서 <이름>_test 를 파생해 만든다. 개발 DB를 건드리지 않는
+  # 구조가 CI에서도 그대로 성립한다.
+  DATABASE_URL: postgresql+psycopg://postgres:root@localhost:5432/matnexus
+  # 러너 콘솔이 cp1252 라 스크립트가 한글을 찍는 순간 UnicodeEncodeError 로
+  # 죽는다. 한국어 서버(CP949)에서는 안 나므로 여기서만 드러난다.
+  PYTHONIOENCODING: utf-8
+  # 스모크가 쓰는 계정. CI 전용이라 값이 노출돼도 문제가 없다 —
+  # 운영 비밀번호는 `seed_install.py` 가 자동 생성한다.
+  SMOKE_PASSWORD: smoke-only-password-1
 
+jobs:
+  backend:
+    name: 백엔드 (ruff · mypy · pytest)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -46,12 +61,6 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: '.node-version'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       # windows 러너 이미지에는 PostgreSQL 이 설치돼 있지만 꺼져 있다.
       - name: PostgreSQL 시작
@@ -84,6 +93,18 @@ jobs:
         working-directory: backend
         run: python -m pytest
 
+  frontend:
+    name: 프론트 (빌드 · vitest · oxlint)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: 프론트엔드 의존성
         working-directory: frontend
         run: npm ci
@@ -103,12 +124,67 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      # 생성 타입이 커밋된 것과 다르면 누군가 재생성을 빠뜨린 것이다(D13).
+      - name: 생성 타입 최신성
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          npm run api:types
+          $diff = git diff --name-only -- src/shared/api/schema.d.ts
+          if ($diff) {
+            Write-Error "schema.d.ts 가 최신이 아닙니다. 'npm run api:types' 를 실행하고 커밋하세요."
+            exit 1
+          }
+
+  smoke:
+    name: 스모크 (진짜 서버·워커·DB)
+    runs-on: windows-latest
+    steps:
       # 스모크는 **진짜 서버·워커·DB** 를 거친다. jsdom 은 레이아웃 엔진이 없고
       # 서버가 전부 가짜라, "곡선이 저장됐는데 화면에 안 보인다" 같은 것을
       # 원리상 못 잡는다(실제로 놓쳤다).
       #
       # 배포와 같은 모양으로 돌린다 — 백엔드 한 프로세스가 SPA 까지 서빙하므로
       # 프록시가 끼지 않고 확인 대상이 하나 줄어든다.
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: '.python-version'
+          cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: PostgreSQL 시작
+        shell: pwsh
+        run: |
+          $service = Get-Service -Name postgresql* | Select-Object -First 1
+          Set-Service -InputObject $service -StartupType Automatic
+          Start-Service -InputObject $service
+          $env:PGPASSWORD = 'root'
+          & "$env:PGBIN\pg_isready" --timeout=30
+
+      - name: 백엔드 의존성
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: 프론트엔드 의존성
+        working-directory: frontend
+        run: npm ci
+
+      - name: 프론트엔드 빌드 (SPA 를 백엔드가 서빙한다)
+        working-directory: frontend
+        run: npm run build
+
       - name: 스모크 준비 (DB·계정)
         working-directory: backend
         shell: pwsh
@@ -156,12 +232,21 @@ jobs:
           path: ~\AppData\Local\ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
 
-      # 캐시가 맞았어도 `--with-deps` 는 그대로 돌린다 — 그쪽은 브라우저가 아니라
-      # 러너의 시스템 라이브러리라 캐시에 안 들어간다. 브라우저가 이미 있으면
-      # 다운로드는 건너뛰므로 몇 초로 끝난다.
+      # **`--with-deps` 를 뺐다**(2026-09-08 실측). 캐시가 맞아 브라우저를 안
+      # 받는데도 이 단계가 **198초**였고, 로그가 이유를 그대로 말한다:
+      #
+      #     Success Restart Needed Exit Code  Feature Result
+      #     True    No             Success    {Media Foundation}
+      #
+      # Windows 에서 `--with-deps` 는 리눅스처럼 패키지를 까는 게 아니라 DISM 으로
+      # 윈도 기능을 켜는 일이다. Media Foundation 은 영상 재생용이고 우리 스모크는
+      # 영상을 안 튼다 — 매 실행 3분 20초를 그것에 쓰고 있었다.
+      #
+      # 「브라우저가 이미 있으면 몇 초로 끝난다」 고 여기 적혀 있었다. 짐작이었고,
+      # 재 보니 틀렸다.
       - name: 브라우저 (playwright)
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: 스모크 (playwright)
         working-directory: frontend
@@ -181,15 +266,3 @@ jobs:
           name: playwright-흔적
           path: frontend/test-results
           retention-days: 7
-
-      # 생성 타입이 커밋된 것과 다르면 누군가 재생성을 빠뜨린 것이다(D13).
-      - name: 생성 타입 최신성
-        working-directory: frontend
-        shell: pwsh
-        run: |
-          npm run api:types
-          $diff = git diff --name-only -- src/shared/api/schema.d.ts
-          if ($diff) {
-            Write-Error "schema.d.ts 가 최신이 아닙니다. 'npm run api:types' 를 실행하고 커밋하세요."
-            exit 1
-          }
