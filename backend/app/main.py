@@ -33,6 +33,7 @@ from app.modules.notifications import routes as notifications_routes
 from app.modules.ontology import routes as ontology_routes
 from app.modules.pipelines import routes as pipelines_routes
 from app.modules.processing import routes as processing_routes
+from app.modules.search import routes as search_routes
 from app.modules.server import routes as server_routes
 from app.modules.statistics import routes as statistics_routes
 from app.modules.tests import formats as tests_formats
@@ -95,6 +96,7 @@ def _api_router() -> APIRouter:
     router.include_router(grouping_routes.router)
     router.include_router(units_routes.router)
     router.include_router(ontology_routes.router)
+    router.include_router(search_routes.router)
     router.include_router(vocabulary_routes.router)
     router.include_router(audit_routes.router)
     router.include_router(trash_routes.router)

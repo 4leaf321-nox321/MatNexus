@@ -3305,6 +3305,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search
+         * @description **한 칸에 치면 무엇이든 찾는다.**
+         *
+         *     사람은 「SECC180」 이 재료인지 시료인지 시험 이름인지 모른 채 친다. 대상은
+         *     온톨로지 종류 전부이고, 안 보이는 것은 결과에도 없다 — **검색에 뜨는데 열면
+         *     404** 가 되면 안 되기 때문이다.
+         *
+         *     `similar` 는 오타·표기 흔들림까지 본다(`pg_trgm`). 「비슷한 것」이 「그 말이 든
+         *     것」보다 위에 서지 않도록 점수를 눌러 둔다.
+         */
+        get: operations["search_api_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/server/info": {
         parameters: {
             query?: never;
@@ -11794,6 +11821,23 @@ export interface components {
             /** Width */
             width?: number | null;
         };
+        /** SearchGroupOut */
+        SearchGroupOut: {
+            /** Hits */
+            hits: components["schemas"]["SearchHitOut"][];
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Module */
+            module: string;
+            /**
+             * Truncated
+             * @description 더 있다 — 종류를 골라 다시 물으면 나온다
+             * @default false
+             */
+            truncated: boolean;
+        };
         /** SearchHit */
         SearchHit: {
             /** Document Key */
@@ -11815,6 +11859,37 @@ export interface components {
             snippet: string;
             /** Topic */
             topic: string | null;
+        };
+        /** SearchHitOut */
+        SearchHitOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Matched
+             * @description 왜 걸렸나 — exact · prefix · contains · similar
+             */
+            matched: string;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Parent Kind */
+            parent_kind?: string | null;
+            /** Score */
+            score: number;
+        };
+        /** SearchOut */
+        SearchOut: {
+            /** Groups */
+            groups: components["schemas"]["SearchGroupOut"][];
+            /** Mode */
+            mode: string;
+            /** Query */
+            query: string;
+            /** Total */
+            total: number;
         };
         /** SectionBrief */
         SectionBrief: {
@@ -19726,6 +19801,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_search_get: {
+        parameters: {
+            query: {
+                /** @description 찾을 말 */
+                q: string;
+                /** @description `exact` · `contains` · `similar` */
+                mode?: string;
+                /** @description 이 종류만 — 주면 더 많이 준다 */
+                kind?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
                 };
             };
             /** @description Validation Error */

@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react'
+import type { FormEvent } from 'react'
 import {
   KeyRound,
   LogOut,
@@ -14,6 +15,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   PanelRight,
+  Search,
   Sun,
   User,
   UserCog,
@@ -24,6 +26,7 @@ import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { useLeftPanel, useRightPanel } from '@/shared/layout/SidePanel'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
+import { Input } from '@/shared/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +53,15 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
   const [changingPassword, setChangingPassword] = useState(false)
   const navigate = useNavigate()
   const params = useParams<{ slug?: string }>()
+  const [query, setQuery] = useState('')
+
+  // **상단은 넘기기만 한다.** 결과를 여기서 그리면 화면마다 다른 자리에 뜨고,
+  // 주소로 공유할 수도 없다(`/search?q=` 가 곧 그 검색이다).
+  function submitSearch(event: FormEvent) {
+    event.preventDefault()
+    const wanted = query.trim()
+    navigate(wanted ? `/search?q=${encodeURIComponent(wanted)}` : '/search')
+  }
 
   const memberships = user?.memberships ?? []
   const current = memberships.find((m) => m.slug === workspaceSlug)
@@ -113,6 +125,23 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
       )}
 
       <div className="flex-1" />
+
+      {/* **한 칸으로 무엇이든 찾는다.** 여태 검색은 화면마다 따로 있어서, 찾는
+          것이 재료인지 시험인지 아는 사람만 쓸 수 있었다. 여기서는 Enter 로
+          전체 검색 화면에 넘긴다 — 상단에서 결과를 미리 떨구지 않는 이유는
+          열세 종류를 좁은 드롭다운에 우겨넣으면 무엇을 찾았는지 안 보이기
+          때문이다. */}
+      <form onSubmit={submitSearch} className="relative mr-1 hidden sm:block">
+        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2" />
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="전체 검색"
+          aria-label="전체 검색"
+          className="h-8 w-44 pl-8 lg:w-64"
+        />
+      </form>
 
       <NotificationBell />
 

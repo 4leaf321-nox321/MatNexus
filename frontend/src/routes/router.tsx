@@ -45,6 +45,7 @@ const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPag
 const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const BomDeckPage = lazy(() => import('@/modules/fitting/BomDeckPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
+const SearchPage = lazy(() => import('@/modules/search/SearchPage'))
 const CatalogPage = lazy(() => import('@/modules/catalog/CatalogPage'))
 const CatalogMaterialPage = lazy(() => import('@/modules/catalog/CatalogMaterialPage'))
 const CatalogDeckPage = lazy(() => import('@/modules/catalog/CatalogDeckPage'))
@@ -126,6 +127,9 @@ export const router = createBrowserRouter([
           { index: true, element: <HomeRedirect /> },
 
           // 카탈로그 (전사)
+          // **한 칸으로 무엇이든.** 상단 검색이 여기로 보낸다 — 주소가 곧 검색이라
+          // 결과를 그대로 남에게 보낼 수 있다.
+          { path: 'search', element: <SearchPage /> },
           { path: 'materials', element: <MaterialsPage /> },
           // **재료를 거치지 않고 시편을 찾는다.** `/cards` 가 있는 이유와 같다.
           { path: 'specimens', element: <SpecimensPage /> },

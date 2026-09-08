@@ -126,8 +126,11 @@ def _coerce(kind: relations.EntityKind, value: Any) -> Any:
     return value
 
 
-def _visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[Any] | None:
+def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[Any] | None:
     """이 종류에서 볼 수 있는 식별자들. `None` 이면 가릴 것이 없다.
+
+    **전체 검색도 이것을 쓴다**(`entity_search`). 규칙이 둘이 되면 「검색에는 뜨는데
+    열면 404」 가 생기고, 그때 어느 쪽이 맞는지 알 방법이 없다.
 
     **재료를 따라간다** — 시료·시편·시험·처리결과·물성카드는 모두 재료의 가시
     범위를 물려받는다(`permissions.visible_runs` 와 같은 판단: 규칙이 둘이 되면
@@ -176,7 +179,7 @@ def fetch(db: Session, user: User, kind_slug: str, ids: list[Any]) -> dict[str, 
     query = select(table.c[kind.id_column], name).where(table.c[kind.id_column].in_(wanted))
     if kind.soft_delete:
         query = query.where(table.c["deleted_at"].is_(None))
-    guard = _visible_ids(db, user, kind)
+    guard = visible_ids(db, user, kind)
     if guard is not None:
         query = query.where(table.c[kind.id_column].in_(guard))
 

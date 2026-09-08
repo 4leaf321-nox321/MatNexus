@@ -16829,6 +16829,43 @@
         "title": "ScannedLineOut",
         "type": "object"
       },
+      "SearchGroupOut": {
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHitOut"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "module": {
+            "title": "Module",
+            "type": "string"
+          },
+          "truncated": {
+            "default": false,
+            "description": "더 있다 — 종류를 골라 다시 물으면 나온다",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "module",
+          "hits"
+        ],
+        "title": "SearchGroupOut",
+        "type": "object"
+      },
       "SearchHit": {
         "properties": {
           "document_key": {
@@ -16883,6 +16920,93 @@
           "snippet"
         ],
         "title": "SearchHit",
+        "type": "object"
+      },
+      "SearchHitOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "matched": {
+            "description": "왜 걸렸나 — exact · prefix · contains · similar",
+            "title": "Matched",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "parent_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Kind"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "score",
+          "matched"
+        ],
+        "title": "SearchHitOut",
+        "type": "object"
+      },
+      "SearchOut": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SearchGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "mode",
+          "groups",
+          "total"
+        ],
+        "title": "SearchOut",
         "type": "object"
       },
       "SectionBrief": {
@@ -31045,6 +31169,85 @@
         "summary": "Create Specimen",
         "tags": [
           "materials"
+        ]
+      }
+    },
+    "/api/search": {
+      "get": {
+        "description": "**한 칸에 치면 무엇이든 찾는다.**\n\n사람은 「SECC180」 이 재료인지 시료인지 시험 이름인지 모른 채 친다. 대상은\n온톨로지 종류 전부이고, 안 보이는 것은 결과에도 없다 — **검색에 뜨는데 열면\n404** 가 되면 안 되기 때문이다.\n\n`similar` 는 오타·표기 흔들림까지 본다(`pg_trgm`). 「비슷한 것」이 「그 말이 든\n것」보다 위에 서지 않도록 점수를 눌러 둔다.",
+        "operationId": "search_api_search_get",
+        "parameters": [
+          {
+            "description": "찾을 말",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "찾을 말",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`exact` · `contains` · `similar`",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "contains",
+              "description": "`exact` · `contains` · `similar`",
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "description": "이 종류만 — 주면 더 많이 준다",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 종류만 — 주면 더 많이 준다",
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
         ]
       }
     },
