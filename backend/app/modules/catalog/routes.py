@@ -23,6 +23,12 @@ from app.modules.catalog.models import (
     CatalogSource,
     CatalogValue,
 )
+from app.modules.catalog.ontology_models import (
+    ALIAS_SOURCES,
+    LINK_KINDS,
+    PropertyAlias,
+    PropertyLink,
+)
 from app.modules.catalog.schemas import (
     AshbyAxisOut,
     AshbyOut,
@@ -45,14 +51,22 @@ from app.modules.catalog.schemas import (
     DeckMatchIn,
     DeckMatchRowOut,
     DeckSkippedOut,
+    PropertyAliasCreate,
+    PropertyAliasOut,
+    PropertyCandidateOut,
+    PropertyLinkCreate,
+    PropertyLinkOut,
+    PropertyResolveOut,
 )
 from app.modules.materials.models import Material
+from app.modules.vocabulary.models import VocabularyTerm
 from app.shared import litdeck as deck_builder
-from app.shared import representative
+from app.shared import property_names, representative
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
 from app.shared.permissions import require_owner_edit, visible_materials
+from app.shared.text import clean, compare_key
 from matcore import export
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -617,4 +631,197 @@ def get_material(
         grade=item.grade,
         attributes=item.attributes,
         values=values,
+    )
+
+
+# --- 물성 이름 사전 -----------------------------------------------------------
+#
+# **MCP/AI 가 값을 묻기 전에 거치는 자리다.** 「항복응력」이 어느 물성인지 모르면
+# 그 뒤의 모든 질문이 틀린 물성에 답한다 — 실측(2026-09-08): 이름이 정확히
+# 「항복응력」인 정의는 유변학 물성(9건, 8~20 Pa)이고, 사람이 뜻하는 금속 항복강도는
+# 「항복강도」(486건)다.
+
+
+@router.get("/properties/resolve", response_model=PropertyResolveOut)
+def resolve_property(
+    q: str = Query(min_length=1, description="사람이 부르는 이름·기호·별칭"),
+    limit: int = Query(default=12, ge=1, le=50),
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyResolveOut:
+    """이름 → 물성 후보들. **고르지 않고 나란히 준다.**
+
+    `ambiguous` 가 참이면 도메인이 다른 후보가 나란히 섰다는 뜻이고, 그때 하나를
+    고르면 조용히 틀린다 — 부르는 쪽이 되물어야 한다.
+    """
+    found = property_names.describe(property_names.resolve(db, q, limit=limit))
+    return PropertyResolveOut(
+        query=q,
+        ambiguous=bool(found["ambiguous"]),
+        candidates=[PropertyCandidateOut(**one) for one in found["candidates"]],
+    )
+
+
+@router.get("/properties/{property_key}/aliases", response_model=list[PropertyAliasOut])
+def list_property_aliases(
+    property_key: str,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[PropertyAliasOut]:
+    rows = db.scalars(
+        select(PropertyAlias)
+        .where(PropertyAlias.property_key == property_key)
+        .order_by(PropertyAlias.alias)
+    ).all()
+    return [PropertyAliasOut.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/properties/{property_key}/aliases", response_model=PropertyAliasOut, status_code=201
+)
+def add_property_alias(
+    property_key: str,
+    payload: PropertyAliasCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyAliasOut:
+    """별칭 하나를 더한다.
+
+    **이미 있으면 그것을 돌려준다** — 409 가 아니다. 기준정보 값 추가와 같은
+    판단이다: 실제로 일어난 일이 「이미 있는 것을 또 적었다」 뿐인데 화면이
+    멈추면 안 된다.
+    """
+    if payload.source not in ALIAS_SOURCES:
+        raise AppError(
+            "MNX-CATALOG-0020",
+            f"별칭 출처는 {', '.join(ALIAS_SOURCES)} 중 하나여야 합니다.",
+            status=422,
+        )
+    definition = db.scalar(
+        select(CatalogDefinition).where(CatalogDefinition.key == property_key)
+    )
+    if definition is None:
+        raise NotFound("MNX-CATALOG-0021", f"'{property_key}' 물성 정의를 찾을 수 없습니다.")
+
+    cleaned = clean(payload.alias)
+    if cleaned is None:
+        raise AppError("MNX-CATALOG-0022", "별칭이 비었습니다.", status=422)
+    normalized = compare_key(cleaned)
+
+    found = db.scalar(
+        select(PropertyAlias).where(
+            PropertyAlias.property_key == property_key,
+            PropertyAlias.normalized == normalized,
+        )
+    )
+    if found is None:
+        found = PropertyAlias(
+            property_key=property_key,
+            alias=cleaned,
+            normalized=normalized,
+            source=payload.source,
+            note=payload.note,
+            created_by_id=user.id,
+        )
+        db.add(found)
+        db.commit()
+        db.refresh(found)
+    return PropertyAliasOut.model_validate(found)
+
+
+@router.delete("/properties/aliases/{alias_id}", status_code=204)
+def remove_property_alias(
+    alias_id: uuid.UUID,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    row = db.get(PropertyAlias, alias_id)
+    if row is None:
+        raise NotFound("MNX-CATALOG-0023", "그 별칭을 찾을 수 없습니다.")
+    db.delete(row)
+    db.commit()
+
+
+@router.get("/properties/links", response_model=list[PropertyLinkOut])
+def list_property_links(
+    _user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> list[PropertyLinkOut]:
+    """문헌 물성 ↔ 사내 물성 항목 매핑 전부(ADR 0027 이 미뤄 둔 그 표)."""
+    rows = db.execute(
+        select(PropertyLink, VocabularyTerm.value)
+        .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
+        .order_by(PropertyLink.property_key)
+    ).all()
+    return [
+        PropertyLinkOut(
+            id=link.id,
+            property_key=link.property_key,
+            term_id=link.term_id,
+            item=item,
+            kind=link.kind,
+            note=link.note,
+        )
+        for link, item in rows
+    ]
+
+
+@router.post("/properties/links", response_model=PropertyLinkOut, status_code=201)
+def add_property_link(
+    payload: PropertyLinkCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyLinkOut:
+    """매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다."""
+    if payload.kind not in LINK_KINDS:
+        raise AppError(
+            "MNX-CATALOG-0024",
+            f"매핑 종류는 {', '.join(LINK_KINDS)} 중 하나여야 합니다.",
+            status=422,
+        )
+    if (
+        db.scalar(
+            select(CatalogDefinition).where(CatalogDefinition.key == payload.property_key)
+        )
+        is None
+    ):
+        raise NotFound(
+            "MNX-CATALOG-0021", f"'{payload.property_key}' 물성 정의를 찾을 수 없습니다."
+        )
+    term = next(
+        (
+            one
+            for one in property_names.item_terms(db)
+            if compare_key(one.value) == compare_key(payload.item)
+        ),
+        None,
+    )
+    if term is None:
+        raise NotFound(
+            "MNX-CATALOG-0025",
+            f"'{payload.item}' 이(가) 사내 물성 항목에 없습니다. 기준정보에서 먼저 만드세요.",
+        )
+    found = db.scalar(
+        select(PropertyLink).where(
+            PropertyLink.property_key == payload.property_key,
+            PropertyLink.term_id == term.id,
+        )
+    )
+    if found is None:
+        found = PropertyLink(
+            property_key=payload.property_key,
+            term_id=term.id,
+            kind=payload.kind,
+            note=payload.note,
+            created_by_id=user.id,
+        )
+        db.add(found)
+        db.commit()
+        db.refresh(found)
+    return PropertyLinkOut(
+        id=found.id,
+        property_key=found.property_key,
+        term_id=found.term_id,
+        item=term.value,
+        kind=found.kind,
+        note=found.note,
     )

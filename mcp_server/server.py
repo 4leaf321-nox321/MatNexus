@@ -1165,6 +1165,46 @@ async def platform_summary(ctx: Context) -> dict[str, Any]:
 # ── 리소스 (MaterialTwin 에서 — 도구 목록에 상주 비용을 안 얹는다) ─────────────
 
 
+@mcp.tool()
+async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
+    """**물성 이름 → 물성 키.** 값을 묻기 전에 여기부터 거친다.
+
+    사람이 부르는 말과 DB 의 키는 다르다. 한글·영문·기호·규격 표기가 다 들어오고
+    (「항복강도」·「yield strength」·「Rp0.2」·「0.2% proof stress」), 비슷한
+    이름의 **다른** 물성이 나란히 있다.
+
+    ## 왜 이것부터인가 — 실측(2026-09-08)
+
+        rheological.yield_stress    「항복응력」      9건   8 ~ 20 Pa      ← 유변학
+        mechanical.yield_strength   「항복강도」    486건   0.1 ~ 2310 MPa  ← 금속
+
+    이름이 정확히 「항복응력」 인 정의는 **페이스트가 흐르기 시작하는 응력**이다.
+    사람이 「항복응력 200MPa」 를 물으면 금속의 항복강도를 뜻하는데, 이름만 맞춰
+    고르면 9건짜리 엉뚱한 물성에 답하게 된다.
+
+    ## `ambiguous` 가 참이면 고르지 말고 되물어라
+
+    도메인이 다른 후보가 나란히 섰다는 뜻이다. 그때 하나를 골라 답하면 **조용히
+    틀린 답**이 나간다 — 사용자에게 어느 쪽인지 물어라.
+
+    `value_count` 가 0이면 그 물성으로는 아무것도 못 찾는다. `internal_items` 가
+    있으면 사내에서 실제로 쓰는 물성이다.
+    """
+    got = await _get(ctx, "/catalog/properties/resolve", {"q": name})
+    if "error" in got:
+        return got
+    if not got.get("candidates"):
+        return {
+            "query": name,
+            "candidates": [],
+            "hint": (
+                f"'{name}' 로 물성을 찾지 못했습니다. `get_taxonomy` 로 어떤 물성 "
+                "도메인이 있는지 보거나, 다른 이름으로 다시 물어보세요."
+            ),
+        }
+    return got
+
+
 @mcp.resource("matnexus://guide", mime_type="text/markdown")
 def guide_resource() -> str:
     """MatNexus 사용 규약 — 단위·값의 무게·층·흐름."""

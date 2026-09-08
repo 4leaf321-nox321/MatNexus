@@ -579,6 +579,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/aliases/{alias_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Property Alias */
+        delete: operations["remove_property_alias_api_catalog_properties_aliases__alias_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Property Links
+         * @description 문헌 물성 ↔ 사내 물성 항목 매핑 전부(ADR 0027 이 미뤄 둔 그 표).
+         */
+        get: operations["list_property_links_api_catalog_properties_links_get"];
+        put?: never;
+        /**
+         * Add Property Link
+         * @description 매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다.
+         */
+        post: operations["add_property_link_api_catalog_properties_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve Property
+         * @description 이름 → 물성 후보들. **고르지 않고 나란히 준다.**
+         *
+         *     `ambiguous` 가 참이면 도메인이 다른 후보가 나란히 섰다는 뜻이고, 그때 하나를
+         *     고르면 조용히 틀린다 — 부르는 쪽이 되물어야 한다.
+         */
+        get: operations["resolve_property_api_catalog_properties_resolve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/{property_key}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Property Aliases */
+        get: operations["list_property_aliases_api_catalog_properties__property_key__aliases_get"];
+        put?: never;
+        /**
+         * Add Property Alias
+         * @description 별칭 하나를 더한다.
+         *
+         *     **이미 있으면 그것을 돌려준다** — 409 가 아니다. 기준정보 값 추가와 같은
+         *     판단이다: 실제로 일어난 일이 「이미 있는 것을 또 적었다」 뿐인데 화면이
+         *     멈추면 안 된다.
+         */
+        post: operations["add_property_alias_api_catalog_properties__property_key__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/summary": {
         parameters: {
             query?: never;
@@ -10350,6 +10439,63 @@ export interface components {
             /** Relaxation Time S */
             relaxation_time_s: number;
         };
+        /** PropertyAliasCreate */
+        PropertyAliasCreate: {
+            /** Alias */
+            alias: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Source
+             * @default manual
+             */
+            source: string;
+        };
+        /** PropertyAliasOut */
+        PropertyAliasOut: {
+            /** Alias */
+            alias: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note: string | null;
+            /** Property Key */
+            property_key: string;
+            /** Source */
+            source: string;
+        };
+        /**
+         * PropertyCandidateOut
+         * @description 물성 후보 하나 — **값을 묻기 전에 필요한 것을 다 들고 있다.**
+         *
+         *     단위를 필드 이름에 박지 않고 값으로 싣는다(`si_unit`). 알루미늄 밀도가
+         *     `2.68e-09 kg/m3` 로 나간 적이 있다 — 이름에 단위를 박은 탓이었다.
+         */
+        PropertyCandidateOut: {
+            /** Domain */
+            domain: string;
+            /** Internal Items */
+            internal_items: string[];
+            /** Key */
+            key: string;
+            /** Matched By */
+            matched_by: string;
+            /** Matched Text */
+            matched_text: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string[];
+            /** Si Unit */
+            si_unit: string;
+            /** Symbol */
+            symbol: string | null;
+            /** Value Count */
+            value_count: number;
+        };
         /** PropertyCardOut */
         PropertyCardOut: {
             /**
@@ -10478,6 +10624,50 @@ export interface components {
             symbol: string | null;
             /** Units */
             units: string[];
+        };
+        /** PropertyLinkCreate */
+        PropertyLinkCreate: {
+            /** Item */
+            item: string;
+            /**
+             * Kind
+             * @default same_as
+             */
+            kind: string;
+            /** Note */
+            note?: string | null;
+            /** Property Key */
+            property_key: string;
+        };
+        /** PropertyLinkOut */
+        PropertyLinkOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item */
+            item: string;
+            /** Kind */
+            kind: string;
+            /** Note */
+            note: string | null;
+            /** Property Key */
+            property_key: string;
+            /**
+             * Term Id
+             * Format: uuid
+             */
+            term_id: string;
+        };
+        /** PropertyResolveOut */
+        PropertyResolveOut: {
+            /** Ambiguous */
+            ambiguous: boolean;
+            /** Candidates */
+            candidates: components["schemas"]["PropertyCandidateOut"][];
+            /** Query */
+            query: string;
         };
         /** PropertySourcesOut */
         PropertySourcesOut: {
@@ -14477,6 +14667,187 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogMaterialDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_property_alias_api_catalog_properties_aliases__alias_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_property_links_api_catalog_properties_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyLinkOut"][];
+                };
+            };
+        };
+    };
+    add_property_link_api_catalog_properties_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_property_api_catalog_properties_resolve_get: {
+        parameters: {
+            query: {
+                /** @description 사람이 부르는 이름·기호·별칭 */
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyResolveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_property_aliases_api_catalog_properties__property_key__aliases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                property_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAliasOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_property_alias_api_catalog_properties__property_key__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                property_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAliasCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAliasOut"];
                 };
             };
             /** @description Validation Error */

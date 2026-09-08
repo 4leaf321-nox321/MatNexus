@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CatalogSummaryOut(BaseModel):
@@ -204,3 +204,66 @@ class CatalogMaterialDetailOut(BaseModel):
     grade: str | None
     attributes: dict[str, Any] | None
     values: list[CatalogValueOut]
+
+
+class PropertyCandidateOut(BaseModel):
+    """물성 후보 하나 — **값을 묻기 전에 필요한 것을 다 들고 있다.**
+
+    단위를 필드 이름에 박지 않고 값으로 싣는다(`si_unit`). 알루미늄 밀도가
+    `2.68e-09 kg/m3` 로 나간 적이 있다 — 이름에 단위를 박은 탓이었다.
+    """
+
+    key: str
+    name: str
+    domain: str
+    si_unit: str
+    symbol: str | None
+    value_count: int
+    """값이 몇 건인가. 0이면 이 물성으로는 아무것도 못 찾는다."""
+    internal_items: list[str]
+    """이어진 사내 물성 항목. 있으면 우리가 실제로 쓰는 물성이다."""
+    matched_by: str
+    """`alias` · `name` · `symbol` · `key` · `alias_partial` · `partial`."""
+    matched_text: str | None
+    notes: list[str]
+
+
+class PropertyResolveOut(BaseModel):
+    query: str
+    ambiguous: bool
+    """**참이면 하나를 고르면 안 된다.** 도메인이 다른 후보가 나란히 섰다는 뜻이다."""
+    candidates: list[PropertyCandidateOut]
+
+
+class PropertyAliasOut(BaseModel):
+    id: uuid.UUID
+    property_key: str
+    alias: str
+    source: str
+    note: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class PropertyAliasCreate(BaseModel):
+    alias: str = Field(min_length=1, max_length=200)
+    source: str = "manual"
+    note: str | None = None
+
+
+class PropertyLinkOut(BaseModel):
+    id: uuid.UUID
+    property_key: str
+    term_id: uuid.UUID
+    item: str
+    """사내 물성 항목 이름 — 화면이 기준정보를 따로 안 부르게."""
+    kind: str
+    note: str | None
+
+
+class PropertyLinkCreate(BaseModel):
+    property_key: str
+    item: str
+    """사내 물성 항목 **이름**으로 받는다 — 사람이 폼에 id 를 적지 않는다."""
+    kind: str = "same_as"
+    note: str | None = None

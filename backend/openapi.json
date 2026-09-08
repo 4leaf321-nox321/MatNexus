@@ -13518,6 +13518,157 @@
         "title": "PronyTermOut",
         "type": "object"
       },
+      "PropertyAliasCreate": {
+        "properties": {
+          "alias": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Alias",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source": {
+            "default": "manual",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias"
+        ],
+        "title": "PropertyAliasCreate",
+        "type": "object"
+      },
+      "PropertyAliasOut": {
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "property_key",
+          "alias",
+          "source",
+          "note"
+        ],
+        "title": "PropertyAliasOut",
+        "type": "object"
+      },
+      "PropertyCandidateOut": {
+        "description": "물성 후보 하나 — **값을 묻기 전에 필요한 것을 다 들고 있다.**\n\n단위를 필드 이름에 박지 않고 값으로 싣는다(`si_unit`). 알루미늄 밀도가\n`2.68e-09 kg/m3` 로 나간 적이 있다 — 이름에 단위를 박은 탓이었다.",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "internal_items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Internal Items",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "matched_by": {
+            "title": "Matched By",
+            "type": "string"
+          },
+          "matched_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Text"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "value_count": {
+            "title": "Value Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "domain",
+          "si_unit",
+          "symbol",
+          "value_count",
+          "internal_items",
+          "matched_by",
+          "matched_text",
+          "notes"
+        ],
+        "title": "PropertyCandidateOut",
+        "type": "object"
+      },
       "PropertyCardOut": {
         "properties": {
           "available_formats": {
@@ -13900,6 +14051,113 @@
           "units"
         ],
         "title": "PropertyItemOut",
+        "type": "object"
+      },
+      "PropertyLinkCreate": {
+        "properties": {
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "kind": {
+            "default": "same_as",
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property_key",
+          "item"
+        ],
+        "title": "PropertyLinkCreate",
+        "type": "object"
+      },
+      "PropertyLinkOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "term_id": {
+            "format": "uuid",
+            "title": "Term Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "property_key",
+          "term_id",
+          "item",
+          "kind",
+          "note"
+        ],
+        "title": "PropertyLinkOut",
+        "type": "object"
+      },
+      "PropertyResolveOut": {
+        "properties": {
+          "ambiguous": {
+            "title": "Ambiguous",
+            "type": "boolean"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "ambiguous",
+          "candidates"
+        ],
+        "title": "PropertyResolveOut",
         "type": "object"
       },
       "PropertySourcesOut": {
@@ -23146,6 +23404,263 @@
           }
         },
         "summary": "Get Material",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/aliases/{alias_id}": {
+      "delete": {
+        "operationId": "remove_property_alias_api_catalog_properties_aliases__alias_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alias_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Alias Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Property Alias",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/links": {
+      "get": {
+        "description": "문헌 물성 ↔ 사내 물성 항목 매핑 전부(ADR 0027 이 미뤄 둔 그 표).",
+        "operationId": "list_property_links_api_catalog_properties_links_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PropertyLinkOut"
+                  },
+                  "title": "Response List Property Links Api Catalog Properties Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Property Links",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "description": "매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다.",
+        "operationId": "add_property_link_api_catalog_properties_links_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Property Link",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/resolve": {
+      "get": {
+        "description": "이름 → 물성 후보들. **고르지 않고 나란히 준다.**\n\n`ambiguous` 가 참이면 도메인이 다른 후보가 나란히 섰다는 뜻이고, 그때 하나를\n고르면 조용히 틀린다 — 부르는 쪽이 되물어야 한다.",
+        "operationId": "resolve_property_api_catalog_properties_resolve_get",
+        "parameters": [
+          {
+            "description": "사람이 부르는 이름·기호·별칭",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "사람이 부르는 이름·기호·별칭",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Property",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/{property_key}/aliases": {
+      "get": {
+        "operationId": "list_property_aliases_api_catalog_properties__property_key__aliases_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "property_key",
+            "required": true,
+            "schema": {
+              "title": "Property Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PropertyAliasOut"
+                  },
+                  "title": "Response List Property Aliases Api Catalog Properties  Property Key  Aliases Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Property Aliases",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "description": "별칭 하나를 더한다.\n\n**이미 있으면 그것을 돌려준다** — 409 가 아니다. 기준정보 값 추가와 같은\n판단이다: 실제로 일어난 일이 「이미 있는 것을 또 적었다」 뿐인데 화면이\n멈추면 안 된다.",
+        "operationId": "add_property_alias_api_catalog_properties__property_key__aliases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "property_key",
+            "required": true,
+            "schema": {
+              "title": "Property Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyAliasCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyAliasOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Property Alias",
         "tags": [
           "catalog"
         ]
