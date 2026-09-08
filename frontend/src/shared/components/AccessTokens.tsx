@@ -1,8 +1,13 @@
 /**
  * 개인 액세스 토큰 — **발급·목록·폐기.**
  *
- * 장비 PC 의 수집 에이전트(MatPylon)가 이 토큰으로 온다. 지금까지는 API 로만
- * 발급할 수 있었다 — 마법사가 토큰을 요구하는데 PowerShell 을 열게 할 수는 없다.
+ * **장비 전용이 아니다.** 장비 PC 의 수집 에이전트(MatPylon)·AI 도구(MCP)·손으로
+ * 짠 스크립트가 모두 이 토큰 하나로 온다 — 인증 지점이 하나이고(`shared/auth.py`),
+ * PAT 는 곧 그 계정의 자격이다. 화면 문구가 장비만 말하고 있어서 「MCP 용 토큰은
+ * 따로 받아야 하나」 를 묻게 됐다(2026-09-08).
+ *
+ * 지금까지는 API 로만 발급할 수 있었다 — 마법사가 토큰을 요구하는데 PowerShell 을
+ * 열게 할 수는 없다.
  *
  * ## 평문은 한 번만
  *
@@ -36,7 +41,14 @@ export const tokensApi = {
   revoke: (id: string) => api.delete<void>(`/auth/tokens/${id}`),
 }
 
-export function AccessTokens({ compact = false }: { compact?: boolean }) {
+export function AccessTokens({
+  compact = false,
+  onIssued,
+}: {
+  compact?: boolean
+  /** 발급된 평문. **화면을 벗어나면 다시 못 보므로** 받는 쪽이 그 자리에서 써야 한다. */
+  onIssued?: (token: string) => void
+}) {
   const { data, error, loading, reload } = useResource(() => tokensApi.list(), [])
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -51,6 +63,7 @@ export function AccessTokens({ compact = false }: { compact?: boolean }) {
     try {
       const made = await tokensApi.create(label)
       setIssued(made)
+      onIssued?.(made.token)
       setName('')
       reload()
     } catch (caught) {
@@ -63,7 +76,7 @@ export function AccessTokens({ compact = false }: { compact?: boolean }) {
   async function revoke(row: Pat) {
     if (
       !window.confirm(
-        `'${row.name}' 토큰을 폐기합니다. 이 토큰으로 붙어 있던 장비는 더 못 보냅니다.`
+        `'${row.name}' 토큰을 폐기합니다. 이 토큰을 쓰던 것(장비·AI 도구·스크립트)은 즉시 끊깁니다.`
       )
     ) {
       return
@@ -89,7 +102,7 @@ export function AccessTokens({ compact = false }: { compact?: boolean }) {
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="용도 (예: 인장기-1 MatPylon)"
+          placeholder="용도 (예: 내 노트북 Claude Code · 인장기-1 MatPylon)"
           aria-label="토큰 이름"
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -104,8 +117,11 @@ export function AccessTokens({ compact = false }: { compact?: boolean }) {
       </div>
       {!compact && (
         <p className="text-muted-foreground text-xs">
-          토큰은 <strong>내 계정의 권한</strong>으로 움직입니다. 장비를 붙일 부서의 구성원이어야 그
-          부서에 파일을 넣을 수 있습니다. 평문은 발급 직후 한 번만 보입니다.
+          장비(MatPylon)·AI 도구(MCP)·스크립트가 <strong>같은 토큰</strong>을 씁니다 — 용도별로
+          따로 받을 필요는 없지만, 이름을 나눠 두면 하나만 골라 폐기할 수 있습니다. 토큰은{' '}
+          <strong>내 계정의 권한</strong>으로 움직입니다 — 장비를 붙일 부서의 구성원이어야 그
+          부서에 파일을 넣을 수 있고, AI 도 내가 화면에서 보는 것만 봅니다. 평문은 발급 직후 한
+          번만 보입니다.
         </p>
       )}
 
@@ -143,7 +159,7 @@ export function AccessTokens({ compact = false }: { compact?: boolean }) {
         open={issued !== null}
         onClose={() => setIssued(null)}
         title="액세스 토큰이 발급되었습니다"
-        description="이 값은 다시 볼 수 없습니다. 지금 복사해 MatPylon 마법사에 붙여 넣으세요."
+        description="이 값은 다시 볼 수 없습니다. 지금 복사해 쓰는 곳(MatPylon 마법사·AI 도구 설정)에 붙여 넣으세요."
         secret={issued?.token ?? ''}
         subject={issued?.pat.name}
       />

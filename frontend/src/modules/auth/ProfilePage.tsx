@@ -13,6 +13,7 @@ import type { FormEvent } from 'react'
 import { ApiError, api } from '@/shared/api/client'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { AccessTokens } from '@/shared/components/AccessTokens'
+import { McpSetup } from '@/shared/components/McpSetup'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -26,6 +27,9 @@ export default function ProfilePage() {
   const [failure, setFailure] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
+  // 방금 발급한 평문. **여기서 들고 있어야** 아래 등록 설정에 채워 넣을 수 있다 —
+  // 서버는 해시만 갖고 있어 다시 물어볼 수 없다.
+  const [issued, setIssued] = useState<string | null>(null)
 
   // 계정은 뒤늦게 풀린다 — 첫 렌더에서 user 가 없을 수 있다.
   useEffect(() => {
@@ -54,8 +58,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <PageHeader title="내 정보" description="이름·비밀번호·액세스 토큰을 여기서 관리합니다." />
+    <div className="max-w-3xl">
+      <PageHeader
+        title="내 정보"
+        description="이름·비밀번호·액세스 토큰과 AI 도구 등록을 여기서 관리합니다."
+      />
 
       <form onSubmit={submit} className="space-y-3">
         <div className="space-y-1.5">
@@ -90,11 +97,18 @@ export default function ProfilePage() {
         </div>
       </form>
 
-      {/* **장비가 들어오는 열쇠.** 장비 PC 의 수집 에이전트가 이 토큰으로 온다.
-          발급은 여기서, 어느 부서에 붙었는지는 장비 커넥터 화면에서 본다. */}
+      {/* **밖에서 들어오는 열쇠 하나.** 장비 PC 의 수집 에이전트도, AI 도구(MCP)도,
+          스크립트도 이 토큰으로 온다. 발급은 여기서, 어느 부서에 붙었는지는 장비
+          커넥터 화면에서 본다. */}
       <section className="mt-8 border-t pt-4">
         <h2 className="mb-2 text-sm font-semibold">액세스 토큰</h2>
-        <AccessTokens />
+        <AccessTokens onIssued={setIssued} />
+      </section>
+
+      {/* 토큰을 받고도 「어디에 넣나」 에서 막힌다 — 도구별로 완성된 설정을 준다. */}
+      <section className="mt-8 border-t pt-4">
+        <h2 className="mb-2 text-sm font-semibold">AI 도구에 등록하기</h2>
+        <McpSetup token={issued} />
       </section>
 
       <ChangePasswordDialog

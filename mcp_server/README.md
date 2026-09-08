@@ -43,10 +43,22 @@ $env:MATNEXUS_API_BASE = 'http://127.0.0.1:8010/api'
 
 ## 3. 클라이언트 등록
 
+**화면이 완성된 설정을 준다.** 「내 정보 → AI 도구에 등록하기」 에서 쓰는 도구를
+고르면 토큰이 채워진 채로 나온다(Claude Code · Claude Desktop · Codex CLI ·
+Gemini CLI). 토큰을 막 발급한 자리에서 바로 복사하는 것이 가장 짧은 길이다 —
+평문은 그 화면을 벗어나면 다시 못 본다.
+
+손으로 적는다면 Claude Code 는 이렇다:
+
 ```powershell
 claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
   --header "Authorization: Bearer mnx_pat_..."
 ```
+
+**설정 파일로 붙이는 도구(Claude Desktop · Codex · Gemini)는 HTTP 서버를 직접 못
+적는다.** `npx mcp-remote` 브리지를 거치고, 그래서 Node.js 가 필요하다 — 화면이
+주는 설정에 이미 들어 있다. 헤더 값에 공백이 있어(`Bearer mnx_pat_…`) args 에
+그대로 적으면 도구에 따라 잘리므로, env 로 넣고 `${AUTH}` 로 참조한다.
 
 ## 4. 안내는 서버가 들고 있다
 
