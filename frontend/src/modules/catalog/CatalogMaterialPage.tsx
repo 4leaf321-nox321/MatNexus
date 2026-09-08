@@ -172,7 +172,13 @@ export default function CatalogMaterialPage() {
                   <TableRow key={value.id} className={value.representative ? '' : 'opacity-80'}>
                     <TableCell className="text-sm">
                       {value.property_name}
-                      {value.symbol && (
+                      {/* **한 이름에 변수가 여럿인 물성이 있다**(ADR 0029). Anand
+                          하나에 9개 상수가 들어 있어서, 이름만 적으면 표에 같은
+                          줄이 아홉 번 서고 무엇이 무엇인지 알 수 없다. */}
+                      {value.term && (
+                        <span className="ml-1 font-medium">· {value.term}</span>
+                      )}
+                      {value.symbol && !value.term && (
                         <span className="text-muted-foreground ml-1 text-xs">{value.symbol}</span>
                       )}
                       {value.n_candidates > 1 && value.representative && (
@@ -196,9 +202,22 @@ export default function CatalogMaterialPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-sm tabular-nums">
-                      {value.value_num !== null && value.value_num !== undefined
-                        ? fmtValueAs(units, value.value_num, value.unit)
-                        : (value.value_text ?? '—')}
+                      {/* **변수마다 단위가 다르다.** 정의는 대개 `1`(무차원)이라고
+                          적혀 있는데 실제로는 `MPa`·`1/s`·`K` 다. 그 값은 SI 로
+                          저장돼 있지도 않아서 환산하지 않고 그대로 보여 준다 —
+                          환산하면 150000 MPa 가 엉뚱한 수가 된다(ADR 0029 D2). */}
+                      {value.value_num === null || value.value_num === undefined ? (
+                        (value.value_text ?? '—')
+                      ) : value.term_unit ? (
+                        <>
+                          {value.value_num}
+                          <span className="text-muted-foreground ml-1 text-xs">
+                            {value.term_unit === '1' ? '' : value.term_unit}
+                          </span>
+                        </>
+                      ) : (
+                        fmtValueAs(units, value.value_num, value.unit)
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground max-w-64 text-xs">
                       {fmtConditions(value.conditions as Record<string, unknown> | null) || '—'}

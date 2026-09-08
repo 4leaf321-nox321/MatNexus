@@ -2388,6 +2388,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/{material_id}/parameter-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Parameter Sets
+         * @description 이 재료가 가진 모델 파라미터 한 벌들.
+         *
+         *     **물성 탭이 이것을 읽는다.** 카드를 만들기 전에도 「이 재료가 Anand 를
+         *     가졌나」 에 답할 수 있어야 한다.
+         */
+        get: operations["list_parameter_sets_api_materials__material_id__parameter_sets_get"];
+        put?: never;
+        /**
+         * Adopt Parameter Set
+         * @description 문헌의 한 벌을 이 재료로 받아 온다.
+         *
+         *     **한 벌이 통째로 온다.** `A` 만 떼어 오면 뜻이 없다 — 모델이 9개를 함께
+         *     기대한다.
+         *
+         *     **단위를 환산하지 않는다**(ADR 0029 D2). 문헌의 이 값들은 SI 가 아니라 그 항의
+         *     원래 단위이고(h0 = 150000 MPa), 환산하면 모델이 기대하는 값과 달라진다. 대신
+         *     단위를 항마다 함께 적는다.
+         *
+         *     같은 재료에 **같은 모델의 다른 벌**(논문이 다르면)은 나란히 남는다. 그것이
+         *     카드에 바로 넣지 않는 이유 중 하나다 — 후보를 견주고 고르는 일이 남아야 한다.
+         */
+        post: operations["adopt_parameter_set_api_materials__material_id__parameter_sets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/parameter-sets/{set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Drop Parameter Set */
+        delete: operations["drop_parameter_set_api_materials__material_id__parameter_sets__set_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{material_id}/property-sources": {
         parameters: {
             query?: never;
@@ -6780,6 +6834,10 @@ export interface components {
             source_detail: string | null;
             /** Symbol */
             symbol: string | null;
+            /** Term */
+            term?: string | null;
+            /** Term Unit */
+            term_unit?: string | null;
             /** Uncertainty */
             uncertainty: number | null;
             /** Unit */
@@ -10226,6 +10284,96 @@ export interface components {
             offset: number;
             /** Total */
             total: number;
+        };
+        /**
+         * ParameterSetAdoptIn
+         * @description 문헌의 한 벌을 재료로 받아 온다.
+         *
+         *     **한 벌이 통째로 온다** — `A` 만 떼어 오면 뜻이 없다. 단위는 환산하지 않는다
+         *     (그 값들은 SI 가 아니다).
+         */
+        ParameterSetAdoptIn: {
+            /**
+             * Catalog Material Id
+             * Format: uuid
+             * @description 어느 문헌 재료의 벌인가
+             */
+            catalog_material_id: string;
+            /**
+             * Model
+             * @description 비우면 그 벌의 모델을 그대로 쓴다
+             * @default
+             */
+            model: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Property Key
+             * @description 어느 문헌 물성인가
+             */
+            property_key: string;
+            /**
+             * Set Id
+             * @description 같은 재료에 벌이 여럿이면 고른다
+             * @default
+             */
+            set_id: string;
+        };
+        /**
+         * ParameterSetOut
+         * @description 재료가 가진 모델 파라미터 한 벌(ADR 0029).
+         *
+         *     **값 하나짜리는 선언 물성이 담고, 묶음은 이쪽이 담는다.** Anand 9개를 선언
+         *     물성에 넣으려면 단위가 `1`·`1/s`·`MPa`·`K` 로 제각각이라 항목의 차원 검사를
+         *     꺼야 하는데, 그 검사는 「비열 자리에 열전도율」 을 막던 것이다.
+         */
+        ParameterSetOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Model */
+            model: string;
+            /** Notes */
+            notes?: string | null;
+            /** Origin */
+            origin: string;
+            /** Property Key */
+            property_key?: string | null;
+            /** Quality Tier */
+            quality_tier?: number | null;
+            /** Source Detail */
+            source_detail?: string | null;
+            /**
+             * Source Ref
+             * @default
+             */
+            source_ref: string;
+            /**
+             * Terms
+             * @default []
+             */
+            terms: components["schemas"]["ParameterTermOut"][];
+        };
+        /**
+         * ParameterTermOut
+         * @description 한 벌 안의 변수 하나. **단위를 항마다 든다** — 한 벌 안에서 섞이기 때문이다.
+         */
+        ParameterTermOut: {
+            /** Term */
+            term: string;
+            /** Text */
+            text?: string | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /** Value */
+            value?: number | null;
         };
         /**
          * ParserOut
@@ -18173,6 +18321,102 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeletePlanOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_parameter_sets_api_materials__material_id__parameter_sets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterSetOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    adopt_parameter_set_api_materials__material_id__parameter_sets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParameterSetAdoptIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drop_parameter_set_api_materials__material_id__parameter_sets__set_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

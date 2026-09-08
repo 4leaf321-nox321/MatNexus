@@ -36,6 +36,7 @@ from app.modules.guide.models import (
     GuideSection,
 )
 from app.modules.materials.models import Material, MaterialUse, Sample, Specimen
+from app.modules.materials.parameter_models import MaterialParameterSet
 from app.modules.metrology.models import Instrument, InstrumentCapability
 from app.modules.notices.models import Notice, NoticeRead
 from app.modules.notifications.models import (
@@ -84,6 +85,7 @@ __all__ = [
     "InstrumentCapability",
     "Job",
     "Material",
+    "MaterialParameterSet",
     "MaterialUse",
     "Notice",
     "NoticeRead",

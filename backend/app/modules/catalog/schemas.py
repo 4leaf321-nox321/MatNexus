@@ -59,6 +59,12 @@ class CatalogValueOut(BaseModel):
     value_num: float | None
     value_text: str | None
     unit: str | None
+    term: str | None = None
+    """**어느 변수인가**(ADR 0029). 한 이름에 여럿이 든 물성에서만 온다 —
+    「Anand 점소성 상수」 의 `h0`."""
+    term_unit: str | None = None
+    """그 변수의 진짜 단위. 정의가 말하는 단위가 아니다 — 대개 정의는 `1` 이라고
+    적혀 있고 실제로는 `MPa`·`1/s`·`K` 다."""
     uncertainty: float | None
     conditions: dict[str, Any] | None
     method: str | None

@@ -63,6 +63,12 @@ export default function MaterialDetailPage() {
   // **묶음 결과는 물성이다.** 물성 표가 그것을 다른 값과 나란히 보이려면 여기서
   // 가져와 넘겨야 한다 — `statistics` 는 묶음 API 를 직접 부르지 않는다(모듈 경계).
   const groupRows = useResource(() => (id ? groupsApi.ofMaterial(id) : Promise.resolve([])), [id])
+  // **문헌에서 받아 온 모델 파라미터도 물성이다**(ADR 0029). 묶음 결과와 같은
+  // 길로 가져와 물성 표에 나란히 세운다 — 카드를 만들기 전에도 보여야 한다.
+  const parameterSets = useResource(
+    () => (id ? materialsApi.parameterSets(id) : Promise.resolve([])),
+    [id]
+  )
   const groupKinds = useResource(() => groupsApi.kinds(), [])
   const [removing, setRemoving] = useState(false)
 
@@ -268,6 +274,7 @@ export default function MaterialDetailPage() {
             <PropertiesPanel
               materialId={id}
               declared={item?.declared_properties}
+              parameterSets={parameterSets.data ?? []}
               onEditDeclared={setEditingDeclared}
               groupResults={groupRows.data ?? []}
               groupKinds={groupKinds.data ?? []}

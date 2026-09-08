@@ -787,3 +787,46 @@ class BulkOut(BaseModel):
     specimens: int
     made: list[BulkMadeOut]
     blocked: list[BulkBlockedOut]
+
+
+class ParameterTermOut(BaseModel):
+    """한 벌 안의 변수 하나. **단위를 항마다 든다** — 한 벌 안에서 섞이기 때문이다."""
+
+    term: str
+    value: float | None = None
+    text: str | None = None
+    unit: str = ""
+
+
+class ParameterSetOut(BaseModel):
+    """재료가 가진 모델 파라미터 한 벌(ADR 0029).
+
+    **값 하나짜리는 선언 물성이 담고, 묶음은 이쪽이 담는다.** Anand 9개를 선언
+    물성에 넣으려면 단위가 `1`·`1/s`·`MPa`·`K` 로 제각각이라 항목의 차원 검사를
+    꺼야 하는데, 그 검사는 「비열 자리에 열전도율」 을 막던 것이다.
+    """
+
+    id: uuid.UUID
+    model: str
+    label: str
+    property_key: str | None = None
+    origin: str
+    source_ref: str = ""
+    source_detail: str | None = None
+    quality_tier: int | None = None
+    terms: list[ParameterTermOut] = []
+    notes: str | None = None
+
+
+class ParameterSetAdoptIn(BaseModel):
+    """문헌의 한 벌을 재료로 받아 온다.
+
+    **한 벌이 통째로 온다** — `A` 만 떼어 오면 뜻이 없다. 단위는 환산하지 않는다
+    (그 값들은 SI 가 아니다).
+    """
+
+    property_key: str = Field(description="어느 문헌 물성인가")
+    catalog_material_id: uuid.UUID = Field(description="어느 문헌 재료의 벌인가")
+    model: str = Field(default="", description="비우면 그 벌의 모델을 그대로 쓴다")
+    set_id: str = Field(default="", description="같은 재료에 벌이 여럿이면 고른다")
+    notes: str | None = None

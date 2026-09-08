@@ -122,6 +122,10 @@ export function isBookkeeping(key: string): boolean {
       'moved_from_source',
       'merge_verdict',
       'direction_verbatim',
+      // **변수와 그 단위는 이제 「물성」 열이 말한다**(ADR 0029). 조건에 또 적으면
+      // 같은 말이 두 곳에 서고, 정작 조건다운 것(온도·속도)이 뒤로 밀린다.
+      'term',
+      'unit_of_term',
     ].includes(key)
   )
 }

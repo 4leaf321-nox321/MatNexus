@@ -604,6 +604,8 @@ def get_material(
             value_num=value.value_num,
             value_text=value.value_text,
             unit=value.unit,
+            term=(value.conditions or {}).get(parameters.TERM),
+            term_unit=(value.conditions or {}).get(parameters.UNIT_OF_TERM),
             uncertainty=value.uncertainty,
             conditions=value.conditions,
             method=value.method,

@@ -60,6 +60,7 @@ export type ValueSource = components['schemas']['ValueSourceOut']
  * `2.06e11` 만 돌려주면 자기가 적은 값인지 알기 어렵다.
  */
 export type DeclaredProperty = components['schemas']['DeclaredPropertyOut']
+export type ParameterSet = components['schemas']['ParameterSetOut']
 /** 넣을 때. `value` 는 `input_unit` 단위의 값이고 서버가 SI 로 바꾼다. */
 export type DeclaredPropertyIn = components['schemas']['DeclaredPropertyIn']
 /** 밀시트가 말한 값과 우리가 잰 값을 나란히(ADR 0016). */
@@ -149,6 +150,8 @@ function search(query: MaterialQuery | SpecimenQuery): string {
 export type WorkspaceChoice = components['schemas']['WorkspaceOut']
 
 export const materialsApi = {
+  /** 이 재료가 문헌에서 받아 온 모델 파라미터 벌들(ADR 0029). */
+  parameterSets: (id: string) => api.get<ParameterSet[]>(`/materials/${id}/parameter-sets`),
   /** 소속 거르기의 선택지. 내가 볼 수 있는 부서. */
   workspaces: () => api.get<WorkspaceChoice[]>('/workspaces'),
   list: (query: MaterialQuery = {}) => api.get<MaterialPage>(`/materials${search(query)}`),

@@ -3278,6 +3278,28 @@
             ],
             "title": "Symbol"
           },
+          "term": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          },
+          "term_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term Unit"
+          },
           "uncertainty": {
             "anyOf": [
               {
@@ -12718,6 +12740,179 @@
           "offset"
         ],
         "title": "Page[TestRunOut]",
+        "type": "object"
+      },
+      "ParameterSetAdoptIn": {
+        "description": "문헌의 한 벌을 재료로 받아 온다.\n\n**한 벌이 통째로 온다** — `A` 만 떼어 오면 뜻이 없다. 단위는 환산하지 않는다\n(그 값들은 SI 가 아니다).",
+        "properties": {
+          "catalog_material_id": {
+            "description": "어느 문헌 재료의 벌인가",
+            "format": "uuid",
+            "title": "Catalog Material Id",
+            "type": "string"
+          },
+          "model": {
+            "default": "",
+            "description": "비우면 그 벌의 모델을 그대로 쓴다",
+            "title": "Model",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "property_key": {
+            "description": "어느 문헌 물성인가",
+            "title": "Property Key",
+            "type": "string"
+          },
+          "set_id": {
+            "default": "",
+            "description": "같은 재료에 벌이 여럿이면 고른다",
+            "title": "Set Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property_key",
+          "catalog_material_id"
+        ],
+        "title": "ParameterSetAdoptIn",
+        "type": "object"
+      },
+      "ParameterSetOut": {
+        "description": "재료가 가진 모델 파라미터 한 벌(ADR 0029).\n\n**값 하나짜리는 선언 물성이 담고, 묶음은 이쪽이 담는다.** Anand 9개를 선언\n물성에 넣으려면 단위가 `1`·`1/s`·`MPa`·`K` 로 제각각이라 항목의 차원 검사를\n꺼야 하는데, 그 검사는 「비열 자리에 열전도율」 을 막던 것이다.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "property_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
+          },
+          "quality_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Tier"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "source_ref": {
+            "default": "",
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "terms": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ParameterTermOut"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "model",
+          "label",
+          "origin"
+        ],
+        "title": "ParameterSetOut",
+        "type": "object"
+      },
+      "ParameterTermOut": {
+        "description": "한 벌 안의 변수 하나. **단위를 항마다 든다** — 한 벌 안에서 섞이기 때문이다.",
+        "properties": {
+          "term": {
+            "title": "Term",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "unit": {
+            "default": "",
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "title": "ParameterTermOut",
         "type": "object"
       },
       "ParserOut": {
@@ -28737,6 +28932,152 @@
           }
         },
         "summary": "Delete Plan",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/parameter-sets": {
+      "get": {
+        "description": "이 재료가 가진 모델 파라미터 한 벌들.\n\n**물성 탭이 이것을 읽는다.** 카드를 만들기 전에도 「이 재료가 Anand 를\n가졌나」 에 답할 수 있어야 한다.",
+        "operationId": "list_parameter_sets_api_materials__material_id__parameter_sets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ParameterSetOut"
+                  },
+                  "title": "Response List Parameter Sets Api Materials  Material Id  Parameter Sets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Parameter Sets",
+        "tags": [
+          "materials"
+        ]
+      },
+      "post": {
+        "description": "문헌의 한 벌을 이 재료로 받아 온다.\n\n**한 벌이 통째로 온다.** `A` 만 떼어 오면 뜻이 없다 — 모델이 9개를 함께\n기대한다.\n\n**단위를 환산하지 않는다**(ADR 0029 D2). 문헌의 이 값들은 SI 가 아니라 그 항의\n원래 단위이고(h0 = 150000 MPa), 환산하면 모델이 기대하는 값과 달라진다. 대신\n단위를 항마다 함께 적는다.\n\n같은 재료에 **같은 모델의 다른 벌**(논문이 다르면)은 나란히 남는다. 그것이\n카드에 바로 넣지 않는 이유 중 하나다 — 후보를 견주고 고르는 일이 남아야 한다.",
+        "operationId": "adopt_parameter_set_api_materials__material_id__parameter_sets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParameterSetAdoptIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterSetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adopt Parameter Set",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/parameter-sets/{set_id}": {
+      "delete": {
+        "operationId": "drop_parameter_set_api_materials__material_id__parameter_sets__set_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drop Parameter Set",
         "tags": [
           "materials"
         ]

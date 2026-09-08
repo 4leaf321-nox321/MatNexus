@@ -21,8 +21,11 @@ from sqlalchemy.orm import Session, aliased
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.catalog import parameters as catalog_parameters
+from app.modules.catalog.models import CatalogDefinition
 from app.modules.materials import declared, services
 from app.modules.materials.models import ORIENTATIONS, Material, Sample, Specimen
+from app.modules.materials.parameter_models import MaterialParameterSet
 from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
@@ -49,6 +52,9 @@ from app.modules.materials.schemas import (
     MillCheckRowOut,
     NamePreviewOut,
     NamePreviewRequest,
+    ParameterSetAdoptIn,
+    ParameterSetOut,
+    ParameterTermOut,
     PropertyItemOut,
     PropertySourcesOut,
     SampleCreateRequest,
@@ -2194,5 +2200,155 @@ def delete_specimen(
         raise Conflict("MNX-MATERIALS-0006", f"시험 {runs}건이 남아 있어 지울 수 없습니다.")
     specimen.deleted_at = _now()
     vocabulary_services.release_bindings(db, specimen, vocabulary_services.SPECIMEN_BINDINGS)
+    db.commit()
+    return Response(status_code=204)
+
+
+# --- 모델 파라미터 집합 (ADR 0029) -------------------------------------------
+#
+# **여럿이 한 벌이어야 뜻이 있는 값**이 사는 자리다. Anand 9개를 선언 물성에 넣으면
+# 단위가 항마다 달라(1·1/s·MPa·K) 항목의 차원 검사를 꺼야 하고, 그 검사는
+# 「비열 자리에 열전도율」 을 막던 것이다.
+
+
+def _parameter_set_out(row: MaterialParameterSet) -> ParameterSetOut:
+    return ParameterSetOut(
+        id=row.id,
+        model=row.model,
+        label=row.label,
+        property_key=row.property_key,
+        origin=row.origin,
+        source_ref=row.source_ref,
+        source_detail=row.source_detail,
+        quality_tier=row.quality_tier,
+        terms=[ParameterTermOut(**one) for one in (row.terms or [])],
+        notes=row.notes,
+    )
+
+
+@router.get("/{material_id}/parameter-sets", response_model=list[ParameterSetOut])
+def list_parameter_sets(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ParameterSetOut]:
+    """이 재료가 가진 모델 파라미터 한 벌들.
+
+    **물성 탭이 이것을 읽는다.** 카드를 만들기 전에도 「이 재료가 Anand 를
+    가졌나」 에 답할 수 있어야 한다.
+    """
+    services.get_material(db, user, material_id)
+    rows = db.scalars(
+        select(MaterialParameterSet)
+        .where(MaterialParameterSet.material_id == material_id)
+        .order_by(MaterialParameterSet.model, MaterialParameterSet.source_ref)
+    ).all()
+    return [_parameter_set_out(row) for row in rows]
+
+
+@router.post("/{material_id}/parameter-sets", response_model=ParameterSetOut, status_code=201)
+def adopt_parameter_set(
+    material_id: uuid.UUID,
+    payload: ParameterSetAdoptIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ParameterSetOut:
+    """문헌의 한 벌을 이 재료로 받아 온다.
+
+    **한 벌이 통째로 온다.** `A` 만 떼어 오면 뜻이 없다 — 모델이 9개를 함께
+    기대한다.
+
+    **단위를 환산하지 않는다**(ADR 0029 D2). 문헌의 이 값들은 SI 가 아니라 그 항의
+    원래 단위이고(h0 = 150000 MPa), 환산하면 모델이 기대하는 값과 달라진다. 대신
+    단위를 항마다 함께 적는다.
+
+    같은 재료에 **같은 모델의 다른 벌**(논문이 다르면)은 나란히 남는다. 그것이
+    카드에 바로 넣지 않는 이유 중 하나다 — 후보를 견주고 고르는 일이 남아야 한다.
+    """
+    material = services.get_material(db, user, material_id)
+    services.require_writable(db, user, material)
+
+    found = catalog_parameters.sets(
+        db, key=payload.property_key, material_id=payload.catalog_material_id
+    )
+    if payload.model:
+        found = [one for one in found if one.model == payload.model]
+    if payload.set_id:
+        found = [one for one in found if one.set_id == payload.set_id]
+    if not found:
+        raise NotFound(
+            "MNX-MATERIALS-0030",
+            "그 문헌 재료에서 해당 파라미터 벌을 찾지 못했습니다.",
+        )
+    if len(found) > 1:
+        raise AppError(
+            "MNX-MATERIALS-0031",
+            "벌이 여럿입니다 — `model` 또는 `set_id` 로 하나를 골라 주세요: "
+            + " · ".join(f"{one.model}/{one.set_id or '(이름없음)'}" for one in found[:8]),
+            status=422,
+        )
+
+    chosen = found[0]
+    definition = db.scalar(
+        select(CatalogDefinition).where(CatalogDefinition.key == payload.property_key)
+    )
+    label = catalog_parameters.label(definition) if definition else payload.property_key
+
+    # **같은 벌을 두 번 담지 않는다.** 다시 채택하면 갱신이다 — 원본이 정정되면
+    # 그것을 따라가야 하고, 줄이 둘로 늘면 카드가 어느 것을 쓸지 알 수 없다.
+    row = db.scalar(
+        select(MaterialParameterSet).where(
+            MaterialParameterSet.material_id == material_id,
+            MaterialParameterSet.model == chosen.model,
+            MaterialParameterSet.source_ref == chosen.set_id,
+        )
+    )
+    if row is None:
+        row = MaterialParameterSet(
+            material_id=material_id,
+            model=chosen.model,
+            source_ref=chosen.set_id,
+            created_by_id=user.id,
+        )
+        db.add(row)
+    row.label = label
+    row.property_key = payload.property_key
+    row.origin = "catalog"
+    row.source_detail = chosen.source
+    row.quality_tier = chosen.quality_tier
+    row.terms = [
+        {
+            "term": one["term"],
+            "value": one["value"],
+            "text": one["text"],
+            "unit": one["unit"],
+        }
+        for one in chosen.terms
+    ]
+    if payload.notes is not None:
+        row.notes = payload.notes
+    db.commit()
+    db.refresh(row)
+    return _parameter_set_out(row)
+
+
+@router.delete("/{material_id}/parameter-sets/{set_id}", status_code=204)
+def drop_parameter_set(
+    material_id: uuid.UUID,
+    set_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    material = services.get_material(db, user, material_id)
+    services.require_writable(db, user, material)
+    row = db.scalar(
+        select(MaterialParameterSet).where(
+            MaterialParameterSet.id == set_id,
+            MaterialParameterSet.material_id == material_id,
+        )
+    )
+    if row is None:
+        raise NotFound("MNX-MATERIALS-0032", "그 파라미터 벌을 찾을 수 없습니다.")
+    db.delete(row)
     db.commit()
     return Response(status_code=204)

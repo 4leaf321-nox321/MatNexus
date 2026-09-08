@@ -62,6 +62,8 @@ const NOTABLE_CV = 0.05
  * 늘리면 다음 사람은 그 예외를 근거로 함수도 가져온다. 스키마는 공용이다.
  */
 type DeclaredProperty = components['schemas']['DeclaredPropertyOut']
+type ParameterSet = components['schemas']['ParameterSetOut']
+type ParameterTerm = components['schemas']['ParameterTermOut']
 
 /**
  * 글로벌 피팅 결과 — **시편 여럿의 데이터를 한 번에 적합한 것**(ADR 0020).
@@ -82,6 +84,11 @@ interface Props {
    * 둘 중 하나가 틀린 것이다 — 지금은 그것을 볼 자리가 어디에도 없었다.
    */
   declared?: DeclaredProperty[]
+  /**
+   * 이 재료가 문헌에서 받아 온 모델 파라미터 벌들(ADR 0029).
+   * **`materials` 가 가져와 넘긴다** — 묶음 결과와 같은 규칙이다.
+   */
+  parameterSets?: ParameterSet[]
   /**
    * 적어 둔 값을 고치러 간다. **없으면 편집 단추를 안 만든다** — 시료 화면처럼
    * 그 창을 들 수 없는 자리도 있다.
@@ -122,6 +129,7 @@ interface Props {
 export function PropertiesPanel({
   materialId,
   declared = [],
+  parameterSets = [],
   onEditDeclared,
   groupResults = [],
   groupKinds = [],
@@ -208,6 +216,7 @@ export function PropertiesPanel({
         <PropertySummary
           groups={groups}
           declared={declared}
+          parameterSets={parameterSets}
           groupResults={groupResults}
           groupKinds={groupKinds}
           onEditDeclared={onEditDeclared}
@@ -336,6 +345,7 @@ export function PropertiesPanel({
 function PropertySummary({
   groups,
   declared,
+  parameterSets,
   groupResults,
   groupKinds,
   onEditDeclared,
@@ -343,6 +353,7 @@ function PropertySummary({
 }: {
   groups: StatisticsGroup[]
   declared: DeclaredProperty[]
+  parameterSets: ParameterSet[]
   groupResults: GroupResult[]
   groupKinds: GroupingSpec[]
   onEditDeclared?: (item: string) => void
@@ -353,7 +364,7 @@ function PropertySummary({
     stats: ScalarStats | null
     /** 통계가 아닌 값(묶음·선언)이면 적을 글자. */
     stated?: string
-    kind: '통계' | '피팅' | '선언'
+    kind: '통계' | '피팅' | '선언' | '문헌 묶음'
   }
 
   const rows = new Map<string, Line[]>()
@@ -388,6 +399,30 @@ function PropertySummary({
           : String(significant(value)),
       })
     }
+  }
+
+  // **문헌에서 받아 온 모델 파라미터도 물성이다**(ADR 0029). Anand 9개처럼 여럿이
+  // 한 벌이어야 뜻이 있는 값인데, 카드에만 두면 카드를 만들기 전까지 「이 재료가
+  // 무엇을 가졌나」 에 답할 수 없다 — 피팅 결과를 여기 세운 것과 같은 이유다.
+  for (const set of parameterSets) {
+    const terms: ParameterTerm[] = set.terms ?? []
+    const head = terms
+      .slice(0, 4)
+      .map((one) => {
+        const shown =
+          one.value === null || one.value === undefined
+            ? (one.text ?? '?')
+            : significant(one.value)
+        const unit = one.unit && one.unit !== '1' ? ` ${one.unit}` : ''
+        return `${one.term}=${shown}${unit}`
+      })
+      .join(' · ')
+    push(set.label, {
+      where: [set.model, set.source_ref].filter(Boolean).join(' · ') || '문헌',
+      stats: null,
+      kind: '문헌 묶음',
+      stated: `${terms.length}개 변수 — ${head}${terms.length > 4 ? ' …' : ''}`,
+    })
   }
 
   for (const row of declared) {
