@@ -1287,6 +1287,148 @@ async def find_by_property(
 
 
 @mcp.tool()
+async def run_batch_processing(
+    ctx: Context,
+    test_run_ids: list[str],
+    steps: list[dict[str, Any]] | None = None,
+    recipe_key: str | None = None,
+    adopt: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """여러 시험에 같은 처리를 돌리고 **왜 안 됐는지를 묶어 준다.**
+
+    이 도구의 값은 성공보다 **실패 쪽**에 있다. 50건을 돌리면 몇 건은 반드시
+    실패하는데, 지금까지는 그것을 건별로 열어 봐야 했다. 여기서는 같은 사유끼리
+    묶어 돌려주므로 **「12건은 점이 성겨서, 3건은 채널 이름이 달라서」** 처럼 한
+    문장으로 옮길 수 있다.
+
+    ## 채택은 기본이 꺼져 있다
+
+    화면의 배치는 `adopt=True` 가 기본이다 — 사람이 이미 한 건으로 단계를 맞춰 본
+    뒤에 누르기 때문이다. **AI 는 그 맞춰 보는 과정을 안 거쳤으므로** 여기서는
+    꺼 둔다. 켜려면 사용자가 결과를 보고 말해야 한다.
+
+    ## 실패를 고치려 들지 마라
+
+    「점이 5개 미만」·「R² 가 낮다」 는 고장이 아니라 판단이다(`run_processing`
+    설명 참조). 구간을 넓혀 다시 돌려 억지로 값을 뽑지 말고, **무엇이 왜 막혔는지**
+    를 사람에게 옮겨라.
+    """
+    if not steps and not recipe_key:
+        return {"error": "`steps` 또는 `recipe_key` 중 하나는 있어야 합니다."}
+    if recipe_key and not steps:
+        recipes = await _get(ctx, "/processing/recipes")
+        if isinstance(recipes, dict) and "error" in recipes:
+            return recipes
+        found = next((one for one in recipes if one.get("key") == recipe_key), None)
+        if found is None:
+            return {"error": f"'{recipe_key}' 레시피를 찾지 못했습니다."}
+        steps = found.get("steps") or []
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_run": {"count": len(test_run_ids), "recipe_key": recipe_key, "adopt": adopt},
+            "note": (
+                "이대로 돌리려면 dry_run=False 로 다시 부르세요. 결과는 불변으로 "
+                "쌓이므로 기존 것을 덮지 않습니다."
+            ),
+        }
+
+    answer = await _send(
+        ctx,
+        "POST",
+        "/processing/batch",
+        {
+            "test_run_ids": test_run_ids,
+            "steps": steps,
+            "recipe_key": recipe_key,
+            "adopt": adopt,
+        },
+    )
+    if not isinstance(answer, dict) or "items" not in answer:
+        if isinstance(answer, dict):
+            return answer
+        return {"error": "배치 응답을 읽지 못했습니다."}
+
+    # **같은 사유끼리 묶는다.** 건별로 늘어놓으면 50줄이 되고, 그 50줄에서 사람이
+    # 다시 패턴을 찾아야 한다 — 그 일을 여기서 한다.
+    grouped: dict[str, list[str]] = {}
+    for item in answer["items"]:
+        if item.get("status") == "ok":
+            continue
+        reason = (item.get("error") or "이유 없음").strip()
+        name = item.get("record_name") or str(item.get("test_run_id"))
+        grouped.setdefault(reason, []).append(name)
+
+    answer = dict(answer)
+    answer["failures_by_reason"] = [
+        {"reason": reason, "count": len(names), "runs": names[:10]}
+        for reason, names in sorted(grouped.items(), key=lambda one: -len(one[1]))
+    ]
+    if grouped:
+        answer["note"] = (
+            f"{answer.get('failed')}건이 안 됐습니다. **사유별로 묶어 뒀습니다** — "
+            "구간을 넓혀 다시 돌리지 말고, 무엇이 왜 막혔는지 사람에게 옮기세요."
+        )
+    return answer
+
+
+@mcp.tool()
+async def list_inbox(
+    ctx: Context, status: str | None = None, limit: int = 20
+) -> dict[str, Any]:
+    """장비가 떨어뜨린 **아직 안 붙은 파일들** — 시험으로 등록할 후보.
+
+    파일을 대화로 나르지 않아도 되는 길이다. 장비 PC 의 수집 에이전트가 파일을
+    서버에 올려 두면, **어디에 붙일지만** 정하면 된다 — 사람이 화면에서 하는 일과
+    같은 판단이다.
+
+    `status` 로 좁힌다: `pending`(아직 안 붙음) · `assigned` · `approved`.
+    """
+    return await _get(
+        ctx, "/pipelines/inbox", {"status": status, "limit": max_limit(limit)}
+    )
+
+
+@mcp.tool()
+async def assign_inbox_item(
+    ctx: Context, item_id: str, specimen_id: str, test_type: str, dry_run: bool = True
+) -> dict[str, Any]:
+    """인박스 파일을 **어느 시편의 어느 시험인지** 정해 준다.
+
+    **기본이 미리보기(dry_run=True)다.**
+
+    ## 무엇을 근거로 정하나
+
+    파일 이름과 인박스 항목의 메타(장비·시각·조작자)가 단서다. 그것만으로 시편을
+    확정할 수 없으면 **짐작하지 마라** — 「이 파일은 SECC_01__MD_02 로 보이는데
+    맞습니까」 를 사람에게 물어라. 잘못 붙이면 그 곡선이 엉뚱한 재료의 물성이 되고,
+    그 사실은 나중에 곡선을 열어 보기 전까지 안 드러난다.
+
+    붙인 뒤에는 사람이 승인해야 시험이 된다(화면의 인박스). 승인 도구는 안 냈다 —
+    그 판단은 사람의 것이다.
+    """
+    if dry_run:
+        detail = await _get(ctx, f"/pipelines/inbox/{item_id}")
+        return {
+            "dry_run": True,
+            "item": detail,
+            "will_assign": {"specimen_id": specimen_id, "test_type": test_type},
+            "note": (
+                "이대로 붙이려면 dry_run=False 로 다시 부르세요. **시편이 맞는지 "
+                "사람에게 확인받으세요** — 잘못 붙이면 엉뚱한 재료의 물성이 됩니다."
+            ),
+        }
+    return await _send(
+        ctx,
+        "POST",
+        f"/pipelines/inbox/{item_id}/assign",
+        {"specimen_id": specimen_id, "test_type": test_type},
+    )
+
+
+@mcp.tool()
 async def inspect_device_file(
     ctx: Context, sample_text: str, header_rows: int = 1
 ) -> dict[str, Any]:
