@@ -139,15 +139,50 @@ const CONDITION_SYMBOLS: Record<string, (v: unknown) => string> = {
 }
 
 /** 조건을 짧게 — 아는 키는 기호로, 나머지는 key=value 로. 길면 「외 n」. */
+/**
+ * 조건 하나를 사람 말로. **아는 것은 짧게, 모르는 것은 그대로.**
+ */
+function fmtOne(key: string, value: unknown): string {
+  const known = CONDITION_SYMBOLS[key]
+  if (known) return known(value)
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
+  return `${key}=${text.length > 24 ? `${text.slice(0, 24)}…` : text}`
+}
+
+/**
+ * **후보를 가르는 조건만.** 서버가 무리 안에서 값이 갈리는 키를 뽑아 준다
+ * (`distinguishing`) — 겹치는 조건은 빼고 온다.
+ *
+ * 실측(2026-09-09): 값이 둘 이상인 조합의 **98%가 조건이 서로 다르다.** 같은 것을
+ * 여러 번 잰 것이 아니라 다른 조건의 값이라는 뜻이고, 그래서 「무엇이 다른가」 가
+ * 고를 때 가장 중요한 정보다. 전에는 사람이 긴 조건 문자열 넷을 눈으로 대조했다.
+ */
+export function fmtDistinguishing(
+  distinguishing: Record<string, unknown> | null | undefined
+): string[] {
+  if (!distinguishing) return []
+  return Object.entries(distinguishing)
+    .filter(([key]) => !isBookkeeping(key))
+    .map(([key, value]) => fmtOne(key, value))
+}
+
+/** 갈리는 것 말고 나머지 조건 — 회색으로 뒤에 둔다. */
+export function fmtRestConditions(
+  conditions: Record<string, unknown> | null | undefined,
+  distinguishing: Record<string, unknown> | null | undefined
+): string {
+  if (!conditions) return ''
+  const shown = new Set(Object.keys(distinguishing ?? {}))
+  const rest = Object.fromEntries(
+    Object.entries(conditions).filter(([key]) => !shown.has(key))
+  )
+  return fmtConditions(rest)
+}
+
 export function fmtConditions(conditions: Record<string, unknown> | null | undefined): string {
   if (!conditions) return ''
   const entries = Object.entries(conditions).filter(([key]) => !isBookkeeping(key))
-  const parts = entries.map(([key, value]) => {
-    const known = CONDITION_SYMBOLS[key]
-    if (known) return known(value)
-    const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
-    return `${key}=${text.length > 24 ? `${text.slice(0, 24)}…` : text}`
-  })
+  const parts = entries.map(([key, value]) => fmtOne(key, value))
   if (parts.length <= 4) return parts.join(' · ')
   return `${parts.slice(0, 4).join(' · ')} 외 ${parts.length - 4}`
 }
@@ -187,7 +222,16 @@ export function adoptionSource(value: CatalogValue): string {
   return 'literature'
 }
 
-/** 채택 시 값에 붙일 참고문헌 문자열 — 제목·연도·DOI 까지, 등급 표기와 함께. */
+/**
+ * 채택 시 값에 붙일 참고문헌 문자열 — 제목·연도·DOI 까지, 등급 표기와 함께.
+ *
+ * **고른 이유가 함께 간다**(2026-09-09). 문헌에 후보가 넷 있었고 그중 하나를 골랐다면,
+ * 담긴 값만 봐서는 왜 그것인지 알 수 없었다 — 반년 뒤에 그 재료로 해석을 돌리는
+ * 사람은 「이 CTE 가 Tg 아래 값인가」 를 물성 탭에서 답할 수 있어야 한다. 그래서
+ * **후보를 가르던 조건**(`distinguishing`)을 문장 끝에 적는다.
+ *
+ * 후보가 하나뿐이면 아무것도 안 붙는다 — 가를 것이 없기 때문이다.
+ */
 export function adoptionReference(value: CatalogValue): string {
   const source = value.source
   const parts = [
@@ -196,7 +240,9 @@ export function adoptionReference(value: CatalogValue): string {
     source?.doi ? `doi:${source.doi}` : null,
     value.source_detail,
   ].filter(Boolean)
-  return `${parts.join(' · ')} (문헌 물성 카탈로그, ${TIER_LABELS[value.quality_tier] ?? `t${value.quality_tier}`})`
+  const varying = fmtDistinguishing(value.distinguishing as Record<string, unknown> | null)
+  const chosen = varying.length > 0 ? ` — ${varying.join(' · ')}` : ''
+  return `${parts.join(' · ')} (문헌 물성 카탈로그, ${TIER_LABELS[value.quality_tier] ?? `t${value.quality_tier}`})${chosen}`
 }
 
 export type CatalogLink = components['schemas']['CatalogLinkOut']

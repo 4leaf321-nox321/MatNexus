@@ -6862,6 +6862,13 @@ export interface components {
             conditions: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Distinguishing
+             * @default {}
+             */
+            distinguishing: {
+                [key: string]: unknown;
+            };
             /** Domain */
             domain: string;
             /**

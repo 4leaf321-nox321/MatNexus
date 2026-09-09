@@ -3281,6 +3281,12 @@
             ],
             "title": "Conditions"
           },
+          "distinguishing": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Distinguishing",
+            "type": "object"
+          },
           "domain": {
             "title": "Domain",
             "type": "string"

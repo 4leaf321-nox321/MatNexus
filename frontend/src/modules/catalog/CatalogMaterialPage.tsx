@@ -22,7 +22,8 @@ import {
   DOMAIN_LABELS,
   TIER_LABELS,
   catalogApi,
-  fmtConditions,
+  fmtDistinguishing,
+  fmtRestConditions,
   fmtValueAs,
 } from '@/modules/catalog/api'
 import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
@@ -81,6 +82,16 @@ function SourceCell({ value }: { value: CatalogValue }) {
 //: /catalog/compare 같은 새 경로를 :id 로 잘못 잡은 것이다(2026-09-06 실측 두 번).
 //: API 를 불러 422 를 보여 주면 사람은 데이터 문제로 읽는다 — 여기서 말한다.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** `bound: lower/upper` 를 사람 말로. 원본이 긴 설명을 적어 둔 경우도 있어 앞만 본다. */
+function boundLabel(value: { distinguishing?: Record<string, unknown> | null }): string | null {
+  const raw = value.distinguishing?.['bound']
+  if (typeof raw !== 'string') return null
+  const head = raw.toLowerCase()
+  if (head.startsWith('lower') || head.startsWith('min')) return '범위 하한'
+  if (head.startsWith('upper') || head.startsWith('max')) return '범위 상한'
+  return null
+}
 
 export default function CatalogMaterialPage() {
   const { id = '' } = useParams()
@@ -191,6 +202,14 @@ export default function CatalogMaterialPage() {
                           대표값 · 후보 {value.n_candidates}
                         </Badge>
                       )}
+                      {/* **범위의 한쪽이라는 것을 말한다.** 경쟁하는 두 측정이
+                          아니라 한 범위의 양끝인데, 지금까지는 대표값 규칙이 둘 중
+                          하나를 이기게 해 놓고 그 사실을 안 알렸다. */}
+                      {boundLabel(value) && (
+                        <Badge variant="outline" className="ml-2">
+                          {boundLabel(value)}
+                        </Badge>
+                      )}
                       {!value.representative && (
                         <Badge variant="outline" className="text-muted-foreground ml-2">
                           대안 · {value.separated_by}
@@ -224,8 +243,35 @@ export default function CatalogMaterialPage() {
                         fmtValueAs(units, value.value_num, value.unit)
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground align-top text-xs break-words">
-                      {fmtConditions(value.conditions as Record<string, unknown> | null) || '—'}
+                    {/* **갈리는 조건이 먼저, 굵게.** 후보가 넷이면 사람이 넷을
+                        눈으로 대조해서 무엇이 다른지 찾아야 했다 — 서버가 그 대조를
+                        대신하고(`distinguishing`), 겹치는 조건은 뒤로 흐린다. */}
+                    <TableCell className="align-top text-xs break-words">
+                      {(() => {
+                        const varying = fmtDistinguishing(
+                          value.distinguishing as Record<string, unknown> | null
+                        )
+                        const rest = fmtRestConditions(
+                          value.conditions as Record<string, unknown> | null,
+                          value.distinguishing as Record<string, unknown> | null
+                        )
+                        if (varying.length === 0 && !rest) return <span className="text-muted-foreground">—</span>
+                        return (
+                          <>
+                            {varying.length > 0 && (
+                              <span className="text-foreground font-medium">
+                                {varying.join(' · ')}
+                              </span>
+                            )}
+                            {rest && (
+                              <span className="text-muted-foreground">
+                                {varying.length > 0 ? ' · ' : ''}
+                                {rest}
+                              </span>
+                            )}
+                          </>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell className="align-top">
                       <TierBadge value={value} />

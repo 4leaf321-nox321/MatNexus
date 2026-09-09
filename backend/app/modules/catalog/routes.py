@@ -622,6 +622,7 @@ def get_material(
             representative=marks[value.id].representative,
             n_candidates=marks[value.id].n_candidates,
             separated_by=marks[value.id].separated_by,
+            distinguishing=marks[value.id].distinguishing,
         )
         for value, definition, source in rows
     ]

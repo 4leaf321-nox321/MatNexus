@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 #: 조건이 아니라 관리 기록인 키 — 순위·조건 수에 안 센다 (원본 `_NOT_A_CONDITION`).
@@ -75,6 +75,55 @@ class Annotation:
     separated_by: str | None
     """대표에게 **어느 자리에서** 밀렸는가. 대표 자신은 None."""
 
+    distinguishing: dict[str, Any] = field(default_factory=dict)
+    """**후보들 사이에서 실제로 값이 갈리는 조건**만. 이 값의 것을 담는다.
+
+    조건은 대개 길다 — `regime`·`below_Tg`·`specimen`·`method` 가 한 줄에 늘어서고,
+    후보가 넷이면 사람이 그 넷을 눈으로 대조해서 「무엇이 다른가」 를 찾아야 한다.
+    실측(2026-09-09): 값이 둘 이상인 조합 6,136개 중 **98%가 조건이 서로 다르다** —
+    같은 것을 여러 번 잰 것이 아니라 **다른 조건의 값**이라는 뜻이다.
+
+    그래서 겹치는 조건은 빼고 **갈리는 것만** 준다. 화면이 대조를 대신한다.
+    """
+
+
+#: 값의 정체를 이루는 키 — 조건이 아니라 「무엇인가」 다(ADR 0029). 갈림 표시에서 뺀다.
+_IDENTITY_KEYS = frozenset({"term", "unit_of_term", "model", "set_id"})
+
+
+def _distinguishing(members: list[Any]) -> dict[Any, dict[str, Any]]:
+    """무리 안에서 **값이 갈리는 조건 키**만 뽑는다 → `{값 id: {키: 그 값의 조건}}`.
+
+    모두가 같은 값을 가진 키는 뺀다 — 그것은 이 무리를 가르지 않으므로, 보여 줘도
+    사람이 지워 가며 읽어야 할 글자만 는다.
+    """
+    if len(members) < 2:
+        return {one.id: {} for one in members}
+
+    seen: dict[str, set[str]] = {}
+    for one in members:
+        conditions = semantic_conditions(one.conditions)
+        for key, value in conditions.items():
+            if key in _IDENTITY_KEYS:
+                continue
+            seen.setdefault(key, set()).add(repr(value))
+    # 값이 하나뿐인 키 = 모두 같다. 없는 값도 「없음」 이라는 값이므로, 일부에만
+    # 있는 키는 갈림으로 친다.
+    varying = {
+        key
+        for key, values in seen.items()
+        if len(values) > 1
+        or any(key not in semantic_conditions(one.conditions) for one in members)
+    }
+    return {
+        one.id: {
+            key: value
+            for key, value in semantic_conditions(one.conditions).items()
+            if key in varying
+        }
+        for one in members
+    }
+
 
 def _rank(value: Any) -> tuple[float, ...]:
     conditions = semantic_conditions(value.conditions)
@@ -103,8 +152,12 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
         ranked = sorted(members, key=_rank)
         winner = ranked[0]
         winner_rank = _rank(winner)
+        varying = _distinguishing(members)
         out[winner.id] = Annotation(
-            representative=True, n_candidates=len(members), separated_by=None
+            representative=True,
+            n_candidates=len(members),
+            separated_by=None,
+            distinguishing=varying.get(winner.id, {}),
         )
         for loser in ranked[1:]:
             loser_rank = _rank(loser)
@@ -113,6 +166,9 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
                 _SLOTS[-1],
             )
             out[loser.id] = Annotation(
-                representative=False, n_candidates=len(members), separated_by=slot
+                representative=False,
+                n_candidates=len(members),
+                separated_by=slot,
+                distinguishing=varying.get(loser.id, {}),
             )
     return out

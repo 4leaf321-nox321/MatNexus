@@ -69,6 +69,12 @@ class CatalogValueOut(BaseModel):
     conditions: dict[str, Any] | None
     method: str | None
     quality_tier: int
+    distinguishing: dict[str, Any] = {}
+    """**후보들 사이에서 값이 갈리는 조건**만 — 이 값의 것.
+
+    조건 전체는 `conditions` 에 있다. 후보가 넷이면 사람이 넷을 눈으로 대조해야
+    무엇이 다른지 아는데, 그 대조를 서버가 대신한다. 실측(2026-09-09): 값이 둘
+    이상인 조합의 98%가 조건이 서로 다르다."""
     source: CatalogSourceOut | None
     source_detail: str | None
     notes: str | None

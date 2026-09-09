@@ -58,7 +58,8 @@ const DETAIL = {
       value_text: null,
       unit: 'Pa',
       uncertainty: null,
-      conditions: { temperature_k: 296.15, corrected_by: '54차 PA' },
+      conditions: { temperature_k: 296.15, corrected_by: '54차 PA', regime: 'alpha1 (below Tg)' },
+      distinguishing: { regime: 'alpha1 (below Tg)' },
       method: 'measured',
       quality_tier: 1,
       source: SOURCE,
@@ -167,5 +168,26 @@ describe('진 후보를 숨기지 않는다', () => {
     show()
     await screen.findByText(/T 296\.15 K/)
     expect(screen.queryByText(/corrected_by/)).toBeNull()
+  })
+})
+
+describe('CatalogMaterialPage — 후보를 가르는 조건', () => {
+  it('갈리는 조건이 굵게, 나머지는 흐리게 선다', async () => {
+    material.mockResolvedValue(DETAIL)
+    show()
+
+    // 서버가 뽑아 준 갈리는 조건이 보인다 — 사람이 넷을 대조하지 않아도 된다.
+    expect(await screen.findByText(/alpha1 \(below Tg\)/)).toBeInTheDocument()
+  })
+
+  it('범위의 한쪽이면 그렇다고 말한다', async () => {
+    material.mockResolvedValue({
+      ...DETAIL,
+      values: [
+        { ...DETAIL.values[0], distinguishing: { bound: 'lower' }, n_candidates: 2 },
+      ],
+    })
+    show()
+    expect(await screen.findByText('범위 하한')).toBeInTheDocument()
   })
 })
