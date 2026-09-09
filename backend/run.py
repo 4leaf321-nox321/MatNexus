@@ -16,6 +16,20 @@ FastAPI는 ASGI라 52가 쓰는 waitress(WSGI)를 쓸 수 없다. uvicorn으로 
 
 우리가 그 포트에 못 붙는데도 uvicorn 이 조용히 뜨는 것이 문제의 핵심이다. 그러면
 「띄웠다」 고 생각한 사람과 실제로 답하는 프로세스가 달라진다.
+
+## 알려 준 PID 가 「없는 프로세스」 일 수 있다 (실측 2026-09-09)
+
+옛 서버가 8011 을 물고 있어 이 안내가 떴는데, 알려 준 PID 를 죽이려니 **그런
+프로세스가 없다**고 했다 — `Get-Process` 에도 `Win32_Process` 에도 없고, 관리자
+권한 `taskkill` 조차 「없는 프로세스」 라고 답했다. 그런데 `netstat` 은 그 PID 가
+LISTENING 이라 하고, `/api/health` 는 멀쩡히 옛 판을 답했다.
+
+**부모는 이미 죽었고, 자식(multiprocessing spawn)이 소켓을 물려받은 것이었다.**
+윈도우에서 자식이 상속한 소켓 핸들은 부모가 사라져도 포트를 계속 잡는다. 자식을
+내리자 즉시 풀렸다.
+
+그래서 이 안내가 **그 경우의 명령까지 함께 찍는다** — 안 그러면 사람은 죽은 PID 를
+붙들고 권한 문제라고 오해한다(실제로 그렇게 30분을 썼다).
 """
 
 from __future__ import annotations
@@ -71,6 +85,18 @@ def main() -> None:
 
       그것을 내리거나, 이 서버의 PORT 를 .env 에서 바꾸세요.
       개발은 8011, 운영(C:\\Server\\MatNexus)은 8010 입니다.
+
+      내리려면 (PowerShell):
+        Get-NetTCPConnection -LocalPort {settings.port} -State Listen |
+          Select-Object OwningProcess
+        Stop-Process -Id <그 PID> -Force
+
+      **그 PID 가 「없는 프로세스」 라고 나오면** 부모는 이미 죽었고 자식이
+      소켓을 물려받은 것입니다(실측 2026-09-09). 관리자 권한으로 죽여도
+      안 되는 이유가 그것입니다 — 그 PID 를 부모로 둔 자식을 내리세요:
+        Get-CimInstance Win32_Process |
+          Where-Object ParentProcessId -eq <그 PID> |
+          Select-Object ProcessId, CommandLine
     ================================================================
     """,
             file=sys.stderr,
