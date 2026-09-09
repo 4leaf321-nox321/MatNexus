@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.tests import services
-from app.modules.tests.models import FormatProfile, TestType
+from app.modules.tests.models import FormatProfile, TestChannel, TestType
 from app.modules.tests.schemas import (
     IDENTITY_FIELDS,
     MATERIAL_FIELDS,
@@ -38,6 +38,9 @@ from app.modules.tests.schemas import (
     FormatProfileCreateRequest,
     FormatProfileOut,
     FormatProfileSaveRequest,
+    ProfileCheckIn,
+    ProfileCheckItemOut,
+    ProfileCheckOut,
     ProfileTryOut,
     StructurePreviewOut,
     TablePreviewOut,
@@ -129,34 +132,18 @@ def _resolve_type(db: Session, key: str) -> TestType:
     return test_type
 
 
-@router.post("/preview", response_model=StructurePreviewOut)
-def preview(
-    file: UploadFile = File(...),
-    header_rows: int = Form(default=1, ge=1, le=5),
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
+def _structure_out(
+    data: bytes, filename: str, header_rows: int, db: Session
 ) -> StructurePreviewOut:
-    """파일을 **저장하지 않고** 구조만 읽어 본다.
-
-    새 장비 파일이 왔을 때 가장 먼저 하는 일이다. 저장하지 않는 이유: 아직 이
-    파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이
-    쌓일 이유가 없다.
-
-    `header_rows` 만 사람이 준다. 헤더가 몇 줄인지는 **기계가 알 수 없기 때문이다**
-    — 그룹 머리(버려도 되는 줄)와 나뉜 이름(버리면 안 되는 줄)은 생김새가 같다.
-    """
-    data = file.file.read()
-    filename = file.filename or "upload.dat"
+    """바이트에서 구조를 읽어 응답 모양으로. **화면과 MCP 가 같은 길을 탄다.**"""
     try:
         structure = readers.read(data, readers.ReadOptions(header_rows=header_rows))
     except readers.ReadError as exc:
         raise AppError("MNX-TESTS-0022", str(exc), status=422) from exc
 
-    matched = None
+    matched: str | None = None
     for candidate in db.scalars(
-        visible_profiles(db, user)
-        .where(FormatProfile.is_active.is_(True))
-        .order_by(FormatProfile.priority.desc(), FormatProfile.key)
+        select(FormatProfile).where(FormatProfile.deleted_at.is_(None))
     ):
         if profiles.matches(candidate.definition, filename=filename, structure=structure):
             matched = candidate.key
@@ -188,34 +175,26 @@ def preview(
     )
 
 
-@router.post("/try", response_model=ProfileTryOut)
-def try_profile(
-    definition: str = Form(..., description="프로파일 JSON"),
+@router.post("/preview", response_model=StructurePreviewOut)
+def preview(
     file: UploadFile = File(...),
+    header_rows: int = Form(default=1, ge=1, le=5),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> ProfileTryOut:
-    """저장하기 **전에** 이 프로파일로 그 파일을 읽어 본다.
+) -> StructurePreviewOut:
+    """파일을 **저장하지 않고** 구조만 읽어 본다.
 
-    저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 프로파일이
-    잘못되면 곡선이 조용히 이상해지는데, 그것은 나중에 찾기가 매우 어렵다.
+    새 장비 파일이 왔을 때 가장 먼저 하는 일이다. 저장하지 않는 이유: 아직 이
+    파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이
+    쌓일 이유가 없다.
+
+    `header_rows` 만 사람이 준다. 헤더가 몇 줄인지는 **기계가 알 수 없기 때문이다.**
     """
-    import json
+    return _structure_out(file.file.read(), file.filename or "", header_rows, db)
 
-    try:
-        rule = json.loads(definition or "{}")
-    except json.JSONDecodeError as exc:
-        raise AppError(
-            "MNX-TESTS-0013", "프로파일 JSON 이 잘못되었습니다.", status=422
-        ) from exc
-    if not isinstance(rule, dict):
-        raise AppError("MNX-TESTS-0013", "프로파일은 객체여야 합니다.", status=422)
 
-    try:
-        parsed = profiles.apply(rule, file.file.read())
-    except (ParseError, readers.ReadError) as exc:
-        raise AppError("MNX-TESTS-0023", str(exc), status=422) from exc
-
+def _tried_out(parsed: Any) -> ProfileTryOut:
+    """읽은 결과를 응답 모양으로. **화면(`/try`)과 검사(`/check`)가 같은 것을 본다.**"""
     return ProfileTryOut(
         curves=[
             TriedCurveOut(
@@ -259,6 +238,37 @@ def try_profile(
         conditions=parsed.conditions,
         condition_units=parsed.condition_units,
     )
+
+
+@router.post("/try", response_model=ProfileTryOut)
+def try_profile(
+    definition: str = Form(..., description="프로파일 JSON"),
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ProfileTryOut:
+    """저장하기 **전에** 이 프로파일로 그 파일을 읽어 본다.
+
+    저장하고 나서 틀린 것을 아는 것과 저장 전에 아는 것은 다르다. 프로파일이
+    잘못되면 곡선이 조용히 이상해지는데, 그것은 나중에 찾기가 매우 어렵다.
+    """
+    import json
+
+    try:
+        rule = json.loads(definition or "{}")
+    except json.JSONDecodeError as exc:
+        raise AppError(
+            "MNX-TESTS-0013", "프로파일 JSON 이 잘못되었습니다.", status=422
+        ) from exc
+    if not isinstance(rule, dict):
+        raise AppError("MNX-TESTS-0013", "프로파일은 객체여야 합니다.", status=422)
+
+    try:
+        parsed = profiles.apply(rule, file.file.read())
+    except (ParseError, readers.ReadError) as exc:
+        raise AppError("MNX-TESTS-0023", str(exc), status=422) from exc
+
+    return _tried_out(parsed)
 
 
 @router.get("", response_model=list[FormatProfileOut])
@@ -479,3 +489,182 @@ def _check_fields(
                 status=422,
             )
         seen[field] = label
+
+
+#: 표본으로 받을 글자 상한. 앞 몇십 줄이면 구조는 다 드러난다 — 파일 전체를
+#: 대화로 나르려는 시도를 여기서 막는다.
+MAX_SAMPLE_CHARS = 200_000
+
+
+def _matches(got: Any, wanted: Any) -> bool:
+    """기대와 같은가. **숫자는 상대오차 1%까지 봐준다** — 표시 자릿수 차이다."""
+    numeric = (
+        isinstance(wanted, (int, float))
+        and isinstance(got, (int, float))
+        and not isinstance(wanted, bool)
+        and not isinstance(got, bool)
+    )
+    if numeric:
+        if wanted == 0:
+            return bool(abs(float(got)) < 1e-12)
+        return bool(abs(float(got) - float(wanted)) / abs(float(wanted)) <= 0.01)
+    return str(got).strip() == str(wanted).strip()
+
+
+@router.post("/check", response_model=ProfileCheckOut)
+def check_profile(
+    payload: ProfileCheckIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ProfileCheckOut:
+    """정의를 **글자로 온 표본**에 대고 검사한다 — AI 가 프로파일을 짓는 자리.
+
+    화면은 파일을 통째로 올리지만 AI 는 파일을 못 나른다. 구조를 판단하는 데는 앞
+    몇십 줄이면 충분하므로, 그만큼만 글자로 받는다.
+
+    ## 「돌아는 갔다」 와 「기대한 것이 나왔다」 는 다르다
+
+    정의가 엉뚱해도 파싱은 성공할 수 있다 — 열을 하나 잘못 짚으면 하중 자리에
+    변위가 들어가고, 곡선은 멀쩡히 그려진다. 그래서 이 검사는 **읽히나** 만 보지
+    않고 다음을 함께 본다:
+
+        쓰이지 않은 열이 있나      매핑을 빠뜨렸다는 신호다
+        단위를 못 읽은 채널이 있나  나중에 조용히 틀린 값이 된다
+        기대한 것과 같은가         `expect` 를 주면 하나씩 대조한다
+
+    **`expect` 가 이 도구의 값이다.** 「최대하중 12.34 kN 이어야 한다」 를 주면
+    그것이 나왔는지 말해 준다 — 사람이 장비 화면에서 읽은 값을 그대로 넣으면,
+    AI 가 지은 정의가 같은 답을 내는지 기계가 판정한다.
+    """
+    if len(payload.sample_text) > MAX_SAMPLE_CHARS:
+        raise AppError(
+            "MNX-TESTS-0030",
+            f"표본이 너무 깁니다({len(payload.sample_text)}자). 앞 {MAX_SAMPLE_CHARS}자 "
+            "안으로 줄이세요 — 구조를 보는 데는 앞부분이면 충분합니다.",
+            status=422,
+        )
+
+    data = payload.sample_text.encode("utf-8")
+    structure = _structure_out(data, "sample.txt", payload.header_rows, db)
+    if payload.definition is None:
+        return ProfileCheckOut(ok=True, checks=[], structure=structure)
+
+    checks: list[ProfileCheckItemOut] = []
+    try:
+        parsed = profiles.apply(payload.definition, data)
+    except (ParseError, readers.ReadError) as exc:
+        return ProfileCheckOut(
+            ok=False,
+            structure=structure,
+            problem=str(exc),
+            checks=[
+                ProfileCheckItemOut(
+                    name="읽기", ok=False, detail=f"이 정의로는 표본을 못 읽습니다: {exc}"
+                )
+            ],
+        )
+
+    tried = _tried_out(parsed)
+    checks.append(
+        ProfileCheckItemOut(
+            name="읽기",
+            ok=True,
+            detail=f"곡선 {len(tried.curves)}개 · 요약값 {len(tried.summary)}개를 읽었습니다.",
+        )
+    )
+
+    # **이 파서는 모든 열을 채널로 만든다.** 정의의 `columns` 는 「이 열을 무슨
+    # 채널이라 부를까」 를 정할 뿐이다. 그래서 위험은 「열이 빠지는 것」 이 아니라
+    # **「이름을 안 정해 줘서 규약 밖 이름이 되는 것」** 이다 — 처리 단계는 규약
+    # 이름(`force`·`displacement`)으로 채널을 찾으므로, 이름이 어긋나면 읽히기는
+    # 하는데 그 뒤가 아무것도 안 된다.
+    named = {str(one).lower() for one in (payload.definition.get("columns") or {})}
+    headers = [cell for table in structure.tables for cell in table.header if cell]
+    unnamed = [one for one in headers if one.lower() not in named]
+    checks.append(
+        ProfileCheckItemOut(
+            name="이름을 안 정한 열",
+            ok=not unnamed,
+            detail=(
+                "모든 열에 채널 이름을 정했습니다."
+                if not unnamed
+                else "정의에 없는 열(원문 이름이 그대로 채널이 됩니다): "
+                + " · ".join(unnamed[:8])
+            ),
+        )
+    )
+
+    # **시험법이 요구하는 채널이 다 붙었나.** 이 검사가 가장 값지다 — 없으면
+    # 「읽히기는 하는데 처리 단계가 채널을 못 찾는」 프로파일이 만들어진다.
+    if payload.test_type:
+        wanted = list(
+            db.scalars(
+                select(TestChannel)
+                .join(TestType, TestType.id == TestChannel.test_type_id)
+                .where(
+                    TestType.key == payload.test_type,
+                    TestChannel.is_required.is_(True),
+                )
+            )
+        )
+        got = {channel.key for curve in tried.curves for channel in curve.channels}
+        missing = [one.key for one in wanted if one.key not in got]
+        checks.append(
+            ProfileCheckItemOut(
+                name=f"'{payload.test_type}' 필수 채널",
+                ok=bool(wanted) and not missing,
+                detail=(
+                    "그 시험법에 필수 채널 선언이 없습니다 — 이 검사로는 아무것도 못 봅니다."
+                    if not wanted
+                    else "모두 붙었습니다."
+                    if not missing
+                    else "빠진 채널: " + " · ".join(missing)
+                ),
+            )
+        )
+
+    missing_unit = [
+        f"{curve.key}.{channel.key}"
+        for curve in tried.curves
+        for channel in curve.channels
+        if not channel.source_unit
+    ]
+    checks.append(
+        ProfileCheckItemOut(
+            name="단위",
+            ok=not missing_unit,
+            detail=(
+                "모든 채널이 단위를 들었습니다."
+                if not missing_unit
+                else "단위를 못 읽은 채널: " + " · ".join(missing_unit[:8])
+            ),
+        )
+    )
+
+    if payload.expect:
+        for key, wanted in (payload.expect.get("summary") or {}).items():
+            found = next((one.value for one in tried.summary if one.key == key), None)
+            checks.append(
+                ProfileCheckItemOut(
+                    name=f"기대값 {key}",
+                    ok=found is not None and _matches(found, wanted),
+                    detail=f"기대 {wanted} · 나온 값 {found}",
+                )
+            )
+        wanted_curves = payload.expect.get("curves")
+        if isinstance(wanted_curves, list):
+            got_keys = [one.key for one in tried.curves]
+            checks.append(
+                ProfileCheckItemOut(
+                    name="기대 곡선",
+                    ok=all(one in got_keys for one in wanted_curves),
+                    detail=f"기대 {wanted_curves} · 나온 것 {got_keys}",
+                )
+            )
+
+    return ProfileCheckOut(
+        ok=all(one.ok for one in checks),
+        checks=checks,
+        structure=structure,
+        tried=tried,
+    )

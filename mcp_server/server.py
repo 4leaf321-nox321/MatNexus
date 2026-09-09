@@ -31,6 +31,7 @@ from typing import Any
 
 import httpx
 
+# 같은 폴더 — 재시도 판단만 떼어 둔 순수 함수(시험이 부를 수 있게).
 import retry_plan
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -1283,6 +1284,226 @@ async def find_by_property(
     if max is not None:
         params["max"] = max
     return await _get(ctx, "/catalog/properties/search", params)
+
+
+@mcp.tool()
+async def inspect_device_file(
+    ctx: Context, sample_text: str, header_rows: int = 1
+) -> dict[str, Any]:
+    """장비 파일의 **앞부분을 글자로 보내** 구조를 읽는다 — 프로파일 짓기의 첫 걸음.
+
+    파일을 통째로 나르지 마라. **앞 몇십 줄이면 구조는 다 드러난다** — 헤더·단위
+    줄·구분자·열 이름. 20만 자를 넘으면 서버가 거절한다.
+
+    `header_rows` 만 사람이 정한다. 헤더가 몇 줄인지는 기계가 알 수 없다 — 단위가
+    둘째 줄에 오는 장비가 흔하니, 그런 파일이면 2 다.
+
+    **이미 읽을 수 있는 파일이면 `matched_profile` 이 온다.** 그러면 새로 짓지 마라 —
+    같은 장비에 프로파일이 둘이면 어느 것이 이겼는지 아무도 모르게 된다.
+    """
+    return await _send(
+        ctx,
+        "POST",
+        "/formats/check",
+        {"sample_text": sample_text, "header_rows": header_rows},
+    )
+
+
+@mcp.tool()
+async def check_format_profile(
+    ctx: Context,
+    sample_text: str,
+    definition: dict[str, Any],
+    header_rows: int = 1,
+    test_type: str | None = None,
+    expect: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """지은 정의를 표본에 대고 **검사한다** — 저장하기 전에.
+
+    ## 「돌아는 갔다」 로 끝내지 마라
+
+    정의가 엉뚱해도 파싱은 성공할 수 있다. 이 파서는 **모든 열을 채널로 만들고**,
+    `columns` 는 「이 열을 무슨 채널이라 부를까」 를 정할 뿐이다. 그래서 이름을 안
+    정해 주면 원문 이름이 그대로 채널 키가 되고, **읽히기는 하는데 처리 단계가
+    `force`·`displacement` 를 못 찾는다.**
+
+    돌려주는 `checks` 를 하나씩 보고 실패한 것을 고쳐라:
+
+        읽기                이 정의로 표본이 읽히나
+        이름을 안 정한 열     규약 밖 이름이 될 열들
+        필수 채널           `test_type` 을 주면 그 시험법 계약과 대조한다
+        단위                단위를 못 읽은 채널
+        기대값              `expect` 를 주면 하나씩 대조한다
+
+    ## `test_type` 과 `expect` 를 되도록 주어라
+
+    `test_type="tensile"` 을 주면 **그 시험법이 요구하는 채널이 다 붙었는지** 본다.
+    이것이 이 검사에서 가장 값진 항목이다.
+
+    `expect` 는 사람이 아는 답이다 — 「장비 화면에 최대하중이 12.34 kN 이라고
+    떴다」 를 `{"summary": {"max_force": 12.34}}` 로 주면, 지은 정의가 같은 답을
+    내는지 기계가 판정한다. **사용자에게 그 값을 물어보는 편이 낫다.**
+
+    ## 단위 표기가 엄격해진다
+
+    열에 이름을 정하는 순간 단위 검사가 엄격해진다 — 안 정하면 넘어가던 `C` 가
+    「모르는 단위」 로 막힌다(`°C` 여야 한다). 그것도 이 검사가 잡아 준다.
+    """
+    return await _send(
+        ctx,
+        "POST",
+        "/formats/check",
+        {
+            "sample_text": sample_text,
+            "definition": definition,
+            "header_rows": header_rows,
+            "test_type": test_type,
+            "expect": expect,
+        },
+    )
+
+
+@mcp.tool()
+async def save_format_profile(
+    ctx: Context,
+    key: str,
+    label: str,
+    test_type: str,
+    definition: dict[str, Any],
+    description: str | None = None,
+    workspace: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """형식 프로파일을 저장한다 — **부서가 그 장비를 읽는 방법이 된다.**
+
+    **`check_format_profile` 로 먼저 검사해라.** 검사 없이 저장하면 그 프로파일로
+    올라온 시험의 곡선이 조용히 이상해지고, 그것은 나중에 찾기가 매우 어렵다.
+
+    **기본이 미리보기(dry_run=True)다.**
+
+    ## 화면이 못 고치는 정의를 지을 수 있다
+
+    화면의 편집기는 정의의 일부만 다룬다 — 실측(2026-08-26)으로 드러난 함정이
+    있다: 화면으로 만든 프로파일은 단위 칸을 못 넣어 **JSON 을 영영 못 읽었다.**
+    AI 는 정의를 직접 짓기 때문에 그 한계가 없는데, **그러면 사람이 화면에서 고칠
+    수 없는 프로파일이 생긴다.** 복잡한 정의를 지었으면 그 사실을 사용자에게
+    말해라 — 「이건 화면에서 편집이 안 될 수 있습니다」.
+    """
+    body = {
+        "key": key,
+        "label": label,
+        "test_type_key": test_type,
+        "definition": definition,
+        "description": description,
+        "owner_workspace_slug": workspace,
+        "is_active": True,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_save": body,
+            "note": (
+                "이대로 만들려면 dry_run=False 로 다시 부르세요. "
+                "먼저 check_format_profile 로 검사했는지 확인하세요."
+            ),
+        }
+    return await _send(ctx, "POST", "/formats", body)
+
+
+@mcp.tool()
+async def scan_deck_format(ctx: Context, deck_text: str) -> dict[str, Any]:
+    """예제 **솔버 덱**을 읽어 내보내기 정의 초안을 만든다.
+
+    덱을 붙이려는 사람에게는 대개 그 솔버의 덱 파일이 이미 있다. 구조는 서버가
+    읽고 **「이 값이 무엇인가」 만 정하면 된다** — 장비 파일 정의가 같은 문제를
+    이미 그렇게 풀었다.
+
+    ## 고정폭 필드를 조심해라
+
+    OptiStruct(8칸)·LS-DYNA(10칸)는 **칸 폭이 곧 값의 경계**다. 한 칸 어긋나면
+    솔버가 다른 값을 읽는데 오류는 안 난다 — 조용히 틀린 해석이 된다. 초안에 폭이
+    잡혀 오면 그대로 두고, 바꿀 때는 사용자에게 확인해라.
+    """
+    return await _send(
+        ctx, "POST", "/fitting/export-profiles/scan", {"text": deck_text}
+    )
+
+
+@mcp.tool()
+async def render_card_deck(ctx: Context, card_id: str, format: str) -> dict[str, Any]:
+    """물성 카드를 **덱 글자로 뽑아 본다** — 저장하지 않고 눈으로 확인하는 자리.
+
+    지은 내보내기 정의가 실제로 어떤 파일을 내는지 보려면 이것이 가장 빠르다.
+    형식 목록은 `list_unit_systems` 가 아니라 `get_card` 의 `available_formats` 에
+    있다.
+
+    ## MID(재료 번호)를 사람에게 말해라
+
+    덱 안의 재료 번호는 **그 파일 안에서만 뜻이 있는 수**다 — 카드 UUID 에서 만든
+    것이라 전역으로 유일하지 않다. **덱 여럿을 손으로 합치면 겹칠 수 있고, 솔버는
+    중복 MID 를 조용히 덮는다.**
+
+    그래서 덱을 건네줄 때 MID 를 함께 말해라: 「이 덱의 MID 는 3847221 입니다.
+    다른 덱과 합치실 거면 겹치는지 확인하세요.」 여러 재료를 한 덱으로 묶는
+    자리(BOM 혼합 덱)는 서버가 중복을 막지만, 낱개로 뽑아 합칠 때는 사람이 본다.
+    """
+    return await _get(ctx, f"/fitting/cards/{card_id}/export", {"format": format})
+
+
+@mcp.tool()
+async def draft_test_type(
+    ctx: Context, key: str, label: str, channels: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """새 시험법 **초안**을 만든다 — **저장하지 않는다.**
+
+    시험 정의는 다른 둘과 성격이 다르다:
+
+    - **검증할 방법이 없다.** 프로파일은 표본에 대 보면 되고 덱은 렌더해 보면
+      되는데, 시험법은 만들어서 시험을 붙여 봐야 안다.
+    - **되돌리기 어렵다.** 한번 시험이 붙기 시작하면 정의를 고칠 때 이미 붙은
+      시험의 뜻이 바뀐다.
+    - **채널 이름이 서버 계약이다.** 같은 이름은 같은 차원·단위여야 한다.
+
+    그래서 이 도구는 **초안과 충돌 검사까지만** 한다. 저장은 사람이 화면에서
+    한다 — 그 판단은 부서의 것이다.
+
+    돌려주는 `conflicts` 를 반드시 사람에게 옮겨라: 같은 채널 이름이 다른 시험법에
+    다른 단위로 이미 있으면, 그 이름을 쓰면 안 된다.
+    """
+    existing = await _get(ctx, "/test-types")
+    if isinstance(existing, dict) and "error" in existing:
+        return existing
+
+    conflicts: list[dict[str, Any]] = []
+    for one in existing:
+        if one.get("key") == key:
+            conflicts.append({"kind": "키 중복", "detail": f"'{key}' 시험법이 이미 있습니다."})
+        for channel in one.get("channels") or []:
+            for wanted in channels:
+                if channel.get("key") != wanted.get("key"):
+                    continue
+                if channel.get("si_unit") != wanted.get("si_unit"):
+                    conflicts.append(
+                        {
+                            "kind": "채널 단위 충돌",
+                            "detail": (
+                                f"'{channel['key']}' 는 '{one.get('key')}' 에서 "
+                                f"{channel.get('si_unit')} 인데 {wanted.get('si_unit')} 로 "
+                                "지으려 합니다 — 같은 이름은 같은 단위여야 합니다."
+                            ),
+                        }
+                    )
+
+    return {
+        "draft": {"key": key, "label": label, "channels": channels},
+        "conflicts": conflicts,
+        "note": (
+            "**저장하지 않았습니다.** 시험법은 검증할 방법이 없고 한번 시험이 붙으면 "
+            "되돌리기 어렵습니다 — 이 초안을 사람에게 보이고, 화면(설정 → 시험 종류)"
+            "에서 만들게 하세요."
+            + (" 충돌을 먼저 해결해야 합니다." if conflicts else "")
+        ),
+    }
 
 
 @mcp.tool()

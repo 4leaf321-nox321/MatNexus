@@ -1710,6 +1710,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/formats/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Profile
+         * @description 정의를 **글자로 온 표본**에 대고 검사한다 — AI 가 프로파일을 짓는 자리.
+         *
+         *     화면은 파일을 통째로 올리지만 AI 는 파일을 못 나른다. 구조를 판단하는 데는 앞
+         *     몇십 줄이면 충분하므로, 그만큼만 글자로 받는다.
+         *
+         *     ## 「돌아는 갔다」 와 「기대한 것이 나왔다」 는 다르다
+         *
+         *     정의가 엉뚱해도 파싱은 성공할 수 있다 — 열을 하나 잘못 짚으면 하중 자리에
+         *     변위가 들어가고, 곡선은 멀쩡히 그려진다. 그래서 이 검사는 **읽히나** 만 보지
+         *     않고 다음을 함께 본다:
+         *
+         *         쓰이지 않은 열이 있나      매핑을 빠뜨렸다는 신호다
+         *         단위를 못 읽은 채널이 있나  나중에 조용히 틀린 값이 된다
+         *         기대한 것과 같은가         `expect` 를 주면 하나씩 대조한다
+         *
+         *     **`expect` 가 이 도구의 값이다.** 「최대하중 12.34 kN 이어야 한다」 를 주면
+         *     그것이 나왔는지 말해 준다 — 사람이 장비 화면에서 읽은 값을 그대로 넣으면,
+         *     AI 가 지은 정의가 같은 답을 내는지 기계가 판정한다.
+         */
+        post: operations["check_profile_api_formats_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/formats/preview": {
         parameters: {
             query?: never;
@@ -1727,8 +1764,7 @@ export interface paths {
          *     파일이 어느 시편의 것인지도 모르고, 프로파일을 만드는 중에 실패한 시험 기록이
          *     쌓일 이유가 없다.
          *
-         *     `header_rows` 만 사람이 준다. 헤더가 몇 줄인지는 **기계가 알 수 없기 때문이다**
-         *     — 그룹 머리(버려도 되는 줄)와 나뉜 이름(버리면 안 되는 줄)은 생김새가 같다.
+         *     `header_rows` 만 사람이 준다. 헤더가 몇 줄인지는 **기계가 알 수 없기 때문이다.**
          */
         post: operations["preview_api_formats_preview_post"];
         delete?: never;
@@ -10745,6 +10781,73 @@ export interface components {
             si_unit: string;
         };
         /**
+         * ProfileCheckIn
+         * @description 정의 하나를 **글자로 온 표본**에 대고 검사한다(MCP 용).
+         *
+         *     화면은 파일을 통째로 올리지만, AI 는 파일을 나를 수 없다 — 50MB 를 대화에 실을
+         *     수는 없기 때문이다. 구조를 판단하는 데는 **앞 몇십 줄이면 충분하다.**
+         */
+        ProfileCheckIn: {
+            /**
+             * Definition
+             * @description 검사할 프로파일 정의. 없으면 구조만 읽는다
+             */
+            definition?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Expect
+             * @description **기대한 결과.** `{curves: [{key, channels: [...]}], summary: {키: 값}}` — 이것과 대조해 하나씩 맞았는지 말한다. 「돌아는 갔다」 와 「기대한 것이 나왔다」 는 다르다
+             */
+            expect?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Header Rows
+             * @default 1
+             */
+            header_rows: number;
+            /**
+             * Sample Text
+             * @description 장비 파일의 앞부분 그대로. 헤더와 데이터 몇 줄이면 된다
+             */
+            sample_text: string;
+            /**
+             * Test Type
+             * @description 이 파일이 어느 시험법의 것인가. 주면 **그 시험법이 요구하는 채널이 다 붙었는지** 검사한다 — 이 검사가 없으면 「읽히기는 하는데 처리 단계가 채널을 못 찾는」 프로파일이 만들어진다
+             */
+            test_type?: string | null;
+        };
+        /**
+         * ProfileCheckItemOut
+         * @description 검사 하나. **통과·실패가 아니라 무엇을 봤는지까지** 적는다.
+         */
+        ProfileCheckItemOut: {
+            /** Detail */
+            detail: string;
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * ProfileCheckOut
+         * @description 정의를 표본에 대 본 결과 — **AI 가 스스로 고칠 수 있을 만큼 말해 준다.**
+         */
+        ProfileCheckOut: {
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["ProfileCheckItemOut"][];
+            /** Ok */
+            ok: boolean;
+            /** Problem */
+            problem?: string | null;
+            structure?: components["schemas"]["StructurePreviewOut"] | null;
+            tried?: components["schemas"]["ProfileTryOut"] | null;
+        };
+        /**
          * ProfileTryOut
          * @description 프로파일을 저장하기 전에 그 파일에 적용해 본 결과.
          *
@@ -17093,6 +17196,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FormatProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_profile_api_formats_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileCheckOut"];
                 };
             };
             /** @description Validation Error */

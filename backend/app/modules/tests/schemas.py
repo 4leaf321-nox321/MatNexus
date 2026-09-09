@@ -847,3 +847,58 @@ class SummaryImportOut(BaseModel):
     rejected: int
     specimens_created: int = 0
     items: list[SummaryImportItemOut]
+
+
+class ProfileCheckIn(BaseModel):
+    """정의 하나를 **글자로 온 표본**에 대고 검사한다(MCP 용).
+
+    화면은 파일을 통째로 올리지만, AI 는 파일을 나를 수 없다 — 50MB 를 대화에 실을
+    수는 없기 때문이다. 구조를 판단하는 데는 **앞 몇십 줄이면 충분하다.**
+    """
+
+    sample_text: str = Field(
+        min_length=1,
+        description="장비 파일의 앞부분 그대로. 헤더와 데이터 몇 줄이면 된다",
+    )
+    definition: dict[str, Any] | None = Field(
+        default=None, description="검사할 프로파일 정의. 없으면 구조만 읽는다"
+    )
+    header_rows: int = Field(default=1, ge=1, le=5)
+    test_type: str | None = Field(
+        default=None,
+        description=(
+            "이 파일이 어느 시험법의 것인가. 주면 **그 시험법이 요구하는 채널이 "
+            "다 붙었는지** 검사한다 — 이 검사가 없으면 「읽히기는 하는데 처리 단계가 "
+            "채널을 못 찾는」 프로파일이 만들어진다"
+        ),
+    )
+    expect: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "**기대한 결과.** `{curves: [{key, channels: [...]}], summary: {키: 값}}` — "
+            "이것과 대조해 하나씩 맞았는지 말한다. 「돌아는 갔다」 와 「기대한 것이 "
+            "나왔다」 는 다르다"
+        ),
+    )
+
+
+class ProfileCheckItemOut(BaseModel):
+    """검사 하나. **통과·실패가 아니라 무엇을 봤는지까지** 적는다."""
+
+    name: str
+    ok: bool
+    detail: str
+
+
+class ProfileCheckOut(BaseModel):
+    """정의를 표본에 대 본 결과 — **AI 가 스스로 고칠 수 있을 만큼 말해 준다.**"""
+
+    ok: bool
+    """검사가 모두 통과했나. 하나라도 실패면 거짓."""
+    checks: list[ProfileCheckItemOut] = []
+    structure: StructurePreviewOut | None = None
+    """정의 없이 불렀거나, 구조를 함께 보고 싶을 때."""
+    tried: ProfileTryOut | None = None
+    """정의로 읽어 본 결과. 실패했으면 없다."""
+    problem: str | None = None
+    """읽다가 멈춘 자리."""
