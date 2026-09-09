@@ -2612,6 +2612,136 @@ class Test되짚어_찾은_것:
         assert "_thermal_si.rad" in names["openradioss_thermal"]
 
 
+class Test뽑은_덱을_되읽어_대조한다:
+    """**「돌아는 갔다」 와 「맞게 나왔다」 는 다르다.**
+
+    렌더러 단위 시험이 지키는 것은 「렌더러가 옳게 짜였나」 이지 「지금 이 덱이
+    옳게 나왔나」 가 아니다 — 단위계를 잘못 고르거나 엉뚱한 카드를 집으면
+    아무것도 안 걸리고, **틀린 덱은 오류 없이 돈다.**
+
+    무는 것 다섯:
+
+        읽기            나오나, 안 나오면 왜 (예외로 끝내지 않는다)
+        값             카드 값이 **그 단위계 숫자로** 덱에 있나
+        표             마지막 점이 있나 (잘렸나)
+        기대값          사람이 아는 값과 카드를 대조한다
+        각주            네킹·첫 점 경고를 함께 낸다
+    """
+
+    def test_값이_그_단위계로_덱에_있다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "되읽기",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+
+        checked = client.post(
+            f"/api/fitting/cards/{card['id']}/export/check",
+            json={"format": "dyna", "units": "mm_n_tonne"},
+            headers=admin_headers,
+        )
+        assert checked.status_code == 200, checked.text
+        body = checked.json()
+        checks = {one["name"]: one for one in body["checks"]}
+        assert checks["읽기"]["ok"] is True
+        assert checks["값"]["ok"] is True, checks["값"]
+        # **환산된 수여야 한다.** 밀도 7850 kg/m3 는 이 계에서 7.85e-9 다 —
+        # SI 숫자가 덱에 있으면 그것이야말로 환산 누락이다.
+        assert body["found"]["elastic.density"] == pytest.approx(7.85e-9)
+        assert body["found"]["elastic.youngs_modulus"] == pytest.approx(200e9 / 1e6)
+
+    def test_기대값이_다르면_짚는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """`expect` 는 **SI 로** 받는다 — 환산 자체가 검사 대상이라 사람에게
+        환산을 시키면 검사의 뜻이 없어진다."""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "기대값",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+
+        body = client.post(
+            f"/api/fitting/cards/{card['id']}/export/check",
+            json={
+                "format": "dyna",
+                "units": "si",
+                "expect": {"elastic.poisson_ratio": 0.29},
+            },
+            headers=admin_headers,
+        ).json()
+        assert body["ok"] is False
+        found = next(one for one in body["checks"] if one["name"].startswith("기대값"))
+        assert found["ok"] is False
+        assert "0.3" in found["detail"] and "0.29" in found["detail"], found
+
+    def test_못_나오면_그것도_검사_결과로_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**예외로 끝내지 않는다.** 그러면 무엇을 보려 했는지가 사라지고,
+        부르는 쪽은 도구가 고장 난 것과 구별하지 못한다."""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "푸아송비 없음",
+            },
+            headers=admin_headers,
+        ).json()
+
+        body = client.post(
+            f"/api/fitting/cards/{card['id']}/export/check",
+            json={"format": "dyna", "units": "si"},
+            headers=admin_headers,
+        ).json()
+        assert body["ok"] is False
+        assert body["checks"][0]["name"] == "읽기"
+        assert body["checks"][0]["ok"] is False
+        assert "푸아송비" in body["checks"][0]["detail"], body["checks"][0]
+
+    def test_각주를_함께_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**검사가 다 통과해도 그 덱을 그대로 쓰면 안 되는 경우가 있다.**"""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "각주",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+
+        body = client.post(
+            f"/api/fitting/cards/{card['id']}/export/check",
+            json={"format": "dyna", "units": "si"},
+            headers=admin_headers,
+        ).json()
+        assert any("네킹" in note for note in body["notes"]), body["notes"]
+
+
 class Test네킹을_안_자르면:
     """**네킹 뒤는 균일 변형이 아니다.**
 

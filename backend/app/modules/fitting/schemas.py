@@ -343,6 +343,37 @@ class DeckKeysOut(BaseModel):
     tables: list[DeckTableOut]
 
 
+class DeckCheckRequest(BaseModel):
+    """뽑은 덱을 **되읽어 카드와 대조한다.**"""
+
+    format: str
+    units: str = "si"
+    expect: dict[str, float] = {}
+    """사람이 아는 값. `{"youngs_modulus": 205000000000.0}` 처럼 **SI 로** 준다 —
+    덱의 단위계로 환산하는 일은 서버가 한다(그 환산이 검사 대상이기도 하다)."""
+
+
+class DeckCheckItemOut(BaseModel):
+    """검사 하나. **실패한 것만 읽어도 되게** 이름과 사유를 함께 낸다."""
+
+    name: str
+    ok: bool
+    detail: str
+
+
+class DeckCheckOut(BaseModel):
+    ok: bool
+    format: str
+    units: str
+    filename: str
+    line_count: int
+    checks: list[DeckCheckItemOut]
+    found: dict[str, float] = {}
+    """덱에서 실제로 읽어 낸 값 — 이름을 붙일 수 있었던 것만."""
+    notes: list[str] = []
+    """내보내면서 한 말(네킹·첫 점·합성). **검사 결과와 함께 읽어야 한다.**"""
+
+
 class DeckPreviewOut(BaseModel):
     """미리보기 결과. **덱이 안 나와도 200 이다.**
 

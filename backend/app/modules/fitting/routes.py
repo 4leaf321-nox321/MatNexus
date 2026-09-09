@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import math
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -38,6 +39,9 @@ from app.modules.fitting.schemas import (
     CardFacetOut,
     CardFacetsOut,
     CardValueOut,
+    DeckCheckItemOut,
+    DeckCheckOut,
+    DeckCheckRequest,
     DeckKeyOut,
     DeckKeysOut,
     DeckPreviewIn,
@@ -600,6 +604,11 @@ def _declared_table(
         rows.append(row)
     return rows
 
+
+#: 기대값과 카드 값이 이만큼 안에 들면 같다고 본다. 사람이 「205 GPa」 라고 말할
+#: 때 카드가 204.98 GPa 인 것은 다른 값이 아니다 — 여기서 자릿수까지 맞추라고 하면
+#: 이 검사는 늘 실패하고, 그러면 아무도 안 쓴다.
+EXPECT_TOLERANCE = 0.01
 
 #: 네킹을 자르는 단계와 그 옵션. **이름을 여기 적는다** — 처리 플러그인이
 #: 무엇을 하는지는 부서의 데이터가 아니라 계산의 성질이다.
@@ -3212,6 +3221,218 @@ def export_card(
                 f'_{system.key}.{target.extension}"'
             )
         },
+    )
+
+
+#: 덱 안에서 숫자로 읽힐 수 있는 글자. 붙어 있는 고정폭 필드를 갈라 보려고
+#: 덩어리째 잡은 다음 안에서 다시 잘라 본다.
+_TOKEN_RUN = re.compile(r"[0-9.eEdD+-]+")
+_NUMBER_ONLY = re.compile(r"^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eEdD][-+]?\d+)?$")
+
+
+def _appears(text: str, value: float) -> bool:
+    """이 숫자가 덱에 **그대로 적혀 있나.**
+
+    ## 왜 `scan` 을 안 쓰나 (실측 2026-09-10)
+
+    `export.scan` 은 **예제 덱을 보고 칸 폭을 추측하는** 도구다. 우리 LS-DYNA
+    MAT 줄처럼 숫자가 구분자 없이 붙어 있고 그 모양의 줄이 하나뿐이면 폭을 못
+    정하고, 그러면 `17.8500E-092.0500E+05` 를 `1.785e-91` · `5e+50` 로 쪼갠다 —
+    **읽기는 읽었는데 값이 전부 엉터리**가 된다. 그 추측 위에서 검사하면 검사가
+    거짓말을 한다.
+
+    그래서 여기서는 구조를 읽지 않는다. 숫자 덩어리를 잡아 **그 안의 모든
+    조각**을 그대로 숫자로 읽어 보고, 찾는 값과 같은 것이 하나라도 있으면 있는
+    것으로 본다. 칸이 어디서 갈리는지 몰라도 되고, 형식이 늘어도 안 고친다.
+    """
+    for run in _TOKEN_RUN.finditer(text):
+        chunk = run.group()
+        for start in range(len(chunk)):
+            for end in range(start + 1, len(chunk) + 1):
+                piece = chunk[start:end]
+                if not _NUMBER_ONLY.match(piece):
+                    continue
+                try:
+                    got = float(piece.replace("d", "e").replace("D", "e"))
+                except ValueError:
+                    continue
+                if abs(got - value) <= abs(value) * scan.TOLERANCE:
+                    return True
+    return False
+
+
+def _deck_known(moved: export.Deck) -> dict[str, float]:
+    """덱이 **그 계로** 들고 있는 숫자들 — 되읽기 대조의 기준.
+
+    카드는 SI 로 들고 덱은 그 계로 적힌다. 옮기지 않고 견주면 늘 어긋나고,
+    **그 환산이 곧 이 검사의 요점**이다.
+    """
+    known: dict[str, float] = {}
+    for block in moved.blocks:
+        for name, value in moved.values(block).items():
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                known[f"{block}.{name}"] = float(value)
+    return known
+
+
+@router.post("/cards/{card_id}/export/check", response_model=DeckCheckOut)
+def check_card_deck(
+    card_id: uuid.UUID,
+    payload: DeckCheckRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckCheckOut:
+    """뽑은 덱을 **되읽어 카드와 대조한다** — 「돌아는 갔다」 와 「맞게 나왔다」 는 다르다.
+
+    ## 왜 필요한가 (실측 2026-09-10)
+
+    덱을 뽑는 길이 뚫린 뒤에도 **그 파일이 그 카드와 맞는지 확인할 방법이 없었다.**
+    렌더러 단위 시험이 지키는 것은 「렌더러가 옳게 짜였나」 이지 「지금 이 덱이 옳게
+    나왔나」 가 아니다 — 단위계를 잘못 고르거나 엉뚱한 카드를 집으면 아무것도 안
+    걸린다. 그리고 **틀린 덱은 오류 없이 돈다.**
+
+    ## 무엇을 보나
+
+        읽기        이 카드로 그 형식이 나오나 (안 나오면 왜)
+        값          카드 값이 **그 단위계 숫자로** 덱에 있나
+        표          점 수가 카드 표와 같나
+        기대값       `expect` 를 주면 사람이 아는 값과 카드를 대조한다
+
+    값 대조는 덱을 **다시 읽어서** 한다(`scan`). 렌더러가 쓴 글자를 도로 파싱하므로,
+    고정폭 칸이 넘쳐 이웃과 붙었으면 그 숫자가 카드 값과 안 맞아 여기서 걸린다 —
+    눈으로는 거의 못 잡는 자리다.
+
+    ## 각주를 함께 낸다
+
+    네킹·첫 점·합성 같은 경고는 **검사 결과와 함께 읽어야 한다.** 검사가 다
+    통과해도 그 덱을 그대로 쓰면 안 되는 경우가 있다.
+    """
+    deck = _deck_for_card(db, user, card_id)
+    system = _unit_system(db, payload.units)
+    try:
+        target = renderers.renderer_for(db, user.home_workspace_id, payload.format)
+        rendered = export.render(target, deck, system)
+    except export.ExportError as exc:
+        # **못 나온 것도 검사 결과다.** 예외로 끝내면 무엇을 보려 했는지가 사라지고,
+        # 부르는 쪽은 도구가 고장 난 것과 구별하지 못한다.
+        return DeckCheckOut(
+            ok=False,
+            format=payload.format,
+            units=system.key,
+            filename="",
+            line_count=0,
+            checks=[DeckCheckItemOut(name="읽기", ok=False, detail=str(exc))],
+        )
+
+    checks = [
+        DeckCheckItemOut(name="읽기", ok=True, detail=f"{target.label} 덱이 나왔습니다.")
+    ]
+
+    moved = export.to_system(deck, system)
+    known = _deck_known(moved)
+    named = {name: value for name, value in known.items() if _appears(rendered.text, value)}
+
+    # **덱에 안 실리는 값도 있다.** 카드는 열물성까지 들고 있는데 *MAT_024 는 그것을
+    # 안 쓴다 — 안 실린 것을 「빠졌다」 고 하면 이 검사가 늘 실패하고, 그러면 아무도
+    # 안 본다. 그래서 **몇 개가 그대로 있었나**를 말하고, 하나도 없으면 실패로 본다.
+    checks.append(
+        DeckCheckItemOut(
+            name="값",
+            ok=bool(named),
+            detail=(
+                f"카드 값 {len(named)}개가 이 계({system.key})의 숫자로 덱에 "
+                f"그대로 있습니다({', '.join(sorted(named)[:5])}"
+                f"{' 외' if len(named) > 5 else ''})."
+                if named
+                else (
+                    f"덱에서 카드 값을 하나도 못 찾았습니다. 이 계({system.key})로 "
+                    f"환산한 수가 덱에 없습니다 — 환산이 어긋났거나 엉뚱한 카드입니다."
+                )
+            ),
+        )
+    )
+
+    # **잘렸는지는 끝점으로 본다.** 줄 수를 세면 형식마다 규칙을 알아야 하는데,
+    # 표의 마지막 점이 덱에 있으면 끝까지 실린 것이다.
+    rows = moved.rows("table")
+    if rows:
+        last = rows[-1]
+        # **카드 표의 열 이름을 쓴다.** 처리 프레임의 이름(`strain_true_plastic`)이
+        # 아니다 — 카드는 블록 규약의 이름으로 담는다(ADR 0012). 섞으면 조용히
+        # 아무것도 못 찾고 「잘렸다」 고 말한다.
+        pair = [
+            value
+            for value in (last.get("plastic_strain"), last.get("true_stress"))
+            if isinstance(value, int | float)
+        ]
+        whole = bool(pair) and all(_appears(rendered.text, float(one)) for one in pair)
+        checks.append(
+            DeckCheckItemOut(
+                name="표",
+                ok=whole,
+                detail=(
+                    f"표 {len(rows)}점의 마지막 점이 덱에 있습니다 — 끝까지 실렸습니다."
+                    if whole
+                    else (
+                        f"표 {len(rows)}점 중 마지막 점을 덱에서 못 찾았습니다. "
+                        f"잘렸을 수 있습니다."
+                    )
+                ),
+            )
+        )
+
+    # **기대값은 카드와 SI 로 견준다.** 덱이 카드를 옳게 담았는지는 위의 「값」 이
+    # 이미 봤다 — 여기서 묻는 것은 「그 카드가 내가 아는 값인가」 다.
+    for key, value in payload.expect.items():
+        block, _, name = key.partition(".")
+        card_value = deck.number(block, name) if name else None
+        if card_value is None:
+            card_value = next(
+                (
+                    float(found_value)
+                    for one in deck.blocks
+                    for found_name, found_value in deck.values(one).items()
+                    if found_name == key and isinstance(found_value, int | float)
+                ),
+                None,
+            )
+        if card_value is None:
+            checks.append(
+                DeckCheckItemOut(
+                    name=f"기대값 {key}",
+                    ok=False,
+                    detail=f"이 카드에 '{key}' 가 없어 대조할 수 없습니다.",
+                )
+            )
+            continue
+        close = abs(card_value - value) <= abs(value) * EXPECT_TOLERANCE
+        checks.append(
+            DeckCheckItemOut(
+                name=f"기대값 {key}",
+                ok=close,
+                detail=(
+                    f"카드 {card_value:.6g} · 기대 {value:.6g} (SI)"
+                    if close
+                    else f"카드는 {card_value:.6g} 인데 기대한 값은 {value:.6g} 입니다 (SI)."
+                ),
+            )
+        )
+
+    return DeckCheckOut(
+        ok=all(one.ok for one in checks),
+        format=payload.format,
+        units=system.key,
+        filename=f"{deck.name}{target.suffix}_{system.key}.{target.extension}",
+        line_count=len(rendered.text.splitlines()),
+        checks=checks,
+        found=named,
+        # **경고는 두 군데서 온다.** 내보내며 한 말(`rendered.notes` — 첫 점·표
+        # 정리)과 카드가 이미 들고 있던 것(네킹·합성)이다. 검사만 보고 「다
+        # 통과했으니 쓰면 된다」 로 읽지 않도록 함께 낸다.
+        notes=[
+            *(one for one in deck.provenance if one.startswith(("네킹을 안 자른", "합성"))),
+            *rendered.notes,
+        ],
     )
 
 

@@ -171,6 +171,12 @@ async def sweep(session: ClientSession) -> None:
                     "render_card_deck",
                     {"card_id": card_id, "format": formats[0], "units": unit_key},
                 )
+                # **뽑은 것을 되읽어 본다.** 이 검사 자체가 도는지도 봐야 한다.
+                await call(
+                    session,
+                    "check_card_deck",
+                    {"card_id": card_id, "format": formats[0], "units": unit_key},
+                )
 
     catalog = await call(session, "search_catalog", {"query": "steel", "limit": 3})
     catalog_id = _first(catalog, "id")

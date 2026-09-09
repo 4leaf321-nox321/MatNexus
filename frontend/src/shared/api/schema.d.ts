@@ -1306,6 +1306,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/{card_id}/export/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Card Deck
+         * @description 뽑은 덱을 **되읽어 카드와 대조한다** — 「돌아는 갔다」 와 「맞게 나왔다」 는 다르다.
+         *
+         *     ## 왜 필요한가 (실측 2026-09-10)
+         *
+         *     덱을 뽑는 길이 뚫린 뒤에도 **그 파일이 그 카드와 맞는지 확인할 방법이 없었다.**
+         *     렌더러 단위 시험이 지키는 것은 「렌더러가 옳게 짜였나」 이지 「지금 이 덱이 옳게
+         *     나왔나」 가 아니다 — 단위계를 잘못 고르거나 엉뚱한 카드를 집으면 아무것도 안
+         *     걸린다. 그리고 **틀린 덱은 오류 없이 돈다.**
+         *
+         *     ## 무엇을 보나
+         *
+         *         읽기        이 카드로 그 형식이 나오나 (안 나오면 왜)
+         *         값          카드 값이 **그 단위계 숫자로** 덱에 있나
+         *         표          점 수가 카드 표와 같나
+         *         기대값       `expect` 를 주면 사람이 아는 값과 카드를 대조한다
+         *
+         *     값 대조는 덱을 **다시 읽어서** 한다(`scan`). 렌더러가 쓴 글자를 도로 파싱하므로,
+         *     고정폭 칸이 넘쳐 이웃과 붙었으면 그 숫자가 카드 값과 안 맞아 여기서 걸린다 —
+         *     눈으로는 거의 못 잡는 자리다.
+         *
+         *     ## 각주를 함께 낸다
+         *
+         *     네킹·첫 점·합성 같은 경고는 **검사 결과와 함께 읽어야 한다.** 검사가 다
+         *     통과해도 그 덱을 그대로 쓰면 안 되는 경우가 있다.
+         */
+        post: operations["check_card_deck_api_fitting_cards__card_id__export_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/{card_id}/publish": {
         parameters: {
             query?: never;
@@ -7413,6 +7456,65 @@ export interface components {
             score: number;
             /** Value Count */
             value_count: number;
+        };
+        /**
+         * DeckCheckItemOut
+         * @description 검사 하나. **실패한 것만 읽어도 되게** 이름과 사유를 함께 낸다.
+         */
+        DeckCheckItemOut: {
+            /** Detail */
+            detail: string;
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /** DeckCheckOut */
+        DeckCheckOut: {
+            /** Checks */
+            checks: components["schemas"]["DeckCheckItemOut"][];
+            /** Filename */
+            filename: string;
+            /** Format */
+            format: string;
+            /**
+             * Found
+             * @default {}
+             */
+            found: {
+                [key: string]: number;
+            };
+            /** Line Count */
+            line_count: number;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /** Ok */
+            ok: boolean;
+            /** Units */
+            units: string;
+        };
+        /**
+         * DeckCheckRequest
+         * @description 뽑은 덱을 **되읽어 카드와 대조한다.**
+         */
+        DeckCheckRequest: {
+            /**
+             * Expect
+             * @default {}
+             */
+            expect: {
+                [key: string]: number;
+            };
+            /** Format */
+            format: string;
+            /**
+             * Units
+             * @default si
+             */
+            units: string;
         };
         /**
          * DeckKeyOut
@@ -16615,6 +16717,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_card_deck_api_fitting_cards__card_id__export_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeckCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckCheckOut"];
                 };
             };
             /** @description Validation Error */

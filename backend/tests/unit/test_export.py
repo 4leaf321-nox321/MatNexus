@@ -181,6 +181,36 @@ class Test표정리:
         assert "3e+08" in str(caught.value) and "2.8e+08" in str(caught.value)
         assert "실제와 다른 재료" in str(caught.value)
 
+    def test_첫_점의_값이_항복점_같지_않으면_짚는다(self) -> None:
+        """**첫 점의 «값»을 보는 검사다.**
+
+        앵커 검사는 첫 점의 *변형률*이 0 인지만 본다 — 값은 아무도 안 봤다.
+        그런데 솔버는 그 점을 초기 항복으로 읽는다(LS-DYNA 는 SIGY 를 거기서
+        가져온다). 실측(2026-09-10): 첫 점 173.4 MPa 뒤 곧바로 352.7 MPa 였고
+        뒤 구간은 점마다 0.7% 씩 올랐다 — **덱은 멀쩡히 돌고 항복만 절반**이었다.
+        """
+        points = [(0.0, 173e6), (0.001, 352e6)]
+        points += [(0.001 + index * 0.001, 352e6 + index * 1e6) for index in range(1, 30)]
+        kept, notes = export.prepare(tuple(points))
+        assert len(kept) == len(points), "막지는 않는다"
+        found = [note for note in notes if "첫 점이 항복점 값이 아닐 수" in note]
+        assert found, notes
+        # **숫자를 함께 준다.** 「이상합니다」 만으로는 심각한지 못 정한다.
+        assert "103%" in found[0], found[0]
+        assert "배입니다" in found[0], found[0]
+
+    def test_고르게_오르는_표에는_안_짚는다(self) -> None:
+        """**늘 짚으면 그 문장이 경고로 안 읽힌다.**"""
+        points = tuple((index * 0.001, 250e6 + index * 1e6) for index in range(30))
+        _, notes = export.prepare(points)
+        assert not [note for note in notes if "첫 점이 항복점" in note], notes
+
+    def test_점이_적으면_안_짚는다(self) -> None:
+        """점이 서넛이면 「전형적인 상승」 이라 할 것이 없다 — 셋을 놓고 하나를
+        이상하다고 하는 것은 판정이 아니라 짐작이다."""
+        _, notes = export.prepare(((0.0, 100e6), (0.01, 300e6), (0.02, 305e6)))
+        assert not [note for note in notes if "첫 점이 항복점" in note], notes
+
     def test_너무_길면_거부한다(self) -> None:
         many = tuple((index * 1e-4, 250e6 + index) for index in range(export.MAX_POINTS + 1))
         with pytest.raises(export.ExportError, match="재샘플"):

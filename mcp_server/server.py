@@ -1902,6 +1902,44 @@ async def render_card_deck(
 
 
 @mcp.tool()
+async def check_card_deck(
+    ctx: Context,
+    card_id: str,
+    format: str,
+    units: str | None = None,
+    expect: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """뽑은 덱을 **되읽어 카드와 대조한다** — 건네기 전에.
+
+    「돌아는 갔다」 와 「맞게 나왔다」 는 다르다. 덱은 **틀려도 오류 없이 돈다** —
+    단위계를 잘못 고르거나 엉뚱한 카드를 집어도 파일은 멀쩡히 나온다.
+
+        읽기        이 카드로 그 형식이 나오나 (안 나오면 왜)
+        값          카드 값이 **그 단위계 숫자로** 덱에 있나
+        표          마지막 점이 있나 (잘렸나)
+        기대값       `expect` 를 주면 사람이 아는 값과 카드를 대조한다
+
+    ## `expect` 는 SI 로 준다
+
+    환산 자체가 검사 대상이라 **네가 환산하지 마라.** 「E 가 205 GPa 여야 한다」 는
+    `{"elastic.youngs_modulus": 205e9}` 다. 사람에게 아는 값을 물어보는 편이 낫다 —
+    그 답이 이 검사에서 가장 값진 항목이다.
+
+    ## 각주를 반드시 읽어라
+
+    `notes` 에 네킹·첫 점·합성 경고가 함께 온다. **검사가 다 통과해도 그 덱을
+    그대로 쓰면 안 되는 경우가 있다** — 「첫 점이 항복점 값이 아닐 수 있습니다」 가
+    그 예다. 그 문장을 사람에게 옮겨라.
+    """
+    return await _send(
+        ctx,
+        "POST",
+        f"/fitting/cards/{card_id}/export/check",
+        {"format": format, "units": units or "si", "expect": expect or {}},
+    )
+
+
+@mcp.tool()
 async def draft_test_type(
     ctx: Context, key: str, label: str, channels: list[dict[str, Any]]
 ) -> dict[str, Any]:

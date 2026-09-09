@@ -62,6 +62,25 @@ MAX_SOLVER_ID = 9_999_999
 #: 빠진 것**이라 거부한다 — 0.01% 를 넘는 소성변형은 이미 소성 구간이다.
 YIELD_ANCHOR_TOLERANCE = 1e-4
 
+#: 첫 구간의 응력 상승이 뒤 구간들의 **중앙값보다 몇 배**면 이상하다고 보나.
+#:
+#: **첫 점의 «값»을 보는 검사다.** 위의 앵커 검사는 첫 점의 *변형률*이 0 인지만
+#: 본다 — 값은 지금까지 아무도 안 봤다. 그런데 솔버는 그 점을 초기 항복으로
+#: 읽는다(LS-DYNA 는 SIGY 를 거기서 가져온다). 그 수가 틀리면 **성형 해석에서
+#: 가장 많이 쓰이는 값이 틀린다.**
+#:
+#: 실측(2026-09-10): 첫 점 173.4 MPa 뒤 곧바로 352.7 MPa 였다(+103%). 뒤 구간은
+#: 점마다 0.7% 씩 올랐다. 변형률은 0 이라 기존 검사를 전부 통과했고, 그래서
+#: **덱은 멀쩡히 돌면서 항복만 절반**이 됐다.
+#:
+#: 중앙값에 견주는 이유는 표마다 점 간격이 달라서다 — 절대값으로 문턱을 두면
+#: 성긴 표에서 늘 걸린다.
+FIRST_RISE_FACTOR = 5.0
+
+#: 그리고 **첫 점 대비 상대 상승**도 이만큼은 돼야 짚는다. 잔 노이즈 수준의
+#: 들쭉날쭉에 매번 경고를 달면 그 문장이 경고로 안 읽힌다.
+FIRST_RISE_RELATIVE = 0.05
+
 
 class ExportError(Exception):
     """이 카드로는 이 솔버 덱을 만들 수 없다.
@@ -266,7 +285,44 @@ def prepare(
 
     if len(ordered) < MIN_POINTS:
         raise ExportError(f"정리하고 나니 {len(ordered)}점입니다. 표가 너무 짧습니다.")
+
+    suspect = _first_point_suspect(ordered)
+    if suspect is not None:
+        notes.append(suspect)
     return ordered, notes
+
+
+def _first_point_suspect(ordered: list[tuple[float, float]]) -> str | None:
+    """첫 점의 **값**이 항복점 같지 않으면 그 사실을 적는다. **막지는 않는다.**
+
+    경화 곡선은 점마다 조금씩 오른다. 첫 구간만 뒤 구간들과 자릿수가 다르게
+    뛰면, 첫 점은 항복점이 아니라 **재샘플이 항복 앞에서 끌어온 자국**일 가능성이
+    크다 — 그 점의 변형률이 0 이라 앵커 검사는 통과한다.
+
+    막지 않는 이유는 위의 네킹과 같다. 항복 직후에 실제로 가파른 재료가 있고,
+    거부하면 사람은 시스템 밖에서 표를 고쳐 근거 없는 덱을 만든다. 대신 **덱
+    각주에 적어** 받는 사람이 보게 한다.
+    """
+    if len(ordered) < 4:
+        # 점이 서넛이면 「전형적인 상승」 이라 할 것이 없다.
+        return None
+    rises = [ordered[index][1] - ordered[index - 1][1] for index in range(1, len(ordered))]
+    first, rest = rises[0], sorted(rises[1:])
+    typical = rest[len(rest) // 2]
+    if first <= 0.0 or typical <= 0.0 or ordered[0][1] <= 0.0:
+        return None
+    if first < FIRST_RISE_FACTOR * typical:
+        return None
+    if first / ordered[0][1] < FIRST_RISE_RELATIVE:
+        return None
+    return (
+        f"**첫 점이 항복점 값이 아닐 수 있습니다.** 첫 점 {ordered[0][1]:.5g} 에서 "
+        f"다음 점 {ordered[1][1]:.5g} 로 {first / ordered[0][1]:.0%} 뛰는데, 뒤 "
+        f"구간은 한 점에 {typical:.4g} 씩 오릅니다(모두 덱의 응력 단위) — "
+        f"{first / typical:.0f}배입니다. 솔버는 첫 점을 초기 항복으로 읽으므로, "
+        f"이 값이 틀리면 항복강도가 틀린 덱이 됩니다. 처리에서 탄성 구간을 자른 "
+        f"자리와 진소성변형률 축 재샘플의 시작을 확인하세요."
+    )
 
 
 #: 값 이름의 한국어. 오류 메시지와 형식 목록이 같은 말을 쓴다.

@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 43개)
+## 5. 지금 있는 것 (도구 44개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 44번
 왕복한다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -144,6 +144,8 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     list_unit_systems()                낼 수 있는 단위계 — 뽑기 전에 고른다
     render_card_deck(card, fmt,        카드 하나 → 덱 본문. **units 를 꼭 넘겨라**
                      units)
+    check_card_deck(card, fmt, units,  뽑은 덱을 되읽어 카드와 대조 — 건네기 전에
+                    expect?)
     build_deck(rows, units,            부품 여럿 → 덱 한 파일. 파일로 건네려면
                include_text)           include_text=True (500줄 넘으면 잘린다)
 
