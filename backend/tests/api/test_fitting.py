@@ -74,8 +74,22 @@ def material(client: TestClient, admin_headers: dict[str, str], db: Session) -> 
     return created
 
 
+#: 네킹 후보를 **재는** 갈래. 기본 `STEPS` 에는 없다 — 그 단계가 없으면 경계를
+#: 계산할 자리가 없어서 경고가 「얼마나 섞였는지」 를 못 센다.
+NECKING_STEPS = [
+    *STEPS[:-1],
+    {"plugin": "tensile.necking_candidate", "options": {}},
+    STEPS[-1],
+]
+
+
 def _adopted(
-    client: TestClient, headers: dict[str, str], db: Session, material_id: str, count: int
+    client: TestClient,
+    headers: dict[str, str],
+    db: Session,
+    material_id: str,
+    count: int,
+    steps: list[dict[str, Any]] | None = None,
 ) -> None:
     for _ in range(count):
         sample = client.post(
@@ -95,7 +109,7 @@ def _adopted(
         assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
         stored = client.post(
             "/api/processing/results",
-            json={"test_run_id": run["id"], "steps": STEPS},
+            json={"test_run_id": run["id"], "steps": steps or STEPS},
             headers=headers,
         )
         assert stored.status_code == 201, stored.text
@@ -2669,6 +2683,84 @@ class Test네킹을_안_자르면:
             headers=admin_headers,
         )
         assert made.status_code == 201, made.text
+
+    def test_얼마나_섞였는지_센다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """**「섞여 있습니다」 만으로는 심각한지 못 정한다.**
+
+        마지막 두 점이 걸친 것과 표의 5분의 1이 네킹 뒤인 것은 다른 이야기다.
+        실측(2026-09-10): AI 에게 덱을 뽑게 했더니 이 경고를 받고도 판단이 안 서서
+        처리를 따로 돌려 후보 위치를 구하고 진소성변형률로 손수 환산했다 — 그
+        계산은 여기가 이미 할 수 있다.
+        """
+        _adopted(client, admin_headers, db, material["id"], 2, steps=NECKING_STEPS)
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": material["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "얼마나",
+                "poisson_ratio": 0.3,
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        notes = " ".join(card.json()["source"]["notes"])
+        assert "네킹을 안 자른" in notes
+        # **숫자가 있어야 판단이 선다.** 경계와 표의 끝을 함께 말한다.
+        assert "가장 이른 네킹 후보는" in notes, notes
+        assert "소성변형률" in notes, notes
+
+    def test_후보를_안_쟀으면_못_센다고_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**숫자가 없는 이유를 적는다.** 안 적으면 「괜찮아서 안 적었나」 로 읽힌다."""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "못 셈",
+                "poisson_ratio": 0.3,
+            },
+            headers=admin_headers,
+        ).json()
+        notes = " ".join(card["source"]["notes"])
+        assert "세지 못했습니다" in notes, notes
+        assert "'네킹 후보' 단계가 없어" in notes, notes
+
+    def test_미리보기에서도_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """**카드를 만들기 전에 알아야 한다.**
+
+        전에는 저장할 때만 떴다 — 미리보기로 식을 고르는 사람(과 AI)은 무엇 위에
+        맞추고 있는지 모른 채 골랐다.
+        """
+        _adopted(client, admin_headers, db, material["id"], 2, steps=NECKING_STEPS)
+        preview = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": material["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+            },
+            headers=admin_headers,
+        )
+        assert preview.status_code == 200, preview.text
+        notes = " ".join(preview.json()["notes"])
+        assert "네킹을 안 자른" in notes, notes
 
     def test_자른_곡선에는_안_적는다(
         self,

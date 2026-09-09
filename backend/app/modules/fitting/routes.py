@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -606,8 +607,45 @@ TRUE_PLASTIC = "tensile.true_plastic"
 CUT_POLICY = "manual_index"
 
 
-def _uncut_necking(group: statistics_services.Group) -> list[str]:
-    """네킹을 안 자른 곡선이 섞여 있으면 그 사실을 말한다. **막지는 않는다.**
+def _necking_plastic_strain(member: statistics_services.Member) -> float | None:
+    """이 시편의 네킹 후보를 **진소성변형률로 옮긴다.** 못 옮기면 `None`.
+
+    후보 단계(`tensile.necking_candidate`)는 **공칭**으로 재고 카드 표는 **진소성**
+    이다. 같은 축으로 옮겨야 「표의 어디부터가 네킹 뒤인지」 를 셀 수 있다.
+
+    변환은 `tensile.true_plastic` 이 하는 것과 같은 식이다 — 두 벌로 두면 언젠가
+    서로 다른 경계를 말한다. 탄성계수도 그 단계가 실제로 쓴 값을 그대로 쓴다.
+    """
+    scalars = {str(one.get("key")): one.get("value") for one in member.result.scalars or []}
+    eng_strain = scalars.get("necking_candidate_strain")
+    eng_stress = scalars.get("necking_candidate_stress")
+    # **탄성계수는 잰 값에서 읽는다.** 단계 옵션은 `@youngs_modulus` 처럼 앞 단계를
+    # 가리키는 참조일 수 있어 숫자가 아니다(실측 2026-09-10 — 그것 때문에 경계를
+    # 못 세고 「단계가 없다」 고 답했다). 옵션은 직접 넣은 숫자일 때만 쓴다.
+    modulus: Any = scalars.get("youngs_modulus")
+    if modulus is None:
+        for step in member.result.steps_snapshot or []:
+            if str(step.get("plugin")) == TRUE_PLASTIC:
+                modulus = (step.get("options") or {}).get("youngs_modulus")
+    if eng_strain is None or eng_stress is None or modulus is None:
+        return None
+    try:
+        strain_value = float(eng_strain)
+        stress_value = float(eng_stress)
+        modulus_value = float(modulus)
+    except (TypeError, ValueError):
+        return None
+    if strain_value <= -1 or modulus_value <= 0:
+        return None
+    true_strain = math.log1p(strain_value)
+    true_stress = stress_value * (1.0 + strain_value)
+    return true_strain - true_stress / modulus_value
+
+
+def _uncut_necking(
+    group: statistics_services.Group, strain: Sequence[float] | np.ndarray
+) -> list[str]:
+    """네킹을 안 자른 곡선이 섞여 있으면 **얼마나 섞였는지까지** 말한다.
 
     ## 왜 짚어야 하나
 
@@ -615,6 +653,20 @@ def _uncut_necking(group: statistics_services.Group) -> list[str]:
     않는다.** 안 자르고 변환하면 그 구간의 진응력이 실제보다 낮게 나오고, 그
     표가 그대로 `*PLASTIC` 으로 간다 — **덱은 멀쩡히 돌고 재료만 무르게
     계산된다.**
+
+    ## 왜 개수까지 세나 (실측 2026-09-10)
+
+    처음에는 「섞여 있습니다」 까지만 말했다. 그런데 그 문장만으로는 **심각한지
+    아닌지를 못 정한다** — 마지막 두 점이 걸친 것과 표의 5분의 1이 네킹 뒤인 것은
+    다른 이야기다. 실제로 AI 에게 덱을 뽑게 했더니, 이 경고를 받고도 판단이 안 서서
+    처리를 따로 돌려 후보 위치를 구하고 진소성변형률로 손수 환산해 「마지막 32점이
+    네킹 이후」 를 스스로 계산했다. **그 계산은 여기가 이미 할 수 있는 것이다.**
+
+    ## 경계는 **가장 이른** 후보다
+
+    대표 곡선은 시편들의 평균이다. 한 시편이 0.14 에서 네킹했고 다른 시편이 0.16
+    이면, 0.14 를 넘는 구간의 평균에는 이미 네킹 뒤 자료가 섞여 있다 — 그러니
+    가장 이른 것을 경계로 본다.
 
     ## 왜 막지는 않나
 
@@ -624,6 +676,7 @@ def _uncut_necking(group: statistics_services.Group) -> list[str]:
     남는다. 초탄성의 Drucker 검사와 같은 자리다.
     """
     uncut: list[str] = []
+    boundaries: list[float] = []
     for member in group.members:
         for step in member.result.steps_snapshot or []:
             if str(step.get("plugin")) != TRUE_PLASTIC:
@@ -631,14 +684,44 @@ def _uncut_necking(group: statistics_services.Group) -> list[str]:
             options = step.get("options") or {}
             if str(options.get("necking_policy") or "") != CUT_POLICY:
                 uncut.append(member.run.record_name)
+                found = _necking_plastic_strain(member)
+                if found is not None:
+                    boundaries.append(found)
     if not uncut:
         return []
-    return [
+
+    head = (
         f"네킹을 안 자른 곡선이 {len(uncut)}건 섞여 있습니다({', '.join(uncut[:3])}"
-        f"{' 외' if len(uncut) > 3 else ''}). 네킹 뒤는 균일 변형이 아니라 진응력 "
-        f"변환식이 성립하지 않습니다 — 그 구간이 소성 표에 들어가면 재료가 실제보다 "
-        f"무르게 계산됩니다. 처리의 '진응력·진소성변형률' 단계에서 네킹 경계를 "
-        f"'지정한 위치에서 자름' 으로 두고, 앞 단계가 낸 후보 위치를 이어 붙이세요."
+        f"{' 외' if len(uncut) > 3 else ''})."
+    )
+    tail = (
+        "네킹 뒤는 균일 변형이 아니라 진응력 변환식이 성립하지 않습니다 — 그 구간이 "
+        "소성 표에 들어가면 재료가 실제보다 무르게 계산됩니다. 처리의 "
+        "'진응력·진소성변형률' 단계에서 네킹 경계를 '지정한 위치에서 자름' 으로 두고, "
+        "앞 단계가 낸 후보 위치를 이어 붙이세요."
+    )
+
+    points = [float(one) for one in strain]
+    if not boundaries or not points:
+        # 후보 단계를 안 돌렸으면 셀 수가 없다. **그 사실을 말한다** — 숫자가
+        # 없는 이유를 안 적으면 「괜찮아서 안 적었나」 로 읽힌다.
+        return [
+            f"{head} 얼마나 섞였는지는 세지 못했습니다 — 이 곡선들에는 '네킹 후보' "
+            f"단계가 없어 경계를 계산할 자리가 없습니다. {tail}"
+        ]
+
+    boundary = min(boundaries)
+    beyond = sum(1 for one in points if one > boundary)
+    largest = max(points)
+    if beyond == 0:
+        return [
+            f"{head} 다만 표는 소성변형률 {largest:.4g} 까지고 가장 이른 네킹 후보는 "
+            f"{boundary:.4g} 이라, **표에 들어간 네킹 뒤 점은 없습니다.** {tail}"
+        ]
+    return [
+        f"{head} 표는 소성변형률 {largest:.4g} 까지 가는데 가장 이른 네킹 후보는 "
+        f"{boundary:.4g} 입니다 — **마지막 {beyond}점"
+        f"({beyond / len(points):.0%})이 네킹 이후입니다.** {tail}"
     ]
 
 
@@ -917,6 +1000,9 @@ def preview(
             db, group, x=axis_family.x_column, y=axis_family.y_column
         )
     ]
+    # **카드를 만들기 전에 알아야 한다.** 전에는 이 경고가 저장할 때만 떴다 —
+    # 미리보기로 식을 고르는 사람(과 AI)은 무엇 위에 맞추고 있는지 모른 채 골랐다.
+    notes.extend(_uncut_necking(group, strain))
     axis_pairs = {(item.x_column, item.y_column) for item in chosen}
     if len(axis_pairs) > 1:
         notes.append(
@@ -1186,7 +1272,7 @@ def create_card(
     poisson = _inherit_poisson(group.material, payload.poisson_ratio)
     density = _inherit_density(group.material, samples, payload.density)
     thermal = _thermal_block(group.material)
-    uncut = _uncut_necking(group)
+    uncut = _uncut_necking(group, strain)
     thermal_rows = _declared_table(group.material, THERMAL_COLUMNS)
     inherited_notes = [
         # 잰 값이면 처리 결과가 근거를 들고 있다. 적은 값일 때만 적는다 —
