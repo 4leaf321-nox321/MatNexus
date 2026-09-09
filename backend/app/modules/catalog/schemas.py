@@ -69,6 +69,12 @@ class CatalogValueOut(BaseModel):
     conditions: dict[str, Any] | None
     method: str | None
     quality_tier: int
+    summary: dict[str, Any] | None = None
+    """**조건이 완전히 같은 중복**일 때만 오는 종합 — `{n, median, min, max}`.
+
+    대표 줄에만 실린다. 이것이 있으면 「같은 조건에서 잰 값이 N개」 라는 뜻이라
+    중앙값을 담는 선택지가 생긴다. 없으면(대부분) 조건이 다른 값들이라 종합하면
+    안 된다 — 실측상 98%가 그쪽이다."""
     distinguishing: dict[str, Any] = {}
     """**후보들 사이에서 값이 갈리는 조건**만 — 이 값의 것.
 

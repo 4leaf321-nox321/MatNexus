@@ -75,6 +75,20 @@ class Annotation:
     separated_by: str | None
     """대표에게 **어느 자리에서** 밀렸는가. 대표 자신은 None."""
 
+    summary: dict[str, Any] | None = None
+    """**조건이 완전히 같은 중복**일 때의 종합 — `{n, median, min, max}`. 아니면 None.
+
+    실측(2026-09-09): 값이 둘 이상인 조합 6,136개 중 조건까지 같은 것은 **58개(1%)**
+    뿐이다. 나머지 98%는 조건이 서로 달라 **평균하면 안 된다** — 하한과 상한을,
+    Tg 위와 아래를 섞으면 아무것도 아닌 수가 된다.
+
+    그 1%에서는 흩어짐이 실제로 작았다(비열 1.36배 · 영률 1.05배 · CTE 2.12배 —
+    문헌값 편차 수준). 거기서는 하나를 고르는 것보다 중앙값이 나을 수 있어, **고를
+    수 있게만** 해 둔다. 기본은 여전히 대표값 하나다.
+
+    **평균이 아니라 중앙값이다.** 값이 서넛뿐이라 한쪽으로 튄 값 하나가 평균을
+    끌고 간다."""
+
     distinguishing: dict[str, Any] = field(default_factory=dict)
     """**후보들 사이에서 실제로 값이 갈리는 조건**만. 이 값의 것을 담는다.
 
@@ -138,6 +152,31 @@ def _rank(value: Any) -> tuple[float, ...]:
     )
 
 
+def _summary(members: list[Any], varying: dict[Any, dict[str, Any]]) -> dict[str, Any] | None:
+    """**조건이 완전히 같은 중복**이면 종합값을 낸다. 아니면 None.
+
+    가르는 조건이 하나라도 있으면 안 낸다 — 그때 종합하는 것은 서로 다른 것을
+    섞는 일이다.
+    """
+    if len(members) < 2:
+        return None
+    if any(varying.get(one.id) for one in members):
+        return None
+    numbers = sorted(float(one.value_num) for one in members if one.value_num is not None)
+    if len(numbers) < 2:
+        return None
+    middle = len(numbers) // 2
+    median = (
+        numbers[middle] if len(numbers) % 2 else (numbers[middle - 1] + numbers[middle]) / 2.0
+    )
+    return {
+        "n": len(numbers),
+        "median": median,
+        "min": numbers[0],
+        "max": numbers[-1],
+    }
+
+
 def annotate(values: list[Any]) -> dict[Any, Annotation]:
     """(같은 재료의) 값 목록 → id 별 대표/대안 주석.
 
@@ -153,11 +192,15 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
         winner = ranked[0]
         winner_rank = _rank(winner)
         varying = _distinguishing(members)
+        # **대표 줄에만 싣는다.** 줄마다 같은 종합을 되풀이하면 「값이 여럿이다」 가
+        # 아니라 「종합이 여럿이다」 로 읽힌다.
+        summary = _summary(members, varying)
         out[winner.id] = Annotation(
             representative=True,
             n_candidates=len(members),
             separated_by=None,
             distinguishing=varying.get(winner.id, {}),
+            summary=summary,
         )
         for loser in ranked[1:]:
             loser_rank = _rank(loser)

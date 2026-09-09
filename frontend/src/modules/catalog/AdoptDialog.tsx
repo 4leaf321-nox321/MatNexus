@@ -31,6 +31,7 @@ import {
   ADOPTABLE,
   TIER_LABELS,
   adoptionReference,
+  pooledReference,
   adoptionSource,
   fmtValueAs,
 } from '@/modules/catalog/api'
@@ -102,6 +103,11 @@ export function AdoptDialog({
   const [found, setFound] = useState<MaterialOut[]>([])
   const [target, setTarget] = useState<MaterialOut | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  /**
+   * **종합값으로 담을 값들.** 조건이 완전히 같은 중복(실측 1%)에만 열린다 —
+   * 나머지 98%는 조건이 서로 달라 종합하면 하한과 상한을, Tg 위와 아래를 섞는다.
+   */
+  const [pooled, setPooled] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [doneCount, setDoneCount] = useState<number | null>(null)
@@ -154,6 +160,7 @@ export function AdoptDialog({
     if (!open) {
       setTarget(null)
       setPicked(new Set())
+      setPooled(new Set())
       setDoneCount(null)
       setError(null)
       setTyped('')
@@ -248,7 +255,9 @@ export function AdoptDialog({
                 typeof value.conditions?.['temperature_k'] === 'number'
                   ? (value.conditions['temperature_k'] as number)
                   : null,
-              value: value.value_num as number,
+              value: (pooled.has(value.id) && value.summary
+                ? (value.summary['median'] as number)
+                : value.value_num) as number,
             }))
             .filter((point) => {
               if (seen.has(point.temperature_k)) return false
@@ -261,7 +270,11 @@ export function AdoptDialog({
             points,
             // input_unit 비움 = 정본 SI — 카탈로그 값이 이미 SI 라 변환이 없다.
             source: adoptionSource(values[0]),
-            reference: values.map(adoptionReference).join(' / '),
+            reference: values
+              .map((value) =>
+                pooled.has(value.id) ? pooledReference(value) : adoptionReference(value)
+              )
+              .join(' / '),
             note: '문헌 물성 카탈로그에서 채택 (스냅샷)',
           }
         })
@@ -380,6 +393,26 @@ export function AdoptDialog({
                         {value.representative && value.n_candidates > 1 && ' · 대표값'}
                         {!value.representative && ' · 대안'}
                       </span>
+                      {/* **조건이 완전히 같은 중복에만 뜬다**(실측 1%). 나머지는
+                          조건이 달라 종합하면 안 되므로 선택지 자체를 안 준다. */}
+                      {value.summary && (
+                        <button
+                          type="button"
+                          className="text-primary text-xs underline"
+                          onClick={() =>
+                            setPooled((before) => {
+                              const next = new Set(before)
+                              if (next.has(value.id)) next.delete(value.id)
+                              else next.add(value.id)
+                              return next
+                            })
+                          }
+                        >
+                          {pooled.has(value.id)
+                            ? `중앙값 ${fmtValueAs(units, value.summary['median'] as number, value.unit)} 로 담는 중`
+                            : `같은 조건 ${value.summary['n']}건 · 중앙값으로 담기`}
+                        </button>
+                      )}
                       {blocked ? (
                         <span className="text-xs text-amber-700 dark:text-amber-500">
                           {blocked}

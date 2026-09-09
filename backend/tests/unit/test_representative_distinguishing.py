@@ -88,3 +88,46 @@ class TestDistinguishing:
         marks = representative.annotate(rows)
         for one in rows:
             assert marks[one.id].distinguishing == {}
+
+
+class TestSummary:
+    """**조건이 완전히 같은 중복에만** 종합값을 낸다(실측 1%)."""
+
+    def test_조건이_같으면_중앙값을_낸다(self) -> None:
+        rows = [
+            _cte(specimen="laminate"),
+            _cte(specimen="laminate"),
+            _cte(specimen="laminate"),
+        ]
+        rows[0].value_num, rows[1].value_num, rows[2].value_num = 990.0, 1040.0, 1350.0
+        marks = representative.annotate(rows)
+        rep = next(one for one in rows if marks[one.id].representative)
+        summary = marks[rep.id].summary
+        assert summary is not None
+        # **평균이 아니라 중앙값이다** — 값이 서넛뿐이라 튄 값 하나가 평균을 끈다.
+        assert summary["median"] == 1040.0
+        assert (summary["min"], summary["max"], summary["n"]) == (990.0, 1350.0, 3)
+
+    def test_조건이_다르면_안_낸다(self) -> None:
+        """**이 시험이 이 기능의 안전장치다.**
+
+        하한과 상한을, Tg 위와 아래를 섞은 중앙값은 아무것도 아닌 수다.
+        """
+        rows = [_cte(regime="alpha1"), _cte(regime="alpha2")]
+        rows[0].value_num, rows[1].value_num = 1.1e-05, 2.7e-04
+        marks = representative.annotate(rows)
+        assert all(marks[one.id].summary is None for one in rows)
+
+    def test_대표_줄에만_싣는다(self) -> None:
+        """줄마다 되풀이하면 「종합이 여럿」 으로 읽힌다."""
+        rows = [_cte(specimen="a"), _cte(specimen="a")]
+        rows[0].value_num, rows[1].value_num = 10.0, 20.0
+        marks = representative.annotate(rows)
+        carried = [one for one in rows if marks[one.id].summary is not None]
+        assert len(carried) == 1
+        assert marks[carried[0].id].representative
+
+    def test_후보가_하나면_안_낸다(self) -> None:
+        one = _cte(specimen="a")
+        marks = representative.annotate([one])
+        assert marks[one.id].summary is None

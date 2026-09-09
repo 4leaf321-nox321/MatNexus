@@ -6901,6 +6901,10 @@ export interface components {
             source: components["schemas"]["CatalogSourceOut"] | null;
             /** Source Detail */
             source_detail: string | null;
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            } | null;
             /** Symbol */
             symbol: string | null;
             /** Term */

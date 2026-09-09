@@ -305,3 +305,21 @@ export const catalogApi = {
   },
   material: (id: string) => api.get<CatalogMaterialDetail>(`/catalog/materials/${id}`),
 }
+
+/**
+ * 종합값으로 담을 때의 참고문헌 — **무엇을 종합했는지 숫자로 남긴다.**
+ *
+ * 값 하나를 고른 것이 아니라 여럿을 묶은 것이므로, 그 사실과 범위가 남지 않으면
+ * 나중에 되짚을 수 없다. 이 저장소는 **카드가 자기 근거를 들고 있어야 한다**는
+ * 원칙 위에 서 있다(ADR 0009·0012).
+ */
+export function pooledReference(value: CatalogValue): string {
+  const summary = value.summary as Record<string, number> | null
+  if (!summary) return adoptionReference(value)
+  const base = adoptionReference(value)
+  const range =
+    summary.min === summary.max
+      ? `${summary.min}`
+      : `${summary.min} ~ ${summary.max}`
+  return `${base} — 같은 조건 ${summary.n}건 종합(중앙값, 범위 ${range})`
+}
