@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 41개)
+## 5. 지금 있는 것 (도구 43개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 44번
 왕복한다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -112,6 +112,14 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     ★ adopt_parameter_set(...)         파라미터 한 벌을 통째로
     ★ create_declared_card(...)        적어 둔 값만으로 카드 초안
 
+### 카드 짓기 — **초안까지만**
+
+    preview_card_fit(...)              경화식들을 견준다 — **RMSE 로 고르지 마라**
+    ★ create_card_from_tests(...)      시험에서 나온 값으로 카드 초안
+
+확정(publish)하는 도구는 **없다.** 초안도 덱으로 뽑히니 흐름은 안 끊기고, 덱 머리에
+「초안」 이 박혀 받는 사람이 안다. 확정은 사람이 화면에서 한다.
+
 ### 시험과 처리
 
     list_inbox(status?)                장비가 떨어뜨린, 아직 안 붙은 파일들
@@ -134,8 +142,10 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 ### 덱
 
     list_unit_systems()                낼 수 있는 단위계 — 뽑기 전에 고른다
-    render_card_deck(card_id, format)  덱 글자로 뽑아 본다 (저장 안 함)
-    build_deck(rows, units?)           확정된 부품 목록 → 덱 한 파일
+    render_card_deck(card, fmt,        카드 하나 → 덱 본문. **units 를 꼭 넘겨라**
+                     units)
+    build_deck(rows, units,            부품 여럿 → 덱 한 파일. 파일로 건네려면
+               include_text)           include_text=True (500줄 넘으면 잘린다)
 
 ### 이어짐 — 온톨로지
 

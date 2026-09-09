@@ -243,7 +243,8 @@ def get_guide(topic: str | None = None) -> str:
 
     단위(전부 SI) · 값의 무게(origin·quality_tier·caveat) · 선언 물성의 층 ·
     전형적인 흐름이 적혀 있다. `topic` 으로 한 절만 받을 수 있다:
-    `overview` · `units` · `trust` · `layers` · `workflow` · `limits`.
+    `overview` · `units` · `properties` · `trust` · `layers` · `ontology` ·
+    `processing` · `definitions` · `cards` · `workflow` · `limits`.
     """
     try:
         text = GUIDE_PATH.read_text(encoding="utf-8")
@@ -814,11 +815,50 @@ async def match_bom(ctx: Context, text: str) -> dict[str, Any]:
     }
 
 
+#: 한 번에 나를 덱 줄 수. **넘으면 자르고 몇 줄이 남았는지 말한다** — 조용히
+#: 잘라 주면 받는 사람이 온전한 파일인 줄 알고 저장한다.
+MAX_DECK_LINES = 500
+
+
+def _deck_body(text: str, include_text: bool) -> dict[str, Any]:
+    """덱 본문을 실을지 정한다.
+
+    처음에는 본문을 아예 안 냈다 — 「파일이 필요하면 화면에서 받아라」. 그런데
+    그러면 **AI 로 끝까지 가는 길이 여기서 끊긴다**(실측 2026-09-10): 단위계를
+    맞춘 덱을 서버가 만들어 놓고 본문을 안 주니, AI 가 SI 덱을 받아 손으로
+    환산해 채워 넣었다. 고정폭 필드에 손대는 일이라 한 칸만 어긋나도 솔버가
+    다른 값을 조용히 읽는다.
+
+    그래서 **달라고 하면 준다.** 다만 상한을 둔다 — 대화가 덱으로 차면 그다음
+    판단을 할 자리가 없어진다.
+    """
+    if not include_text:
+        return {
+            "note": (
+                "본문은 안 실었다. 필요하면 `include_text=True` 로 다시 부르거나"
+                " 화면(카드 → BOM 혼합 덱)에서 받는다."
+            )
+        }
+    lines = text.splitlines()
+    if len(lines) <= MAX_DECK_LINES:
+        return {"deck": text}
+    return {
+        "deck": "\n".join(lines[:MAX_DECK_LINES]),
+        "truncated": len(lines) - MAX_DECK_LINES,
+        "note": (
+            f"**잘렸다.** {len(lines)}줄 중 {MAX_DECK_LINES}줄만 실었다 — 이대로"
+            " 저장하면 안 되는 파일이다. 온전한 파일은 화면(카드 → BOM 혼합 덱)"
+            "에서 받는다."
+        ),
+    }
+
+
 @mcp.tool()
 async def build_deck(
     ctx: Context,
     rows: list[dict[str, Any]],
     units: str | None = None,
+    include_text: bool = False,
     synthesize_missing_curves: bool = False,
 ) -> dict[str, Any]:
     """확정된 부품 목록 → **해석용 덱 한 파일**(LS-DYNA).
@@ -837,7 +877,16 @@ async def build_deck(
 
     `synthesize_missing_curves=True` 면 문헌 스칼라로 **곡선을 지어** 소성 덱까지
     낸다 — 지어낸 곡선은 덱 각주에 「합성 — 실측이 아니다」 로 남고, 사람에게도
-    그렇게 전해야 한다. 기본은 끄여 있다.
+    그렇게 전해야 한다. 기본은 꺼져 있다.
+
+    ## 파일을 건네려면 `include_text=True`
+
+    기본은 머리(출처 각주)와 개수만 온다 — 수백 줄이면 대화가 그것으로 찬다.
+    사람이 파일로 저장할 것이면 켜서 본문을 받아라. 500줄이 넘으면 잘리고 몇 줄이
+    남았는지 함께 온다 — **잘린 것을 저장하면 안 되는 파일이다.**
+
+    **본문을 손으로 고치지 마라.** 단위가 다르면 `units` 로 다시 뽑아라. 고정폭
+    필드에 손대는 일이고, 한 칸만 어긋나도 솔버는 다른 값을 조용히 읽는다.
     """
     payload = {
         "rows": [
@@ -863,15 +912,11 @@ async def build_deck(
         "literature_count": got.get("literature_count"),
         "synthetic_count": got.get("synthetic_count", 0),
         "skipped": got.get("skipped", []),
-        # **덱 본문을 통째로 내지 않는다.** 수백 줄이면 대화가 그것으로 찬다 —
-        # 머리(출처 각주)만 보이고, 파일이 필요하면 화면에서 받는다.
+        # **기본은 머리(출처 각주)만이다.** 수백 줄이면 대화가 그것으로 찬다.
         "header": "\n".join(
             line for line in text.splitlines()[:40] if line.startswith(("$", "*"))
         ),
-        "note": (
-            "덱 본문은 화면(카드 → BOM 혼합 덱)에서 받는다. 여기서는 무엇이"
-            " 실렸는지와 출처 각주만 본다."
-        ),
+        **_deck_body(text, include_text),
         **(
             {"caveat": f"합성 곡선 {got.get('synthetic_count')}건이 실렸다 — 실측이 아니다"}
             if got.get("synthetic_count")
@@ -1031,6 +1076,153 @@ async def adopt_catalog_values(
         "adopted": planned,
         "note": "담은 값은 스냅샷이다 — 카탈로그를 다시 이관해도 안 바뀐다.",
     }
+
+
+@mcp.tool()
+async def preview_card_fit(
+    ctx: Context,
+    material_id: str,
+    test_type: str,
+    orientation: str,
+    test_run_ids: list[str] | None = None,
+    families: list[str] | None = None,
+    extrapolate_to: float | None = None,
+) -> dict[str, Any]:
+    """시험 곡선에 **여러 경화식을 맞춰 견준다** — 저장하지 않는다.
+
+    카드를 만들기 전에 여기부터 온다. 대표 곡선을 뽑고 등록된 식들을 각각 맞춰
+    상대 RMSE 와 적합 구간을 돌려준다.
+
+    ## **RMSE 로 고르지 마라**
+
+    이 도구는 순서를 매겨 주지만 **어느 것이 맞는지 고르지 않는다.** 적합 구간에서
+    거의 같은 두 식이 그 밖에서 크게 갈리기 때문이다 — Swift 는 과대, Voce 는 과소
+    예측하는 경향이 알려져 있고, 어디까지 쓸 것인지는 해석하는 사람이 안다.
+    후보를 사람에게 보이고 **골라 달라고 해라.**
+
+    `extrapolate_to` 로 그 구간 밖까지 늘려 그려 볼 수 있다 — 두 식이 얼마나
+    갈리는지 숫자로 보여 줄 수 있다.
+
+    `test_run_ids` 를 주면 **그 시험들만** 쓴다(이상치 하나를 빼고 다시 보는 것이
+    실무의 정상 작업이다). 비우면 채택된 것 전부.
+    """
+    answer = await _send(
+        ctx,
+        "POST",
+        "/fitting/preview",
+        {
+            "material_id": material_id,
+            "test_type_key": test_type,
+            "orientation": orientation,
+            "test_run_ids": test_run_ids,
+            "families": families or [],
+            "extrapolate_to": extrapolate_to,
+        },
+    )
+    if not isinstance(answer, dict):
+        return {"error": "적합 응답을 읽지 못했습니다."}
+    if "error" in answer:
+        return answer
+
+    # **곡선 점을 통째로 내지 않는다.** 식마다 수백 점이라 대화가 그것으로 찬다 —
+    # 고르는 데 필요한 것은 오차와 구간이다.
+    fits = [
+        {
+            "family": one.get("family"),
+            "label": one.get("label"),
+            "relative_rmse": one.get("relative_rmse"),
+            "r_squared": one.get("r_squared"),
+            "max_residual": one.get("max_residual"),
+            "fitted_range": [one.get("strain_min"), one.get("strain_max")],
+            "parameters": [
+                {
+                    "name": two.get("name"),
+                    "value": two.get("value"),
+                    "unit": two.get("si_unit"),
+                }
+                for two in one.get("parameters") or []
+            ],
+            "notes": one.get("notes") or [],
+        }
+        for one in answer.get("fits") or []
+    ]
+    return {
+        "sample_count": answer.get("sample_count"),
+        "point_count": len(answer.get("source_points") or []),
+        "fits": fits,
+        "inherited": answer.get("elastic") or [],
+        "notes": answer.get("notes") or [],
+        "hint": (
+            "**RMSE 가 가장 낮은 것을 자동으로 고르지 마라.** 적합 구간 밖에서 식들이"
+            " 갈린다 — 후보를 사람에게 보이고 어디까지 쓸 것인지 물어라."
+        ),
+    }
+
+
+@mcp.tool()
+async def create_card_from_tests(
+    ctx: Context,
+    material_id: str,
+    test_type: str,
+    orientation: str,
+    label: str,
+    family: str | None = None,
+    test_run_ids: list[str] | None = None,
+    poisson_ratio: float | None = None,
+    density: float | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """시험에서 나온 값으로 **물성 카드(초안)** 를 만든다.
+
+    **기본이 미리보기(dry_run=True)다.** 그리고 카드는 **언제나 초안으로** 생긴다 —
+    확정(publish)하는 도구는 안 냈다. 확정은 사람이 화면에서 한다.
+
+    ## `preview_card_fit` 을 먼저 거쳐라
+
+    식을 고르는 일은 이 도구가 하면 안 된다. 미리보기로 후보를 보이고 **사람이
+    고른 식**을 `family` 로 넘겨라.
+
+    **`family` 를 비우면 표만 저장한다.** 그것이 나쁜 선택이 아니다 — 많은 솔버가
+    식보다 표를 그대로 받고, 식이 안 맞는 재료에서는 표가 더 정확하다. 사람이
+    식을 안 골랐으면 비워 두고 그 사실을 말해라.
+
+    ## 채우지 마라
+
+    `poisson_ratio` 는 **인장시험이 주지 않는 값이다.** 모르면 비워 둔다 — 0.3 으로
+    채우면 그것이 측정값인지 기본값인지 나중에 아무도 모른다. `density` 도 같다.
+
+    `test_run_ids` 를 주면 그 시험들만 쓴다. 비우면 채택된 것 전부 — 카드는 자기가
+    무엇으로 나왔는지 들고 있으므로(`source.test_run_ids`), 「10건짜리」와 「8건
+    짜리」를 나란히 두고 견줄 수 있다.
+    """
+    body: dict[str, Any] = {
+        "material_id": material_id,
+        "test_type_key": test_type,
+        "orientation": orientation,
+        "test_run_ids": test_run_ids,
+        "label": label,
+        "family": family,
+        "poisson_ratio": poisson_ratio,
+        "density": density,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_create": {key: value for key, value in body.items() if value is not None},
+            "note": (
+                "이대로 만들려면 dry_run=False 로 다시 부르세요. **초안으로 생깁니다** —"
+                " 확정은 사람이 화면에서 합니다."
+                + ("" if family else " 식을 안 골랐으므로 표만 저장됩니다.")
+            ),
+        }
+    made = await _send(ctx, "POST", "/fitting/cards", body)
+    if isinstance(made, dict) and "error" not in made:
+        made = dict(made)
+        made["note"] = (
+            "**초안으로 만들었습니다.** 덱으로 뽑아 볼 수는 있지만 덱 머리에"
+            " 「초안」 이 박힙니다 — 확정은 사람이 화면에서 합니다."
+        )
+    return made
 
 
 @mcp.tool()
@@ -1668,12 +1860,24 @@ async def scan_deck_format(ctx: Context, deck_text: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def render_card_deck(ctx: Context, card_id: str, format: str) -> dict[str, Any]:
-    """물성 카드를 **덱 글자로 뽑아 본다** — 저장하지 않고 눈으로 확인하는 자리.
+async def render_card_deck(
+    ctx: Context, card_id: str, format: str, units: str | None = None
+) -> dict[str, Any]:
+    """물성 카드를 **덱 글자로 뽑는다** — 그대로 파일로 저장할 수 있는 본문.
 
-    지은 내보내기 정의가 실제로 어떤 파일을 내는지 보려면 이것이 가장 빠르다.
     형식 목록은 `list_unit_systems` 가 아니라 `get_card` 의 `available_formats` 에
     있다.
+
+    ## `units` 를 반드시 물어보고 넘겨라
+
+    `units` 는 `list_unit_systems()` 의 key 다. **안 주면 SI 로 나간다.** 판재
+    CAE 의 관행은 `mm·N·tonne` 이고 화면도 그 단위계라, SI 덱을 그대로 건네면
+    받는 사람이 손으로 환산하게 된다 — **그 손이 사고의 자리다.**
+
+    **네가 환산하지 마라.** 실측(2026-09-10): 이 인자가 없던 판에서 AI 가 SI 덱을
+    받아 Pa→MPa 를 직접 고쳐 넣었다. 고정폭 필드에 손을 대는 일이고, 한 칸만
+    어긋나도 솔버는 다른 값을 조용히 읽는다. 단위계는 여기서 넘겨 서버가 만들게
+    한다.
 
     ## MID(재료 번호)를 사람에게 말해라
 
@@ -1689,10 +1893,12 @@ async def render_card_deck(ctx: Context, card_id: str, format: str) -> dict[str,
     다른 덱과 합치실 거면 겹치는지 확인하세요.」 여러 재료를 한 덱으로 묶는
     자리(BOM 혼합 덱)는 서버가 중복을 막지만, 낱개로 뽑아 합칠 때는 사람이 본다.
     """
-    deck = await _get_text(ctx, f"/fitting/cards/{card_id}/export", {"format": format})
+    deck = await _get_text(
+        ctx, f"/fitting/cards/{card_id}/export", {"format": format, "units": units}
+    )
     if isinstance(deck, dict):
         return deck  # 오류 봉투
-    return {"format": format, "deck": deck}
+    return {"format": format, "units": units or "si", "deck": deck}
 
 
 @mcp.tool()

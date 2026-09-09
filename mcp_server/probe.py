@@ -135,7 +135,6 @@ async def sweep(session: ClientSession) -> None:
     await call(session, "get_guide", {"topic": "units"})
     await call(session, "platform_summary")
     await call(session, "get_taxonomy")
-    await call(session, "list_unit_systems")
     await call(session, "measurement_gaps")
 
     found = await call(session, "search_materials", {"query": "A", "limit": 3})
@@ -150,6 +149,15 @@ async def sweep(session: ClientSession) -> None:
     if material_id:
         await call(session, "get_material", {"material_id": material_id})
         await call(session, "get_parameter_sets", {"material_id": material_id})
+    systems = await call(session, "list_unit_systems")
+    unit_key = None
+    if isinstance(systems, dict):
+        rows = systems.get("systems") or []
+        # SI 가 아닌 계를 하나 고른다 — **환산이 실제로 먹는지** 보려는 것이라
+        # 기본값(SI)으로는 확인이 안 된다.
+        unit_key = next(
+            (one.get("key") for one in rows if one.get("key") and one["key"] != "si"), None
+        )
     cards = await call(session, "list_cards", {"limit": 3})
     card_id = _first(cards, "id", "card_id")
     if card_id:
@@ -157,6 +165,12 @@ async def sweep(session: ClientSession) -> None:
         formats = card.get("available_formats") or [] if isinstance(card, dict) else []
         if formats:
             await call(session, "render_card_deck", {"card_id": card_id, "format": formats[0]})
+            if unit_key:
+                await call(
+                    session,
+                    "render_card_deck",
+                    {"card_id": card_id, "format": formats[0], "units": unit_key},
+                )
 
     catalog = await call(session, "search_catalog", {"query": "steel", "limit": 3})
     catalog_id = _first(catalog, "id")
@@ -190,6 +204,27 @@ async def sweep(session: ClientSession) -> None:
     # **도메인이 빠진 키는 일부러 넣는다** — 안내가 나오는지 보는 자리다.
     await call(session, "how_to_measure", {"property_key": "yield_strength"})
     await call(session, "how_to_measure", {"property_key": "mechanical.yield_strength"})
+
+    # **시험 기반 카드 길**: 적합을 견주고, 초안을 미리보기까지 해 본다.
+    #   DP600 은 시편 8개가 붙어 있어 대표 곡선이 나온다(개발 DB).
+    fit_material = os.environ.get("MATNEXUS_PROBE_FIT_MATERIAL")
+    if fit_material:
+        await call(
+            session,
+            "preview_card_fit",
+            {"material_id": fit_material, "test_type": "tensile", "orientation": "MD"},
+        )
+        await call(
+            session,
+            "create_card_from_tests",
+            {
+                "material_id": fit_material,
+                "test_type": "tensile",
+                "orientation": "MD",
+                "label": "점검용 초안",
+                "dry_run": True,
+            },
+        )
 
     runs = await call(session, "list_test_runs", {"limit": 3})
     run_id = _first(runs, "id", "test_run_id")
@@ -330,7 +365,10 @@ async def sweep(session: ClientSession) -> None:
         await call(
             session,
             "build_deck",
-            {"rows": [{"mid": 1, "name": "점검용 부품", "catalog_material_id": catalog_id}]},
+            {
+                "rows": [{"mid": 1, "name": "점검용 부품", "catalog_material_id": catalog_id}],
+                "include_text": True,
+            },
         )
 
     missed = sorted(set(names) - {one["tool"] for one in results})
