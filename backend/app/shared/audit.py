@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.audit.models import AuditEntry
-from app.shared.request_context import get_request_id
+from app.shared.request_context import get_client, get_request_id
 
 #: 남기는 일. **과거형으로 적는다** — 일어난 일의 기록이지 명령이 아니다.
 #:
@@ -105,6 +105,8 @@ def record(
         reason=reason,
         # 접근 로그·파일 로그와 잇는 끈. 이 값으로 그 요청의 전말을 볼 수 있다.
         request_id=get_request_id(),
+        # **어느 길로 들어왔나.** 화면이면 빈 값, AI 면 `mcp`.
+        client=get_client(),
     )
     db.add(entry)
     return entry

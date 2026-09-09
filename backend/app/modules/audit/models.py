@@ -123,6 +123,15 @@ class AuditEntry(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     """사람이 적은 사유. 없을 수 있다 — **없다고 안 남기지는 않는다.**"""
 
+    client: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    """**어느 길로 들어온 변경인가** — `mcp` · `pylon` · `script`, 빈 값이면 화면.
+
+    사람이 한 것과 AI 가 한 것을 가르는 유일한 표시다. MCP 서버는 진작부터
+    `X-Client: mcp` 를 보내고 있었는데 백엔드가 안 읽었다 — 쓰기 도구가 둘뿐일
+    때는 티가 안 났지만, 처리 실행까지 열면 「이 결과 누가 돌렸지」 를 못 답한다.
+
+    **인증이 아니다.** 클라이언트가 아무 값이나 보낼 수 있고 권한은 토큰이 정한다."""
+
     request_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     """접근 로그·파일 로그와 잇는 끈. 이 값으로 그 요청의 전말을 볼 수 있다."""
 

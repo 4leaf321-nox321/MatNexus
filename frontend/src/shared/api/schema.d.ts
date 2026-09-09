@@ -5878,6 +5878,11 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
+             * Client
+             * @default
+             */
+            client: string;
+            /**
              * Created At
              * Format: date-time
              */
@@ -14687,6 +14692,8 @@ export interface operations {
         parameters: {
             query?: {
                 action?: string | null;
+                /** @description `mcp` 처럼 들어온 길로 거른다. `web` 이면 화면에서 한 것만. */
+                client?: string | null;
                 target_id?: string | null;
                 workspace_id?: string | null;
                 limit?: number | null;

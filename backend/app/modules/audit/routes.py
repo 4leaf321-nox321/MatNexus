@@ -43,6 +43,10 @@ def _managed(db: Session, user: User) -> list[uuid.UUID]:
 @router.get("", response_model=list[AuditEntryOut])
 def list_entries(
     action: str | None = Query(default=None),
+    client: str | None = Query(
+        default=None,
+        description="`mcp` 처럼 들어온 길로 거른다. `web` 이면 화면에서 한 것만.",
+    ),
     target_id: uuid.UUID | None = Query(default=None),
     workspace_id: uuid.UUID | None = Query(default=None),
     limit: int | None = Query(default=None),
@@ -68,6 +72,12 @@ def list_entries(
 
     if action:
         query = query.where(AuditEntry.action == action)
+    if client:
+        # **「화면에서 한 것」 을 고르는 길도 준다.** 빈 문자열은 질의 인자로 넘기기
+        # 나빠서 `web` 이라는 말로 받는다.
+        query = query.where(
+            AuditEntry.client == ("" if client == "web" else client.strip().lower())
+        )
     if target_id:
         query = query.where(AuditEntry.target_id == target_id)
     if workspace_id:

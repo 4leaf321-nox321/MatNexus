@@ -128,6 +128,14 @@ export default function AuditPage() {
                     {!entry.actor_id && (
                       <span className="text-muted-foreground ml-1 text-xs">(지워진 계정)</span>
                     )}
+                    {/* **사람이 한 것과 AI 가 한 것을 가른다.** 권한은 그 사람의
+                        것이지만, 화면에서 누른 것과 AI 가 대신 부른 것은 나중에
+                        「이거 누가 했지」 를 물을 때 다른 이야기다. */}
+                    {entry.client && (
+                      <Badge variant="secondary" className="ml-2">
+                        {entry.client === 'mcp' ? 'AI(MCP)' : entry.client}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Changes entry={entry} />

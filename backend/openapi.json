@@ -617,6 +617,11 @@
             "title": "Changes",
             "type": "object"
           },
+          "client": {
+            "default": "",
+            "title": "Client",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -23392,6 +23397,24 @@
                 }
               ],
               "title": "Action"
+            }
+          },
+          {
+            "description": "`mcp` 처럼 들어온 길로 거른다. `web` 이면 화면에서 한 것만.",
+            "in": "query",
+            "name": "client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`mcp` 처럼 들어온 길로 거른다. `web` 이면 화면에서 한 것만.",
+              "title": "Client"
             }
           },
           {

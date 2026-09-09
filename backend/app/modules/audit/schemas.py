@@ -25,4 +25,8 @@ class AuditEntryOut(BaseModel):
     reason: str | None
     request_id: str | None
     """접근 로그·파일 로그와 잇는 끈."""
+    client: str = ""
+    """**어느 길로 들어온 변경인가** — `mcp` · `pylon` · `script`, 빈 값이면 화면.
+
+    사람이 한 것과 AI 가 한 것을 가르는 표시다."""
     created_at: datetime
