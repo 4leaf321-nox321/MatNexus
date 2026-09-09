@@ -1284,6 +1284,148 @@ async def find_by_property(
 
 
 @mcp.tool()
+async def get_parameter_sets(ctx: Context, material_id: str) -> dict[str, Any]:
+    """**이 재료가 가진 모델 파라미터 벌들** — Anand·Prony·Ogden 같은 것.
+
+    여럿이 한 벌이어야 뜻이 있는 값이다(ADR 0029). `A` 만 떼어 보면 모델이 못 쓴다.
+
+    ## 단위가 항마다 다르다
+
+    한 벌 안에서 `1`·`1/s`·`MPa`·`K` 가 섞인다. **이 값들은 SI 가 아니라 그 항의
+    원래 단위**이므로, 사람에게 옮길 때 단위를 반드시 함께 적어라 — 환산하지 마라.
+
+    `source_ref` 가 어느 논문·자료의 벌인지 가리킨다. 같은 재료에 벌이 여럿이면
+    **논문마다 값이 다르다는 뜻**이지 하나가 틀린 것이 아니다.
+    """
+    return await _get(ctx, f"/materials/{material_id}/parameter-sets")
+
+
+@mcp.tool()
+async def get_catalog_parameter_sets(ctx: Context, catalog_material_id: str) -> dict[str, Any]:
+    """문헌 재료가 가진 **모델 파라미터 벌들** — 사내로 받아 갈 후보.
+
+    값 표(`get_catalog_material`)에는 이것들이 낱개로 흩어져 있다 — 「Anand 점소성
+    상수」 라는 같은 이름이 아홉 번 선다. 여기서는 한 벌씩 묶어 준다.
+
+    받아 가려면 `adopt_parameter_set` 를 쓴다.
+    """
+    return await _get(ctx, f"/catalog/materials/{catalog_material_id}/parameter-sets")
+
+
+@mcp.tool()
+async def adopt_parameter_set(
+    ctx: Context,
+    material_id: str,
+    catalog_material_id: str,
+    property_key: str,
+    model: str = "",
+    set_id: str = "",
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """문헌의 파라미터 한 벌을 **사내 재료로 받아 온다.**
+
+    **기본이 미리보기(dry_run=True)다** — 무엇이 담길지 먼저 보이고, 사람이 확인한
+    뒤에 `dry_run=False` 로 다시 부른다.
+
+    ## 한 벌이 통째로 간다
+
+    `A` 만 골라 담을 수 없다. 모델이 9개를 함께 기대하기 때문이다.
+
+    ## 벌이 여럿이면 골라야 한다
+
+    같은 문헌 재료에 논문이 여럿이면 `model`·`set_id` 로 하나를 고른다 — 안 고르면
+    서버가 목록과 함께 거절한다. **임의로 고르지 마라**: 논문이 다르면 값이 다르고,
+    어느 쪽이 맞는지는 쓰는 사람의 판단이다.
+
+    담긴 값은 그 재료의 물성 탭에 서고, 카드를 만들 때 인용할 수 있다.
+    """
+    sets = await _get(ctx, f"/catalog/materials/{catalog_material_id}/parameter-sets")
+    if isinstance(sets, dict) and "error" in sets:
+        return sets
+
+    candidates = [
+        one
+        for one in sets
+        if one.get("property_key") == property_key
+        and (not model or one.get("model") == model)
+        and (not set_id or one.get("set_id") == set_id)
+    ]
+    if not candidates:
+        return {
+            "error": (
+                f"'{property_key}' 의 파라미터 벌을 그 문헌 재료에서 찾지 못했습니다. "
+                "`get_catalog_parameter_sets` 로 무엇이 있는지 먼저 보세요."
+            )
+        }
+    if len(candidates) > 1:
+        return {
+            "ambiguous": True,
+            "candidates": [
+                {
+                    "model": one.get("model"),
+                    "set_id": one.get("set_id"),
+                    "quality_tier": one.get("quality_tier"),
+                    "source": one.get("source_detail"),
+                    "terms": [term.get("term") for term in one.get("terms") or []],
+                }
+                for one in candidates
+            ],
+            "note": (
+                "벌이 여럿입니다 — `model` 또는 `set_id` 로 하나를 고르세요. "
+                "논문이 다르면 값이 다릅니다. 어느 쪽인지 사용자에게 물어보세요."
+            ),
+        }
+
+    chosen = candidates[0]
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_adopt": {
+                "label": chosen.get("label"),
+                "model": chosen.get("model"),
+                "set_id": chosen.get("set_id"),
+                "quality_tier": chosen.get("quality_tier"),
+                "source": chosen.get("source_detail"),
+                "terms": chosen.get("terms"),
+            },
+            "note": (
+                "이대로 담으려면 dry_run=False 로 다시 부르세요. 같은 벌이 이미 "
+                "있으면 갱신됩니다. 단위는 환산하지 않고 그대로 담깁니다."
+            ),
+        }
+
+    return await _send(
+        ctx,
+        "POST",
+        f"/materials/{material_id}/parameter-sets",
+        {
+            "property_key": property_key,
+            "catalog_material_id": catalog_material_id,
+            "model": chosen.get("model") or "",
+            "set_id": chosen.get("set_id") or "",
+        },
+    )
+
+
+@mcp.tool()
+async def get_handbook_section(ctx: Context, section_id: str) -> dict[str, Any]:
+    """**핸드북 절 하나를 펼쳐 읽는다.**
+
+    `search_all` 이 절을 찾아 주지만 제목까지만 온다 — 본문을 읽으려면 여기다.
+    찾은 결과의 `id` 를 그대로 넣는다(`kind` 가 `guide_section` 인 것).
+
+    ## 규약이 여기 산다
+
+    단위 규칙·시험 절차·판정 기준처럼 **사람이 합의해 적어 둔 것**이 핸드북이다.
+    값을 계산해서 답하기 전에, 그 물성에 대한 절이 있는지 먼저 보는 편이 낫다 —
+    거기 적힌 절차와 다르게 답하면 그것은 틀린 답이다.
+
+    본문에 그림·표가 있으면 글로만 온다. 그림이 중요한 절은 화면에서 보라고 말해라.
+    """
+    return await _get(ctx, f"/guide/sections/{section_id}")
+
+
+@mcp.tool()
 async def search_all(
     ctx: Context,
     q: str,

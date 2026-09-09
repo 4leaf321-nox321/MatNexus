@@ -150,6 +150,21 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
         find_path(from_kind="test_run", …, to_kind="material", …)
         → tested → part_of → derived_from
 
+### 모델 파라미터는 **한 벌**이다
+
+「Anand 점소성 상수」 하나에 9개 상수가 들어 있고 단위는 항마다 다르다
+(`1`·`1/s`·`MPa`·`K`). `get_parameter_sets`(사내)·`get_catalog_parameter_sets`(문헌)
+가 한 벌씩 묶어 준다.
+
+**`A` 만 떼어 답하지 마라** — 모델이 9개를 함께 기대한다. 그리고 이 값들은 **SI 가
+아니라 그 항의 원래 단위**이므로 환산하지 말고 단위를 함께 적어라.
+
+### 핸드북은 규약이다
+
+`search_all` 이 절을 찾아 주면 `get_handbook_section` 으로 본문을 읽는다. 단위
+규칙·시험 절차·판정 기준이 거기 적혀 있고, **거기 적힌 절차와 다르게 답하면 그것은
+틀린 답이다.**
+
 **`property` 만 식별자가 문자열 키다**(`mechanical.yield_strength`).
 `resolve_property` 가 돌려주는 `key` 를 그대로 넣는다. 나머지는 UUID 다.
 
