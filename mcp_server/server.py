@@ -497,24 +497,48 @@ async def search_catalog(
 
 @mcp.tool()
 async def get_catalog_material(
-    ctx: Context, catalog_material_id: str, domain: str | None = None
+    ctx: Context,
+    catalog_material_id: str,
+    domain: str | None = None,
+    property_keys: list[str] | None = None,
+    limit: int = 60,
 ) -> dict[str, Any]:
-    """문헌 재료 하나의 **물성 전부** — 값·조건·등급·출처.
+    """문헌 재료 하나의 **물성** — 값·조건·등급·출처.
 
     같은 물성에 값이 여럿이면 **대표값이 먼저** 오고 밀린 후보도 이유와 함께
-    온다(`representative`·`separated_by`). 값이 많은 재료는 `domain` 으로 좁혀라
-    (`mechanical`·`thermal`·`physical`·`electrical`·`optical` …).
+    온다(`representative`·`separated_by`).
+
+    ## 좁혀서 물어라 — 안 그러면 답이 안 읽힌다
+
+    값이 786개인 재료가 있다(솔더 합금: Anand 상수만 224개). 전부 받으면 응답이
+    수 MB 가 되고, 그러면 **당신의 문맥이 그것으로 다 찬다** — 실측(2026-09-10):
+    AI 가 이 응답을 다 못 읽어서 제 대화 기록을 뒤져 물성 키를 찾아냈다.
+
+        domain          `mechanical`·`thermal`·`physical`·`electrical`·`optical`
+        property_keys   아는 키만 콕 집는다 (`resolve_property` 로 푼 것)
+        limit           기본 60. 잘리면 `omitted` 로 몇 개가 남았는지 말해 준다
+
+    **파라미터 벌(Anand·Prony 같은 것)은 여기서 찾지 마라.** 낱개로 흩어져 보이는
+    데다 개수가 많다 — `get_catalog_parameter_sets` 가 벌로 묶어 준다.
 
     **tier 4 는 추정·가정이다.** `caveat` 가 붙은 값을 실측처럼 옮기지 않는다.
     """
     got = await _get(ctx, f"/catalog/materials/{catalog_material_id}")
     if "error" in got:
         return got
-    values = [
-        _catalog_value(row)
+    wanted = {one.lower() for one in property_keys or []}
+    rows = [
+        row
         for row in got.get("values", [])
-        if not domain or row.get("domain") == domain
+        if (not domain or row.get("domain") == domain)
+        and (not wanted or str(row.get("property_key", "")).lower() in wanted)
     ]
+    total = len(rows)
+    # **대표값을 먼저 남긴다.** 잘라야 한다면 밀린 후보부터 버리는 것이 맞다 —
+    # 받아 갈 수 있는 값은 대표값이다.
+    rows.sort(key=lambda one: (not one.get("representative"), one.get("quality_tier") or 9))
+    cut = max(1, limit)
+    values = [_catalog_value(row) for row in rows[:cut]]
     tiers: dict[str, int] = {}
     for one in values:
         key = f"tier{one['quality_tier']}"
@@ -528,9 +552,22 @@ async def get_catalog_material(
         "material_class": got.get("material_class"),
         "grade": got.get("grade"),
         "description": got.get("description"),
+        "total_values": total,
         "shown_values": len(values),
+        "omitted": max(0, total - len(values)),
         "tier_counts": tiers,
         "values": values,
+        **(
+            {
+                "hint": (
+                    f"{total - len(values)}개를 안 보였습니다. `domain` 이나 "
+                    "`property_keys` 로 좁히세요 — 파라미터 벌은 "
+                    "`get_catalog_parameter_sets` 가 묶어 줍니다."
+                )
+            }
+            if total > len(values)
+            else {}
+        ),
     }
 
 

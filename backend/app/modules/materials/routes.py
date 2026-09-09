@@ -89,6 +89,7 @@ from app.shared import audit, contention, display, permissions, sorting, specime
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
+from app.shared.request_context import get_client
 from matcore import naming, units
 from matcore import specimen as specimen_kit
 
@@ -1181,6 +1182,32 @@ def property_sources(
     )
 
 
+def _audit_if_not_human(
+    db: Session, user: User, material: Material, fields: list[str]
+) -> None:
+    """**사람이 아닌 것이 고쳤으면 남긴다.**
+
+    값 수정은 원래 감사 대상이 아니다 — `shared/audit.py` 가 「되돌릴 수 없거나
+    권한이 실린 것만」 이라고 정해 뒀고, 값마다 남기면 정작 찾을 것을 못 찾는다.
+    그 규칙은 그대로 두고 **사람이 아닌 길로 들어온 것만** 예외로 남긴다.
+
+    실측(2026-09-10): AI 세션이 문헌값 9건을 재료에 담았는데 남은 흔적이
+    `updated_at` 뿐이었다. 값에는 출처가 붙지만 **누가 담았는지가 없었다.**
+    """
+    if not get_client():
+        return
+    audit.record(
+        db,
+        action=audit.VALUES_CHANGED_BY_CLIENT,
+        actor=user,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        workspace_id=material.owner_workspace_id,
+        changes={"fields": fields},
+    )
+
+
 @router.patch("/{material_id}", response_model=MaterialOut)
 def update_material(
     material_id: uuid.UUID,
@@ -1252,6 +1279,7 @@ def update_material(
         # 이름은 참조 키가 아니므로 다시 계산해 덮으면 그만이다(ADR 0004).
         services.rename_descendants(db, material)
 
+    _audit_if_not_human(db, user, material, sorted(data))
     db.commit()
     names = services.workspace_names(db, [material.owner_workspace_id])
     return _material_out(
@@ -2332,6 +2360,7 @@ def adopt_parameter_set(
     ]
     if payload.notes is not None:
         row.notes = payload.notes
+    _audit_if_not_human(db, user, material, [f"parameter_set:{payload.property_key}"])
     db.commit()
     db.refresh(row)
     return _parameter_set_out(row)

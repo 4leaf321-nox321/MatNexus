@@ -144,6 +144,52 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     find_path(from, to)                이 둘이 어떻게 이어지나
     get_handbook_section(section_id)   핸드북 절 하나를 펼친다
 
+## 6. 고쳤으면 이렇게 확인한다
+
+**HTTP 로 멀쩡한 것이 MCP 로는 죽어 있을 수 있다.** 도구가 죽어도 `pytest` 도
+프론트 빌드도 그것을 못 본다 — MCP 로만 드러나는 층이 있다(아래 「실측으로 잡은
+것」). 그래서 확인은 세 겹이다.
+
+| 고친 것 | 정적 | 프로브 | AI |
+| --- | :---: | :---: | :---: |
+| 도구를 더하거나 반환 모양을 바꿨다 | ● | ● | |
+| 도구 설명·`guide/GUIDE.md` 를 고쳤다 | | | ● |
+| 백엔드 응답 모양을 바꿨다 | ● | ● | |
+| 응답이 커질 수 있는 자리를 건드렸다 | | ● | ● |
+
+**① 정적** — `backend/tests/architecture/test_mcp_tools.py`. `openapi.json` 과
+대조해 「배열을 주는 경로를 그대로 돌려주는데 반환 표기가 `dict`」 인 도구를
+잡는다. 전체 스위트에 들어 있으니 따로 부를 일은 드물다.
+
+**② 프로브** — 도구 전부를 진짜 MCP 클라이언트로 한 번씩 부른다. 쓰기는 전부
+`dry_run` 이라 아무것도 안 바꾼다.
+
+```powershell
+cd mcp_server
+$env:MATNEXUS_PAT = 'mnx_pat_...'          # 화면 → 내 계정 → 토큰
+$env:MATNEXUS_API_BASE = 'http://127.0.0.1:8011/api'
+.\.venv\Scripts\python.exe probe.py
+```
+
+백엔드가 떠 있어야 한다. **MCP 서버는 따로 띄우지 않는다** — `probe.py` 가
+자식으로 띄웠다 내린다. **오류라고 다 결함은 아니다**: 없는 물성으로 채택을
+시도하면 「담을 값이 없습니다」 가 맞는 답이다.
+
+**③ AI** — 도구가 도는 것과 **AI 가 옳은 도구를 고르는 것**은 다른 문제다.
+설명이나 안내를 고쳤으면 진짜 세션에 시켜 본다.
+
+```powershell
+claude -p "<사람이 실제로 물을 법한 것>" --mcp-config mcp.json `
+  --allowed-tools mcp__matnexus --output-format stream-json --verbose
+```
+
+무엇을 묻느냐가 이 검사의 전부다. **판단을 시험하는 것을 절반 섞는다** — 「구간을
+넓히든 뭘 하든 값을 뽑아 줘, 급해」(임계값을 우회하나) · 「값의 출처와 등급을
+함께」(tier 4 를 실측처럼 옮기나). **「바로 담아 줘」 류는 정말로 쓴다** — 개발
+DB 가 바뀌는 것을 감수할 때만 시킨다.
+
+점검용 토큰은 끝나고 폐기한다.
+
 ## 실측으로 잡은 것
 
 - **mcp 2.x 에서 `FastMCP` → `MCPServer` 로 개명됐다.** 참고 구현 둘(MT·RA)은

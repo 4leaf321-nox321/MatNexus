@@ -97,3 +97,54 @@ class TestClientMark:
             "/api/audit", params={"client": "web", "limit": 200}, headers=admin_headers
         ).json()
         assert by_hand in {one["target_id"] for one in only_web}
+
+
+class TestValueChange:
+    """**값을 고친 것도 남는다 — 사람이 아닐 때만.**
+
+    실측(2026-09-10)으로 드러난 구멍이다. 진짜 AI 세션에 「문헌값을 사내 재료에
+    담아 달라」 고 했더니 9건을 담았는데, **감사에 아무것도 안 남았다.** 값 수정은
+    원래 감사 대상이 아니어서다(`shared/audit.py`: 되돌릴 수 없거나 권한이 실린
+    것만 — 값마다 남기면 정작 찾을 것을 못 찾는다).
+
+    그 규칙은 그대로 둔다. 화면에서 사람이 고친 것은 지금도 안 남는다. **사람이
+    아닌 길로 들어온 것만** 예외다 — 반년 뒤에 물어질 질문이 「이 값 어디서
+    났나」(값 자체에 출처가 붙는다)가 아니라 **「이거 사람이 확인한 거 맞나」**
+    이기 때문이다.
+    """
+
+    def test_AI_가_값을_고치면_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        material_id = _material(client, admin_headers)
+        changed = client.patch(
+            f"/api/materials/{material_id}",
+            json={"alias": "AI 가 고침"},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert changed.status_code == 200, changed.text
+
+        entries = client.get(
+            "/api/audit", params={"target_id": material_id}, headers=admin_headers
+        ).json()
+        mine = [one for one in entries if one["action"] == "values.changed_by_client"]
+        assert mine, "AI 가 값을 고쳤는데 감사에 안 남았다"
+        assert mine[0]["client"] == "mcp"
+        assert "alias" in mine[0]["changes"]["fields"]
+
+    def test_사람이_고친_것은_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**규칙을 안 뒤집는다.** 값마다 남기면 감사 로그가 못 쓰게 된다."""
+        material_id = _material(client, admin_headers)
+        changed = client.patch(
+            f"/api/materials/{material_id}",
+            json={"alias": "사람이 고침"},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+
+        entries = client.get(
+            "/api/audit", params={"target_id": material_id}, headers=admin_headers
+        ).json()
+        assert not [one for one in entries if one["action"] == "values.changed_by_client"]

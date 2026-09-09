@@ -29,7 +29,12 @@ mcp_server/probe-server.log
 # 로컬 도구
 .idea/
 .vscode/
-.claude/
+# **`.claude/` 는 개인 설정 자리다 — 다만 스킬만 함께 쓴다.**
+# 스킬은 「이 저장소를 이렇게 고친다」 라 셋이 같은 것을 봐야 한다. 규칙 자체는
+# 스킬에 안 적는다 — 정본은 AGENTS.md 와 각 README 이고 스킬은 가리키기만 한다.
+# 디렉터리째 무시하면 안쪽을 되살릴 수 없어서(git 규칙) `/*` 로 적는다.
+.claude/*
+!.claude/skills/
 *.local
 
 # MaterialTwin 원본 스냅샷 - 저장소 밖 보관 (ADR 0027: 파일이 문)
