@@ -17,6 +17,7 @@ frontend/dist/
 backend/.env
 backend/filestore/
 backend/logs/
+mcp_server/probe-server.log
 
 # 배포 산출물 — **앞의 슬래시가 중요하다.**
 # `deploy/` 라고만 쓰면 어느 깊이의 deploy 폴더든 걸려서 `scripts/deploy/` 의

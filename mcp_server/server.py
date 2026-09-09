@@ -95,12 +95,65 @@ async def _get(ctx: Context, path: str, params: dict[str, Any] | None = None) ->
     if got.status_code == 403:
         return {"error": "권한이 없습니다 — 이 자료는 당신 계정으로 볼 수 없습니다."}
     if got.status_code >= 400:
-        try:
-            body = got.json()["error"]
-            return {"error": f"{body.get('message')} ({body.get('code')})"}
-        except Exception:
-            return {"error": f"요청이 실패했습니다(HTTP {got.status_code})."}
+        return _failed(got)
     return got.json()
+
+
+def _failed(got: httpx.Response) -> dict[str, Any]:
+    """오류 봉투를 **자세한 내용까지** 옮긴다.
+
+    처음에는 message 와 code 만 옮겼는데, 그러면 「건너뛴 이유를 보세요」 같은
+    안내가 가리키는 곳이 사라진다 — 백엔드는 `details` 에 실어 보내는데 여기서
+    버리고 있었다(실측 2026-09-10, `build_deck`).
+    """
+    try:
+        body = got.json()["error"]
+    except Exception:
+        return {"error": f"요청이 실패했습니다(HTTP {got.status_code})."}
+    out: dict[str, Any] = {"error": f"{body.get('message')} ({body.get('code')})"}
+    if body.get("details"):
+        out["details"] = body["details"]
+    return out
+
+
+def _listed(payload: object, key: str) -> dict[str, object]:
+    """목록을 dict 로 **감싼다.**
+
+    **감싸지 않으면 그 도구는 통째로 죽는다.** mcp 2.x 는 도구가 돌려준 값을
+    함수의 반환 표기(`-> dict[str, Any]`)로 검증하는데, 목록 엔드포인트는 배열을
+    준다 — 그러면 pydantic 이 「dict 여야 한다」 로 막고 클라이언트에는
+    `Error executing tool …` 만 간다. 무엇이 왜 틀렸는지가 사라진다.
+
+    실측(2026-09-10): 진짜 MCP 클라이언트로 41개를 왕복해 보고서야 드러났다 —
+    `get_parameter_sets` · `get_catalog_parameter_sets` · `list_recipes` 셋이
+    그렇게 죽어 있었고, HTTP 로 같은 엔드포인트를 부르면 멀쩡했으므로 화면이나
+    curl 로는 영영 안 보였다. `tests/architecture/test_mcp_tools.py` 가 이제
+    같은 어긋남을 정적으로 막는다.
+
+    오류 봉투(`{"error": …}`)는 이미 dict 이므로 그대로 흘려보낸다.
+    """
+    if isinstance(payload, dict):
+        return payload
+    rows = list(payload) if isinstance(payload, list) else []
+    return {key: rows, "count": len(rows)}
+
+
+async def _get_text(ctx: Context, path: str, params: dict[str, Any] | None = None) -> Any:
+    """**글자로 오는 응답**을 읽는다 — 덱처럼 JSON 이 아닌 것.
+
+    `_get` 은 무조건 `.json()` 을 부른다. 덱 내보내기는 `text/plain` 이라 거기서
+    JSONDecodeError 로 터졌다(실측 2026-09-10). 형식에 따라 JSON 이 오기도 하므로
+    (`format="json"`) 파싱이 되면 파싱해서 준다.
+    """
+    clean = {key: value for key, value in (params or {}).items() if value is not None}
+    try:
+        async with httpx.AsyncClient(base_url=API_BASE, timeout=30.0) as client:
+            got = await client.get(path, params=clean, headers=_headers(ctx))
+    except httpx.RequestError as failed:
+        return {"error": f"백엔드에 닿지 못했습니다({API_BASE}): {failed}"}
+    if got.status_code >= 400:
+        return _failed(got)
+    return got.text
 
 
 async def _send(
@@ -119,11 +172,7 @@ async def _send(
     if got.status_code == 403:
         return {"error": "권한이 없습니다 — 이 자료는 당신 계정으로 고칠 수 없습니다."}
     if got.status_code >= 400:
-        try:
-            body_json = got.json()["error"]
-            return {"error": f"{body_json.get('message')} ({body_json.get('code')})"}
-        except Exception:
-            return {"error": f"요청이 실패했습니다(HTTP {got.status_code})."}
+        return _failed(got)
     return got.json() if got.content else {"ok": True}
 
 
@@ -500,6 +549,16 @@ async def how_to_measure(ctx: Context, property_key: str) -> dict[str, Any]:
     """
     got = await _get(ctx, f"/metrology/by-property/{property_key}")
     if "error" in got:
+        # **도메인을 안 붙이면 못 찾는다.** `yield_strength` 가 아니라
+        # `mechanical.yield_strength` 다 — 다음 수를 알려 주지 않으면 AI 는
+        # 「그 물성은 못 잽니다」 로 결론지어 사람에게 옮긴다(실측 2026-09-10).
+        if "." not in property_key:
+            got = dict(got)
+            got["hint"] = (
+                f"'{property_key}' 에 도메인이 안 붙었습니다. `resolve_property"
+                f"(\"{property_key}\")` 로 온전한 키를 먼저 푸세요 —"
+                " `mechanical.yield_strength` 같은 모양이어야 합니다."
+            )
         return got
     techniques = []
     for group in got.get("techniques", []):
@@ -1585,11 +1644,18 @@ async def render_card_deck(ctx: Context, card_id: str, format: str) -> dict[str,
     것이라 전역으로 유일하지 않다. **덱 여럿을 손으로 합치면 겹칠 수 있고, 솔버는
     중복 MID 를 조용히 덮는다.**
 
-    그래서 덱을 건네줄 때 MID 를 함께 말해라: 「이 덱의 MID 는 3847221 입니다.
+    그 수는 **돌려주는 덱 글자 안에 있다**(솔버 재료 카드의 첫 칸). 따로 실어
+    주지 않는 이유는 만드는 규칙이 백엔드에 있기 때문이다 — 여기서 다시 계산하면
+    규칙이 두 벌이 되고, 그러면 언젠가 서로 다른 수를 말한다.
+
+    덱을 건네줄 때 그것을 읽어 함께 말해라: 「이 덱의 MID 는 3847221 입니다.
     다른 덱과 합치실 거면 겹치는지 확인하세요.」 여러 재료를 한 덱으로 묶는
     자리(BOM 혼합 덱)는 서버가 중복을 막지만, 낱개로 뽑아 합칠 때는 사람이 본다.
     """
-    return await _get(ctx, f"/fitting/cards/{card_id}/export", {"format": format})
+    deck = await _get_text(ctx, f"/fitting/cards/{card_id}/export", {"format": format})
+    if isinstance(deck, dict):
+        return deck  # 오류 봉투
+    return {"format": format, "deck": deck}
 
 
 @mcp.tool()
@@ -1655,7 +1721,7 @@ async def list_recipes(ctx: Context, test_type: str | None = None) -> dict[str, 
     새로 지어내기 전에 여기부터 본다. 부서가 쓰는 레시피가 있으면 그것이 그 부서의
     합의이고, 다르게 돌린 결과는 견줄 수가 없다.
     """
-    return await _get(ctx, "/processing/recipes", {"test_type": test_type})
+    return _listed(await _get(ctx, "/processing/recipes", {"test_type": test_type}), "recipes")
 
 
 @mcp.tool()
@@ -1815,7 +1881,7 @@ async def get_parameter_sets(ctx: Context, material_id: str) -> dict[str, Any]:
     `source_ref` 가 어느 논문·자료의 벌인지 가리킨다. 같은 재료에 벌이 여럿이면
     **논문마다 값이 다르다는 뜻**이지 하나가 틀린 것이 아니다.
     """
-    return await _get(ctx, f"/materials/{material_id}/parameter-sets")
+    return _listed(await _get(ctx, f"/materials/{material_id}/parameter-sets"), "sets")
 
 
 @mcp.tool()
@@ -1827,7 +1893,9 @@ async def get_catalog_parameter_sets(ctx: Context, catalog_material_id: str) -> 
 
     받아 가려면 `adopt_parameter_set` 를 쓴다.
     """
-    return await _get(ctx, f"/catalog/materials/{catalog_material_id}/parameter-sets")
+    return _listed(
+        await _get(ctx, f"/catalog/materials/{catalog_material_id}/parameter-sets"), "sets"
+    )
 
 
 @mcp.tool()

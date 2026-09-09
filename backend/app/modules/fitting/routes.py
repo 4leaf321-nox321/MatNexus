@@ -3496,10 +3496,14 @@ def build_bom_deck(
         )
 
     if not rendered:
+        # **이유를 함께 싣는다.** 「건너뛴 이유를 보세요」 라고 말하면서 그 이유를
+        # 안 주면 볼 곳이 없다 — 화면은 다른 자리에서 보여 주지만 API 로 부르는
+        # 쪽(MCP·스크립트)에는 아무것도 안 남았다(실측 2026-09-10).
         raise AppError(
             "MNX-FITTING-0034",
             "덱에 실을 수 있는 부품이 없습니다 — 건너뛴 이유를 보세요.",
             status=422,
+            details={"skipped": [one.model_dump(mode="json") for one in skipped]},
         )
     return BomDeckOut(
         text=litdeck.combine(rendered),
