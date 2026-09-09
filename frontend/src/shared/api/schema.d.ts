@@ -10711,6 +10711,11 @@ export interface components {
             source_row_count: number;
             /** Stage Index */
             stage_index?: number | null;
+            /**
+             * Stage Points
+             * @default []
+             */
+            stage_points: components["schemas"]["StagePointsOut"][];
             /** Stages */
             stages: components["schemas"]["ProcessingStageOut"][];
             /** Units */
@@ -12983,6 +12988,29 @@ export interface components {
             q1: number;
             /** Q3 */
             q3: number;
+        };
+        /**
+         * StagePointsOut
+         * @description 단계 하나가 끝난 시점의 곡선. **겹쳐 보라고 주는 것이다.**
+         *
+         *     전에는 단계를 고르면 그 단계 것으로 **갈아 끼웠다** — 앞을 자르고 나면
+         *     그림이 남은 구간에 맞춰 다시 스케일돼서, 무엇이 얼마나 잘렸는지 볼 방법이
+         *     없었다(실사용 2026-09-10). 나란히 놓아야 비교가 된다.
+         *
+         *     `points` 가 비면 **그 단계에는 이 축이 아직 없다** — 진소성변형률은 변환
+         *     단계에서 생기므로 그 앞 단계에는 없다. 빈 것과 「0 이 쭉 이어진 것」 은
+         *     다르니, 화면은 그 사실을 말해야 한다.
+         */
+        StagePointsOut: {
+            /** Index */
+            index: number;
+            /** Label */
+            label: string;
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
         };
         /**
          * StandardImportItem

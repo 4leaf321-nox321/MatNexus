@@ -69,7 +69,15 @@ export interface CurveChartProps {
    * 축 범위에 함께 넣는다. 안 넣으면 판 밖으로 나간 곡선이 잘려 보이고,
    * **잘린 그림은 흩어짐을 실제보다 작아 보이게 한다.**
    */
-  background?: { points: [number, number][]; label: string }[]
+  background?: { points: [number, number][]; label: string; tone?: string }[]
+  /**
+   * `tone` 은 그 선의 색(Tailwind `stroke-*` 클래스). **안 주면 전부 같은
+   * 파랑**이고, 그것이 시편 원곡선에는 맞다 — 서로 구별할 것이 아니라 흩어짐을
+   * 보는 것이라서다.
+   *
+   * 처리 단계를 겹칠 때는 다르다. 「자르기 전」 과 「자른 뒤」 가 같은 색이면
+   * 어느 쪽이 어느 쪽인지 그림에서 알 수 없고, 그러면 겹쳐 놓은 뜻이 없다.
+   */
 }
 
 /** 보고 있는 범위. 변환된 축(로그면 log10)의 값이다. */
@@ -475,7 +483,7 @@ export function CurveChart({
             fill="none"
             // **흐리되 보여야 한다.** 30% 회색 1px 로 뒀더니 대표선 아래에서
             // 사실상 안 보였고, 그러면 이 선을 그리는 뜻이 없다.
-            className="stroke-sky-600 dark:stroke-sky-400"
+            className={one.tone ?? 'stroke-sky-600 dark:stroke-sky-400'}
             strokeWidth={1.1}
             opacity={0.45}
           >

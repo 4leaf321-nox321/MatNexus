@@ -439,6 +439,66 @@ class Test미리보기:
         assert any("게이지 길이" in note for note in body["notes"])
         assert all(stage["version"] for stage in body["stages"])
 
+    def test_단계마다의_곡선을_한_번에_준다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**겹쳐 보려면 한 번에 와야 한다.**
+
+        켤 때마다 서버를 부르면 그때마다 파이프라인 전체가 다시 돈다 — 켜고
+        끄며 견주는 일이 느려지면 아무도 안 쓴다(실사용 2026-09-10). 파이프라인은
+        이미 단계마다 프레임을 들고 있으므로 버릴 이유가 없다.
+        """
+        steps = [
+            *STEPS,
+            {
+                "plugin": "curve.resample",
+                "options": {"x": "strain_engineering", "count": 50},
+            },
+        ]
+        body = {"test_run_id": run_id, "steps": steps}
+        축 = "x=strain_engineering&y=stress_engineering"
+        나온것 = client.post(
+            f"/api/processing/preview?{축}", json=body, headers=admin_headers
+        ).json()
+
+        stage_points = 나온것["stage_points"]
+        assert len(stage_points) == len(steps)
+        assert [one["index"] for one in stage_points] == list(range(len(steps)))
+        # **각 단계의 곡선이 실제로 다르다.** 마지막 것만 복사해 주면 겹쳐 봐야
+        # 한 줄로 보이고, 그러면 이 기능이 있는 줄 알고 없는 셈이 된다.
+        assert len(stage_points[-1]["points"]) == 50
+        assert len(stage_points[0]["points"]) != 50
+
+    def test_그_축이_없는_단계는_빈_점을_준다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**없는 것과 0 인 것은 다르다.**
+
+        진소성변형률은 변환 단계에서 생기므로 그 앞 단계에는 아예 없다. 0 으로
+        채워 주면 화면이 없는 곡선을 그리고, 사람은 그것을 자료로 읽는다.
+        """
+        # **변환 단계를 붙여야 그 축이 생긴다.** 기본 `STEPS` 는 공칭까지다.
+        steps = [
+            *STEPS,
+            {
+                "plugin": "tensile.elastic_modulus",
+                "options": {"method": "manual", "manual_modulus": 200e9},
+            },
+            {
+                "plugin": "tensile.true_plastic",
+                "options": {"youngs_modulus": "@youngs_modulus"},
+            },
+        ]
+        body = {"test_run_id": run_id, "steps": steps}
+        축 = "x=strain_true_plastic&y=stress_true"
+        나온것 = client.post(
+            f"/api/processing/preview?{축}", json=body, headers=admin_headers
+        ).json()
+
+        rows = 나온것["stage_points"]
+        assert rows[0]["points"] == [], "공칭 단계에는 진소성변형률이 없다"
+        assert rows[-1]["points"], "변환 뒤에는 있어야 한다"
+
     def test_중간_단계의_곡선을_그린다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:

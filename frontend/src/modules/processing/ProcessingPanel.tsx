@@ -162,6 +162,19 @@ function defaults(plugin: ProcessingStep | undefined): Record<string, unknown> {
   return options
 }
 
+/**
+ * 겹쳐 그리는 단계 선의 색. **대표선(처리 결과)은 검정이고 이것들은 뒤에 깔린다.**
+ *
+ * 색을 돌려 쓰는 이유는 구별이지 예쁨이 아니다 — 단계가 넷 넘게 켜지는 일은
+ * 드물고, 넘으면 처음 색으로 돌아간다. 그때는 범례가 구별해 준다.
+ */
+const STAGE_TONES = [
+  'stroke-sky-600 dark:stroke-sky-400',
+  'stroke-amber-600 dark:stroke-amber-400',
+  'stroke-violet-600 dark:stroke-violet-400',
+  'stroke-emerald-600 dark:stroke-emerald-400',
+]
+
 export function ProcessingPanel({
   testRunId,
   testTypeKey,
@@ -297,6 +310,8 @@ export function ProcessingPanel({
    * 그것을 확인하려면 뒤 단계를 지우고 다시 돌리는 수밖에 없었다.
    */
   const [stageShown, setStageShown] = useState<number | null>(null)
+  /** 겹쳐 볼 단계들. 비면 처리 결과 하나만 그린다. */
+  const [compared, setCompared] = useState<number[]>([])
 
   /** 그림만 다시 받는다. 단계 구성은 그대로다. */
   async function draw(next: { x: string; y: string }, stage: number | null) {
@@ -502,6 +517,45 @@ export function ProcessingPanel({
       ]),
     [result, axes.x, axes.y]
   )
+
+  /**
+   * 겹쳐 그릴 단계들. **갈아 끼우는 것과 겹치는 것은 다르다** — 앞을 자르고 나면
+   * 그림이 남은 구간에 맞춰 다시 스케일돼서, 나란히 놓기 전에는 무엇이 얼마나
+   * 잘렸는지 볼 수가 없다(실사용 2026-09-10).
+   *
+   * 색을 돌려 가며 준다. 같은 색으로 깔면 「자르기 전」 과 「자른 뒤」 를 그림에서
+   * 구별할 수 없고, 그러면 겹쳐 놓은 뜻이 없다.
+   */
+  const compareLines = useMemo(
+    () =>
+      (result?.stage_points ?? [])
+        .filter((one) => compared.includes(one.index) && one.points.length > 0)
+        .map((one, order) => ({
+          label: `${one.index + 1}. ${one.label}`,
+          tone: STAGE_TONES[order % STAGE_TONES.length],
+          points: one.points.map(
+            ([x, y]) =>
+              [toDisplay(x, result?.units[axes.x]), toDisplay(y, result?.units[axes.y])] as [
+                number,
+                number,
+              ]
+          ),
+        })),
+    [result, compared, axes.x, axes.y]
+  )
+
+  /**
+   * 이 축이 **몇 단계에서 생겼나.** 진소성변형률은 변환 단계에서 생기므로 그 앞
+   * 단계에는 아예 없다.
+   *
+   * 없는 것을 조용히 빼면 「켰는데 아무것도 안 나오네」 가 되고, 더 나쁘게는
+   * 「원본이 처리 결과와 똑같구나」 로 읽힌다. 그래서 **어디서 생겼는지** 를 말한다.
+   */
+  const axisBornAt = useMemo(() => {
+    const rows = result?.stage_points ?? []
+    const first = rows.findIndex((one) => one.points.length > 0)
+    return first > 0 ? rows[first] : null
+  }, [result])
 
   return (
     <section className="mb-8">
@@ -1120,6 +1174,68 @@ export function ProcessingPanel({
                 </span>
               </div>
 
+              {/* **겹쳐 보기.** 단계를 고르는 위 셀렉트는 그림을 *갈아 끼운다* —
+                  앞을 자르고 나면 남은 구간에 맞춰 다시 스케일되므로, 무엇이
+                  얼마나 잘렸는지는 나란히 놓아야 보인다. */}
+              {(result.stage_points ?? []).length > 0 && (
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-muted-foreground text-xs">겹쳐 보기</span>
+                  {(result.stage_points ?? []).map((one) => {
+                    const on = compared.includes(one.index)
+                    const empty = one.points.length === 0
+                    return (
+                      <button
+                        key={one.index}
+                        type="button"
+                        disabled={empty}
+                        aria-pressed={on}
+                        title={
+                          empty
+                            ? `이 단계에는 «${axes.x}» 나 «${axes.y}» 가 아직 없습니다.`
+                            : undefined
+                        }
+                        onClick={() =>
+                          setCompared((prev) =>
+                            prev.includes(one.index)
+                              ? prev.filter((index) => index !== one.index)
+                              : [...prev, one.index]
+                          )
+                        }
+                        className={`rounded-full border px-2 py-0.5 text-xs transition ${
+                          empty
+                            ? 'text-muted-foreground/50 cursor-not-allowed line-through'
+                            : on
+                              ? 'border-foreground/40 bg-foreground/10 font-medium'
+                              : 'hover:bg-muted'
+                        }`}
+                      >
+                        {one.index + 1}. {one.label}
+                      </button>
+                    )
+                  })}
+                  {compared.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-muted-foreground ml-1 text-xs underline"
+                      onClick={() => setCompared([])}
+                    >
+                      모두 끄기
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* **없는 것과 안 보이는 것을 구별한다.** 조용히 빼면 「켰는데 아무것도
+                  안 나오네」 가 되고, 더 나쁘게는 「원본이 처리 결과와 똑같구나」 로
+                  읽힌다. */}
+              {axisBornAt && (
+                <p className="text-muted-foreground mb-2 text-xs">
+                  지금 축(<b>{axes.y}</b>)은 <b>{axisBornAt.index + 1}. {axisBornAt.label}</b> 에서
+                  생겼습니다 — 그 앞 단계에는 없어서 겹쳐 볼 수 없습니다. 공칭 축으로 바꾸면
+                  원본부터 견줄 수 있습니다.
+                </p>
+              )}
+
               {/* **멈췄어도 여기까지는 보여 준다.** 그 곡선이 없으면 사람은 단계를
                   하나씩 지워 가며 다시 돌려야 한다 — 실제로 그렇게 했다.
                   다만 「다 됐다」 로 읽히면 안 되므로 무엇이 멈췄는지 먼저 적는다. */}
@@ -1153,6 +1269,7 @@ export function ProcessingPanel({
                 xLabel={axisLabel(axes.x, result.units[axes.x])}
                 yLabel={axisLabel(axes.y, result.units[axes.y])}
                 height={300}
+                background={compareLines.length > 0 ? compareLines : undefined}
               />
 
               {/* **라벨이 짧고 값이 한 줄이다.** 2열이면 카드 하나가 570px 이

@@ -42,6 +42,7 @@ from app.modules.processing.schemas import (
     RecipeOut,
     RecipeUpdateRequest,
     ResultCurveOut,
+    StagePointsOut,
     StepParamOut,
 )
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
@@ -62,6 +63,10 @@ router = APIRouter(prefix="/processing", tags=["processing"])
 
 #: 미리보기가 돌려주는 점 수 상한. 화면 픽셀에 겹치는 점을 보낼 이유가 없다.
 PREVIEW_POINTS = 600
+
+#: 단계별 곡선은 **뒤에 깔린다** — 그림용이라 600점까지 필요 없다. 단계가 예닐곱
+#: 이면 응답이 그만큼 커지는데, 켜 보지도 않는 사람에게까지 그 값을 물린다.
+STAGE_POINTS = 300
 
 
 # --- 단계 목록 ---------------------------------------------------------------
@@ -278,13 +283,20 @@ def _scalar_out(
     )
 
 
-def _points(frame: processing.Frame, x: str, y: str) -> list[tuple[float, float]]:
+def _points(
+    frame: processing.Frame, x: str, y: str, *, max_points: int = PREVIEW_POINTS
+) -> list[tuple[float, float]]:
+    """이 프레임의 두 열을 점으로. **없는 축이면 빈 목록이다.**
+
+    빈 것과 「값이 0 인 것」 은 다르다 — 진소성변형률은 변환 단계에서 생기므로
+    그 앞 단계에는 아예 없다. 여기서 0 으로 채우면 화면이 없는 곡선을 그린다.
+    """
     if x not in frame.columns or y not in frame.columns:
         return []
     return curves.downsample(
         [None if np.isnan(v) else float(v) for v in frame.columns[x]],
         [None if np.isnan(v) else float(v) for v in frame.columns[y]],
-        max_points=PREVIEW_POINTS,
+        max_points=max_points,
     )
 
 
@@ -385,6 +397,16 @@ def preview(
         frame = result.stages[stage].frame
 
     columns = sorted(frame.columns)
+    # **단계마다의 곡선을 함께 준다.** 화면이 골라 겹쳐 보는 데 쓴다 — 켤 때마다
+    # 서버를 부르면 그때마다 파이프라인 전체가 다시 돈다.
+    stage_points = [
+        StagePointsOut(
+            index=one.index,
+            label=one.label,
+            points=_points(one.frame, x or "", y or "", max_points=STAGE_POINTS),
+        )
+        for one in result.stages
+    ]
     return ProcessingPreviewOut(
         source_curve_key=curve.key,
         source_row_count=curve.row_count,
@@ -395,6 +417,7 @@ def preview(
         scalars=[_scalar_out(item) for item in result.scalars],
         notes=list(result.notes),
         points=_points(frame, x or "", y or ""),
+        stage_points=stage_points,
         stage_index=shown,
         problem=problem,
     )

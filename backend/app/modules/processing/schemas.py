@@ -138,6 +138,23 @@ class ProcessingRunRequest(BaseModel):
     """저장된 레시피로 돌렸으면 그 키. 결과에 이름을 남기려고 받는다."""
 
 
+class StagePointsOut(BaseModel):
+    """단계 하나가 끝난 시점의 곡선. **겹쳐 보라고 주는 것이다.**
+
+    전에는 단계를 고르면 그 단계 것으로 **갈아 끼웠다** — 앞을 자르고 나면
+    그림이 남은 구간에 맞춰 다시 스케일돼서, 무엇이 얼마나 잘렸는지 볼 방법이
+    없었다(실사용 2026-09-10). 나란히 놓아야 비교가 된다.
+
+    `points` 가 비면 **그 단계에는 이 축이 아직 없다** — 진소성변형률은 변환
+    단계에서 생기므로 그 앞 단계에는 없다. 빈 것과 「0 이 쭉 이어진 것」 은
+    다르니, 화면은 그 사실을 말해야 한다.
+    """
+
+    index: int
+    label: str
+    points: list[tuple[float, float]]
+
+
 class ProcessingPreviewOut(BaseModel):
     source_curve_key: str
     source_row_count: int
@@ -148,6 +165,13 @@ class ProcessingPreviewOut(BaseModel):
     scalars: list[ProcessingScalarOut]
     notes: list[str]
     points: list[tuple[float, float]]
+    stage_points: list[StagePointsOut] = []
+    """**단계마다의 곡선** — 화면이 골라 겹쳐 본다.
+
+    한 번에 주는 이유: 파이프라인은 이미 단계마다 프레임을 들고 있다. 켤 때마다
+    서버를 다시 부르면 **그때마다 전체를 다시 돌린다** — 켜고 끄며 견주는 일이
+    느려지면 아무도 안 쓴다. 대신 뒤에 깔릴 선이라 더 성기게 솎는다."""
+
     problem: str | None = None
     """**멈춘 자리.** 값이 있으면 이 미리보기는 거기까지만 돈 것이다.
 

@@ -427,6 +427,114 @@ describe('돌려 보기가 막힐 때', () => {
     })
   })
 
+  it('단계를 골라 겹쳐 본다 — 갈아 끼우는 것과 다르다', async () => {
+    // **앞을 자르고 나면 그림이 남은 구간에 맞춰 다시 스케일된다** — 나란히
+    // 놓기 전에는 무엇이 얼마나 잘렸는지 볼 수가 없다(실사용 2026-09-10).
+    preview.mockResolvedValue({
+      source_curve_key: 'curve-1',
+      source_row_count: 100,
+      row_count: 40,
+      columns: ['strain_engineering', 'stress_engineering'],
+      units: { strain_engineering: '1', stress_engineering: 'Pa' },
+      stages: [
+        {
+          index: 0,
+          plugin: 'tensile.engineering',
+          label: '공칭 응력-변형률',
+          version: '1',
+          options: {},
+          notes: [],
+          row_count: 100,
+          columns: [],
+          scalars: [],
+        },
+        {
+          index: 1,
+          plugin: 'curve.crop',
+          label: '구간 자르기',
+          version: '1',
+          options: {},
+          notes: [],
+          row_count: 40,
+          columns: [],
+          scalars: [],
+        },
+      ],
+      scalars: [],
+      notes: [],
+      points: [[0.1, 300e6]],
+      stage_points: [
+        { index: 0, label: '공칭 응력-변형률', points: [[0, 0], [0.1, 300e6]] },
+        { index: 1, label: '구간 자르기', points: [[0.1, 300e6]] },
+      ],
+    })
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(screen.getByRole('button', { name: /돌려 보기/ }))
+
+    const chip = await screen.findByRole('button', { name: /1\. 공칭 응력-변형률/ })
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    await user.click(chip)
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    // **끄는 길이 있어야 한다.** 켜기만 되면 그림이 금세 못 읽게 된다.
+    await user.click(screen.getByRole('button', { name: '모두 끄기' }))
+    expect(screen.getByRole('button', { name: /1\. 공칭 응력-변형률/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+  })
+
+  it('그 축이 없는 단계는 끄고, 어디서 생겼는지 말한다', async () => {
+    // **없는 것과 안 보이는 것은 다르다.** 조용히 빼면 「켰는데 아무것도 안
+    // 나오네」 가 되고, 더 나쁘게는 「원본이 처리 결과와 똑같구나」 로 읽힌다.
+    preview.mockResolvedValue({
+      source_curve_key: 'curve-1',
+      source_row_count: 100,
+      row_count: 100,
+      columns: ['strain_true_plastic', 'stress_true'],
+      units: { strain_true_plastic: '1', stress_true: 'Pa' },
+      stages: [
+        {
+          index: 0,
+          plugin: 'tensile.engineering',
+          label: '공칭 응력-변형률',
+          version: '1',
+          options: {},
+          notes: [],
+          row_count: 100,
+          columns: [],
+          scalars: [],
+        },
+        {
+          index: 1,
+          plugin: 'tensile.true_plastic',
+          label: '진응력·진소성변형률',
+          version: '1',
+          options: {},
+          notes: [],
+          row_count: 100,
+          columns: [],
+          scalars: [],
+        },
+      ],
+      scalars: [],
+      notes: [],
+      points: [[0.01, 300e6]],
+      stage_points: [
+        { index: 0, label: '공칭 응력-변형률', points: [] },
+        { index: 1, label: '진응력·진소성변형률', points: [[0.01, 300e6]] },
+      ],
+    })
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(screen.getByRole('button', { name: /돌려 보기/ }))
+
+    expect(await screen.findByRole('button', { name: /1\. 공칭 응력-변형률/ })).toBeDisabled()
+    expect(screen.getByText(/에서\s*생겼습니다/)).toBeInTheDocument()
+  })
+
   it('멈춰도 여기까지의 곡선을 보여 주고, 저장은 막는다', async () => {
     // **그 곡선이 없으면 사람은 단계를 하나씩 지워 가며 다시 돌린다** — 실제로
     // 그렇게 했다(2026-09-02). 다만 「다 됐다」 로 읽히면 안 되므로 무엇이
