@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+import retry_plan
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -1281,6 +1283,159 @@ async def find_by_property(
     if max is not None:
         params["max"] = max
     return await _get(ctx, "/catalog/properties/search", params)
+
+
+@mcp.tool()
+async def list_recipes(ctx: Context, test_type: str | None = None) -> dict[str, Any]:
+    """저장된 처리 레시피들 — **사람이 이미 합의해 둔 단계 묶음.**
+
+    새로 지어내기 전에 여기부터 본다. 부서가 쓰는 레시피가 있으면 그것이 그 부서의
+    합의이고, 다르게 돌린 결과는 견줄 수가 없다.
+    """
+    return await _get(ctx, "/processing/recipes", {"test_type": test_type})
+
+
+@mcp.tool()
+async def run_processing(
+    ctx: Context,
+    test_run_id: str,
+    steps: list[dict[str, Any]] | None = None,
+    recipe_key: str | None = None,
+    source_curve_key: str | None = None,
+    save: bool = False,
+    retry: bool = False,
+) -> dict[str, Any]:
+    """시험 곡선에 처리를 돌린다. **기본은 저장하지 않는 미리보기다.**
+
+    `steps` 를 직접 주거나 `recipe_key` 로 저장된 레시피를 쓴다. 저장하려면
+    `save=True` — 그때도 **채택은 안 한다**(어느 결과를 공식으로 삼을지는 사람이
+    정한다, ADR 0007).
+
+    ## 실패는 실패다 — **임계값을 우회하지 마라**
+
+    「점이 5개 미만이라 값을 안 냈다」 · 「그 구간의 R² 가 낮아 직선이 아니다」 는
+    **고장이 아니라 판단이다.** 실측(2026-08-29): 18점짜리 곡선에서 탄성계수가
+    1.83 GPa 로 나온 적이 있다 — 강판이면 200 GPa 다. 그 뒤로 못 믿을 값은 아예
+    안 낸다.
+
+    구간을 넓히거나 단계를 빼서 **억지로 값을 뽑지 마라.** 그렇게 나온 숫자는
+    통계·물성 카드·해석 덱까지 그대로 흘러가고, 그것이 우회로 나온 값이라는 사실은
+    어디에도 안 남는다. 못 냈으면 **왜 못 냈는지 사람에게 옮겨라.**
+
+    ## `retry=True` — 사람이 켤 때만
+
+    켜면 실패한 단계의 **구간·창을 한 번씩 넓혀 다시 시도**한다. 사람이 화면에서
+    하는 것과 같은 조정이고, **임계값(최소 점 수·R² 문턱)은 코드 상수라 못 바꾼다** —
+    방어선 자체는 내려가지 않는다.
+
+    무엇을 바꿔 봤는지는 결과의 `attempts` 에 전부 남고, 저장하면 그 기록이 결과에
+    함께 저장된다. **자동으로 켜지 마라** — 사용자가 「되는 데까지 해 봐」 라고
+    말했을 때만 켠다.
+
+    ## 결과를 읽을 때
+
+    `problem` 이 있으면 거기까지만 돈 것이다 — 그 앞 단계의 곡선은 멀쩡하다.
+    `notes` 에 경고가 있으면 값은 나왔지만 사람이 봐야 한다는 뜻이다(토우 R² 처럼
+    재료에 따라 진짜로 직선이 아닐 수 있는 것들).
+    """
+    if not steps and not recipe_key:
+        return {
+            "error": (
+                "`steps` 또는 `recipe_key` 중 하나는 있어야 합니다. "
+                "`list_recipes` 로 부서가 쓰는 레시피부터 보세요."
+            )
+        }
+
+    if recipe_key and not steps:
+        recipes = await _get(ctx, "/processing/recipes")
+        if isinstance(recipes, dict) and "error" in recipes:
+            return recipes
+        found = next((one for one in recipes if one.get("key") == recipe_key), None)
+        if found is None:
+            return {"error": f"'{recipe_key}' 레시피를 찾지 못했습니다."}
+        steps = found.get("steps") or []
+
+    body: dict[str, Any] = {
+        "test_run_id": test_run_id,
+        "steps": steps,
+        "recipe_key": recipe_key,
+        "source_curve_key": source_curve_key,
+    }
+    attempts: list[dict[str, Any]] = []
+    answer = await _send(ctx, "POST", "/processing/preview", body)
+    attempts.append({"steps": steps, "problem": (answer or {}).get("problem")})
+
+    if retry and isinstance(answer, dict) and answer.get("problem"):
+        for widened in retry_plan.widen(steps or []):
+            body["steps"] = widened
+            answer = await _send(ctx, "POST", "/processing/preview", body)
+            attempts.append({"steps": widened, "problem": (answer or {}).get("problem")})
+            if not (isinstance(answer, dict) and answer.get("problem")):
+                break
+
+    if isinstance(answer, dict) and "error" in answer:
+        return answer
+    if not isinstance(answer, dict):
+        return {"error": "처리 응답을 읽지 못했습니다."}
+
+    answer = dict(answer)
+    if len(attempts) > 1:
+        answer["attempts"] = attempts
+        answer["note"] = (
+            f"{len(attempts)}번 시도했습니다 — 구간을 넓혀 가며 다시 돌렸습니다. "
+            "**사람에게 그 사실을 말하세요.** 첫 시도로 안 된 곡선입니다."
+        )
+
+    if not save:
+        answer["dry_run"] = True
+        answer.setdefault(
+            "note", "저장하려면 save=True 로 다시 부르세요. 채택은 사람이 합니다."
+        )
+        return answer
+    if answer.get("problem"):
+        return {
+            "error": f"처리가 끝까지 못 돌아 저장하지 않았습니다: {answer['problem']}",
+            "attempts": attempts,
+        }
+
+    body["steps"] = attempts[-1]["steps"]
+    saved = await _send(ctx, "POST", "/processing/results", body)
+    if isinstance(saved, dict) and len(attempts) > 1:
+        saved["attempts"] = attempts
+    return saved
+
+
+@mcp.tool()
+async def save_recipe(
+    ctx: Context,
+    label: str,
+    test_type: str,
+    steps: list[dict[str, Any]],
+    description: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """처리 레시피를 저장한다 — **부서가 함께 쓰는 단계 묶음이 된다.**
+
+    **기본이 미리보기(dry_run=True)다.** 레시피는 한 사람의 설정이 아니라 그 부서의
+    합의라, 만들기 전에 무엇이 저장될지 보여야 한다.
+
+    새로 짓기 전에 `list_recipes` 로 이미 있는 것을 본다 — 비슷한 것이 있으면 그것을
+    쓰는 편이 낫다. 레시피가 갈리면 같은 시험의 결과를 서로 못 견준다.
+    """
+    body = {
+        "label": label,
+        "test_type_key": test_type,
+        "steps": steps,
+        "description": description,
+        "is_active": True,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_save": body,
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요.",
+        }
+    return await _send(ctx, "POST", "/processing/recipes", body)
 
 
 @mcp.tool()

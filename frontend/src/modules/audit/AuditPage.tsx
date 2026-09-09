@@ -132,8 +132,14 @@ export default function AuditPage() {
                         것이지만, 화면에서 누른 것과 AI 가 대신 부른 것은 나중에
                         「이거 누가 했지」 를 물을 때 다른 이야기다. */}
                     {entry.client && (
-                      <Badge variant="secondary" className="ml-2">
-                        {entry.client === 'mcp' ? 'AI(MCP)' : entry.client}
+                      <Badge
+                        variant="secondary"
+                        className="ml-2"
+                        title={`${entry.actor_label} 님이 ${
+                          entry.client === 'mcp' ? 'AI(MCP)' : entry.client
+                        } 를 거쳐 한 일입니다. 권한은 그 사람의 것입니다.`}
+                      >
+                        {entry.client === 'mcp' ? 'AI(MCP) 경유' : entry.client}
                       </Badge>
                     )}
                   </TableCell>

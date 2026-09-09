@@ -48,6 +48,9 @@ extend-immutable-calls = [
 python_version = "3.13"
 strict = true
 files = ["app", "matcore", "tests"]
+# `mcp_server` 는 별도 venv 라 여기서 import 를 못 푼다. 그쪽 순수 함수를 부르는
+# 시험이 하나 있는데(`test_mcp_retry_plan`), 그 모듈에는 딸린 것이 없어 실행은 된다.
+mypy_path = "../mcp_server"
 plugins = []
 # 서드파티 스텁이 없는 것만 개별 예외로 둔다. 전역 ignore는 두지 않는다.
 
