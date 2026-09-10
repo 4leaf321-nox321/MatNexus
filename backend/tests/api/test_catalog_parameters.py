@@ -253,6 +253,83 @@ def aged(db: Session) -> Iterator[CatalogMaterial]:
     parameters.forget()
 
 
+@pytest.fixture
+def two_papers(db: Session) -> Iterator[CatalogMaterial]:
+    """**논문 둘이 같은 모델을 한 이름 아래.** 항 이름 표기까지 다르다.
+
+    실측(2026-09-10): Ecoflex 00-30 의 Yeoh-3 이 그랬다 — 한쪽은 `C10·C20·C30`,
+    다른 쪽은 `C1·C2·C3`. **이름이 안 겹치니 겹침 검사에 안 걸렸고**, 값은 30배
+    달랐다. 그대로 담으면 계수 6개짜리 Yeoh 가 재료에 들어간다.
+    """
+    from app.modules.catalog.models import CatalogSource
+
+    parameters.forget()
+    db.add(
+        CatalogDefinition(
+            mt_id=993001,
+            key=SPLIT_KEY,
+            name="시험용 초탄성 계수",
+            domain="mechanical",
+            si_unit="Pa",
+            value_type="number",
+        )
+    )
+    item = CatalogMaterial(mt_id=993002, name="시험용 실리콘", category="rubber")
+    first = CatalogSource(mt_id=993010, kind="journal", title="첫째 논문")
+    second = CatalogSource(mt_id=993011, kind="journal", title="둘째 논문")
+    db.add_all([item, first, second])
+    db.flush()
+    at = 0
+    for source, names, base in (
+        (first, ("C10", "C20"), 3300.0),
+        (second, ("C1", "C2"), 100000.0),
+    ):
+        for term in names:
+            db.add(
+                CatalogValue(
+                    mt_id=993100 + at,
+                    material_id=item.id,
+                    source_id=source.id,
+                    property_key=SPLIT_KEY,
+                    value_num=base + at,
+                    unit="Pa",
+                    quality_tier=2,
+                    conditions={"term": term, "model": "yeoh_3"},
+                )
+            )
+            at += 1
+    db.commit()
+    parameters.forget()
+    yield item
+    parameters.forget()
+
+
+class Test한_벌은_한_출처에서:
+    """**논문이 다르면 같은 모델이라도 다른 벌이다.**
+
+    항 이름이 안 겹치면 겹침 검사로는 못 잡는다 — 표기가 갈리기 때문이다. 그래서
+    이름에 기대지 않고 **출처로 먼저** 가른다.
+    """
+
+    def test_논문마다_한_벌이_된다(self, db: Session, two_papers: CatalogMaterial) -> None:
+        found = parameters.sets(db, key=SPLIT_KEY, material_id=two_papers.id)
+        assert len(found) == 2, [one.variant for one in found]
+        assert {one.variant for one in found} == {"source=첫째 논문", "source=둘째 논문"}
+        # **섞이지 않았다.** 논문마다 자기 표기의 항만 들고 있어야 한다.
+        got = {one.variant: {term["term"] for term in one.terms} for one in found}
+        assert got == {
+            "source=첫째 논문": {"C10", "C20"},
+            "source=둘째 논문": {"C1", "C2"},
+        }
+
+    def test_출처가_하나면_안_가른다(self, db: Session, aged: CatalogMaterial) -> None:
+        """**늘 가르면 멀쩡한 벌이 조각난다.** 출처가 하나면 그 축은 안 쓴다."""
+        found = parameters.sets(db, key=SPLIT_KEY, material_id=aged.id)
+        assert all("source" not in one.distinguishing for one in found), [
+            one.distinguishing for one in found
+        ]
+
+
 class Test한_이름_아래_여러_벌:
     """**안 가르면 같은 항이 여러 번 든 벌이 나간다.**
 

@@ -334,8 +334,11 @@ def sets(
             SELECT v.conditions->>'{TERM}' AS term, v.value_num, v.value_text,
                    coalesce(v.conditions->>'{UNIT_OF_TERM}', '') AS unit, v.quality_tier,
                    left(coalesce(v.source_detail, ''), 160) AS source, m.name AS material,
-                   v.conditions
-            FROM catalog_values v JOIN catalog_materials m ON m.id = v.material_id
+                   v.conditions, v.source_id,
+                   left(coalesce(s.title, ''), 60) AS source_title
+            FROM catalog_values v
+            JOIN catalog_materials m ON m.id = v.material_id
+            LEFT JOIN catalog_sources s ON s.id = v.source_id
             WHERE v.property_key = :key AND v.material_id = :owner
               AND coalesce(v.conditions->>'{MODEL}', '') = :model
               AND coalesce(v.conditions->>'{SET_ID}', '') = :set_id
@@ -357,9 +360,31 @@ def sets(
         # 있으면 갈라서 낸다 — 안 가르면 같은 항이 여러 번 든 벌이 나가고, 그것을
         # 그대로 받아 가면 `C01` 이 8개인 Mooney-Rivlin 이 재료에 담긴다.
         rows = [dict(one) for one in found]
-        axes = _split_axes(rows)
-        groups = _grouped_by(rows, axes) if axes else {"": rows}
-        for part in groups.values():
+
+        # **한 벌은 한 출처에서 온다.** 논문이 다르면 같은 모델이라도 다른 벌이다 —
+        # 실측(2026-09-10): Ecoflex 00-30 의 Yeoh-3 에 두 논문이 한 벌로 있었는데,
+        # 한쪽은 항을 `C10·C20·C30` 으로 다른 쪽은 `C1·C2·C3` 으로 적어 **이름이
+        # 안 겹치는 바람에** 아래 겹침 검사에 안 걸렸다. 값은 30배 달랐다.
+        # 이름 표기에 기대지 않으려면 출처로 먼저 가른다.
+        by_source: dict[Any, list[dict[str, Any]]] = {}
+        for row in rows:
+            by_source.setdefault(row.get("source_id"), []).append(row)
+        papers = list(by_source.values()) if len(by_source) > 1 else [rows]
+
+        parts: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+        for paper in papers:
+            head: dict[str, Any] = {}
+            if len(by_source) > 1:
+                head["source"] = paper[0].get("source_title") or "(제목 없음)"
+            axes = _split_axes(paper)
+            for part in (_grouped_by(paper, axes) if axes else {"": paper}).values():
+                marks = dict(head)
+                marks.update(
+                    {axis: (part[0].get("conditions") or {}).get(axis) for axis in axes}
+                )
+                parts.append((marks, part))
+
+        for marks, part in parts:
             counted = Counter(str(one["term"]) for one in part)
             made.append(
                 ParameterSet(
@@ -370,9 +395,7 @@ def sets(
                     material_name=part[0]["material"] or "",
                     quality_tier=part[0]["quality_tier"],
                     source=part[0]["source"] or None,
-                    distinguishing={
-                        axis: (part[0].get("conditions") or {}).get(axis) for axis in axes
-                    },
+                    distinguishing=marks,
                     # 갈랐는데도 남았으면 **그 사실을 들고 다닌다.** 조용히 두면
                     # 받는 쪽은 항이 왜 여러 번인지 모른 채 채택한다.
                     duplicated=sorted(name for name, times in counted.items() if times > 1),
