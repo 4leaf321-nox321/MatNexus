@@ -18,6 +18,7 @@ import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.catalog.models import CatalogDefinition
@@ -313,3 +314,115 @@ class TestVisibility:
         )
         assert answer.status_code == 200, answer.text
         assert answer.json()["found"] is True
+
+
+class Test출처와_파라미터_벌:
+    """온톨로지에 늦게 들어온 두 마디.
+
+    문헌 자료를 훑다 **「이 논문에서 온 값이 어디어디 쓰였나」 를 물을 방법이
+    없다**는 것이 드러났다(실측 2026-09-10) — 출처가 값에 붙은 글자였지 마디가
+    아니었다. 값(42,209건)을 마디로 만들면 그래프가 값으로 뒤덮이므로, **값은
+    관계를 나르는 표로만** 쓰고 출처만 마디로 뒀다.
+    """
+
+    def test_출처가_지도에_있다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        got = client.get("/api/ontology", headers=admin_headers)
+        assert got.status_code == 200, got.text
+        body = got.json()
+        kinds = {one["slug"] for one in body["kinds"]}
+        assert {"source", "parameter_set"} <= kinds
+        relations = {one["slug"] for one in body["relations"]}
+        assert {"cited_by", "measured_in", "set_of"} <= relations
+
+    def test_같은_이음을_값_수만큼_되풀이하지_않는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**값 표가 관계를 나른다** — 한 쌍에 행이 수십 개다.
+
+        안 묶으면 이웃 목록이 같은 출처로 채워지고, 상한에 값 몇 개로 닿는다
+        (실측: Ecoflex 이웃 47개가 실제로는 출처 8개였다).
+        """
+        from app.modules.catalog.models import CatalogMaterial, CatalogSource, CatalogValue
+
+        source = CatalogSource(mt_id=994001, kind="journal", title="한 논문")
+        item = CatalogMaterial(mt_id=994002, name="온톨로지 시험재료", category="metal")
+        # 값은 정의를 가리키는 FK 를 든다 — 없는 키로 넣으면 DB 가 막는다.
+        definition = CatalogDefinition(
+            mt_id=994003,
+            key="physical.test_density",
+            name="시험용 밀도",
+            domain="physical",
+            si_unit="kg/m^3",
+            value_type="number",
+        )
+        db.add_all([source, item, definition])
+        db.flush()
+        for at in range(6):
+            db.add(
+                CatalogValue(
+                    mt_id=994100 + at,
+                    material_id=item.id,
+                    source_id=source.id,
+                    property_key="physical.test_density",
+                    value_num=7800.0 + at,
+                    unit="kg/m^3",
+                    quality_tier=2,
+                )
+            )
+        db.commit()
+
+        got = client.get(
+            "/api/ontology/related",
+            params={"kind": "catalog_material", "id": str(item.id)},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        cited = [one for one in got.json()["edges"] if one["relation"] == "cited_by"]
+        assert len(cited) == 1, cited
+
+    def test_파라미터_벌은_재료의_가시_범위를_따른다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**안 붙이면 남의 부서 재료가 받아 온 벌이 검색에 뜬다.**
+
+        그리고 열면 404 가 난다 — 「검색에는 뜨는데 열면 없다」 가 이 규칙을 한
+        곳에 둔 이유다.
+        """
+        from app.modules.accounts.models import User
+        from app.modules.materials.models import MaterialParameterSet
+        from app.shared import graph, relations
+
+        for slug, name in (("pset-a", "A 부서"), ("pset-b", "B 부서")):
+            client.post(
+                "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
+            )
+        made = _chain(client, db, admin_headers, owner_slug="pset-a")
+        db.add(
+            MaterialParameterSet(
+                material_id=uuid.UUID(made["material"]),
+                model="anand",
+                label="가려질 벌",
+                origin="catalog",
+                terms=[{"term": "A", "value": 1.0, "unit": "1", "text": None}],
+            )
+        )
+        db.commit()
+        client.patch(
+            "/api/workspaces/pset-a", json={"restricted": True}, headers=admin_headers
+        )
+
+        outsider = db.scalar(select(User).where(User.email == "ont-pset-outsider@example.com"))
+        if outsider is None:
+            _login_member_of(
+                client, admin_headers, slug="pset-b", email="ont-pset-outsider@example.com"
+            )
+            outsider = db.scalar(
+                select(User).where(User.email == "ont-pset-outsider@example.com")
+            )
+        assert outsider is not None
+
+        allowed = graph.visible_ids(db, outsider, relations.KINDS["parameter_set"])
+        assert allowed is not None, "가리는 규칙이 아예 없다"
+        assert db.scalars(allowed).all() == [], "남의 부서 벌이 보인다"

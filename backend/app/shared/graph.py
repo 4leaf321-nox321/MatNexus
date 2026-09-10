@@ -43,7 +43,7 @@ from sqlalchemy.orm import Session
 from app.database import Base
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
-from app.modules.materials.models import Sample, Specimen
+from app.modules.materials.models import MaterialParameterSet, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun
 from app.shared import permissions, relations
@@ -161,6 +161,12 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
         return select(ProcessingResult.id).where(ProcessingResult.test_run_id.in_(runs))
     if kind.slug == "property_card":
         return select(PropertyCard.id).where(PropertyCard.material_id.in_(materials))
+    if kind.slug == "parameter_set":
+        # **재료를 따라간다.** 안 붙이면 남의 부서 재료가 받아 온 벌이 검색에 뜨고,
+        # 열면 404 가 난다 — 이 함수가 있는 이유가 그 어긋남을 막는 것이다.
+        return select(MaterialParameterSet.id).where(
+            MaterialParameterSet.material_id.in_(materials)
+        )
     return None
 
 
@@ -230,7 +236,15 @@ def _hop(
     dst_column = table.c[source.dst_column]
     near, far = (src_column, dst_column) if forward else (dst_column, src_column)
     kind = relations.KINDS[relation.src if forward else relation.dst]
-    query = select(near, far).where(near.in_([_coerce(kind, one) for one in ids]))
+    # **같은 이음을 값 개수만큼 되풀이하지 않는다.** 연결 표가 값 표일 수 있다 —
+    # `catalog_values` 는 (재료, 출처) 한 쌍에 행이 수십 개다. 안 묶으면 이웃
+    # 목록이 같은 출처로 채워지고, 상한(`MAX_NODES`)에 값 몇 개로 닿는다
+    # (실측 2026-09-10: Ecoflex 이웃 47개가 실제로는 출처 8개였다).
+    query = (
+        select(near, far)
+        .where(near.in_([_coerce(kind, one) for one in ids]), far.is_not(None))
+        .distinct()
+    )
     return [(row[0], row[1]) for row in db.execute(query.limit(MAX_NODES * 4)).all()]
 
 

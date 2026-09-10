@@ -193,6 +193,26 @@ KINDS: dict[str, EntityKind] = {
             module="catalog",
             name_columns=("name",),
         ),
+        # **출처는 마디여야 한다.** 값마다 붙어 있는 글자로 두면 「이 논문에서 온
+        # 값이 어디어디 쓰였나」 를 물을 수가 없다 — 실제로 문헌 자료를 훑다가
+        # 그 물음이 막혔다(실측 2026-09-10). 값(42,209건)을 마디로 만들면 그래프가
+        # 값으로 뒤덮이므로, **값은 관계를 나르는 표로만** 쓰고 출처만 마디로 둔다.
+        EntityKind(
+            slug="source",
+            label="출처",
+            table="catalog_sources",
+            module="catalog",
+            name_columns=("title",),
+        ),
+        # 받아 온 파라미터 벌. **재료의 물성 탭에 서는 것**이라 사람이 실제로
+        # 묻는다 — 「이 재료의 Anand 벌은 어디서 왔나」.
+        EntityKind(
+            slug="parameter_set",
+            label="파라미터 벌",
+            table="material_parameter_sets",
+            module="materials",
+            name_columns=("label",),
+        ),
         EntityKind(
             slug="instrument",
             label="장비 정의",
@@ -342,6 +362,31 @@ RELATIONS: dict[str, RelationType] = {
             src="material",
             dst="catalog_material",
             source=via("catalog_links", "material_id", "catalog_material_id"),
+        ),
+        # ── 값이 어디서 왔나. **값 자체는 마디가 아니고 관계를 나른다.**
+        RelationType(
+            slug="cited_by",
+            label="이 문헌 재료의 값이 온 출처",
+            inverse_label="이 출처가 값을 준 문헌 재료",
+            src="catalog_material",
+            dst="source",
+            source=via("catalog_values", "material_id", "source_id"),
+        ),
+        RelationType(
+            slug="measured_in",
+            label="이 물성 값이 온 출처",
+            inverse_label="이 출처가 값을 준 물성",
+            src="property",
+            dst="source",
+            source=via("catalog_values", "property_key", "source_id"),
+        ),
+        RelationType(
+            slug="set_of",
+            label="이 벌을 가진 재료",
+            inverse_label="이 재료가 받아 온 파라미터 벌",
+            src="parameter_set",
+            dst="material",
+            source=fk("material_parameter_sets", "material_id"),
         ),
         RelationType(
             slug="section_of",
