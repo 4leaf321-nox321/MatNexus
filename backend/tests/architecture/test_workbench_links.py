@@ -44,8 +44,7 @@ def test_워크플로가_가리키는_화면이_있다() -> None:
     assert known, "라우터에서 경로를 하나도 못 찾았다 — 대조가 무의미하다"
     missing = sorted({one for one in targets() if one not in known})
     assert not missing, (
-        "워크벤치가 없는 화면으로 보냅니다 — 누르면 빈 화면입니다:\n  "
-        + "\n  ".join(missing)
+        "워크벤치가 없는 화면으로 보냅니다 — 누르면 빈 화면입니다:\n  " + "\n  ".join(missing)
     )
 
 
