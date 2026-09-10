@@ -2187,6 +2187,7 @@ async def adopt_parameter_set(
     property_key: str,
     model: str = "",
     set_id: str = "",
+    variant: str = "",
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """문헌의 파라미터 한 벌을 **사내 재료로 받아 온다.**
@@ -2204,6 +2205,14 @@ async def adopt_parameter_set(
     서버가 목록과 함께 거절한다. **임의로 고르지 마라**: 논문이 다르면 값이 다르고,
     어느 쪽이 맞는지는 쓰는 사람의 판단이다.
 
+    ## `variant` — 같은 벌 이름 아래 여러 벌
+
+    출처 하나가 **온도별·계열별·노화 시간별**로 여러 벌을 한 `set_id` 에 담는 일이
+    흔하다(실측 2026-09-10: NBR 씰 고무는 노화 8조건이 한 이름 아래 있었다). 그런
+    벌은 조건으로 갈라 내고 `variant` 로 구별한다 — `temperature_c=200` 처럼.
+    목록이 주는 값을 **그대로** 넘겨라. **어느 온도·어느 계열인지는 사용자에게
+    물어라** — 200℃ 상수로 상온 해석을 돌리면 그 결과는 조용히 틀린다.
+
     담긴 값은 그 재료의 물성 탭에 서고, 카드를 만들 때 인용할 수 있다.
     """
     sets = await _get(ctx, f"/catalog/materials/{catalog_material_id}/parameter-sets")
@@ -2216,6 +2225,7 @@ async def adopt_parameter_set(
         if one.get("property_key") == property_key
         and (not model or one.get("model") == model)
         and (not set_id or one.get("set_id") == set_id)
+        and (not variant or one.get("variant") == variant)
     ]
     if not candidates:
         return {
@@ -2231,6 +2241,7 @@ async def adopt_parameter_set(
                 {
                     "model": one.get("model"),
                     "set_id": one.get("set_id"),
+                    "variant": one.get("variant"),
                     "quality_tier": one.get("quality_tier"),
                     "source": one.get("source_detail"),
                     "terms": [term.get("term") for term in one.get("terms") or []],
@@ -2238,8 +2249,9 @@ async def adopt_parameter_set(
                 for one in candidates
             ],
             "note": (
-                "벌이 여럿입니다 — `model` 또는 `set_id` 로 하나를 고르세요. "
-                "논문이 다르면 값이 다릅니다. 어느 쪽인지 사용자에게 물어보세요."
+                "벌이 여럿입니다 — `model`·`set_id`·`variant` 로 하나를 고르세요. "
+                "논문이 다르면 값이 다르고, `variant` 가 다르면 **조건이 다릅니다**"
+                "(온도·계열·노화). 어느 쪽인지 사용자에게 물어보세요."
             ),
         }
 
@@ -2251,6 +2263,7 @@ async def adopt_parameter_set(
                 "label": chosen.get("label"),
                 "model": chosen.get("model"),
                 "set_id": chosen.get("set_id"),
+                "variant": chosen.get("variant"),
                 "quality_tier": chosen.get("quality_tier"),
                 "source": chosen.get("source_detail"),
                 "terms": chosen.get("terms"),
@@ -2270,6 +2283,7 @@ async def adopt_parameter_set(
             "catalog_material_id": catalog_material_id,
             "model": chosen.get("model") or "",
             "set_id": chosen.get("set_id") or "",
+            "variant": chosen.get("variant") or "",
         },
     )
 

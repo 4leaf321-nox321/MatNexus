@@ -348,4 +348,15 @@ class CatalogParameterSetOut(BaseModel):
     set_id: str
     quality_tier: int | None = None
     source_detail: str | None = None
+    variant: str = ""
+    """같은 `set_id` 안에서 이 벌을 형제와 가르는 조건. 안 갈렸으면 빈 값.
+
+    **채택할 때 이것으로 고른다** — 출처가 한 벌 이름 아래 온도별·계열별로 여러
+    벌을 담는 일이 흔해서, `set_id` 만으로는 못 집는다."""
+
+    distinguishing: dict[str, Any] = {}
+    duplicated: list[str] = []
+    """그래도 남은 겹친 항. **비어 있어야 정상이다** — 있으면 그 벌은 채택이
+    거절된다(어느 값이 쓰일지 알 수 없어서다)."""
+
     terms: list[CatalogParameterTermOut] = []

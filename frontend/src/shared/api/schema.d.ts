@@ -6934,6 +6934,18 @@ export interface components {
          *     **한 벌이 채택의 단위다** — `A` 만 떼어 가면 모델이 못 쓴다.
          */
         CatalogParameterSetOut: {
+            /**
+             * Distinguishing
+             * @default {}
+             */
+            distinguishing: {
+                [key: string]: unknown;
+            };
+            /**
+             * Duplicated
+             * @default []
+             */
+            duplicated: string[];
             /** Label */
             label: string;
             /** Model */
@@ -6951,6 +6963,11 @@ export interface components {
              * @default []
              */
             terms: components["schemas"]["CatalogParameterTermOut"][];
+            /**
+             * Variant
+             * @default
+             */
+            variant: string;
         };
         /** CatalogParameterTermOut */
         CatalogParameterTermOut: {
@@ -10615,6 +10632,12 @@ export interface components {
              * @default
              */
             set_id: string;
+            /**
+             * Variant
+             * @description 같은 `set_id` 안에서 조건으로 갈린 벌을 고른다 (`temperature_c=200` 처럼 — 목록이 주는 값을 그대로 넘긴다)
+             * @default
+             */
+            variant: string;
         };
         /**
          * ParameterSetOut

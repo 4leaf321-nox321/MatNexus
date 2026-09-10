@@ -69,12 +69,22 @@ export function ParameterSetsSection({ materialId }: { materialId: string }) {
 
       <div className="space-y-3">
         {sets.map((set) => (
-          <div key={`${set.property_key}:${set.model}:${set.set_id}`} className="rounded-md border p-3">
+          <div
+            // **`variant` 가 열쇠의 일부다.** 갈린 벌은 model·set_id 가 같아서
+            // 그것만으로는 열쇠가 겹친다 — 겹치면 React 가 줄을 잘못 잇는다.
+            key={`${set.property_key}:${set.model}:${set.set_id}:${set.variant}`}
+            className="rounded-md border p-3"
+          >
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{set.label}</span>
               <Badge variant="secondary">{set.model || '모델 미상'}</Badge>
               {set.set_id && (
                 <span className="text-muted-foreground font-mono text-xs">{set.set_id}</span>
+              )}
+              {set.variant && (
+                // **무엇으로 갈린 벌인지 보인다.** 안 보이면 같은 이름의 벌이
+                // 여럿 늘어선 것으로만 읽히고, 어느 것을 담을지 고를 수 없다.
+                <Badge>{set.variant}</Badge>
               )}
               {set.quality_tier !== null && set.quality_tier !== undefined && (
                 <Badge variant="outline">tier{set.quality_tier}</Badge>
@@ -83,6 +93,12 @@ export function ParameterSetsSection({ materialId }: { materialId: string }) {
                 size="sm"
                 variant="outline"
                 className="ml-auto"
+                disabled={(set.duplicated ?? []).length > 0}
+                title={
+                  (set.duplicated ?? []).length > 0
+                    ? '같은 항이 여러 번 들어 있어 담을 수 없습니다.'
+                    : undefined
+                }
                 onClick={() => setAdopting(set)}
               >
                 <PackagePlus className="size-4" />
@@ -92,13 +108,21 @@ export function ParameterSetsSection({ materialId }: { materialId: string }) {
 
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
               {(set.terms ?? []).map((term) => (
-                <span key={term.term} className="tabular-nums">
+                <span key={`${term.term}:${term.value ?? term.text}`} className="tabular-nums">
                   <span className="font-medium">{term.term}</span>
                   <span className="text-muted-foreground"> = {shown(term)}</span>
                 </span>
               ))}
             </div>
 
+            {(set.duplicated ?? []).length > 0 && (
+              // **왜 못 담는지 적는다.** 버튼만 꺼 두면 고장으로 읽힌다.
+              <p className="mt-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs">
+                같은 항이 여러 번 들어 있습니다({(set.duplicated ?? []).join(', ')}). 출처가 한 벌
+                이름 아래 여러 벌을 담았는데 그것을 가를 조건이 자료에 없습니다 —{' '}
+                <b>그대로 담으면 어느 값이 쓰일지 알 수 없습니다.</b>
+              </p>
+            )}
             {set.source_detail && (
               <p className="text-muted-foreground mt-2 text-xs">{set.source_detail}</p>
             )}
@@ -169,6 +193,8 @@ function AdoptParameterSetDialog({
         catalog_material_id: catalogMaterialId,
         model: set.model,
         set_id: set.set_id,
+        // **갈린 벌은 이것으로 집는다.** 안 보내면 서버가 「벌이 여럿」 이라 거절한다.
+        variant: set.variant,
       })
       setDone(target.record_name)
     } catch (caught) {

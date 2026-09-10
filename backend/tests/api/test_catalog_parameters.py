@@ -201,3 +201,128 @@ class TestSearchGuard:
         )
         assert answer.status_code == 200, answer.text
         assert answer.json()["hits"][0]["value"] == pytest.approx(200.0)
+
+
+SPLIT_KEY = "mechanical.test_mooney"
+
+
+@pytest.fixture
+def aged(db: Session) -> Iterator[CatalogMaterial]:
+    """**한 벌 이름 아래 여러 벌.** 노화 3조건에 항 2개씩 6값이 한 `set_id` 에.
+
+    실측(2026-09-10)에서 나온 모양 그대로다 — NBR 씰 고무가 노화 8조건을 한
+    이름에 담고 있었다.
+    """
+    parameters.forget()
+    db.add(
+        CatalogDefinition(
+            mt_id=992001,
+            key=SPLIT_KEY,
+            name="시험용 초탄성 계수",
+            domain="mechanical",
+            si_unit="Pa",
+            value_type="number",
+        )
+    )
+    item = CatalogMaterial(mt_id=992002, name="시험용 노화고무", category="rubber")
+    db.add(item)
+    db.flush()
+    at = 0
+    for hours in (0.0, 10.0, 100.0):
+        for term, value in (("C10", 1e5), ("C01", 2e5)):
+            db.add(
+                CatalogValue(
+                    mt_id=992100 + at,
+                    material_id=item.id,
+                    property_key=SPLIT_KEY,
+                    value_num=value + hours,
+                    unit="Pa",
+                    quality_tier=2,
+                    conditions={
+                        "term": term,
+                        "model": "mooney_rivlin_2",
+                        "set_id": "one_paper",
+                        "aging_hours": hours,
+                    },
+                )
+            )
+            at += 1
+    db.commit()
+    parameters.forget()
+    yield item
+    parameters.forget()
+
+
+class Test한_이름_아래_여러_벌:
+    """**안 가르면 같은 항이 여러 번 든 벌이 나간다.**
+
+    그것을 그대로 받아 가면 `C10` 이 3개인 Mooney-Rivlin 이 재료에 담기고,
+    카드는 그중 어느 것을 쓸지 모른다.
+    """
+
+    def test_조건으로_갈라_낸다(self, db: Session, aged: CatalogMaterial) -> None:
+        found = parameters.sets(db, key=SPLIT_KEY, material_id=aged.id)
+        assert len(found) == 3, [one.variant for one in found]
+        assert {one.variant for one in found} == {
+            "aging_hours=0.0",
+            "aging_hours=10.0",
+            "aging_hours=100.0",
+        }
+        for one in found:
+            assert len(one.terms) == 2
+            assert not one.duplicated
+
+    def test_화면에도_갈림이_간다(
+        self, client: TestClient, admin_headers: dict[str, str], aged: CatalogMaterial
+    ) -> None:
+        got = client.get(
+            f"/api/catalog/materials/{aged.id}/parameter-sets", headers=admin_headers
+        )
+        assert got.status_code == 200, got.text
+        rows = [one for one in got.json() if one["property_key"] == SPLIT_KEY]
+        assert len(rows) == 3
+        assert all(one["variant"] for one in rows), rows
+        assert all(one["duplicated"] == [] for one in rows)
+
+    def test_채택은_갈린_벌_하나를_집는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        aged: CatalogMaterial,
+    ) -> None:
+        """`set_id` 만으로는 못 집는다 — 셋 다 같은 이름이다."""
+        made = client.post(
+            "/api/materials",
+            json={"family": "Metal", "category": "Steel", "grade": "PSPLIT"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        material_id = made.json()["id"]
+
+        vague = client.post(
+            f"/api/materials/{material_id}/parameter-sets",
+            json={
+                "property_key": SPLIT_KEY,
+                "catalog_material_id": str(aged.id),
+                "set_id": "one_paper",
+            },
+            headers=admin_headers,
+        )
+        assert vague.status_code == 422, vague.text
+        assert "variant" in vague.json()["error"]["message"]
+
+        picked = client.post(
+            f"/api/materials/{material_id}/parameter-sets",
+            json={
+                "property_key": SPLIT_KEY,
+                "catalog_material_id": str(aged.id),
+                "set_id": "one_paper",
+                "variant": "aging_hours=10.0",
+            },
+            headers=admin_headers,
+        )
+        assert picked.status_code == 201, picked.text
+        # **그 조건의 값이 담겼다.** 다른 벌 값이 섞이면 여기서 걸린다.
+        values = {row["term"]: row["value"] for row in picked.json()["terms"]}
+        assert values == {"C10": 1e5 + 10.0, "C01": 2e5 + 10.0}

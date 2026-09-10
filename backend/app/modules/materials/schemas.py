@@ -829,4 +829,11 @@ class ParameterSetAdoptIn(BaseModel):
     catalog_material_id: uuid.UUID = Field(description="어느 문헌 재료의 벌인가")
     model: str = Field(default="", description="비우면 그 벌의 모델을 그대로 쓴다")
     set_id: str = Field(default="", description="같은 재료에 벌이 여럿이면 고른다")
+    variant: str = Field(
+        default="",
+        description=(
+            "같은 `set_id` 안에서 조건으로 갈린 벌을 고른다"
+            " (`temperature_c=200` 처럼 — 목록이 주는 값을 그대로 넘긴다)"
+        ),
+    )
     notes: str | None = None

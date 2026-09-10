@@ -3025,6 +3025,20 @@
       "CatalogParameterSetOut": {
         "description": "문헌 재료가 가진 모델 파라미터 한 벌(ADR 0029).\n\n**한 벌이 채택의 단위다** — `A` 만 떼어 가면 모델이 못 쓴다.",
         "properties": {
+          "distinguishing": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Distinguishing",
+            "type": "object"
+          },
+          "duplicated": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Duplicated",
+            "type": "array"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -3070,6 +3084,11 @@
             },
             "title": "Terms",
             "type": "array"
+          },
+          "variant": {
+            "default": "",
+            "title": "Variant",
+            "type": "string"
           }
         },
         "required": [
@@ -13017,6 +13036,12 @@
             "default": "",
             "description": "같은 재료에 벌이 여럿이면 고른다",
             "title": "Set Id",
+            "type": "string"
+          },
+          "variant": {
+            "default": "",
+            "description": "같은 `set_id` 안에서 조건으로 갈린 벌을 고른다 (`temperature_c=200` 처럼 — 목록이 주는 값을 그대로 넘긴다)",
+            "title": "Variant",
             "type": "string"
           }
         },

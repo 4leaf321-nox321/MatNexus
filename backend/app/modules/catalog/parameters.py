@@ -27,7 +27,9 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -44,6 +46,18 @@ UNIT_OF_TERM = "unit_of_term"
 
 #: 파라미터형으로 볼 최소 변수 수. 하나뿐이면 그냥 그 물성이다.
 MIN_TERMS = 2
+
+#: 벌을 가르는 축을 찾을 때 **거들떠보지 않는 조건 칸.**
+#:
+#: 벌의 이름표(`term`·`model`·`set_id`·`unit_of_term`)와, 이관하며 붙인 기록
+#: (`*_before_correction`·`correction_*`·`verdict_*`)이다. 뒤엣것을 축으로 쓰면
+#: 「고친 이력이 다르다」 는 이유로 벌이 갈린다 — 물성과 아무 상관이 없다.
+_NOT_AN_AXIS = frozenset({TERM, MODEL, SET_ID, UNIT_OF_TERM})
+
+#: 한 벌을 가르는 데 쓸 축을 몇 개까지 겹쳐 볼까. 둘이면 「온도와 계열」 까지
+#: 짚는다. 셋부터는 조합이 빠르게 늘고, 그쯤 되면 자료 쪽을 고치는 게 맞다.
+MAX_AXES = 2
+
 
 _cache: dict[str, list[str]] | None = None
 
@@ -69,6 +83,31 @@ class ParameterSet:
     terms: list[dict[str, Any]] = field(default_factory=list)
     source: str | None = None
     quality_tier: int | None = None
+    distinguishing: dict[str, Any] = field(default_factory=dict)
+    """이 벌을 **형제 벌과 가르는 조건.** 안 갈렸으면 비어 있다.
+
+    출처 하나가 한 `set_id` 아래 여러 벌을 담는 일이 흔하다 — 온도를 바꿔 가며
+    잰 것, 인장(E)과 전단(G) 계열, 노화 시간별. 그것을 안 가르면 **한 벌 안에
+    같은 항이 여러 번** 들어간다(실측 2026-09-10: 재료 25종·벌 61개·값 435건.
+    NBR 씰 고무는 노화 8조건이 한 벌로 뭉쳐 `C01` 이 8번이었다).
+    """
+
+    duplicated: list[str] = field(default_factory=list)
+    """그래도 남은 겹친 항 이름. **비어 있어야 정상이다.**
+
+    가를 축을 못 찾았다는 뜻이라, 이 벌은 그대로 받아 가면 안 된다 — 화면과
+    도구가 그 사실을 말해야 한다.
+    """
+
+    @property
+    def variant(self) -> str:
+        """형제 벌과 가르는 이름표. `온도=200 · 계열=shear` 처럼.
+
+        **채택할 때 이것으로 고른다.** `set_id` 만으로는 갈린 벌을 못 집는다.
+        """
+        return " · ".join(
+            f"{key}={value}" for key, value in sorted(self.distinguishing.items())
+        )
 
 
 def _load(db: Session) -> dict[str, list[str]]:
@@ -164,6 +203,104 @@ def unit_of(db: Session, key: str, term: str | None) -> str:
     return (definition.si_unit or "") if definition else ""
 
 
+def _mark(conditions: dict[str, Any], axes: tuple[str, ...]) -> str:
+    """이 값이 어느 벌에 속하는지 나타내는 표.
+
+    **「없음」 을 값으로 적지 않는다.** 어떤 표를 쓰든 진짜 값과 겹칠 수 있어서,
+    있고 없음을 값과 **따로** 싣는다 — `mode` 가 어떤 벌에만 붙어 있으면 그
+    있고 없음이 곧 두 벌을 가르는 축이다(실측 2026-09-10: Ogden 벌 넷).
+    """
+    return json.dumps(
+        [[axis in conditions, conditions.get(axis)] for axis in axes],
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _axis_candidates(rows: list[dict[str, Any]]) -> list[str]:
+    """벌을 가를 후보 축. **값이 갈리는 조건 칸만** 남긴다.
+
+    이관 기록(`*_before_correction`·`correction_*`·`verdict_*`)은 뺀다 — 그것으로
+    가르면 「고친 이력이 다르다」 는 이유로 벌이 쪼개진다.
+    """
+    names: set[str] = set()
+    for row in rows:
+        for key in row.get("conditions") or {}:
+            if key in _NOT_AN_AXIS or key == "corrected_by":
+                continue
+            if key.endswith("_before_correction") or key.startswith(
+                ("correction_", "verdict_")
+            ):
+                continue
+            names.add(key)
+
+    # **없는 것도 값이다.** 어떤 벌에만 `mode` 가 붙어 있으면 그 있고 없음이
+    # 곳 두 벌을 가르는 축이다 — 있는 행끼리만 보면 값이 한 가지라 축이 아닌 줄
+    # 안다(실측 2026-09-10: Ogden 벌 넯이 그래서 안 갈렸다).
+    found: list[str] = []
+    for key in sorted(names):
+        marks = {_mark(row.get("conditions") or {}, (key,)) for row in rows}
+        if len(marks) > 1:
+            found.append(key)
+    return found
+
+
+def _grouped_by(
+    rows: list[dict[str, Any]], axes: tuple[str, ...]
+) -> dict[str, list[dict[str, Any]]]:
+    made: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        conditions = row.get("conditions") or {}
+        made.setdefault(_mark(conditions, axes), []).append(row)
+    return made
+
+
+def _split_axes(rows: list[dict[str, Any]]) -> tuple[str, ...]:
+    """이 무리를 가를 **가장 성긴 축**을 고른다. 못 고르면 빈 것.
+
+    ## 왜 「가장 성긴」 인가
+
+    항마다 달라지는 칸(`term_index`·`relaxation_time_s`)으로 가르면 **항 하나에
+    벌 하나**가 되어 버린다 — 갈린 것이 아니라 흩어진 것이다. 실제로 가르는 축은
+    항을 한 벌씩 통째로 되풀이시키는 것이므로, 조건이 만족되는 것 중 **묶음이
+    가장 적은** 축이 답이다.
+
+    같은 묶음 수면 **네모반듯한 쪽**(묶음마다 값 수가 같은 것)을 고른다. 온도
+    7가지에 항 4개면 7개씩 4줄로 반듯한데, 우연히 같은 수로 갈리는 다른 칸은 대개
+    들쭉날쭉하다.
+    """
+    counted = Counter(str(row.get("term")) for row in rows)
+    if not counted or max(counted.values()) <= 1:
+        return ()
+
+    candidates = _axis_candidates(rows)
+    tries: list[tuple[str, ...]] = [(one,) for one in candidates]
+    if len(candidates) <= 8:
+        tries += [
+            (first, second)
+            for index, first in enumerate(candidates)
+            for second in candidates[index + 1 :]
+        ]
+
+    best: tuple[tuple[int, int, tuple[str, ...]], tuple[str, ...]] | None = None
+    for axes in tries:
+        if len(axes) > MAX_AXES:
+            continue
+        groups = _grouped_by(rows, axes)
+        if len(groups) < 2:
+            continue
+        if any(
+            max(Counter(str(row.get("term")) for row in group).values()) > 1
+            for group in groups.values()
+        ):
+            continue  # 갈라도 여전히 같은 항이 겹친다
+        sizes = {len(group) for group in groups.values()}
+        score = (0 if len(sizes) == 1 else 1, len(groups), axes)
+        if best is None or score < best[0]:
+            best = (score, axes)
+    return best[1] if best else ()
+
+
 def sets(
     db: Session,
     *,
@@ -191,39 +328,63 @@ def sets(
 
     made: list[ParameterSet] = []
     for owner, model, set_id in db.execute(query).all():
-        rows = db.execute(
-            text(f"""
-            SELECT v.conditions->>'{TERM}', v.value_num, v.value_text,
-                   coalesce(v.conditions->>'{UNIT_OF_TERM}', ''), v.quality_tier,
-                   left(coalesce(v.source_detail, ''), 160), m.name
+        found = (
+            db.execute(
+                text(f"""
+            SELECT v.conditions->>'{TERM}' AS term, v.value_num, v.value_text,
+                   coalesce(v.conditions->>'{UNIT_OF_TERM}', '') AS unit, v.quality_tier,
+                   left(coalesce(v.source_detail, ''), 160) AS source, m.name AS material,
+                   v.conditions
             FROM catalog_values v JOIN catalog_materials m ON m.id = v.material_id
             WHERE v.property_key = :key AND v.material_id = :owner
               AND coalesce(v.conditions->>'{MODEL}', '') = :model
               AND coalesce(v.conditions->>'{SET_ID}', '') = :set_id
+              -- **항 이름이 있는 값만 벌에 넣는다.** 없으면 벌의 구성원이 아니다 —
+              -- 모델·set_id 가 둘 다 빈 값끼리 묶이면서 이름 없는 값이 남의 벌에
+              -- 딸려 들어왔다(실측 2026-09-10).
+              AND v.conditions ? '{TERM}'
             ORDER BY 1
             """),
-            {"key": key, "owner": owner, "model": model, "set_id": set_id},
-        ).all()
-        if not rows:
-            continue
-        made.append(
-            ParameterSet(
-                key=key,
-                model=model,
-                set_id=set_id,
-                material_id=owner,
-                material_name=rows[0][6] or "",
-                quality_tier=rows[0][4],
-                source=rows[0][5] or None,
-                terms=[
-                    {
-                        "term": row[0],
-                        "value": row[1],
-                        "text": row[2],
-                        "unit": row[3],
-                    }
-                    for row in rows
-                ],
+                {"key": key, "owner": owner, "model": model, "set_id": set_id},
             )
+            .mappings()
+            .all()
         )
+        if not found:
+            continue
+
+        # **한 `set_id` 아래 여러 벌이 들어 있을 수 있다.** 갈라 줄 축이 조건에
+        # 있으면 갈라서 낸다 — 안 가르면 같은 항이 여러 번 든 벌이 나가고, 그것을
+        # 그대로 받아 가면 `C01` 이 8개인 Mooney-Rivlin 이 재료에 담긴다.
+        rows = [dict(one) for one in found]
+        axes = _split_axes(rows)
+        groups = _grouped_by(rows, axes) if axes else {"": rows}
+        for part in groups.values():
+            counted = Counter(str(one["term"]) for one in part)
+            made.append(
+                ParameterSet(
+                    key=key,
+                    model=model,
+                    set_id=set_id,
+                    material_id=owner,
+                    material_name=part[0]["material"] or "",
+                    quality_tier=part[0]["quality_tier"],
+                    source=part[0]["source"] or None,
+                    distinguishing={
+                        axis: (part[0].get("conditions") or {}).get(axis) for axis in axes
+                    },
+                    # 갈랐는데도 남았으면 **그 사실을 들고 다닌다.** 조용히 두면
+                    # 받는 쪽은 항이 왜 여러 번인지 모른 채 채택한다.
+                    duplicated=sorted(name for name, times in counted.items() if times > 1),
+                    terms=[
+                        {
+                            "term": one["term"],
+                            "value": one["value_num"],
+                            "text": one["value_text"],
+                            "unit": one["unit"],
+                        }
+                        for one in part
+                    ],
+                )
+            )
     return made

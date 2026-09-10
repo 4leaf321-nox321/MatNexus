@@ -2454,6 +2454,10 @@ def adopt_parameter_set(
         found = [one for one in found if one.model == payload.model]
     if payload.set_id:
         found = [one for one in found if one.set_id == payload.set_id]
+    # **`set_id` 하나로는 못 집는다.** 출처가 한 `set_id` 아래 온도별·계열별로
+    # 여러 벌을 담는 일이 흔해서, 그런 벌은 조건으로 갈라 낸다(`variant`).
+    if payload.variant:
+        found = [one for one in found if one.variant == payload.variant]
     if not found:
         raise NotFound(
             "MNX-MATERIALS-0030",
@@ -2462,12 +2466,26 @@ def adopt_parameter_set(
     if len(found) > 1:
         raise AppError(
             "MNX-MATERIALS-0031",
-            "벌이 여럿입니다 — `model` 또는 `set_id` 로 하나를 골라 주세요: "
-            + " · ".join(f"{one.model}/{one.set_id or '(이름없음)'}" for one in found[:8]),
+            "벌이 여럿입니다 — `model`·`set_id`·`variant` 로 하나를 골라 주세요: "
+            + " · ".join(
+                f"{one.model}/{one.set_id or '(이름없음)'}"
+                + (f"[{one.variant}]" if one.variant else "")
+                for one in found[:8]
+            ),
             status=422,
         )
 
     chosen = found[0]
+    if chosen.duplicated:
+        # **같은 항이 여러 번 든 벌은 담지 않는다.** 담으면 `C01` 이 8개인
+        # Mooney-Rivlin 이 재료에 들어가고, 카드는 그중 어느 것을 쓸지 모른다.
+        raise AppError(
+            "MNX-MATERIALS-0032",
+            f"이 벌에는 같은 항이 여러 번 들어 있습니다({', '.join(chosen.duplicated[:5])}). "
+            "출처가 한 벌 이름 아래 여러 벌을 담았는데 그것을 가를 조건이 자료에 "
+            "없습니다 — 그대로 담으면 어느 값이 쓰일지 알 수 없습니다.",
+            status=422,
+        )
     definition = db.scalar(
         select(CatalogDefinition).where(CatalogDefinition.key == payload.property_key)
     )

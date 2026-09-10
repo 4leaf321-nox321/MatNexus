@@ -1160,6 +1160,9 @@ def catalog_parameter_sets(
                     set_id=one.set_id,
                     quality_tier=one.quality_tier,
                     source_detail=one.source,
+                    variant=one.variant,
+                    distinguishing=one.distinguishing,
+                    duplicated=one.duplicated,
                     terms=[CatalogParameterTermOut(**term) for term in one.terms],
                 )
             )
