@@ -25,9 +25,9 @@
  * 사람은 재료가 없는 줄 안다.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { CatalogHits } from '@/modules/catalog/CatalogHits'
 import { materialsApi } from '@/modules/materials/api'
@@ -44,8 +44,14 @@ import { RecordName } from '@/shared/components/RecordName'
 /** 한 번에 받아 오는 수. 옆 목록이라 스크롤로 훑는 것이 전부다. */
 const LIMIT = 50
 
+//: 화살표로 옮긴 뒤 그 재료를 열기까지 기다리는 시간. **누르고 있는 동안은 안
+//: 간다** — 지나가는 재료마다 상세·시료·요약을 부르면 요청이 백 단위가 된다.
+//: 한 번 눌렀을 때 느껴지지 않을 만큼 짧아야 해서 150ms 로 뒀다.
+const FOLLOW_DELAY_MS = 150
+
 export function MaterialListPanel({ currentId }: { currentId: string | undefined }) {
   const { search } = useLocation()
+  const navigate = useNavigate()
   const panel = useLeftPanel()
   const [query, setQuery] = useState('')
   const [family, setFamily] = useState('')
@@ -85,10 +91,37 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
   const known = classes.data ?? []
   // **지금 보고 있는 재료가 Tab 이 닿는 자리다.** 첫 줄로 두면 50번째 재료를
   // 보는 중에도 처음부터 내려와야 한다.
-  const focus = useRowFocus(
-    rows.map((one) => one.id),
-    currentId
-  )
+  //
+  // **여기서는 옮기는 것이 곧 고르는 것이다.** 고른 결과가 오른쪽에 그대로
+  // 보이는 화면이라, 엔터를 한 번 더 누르게 하면 그 한 번이 늘 군더더기다
+  // (2026-09-11 지적). 전체 목록의 표에는 이것을 안 붙였다 — 거기서는 줄이
+  // 다른 화면으로 가는 링크라 화살표 한 번에 목록을 떠나 버린다.
+  const focus = useRowFocus(rows.map((one) => one.id), {
+    preferred: currentId,
+    onMove: (id) => follow(id),
+  })
+
+  /**
+   * 옮겨 간 재료를 연다. **조금 기다렸다 간다.**
+   *
+   * 화살표를 누르고 있으면 줄마다 상세를 읽게 되는데, 지나가는 재료의 시료·
+   * 요약·카드까지 줄줄이 부른다 — 50줄을 내려가면 요청이 백 단위가 된다.
+   * 사람이 멈춘 뒤에 한 번만 간다.
+   *
+   * **히스토리를 안 쌓는다**(`replace`). 화살표로 스무 번 내려간 뒤 뒤로
+   * 가기를 누르면 스무 번을 되짚어야 하는데, 그건 사람이 뜻한 것이 아니다 —
+   * 눌러서 들어간 것만 한 걸음으로 남는다.
+   */
+  const pending = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (pending.current !== null) window.clearTimeout(pending.current)
+  }, [])
+  function follow(id: string): void {
+    if (pending.current !== null) window.clearTimeout(pending.current)
+    pending.current = window.setTimeout(() => {
+      navigate({ pathname: `/materials/${id}`, search }, { replace: true })
+    }, FOLLOW_DELAY_MS)
+  }
 
   return (
     <LeftPanel

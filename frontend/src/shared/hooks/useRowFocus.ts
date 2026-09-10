@@ -65,13 +65,13 @@ export interface RowFocus {
 export const ROW_FOCUS_STYLE =
   'focus-visible:ring-primary/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none'
 
-function move(from: HTMLElement, to: 'next' | 'prev' | 'first' | 'last'): void {
+function move(from: HTMLElement, to: 'next' | 'prev' | 'first' | 'last'): string | null {
   const row = from.closest<HTMLElement>('[data-row]')
   const body = row?.parentElement
-  if (!row || !body) return
+  if (!row || !body) return null
   const rows = Array.from(body.querySelectorAll<HTMLElement>(':scope > [data-row]'))
   const here = rows.indexOf(row)
-  if (here < 0) return
+  if (here < 0) return null
   const target =
     to === 'next'
       ? rows[here + 1]
@@ -80,20 +80,39 @@ function move(from: HTMLElement, to: 'next' | 'prev' | 'first' | 'last'): void {
         : to === 'first'
           ? rows[0]
           : rows[rows.length - 1]
-  if (!target) return
+  if (!target) return null
   // **브라우저에 스크롤을 맡기지 않는다.** 맡기면 줄을 화면 가운데로 끌어와
   // 한 줄 내려갈 때마다 화면이 출렁인다.
   target.focus({ preventScroll: true })
   target.scrollIntoView({ block: 'nearest' })
+  return target.dataset.row ?? null
+}
+
+export interface RowFocusOptions {
+  /**
+   * 아직 아무 줄도 안 짚었을 때 **Tab 이 닿을 줄.** 「지금 보고 있는 것」 이
+   * 있는 목록(재료 상세의 왼쪽 목록)에서 그 줄을 준다 — 안 주면 Tab 이 늘 첫
+   * 줄로 가고, 50번째 재료를 보는 중에도 처음부터 내려와야 한다.
+   */
+  preferred?: string | null
+  /**
+   * 화살표로 **옮겨 간 줄**. 주면 옮기는 것이 곧 고르는 것이 된다.
+   *
+   * **아무 목록에나 주면 안 된다.** 줄을 고르는 일이 그 화면 안에서 끝나는
+   * 목록에만 준다(재료 상세의 왼쪽 목록처럼) — 줄이 다른 화면으로 가는 링크인
+   * 목록에서는 화살표 한 번에 목록을 떠나 버린다.
+   *
+   * 마우스로 누른 것과 Tab 으로 들어온 것에는 안 부른다. 그 둘은 사람이 이미
+   * 「거기로 간다」 를 뜻했거나(클릭), 아직 아무것도 안 고른 것이다(Tab).
+   */
+  onMove?: (id: string) => void
 }
 
 /**
  * @param ids 지금 보이는 줄. 거르기·정렬로 바뀌면 그대로 따라간다.
- * @param preferred 아직 아무 줄도 안 짚었을 때 **Tab 이 닿을 줄.** 「지금 보고
- *   있는 것」 이 있는 목록(재료 상세의 왼쪽 목록)에서 그 줄을 준다 — 안 주면
- *   Tab 이 늘 첫 줄로 가고, 50번째 재료를 보는 중에도 처음부터 내려와야 한다.
  */
-export function useRowFocus(ids: string[], preferred?: string | null): RowFocus {
+export function useRowFocus(ids: string[], options: RowFocusOptions = {}): RowFocus {
+  const { preferred, onMove } = options
   const [at, setAt] = useState<string | null>(null)
   // 고른 줄이 거르기로 사라졌으면 짚어 준 줄, 그것도 없으면 첫 줄이 Tab 순서를
   // 든다 — 아무 줄도 `0` 이 아니면 **표를 Tab 으로 아예 못 들어간다.**
@@ -129,7 +148,8 @@ export function useRowFocus(ids: string[], preferred?: string | null): RowFocus 
                   : null
         if (how) {
           event.preventDefault()
-          move(event.currentTarget, how)
+          const moved = move(event.currentTarget, how)
+          if (moved && onMove) onMove(moved)
           return
         }
         // 줄 자체에 포커스가 있을 때만 연다. 안쪽 단추 위에서 누른 Enter 는
@@ -143,7 +163,7 @@ export function useRowFocus(ids: string[], preferred?: string | null): RowFocus 
         }
       },
     }),
-    [here]
+    [here, onMove]
   )
 
   return { rowProps, at: here }

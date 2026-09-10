@@ -17,12 +17,14 @@ function Table({
   ids,
   onOpen,
   preferred,
+  onMove,
 }: {
   ids: string[]
   onOpen?: (id: string) => void
   preferred?: string
+  onMove?: (id: string) => void
 }) {
-  const focus = useRowFocus(ids, preferred)
+  const focus = useRowFocus(ids, { preferred, onMove })
   return (
     <table>
       <tbody>
@@ -129,6 +131,42 @@ describe('useRowFocus', () => {
     render(<Table ids={['a', 'b']} onOpen={() => {}} />)
     await user.click(screen.getByRole('link', { name: 'b' }))
     expect(rowOf('b')).not.toHaveFocus()
+  })
+
+  it('옮기면 곧 고른 것이 된다', async () => {
+    // 「이동 후 엔터를 눌러야 선택된다」 — 목록 안에서 고르는 일이 끝나는
+    // 화면(재료 상세의 왼쪽 목록)에서는 옮기는 것이 곧 고르는 것이다
+    // (2026-09-11 지적).
+    const user = userEvent.setup()
+    const onMove = vi.fn()
+    render(<Table ids={['a', 'b', 'c']} onMove={onMove} />)
+    rowOf('a').focus()
+
+    await user.keyboard('{ArrowDown}')
+    expect(onMove).toHaveBeenCalledWith('b')
+    await user.keyboard('{End}')
+    expect(onMove).toHaveBeenLastCalledWith('c')
+  })
+
+  it('마우스로 누른 것과 Tab 으로 들어온 것에는 안 부른다', async () => {
+    // 클릭은 사람이 이미 「거기로 간다」 를 뜻한 것이고(링크가 제 일을 한다),
+    // Tab 은 아직 아무것도 안 고른 것이다.
+    const user = userEvent.setup()
+    const onMove = vi.fn()
+    render(<Table ids={['a', 'b']} onMove={onMove} />)
+    await user.click(rowOf('b'))
+    await user.tab()
+    expect(onMove).not.toHaveBeenCalled()
+  })
+
+  it('끝에서 더 눌러도 다시 고르지 않는다', async () => {
+    // 못 옮겼으면 안 부른다 — 같은 줄을 거듭 고르면 그때마다 다시 읽는다.
+    const user = userEvent.setup()
+    const onMove = vi.fn()
+    render(<Table ids={['a', 'b']} onMove={onMove} />)
+    rowOf('b').focus()
+    await user.keyboard('{ArrowDown}')
+    expect(onMove).not.toHaveBeenCalled()
   })
 
   it('Enter 가 그 줄의 링크를 연다', async () => {

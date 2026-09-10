@@ -15,7 +15,7 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { MaterialListPanel } from '@/modules/materials/MaterialListPanel'
@@ -36,12 +36,19 @@ function material(id: string, name: string, alias: string | null = null) {
   return { id, record_name: name, alias }
 }
 
+/** 지금 주소를 시험이 읽을 수 있게. 화살표가 어디로 데려갔는지가 그 값이다. */
+function Here() {
+  const { pathname } = useLocation()
+  return <span data-testid="here">{pathname}</span>
+}
+
 function panel(currentId?: string, at = '/materials/m1') {
   return render(
     <MemoryRouter initialEntries={[at]}>
       <LeftPanelProvider>
         {/* 껍데기가 자리를 먼저 그려야 포털이 찾는다. */}
         <LeftPanelHost />
+        <Here />
         <MaterialListPanel currentId={currentId} />
       </LeftPanelProvider>
     </MemoryRouter>
@@ -90,6 +97,21 @@ describe('재료 목록 옆패널', () => {
     first.focus()
     await user.keyboard('{ArrowDown}')
     expect(screen.getByRole('link', { name: /DP780/ })).toHaveFocus()
+  })
+
+  it('옮기면 그 재료가 열린다', async () => {
+    // **엔터를 한 번 더 누르게 하지 않는다.** 고른 결과가 오른쪽에 그대로
+    // 보이는 화면이라 그 한 번은 늘 군더더기다(2026-09-11 지적).
+    const user = userEvent.setup()
+    panel('m1')
+    const first = await screen.findByRole('link', { name: /DP600/ })
+    first.focus()
+    await user.keyboard('{ArrowDown}')
+
+    // **누른 즉시 가지는 않는다.** 누르고 있는 동안 지나가는 재료마다 상세를
+    // 부르면 요청이 백 단위가 된다 — 멈춘 뒤에 한 번만 간다.
+    expect(screen.getByTestId('here')).toHaveTextContent('/materials/m1')
+    await waitFor(() => expect(screen.getByTestId('here')).toHaveTextContent('/materials/m2'))
   })
 
   it('누르면 그 재료로 간다', async () => {
