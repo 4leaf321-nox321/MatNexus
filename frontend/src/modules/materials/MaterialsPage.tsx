@@ -12,6 +12,7 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  Download,
   Globe2,
   Plus,
   Search,
@@ -36,6 +37,7 @@ import {
   FILTER_HEAD,
   FILTER_ROW,
 } from '@/shared/components/ColumnFilter'
+import { downloadFile } from '@/shared/api/client'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Stamp } from '@/shared/components/Stamp'
 import { Badge } from '@/shared/components/ui/badge'
@@ -79,6 +81,7 @@ export default function MaterialsPage() {
   // **소속은 부서다.** 「전역인가 아닌가」 만 갈랐더니 부서가 여럿인 곳에서
   // 「고분자팀 재료」 를 못 찾았다(실사용 지적). 값은 `global` 이거나 부서 slug.
   const [scope, setScope] = useState('')
+  const [exporting, setExporting] = useState(false)
   // 기본은 **최근 등록순.** 전에는 이름순이었는데, 갓 넣은 것을 찾으려면
   // 표를 훑어야 했다 — 등록 직후에 보는 일이 가장 잦다.
   const { sort, handle } = useSort('created_at', {
@@ -182,6 +185,36 @@ export default function MaterialsPage() {
   }
 
   const page = materials.data
+  /**
+   * 지금 화면의 조건 그대로 파일을 받는다.
+   *
+   * **목록이 서버에 보내는 것과 같은 값을 보낸다** — 여기서 다르게 만들면
+   * 「화면에서 본 것」 과 「받아 간 파일」 이 갈리고, 받아 간 쪽이 틀렸다는 것을
+   * 알아챌 방법이 없다.
+   */
+  async function exportJson() {
+    setExporting(true)
+    try {
+      const query = new URLSearchParams()
+      for (const [key, value] of [
+        ['q', applied],
+        ['name', name],
+        ['alias', alias],
+        ['code', code],
+        ['family', family],
+        ['category', category],
+        ['scope', scope === 'global' ? 'global' : ''],
+        ['workspace', scope && scope !== 'global' ? scope : ''],
+      ] as const) {
+        if (value) query.set(key, value)
+      }
+      const suffix = query.toString() ? `?${query}` : ''
+      await downloadFile(`/materials/export${suffix}`, 'matnexus_materials.json')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const rows = page?.items ?? []
   // **Shift 로 범위를 고른다.** 한 쪽이 50건이라 하나씩 누르는 것은 일이 아니다.
   const selection = useRowSelection(rows.map((material) => material.id))
@@ -202,6 +235,12 @@ export default function MaterialsPage() {
             <Button variant="secondary" onClick={() => setBulk(true)}>
               <Plus className="size-4" />
               여러 개 등록
+            </Button>
+            {/* **지금 거른 것을 그대로 받는다.** 화면과 다른 것이 내려오면
+                사람은 그 사실을 모른 채 그 파일로 계산한다. */}
+            <Button variant="outline" onClick={() => void exportJson()} disabled={exporting}>
+              <Download className="size-4" />
+              {exporting ? '내보내는 중…' : 'JSON 내보내기'}
             </Button>
             <Button onClick={() => setRegistering(true)}>
               <Plus className="size-4" />

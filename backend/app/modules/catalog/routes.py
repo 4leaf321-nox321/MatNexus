@@ -8,12 +8,15 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import ColumnElement, func, select
+from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy import ColumnElement, Row, func, select
 from sqlalchemy.orm import Session
 
+from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.catalog import parameters
@@ -65,8 +68,8 @@ from app.modules.catalog.schemas import (
 )
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
+from app.shared import exports, property_names, property_search, representative
 from app.shared import litdeck as deck_builder
-from app.shared import property_names, property_search, representative
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
@@ -109,17 +112,118 @@ def summary(
     )
 
 
-@router.get("/materials", response_model=CatalogMaterialPage)
-def list_materials(
+#: 내보낸 파일이 스스로를 설명하는 이름.
+EXPORT_KIND = "matnexus.catalog"
+
+
+@router.get("/export")
+def export_catalog(
     q: str | None = Query(default=None),
     subsystem: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    limit: int | None = Query(default=None),
-    offset: int = Query(default=0, ge=0),
     _user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> CatalogMaterialPage:
-    """카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다."""
+) -> Response:
+    """문헌 물성을 **JSON 파일로** 내려준다 — 재료·값·출처를 함께.
+
+    ## 거르는 규칙은 목록과 한 벌이다
+
+    `_catalog_filters` 를 함께 쓴다. 두 곳에 적으면 「화면에서 본 것」 과 「받아 간
+    파일」 이 달라지고, 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+
+    ## 대표 표시를 붙여 낸다
+
+    같은 물성에 값이 여럿인 것이 이 카탈로그의 성질이다. 대표 표시 없이 값만
+    내보내면 받은 사람은 **아무거나 고르게 된다** — `representative` 를 두는
+    이유가 바로 그것을 막는 것이라, 상세 화면과 같은 함수로 붙인다.
+
+    ## 크기
+
+    전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는
+    일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은
+    조건(`q`·`category`·`subsystem`)을 준다.
+    """
+    conditions = _catalog_filters(q, subsystem, category)
+    materials = list(
+        db.scalars(select(CatalogMaterial).where(*conditions).order_by(CatalogMaterial.name))
+    )
+    ids = [one.id for one in materials]
+
+    # **한 번에 읽고 재료별로 나눈다.** 재료마다 물으면 2,663번이 된다.
+    grouped: dict[uuid.UUID, list[Any]] = {one: [] for one in ids}
+    if ids:
+        for row in db.execute(
+            select(CatalogValue, CatalogDefinition, CatalogSource)
+            .join(CatalogDefinition, CatalogDefinition.key == CatalogValue.property_key)
+            .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
+            .where(CatalogValue.material_id.in_(ids))
+            .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
+        ).all():
+            grouped[row[0].material_id].append(row)
+
+    # **출처는 한 번만 적는다.** 3,013개가 값 42,209건에 통째로 박히면 그것만
+    # 13MB 다. 같은 논문을 500번 되풀이해 적는 것은 파일을 키우기만 하는 게 아니라,
+    # 「출처가 4만 개」 라고 말하는 셈이다 — 출처는 3천 개다.
+    sources: dict[str, dict[str, Any]] = {}
+
+    rows_out: list[dict[str, Any]] = []
+    for item in materials:
+        # 대표 표시는 **한 재료 안에서** 정해진다 — 재료를 섞어 넣으면 남의 값과
+        # 견주게 되고, 그러면 대표가 엉뚱하게 붙는다.
+        values: list[dict[str, Any]] = []
+        for one in _values_out(grouped.get(item.id, [])):
+            said = one.model_dump(mode="json")
+            found = said.pop("source", None)
+            if found:
+                sources.setdefault(found["id"], found)
+                said["source_id"] = found["id"]
+            values.append(said)
+        rows_out.append(
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "material_code": item.material_code,
+                "category": item.category,
+                "subsystem": item.subsystem,
+                "role": item.role,
+                "manufacturer": item.manufacturer,
+                "grade": item.grade,
+                "material_class": item.material_class,
+                "description": item.description,
+                "value_count": len(values),
+                "values": values,
+            }
+        )
+
+    payload = {
+        "kind": EXPORT_KIND,
+        "app_version": version.current(),
+        "exported_at": datetime.now(UTC).isoformat(),
+        "filters": {
+            key: value
+            for key, value in (("q", q), ("subsystem", subsystem), ("category", category))
+            if value is not None and value != ""
+        },
+        "count": len(rows_out),
+        "value_count": sum(len(one["values"]) for one in rows_out),
+        # 값의 `source_id` 가 여기를 가리킨다. 값마다 통째로 박지 않는 이유는
+        # 위 주석에 있다.
+        "sources": list(sources.values()),
+        "materials": rows_out,
+    }
+    return exports.json_file(
+        payload, f"matnexus_catalog_{datetime.now(UTC):%Y%m%d}.json", pretty=False
+    )
+
+
+def _catalog_filters(
+    q: str | None, subsystem: str | None, category: str | None
+) -> list[ColumnElement[bool]]:
+    """목록이 거르는 규칙. **내보내기와 한 벌로 쓴다.**
+
+    두 곳에 적으면 한쪽만 고쳐지고, 그때 「화면에서 본 것」 과 「받아 간 파일」 이
+    달라진다 — 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+    """
     conditions: list[ColumnElement[bool]] = []
     if q:
         conditions.append(CatalogMaterial.name.ilike(f"%{q}%"))
@@ -132,6 +236,21 @@ def list_materials(
         )
     if category:
         conditions.append(CatalogMaterial.category == category)
+    return conditions
+
+
+@router.get("/materials", response_model=CatalogMaterialPage)
+def list_materials(
+    q: str | None = Query(default=None),
+    subsystem: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    limit: int | None = Query(default=None),
+    offset: int = Query(default=0, ge=0),
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogMaterialPage:
+    """카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다."""
+    conditions = _catalog_filters(q, subsystem, category)
 
     value_count = (
         select(func.count())
@@ -560,29 +679,35 @@ def deck_build(
     )
 
 
-@router.get("/materials/{material_id}", response_model=CatalogMaterialDetailOut)
-def get_material(
-    material_id: uuid.UUID,
-    _user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> CatalogMaterialDetailOut:
-    """재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.
+def _term_name(raw: object) -> str | None:
+    """항 이름. **숫자로 들어온 것도 이름으로 받는다.**
 
-    **후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을
-    대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.
+    대개 `A`·`h0`·`Rp0.2` 같은 글자인데, Ogden 초탄성처럼 **항 번호가 곧 이름**인
+    모델에서는 `1`·`2` 로 들어온다(실측 2026-09-10: 4,453건 중 4건). 그것을 막으면
+    그 재료는 상세 화면도 500 이 난다 — 내보내기를 만들다 드러났다.
+
+    숫자를 글자로 바꾸는 것이지 값을 지어내는 것이 아니다. 항 이름은 애초에
+    사람이 읽는 딱지라, `1` 과 `"1"` 은 같은 뜻이다.
     """
-    item = db.get(CatalogMaterial, material_id)
-    if item is None:
-        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, int | float):
+        # 1.0 을 "1.0" 으로 적으면 화면과 검색이 갈린다 — 정수는 정수로 적는다.
+        return str(int(raw)) if float(raw).is_integer() else str(raw)
+    return str(raw)
 
-    rows = db.execute(
-        select(CatalogValue, CatalogDefinition, CatalogSource)
-        .join(CatalogDefinition, CatalogDefinition.key == CatalogValue.property_key)
-        .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
-        .where(CatalogValue.material_id == item.id)
-        .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
-    ).all()
 
+def _values_out(
+    rows: Sequence[Row[tuple[CatalogValue, CatalogDefinition, CatalogSource]]],
+) -> list[CatalogValueOut]:
+    """문헌 값들을 **대표 표시까지 붙여** 낸다. 상세와 내보내기가 한 벌로 쓴다.
+
+    대표 표시를 빼고 값만 내보내면, 받은 사람은 같은 물성의 값 여럿 중에서
+    **아무거나 고르게 된다** — 이 카탈로그가 `representative` 를 두는 이유가
+    바로 그것을 막는 것이다.
+    """
     # 같은 물성의 후보들 중 대표를 고르고 — 진 후보는 이유와 함께 그대로 낸다.
     marks = representative.annotate([value for value, _, _ in rows])
     # 무리 안에서 대표가 먼저 서도록 정렬만 바꾼다(도메인·키 차례는 유지).
@@ -606,7 +731,7 @@ def get_material(
             value_num=value.value_num,
             value_text=value.value_text,
             unit=value.unit,
-            term=(value.conditions or {}).get(parameters.TERM),
+            term=_term_name((value.conditions or {}).get(parameters.TERM)),
             term_unit=(value.conditions or {}).get(parameters.UNIT_OF_TERM),
             uncertainty=value.uncertainty,
             conditions=value.conditions,
@@ -627,6 +752,33 @@ def get_material(
         )
         for value, definition, source in rows
     ]
+    return values
+
+
+@router.get("/materials/{material_id}", response_model=CatalogMaterialDetailOut)
+def get_material(
+    material_id: uuid.UUID,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogMaterialDetailOut:
+    """재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.
+
+    **후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을
+    대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.
+    """
+    item = db.get(CatalogMaterial, material_id)
+    if item is None:
+        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
+
+    rows = db.execute(
+        select(CatalogValue, CatalogDefinition, CatalogSource)
+        .join(CatalogDefinition, CatalogDefinition.key == CatalogValue.property_key)
+        .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
+        .where(CatalogValue.material_id == item.id)
+        .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
+    ).all()
+
+    values = _values_out(rows)
     return CatalogMaterialDetailOut(
         id=item.id,
         name=item.name,

@@ -15,10 +15,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import false, func, or_, select
+from sqlalchemy import Select, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
+from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.catalog import parameters as catalog_parameters
@@ -85,7 +86,15 @@ from app.modules.tests.models import TestRun
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, contention, display, permissions, sorting, specimen_size
+from app.shared import (
+    audit,
+    contention,
+    display,
+    exports,
+    permissions,
+    sorting,
+    specimen_size,
+)
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -526,26 +535,128 @@ def list_classifications(
     ]
 
 
-@router.get("", response_model=Page[MaterialOut])
-def list_materials(
-    q: str | None = Query(
-        default=None,
-        description="이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
-    ),
-    name: str | None = Query(default=None, description="이름만 부분 일치"),
-    alias: str | None = Query(default=None, description="별칭만 부분 일치"),
-    code: str | None = Query(default=None, description="재료번호. 패딩 없이 쳐도 된다"),
-    family: str | None = None,
-    category: str | None = None,
+#: 내보낸 파일이 스스로를 설명하는 이름. **맨 배열로 주지 않는다** — 받은 사람이
+#: 이게 무엇의 어느 시점 자료인지, 무슨 조건으로 거른 것인지 알 방법이 없다.
+EXPORT_KIND = "matnexus.materials"
+
+
+@router.get("/export")
+def export_materials(
+    q: str | None = Query(default=None),
+    name: str | None = Query(default=None),
+    alias: str | None = Query(default=None),
+    code: str | None = Query(default=None),
+    family: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     scope: str = Query(default="all", pattern="^(all|mine|global)$"),
     workspace: str | None = Query(default=None),
-    sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
-    desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
-    limit: int | None = Query(default=None, le=1000),
-    offset: int = Query(default=0, ge=0),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> Page[MaterialOut]:
+) -> Response:
+    """보이는 재료를 **JSON 파일로** 내려준다.
+
+    ## 목록과 같은 것을 담는다
+
+    거르는 규칙은 목록과 **한 함수를 쓴다**(`_filtered_materials`). 두 곳에 적으면
+    한쪽만 고쳐지고, 그때 「화면에서 본 것」 과 「받아 간 파일」 이 달라진다 —
+    받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+
+    **쪽 넘김은 없다.** 거른 것을 전부 담는다 — 나눠 받은 파일을 사람이 다시
+    이어 붙이게 하면 그 자리에서 빠뜨린다.
+
+    ## 무엇이 들어가고 무엇이 안 들어가나
+
+    재료 자체와 **선언 물성·파라미터 벌**이 들어간다. 시료·시편·시험·곡선은 **안
+    들어간다** — 곡선은 파일이고(수십 MB), 그것까지 담으면 이 파일은 열어 볼 수
+    없는 것이 된다. 시험 자료가 필요하면 그것은 다른 내보내기다.
+
+    값은 **SI 그대로**다. 화면 표시 단위로 바꾸지 않는다 — 받아서 계산에 쓰는
+    파일이라, 단위가 화면 설정에 따라 달라지면 그 파일을 믿을 수 없다.
+    """
+    query = _filtered_materials(
+        db,
+        user,
+        q=q,
+        name=name,
+        alias=alias,
+        code=code,
+        family=family,
+        category=category,
+        scope=scope,
+        workspace=workspace,
+    )
+    rows = list(db.scalars(query.order_by(Material.code)))
+    counts = services.sample_counts(db, [one.id for one in rows])
+    names = services.workspace_names(db, [one.owner_workspace_id for one in rows])
+    uses = services.uses_of(db, [one.id for one in rows])
+    sets: dict[uuid.UUID, list[MaterialParameterSet]] = {}
+    for row in db.scalars(
+        select(MaterialParameterSet).where(
+            MaterialParameterSet.material_id.in_([one.id for one in rows] or [None])
+        )
+    ):
+        sets.setdefault(row.material_id, []).append(row)
+
+    payload = {
+        "kind": EXPORT_KIND,
+        "app_version": version.current(),
+        "exported_at": datetime.now(UTC).isoformat(),
+        # **무슨 조건으로 거른 것인가.** 안 적으면 「전부인 줄 알았는데 아니었다」 가
+        # 나중에 드러나고, 그때는 이미 그 파일로 무언가를 계산한 뒤다.
+        "filters": {
+            key: value
+            for key, value in (
+                ("q", q),
+                ("name", name),
+                ("alias", alias),
+                ("code", code),
+                ("family", family),
+                ("category", category),
+                ("scope", scope if scope != "all" else None),
+                ("workspace", workspace),
+            )
+            if value
+        },
+        "count": len(rows),
+        "materials": [
+            {
+                **_material_out(
+                    one,
+                    sample_count=counts.get(one.id, 0),
+                    workspace_name=(
+                        names.get(one.owner_workspace_id) if one.owner_workspace_id else None
+                    ),
+                    uses=uses.get(one.id),
+                ).model_dump(mode="json"),
+                "parameter_sets": [
+                    _parameter_set_out(row).model_dump(mode="json")
+                    for row in sets.get(one.id, [])
+                ],
+            }
+            for one in rows
+        ],
+    }
+    return exports.json_file(payload, f"matnexus_materials_{datetime.now(UTC):%Y%m%d}.json")
+
+
+def _filtered_materials(
+    db: Session,
+    user: User,
+    *,
+    q: str | None = None,
+    name: str | None = None,
+    alias: str | None = None,
+    code: str | None = None,
+    family: str | None = None,
+    category: str | None = None,
+    scope: str = "all",
+    workspace: str | None = None,
+) -> Select[tuple[Material]]:
+    """목록이 거르는 규칙. **내보내기와 한 벌로 쓴다.**
+
+    두 곳에 적으면 한쪽만 고쳐지고, 그때 「화면에서 본 것」 과 「받아 간 파일」 이
+    달라진다 — 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+    """
     query = services.visible_materials(db, user)
     for condition in _search_terms(db, q):
         query = query.where(condition)
@@ -590,6 +701,41 @@ def list_materials(
             Material.owner_workspace_id == permissions.workspace_by_slug(db, workspace).id
         )
 
+    return query
+
+
+@router.get("", response_model=Page[MaterialOut])
+def list_materials(
+    q: str | None = Query(
+        default=None,
+        description="이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
+    ),
+    name: str | None = Query(default=None, description="이름만 부분 일치"),
+    alias: str | None = Query(default=None, description="별칭만 부분 일치"),
+    code: str | None = Query(default=None, description="재료번호. 패딩 없이 쳐도 된다"),
+    family: str | None = None,
+    category: str | None = None,
+    scope: str = Query(default="all", pattern="^(all|mine|global)$"),
+    workspace: str | None = Query(default=None),
+    sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
+    desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
+    limit: int | None = Query(default=None, le=1000),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Page[MaterialOut]:
+    query = _filtered_materials(
+        db,
+        user,
+        q=q,
+        name=name,
+        alias=alias,
+        code=code,
+        family=family,
+        category=category,
+        scope=scope,
+        workspace=workspace,
+    )
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
     rows = list(

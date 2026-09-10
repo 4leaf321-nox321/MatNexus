@@ -7,6 +7,7 @@
  */
 
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,6 +15,13 @@ import CatalogPage from '@/modules/catalog/CatalogPage'
 
 const summary = vi.fn()
 const materials = vi.fn()
+
+const download = vi.fn()
+
+vi.mock('@/shared/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/client')>()),
+  downloadFile: (...args: unknown[]) => download(...args),
+}))
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -73,9 +81,9 @@ beforeEach(() => {
   materials.mockResolvedValue(PAGE)
 })
 
-function show() {
+function show(routes: string[] = ['/catalog']) {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={routes}>
       <CatalogPage />
     </MemoryRouter>
   )
@@ -102,5 +110,19 @@ describe('문헌 물성 목록', () => {
     materials.mockResolvedValue({ ...PAGE, total: 500 })
     show()
     expect(await screen.findByRole('button', { name: /더 보기/ })).toBeInTheDocument()
+  })
+
+  it('지금 거른 조건 그대로 내보낸다', async () => {
+    // **화면과 다른 것이 내려오면** 사람은 그 사실을 모른 채 그 파일로 계산한다.
+    // 전부 받으면 70MB 가 넘으므로, 좁혀 놓고 받는 길이 기본이다.
+    const user = userEvent.setup()
+    show(['/catalog?q=SUS'])
+    await screen.findByText('SUS304')
+
+    await user.click(screen.getByRole('button', { name: /JSON 내보내기/ }))
+    expect(download).toHaveBeenCalledWith(
+      expect.stringContaining('/catalog/export?q=SUS'),
+      expect.stringContaining('.json')
+    )
   })
 })

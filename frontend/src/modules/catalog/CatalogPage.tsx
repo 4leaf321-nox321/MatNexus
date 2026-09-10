@@ -7,7 +7,7 @@
  * 정렬은 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
  */
 
-import { FileCode2, GitCompare, Grid3X3, ScatterChart } from 'lucide-react'
+import { Download, FileCode2, GitCompare, Grid3X3, ScatterChart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { downloadFile } from '@/shared/api/client'
 import { useResource } from '@/shared/hooks/useResource'
 
 const STEP = 50
@@ -57,6 +58,28 @@ export default function CatalogPage() {
     () => catalogApi.materials({ q: q || undefined, subsystem, category, limit }),
     [q, subsystem, category, limit]
   )
+  const [exporting, setExporting] = useState(false)
+
+  /**
+   * 지금 화면의 조건 그대로 파일을 받는다.
+   *
+   * **전부 받으면 70MB 가 넘는다**(값 4만여 건 · 조건과 근거가 값마다 붙는다).
+   * 그래서 거른 채로 받는 길을 먼저 둔다 — 좁혀 놓고 누르면 그만큼만 온다.
+   */
+  async function exportJson() {
+    setExporting(true)
+    try {
+      const query = new URLSearchParams()
+      if (q) query.set('q', q)
+      if (subsystem !== undefined) query.set('subsystem', subsystem)
+      if (category) query.set('category', category)
+      const suffix = query.toString() ? `?${query}` : ''
+      await downloadFile(`/catalog/export${suffix}`, 'matnexus_catalog.json')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const rows = page.data?.items ?? []
   const total = page.data?.total ?? 0
 
@@ -90,6 +113,12 @@ export default function CatalogPage() {
                 <FileCode2 className="size-4" />
                 문헌 덱 만들기
               </Link>
+            </Button>
+            {/* **지금 거른 것을 그대로 받는다.** 화면과 다른 것이 내려오면
+                사람은 그 사실을 모른 채 그 파일로 계산한다. */}
+            <Button variant="outline" onClick={() => void exportJson()} disabled={exporting}>
+              <Download className="size-4" />
+              {exporting ? '내보내는 중…' : 'JSON 내보내기'}
             </Button>
           </div>
         }

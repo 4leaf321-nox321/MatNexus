@@ -507,6 +507,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Catalog
+         * @description 문헌 물성을 **JSON 파일로** 내려준다 — 재료·값·출처를 함께.
+         *
+         *     ## 거르는 규칙은 목록과 한 벌이다
+         *
+         *     `_catalog_filters` 를 함께 쓴다. 두 곳에 적으면 「화면에서 본 것」 과 「받아 간
+         *     파일」 이 달라지고, 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+         *
+         *     ## 대표 표시를 붙여 낸다
+         *
+         *     같은 물성에 값이 여럿인 것이 이 카탈로그의 성질이다. 대표 표시 없이 값만
+         *     내보내면 받은 사람은 **아무거나 고르게 된다** — `representative` 를 두는
+         *     이유가 바로 그것을 막는 것이라, 상세 화면과 같은 함수로 붙인다.
+         *
+         *     ## 크기
+         *
+         *     전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는
+         *     일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은
+         *     조건(`q`·`category`·`subsystem`)을 준다.
+         */
+        get: operations["export_catalog_api_catalog_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/links/{material_id}": {
         parameters: {
             query?: never;
@@ -2350,6 +2387,44 @@ export interface paths {
          *     하는 자리이고, 개수만 주면 무엇을 해야 할지 알 수 없다.
          */
         post: operations["bulk_delete_plan_api_materials_delete_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Materials
+         * @description 보이는 재료를 **JSON 파일로** 내려준다.
+         *
+         *     ## 목록과 같은 것을 담는다
+         *
+         *     거르는 규칙은 목록과 **한 함수를 쓴다**(`_filtered_materials`). 두 곳에 적으면
+         *     한쪽만 고쳐지고, 그때 「화면에서 본 것」 과 「받아 간 파일」 이 달라진다 —
+         *     받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+         *
+         *     **쪽 넘김은 없다.** 거른 것을 전부 담는다 — 나눠 받은 파일을 사람이 다시
+         *     이어 붙이게 하면 그 자리에서 빠뜨린다.
+         *
+         *     ## 무엇이 들어가고 무엇이 안 들어가나
+         *
+         *     재료 자체와 **선언 물성·파라미터 벌**이 들어간다. 시료·시편·시험·곡선은 **안
+         *     들어간다** — 곡선은 파일이고(수십 MB), 그것까지 담으면 이 파일은 열어 볼 수
+         *     없는 것이 된다. 시험 자료가 필요하면 그것은 다른 내보내기다.
+         *
+         *     값은 **SI 그대로**다. 화면 표시 단위로 바꾸지 않는다 — 받아서 계산에 쓰는
+         *     파일이라, 단위가 화면 설정에 따라 달라지면 그 파일을 믿을 수 없다.
+         */
+        get: operations["export_materials_api_materials_export_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -15365,6 +15440,39 @@ export interface operations {
             };
         };
     };
+    export_catalog_api_catalog_export_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                subsystem?: string | null;
+                category?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_link_api_catalog_links__material_id__get: {
         parameters: {
             query?: never;
@@ -18511,6 +18619,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkDeletePlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_materials_api_materials_export_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                name?: string | null;
+                alias?: string | null;
+                code?: string | null;
+                family?: string | null;
+                category?: string | null;
+                scope?: string;
+                workspace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

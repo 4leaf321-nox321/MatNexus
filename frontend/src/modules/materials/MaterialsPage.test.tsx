@@ -19,6 +19,13 @@ const bulkDeletePlan = vi.fn()
 const removeMany = vi.fn()
 const workspaces = vi.fn()
 
+const download = vi.fn()
+
+vi.mock('@/shared/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/client')>()),
+  downloadFile: (...args: unknown[]) => download(...args),
+}))
+
 vi.mock('@/modules/materials/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/materials/api')>()),
   materialsApi: {
@@ -199,5 +206,18 @@ describe('일괄 삭제', () => {
     expect(
       await screen.findByText(/재료 2건과 함께 시료 2건 · 시편 6건을 지웠습니다/)
     ).toBeInTheDocument()
+  })
+  it('지금 거른 조건 그대로 내보낸다', async () => {
+    // **「화면에서 본 것」 과 「받아 간 파일」 이 달라지면 안 된다** — 받아 간
+    // 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+    const user = userEvent.setup()
+    show()
+    await screen.findByRole('link', { name: 'SPCC_-_1.2' })
+
+    await user.click(screen.getByRole('button', { name: /JSON 내보내기/ }))
+    expect(download).toHaveBeenCalledWith(
+      expect.stringContaining('/materials/export'),
+      expect.stringContaining('.json')
+    )
   })
 })
