@@ -47,10 +47,17 @@ export interface StepCheck {
 }
 
 /** 담는 자리 — **담는 단추가 사는 목록 화면**. 종류마다 하나뿐이다. */
+/**
+ * 담으러 가는 자리.
+ *
+ * **`?collect=` 를 달고 간다.** 그 목록 화면은 평소에는 담기 창을 안 띄우고
+ * 단추만 두는데(줄마다 뜨면 목록을 훑는 일을 방해한다), **워크벤치에서 담으러
+ * 온 사람은 그 단추를 또 찾을 이유가 없다** — 고르는 순간 창이 뜬다.
+ */
 export const COLLECT_AT: Record<ItemKind, string> = {
-  test_run: '/tests',
-  material: '/materials',
-  card: '/cards',
+  test_run: '/tests?collect=test_run',
+  material: '/materials?collect=material',
+  card: '/cards?collect=card',
 }
 
 /** 담긴 것으로 판정한다. `null` 은 「이 단계는 판정하지 않는다」 — 모르면 침묵한다. */

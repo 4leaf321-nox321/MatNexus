@@ -166,6 +166,9 @@ export default function TestRunsPage() {
   // 보내는데 그것을 안 읽으면 거르개 없는 전체 목록이 뜬다 — 누른 사람은 그 숫자가
   // 가리킨 것을 다시 찾아야 하고, 단추가 안 먹은 것처럼 보인다.
   const [askedIn] = useSearchParams()
+  // **워크벤치에서 담으러 왔나.** 그 사람은 고르는 순간 담기 창이 떠야 한다 —
+  // 평소에는 단추만 선다(체크만 해도 창이 뜨면 지우기·일괄 수정을 방해한다).
+  const collecting = askedIn.get('collect') === 'test_run'
   const [filters, setFilters] = useState<Record<string, string | undefined>>(() => {
     // 재료 화면의 「그 시험 보기」 가 `?material=` 로, 홈의 「읽기 실패 N」 이
     // `?status=` 로 보낸다. 안 읽으면 거르개 없는 전체가 떠서, 세어 준 값을 사람이
@@ -379,19 +382,6 @@ export default function TestRunsPage() {
               만들어집니다. 종류별로 나눠 거세요.
             </span>
           )}
-          {/* **담아 두면 화면을 오가지 않아도 된다**(ADR 0024). 여기서 고른 것을
-              워크벤치가 이어받는다.
-
-              **이 줄에 그려지지 않는다** — 떠 있는 패널로 화면 위에 뜬다. 이 줄에
-              단추로 세워 봤더니(v1.174~1.178) 색을 채우고 자리를 옮겨도 못 찾았다:
-              처리 단추가 넷 늘어선 줄에서 다섯째 단추는 눈에 안 들어온다. */}
-          <AddToBasket
-            kind="test_run"
-            ids={[...picked]}
-            labels={rows.filter((one) => picked.has(one.id)).map((one) => one.record_name)}
-            workspaceSlug={slug}
-          />
-
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm" variant="ghost" onClick={() => selection.clear()}>
               선택 해제
@@ -404,6 +394,21 @@ export default function TestRunsPage() {
               <Layers className="size-4" />
               레시피 적용
             </Button>
+            {/* **담아 두면 화면을 오가지 않아도 된다**(ADR 0024). 여기서 고른 것을
+                워크벤치가 이어받는다.
+
+                단추는 「레시피 적용」 옆에 선다. 고르는 순간 창이 뜨던 때가 있었는데
+                (v1.179~1.214), 담을 생각 없이 지우거나 일괄 수정하려고 고른 사람에게는
+                그것이 화면을 가리는 일이었다(2026-09-11 지적). **워크벤치에서 담으러
+                온 길**(`?collect=`)에서만 저절로 뜬다 — 그 사람은 단추를 또 찾을
+                이유가 없다. */}
+            <AddToBasket
+              kind="test_run"
+              ids={[...picked]}
+              labels={rows.filter((one) => picked.has(one.id)).map((one) => one.record_name)}
+              workspaceSlug={slug}
+              auto={collecting}
+            />
             {/* **올릴 때 빠뜨린 것을 나중에 채운다.** 지금까지는 사업부를
                 빠뜨리면 다시 올리는 수밖에 없었다. */}
             <Button size="sm" variant="outline" onClick={() => setEditing(true)}>

@@ -19,7 +19,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { CatalogHits } from '@/modules/catalog/CatalogHits'
 import { materialsApi } from '@/modules/materials/api'
@@ -67,6 +67,9 @@ const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 
 export default function MaterialsPage() {
+  // **워크벤치에서 담으러 왔나.** 그때만 고르는 순간 담기 창이 뜬다.
+  const [asked] = useSearchParams()
+  const collecting = asked.get('collect') === 'material'
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [registering, setRegistering] = useState(false)
@@ -314,20 +317,25 @@ export default function MaterialsPage() {
             <Trash2 className="size-3.5" />
             지우기
           </Button>
+          {/* **여기가 「해석에 쓸 물성 갖추기」 의 첫 단계다**(ADR 0024). 적용
+              제품·파트로 좁힌 재료를 담아 두면, 워크벤치가 재료마다 카드가 있는지
+              세어 준다.
+
+              고르는 순간 창이 뜨던 때가 있었는데, 담을 생각 없이 지우려고 고른
+              사람에게는 그것이 방해였다(2026-09-11 지적). 워크벤치에서 담으러 온
+              길에서만 저절로 뜬다. */}
+          <AddToBasket
+            kind="material"
+            ids={[...picked]}
+            labels={rows.filter((one) => picked.has(one.id)).map((one) => one.record_name)}
+            onError={setFailure}
+            auto={collecting}
+          />
           <Button size="sm" variant="ghost" onClick={() => selection.clear()}>
             선택 해제
           </Button>
         </div>
       )}
-
-      {/* **여기가 「해석에 쓸 물성 갖추기」 의 첫 단계다**(ADR 0024). 적용 제품·파트로
-          좁힌 재료를 담아 두면, 워크벤치가 재료마다 카드가 있는지 세어 준다. */}
-      <AddToBasket
-        kind="material"
-        ids={[...picked]}
-        labels={rows.filter((one) => picked.has(one.id)).map((one) => one.record_name)}
-        onError={setFailure}
-      />
 
       <ConfirmDialog
         open={removing}

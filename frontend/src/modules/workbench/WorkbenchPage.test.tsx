@@ -278,7 +278,7 @@ describe('할 자리로 데려간다', () => {
     // **「담는 단추는 그 목록 화면에 있습니다」 만 적으면 그 화면을 사람이 찾아야
     // 한다.** 그러면 안 담는다 — 실제로 그렇게 걸렸다.
     await openAt(run말고({ steps: { at: 'pick', done: [] }, items: [], item_count: 0 }))
-    expect(screen.getByRole('link', { name: '시험 목록' })).toHaveAttribute('href', '/tests')
+    expect(screen.getByRole('link', { name: '시험 목록' })).toHaveAttribute('href', '/tests?collect=test_run')
     // 조사도 표에서 읽은 낱말에 맞춘다 — 「시험 를 담습니다」 가 나오면 안 된다.
     expect(screen.getAllByText(/시험을/).length).toBeGreaterThan(0)
   })

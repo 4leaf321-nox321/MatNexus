@@ -48,10 +48,15 @@ const RUN = {
   finished_at: null,
 }
 
+/**
+ * 창을 **연 채로** 띄운다. 평소에는 단추만 서고 눌러야 열리는데, 아래 시험들이
+ * 보는 것은 창의 내용이라 매번 누르게 하면 그 클릭이 시험의 뜻을 흐린다.
+ * 「언제 뜨는가」 는 맨 아래에서 따로 무다.
+ */
 function show(ids = ['c1'], labels?: string[]) {
   render(
     <MemoryRouter>
-      <AddToBasket kind="card" ids={ids} labels={labels} workspaceSlug="metal" />
+      <AddToBasket kind="card" ids={ids} labels={labels} workspaceSlug="metal" auto />
     </MemoryRouter>
   )
 }
@@ -214,5 +219,62 @@ describe('기억해 둔 작업', () => {
     show()
     await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
     await waitFor(() => expect(window.localStorage.getItem('matnexus.basket.active')).toBe('r1'))
+  })
+})
+
+describe('언제 뜨는가', () => {
+  /**
+   * **담을 생각이 없는데 체크만 해도 창이 떴다**(2026-09-11 지적). 목록에서 줄을
+   * 고르는 일은 지우기·일괄 수정·레시피 적용에도 쓴다 — 그때마다 화면이 가려졌다.
+   *
+   * 그렇다고 늘 단추로 두면 예전 문제로 돌아간다(줄에 선 다섯째 단추는 눈에 안
+   * 들어온다). 그래서 **누가 왔는지**로 가른다.
+   */
+  it('평소에는 단추만 선다', async () => {
+    runs.mockResolvedValue([RUN])
+    render(
+      <MemoryRouter>
+        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" />
+      </MemoryRouter>
+    )
+    expect(await screen.findByRole('button', { name: /워크벤치에 담기/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '담기' })).toBeNull()
+  })
+
+  it('단추를 누르면 창이 뜬다', async () => {
+    const user = userEvent.setup()
+    runs.mockResolvedValue([RUN])
+    render(
+      <MemoryRouter>
+        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" />
+      </MemoryRouter>
+    )
+    await user.click(await screen.findByRole('button', { name: /워크벤치에 담기/ }))
+    expect(await screen.findByRole('region', { name: '담기' })).toBeInTheDocument()
+  })
+
+  it('담으러 온 길에서는 고르는 순간 뜬다', async () => {
+    runs.mockResolvedValue([RUN])
+    render(
+      <MemoryRouter>
+        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" auto />
+      </MemoryRouter>
+    )
+    expect(await screen.findByRole('region', { name: '담기' })).toBeInTheDocument()
+  })
+
+  it('닫을 수 있다', async () => {
+    // 저절로 뜬 것을 치울 길이 없으면 그것은 창이 아니라 방해물이다.
+    const user = userEvent.setup()
+    runs.mockResolvedValue([RUN])
+    render(
+      <MemoryRouter>
+        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" auto />
+      </MemoryRouter>
+    )
+    await user.click(await screen.findByRole('button', { name: '닫기' }))
+    expect(screen.queryByRole('region', { name: '담기' })).toBeNull()
+    // 선택은 그대로다 — 담기만 접은 것이다.
+    expect(screen.getByRole('button', { name: /워크벤치에 담기/ })).toBeInTheDocument()
   })
 })

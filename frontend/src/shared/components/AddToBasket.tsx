@@ -3,14 +3,28 @@
  *
  * 시험 목록·재료 목록·카드 목록 어디서든 담고, 워크벤치에서 한 번에 민다.
  *
- * ## 줄에 세우지 않고 **떠 있는 패널**로 띄운다
+ * ## 언제 뜨는가 — **담으러 온 사람에게만 저절로**
  *
  * 처음에는 선택 줄의 단추였다. 색을 채우고 자리를 옮겨도 **못 찾는다는 말이 두 번
  * 나왔다** — 「레시피 적용」·「일괄 수정」·「삭제」 가 늘어선 줄에서는 하나 더 붙은 단추가
- * 그저 넷째 단추다. 목록을 훑는 눈은 그 줄을 안 읽는다.
+ * 그저 넷째 단추다. 그래서 고르는 순간 저절로 뜨게 했다.
  *
- * 그래서 고르는 순간 **화면 위로 떠오르는 패널**이 된다. 색을 진하게 준 것은 장식이
- * 아니라 「이건 저 줄의 일부가 아니다」 를 말하기 위해서다.
+ * 그랬더니 반대쪽에서 말이 나왔다(2026-09-11): **담을 생각이 없는데 체크만 해도
+ * 창이 뜬다.** 목록에서 줄을 고르는 일은 지우기·일괄 수정·레시피 적용에도 쓰는데,
+ * 그때마다 담기 창이 화면을 가린다.
+ *
+ * 둘 다 맞는 말이라 **누가 왔는지로 가른다.**
+ *
+ *     평소                단추만 선다 (「레시피 적용」 옆) — 누르면 창이 뜬다
+ *     워크벤치에서 왔다     고르는 순간 뜬다 — 그 사람은 담으러 온 것이다
+ *
+ * 워크벤치가 담으러 보낼 때 주소에 `?collect=` 를 단다(`COLLECT_AT`). 화면이 그것을
+ * 읽어 `auto` 로 넘긴다 — 「지금 활성 작업이 있나」 로 판단하지 않는다. 그 값은 한 번
+ * 워크벤치를 쓴 뒤로 계속 남아 있어서, 그걸로 가르면 결국 늘 뜨는 것과 같아진다.
+ *
+ * 떠 있는 패널이라는 것은 그대로다. 색을 진하게 준 것은 장식이 아니라 「이건 저 줄의
+ * 일부가 아니다」 를 말하기 위해서다. **닫는 단추가 있다** — 저절로 뜬 것도 사람이
+ * 치울 수 있어야 한다.
  *
  * **끌어서 옮길 수 있다.** 떠 있는 것은 무언가를 가린다 — 하필 지금 보려는 줄을 가리면
  * 그때부터는 방해물이다. 옮긴 자리는 이 브라우저가 기억한다.
@@ -49,7 +63,7 @@
  * 가로지르는 배관이라, 이 파일도 아무 도메인 모듈을 import 하지 않는다.
  */
 
-import { GripHorizontal, Inbox } from 'lucide-react'
+import { GripHorizontal, Inbox, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
@@ -108,11 +122,24 @@ interface BasketProps {
    * 자기 부서가 아닌 곳을 가리켜 작업 목록이 비어 보인다(`AppShell` 과 같은 규칙).
    */
   workspaceSlug?: string
+  /**
+   * 고르는 순간 창이 뜨나. **워크벤치에서 담으러 온 길에서만 참이다**
+   * (`?collect=`). 평소에는 단추만 서고, 누를 때 뜬다.
+   */
+  auto?: boolean
 }
 
-export function AddToBasket({ kind, ids, labels, onError, workspaceSlug }: BasketProps) {
+export function AddToBasket({ kind, ids, labels, onError, workspaceSlug, auto }: BasketProps) {
   const [spot, setSpot] = useState<Spot>(() => firstSpot())
   const grab = useRef<{ dx: number; dy: number } | null>(null)
+  const [open, setOpen] = useState(false)
+
+  // **고른 것이 없어지면 처음으로 돌아간다.** 닫아 둔 것을 기억한 채로 두면,
+  // 다음에 담으러 와서 골라도 안 뜬다.
+  useEffect(() => {
+    if (ids.length === 0) setOpen(false)
+    else if (auto) setOpen(true)
+  }, [ids.length === 0, auto])
 
   // 창이 줄면 패널이 밖으로 나간다 — 되돌린다.
   useEffect(() => {
@@ -151,6 +178,17 @@ export function AddToBasket({ kind, ids, labels, onError, workspaceSlug }: Baske
   // **고른 게 없으면 안 뜬다.** 떠 있는 것은 무언가를 가리므로, 할 일이 있을 때만 뜬다.
   if (ids.length === 0) return null
 
+  // 줄에 서는 단추. **창이 뜨면 물러난다** — 「담기」 라고 적힌 것이 둘이면
+  // 어느 것을 눌러야 하는지 사람이 판단해야 한다. 닫으면 다시 선다.
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Inbox className="size-4" />
+        워크벤치에 담기
+      </Button>
+    )
+  }
+
   const panel = (
     <div
       className="fixed z-50 w-80 overflow-hidden rounded-xl border border-sky-300 bg-white shadow-2xl ring-1 ring-sky-400/25 dark:border-sky-500/40 dark:bg-neutral-900"
@@ -170,6 +208,16 @@ export function AddToBasket({ kind, ids, labels, onError, workspaceSlug }: Baske
         <Inbox className="size-4 shrink-0" />
         <span className="text-sm font-semibold">워크벤치 작업에 담기</span>
         <span className="ml-auto text-xs font-medium opacity-80">{ids.length}건</span>
+        {/* **닫을 수 있어야 한다.** 저절로 뜬 것을 치울 길이 없으면 그것은
+            창이 아니라 방해물이다. 선택은 그대로 둔다 — 담기만 접는 것이다. */}
+        <button
+          type="button"
+          className="-mr-1 rounded p-0.5 opacity-70 hover:bg-sky-200/60 hover:opacity-100 dark:hover:bg-sky-800/60"
+          aria-label="닫기"
+          onClick={() => setOpen(false)}
+        >
+          <X className="size-4" />
+        </button>
       </div>
 
       <div className="p-3">
