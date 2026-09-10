@@ -80,11 +80,19 @@ Copy-Item -Recurse -Force .\frontend\dist .\deploy\frontend\dist
 # **앱과 별도 venv 라 wheel 도 따로 담는다.** MCP 가 없어도 앱은 돌아야 하므로
 # 여기서 실패해도 배포는 계속된다 — 다만 조용히 넘어가지 않고 경고를 남긴다.
 Write-Host 'MCP 서버 포함'
-New-Item -ItemType Directory -Force -Path .\deploy\mcp_server\guide | Out-Null
-Copy-Item -Force .\mcp_server\server.py .\deploy\mcp_server\server.py
-Copy-Item -Force .\mcp_server\requirements.txt .\deploy\mcp_server\requirements.txt
-Copy-Item -Force .\mcp_server\README.md .\deploy\mcp_server\README.md
-Copy-Item -Force .\mcp_server\guide\GUIDE.md .\deploy\mcp_server\guide\GUIDE.md
+# **폴더째 담고 쓰레기만 뺀다** — 백엔드와 같은 규칙이다.
+#
+# 전에는 파일을 하나씩 이름으로 골라 담았다(server.py·requirements.txt·README·
+# GUIDE). 그러다 `retry_plan.py` 가 늘었는데 이 목록을 아무도 안 고쳤고,
+# 운영 서버에서 `ModuleNotFoundError: retry_plan` 이 났다(실측 2026-09-10).
+# CI 도 개발도 그 파일이 옆에 있으니 아무 데서도 안 드러난다 — **배포한 뒤에야** 안다.
+#
+# 이름을 두 곳에 적으면 한쪽이 낡는다. 그러니 적지 않는다.
+Copy-Item -Recurse -Force .\mcp_server .\deploy\mcp_server
+foreach ($junk in @('.venv', '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache', 'probe-server.log')) {
+    Get-ChildItem -Path .\deploy\mcp_server -Filter $junk -Recurse -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 python -m pip wheel -r .\deploy\mcp_server\requirements.txt -w .\deploy\mcp_server\packages
 if ($LASTEXITCODE -ne 0) {
@@ -92,6 +100,20 @@ if ($LASTEXITCODE -ne 0) {
 } else {
     $mcpWheels = (Get-ChildItem .\deploy\mcp_server\packages -Filter '*.whl' -ErrorAction SilentlyContinue).Count
     Write-Host "  MCP wheel $mcpWheels 개"
+}
+
+# **서버가 불러오는 모듈이 다 들어갔나.** 폴더째 담으니 지금은 빠질 이유가
+# 없지만, 누군가 다시 골라 담기 시작하면 같은 일이 또 난다. **배포한 뒤에야
+# 알게 되는 종류**라 여기서 막는다 — CI 도 개발도 그 파일이 옆에 있으니
+# 아무 데서도 안 드러난다.
+$imported = Select-String -Path .\deploy\mcp_server\server.py -Pattern '^import\s+(\w+)$' |
+    ForEach-Object { $_.Matches[0].Groups[1].Value }
+foreach ($name in $imported) {
+    $sibling = Join-Path '.\mcp_server' "$name.py"
+    if ((Test-Path $sibling) -and -not (Test-Path (Join-Path '.\deploy\mcp_server' "$name.py"))) {
+        Write-Error "패키지에 mcp_server\$name.py 가 빠졌습니다 — 서버가 import 합니다."
+        exit 1
+    }
 }
 
 # --- wheel 번들 ---------------------------------------------------------------
