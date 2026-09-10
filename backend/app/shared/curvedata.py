@@ -230,8 +230,13 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     3개뿐이라 처리가 첫 단계에서 막히던 문제가 여기서 풀린다. 잰 값이 있으면
     그것이 이긴다.
 
-    **읽는 순서는 셋이다** — 이 시험이 잰 값 → 시편에 적힌 값 → 규격 공칭.
-    치수는 그 시험에서 잰 값이라 앞엣것이 이긴다(`specimen_size.sizes_of`).
+    **읽는 순서는 넷이다** — 이 시험이 잰 값 → 시편에 적힌 값 → 규격 공칭 →
+    재료의 스펙 두께. 치수는 그 시험에서 잰 값이라 앞엣것이 이긴다
+    (`specimen_size.sizes_of`).
+
+    **잰 값이 아니면 이름에 그렇게 적는다.** 처리 화면은 이 이름만 보여 주므로,
+    안 적으면 물려받은 값을 자기가 잰 값으로 읽는다 — 그리고 그 값으로 낸 응력을
+    실측이라고 믿는다.
 
     **없는 값은 넘기지 않는다.** 0 이나 기본값으로 채우면 응력이 조용히 틀린다 —
     단면적이 잘못되면 자릿수가 통째로 어긋나는데 숫자는 그럴듯해 보인다. 없으면
@@ -244,9 +249,14 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     # **이 시험이 잰 값이 먼저다.** 같은 시편에 시험이 여럿이면 시편 한 벌을
     # 나눠 쓰게 되는데, 치수는 그 시험에서 잰 값이다(실사용에서 나왔다).
     sizes = specimen_size.sizes_of(db, specimen, run.dimensions or {})
+    #: 잰 값이 아닌 것에 붙는 꼬리표. `specimen_size` 의 출처 이름과 같아야 한다.
+    origin = {"nominal": " (규격 공칭)", "material": " (재료 스펙)"}
     given: list[processing.Scalar] = [
         processing.Scalar(
-            f"specimen_{item.key}", f"시편 {item.label}", item.value, item.si_unit
+            f"specimen_{item.key}",
+            f"시편 {item.label}{origin.get(item.source, '')}",
+            item.value,
+            item.si_unit,
         )
         for item in sizes.items
     ]

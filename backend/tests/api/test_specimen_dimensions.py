@@ -177,6 +177,52 @@ class TestValues:
         assert gauge["measured"] is None
         assert gauge["source"] == "nominal"
 
+    def test_재료_스펙_두께는_출처를_밝히고_온다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """**폼도 단면적과 같은 차례를 봐야 한다.**
+
+        여기서 차례가 달라지면 사람이 보는 「이 값은 어디서 왔나」 와 응력이 쓴
+        값이 갈리고, 그 어긋남은 응력이 틀린 뒤에야 드러난다.
+
+        VOC(2026-09-11): 스펙 두께가 있는데도 「두께 없음」 으로 막혔다.
+        """
+        make_standard(
+            client,
+            admin_headers,
+            "평판 두께미정",
+            attributes={"gauge_length": 0.05, "width": 0.0125},
+            extra_fields=[
+                {
+                    "key": "width",
+                    "label": "폭",
+                    "dimension": "length",
+                    "si_unit": "m",
+                    "is_required": True,
+                    "help": None,
+                },
+                # **칸은 있고 공칭은 없다.** 판재 두께는 규격이 정하는 값이
+                # 아니라서, 규격은 적을 자리만 두고 값은 비워 둔다.
+                {
+                    "key": "thickness",
+                    "label": "두께",
+                    "dimension": "length",
+                    "si_unit": "m",
+                    "is_required": False,
+                    "help": None,
+                },
+            ],
+            cross_section="rectangle",
+        )
+        specimen = make_specimen(client, admin_headers, standard="평판 두께미정")
+
+        found = field_named(dimensions_of(client, admin_headers, specimen["id"]), "thickness")
+        # `make_specimen` 의 재료는 스펙 두께 1.0 mm 다.
+        assert found["from_material"] == pytest.approx(0.001)
+        assert found["nominal"] is None
+        assert found["measured"] is None
+        assert found["source"] == "material"
+
     def test_잰_값이_이긴다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
@@ -610,11 +656,23 @@ class TestBriefSizes:
         # 규격이 준 것은 그 사실이 함께 온다 — 화면이 흐리게 그린다.
         assert sizes["gauge_length"]["source"] == "nominal"
 
-    def test_규격이_없으면_적을_것도_없다(
+    def test_규격이_없어도_재료가_아는_두께는_적는다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
+        """규격이 없으면 **규격이 준 칸**은 없다. 그래도 빈손은 아니다.
+
+        전에는 여기서 아무것도 안 나왔다. 그런데 개발 DB 의 시편 244개 중
+        177개가 규격이 없고 그중 120개가 두께를 안 적었다 — 그쪽이 다수인데,
+        재료는 `SECC_-_0.8` 처럼 두께를 이름에 달고 있다(2026-09-11 VOC).
+
+        **출처를 함께 낸다.** 화면이 「재료 스펙에서 왔다」 고 말해야 사람이
+        실측으로 읽지 않는다.
+        """
         specimen = make_specimen(client, admin_headers)
         listed = client.get(
             f"/api/samples/{specimen['sample_id']}/specimens", headers=admin_headers
         )
-        assert listed.json()[0]["sizes"] == []
+        sizes = {item["key"]: item for item in listed.json()[0]["sizes"]}
+        assert set(sizes) == {"thickness"}
+        assert sizes["thickness"]["source"] == "material"
+        assert sizes["thickness"]["value"] == pytest.approx(0.001)

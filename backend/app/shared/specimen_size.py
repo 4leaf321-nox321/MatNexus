@@ -13,6 +13,17 @@
 
     시편에 값이 있다   그 값을 쓴다        ← 사람이 실제로 잰 것
     시편이 비었다      규격의 공칭을 쓴다
+    그것도 없다        재료의 스펙 두께     ← 두께 하나뿐, 마지막 수단
+
+**재료의 스펙 두께가 마지막에 오는 이유.** 판재는 이름이 곧 두께다(`SECC_-_0.8`).
+그런데 시편에 두께를 안 적으면 단면적을 못 내고, 처리가 첫 단계에서 막힌다 —
+사람 눈에는 **화면에 0.8t 라고 쓰여 있는데 「두께가 없습니다」** 로 보인다
+(2026-09-11 VOC). 규격은 판재 두께를 안 정한다(그건 소재 쪽 값이다), 그래서
+규격 공칭으로는 영영 안 채워진다.
+
+**그래도 실측이 원칙이다.** 압연 공차가 있어 0.8t 가 0.786 으로 나온다 — 1~2%면
+응력이 그만큼 어긋난다. 그래서 조용히 쓰지 않고 **출처를 `material` 로 밝힌다.**
+화면이 「재료 스펙에서 왔다」 고 말하고, 사람이 잰 값을 넣는 순간 그것이 이긴다.
 
 **규격이 잰 값을 조용히 덮으면 안 된다.** 장비 파일의 치수를 시편에 채울 때와
 같은 규칙이다 — 덮어쓰면 "이 두께가 실측인가 규격값인가" 를 나중에 답할 수 없다.
@@ -35,7 +46,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import Specimen
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.vocabulary.models import VocabularyTerm
 
 # **`Field` 를 여기서 다시 내보낸다.** 모듈은 다른 모듈의 `services` 를 직접
@@ -117,6 +128,9 @@ class Sizes:
     measured: dict[str, float]
     #: **이 시험이** 잰 값. 시험 없이 부르면 비어 있다.
     from_run: dict[str, float]
+    #: 재료의 스펙에서 물려받은 값(두께뿐). **가장 약한 근거다** — 위의 셋 중
+    #: 하나라도 있으면 그것이 이긴다.
+    from_material: dict[str, float]
     #: 규격 값(`ASTM E8 R1`). 없으면 규격을 안 정한 시편이다.
     standard: str | None
     #: 이 규격이 요구하는 비율 조건. **어겨도 막지 않는다** — 보이게만 한다.
@@ -156,6 +170,7 @@ def sizes_of(
         ① 이 시험이 잰 값   `run_measured` (그 시험 파일이 들고 온 것)
         ② 시편에 적힌 값     `specimen.dimensions`
         ③ 규격이 정한 공칭   규격 값의 속성
+        ④ 재료의 스펙 두께   `material.spec_thickness_m` — **두께 하나만**
 
     ①이 있는 이유는 실사용에서 나왔다 — *"시편 하나에 여러 시험으로 넣으니까,
     그 시험은 다 같은 두께, 폭을 가지게 되어 버린다"*. 치수는 그 시험에서 잰
@@ -210,15 +225,33 @@ def sizes_for(
             )
 
     told = run_measured or {}
+    thickness = _spec_thickness(db, specimens)
     return {
         specimen.id: _sizes(
             specimen,
             standards.get(specimen.standard_term_id) if specimen.standard_term_id else None,
             *schema.get(specimen.standard_term_id or uuid.UUID(int=0), ((), {})),
             told.get(specimen.id) or {},
+            thickness.get(specimen.id),
         )
         for specimen in specimens
     }
+
+
+def _spec_thickness(db: Session, specimens: Sequence[Specimen]) -> dict[uuid.UUID, float]:
+    """시편 → 그 재료의 스펙 두께(m). **한 번에 읽는다** — 시편마다 물으면 N+1 이다."""
+    ids = [one.id for one in specimens]
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(Specimen.id, Material.spec_thickness_m)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .join(Material, Material.id == Sample.material_id)
+        .where(Specimen.id.in_(ids), Material.spec_thickness_m.is_not(None))
+    ).all()
+    # 0 은 두께가 아니다 — 「안 적었다」 와 같이 다룬다. 0 으로 단면적을 내면
+    # 넓이가 0 이 되고, 응력이 무한대로 나가는 편이 낫지 않다.
+    return {row[0]: float(row[1]) for row in rows if row[1]}
 
 
 def _with_needs(fields: tuple[Field, ...], cross_section: str | None) -> tuple[Field, ...]:
@@ -261,8 +294,11 @@ def _sizes(
     fields: tuple[Field, ...],
     nominal: dict[str, float],
     run_measured: Mapping[str, float] | None = None,
+    spec_thickness: float | None = None,
 ) -> Sizes:
     from_run = {key: float(value) for key, value in (run_measured or {}).items()}
+    # **재료가 아는 것은 두께 하나다.** 폭·게이지는 자를 때 정해지므로 재료에 없다.
+    from_material = {"thickness": float(spec_thickness)} if spec_thickness else {}
     measured = {key: float(value) for key, value in (specimen.dimensions or {}).items()}
     # **옛 컬럼도 실측이다.** 아직 그쪽으로만 채워진 시편이 있다(ADR 0010 Expand).
     for key, column in LEGACY_COLUMNS.items():
@@ -275,7 +311,11 @@ def _sizes(
     known = {item.key: item for item in fields}
     items: list[Size] = []
     # 규격이 정한 칸 순서를 따른다 — 화면이 그 순서로 그린다.
-    extra = [k for k in (*from_run, *measured) if k not in known]
+    #
+    # **규격이 없는 시편에도 재료 두께는 들어온다.** 규격을 안 정한 시편이
+    # 개발 DB 에 177개고 그중 120개가 두께를 안 적었다(2026-09-11) — 규격이
+    # 없으면 칸도 없으니, 여기서 빼면 그 시편들에는 물려받을 길이 영영 없다.
+    extra = [k for k in (*from_run, *measured, *from_material) if k not in known]
     for key in [*known, *dict.fromkeys(extra)]:
         field = known.get(key)
         # **이 시험이 잰 것이 먼저다.** 같은 시편으로 여러 번 재면 값이 다를 수
@@ -286,6 +326,8 @@ def _sizes(
             value, source = measured[key], "measured"
         elif key in nominal:
             value, source = nominal[key], "nominal"
+        elif key in from_material:
+            value, source = from_material[key], "material"
         else:
             continue
         items.append(
@@ -315,6 +357,7 @@ def _sizes(
         nominal=nominal,
         measured=measured,
         from_run=from_run,
+        from_material=from_material,
         standard=standard.value if standard else None,
     )
 
@@ -359,7 +402,15 @@ def area_detail(
     # **무엇이 있는지 말해 준다.** 「폭·두께가 없습니다」 만 적으면, 지름을 채워 둔
     # 사람은 화면에 값이 보이는데 없다고 하니 화면이 틀렸다고 여긴다 — 실제로 그
     # 물음이 나왔다(2026-09-02). 있는 것을 세어 주면 무엇이 모자란지가 드러난다.
-    have = [f"{one.label} {one.value * 1000:g} mm" for one in sizes.items if one.value]
+    # **어디서 온 값인지 함께 적는다.** 재료에서 물려받은 두께를 그냥 「이
+    # 시편에 있는 값」 이라고 적으면, 사람은 자기가 적은 줄 알고 왜 모자라다는
+    # 것인지 더 헷갈린다 — VOC 가 그 자리에서 나왔다(2026-09-11).
+    where = {"material": "(재료 스펙)", "nominal": "(규격 공칭)"}
+    have = [
+        f"{one.label} {one.value * 1000:g} mm{where.get(one.source, '')}"
+        for one in sizes.items
+        if one.value
+    ]
     if have:
         return Area(
             None,

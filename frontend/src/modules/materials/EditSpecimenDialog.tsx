@@ -61,6 +61,19 @@ function shownValue(value: number | null | undefined, field: SpecimenSize): stri
   return String(Number(toDisplay(value, field.si_unit, field.dimension).toPrecision(10)))
 }
 
+/**
+ * 비워 두면 쓰일 값 — **어디서 오는지 함께 적는다.**
+ *
+ * 판재는 규격이 두께를 안 정한다(그건 소재 쪽 값이다). 그래서 두께 칸은 공칭이
+ * 늘 비어 있었고, 사람은 재료에 `0.8t` 라고 적어 두고도 「두께 없음」 으로
+ * 막혔다(2026-09-11 VOC).
+ */
+function placeholderOf(field: SpecimenSize): string {
+  if (field.nominal != null) return `규격 ${shownValue(field.nominal, field)}`
+  if (field.from_material != null) return `재료 ${shownValue(field.from_material, field)}`
+  return ''
+}
+
 export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) {
   const [standard, setStandard] = useState(specimen.standard ?? '')
   const [note, setNote] = useState(specimen.note ?? '')
@@ -204,10 +217,11 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
                         id={`sp-${field.key}`}
                         inputMode="decimal"
                         className="h-8"
-                        // 흐린 숫자가 규격의 공칭이다. 비워 두면 그 값이 쓰인다.
-                        placeholder={
-                          field.nominal == null ? '' : `규격 ${shownValue(field.nominal, field)}`
-                        }
+                        // 흐린 숫자가 **비워 두면 쓰일 값**이다. 규격이 정한
+                        // 공칭이 먼저이고, 없으면 재료의 스펙 두께다 — 어느
+                        // 쪽인지 함께 적는다. 그냥 숫자만 보이면 사람은 그것을
+                        // 이미 잰 값으로 읽는다.
+                        placeholder={placeholderOf(field)}
                         value={measured[field.key] ?? ''}
                         onChange={(event) =>
                           setMeasured((current) => ({

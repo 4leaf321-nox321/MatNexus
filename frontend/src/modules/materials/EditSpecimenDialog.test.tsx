@@ -47,6 +47,7 @@ const size = (key: string, label: string, extra: Record<string, unknown> = {}) =
   help: null,
   inherited: true,
   nominal: null,
+  from_material: null,
   measured: null,
   source: null,
   ...extra,
@@ -103,6 +104,21 @@ describe('시편 치수', () => {
     const gauge = await screen.findByLabelText<HTMLInputElement>(/게이지 길이/)
     expect(gauge).toHaveValue('')
     expect(gauge).toHaveAttribute('placeholder', '규격 50')
+  })
+
+  it('규격이 두께를 안 정하면 재료의 스펙 두께를 보여 준다', async () => {
+    // 판재는 규격이 두께를 안 정한다 — 그건 소재 쪽 값이다. 그래서 두께 칸은
+    // 공칭이 늘 비어 있었고, 사람은 재료에 `0.8t` 라고 적어 두고도 「두께가
+    // 없습니다」 로 막혔다(2026-09-11 VOC).
+    dimensions.mockResolvedValue({
+      fields: [size('thickness', '두께', { from_material: 0.0008, source: 'material' })],
+      area: null,
+    })
+    show()
+    const thickness = await screen.findByLabelText<HTMLInputElement>(/두께/)
+    expect(thickness).toHaveValue('')
+    // **어디서 온 값인지 함께 적는다.** 숫자만 보이면 이미 잰 값으로 읽는다.
+    expect(thickness).toHaveAttribute('placeholder', '재료 0.8')
   })
 
   it('빈 칸은 안 보낸다', async () => {
