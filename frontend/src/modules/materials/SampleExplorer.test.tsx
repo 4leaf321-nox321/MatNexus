@@ -79,7 +79,7 @@ const specimen = (id: string, name: string, orientation: string, runs = 0) => ({
   registered_by: null,
 })
 
-function show() {
+function show(focus: { sample?: string; specimen?: string } = {}) {
   render(
     <MemoryRouter>
       <SampleExplorer
@@ -87,6 +87,8 @@ function show() {
         samples={SAMPLES as never}
         onChanged={() => {}}
         onAddSample={() => {}}
+        focusSampleId={focus.sample}
+        focusSpecimenId={focus.specimen}
       />
     </MemoryRouter>
   )
@@ -368,5 +370,26 @@ describe('보기 모드에 따라', () => {
     show()
     await screen.findByText('MD_01')
     expect(screen.getAllByRole('button', { name: /표로 시험 넣기/ })).toHaveLength(1)
+  })
+})
+
+describe('주소가 가리킨 자리를 연다', () => {
+  // 시편에는 제 화면이 없다 — 여기 안에 산다. 그래서 밖에서 「그 시편으로」
+  // 보내려면 이 자리를 열어 주는 수밖에 없다(2026-09-11 지적).
+  it('그 시료를 고르고 그 시편을 펼친다', async () => {
+    specimens.mockResolvedValue([specimen('sp9', 'SECC_1.0__02_TD_01', 'TD', 1)])
+    show({ sample: 's2', specimen: 'sp9' })
+
+    // 첫 시료가 아니라 지목받은 시료를 읽는다.
+    await waitFor(() => expect(specimens).toHaveBeenCalledWith('s2'))
+    expect(await screen.findByText('시험 목록: SECC_1.0__02_TD_01')).toBeInTheDocument()
+  })
+
+  it('지목이 없으면 전과 같이 첫 시료만 연다', async () => {
+    specimens.mockResolvedValue([specimen('sp1', 'SECC_1.0__01_MD_01', 'MD', 1)])
+    show()
+
+    await waitFor(() => expect(specimens).toHaveBeenCalledWith('s1'))
+    expect(screen.queryByText(/시험 목록:/)).not.toBeInTheDocument()
   })
 })

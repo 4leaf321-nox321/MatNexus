@@ -48,6 +48,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 
@@ -275,6 +276,8 @@ export default function TestRunsPage() {
   // **고를 수 있는 줄만 넘긴다.** Shift 범위가 못 고르는 줄을 건너뛰어야 한다 —
   // 안 그러면 범위 안의 실패한 시험까지 켜지고, 배치가 통째로 실패한다.
   const selection = useRowSelection(processable.map((run) => run.id))
+  // 고를 수 있는 줄만 세는 선택과 달리, 오가는 것은 **보이는 줄 전부**다.
+  const focus = useRowFocus(rows.map((run) => run.id))
   const picked = selection.picked
   /** 한 배치는 **한 종류**여야 한다 — 인장 레시피가 DMA 곡선에 걸리면 실패한다. */
   const pickedTypes = new Set(
@@ -581,7 +584,7 @@ export default function TestRunsPage() {
           </TableHeader>
           <TableBody>
             {rows.map((run) => (
-              <TableRow key={run.id}>
+              <TableRow key={run.id} className={ROW_FOCUS_STYLE} {...focus.rowProps(run.id)}>
                 <TableCell>
                   <input
                     type="checkbox"
@@ -594,7 +597,7 @@ export default function TestRunsPage() {
                     onChange={() => {}}
                   />
                 </TableCell>
-                <TableCell className="font-mono text-xs">
+                <TableCell className="font-mono font-medium">
                   {/* **어디서 왔는지 함께 넘긴다.** 상세의 「뒤로」 가 늘 재료
                       화면으로 갔는데, 목록에서 들어온 사람은 목록으로 돌아가려
                       한다 — 20건을 훑는 중이면 재료로 튕기는 순간 자리를 잃는다. */}
@@ -609,7 +612,7 @@ export default function TestRunsPage() {
                     <AlertTriangle className="ml-1 inline size-3 text-amber-500" />
                   )}
                 </TableCell>
-                <TableCell className="text-muted-foreground font-mono text-xs">
+                <TableCell className="font-mono">
                   {/* **재료로도 들어간다**(2026-09-05). 시험을 보다가 「이 재료가 뭐였지」 로
                       가는 길이 없어 재료 목록에서 이름을 다시 찾아야 했다. */}
                   {run.material_id ? (
@@ -627,7 +630,7 @@ export default function TestRunsPage() {
                 <TableCell>
                   <Badge variant="secondary">{run.orientation ?? '—'}</Badge>
                 </TableCell>
-                <TableCell className="text-sm">{run.test_type_label}</TableCell>
+                <TableCell>{run.test_type_label}</TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(run.status)}>
                     {RUN_STATUS_LABEL[run.status] ?? run.status}
@@ -656,20 +659,20 @@ export default function TestRunsPage() {
                 <TableCell className="text-right tabular-nums">
                   {run.row_count?.toLocaleString('ko-KR') ?? '—'}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
+                <TableCell>
                   {run.division ?? '—'}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
+                <TableCell>
                   {typeof run.conditions?.testing_group === 'string'
                     ? run.conditions.testing_group
                     : '—'}
                 </TableCell>
                 {/* **파일이 이상할 때 물어볼 데가 여기다.** 전에는 상세를
                     열어야 알 수 있었고, 20건이 이상하면 20번 열어야 했다. */}
-                <TableCell className="text-muted-foreground text-sm">
+                <TableCell>
                   {run.operator ?? '—'}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
+                <TableCell>
                   {run.registered_by ?? '—'}
                 </TableCell>
                 <TableCell>

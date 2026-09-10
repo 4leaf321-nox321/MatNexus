@@ -2179,16 +2179,35 @@ def bulk_update_specimens(
     )
 
 
-@specimens_router.get("/{specimen_id}", response_model=SpecimenOut)
+@specimens_router.get("/{specimen_id}", response_model=SpecimenRowOut)
 def get_specimen(
     specimen_id: uuid.UUID,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> SpecimenOut:
+) -> SpecimenRowOut:
+    """시편 하나. **어느 재료·어느 시료의 것인지 함께 낸다.**
+
+    시편은 제 화면이 없다 — 재료 상세의 시료 탭 안에 산다. 그래서 「이 시편으로
+    가라」 는 주소를 만들려면 **재료와 시료를 알아야** 하는데, 시편만 돌려주면
+    부르는 쪽이 시료를 읽고 다시 재료를 읽어야 했다(왕복 셋). 목록(`SpecimenRowOut`)
+    이 이미 그 셋을 함께 내므로 같은 모양으로 맞춘다 — 칸이 늘기만 하니 이미
+    쓰던 쪽은 그대로 돈다.
+    """
     one = _get_specimen(db, user, specimen_id)
-    return _specimen_out(
-        one,
-        registered_by=services.registrant_names([one], db).get(one.registered_by_id),
+    sample = db.get(Sample, one.sample_id)
+    material = db.get(Material, sample.material_id) if sample else None
+    if sample is None or material is None:
+        raise NotFound("MNX-MATERIALS-0003", "시편을 찾을 수 없습니다.")
+    return SpecimenRowOut(
+        **_specimen_out(
+            one,
+            sizes=specimen_size.sizes_of(db, one),
+            registered_by=services.registrant_names([one], db).get(one.registered_by_id),
+        ).model_dump(),
+        material_id=material.id,
+        material_name=material.record_name,
+        lot_no=sample.lot_no,
+        sample_name=sample.record_name,
     )
 
 
@@ -2290,9 +2309,15 @@ def get_specimen_dimensions(
     for field in [*sizes.fields, *orphans]:
         measured = sizes.measured.get(field.key)
         nominal = sizes.nominal.get(field.key)
+        # **재료 스펙은 가장 약한 근거다**(`specimen_size` 의 차례와 같아야 한다).
+        # 여기서 차례를 다르게 적으면 폼이 보여 주는 출처와 단면적이 쓴 값이
+        # 갈린다 — 그 어긋남은 응력이 틀린 뒤에야 드러난다.
+        from_material = sizes.from_material.get(field.key)
         source = "measured" if measured is not None else None
         if source is None and nominal is not None:
             source = "nominal"
+        if source is None and from_material is not None:
+            source = "material"
         fields.append(
             SpecimenSizeOut(
                 key=field.key,
@@ -2304,6 +2329,7 @@ def get_specimen_dimensions(
                 inherited=field.inherited,
                 nominal=nominal,
                 measured=measured,
+                from_material=from_material,
                 source=source,
             )
         )

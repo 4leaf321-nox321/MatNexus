@@ -349,6 +349,10 @@ export default function MaterialDetailPage() {
         samples={samples.data ?? []}
         onChanged={() => samples.reload()}
         onAddSample={() => setAddingSample(true)}
+        // 주소가 시료·시편을 지목하면 그 자리를 열어 준다 — 시편에는 제 화면이
+        // 없어서, 밖에서 「그 시편으로」 보내는 길이 이것뿐이다.
+        focusSampleId={params.get('sample')}
+        focusSpecimenId={params.get('specimen')}
       />
 
         </TabsContent>

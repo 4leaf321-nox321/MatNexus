@@ -15,6 +15,7 @@ import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
 import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
+import SpecimenEntry from '@/modules/materials/SpecimenEntry'
 import SpecimensPage from '@/modules/materials/SpecimensPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
@@ -133,6 +134,10 @@ export const router = createBrowserRouter([
           { path: 'materials', element: <MaterialsPage /> },
           // **재료를 거치지 않고 시편을 찾는다.** `/cards` 가 있는 이유와 같다.
           { path: 'specimens', element: <SpecimensPage /> },
+          // 시편 하나를 가리키는 주소. 제 화면은 없고 재료 상세의 그 자리로
+          // 바꿔 준다 — 검색 결과가 든 것은 시편 식별자 하나뿐이라, 이 문이
+          // 없으면 「시편으로 가라」 를 적을 방법이 없다.
+          { path: 'specimens/:id', element: <SpecimenEntry /> },
           // **전역 시험 목록.** 사이드바의 「시험」 이 여기다 — 옆의 재료·시편과
           // 같은 범위여야 한다. `/w/<부서>/tests` 도 살아 있고 그쪽은 홈에서
           // 사업부 현황을 눌러 들어가는 길이다(같은 화면이 slug 유무로 갈린다).

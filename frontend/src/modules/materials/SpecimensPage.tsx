@@ -51,14 +51,24 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 import { formatScalar } from '@/shared/units'
+import { specimenHref } from '@/modules/materials/SpecimenEntry'
 import { RecordName } from '@/shared/components/RecordName'
 
 const PAGE = 50
 
-/** 치수 한 줄. **규격에서 온 값은 흐리게** — 합치면 사람은 전부 실측으로 읽는다. */
+//: 치수 값이 어디서 왔나 → 사람에게 할 말. **잰 것이 아니면 그렇다고 말한다.**
+const SIZE_SOURCES: Record<string, string> = {
+  measured: '잰 값입니다',
+  run: '이 시험에서 잰 값입니다',
+  nominal: '규격이 정한 공칭입니다',
+  material: '재료의 스펙 두께입니다 — 실제로 재면 그 값이 이깁니다',
+}
+
+/** 치수 한 줄. **잰 값이 아닌 것은 흐리게** — 합치면 사람은 전부 실측으로 읽는다. */
 function Sizes({ row }: { row: { sizes: { label: string; value: number | null; source: string }[] } }) {
   const shown = row.sizes.filter((one) => one.value != null)
   if (shown.length === 0) return <span className="text-muted-foreground">—</span>
@@ -71,9 +81,11 @@ function Sizes({ row }: { row: { sizes: { label: string; value: number | null; s
         <span
           key={one.label}
           className={`text-xs tabular-nums ${
-            one.source === 'nominal' ? 'text-muted-foreground italic' : ''
+            one.source === 'measured' || one.source === 'run'
+              ? ''
+              : 'text-muted-foreground italic'
           }`}
-          title={one.source === 'nominal' ? '규격이 정한 공칭입니다' : '잰 값입니다'}
+          title={SIZE_SOURCES[one.source] ?? '잰 값입니다'}
         >
           {one.label} {formatScalar(one.value ?? 0, 'm', 'length')}
         </span>
@@ -131,6 +143,7 @@ export default function SpecimensPage() {
   // **Shift 로 범위를 고른다.** 수백 장을 하나씩 누르는 것은 일이 아니다.
 
   const selection = useRowSelection(rows.map((row) => row.id))
+  const focus = useRowFocus(rows.map((row) => row.id))
 
   const picked = selection.picked
   const total = page.data?.total ?? 0
@@ -288,7 +301,7 @@ export default function SpecimensPage() {
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow key={row.id} className={ROW_FOCUS_STYLE} {...focus.rowProps(row.id)}>
                 <TableCell>
                   <input
                     type="checkbox"
@@ -299,7 +312,7 @@ export default function SpecimensPage() {
                     onChange={() => {}}
                   />
                 </TableCell>
-                <TableCell className="font-mono text-xs">
+                <TableCell className="font-mono">
                   <Link
                     to={`/materials/${row.material_id}`}
                     className="hover:text-primary hover:underline"
@@ -307,16 +320,22 @@ export default function SpecimensPage() {
                     {row.material_name}
                   </Link>
                 </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
+                <TableCell>
                   {row.lot_no ?? '—'}
                 </TableCell>
-                <TableCell className="font-mono text-xs">
-                  <RecordName name={row.record_name} />
+                <TableCell className="font-mono font-medium">
+                  {/* **시편 이름이 곧 들어가는 문이다.** 전에는 재료 이름만
+                      링크라, 시편을 찾아 놓고도 그 시편으로는 못 갔다 —
+                      재료로 간 다음 시료를 하나씩 열어 눈으로 찾아야 했다
+                      (2026-09-11 지적). */}
+                  <Link to={specimenHref(row)} className="hover:text-primary hover:underline">
+                    <RecordName name={row.record_name} />
+                  </Link>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline">{row.orientation}</Badge>
                 </TableCell>
-                <TableCell className="text-xs">
+                <TableCell>
                   {row.standard ?? (
                     // **비어 있다는 것이 중요한 정보다.** 규격이 없으면 그 시편은
                     // 치수 칸조차 못 갖는다(ADR 0010) — 이관에서 실제로 그랬다.
@@ -326,7 +345,7 @@ export default function SpecimensPage() {
                 <TableCell>
                   <Sizes row={row} />
                 </TableCell>
-                <TableCell className="text-right text-xs tabular-nums">
+                <TableCell className="text-right tabular-nums">
                   {row.test_run_count > 0 ? (
                     <span className="inline-flex items-center gap-1">
                       <FlaskConical className="size-3 opacity-60" />

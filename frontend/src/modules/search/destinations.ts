@@ -48,12 +48,17 @@ export function destinationOf(hit: SearchHit): Destination {
     case 'guide_section':
       return { href: '/guide', approximate: true }
 
-    // 품은 것으로 데려간다 — 제 화면이 없다.
+    // 품은 것으로 데려간다 — 제 화면이 없다. **다만 그 자리까지 데려간다.**
+    // 재료 화면에 떨어뜨려 놓기만 하면 사람은 시료를 하나씩 열어 그 시편을
+    // 눈으로 찾아야 했다(2026-09-11 지적).
     case 'sample':
-    case 'specimen':
       return hit.parent_id
-        ? { href: `/materials/${hit.parent_id}` }
+        ? { href: `/materials/${hit.parent_id}?tab=samples&sample=${hit.id}` }
         : { href: '/specimens', approximate: true }
+    // 시편은 시료를 한 번 더 거쳐야 자리가 정해진다 — 검색이 든 것은 재료뿐이라
+    // 그 문(`/specimens/:id`)이 한 번 읽어 자리를 찾아 준다.
+    case 'specimen':
+      return { href: `/specimens/${hit.id}` }
     case 'processing_result':
       return hit.parent_id
         ? { href: `/test-runs/${hit.parent_id}` }

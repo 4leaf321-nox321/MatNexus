@@ -72,7 +72,10 @@ describe('SearchPage', () => {
     expect(screen.getByText(/비슷함/)).toBeInTheDocument()
   })
 
-  it('시편은 품은 재료로 데려간다', async () => {
+  it('시편은 그 시편의 자리로 데려간다', async () => {
+    // 전에는 품은 **재료까지만** 데려갔다. 그러면 사람은 시료를 하나씩 열어
+    // 그 시편을 눈으로 찾아야 한다 — 「시편을 골라 들어갈 수가 없다」 가 그
+    // 말이었다(2026-09-11). 시편 식별자 하나로 갈 수 있는 문이 생겼다.
     get.mockResolvedValue({
       query: 'SECC',
       mode: 'contains',
@@ -100,7 +103,7 @@ describe('SearchPage', () => {
     show('?q=SECC')
 
     const link = await screen.findByRole('link', { name: 'SECC_01__MD_02' })
-    expect(link).toHaveAttribute('href', '/materials/m9')
+    expect(link).toHaveAttribute('href', '/specimens/s1')
   })
 
   it('못 찾으면 비슷 모드를 권한다', async () => {

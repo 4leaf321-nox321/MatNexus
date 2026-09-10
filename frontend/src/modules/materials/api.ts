@@ -274,6 +274,14 @@ export const materialsApi = {
   removeSample: (id: string) => api.delete<void>(`/samples/${id}`),
 
   specimens: (sampleId: string) => api.get<Specimen[]>(`/samples/${sampleId}/specimens`),
+  /**
+   * 시편 하나 — **재료·시료까지 함께 온다.**
+   *
+   * 시편에는 제 화면이 없어서(재료 상세 안에 산다) 「이 시편으로 가라」 를
+   * 적으려면 재료와 시료를 알아야 한다. 시편만 돌려받으면 시료를 읽고 재료를
+   * 또 읽어야 해서 왕복이 셋이 된다.
+   */
+  specimen: (id: string) => api.get<SpecimenRow>(`/specimens/${id}`),
   createSpecimen: (sampleId: string, payload: SpecimenCreate) =>
     api.post<Specimen>(`/samples/${sampleId}/specimens`, payload),
   /**

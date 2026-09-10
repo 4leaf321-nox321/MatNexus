@@ -588,6 +588,11 @@ class SpecimenSizeOut(BaseModel):
     """분류가 준 칸인가. 아니면 이 규격만의 칸이다."""
     nominal: float | None
     """규격이 정한 공칭(SI). 시편 행에는 복사돼 있지 않다."""
+    from_material: float | None = None
+    """재료의 스펙 두께(SI). **잰 값도 규격 공칭도 없을 때만** 이것이 쓰인다.
+
+    공칭과 한 칸으로 합치지 않는다 — 규격이 정한 값과 소재가 가진 값은 근거가
+    다르고, 화면이 「규격 1.0」 과 「재료 0.8」 을 다르게 말해야 한다."""
     measured: float | None
     """이 시편에서 실제로 잰 값(SI)."""
     source: str | None

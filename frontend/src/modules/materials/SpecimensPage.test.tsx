@@ -92,6 +92,18 @@ describe('시편 표', () => {
     expect(screen.getByText('ASTM E8/E8M 박판형')).toBeInTheDocument()
   })
 
+  it('시편 이름이 그 시편의 자리로 가는 문이다', async () => {
+    // 전에는 재료 이름만 링크였다 — 시편을 찾아 놓고도 그 시편으로는 못 가고,
+    // 재료로 간 다음 시료를 하나씩 열어 눈으로 찾아야 했다(2026-09-11 지적).
+    open()
+
+    const link = await screen.findByRole('link', { name: /SECC_MDOI_1\.0__01_MD_01/ })
+    expect(link).toHaveAttribute(
+      'href',
+      '/materials/m1?tab=samples&sample=sa1&specimen=sp1'
+    )
+  })
+
   it('규격이 없으면 그 사실을 드러낸다', async () => {
     /**
      * **비어 있다는 것이 중요한 정보다.** 규격이 없으면 그 시편은 치수 칸조차

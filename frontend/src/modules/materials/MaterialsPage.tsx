@@ -52,6 +52,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 import { RecordName } from '@/shared/components/RecordName'
@@ -218,6 +219,8 @@ export default function MaterialsPage() {
   const rows = page?.items ?? []
   // **Shift 로 범위를 고른다.** 한 쪽이 50건이라 하나씩 누르는 것은 일이 아니다.
   const selection = useRowSelection(rows.map((material) => material.id))
+  // 화살표로 앞뒤 재료를 오간다 — 목록을 훑는 일이 마우스에 매여 있었다.
+  const focus = useRowFocus(rows.map((material) => material.id))
   const picked = selection.picked
   const total = page?.total ?? 0
   // 천장(2,000)에 걸렸는지. 걸렸으면 몇 건에서 멈췄는지 말한다.
@@ -548,7 +551,11 @@ export default function MaterialsPage() {
             </TableHeader>
             <TableBody>
               {rows.map((material) => (
-                <TableRow key={material.id}>
+                <TableRow
+                  key={material.id}
+                  className={ROW_FOCUS_STYLE}
+                  {...focus.rowProps(material.id)}
+                >
                   <TableCell>
                     <input
                       type="checkbox"
@@ -560,10 +567,10 @@ export default function MaterialsPage() {
                     />
                   </TableCell>
                   {/* 불변 고유 번호 — 이름은 기준정보 개명에 따라 바뀌지만 이건 안 바뀐다. */}
-                  <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">
+                  <TableCell className="font-mono whitespace-nowrap">
                     {material.code}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono font-medium">
                     <Link
                       to={`/materials/${material.id}`}
                       className="hover:text-primary hover:underline"
@@ -571,9 +578,9 @@ export default function MaterialsPage() {
                       <RecordName name={material.record_name} />
                     </Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{material.alias ?? '—'}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{material.family}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
+                  <TableCell>{material.alias ?? '—'}</TableCell>
+                  <TableCell>{material.family}</TableCell>
+                  <TableCell>
                     {material.category}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">

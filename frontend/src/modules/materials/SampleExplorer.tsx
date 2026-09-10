@@ -173,9 +173,19 @@ export function SampleExplorer({
   samples,
   onChanged,
   onAddSample,
+  focusSampleId,
+  focusSpecimenId,
 }: {
   materialId: string
   samples: Sample[]
+  /**
+   * 주소가 가리킨 시료·시편. **시편에는 제 화면이 없어서**(여기 안에 산다)
+   * 밖에서 「그 시편으로」 보내려면 이 자리를 열어 주는 수밖에 없다 —
+   * 재료 화면에 떨어뜨려 놓기만 하면 사람이 시료를 하나씩 열어 찾게 된다
+   * (2026-09-11 지적).
+   */
+  focusSampleId?: string | null
+  focusSpecimenId?: string | null
   /** 시료·시편이 늘거나 줄면 위의 요약 줄과 시료 목록이 달라진다. */
   onChanged: () => void
   /**
@@ -186,8 +196,8 @@ export function SampleExplorer({
 }) {
   // **시료가 하나뿐이어도 고른 상태로 시작한다.** 한 항목짜리 층을 눌러서
   // 통과하게 하지 않는다 — 그것이 아코디언에서 가장 자주 하던 헛클릭이다.
-  const [sampleId, setSampleId] = useState<string | null>(null)
-  const [specimenId, setSpecimenId] = useState<string | null>(null)
+  const [sampleId, setSampleId] = useState<string | null>(focusSampleId ?? null)
+  const [specimenId, setSpecimenId] = useState<string | null>(focusSpecimenId ?? null)
   const [mode, setMode] = useAutoMode()
 
   const active = samples.find((one) => one.id === sampleId) ?? samples[0] ?? null
@@ -198,9 +208,26 @@ export function SampleExplorer({
   )
   const rows = useMemo(() => specimens.data ?? [], [specimens.data])
 
+  // 주소가 다른 자리를 가리키면 따라간다 — 같은 화면에 머문 채 링크를 또
+  // 받는 일이 있다(검색 → 시편 → 다른 시편).
+  useEffect(() => {
+    if (focusSampleId) setSampleId(focusSampleId)
+  }, [focusSampleId])
+  useEffect(() => {
+    if (focusSpecimenId) setSpecimenId(focusSpecimenId)
+  }, [focusSpecimenId])
+
   // 시료를 바꾸면 고른 시편은 그 시료의 것이 아니다. 안 지우면 오른쪽에 남의
   // 시편의 시험이 떠 있고, 그것이 어느 시편의 것인지 화면에 없다.
-  useEffect(() => setSpecimenId(null), [active?.id])
+  //
+  // **비우는 것이 아니라 「주소가 가리킨 것으로」 되돌린다.** 대개 주소는 아무
+  // 것도 안 가리키므로 전과 같이 비워지고, 주소로 들어온 길에서는 열어 주려던
+  // 시편이 열리자마자 닫히지 않는다. 「그 시편이 이 시료에 없으면」 으로 판단을
+  // 바꿔 봤더니, 목록을 다시 읽는 동안 옛 줄이 잠깐 남아 **남의 시편의 시험이
+  // 그 틈에 보였다** — 시험이 그것을 잡았다.
+  useEffect(() => {
+    setSpecimenId(focusSpecimenId ?? null)
+  }, [active?.id, focusSpecimenId])
 
   const picked = rows.find((one) => one.id === specimenId) ?? null
 
@@ -423,35 +450,49 @@ export function SampleExplorer({
                 <TableBody>
                   {rows.map((specimen) => {
                     const open = specimen.id === specimenId
+                    const aimed = specimen.id === focusSpecimenId
                     return (
                       // **열쇠는 조각에 붙인다.** 목록이 받는 자식이 이 조각이라,
                       // 안쪽 `TableRow` 에 붙이면 React 는 못 본다.
                       <Fragment key={specimen.id}>
                         <TableRow
+                          // **주소가 가리킨 줄은 화면 안으로 들여온다.** 시편이
+                          // 서른 줄이면 열어 놓기만 해서는 스크롤 밖에 있다 —
+                          // 사람 눈에는 아무 일도 안 일어난 것으로 보인다.
+                          ref={(node) => {
+                            if (aimed && node) node.scrollIntoView({ block: 'center' })
+                          }}
                           onClick={() => setSpecimenId(open ? null : specimen.id)}
                           aria-selected={open}
-                          className={cn('cursor-pointer', open && 'bg-muted/60')}
+                          className={cn(
+                            'cursor-pointer',
+                            open && 'bg-muted/60',
+                            aimed && 'ring-primary/60 ring-2 ring-inset'
+                          )}
                         >
-                          <TableCell className="text-muted-foreground">
+                          <TableCell>
+                            {/* 흐리게 하는 것은 **값이 아닌 것**뿐이다 — 이건
+                                펼침 표시라 아이콘에 직접 준다. 칸에 주면 값
+                                칸까지 흐려진다. */}
                             {open ? (
-                              <ChevronDown className="size-3.5" />
+                              <ChevronDown className="text-muted-foreground size-3.5" />
                             ) : (
-                              <ChevronRight className="size-3.5" />
+                              <ChevronRight className="text-muted-foreground size-3.5" />
                             )}
                           </TableCell>
                           {/* 이름이 길면 여기서 접힌다. 식별자라 잘라내지 않는다 —
                               `SECC_1.0__01_TD_02` 의 뒤가 잘리면 어느 시편인지 모른다. */}
-                          <TableCell className="font-mono text-xs break-all">
+                          <TableCell className="font-mono font-medium break-all">
                             <RecordName name={specimen.record_name} />
                           </TableCell>
                           <TableCell>
                             <Badge variant="secondary">{specimen.orientation}</Badge>
                           </TableCell>
-                          <TableCell className="text-xs">{specimen.standard ?? '—'}</TableCell>
+                          <TableCell>{specimen.standard ?? '—'}</TableCell>
                           {/* **치수는 한 줄로 둔다.** `두께 1mm · 폭 25mm · 표점 50mm`
                               가 줄바꿈되면 값과 이름이 어긋나 붙어, 어느 숫자가
                               무엇인지 눈으로 다시 맞춰야 한다. */}
-                          <TableCell className="text-muted-foreground w-px text-xs whitespace-nowrap">
+                          <TableCell className="w-px whitespace-nowrap">
                             {sizeText(specimen)}
                           </TableCell>
                           <TableCell>
