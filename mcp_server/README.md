@@ -68,9 +68,9 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 44개)
+## 5. 지금 있는 것 (도구 45개)
 
-**전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 44번
+**전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 45번
 왕복한다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
 
 **쓰는 도구는 전부 `dry_run=True` 가 기본이다.** 미리보기를 사람에게 보이고,
@@ -97,6 +97,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     get_material(material_id)          기본 칸·선언 물성·카드·문헌 연결
     get_parameter_sets(material_id)    모델 파라미터 벌 (Anand·Prony·Ogden)
     list_cards(material_id?, status?)  물성 카드 목록
+    list_card_blocks()                 카드가 담을 수 있는 갈래 — 「점탄성은 어디에」
     get_card(card_id)                  카드 하나 — 덱에 실릴 값 그대로
 
 ### 문헌 카탈로그 → 사내로 받아 오기
@@ -151,7 +152,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 ### 이어짐 — 온톨로지
 
-    get_ontology()                     이 시스템의 지도
+    get_ontology()                     이 시스템의 지도 — 종류마다 **들머리**가 붙는다
     related(kind, id, relation?)       이 마디 옆에 무엇이 있나
     find_path(from, to)                이 둘이 어떻게 이어지나
     get_handbook_section(section_id)   핸드북 절 하나를 펼친다

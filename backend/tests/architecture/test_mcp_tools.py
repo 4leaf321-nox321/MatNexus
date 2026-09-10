@@ -18,6 +18,7 @@ CI 가 그 파일을 최신으로 강제하므로(스키마를 바꾸면 다시 
 
     반환 표기가 dict 인데 배열 경로를 그대로 돌려주는 도구가 없다
     도구에는 설명이 있다 (AI 가 고르는 근거가 설명뿐이다)
+    지도에 적은 들머리·길잡이가 **실재하는 이름만** 쓴다
 
 경로를 **그대로 돌려주는** 것만 본다. 안에서 받아 쓰고 자기 모양으로 감싸는 것은
 문제가 아니다 — `_listed(...)` 로 감싼 것도 여기서 통과한다.
@@ -31,6 +32,8 @@ import re
 from pathlib import Path
 
 import pytest
+
+from app.shared import relations
 
 ROOT = Path(__file__).resolve().parents[3]
 SERVER = ROOT / "mcp_server" / "server.py"
@@ -151,3 +154,61 @@ class TestMcp도구:
         """AI 가 도구를 고르는 근거는 설명뿐이다 — 없으면 안 불리거나 잘못 불린다."""
         empty = [tool.name for tool in _tools() if not ast.get_docstring(tool)]
         assert not empty, f"설명 없는 도구: {empty}"
+
+
+def _map_hints() -> str:
+    """`get_ontology` 에 실어 보내는 들머리·길잡이의 원문."""
+    source = SERVER.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    out = []
+    for node in tree.body:
+        if isinstance(node, ast.AnnAssign | ast.Assign):
+            names = [node.target] if isinstance(node, ast.AnnAssign) else list(node.targets)
+            for name in names:
+                if isinstance(name, ast.Name) and name.id in (
+                    "_ENTRY",
+                    "_RECIPES",
+                    "_ANY_ENTRY",
+                ):
+                    got = ast.get_source_segment(source, node)
+                    if got:
+                        out.append(got)
+    return "\n".join(out)
+
+
+@pytest.mark.skipif(not SERVER.exists(), reason="mcp_server 가 없는 배포본")
+class Test지도의_길잡이:
+    """**지도에 적어 둔 길이 실재하는가.**
+
+    `get_ontology` 는 종류마다 「이 손잡이를 어느 도구가 주나」(`entry`)와 물음별
+    도구 차례(`recipes`)를 얹어 보낸다. 그 글은 사람이 손으로 적은 것이라 **이름이
+    바뀌면 조용히 썩는다** — AI 는 그 말을 믿고 부르고, 422 나 빈손을 받고, 그때
+    지도가 틀렸다는 것은 모른 채 자기가 잘못 골랐다고 여기고 헤맨다.
+
+    실측(2026-09-10): 「점탄성이 있나」 한 물음에 도구를 37번 부른 세션이 있었다
+    (길잡이를 넣고 다시 물으니 16번). 길잡이를 넣는 이유가 그것이고, **그 길잡이가
+    틀리면 헤맴이 그때보다 길어진다.**
+    """
+
+    def test_적어_둔_종류가_온톨로지에_있다(self) -> None:
+        source = _map_hints()
+        assert source, "_ENTRY·_RECIPES 를 못 찾았다 — 이름이 바뀌었나"
+        named = set(re.findall(r'kind="([a-z_]+)"', source))
+        keys = set(re.findall(r'^\s{4}"([a-z_]+)":', source, re.MULTILINE))
+        unknown = sorted((named | keys) - set(relations.KINDS) - {"…"})
+        assert not unknown, f"지도에 없는 종류를 길잡이가 가리킨다: {unknown}"
+
+    def test_적어_둔_관계가_온톨로지에_있다(self) -> None:
+        source = _map_hints()
+        named = set(re.findall(r'relation="([a-z_]+)"', source))
+        assert named, "길잡이에 관계 이름이 하나도 없다 — 정규식이 늙었나"
+        unknown = sorted(named - set(relations.RELATIONS))
+        assert not unknown, f"지도에 없는 관계를 길잡이가 가리킨다: {unknown}"
+
+    def test_적어_둔_도구가_실재한다(self) -> None:
+        """**없는 도구를 부르라고 적어 두면 헤맴이 늘어난다.**"""
+        source = _map_hints()
+        known = {tool.name for tool in _tools()}
+        called = set(re.findall(r"\b([a-z][a-z_]{3,})\(", source))
+        unknown = sorted(called - known)
+        assert not unknown, f"없는 도구를 길잡이가 가리킨다: {unknown}"

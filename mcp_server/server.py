@@ -116,6 +116,11 @@ def _failed(got: httpx.Response) -> dict[str, Any]:
     return out
 
 
+def _named(item: dict[str, Any]) -> dict[str, Any]:
+    """블록이 든 항목에서 **이름과 단위만.** 설명까지 실으면 응답이 세 배가 된다."""
+    return {"key": item.get("key"), "label": item.get("label"), "si_unit": item.get("si_unit")}
+
+
 def _listed(payload: object, key: str) -> dict[str, object]:
     """목록을 dict 로 **감싼다.**
 
@@ -1293,6 +1298,53 @@ async def create_declared_card(
 
 
 @mcp.tool()
+async def list_card_blocks(ctx: Context) -> dict[str, Any]:
+    """**카드가 담을 수 있는 물성 갈래** — 「점탄성은 어디에 사나」 의 답이 여기다.
+
+    카드는 블록의 묶음이다. 어떤 블록이 있는지 모르면 카드를 하나씩 열어 보는
+    수밖에 없고, 그러면 **찾는 것이 없다는 사실조차 확인이 안 된다.**
+
+    실측(2026-09-10): 「점탄성 마스터커브나 Prony 적합이 있나」 를 물은 AI 가
+    이 도구가 없을 때 **37번** 불렀다 — 검색어를 바꿔 가며 훑고, 카드 40장을 받아
+    여섯 장을 열어 보고서야 `viscoelastic` 블록에 닿았다. 이 도구를 두고 다시
+    물으니 **16번**이었고, 그 블록을 단 카드를 여섯 장이 아니라 **열 장 다** 찾았다.
+
+    ## 읽는 법
+
+        key         `list_cards`·`get_card` 의 `blocks` 에 그대로 뜨는 이름
+        help        이 블록이 무엇인가 — **유효 범위가 여기 적혀 있다**
+        in_deck     이 블록이 해석 덱에 실리나. 거짓이면 카드에만 남는다
+        produces    그 블록이 든 스칼라(이름·SI 단위)
+        rows        표가 있으면 그 열. 비어 있으면 표가 없는 블록이다
+
+    각 항목의 긴 설명까지는 안 싣는다 — 필요하면 `get_card` 로 실물을 봐라.
+
+    **문헌 쪽은 블록이 아니다.** 같은 물성이라도 문헌 카탈로그에서는 파라미터
+    벌로 산다(`get_catalog_parameter_sets`). 사내 카드에 없다고 문헌에도 없다고
+    답하지 마라.
+    """
+    got = await _get(ctx, "/fitting/blocks")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    return {
+        "count": len(rows),
+        "blocks": [
+            {
+                "key": one.get("key"),
+                "label": one.get("label"),
+                "help": one.get("help"),
+                "in_deck": one.get("in_deck"),
+                "produces": [_named(item) for item in one.get("produces") or []],
+                "rows": [_named(item) for item in one.get("rows") or []],
+            }
+            for one in rows
+        ],
+        "note": "이 이름이 `list_cards`·`get_card` 의 `blocks` 에 그대로 뜬다.",
+    }
+
+
+@mcp.tool()
 async def list_cards(
     ctx: Context,
     material_id: str | None = None,
@@ -2340,6 +2392,58 @@ async def search_all(
     return await _get(ctx, "/search", {"q": q, "mode": mode, "kind": kind})
 
 
+#: **어느 도구가 그 종류의 손잡이를 주나.** 지도가 「무엇이 이어져 있나」 만
+#: 말하고 「어디서 시작하나」 를 안 말하면, AI 는 검색어를 바꿔 가며 훑는다 —
+#: 실측(2026-09-10)으로 한 물음에 도구를 37번 부른 세션이 그랬다.
+#:
+#: 여기 적는 것은 **더 나은 들머리가 있는 종류만**이다. 전부에 `search_all` 이
+#: 듣기 때문에 다 적으면 같은 말이 열일곱 번 실린다.
+#:
+#: 이름이 썩지 않는지는 `tests/architecture/test_mcp_tools.py` 가 검사한다 —
+#: 여기 적힌 종류가 온톨로지에 실제로 있는지 맞대 본다.
+_ENTRY: dict[str, str] = {
+    "material": "search_materials(q=…) → items[].id",
+    "catalog_material": "search_catalog(query=…) → items[].id",
+    "property": "resolve_property(name=…) → key. **UUID 가 아니라 이 문자열이다**",
+    "property_card": "list_cards(material_id=…) → items[].id. `blocks` 에 담긴 갈래가 보인다",
+    "test_run": "list_test_runs(material_id=…) → items[].id",
+    "parameter_set": "get_parameter_sets(material_id=…)(사내) · "
+    "get_catalog_parameter_sets(catalog_material_id=…)(문헌)",
+    "instrument": "how_to_measure(property_key=…) → 그 물성을 재는 장비들",
+    "source": 'search_all(q=논문 제목, kind="source", mode="similar") → 그 마디에서 `cited_by`',
+    "guide_section": "search_all(q=…) 로 찾아 get_handbook_section(section_id=…) 로 읽는다",
+}
+
+#: 적힌 들머리가 없는 종류. **없는 것이 아니라 이름으로 집는 것이다.**
+_ANY_ENTRY = 'search_all(q=이름, kind="…") → groups[].hits[].id'
+
+#: 물음 → 도구 차례. **여기 있는 물음은 헤매지 말고 그대로 따라가라.**
+_RECIPES: list[dict[str, str]] = [
+    {
+        "question": "이 논문에서 온 값이 어느 재료들에 쓰였나",
+        "steps": 'search_all(q=제목, kind="source", mode="similar") → '
+        'related(kind="source", id=…, relation="cited_by")',
+        "note": "출처가 마디라서 한 홉이다. 값을 하나씩 뒤지지 마라.",
+    },
+    {
+        "question": "점탄성·Prony·경화식 같은 갈래가 카드에 있나",
+        "steps": "list_card_blocks() → list_cards() 의 `blocks` → get_card(card_id)",
+        "note": "문헌 쪽은 블록이 아니라 파라미터 벌이다 — get_catalog_parameter_sets.",
+    },
+    {
+        "question": "이 물성을 무엇으로 재나 / 우리가 그 장비를 갖고 있나",
+        "steps": "resolve_property(name) → how_to_measure(property_key) → "
+        'related(kind="instrument", id=…, relation="unit_of")',
+        "note": "`unit_of` 가 비면 **정의만 있고 보유 장비가 없는 것**이다.",
+    },
+    {
+        "question": "이 시험 값이 어느 재료에서 나왔나",
+        "steps": 'find_path(from_kind="test_run", from_id=…, to_kind="material", to_id=…)',
+        "note": "tested → part_of → derived_from 사슬로 돌아온다.",
+    },
+]
+
+
 @mcp.tool()
 async def get_ontology(ctx: Context) -> dict[str, Any]:
     """**이 시스템의 지도** — 무엇이 있고 무엇이 무엇과 이어지나.
@@ -2357,8 +2461,29 @@ async def get_ontology(ctx: Context) -> dict[str, Any]:
 
     이 지도의 종류·관계 이름을 그대로 `related` 와 `find_path` 에 넣어라. 지도에
     없는 이름을 지어내면 422 로 돌아온다.
+
+    ## 들머리 — **마디를 못 집으면 관계는 소용없다**
+
+    종류마다 `entry` 가 붙어 온다. **그 종류의 손잡이를 어느 도구가 주나**다.
+    관계를 아무리 잘 읽어도 출발 `id` 가 없으면 한 걸음도 못 뗀다.
+
+    `id_kind` 도 함께 온다 — `property` 만 문자열 키이고 나머지는 UUID 다.
+
+    `recipes` 는 **물음에서 도구 차례로** 가는 길이다. 여기 있는 물음이면 그대로
+    따라가라 — 검색어를 바꿔 가며 훑는 것보다 훨씬 짧다.
     """
-    return await _get(ctx, "/ontology")
+    got = await _get(ctx, "/ontology")
+    if not isinstance(got, dict) or "error" in got:
+        return got if isinstance(got, dict) else {"error": "온톨로지를 못 읽었다"}
+    for one in got.get("kinds") or []:
+        if isinstance(one, dict):
+            one["entry"] = _ENTRY.get(str(one.get("slug")), _ANY_ENTRY)
+    got["recipes"] = _RECIPES
+    got["note"] = (
+        "`entry` 는 그 종류의 `id` 를 어느 도구가 주나다. "
+        "적힌 것이 없으면 `search_all(q, kind=…)` 로 이름을 쳐서 집는다."
+    )
+    return got
 
 
 @mcp.tool()

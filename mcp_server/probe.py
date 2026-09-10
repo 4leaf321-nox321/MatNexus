@@ -158,6 +158,7 @@ async def sweep(session: ClientSession) -> None:
         unit_key = next(
             (one.get("key") for one in rows if one.get("key") and one["key"] != "si"), None
         )
+    await call(session, "list_card_blocks")
     cards = await call(session, "list_cards", {"limit": 3})
     card_id = _first(cards, "id", "card_id")
     if card_id:

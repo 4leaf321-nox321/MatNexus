@@ -308,6 +308,20 @@ RELATIONS: dict[str, RelationType] = {
             dst="test_run",
             source=fk("processing_results", "test_run_id"),
         ),
+        # **이 시험의 물성은 채택본 하나다.** `processed_from` 은 그 시험에 딸린
+        # 처리 결과 *전부*를 준다 — 되돌린 것, 실패한 것, 견줘 본 것까지. 어느
+        # 것이 쓰이는 값인지는 이 관계만 안다(실측 2026-09-10: 시험 261건 중
+        # 60건이 채택본을 갖고 있는데, 그래프에서는 그 60건을 못 집었다).
+        RelationType(
+            slug="adopted",
+            label="이 시험이 채택한 처리 결과",
+            inverse_label="이 결과를 채택한 시험",
+            src="test_run",
+            dst="processing_result",
+            source=fk("test_runs", "adopted_result_id"),
+            note="`processed_from` 은 그 시험의 처리 결과 전부다 —"
+            " 그중 물성으로 쓰는 하나가 이것.",
+        ),
         RelationType(
             slug="card_of",
             label="이 카드의 재료",
@@ -317,6 +331,16 @@ RELATIONS: dict[str, RelationType] = {
             source=fk("property_cards", "material_id"),
         ),
         # ── 물성과 장비. 「이 물성을 재려면 어느 장비인가」 가 여기로 답해진다.
+        # 카드가 어느 시험법에서 나왔나. **빌 수 있다** — 적어 둔 값만으로 지은
+        # 카드에는 시험이 없다(41장 중 36장이 시험법을 든다).
+        RelationType(
+            slug="fitted_from",
+            label="이 카드가 나온 시험법",
+            inverse_label="이 시험법에서 나온 물성카드",
+            src="property_card",
+            dst="test_type",
+            source=fk("property_cards", "test_type_id"),
+        ),
         RelationType(
             slug="measured_by",
             label="이 물성을 재는 장비",
@@ -371,6 +395,16 @@ RELATIONS: dict[str, RelationType] = {
             src="catalog_material",
             dst="source",
             source=via("catalog_values", "material_id", "source_id"),
+        ),
+        # 장비 정의 218개가 전부 출처를 든다 — 카탈로그 PDF 에서 긁어 온 것들이라
+        # 「이 사양을 어디서 봤나」 가 곧 신뢰도다.
+        RelationType(
+            slug="listed_in",
+            label="이 장비 정의가 실린 출처",
+            inverse_label="이 출처에 실린 장비 정의",
+            src="instrument",
+            dst="source",
+            source=fk("instruments", "source_id"),
         ),
         RelationType(
             slug="measured_in",
@@ -431,7 +465,14 @@ def describe() -> dict[str, Any]:
     """
     return {
         "kinds": [
-            {"slug": one.slug, "label": one.label, "module": one.module}
+            {
+                "slug": one.slug,
+                "label": one.label,
+                "module": one.module,
+                # **식별자가 어떻게 생겼나.** `property` 만 문자열 키다 — 모르면
+                # UUID 를 넣어 보고 빈 답을 받고서야 안다.
+                "id_kind": "key" if one.id_column != "id" else "uuid",
+            }
             for one in KINDS.values()
         ],
         "relations": [

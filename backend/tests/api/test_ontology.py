@@ -106,6 +106,21 @@ class TestMap:
         assert {one["slug"] for one in body["kinds"]} == set(relations.KINDS)
         assert {one["slug"] for one in body["relations"]} == set(relations.RELATIONS)
 
+    def test_식별자_생김새를_말한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**`property` 만 문자열 키다.**
+
+        안 말해 주면 AI 는 UUID 를 넣어 보고 빈 답을 받고서야 안다 — 그리고 그때
+        「자료가 없다」 로 잘못 결론짓는다. 지도가 말할 수 있는 것을 안 말해서
+        생기는 헛걸음이다.
+        """
+        body = client.get(ONTOLOGY, headers=admin_headers).json()
+        found = {one["slug"]: one["id_kind"] for one in body["kinds"]}
+        assert found["property"] == "key"
+        assert found["material"] == "uuid"
+        assert set(found.values()) == {"key", "uuid"}
+
     def test_관계가_어디_실려_있는지_말한다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

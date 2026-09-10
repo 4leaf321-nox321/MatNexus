@@ -10394,6 +10394,12 @@ export interface components {
         };
         /** OntologyKindOut */
         OntologyKindOut: {
+            /**
+             * Id Kind
+             * @description 식별자 생김새 — `uuid` 이거나 `key`(문자열). `property` 만 `key` 다
+             * @default uuid
+             */
+            id_kind: string;
             /** Label */
             label: string;
             /**

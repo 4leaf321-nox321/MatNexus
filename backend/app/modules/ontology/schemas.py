@@ -9,6 +9,10 @@ class OntologyKindOut(BaseModel):
     slug: str
     label: str
     module: str = Field(description="어느 모듈의 것인가 — 화면을 찾을 때 쓴다")
+    id_kind: str = Field(
+        default="uuid",
+        description="식별자 생김새 — `uuid` 이거나 `key`(문자열). `property` 만 `key` 다",
+    )
 
 
 class OntologyRelationOut(BaseModel):
