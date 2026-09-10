@@ -680,7 +680,9 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
     test_type = ctx["types"].get(run.test_type_id)
     person = ctx["users"].get(run.registered_by_id) if run.registered_by_id else None
     curve = ctx["curves"].get(run.id)
-    warnings = run.source_metadata.get("_warnings", "")
+    # **`or ""` 다.** 기본값만으로는 그 키가 JSON `null` 일 때 `None.split` 로
+    # 500 이 난다 — 지금 쓰는 쪽은 늘 문자열을 넣지만, 그것은 넣는 쪽의 사정이다.
+    warnings = run.source_metadata.get("_warnings") or ""
 
     return TestRunOut(
         id=run.id,

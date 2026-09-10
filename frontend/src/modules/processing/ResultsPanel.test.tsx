@@ -76,6 +76,27 @@ beforeEach(() => {
   })
 })
 
+describe('진응력이 없을 때', () => {
+  it('하나도 없으면 채택하기 전에 말한다', async () => {
+    // 실측(2026-09-11): 채택된 시험 52건 중 33건이 진응력 없이 채택돼 있었다.
+    // 그 사실은 세 화면 건너 카드 탭에서야 드러나고, 그때는 다시 처리하는 것
+    // 말고 방법이 없다(결과는 불변이다).
+    results.mockResolvedValue([RESULT])
+    render(<ResultsPanel testRunId="t1" />)
+    expect(
+      await screen.findByText(/진응력 열을 가진 결과가 하나도 없습니다/)
+    ).toBeInTheDocument()
+  })
+
+  it('있으면 그 말을 안 한다', async () => {
+    // 늘 뜨는 경고는 아무도 안 읽는다.
+    results.mockResolvedValue([{ ...RESULT, columns: ['strain', 'stress', 'stress_true'] }])
+    render(<ResultsPanel testRunId="t1" />)
+    await screen.findByRole('button', { name: /채택/ })
+    expect(screen.queryByText(/진응력 열을 가진 결과가 하나도 없습니다/)).toBeNull()
+  })
+})
+
 describe('시도 지우기', () => {
   // 지울 길이 없어서 잘못 돌린 것까지 영원히 남았다(2026-09-11 지적).
   it('확인을 거쳐 지운다', async () => {

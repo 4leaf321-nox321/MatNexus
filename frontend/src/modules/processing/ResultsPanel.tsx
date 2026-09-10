@@ -76,6 +76,19 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
     rows.some((item) => !item.is_adopted && item.columns.includes('stress_true'))
 
   /**
+   * **아무 결과에도 진응력이 없다.** 위의 경고는 「다른 결과에는 있는데 이걸
+   * 채택했다」 를 짚는데, 하나도 없으면 아무 말도 안 했다.
+   *
+   * 실측(개발 DB, 2026-09-11): 채택된 시험 52건 중 **33건**이 진응력 열 없이
+   * 채택돼 있었다. 전부 레시피를 저장하지 않고 즉석으로 조립한 단계에서 나왔다.
+   * 그 재료는 CAE 카드를 못 만드는데, 그 사실은 **세 화면 건너 카드 탭**에서
+   * 「strain_true_plastic 열이 없습니다」 로 드러난다 — 그때는 다시 처리하는 것
+   * 말고 방법이 없다(결과는 불변이다).
+   */
+  const noTrueStressAnywhere =
+    rows.length > 0 && rows.every((item) => !item.columns.includes('stress_true'))
+
+  /**
    * 지울 것. **확인을 거친다** — 되돌릴 수 없고, 그 값이 이미 보고서에 실렸을
    * 수 있다.
    */
@@ -117,6 +130,16 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
   return (
     <section>
       <ErrorNotice error={results.error ?? error} className="mb-3" />
+
+      {noTrueStressAnywhere && (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+          <b>진응력 열을 가진 결과가 하나도 없습니다.</b> 이대로 채택하면 이 시험
+          으로는 <b>CAE 카드를 만들 수 없습니다</b> — 그 사실은 카드 탭에서야
+          드러나고, 그때는 다시 처리하는 것 말고 방법이 없습니다(결과는 바뀌지
+          않습니다). <b>처리</b> 탭에서 <b>진응력·진소성변형률</b> 단계를 넣고
+          다시 저장하세요.
+        </div>
+      )}
 
       {trueStressElsewhere && (
         <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
