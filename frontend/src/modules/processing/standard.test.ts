@@ -32,6 +32,23 @@ describe('표준 단계', () => {
     expect(at('tensile.elastic_modulus')).toBeLessThan(at('tensile.true_plastic'))
   })
 
+  it('재는 단계가 재샘플보다 앞에 있다', () => {
+    // **격자점으로 재면 탄성계수가 안 나온다**(2026-09-11 VOC). 금속은 항복이
+    // 변형률 0.002 언저리인데 곡선은 0.4 까지 간다 — 400점을 전 구간에 고르게
+    // 뿌리면 항복 전에 한두 점만 남는다. 실제 곡선 5건이 전부 그렇게 막혔다.
+    //
+    // 점 수를 늘려 푸는 길은 안 골랐다: 잰 점이 18개인 곡선에서도 「띠 안 6점」
+    // 이 되어 값이 나오는데, 그 점들은 보간이라 새 정보가 없고 R² 도 1 이다.
+    expect(at('tensile.elastic_modulus')).toBeLessThan(at('curve.resample'))
+    expect(at('tensile.strength')).toBeLessThan(at('curve.resample'))
+    expect(at('tensile.proof_stress')).toBeLessThan(at('curve.resample'))
+  })
+
+  it('공칭 축 재샘플은 자르기 앞이다', () => {
+    // 뒤에 두면 시편마다 끝이 달라 격자가 어긋난다 — 그러면 대표 곡선을 못 낸다.
+    expect(at('curve.resample')).toBeLessThan(at('curve.crop'))
+  })
+
   it('네킹을 짚고 나서 자른다', () => {
     expect(at('tensile.necking_candidate')).toBeLessThan(at('curve.crop'))
   })

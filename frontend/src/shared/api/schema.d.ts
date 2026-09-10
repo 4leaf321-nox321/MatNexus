@@ -3388,6 +3388,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/results/{result_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Result
+         * @description 시도 하나를 **지운다. 되돌릴 수 없다.**
+         *
+         *     ## 왜 필요한가 (2026-09-11 지적)
+         *
+         *     *"각 시험 데이터에서 처리한 결과 삭제가 안 되는 문제가 있어. 삭제 버튼이
+         *     없어."* 결과는 여러 벌 쌓이는 것이 정상이다(회귀로도 재고 현으로도 재고
+         *     네킹 후보로 잘라도 본다). 그런데 지울 길이 없으니 **잘못 돌린 것과 견주려고
+         *     돌린 것이 영원히 목록에 남고**, 그중 어느 것이 쓸 것인지가 갈수록 안 보인다.
+         *
+         *     ## 두 가지는 막는다
+         *
+         *         채택된 결과        이 시험의 물성이다 — 먼저 채택을 거두게 한다
+         *         묶음이 근거로 쓴 것  평균이 무엇으로 나왔는지가 사라진다
+         *
+         *     막는 쪽을 고른 이유: 둘 다 **다른 자리에 이미 실린 값**이라, 지우면 그 값이
+         *     어디서 왔는지 답할 수 없게 된다. 채택은 한 번 거두면 되고, 묶음은 다시 낼 수
+         *     있다 — 되돌릴 수 있는 쪽을 사람이 먼저 하게 한다.
+         *
+         *     휴지통에 안 넣는다. 결과에는 `deleted_at` 이 없고(불변으로 설계했다), 그
+         *     자리를 지금 만들면 「지운 결과가 통계에 잡히나」 를 모든 질의가 다시 물어야
+         *     한다. 대신 **감사에 남긴다** — 그 값이 보고서에 실렸을 수 있다.
+         */
+        delete: operations["delete_result_api_processing_results__result_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/results/{result_id}/adopt": {
         parameters: {
             query?: never;
@@ -3705,7 +3745,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Specimen */
+        /**
+         * Get Specimen
+         * @description 시편 하나. **어느 재료·어느 시료의 것인지 함께 낸다.**
+         *
+         *     시편은 제 화면이 없다 — 재료 상세의 시료 탭 안에 산다. 그래서 「이 시편으로
+         *     가라」 는 주소를 만들려면 **재료와 시료를 알아야** 하는데, 시편만 돌려주면
+         *     부르는 쪽이 시료를 읽고 다시 재료를 읽어야 했다(왕복 셋). 목록(`SpecimenRowOut`)
+         *     이 이미 그 셋을 함께 내므로 같은 모양으로 맞춘다 — 칸이 늘기만 하니 이미
+         *     쓰던 쪽은 그대로 돈다.
+         */
         get: operations["get_specimen_api_specimens__specimen_id__get"];
         put?: never;
         post?: never;
@@ -12972,6 +13021,8 @@ export interface components {
         SpecimenSizeOut: {
             /** Dimension */
             dimension: string;
+            /** From Material */
+            from_material?: number | null;
             /** Help */
             help: string | null;
             /** Inherited */
@@ -20355,6 +20406,35 @@ export interface operations {
             };
         };
     };
+    delete_result_api_processing_results__result_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     adopt_api_processing_results__result_id__adopt_post: {
         parameters: {
             query?: never;
@@ -20875,7 +20955,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SpecimenOut"];
+                    "application/json": components["schemas"]["SpecimenRowOut"];
                 };
             };
             /** @description Validation Error */

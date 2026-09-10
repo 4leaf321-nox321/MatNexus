@@ -449,6 +449,47 @@ def _reference_slope(
     )
 
 
+def _uniform_grid(x: Any) -> int:
+    """이 x 축이 **균등 격자인가** — 맞으면 점 수, 아니면 0.
+
+    ## 왜 이것을 알아야 하나 (실측 2026-09-11)
+
+    표준 레시피가 재샘플(400점)을 이 단계 **앞**에 두고 있었다. 그러면 탄성계수는
+    잰 점이 아니라 **격자점**으로 계산된다. 금속은 항복이 변형률 0.002 언저리인데
+    곡선은 0.4 까지 가므로, 400점을 전 구간에 고르게 뿌리면 항복 전에는
+    **한두 점**만 남는다 — 실제로 시험 다섯 건 전부 「띠 안에 0~1점」 으로 값이
+    안 나왔다.
+
+    ## 점을 늘려서 풀면 안 되는 이유
+
+    같은 곡선을 4000점으로 재샘플하면 띠 안에 6~12점이 들어와 값이 **나온다.**
+    그런데 잰 점이 18개뿐인 곡선에서도 6점이 들어온다 — 그 6점은 두 잰 점 사이를
+    직선으로 이은 자리라 **새 정보가 없고**, 직선 위의 점이라 R² 도 1 에 붙는다.
+    점 수와 R² 두 방어가 함께 뚫린다.
+
+    그래서 여기서는 **격자라는 사실을 말해 준다.** 값을 막지는 않는다 — 촘촘한
+    곡선을 재샘플한 것이면 기울기는 맞다(실측 205.9 GPa, 잰 점으로 계산한 것과
+    같았다). 다만 「점이 몇 개」 라는 말의 뜻이 달라지므로 그것을 적는다.
+    """
+    values = np.asarray(x, dtype=float)
+    if values.size < 3:
+        return 0
+    gaps = np.diff(values)
+    span = float(values[-1] - values[0])
+    if span <= 0 or not np.all(np.isfinite(gaps)):
+        return 0
+    # `np.linspace` 가 만든 격자는 간격이 부동소수 오차 안에서 같다.
+    return int(values.size) if float(np.ptp(gaps)) <= abs(span) * 1e-9 else 0
+
+
+#: 격자 위에서 계산할 때 붙이는 말. **점 수의 뜻이 달라진다.**
+GRID_NOTE = (
+    "이 곡선은 **균등 격자로 재샘플된 것**입니다({count}점) — 아래의 점 수는 잰 점이 "
+    "아니라 보간된 점을 셉니다. 잰 점으로 계산하려면 레시피에서 "
+    "**「균등 격자로 재샘플」 을 이 단계 뒤로** 옮기세요."
+)
+
+
 def _auto_window(
     strain: Any,
     stress: Any,
@@ -721,11 +762,16 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             # (「값이 없다」 만으로는 고칠 데를 모른다), 자동만 안 남기면 사람이
             # 곡선을 직접 열어 점을 세게 된다 — 실측 2026-08-31 에 그 일을 했다.
             hint, hint_note = _reference_slope(strain, stress, band_low, band_high)
+            # **격자 때문이면 고칠 데가 다르다.** 「곡선이 성깁니다」 는 다시 잴
+            # 수 없다는 말인데, 사실은 잰 점을 우리가 버린 것일 수 있다.
+            grid = _uniform_grid(strain)
+            grid_note = (" " + GRID_NOTE.format(count=grid)) if grid else ""
             return StepResult(
                 frame,
                 notes=(
                     f"최대응력의 {band_low:.0%}~{band_high:.0%} 띠 안에 {in_band}점밖에 "
-                    f"없어 **탄성계수를 내지 않았습니다**(상승 구간 전체가 {rising}점). "
+                    f"없어 **탄성계수를 내지 않았습니다**(상승 구간 전체가 {rising}점)."
+                    f"{grid_note} "
                     f"{MIN_TRUSTWORTHY_POINTS}점은 있어야 합니다 — {in_band}점을 지나는 "
                     "직선은 거의 언제나 R²≈1 이라 맞았는지 알 수 없습니다. "
                     "**곡선이 성깁니다.** 이미 찍힌 파일이면 다시 잴 수 없으므로 "
@@ -804,6 +850,10 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             if auto_note is not None
             else ""
         )
+        # 격자 위에서 잰 「점 수」 는 잰 점의 수가 아니다 — 거절할 때 그 사실을
+        # 말해야 사람이 「곡선이 성기다」 를 고치려 들지 않는다.
+        grid = _uniform_grid(strain)
+        grid_note = (" " + GRID_NOTE.format(count=grid)) if grid else ""
         refused = None
         if count < MIN_TRUSTWORTHY_POINTS:
             refused = (
@@ -817,7 +867,7 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 # 강판인데 1.8 GPa 면 구간이 틀린 것이고, 190 GPa 면 점이 둘이어도
                 # 쓸 만하다. 쓰기로 했으면 「직접 입력」 에 옮겨 적는다.
                 f"그 구간의 기울기는 **{modulus / 1e9:.4g} GPa** 입니다 — 참고값입니다. "
-                f"{observed}"
+                f"{observed}{grid_note}"
             )
         elif math.isfinite(r_squared) and r_squared < MIN_TRUSTWORTHY_R_SQUARED:
             # **점을 채우려고 창을 넓힌 경우가 여기 걸린다.** 5점은 들어왔는데 그
@@ -828,7 +878,7 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 f"**탄성계수를 내지 않았습니다.** 기울기 {modulus / 1e9:.4g} GPa 는 나왔지만 "
                 f"그 구간이 직선이 아니면 그것은 탄성계수가 아닙니다. 구간이 항복 뒤까지 "
                 f"걸쳤거나 초기 토우가 섞였는지 보고 창을 좁히세요. 값을 아는 경우 방법을 "
-                f"「직접 입력」 으로 바꾸세요. {advice}{observed}"
+                f"「직접 입력」 으로 바꾸세요. {advice}{observed}{grid_note}"
             )
         if refused is not None:
             # **인장강도·연신율은 멀쩡히 나온 것이다.** 단계를 실패시키면 사람이
@@ -881,6 +931,13 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         # 사람은 변형률만 보게 되는데, 사람이 적은 것은 mm 였다.
         note = f"{basis_note} {note}"
     notes = [note]
+    # **값이 나왔어도 격자면 말한다.** 여기가 조용히 틀리는 자리다 — 잰 점이
+    # 18개뿐인 곡선을 4000점으로 재샘플하면 띠 안에 6점이 들어오고 R² 는 1 에
+    # 붙는다. 두 방어가 함께 뚫리므로, 사람이 그 수를 잰 점으로 읽지 않게 한다.
+    if method != "manual":
+        on_grid = _uniform_grid(strain)
+        if on_grid:
+            notes.append(GRID_NOTE.format(count=on_grid))
     if math.isfinite(r_squared) and r_squared < 0.995:
         # **경고이지 실패가 아니다.** 0.98 미만은 위에서 이미 막았다 — 여기는 그
         # 문턱을 넘었지만 완전하지는 않은 자리로, 토우가 조금 섞였을 때 걸린다.
