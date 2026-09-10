@@ -68,9 +68,9 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 45개)
+## 5. 지금 있는 것 (도구 51개)
 
-**전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 45번
+**전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 51번
 왕복한다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
 
 **쓰는 도구는 전부 `dry_run=True` 가 기본이다.** 미리보기를 사람에게 보이고,
@@ -125,7 +125,11 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
     list_inbox(status?)                장비가 떨어뜨린, 아직 안 붙은 파일들
     list_test_runs(material_id?, ...)  시험 목록
-    get_test_run(test_run_id)          조건과 채택된 처리 결과
+    get_test_run(test_run_id)          조건·시편·채택된 처리 결과
+    list_specimens(material?, q?, ...) 시편을 재료를 거치지 않고 — 규격·방향으로
+    get_specimen(specimen_id)          치수와 **그것이 어디서 온 값인지**
+    list_processing_steps(test_type?)  돌릴 수 있는 단계와 **인장 표준 순서**
+    list_processing_inputs(run_id)     `@` 로 꽂을 수 있는 값 (시편 치수·단면적)
     list_recipes(test_type?)           사람이 합의해 둔 단계 묶음
     ★ assign_inbox_item(...)           인박스 파일 → 어느 시편의 어느 시험
     ★ run_processing(...)              곡선에 처리를 돌린다 (미리보기가 기본)
@@ -149,6 +153,11 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
                     expect?)
     build_deck(rows, units,            부품 여럿 → 덱 한 파일. 파일로 건네려면
                include_text)           include_text=True (500줄 넘으면 잘린다)
+
+### 통계 — 흩어짐
+
+    get_statistics(material_id, ...)   반복 시편의 평균·SD·CV·이상치 (묶음=시험법+방향)
+    compare_material_statistics(ids)   여러 재료를 한 표로
 
 ### 이어짐 — 온톨로지
 

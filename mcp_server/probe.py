@@ -149,6 +149,8 @@ async def sweep(session: ClientSession) -> None:
     if material_id:
         await call(session, "get_material", {"material_id": material_id})
         await call(session, "get_parameter_sets", {"material_id": material_id})
+        await call(session, "get_statistics", {"material_id": material_id})
+        await call(session, "compare_material_statistics", {"material_ids": [material_id]})
     systems = await call(session, "list_unit_systems")
     unit_key = None
     if isinstance(systems, dict):
@@ -159,6 +161,8 @@ async def sweep(session: ClientSession) -> None:
             (one.get("key") for one in rows if one.get("key") and one["key"] != "si"), None
         )
     await call(session, "list_card_blocks")
+    await call(session, "list_processing_steps", {"test_type": "tensile"})
+    await call(session, "list_specimens", {"limit": 2})
     cards = await call(session, "list_cards", {"limit": 3})
     card_id = _first(cards, "id", "card_id")
     if card_id:
@@ -236,7 +240,13 @@ async def sweep(session: ClientSession) -> None:
     runs = await call(session, "list_test_runs", {"limit": 3})
     run_id = _first(runs, "id", "test_run_id")
     if run_id:
-        await call(session, "get_test_run", {"test_run_id": run_id})
+        detail = await call(session, "get_test_run", {"test_run_id": run_id})
+        await call(session, "list_processing_inputs", {"test_run_id": run_id})
+        # 시험이 든 시편으로 바로 들어간다 — 시편에는 제 목록이 따로 있지만,
+        # **시험에서 시편으로 가는 길**이 실제로 쓰이는 길이다.
+        specimen = (detail or {}).get("specimen") if isinstance(detail, dict) else None
+        if isinstance(specimen, dict) and specimen.get("id"):
+            await call(session, "get_specimen", {"specimen_id": specimen["id"]})
     recipes = await call(session, "list_recipes")
     rows = recipes.get("recipes") if isinstance(recipes, dict) else recipes
     recipe_key = rows[0].get("key") if isinstance(rows, list) and rows else None

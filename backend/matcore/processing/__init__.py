@@ -294,9 +294,15 @@ def _plugin(plugin_id: str) -> registry.Plugin:
     try:
         plugin = registry.get(plugin_id)
     except KeyError:
+        # **있는 것을 함께 적는다.** 이름을 틀린 쪽은 대개 목록을 못 본 쪽이고,
+        # 「없다」 만 들으면 다음에 무엇을 부를지 알 방법이 없다 — 화면은 목록을
+        # 보고 고르지만 API·MCP 로 부르는 쪽은 이 문장이 유일한 단서다
+        # (실측 2026-09-11: MCP 로 `resample` 을 지어내 부른 자리에서 막혔다).
+        known = ", ".join(one.id for one in registry.list_plugins(kind="processing"))
         raise ProcessingError(
             f"등록되지 않은 처리 단계입니다: {plugin_id}. "
-            f"처리는 **코드**입니다 — 정의만으로는 만들 수 없습니다."
+            f"처리는 **코드**입니다 — 정의만으로는 만들 수 없습니다. "
+            f"있는 단계: {known}"
         ) from None
     if plugin.kind != "processing":
         raise ProcessingError(f"처리 단계가 아닙니다: {plugin_id} ({plugin.kind})")

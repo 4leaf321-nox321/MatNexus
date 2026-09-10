@@ -695,6 +695,214 @@ async def list_test_runs(
     }
 
 
+def _specimen_brief(one: Any) -> dict[str, Any] | None:
+    """시편 하나를 **치수와 그 출처까지** 간추린다.
+
+    치수는 값만 내면 안 된다 — 잰 값과 규격 공칭, 재료의 스펙 두께가 한 칸에
+    섞여 있다. 어느 쪽인지 안 밝히면 받는 쪽은 전부 실측으로 읽는다.
+    """
+    if not isinstance(one, dict) or "error" in one:
+        return None
+    return {
+        "id": one.get("id"),
+        "name": one.get("record_name"),
+        "standard": one.get("standard"),
+        "orientation": one.get("orientation"),
+        "sizes_si": [
+            {
+                "key": item.get("key"),
+                "label": item.get("label"),
+                "value": item.get("value"),
+                "unit": "m",
+                "source": item.get("source"),
+            }
+            for item in one.get("sizes") or []
+        ],
+    }
+
+
+@mcp.tool()
+async def get_statistics(
+    ctx: Context, material_id: str, test_type: str | None = None, orientation: str | None = None
+) -> dict[str, Any]:
+    """이 재료의 **산포** — 반복 시편을 묶어 낸 평균·표준편차·이상치.
+
+    실측(2026-09-11): 이 도구가 없어서 「이 재료 항복강도가 얼마나 흩어지나」 에
+    MCP 로는 답할 수 없었다. 사람은 화면에서 늘 보는 값이다.
+
+    ## 묶음은 **시험종류 + 방향**이다
+
+    인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가
+    크게 나오는데, 그것은 **산포가 아니라 다른 것을 섞은 것이다.** 그래서 답할
+    때도 방향을 함께 적어라.
+
+    ## 값 하나만 떼어 말하지 마라
+
+        count        몇 건인가. **1건이면 산포가 아니라 값 하나다**
+        sample_sd    1건이면 `null` 이다 — 0 이 아니라 **없는 것**이다
+        cv           변동계수. 크면 시료가 섞였는지부터 본다
+        outliers     이상치 후보. 지운 값이 아니라 **의심하는 값**이다
+
+    **채택된 결과만 들어간다.** 처리해 놓고 채택 안 한 시험은 여기 없다 —
+    `skipped_unadopted` 가 그 수다. 그 수가 크면 통계가 아니라 채택이 문제다.
+    """
+    got = await _get(ctx, f"/statistics/materials/{material_id}")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    groups = got.get("groups", []) if isinstance(got, dict) else []
+    if test_type:
+        groups = [one for one in groups if one.get("test_type_key") == test_type]
+    if orientation:
+        groups = [one for one in groups if one.get("orientation") == orientation]
+    return {
+        "material": got.get("material_name") if isinstance(got, dict) else None,
+        "group_count": len(groups),
+        "groups": [
+            {
+                "test_type": one.get("test_type_key"),
+                "orientation": one.get("orientation"),
+                "sample_count": one.get("sample_count"),
+                "skipped_unadopted": one.get("skipped_unadopted"),
+                "notes": one.get("notes"),
+                "values_si": [
+                    {
+                        "key": value.get("key"),
+                        "label": value.get("label"),
+                        "unit": value.get("si_unit"),
+                        "count": value.get("count"),
+                        "mean": value.get("mean"),
+                        "median": value.get("median"),
+                        "sd": value.get("sample_sd"),
+                        "cv": value.get("coefficient_of_variation"),
+                        "min": value.get("minimum"),
+                        "max": value.get("maximum"),
+                        "outlier_count": len(value.get("outliers") or []),
+                    }
+                    for value in one.get("scalars") or []
+                ],
+            }
+            for one in groups
+        ],
+        "note": (
+            "채택된 결과만 들어간다. `skipped_unadopted` 가 크면 통계가 아니라 "
+            "채택이 문제다 — 사람에게 그렇게 말해라."
+        ),
+    }
+
+
+@mcp.tool()
+async def compare_material_statistics(ctx: Context, material_ids: list[str]) -> dict[str, Any]:
+    """여러 재료의 물성을 **한 표로 견준다** — 화면의 「비교」 와 같은 값.
+
+    재료를 고를 때 묻는 물음이다: 「이 셋 중 항복강도가 가장 높고 산포가 작은
+    것은」. 하나씩 `get_statistics` 로 받아 손으로 맞춰 보면 방향·시험종류를
+    섞기 쉽다.
+
+    **없는 칸은 없는 대로 온다.** 어떤 재료에 그 물성이 없으면 빈칸이고, 그것을
+    0 으로 읽으면 안 된다.
+    """
+    if not material_ids:
+        return {"error": "재료를 하나 이상 주세요."}
+    got = await _get(ctx, "/statistics/analysis/compare", {"material_ids": material_ids})
+    if isinstance(got, dict) and "error" in got:
+        return got
+    # **채택 안 한 것이 몇인지 함께 온다.** 그 수가 크면 표가 비어 보이는 이유가
+    # 「값이 없다」 가 아니라 「아직 안 정했다」 다.
+    return got if isinstance(got, dict) else {"error": "비교표를 읽지 못했습니다."}
+
+
+@mcp.tool()
+async def get_specimen(ctx: Context, specimen_id: str) -> dict[str, Any]:
+    """시편 하나 — **치수와 그것이 어디서 온 값인지.**
+
+    응력은 단면적으로 나눈 값이다. 그래서 「이 값이 맞나」 를 따지려면 두께·폭을
+    봐야 하는데, 전에는 MCP 로 시편에 닿을 길이 아예 없었다(실측 2026-09-11).
+
+    ## 치수의 `source` 를 반드시 읽어라
+
+        measured   그 시편에서 잰 값
+        run        **이 시험에서** 잰 값 — 같은 시편을 여러 번 재면 이것이 맞다
+        nominal    규격이 정한 공칭
+        material   재료의 스펙 두께 — 판재는 이름이 곧 두께다(`SECC_-_0.8`)
+
+    뒤의 둘은 **잰 값이 아니다.** 그대로 써도 되지만 답에 옮길 때는 그 사실을
+    함께 적어라 — 압연 공차가 있어 0.8t 가 0.786 으로 나오고, 1~2% 면 응력이
+    그만큼 어긋난다.
+
+    `area_problem` 이 있으면 단면적을 못 낸 것이고, 그 시험은 응력을 못 낸다.
+    그 문장에 무엇이 모자란지 적혀 있다.
+    """
+    got = await _get(ctx, f"/specimens/{specimen_id}")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    brief = _specimen_brief(got)
+    if brief is None:
+        return {"error": "시편을 읽지 못했습니다."}
+    # **단면적은 따로 묻는다.** 목록에는 안 실리는 값이라(시편마다 계산이다)
+    # 여기서 한 번 더 부른다 — 「왜 응력이 안 나오나」 의 답이 그 자리에 있다.
+    sizes = await _get(ctx, f"/specimens/{specimen_id}/dimensions")
+    if isinstance(sizes, dict) and "error" not in sizes:
+        brief["area_m2"] = sizes.get("area")
+        if sizes.get("area_problem"):
+            brief["area_problem"] = sizes["area_problem"]
+        if sizes.get("cross_section_label"):
+            brief["cross_section"] = sizes["cross_section_label"]
+    return {
+        **brief,
+        "sample": {"id": got.get("sample_id"), "name": got.get("sample_name")},
+        "material": {"id": got.get("material_id"), "name": got.get("material_name")},
+        "lot_no": got.get("lot_no"),
+        "test_run_count": got.get("test_run_count"),
+        "adopted_count": got.get("adopted_count"),
+    }
+
+
+@mcp.tool()
+async def list_specimens(
+    ctx: Context,
+    material: str | None = None,
+    q: str | None = None,
+    standard: str | None = None,
+    orientation: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """시편을 **재료를 거치지 않고** 찾는다 — 규격·방향으로도 좁힌다.
+
+    「ASTM E8/E8M 박판형 시편 전부」 처럼 시편을 가로지르는 물음에 답하는 자리다.
+    규격은 시편에 붙으므로(ADR 0010) 재료에서 내려가서는 그 물음에 못 답한다.
+
+    `material` 은 재료 이름의 일부, `q` 는 시편 이름·규격, `orientation` 은
+    `MD`·`TD`·`DD`·`NA` 중 **정확히** 하나다(부분 일치로 두면 `D` 가 셋을 함께
+    문다).
+    """
+    got = await _get(
+        ctx,
+        "/specimens",
+        {
+            "material": material,
+            "q": q,
+            "standard": standard,
+            "orientation": orientation,
+            "limit": max(1, min(limit, MAX_LIMIT)),
+        },
+    )
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got.get("items", []) if isinstance(got, dict) else []
+    return {
+        "total": got.get("total", len(rows)) if isinstance(got, dict) else len(rows),
+        "specimens": [
+            {
+                **(_specimen_brief(one) or {}),
+                "material": one.get("material_name"),
+                "sample": one.get("sample_name"),
+                "test_run_count": one.get("test_run_count"),
+            }
+            for one in rows
+        ],
+    }
+
+
 @mcp.tool()
 async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
     """시험 하나 — 조건과 **채택된 처리 결과의 물성값**.
@@ -705,6 +913,12 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
     run = await _get(ctx, f"/test-runs/{test_run_id}")
     if "error" in run:
         return run
+    # **시편을 함께 낸다.** 응력은 단면적으로 나눈 값이라 「이 값이 무엇으로
+    # 나왔나」 에 답하려면 두께·폭을 알아야 하는데, 시험만 봐서는 시편 식별자도
+    # 안 보였다(실측 2026-09-11: MCP 로는 시료·시편 층이 통째로 안 보였다).
+    specimen = None
+    if run.get("specimen_id"):
+        specimen = _specimen_brief(await _get(ctx, f"/specimens/{run['specimen_id']}"))
     results = await _get(ctx, "/processing/results", {"test_run_id": test_run_id})
     scalars: list[dict[str, Any]] = []
     adopted_label = None
@@ -730,6 +944,7 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
         "status": run.get("status"),
         "conditions": run.get("conditions"),
         "material_id": run.get("material_id"),
+        **({"specimen": specimen} if specimen else {}),
         "adopted_recipe": adopted_label,
         "measured_values_si": scalars,
         **(
@@ -2045,6 +2260,103 @@ async def draft_test_type(
             + (" 충돌을 먼저 해결해야 합니다." if conflicts else "")
         ),
     }
+
+
+#: 인장 표준 단계 — **순서가 규칙이다.** 프론트의 `standard.ts` 가 정본이고,
+#: `tests/architecture/test_mcp_standard.py` 가 그쪽과 어긋나면 실패한다.
+#:
+#: **재는 단계가 재샘플보다 앞이다.** 금속은 항복이 변형률 0.002 언저리인데
+#: 곡선은 0.4 까지 간다 — 400점을 전 구간에 고르게 뿌리면 항복 전에 한두 점만
+#: 남아 탄성계수가 안 나온다(실측 2026-09-11: 실제 곡선 5건 전부 그랬다).
+TENSILE_STANDARD: tuple[str, ...] = (
+    "tensile.engineering",
+    "curve.sort_unique",
+    "tensile.strength",
+    "tensile.elastic_modulus",
+    "tensile.proof_stress",
+    "tensile.necking_candidate",
+    "curve.resample",
+    "curve.crop",
+    "tensile.true_plastic",
+    "curve.sort_unique",
+    "curve.resample",
+)
+
+
+@mcp.tool()
+async def list_processing_steps(
+    ctx: Context, test_type: str | None = None, step: str | None = None
+) -> dict[str, Any]:
+    """**돌릴 수 있는 처리 단계와 그 인자.** 단계를 짜기 전에 여기부터 본다.
+
+    실측(2026-09-11): 이 도구가 없어서 MCP 로는 **어떤 단계가 있는지 물을 데가
+    없었다.** 이름을 지어내면 「등록되지 않은 처리 단계입니다」 로 막히는데,
+    화면과 달리 목록을 볼 자리가 없으니 거기서 길이 끊긴다.
+
+    `step` 을 주면 그 하나를 **인자까지** 자세히 준다. 안 주면 이름·라벨·인자
+    이름만 간추린다 — 열여섯 단계의 인자를 다 펼치면 그것만으로 문맥이 찬다.
+
+    `test_type` 은 그 시험법에 걸리는 것만 고른다(`tensile` · `dma_sweep` …).
+
+    ## 표준 순서를 지어내지 마라
+
+    `standard` 에 인장 표준 순서가 함께 온다. **그 순서에는 이유가 있다** —
+    특히 「균등 격자로 재샘플」 은 **재는 단계 뒤**여야 한다. 앞에 두면 탄성계수·
+    항복강도가 잰 점이 아니라 격자점으로 계산되고, 항복 전 구간에 점이 한두 개만
+    남아 값이 아예 안 나온다.
+
+    부서가 저장해 둔 레시피가 있으면 그쪽이 먼저다(`list_recipes`) — 다르게
+    돌린 결과는 서로 견줄 수가 없다.
+    """
+    got = await _get(ctx, "/processing/steps", {"test_type": test_type})
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    if step:
+        found = next((one for one in rows if one.get("id") == step), None)
+        if found is None:
+            # **있는 것을 함께 준다.** 「없다」 만 들으면 다음에 무엇을 부를지
+            # 알 방법이 없다 — 이 도구를 만든 이유가 그것이다.
+            return {
+                "error": f"그런 단계가 없습니다: {step}",
+                "known": [one.get("id") for one in rows],
+            }
+        return {"step": found}
+    return {
+        "count": len(rows),
+        "steps": [
+            {
+                "id": one.get("id"),
+                "label": one.get("label"),
+                "applies_to": one.get("applies_to") or "전부",
+                "params": [item.get("name") for item in one.get("params") or []],
+            }
+            for one in rows
+        ],
+        "standard": list(TENSILE_STANDARD),
+        "note": (
+            "`standard` 는 인장 표준 순서다. **재샘플은 재는 단계 뒤에 둔다** — "
+            "앞에 두면 탄성계수가 격자점으로 계산돼 값이 안 나온다."
+        ),
+    }
+
+
+@mcp.tool()
+async def list_processing_inputs(ctx: Context, test_run_id: str) -> dict[str, Any]:
+    """이 시험에 **바깥에서 들어오는 값** — `@` 로 참조할 수 있는 것들.
+
+    시편 치수(게이지 길이·폭·두께)와 단면적, 재료에 적어 둔 물성이 여기로 온다.
+    단계 옵션에 `"@specimen_area"` 처럼 적으면 그 값이 꽂힌다.
+
+    **이름을 외우지 마라.** 규격이 칸을 더하면 목록이 달라진다 — 환봉 규격은
+    직경을, DMA 규격은 자유 길이를 준다. 없는 이름을 적으면 그 단계에서 멈춘다.
+
+    이름에 「(재료 스펙)」·「(규격 공칭)」 이 붙은 것은 **그 시편에서 잰 값이
+    아니다.** 그대로 써도 되지만, 답에 옮길 때는 그 사실을 함께 적어라.
+    """
+    return _listed(
+        await _get(ctx, "/processing/inputs", {"test_run_id": test_run_id}), "inputs"
+    )
 
 
 @mcp.tool()
