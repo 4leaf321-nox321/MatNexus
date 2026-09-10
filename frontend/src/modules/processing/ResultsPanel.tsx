@@ -20,12 +20,13 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Star } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Star, Trash2 } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 import type { ProcessingResult } from '@/modules/processing/api'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -73,6 +74,30 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
     adopted !== undefined &&
     !adopted.columns.includes('stress_true') &&
     rows.some((item) => !item.is_adopted && item.columns.includes('stress_true'))
+
+  /**
+   * 지울 것. **확인을 거친다** — 되돌릴 수 없고, 그 값이 이미 보고서에 실렸을
+   * 수 있다.
+   */
+  const [removing, setRemoving] = useState<ProcessingResult | null>(null)
+
+  async function remove(item: ProcessingResult) {
+    setBusy(true)
+    setError(null)
+    try {
+      await processingApi.removeResult(item.id)
+      setRemoving(null)
+      if (open === item.id) setOpen(null)
+      results.reload()
+      // 채택된 것은 서버가 막으므로 여기 오면 대표는 안 바뀐다. 그래도
+      // 알려 준다 — 목록 수가 달라진 것을 위쪽 요약도 알아야 한다.
+      onAdoptChange?.()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function toggle(item: ProcessingResult) {
     setBusy(true)
@@ -185,6 +210,20 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                     >
                       {item.is_adopted ? '채택 거두기' : <><Check className="size-3.5" />채택</>}
                     </Button>
+                    {/* **채택된 것에는 안 보인다.** 서버도 막지만, 누를 수 있게
+                        두면 사람은 눌러 보고 거절당한 뒤에야 규칙을 안다. */}
+                    {!item.is_adopted && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                        disabled={busy}
+                        aria-label="이 결과 지우기"
+                        onClick={() => setRemoving(item)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -250,8 +289,40 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
         결과는 <b>바뀌지 않습니다.</b> 단계를 고쳐 다시 저장하면 새 결과가 생기고,
         예전 결과는 그때의 단계를 그대로 갖고 있습니다. <b>채택</b>은 그중 무엇이
         이 시험의 물성인지를 정하는 것이고, 채택된 값만 요약값 표·통계·내보내기로
-        갑니다.
+        갑니다. 견주려고 돌린 시도는 <b>지울 수 있습니다</b> — 채택된 것과 반복
+        시편 통계의 근거로 실린 것은 지워지지 않습니다.
       </p>
+
+      {/* **무엇이 사라지는지 적는다.** 「정말 지울까요」 만으로는 사람이 어느
+          줄을 눌렀는지 확인할 수 없다 — 결과는 되살릴 데가 없다. */}
+      <ConfirmDialog
+        open={removing !== null}
+        title="이 처리 결과를 지울까요?"
+        busy={busy}
+        body={
+          removing && (
+            <>
+              <b>
+                {removing.steps.length}단계 · {removing.row_count.toLocaleString('ko-KR')}행
+              </b>
+              {removing.recipe_label ? ` · ${removing.recipe_label}` : ''} 결과가
+              사라집니다. <b>되돌릴 수 없습니다</b> — 결과에는 휴지통이 없습니다.
+              {removing.scalars.length > 0 && (
+                <span className="mt-1 block">
+                  이 결과가 든 값:{' '}
+                  {removing.scalars
+                    .slice(0, 4)
+                    .map((one) => one.label)
+                    .join(' · ')}
+                  {removing.scalars.length > 4 ? ' …' : ''}
+                </span>
+              )}
+            </>
+          )
+        }
+        onConfirm={() => removing && remove(removing)}
+        onClose={() => setRemoving(null)}
+      />
     </section>
   )
 }

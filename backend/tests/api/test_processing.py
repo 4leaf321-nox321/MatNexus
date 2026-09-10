@@ -24,8 +24,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import Specimen
+from app.modules.materials.models import Sample, Specimen
 from app.modules.processing.models import ProcessingResult
+from app.modules.statistics.models import EnsembleResult
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.models import TestRun
@@ -808,6 +809,116 @@ class Test레시피:
         assert allowed.json()["is_global"] is False
 
 
+class Test결과_지우기:
+    """**시도는 쌓이는 것이 정상이고, 그래서 지울 길이 있어야 한다.**
+
+    회귀로도 재고 현으로도 재고 네킹 후보로 잘라도 보는 것이 정상 작업이다.
+    그런데 지울 길이 없어서 잘못 돌린 것까지 영원히 남았고, 목록이 길어질수록
+    어느 것이 쓸 것인지가 안 보였다(2026-09-11 지적).
+
+    **되돌릴 수 없다.** 그래서 두 가지는 막는다 — 둘 다 그 값이 **다른 자리에
+    이미 실려 있어서**, 지우면 그것이 무엇으로 나왔는지 답할 수 없게 된다.
+    """
+
+    def _save(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
+        response = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def test_시도를_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        saved = self._save(client, admin_headers, run_id)
+        gone = client.delete(f"/api/processing/results/{saved['id']}", headers=admin_headers)
+        assert gone.status_code == 204, gone.text
+
+        listed = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        )
+        assert saved["id"] not in [one["id"] for one in listed.json()]
+
+    def test_채택된_것은_못_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**이 시험의 물성이다.** 지우면 요약값 표의 값이 근거를 잃는다 —
+        채택을 거두는 것은 되돌릴 수 있으니 그쪽을 먼저 하게 한다."""
+        saved = self._save(client, admin_headers, run_id)
+        client.post(f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers)
+
+        blocked = client.delete(
+            f"/api/processing/results/{saved['id']}", headers=admin_headers
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert "채택" in blocked.json()["error"]["message"]
+
+        # 거두고 나면 지워진다.
+        client.delete(f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers)
+        assert (
+            client.delete(
+                f"/api/processing/results/{saved['id']}", headers=admin_headers
+            ).status_code
+            == 204
+        )
+
+    def test_통계가_근거로_실은_것은_못_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """**평균이 무엇으로 나왔는지가 사라진다.**
+
+        FK 가 아니라 JSONB 배열(`ensemble_results.result_ids`)이라 의존성
+        레지스트리가 못 잡는다 — 여기서 안 막으면 아무 데서도 안 막힌다.
+        """
+        saved = self._save(client, admin_headers, run_id)
+        run = db.get(TestRun, uuid.UUID(run_id))
+        assert run is not None
+        specimen = db.get(Specimen, run.specimen_id)
+        assert specimen is not None
+        sample = db.get(Sample, specimen.sample_id)
+        assert sample is not None
+        db.add(
+            EnsembleResult(
+                material_id=sample.material_id,
+                test_type_id=run.test_type_id,
+                orientation=specimen.orientation,
+                sample_count=1,
+                test_run_ids=[run_id],
+                result_ids=[saved["id"]],
+            )
+        )
+        db.commit()
+
+        blocked = client.delete(
+            f"/api/processing/results/{saved['id']}", headers=admin_headers
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert "통계" in blocked.json()["error"]["message"]
+
+    def test_지운_것은_감사에_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """**되살릴 데가 없다.** 그 값이 이미 보고서에 실렸을 수 있으므로,
+        「그 값이 어디 갔나」 에 답할 자리가 하나는 있어야 한다."""
+        saved = self._save(client, admin_headers, run_id)
+        client.delete(f"/api/processing/results/{saved['id']}", headers=admin_headers)
+
+        from app.modules.audit.models import AuditEntry
+
+        found = db.scalars(
+            select(AuditEntry).where(AuditEntry.target_id == uuid.UUID(saved["id"]))
+        ).all()
+        assert [one.action for one in found] == ["processing_result.deleted"]
+
+    def test_없는_것을_지우면_404(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        gone = client.delete(f"/api/processing/results/{uuid.uuid4()}", headers=admin_headers)
+        assert gone.status_code == 404
+
+
 class Test채택:
     """**"이 시험의 항복강도는?" 에 답이 하나여야 한다**(ADR 0007).
 
@@ -1219,12 +1330,15 @@ class Test들어오는값:
         stored.dimensions = {}
         db.commit()
 
-        # 치수가 없으면 넣어 줄 것도 없다 — **0 으로 채우지 않는다.**
+        # 잰 값이 없으면 **재료가 아는 두께 하나만** 남는다(그 재료는 1.0t 다).
+        # 없는 값을 0 으로 채우지 않는 규칙은 그대로다 — 폭·게이지는 안 온다.
         empty = client.get(
             f"/api/processing/inputs?test_run_id={run_id}", headers=admin_headers
         )
         assert empty.status_code == 200, empty.text
-        assert empty.json() == []
+        assert [one["key"] for one in empty.json()] == ["specimen_thickness"]
+        # **이름이 출처를 말한다.** 처리 화면은 이 이름만 보여 준다.
+        assert empty.json()[0]["label"].endswith("(재료 스펙)")
 
         saved = client.patch(
             f"/api/specimens/{specimen_id}",

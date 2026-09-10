@@ -228,6 +228,11 @@ def incomplete_files(*, older_than_seconds: int = 3600) -> list[tuple[str, int, 
 
 
 def delete_file(relative: str) -> bool:
+    """파일 하나를 지운다. 돌려주는 값은 '실제로 지웠는가'.
+
+    **없어도 오류가 아니다** — 행을 지우는 길에서 부르는데, 파일이 이미 없다고
+    행 삭제가 막히면 지울 수 없는 행이 영영 남는다.
+    """
     path = resolve(relative)
     if not path.is_file():
         return False

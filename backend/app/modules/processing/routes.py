@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import Select, delete, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -45,9 +45,10 @@ from app.modules.processing.schemas import (
     StagePointsOut,
     StepParamOut,
 )
+from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
 from app.modules.workspaces.models import Workspace
-from app.shared import curvedata, filestore, revision, test_type_channels
+from app.shared import audit, curvedata, filestore, revision, test_type_channels
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import (
@@ -817,6 +818,87 @@ def result_curve(
         row_count=item.row_count,
         points=points,
     )
+
+
+@router.delete("/results/{result_id}", status_code=204)
+def delete_result(
+    result_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """시도 하나를 **지운다. 되돌릴 수 없다.**
+
+    ## 왜 필요한가 (2026-09-11 지적)
+
+    *"각 시험 데이터에서 처리한 결과 삭제가 안 되는 문제가 있어. 삭제 버튼이
+    없어."* 결과는 여러 벌 쌓이는 것이 정상이다(회귀로도 재고 현으로도 재고
+    네킹 후보로 잘라도 본다). 그런데 지울 길이 없으니 **잘못 돌린 것과 견주려고
+    돌린 것이 영원히 목록에 남고**, 그중 어느 것이 쓸 것인지가 갈수록 안 보인다.
+
+    ## 두 가지는 막는다
+
+        채택된 결과        이 시험의 물성이다 — 먼저 채택을 거두게 한다
+        묶음이 근거로 쓴 것  평균이 무엇으로 나왔는지가 사라진다
+
+    막는 쪽을 고른 이유: 둘 다 **다른 자리에 이미 실린 값**이라, 지우면 그 값이
+    어디서 왔는지 답할 수 없게 된다. 채택은 한 번 거두면 되고, 묶음은 다시 낼 수
+    있다 — 되돌릴 수 있는 쪽을 사람이 먼저 하게 한다.
+
+    휴지통에 안 넣는다. 결과에는 `deleted_at` 이 없고(불변으로 설계했다), 그
+    자리를 지금 만들면 「지운 결과가 통계에 잡히나」 를 모든 질의가 다시 물어야
+    한다. 대신 **감사에 남긴다** — 그 값이 보고서에 실렸을 수 있다.
+    """
+    item = db.get(ProcessingResult, result_id)
+    if item is None:
+        raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
+    run = get_run(db, user, item.test_run_id)
+    require_owner_edit(
+        db,
+        user,
+        run.workspace_id,
+        what="이 시험의 처리 결과",
+        code="MNX-PROCESSING-0015",
+    )
+
+    if run.adopted_result_id == item.id:
+        raise Conflict(
+            "MNX-PROCESSING-0013",
+            "채택된 결과입니다 — 이 시험의 물성이라 지울 수 없습니다. 채택을 먼저 거두세요.",
+        )
+
+    # **FK 가 아니라 JSONB 배열이라 의존성 레지스트리가 못 잡는다.** 반복 시편
+    # 통계는 「어느 결과로 냈는지」 를 id 목록으로 들고 있다
+    # (`ensemble_results.result_ids`) — 그것이 평균의 근거다.
+    used = db.scalar(
+        select(func.count())
+        .select_from(EnsembleResult)
+        .where(EnsembleResult.result_ids.contains([str(item.id)]))
+    )
+    if used:
+        raise Conflict(
+            "MNX-PROCESSING-0014",
+            f"반복 시편 통계 {used}건이 이 결과를 근거로 싣고 있어 지울 수 없습니다 — "
+            f"지우면 그 평균이 무엇으로 나왔는지 알 수 없게 됩니다. "
+            f"묶음을 먼저 지우거나 다시 내세요.",
+        )
+
+    audit.record(
+        db,
+        action=audit.PROCESSING_RESULT_DELETED,
+        actor=user,
+        target_table="processing_results",
+        target_id=item.id,
+        target_label=f"{run.record_name} · {len(item.steps_snapshot)}단계",
+        workspace_id=run.workspace_id,
+        changes={"created_at": str(item.created_at), "row_count": item.row_count},
+    )
+    # **행보다 파일을 먼저 지우지 않는다.** 파일만 지우고 커밋이 실패하면 행은
+    # 남는데 곡선을 못 읽는다 — 그 결과는 열 때마다 500 이 난다.
+    stored = item.storage_path
+    db.delete(item)
+    db.commit()
+    filestore.delete_file(stored)
+    return Response(status_code=204)
 
 
 @router.delete("/results/{result_id}/adopt", status_code=204)

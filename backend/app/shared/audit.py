@@ -46,6 +46,9 @@ ACCOUNT_HOME_CHANGED = "account.home_changed"
 ACCOUNT_ADMIN_CHANGED = "account.admin_changed"
 ACCOUNT_DELETED = "account.deleted"
 GROUP_RESULT_DELETED = "group_result.deleted"
+#: 처리 결과를 **실제로 지운** 일. 결과는 되살릴 수 없고(휴지통이 없다) 그 값이
+#: 이미 보고서에 실렸을 수 있다 — 「그 값이 어디 갔나」 에 답할 자리가 여기다.
+PROCESSING_RESULT_DELETED = "processing_result.deleted"
 #: 장비를 **실제로 지운** 일. 폐기(`status`)는 여기 안 남긴다 — 그건 되돌릴 수
 #: 있고 행도 살아 있다. 실삭제는 되돌릴 수 없으므로 누가 언제 왜 지웠는지가
 #: 반년 뒤에 물어질 수 있는 유일한 자리다.

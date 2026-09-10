@@ -225,6 +225,15 @@ export const processingApi = {
   /** 채택만 거둔다 — 결과는 지워지지 않는다. */
   unadopt: (resultId: string) => api.delete<void>(`/processing/results/${resultId}/adopt`),
 
+  /**
+   * 시도 하나를 **지운다. 되돌릴 수 없다.**
+   *
+   * 채택된 결과와 반복 시편 통계의 근거로 실린 결과는 서버가 막는다(409) —
+   * 둘 다 그 값이 다른 자리에 이미 실려 있어서, 지우면 무엇으로 나왔는지
+   * 답할 수 없게 된다.
+   */
+  removeResult: (resultId: string) => api.delete<void>(`/processing/results/${resultId}`),
+
   /** 여러 시험에 같은 단계를. **부분 실패를 건별로 돌려준다.** */
   batch: (body: {
     test_run_ids: string[]

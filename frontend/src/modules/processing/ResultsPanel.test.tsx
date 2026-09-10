@@ -20,6 +20,7 @@ import { ResultsPanel } from '@/modules/processing/ResultsPanel'
 
 const results = vi.fn()
 const curve = vi.fn()
+const removeResult = vi.fn()
 
 vi.mock('@/modules/processing/api', async () => {
   const actual =
@@ -31,6 +32,7 @@ vi.mock('@/modules/processing/api', async () => {
       curve: (...args: unknown[]) => curve(...args),
       adopt: vi.fn(),
       unadopt: vi.fn(),
+      removeResult: (...args: unknown[]) => removeResult(...args),
     },
   }
 })
@@ -71,6 +73,46 @@ beforeEach(() => {
     units: { strain: '1', stress: 'Pa' },
     x: 'strain',
     y: 'stress',
+  })
+})
+
+describe('시도 지우기', () => {
+  // 지울 길이 없어서 잘못 돌린 것까지 영원히 남았다(2026-09-11 지적).
+  it('확인을 거쳐 지운다', async () => {
+    const user = userEvent.setup()
+    removeResult.mockResolvedValue(undefined)
+    render(<ResultsPanel testRunId="t1" />)
+
+    await user.click(await screen.findByRole('button', { name: '이 결과 지우기' }))
+    // **무엇이 사라지는지 적는다.** 결과는 되살릴 데가 없다.
+    expect(
+      await screen.findByRole('heading', { name: '이 처리 결과를 지울까요?' })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/휴지통이 없습니다/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(removeResult).toHaveBeenCalledWith('r1'))
+  })
+
+  it('채택된 것에는 단추가 없다', async () => {
+    // 서버도 막지만, 누를 수 있게 두면 눌러 보고 거절당한 뒤에야 규칙을 안다.
+    results.mockResolvedValue([{ ...RESULT, is_adopted: true }])
+    render(<ResultsPanel testRunId="t1" />)
+
+    expect(await screen.findByRole('button', { name: '채택 거두기' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '이 결과 지우기' })).toBeNull()
+  })
+
+  it('막히면 그 이유가 보인다', async () => {
+    // 반복 시편 통계가 근거로 싣고 있으면 서버가 409 로 막는다 — 그 말이
+    // 화면에 안 뜨면 사람은 단추가 고장 난 줄 안다.
+    const user = userEvent.setup()
+    removeResult.mockRejectedValue(new Error('반복 시편 통계 2건이 이 결과를 근거로 싣고 있어'))
+    render(<ResultsPanel testRunId="t1" />)
+
+    await user.click(await screen.findByRole('button', { name: '이 결과 지우기' }))
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+    expect(await screen.findByText(/반복 시편 통계 2건/)).toBeInTheDocument()
   })
 })
 
