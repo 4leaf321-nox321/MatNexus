@@ -177,7 +177,7 @@ export const WORKFLOWS: Workflow[] = [
       {
         key: 'process',
         title: '처리',
-        what: '레시피를 걸어 한 번에 돌립니다. 시험 목록에서 고른 채로 「레시피 적용」 을 누릅니다.',
+        what: '같은 처리 단계를 한 번에 겁니다. 시험 목록에서 고른 채로 「일괄 데이터 처리」 를 누릅니다.',
         where: '/tests',
         whereLabel: '시험 목록으로',
         judge: (items) => {

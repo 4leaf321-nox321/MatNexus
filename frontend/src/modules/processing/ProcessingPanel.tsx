@@ -27,6 +27,7 @@ import {
   ChevronUp,
   Circle,
   CircleCheck,
+  Layers,
   Link2,
   Lock,
   Play,
@@ -92,6 +93,7 @@ import {
   fromDisplay,
   toDisplay,
 } from '@/shared/units'
+import { BatchFromSteps } from '@/modules/processing/BatchFromSteps'
 import { RightPanel } from '@/shared/layout/SidePanel'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -108,6 +110,11 @@ interface Props {
   sourceChannels?: { key: string; label: string; si_unit: string }[]
   /** 관리자인 부서. 비어 있으면 '레시피로 저장' 을 감춘다 — 서버가 거절한다. */
   managedWorkspaces?: { slug: string; name: string }[]
+  /**
+   * 이 시험이 딸린 재료. **「이 단계 그대로 여러 건에」 가 형제를 찾는 데 쓴다** —
+   * 없으면 그 단추가 안 뜬다(어디에 걸지 모르는 채로 물을 수는 없다).
+   */
+  materialId?: string | null
 }
 
 /**
@@ -182,6 +189,7 @@ export function ProcessingPanel({
   sourceColumns,
   sourceChannels = [],
   managedWorkspaces = [],
+  materialId = null,
 }: Props) {
   const catalog = useResource(() => processingApi.steps(testTypeKey), [testTypeKey])
   const [steps, setSteps] = useState<RecipeStep[]>([])
@@ -214,6 +222,8 @@ export function ProcessingPanel({
     })
   }
   const [savingRecipe, setSavingRecipe] = useState(false)
+  /** 「이 단계 그대로 여러 건에」 를 열었나. */
+  const [batching, setBatching] = useState(false)
   /**
    * '돌려 보기' 를 눌러 본 적이 있는가.
    *
@@ -603,6 +613,19 @@ export function ProcessingPanel({
               나머지 20건에 같은 것을 거는 것이 실제 작업 흐름인데, 그 '같은 것'
               에 이름을 붙일 자리가 여기 말고 없었다 — 레시피 테이블은 있는데
               화면에서 만들 길이 없었다. */}
+          {/* **레시피 없이도 배치를 건다.** 레시피 저장은 부서 관리자만 할 수
+              있어서, 그것을 요구하는 동안 관리자가 아닌 사람은 배치를 아예 못
+              썼다 — 실측(2026-09-11): 채택된 결과 52건 중 49건이 레시피 없이
+              나왔고, 그 49건은 전부 한 건씩 손으로 돌린 것이다. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setBatching(true)}
+            disabled={busy || !steps.length}
+            title="같은 재료·같은 시험법의 다른 시험에 이 단계를 그대로 겁니다"
+          >
+            <Layers className="size-3.5" />이 단계 그대로 여러 건에
+          </Button>
           {managedWorkspaces.length > 0 && (
             <Button
               size="sm"
@@ -715,6 +738,21 @@ export function ProcessingPanel({
             </p>
           )}
         </div>
+      )}
+
+      {batching && (
+        <BatchFromSteps
+          testRunId={testRunId}
+          testTypeKey={testTypeKey}
+          materialId={materialId}
+          steps={steps}
+          onClose={() => setBatching(false)}
+          onDone={() =>
+            setNotice(
+              '여러 건에 같은 단계를 걸었습니다 — 각 시험의 「결과」 탭에서 확인하세요.'
+            )
+          }
+        />
       )}
 
       {savingRecipe && (

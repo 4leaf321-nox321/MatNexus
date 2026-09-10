@@ -781,6 +781,8 @@ export default function TestRunDetailPage() {
                   /* 변수 목록이 `displacement` 를 '변위 (m)' 로 읽게 한다. */
                   sourceChannels={channels}
                   managedWorkspaces={managed}
+                  // 「이 단계 그대로 여러 건에」 가 형제를 찾는 데 쓴다.
+                  materialId={item.material_id}
                 />
               ) : (
                 <p className="text-muted-foreground py-12 text-center text-sm">
