@@ -31,6 +31,9 @@ from app.modules.processing.schemas import (
     BatchItemOut,
     BatchOut,
     BatchRequest,
+    BatchUndoItemOut,
+    BatchUndoOut,
+    BatchUndoRequest,
     ProcessingPreviewOut,
     ProcessingResultOut,
     ProcessingRunRequest,
@@ -255,6 +258,28 @@ def _store(
     db.add(item)
     db.flush()
     return item
+
+
+def _batch_scalars(rows: Any) -> list[ProcessingScalarOut]:
+    """저장된 결과의 스칼라 → 응답 모양. **미리보기와 저장이 같은 함수를 쓴다.**"""
+    return [
+        ProcessingScalarOut(
+            key=str(one.get("key", "")),
+            label=str(one.get("label", "")),
+            value=float(one.get("value", 0.0)),
+            si_unit=str(one.get("si_unit") or "1"),
+            dimension=(str(one["dimension"]) if one.get("dimension") else None),
+        )
+        for one in (rows or [])
+    ]
+
+
+def _adopted_scalars(db: Session, run: TestRun) -> list[ProcessingScalarOut]:
+    """지금 이 시험의 값. 채택된 결과가 없으면 빈 목록."""
+    if run.adopted_result_id is None:
+        return []
+    found = db.get(ProcessingResult, run.adopted_result_id)
+    return _batch_scalars(found.scalars) if found else []
 
 
 def _stage_out(stage: processing.Stage) -> ProcessingStageOut:
@@ -958,6 +983,103 @@ def unadopt(
 MAX_BATCH = 1000
 
 
+@router.post("/batch/undo", response_model=BatchUndoOut)
+def undo_batch(
+    payload: BatchUndoRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> BatchUndoOut:
+    """방금 건 배치를 **되돌린다** — 만든 결과를 지우고 채택을 원래대로.
+
+    ## 왜 「지우기」 가 아니라 「되돌리기」 인가
+
+    배치는 대개 채택까지 함께 옮긴다. 만든 결과만 지우고 말면 **원래 있던 값까지
+    사라진다** — 시험은 채택이 빈 상태로 남고, 사람은 배치를 걸기 전보다 나쁜
+    자리에 선다. 그래서 부르는 쪽이 `restore_adopted_id`(배치 응답의
+    `previous_adopted_id`)를 함께 보내고, 여기서 그것으로 돌려놓는다.
+
+    ## 한 건씩과 같은 규칙으로 막는다
+
+    통계가 근거로 실은 결과는 못 지운다(`delete_result` 와 같은 판단) — 되돌리는
+    길이라고 그 규칙이 느슨해지지 않는다. 이미 없는 것은 **성공으로 친다**:
+    되돌리기를 두 번 눌렀거나 누가 먼저 지운 것이고, 어느 쪽이든 원하는 상태다.
+
+    **건별로 커밋한다.** 하나가 막혔다고 앞의 되돌리기를 취소하면, 사람은 무엇이
+    남았는지 모른 채 다시 눌러야 한다.
+    """
+    rows: list[BatchUndoItemOut] = []
+    for asked in payload.items:
+        item = db.get(ProcessingResult, asked.result_id)
+        if item is None:
+            rows.append(BatchUndoItemOut(result_id=asked.result_id, status="missing"))
+            continue
+        try:
+            run = get_run(db, user, item.test_run_id)
+            require_owner_edit(
+                db,
+                user,
+                run.workspace_id,
+                what="이 시험의 처리 결과",
+                code="MNX-PROCESSING-0015",
+            )
+            used = db.scalar(
+                select(func.count())
+                .select_from(EnsembleResult)
+                .where(EnsembleResult.result_ids.contains([str(item.id)]))
+            )
+            if used:
+                raise Conflict(
+                    "MNX-PROCESSING-0014",
+                    f"반복 시편 통계 {used}건이 이 결과를 근거로 싣고 있어 지울 수 없습니다.",
+                )
+
+            restored = False
+            if run.adopted_result_id == item.id:
+                # **원래 채택으로 돌려놓는다.** 그 결과가 이 시험의 것이 아니면
+                # 안 받는다 — 남의 시험 결과를 채택하는 길이 되면 안 된다.
+                back = (
+                    db.get(ProcessingResult, asked.restore_adopted_id)
+                    if asked.restore_adopted_id
+                    else None
+                )
+                if asked.restore_adopted_id and (back is None or back.test_run_id != run.id):
+                    raise Conflict(
+                        "MNX-PROCESSING-0016",
+                        "되돌릴 채택 결과가 이 시험의 것이 아닙니다.",
+                    )
+                run.adopted_result_id = back.id if back else None
+                _project_summaries(db, run, back)
+                restored = back is not None
+
+            audit.record(
+                db,
+                action=audit.PROCESSING_RESULT_DELETED,
+                actor=user,
+                target_table="processing_results",
+                target_id=item.id,
+                target_label=f"{run.record_name} · 배치 되돌리기",
+                workspace_id=run.workspace_id,
+                changes={"undo": True, "restored_adopted": restored},
+            )
+            stored = item.storage_path
+            db.delete(item)
+            db.commit()
+            filestore.delete_file(stored)
+            rows.append(
+                BatchUndoItemOut(result_id=asked.result_id, status="ok", restored=restored)
+            )
+        except AppError as exc:
+            db.rollback()
+            rows.append(
+                BatchUndoItemOut(result_id=asked.result_id, status="failed", error=exc.message)
+            )
+
+    undone = sum(1 for one in rows if one.status in ("ok", "missing"))
+    return BatchUndoOut(
+        requested=len(rows), undone=undone, failed=len(rows) - undone, items=rows
+    )
+
+
 @router.post("/batch", response_model=BatchOut)
 def run_batch(
     payload: BatchRequest,
@@ -997,7 +1119,29 @@ def run_batch(
             )
             continue
 
+        # **전과 후를 함께 낸다.** 「무엇이 어떻게 달라지나」 를 보고 정하려면
+        # 지금 값이 있어야 한다. 실패한 건에도 붙인다 — 「원래 값은 있었는데
+        # 이번에 못 냈다」 와 「원래도 없었다」 는 다른 말이다.
+        before = _adopted_scalars(db, run)
+        was_adopted = run.adopted_result_id
+
         try:
+            if payload.dry_run:
+                # **저장하지 않는다.** 파일도 행도 안 만들고 계산만 한다 —
+                # `_store` 와 같은 `_run_pipeline` 을 지나므로 값이 어긋날 수 없다.
+                computed, _ = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
+                items.append(
+                    BatchItemOut(
+                        test_run_id=run.id,
+                        record_name=run.record_name,
+                        status="ok",
+                        adopted=False,
+                        scalars=[_scalar_out(one) for one in computed.scalars],
+                        previous=before,
+                        previous_adopted_id=was_adopted,
+                    )
+                )
+                continue
             stored = _store(db, run, payload.source_curve_key, payload.steps, recipe, user)
         except AppError as exc:
             db.rollback()
@@ -1007,6 +1151,8 @@ def run_batch(
                     record_name=run.record_name,
                     status="failed",
                     error=exc.message,
+                    previous=before,
+                    previous_adopted_id=was_adopted,
                 )
             )
             continue
@@ -1025,20 +1171,17 @@ def run_batch(
                 status="ok",
                 result_id=stored.id,
                 adopted=adopted,
-                scalars=[
-                    ProcessingScalarOut(
-                        key=str(s.get("key", "")),
-                        label=str(s.get("label", "")),
-                        value=float(s.get("value", 0.0)),
-                        si_unit=str(s.get("si_unit") or "1"),
-                        dimension=(str(s["dimension"]) if s.get("dimension") else None),
-                    )
-                    for s in stored.scalars
-                ],
+                scalars=_batch_scalars(stored.scalars),
+                previous=before,
+                previous_adopted_id=was_adopted,
             )
         )
 
     succeeded = sum(1 for item in items if item.status == "ok")
     return BatchOut(
-        requested=len(items), succeeded=succeeded, failed=len(items) - succeeded, items=items
+        requested=len(items),
+        succeeded=succeeded,
+        failed=len(items) - succeeded,
+        dry_run=payload.dry_run,
+        items=items,
     )

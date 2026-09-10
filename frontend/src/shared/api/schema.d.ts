@@ -3246,6 +3246,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/batch/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Batch
+         * @description 방금 건 배치를 **되돌린다** — 만든 결과를 지우고 채택을 원래대로.
+         *
+         *     ## 왜 「지우기」 가 아니라 「되돌리기」 인가
+         *
+         *     배치는 대개 채택까지 함께 옮긴다. 만든 결과만 지우고 말면 **원래 있던 값까지
+         *     사라진다** — 시험은 채택이 빈 상태로 남고, 사람은 배치를 걸기 전보다 나쁜
+         *     자리에 선다. 그래서 부르는 쪽이 `restore_adopted_id`(배치 응답의
+         *     `previous_adopted_id`)를 함께 보내고, 여기서 그것으로 돌려놓는다.
+         *
+         *     ## 한 건씩과 같은 규칙으로 막는다
+         *
+         *     통계가 근거로 실은 결과는 못 지운다(`delete_result` 와 같은 판단) — 되돌리는
+         *     길이라고 그 규칙이 느슨해지지 않는다. 이미 없는 것은 **성공으로 친다**:
+         *     되돌리기를 두 번 눌렀거나 누가 먼저 지운 것이고, 어느 쪽이든 원하는 상태다.
+         *
+         *     **건별로 커밋한다.** 하나가 막혔다고 앞의 되돌리기를 취소하면, 사람은 무엇이
+         *     남았는지 모른 채 다시 눌러야 한다.
+         */
+        post: operations["undo_batch_api_processing_batch_undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/inputs": {
         parameters: {
             query?: never;
@@ -6135,6 +6171,13 @@ export interface components {
             adopted: boolean;
             /** Error */
             error?: string | null;
+            /**
+             * Previous
+             * @default []
+             */
+            previous: components["schemas"]["ProcessingScalarOut"][];
+            /** Previous Adopted Id */
+            previous_adopted_id?: string | null;
             /** Record Name */
             record_name: string;
             /** Result Id */
@@ -6154,6 +6197,11 @@ export interface components {
         };
         /** BatchOut */
         BatchOut: {
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
             /** Failed */
             failed: number;
             /** Items */
@@ -6170,6 +6218,11 @@ export interface components {
              * @default true
              */
             adopt: boolean;
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
             /** Recipe Key */
             recipe_key?: string | null;
             /** Source Curve Key */
@@ -6180,6 +6233,52 @@ export interface components {
             }[];
             /** Test Run Ids */
             test_run_ids: string[];
+        };
+        /**
+         * BatchUndoItem
+         * @description 되돌릴 것 하나. **무엇으로 돌려놓을지까지 받는다.**
+         */
+        BatchUndoItem: {
+            /** Restore Adopted Id */
+            restore_adopted_id?: string | null;
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+        };
+        /** BatchUndoItemOut */
+        BatchUndoItemOut: {
+            /** Error */
+            error?: string | null;
+            /**
+             * Restored
+             * @default false
+             */
+            restored: boolean;
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /** Status */
+            status: string;
+        };
+        /** BatchUndoOut */
+        BatchUndoOut: {
+            /** Failed */
+            failed: number;
+            /** Items */
+            items: components["schemas"]["BatchUndoItemOut"][];
+            /** Requested */
+            requested: number;
+            /** Undone */
+            undone: number;
+        };
+        /** BatchUndoRequest */
+        BatchUndoRequest: {
+            /** Items */
+            items: components["schemas"]["BatchUndoItem"][];
         };
         /**
          * BlockSpecOut
@@ -20132,6 +20231,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_batch_api_processing_batch_undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchUndoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchUndoOut"];
                 };
             };
             /** @description Validation Error */

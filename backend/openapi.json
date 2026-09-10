@@ -790,6 +790,26 @@
             ],
             "title": "Error"
           },
+          "previous": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProcessingScalarOut"
+            },
+            "title": "Previous",
+            "type": "array"
+          },
+          "previous_adopted_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Adopted Id"
+          },
           "record_name": {
             "title": "Record Name",
             "type": "string"
@@ -834,6 +854,11 @@
       },
       "BatchOut": {
         "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
           "failed": {
             "title": "Failed",
             "type": "integer"
@@ -868,6 +893,11 @@
           "adopt": {
             "default": true,
             "title": "Adopt",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
             "type": "boolean"
           },
           "recipe_key": {
@@ -915,6 +945,116 @@
           "steps"
         ],
         "title": "BatchRequest",
+        "type": "object"
+      },
+      "BatchUndoItem": {
+        "description": "되돌릴 것 하나. **무엇으로 돌려놓을지까지 받는다.**",
+        "properties": {
+          "restore_adopted_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restore Adopted Id"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id"
+        ],
+        "title": "BatchUndoItem",
+        "type": "object"
+      },
+      "BatchUndoItemOut": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "restored": {
+            "default": false,
+            "title": "Restored",
+            "type": "boolean"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "status"
+        ],
+        "title": "BatchUndoItemOut",
+        "type": "object"
+      },
+      "BatchUndoOut": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchUndoItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "integer"
+          },
+          "undone": {
+            "title": "Undone",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requested",
+          "undone",
+          "failed",
+          "items"
+        ],
+        "title": "BatchUndoOut",
+        "type": "object"
+      },
+      "BatchUndoRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchUndoItem"
+            },
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "BatchUndoRequest",
         "type": "object"
       },
       "BlockSpecOut": {
@@ -31519,6 +31659,48 @@
           }
         },
         "summary": "Run Batch",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/api/processing/batch/undo": {
+      "post": {
+        "description": "방금 건 배치를 **되돌린다** — 만든 결과를 지우고 채택을 원래대로.\n\n## 왜 「지우기」 가 아니라 「되돌리기」 인가\n\n배치는 대개 채택까지 함께 옮긴다. 만든 결과만 지우고 말면 **원래 있던 값까지\n사라진다** — 시험은 채택이 빈 상태로 남고, 사람은 배치를 걸기 전보다 나쁜\n자리에 선다. 그래서 부르는 쪽이 `restore_adopted_id`(배치 응답의\n`previous_adopted_id`)를 함께 보내고, 여기서 그것으로 돌려놓는다.\n\n## 한 건씩과 같은 규칙으로 막는다\n\n통계가 근거로 실은 결과는 못 지운다(`delete_result` 와 같은 판단) — 되돌리는\n길이라고 그 규칙이 느슨해지지 않는다. 이미 없는 것은 **성공으로 친다**:\n되돌리기를 두 번 눌렀거나 누가 먼저 지운 것이고, 어느 쪽이든 원하는 상태다.\n\n**건별로 커밋한다.** 하나가 막혔다고 앞의 되돌리기를 취소하면, 사람은 무엇이\n남았는지 모른 채 다시 눌러야 한다.",
+        "operationId": "undo_batch_api_processing_batch_undo_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchUndoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchUndoOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo Batch",
         "tags": [
           "processing"
         ]

@@ -267,6 +267,12 @@ class BatchRequest(BaseModel):
     """성공한 것을 바로 채택할지. **기본이 참인 이유:** 배치를 돌리는 사람은
     이미 한 건으로 단계를 맞춰 본 뒤다. 여기서 또 하나씩 채택하게 하면 배치를
     쓴 의미가 절반이 된다."""
+    dry_run: bool = False
+    """**돌려만 보고 저장하지 않는다.** 참이면 결과 행도 파일도 안 생기고
+    채택도 안 바뀐다 — 나온 값만 돌려준다.
+
+    미리보기를 **같은 경로로** 도는 이유: 따로 만들면 「미리보기는 됐는데 저장은
+    실패」 가 가능해지고, 그 어긋남은 20건을 이미 건 뒤에 드러난다."""
 
 
 class BatchItemOut(BaseModel):
@@ -280,13 +286,53 @@ class BatchItemOut(BaseModel):
     """어디서 왜 막혔는지. **건별로 다르다** — 시편 치수가 없는 것, 탄성 구간에
     점이 없는 것, 채널 이름이 다른 것이 한 배치에 섞여 온다."""
     scalars: list[ProcessingScalarOut] = []
+    previous: list[ProcessingScalarOut] = []
+    """**지금 이 시험의 값**(채택된 결과의 스칼라). 없으면 빈 목록이다.
+
+    걸기 전에 「무엇이 어떻게 달라지나」 를 보려면 전과 후가 함께 있어야 한다.
+    수치가 거의 같으면 다시 걸 이유가 없고, 크게 달라지면 그것이야말로 사람이
+    보고 정해야 할 자리다."""
+    previous_adopted_id: uuid.UUID | None = None
+    """되돌릴 때 **원래 채택으로 돌려놓기 위한** 값. 배치가 채택을 옮겼는데
+    되돌리기가 그냥 풀어 버리면, 원래 있던 값까지 사라진다."""
 
 
 class BatchOut(BaseModel):
     requested: int
     succeeded: int
     failed: int
+    dry_run: bool = False
+    """돌려만 본 것인가. 화면이 「저장됨」 과 「이렇게 나옵니다」 를 다르게 적는다."""
     items: list[BatchItemOut]
+
+
+class BatchUndoItem(BaseModel):
+    """되돌릴 것 하나. **무엇으로 돌려놓을지까지 받는다.**"""
+
+    result_id: uuid.UUID
+    restore_adopted_id: uuid.UUID | None = None
+    """되돌린 뒤 이 시험이 채택할 것. 배치 응답의 `previous_adopted_id` 를 그대로
+    돌려보낸다. `null` 이면 채택 없는 상태로 되돌린다."""
+
+
+class BatchUndoRequest(BaseModel):
+    items: list[BatchUndoItem] = Field(min_length=1)
+
+
+class BatchUndoItemOut(BaseModel):
+    result_id: uuid.UUID
+    status: str
+    """`ok` | `failed` | `missing`(이미 없다 — 되돌리기에서는 성공과 같다)."""
+    restored: bool = False
+    """원래 채택으로 돌려놓았나."""
+    error: str | None = None
+
+
+class BatchUndoOut(BaseModel):
+    requested: int
+    undone: int
+    failed: int
+    items: list[BatchUndoItemOut]
 
 
 class ResultCurveOut(BaseModel):

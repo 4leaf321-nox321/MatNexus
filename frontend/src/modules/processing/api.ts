@@ -27,6 +27,7 @@ export type ProcessingScalar = components['schemas']['ProcessingScalarOut']
 export type Recipe = components['schemas']['RecipeOut']
 export type BatchOut = components['schemas']['BatchOut']
 export type BatchItem = components['schemas']['BatchItemOut']
+export type BatchUndoOut = components['schemas']['BatchUndoOut']
 type RecipeUpdate = components['schemas']['RecipeUpdateRequest']
 type RecipeCreate = components['schemas']['RecipeCreateRequest']
 
@@ -234,14 +235,30 @@ export const processingApi = {
    */
   removeResult: (resultId: string) => api.delete<void>(`/processing/results/${resultId}`),
 
-  /** 여러 시험에 같은 단계를. **부분 실패를 건별로 돌려준다.** */
+  /**
+   * 여러 시험에 같은 단계를. **부분 실패를 건별로 돌려준다.**
+   *
+   * `dry_run` 이면 아무것도 안 남기고 값만 낸다 — 걸기 전에 전/후를 견주는
+   * 자리다. 저장과 **같은 경로**로 돌므로 「미리보기는 됐는데 저장은 실패」 가
+   * 생기지 않는다.
+   */
   batch: (body: {
     test_run_ids: string[]
     source_curve_key?: string | null
     steps: RecipeStep[]
     recipe_key?: string | null
     adopt: boolean
+    dry_run?: boolean
   }) => api.post<BatchOut>('/processing/batch', body),
+
+  /**
+   * 방금 건 배치를 **되돌린다** — 만든 결과를 지우고 채택을 원래대로.
+   *
+   * `restore_adopted_id` 는 배치 응답의 `previous_adopted_id` 를 그대로
+   * 돌려보낸다. 안 보내면 채택이 빈 채로 남아, 배치 걸기 전보다 나쁜 자리가 된다.
+   */
+  undoBatch: (items: { result_id: string; restore_adopted_id?: string | null }[]) =>
+    api.post<BatchUndoOut>('/processing/batch/undo', { items }),
 
   recipes: (testType?: string) =>
     api.get<Recipe[]>(`/processing/recipes${search({ test_type: testType })}`),

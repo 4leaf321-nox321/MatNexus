@@ -809,6 +809,127 @@ class Test레시피:
         assert allowed.json()["is_global"] is False
 
 
+class Test배치_미리보기와_되돌리기:
+    """**20건에 걸기 전에 보고, 잘못 걸었으면 되돌린다.**
+
+    배치는 한 번에 스무 건의 값을 바꾼다. 그런데 지금까지는 걸어 본 뒤에야
+    무엇이 나오는지 알 수 있었고, 잘못 걸어도 되돌릴 길이 없었다 — 결과 20개와
+    옮겨진 채택 20개가 그대로 남는다(2026-09-11 요청).
+
+    ## 미리보기는 **같은 경로**로 돈다
+
+    따로 만들면 「미리보기는 됐는데 저장은 실패」 가 가능해지고, 그 어긋남은
+    이미 스무 건을 건 뒤에 드러난다. `dry_run` 은 `_run_pipeline` 까지 똑같이
+    지나고 저장만 안 한다.
+
+    ## 되돌리기는 **원래 채택으로 돌려놓는 것**까지다
+
+    만든 결과만 지우면 원래 있던 값까지 사라진다 — 배치를 걸기 전보다 나쁜
+    자리에 서게 된다.
+    """
+
+    def _batch(
+        self, client: TestClient, headers: dict[str, str], run_id: str, **over: Any
+    ) -> Any:
+        body = {"test_run_ids": [run_id], "steps": STEPS, **over}
+        got = client.post("/api/processing/batch", json=body, headers=headers)
+        assert got.status_code == 200, got.text
+        return got.json()
+
+    def test_미리보기는_아무것도_안_남긴다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        before = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        got = self._batch(client, admin_headers, run_id, dry_run=True)
+
+        assert got["dry_run"] is True
+        assert got["succeeded"] == 1
+        # **값은 나온다.** 안 나오면 미리보기가 아니라 그냥 확인 버튼이다.
+        assert got["items"][0]["scalars"], "미리보기인데 값이 없다"
+        assert got["items"][0]["result_id"] is None
+        after = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        ).json()
+        assert len(after) == len(before), "미리보기가 결과를 남겼다"
+
+    def test_미리보기와_실제가_같은_값을_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**이것이 `dry_run` 을 같은 경로에 둔 이유다.**"""
+        preview = self._batch(client, admin_headers, run_id, dry_run=True)
+        real = self._batch(client, admin_headers, run_id, adopt=False)
+        seen = {one["key"]: one["value"] for one in preview["items"][0]["scalars"]}
+        saved = {one["key"]: one["value"] for one in real["items"][0]["scalars"]}
+        assert seen == pytest.approx(saved)
+
+    def test_지금_값을_함께_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """전과 후가 함께 있어야 「할지 말지」 를 정할 수 있다."""
+        first = self._batch(client, admin_headers, run_id, adopt=True)
+        assert first["items"][0]["previous"] == [], "채택 전인데 전 값이 있다"
+
+        second = self._batch(client, admin_headers, run_id, dry_run=True)
+        assert second["items"][0]["previous"], "채택된 값이 있는데 전 값이 비었다"
+        assert second["items"][0]["previous_adopted_id"] == first["items"][0]["result_id"]
+
+    def test_되돌리면_원래_채택으로_돌아간다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**만든 것만 지우면 원래 값까지 사라진다.**"""
+        first = self._batch(client, admin_headers, run_id, adopt=True)
+        was = first["items"][0]["result_id"]
+        second = self._batch(client, admin_headers, run_id, adopt=True)
+        now = second["items"][0]["result_id"]
+        assert second["items"][0]["previous_adopted_id"] == was
+
+        undo = client.post(
+            "/api/processing/batch/undo",
+            json={"items": [{"result_id": now, "restore_adopted_id": was}]},
+            headers=admin_headers,
+        )
+        assert undo.status_code == 200, undo.text
+        assert undo.json()["undone"] == 1
+        assert undo.json()["items"][0]["restored"] is True
+
+        detail = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert detail["adopted_result_id"] == was, "원래 채택으로 안 돌아갔다"
+
+    def test_이미_없는_것은_성공으로_친다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """두 번 누른 것이고, 어느 쪽이든 원하는 상태다."""
+        got = client.post(
+            "/api/processing/batch/undo",
+            json={"items": [{"result_id": str(uuid.uuid4())}]},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        assert got.json()["items"][0]["status"] == "missing"
+        assert got.json()["failed"] == 0
+
+    def test_남의_시험_결과로는_못_돌려놓는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """**되돌리기가 채택을 옮기는 뒷문이 되면 안 된다.**"""
+        made = self._batch(client, admin_headers, run_id, adopt=True)
+        result_id = made["items"][0]["result_id"]
+        other = db.scalar(
+            select(ProcessingResult).where(ProcessingResult.test_run_id != uuid.UUID(run_id))
+        )
+        if other is None:
+            pytest.skip("다른 시험의 결과가 없다")
+        got = client.post(
+            "/api/processing/batch/undo",
+            json={"items": [{"result_id": result_id, "restore_adopted_id": str(other.id)}]},
+            headers=admin_headers,
+        )
+        assert got.json()["items"][0]["status"] == "failed"
+        assert "이 시험의 것이 아닙니다" in (got.json()["items"][0]["error"] or "")
+
+
 class Test결과_지우기:
     """**시도는 쌓이는 것이 정상이고, 그래서 지울 길이 있어야 한다.**
 
