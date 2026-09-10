@@ -1768,7 +1768,7 @@ export default function FormatProfileEditorPage() {
                 <TableBody>
                   {visibleColumns.map((column) => (
                     <TableRow key={column.name}>
-                      <TableCell className="text-sm">
+                      <TableCell>
                         {column.name || '(이름 없음)'}
                         {/* **어느 표의 열인지 보인다.** 안 그러면 펼친 뒤에 측정 열과
                             섞여, 있지도 않은 열을 측정에 매핑한 줄 안다. */}
@@ -1778,7 +1778,7 @@ export default function FormatProfileEditorPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
+                      <TableCell className="font-mono">
                         {(() => {
                           const rule = columnMap[column.name] ?? EMPTY_RULE
                           const state = unitState({
@@ -1801,7 +1801,7 @@ export default function FormatProfileEditorPage() {
                           )
                         })()}
                       </TableCell>
-                      <TableCell className="text-muted-foreground font-mono text-xs">
+                      <TableCell className="font-mono">
                         {column.sample || '—'}
                       </TableCell>
                       <TableCell>

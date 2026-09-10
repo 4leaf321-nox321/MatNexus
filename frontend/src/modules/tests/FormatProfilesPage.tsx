@@ -133,7 +133,7 @@ export default function FormatProfilesPage() {
                   </TableCell>
                   {/* **장비는 부서마다 다르다.** 누구 것인지 안 보이면 왜 내
                       파일이 저 규칙으로 읽혔는지 알 수 없다. */}
-                  <TableCell className="text-sm">
+                  <TableCell>
                     {item.is_global ? (
                       <Badge variant="outline" className="gap-1">
                         <Globe2 className="size-3" />
@@ -145,7 +145,7 @@ export default function FormatProfilesPage() {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm">{item.test_type_label}</TableCell>
+                  <TableCell>{item.test_type_label}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {(match.extensions ?? []).map((extension) => (
@@ -165,11 +165,11 @@ export default function FormatProfilesPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
+                  <TableCell>
                     {columnCount}개
                     {definition.tables?.mode === 'all' && ' · 표 전부'}
                   </TableCell>
-                  <TableCell className="text-muted-foreground font-mono text-xs">
+                  <TableCell className="font-mono">
                     {item.priority}
                   </TableCell>
                   <TableCell className="text-right">

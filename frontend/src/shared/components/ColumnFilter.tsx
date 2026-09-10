@@ -90,7 +90,10 @@ export function ColumnLabel({
     <div
       className={`flex h-[3.25rem] flex-col justify-end ${align === 'right' ? 'items-end' : ''}`}
     >
-      <span className="text-muted-foreground text-[11px] font-medium tracking-wide">
+      {/* **크기·색을 여기서 정하지 않는다.** `TableHead` 가 이미 표의 글자
+          크기와 `font-medium` 을 준다 — 여기서 다시 정하면 필터가 달린 표만
+          머리글이 작고 흐려져, 화면을 옮길 때마다 글자가 달라 보인다. */}
+      <span className="tracking-wide">
         {sort ? <SortButton label={String(children)} sort={sort} /> : children}
       </span>
     </div>
@@ -135,7 +138,7 @@ export function ColumnFilter({
 
   return (
     <div className={`flex flex-col gap-1.5 ${align === 'right' ? 'items-end' : ''}`}>
-      <span className="text-muted-foreground flex items-center gap-1 text-[11px] font-medium tracking-wide">
+      <span className="flex items-center gap-1 tracking-wide">
         {sort ? <SortButton label={label} sort={sort} /> : label}
         {/* **켜진 것을 글자 높이에서 보인다.** 아래 칸의 테두리만으로는 열이
             여럿일 때 눈에 안 들어온다. */}

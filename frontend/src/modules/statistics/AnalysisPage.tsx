@@ -683,7 +683,7 @@ function SpecGapTab() {
                         {percent.toFixed(1)}%
                       </span>
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
+                    <TableCell>
                       {row.declared_reference ?? row.declared_source ?? '—'}
                     </TableCell>
                   </TableRow>

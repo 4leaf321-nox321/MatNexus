@@ -112,7 +112,7 @@ export default function MembersPage() {
               <TableRow>
                 <TableCell
                   colSpan={canManage ? 5 : 4}
-                  className="text-muted-foreground py-8 text-center text-sm"
+                  className="text-muted-foreground py-8 text-center"
                 >
                   멤버가 없습니다.
                 </TableCell>
@@ -122,7 +122,7 @@ export default function MembersPage() {
             {rows.map((member) => (
               <TableRow key={member.user_id}>
                 <TableCell className="font-medium">{member.display_name}</TableCell>
-                <TableCell className="text-muted-foreground">{member.email}</TableCell>
+                <TableCell>{member.email}</TableCell>
                 <TableCell>
                   <StatusBadge status={member.status} />
                 </TableCell>

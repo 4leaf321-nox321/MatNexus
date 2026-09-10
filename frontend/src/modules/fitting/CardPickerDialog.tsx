@@ -138,7 +138,7 @@ export function CardPickerDialog({ open, onOpenChange, onPick, specs, current }:
                       )}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
+                  <TableCell className="text-right font-mono">
                     {/* **점이 없으면 표를 쓰는 정의를 못 그려 본다.** 그때 미리보기가
                         빈 표를 내는데, 정의 탓인지 카드 탓인지 화면에 안 나온다. */}
                     {card.point_count || '—'}

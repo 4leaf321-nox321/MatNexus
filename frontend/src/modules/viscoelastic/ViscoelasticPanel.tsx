@@ -651,15 +651,15 @@ function MasterCurveView({ curve, materialId }: { curve: MasterCurve; materialId
                     <TableCell className="text-right font-mono tabular-nums">
                       {shift.log10_a_t.toFixed(3)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-right font-mono tabular-nums">
+                    <TableCell className="text-right font-mono tabular-nums">
                       {shift.observed_log10_a_t?.toFixed(3) ?? '—'}
                     </TableCell>
                     <TableCell
-                      className={`text-right font-mono tabular-nums ${loud ? 'text-destructive font-medium' : 'text-muted-foreground'}`}
+                      className={`text-right font-mono tabular-nums ${loud ? 'text-destructive font-medium' : ''}`}
                     >
                       {drift === null ? '—' : `${drift > 0 ? '+' : ''}${drift.toFixed(3)}`}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">{shift.source}</TableCell>
+                    <TableCell>{shift.source}</TableCell>
                   </TableRow>
                 )
               })}

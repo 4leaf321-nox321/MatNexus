@@ -194,7 +194,7 @@ export default function AccountsAdminPage() {
 
             {!accounts.loading && rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground py-8 text-center text-sm">
+                <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                   {tab === 'pending' ? '승인을 기다리는 신청이 없습니다.' : '계정이 없습니다.'}
                 </TableCell>
               </TableRow>
@@ -215,7 +215,7 @@ export default function AccountsAdminPage() {
                     <p className="text-muted-foreground mt-1 text-xs">{account.decision_note}</p>
                   )}
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell>
                   <WorkspaceCell
                     account={account}
                     nameOf={nameOf}

@@ -143,7 +143,7 @@ export default function StoragePage() {
           >
             {data.orphans.map((item) => (
               <TableRow key={item.path}>
-                <TableCell className="font-mono text-xs">{item.path}</TableCell>
+                <TableCell className="font-mono">{item.path}</TableCell>
                 <TableCell className="text-right tabular-nums">{mb(item.bytes)}</TableCell>
               </TableRow>
             ))}
@@ -157,7 +157,7 @@ export default function StoragePage() {
           >
             {data.incomplete.map((item) => (
               <TableRow key={item.path}>
-                <TableCell className="font-mono text-xs">
+                <TableCell className="font-mono">
                   {item.path}
                   <span className="text-muted-foreground ml-2">{item.age_hours}시간 전</span>
                 </TableCell>
@@ -175,7 +175,7 @@ export default function StoragePage() {
           >
             {data.expired.map((item) => (
               <TableRow key={item.path}>
-                <TableCell className="text-xs">
+                <TableCell>
                   <span className="font-mono">{item.record_name}</span>
                   <span className="text-muted-foreground ml-2">
                     {new Date(item.deleted_at).toLocaleDateString('ko-KR')} 삭제

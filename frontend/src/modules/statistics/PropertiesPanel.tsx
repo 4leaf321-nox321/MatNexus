@@ -718,7 +718,7 @@ function ScalarRow({ row }: { row: ScalarStats }) {
       </TableCell>
       <TableCell className="text-right tabular-nums">{row.count}</TableCell>
       <TableCell className="text-right tabular-nums">{value(row.mean)}</TableCell>
-      <TableCell className="text-muted-foreground text-right tabular-nums">
+      <TableCell className="text-right tabular-nums">
         {value(row.median)}
       </TableCell>
       <TableCell className="text-right tabular-nums">{value(row.sample_sd)}</TableCell>
@@ -731,7 +731,7 @@ function ScalarRow({ row }: { row: ScalarStats }) {
           </span>
         )}
       </TableCell>
-      <TableCell className="text-muted-foreground text-right tabular-nums text-xs">
+      <TableCell className="text-right tabular-nums">
         {row.ci95_low === null ? '—' : `${value(row.ci95_low)} ~ ${value(row.ci95_high)}`}
       </TableCell>
       <TableCell>

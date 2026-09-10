@@ -793,7 +793,7 @@ export default function BatchUploadPage() {
                         onChange={(event) => patch(row.key, { selected: event.target.checked })}
                       />
                     </TableCell>
-                    <TableCell className="max-w-56 truncate text-xs" title={row.file.name}>
+                    <TableCell className="max-w-56 truncate" title={row.file.name}>
                       {row.file.name}
                       <span className="text-muted-foreground ml-1">
                         {(row.file.size / 1024).toFixed(0)}KB
@@ -948,7 +948,7 @@ export default function BatchUploadPage() {
                     {/* 옆에서 일괄로 넣은 값이 줄마다 보인다 — 안 보이면
                         「넣었나」 를 확인할 데가 없다. 다른 줄만 고치려면 그
                         줄을 골라 다시 일괄 지정한다(규격·치수와 같은 방식). */}
-                    <TableCell className="text-muted-foreground text-xs">
+                    <TableCell>
                       {row.division || '—'}
                     </TableCell>
 

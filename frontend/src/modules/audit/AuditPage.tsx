@@ -110,7 +110,7 @@ export default function AuditPage() {
             <TableBody>
               {rows.map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
+                  <TableCell className="whitespace-nowrap tabular-nums">
                     {stamp(entry.created_at)}
                   </TableCell>
                   <TableCell>
@@ -122,7 +122,7 @@ export default function AuditPage() {
                     <div className="text-sm">{entry.target_label}</div>
                     <div className="text-muted-foreground text-xs">{entry.target_table}</div>
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell>
                     {entry.actor_label}
                     {/* 계정이 지워지면 id 는 비고 이름만 남는다 — 그 사실이 보여야 한다. */}
                     {!entry.actor_id && (

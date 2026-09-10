@@ -658,7 +658,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                 )}
               </TableCell>
               {hasAttributes && (
-                <TableCell className="text-sm">
+                <TableCell>
                   {role === 'category' ? (
                     /* **칸이 0 이면 그 분류의 규격은 치수를 하나도 못 갖는다.** */
                     item.field_count > 0 ? (
@@ -684,7 +684,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                   )}
                 </TableCell>
               )}
-              <TableCell className="text-muted-foreground text-sm">
+              <TableCell>
                 {item.parent_value ?? '—'}
               </TableCell>
               {/* **몇 건이 따라오는지 보여 준다.** 이름 고치기가 가벼운 조작처럼

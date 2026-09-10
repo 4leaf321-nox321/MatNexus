@@ -126,7 +126,7 @@ export default function RecipesPage() {
                     <p className="text-muted-foreground mt-0.5 text-xs">{item.description}</p>
                   )}
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell>
                   {item.is_global ? (
                     <Badge variant="outline" className="gap-1">
                       <Globe2 className="size-3" />
@@ -138,7 +138,7 @@ export default function RecipesPage() {
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="text-sm">{item.test_type_label}</TableCell>
+                <TableCell>{item.test_type_label}</TableCell>
                 <TableCell>
                   <button
                     type="button"

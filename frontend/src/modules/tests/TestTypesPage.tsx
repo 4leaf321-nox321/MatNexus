@@ -214,13 +214,13 @@ export default function TestTypesPage() {
                   <TableBody>
                     {active.channels.map((channel) => (
                       <TableRow key={channel.key}>
-                        <TableCell className="font-mono text-xs">{channel.key}</TableCell>
-                        <TableCell className="text-sm">{channel.label}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
+                        <TableCell className="font-mono">{channel.key}</TableCell>
+                        <TableCell>{channel.label}</TableCell>
+                        <TableCell>
                           {channel.dimension}
                         </TableCell>
-                        <TableCell className="font-mono text-xs">{channel.si_unit}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
+                        <TableCell className="font-mono">{channel.si_unit}</TableCell>
+                        <TableCell>
                           {display(channel.si_unit, channel.dimension).unit || '—'}
                         </TableCell>
                         <TableCell>

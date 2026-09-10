@@ -211,13 +211,13 @@ export default function CatalogPage() {
                   <TableCell>
                     <Badge variant="outline">{CATEGORY_LABELS[one.category] ?? one.category}</Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
+                  <TableCell>
                     {one.subsystem ?? '미분류'}
                   </TableCell>
-                  <TableCell className="text-muted-foreground max-w-64 truncate text-sm">
+                  <TableCell className="max-w-64 truncate">
                     {one.manufacturer ?? '—'}
                   </TableCell>
-                  <TableCell className="text-right text-sm tabular-nums">
+                  <TableCell className="text-right tabular-nums">
                     {one.value_count}
                   </TableCell>
                 </TableRow>

@@ -118,9 +118,9 @@ export function UnitSystemsSection({ canEdit }: { canEdit: boolean }) {
                   {item.builtin ? <Badge variant="outline">붙박이</Badge> : null}
                 </span>
               </TableCell>
-              <TableCell className="font-mono text-xs">{item.declaration}</TableCell>
+              <TableCell className="font-mono">{item.declaration}</TableCell>
               {SHOWN.map(([si]) => (
-                <TableCell key={si} className="font-mono text-xs">
+                <TableCell key={si} className="font-mono">
                   {item.symbols?.[si] ?? '—'}
                 </TableCell>
               ))}

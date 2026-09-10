@@ -248,7 +248,7 @@ export default function TrashPage() {
                       onChange={() => {}}
                     />
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs whitespace-nowrap tabular-nums">
+                  <TableCell className="whitespace-nowrap tabular-nums">
                     {stamp(row.deleted_at)}
                   </TableCell>
                   <TableCell>
@@ -264,7 +264,7 @@ export default function TrashPage() {
                       </p>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
+                  <TableCell>
                     {below(row.below) || '—'}
                   </TableCell>
                   <TableCell className="text-right whitespace-nowrap">

@@ -167,7 +167,7 @@ export default function ExportProfilesPage() {
           <TableBody>
             {rows.map((item) => (
               <TableRow key={item.id}>
-                <TableCell className="font-mono text-xs">{item.key}</TableCell>
+                <TableCell className="font-mono">{item.key}</TableCell>
                 <TableCell>
                   <span className="flex items-center gap-2">
                     <FileOutput className="text-muted-foreground size-4" />
@@ -175,7 +175,7 @@ export default function ExportProfilesPage() {
                     {item.is_active ? null : <Badge variant="outline">중단</Badge>}
                   </span>
                 </TableCell>
-                <TableCell className="font-mono text-xs">
+                <TableCell className="font-mono">
                   {String(
                     (item.definition as Record<string, unknown>).extension ?? '?'
                   )}

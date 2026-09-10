@@ -248,7 +248,7 @@ function CandidateRow({
         </div>
         {item.reason && <p className="text-muted-foreground mt-0.5 text-xs">{item.reason}</p>}
       </TableCell>
-      <TableCell className="font-mono text-xs">
+      <TableCell className="font-mono">
         {item.parameters.length === 0
           ? '—'
           : item.parameters

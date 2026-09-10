@@ -186,7 +186,7 @@ export default function CatalogMaterialPage() {
               <TableBody>
                 {values.map((value) => (
                   <TableRow key={value.id} className={value.representative ? '' : 'opacity-80'}>
-                    <TableCell className="align-top text-sm break-words">
+                    <TableCell className="align-top break-words">
                       {value.property_name}
                       {/* **한 이름에 변수가 여럿인 물성이 있다**(ADR 0029). Anand
                           하나에 9개 상수가 들어 있어서, 이름만 적으면 표에 같은
@@ -225,7 +225,7 @@ export default function CatalogMaterialPage() {
                         </Link>
                       )}
                     </TableCell>
-                    <TableCell className="align-top text-sm break-words tabular-nums">
+                    <TableCell className="align-top break-words tabular-nums">
                       {/* **변수마다 단위가 다르다.** 정의는 대개 `1`(무차원)이라고
                           적혀 있는데 실제로는 `MPa`·`1/s`·`K` 다. 그 값은 SI 로
                           저장돼 있지도 않아서 환산하지 않고 그대로 보여 준다 —
@@ -246,7 +246,7 @@ export default function CatalogMaterialPage() {
                     {/* **갈리는 조건이 먼저, 굵게.** 후보가 넷이면 사람이 넷을
                         눈으로 대조해서 무엇이 다른지 찾아야 했다 — 서버가 그 대조를
                         대신하고(`distinguishing`), 겹치는 조건은 뒤로 흐린다. */}
-                    <TableCell className="align-top text-xs break-words">
+                    <TableCell className="align-top break-words">
                       {(() => {
                         const varying = fmtDistinguishing(
                           value.distinguishing as Record<string, unknown> | null

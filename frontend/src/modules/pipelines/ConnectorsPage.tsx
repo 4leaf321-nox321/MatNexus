@@ -264,7 +264,7 @@ function ConnectorsTab() {
               {data.map((row) => (
                 <TableRow key={row.id} className={row.is_active ? '' : 'opacity-60'}>
                   <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell className="font-mono text-xs">{row.hostname}</TableCell>
+                  <TableCell className="font-mono">{row.hostname}</TableCell>
                   <TableCell>{row.workspace_name ?? '—'}</TableCell>
                   <TableCell className={seenTone(row.last_seen_at)}>
                     {row.last_seen_at ? stamp(row.last_seen_at) : '아직 없음'}
@@ -293,7 +293,7 @@ function ConnectorsTab() {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
+                  <TableCell>
                     {row.app_version ?? '—'}
                   </TableCell>
                   <TableCell className="text-right">
@@ -527,11 +527,11 @@ function InboxRow({
       </TableCell>
       <TableCell>{row.connector_name ?? '—'}</TableCell>
       <TableCell>{row.test_type_label ?? row.test_type_key ?? '—'}</TableCell>
-      <TableCell className="text-muted-foreground max-w-xs truncate text-xs">
+      <TableCell className="max-w-xs truncate">
         {hintText(row.hints as Record<string, string | undefined>)}
       </TableCell>
       <TableCell>{statusBadge(row.status)}</TableCell>
-      <TableCell className="max-w-md text-sm">
+      <TableCell className="max-w-md">
         {row.status === 'suggested'
           ? '후보 1 — 승인만 남았습니다'
           : row.status === 'needs_specimen' && row.candidate_count > 1

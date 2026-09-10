@@ -377,7 +377,7 @@ export function BulkMaterialDialog({
                     key={at}
                     className={`hover:bg-transparent ${starts ? 'border-t-foreground/25 border-t-2' : ''}`}
                   >
-                    <TableCell className="text-muted-foreground p-0 text-center text-xs">
+                    <TableCell className="p-0 text-center">
                       {at + 1}
                     </TableCell>
                     {visible.map((column, across) => {
