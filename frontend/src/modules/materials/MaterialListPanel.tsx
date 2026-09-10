@@ -37,6 +37,7 @@ import { OptionPicker } from '@/shared/components/OptionPicker'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { useResource } from '@/shared/hooks/useResource'
+import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 import { LeftPanel, useLeftPanel } from '@/shared/layout/SidePanel'
 import { RecordName } from '@/shared/components/RecordName'
 
@@ -82,6 +83,12 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
   // 고정 목록을 박으면 부서가 새 분류를 쓰기 시작할 때 고를 수 없게 된다.
   const classes = useResource(() => materialsApi.classifications(), [])
   const known = classes.data ?? []
+  // **지금 보고 있는 재료가 Tab 이 닿는 자리다.** 첫 줄로 두면 50번째 재료를
+  // 보는 중에도 처음부터 내려와야 한다.
+  const focus = useRowFocus(
+    rows.map((one) => one.id),
+    currentId
+  )
 
   return (
     <LeftPanel
@@ -165,12 +172,15 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
             return (
               <Link
                 key={material.id}
+                // 화살표로 앞뒤 재료를 오간다. 전체 목록의 표와 같은 규칙이다 —
+                // 한 화면에서만 되면 사람은 어디서 되는지를 외워야 한다.
+                {...focus.rowProps(material.id)}
                 // **켜 둔 탭을 갖고 간다.** CAE 카드를 보며 재료를 갈아타는데 매번
                 // 시료·시편으로 떨어지면 탭을 다시 눌러야 한다. 그 재료에 없는
                 // 탭이면 `tabOf` 가 첫 탭으로 돌린다.
                 to={{ pathname: `/materials/${material.id}`, search }}
                 aria-current={here ? 'page' : undefined}
-                className={`block border-b px-3 py-2 text-sm ${
+                className={`block border-b px-3 py-2 text-sm ${ROW_FOCUS_STYLE} ${
                   here ? 'bg-muted font-medium' : 'hover:bg-muted/50'
                 }`}
               >

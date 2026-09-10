@@ -78,6 +78,20 @@ describe('재료 목록 옆패널', () => {
     expect(other).not.toHaveAttribute('aria-current')
   })
 
+  it('화살표로 앞뒤 재료를 오간다', async () => {
+    // **전체 목록에서는 되는데 여기서는 안 됐다**(2026-09-11 지적). 한 화면에서만
+    // 되면 사람은 어디서 되는지를 외워야 한다.
+    const user = userEvent.setup()
+    panel('m1')
+    const first = await screen.findByRole('link', { name: /DP600/ })
+    // 지금 보고 있는 재료가 Tab 이 닿는 자리다.
+    expect(first).toHaveAttribute('tabindex', '0')
+
+    first.focus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('link', { name: /DP780/ })).toHaveFocus()
+  })
+
   it('누르면 그 재료로 간다', async () => {
     panel('m1')
     const link = await screen.findByRole('link', { name: /DP780/ })
