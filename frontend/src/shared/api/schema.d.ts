@@ -8061,6 +8061,8 @@ export interface components {
             reference: string;
             /** Scale */
             scale?: string | null;
+            /** Si Unit */
+            si_unit?: string | null;
             /** Source */
             source: string;
         };
@@ -9762,6 +9764,8 @@ export interface components {
             key: string;
             /** Label */
             label: string;
+            /** Si Unit */
+            si_unit: string;
             /** Source */
             source: string;
             /** Value */

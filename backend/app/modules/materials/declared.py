@@ -336,6 +336,9 @@ def check(
                     "points": _points(given, name=name, symbol=None),
                     "scale": scale,
                     "input_unit": None,
+                    # **값 옆에 저장 단위를 적는다.** 응답이 SI 값만 주면 받는 쪽이 단위를
+                    # 짐작한다 — MCP 가 `values_si: [2.06e11]` 만 넘기던 자리다(ADR 0004).
+                    "si_unit": spec["si_unit"],
                     "source": source,
                     "reference": reference,
                     "note": clean(str(row.get("note") or "")),
@@ -348,6 +351,9 @@ def check(
             unit = units.unit_of(symbol)
         except units.UnknownUnit as caught:
             raise AppError("MNX-MATERIALS-0025", str(caught), status=422) from caught
+        # **정본 기호로 저장한다.** `W/(m·K)` 로 받아도 `W/(m.K)` 로 둔다 — 시드가
+        # 가운뎃점으로 넣은 147건이 읽을 때마다 단위가 지워졌다(2026-09-11).
+        symbol = unit.symbol
         # **여기가 이 파일의 핵심이다.** 차원이 안 맞으면 값은 멀쩡한데 뜻이
         # 다르다 — 비열 자리에 열전도율을 넣어도 숫자는 그럴듯하다.
         if not units.same_dimension(unit.dimension, spec["dimension"]):
@@ -364,6 +370,7 @@ def check(
                 "points": _points(given, name=name, symbol=symbol),
                 "scale": None,
                 "input_unit": symbol,
+                "si_unit": spec["si_unit"],
                 "source": source,
                 "reference": reference,
                 "note": clean(str(row.get("note") or "")),

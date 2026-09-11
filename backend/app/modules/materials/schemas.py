@@ -66,6 +66,10 @@ class DeclaredPropertyOut(BaseModel):
     """기준정보 `property_item` 축의 값. 항목 목록을 **부서가 정한다**(D7)."""
     points: list[DeclaredPointOut]
     """온도-값 점들. **온도 오름차순이고 비지 않는다.**"""
+    si_unit: str | None = None
+    """`value_si` 의 단위(항목의 차원이 정한다). **값과 단위를 떼어 주지 않는다** —
+    SI 값만 받은 쪽(MCP·내보내기)은 단위를 짐작하게 되고, 밀도에서 그것이 10¹² 배로
+    틀렸다. 옛 줄(2026-09 이전)은 비어 있을 수 있다."""
     input_unit: str | None = None
     """사람이 적은 단위. 화면이 그대로 되돌려 보여 준다 — 206 GPa 를 넣었는데
     2.06e11 Pa 로 보이면 자기가 적은 값인지 알기 어렵다.

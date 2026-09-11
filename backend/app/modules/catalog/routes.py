@@ -75,7 +75,7 @@ from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
 from app.shared.permissions import require_owner_edit, visible_material_ids, visible_materials
 from app.shared.text import clean, compare_key
-from matcore import export
+from matcore import export, units
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -1049,7 +1049,14 @@ def search_by_property(
             status=422,
         )
     # 파라미터형은 저장된 값이 SI 가 아니라 그 항의 원래 단위다(D2) — 환산하지 않는다.
+    # **표가 모르는 눈금(HV·ShoreA)도 정의의 단위 그대로 물으면 환산 없이 견준다** —
+    # 「HV 200 근처」 는 뜻이 있고, 저장된 값이 그 눈금 그대로다.
     real_unit = parameters.unit_of(db, chosen.key, term) if grouped else chosen.si_unit
+    raw_scale = (
+        not grouped
+        and units.canonical(chosen.si_unit or "") is None
+        and property_search.same_symbol(unit, chosen.si_unit)
+    )
     if grouped and term and real_unit and unit.strip().lower() != real_unit.strip().lower():
         raise AppError(
             "MNX-CATALOG-0035",
@@ -1064,7 +1071,7 @@ def search_by_property(
         minimum=min_value,
         maximum=max_value,
         near=near,
-        convert=not grouped,
+        convert=not grouped and not raw_scale,
     )
 
     hits: list[property_search.Hit] = []
@@ -1078,7 +1085,7 @@ def search_by_property(
             unit=unit,
             limit=limit,
             term=term,
-            convert=not grouped,
+            convert=not grouped and not raw_scale,
         )
     if scope in ("all", "internal") and grouped:
         # 파라미터 집합은 아직 사내로 받아 가는 길이 열리지 않았다(ADR 0029 2단계).

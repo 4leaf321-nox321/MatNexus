@@ -1129,6 +1129,41 @@ class Test물려받기:
         assert values(card, "elastic")["poisson_ratio"] == 0.33
         assert values(card, "elastic")["poisson_ratio_source"] == "manual"
 
+    def test_밀도는_SI_로만_받는다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**표시 단위 숫자를 막는다.** 재료 API 는 tonne/mm³ 로 내고 여기는 kg/m³ 로
+        받는데, 그 숫자를 그대로 옮기면 밀도 7.85e-9 인 카드가 생겨 덱에 0 이 적혔다
+        (2026-09-06 `density_kg_m3: 2.68e-09`)."""
+        body = {
+            "material_id": ready["id"],
+            "test_type_key": "tensile",
+            "orientation": "MD",
+            "label": "밀도",
+        }
+        bad = client.post(
+            "/api/fitting/cards", json={**body, "density": 7.85e-9}, headers=admin_headers
+        )
+        assert bad.status_code == 422, bad.text
+        assert "kg/m³" in bad.text and "tonne/mm³" in bad.text
+        good = client.post(
+            "/api/fitting/cards", json={**body, "density": 7850.0}, headers=admin_headers
+        )
+        assert good.status_code == 201, good.text
+        assert values(good.json(), "elastic")["density"] == 7850.0
+
+    def test_물려받는_값에_단위가_붙어_온다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """SI 값만 주면 받는 쪽(MCP)이 단위를 짐작한다."""
+        got = client.get(
+            f"/api/fitting/cards/inherited?material_id={ready['id']}", headers=admin_headers
+        )
+        assert got.status_code == 200, got.text
+        by_key = {one["key"]: one for one in got.json()}
+        assert by_key["density"]["si_unit"] == "kg/m3"
+        assert by_key["poisson_ratio"]["si_unit"] == "1"
+
 
 class Test초탄성:
     """고무 카드가 **같은 엔드포인트로** 나온다.

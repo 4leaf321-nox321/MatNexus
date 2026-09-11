@@ -5478,6 +5478,17 @@
             ],
             "title": "Scale"
           },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -10371,6 +10382,10 @@
             "title": "Label",
             "type": "string"
           },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -10391,6 +10406,7 @@
           "key",
           "label",
           "value",
+          "si_unit",
           "source",
           "detail"
         ],

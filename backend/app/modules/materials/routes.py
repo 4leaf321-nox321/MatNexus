@@ -224,6 +224,7 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
         ],
         # **모르는 단위는 비운다.** 값이 SI 인데 단위가 `W/(m·K)` 라고 붙어 있으면
         # 사람은 그 단위로 읽는다 — 비어 있는 편이 낫다.
+        si_unit=row.get("si_unit"),
         input_unit=value_unit,
         scale=row.get("scale"),
         source=str(row["source"]),

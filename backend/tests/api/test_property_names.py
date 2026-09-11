@@ -405,6 +405,88 @@ class Test값으로_찾기:
         assert got["hits"] == [], "갈렸으면 값을 안 찾는다"
         assert len(got["candidates"]) >= 2
 
+    def test_문헌_표기가_달라도_같은_단위면_찾는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**`W/(m*K)` 와 `W/(m.K)` 는 같은 단위다.** 전에는 「차원이 다릅니다」 였다."""
+        material = CatalogMaterial(mt_id=2, name="구리", category="metal")
+        db.add(material)
+        db.add(
+            CatalogDefinition(
+                mt_id=777_001,
+                key="thermal.conductivity",
+                name="열전도율",
+                domain="thermal",
+                si_unit="W/(m*K)",
+                value_type="number",
+            )
+        )
+        db.flush()
+        db.add(
+            CatalogValue(
+                mt_id=777_002,
+                material_id=material.id,
+                property_key="thermal.conductivity",
+                value_num=400.0,
+                unit="W/(m*K)",
+                quality_tier=2,
+            )
+        )
+        db.commit()
+        for asked in ("W/(m.K)", "W/(m*K)", "W/(m·K)"):
+            got = client.get(
+                SEARCH,
+                params={"q": "thermal.conductivity", "unit": asked, "near": 400},
+                headers=admin_headers,
+            )
+            assert got.status_code == 200, (asked, got.text)
+            assert [one["value"] for one in got.json()["hits"]] == [400.0], asked
+
+    def test_표가_모르는_눈금은_정의의_단위_그대로_견준다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**「HV 200 근처」 는 뜻이 있다.** 환산은 못 해도 저장된 값이 그 눈금이다."""
+        material = CatalogMaterial(mt_id=3, name="공구강", category="metal")
+        db.add(material)
+        db.add(
+            CatalogDefinition(
+                mt_id=777_003,
+                key="mechanical.hardness_vickers",
+                name="비커스 경도",
+                domain="mechanical",
+                si_unit="HV",
+                value_type="number",
+            )
+        )
+        db.flush()
+        for at, hv in enumerate((190.0, 210.0, 400.0)):
+            db.add(
+                CatalogValue(
+                    mt_id=777_010 + at,
+                    material_id=material.id,
+                    property_key="mechanical.hardness_vickers",
+                    value_num=hv,
+                    unit="HV",
+                    quality_tier=2,
+                )
+            )
+        db.commit()
+        got = client.get(
+            SEARCH,
+            params={"q": "mechanical.hardness_vickers", "unit": "hv", "near": 200},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        assert [one["value"] for one in got.json()["hits"]] == [190.0, 210.0]
+        # 다른 눈금으로 물으면 여전히 모른다고 한다 — HB 200 은 HV 200 이 아니다.
+        bad = client.get(
+            SEARCH,
+            params={"q": "mechanical.hardness_vickers", "unit": "HB", "near": 200},
+            headers=admin_headers,
+        )
+        assert bad.status_code == 422
+        assert bad.json()["error"]["code"] == "MNX-CATALOG-0031"
+
     def test_사내와_안_이어졌으면_그렇다고_말한다(
         self, client: TestClient, admin_headers: dict[str, str], values: CatalogMaterial
     ) -> None:

@@ -21,11 +21,19 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
 }))
 
 const ROWS = [
-  { key: 'poisson_ratio', label: '푸아송비', value: 0.29, source: 'material', detail: '재료에 적힌 값입니다.' },
+  {
+    key: 'poisson_ratio',
+    label: '푸아송비',
+    value: 0.29,
+    si_unit: '1',
+    source: 'material',
+    detail: '재료에 적힌 값입니다.',
+  },
   {
     key: 'density',
     label: '밀도',
     value: 7900,
+    si_unit: 'kg/m3',
     source: 'sample',
     detail: '시료에서 잰 값입니다 (7.9e-09 tonne/mm3).',
   },
@@ -79,6 +87,7 @@ describe('물려받을 값', () => {
             key: 'density',
             label: '밀도',
             value: null as unknown as number,
+            si_unit: 'kg/m3',
             source: 'conflict',
             detail: '시료마다 밀도가 다릅니다(7800, 7900 kg/m3) — 쓸 값을 직접 넣으세요.',
           },

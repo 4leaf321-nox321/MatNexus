@@ -202,6 +202,18 @@ def _normalize(symbol: str) -> str:
     return "".join(symbol.split()).lower()
 
 
+def _styled(symbol: str) -> str:
+    """곱·거듭제곱 표기를 이 표의 것으로. **물리량은 안 바뀐다.**
+
+    문헌 카탈로그(MaterialTwin 이관)는 `W/(m*K)`·`kg/m^3` 로 적고, 시드 스크립트와
+    사람은 `W/(m·K)` 로 적었다. 이 표는 `W/(m.K)`·`kg/m3` 다. 실측(2026-09-11):
+    그 차이 때문에 값으로 재료 찾기가 열전도율·비열·밀도(3,591건)에서 「차원이
+    다릅니다」 로 막혔고, 선언 물성 147건이 화면에 단위 없이 떴다 — 전부 같은
+    단위였다. 곱 기호 셋과 캐럿을 지우는 것뿐이라 다른 단위로 바뀔 길이 없다.
+    """
+    return symbol.replace("*", ".").replace("·", ".").replace("⋅", ".").replace("^", "")
+
+
 def _case_index() -> dict[str, str]:
     """소문자 → 정본 심볼. **충돌하면 둘 다 뺀다.**
 
@@ -225,6 +237,11 @@ def _case_index() -> dict[str, str]:
 CASE_INDEX = _case_index()
 
 
+def loose_key(symbol: str) -> str:
+    """표기 차이를 다 지운 비교용 열쇠. **환산에는 안 쓴다** — 같은 글자인지만 본다."""
+    return _normalize(_styled(symbol.strip()))
+
+
 def canonical(symbol: str) -> str | None:
     """표기가 조금 다른 단위를 정본 심볼로. 모르면 `None`.
 
@@ -245,14 +262,31 @@ def canonical(symbol: str) -> str | None:
     alias = NOTATION_ALIASES.get(key)
     if alias:
         return alias
-    return CASE_INDEX.get(key)
+    found = CASE_INDEX.get(key)
+    if found:
+        return found
+    # 4. 곱·거듭제곱 표기만 다른가 (`W/(m*K)`·`kg/m^3`·`J/(kg·K)`)
+    styled = _styled(text)
+    if styled != text:
+        return canonical(styled)
+    return None
 
 
 def unit_of(symbol: str) -> Unit:
-    try:
-        return UNITS[symbol]
-    except KeyError:
-        raise UnknownUnit(symbol) from None
+    """기호로 단위를. **표기가 조금 달라도 받는다** — `canonical` 이 아는 만큼.
+
+    전에는 정본 기호만 받았다. 그래서 `canonical` 로 걸러 둔 값도 환산 함수에
+    원래 기호를 넘기면 거기서 다시 막혔고(값으로 찾기 — `bounds` 는 통과하고
+    `from_si` 가 던졌다), 시드가 넣은 `W/(m·K)` 는 읽을 때마다 단위가 지워졌다.
+    모르는 것은 여전히 모른다 — 추측은 `canonical` 이 안 한다.
+    """
+    exact = UNITS.get(symbol)
+    if exact is not None:
+        return exact
+    found = canonical(symbol)
+    if found is None:
+        raise UnknownUnit(symbol)
+    return UNITS[found]
 
 
 def to_si(value: float | Decimal | str, symbol: str) -> float:

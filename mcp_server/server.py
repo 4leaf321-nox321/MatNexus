@@ -200,7 +200,9 @@ def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "item": row.get("item"),
         # **SI 값만 낸다.** `value` 는 사람이 적은 단위의 숫자라, 함께 주면
-        # 어느 쪽이 정본인지 헷갈린다.
+        # 어느 쪽이 정본인지 헷갈린다. **그 단위는 반드시 함께 싣는다** — 값만
+        # 넘기면 읽는 쪽이 짐작하고, 밀도에서 그것이 10¹² 배로 틀렸다(2026-09-11).
+        "si_unit": row.get("si_unit"),
         "values_si": [
             {"temperature_k": one.get("temperature_k"), "value": one.get("value_si")}
             for one in points
@@ -1411,6 +1413,13 @@ async def create_card_from_tests(
     `poisson_ratio` 는 **인장시험이 주지 않는 값이다.** 모르면 비워 둔다 — 0.3 으로
     채우면 그것이 측정값인지 기본값인지 나중에 아무도 모른다. `density` 도 같다.
 
+    ## `density` 는 SI(kg/m³) 다 — 재료 API 의 숫자를 그대로 옮기지 마라
+
+    `get_material` 은 밀도를 **표시 단위(tonne/mm³)** 로 준다 — 강판이 `7.85e-9`.
+    이 인자는 kg/m³ 라 강판은 `7850` 이다. 그 숫자를 그대로 넘기면 서버가 범위
+    밖(0.5~50,000)이라고 거절한다. 대개는 비워 두면 된다 — 재료·시료에 적힌 밀도를
+    카드가 알아서 물려받는다.
+
     `test_run_ids` 를 주면 그 시험들만 쓴다. 비우면 채택된 것 전부 — 카드는 자기가
     무엇으로 나왔는지 들고 있으므로(`source.test_run_ids`), 「10건짜리」와 「8건
     짜리」를 나란히 두고 견줄 수 있다.
@@ -1476,7 +1485,12 @@ async def create_declared_card(
         "material": preview.get("material_name"),
         "blocks": preview.get("blocks"),
         "values": [
-            {"label": one.get("label"), "value_si": one.get("value"), "origin": one.get("source")}
+            {
+                "label": one.get("label"),
+                "value_si": one.get("value"),
+                "unit": one.get("si_unit"),
+                "origin": one.get("source"),
+            }
             for one in preview.get("values", [])
         ],
     }
@@ -2329,14 +2343,19 @@ async def list_processing_steps(
                 "id": one.get("id"),
                 "label": one.get("label"),
                 "applies_to": one.get("applies_to") or "전부",
-                "params": [item.get("name") for item in one.get("params") or []],
+                # 단위를 이름 옆에 적는다 — 인자는 SI 라 `0.2` 와 `0.002` 가 다른 값이다.
+                "params": [
+                    f"{item.get('name')} ({item.get('unit')})" if item.get("unit") else item.get("name")
+                    for item in one.get("params") or []
+                ],
             }
             for one in rows
         ],
         "standard": list(TENSILE_STANDARD),
         "note": (
             "`standard` 는 인장 표준 순서다. **재샘플은 재는 단계 뒤에 둔다** — "
-            "앞에 두면 탄성계수가 격자점으로 계산돼 값이 안 나온다."
+            "앞에 두면 탄성계수가 격자점으로 계산돼 값이 안 나온다. "
+            "**인자는 SI 다** — 변형률 0.2% 는 0.002, 응력은 Pa."
         ),
     }
 
@@ -2384,6 +2403,14 @@ async def run_processing(
     `steps` 를 직접 주거나 `recipe_key` 로 저장된 레시피를 쓴다. 저장하려면
     `save=True` — 그때도 **채택은 안 한다**(어느 결과를 공식으로 삼을지는 사람이
     정한다, ADR 0007).
+
+    ## 인자는 전부 SI 다 — 화면과 다르다
+
+    화면은 변형률을 % 로, 응력을 MPa 로 보여 주고 서버로 보낼 때 환산한다. 여기는
+    그 환산이 없다. 사람이 「0.2% 오프셋」 이라고 말하면 `offset_strain` 은 **0.002**
+    이고, 「200 GPa」 는 `youngs_modulus` **2e11** 이다. `0.2` 를 넣으면 20% 오프셋
+    항복강도가 조용히 나온다 — 서버는 그것을 틀렸다고 알 길이 없다. 각 인자의
+    단위는 `list_processing_steps(step=…)` 의 `params[].unit` 이 말한다.
 
     ## 실패는 실패다 — **임계값을 우회하지 마라**
 

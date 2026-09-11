@@ -39,6 +39,43 @@ class Test대소문자표기:
             assert units.canonical(symbol) == symbol
 
 
+class Test곱과_거듭제곱_표기:
+    """문헌 카탈로그는 `W/(m*K)`·`kg/m^3`, 시드와 사람은 `W/(m·K)` 로 적는다.
+
+    실측(2026-09-11): 이 표기 차이 하나로 값으로 재료 찾기가 열전도율·비열·밀도
+    3,591건에서 「차원이 다릅니다」 로 막혔고, 선언 물성 147건이 화면에 단위 없이
+    떴다 — 전부 같은 단위였다.
+    """
+
+    @pytest.mark.parametrize(
+        ("written", "expected"),
+        [
+            ("W/(m*K)", "W/(m.K)"),
+            ("W/(m·K)", "W/(m.K)"),
+            ("J/(kg*K)", "J/(kg.K)"),
+            ("J/(kg·K)", "J/(kg.K)"),
+            ("kJ/(kg·K)", "kJ/(kg.K)"),
+            ("kg/m^3", "kg/m3"),
+            ("m^2", "m2"),
+            ("Pa*s", None),  # 표에 없는 것은 표기를 맞춰도 모른다 — 지어내지 않는다
+        ],
+    )
+    def test_표기만_다르면_정본으로(self, written: str, expected: str | None) -> None:
+        assert units.canonical(written) == expected
+
+    def test_환산_함수도_받는다(self) -> None:
+        """`canonical` 로 걸러 놓고 `from_si` 에서 다시 막히면 절반만 고친 것이다."""
+        assert units.from_si(1.0, "W/(m*K)") == 1.0
+        assert units.to_si(7.85, "g/cm³") == pytest.approx(7850.0)
+        with pytest.raises(units.UnknownUnit):
+            units.unit_of("HV")
+
+    def test_비교용_열쇠는_표에_없는_눈금도_같다고_본다(self) -> None:
+        assert units.loose_key("HV") == units.loose_key(" hv ")
+        assert units.loose_key("Pa*s") == units.loose_key("Pa·s")
+        assert units.loose_key("HV") != units.loose_key("HB")
+
+
 class Test소문자충돌:
     """**이 검사가 이 파일의 핵심이다.**
 

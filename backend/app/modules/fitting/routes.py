@@ -342,6 +342,17 @@ THERMAL_ITEMS = {
     "thermal_conductivity": "열전도율",
 }
 
+#: 물려받는 값의 저장 단위. **응답에 값과 함께 실린다** — SI 값만 주면 받는 쪽이
+#: 단위를 짐작하고, 밀도에서 그것이 10¹² 배로 틀렸다(2026-09-06·09-11).
+INHERITED_UNITS: dict[str, str] = {
+    "youngs_modulus": "Pa",
+    "poisson_ratio": "1",
+    "density": "kg/m3",
+    "thermal_expansion": "1/K",
+    "specific_heat": "J/(kg.K)",
+    "thermal_conductivity": "W/(m.K)",
+}
+
 
 def _thermal_block(material: Material) -> dict[str, Any]:
     """선언 물성에서 열물성 블록을 만든다. 셋 다 없으면 빈 dict.
@@ -495,7 +506,12 @@ def _declared_blocks(
 
     found = [
         InheritedValueOut(
-            key=key, label=label, value=one.value, source=one.source, detail=one.detail
+            key=key,
+            label=label,
+            value=one.value,
+            si_unit=INHERITED_UNITS[key],
+            source=one.source,
+            detail=one.detail,
         )
         for key, label, one in (
             ("youngs_modulus", "탄성계수", stated),
@@ -1049,7 +1065,12 @@ def preview(
         fits=[_fit_out(item, extrapolate_to=payload.extrapolate_to) for item in drawn],
         elastic=[
             InheritedValueOut(
-                key=key, label=label, value=got.value, source=got.source, detail=got.detail
+                key=key,
+                label=label,
+                value=got.value,
+                si_unit=INHERITED_UNITS[key],
+                source=got.source,
+                detail=got.detail,
             )
             for key, label, got in (
                 ("poisson_ratio", "푸아송비", _inherit_poisson(group.material, None)),
@@ -1500,7 +1521,12 @@ def inherited_values(
     )
     return [
         InheritedValueOut(
-            key=key, label=label, value=one.value, source=one.source, detail=one.detail
+            key=key,
+            label=label,
+            value=one.value,
+            si_unit=INHERITED_UNITS[key],
+            source=one.source,
+            detail=one.detail,
         )
         for key, label, one in (
             ("poisson_ratio", "푸아송비", _inherit_poisson(material, None)),

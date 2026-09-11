@@ -104,8 +104,13 @@ def bounds(
         )
     # **차원이 다르면 답하지 않는다.** 「항복강도를 °C 로」 물으면 숫자는 나오지만
     # 그 답은 뜻이 없다 — 조용히 틀리는 쪽이다.
+    #
+    # 정의의 단위를 표가 모르면(HV·ShoreA) 차원 검사는 **건너뛴다** — 전에는 빈
+    # 차원과 견줘서 「차원이 다릅니다」 로 막혔다. 같은 단위인데 표기만 다른 것
+    # (`W/(m*K)`)이 그 길로 3,591건 막혀 있었다(2026-09-11).
     known = units.unit_of(canonical)
-    if si_unit and not units.same_dimension(known.dimension, _dimension_of(si_unit)):
+    dimension = _dimension_of(si_unit) if si_unit else None
+    if dimension and not units.same_dimension(known.dimension, dimension):
         raise AppError(
             "MNX-CATALOG-0032",
             f"이 물성의 단위는 '{si_unit}' 인데 '{unit}' 로 물었습니다 — 차원이 다릅니다.",
@@ -122,14 +127,25 @@ def bounds(
     return low, high
 
 
-def _dimension_of(si_unit: str) -> str:
-    """SI 기호에서 차원을 되찾는다. 정의가 든 것은 기호뿐이다."""
-    for dimension, symbol in units.SI_UNITS.items():
-        if symbol == si_unit:
-            return dimension
-    # 모르는 단위(HV·ShoreA 등 원본 taxonomy 것)는 차원 검사를 건너뛴다 —
-    # 억지로 꿰면 값이 상한다(ADR 0027).
-    return ""
+def _dimension_of(si_unit: str) -> str | None:
+    """정의의 기호에서 차원을 되찾는다. 모르면 `None` — 그때는 검사를 건너뛴다.
+
+    표기가 조금 달라도(`W/(m*K)`) `canonical` 이 알면 그 차원이다. 정말 모르는
+    단위(HV·ShoreA 등 원본 taxonomy 것)는 억지로 꿰지 않는다(ADR 0027).
+    """
+    found = units.canonical(si_unit)
+    return units.unit_of(found).dimension if found else None
+
+
+def same_symbol(asked: str, si_unit: str | None) -> bool:
+    """물어본 단위가 **정의의 단위 그 자체**인가 — 표에 없어도 그대로 견줄 수 있다.
+
+    `HV` 는 환산할 수 없지만 「HV 200 근처」 는 뜻이 있다 — 저장된 값이 그 눈금
+    그대로라 숫자를 그대로 걸면 된다. 곱·거듭제곱·대소문자·공백만 다른 것은 같다.
+    """
+    if not si_unit:
+        return False
+    return units.loose_key(asked) == units.loose_key(si_unit)
 
 
 def catalog_hits(

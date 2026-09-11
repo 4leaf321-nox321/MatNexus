@@ -1236,6 +1236,34 @@ class Test선언물성:
         # 알기 어렵다.
         assert row["input_unit"] == "GPa"
         assert row["reference"] == "KS D 3512 표 3"
+        # **값 옆에 저장 단위가 있다.** SI 값만 받은 쪽(MCP)이 단위를 짐작하지 않게.
+        assert row["si_unit"] == "Pa"
+
+    def test_표기가_달라도_받고_정본으로_저장한다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """시드가 `W/(m·K)`(가운뎃점)로 넣은 147건이 읽을 때마다 단위가 지워졌다
+        (2026-09-11). 받을 때 정본 기호로 바꿔 두면 다시 생기지 않는다."""
+        saved = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "열전도율",
+                        "points": [{"value": 45}],
+                        "input_unit": "W/(m·K)",
+                        "source": "literature",
+                        "reference": "핸드북",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        row = saved.json()["declared_properties"][0]
+        assert row["input_unit"] == "W/(m.K)"
+        assert row["si_unit"] == "W/(m.K)"
+        assert row["points"][0]["value"] == pytest.approx(45.0)
 
     def test_차원이_안_맞으면_막는다(
         self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
@@ -2598,6 +2626,9 @@ class Test모르는_단위:
     쓰는 길은 단위를 검사하지만, DB 에 직접 넣은 값이나 표에서 빠진 단위는 그 검사를
     안 지난다. 실측(2026-08-29): 시드 스크립트가 `W/(m·K)`(가운뎃점)를 넣었는데 표는
     `W/(m.K)`(온점)를 안다 — 재료 **한 줄** 때문에 목록 전체가 500 이었다.
+
+    가운뎃점은 이제 표가 받는다(2026-09-11, `units.canonical`). 그래서 여기서는
+    **정말 모르는 기호**로 목록이 사는지를 보고, 가운뎃점은 단위째 보이는지를 본다.
     """
 
     def test_모르는_단위가_있어도_목록이_열린다(
@@ -2618,15 +2649,23 @@ class Test모르는_단위:
         ).json()
         row = db.get(Material, uuid.UUID(made["id"]))
         assert row is not None
-        # 표가 모르는 기호 — 가운뎃점.
         row.declared_properties = [
             {
+                # 표가 정말 모르는 기호.
                 "item": "열전도율",
                 "points": [{"temperature_k": 293.15, "value_si": 50.0}],
-                "input_unit": "W/(m·K)",
+                "input_unit": "BTU/(hr·ft·F)",
                 "source": "literature",
                 "reference": "손으로 넣은 값",
-            }
+            },
+            {
+                # 표기만 다른 기호(가운뎃점) — 시드가 넣던 그것.
+                "item": "비열",
+                "points": [{"temperature_k": 293.15, "value_si": 460.0}],
+                "input_unit": "J/(kg·K)",
+                "source": "literature",
+                "reference": "손으로 넣은 값",
+            },
         ]
         db.commit()
 
@@ -2634,8 +2673,12 @@ class Test모르는_단위:
         assert listed.status_code == 200, listed.text
 
         detail = client.get(f"/api/materials/{made['id']}", headers=admin_headers).json()
-        declared = detail["declared_properties"][0]
+        by_item = {one["item"]: one for one in detail["declared_properties"]}
+        unknown, dotted = by_item["열전도율"], by_item["비열"]
         # **값을 감추지 않는다** — SI 그대로 보인다.
-        assert declared["points"][0]["value"] == pytest.approx(50.0)
+        assert unknown["points"][0]["value"] == pytest.approx(50.0)
         # **단위는 비운다.** SI 값에 모르는 단위를 붙여 두면 사람이 그 단위로 읽는다.
-        assert declared["input_unit"] is None
+        assert unknown["input_unit"] is None
+        # 가운뎃점은 같은 단위다 — 값도 단위도 그대로 보인다.
+        assert dotted["points"][0]["value"] == pytest.approx(460.0)
+        assert dotted["input_unit"] == "J/(kg·K)"

@@ -6,7 +6,26 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+#: 밀도가 SI(kg/m³)로 왔는지 가르는 울타리. 에어로젤 1 kg/m³ 부터 오스뮴 22,600 까지가
+#: 안이고, 표시 단위(tonne/mm³)로 잘못 넘긴 7.85e-9 는 밖이다.
+DENSITY_SI_RANGE = (0.5, 50_000.0)
+
+
+def _density_in_si(value: float | None) -> float | None:
+    """**표시 단위 숫자를 막는다.** 값이 틀리는 것이 아니라 단위가 틀리는 것이라
+    숫자만 봐서는 안 드러난다 — 덱에 밀도 0 이 적힌 뒤에야 안다."""
+    if value is None:
+        return None
+    low, high = DENSITY_SI_RANGE
+    if not low <= value <= high:
+        raise ValueError(
+            f"밀도는 SI(kg/m³)로 받습니다 — {value:g} 는 그 범위({low:g}~{high:g})가 "
+            "아닙니다. 7.85e-9 처럼 작으면 tonne/mm³ 표시 단위를 그대로 넘긴 것입니다 "
+            "(강판은 7850)."
+        )
+    return value
 
 
 class FamilyOut(BaseModel):
@@ -108,6 +127,9 @@ class InheritedValueOut(BaseModel):
     key: str
     label: str
     value: float | None
+    """**SI 다** — 밀도는 kg/m³, 탄성계수는 Pa. 화면은 표시 단위로 바꿔 보이고, 이
+    응답을 그대로 읽는 쪽(MCP)은 `si_unit` 을 함께 본다."""
+    si_unit: str
     source: str
     """`sample` | `material` | `manual` | `conflict` | `missing`."""
     detail: str | None
@@ -161,6 +183,16 @@ class PropertyCardSaveRequest(BaseModel):
     """**인장시험이 주지 않는 값이다.** 없으면 없는 채로 둔다 — 0.3 으로 채우면
     그것이 측정값인지 기본값인지 나중에 알 수 없다."""
     density: float | None = Field(default=None, gt=0)
+    """**SI(kg/m³)다.** 재료 API 는 밀도를 표시 단위(tonne/mm³)로 내지만 여기는 SI 로
+    받는다 — 그 값을 그대로 옮겨 넣으면 7.85e-9 kg/m³ 인 카드가 생기고, 덱에서
+    밀도가 0 이 된다(실측 2026-09-06 에 같은 사고: `density_kg_m3: 2.68e-09`).
+    `check_density` 가 그 자릿수를 막는다."""
+
+    @field_validator("density")
+    @classmethod
+    def check_density(cls, value: float | None) -> float | None:
+        return _density_in_si(value)
+
     blend_with: str | None = None
     """`family` 와 섞을 두 번째 식. **외삽에서 갈리는 구간을 조정한다.**
 
@@ -600,6 +632,13 @@ class DeclaredCardSaveRequest(BaseModel):
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
     """비우면 재료에 적힌 값을 쓴다. **없으면 없는 채로 둔다.**"""
     density: float | None = Field(default=None, gt=0)
+    """**SI(kg/m³)다.** `CardCreateIn.density` 와 같은 검사."""
+
+    @field_validator("density")
+    @classmethod
+    def check_density(cls, value: float | None) -> float | None:
+        return _density_in_si(value)
+
     note: str | None = None
 
 
