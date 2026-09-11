@@ -16649,6 +16649,14 @@
             "title": "Divisions",
             "type": "array"
           },
+          "materials": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunFacetOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
           "operators": {
             "items": {
               "$ref": "#/components/schemas/RunFacetOut"
@@ -16663,6 +16671,14 @@
             "title": "Orientations",
             "type": "array"
           },
+          "processing": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunFacetOut"
+            },
+            "title": "Processing",
+            "type": "array"
+          },
           "registrants": {
             "items": {
               "$ref": "#/components/schemas/RunFacetOut"
@@ -16675,6 +16691,14 @@
               "$ref": "#/components/schemas/RunFacetOut"
             },
             "title": "Statuses",
+            "type": "array"
+          },
+          "steps": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunFacetOut"
+            },
+            "title": "Steps",
             "type": "array"
           },
           "test_types": {
@@ -34037,6 +34061,61 @@
               ],
               "description": "채택된 처리 결과가 있는가 — 없는 것만 보려면 false",
               "title": "Adopted"
+            }
+          },
+          {
+            "description": "처리가 어디까지 갔나 — 안 함 · 결과만 있음 · 채택됨",
+            "in": "query",
+            "name": "processing",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(none|results|adopted)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "처리가 어디까지 갔나 — 안 함 · 결과만 있음 · 채택됨",
+              "title": "Processing"
+            }
+          },
+          {
+            "description": "**채택된 결과**가 이 단계를 거쳤는가(플러그인 id)",
+            "in": "query",
+            "name": "step",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "**채택된 결과**가 이 단계를 거쳤는가(플러그인 id)",
+              "title": "Step"
+            }
+          },
+          {
+            "description": "**채택된 결과**에 이 단계가 없는가",
+            "in": "query",
+            "name": "step_missing",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "**채택된 결과**에 이 단계가 없는가",
+              "title": "Step Missing"
             }
           },
           {

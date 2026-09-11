@@ -12236,14 +12236,29 @@ export interface components {
         RunFacetsOut: {
             /** Divisions */
             divisions: components["schemas"]["RunFacetOut"][];
+            /**
+             * Materials
+             * @default []
+             */
+            materials: components["schemas"]["RunFacetOut"][];
             /** Operators */
             operators: components["schemas"]["RunFacetOut"][];
             /** Orientations */
             orientations: components["schemas"]["RunFacetOut"][];
+            /**
+             * Processing
+             * @default []
+             */
+            processing: components["schemas"]["RunFacetOut"][];
             /** Registrants */
             registrants: components["schemas"]["RunFacetOut"][];
             /** Statuses */
             statuses: components["schemas"]["RunFacetOut"][];
+            /**
+             * Steps
+             * @default []
+             */
+            steps: components["schemas"]["RunFacetOut"][];
             /** Test Types */
             test_types: components["schemas"]["RunFacetOut"][];
             /** Testing Groups */
@@ -21612,6 +21627,12 @@ export interface operations {
                 q?: string | null;
                 /** @description 채택된 처리 결과가 있는가 — 없는 것만 보려면 false */
                 adopted?: boolean | null;
+                /** @description 처리가 어디까지 갔나 — 안 함 · 결과만 있음 · 채택됨 */
+                processing?: string | null;
+                /** @description **채택된 결과**가 이 단계를 거쳤는가(플러그인 id) */
+                step?: string | null;
+                /** @description **채택된 결과**에 이 단계가 없는가 */
+                step_missing?: string | null;
                 /** @description 정렬할 열. 기본은 등록 일시 */
                 sort?: string | null;
                 /** @description 내림차순. 기본은 최근 등록순 */

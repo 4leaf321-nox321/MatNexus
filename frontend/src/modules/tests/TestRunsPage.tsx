@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
@@ -24,8 +24,8 @@ import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { AddToBasket } from '@/shared/components/AddToBasket'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { FacetPicker } from '@/shared/components/FacetPicker'
 import { SortButton } from '@/shared/components/ColumnFilter'
-import type { SortHandle } from '@/shared/components/ColumnFilter'
 import { Stamp } from '@/shared/components/Stamp'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { BulkEditDialog } from '@/modules/tests/BulkEditDialog'
@@ -33,12 +33,6 @@ import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -67,89 +61,8 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
  * **있는데 화면 어디에도 없었고, 없다는 사실조차 안 보였다.** 목록이 조용히
  * 잘리는 것이 가장 나쁘다.
  */
-/** 이름 옆에 서는 정렬 화살표. **꺼져 있을 때도 보인다** — 안 보이면 누를 수
- *  있는 줄인지 모르고, 그러면 정렬이 있어도 아무도 안 쓴다. */
-function SortArrow({ sort }: { sort: SortHandle }) {
-  const on = sort.active === sort.key
-  const Icon = on ? (sort.descending ? ArrowDown : ArrowUp) : ChevronsUpDown
-  return (
-    <button
-      type="button"
-      aria-label={`${sort.key} 로 정렬`}
-      aria-pressed={on}
-      className={`hover:text-foreground rounded ${on ? 'text-foreground' : 'opacity-40'}`}
-      onClick={() => sort.onSort(sort.key)}
-    >
-      <Icon className="size-3" aria-hidden />
-    </button>
-  )
-}
-
 const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
-
-/**
- * 열 하나를 좁힌다. **개수는 서버가 센다.**
- *
- * 화면이 한 쪽에서 세면 「인장시험 50」이라고 적히는데 실제로는 300건일 수
- * 있고, 그러면 필터 옆의 숫자가 거짓말을 한다.
- *
- * 「전체」가 첫 줄이다 — 고른 것을 푸는 길이 없으면 새로고침으로 푸는 사람이
- * 생긴다.
- */
-function ColumnFilter({
-  label,
-  rows,
-  current,
-  onPick,
-  sort,
-}: {
-  label: string
-  rows: { key: string; label: string; count: number }[]
-  current?: string
-  onPick: (value: string | undefined) => void
-  /** 주면 이름 옆에 정렬 화살표가 선다. **이름을 겸하게 둘 수 없다** — 이
-   *  표의 거르기는 드롭다운이라 이름을 누르면 그것이 열린다. */
-  sort?: SortHandle
-}) {
-  const arrow = sort ? <SortArrow sort={sort} /> : null
-  if (rows.length === 0)
-    return (
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {arrow}
-      </span>
-    )
-  return (
-    <span className="inline-flex items-center gap-1">
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="hover:text-foreground -ml-1 inline-flex items-center gap-1 rounded px-1"
-        >
-          {label}
-          {/* **걸린 것이 보여야 한다.** 목록이 왜 짧은지 여기서 설명된다. */}
-          {current && <Badge variant="secondary" className="text-[10px]">{current}</Badge>}
-          <ChevronDown className="size-3 opacity-60" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-        <DropdownMenuItem onSelect={() => onPick(undefined)}>
-          <span className={current ? '' : 'font-medium'}>전체</span>
-        </DropdownMenuItem>
-        {rows.map((row) => (
-          <DropdownMenuItem key={row.key} onSelect={() => onPick(row.key)}>
-            <span className={row.key === current ? 'font-medium' : ''}>{row.label}</span>
-            <span className="text-muted-foreground ml-auto tabular-nums">{row.count}</span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-    {arrow}
-    </span>
-  )
-}
 
 export default function TestRunsPage() {
   const { slug } = useParams<{ slug?: string }>()
@@ -235,6 +148,16 @@ export default function TestRunsPage() {
   }
 
   /** 열 하나를 좁힌다. **필터가 바뀌면 처음부터 다시 본다.** */
+  /**
+   * 단계 거르개. **둘을 함께 걸지 않는다** — 「거쳤다」 와 「안 거쳤다」 를 동시에
+   * 걸면 언제나 0건이고, 사람은 그것을 자료가 없는 것으로 읽는다.
+   */
+  function narrowStep(step: string | undefined, missing: string | undefined) {
+    setOffset(0)
+    selection.clear()
+    setFilters((current) => ({ ...current, step, step_missing: missing }))
+  }
+
   function narrow(key: string, value: string | undefined) {
     setOffset(0)
     selection.clear()
@@ -522,72 +445,121 @@ export default function TestRunsPage() {
               <TableHead>
                 <SortButton label="이름" sort={handle('record_name')} />
               </TableHead>
-              <TableHead>재료</TableHead>
               <TableHead>
-                <ColumnFilter
+                {/* **이름이 아니라 식별자로 거른다.** 이름은 기준정보 개명을
+                    따라 바뀌는데, 걸어 둔 거르개가 옛 이름을 들고 있으면 그
+                    목록은 조용히 0건이 된다. */}
+                <FacetPicker
+                  label="재료"
+                  groups={[
+                    { rows: facets.data?.materials ?? [], value: filters.material_id, onPick: (value) => narrow('material_id', value) },
+                  ]}
+                />
+              </TableHead>
+              <TableHead>
+                <FacetPicker
                   label="방향"
-                  rows={facets.data?.orientations ?? []}
-                  current={filters.orientation}
-                  onPick={(value) => narrow('orientation', value)}
+                  groups={[
+                    { rows: facets.data?.orientations ?? [], value: filters.orientation, onPick: (value) => narrow('orientation', value) },
+                  ]}
                 />
               </TableHead>
               <TableHead>
-                <ColumnFilter
+                <FacetPicker
                   label="종류"
-                  rows={facets.data?.test_types ?? []}
-                  current={filters.test_type_key}
-                  onPick={(value) => narrow('test_type_key', value)}
+                  groups={[
+                    { rows: facets.data?.test_types ?? [], value: filters.test_type_key, onPick: (value) => narrow('test_type_key', value) },
+                  ]}
                 />
               </TableHead>
               <TableHead>
-                <ColumnFilter
-                  label="상태"
-                  sort={handle('status')}
-                  rows={facets.data?.statuses ?? []}
-                  current={filters.status}
-                  onPick={(value) => narrow('status', value)}
-                />
+                <span className="inline-flex items-center gap-1">
+                  <FacetPicker
+                    label="상태"
+                    groups={[
+                      {
+                        rows: facets.data?.statuses ?? [],
+                        value: filters.status,
+                        onPick: (value) => narrow('status', value),
+                      },
+                    ]}
+                  />
+                  <SortButton label="" sort={handle('status')} />
+                </span>
               </TableHead>
-              <TableHead>처리</TableHead>
+              <TableHead>
+                {/* **처리는 축이 둘이다.** 「어디까지 갔나」 와 「무엇을 거쳤나」 는
+                    다른 물음이고, 둘을 겹쳐야 답이 나오는 물음이 실제로 있다 —
+                    「채택은 했는데 진응력을 안 거친 것」(실측 2026-09-11: 채택된
+                    52건 중 33건). 한 칸에 두 개를 세운다. */}
+                <div className="flex flex-col gap-0.5">
+                  <FacetPicker
+                    label="처리"
+                    groups={[
+                      { rows: facets.data?.processing ?? [], value: filters.processing, onPick: (value) => narrow('processing', value) },
+                    ]}
+                />
+                  <FacetPicker
+                    label="단계"
+                    groups={[
+                      {
+                        // **채택된 결과를 본다고 적어 둔다.** 돌려만 보고 안 정한
+                        // 시도까지 세면 「진응력이 있다」 고 답해 놓고 그 시험의
+                        // 값은 없는 상태가 된다.
+                        title: '채택된 결과가 거친 단계',
+                        rows: facets.data?.steps ?? [],
+                        value: filters.step,
+                        onPick: (value) => narrowStep(value, undefined),
+                      },
+                      {
+                        title: '그 단계를 안 거친 것',
+                        rows: facets.data?.steps ?? [],
+                        value: filters.step_missing,
+                        badgePrefix: '없음: ',
+                        onPick: (value) => narrowStep(undefined, value),
+                      },
+                    ]}
+                  />
+                </div>
+              </TableHead>
               <TableHead className="text-right">행</TableHead>
               <TableHead>
                 {/* **부서와 다른 축이다.** 부서는 누가 볼 수 있는가를 정하고,
                     사업부는 누가 낸 데이터인가를 적는다. */}
-                <ColumnFilter
+                <FacetPicker
                   label="사업부"
-                  sort={handle('division')}
-                  rows={facets.data?.divisions ?? []}
-                  current={filters.division}
-                  onPick={(value) => narrow('division', value)}
+                  groups={[
+                    { rows: facets.data?.divisions ?? [], value: filters.division, onPick: (value) => narrow('division', value) },
+                  ]}
                 />
               </TableHead>
               <TableHead>
                 {/* **묶어 보려고 적는 값이다.** 조건이지만 단위가 없는 글자라
                     목록에서 그대로 보인다 — 「2026 고온」 이 몇 건인지 세려고
                     상세를 하나씩 열게 하지 않는다. */}
-                <ColumnFilter
+                <FacetPicker
                   label="시험 그룹"
-                  rows={facets.data?.testing_groups ?? []}
-                  current={filters.testing_group}
-                  onPick={(value) => narrow('testing_group', value)}
+                  groups={[
+                    { rows: facets.data?.testing_groups ?? [], value: filters.testing_group, onPick: (value) => narrow('testing_group', value) },
+                  ]}
                 />
               </TableHead>
               <TableHead>
                 {/* **등록한 사람과 다르다.** 등록은 파일을 올린 사람이고,
                     시험자는 실제로 장비를 돌린 사람이다 — 물어볼 데가 다르다. */}
-                <ColumnFilter
+                <FacetPicker
                   label="시험자"
-                  rows={facets.data?.operators ?? []}
-                  current={filters.operator}
-                  onPick={(value) => narrow('operator', value)}
+                  groups={[
+                    { rows: facets.data?.operators ?? [], value: filters.operator, onPick: (value) => narrow('operator', value) },
+                  ]}
                 />
               </TableHead>
               <TableHead>
-                <ColumnFilter
+                <FacetPicker
                   label="등록한 사람"
-                  rows={facets.data?.registrants ?? []}
-                  current={filters.registered_by}
-                  onPick={(value) => narrow('registered_by', value)}
+                  groups={[
+                    { rows: facets.data?.registrants ?? [], value: filters.registered_by, onPick: (value) => narrow('registered_by', value) },
+                  ]}
                 />
               </TableHead>
               <TableHead>

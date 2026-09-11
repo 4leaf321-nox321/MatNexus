@@ -1696,3 +1696,112 @@ class Test재현기록:
             )
             digests.add(stored.json()["runtime"]["digest"])
         assert len(digests) == 1
+
+
+class Test처리로_거르기:
+    """**「이 시험의 값이 그 단계를 거쳤나」 를 목록에서 묻는다.**
+
+    실측(2026-09-11): 채택된 시험 52건 중 33건이 **진응력 없이** 채택돼 있었다.
+    그 33건을 찾으려면 지금까지는 SQL 을 쓰는 수밖에 없었다 — 화면에서는 카드를
+    만들려다 막혀서야 알았고, 그때는 다시 처리하는 것 말고 방법이 없다.
+
+    ## 단계는 **채택된 결과**를 본다
+
+    「이 시험의 값」 이 곧 채택된 결과이고 카드·통계·덱으로 가는 것도 그것뿐이다.
+    안 채택한 시도까지 세면 「진응력이 있다」 고 답해 놓고 정작 그 값은 진응력
+    없이 나온 상태가 된다.
+    """
+
+    def test_처리_단계로_셋을_가른다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """안 함 · 결과만 있음 · 채택됨 — 할 일이 다르다."""
+        none = client.get("/api/test-runs?processing=none", headers=admin_headers)
+        assert none.status_code == 200, none.text
+        assert run_id in [one["id"] for one in none.json()["items"]]
+
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 201, saved.text
+        listed = client.get("/api/test-runs?processing=results", headers=admin_headers)
+        assert run_id in [one["id"] for one in listed.json()["items"]]
+        assert run_id not in [
+            one["id"]
+            for one in client.get(
+                "/api/test-runs?processing=none", headers=admin_headers
+            ).json()["items"]
+        ]
+
+        client.post(
+            f"/api/processing/results/{saved.json()['id']}/adopt", headers=admin_headers
+        )
+        listed = client.get("/api/test-runs?processing=adopted", headers=admin_headers)
+        assert run_id in [one["id"] for one in listed.json()["items"]]
+
+    def test_단계를_거친_것과_안_거친_것(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+        client.post(f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers)
+
+        ran = STEPS[0]["plugin"]
+        have = client.get(f"/api/test-runs?step={ran}", headers=admin_headers)
+        assert run_id in [one["id"] for one in have.json()["items"]]
+
+        # 안 건 단계로는 안 걸리고, 「없는 것」 으로는 걸린다.
+        missing = "tensile.necking_candidate"
+        assert missing not in [one["plugin"] for one in STEPS]
+        assert run_id not in [
+            one["id"]
+            for one in client.get(
+                f"/api/test-runs?step={missing}", headers=admin_headers
+            ).json()["items"]
+        ]
+        assert run_id in [
+            one["id"]
+            for one in client.get(
+                f"/api/test-runs?step_missing={missing}", headers=admin_headers
+            ).json()["items"]
+        ]
+
+    def test_채택_안_한_시도는_단계로_안_걸린다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**값의 기준은 채택이다.** 돌려만 본 것으로 「거쳤다」 고 답하면,
+        그 시험의 값은 그 단계를 안 거친 채로 남는다."""
+        client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        )
+        ran = STEPS[0]["plugin"]
+        listed = client.get(f"/api/test-runs?step={ran}", headers=admin_headers)
+        assert run_id not in [one["id"] for one in listed.json()["items"]]
+
+    def test_거를_수_있는_것을_서버가_센다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**화면이 한 쪽을 받아 세지 않는다.** 상한에 걸리면 숫자가 조용히 틀린다."""
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+        client.post(f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers)
+
+        facets = client.get("/api/test-runs/facets", headers=admin_headers)
+        assert facets.status_code == 200, facets.text
+        body = facets.json()
+        assert {one["key"] for one in body["processing"]} <= {"none", "results", "adopted"}
+        assert dict((one["key"], one["count"]) for one in body["processing"])["adopted"] >= 1
+        steps = {one["key"]: one["count"] for one in body["steps"]}
+        assert steps.get(STEPS[0]["plugin"], 0) >= 1
+        # 재료는 이름이 아니라 식별자로 거른다 — 이름은 개명을 따라 바뀐다.
+        assert body["materials"] and body["materials"][0]["key"]

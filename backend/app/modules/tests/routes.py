@@ -15,7 +15,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, case, cast, func, or_, select, true
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -966,6 +967,30 @@ RUN_SORTS = {
 }
 
 
+def _has_any_result() -> Any:
+    """이 시험에 처리 결과가 하나라도 있나."""
+    return (
+        select(ProcessingResult.id).where(ProcessingResult.test_run_id == TestRun.id).exists()
+    )
+
+
+def _adopted_has_step(plugin: str) -> Any:
+    """**채택된 결과**가 그 단계를 거쳤나.
+
+    `steps_snapshot` 은 `[{plugin, options}, …]` 이라 JSONB 담김(`@>`)으로 묻는다 —
+    `[{"plugin": "…"}]` 을 담고 있으면 참이다. 문자열을 SQL 에 끼워 넣지 않으므로
+    이름에 무엇이 오든 안전하고, GIN 색인이 그대로 먹는다.
+    """
+    return (
+        select(ProcessingResult.id)
+        .where(
+            ProcessingResult.id == TestRun.adopted_result_id,
+            ProcessingResult.steps_snapshot.contains([{"plugin": plugin}]),
+        )
+        .exists()
+    )
+
+
 @runs_router.get("", response_model=Page[TestRunOut])
 def list_runs(
     workspace: str | None = Query(
@@ -983,6 +1008,17 @@ def list_runs(
     q: str | None = Query(default=None),
     adopted: bool | None = Query(
         default=None, description="채택된 처리 결과가 있는가 — 없는 것만 보려면 false"
+    ),
+    processing: str | None = Query(
+        default=None,
+        pattern="^(none|results|adopted)$",
+        description="처리가 어디까지 갔나 — 안 함 · 결과만 있음 · 채택됨",
+    ),
+    step: str | None = Query(
+        default=None, description="**채택된 결과**가 이 단계를 거쳤는가(플러그인 id)"
+    ),
+    step_missing: str | None = Query(
+        default=None, description="**채택된 결과**에 이 단계가 없는가"
     ),
     sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
     desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
@@ -1085,6 +1121,22 @@ def list_runs(
             if adopted
             else TestRun.adopted_result_id.is_(None)
         )
+    # **처리가 어디까지 갔나.** 「안 올렸다」 와 「올렸는데 안 돌렸다」 와 「돌렸는데
+    # 안 정했다」 는 할 일이 다르다 — 세 번째가 가장 잘 잊힌다(실측 2026-09-11:
+    # 결과는 있는데 채택 안 한 시험이 47건이었고, 그 값들은 통계에 안 들어간다).
+    if processing == "none":
+        query = query.where(~_has_any_result())
+    elif processing == "results":
+        query = query.where(TestRun.adopted_result_id.is_(None), _has_any_result())
+    elif processing == "adopted":
+        query = query.where(TestRun.adopted_result_id.is_not(None))
+    # **단계는 채택된 결과를 본다.** 「이 시험의 값」 이 곧 채택된 결과이고, 카드·
+    # 통계·덱으로 가는 것도 그것뿐이다. 안 채택한 시도까지 세면 「진응력이 있다」 고
+    # 답해 놓고 정작 그 값은 진응력 없이 나온 상태가 된다.
+    if step:
+        query = query.where(_adopted_has_step(step))
+    if step_missing:
+        query = query.where(~_adopted_has_step(step_missing))
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
@@ -1217,7 +1269,85 @@ def run_facets(
         for value, count in group_pairs
         if value
     ]
+    # **처리가 어디까지 갔나.** 세 갈래를 한 번에 센다 — 목록을 받아 화면이
+    # 세면 상한에 걸린 순간 숫자가 조용히 틀린다(이 파일의 머리말이 그 이야기다).
+    any_result = (
+        select(ProcessingResult.id).where(ProcessingResult.test_run_id == base.c.id).exists()
+    )
+    stage_counts: dict[str, int] = {
+        str(row[0]): int(row[1])
+        for row in db.execute(
+            select(
+                case(
+                    (base.c.adopted_result_id.is_not(None), "adopted"),
+                    (any_result, "results"),
+                    else_="none",
+                ).label("stage"),
+                func.count(),
+            )
+            .select_from(base)
+            .group_by("stage")
+        ).all()
+    }
+    stages = [
+        RunFacetOut(key=key, label=label, count=stage_counts.get(key, 0))
+        for key, label in (
+            ("none", "처리 안 함"),
+            ("results", "결과만 있음"),
+            ("adopted", "채택됨"),
+        )
+        if stage_counts.get(key)
+    ]
+
+    # **채택된 결과가 거친 단계.** 배열을 펼쳐 세므로 한 시험이 여러 줄에 걸린다 —
+    # `distinct` 로 시험 수를 센다(단계 수를 세면 재샘플이 둘이라 두 번 세진다).
+    element = func.jsonb_array_elements(ProcessingResult.steps_snapshot).table_valued("value")
+    # **`cast` 가 필요하다.** `table_valued` 가 낸 칸은 타입이 없어서 `['plugin']`
+    # 이 「이 식에는 getitem 이 없다」 로 막힌다 — JSONB 라고 말해 주면 그때부터
+    # 평소의 JSON 연산자가 그대로 먹는다.
+    plugin_of = cast(element.c.value, JSONB)["plugin"].astext
+    step_rows = db.execute(
+        select(plugin_of.label("plugin"), func.count(base.c.id.distinct()))
+        .select_from(base)
+        .join(ProcessingResult, ProcessingResult.id == base.c.adopted_result_id)
+        .join(element, true())
+        .group_by("plugin")
+    ).all()
+    processing.load_builtin()
+    step_labels = {one.id: one.label for one in registry.list_plugins(kind="processing")}
+    steps = sorted(
+        (
+            RunFacetOut(
+                key=str(key), label=step_labels.get(str(key), str(key)), count=int(count)
+            )
+            for key, count in step_rows
+            if key
+        ),
+        key=lambda one: one.label,
+    )
+
+    # 재료는 시편·시료를 거쳐야 닿는다. **이름이 아니라 식별자로 거른다** —
+    # 이름은 기준정보 개명을 따라 바뀐다.
+    material_rows = db.execute(
+        select(Material.id, Material.record_name, func.count())
+        .select_from(base)
+        .join(Specimen, Specimen.id == base.c.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .join(Material, Material.id == Sample.material_id)
+        .group_by(Material.id, Material.record_name)
+    ).all()
+    materials = sorted(
+        (
+            RunFacetOut(key=str(key), label=str(name), count=int(count))
+            for key, name, count in material_rows
+        ),
+        key=lambda one: one.label,
+    )
+
     return RunFacetsOut(
+        processing=stages,
+        steps=steps,
+        materials=materials,
         test_types=sorted(kinds, key=lambda one: one.label),
         orientations=with_empty(
             sorted(directions, key=lambda one: one.label), orientation_pairs

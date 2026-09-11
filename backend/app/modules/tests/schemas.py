@@ -271,6 +271,19 @@ class RunFacetsOut(BaseModel):
     """시험 그룹. 조건이지만 단위 없는 글자라 그대로 셀 수 있다."""
     divisions: list[RunFacetOut]
     statuses: list[RunFacetOut]
+    processing: list[RunFacetOut] = []
+    """처리가 어디까지 갔나 — 안 함 · 결과만 있음 · 채택됨.
+
+    **셋을 가르는 이유:** 할 일이 다르다. 「안 올렸다」 는 올리는 일이고,
+    「돌렸는데 안 정했다」 는 고르는 일이다 — 뒤엣것이 가장 잘 잊힌다."""
+    steps: list[RunFacetOut] = []
+    """**채택된 결과**가 거친 단계별 건수.
+
+    「진응력을 안 거친 채 채택된 시험」 처럼, 물어봐야 알 수 있던 것을 목록에서
+    바로 좁힌다(실측 2026-09-11: 채택된 52건 중 33건이 그랬다)."""
+    materials: list[RunFacetOut] = []
+    """재료별 건수. `key` 는 식별자이고 `label` 이 이름이다 — 이름은 기준정보
+    개명을 따라 바뀌지만 거르는 값은 안 바뀌어야 한다."""
 
 
 class TestRunOut(BaseModel):
