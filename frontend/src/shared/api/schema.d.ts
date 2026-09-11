@@ -656,6 +656,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/dictionary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Property Dictionary
+         * @description 물성 키 사전 — 다른 시스템이 받아 가는 허브 키 목록. 파일로 저장해 쓴다.
+         */
+        get: operations["property_dictionary_api_catalog_properties_dictionary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/properties/links": {
         parameters: {
             query?: never;
@@ -672,8 +692,55 @@ export interface paths {
         /**
          * Add Property Link
          * @description 매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다.
+         *
+         *     시스템 관리자만 — 매핑은 모든 부서의 값 검색에 걸린다.
          */
         post: operations["add_property_link_api_catalog_properties_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Property Link
+         * @description 매핑을 푼다. 값은 안 건드린다 — 이어짐만 사라진다.
+         */
+        delete: operations["remove_property_link_api_catalog_properties_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Property Mapping
+         * @description 물성 하나가 **세 층에서 어떻게 불리는가** — 문헌 키 · 사내 항목 · 잰 값.
+         *
+         *     같은 물성이 세 이름으로 살고(`proof_stress` · 「항복강도」 ·
+         *     `mechanical.yield_strength`), 그것이 이어져 있는지는 코드를 열어야 알 수
+         *     있었다(2026-09-12). 여기서 한 표로 보인다. **빈 칸이 정보다** — 사내 항목인데
+         *     문헌 키에 안 이어진 것은 값으로 찾기와 다른 시스템과의 매핑에서 조용히 빠진다.
+         */
+        get: operations["property_mapping_api_catalog_properties_mapping_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -11588,6 +11655,54 @@ export interface components {
             note?: string | null;
         };
         /**
+         * PropertyDictionaryEntryOut
+         * @description 물성 키 사전의 한 줄 — **다른 시스템이 자기 매핑의 키를 검사하는 데 쓴다.**
+         */
+        PropertyDictionaryEntryOut: {
+            /** Aliases */
+            aliases: string[];
+            /** Domain */
+            domain: string;
+            /** Internal Items */
+            internal_items: string[];
+            /** Key */
+            key: string;
+            /** Measured Keys */
+            measured_keys: string[];
+            /** Name */
+            name: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Test Standard */
+            test_standard: string | null;
+        };
+        /**
+         * PropertyDictionaryOut
+         * @description 물성 키 사전 — 허브 키의 정본.
+         *
+         *     시스템이 여럿(MaterialTwin · MatNexus · TestScope …)이면 쌍마다 표를 두지 않고
+         *     **키 하나를 허브로** 두고 각자 자기 개념을 그 키에 잇는다(2026-09-12). 이 파일이
+         *     그 허브다. 폐쇄망이라 API 보다 파일이 낫다 — 받아서 자기 검사에 쓴다.
+         *
+         *     **키는 안 바뀐다.** 틀렸으면 새 키를 만들고 옛 키는 폐기 표시만 한다 — 바꾸면
+         *     스포크 전부가 같은 날 깨진다.
+         */
+        PropertyDictionaryOut: {
+            /** Count */
+            count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Properties */
+            properties: components["schemas"]["PropertyDictionaryEntryOut"][];
+            /** Version */
+            version: string;
+        };
+        /**
          * PropertyHitOut
          * @description 값 하나와 그것을 든 재료. **값과 단위를 함께 싣는다.**
          */
@@ -11595,16 +11710,25 @@ export interface components {
             /** Category */
             category?: string | null;
             /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /**
              * Material Id
              * Format: uuid
              */
             material_id: string;
             /** Material Name */
             material_name: string;
+            /** Method */
+            method?: string | null;
             /** Quality Tier */
             quality_tier?: number | null;
             /** Source Detail */
             source_detail?: string | null;
+            /** Spread */
+            spread?: number | null;
             /** Unit */
             unit: string;
             /** Value */
@@ -11650,6 +11774,8 @@ export interface components {
             note?: string | null;
             /** Property Key */
             property_key: string;
+            /** Scale */
+            scale?: string | null;
         };
         /** PropertyLinkOut */
         PropertyLinkOut: {
@@ -11666,11 +11792,66 @@ export interface components {
             note: string | null;
             /** Property Key */
             property_key: string;
+            /** Scale */
+            scale?: string | null;
             /**
              * Term Id
              * Format: uuid
              */
             term_id: string;
+        };
+        /** PropertyMappingOut */
+        PropertyMappingOut: {
+            /** Axis Slug */
+            axis_slug: string;
+            /** Items */
+            items: components["schemas"]["PropertyUnlinkedItemOut"][];
+            /** Kinds */
+            kinds: string[];
+            /** Rows */
+            rows: components["schemas"]["PropertyMappingRowOut"][];
+            /** Summary */
+            summary: {
+                [key: string]: number;
+            };
+            /** Unlinked Items */
+            unlinked_items: components["schemas"]["PropertyUnlinkedItemOut"][];
+        };
+        /**
+         * PropertyMappingRowOut
+         * @description 물성 하나가 세 층에서 어떻게 불리는가 — 매핑 화면의 한 줄.
+         */
+        PropertyMappingRowOut: {
+            /** Domain */
+            domain: string;
+            /** Key */
+            key: string;
+            /** Links */
+            links: components["schemas"]["PropertyLinkOut"][];
+            /** Measured */
+            measured: components["schemas"]["PropertyMeasuredOut"][];
+            /** Name */
+            name: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Test Standard */
+            test_standard: string | null;
+            /** Value Count */
+            value_count: number;
+        };
+        /**
+         * PropertyMeasuredOut
+         * @description 시험 처리가 이 물성으로 내는 값 하나 — 어느 계산의 어느 값.
+         */
+        PropertyMeasuredOut: {
+            /** Plugin Id */
+            plugin_id: string;
+            /** Plugin Label */
+            plugin_label: string;
+            /** Scalar Key */
+            scalar_key: string;
         };
         /** PropertyResolveOut */
         PropertyResolveOut: {
@@ -11724,6 +11905,24 @@ export interface components {
             material_name: string;
             /** Rows */
             rows: components["schemas"]["ValueSourceOut"][];
+        };
+        /**
+         * PropertyUnlinkedItemOut
+         * @description 사내 항목인데 문헌 키에 안 이어진 것. **표시가 없으면 조용히 빠진다** —
+         *     값으로 찾기·다른 시스템과의 매핑에서.
+         */
+        PropertyUnlinkedItemOut: {
+            /** Dimension */
+            dimension: string | null;
+            /** Item */
+            item: string;
+            /** Scales */
+            scales: string[];
+            /**
+             * Term Id
+             * Format: uuid
+             */
+            term_id: string;
         };
         /**
          * QueueOut
@@ -16036,6 +16235,26 @@ export interface operations {
             };
         };
     };
+    property_dictionary_api_catalog_properties_dictionary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyDictionaryOut"];
+                };
+            };
+        };
+    };
     list_property_links_api_catalog_properties_links_get: {
         parameters: {
             query?: never;
@@ -16085,6 +16304,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_property_link_api_catalog_properties_links__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    property_mapping_api_catalog_properties_mapping_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyMappingOut"];
                 };
             };
         };

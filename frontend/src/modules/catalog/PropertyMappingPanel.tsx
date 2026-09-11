@@ -1,0 +1,547 @@
+/**
+ * 물성 매핑 — **물성 하나가 세 층에서 어떻게 불리는가.**
+ *
+ *     문헌 키(정본)                 사람이 적는 항목        시험이 재는 값
+ *     mechanical.yield_strength    항복강도              proof_stress ← 오프셋 항복강도
+ *
+ * 같은 물성이 세 이름으로 살고, 그것이 이어져 있는지는 코드를 열어야 알 수 있었다
+ * (2026-09-12). 여기서 한 표로 본다. **빈 칸이 정보다** — 사내 항목인데 문헌 키에
+ * 안 이어진 것은 값으로 찾기와 다른 시스템(TestScope)과의 매핑에서 **조용히 빠진다.**
+ * 그 수를 위에 크게 센다.
+ *
+ * ## 누가 무엇을 편집하나
+ *
+ * 둘째 열(사내 항목)만 여기서 잇고 푼다. 셋째 열(잰 값)은 계산이 선언한 것이라
+ * 코드에 있고(`Produced.property_key`), 다른 시스템의 열은 그 시스템이 자기 안에서
+ * 잇는다 — 허브 키 하나를 두고 각자 스포크를 갖는다. 그래서 **사전 내려받기**가
+ * 있다: 저쪽이 자기 매핑의 키가 실재하는지 이 파일로 검사한다.
+ *
+ * ## 눈금
+ *
+ * 「경도」 는 하나인데 문헌은 비커스·브리넬·로크웰이 다른 키다. 눈금 없이 이으면
+ * HRC 60 이 비커스 검색에 섞인다 — 서버가 눈금 있는 항목은 눈금 없이 못 잇게 막고,
+ * 여기서는 그 눈금을 고르게 한다.
+ *
+ * 기준정보 화면(`VocabularyAdminPage`)이 자리만 내준다 — 표는 catalog 의 것이다.
+ */
+
+import { useMemo, useState } from 'react'
+import { Download, Link2, Link2Off, Plus } from 'lucide-react'
+
+import { catalogApi } from '@/modules/catalog/api'
+import type {
+  PropertyLinkCreate,
+  PropertyMapping,
+  PropertyMappingRow,
+  PropertyUnlinkedItem,
+} from '@/modules/catalog/api'
+import { downloadFile } from '@/shared/api/client'
+import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
+import { Input } from '@/shared/components/ui/input'
+import { Label } from '@/shared/components/ui/label'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table'
+
+const KIND_LABELS: Record<string, string> = {
+  same_as: '같은 것',
+  narrower: '더 좁은 것',
+  related: '관련',
+}
+
+export function PropertyMappingPanel({
+  mapping,
+  canEdit,
+  onChanged,
+}: {
+  mapping: PropertyMapping
+  /** 시스템 관리자만 잇고 푼다 — 매핑은 모든 부서의 값 검색에 걸린다. */
+  canEdit: boolean
+  onChanged: () => void
+}) {
+  const [domain, setDomain] = useState('')
+  const [onlyOurs, setOnlyOurs] = useState(false)
+  const [q, setQ] = useState('')
+  const [linking, setLinking] = useState<{
+    row?: PropertyMappingRow
+    item?: PropertyUnlinkedItem
+  } | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<Error | null>(null)
+
+  const domains = useMemo(
+    () => [...new Set(mapping.rows.map((one) => one.domain))].sort(),
+    [mapping.rows]
+  )
+  const needle = q.trim().toLowerCase()
+  const rows = useMemo(
+    () =>
+      mapping.rows.filter((one) => {
+        if (domain && one.domain !== domain) return false
+        if (onlyOurs && one.links.length === 0 && one.measured.length === 0) return false
+        if (!needle) return true
+        return (
+          one.name.toLowerCase().includes(needle) ||
+          one.key.toLowerCase().includes(needle) ||
+          one.links.some((link) => link.item.toLowerCase().includes(needle)) ||
+          one.measured.some((m) => m.scalar_key.toLowerCase().includes(needle))
+        )
+      }),
+    [mapping.rows, domain, onlyOurs, needle]
+  )
+
+  async function unlink(linkId: string) {
+    setBusy(linkId)
+    setError(null)
+    try {
+      await catalogApi.unlinkProperty(linkId)
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('풀지 못했습니다.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const { summary } = mapping
+
+  return (
+    <section className="mt-8 space-y-4" aria-label="물성 매핑">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-semibold">물성 매핑</h2>
+          <p className="text-muted-foreground text-sm">
+            물성 하나가 문헌 키 · 사내 항목 · 시험이 재는 값으로 어떻게 이어져 있는가.
+            문헌 키가 시스템끼리 쓰는 공용 이름표입니다.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            downloadFile('/catalog/properties/dictionary', 'matnexus_property_dictionary.json')
+          }
+        >
+          <Download className="size-4" />
+          사전 내려받기
+        </Button>
+      </div>
+
+      {/* **수를 먼저 보인다.** 「안 이어진 사내 항목」 이 0 이 아니면 그것부터다. */}
+      <dl className="flex flex-wrap gap-2 text-sm">
+        <Stat label="문헌 물성" value={summary.keys} />
+        <Stat label="사내 항목과 이어짐" value={summary.linked_keys} />
+        <Stat label="시험으로 재는 것" value={summary.measured_keys} />
+        <Stat
+          label="안 이어진 사내 항목"
+          value={summary.unlinked_items}
+          tone={summary.unlinked_items > 0 ? 'warn' : undefined}
+        />
+      </dl>
+
+      <ErrorNotice error={error} />
+
+      {mapping.unlinked_items.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
+          <p className="mb-2 font-medium">
+            문헌 키에 안 이어진 사내 항목 {mapping.unlinked_items.length}개 — 값으로 찾기와 다른
+            시스템과의 매핑에서 빠집니다.
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {mapping.unlinked_items.map((item) => (
+              <li key={item.term_id} className="flex items-center gap-1">
+                <Badge variant="outline">{item.item}</Badge>
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2"
+                    aria-label={`${item.item} 잇기`}
+                    onClick={() => setLinking({ item })}
+                  >
+                    <Link2 className="size-3.5" />
+                    잇기
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label="도메인으로 거르기"
+          className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+          value={domain}
+          onChange={(event) => setDomain(event.target.value)}
+        >
+          <option value="">모든 도메인</option>
+          {domains.map((one) => (
+            <option key={one} value={one}>
+              {one}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-sm">
+          <input
+            type="checkbox"
+            checked={onlyOurs}
+            onChange={(event) => setOnlyOurs(event.target.checked)}
+          />
+          사내에서 쓰는 것만
+        </label>
+        <Input
+          aria-label="물성 찾기"
+          className="w-full sm:ml-auto sm:w-64"
+          placeholder="이름·키·항목으로 찾기"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+        />
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>문헌 물성</TableHead>
+              <TableHead className="w-64">사내 항목</TableHead>
+              <TableHead className="w-64">시험이 재는 값</TableHead>
+              <TableHead className="w-36">규격</TableHead>
+              <TableHead className="w-20 text-right">문헌값</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                  거른 조건에 맞는 물성이 없습니다.
+                </TableCell>
+              </TableRow>
+            )}
+            {rows.map((row) => (
+              <TableRow key={row.key}>
+                <TableCell>
+                  <div className="font-medium">{row.name}</div>
+                  <div className="text-muted-foreground font-mono">{row.key}</div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {row.links.map((link) => (
+                      <span key={link.id} className="inline-flex items-center gap-0.5">
+                        <Badge
+                          variant="secondary"
+                          title={`${KIND_LABELS[link.kind] ?? link.kind}${link.note ? ` · ${link.note}` : ''}`}
+                        >
+                          {link.item}
+                          {link.scale && <span className="ml-1 opacity-70">({link.scale})</span>}
+                        </Badge>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            aria-label={`${row.name} ↔ ${link.item}${link.scale ? ` (${link.scale})` : ''} 풀기`}
+                            className="text-muted-foreground hover:text-foreground rounded p-0.5"
+                            disabled={busy === link.id}
+                            onClick={() => unlink(link.id)}
+                          >
+                            <Link2Off className="size-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        aria-label={`${row.name} 에 사내 항목 잇기`}
+                        className="text-muted-foreground hover:text-foreground rounded border border-dashed px-1.5 py-0.5"
+                        onClick={() => setLinking({ row })}
+                      >
+                        <Plus className="inline size-3" />
+                      </button>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {row.measured.length === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {row.measured.map((m) => (
+                        <li key={`${m.plugin_id}.${m.scalar_key}`}>
+                          <span className="font-mono">{m.scalar_key}</span>{' '}
+                          <span className="text-muted-foreground">← {m.plugin_label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {row.test_standard ?? <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{row.value_count}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <LinkDialog
+        open={linking !== null}
+        preset={linking ?? {}}
+        mapping={mapping}
+        onClose={() => setLinking(null)}
+        onDone={() => {
+          setLinking(null)
+          onChanged()
+        }}
+      />
+    </section>
+  )
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
+  return (
+    <div
+      className={`rounded-md border px-3 py-1.5 ${
+        tone === 'warn' && value > 0
+          ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
+          : ''
+      }`}
+    >
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className="font-medium tabular-nums">{value}</dd>
+    </div>
+  )
+}
+
+/**
+ * 잇는 창 — 문헌 물성 하나와 사내 항목 하나(눈금이 있으면 눈금까지).
+ *
+ * 문헌 쪽이 정해져 있으면(표의 「+」) 항목만 고르고, 항목 쪽이 정해져 있으면
+ * (안 이어진 목록의 「잇기」) 문헌 물성을 쳐서 찾는다 — 271개를 펼쳐 놓고 눈으로
+ * 찾게 하지 않는다.
+ */
+function LinkDialog({
+  open,
+  preset,
+  mapping,
+  onClose,
+  onDone,
+}: {
+  open: boolean
+  preset: { row?: PropertyMappingRow; item?: PropertyUnlinkedItem }
+  mapping: PropertyMapping
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [keyQuery, setKeyQuery] = useState('')
+  const [key, setKey] = useState<string | null>(null)
+  const [termId, setTermId] = useState<string>('')
+  const [scale, setScale] = useState('')
+  const [kind, setKind] = useState('same_as')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [openedFor, setOpenedFor] = useState<string | null>(null)
+
+  // 열릴 때 미리 정해진 쪽을 채운다. 렌더마다 채우면 고른 것이 되돌아간다.
+  const presetId = `${preset.row?.key ?? ''}|${preset.item?.term_id ?? ''}`
+  if (open && openedFor !== presetId) {
+    setOpenedFor(presetId)
+    setKey(preset.row?.key ?? null)
+    setKeyQuery('')
+    setTermId(preset.item?.term_id ?? '')
+    setScale('')
+    setKind('same_as')
+    setError(null)
+  }
+  if (!open && openedFor !== null) setOpenedFor(null)
+
+  const chosenItem = mapping.items.find((one) => one.term_id === termId) ?? null
+  const needle = keyQuery.trim().toLowerCase()
+  const keyCandidates = useMemo(
+    () =>
+      needle
+        ? mapping.rows
+            .filter(
+              (one) =>
+                one.name.toLowerCase().includes(needle) || one.key.toLowerCase().includes(needle)
+            )
+            .slice(0, 12)
+        : [],
+    [mapping.rows, needle]
+  )
+  const chosenRow = key ? mapping.rows.find((one) => one.key === key) : null
+  const needsScale = (chosenItem?.scales.length ?? 0) > 0
+  const ready = Boolean(key && termId && (!needsScale || scale))
+
+  async function submit() {
+    if (!key || !chosenItem) return
+    setBusy(true)
+    setError(null)
+    const payload: PropertyLinkCreate = {
+      property_key: key,
+      item: chosenItem.item,
+      kind,
+      scale: needsScale ? scale : null,
+    }
+    try {
+      await catalogApi.linkProperty(payload)
+      onDone()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('잇지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>사내 항목을 문헌 물성에 잇기</DialogTitle>
+          <DialogDescription>
+            이어 두면 값으로 찾기가 사내 값까지 보고, 다른 시스템이 같은 키로 만납니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>문헌 물성</Label>
+            {chosenRow ? (
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <span className="font-medium">{chosenRow.name}</span>
+                <span className="text-muted-foreground font-mono">{chosenRow.key}</span>
+                {!preset.row && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto h-7"
+                    onClick={() => setKey(null)}
+                  >
+                    바꾸기
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                <Input
+                  aria-label="문헌 물성 찾기"
+                  autoFocus
+                  placeholder="이름이나 키로 쳐서 찾기 — 항복, yield…"
+                  value={keyQuery}
+                  onChange={(event) => setKeyQuery(event.target.value)}
+                />
+                {keyCandidates.length > 0 && (
+                  <ul className="max-h-48 overflow-y-auto rounded-md border">
+                    {keyCandidates.map((one) => (
+                      <li key={one.key}>
+                        <button
+                          type="button"
+                          className="hover:bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
+                          onClick={() => setKey(one.key)}
+                        >
+                          <span className="font-medium">{one.name}</span>
+                          <span className="text-muted-foreground font-mono">{one.key}</span>
+                          <span className="text-muted-foreground ml-auto tabular-nums">
+                            {one.value_count}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="link-item">사내 항목</Label>
+            <select
+              id="link-item"
+              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+              value={termId}
+              onChange={(event) => {
+                setTermId(event.target.value)
+                setScale('')
+              }}
+              disabled={Boolean(preset.item)}
+            >
+              <option value="">고르세요</option>
+              {mapping.items.map((one) => (
+                <option key={one.term_id} value={one.term_id}>
+                  {one.item}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {needsScale && chosenItem && (
+            <div className="space-y-1.5">
+              <Label htmlFor="link-scale">눈금</Label>
+              <select
+                id="link-scale"
+                className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+                value={scale}
+                onChange={(event) => setScale(event.target.value)}
+              >
+                <option value="">고르세요</option>
+                {chosenItem.scales.map((one) => (
+                  <option key={one} value={one}>
+                    {one}
+                  </option>
+                ))}
+              </select>
+              <p className="text-muted-foreground text-xs">
+                「{chosenItem.item}」 은 눈금을 갖는 항목입니다 — 어느 눈금의 값이 이 문헌
+                물성인지 정해야 다른 눈금 값이 검색에 섞이지 않습니다.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="link-kind">관계</Label>
+            <select
+              id="link-kind"
+              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+              value={kind}
+              onChange={(event) => setKind(event.target.value)}
+            >
+              {mapping.kinds.map((one) => (
+                <option key={one} value={one}>
+                  {KIND_LABELS[one] ?? one}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <ErrorNotice error={error} />
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button disabled={busy || !ready} onClick={submit}>
+            <Link2 className="size-4" />
+            잇기
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

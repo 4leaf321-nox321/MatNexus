@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import Float, Select, cast, func, select, true
+from sqlalchemy import null as sa_null
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
@@ -40,7 +41,7 @@ from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun
 from app.shared.errors import AppError
-from matcore import units
+from matcore import registry, units
 
 #: 「근처」 를 물었을 때의 기본 폭. ±10% — 물성 문헌값이 그 정도로 흩어진다.
 NEAR_RATIO = 0.10
@@ -64,6 +65,14 @@ class Hit:
     quality_tier: int | None = None
     source_detail: str | None = None
     category: str | None = None
+    count: int = 1
+    """이 줄에 묶인 값의 수. 잰 값은 **재료·방법별로 묶어** 낸다 — 시편 3장이면 1줄."""
+    spread_si: float | None = None
+    """묶인 값들의 표준편차(SI). 하나면 `None`."""
+    method: str | None = None
+    """어떻게 쟀나 — 「항복강도 · 오프셋 0.002」. **같은 키로 묶였어도 방법이 다르면
+    값이 다르다**(Tg 는 DSC·DMA 가 다르고, 항복은 오프셋마다 다르다). 그 사실이
+    보이지 않으면 사람은 「왜 같은 재료가 값이 셋이지」 가 된다."""
 
 
 def bounds(
@@ -209,6 +218,7 @@ def measured_hits(
     unit: str,
     limit: int,
     visible: Select[Any] | None = None,
+    convert: bool = True,
 ) -> list[Hit]:
     """**시험으로 잰 값**에서 찾는다 — 채택된 처리 결과의 스칼라.
 
@@ -229,6 +239,7 @@ def measured_hits(
             TestRun.record_name,
             scalar_key,
             scalar_value,
+            ProcessingResult.stages,
         )
         .select_from(ProcessingResult)
         .join(TestRun, TestRun.adopted_result_id == ProcessingResult.id)
@@ -244,22 +255,93 @@ def measured_hits(
             scalar_value <= high,
         )
         .order_by(scalar_value)
-        .limit(limit)
+        .limit(MAX_ROWS)
     )
     if visible is not None:
         query = query.where(Material.id.in_(visible))
-    return [
-        Hit(
-            world="measured",
-            material_id=material_id,
-            material_name=name,
-            value_si=float(value),
-            value_shown=units.from_si(value, unit),
-            unit_shown=unit,
-            source_detail=f"{run_name} · {key}",
+
+    # **재료·방법별로 묶는다.** 시편 3장이면 값이 셋인데 그것을 3줄로 내면 사람은
+    # 「같은 재료가 왜 셋이지」 가 되고, 방법을 안 가르고 묶으면 0.2% 와 0.5%
+    # 오프셋이 한 평균에 섞인다.
+    bucket: dict[tuple[uuid.UUID, str, str], list[tuple[float, str]]] = {}
+    names: dict[uuid.UUID, str] = {}
+    for material_id, name, run_name, key, value, stages in db.execute(query).all():
+        names[material_id] = name
+        method = _method_of(key, stages)
+        bucket.setdefault((material_id, key, method), []).append((float(value), run_name))
+
+    made: list[Hit] = []
+    for (material_id, key, method), values in bucket.items():
+        numbers = [one for one, _ in values]
+        mean = sum(numbers) / len(numbers)
+        spread = (
+            (sum((one - mean) ** 2 for one in numbers) / (len(numbers) - 1)) ** 0.5
+            if len(numbers) > 1
+            else None
         )
-        for material_id, name, run_name, key, value in db.execute(query).all()
-    ]
+        runs = ", ".join(run for _, run in values[:3]) + (" …" if len(values) > 3 else "")
+        made.append(
+            Hit(
+                world="measured",
+                material_id=material_id,
+                material_name=names[material_id],
+                value_si=mean,
+                value_shown=units.from_si(mean, unit) if convert else mean,
+                unit_shown=unit,
+                source_detail=f"{key} · {runs}",
+                count=len(values),
+                spread_si=spread,
+                method=method,
+            )
+        )
+    made.sort(key=lambda one: one.value_si)
+    return made[:limit]
+
+
+def _method_of(scalar_key: str, stages: list[dict[str, Any]] | None) -> str:
+    """이 값을 낸 단계와 그 인자 — 「항복강도 · offset_strain=0.002」.
+
+    인자는 그 단계가 **선언한 것 중 숫자·선택 칸만**(열 이름·참조는 뺀다). 기본값과
+    같아도 적는다 — 「오프셋 0.2%」 는 기본값이어도 값의 뜻이다.
+    """
+    plugin = next(
+        (
+            one
+            for one in registry.list_plugins()
+            if one.kind in ("processing", "grouping")
+            and any(made.key == scalar_key for made in one.makes_values)
+        ),
+        None,
+    )
+    if plugin is None:
+        return scalar_key
+    options: dict[str, Any] = {}
+    for stage in stages or []:
+        if stage.get("plugin") == plugin.id:
+            options = stage.get("options") or {}
+    # **앞 단계가 낸 값을 받는 칸은 방법이 아니다.** 항복강도 단계의 `youngs_modulus`
+    # 는 탄성계수 단계가 잰 값이 흘러든 것이라 시편마다 다르다 — 그것을 방법에 넣으면
+    # 시편마다 다른 방법이 되어 묶이지 않는다. 저장된 옵션은 이미 숫자로 풀려 있어
+    # 참조였는지 알 수 없으니, 어느 계산이든 내는 이름이면 뺀다.
+    carried = {
+        made.key
+        for one in registry.list_plugins()
+        if one.kind in ("processing", "grouping")
+        for made in one.makes_values
+    }
+    parts: list[str] = []
+    for spec in plugin.params:
+        if spec.role is not None or spec.type not in ("float", "int", "choice"):
+            continue
+        if spec.name in carried or spec.links_to in carried:
+            continue
+        value = options.get(spec.name)
+        if value is None or (isinstance(value, str) and value.startswith("@")):
+            continue
+        parts.append(
+            f"{spec.name}={value:g}" if isinstance(value, float) else f"{spec.name}={value}"
+        )
+    return plugin.label + (" · " + ", ".join(parts) if parts else "")
 
 
 def internal_hits(
@@ -271,6 +353,8 @@ def internal_hits(
     unit: str,
     limit: int,
     visible: Select[Any] | None = None,
+    scale: str | None = None,
+    convert: bool = True,
 ) -> list[Hit]:
     """사내 재료의 선언 물성에서 찾는다.
 
@@ -279,20 +363,41 @@ def internal_hits(
 
     **권한은 부르는 쪽이 준다**(`visible`). 이 모듈은 값만 안다.
     """
-    query = select(Material.id, Material.record_name, Material.declared_properties).where(
+    wanted = cast([{"item": item}], JSONB)
+    # **재료와 시료 둘 다 본다.** 문헌·규격값은 재료에, 밀시트값(경도·강도)은 시료에
+    # 붙는다(ADR 0016) — 재료만 보면 시료 층 항목은 영영 안 잡힌다.
+    query = select(
+        Material.id, Material.record_name, Material.declared_properties, sa_null()
+    ).where(
         Material.deleted_at.is_(None),
         # **JSONB 를 통째로 훑기 전에 그 항목을 든 재료로 좁힌다.** `@>` 는
         # GIN 색인을 탄다 — 없으면 재료 전부의 JSON 을 파이썬으로 연다.
-        Material.declared_properties.op("@>")(cast([{"item": item}], JSONB)),
+        Material.declared_properties.op("@>")(wanted),
+    )
+    sample_query = (
+        select(Material.id, Material.record_name, Sample.declared_properties, Sample.lot_no)
+        .join(Material, Material.id == Sample.material_id)
+        .where(
+            Sample.deleted_at.is_(None),
+            Material.deleted_at.is_(None),
+            Sample.declared_properties.op("@>")(wanted),
+        )
     )
     if visible is not None:
         query = query.where(Material.id.in_(visible))
-    rows = db.execute(query.limit(MAX_ROWS)).all()
+        sample_query = sample_query.where(Material.id.in_(visible))
+    rows = [
+        *db.execute(query.limit(MAX_ROWS)).all(),
+        *db.execute(sample_query.limit(MAX_ROWS)).all(),
+    ]
 
     made: list[Hit] = []
-    for material_id, name, declared in rows:
+    for material_id, name, declared, lot_no in rows:
         for entry in declared or []:
             if entry.get("item") != item:
+                continue
+            # **눈금이 다르면 다른 값이다.** HRC 60 은 비커스 검색에 안 낀다.
+            if scale is not None and entry.get("scale") != scale:
                 continue
             for point in entry.get("points") or []:
                 value = point.get("value_si")
@@ -305,9 +410,16 @@ def internal_hits(
                             material_id=material_id,
                             material_name=name,
                             value_si=float(value),
-                            value_shown=units.from_si(value, unit),
+                            # 표가 모르는 눈금(HV)은 환산 없이 — 저장된 값이 그 눈금이다.
+                            value_shown=units.from_si(value, unit)
+                            if convert
+                            else float(value),
                             unit_shown=unit,
-                            source_detail=entry.get("reference"),
+                            source_detail=(
+                                f"로트 {lot_no} · {entry.get('reference') or ''}".rstrip(" ·")
+                                if lot_no
+                                else entry.get("reference")
+                            ),
                         )
                     )
                     break

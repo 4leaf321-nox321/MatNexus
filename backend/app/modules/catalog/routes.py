@@ -60,22 +60,28 @@ from app.modules.catalog.schemas import (
     PropertyAliasCreate,
     PropertyAliasOut,
     PropertyCandidateOut,
+    PropertyDictionaryEntryOut,
+    PropertyDictionaryOut,
     PropertyHitOut,
     PropertyLinkCreate,
     PropertyLinkOut,
+    PropertyMappingOut,
+    PropertyMappingRowOut,
+    PropertyMeasuredOut,
     PropertyResolveOut,
     PropertySearchOut,
+    PropertyUnlinkedItemOut,
 )
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
 from app.shared import exports, property_names, property_search, representative
 from app.shared import litdeck as deck_builder
-from app.shared.auth import current_user
+from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
 from app.shared.permissions import require_owner_edit, visible_material_ids, visible_materials
 from app.shared.text import clean, compare_key
-from matcore import export, units
+from matcore import export, registry, units
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -913,26 +919,148 @@ def list_property_links(
         .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
         .order_by(PropertyLink.property_key)
     ).all()
-    return [
-        PropertyLinkOut(
-            id=link.id,
-            property_key=link.property_key,
-            term_id=link.term_id,
-            item=item,
-            kind=link.kind,
-            note=link.note,
+    return [_link_out(link, item) for link, item in rows]
+
+
+def _link_out(link: PropertyLink, item: str) -> PropertyLinkOut:
+    return PropertyLinkOut(
+        id=link.id,
+        property_key=link.property_key,
+        term_id=link.term_id,
+        item=item,
+        kind=link.kind,
+        scale=link.scale,
+        note=link.note,
+    )
+
+
+@router.get("/properties/dictionary", response_model=PropertyDictionaryOut)
+def property_dictionary(
+    _user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> PropertyDictionaryOut:
+    """물성 키 사전 — 다른 시스템이 받아 가는 허브 키 목록. 파일로 저장해 쓴다."""
+    definitions = list(db.scalars(select(CatalogDefinition).order_by(CatalogDefinition.key)))
+    aliases: dict[str, list[str]] = {}
+    for key, alias in db.execute(
+        select(PropertyAlias.property_key, PropertyAlias.alias).order_by(PropertyAlias.alias)
+    ).all():
+        aliases.setdefault(key, []).append(alias)
+    items: dict[str, list[str]] = {}
+    for key, item, scale in db.execute(
+        select(PropertyLink.property_key, VocabularyTerm.value, PropertyLink.scale)
+        .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
+        .order_by(VocabularyTerm.value, PropertyLink.scale)
+    ).all():
+        items.setdefault(key, []).append(f"{item} ({scale})" if scale else item)
+    return PropertyDictionaryOut(
+        version=version.current(),
+        generated_at=datetime.now(UTC),
+        count=len(definitions),
+        properties=[
+            PropertyDictionaryEntryOut(
+                key=one.key,
+                name=one.name,
+                domain=one.domain,
+                si_unit=one.si_unit,
+                symbol=one.symbol,
+                test_standard=one.test_standard,
+                aliases=aliases.get(one.key, []),
+                internal_items=items.get(one.key, []),
+                measured_keys=sorted({scalar for _p, scalar in registry.measured_by(one.key)}),
+            )
+            for one in definitions
+        ],
+    )
+
+
+@router.get("/properties/mapping", response_model=PropertyMappingOut)
+def property_mapping(
+    _user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> PropertyMappingOut:
+    """물성 하나가 **세 층에서 어떻게 불리는가** — 문헌 키 · 사내 항목 · 잰 값.
+
+    같은 물성이 세 이름으로 살고(`proof_stress` · 「항복강도」 ·
+    `mechanical.yield_strength`), 그것이 이어져 있는지는 코드를 열어야 알 수
+    있었다(2026-09-12). 여기서 한 표로 보인다. **빈 칸이 정보다** — 사내 항목인데
+    문헌 키에 안 이어진 것은 값으로 찾기와 다른 시스템과의 매핑에서 조용히 빠진다.
+    """
+    definitions = list(db.scalars(select(CatalogDefinition).order_by(CatalogDefinition.key)))
+    counts = {
+        key: int(count)
+        for key, count in db.execute(
+            select(CatalogValue.property_key, func.count()).group_by(CatalogValue.property_key)
+        ).all()
+    }
+    links_by_key: dict[str, list[PropertyLinkOut]] = {}
+    linked_terms: set[uuid.UUID] = set()
+    for link, item in db.execute(
+        select(PropertyLink, VocabularyTerm.value)
+        .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
+        .order_by(VocabularyTerm.value, PropertyLink.scale)
+    ).all():
+        links_by_key.setdefault(link.property_key, []).append(_link_out(link, item))
+        linked_terms.add(link.term_id)
+
+    plugins = {one.id: one for one in registry.list_plugins()}
+    rows = [
+        PropertyMappingRowOut(
+            key=one.key,
+            name=one.name,
+            domain=one.domain,
+            si_unit=one.si_unit,
+            symbol=one.symbol,
+            test_standard=one.test_standard,
+            value_count=counts.get(one.key, 0),
+            links=links_by_key.get(one.key, []),
+            measured=[
+                PropertyMeasuredOut(
+                    plugin_id=plugin_id,
+                    plugin_label=plugins[plugin_id].label,
+                    scalar_key=scalar_key,
+                )
+                for plugin_id, scalar_key in registry.measured_by(one.key)
+            ],
         )
-        for link, item in rows
+        for one in definitions
     ]
+    items = [
+        PropertyUnlinkedItemOut(
+            term_id=term.id,
+            item=term.value,
+            dimension=(term.attributes or {}).get("dimension"),
+            scales=[
+                part.strip()
+                for part in str((term.attributes or {}).get("scales") or "").split(",")
+                if part.strip()
+            ],
+        )
+        for term in property_names.item_terms(db)
+    ]
+    unlinked = [one for one in items if one.term_id not in linked_terms]
+    return PropertyMappingOut(
+        axis_slug=property_names.ITEM_AXIS,
+        rows=rows,
+        items=items,
+        unlinked_items=unlinked,
+        kinds=list(LINK_KINDS),
+        summary={
+            "keys": len(rows),
+            "linked_keys": sum(1 for one in rows if one.links),
+            "measured_keys": sum(1 for one in rows if one.measured),
+            "unlinked_items": len(unlinked),
+        },
+    )
 
 
 @router.post("/properties/links", response_model=PropertyLinkOut, status_code=201)
 def add_property_link(
     payload: PropertyLinkCreate,
-    user: User = Depends(current_user),
+    user: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ) -> PropertyLinkOut:
-    """매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다."""
+    """매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다.
+
+    시스템 관리자만 — 매핑은 모든 부서의 값 검색에 걸린다."""
     if payload.kind not in LINK_KINDS:
         raise AppError(
             "MNX-CATALOG-0024",
@@ -961,10 +1089,33 @@ def add_property_link(
             "MNX-CATALOG-0025",
             f"'{payload.item}' 이(가) 사내 물성 항목에 없습니다. 기준정보에서 먼저 만드세요.",
         )
+    scale = clean(payload.scale or "") or None
+    declared_scales = [
+        part.strip()
+        for part in str((term.attributes or {}).get("scales") or "").split(",")
+        if part.strip()
+    ]
+    if scale is not None and scale not in declared_scales:
+        raise AppError(
+            "MNX-CATALOG-0026",
+            f"'{term.value}' 항목에 '{scale}' 눈금이 없습니다"
+            + (f" — 있는 눈금: {', '.join(declared_scales)}." if declared_scales else "."),
+            status=422,
+        )
+    if scale is None and declared_scales:
+        # **눈금 있는 항목은 눈금 없이 못 잇는다.** HRC 60 이 비커스 검색에 섞인다.
+        raise AppError(
+            "MNX-CATALOG-0027",
+            f"'{term.value}' 은 눈금을 갖는 항목입니다 — 어느 눈금의 값이 "
+            f"'{payload.property_key}' 인지 `scale` 로 정하세요"
+            f"({', '.join(declared_scales)}).",
+            status=422,
+        )
     found = db.scalar(
         select(PropertyLink).where(
             PropertyLink.property_key == payload.property_key,
             PropertyLink.term_id == term.id,
+            PropertyLink.scale.is_(None) if scale is None else PropertyLink.scale == scale,
         )
     )
     if found is None:
@@ -972,20 +1123,28 @@ def add_property_link(
             property_key=payload.property_key,
             term_id=term.id,
             kind=payload.kind,
+            scale=scale,
             note=payload.note,
             created_by_id=user.id,
         )
         db.add(found)
         db.commit()
         db.refresh(found)
-    return PropertyLinkOut(
-        id=found.id,
-        property_key=found.property_key,
-        term_id=found.term_id,
-        item=term.value,
-        kind=found.kind,
-        note=found.note,
-    )
+    return _link_out(found, term.value)
+
+
+@router.delete("/properties/links/{link_id}", status_code=204)
+def remove_property_link(
+    link_id: uuid.UUID,
+    _user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    """매핑을 푼다. 값은 안 건드린다 — 이어짐만 사라진다."""
+    link = db.get(PropertyLink, link_id)
+    if link is None:
+        raise NotFound("MNX-CATALOG-0028", "그 매핑을 찾을 수 없습니다.")
+    db.delete(link)
+    db.commit()
 
 
 @router.get("/properties/search", response_model=PropertySearchOut)
@@ -1101,9 +1260,10 @@ def search_by_property(
                 unit=unit,
                 limit=limit,
                 visible=visible_material_ids(db, user),
+                convert=not raw_scale,
             )
-        if chosen.items:
-            for item in chosen.items:
+        if chosen.item_filters:
+            for item, scale in chosen.item_filters:
                 hits += property_search.internal_hits(
                     db,
                     item=item,
@@ -1112,6 +1272,8 @@ def search_by_property(
                     unit=unit,
                     limit=limit,
                     visible=visible_material_ids(db, user),
+                    scale=scale,
+                    convert=not raw_scale,
                 )
         else:
             # **못 찾은 게 아니라 이어져 있지 않은 것이다.** 그 차이를 말한다.
@@ -1138,6 +1300,13 @@ def search_by_property(
                 quality_tier=one.quality_tier,
                 source_detail=one.source_detail,
                 category=one.category,
+                count=one.count,
+                spread=(
+                    units.from_si(one.spread_si, unit) - units.from_si(0.0, unit)
+                    if one.spread_si is not None and not grouped
+                    else one.spread_si
+                ),
+                method=one.method,
             )
             for one in hits[:limit]
         ],

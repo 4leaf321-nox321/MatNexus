@@ -63,6 +63,9 @@ class Candidate:
     value_count: int
     #: 사내 물성 항목 이름들(이어져 있으면). 「우리가 실제로 쓰는 물성인가」.
     items: tuple[str, ...] = ()
+    #: 항목마다 **눈금 조건** — `(항목, 눈금 | None)`. 「경도」 는 HV 로 이어진
+    #: 것만 비커스다. 값을 찾을 때 이것으로 거른다.
+    item_filters: tuple[tuple[str, str | None], ...] = ()
     #: 시험 처리가 이 물성으로 내는 값 이름들(`Produced.property_key`). 있으면
     #: 잰 값까지 찾을 수 있다 — 「항복강도」 는 `proof_stress` 로 잰다.
     measured: tuple[str, ...] = ()
@@ -91,18 +94,18 @@ def _counts(db: Session, keys: list[str]) -> dict[str, int]:
     return {row[0]: row[1] for row in rows}
 
 
-def _items(db: Session, keys: list[str]) -> dict[str, list[str]]:
-    """물성별로 이어진 사내 물성 항목 이름."""
+def _items(db: Session, keys: list[str]) -> dict[str, list[tuple[str, str | None]]]:
+    """물성별로 이어진 사내 물성 항목 — `(이름, 눈금)`. 눈금은 「경도」 만 든다."""
     if not keys:
         return {}
     rows = db.execute(
-        select(PropertyLink.property_key, VocabularyTerm.value)
+        select(PropertyLink.property_key, VocabularyTerm.value, PropertyLink.scale)
         .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
         .where(PropertyLink.property_key.in_(keys))
     ).all()
-    found: dict[str, list[str]] = {}
-    for key, value in rows:
-        found.setdefault(key, []).append(value)
+    found: dict[str, list[tuple[str, str | None]]] = {}
+    for key, value, scale in rows:
+        found.setdefault(key, []).append((value, scale))
     return found
 
 
@@ -175,7 +178,10 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
         else:
             matched, text_hit, base = "partial", one.name, 30.0
 
-        linked = tuple(sorted(items.get(one.key, ())))
+        filters = tuple(
+            sorted(items.get(one.key, ()), key=lambda pair: (pair[0], pair[1] or ""))
+        )
+        linked = tuple(dict.fromkeys(name for name, _scale in filters))
         count = counts.get(one.key, 0)
         grouped = parameters.is_parameterized(db, one.key)
         variables = (
@@ -192,7 +198,10 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
         if not count:
             notes.append("값이 없습니다 — 이 물성으로는 아무것도 못 찾습니다.")
         if linked:
-            notes.append("사내 물성 항목: " + " · ".join(linked))
+            notes.append(
+                "사내 물성 항목: "
+                + " · ".join(f"{name} ({scale})" if scale else name for name, scale in filters)
+            )
         measured = tuple(sorted({scalar for _plugin, scalar in registry.measured_by(one.key)}))
         if measured:
             notes.append("시험으로 재는 값: " + " · ".join(measured))
@@ -209,6 +218,7 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
                 symbol=one.symbol,
                 value_count=count,
                 items=linked,
+                item_filters=filters,
                 measured=measured,
                 parameterized=grouped,
                 terms=variables,

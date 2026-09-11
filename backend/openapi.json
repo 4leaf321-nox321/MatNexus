@@ -15043,6 +15043,123 @@
         "title": "PropertyCardUpdateRequest",
         "type": "object"
       },
+      "PropertyDictionaryEntryOut": {
+        "description": "물성 키 사전의 한 줄 — **다른 시스템이 자기 매핑의 키를 검사하는 데 쓴다.**",
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "internal_items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Internal Items",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "measured_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Measured Keys",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "test_standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Standard"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "domain",
+          "si_unit",
+          "symbol",
+          "test_standard",
+          "aliases",
+          "internal_items",
+          "measured_keys"
+        ],
+        "title": "PropertyDictionaryEntryOut",
+        "type": "object"
+      },
+      "PropertyDictionaryOut": {
+        "description": "물성 키 사전 — 허브 키의 정본.\n\n시스템이 여럿(MaterialTwin · MatNexus · TestScope …)이면 쌍마다 표를 두지 않고\n**키 하나를 허브로** 두고 각자 자기 개념을 그 키에 잇는다(2026-09-12). 이 파일이\n그 허브다. 폐쇄망이라 API 보다 파일이 낫다 — 받아서 자기 검사에 쓴다.\n\n**키는 안 바뀐다.** 틀렸으면 새 키를 만들고 옛 키는 폐기 표시만 한다 — 바꾸면\n스포크 전부가 같은 날 깨진다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyDictionaryEntryOut"
+            },
+            "title": "Properties",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "generated_at",
+          "count",
+          "properties"
+        ],
+        "title": "PropertyDictionaryOut",
+        "type": "object"
+      },
       "PropertyHitOut": {
         "description": "값 하나와 그것을 든 재료. **값과 단위를 함께 싣는다.**",
         "properties": {
@@ -15057,6 +15174,11 @@
             ],
             "title": "Category"
           },
+          "count": {
+            "default": 1,
+            "title": "Count",
+            "type": "integer"
+          },
           "material_id": {
             "format": "uuid",
             "title": "Material Id",
@@ -15065,6 +15187,17 @@
           "material_name": {
             "title": "Material Name",
             "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
           },
           "quality_tier": {
             "anyOf": [
@@ -15087,6 +15220,17 @@
               }
             ],
             "title": "Source Detail"
+          },
+          "spread": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread"
           },
           "unit": {
             "title": "Unit",
@@ -15198,6 +15342,18 @@
           "property_key": {
             "title": "Property Key",
             "type": "string"
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
           }
         },
         "required": [
@@ -15237,6 +15393,17 @@
             "title": "Property Key",
             "type": "string"
           },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
+          },
           "term_id": {
             "format": "uuid",
             "title": "Term Id",
@@ -15252,6 +15419,164 @@
           "note"
         ],
         "title": "PropertyLinkOut",
+        "type": "object"
+      },
+      "PropertyMappingOut": {
+        "properties": {
+          "axis_slug": {
+            "title": "Axis Slug",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyUnlinkedItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyMappingRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "summary": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Summary",
+            "type": "object"
+          },
+          "unlinked_items": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyUnlinkedItemOut"
+            },
+            "title": "Unlinked Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "axis_slug",
+          "rows",
+          "items",
+          "unlinked_items",
+          "kinds",
+          "summary"
+        ],
+        "title": "PropertyMappingOut",
+        "type": "object"
+      },
+      "PropertyMappingRowOut": {
+        "description": "물성 하나가 세 층에서 어떻게 불리는가 — 매핑 화면의 한 줄.",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "measured": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyMeasuredOut"
+            },
+            "title": "Measured",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "test_standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Standard"
+          },
+          "value_count": {
+            "title": "Value Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "domain",
+          "si_unit",
+          "symbol",
+          "test_standard",
+          "value_count",
+          "links",
+          "measured"
+        ],
+        "title": "PropertyMappingRowOut",
+        "type": "object"
+      },
+      "PropertyMeasuredOut": {
+        "description": "시험 처리가 이 물성으로 내는 값 하나 — 어느 계산의 어느 값.",
+        "properties": {
+          "plugin_id": {
+            "title": "Plugin Id",
+            "type": "string"
+          },
+          "plugin_label": {
+            "title": "Plugin Label",
+            "type": "string"
+          },
+          "scalar_key": {
+            "title": "Scalar Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "plugin_label",
+          "scalar_key"
+        ],
+        "title": "PropertyMeasuredOut",
         "type": "object"
       },
       "PropertyResolveOut": {
@@ -15385,6 +15710,46 @@
           "rows"
         ],
         "title": "PropertySourcesOut",
+        "type": "object"
+      },
+      "PropertyUnlinkedItemOut": {
+        "description": "사내 항목인데 문헌 키에 안 이어진 것. **표시가 없으면 조용히 빠진다** —\n값으로 찾기·다른 시스템과의 매핑에서.",
+        "properties": {
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "scales": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scales",
+            "type": "array"
+          },
+          "term_id": {
+            "format": "uuid",
+            "title": "Term Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term_id",
+          "item",
+          "dimension",
+          "scales"
+        ],
+        "title": "PropertyUnlinkedItemOut",
         "type": "object"
       },
       "QueueOut": {
@@ -25273,6 +25638,28 @@
         ]
       }
     },
+    "/api/catalog/properties/dictionary": {
+      "get": {
+        "description": "물성 키 사전 — 다른 시스템이 받아 가는 허브 키 목록. 파일로 저장해 쓴다.",
+        "operationId": "property_dictionary_api_catalog_properties_dictionary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyDictionaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Property Dictionary",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/properties/links": {
       "get": {
         "description": "문헌 물성 ↔ 사내 물성 항목 매핑 전부(ADR 0027 이 미뤄 둔 그 표).",
@@ -25299,7 +25686,7 @@
         ]
       },
       "post": {
-        "description": "매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다.",
+        "description": "매핑 하나. **`same_as` 를 함부로 쓰지 않는다** — 다른 것은 다르게 적는다.\n\n시스템 관리자만 — 매핑은 모든 부서의 값 검색에 걸린다.",
         "operationId": "add_property_link_api_catalog_properties_links_post",
         "requestBody": {
           "content": {
@@ -25334,6 +25721,65 @@
           }
         },
         "summary": "Add Property Link",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/links/{link_id}": {
+      "delete": {
+        "description": "매핑을 푼다. 값은 안 건드린다 — 이어짐만 사라진다.",
+        "operationId": "remove_property_link_api_catalog_properties_links__link_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Property Link",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/mapping": {
+      "get": {
+        "description": "물성 하나가 **세 층에서 어떻게 불리는가** — 문헌 키 · 사내 항목 · 잰 값.\n\n같은 물성이 세 이름으로 살고(`proof_stress` · 「항복강도」 ·\n`mechanical.yield_strength`), 그것이 이어져 있는지는 코드를 열어야 알 수\n있었다(2026-09-12). 여기서 한 표로 보인다. **빈 칸이 정보다** — 사내 항목인데\n문헌 키에 안 이어진 것은 값으로 찾기와 다른 시스템과의 매핑에서 조용히 빠진다.",
+        "operationId": "property_mapping_api_catalog_properties_mapping_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyMappingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Property Mapping",
         "tags": [
           "catalog"
         ]

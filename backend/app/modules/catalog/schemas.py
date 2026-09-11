@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -283,6 +284,8 @@ class PropertyLinkOut(BaseModel):
     item: str
     """사내 물성 항목 이름 — 화면이 기준정보를 따로 안 부르게."""
     kind: str
+    scale: str | None = None
+    """이 매핑이 해당하는 눈금(`HV`·`HRC`). 비면 눈금을 안 가린다."""
     note: str | None
 
 
@@ -291,7 +294,91 @@ class PropertyLinkCreate(BaseModel):
     item: str
     """사내 물성 항목 **이름**으로 받는다 — 사람이 폼에 id 를 적지 않는다."""
     kind: str = "same_as"
+    scale: str | None = Field(default=None, max_length=20)
+    """항목이 눈금을 갖는 것(경도)이면 **어느 눈금의 값이 이 물성인가.** 항목이
+    선언한 눈금(`scales`) 중 하나여야 한다."""
     note: str | None = None
+
+
+class PropertyDictionaryEntryOut(BaseModel):
+    """물성 키 사전의 한 줄 — **다른 시스템이 자기 매핑의 키를 검사하는 데 쓴다.**"""
+
+    key: str
+    name: str
+    domain: str
+    si_unit: str | None
+    symbol: str | None
+    test_standard: str | None
+    aliases: list[str]
+    internal_items: list[str]
+    """사내 항목 이름(눈금이 있으면 「경도 (HV)」)."""
+    measured_keys: list[str]
+
+
+class PropertyDictionaryOut(BaseModel):
+    """물성 키 사전 — 허브 키의 정본.
+
+    시스템이 여럿(MaterialTwin · MatNexus · TestScope …)이면 쌍마다 표를 두지 않고
+    **키 하나를 허브로** 두고 각자 자기 개념을 그 키에 잇는다(2026-09-12). 이 파일이
+    그 허브다. 폐쇄망이라 API 보다 파일이 낫다 — 받아서 자기 검사에 쓴다.
+
+    **키는 안 바뀐다.** 틀렸으면 새 키를 만들고 옛 키는 폐기 표시만 한다 — 바꾸면
+    스포크 전부가 같은 날 깨진다.
+    """
+
+    version: str
+    """MatNexus 버전. 사전이 어느 배포에서 나왔는지."""
+    generated_at: datetime
+    count: int
+    properties: list[PropertyDictionaryEntryOut]
+
+
+class PropertyMeasuredOut(BaseModel):
+    """시험 처리가 이 물성으로 내는 값 하나 — 어느 계산의 어느 값."""
+
+    plugin_id: str
+    plugin_label: str
+    scalar_key: str
+
+
+class PropertyMappingRowOut(BaseModel):
+    """물성 하나가 세 층에서 어떻게 불리는가 — 매핑 화면의 한 줄."""
+
+    key: str
+    name: str
+    domain: str
+    si_unit: str | None
+    symbol: str | None
+    test_standard: str | None
+    value_count: int
+    """문헌값 수. 0 이면 문헌에도 값이 없는 정의다."""
+    links: list[PropertyLinkOut]
+    """사내 항목과의 매핑 — 사람이 잇고 푼다."""
+    measured: list[PropertyMeasuredOut]
+    """시험 처리가 이 물성으로 내는 값 — 코드가 정한다."""
+
+
+class PropertyUnlinkedItemOut(BaseModel):
+    """사내 항목인데 문헌 키에 안 이어진 것. **표시가 없으면 조용히 빠진다** —
+    값으로 찾기·다른 시스템과의 매핑에서."""
+
+    term_id: uuid.UUID
+    item: str
+    dimension: str | None
+    scales: list[str]
+
+
+class PropertyMappingOut(BaseModel):
+    axis_slug: str
+    """사내 항목이 사는 기준정보 축. 화면이 이 축의 탭에 매핑을 붙인다 — 이름을
+    화면이 외우지 않게."""
+    rows: list[PropertyMappingRowOut]
+    items: list[PropertyUnlinkedItemOut]
+    """사내 항목 전부(잇는 창의 후보). 눈금이 있으면 `scales` 에 든다."""
+    unlinked_items: list[PropertyUnlinkedItemOut]
+    kinds: list[str]
+    summary: dict[str, int]
+    """`keys` · `linked_keys` · `measured_keys` · `unlinked_items`."""
 
 
 class PropertyHitOut(BaseModel):
@@ -309,6 +396,13 @@ class PropertyHitOut(BaseModel):
     quality_tier: int | None = None
     source_detail: str | None = None
     category: str | None = None
+    count: int = 1
+    """이 줄에 묶인 값의 수. `measured` 는 재료·방법별로 묶여 오므로 시편 3장이면 3."""
+    spread: float | None = None
+    """묶인 값들의 표준편차(**물어본 단위**). 하나면 비어 있다."""
+    method: str | None = None
+    """`measured` 가 어떻게 쟀나 — 「항복강도 · offset_strain=0.002」. 같은 물성이라도
+    방법이 다르면 값이 다르다."""
 
 
 class PropertySearchOut(BaseModel):

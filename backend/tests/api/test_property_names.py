@@ -276,6 +276,194 @@ class Test매핑:
 SEARCH = "/api/catalog/properties/search"
 
 
+class Test매핑_화면:
+    """물성 하나가 **세 층에서 어떻게 불리는가** — 문헌 키 · 사내 항목 · 잰 값.
+
+    빈 칸이 정보다. 사내 항목인데 문헌 키에 안 이어진 것은 값으로 찾기와 다른
+    시스템과의 매핑에서 조용히 빠진다 — 그 수를 세어 준다.
+    """
+
+    def test_세_층이_한_줄에_선다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        db.add(VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도"))
+        db.add(VocabularyTerm(vocabulary_id=axis.id, value="굴곡강도", normalized="굴곡강도"))
+        db.commit()
+        client.post(
+            "/api/catalog/properties/links",
+            json={"property_key": YIELD_STRENGTH[0], "item": "항복강도"},
+            headers=admin_headers,
+        )
+
+        body = client.get("/api/catalog/properties/mapping", headers=admin_headers).json()
+        assert body["axis_slug"] == "property_item"
+        row = next(one for one in body["rows"] if one["key"] == YIELD_STRENGTH[0])
+        assert [link["item"] for link in row["links"]] == ["항복강도"]
+        # 잰 값은 코드가 정한다 — `proof_stress` 가 항복강도다.
+        assert [one["scalar_key"] for one in row["measured"]] == ["proof_stress"]
+        assert row["measured"][0]["plugin_label"] == "오프셋 항복강도"
+        # **안 이어진 항목을 센다.** 「굴곡강도」 는 만들어만 두고 아무 데도 안 이었다.
+        assert [one["item"] for one in body["unlinked_items"]] == ["굴곡강도"]
+        assert body["summary"]["unlinked_items"] == 1
+        assert body["summary"]["measured_keys"] >= 1
+
+    def test_매핑을_풀_수_있다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        db.add(VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도"))
+        db.commit()
+        made = client.post(
+            "/api/catalog/properties/links",
+            json={"property_key": YIELD_STRENGTH[0], "item": "항복강도"},
+            headers=admin_headers,
+        ).json()
+        gone = client.delete(
+            f"/api/catalog/properties/links/{made['id']}", headers=admin_headers
+        )
+        assert gone.status_code == 204
+        assert client.get("/api/catalog/properties/links", headers=admin_headers).json() == []
+
+
+class Test눈금_매핑:
+    """「경도」 는 하나인데 문헌은 비커스·브리넬·로크웰이 다른 키다.
+
+    눈금 없이 이으면 HRC 60 이 비커스 검색에 섞여 나온다 — 숫자 크기가 비슷해
+    눈에 안 띈다.
+    """
+
+    @pytest.fixture
+    def hardness(self, db: Session) -> None:
+        for key, name, unit in (
+            ("mechanical.hardness_vickers", "비커스 경도", "HV"),
+            ("mechanical.hardness_rockwell", "로크웰 경도", "HR"),
+        ):
+            db.add(
+                CatalogDefinition(
+                    mt_id=abs(hash(key)) % 1_000_000,
+                    key=key,
+                    name=name,
+                    domain="mechanical",
+                    si_unit=unit,
+                    value_type="number",
+                )
+            )
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        db.add(
+            VocabularyTerm(
+                vocabulary_id=axis.id,
+                value="경도",
+                normalized="경도",
+                attributes={
+                    "dimension": "dimensionless",
+                    "scales": "HV, HRC",
+                    "level": "시료",
+                },
+            )
+        )
+        db.commit()
+
+    def test_눈금_있는_항목은_눈금_없이_못_잇는다(
+        self, client: TestClient, admin_headers: dict[str, str], hardness: None
+    ) -> None:
+        bad = client.post(
+            "/api/catalog/properties/links",
+            json={"property_key": "mechanical.hardness_vickers", "item": "경도"},
+            headers=admin_headers,
+        )
+        assert bad.status_code == 422
+        assert bad.json()["error"]["code"] == "MNX-CATALOG-0027"
+        wrong = client.post(
+            "/api/catalog/properties/links",
+            json={
+                "property_key": "mechanical.hardness_vickers",
+                "item": "경도",
+                "scale": "HB",
+            },
+            headers=admin_headers,
+        )
+        assert wrong.status_code == 422
+        assert wrong.json()["error"]["code"] == "MNX-CATALOG-0026"
+
+    def test_눈금이_다르면_검색에_안_섞인다(
+        self, client: TestClient, admin_headers: dict[str, str], hardness: None
+    ) -> None:
+        """HV 200 과 HRC 60 을 한 시료에 적고, 비커스로 물으면 HV 만 온다."""
+        for key, scale in (
+            ("mechanical.hardness_vickers", "HV"),
+            ("mechanical.hardness_rockwell", "HRC"),
+        ):
+            made = client.post(
+                "/api/catalog/properties/links",
+                json={"property_key": key, "item": "경도", "scale": scale},
+                headers=admin_headers,
+            )
+            assert made.status_code == 201, made.text
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "HRD",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        # 한 시료에는 한 항목이 한 줄뿐이다 — 눈금이 다른 값은 로트 둘로 나눈다.
+        for lot, scale, value in (("L-7", "HV", 200), ("L-8", "HRC", 60)):
+            sample = client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"lot_no": lot},
+                headers=admin_headers,
+            ).json()
+            saved = client.patch(
+                f"/api/samples/{sample['id']}",
+                json={
+                    "declared_properties": [
+                        {
+                            "item": "경도",
+                            "points": [{"value": value}],
+                            "scale": scale,
+                            "source": "datasheet",
+                            "reference": "MTC-1",
+                        }
+                    ]
+                },
+                headers=admin_headers,
+            )
+            assert saved.status_code == 200, saved.text
+
+        # 비커스 20~300 — HRC 60 은 범위 안이지만 눈금이 달라 안 온다.
+        got = client.get(
+            SEARCH,
+            params={"q": "mechanical.hardness_vickers", "unit": "HV", "min": 20, "max": 300},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        internal = [one for one in got.json()["hits"] if one["world"] == "internal"]
+        assert [one["value"] for one in internal] == [200.0]
+        assert "로트 L-7" in internal[0]["source_detail"]
+        got = client.get(
+            SEARCH,
+            params={"q": "mechanical.hardness_rockwell", "unit": "HR", "min": 20, "max": 300},
+            headers=admin_headers,
+        )
+        internal = [one for one in got.json()["hits"] if one["world"] == "internal"]
+        assert [one["value"] for one in internal] == [60.0]
+
+
 class Test값으로_찾기:
     """**「항복응력이 200MPa 근처인 재료」** — 이름 해소 + 단위 환산 + 범위."""
 

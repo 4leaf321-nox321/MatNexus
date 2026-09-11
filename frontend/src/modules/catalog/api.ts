@@ -304,7 +304,20 @@ export const catalogApi = {
     return api.get<CatalogMaterialPage>(`/catalog/materials${suffix ? `?${suffix}` : ''}`)
   },
   material: (id: string) => api.get<CatalogMaterialDetail>(`/catalog/materials/${id}`),
+
+  /** 물성 매핑 — 문헌 키 · 사내 항목 · 잰 값이 한 줄에. 매핑 화면이 이것만으로 그린다. */
+  propertyMapping: () => api.get<PropertyMapping>('/catalog/properties/mapping'),
+  /** 사내 항목을 문헌 키에 잇는다. 눈금 있는 항목(경도)은 `scale` 이 필수다 — 서버가 막는다. */
+  linkProperty: (payload: PropertyLinkCreate) =>
+    api.post<PropertyLink>('/catalog/properties/links', payload),
+  unlinkProperty: (linkId: string) => api.delete<void>(`/catalog/properties/links/${linkId}`),
 }
+
+export type PropertyMapping = components['schemas']['PropertyMappingOut']
+export type PropertyMappingRow = components['schemas']['PropertyMappingRowOut']
+export type PropertyLink = components['schemas']['PropertyLinkOut']
+export type PropertyLinkCreate = components['schemas']['PropertyLinkCreate']
+export type PropertyUnlinkedItem = components['schemas']['PropertyUnlinkedItemOut']
 
 /**
  * 종합값으로 담을 때의 참고문헌 — **무엇을 종합했는지 숫자로 남긴다.**

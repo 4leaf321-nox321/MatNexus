@@ -107,7 +107,9 @@ class PropertyLink(Base):
     """
 
     __tablename__ = "property_links"
-    __table_args__ = (UniqueConstraint("property_key", "term_id", name="uq_property_links"),)
+    __table_args__ = (
+        UniqueConstraint("property_key", "term_id", "scale", name="uq_property_links"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -125,6 +127,12 @@ class PropertyLink(Base):
 
     kind: Mapped[str] = mapped_column(String(20), default="same_as")
     """`LINK_KINDS` 중 하나."""
+    scale: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """이 매핑이 **어느 눈금의 값에만** 해당하는가 — `HV`·`HRC`.
+
+    사내 항목 「경도」 는 하나인데 문헌은 비커스·브리넬·로크웰이 다른 키다. 눈금 없이
+    이으면 HRC 60 이 비커스 검색에 섞여 나오고, 숫자 크기가 비슷해 눈에 안 띈다
+    (2026-09-12). 비어 있으면 눈금을 안 가린다 — 항복강도처럼 눈금이 없는 항목."""
     note: Mapped[str | None] = mapped_column(Text)
 
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(

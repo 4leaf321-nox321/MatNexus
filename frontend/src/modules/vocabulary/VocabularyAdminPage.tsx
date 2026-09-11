@@ -33,6 +33,8 @@ import {
   X,
 } from 'lucide-react'
 
+import { PropertyMappingPanel } from '@/modules/catalog/PropertyMappingPanel'
+import { catalogApi } from '@/modules/catalog/api'
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
 import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { PasteTable, columnsOf, toLines } from '@/modules/vocabulary/PasteTable'
@@ -73,6 +75,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { VocabularyAxisPanel } from '@/modules/vocabulary/VocabularyAxisPanel'
+import { useAuth } from '@/shared/auth/AuthContext'
 import { useResource } from '@/shared/hooks/useResource'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 
@@ -100,6 +103,10 @@ export default function VocabularyAdminPage() {
   const [slug, setSlug] = useState<string | null>(null)
   const axes = vocabularies.data ?? []
   const active = axes.find((item) => item.slug === slug) ?? axes[0] ?? null
+  // **물성 항목 축에는 매핑 표가 붙는다.** 어느 축인지는 서버가 말한다(`axis_slug`) —
+  // 화면이 축 이름을 외우면 축이 바뀔 때 한 곳을 빠뜨린다(`roleOf` 와 같은 판단).
+  const mapping = useResource(() => catalogApi.propertyMapping(), [])
+  const { user } = useAuth()
 
 
   return (
@@ -117,6 +124,14 @@ export default function VocabularyAdminPage() {
       <VocabularyAxisPanel axes={axes} current={active?.slug ?? null} onPick={setSlug} />
 
       {active && <TermTable vocabulary={active} role={roleOf(active, axes)} />}
+
+      {active && mapping.data && mapping.data.axis_slug === active.slug && (
+        <PropertyMappingPanel
+          mapping={mapping.data}
+          canEdit={Boolean(user?.is_system_admin)}
+          onChanged={() => mapping.reload()}
+        />
+      )}
 
       <DriftPanel onRepaired={() => vocabularies.reload()} />
     </div>

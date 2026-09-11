@@ -405,14 +405,19 @@ class Test값으로_찾기:
         body = got.json()
         assert "proof_stress" in body["resolved"]["measured_keys"]
         measured = [one for one in body["hits"] if one["world"] == "measured"]
-        assert len(measured) == len(loaded["run_ids"]), body["hits"]
-        # 어느 시험의 값인지 되짚을 수 있다.
-        assert all("proof_stress" in one["source_detail"] for one in measured)
-        assert all(one["unit"] == "MPa" for one in measured)
+        # **재료·방법별로 한 줄이다.** 시편이 셋이어도 「같은 재료가 왜 셋이지」 가 안 된다.
+        assert len(measured) == 1, body["hits"]
+        (hit,) = measured
+        assert hit["count"] == len(loaded["run_ids"])
+        assert hit["spread"] is not None and hit["spread"] >= 0
+        # 어떻게 쟀는지가 붙어 있다 — 오프셋이 다르면 값이 다르다. 앞 단계에서 흘러든
+        # 탄성계수는 방법이 아니라 안 붙는다(붙으면 시편마다 다른 방법이 된다).
+        assert "항복강도" in hit["method"] and "offset_strain=0.002" in hit["method"]
+        assert "youngs_modulus" not in hit["method"]
+        assert "proof_stress" in hit["source_detail"]
+        assert hit["unit"] == "MPa"
         # 합성 곡선의 참 항복(340 MPa) 근처다.
-        assert all(250 < one["value"] < 450 for one in measured), [
-            one["value"] for one in measured
-        ]
+        assert 250 < hit["value"] < 450, hit["value"]
 
 
 class Test분포:
