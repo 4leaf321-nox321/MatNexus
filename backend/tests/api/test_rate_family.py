@@ -34,7 +34,11 @@ STEPS: list[dict[str, Any]] = [
         "plugin": "tensile.elastic_modulus",
         "options": {"method": "manual", "manual_modulus": 200e9},
     },
-    {"plugin": "tensile.true_plastic", "options": {"youngs_modulus": "@youngs_modulus"}},
+    {"plugin": "tensile.proof_stress", "options": {"youngs_modulus": "@youngs_modulus"}},
+    {
+        "plugin": "tensile.true_plastic",
+        "options": {"youngs_modulus": "@youngs_modulus", "proof_stress": "@proof_stress"},
+    },
 ]
 
 

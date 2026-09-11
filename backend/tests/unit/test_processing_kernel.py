@@ -856,11 +856,13 @@ class Test토우보정:
             )
 
 
+#: 식 자체를 보는 시험은 항복에서 안 자른다 — 전 구간에서 식이 맞는지 본다.
+WHOLE = {"youngs_modulus": E_TRUE, "yield_policy": "line_crossing"}
+
+
 class Test진응력:
     def test_변환식이_맞다(self) -> None:
-        result = processing.apply(
-            [Step("tensile.true_plastic", {"youngs_modulus": E_TRUE})], synthetic()
-        )
+        result = processing.apply([Step("tensile.true_plastic", WHOLE)], synthetic())
         frame = result.frame
         eng_strain = frame.columns["strain_engineering"]
         eng_stress = frame.columns["stress_engineering"]
@@ -870,9 +872,7 @@ class Test진응력:
 
     def test_자르지_않으면_네킹_경고가_남는다(self) -> None:
         # 조용히 넘어가면 그 곡선으로 적합한 경화식이 네킹 후 구간까지 맞추려 든다.
-        result = processing.apply(
-            [Step("tensile.true_plastic", {"youngs_modulus": E_TRUE})], synthetic()
-        )
+        result = processing.apply([Step("tensile.true_plastic", WHOLE)], synthetic())
         assert any("네킹 뒤 구간이 섞여" in note for note in result.notes)
 
     def test_음의_소성변형률을_어떻게_다뤘는지_남는다(self) -> None:
@@ -880,13 +880,90 @@ class Test진응력:
             [
                 Step(
                     "tensile.true_plastic",
-                    {"youngs_modulus": E_TRUE, "negative_policy": "clip_zero"},
+                    {**WHOLE, "negative_policy": "clip_zero"},
                 )
             ],
             synthetic(),
         )
         assert np.all(result.frame.columns["strain_true_plastic"] >= 0)
         assert any("0 으로 잘랐습니다" in note for note in result.notes)
+
+
+class Test소성은_항복부터:
+    """**소성 곡선의 시작은 항복강도가 정한다** — E 직선이 아니라 (2026-09-11 VOC).
+
+    v1 은 `ε - σ/E` 를 첫 점부터 적용하고 음수만 0 으로 눌렀다. 「어디서부터
+    소성인가」 를 정하는 자리가 없어서 시작점이 노이즈·토우·컴플라이언스·E 값에
+    따라 움직였고, 항복강도 단계의 오프셋은 **아무도 읽지 않아** 아무리 바꿔도
+    이 열은 비트 하나 안 바뀌었다. 토우가 있으면 탄성 구간이 통째로 남아 덱 첫
+    점이 (0, 0 MPa) 가 됐다.
+
+        첫 점은 (0, Rp)          솔버는 첫 점을 항복점으로 읽는다
+        Rp 앞은 없다             탄성 구간의 응력이 소성 곡선에 남지 않는다
+        둘째 점은 오프셋 근처     잰 점을 옮기지 않는다 — 항복점까지의 영구 변형은 첫 구간이다
+        오프셋이 시작을 정한다    바꾸면 첫 점이 움직인다
+        토우가 있어도 같다        E 직선 아래로 처진 초기 구간이 새어 들어오지 않는다
+    """
+
+    @staticmethod
+    def _run(frame: Frame, offset: float = 0.002) -> processing.PipelineResult:
+        return processing.apply(
+            [
+                Step(
+                    "tensile.proof_stress",
+                    {"youngs_modulus": E_TRUE, "offset_strain": offset},
+                ),
+                Step(
+                    "tensile.true_plastic",
+                    {"youngs_modulus": E_TRUE, "proof_stress": "@proof_stress"},
+                ),
+            ],
+            frame,
+        )
+
+    def test_첫_점이_항복점이고_그_앞은_없다(self) -> None:
+        result = self._run(synthetic())
+        rp = scalar(result, "proof_stress")
+        plastic = result.frame.columns["strain_true_plastic"]
+        eng_stress = result.frame.columns["stress_engineering"]
+        assert plastic[0] == 0.0
+        # 첫 줄은 곡선이 Rp 를 지나는 보간 교점 — 공칭응력이 정확히 Rp 다.
+        assert eng_stress[0] == pytest.approx(rp, rel=1e-9)
+        assert np.all(eng_stress >= rp * (1 - 1e-9))
+        assert np.all(plastic[1:] > 0)
+        assert any("항복점으로 읽습니다" in note for note in result.notes)
+
+    def test_둘째_점부터는_식_그대로라_오프셋_근처에서_시작한다(self) -> None:
+        result = self._run(synthetic(), offset=0.002)
+        plastic = result.frame.columns["strain_true_plastic"]
+        # 잰 점은 안 옮긴다. 오프셋 정의상 항복점에 이미 0.2% 의 영구 변형이 있다.
+        assert 0.0015 < plastic[1] < 0.004
+
+    def test_오프셋이_시작점을_정한다(self) -> None:
+        low = self._run(synthetic(), offset=0.001)
+        high = self._run(synthetic(), offset=0.005)
+        first_low = low.frame.columns["stress_true"][0]
+        first_high = high.frame.columns["stress_true"][0]
+        assert first_high > first_low
+        assert low.frame.length() > high.frame.length()
+
+    def test_토우가_있어도_탄성_구간이_새어_들지_않는다(self) -> None:
+        """v1 의 증상 그대로 — 토우 구간은 E 직선 아래에 있어 `ε - σ/E > 0` 이다."""
+        frame = synthetic_with_toe()
+        result = self._run(frame)
+        eng_stress = result.frame.columns["stress_engineering"]
+        rp = scalar(result, "proof_stress")
+        assert np.all(eng_stress >= rp * (1 - 1e-9))
+        # 옛 방식이면 토우의 점들이 양의 소성변형률을 달고 남는다.
+        old = processing.apply([Step("tensile.true_plastic", WHOLE)], frame)
+        leaked = old.frame.columns["stress_engineering"] < rp
+        assert np.any(leaked & (old.frame.columns["strain_true_plastic"] > 0))
+
+    def test_항복강도를_안_이어_붙이면_어디를_고칠지_말한다(self) -> None:
+        with pytest.raises(processing.ProcessingError, match="@proof_stress"):
+            processing.apply(
+                [Step("tensile.true_plastic", {"youngs_modulus": E_TRUE})], synthetic()
+            )
 
 
 class Test네킹:

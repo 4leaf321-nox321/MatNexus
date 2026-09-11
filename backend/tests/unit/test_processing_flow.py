@@ -106,8 +106,15 @@ class TestDeclaredColumns:
             Step("tensile.engineering", {"gauge_length": 0.05, "area": 12.12e-6}),
         ]
         before = processing.apply(steps, source_frame()).frame
+        # 이 곡선은 탄성뿐이라 항복이 없다 — 열 이름을 보는 시험이므로 옛 방식으로.
         result = processing.apply(
-            [Step("tensile.true_plastic", {"youngs_modulus": 200e9})], before
+            [
+                Step(
+                    "tensile.true_plastic",
+                    {"youngs_modulus": 200e9, "yield_policy": "line_crossing"},
+                )
+            ],
+            before,
         )
         added = set(result.frame.columns) - set(before.columns)
         assert added == {item.key for item in plugin.makes_columns}
@@ -238,6 +245,8 @@ class TestRequired:
         "tensile.proof_stress": {"youngs_modulus": 200e9},
         "tensile.true_plastic": {
             "youngs_modulus": 200e9,
+            # 이 곡선(기울기 8 GPa 직선)이 지나는 값이면 된다 — 항복점을 앉히는 것을 본다.
+            "proof_stress": 40e6,
             "necking_policy": "manual_index",
             "manual_index": 100,
         },

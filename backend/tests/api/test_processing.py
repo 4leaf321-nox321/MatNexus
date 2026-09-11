@@ -486,8 +486,15 @@ class Test미리보기:
                 "options": {"method": "manual", "manual_modulus": 200e9},
             },
             {
-                "plugin": "tensile.true_plastic",
+                "plugin": "tensile.proof_stress",
                 "options": {"youngs_modulus": "@youngs_modulus"},
+            },
+            {
+                "plugin": "tensile.true_plastic",
+                "options": {
+                    "youngs_modulus": "@youngs_modulus",
+                    "proof_stress": "@proof_stress",
+                },
             },
         ]
         body = {"test_run_id": run_id, "steps": steps}
@@ -1408,8 +1415,15 @@ class Test저장된_결과의_곡선:
                 "options": {"method": "manual", "manual_modulus": 200e9},
             },
             {
-                "plugin": "tensile.true_plastic",
+                "plugin": "tensile.proof_stress",
                 "options": {"youngs_modulus": "@youngs_modulus"},
+            },
+            {
+                "plugin": "tensile.true_plastic",
+                "options": {
+                    "youngs_modulus": "@youngs_modulus",
+                    "proof_stress": "@proof_stress",
+                },
             },
         ]
         stored = client.post(

@@ -182,6 +182,7 @@ def _steps(end: float) -> list[dict[str, Any]]:
             "plugin": "tensile.true_plastic",
             "options": {
                 "youngs_modulus": "@youngs_modulus",
+                "proof_stress": "@proof_stress",
                 "necking_policy": "observed_full_domain",
                 "negative_policy": "clip_zero",
             },
@@ -509,20 +510,29 @@ class Test적합:
         진응력 변환식은 균일 변형을 전제한다. 네킹 뒤를 함께 적합하면 파라미터가
         참값에서 멀어진다 — 그런데 곡선은 여전히 그럴듯하게 그려진다.
         """
-        _process(client, admin_headers, loaded, NECKED_END)
-        fit = client.post(
-            "/api/fitting/preview",
-            json={
-                "material_id": loaded["material_id"],
-                "test_type_key": "tensile",
-                "orientation": "MD",
-                "families": ["voce"],
-            },
-            headers=admin_headers,
-        ).json()["fits"][0]
-        values = {item["name"]: item["value"] for item in fit["parameters"]}
-        # 균일 구간만 썼을 때는 20% 안에 들어온다(위 시험). 네킹을 섞으면 벗어난다.
-        assert abs(values["b"] / TRUE_B - 1) > 0.20
+
+        def error_of_b(end: float) -> float:
+            _process(client, admin_headers, loaded, end)
+            fit = client.post(
+                "/api/fitting/preview",
+                json={
+                    "material_id": loaded["material_id"],
+                    "test_type_key": "tensile",
+                    "orientation": "MD",
+                    "families": ["voce"],
+                },
+                headers=admin_headers,
+            ).json()["fits"][0]
+            values = {item["name"]: item["value"] for item in fit["parameters"]}
+            return abs(float(values["b"]) / TRUE_B - 1)
+
+        # **같은 곡선, 자르는 자리만 다르다.** 고정된 문턱(20%)으로 재면 소성 곡선의
+        # 시작을 항복점에 앉힌 뒤(true_plastic v2)로는 네킹이 섞여도 17% 라 문턱
+        # 아래로 내려온다 — 그것은 적합이 튼튼해진 것이지 네킹이 무해해진 것이
+        # 아니다. 견줘야 할 것은 균일 구간만 쓴 적합이다.
+        uniform, necked = error_of_b(UNIFORM_END), error_of_b(NECKED_END)
+        assert necked > 0.10
+        assert necked > 2 * uniform
 
 
 class Test내보내기:
