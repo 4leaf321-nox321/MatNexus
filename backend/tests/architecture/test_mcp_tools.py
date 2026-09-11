@@ -155,6 +155,43 @@ class TestMcp도구:
         empty = [tool.name for tool in _tools() if not ast.get_docstring(tool)]
         assert not empty, f"설명 없는 도구: {empty}"
 
+    def test_덱_도구의_단위계_기본은_SI_가_아니다(self) -> None:
+        """**안 고르면 SI 로 나가면 안 된다**(2026-09-12 결정).
+
+        AI 가 `units` 를 잊으면 SI 덱이 나갔고, 그것을 mm 계 모델에 넣으면 오류 없이
+        돌면서 답만 1000배 틀린다. 덱을 내는 도구의 `units` 는 판재 CAE 관행인
+        `mm_n_tonne` 을 기본으로 갖는다 — `None`(=서버 기본 SI)도 `"si"` 도 안 된다.
+        """
+        source = SERVER.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        constants = {
+            target.id: ast.literal_eval(node.value)
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name) and isinstance(node.value, ast.Constant)
+        }
+        checked = 0
+        for tool in _tools():
+            args = tool.args
+            if not args.defaults:
+                continue
+            names = [a.arg for a in args.args][-len(args.defaults) :]
+            defaults = dict(zip(names, args.defaults, strict=True))
+            if "units" not in defaults:
+                continue
+            checked += 1
+            default = defaults["units"]
+            value = (
+                constants.get(default.id)
+                if isinstance(default, ast.Name)
+                else ast.literal_eval(default)
+            )
+            assert value == "mm_n_tonne", (
+                f"{tool.name} 의 units 기본이 {value!r} 다 — 안 고르면 SI 로 나가는 판이다"
+            )
+        assert checked >= 3, f"units 를 받는 덱 도구를 {checked}개만 찾았다 — 이름이 바뀌었나"
+
 
 def _map_hints() -> str:
     """`get_ontology` 에 실어 보내는 들머리·길잡이의 원문."""

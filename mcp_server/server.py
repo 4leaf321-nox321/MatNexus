@@ -43,6 +43,11 @@ API_BASE = os.environ.get("MATNEXUS_API_BASE", "http://127.0.0.1:8010/api").rstr
 #: 상한이 없으면 한 번의 호출이 수십만 자가 되어 대화가 끊긴다).
 MAX_LIMIT = 50
 
+#: 덱 도구의 단위계 기본값. **SI 가 아니다.** 안 고르면 SI 로 나가던 판에서, AI 가
+#: 잊으면 mm 계 모델에 SI 덱이 들어가 오류 없이 1000배 틀렸다 — 판재 CAE 의 관행인
+#: mm·N·tonne 을 기본으로 두고, 다른 계는 사용자에게 확인해 넘긴다(2026-09-12).
+DEFAULT_DECK_UNITS = "mm_n_tonne"
+
 GUIDE_PATH = Path(__file__).parent / "guide" / "GUIDE.md"
 
 mcp = MCPServer(
@@ -414,8 +419,8 @@ async def list_unit_systems(ctx: Context) -> dict[str, Any]:
             for one in got
         ],
         "hint": (
-            "덱 도구의 units 인자에 key 를 넘긴다. 안 고르면 SI 로 나가는데,"
-            " 받는 쪽 해석 모델이 mm·tonne 계면 그대로 쓰면 안 된다."
+            "덱 도구의 units 인자에 key 를 넘긴다. 기본은 mm_n_tonne(판재 CAE 관행)이고"
+            " SI 가 아니다 — 받는 쪽 해석 모델의 계를 사용자에게 확인하고 넘겨라."
         ),
     }
 
@@ -1079,7 +1084,7 @@ def _deck_body(text: str, include_text: bool) -> dict[str, Any]:
 async def build_deck(
     ctx: Context,
     rows: list[dict[str, Any]],
-    units: str | None = None,
+    units: str = DEFAULT_DECK_UNITS,
     include_text: bool = False,
     synthesize_missing_curves: bool = False,
 ) -> dict[str, Any]:
@@ -1093,9 +1098,9 @@ async def build_deck(
     사내 카드가 있으면 **곡선 덱**(*MAT_024)으로, 문헌만 있으면 스칼라 덱으로
     나가고 한 파일로 합쳐진다. 값마다 출처 각주가 파일 안에 들어간다.
 
-    `units` 는 `list_unit_systems()` 의 key 다. **안 주면 SI 로 나간다** —
-    받는 쪽 모델이 mm·tonne 계면 그대로 쓰면 안 되니 어느 계로 뽑았는지 사람에게
-    반드시 말한다.
+    `units` 는 `list_unit_systems()` 의 key 다. **기본은 `mm_n_tonne`(판재 CAE 의
+    관행)이고 SI 가 아니다** — 받는 쪽 해석 모델의 계를 사용자에게 확인하고 넘겨라.
+    어느 계로 뽑았는지는 덱 머리에도 적히지만 사람에게 말로도 전한다.
 
     `synthesize_missing_curves=True` 면 문헌 스칼라로 **곡선을 지어** 소성 덱까지
     낸다 — 지어낸 곡선은 덱 각주에 「합성 — 실측이 아니다」 로 남고, 사람에게도
@@ -2142,18 +2147,20 @@ async def scan_deck_format(ctx: Context, deck_text: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def render_card_deck(
-    ctx: Context, card_id: str, format: str, units: str | None = None
+    ctx: Context, card_id: str, format: str, units: str = DEFAULT_DECK_UNITS
 ) -> dict[str, Any]:
     """물성 카드를 **덱 글자로 뽑는다** — 그대로 파일로 저장할 수 있는 본문.
 
     형식 목록은 `list_unit_systems` 가 아니라 `get_card` 의 `available_formats` 에
     있다.
 
-    ## `units` 를 반드시 물어보고 넘겨라
+    ## `units` 를 사용자에게 확인하고 넘겨라
 
-    `units` 는 `list_unit_systems()` 의 key 다. **안 주면 SI 로 나간다.** 판재
-    CAE 의 관행은 `mm·N·tonne` 이고 화면도 그 단위계라, SI 덱을 그대로 건네면
-    받는 사람이 손으로 환산하게 된다 — **그 손이 사고의 자리다.**
+    `units` 는 `list_unit_systems()` 의 key 다. **기본은 `mm_n_tonne`(tonne · mm ·
+    s · MPa)이고 SI 가 아니다** — 판재 CAE 의 관행이고 화면도 그 단위계다. 전에는
+    안 주면 SI 로 나갔는데, 그 SI 덱을 mm 계 모델에 그대로 넣으면 오류 없이
+    돌면서 1000배 틀린다(2026-09-12 결정). 받는 쪽 모델이 다른 계(예: LS-DYNA
+    의 mm·ms·kg)면 그 key 를 넘긴다.
 
     **네가 환산하지 마라.** 실측(2026-09-10): 이 인자가 없던 판에서 AI 가 SI 덱을
     받아 Pa→MPa 를 직접 고쳐 넣었다. 고정폭 필드에 손을 대는 일이고, 한 칸만
@@ -2179,7 +2186,7 @@ async def render_card_deck(
     )
     if isinstance(deck, dict):
         return deck  # 오류 봉투
-    return {"format": format, "units": units or "si", "deck": deck}
+    return {"format": format, "units": units, "deck": deck}
 
 
 @mcp.tool()
@@ -2187,7 +2194,7 @@ async def check_card_deck(
     ctx: Context,
     card_id: str,
     format: str,
-    units: str | None = None,
+    units: str = DEFAULT_DECK_UNITS,
     expect: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """뽑은 덱을 **되읽어 카드와 대조한다** — 건네기 전에.
@@ -2216,7 +2223,7 @@ async def check_card_deck(
         ctx,
         "POST",
         f"/fitting/cards/{card_id}/export/check",
-        {"format": format, "units": units or "si", "expect": expect or {}},
+        {"format": format, "units": units, "expect": expect or {}},
     )
 
 
