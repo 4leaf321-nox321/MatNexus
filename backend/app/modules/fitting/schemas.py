@@ -491,6 +491,8 @@ class CardValueOut(BaseModel):
     si_unit: str
     """**저장 단위(SI)** 다. 화면은 실무 단위로 바꿔 보여 준다."""
     help: str | None = None
+    property_key: str | None = None
+    """이 값이 문헌 물성으로 치면 무엇인가. `ProducedOut.property_key` 와 같다."""
 
 
 class BlockSpecOut(BaseModel):

@@ -239,6 +239,8 @@ class PropertyCandidateOut(BaseModel):
     value_count: int
     """값이 몇 건인가. 0이면 이 물성으로는 아무것도 못 찾는다."""
     internal_items: list[str]
+    measured_keys: list[str] = Field(default_factory=list)
+    """시험 처리가 이 물성으로 내는 값 이름(`proof_stress`…). 비면 잰 값은 안 찾는다."""
     """이어진 사내 물성 항목. 있으면 우리가 실제로 쓰는 물성이다."""
     parameterized: bool = False
     """**한 키에 여러 변수가 들어 있나**(ADR 0029). 참이면 값을 묻기 전에 어느
@@ -296,7 +298,8 @@ class PropertyHitOut(BaseModel):
     """값 하나와 그것을 든 재료. **값과 단위를 함께 싣는다.**"""
 
     world: str
-    """`catalog`(문헌) · `internal`(사내)."""
+    """`catalog`(문헌) · `internal`(사내 선언) · `measured`(시험으로 잰 값 — 채택된
+    처리 결과)."""
     material_id: uuid.UUID
     material_name: str
     value: float

@@ -216,6 +216,8 @@ def frequency(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="유리전이온도",
             si_unit="K",
             help="정의에 따라 값이 다릅니다. 무엇으로 쟀는지가 단계 설정에 남습니다.",
+            # 문헌도 같은 키 하나에 DSC·DMA·TMA 값을 섞어 담는다 — 조건에 기법이 남는다.
+            property_key="thermal.glass_transition",
         ),
         Produced(
             key="glass_transition_peak",

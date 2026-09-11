@@ -41,6 +41,7 @@ THERMAL = register_block(
                 key="thermal_expansion",
                 label="선팽창계수(CTE)",
                 si_unit="1/K",
+                property_key="thermal.expansion_linear",
                 help=(
                     "선팽창계수 α. 열응력 해석에 필요하다. **기준 온도가 함께 "
                     "있어야 뜻이 성립한다** — 솔버가 `α·ΔT` 로 쓰기 때문이다."
@@ -51,12 +52,14 @@ THERMAL = register_block(
                 label="비열",
                 si_unit="J/(kg.K)",
                 help="정압 비열 Cp. 과도 열해석에 필요하다.",
+                property_key="thermal.specific_heat",
             ),
             Produced(
                 key="thermal_conductivity",
                 label="열전도율",
                 si_unit="W/(m.K)",
                 help="열전도율 k. 정상·과도 열해석에 모두 필요하다.",
+                property_key="thermal.conductivity",
             ),
             Produced(
                 key="reference_temperature",

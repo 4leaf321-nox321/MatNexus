@@ -151,7 +151,13 @@ def list_families(
 
 
 def _produced(item: Produced) -> CardValueOut:
-    return CardValueOut(key=item.key, label=item.label, si_unit=item.si_unit, help=item.help)
+    return CardValueOut(
+        key=item.key,
+        label=item.label,
+        si_unit=item.si_unit,
+        help=item.help,
+        property_key=item.property_key,
+    )
 
 
 @router.get("/blocks", response_model=list[BlockSpecOut])

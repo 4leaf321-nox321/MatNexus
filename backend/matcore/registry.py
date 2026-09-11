@@ -130,6 +130,25 @@ class Produced:
     """**저장 단위(SI)** 다. 화면은 실무 단위로 바꿔 보여 준다."""
     help: str | None = None
     """무엇인지·어떻게 만들어졌는지 한 줄. 화면의 변수 목록에 그대로 뜬다."""
+    property_key: str | None = None
+    """이 값이 **문헌 물성으로 치면 무엇인가** — `mechanical.yield_strength` 처럼
+    `catalog_definitions.key`(MaterialTwin 네임스페이스)를 적는다.
+
+    ## 왜 (2026-09-12)
+
+    같은 물성이 세 이름으로 살았다 — 처리 결과 `proof_stress`, 사람이 적는
+    「항복강도」, 문헌 `mechanical.yield_strength`. 뒤 둘은 기준정보(`property_links`)
+    가 잇는데 첫째는 아무 데도 안 이어져 있어서, 「항복강도 200 MPa 근처인 재료」 를
+    물으면 **시험으로 실제로 잰 값만 빠졌다.** 제일 믿을 만한 값이 그것인데.
+
+    계산이 무엇을 내는지는 그 계산을 짠 사람이 안다 — `label`·`si_unit` 을 여기
+    적는 것과 같은 이유로 여기 적는다. 기준정보에 두지 않는 것은 부서가 바꿀 사실이
+    아니기 때문이다. 문헌 정의 271개는 안 건드린다 — 그 키를 **공용어로 빌려 쓴다.**
+
+    **같지 않은 것에 달지 않는다.** `elongation_observed` 는 기록이 끝난 지점이지
+    파단 연신율이 아니다 — `mechanical.elongation_at_break` 를 달면 잰 적 없는 값이
+    문헌값과 나란히 선다. `tests/architecture/test_property_keys.py` 가 키가 실재하는
+    문헌 정의인지 검사한다."""
 
 
 @dataclass(frozen=True)
@@ -274,6 +293,35 @@ def fits(plugin: Plugin, key: str | None, channels: Iterable[str] | None = None)
     if plugin.requires_channels and channels is not None:
         return not missing_channels(plugin, channels)
     return False
+
+
+def measured_by(property_key: str) -> list[tuple[str, str]]:
+    """이 문헌 물성을 **내는 계산과 값 이름**. `[(plugin_id, scalar_key), …]`.
+
+    「항복강도 근처인 재료」 를 물을 때 시험으로 잰 값까지 찾으려면 어느 스칼라를
+    봐야 하는지가 여기서 나온다.
+    """
+    found: list[tuple[str, str]] = []
+    for plugin in list_plugins():
+        if plugin.kind not in ("processing", "grouping"):
+            continue
+        for made in plugin.makes_values:
+            if made.property_key == property_key:
+                found.append((plugin.id, made.key))
+    return found
+
+
+def property_key_of(scalar_key: str) -> str | None:
+    """값 이름 하나가 어느 문헌 물성인가. 선언이 여럿이면 **같아야** 한다 —
+    다르면 그것은 두 계산이 같은 이름으로 다른 것을 내는 것이라 `None` 이다."""
+    keys = {
+        made.property_key
+        for plugin in list_plugins()
+        if plugin.kind in ("processing", "grouping")
+        for made in plugin.makes_values
+        if made.key == scalar_key and made.property_key
+    }
+    return keys.pop() if len(keys) == 1 else None
 
 
 def list_plugins(

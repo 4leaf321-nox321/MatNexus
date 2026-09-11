@@ -1770,7 +1770,9 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
     틀린 답**이 나간다 — 사용자에게 어느 쪽인지 물어라.
 
     `value_count` 가 0이면 그 물성으로는 아무것도 못 찾는다. `internal_items` 가
-    있으면 사내에서 실제로 쓰는 물성이다.
+    있으면 사내에서 실제로 쓰는 물성이고, `measured_keys` 가 있으면 **시험 처리가
+    이 물성을 실제로 잰다**(`proof_stress` 처럼) — 그때 `find_by_property` 는 잰
+    값까지 찾는다.
 
     ## `parameterized` 가 참이면 **변수를 먼저 골라야 한다**
 
@@ -1839,8 +1841,9 @@ async def find_by_property(
 
     ## 결과를 읽을 때
 
-    `world` 가 `catalog` 면 문헌값, `internal` 이면 사내 재료의 선언 물성이다.
-    `quality_tier` 는 문헌값의 등급이고 **tier4 도 걸러 내지 않는다**(추정·가정값도
+    `world` 가 `catalog` 면 문헌값, `internal` 이면 사내 재료에 사람이 적은 값,
+    **`measured` 면 시험으로 잰 값**(채택된 처리 결과 — 셋 중 제일 믿을 만하다;
+    `source_detail` 에 어느 시험인지 있다). `quality_tier` 는 문헌값의 등급이고 **tier4 도 걸러 내지 않는다**(추정·가정값도
     필요해서 모은 것이다) — 다만 답할 때 등급을 함께 말해라.
     `range_si` 로 실제로 건 범위를 되짚을 수 있다.
     """

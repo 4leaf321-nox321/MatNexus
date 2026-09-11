@@ -1091,6 +1091,17 @@ def search_by_property(
         # 파라미터 집합은 아직 사내로 받아 가는 길이 열리지 않았다(ADR 0029 2단계).
         notes.append("사내 재료는 안 봤습니다 — 모델 파라미터는 아직 채택 경로가 없습니다.")
     elif scope in ("all", "internal"):
+        # **시험으로 잰 값이 먼저다.** 셋 중 제일 믿을 만한 값인데 전에는 이것만 빠졌다.
+        if chosen.measured:
+            hits += property_search.measured_hits(
+                db,
+                scalar_keys=chosen.measured,
+                low=low,
+                high=high,
+                unit=unit,
+                limit=limit,
+                visible=visible_material_ids(db, user),
+            )
         if chosen.items:
             for item in chosen.items:
                 hits += property_search.internal_hits(

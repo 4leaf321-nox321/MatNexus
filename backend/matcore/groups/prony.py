@@ -244,7 +244,12 @@ def _outcome(
         ),
     ),
     makes_values=(
-        Produced(key="equilibrium_pa", label="평형 탄성률", si_unit="Pa"),
+        Produced(
+            key="equilibrium_pa",
+            label="평형 탄성률",
+            si_unit="Pa",
+            property_key="mechanical.prony_long_term_modulus",
+        ),
         Produced(key="instantaneous_pa", label="순간 탄성률", si_unit="Pa"),
         Produced(key="reference_temperature_k", label="기준 온도", si_unit="K"),
         Produced(key="term_count", label="항 수", si_unit="1"),

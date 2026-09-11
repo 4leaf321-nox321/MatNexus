@@ -665,6 +665,7 @@ def _auto_window(
             label="탄성계수",
             si_unit="Pa",
             help="탄성 구간의 기울기(E). 항복강도·진소성변형률이 이 값을 씁니다.",
+            property_key="mechanical.youngs_modulus",
         ),
         Produced(
             key="elastic_intercept",
@@ -1044,6 +1045,7 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
             key="proof_stress",
             label="항복강도",
             si_unit="Pa",
+            property_key="mechanical.yield_strength",
             help=(
                 "오프셋 선과 곡선이 만나는 점의 응력. "
                 "**만나지 않으면 외삽하지 않고 실패합니다.**"
@@ -1138,6 +1140,7 @@ def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="인장강도",
             si_unit="Pa",
             help="최대 공칭응력(UTS). 곡선의 봉우리입니다.",
+            property_key="mechanical.tensile_strength",
         ),
         Produced(
             key="strain_at_strength",

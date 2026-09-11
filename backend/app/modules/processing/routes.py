@@ -77,7 +77,13 @@ STAGE_POINTS = 300
 
 
 def _produced(item: registry.Produced) -> ProducedOut:
-    return ProducedOut(key=item.key, label=item.label, si_unit=item.si_unit, help=item.help)
+    return ProducedOut(
+        key=item.key,
+        label=item.label,
+        si_unit=item.si_unit,
+        help=item.help,
+        property_key=item.property_key,
+    )
 
 
 @router.get("/steps", response_model=list[ProcessingStepOut])

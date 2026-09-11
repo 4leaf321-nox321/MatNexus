@@ -367,6 +367,54 @@ class Test통계:
         assert td["mean"] / md["mean"] == pytest.approx(TD_FACTOR, rel=0.05)
 
 
+class Test값으로_찾기:
+    def test_시험으로_잰_값이_문헌값과_한_목록에_선다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        loaded: dict[str, Any],
+    ) -> None:
+        """**셋 중 제일 믿을 만한 값이 전에는 이것만 빠져 있었다**(2026-09-12).
+
+        `proof_stress` 는 `mechanical.yield_strength` 라는 이름표를 들고 있고
+        (`Produced.property_key`), 그 키로 물으면 채택된 처리 결과의 항복강도가
+        `world=measured` 로 나온다.
+        """
+        from app.modules.catalog.models import CatalogDefinition
+
+        db.add(
+            CatalogDefinition(
+                mt_id=880_001,
+                key="mechanical.yield_strength",
+                name="항복강도",
+                domain="mechanical",
+                si_unit="Pa",
+                value_type="number",
+            )
+        )
+        db.commit()
+        _process(client, admin_headers, loaded, UNIFORM_END)
+
+        got = client.get(
+            "/api/catalog/properties/search",
+            params={"q": "mechanical.yield_strength", "unit": "MPa", "min": 100, "max": 800},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        body = got.json()
+        assert "proof_stress" in body["resolved"]["measured_keys"]
+        measured = [one for one in body["hits"] if one["world"] == "measured"]
+        assert len(measured) == len(loaded["run_ids"]), body["hits"]
+        # 어느 시험의 값인지 되짚을 수 있다.
+        assert all("proof_stress" in one["source_detail"] for one in measured)
+        assert all(one["unit"] == "MPa" for one in measured)
+        # 합성 곡선의 참 항복(340 MPa) 근처다.
+        assert all(250 < one["value"] < 450 for one in measured), [
+            one["value"] for one in measured
+        ]
+
+
 class Test분포:
     """흩어짐에 **모양**을 붙인다. 위의 `Test통계` 는 얼마나 큰지를 봤다.
 

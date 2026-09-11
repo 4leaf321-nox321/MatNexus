@@ -66,6 +66,9 @@ class ProducedOut(BaseModel):
     label: str
     si_unit: str = "1"
     help: str | None = None
+    property_key: str | None = None
+    """이 값이 문헌 물성으로 치면 무엇인가(`mechanical.yield_strength`). 계산이
+    선언한다 — 세 이름(처리 키·선언 항목·문헌 키)을 한 키로 묶는 이름표."""
 
 
 class ProcessingStepOut(BaseModel):

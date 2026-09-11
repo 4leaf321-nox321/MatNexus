@@ -40,6 +40,7 @@ from app.modules.catalog.models import CatalogDefinition, CatalogValue
 from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
 from app.shared.text import compare_key
+from matcore import registry
 
 #: 사내 물성 항목이 사는 축.
 ITEM_AXIS = "property_item"
@@ -62,6 +63,9 @@ class Candidate:
     value_count: int
     #: 사내 물성 항목 이름들(이어져 있으면). 「우리가 실제로 쓰는 물성인가」.
     items: tuple[str, ...] = ()
+    #: 시험 처리가 이 물성으로 내는 값 이름들(`Produced.property_key`). 있으면
+    #: 잰 값까지 찾을 수 있다 — 「항복강도」 는 `proof_stress` 로 잰다.
+    measured: tuple[str, ...] = ()
     #: **한 키에 여러 변수가 들어 있나**(ADR 0029). 참이면 값을 묻기 전에 어느
     #: 변수인지 정해야 한다 — Anand 하나에 9개 상수가 들어 있다.
     parameterized: bool = False
@@ -189,6 +193,9 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
             notes.append("값이 없습니다 — 이 물성으로는 아무것도 못 찾습니다.")
         if linked:
             notes.append("사내 물성 항목: " + " · ".join(linked))
+        measured = tuple(sorted({scalar for _plugin, scalar in registry.measured_by(one.key)}))
+        if measured:
+            notes.append("시험으로 재는 값: " + " · ".join(measured))
 
         made.append(
             Candidate(
@@ -202,6 +209,7 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
                 symbol=one.symbol,
                 value_count=count,
                 items=linked,
+                measured=measured,
                 parameterized=grouped,
                 terms=variables,
                 matched_by=matched,
@@ -256,6 +264,7 @@ def describe(candidates: list[Candidate]) -> dict[str, Any]:
                 "symbol": one.symbol,
                 "value_count": one.value_count,
                 "internal_items": list(one.items),
+                "measured_keys": list(one.measured),
                 "parameterized": one.parameterized,
                 "terms": list(one.terms),
                 "matched_by": one.matched_by,

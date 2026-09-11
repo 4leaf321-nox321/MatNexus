@@ -34,6 +34,7 @@ VISCOELASTIC = register_block(
                 label="평형 탄성률",
                 si_unit="Pa",
                 help="완화가 끝난 뒤(t→∞) 남는 탄성률. E∞ 다.",
+                property_key="mechanical.prony_long_term_modulus",
             ),
             Produced(
                 key="instantaneous_pa",
@@ -96,6 +97,8 @@ LVE = register_block(
                 label="저장 탄성률 (선형 구간)",
                 si_unit="Pa",
                 help="선형 구간 점들의 평균 E′. 여러 시편이면 그 시편 평균들의 평균.",
+                # 이름은 youngs_modulus 지만 잰 것은 E′ 다 — 문헌으로는 저장탄성률이다.
+                property_key="mechanical.storage_modulus",
             ),
             Produced(
                 key="lve_strain_limit",

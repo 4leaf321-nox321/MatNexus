@@ -30,13 +30,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Select, cast, select
+from sqlalchemy import Float, Select, cast, func, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
-from app.modules.materials.models import Material
+from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.processing.models import ProcessingResult
+from app.modules.tests.models import TestRun
 from app.shared.errors import AppError
 from matcore import units
 
@@ -52,7 +54,7 @@ class Hit:
     """값 하나와 그것을 든 재료."""
 
     world: str
-    """`catalog`(문헌) 또는 `internal`(사내)."""
+    """`catalog`(문헌) · `internal`(사내 선언) · `measured`(시험으로 잰 값)."""
     material_id: uuid.UUID
     material_name: str
     value_si: float
@@ -196,6 +198,68 @@ def catalog_hits(
             )
         )
     return made
+
+
+def measured_hits(
+    db: Session,
+    *,
+    scalar_keys: tuple[str, ...],
+    low: float,
+    high: float,
+    unit: str,
+    limit: int,
+    visible: Select[Any] | None = None,
+) -> list[Hit]:
+    """**시험으로 잰 값**에서 찾는다 — 채택된 처리 결과의 스칼라.
+
+    셋 중 제일 믿을 만한 값인데 전에는 이것만 빠져 있었다(2026-09-12). 어느 스칼라가
+    이 물성인지는 계산이 선언한다(`Produced.property_key`) — 여기는 그 이름들만
+    받는다. **채택된 결과만** 본다: 돌려만 보고 안 정한 시도까지 세면 한 시험이
+    값을 여럿 든다.
+    """
+    if not scalar_keys:
+        return []
+    element = func.jsonb_array_elements(ProcessingResult.scalars).table_valued("value")
+    scalar_key = cast(element.c.value, JSONB)["key"].astext
+    scalar_value = cast(cast(element.c.value, JSONB)["value"].astext, Float)
+    query = (
+        select(
+            Material.id,
+            Material.record_name,
+            TestRun.record_name,
+            scalar_key,
+            scalar_value,
+        )
+        .select_from(ProcessingResult)
+        .join(TestRun, TestRun.adopted_result_id == ProcessingResult.id)
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .join(Material, Material.id == Sample.material_id)
+        .join(element, true())
+        .where(
+            TestRun.deleted_at.is_(None),
+            Material.deleted_at.is_(None),
+            scalar_key.in_(scalar_keys),
+            scalar_value >= low,
+            scalar_value <= high,
+        )
+        .order_by(scalar_value)
+        .limit(limit)
+    )
+    if visible is not None:
+        query = query.where(Material.id.in_(visible))
+    return [
+        Hit(
+            world="measured",
+            material_id=material_id,
+            material_name=name,
+            value_si=float(value),
+            value_shown=units.from_si(value, unit),
+            unit_shown=unit,
+            source_detail=f"{run_name} · {key}",
+        )
+        for material_id, name, run_name, key, value in db.execute(query).all()
+    ]
 
 
 def internal_hits(

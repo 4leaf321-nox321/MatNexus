@@ -6915,6 +6915,8 @@ export interface components {
             key: string;
             /** Label */
             label: string;
+            /** Property Key */
+            property_key?: string | null;
             /** Si Unit */
             si_unit: string;
         };
@@ -11179,6 +11181,8 @@ export interface components {
             key: string;
             /** Label */
             label: string;
+            /** Property Key */
+            property_key?: string | null;
             /**
              * Si Unit
              * @default 1
@@ -11454,6 +11458,8 @@ export interface components {
             matched_by: string;
             /** Matched Text */
             matched_text: string | null;
+            /** Measured Keys */
+            measured_keys?: string[];
             /** Name */
             name: string;
             /** Notes */

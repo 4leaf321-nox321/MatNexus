@@ -2604,6 +2604,17 @@
             "title": "Label",
             "type": "string"
           },
+          "property_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
+          },
           "si_unit": {
             "title": "Si Unit",
             "type": "string"
@@ -14087,6 +14098,17 @@
             "title": "Label",
             "type": "string"
           },
+          "property_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
+          },
           "si_unit": {
             "default": "1",
             "title": "Si Unit",
@@ -14627,6 +14649,13 @@
               }
             ],
             "title": "Matched Text"
+          },
+          "measured_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Measured Keys",
+            "type": "array"
           },
           "name": {
             "title": "Name",

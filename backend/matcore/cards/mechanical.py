@@ -25,18 +25,21 @@ ELASTIC = register_block(
                 help=(
                     "대표 곡선의 탄성 구간에서 잰 값. 점탄성 카드에서는 순간(t=0) 탄성률이다."
                 ),
+                property_key="mechanical.youngs_modulus",
             ),
             Produced(
                 key="poisson_ratio",
                 label="푸아송비",
                 si_unit="1",
                 help="인장시험이 주지 않는다. 재료에서 물려받거나 사람이 넣는다.",
+                property_key="mechanical.poisson_ratio",
             ),
             Produced(
                 key="density",
                 label="밀도",
                 si_unit="kg/m3",
                 help="동적 해석에 필요하다. 시료의 실측값이 있으면 그것을 쓴다.",
+                property_key="physical.density",
             ),
         ),
         rows=(
