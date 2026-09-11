@@ -154,6 +154,8 @@ def test_설명은_MCP_가_실을_수_있는_모양이다() -> None:
 설정 = "다루는 방법(형식·필드·단위계) — 자료가 아니라 설정이라 마디로 둘 것이 없다"
 #: 언제 무엇이 돌았나.
 이력 = "일감·이력 — 「언제 무엇이 돌았나」 이지 「무엇이 무엇인가」 가 아니다"
+#: VOC — 사람이 사람에게 낸 제보와 그 절차.
+제보 = "제보와 그 절차(등록·접수·해결) — 사람 사이에 오가는 말이지 물성 사이가 아니다"
 
 #: 마디도 나르개도 아닌 표와 **왜 아닌가**.
 EXCLUDED_TABLES: dict[str, str] = {
@@ -170,7 +172,8 @@ EXCLUDED_TABLES: dict[str, str] = {
     "notifications": 알림,
     "bom_aliases": 기준정보,
     "property_aliases": 기준정보,
-    "voc_items": 기준정보,
+    "voc_events": 제보,
+    "voc_items": 제보,
     "vocabularies": 기준정보,
     "vocabulary_aliases": 기준정보,
     "vocabulary_dismissals": 기준정보,

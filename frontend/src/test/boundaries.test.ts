@@ -276,7 +276,8 @@ describe('모듈 경계', () => {
 const NARROW_BY_DESIGN = new Set([
   path.join('notices', 'NoticesPage.tsx'),
   path.join('notifications', 'NotificationsPage.tsx'),
-  path.join('voc', 'VocPage.tsx'),
+  // 게시판(`VocPage`)은 표라 좁히지 않는다. 한 건을 읽는 상세만 좁힌다.
+  path.join('voc', 'VocDetailPage.tsx'),
 ])
 
 describe('본문 폭', () => {

@@ -1,17 +1,13 @@
 /**
- * VOC 고치기·지우기 — **누구에게 단추가 보이는가.**
+ * VOC 게시판 — **번호·사람·날짜·상태가 한 표에 서고, 거를 수 있다.**
  *
- * 규칙은 서버가 정한다(`voc/routes.py` 의 `_mine`) — 낸 사람은 답변 전까지,
- * 관리자는 언제나. 화면이 그것과 다르면 두 가지로 틀린다.
- *
- *   보이면 안 되는데 보인다   눌러야 막힌다. 사람은 「고장」 으로 읽는다
- *   보여야 하는데 안 보인다   기능이 없는 것과 구별이 안 된다
- *
- * 그리고 **내 것인지는 서버가 준 `is_mine` 으로 안다.** 작성자 이름으로 짐작하면
- * 동명이인이 남의 제보를 고치게 된다.
+ *   번호가 붙고 최신이 위다        「VOC 12번」 이라고 부를 수 있다
+ *   상태 칩은 서버가 준 것으로 선다   상태가 늘어도 화면이 표를 안 든다
+ *   거르면 서버에 그대로 묻는다     화면에서 거르면 이 쪽에 실린 것만 걸러진다
+ *   최근 처리는 손댄 사람과 때다    등록만 된 건은 비워 둔다
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,40 +15,45 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import VocPage from '@/modules/voc/VocPage'
 
 const list = vi.fn()
-const remove = vi.fn()
+const statuses = vi.fn()
 
-vi.mock('@/modules/voc/api', () => ({
+vi.mock('@/modules/voc/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/voc/api')>()),
   vocApi: {
-    list: () => list(),
+    list: (...args: unknown[]) => list(...args),
+    statuses: () => statuses(),
     create: vi.fn(),
-    update: vi.fn(),
-    remove: (id: string) => remove(id),
-    reply: vi.fn(),
   },
-}))
-
-let isAdmin = false
-vi.mock('@/shared/auth/AuthContext', () => ({
-  useAuth: () => ({ user: { display_name: '홍길동', is_system_admin: isAdmin } }),
 }))
 
 const item = (over: Record<string, unknown> = {}) => ({
   id: 'voc-1',
+  seq: 12,
   title: '목록이 느려요',
-  body: '시험 목록이 느립니다',
   status: 'open',
+  status_label: '등록',
   page_path: '/w/metal/tests',
   created_at: '2026-08-27T10:00:00Z',
   created_by: '홍길동',
+  status_at: '2026-08-27T10:00:00Z',
+  status_by: '홍길동',
   is_mine: true,
-  reply: null,
-  replied_at: null,
+  can_edit: true,
+  event_count: 0,
   ...over,
 })
 
+const STATUSES = [
+  { key: 'open', label: '등록' },
+  { key: 'accepted', label: '접수' },
+  { key: 'in_progress', label: '처리 중' },
+  { key: 'resolved', label: '해결' },
+  { key: 'closed', label: '종료' },
+  { key: 'rejected', label: '반려' },
+]
+
 async function show(rows: unknown[]) {
-  list.mockResolvedValue(rows)
-  // 화면 위에 공지 탭이 붙어 라우터가 필요하다 — 공지와 VOC 는 한 진입점이다.
+  list.mockResolvedValue({ items: rows, total: rows.length, limit: 50, offset: 0 })
   render(
     <MemoryRouter initialEntries={['/voc']}>
       <VocPage />
@@ -61,50 +62,79 @@ async function show(rows: unknown[]) {
   await waitFor(() => expect(list).toHaveBeenCalled())
 }
 
-describe('VOC 고치기·지우기', () => {
+/** 마지막으로 서버에 보낸 질의. */
+function asked(): Record<string, unknown> {
+  return (list.mock.calls.at(-1)?.[0] ?? {}) as Record<string, unknown>
+}
+
+describe('VOC 게시판', () => {
   beforeEach(() => {
-    isAdmin = false
     list.mockReset()
-    remove.mockReset()
-    remove.mockResolvedValue(undefined)
+    statuses.mockReset()
+    statuses.mockResolvedValue(STATUSES)
   })
 
-  it('내가 낸 것은 답변 전까지 고치고 지울 수 있다', async () => {
-    await show([item()])
-    expect(await screen.findByLabelText('목록이 느려요 고치기')).toBeInTheDocument()
-    expect(screen.getByLabelText('목록이 느려요 삭제')).toBeInTheDocument()
+  it('번호·제목·상태·올린 사람·날짜가 한 줄에 선다', async () => {
+    await show([
+      item(),
+      item({
+        id: 'voc-2',
+        seq: 13,
+        title: '내보내기 오류',
+        status: 'resolved',
+        status_label: '해결',
+        created_by: '김철수',
+        status_by: '관리자',
+        status_at: '2026-08-28T09:00:00Z',
+        is_mine: false,
+        event_count: 3,
+      }),
+    ])
+    const rows = await screen.findAllByRole('row')
+    // 머리 한 줄 + 자료 두 줄
+    expect(rows).toHaveLength(3)
+    const second = rows[2]
+    expect(within(second).getByText('13')).toBeInTheDocument()
+    expect(within(second).getByRole('link', { name: '내보내기 오류' })).toHaveAttribute(
+      'href',
+      '/voc/voc-2'
+    )
+    expect(within(second).getByText('해결')).toBeInTheDocument()
+    expect(within(second).getByText('김철수')).toBeInTheDocument()
+    // 최근 처리 = 손댄 사람. 말이 오간 수도 보인다.
+    expect(within(second).getByText(/관리자/)).toBeInTheDocument()
+    expect(within(second).getByText('3')).toBeInTheDocument()
+    // 등록만 된 건은 최근 처리가 비어 있다.
+    expect(within(rows[1]).getByText('—')).toBeInTheDocument()
   })
 
-  it('답변이 달리면 단추가 사라진다', async () => {
-    // 본문이 바뀌면 답변이 딴 소리가 된다 — 그때는 새로 내는 것이 맞다.
-    await show([item({ reply: '고쳤습니다', status: 'resolved' })])
-    await screen.findByText('목록이 느려요')
-    expect(screen.queryByLabelText('목록이 느려요 고치기')).not.toBeInTheDocument()
-  })
-
-  it('남이 낸 것에는 단추가 없다', async () => {
-    // **이름이 같아도 안 된다.** `created_by` 가 아니라 `is_mine` 이 정한다.
-    await show([item({ is_mine: false, created_by: '홍길동' })])
-    await screen.findByText('목록이 느려요')
-    expect(screen.queryByLabelText('목록이 느려요 삭제')).not.toBeInTheDocument()
-  })
-
-  it('관리자는 답변이 달린 남의 것도 고칠 수 있다', async () => {
-    isAdmin = true
-    await show([item({ is_mine: false, reply: '고쳤습니다', status: 'resolved' })])
-    expect(await screen.findByLabelText('목록이 느려요 고치기')).toBeInTheDocument()
-  })
-
-  it('지우기 전에 묻는다 — 무엇이 없어지는지와 함께', async () => {
+  it('상태 칩은 서버가 준 것으로 서고, 누르면 서버에 묻는다', async () => {
     const user = userEvent.setup()
     await show([item()])
+    const chips = await screen.findByRole('group', { name: '상태로 거르기' })
+    expect(within(chips).getAllByRole('button')).toHaveLength(STATUSES.length + 1)
 
-    await user.click(await screen.findByLabelText('목록이 느려요 삭제'))
-    // 「무슨 제보가 있었는지」 까지 없어진다는 것이 이 창의 요점이다.
-    expect(await screen.findByText(/무슨 제보가 있었는지/)).toBeInTheDocument()
-    expect(remove).not.toHaveBeenCalled()
+    await user.click(within(chips).getByRole('button', { name: '처리 중' }))
+    await waitFor(() => expect(asked().status).toBe('in_progress'))
+    await user.click(within(chips).getByRole('button', { name: '전체' }))
+    await waitFor(() => expect(asked().status).toBeUndefined())
+  })
 
-    await user.click(screen.getByRole('button', { name: '삭제' }))
-    await waitFor(() => expect(remove).toHaveBeenCalledWith('voc-1'))
+  it('내 것만·글자 찾기도 서버가 거른다', async () => {
+    const user = userEvent.setup()
+    await show([item()])
+    await user.click(screen.getByLabelText('내가 낸 것만'))
+    await waitFor(() => expect(asked().mine).toBe(true))
+
+    await user.type(screen.getByLabelText('VOC 찾기'), '느려{Enter}')
+    await waitFor(() => expect(asked().q).toBe('느려'))
+  })
+
+  it('거른 결과가 없으면 「없다」 가 아니라 「조건에 맞는 것이 없다」 고 말한다', async () => {
+    const user = userEvent.setup()
+    await show([item()])
+    list.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
+    await user.click(screen.getByRole('button', { name: '반려' }))
+    expect(await screen.findByText(/거른 조건에 맞는 것이 없습니다/)).toBeInTheDocument()
   })
 })

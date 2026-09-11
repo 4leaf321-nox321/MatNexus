@@ -79,6 +79,7 @@ const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
 const VocabularyAdminPage = lazy(() => import('@/modules/vocabulary/VocabularyAdminPage'))
 const VocabularyPage = lazy(() => import('@/modules/vocabulary/VocabularyPage'))
 const VocPage = lazy(() => import('@/modules/voc/VocPage'))
+const VocDetailPage = lazy(() => import('@/modules/voc/VocDetailPage'))
 const WorkspaceHomePage = lazy(() => import('@/modules/workspaces/WorkspaceHomePage'))
 const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
 const CompositeOverviewPage = lazy(() => import('@/modules/composite/CompositeOverviewPage'))
@@ -179,6 +180,7 @@ export const router = createBrowserRouter([
           // 가리킬 수 없다(`SubTabs`).
           { path: 'notices', element: <NoticesPage /> },
           { path: 'voc', element: <VocPage /> },
+          { path: 'voc/:id', element: <VocDetailPage /> },
           // 물성 핸드북 — 배포 없이 갱신된다. 누구나 초안, 검토자가 승인(ADR 0022).
           { path: 'guide', element: <GuidePage /> },
           { path: 'guide/:documentKey', element: <GuidePage /> },

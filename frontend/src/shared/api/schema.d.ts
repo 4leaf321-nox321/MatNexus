@@ -4910,11 +4910,34 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Items */
+        /**
+         * List Items
+         * @description 게시판. **누구나 전부 본다** — 최신이 위다.
+         */
         get: operations["list_items_api_voc_get"];
         put?: never;
         /** Create Item */
         post: operations["create_item_api_voc_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voc/statuses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Statuses
+         * @description 상태의 차례와 이름. **화면이 표를 갖지 않는다** — 거르개 칩이 이것으로 선다.
+         */
+        get: operations["list_statuses_api_voc_statuses_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4928,12 +4951,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Item */
+        get: operations["get_item_api_voc__item_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Item
-         * @description **행을 없앤다.** 딸린 것이 없어 남길 것도 없다 — 화면이 먼저 묻는다.
+         * @description **행을 없앤다.** 이력도 함께 간다(CASCADE) — 화면이 먼저 묻는다.
          */
         delete: operations["delete_item_api_voc__item_id__delete"];
         options?: never;
@@ -4942,7 +4966,7 @@ export interface paths {
         patch: operations["update_item_api_voc__item_id__patch"];
         trace?: never;
     };
-    "/api/voc/{item_id}/reply": {
+    "/api/voc/{item_id}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -4951,8 +4975,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reply */
-        post: operations["reply_api_voc__item_id__reply_post"];
+        /**
+         * Add Event
+         * @description 상태를 옮기거나 말을 보탠다.
+         *
+         *     **갈 수 있는 곳만 간다.** 관리자는 `ADMIN_MOVES`, 낸 사람은 `AUTHOR_MOVES` —
+         *     「해결됐다」 는 관리자가 말하고 「됐다」 는 낸 사람이 확인한다. 말만 보태는 것은
+         *     보는 사람 누구나 할 수 있다.
+         */
+        post: operations["add_event_api_voc__item_id__events_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10753,6 +10784,17 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[VocOut] */
+        Page_VocOut_: {
+            /** Items */
+            items: components["schemas"]["VocOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /**
          * ParameterSetAdoptIn
          * @description 문헌의 한 벌을 재료로 받아 온다.
@@ -14501,10 +14543,18 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** VocOut */
-        VocOut: {
+        /** VocDetailOut */
+        VocDetailOut: {
+            /** Allowed */
+            allowed: string[];
+            /** Allowed Labels */
+            allowed_labels: {
+                [key: string]: string;
+            };
             /** Body */
             body: string;
+            /** Can Edit */
+            can_edit: boolean;
             /**
              * Created At
              * Format: date-time
@@ -14512,6 +14562,90 @@ export interface components {
             created_at: string;
             /** Created By */
             created_by: string | null;
+            /** Event Count */
+            event_count: number;
+            /** Events */
+            events: components["schemas"]["VocEventOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Mine */
+            is_mine: boolean;
+            /** Note Required */
+            note_required: string[];
+            /** Page Path */
+            page_path: string | null;
+            /** Seq */
+            seq: number;
+            /** Status */
+            status: string;
+            /**
+             * Status At
+             * Format: date-time
+             */
+            status_at: string;
+            /** Status By */
+            status_by: string | null;
+            /** Status Label */
+            status_label: string;
+            /** Title */
+            title: string;
+        };
+        /** VocEventOut */
+        VocEventOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** By */
+            by: string | null;
+            /** From Status */
+            from_status: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note: string | null;
+            /** To Status */
+            to_status: string;
+            /** To Status Label */
+            to_status_label: string;
+        };
+        /**
+         * VocEventRequest
+         * @description 상태를 옮기거나 말을 보탠다. **둘 중 하나는 있어야 한다.**
+         *
+         *     `status` 를 비우면 댓글이다. `note` 를 비우고 상태만 옮기는 것은 상태에 따라
+         *     막힌다(`NOTE_REQUIRED`) — 「해결」 만 찍힌 건은 무엇이 바뀌었는지 아무도 모른다.
+         */
+        VocEventRequest: {
+            /** Note */
+            note?: string | null;
+            /** Status */
+            status?: string | null;
+        };
+        /**
+         * VocOut
+         * @description 게시판 한 줄. **상세는 `VocDetailOut`** — 목록에 본문과 이력을 다 실으면
+         *     100건짜리 화면이 느려지고, 그 느림은 목록에서만 보인다.
+         */
+        VocOut: {
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Event Count */
+            event_count: number;
             /**
              * Id
              * Format: uuid
@@ -14521,24 +14655,28 @@ export interface components {
             is_mine: boolean;
             /** Page Path */
             page_path: string | null;
-            /** Replied At */
-            replied_at: string | null;
-            /** Reply */
-            reply: string | null;
+            /** Seq */
+            seq: number;
             /** Status */
             status: string;
+            /**
+             * Status At
+             * Format: date-time
+             */
+            status_at: string;
+            /** Status By */
+            status_by: string | null;
+            /** Status Label */
+            status_label: string;
             /** Title */
             title: string;
         };
-        /** VocReplyRequest */
-        VocReplyRequest: {
-            /** Reply */
-            reply: string;
-            /**
-             * Status
-             * @default resolved
-             */
-            status: string;
+        /** VocStatusOut */
+        VocStatusOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /**
          * VocUpdateRequest
@@ -22773,6 +22911,10 @@ export interface operations {
         parameters: {
             query?: {
                 status?: string | null;
+                q?: string | null;
+                mine?: boolean;
+                limit?: number | null;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -22786,7 +22928,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VocOut"][];
+                    "application/json": components["schemas"]["Page_VocOut_"];
                 };
             };
             /** @description Validation Error */
@@ -22819,7 +22961,58 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VocOut"];
+                    "application/json": components["schemas"]["VocDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_statuses_api_voc_statuses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocStatusOut"][];
+                };
+            };
+        };
+    };
+    get_item_api_voc__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -22883,7 +23076,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VocOut"];
+                    "application/json": components["schemas"]["VocDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -22897,7 +23090,7 @@ export interface operations {
             };
         };
     };
-    reply_api_voc__item_id__reply_post: {
+    add_event_api_voc__item_id__events_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -22908,7 +23101,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VocReplyRequest"];
+                "application/json": components["schemas"]["VocEventRequest"];
             };
         };
         responses: {
@@ -22918,7 +23111,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VocOut"];
+                    "application/json": components["schemas"]["VocDetailOut"];
                 };
             };
             /** @description Validation Error */

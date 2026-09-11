@@ -13147,6 +13147,37 @@
         "title": "Page[TestRunOut]",
         "type": "object"
       },
+      "Page_VocOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VocOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[VocOut]",
+        "type": "object"
+      },
       "ParameterSetAdoptIn": {
         "description": "문헌의 한 벌을 재료로 받아 온다.\n\n**한 벌이 통째로 온다** — `A` 만 떼어 오면 뜻이 없다. 단위는 환산하지 않는다\n(그 값들은 SI 가 아니다).",
         "properties": {
@@ -22613,11 +22644,29 @@
         "title": "VocCreateRequest",
         "type": "object"
       },
-      "VocOut": {
+      "VocDetailOut": {
         "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed",
+            "type": "array"
+          },
+          "allowed_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Allowed Labels",
+            "type": "object"
+          },
           "body": {
             "title": "Body",
             "type": "string"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
           },
           "created_at": {
             "format": "date-time",
@@ -22634,6 +22683,223 @@
               }
             ],
             "title": "Created By"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/VocEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_mine": {
+            "title": "Is Mine",
+            "type": "boolean"
+          },
+          "note_required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Note Required",
+            "type": "array"
+          },
+          "page_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Path"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_at": {
+            "format": "date-time",
+            "title": "Status At",
+            "type": "string"
+          },
+          "status_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status By"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "title",
+          "status",
+          "status_label",
+          "page_path",
+          "created_at",
+          "created_by",
+          "status_at",
+          "status_by",
+          "is_mine",
+          "can_edit",
+          "event_count",
+          "body",
+          "events",
+          "allowed",
+          "allowed_labels",
+          "note_required"
+        ],
+        "title": "VocDetailOut",
+        "type": "object"
+      },
+      "VocEventOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Status"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "to_status": {
+            "title": "To Status",
+            "type": "string"
+          },
+          "to_status_label": {
+            "title": "To Status Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "by",
+          "from_status",
+          "to_status",
+          "to_status_label",
+          "note"
+        ],
+        "title": "VocEventOut",
+        "type": "object"
+      },
+      "VocEventRequest": {
+        "description": "상태를 옮기거나 말을 보탠다. **둘 중 하나는 있어야 한다.**\n\n`status` 를 비우면 댓글이다. `note` 를 비우고 상태만 옮기는 것은 상태에 따라\n막힌다(`NOTE_REQUIRED`) — 「해결」 만 찍힌 건은 무엇이 바뀌었는지 아무도 모른다.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "VocEventRequest",
+        "type": "object"
+      },
+      "VocOut": {
+        "description": "게시판 한 줄. **상세는 `VocDetailOut`** — 목록에 본문과 이력을 다 실으면\n100건짜리 화면이 느려지고, 그 느림은 목록에서만 보인다.",
+        "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
           },
           "id": {
             "format": "uuid",
@@ -22655,31 +22921,32 @@
             ],
             "title": "Page Path"
           },
-          "replied_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Replied At"
-          },
-          "reply": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reply"
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
           },
           "status": {
             "title": "Status",
+            "type": "string"
+          },
+          "status_at": {
+            "format": "date-time",
+            "title": "Status At",
+            "type": "string"
+          },
+          "status_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status By"
+          },
+          "status_label": {
+            "title": "Status Label",
             "type": "string"
           },
           "title": {
@@ -22689,36 +22956,38 @@
         },
         "required": [
           "id",
+          "seq",
           "title",
-          "body",
           "status",
+          "status_label",
           "page_path",
           "created_at",
           "created_by",
+          "status_at",
+          "status_by",
           "is_mine",
-          "reply",
-          "replied_at"
+          "can_edit",
+          "event_count"
         ],
         "title": "VocOut",
         "type": "object"
       },
-      "VocReplyRequest": {
+      "VocStatusOut": {
         "properties": {
-          "reply": {
-            "minLength": 1,
-            "title": "Reply",
+          "key": {
+            "title": "Key",
             "type": "string"
           },
-          "status": {
-            "default": "resolved",
-            "title": "Status",
+          "label": {
+            "title": "Label",
             "type": "string"
           }
         },
         "required": [
-          "reply"
+          "key",
+          "label"
         ],
-        "title": "VocReplyRequest",
+        "title": "VocStatusOut",
         "type": "object"
       },
       "VocUpdateRequest": {
@@ -35868,6 +36137,7 @@
     },
     "/api/voc": {
       "get": {
+        "description": "게시판. **누구나 전부 본다** — 최신이 위다.",
         "operationId": "list_items_api_voc_get",
         "parameters": [
           {
@@ -35885,6 +36155,61 @@
               ],
               "title": "Status"
             }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Mine",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -35892,11 +36217,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/VocOut"
-                  },
-                  "title": "Response List Items Api Voc Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_VocOut_"
                 }
               }
             },
@@ -35935,7 +36256,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VocOut"
+                  "$ref": "#/components/schemas/VocDetailOut"
                 }
               }
             },
@@ -35958,9 +36279,35 @@
         ]
       }
     },
+    "/api/voc/statuses": {
+      "get": {
+        "description": "상태의 차례와 이름. **화면이 표를 갖지 않는다** — 거르개 칩이 이것으로 선다.",
+        "operationId": "list_statuses_api_voc_statuses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VocStatusOut"
+                  },
+                  "title": "Response List Statuses Api Voc Statuses Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Statuses",
+        "tags": [
+          "voc"
+        ]
+      }
+    },
     "/api/voc/{item_id}": {
       "delete": {
-        "description": "**행을 없앤다.** 딸린 것이 없어 남길 것도 없다 — 화면이 먼저 묻는다.",
+        "description": "**행을 없앤다.** 이력도 함께 간다(CASCADE) — 화면이 먼저 묻는다.",
         "operationId": "delete_item_api_voc__item_id__delete",
         "parameters": [
           {
@@ -35994,6 +36341,47 @@
           "voc"
         ]
       },
+      "get": {
+        "operationId": "get_item_api_voc__item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VocDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Item",
+        "tags": [
+          "voc"
+        ]
+      },
       "patch": {
         "operationId": "update_item_api_voc__item_id__patch",
         "parameters": [
@@ -36023,7 +36411,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VocOut"
+                  "$ref": "#/components/schemas/VocDetailOut"
                 }
               }
             },
@@ -36046,9 +36434,10 @@
         ]
       }
     },
-    "/api/voc/{item_id}/reply": {
+    "/api/voc/{item_id}/events": {
       "post": {
-        "operationId": "reply_api_voc__item_id__reply_post",
+        "description": "상태를 옮기거나 말을 보탠다.\n\n**갈 수 있는 곳만 간다.** 관리자는 `ADMIN_MOVES`, 낸 사람은 `AUTHOR_MOVES` —\n「해결됐다」 는 관리자가 말하고 「됐다」 는 낸 사람이 확인한다. 말만 보태는 것은\n보는 사람 누구나 할 수 있다.",
+        "operationId": "add_event_api_voc__item_id__events_post",
         "parameters": [
           {
             "in": "path",
@@ -36065,7 +36454,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/VocReplyRequest"
+                "$ref": "#/components/schemas/VocEventRequest"
               }
             }
           },
@@ -36076,7 +36465,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VocOut"
+                  "$ref": "#/components/schemas/VocDetailOut"
                 }
               }
             },
@@ -36093,7 +36482,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Reply",
+        "summary": "Add Event",
         "tags": [
           "voc"
         ]
