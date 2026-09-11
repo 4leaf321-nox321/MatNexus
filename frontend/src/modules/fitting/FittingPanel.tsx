@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  Blend,
   BookOpen,
   Check,
   ChevronDown,
@@ -29,6 +30,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  X,
 } from 'lucide-react'
 
 import { DeclaredCardDialog } from '@/modules/fitting/DeclaredCardDialog'
@@ -280,6 +282,20 @@ export function FittingPanel({ materialId }: Props) {
     } finally {
       setBusy(false)
     }
+  }
+
+  /**
+   * 주식을 고른다. **혼합은 고르는 대상이 아니다.**
+   *
+   * 혼합 후보는 서버가 `voce+swift` 처럼 `+` 가 든 키로 돌려주는데, 그것을 주식으로
+   * 삼아 다시 물으면 서버가 혼합을 조용히 빼고 답한다 — 그러면 그래프와 선택이
+   * 함께 사라진다(2026-09-11 VOC). 혼합은 「주식 + 상대 + 비중」 이라는 상태이지
+   * 후보가 아니다. 상대를 주식으로 고르거나 식을 안 쓰기로 하면 상대는 푼다.
+   */
+  function choose(family: string | null) {
+    if (family?.includes('+')) return
+    if (family === null || family === blendWith) setBlendWith('')
+    setChosen(family)
   }
 
   // **조정하면 다시 그린다.** 계산은 서버가 한다 — 화면이 식을 복제하면 두
@@ -568,7 +584,7 @@ export function FittingPanel({ materialId }: Props) {
                 onBlendWeight={setBlendWeight}
                 preview={preview}
                 chosen={chosen}
-                onChoose={setChosen}
+                onChoose={choose}
                 onSave={() => setSaving(true)}
               />
             )}
@@ -661,6 +677,12 @@ function FitComparison({
   // 전에는 여기서 `?? preview.fits[0]` 로 되돌려서, 표만 쓰겠다는 선택이
   // 화면에서 사라졌다 — 서버는 받는데 갈 길이 없었다.
   const fit = chosen === null ? null : preview.fits.find((item) => item.family === chosen)
+  // 후보(식 하나짜리)와 혼합(서버가 `a+b` 키로 돌려준 것)을 가른다.
+  const plain = preview.fits.filter((item) => !item.family.includes('+'))
+  const blended =
+    fit && blendWith !== ''
+      ? (preview.fits.find((item) => item.family === `${fit.family}+${blendWith}`) ?? null)
+      : null
   // **축 이름을 화면이 정하지 않는다.** 금속은 진응력·진소성변형률에, 고무는
   // 공칭에 맞춘다 — 그래프 축이 "진소성변형률" 이라고 붙으면 그것은 거짓말이고,
   // 그 거짓말은 화면에서만 보인다. 식 없이 표만 쓸 때는 소성 표라서 금속 축이다.
@@ -720,7 +742,10 @@ function FitComparison({
         {/* **눈으로 보고 정하는 값들이다.** 저장 모달에 있었을 때는 숫자를
             타이핑하고 저장한 뒤에야 결과를 봤다 — 194 MPa 가 갈리는 결정을
             눈 감고 내리는 셈이었다. */}
-        <div className="bg-muted/40 grid gap-3 rounded-md p-3 sm:grid-cols-2">
+        {/* 섞기는 여기 없다 — 후보 박스의 「섞기」 로 상대를 고르고, 비중은 아래
+            혼합 줄에서 정한다. 위에 셀렉트로 두었더니 「두 식을 고르는 방식이
+            둘」 이라 헷갈렸다(2026-09-11 VOC). */}
+        <div className="bg-muted/40 grid gap-3 rounded-md p-3">
           <div className="space-y-1.5">
             {/* **축 이름을 하드코딩하지 않는다.** 고무는 공칭 변형률이고, 여기에
                 "진소성변형률" 이라고 붙으면 그것은 거짓말이다. 식이 자기 축을
@@ -758,45 +783,6 @@ function FitComparison({
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="blend">섞을 식</Label>
-            <select
-              id="blend"
-              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
-              value={blendWith}
-              onChange={(event) => onBlendWith(event.target.value)}
-              disabled={chosen === null}
-            >
-              <option value="">안 섞음</option>
-              {preview.fits
-                .filter((item) => item.family !== chosen && !item.family.includes('+'))
-                .map((item) => (
-                  <option key={item.family} value={item.family}>
-                    {item.label}
-                  </option>
-                ))}
-            </select>
-            {blendWith !== '' && (
-              <>
-                <input
-                  aria-label="섞는 비중"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={blendWeight}
-                  onChange={(event) => onBlendWeight(Number(event.target.value))}
-                  className="w-full"
-                />
-                <p className="text-muted-foreground text-xs">
-                  고른 식 <b>{blendWeight.toFixed(2)}</b> : 섞을 식{' '}
-                  <b>{(1 - blendWeight).toFixed(2)}</b>. <b>데이터가 이 값을 정해 주지
-                  않습니다</b> — 적합 구간에서는 어느 값이든 비슷하게 맞으므로, 얼마나
-                  보수적으로 볼지가 정합니다.
-                </p>
-              </>
-            )}
-          </div>
         </div>
 
         {preview.notes.length > 0 && (
@@ -811,13 +797,23 @@ function FitComparison({
 
         {/* **순서만 준다. 고르지는 않는다.** 적합 구간에서 비슷한 두 식이 그
             밖에서 갈린다 — 어디까지 쓸 것인지는 해석하는 사람이 안다. */}
+        {/* **혼합은 후보 목록에 안 선다.** 후보처럼 생긴 박스를 누르면 주식이
+            되어 버리고, 그러면 서버가 혼합을 빼고 답해 그래프가 사라진다.
+            혼합은 「주식 + 상대」 라는 상태라 아래 결과 줄에 따로 그린다. */}
         <div className="grid gap-2 sm:grid-cols-3">
-          {preview.fits.map((item) => (
+          {plain.map((item) => (
             <FitCard
               key={item.family}
               fit={item}
               active={item.family === fit?.family}
+              partner={item.family === blendWith}
               onClick={() => onChoose(item.family)}
+              // 주식이 있고 그것이 아닌 것만 상대가 될 수 있다.
+              onBlend={
+                fit && item.family !== fit.family
+                  ? () => onBlendWith(item.family === blendWith ? '' : item.family)
+                  : undefined
+              }
             />
           ))}
           {/* **식을 안 쓰는 것도 선택이다.**
@@ -839,6 +835,17 @@ function FitComparison({
             </p>
           </button>
         </div>
+
+        {fit && blendWith !== '' && (
+          <BlendRow
+            primary={fit}
+            partner={plain.find((item) => item.family === blendWith) ?? null}
+            blended={blended}
+            weight={blendWeight}
+            onWeight={onBlendWeight}
+            onClear={() => onBlendWith('')}
+          />
+        )}
 
         {chosen === null && (
           <>
@@ -863,9 +870,11 @@ function FitComparison({
             <CurveChart
               points={shown(preview.source_points as [number, number][])}
               background={raw}
+              // **저장될 곡선을 그린다.** 상대를 골랐으면 카드에 실리는 것은 혼합이다 —
+              // 주식만 그려 두면 사람은 본 것과 다른 카드를 받는다.
               overlay={{
-                points: shown(fit.curve as [number, number][]),
-                label: `${fit.label} 적합`,
+                points: shown((blended ?? fit).curve as [number, number][]),
+                label: `${(blended ?? fit).label} 적합`,
               }}
               pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
               xLabel={xLabel}
@@ -921,26 +930,42 @@ function FitComparison({
 function FitCard({
   fit,
   active,
+  partner = false,
   onClick,
+  onBlend,
 }: {
   fit: Fit
   active: boolean
+  /** 주식에 섞을 상대로 골라져 있는가. */
+  partner?: boolean
   onClick: () => void
+  /** 있으면 「섞기」 단추가 선다 — 주식이 정해졌고 이것이 그 주식이 아닐 때. */
+  onBlend?: () => void
 }) {
   const poor = fit.relative_rmse >= NOTABLE_RMSE
+  // **단추 안에 단추를 두지 않는다.** 카드 전체가 하나의 <button> 이었는데,
+  // 그 안에 「섞기」 를 넣으면 HTML 이 아니다 — 겉을 div 로 두고 둘을 나란히 둔다.
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md border p-3 text-left transition ${
-        active ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'
+    <div
+      className={`rounded-md border transition ${
+        active
+          ? 'border-primary bg-primary/5'
+          : partner
+            ? 'border-primary/60 border-dashed bg-primary/[0.03]'
+            : 'hover:bg-muted/40'
       }`}
     >
-      <div className="flex items-center gap-2">
-        <span className="font-medium">{fit.label}</span>
-        {active && <Check className="text-primary size-3.5" />}
-        {poor && <AlertTriangle className="size-3.5 text-amber-600 dark:text-amber-500" />}
-      </div>
+      <button type="button" onClick={onClick} className="w-full p-3 text-left">
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{fit.label}</span>
+          {active && <Check className="text-primary size-3.5" />}
+          {partner && (
+            <span className="text-primary rounded border border-current px-1 text-[10px]">
+              섞는 상대
+            </span>
+          )}
+          {poor && <AlertTriangle className="size-3.5 text-amber-600 dark:text-amber-500" />}
+        </div>
       <dl className="text-muted-foreground mt-1 space-y-0.5 text-xs">
         <div className="flex justify-between">
           <dt>상대 RMSE</dt>
@@ -957,7 +982,93 @@ function FitCard({
           <dd className="tabular-nums">{formatScalar(fit.max_residual, 'Pa')}</dd>
         </div>
       </dl>
-    </button>
+      </button>
+      {onBlend && (
+        <div className="border-t px-3 py-1.5">
+          <button
+            type="button"
+            onClick={onBlend}
+            aria-label={`${fit.label} ${partner ? '섞기 해제' : '섞기'}`}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+          >
+            <Blend className="size-3" />
+            {partner ? '섞기 해제' : '고른 식과 섞기'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 혼합 결과 줄 — **고르는 것이 아니라 고른 상태다.**
+ *
+ * 주식과 상대가 정해지면 서버가 섞은 곡선을 하나 더 돌려준다. 그것은 후보가
+ * 아니라 「이대로 저장된다」 는 결과라, 후보 박스와 다른 모양으로 아래에 둔다.
+ * 비중 슬라이더는 여기 있다 — 움직이면 위 그래프의 곡선 끝이 움직인다.
+ */
+function BlendRow({
+  primary,
+  partner,
+  blended,
+  weight,
+  onWeight,
+  onClear,
+}: {
+  primary: Fit
+  partner: Fit | null
+  /** 서버가 돌려준 혼합. 아직 안 왔으면 `null`. */
+  blended: Fit | null
+  weight: number
+  onWeight: (value: number) => void
+  onClear: () => void
+}) {
+  const poor = blended !== null && blended.relative_rmse >= NOTABLE_RMSE
+  return (
+    <div
+      role="group"
+      aria-label="혼합"
+      className="border-primary/60 bg-primary/[0.03] space-y-2 rounded-md border p-3"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Blend className="text-primary size-4" />
+        <span className="font-medium">
+          {primary.label} <span className="tabular-nums">{weight.toFixed(2)}</span> +{' '}
+          {partner?.label ?? '…'}{' '}
+          <span className="tabular-nums">{(1 - weight).toFixed(2)}</span>
+        </span>
+        {blended ? (
+          <span className="text-muted-foreground text-xs tabular-nums">
+            상대 RMSE {(blended.relative_rmse * 100).toPrecision(3)}% · R²{' '}
+            {blended.r_squared.toFixed(5)}
+            {poor && (
+              <AlertTriangle className="ml-1 inline size-3.5 text-amber-600 dark:text-amber-500" />
+            )}
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-xs">섞는 중…</span>
+        )}
+        <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
+          <X className="size-3.5" />
+          안 섞음
+        </Button>
+      </div>
+      <input
+        aria-label="섞는 비중"
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={weight}
+        onChange={(event) => onWeight(Number(event.target.value))}
+        className="w-full"
+      />
+      <p className="text-muted-foreground text-xs">
+        <b>데이터가 이 비중을 정해 주지 않습니다</b> — 적합 구간에서는 어느 값이든 비슷하게
+        맞으므로, 늘린 구간에서 얼마나 보수적으로 볼지가 정합니다. 이 줄이 그대로 카드에
+        실립니다.
+      </p>
+    </div>
   )
 }
 

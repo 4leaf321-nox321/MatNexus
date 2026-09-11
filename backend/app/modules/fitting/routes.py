@@ -986,6 +986,17 @@ def preview(
     # **섞은 곡선도 후보로 그린다.** 저장 모달에서 숫자만 바꾸고 눈으로 못 보면
     # 가중치를 고를 근거가 없다 — 데이터가 정해 주지 않는 값이라 더 그렇다.
     drawn: list[fitting.FitResult | fitting.Blended] = list(results)
+    for key in (payload.blend_primary, payload.blend_with):
+        # **조용히 빼지 않는다.** 혼합 후보의 키(`voce+swift`)를 주식으로 받으면 전에는
+        # 혼합만 빠진 채 200 이 나갔고, 화면에서는 그래프와 선택이 함께 사라졌다
+        # (2026-09-11 VOC). 무엇이 잘못됐는지는 여기서 말해야 한다.
+        if key and "+" in key:
+            raise AppError(
+                "MNX-FITTING-0037",
+                f"'{key}' 는 이미 섞은 곡선입니다 — 혼합을 다시 섞을 수 없습니다. "
+                "식 하나를 주식으로, 다른 하나를 상대로 주세요.",
+                status=422,
+            )
     if payload.blend_primary and payload.blend_with and payload.blend_weight is not None:
         by_key = {item.family: item for item in results}
         first, second = by_key.get(payload.blend_primary), by_key.get(payload.blend_with)

@@ -328,6 +328,98 @@ describe('늘리기 칸', () => {
   })
 })
 
+describe('섞기', () => {
+  /**
+   * 주식 Voce + 상대 Swift. **혼합은 후보가 아니라 상태다** — 서버가 `voce+swift`
+   * 키로 돌려주는 곡선을 후보처럼 눌렀더니 그것이 주식이 되어 서버가 혼합을 빼고
+   * 답했고, 그래프와 선택이 함께 사라졌다(2026-09-11 VOC).
+   */
+  const voce = fit()
+  const swift = fit({ family: 'swift', label: 'Swift', relative_rmse: 0.006 })
+  const mixed = fit({
+    family: 'voce+swift',
+    label: 'Voce 0.50 + Swift 0.50',
+    relative_rmse: 0.005,
+    curve: [
+      [0.001, 2.6e8],
+      [0.2, 4.5e8],
+    ] as [number, number][],
+  })
+
+  beforeEach(() => {
+    // 주식·상대·비중이 함께 오면 혼합이 하나 더 붙는다 — 서버와 같은 규칙.
+    preview.mockImplementation((body: { blend_primary?: string; blend_with?: string }) =>
+      Promise.resolve(
+        body.blend_primary && body.blend_with
+          ? { ...bodyOf([voce, swift]), fits: [voce, swift, mixed] }
+          : bodyOf([voce, swift])
+      )
+    )
+  })
+
+  function bodyOf(fits: ReturnType<typeof fit>[]) {
+    return body(fits)
+  }
+
+  it('후보의 「섞기」 로 상대를 고르면 혼합 줄이 서고, 그래프에는 혼합 곡선이 오른다', async () => {
+    panel()
+    await compare()
+    await userEvent.click(await screen.findByRole('button', { name: 'Swift 섞기' }))
+
+    await waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ blend_primary: 'voce', blend_with: 'swift', blend_weight: 0.5 })
+      )
+    )
+    const row = await screen.findByRole('group', { name: '혼합' })
+    expect(within(row).getByText(/Voce/)).toBeInTheDocument()
+    expect(within(row).getByLabelText('섞는 비중')).toBeInTheDocument()
+    // 혼합은 후보 격자에 박스로 서지 않는다.
+    expect(screen.queryByRole('button', { name: /Voce 0\.50 \+ Swift/ })).toBeNull()
+    expect(await screen.findByText('Voce 0.50 + Swift 0.50 적합')).toBeInTheDocument()
+  })
+
+  it('혼합 줄을 눌러도 아무것도 사라지지 않는다', async () => {
+    panel()
+    await compare()
+    await userEvent.click(await screen.findByRole('button', { name: 'Swift 섞기' }))
+    const row = await screen.findByRole('group', { name: '혼합' })
+    // 서버 답이 와서 혼합 곡선까지 오른 뒤에 센다 — 그 전에 세면 늦게 온 답을 「다시 물었다」 로 읽는다.
+    await screen.findByText('Voce 0.50 + Swift 0.50 적합')
+    const calls = preview.mock.calls.length
+
+    await userEvent.click(row)
+    await userEvent.click(within(row).getByText(/Voce/))
+
+    expect(screen.getByRole('group', { name: '혼합' })).toBeInTheDocument()
+    expect(screen.getByText('Voce 0.50 + Swift 0.50 적합')).toBeInTheDocument()
+    // 다시 묻지도 않는다 — 누른 것이 선택이 아니기 때문이다.
+    expect(preview.mock.calls.length).toBe(calls)
+  })
+
+  it('상대를 주식으로 고르면 섞기가 풀린다', async () => {
+    // 같은 식을 주식이자 상대로 두면 서버는 혼합을 못 만든다.
+    panel()
+    await compare()
+    await userEvent.click(await screen.findByRole('button', { name: 'Swift 섞기' }))
+    await screen.findByRole('group', { name: '혼합' })
+
+    // 후보 박스 본체(이름 뒤에 지표가 이어진다) — 「Swift 섞기 해제」 단추와 가른다.
+    const swiftBox = screen
+      .getAllByRole('button', { name: /^Swift/ })
+      .find((one) => !one.getAttribute('aria-label'))
+    expect(swiftBox).toBeDefined()
+    await userEvent.click(swiftBox!)
+
+    await waitFor(() => expect(screen.queryByRole('group', { name: '혼합' })).toBeNull())
+    await waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ blend_primary: null, blend_with: null })
+      )
+    )
+  })
+})
+
 describe('시험 종류에 맞는 길만 연다', () => {
   /**
    * DMA 묶음에 「경화식 맞춰 보기」 가 떠서 누르면 422 였다(2026-09-05 실사용). 어느

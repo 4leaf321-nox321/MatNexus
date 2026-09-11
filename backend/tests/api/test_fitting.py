@@ -1601,6 +1601,25 @@ class Test미리보기외삽:
         after = len(client.get("/api/fitting/cards", headers=admin_headers).json())
         assert before == after
 
+    def test_혼합을_다시_섞으라고_하면_조용히_빼지_않고_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """**혼합 후보의 키를 주식으로 받으면 422 다.**
+
+        전에는 혼합만 빠진 채 200 이 나갔고, 화면에서는 그 박스를 누른 순간
+        그래프와 선택이 함께 사라졌다(2026-09-11 VOC). 무엇이 잘못됐는지 말한다.
+        """
+        response = self._preview(
+            client,
+            admin_headers,
+            ready["id"],
+            blend_primary="voce+swift",
+            blend_with="hockett_sherby",
+            blend_weight=0.5,
+        )
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "MNX-FITTING-0037"
+
     def test_섞은_곡선이_후보에_하나_더_붙는다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
     ) -> None:
