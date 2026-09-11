@@ -24,8 +24,13 @@ import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { AddToBasket } from '@/shared/components/AddToBasket'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { FacetPicker } from '@/shared/components/FacetPicker'
-import { SortButton } from '@/shared/components/ColumnFilter'
+import {
+  ColumnFilter,
+  ColumnLabel,
+  FacetPicker,
+  FILTER_HEAD,
+  FILTER_ROW,
+} from '@/shared/components/ColumnFilter'
 import { Stamp } from '@/shared/components/Stamp'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { BulkEditDialog } from '@/modules/tests/BulkEditDialog'
@@ -147,21 +152,46 @@ export default function TestRunsPage() {
     setFilters((current) => ({ ...current, q: text || undefined }))
   }
 
-  /** 열 하나를 좁힌다. **필터가 바뀌면 처음부터 다시 본다.** */
+  /**
+   * 서버가 센 줄을 거르개 선택지로 바꾼다.
+   *
+   * **값은 이름이 아니라 key 다.** 재료·종류는 기준정보 개명을 따라 이름이
+   * 바뀌는데, 걸어 둔 거르개가 옛 이름을 들고 있으면 그 목록은 조용히 0건이
+   * 된다 — 사람은 그것을 「자료가 없다」 로 읽는다.
+   */
+  function pickable(rows: { key: string; label: string; count: number }[] | undefined) {
+    return (rows ?? []).map((one) => ({ value: one.key, label: one.label, count: one.count }))
+  }
+
   /**
    * 단계 거르개. **둘을 함께 걸지 않는다** — 「거쳤다」 와 「안 거쳤다」 를 동시에
    * 걸면 언제나 0건이고, 사람은 그것을 자료가 없는 것으로 읽는다.
+   *
+   * **「거친 단계」 는 채택된 결과만 본다.** 그래서 처리가 「안 함」·「결과만」 인
+   * 것과 함께 걸면 그 역시 언제나 0건이다 — 남겨 두지 않고 푼다. 재료 목록이
+   * Family 를 바꿀 때 Category 를 푸는 것과 같은 이유다.
    */
   function narrowStep(step: string | undefined, missing: string | undefined) {
     setOffset(0)
     selection.clear()
-    setFilters((current) => ({ ...current, step, step_missing: missing }))
+    setFilters((current) => ({
+      ...current,
+      step,
+      step_missing: missing,
+      processing: step && current.processing !== 'adopted' ? undefined : current.processing,
+    }))
   }
 
+  /** 열 하나를 좁힌다. **필터가 바뀌면 처음부터 다시 본다.** */
   function narrow(key: string, value: string | undefined) {
     setOffset(0)
     selection.clear()
-    setFilters((current) => ({ ...current, [key]: value }))
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+      // 채택 전 단계를 고르면 「거친 단계」 가 남아 있어 봐야 0건이다.
+      step: key === 'processing' && value && value !== 'adopted' ? undefined : current.step,
+    }))
   }
 
   async function removePicked() {
@@ -429,78 +459,79 @@ export default function TestRunsPage() {
       {rows.length > 0 && (
         <Table>
           <TableHeader>
-            <TableRow>
+            {/* **머리 띠를 본문과 가른다.** 거르는 칸이 들어가 두 층이 되면서
+                띠가 두꺼워졌는데, 배경이 없으면 첫 줄이 머리인지 자료인지
+                한눈에 안 갈린다. 재료·시편 목록과 같은 모양이다 — 화면마다
+                거르는 자리가 다르면 그때부터 거르개를 찾는 일이 생긴다. */}
+            <TableRow className={FILTER_ROW}>
               {/* **20건을 하나씩 여는 것은 일이 아니다.** 골라서 한 번에 건다. */}
-              <TableHead className="w-8">
-                <input
-                  type="checkbox"
-                  aria-label="전부 선택"
-                  checked={selection.allOn}
-                  ref={(node) => {
-                    if (node) node.indeterminate = selection.someOn
-                  }}
-                  onChange={(event) => selection.setAll(event.target.checked)}
-                />
-              </TableHead>
-              <TableHead>
-                <SortButton label="이름" sort={handle('record_name')} />
-              </TableHead>
-              <TableHead>
-                {/* **이름이 아니라 식별자로 거른다.** 이름은 기준정보 개명을
-                    따라 바뀌는데, 걸어 둔 거르개가 옛 이름을 들고 있으면 그
-                    목록은 조용히 0건이 된다. */}
-                <FacetPicker
-                  label="재료"
-                  groups={[
-                    { rows: facets.data?.materials ?? [], value: filters.material_id, onPick: (value) => narrow('material_id', value) },
-                  ]}
-                />
-              </TableHead>
-              <TableHead>
-                <FacetPicker
-                  label="방향"
-                  groups={[
-                    { rows: facets.data?.orientations ?? [], value: filters.orientation, onPick: (value) => narrow('orientation', value) },
-                  ]}
-                />
-              </TableHead>
-              <TableHead>
-                <FacetPicker
-                  label="종류"
-                  groups={[
-                    { rows: facets.data?.test_types ?? [], value: filters.test_type_key, onPick: (value) => narrow('test_type_key', value) },
-                  ]}
-                />
-              </TableHead>
-              <TableHead>
-                <span className="inline-flex items-center gap-1">
-                  <FacetPicker
-                    label="상태"
-                    groups={[
-                      {
-                        rows: facets.data?.statuses ?? [],
-                        value: filters.status,
-                        onPick: (value) => narrow('status', value),
-                      },
-                    ]}
+              <TableHead className={`w-8 ${FILTER_HEAD}`}>
+                {/* 거르는 칸들과 **같은 높이에 선다.** 위에 붙으면 머리 띠에서
+                    혼자 떠 보인다. */}
+                <div className="flex h-[3.25rem] items-end pb-2">
+                  <input
+                    type="checkbox"
+                    aria-label="전부 선택"
+                    checked={selection.allOn}
+                    ref={(node) => {
+                      if (node) node.indeterminate = selection.someOn
+                    }}
+                    onChange={(event) => selection.setAll(event.target.checked)}
                   />
-                  <SortButton label="" sort={handle('status')} />
-                </span>
+                </div>
               </TableHead>
-              <TableHead>
+              {/* 이름은 **표 위의 찾기 상자**가 맡는다 — `record_name` 하나로
+                  재료·시료·시편·회차가 다 걸리므로 열 거르개와 성격이 다르다. */}
+              <TableHead className={`min-w-[14rem] ${FILTER_HEAD}`}>
+                <ColumnLabel sort={handle('record_name')}>이름</ColumnLabel>
+              </TableHead>
+              <TableHead className={`min-w-[10rem] ${FILTER_HEAD}`}>
+                <ColumnFilter
+                  label="재료"
+                  value={filters.material_id ?? ''}
+                  options={pickable(facets.data?.materials)}
+                  onChange={(next) => narrow('material_id', next || undefined)}
+                />
+              </TableHead>
+              <TableHead className={`w-24 ${FILTER_HEAD}`}>
+                <ColumnFilter
+                  label="방향"
+                  value={filters.orientation ?? ''}
+                  options={pickable(facets.data?.orientations)}
+                  onChange={(next) => narrow('orientation', next || undefined)}
+                />
+              </TableHead>
+              <TableHead className={`w-28 ${FILTER_HEAD}`}>
+                <ColumnFilter
+                  label="종류"
+                  value={filters.test_type_key ?? ''}
+                  options={pickable(facets.data?.test_types)}
+                  onChange={(next) => narrow('test_type_key', next || undefined)}
+                />
+              </TableHead>
+              <TableHead className={`w-28 ${FILTER_HEAD}`}>
+                <ColumnFilter
+                  label="상태"
+                  sort={handle('status')}
+                  value={filters.status ?? ''}
+                  options={pickable(facets.data?.statuses)}
+                  onChange={(next) => narrow('status', next || undefined)}
+                />
+              </TableHead>
+              <TableHead className={`min-w-[9rem] ${FILTER_HEAD}`}>
                 {/* **처리는 축이 둘이다.** 「어디까지 갔나」 와 「무엇을 거쳤나」 는
                     다른 물음이고, 둘을 겹쳐야 답이 나오는 물음이 실제로 있다 —
                     「채택은 했는데 진응력을 안 거친 것」(실측 2026-09-11: 채택된
                     52건 중 33건). 한 칸에 두 개를 세운다. */}
-                <div className="flex flex-col gap-0.5">
+                <ColumnFilter
+                  label="처리"
+                  value={filters.processing ?? ''}
+                  options={pickable(facets.data?.processing)}
+                  onChange={(next) => narrow('processing', next || undefined)}
+                >
                   <FacetPicker
-                    label="처리"
-                    groups={[
-                      { rows: facets.data?.processing ?? [], value: filters.processing, onPick: (value) => narrow('processing', value) },
-                    ]}
-                />
-                  <FacetPicker
-                    label="단계"
+                    label="처리 단계"
+                    placeholder="단계"
                     groups={[
                       {
                         // **채택된 결과를 본다고 적어 둔다.** 돌려만 보고 안 정한
@@ -520,50 +551,56 @@ export default function TestRunsPage() {
                       },
                     ]}
                   />
-                </div>
+                </ColumnFilter>
               </TableHead>
-              <TableHead className="text-right">행</TableHead>
-              <TableHead>
+              {/* 행 수는 **서버가 거르는 축이 아니다.** 거르는 칸을 두면 이 쪽에
+                  실린 것만 걸러 거짓말을 한다. */}
+              <TableHead className={`text-right ${FILTER_HEAD}`}>
+                <ColumnLabel align="right">행</ColumnLabel>
+              </TableHead>
+              <TableHead className={`w-28 ${FILTER_HEAD}`}>
                 {/* **부서와 다른 축이다.** 부서는 누가 볼 수 있는가를 정하고,
                     사업부는 누가 낸 데이터인가를 적는다. */}
-                <FacetPicker
+                <ColumnFilter
                   label="사업부"
-                  groups={[
-                    { rows: facets.data?.divisions ?? [], value: filters.division, onPick: (value) => narrow('division', value) },
-                  ]}
+                  sort={handle('division')}
+                  value={filters.division ?? ''}
+                  options={pickable(facets.data?.divisions)}
+                  onChange={(next) => narrow('division', next || undefined)}
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className={`w-32 ${FILTER_HEAD}`}>
                 {/* **묶어 보려고 적는 값이다.** 조건이지만 단위가 없는 글자라
                     목록에서 그대로 보인다 — 「2026 고온」 이 몇 건인지 세려고
                     상세를 하나씩 열게 하지 않는다. */}
-                <FacetPicker
+                <ColumnFilter
                   label="시험 그룹"
-                  groups={[
-                    { rows: facets.data?.testing_groups ?? [], value: filters.testing_group, onPick: (value) => narrow('testing_group', value) },
-                  ]}
+                  value={filters.testing_group ?? ''}
+                  options={pickable(facets.data?.testing_groups)}
+                  onChange={(next) => narrow('testing_group', next || undefined)}
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className={`w-28 ${FILTER_HEAD}`}>
                 {/* **등록한 사람과 다르다.** 등록은 파일을 올린 사람이고,
                     시험자는 실제로 장비를 돌린 사람이다 — 물어볼 데가 다르다. */}
-                <FacetPicker
+                <ColumnFilter
                   label="시험자"
-                  groups={[
-                    { rows: facets.data?.operators ?? [], value: filters.operator, onPick: (value) => narrow('operator', value) },
-                  ]}
+                  sort={handle('operator')}
+                  value={filters.operator ?? ''}
+                  options={pickable(facets.data?.operators)}
+                  onChange={(next) => narrow('operator', next || undefined)}
                 />
               </TableHead>
-              <TableHead>
-                <FacetPicker
+              <TableHead className={`w-28 ${FILTER_HEAD}`}>
+                <ColumnFilter
                   label="등록한 사람"
-                  groups={[
-                    { rows: facets.data?.registrants ?? [], value: filters.registered_by, onPick: (value) => narrow('registered_by', value) },
-                  ]}
+                  value={filters.registered_by ?? ''}
+                  options={pickable(facets.data?.registrants)}
+                  onChange={(next) => narrow('registered_by', next || undefined)}
                 />
               </TableHead>
-              <TableHead>
-                <SortButton label="등록 일시" sort={handle('created_at')} />
+              <TableHead className={`w-36 ${FILTER_HEAD}`}>
+                <ColumnLabel sort={handle('created_at')}>등록 일시</ColumnLabel>
               </TableHead>
             </TableRow>
           </TableHeader>
