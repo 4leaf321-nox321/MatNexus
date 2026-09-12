@@ -5433,7 +5433,15 @@ export interface paths {
         delete: operations["delete_event_api_voc__item_id__events__event_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Event
+         * @description 이력 한 줄의 말을 고친다 — **시스템 관리자만.**
+         *
+         *     옮기면서 적었어야 할 말을 빠뜨린 경우(VOC 2026-09-13). 상태 이동 자체는 안
+         *     고친다 — 잘못 옮겼으면 그 줄을 지우고 다시 옮긴다. 말이 필수인 상태(해결·반려)로
+         *     옮긴 줄의 말은 비울 수 없다.
+         */
+        patch: operations["update_event_api_voc__item_id__events__event_id__patch"];
         trace?: never;
     };
     "/api/vocabularies": {
@@ -15860,6 +15868,16 @@ export interface components {
             status?: string | null;
         };
         /**
+         * VocEventUpdateRequest
+         * @description 이력 한 줄의 말을 고친다 — **시스템 관리자만.** 상태 이동은 안 고친다(잘못
+         *     옮겼으면 줄을 지운다). 비우면 말 없는 이동이 된다 — 말이 필수인 상태로 옮긴
+         *     줄은 비울 수 없다.
+         */
+        VocEventUpdateRequest: {
+            /** Note */
+            note?: string | null;
+        };
+        /**
          * VocOut
          * @description 게시판 한 줄. **상세는 `VocDetailOut`** — 목록에 본문과 이력을 다 실으면
          *     100건짜리 화면이 느려지고, 그 느림은 목록에서만 보인다.
@@ -25065,6 +25083,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_event_api_voc__item_id__events__event_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VocEventUpdateRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

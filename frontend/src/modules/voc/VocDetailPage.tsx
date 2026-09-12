@@ -46,6 +46,7 @@ export default function VocDetailPage() {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [removingEvent, setRemovingEvent] = useState<VocEvent | null>(null)
+  const [editingEvent, setEditingEvent] = useState<VocEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
@@ -113,6 +114,7 @@ export default function VocDetailPage() {
             <Timeline
               events={detail.events}
               onRemove={detail.can_delete_events ? setRemovingEvent : undefined}
+              onEdit={detail.can_delete_events ? setEditingEvent : undefined}
             />
           </section>
 
@@ -129,6 +131,16 @@ export default function VocDetailPage() {
             onClose={() => setEditing(false)}
             onDone={() => {
               setEditing(false)
+              item.reload()
+            }}
+          />
+
+          <EditEventDialog
+            itemId={detail.id}
+            event={editingEvent}
+            onClose={() => setEditingEvent(null)}
+            onDone={() => {
+              setEditingEvent(null)
               item.reload()
             }}
           />
@@ -215,10 +227,13 @@ export default function VocDetailPage() {
 function Timeline({
   events,
   onRemove,
+  onEdit,
 }: {
   events: VocEvent[]
   /** 있으면 줄마다 삭제 단추가 선다 — 서버가 `can_delete_events` 로 정한다. 등록 줄은 못 지운다. */
   onRemove?: (event: VocEvent) => void
+  /** 있으면 줄마다 편집 단추가 선다 — 말만 고친다. 옮기면서 빠뜨린 말을 채우는 자리다. */
+  onEdit?: (event: VocEvent) => void
 }) {
   return (
     <ol className="space-y-2" aria-label="이력">
@@ -245,6 +260,18 @@ function Timeline({
               )}
               {one.note && <p className="mt-1.5 whitespace-pre-wrap">{one.note}</p>}
             </div>
+            {onEdit && !registered && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0"
+                aria-label="이력 편집"
+                title="이 줄의 말을 고칩니다 — 옮기면서 빠뜨린 말을 채울 때"
+                onClick={() => onEdit(one)}
+              >
+                <Pencil className="size-4" />
+              </Button>
+            )}
             {onRemove && !registered && (
               <Button
                 variant="ghost"
@@ -342,6 +369,81 @@ function ActionBox({ detail, onDone }: { detail: VocDetail; onDone: () => void }
  * 낸 것을 고친다. **제목과 본문만이다** — 상태는 절차가 정하고, 화면 경로는 접수
  * 당시의 사실이라 나중에 고칠 것이 아니다.
  */
+/**
+ * 이력 한 줄의 말 편집 — 관리자만. **상태 이동은 안 건드린다.** 잘못 옮긴 것은
+ * 지우고 다시 옮기는 것이지 글자로 바꾸는 것이 아니다 — 이력이 곧 절차의 기록이다.
+ */
+function EditEventDialog({
+  itemId,
+  event,
+  onClose,
+  onDone,
+}: {
+  itemId: string
+  event: VocEvent | null
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [note, setNote] = useState('')
+  const [opened, setOpened] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  if (event && opened !== event.id) {
+    setOpened(event.id)
+    setNote(event.note ?? '')
+  }
+  if (!event && opened !== null) setOpened(null)
+
+  async function submit() {
+    if (!event) return
+    setBusy(true)
+    setError(null)
+    try {
+      await vocApi.updateEvent(itemId, event.id, note)
+      onDone()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('고치지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const moved = event !== null && event.from_status !== event.to_status
+  return (
+    <Dialog open={event !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>이력 편집</DialogTitle>
+          <DialogDescription>
+            {moved ? `「${event?.to_status_label} 로 옮김」 의 말만 고칩니다.` : '댓글의 말을 고칩니다.'}{' '}
+            상태 이동은 바뀌지 않습니다 — 잘못 옮겼으면 이 줄을 지우고 다시 옮기세요.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label htmlFor="voc-event-note">말</Label>
+          <textarea
+            id="voc-event-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={5}
+            className={TEXTAREA}
+          />
+        </div>
+        <ErrorNotice error={error} />
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button disabled={busy || !note.trim()} onClick={submit}>
+            저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function EditDialog({
   item,
   onClose,

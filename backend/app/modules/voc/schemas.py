@@ -87,6 +87,14 @@ class VocUpdateRequest(BaseModel):
     body: str | None = Field(default=None, min_length=1)
 
 
+class VocEventUpdateRequest(BaseModel):
+    """이력 한 줄의 말을 고친다 — **시스템 관리자만.** 상태 이동은 안 고친다(잘못
+    옮겼으면 줄을 지운다). 비우면 말 없는 이동이 된다 — 말이 필수인 상태로 옮긴
+    줄은 비울 수 없다."""
+
+    note: str | None = Field(default=None, max_length=5000)
+
+
 class VocEventRequest(BaseModel):
     """상태를 옮기거나 말을 보탠다. **둘 중 하나는 있어야 한다.**
 

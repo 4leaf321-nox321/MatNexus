@@ -32,6 +32,7 @@ from app.modules.voc.schemas import (
     VocDetailOut,
     VocEventOut,
     VocEventRequest,
+    VocEventUpdateRequest,
     VocOut,
     VocStatusOut,
     VocUpdateRequest,
@@ -375,6 +376,41 @@ def delete_item(
     """**행을 없앤다.** 이력도 함께 간다(CASCADE) — 화면이 먼저 묻는다."""
     db.delete(_mine(db, item_id, user))
     db.commit()
+
+
+@router.patch("/{item_id}/events/{event_id}", response_model=VocDetailOut)
+def update_event(
+    item_id: uuid.UUID,
+    event_id: uuid.UUID,
+    payload: VocEventUpdateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> VocDetailOut:
+    """이력 한 줄의 말을 고친다 — **시스템 관리자만.**
+
+    옮기면서 적었어야 할 말을 빠뜨린 경우(VOC 2026-09-13). 상태 이동 자체는 안
+    고친다 — 잘못 옮겼으면 그 줄을 지우고 다시 옮긴다. 말이 필수인 상태(해결·반려)로
+    옮긴 줄의 말은 비울 수 없다.
+    """
+    if not user.is_system_admin:
+        raise Forbidden("MNX-VOC-0008", "이력은 시스템 관리자만 고칠 수 있습니다.")
+    item = _get(db, item_id)
+    event = db.get(VocEvent, event_id)
+    if event is None or event.item_id != item.id:
+        raise NotFound("MNX-VOC-0009", "그 이력이 없습니다.")
+    note = (payload.note or "").strip() or None
+    moved = event.from_status is not None and event.from_status != event.to_status
+    if note is None and moved and event.to_status in NOTE_REQUIRED:
+        raise AppError(
+            "MNX-VOC-0007",
+            f"'{VOC_STATUS_LABELS[event.to_status]}' 로 옮긴 줄의 말은 비울 수 없습니다.",
+            status=422,
+        )
+    if note is None and not moved:
+        raise AppError("MNX-VOC-0011", "댓글을 비우려면 그 줄을 지우세요.", status=422)
+    event.note = note
+    db.commit()
+    return _detail(db, item, user)
 
 
 @router.delete("/{item_id}/events/{event_id}", response_model=VocDetailOut)

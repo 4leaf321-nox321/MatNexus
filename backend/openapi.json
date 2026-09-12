@@ -25202,6 +25202,25 @@
         "title": "VocEventRequest",
         "type": "object"
       },
+      "VocEventUpdateRequest": {
+        "description": "이력 한 줄의 말을 고친다 — **시스템 관리자만.** 상태 이동은 안 고친다(잘못\n옮겼으면 줄을 지운다). 비우면 말 없는 이동이 된다 — 말이 필수인 상태로 옮긴\n줄은 비울 수 없다.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "VocEventUpdateRequest",
+        "type": "object"
+      },
       "VocOut": {
         "description": "게시판 한 줄. **상세는 `VocDetailOut`** — 목록에 본문과 이력을 다 실으면\n100건짜리 화면이 느려지고, 그 느림은 목록에서만 보인다.",
         "properties": {
@@ -39841,6 +39860,68 @@
           }
         },
         "summary": "Delete Event",
+        "tags": [
+          "voc"
+        ]
+      },
+      "patch": {
+        "description": "이력 한 줄의 말을 고친다 — **시스템 관리자만.**\n\n옮기면서 적었어야 할 말을 빠뜨린 경우(VOC 2026-09-13). 상태 이동 자체는 안\n고친다 — 잘못 옮겼으면 그 줄을 지우고 다시 옮긴다. 말이 필수인 상태(해결·반려)로\n옮긴 줄의 말은 비울 수 없다.",
+        "operationId": "update_event_api_voc__item_id__events__event_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VocEventUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VocDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Event",
         "tags": [
           "voc"
         ]

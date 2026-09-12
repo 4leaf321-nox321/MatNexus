@@ -18,6 +18,7 @@ const get = vi.fn()
 const event = vi.fn()
 const remove = vi.fn()
 const removeEvent = vi.fn()
+const updateEvent = vi.fn()
 
 vi.mock('@/modules/voc/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/voc/api')>()),
@@ -26,6 +27,7 @@ vi.mock('@/modules/voc/api', async (importOriginal) => ({
     event: (...args: unknown[]) => event(...args),
     remove: (id: string) => remove(id),
     removeEvent: (...args: unknown[]) => removeEvent(...args),
+    updateEvent: (...args: unknown[]) => updateEvent(...args),
     update: vi.fn(),
   },
 }))
@@ -187,6 +189,33 @@ describe('VOC 상세', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('실수로 눌렀다')
     await userEvent.click(screen.getByRole('button', { name: '삭제' }))
     await waitFor(() => expect(removeEvent).toHaveBeenCalledWith('voc-1', 'e-3'))
+  })
+
+  it('관리자는 이력의 말을 고친다 — 상태 이동은 그대로', async () => {
+    const moved = {
+      id: 'e-3',
+      at: '2026-08-28T09:00:00Z',
+      by: '관리자',
+      from_status: 'in_progress',
+      to_status: 'resolved',
+      to_status_label: '해결',
+      note: '임시',
+    }
+    updateEvent.mockResolvedValue(detail({ events: [registered, moved] }))
+    await show(detail({ events: [registered, moved], can_delete_events: true }))
+    await userEvent.click(screen.getByRole('button', { name: '이력 편집' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('해결 로 옮김')
+    const box = within(dialog).getByLabelText('말')
+    expect(box).toHaveValue('임시')
+    await userEvent.clear(box)
+    await userEvent.click(within(dialog).getByRole('button', { name: '저장' }))
+    expect(updateEvent).not.toHaveBeenCalled()
+    await userEvent.type(box, '원본 교체 기능으로 해결')
+    await userEvent.click(within(dialog).getByRole('button', { name: '저장' }))
+    await waitFor(() =>
+      expect(updateEvent).toHaveBeenCalledWith('voc-1', 'e-3', '원본 교체 기능으로 해결')
+    )
   })
 
   it('고치기·삭제는 can_edit 가 정한다 — 이름이 같아도 안 된다', async () => {

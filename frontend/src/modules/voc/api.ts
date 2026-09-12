@@ -60,6 +60,9 @@ export const vocApi = {
   event: (id: string, payload: EventRequest) => api.post<VocDetail>(`/voc/${id}/events`, payload),
   /** 이력 한 줄을 지운다 — 시스템 관리자만(`can_delete_events`). 상태는 남은 이력에서
    *  다시 정해진다. */
+  /** 이력 한 줄의 말을 고친다 — 시스템 관리자만. 상태 이동은 안 바뀐다. */
+  updateEvent: (id: string, eventId: string, note: string) =>
+    api.patch<VocDetail>(`/voc/${id}/events/${eventId}`, { note }),
   removeEvent: (id: string, eventId: string) =>
     api.delete<VocDetail>(`/voc/${id}/events/${eventId}`),
 }

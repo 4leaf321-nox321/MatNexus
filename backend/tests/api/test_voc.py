@@ -204,6 +204,41 @@ class Test절차:
         assert back.json()["status"] == "in_progress"
         assert [one["note"] for one in back.json()["events"]][-1] == "메모 하나"
 
+    def test_관리자는_이력의_말을_고치되_필수인_말은_못_비운다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        """옮기면서 적었어야 할 말을 빠뜨린 경우(VOC 2026-09-13)."""
+        hong = member_headers(client, db, workspace)
+        item_id = _voc(client, hong)["id"]
+        moved = _move(client, admin_headers, item_id, "resolved", "임시")
+        event_id = moved.json()["events"][-1]["id"]
+
+        denied = client.patch(
+            f"/api/voc/{item_id}/events/{event_id}", json={"note": "몰래"}, headers=hong
+        )
+        assert denied.status_code == 403
+
+        fixed = client.patch(
+            f"/api/voc/{item_id}/events/{event_id}",
+            json={"note": "v1.229 에서 고쳤습니다 — 원본 교체 기능"},
+            headers=admin_headers,
+        )
+        assert fixed.status_code == 200, fixed.text
+        body = fixed.json()
+        assert body["events"][-1]["note"] == "v1.229 에서 고쳤습니다 — 원본 교체 기능"
+        assert body["events"][-1]["to_status"] == "resolved", "상태 이동은 그대로다"
+        assert body["status"] == "resolved"
+
+        # 「해결」 로 옮긴 줄의 말은 비울 수 없다 — 무엇이 바뀌었는지 남아야 한다.
+        emptied = client.patch(
+            f"/api/voc/{item_id}/events/{event_id}", json={"note": "  "}, headers=admin_headers
+        )
+        assert emptied.status_code == 422
+
     def test_해결과_반려는_말_없이는_못_옮긴다(
         self,
         client: TestClient,
