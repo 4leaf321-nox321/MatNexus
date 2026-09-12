@@ -16,7 +16,7 @@
  * 있다.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { DENSITY_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
@@ -40,10 +40,63 @@ interface Props {
   onCreated: (sample: Sample) => void
 }
 
+/**
+ * 지난 시료에서 **그대로 물려받는 칸.** 같은 재료의 시료는 대개 같은 제조사·같은
+ * 유통 경로에서 온다 — 시료마다 이것을 다시 적는 것이 반복의 정체였다(VOC
+ * 2026-09-13). 로트번호·생산일은 새 시료의 정체성이라 안 물려받고, 밀도는 **그
+ * 로트에서 잰 값**이라 물려받으면 안 잰 로트가 잰 것처럼 된다.
+ */
+const INHERITED: readonly (keyof SampleForm)[] = [
+  'manufacturer',
+  'distributor',
+  'primary_vendor',
+  'sales_type',
+]
+
 export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props) {
   const [form, setForm] = useState<SampleForm>(EMPTY_SAMPLE)
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
+  /** 무엇을 물려받았나 — 이름을 적어야 사람이 「이게 왜 채워져 있나」 를 안다. */
+  const [inheritedFrom, setInheritedFrom] = useState<string | null>(null)
+
+  // 창을 열 때 그 재료의 가장 최근 시료를 보고 채워 둔다. 이미 적은 것은 안 덮는다.
+  useEffect(() => {
+    if (!open || !materialId) return
+    let alive = true
+    materialsApi
+      .samples(materialId)
+      .then((samples) => {
+        if (!alive || samples.length === 0) return
+        const latest = [...samples].sort((a, b) => b.seq_no - a.seq_no)[0]
+        const carried: Partial<SampleForm> = {}
+        for (const key of INHERITED) {
+          const value = latest[key]
+          if (typeof value === 'string' && value) carried[key] = value
+        }
+        if (Object.keys(carried).length === 0) return
+        setForm((current) => {
+          const untouched = INHERITED.every((key) => current[key] === '')
+          return untouched ? { ...current, ...carried } : current
+        })
+        setInheritedFrom(latest.record_name)
+      })
+      .catch(() => {
+        /* 못 읽으면 빈 폼 — 채워 주는 것은 거들기다 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [open, materialId])
+
+  function clearInherited() {
+    setForm((current) => {
+      const next = { ...current }
+      for (const key of INHERITED) next[key] = ''
+      return next
+    })
+    setInheritedFrom(null)
+  }
 
   async function submit() {
     if (!materialId) return
@@ -55,6 +108,7 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
         samplePayload(form, DENSITY_UNIT)
       )
       setForm(EMPTY_SAMPLE)
+      setInheritedFrom(null)
       onCreated(created)
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('시료를 만들지 못했습니다.'))
@@ -73,6 +127,18 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
             바뀌지 않습니다 — 이름이 바뀌면 옛 보고서가 다른 것을 가리킵니다.
           </DialogDescription>
         </DialogHeader>
+
+        {inheritedFrom && (
+          <p className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-2.5 text-xs">
+            <span>
+              지난 시료 <b>{inheritedFrom}</b> 의 제조사·유통사·주 벤더·판매 유형을 채워
+              두었습니다 — 로트번호·생산일만 적으면 됩니다.
+            </span>
+            <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs" onClick={clearInherited}>
+              비우기
+            </Button>
+          </p>
+        )}
 
         <SampleFields
           idPrefix="new-sample"
