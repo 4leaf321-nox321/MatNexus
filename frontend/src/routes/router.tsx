@@ -169,8 +169,8 @@ export const router = createBrowserRouter([
           { path: 'composite', element: <CompositeOverviewPage /> },
           ...compositeStubs,
 
-          // 내 활동
-          { path: 'personal', ...stub('내 작업함', 'Phase 1') },
+          // 내 활동 — 「내 작업함」 은 뺐다(navigation.ts). 옛 주소는 홈으로 간다.
+          { path: 'personal', element: <Navigate to="/" replace /> },
           { path: 'notifications', element: <NotificationsPage /> },
           { path: 'me', element: <ProfilePage /> },
 

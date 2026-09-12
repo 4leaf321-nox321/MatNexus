@@ -211,7 +211,8 @@ describe('미구현 표시', () => {
       .flatMap((group) => group.items)
       .filter((item) => item.label !== '홈')
       .map((item) => item.label)
-    expect(pending.sort()).toEqual(['내 작업함', ...composite].sort())
+    // 「내 작업함」 도 뺐다(2026-09-13) — 내용이 워크벤치·알림·홈·거르개로 갈라져 생겼다.
+    expect(pending.sort()).toEqual([...composite].sort())
   })
 
   it('서버는 이제 화면이 있다 — 저장소 정리를 그 아래 탭으로 품는다', () => {
