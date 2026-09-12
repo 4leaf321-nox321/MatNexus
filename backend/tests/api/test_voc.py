@@ -367,9 +367,13 @@ class Test알림:
         admin: User,
         admin_headers: dict[str, str],
     ) -> None:
-        from app.jobs import queue
+        from app.jobs import handlers, queue, worker
 
-        from tests.api.test_notifications import drain
+        def drain(db: Session) -> None:
+            """큐가 빌 때까지 워커를 돌린다(test_notifications 와 같은 것)."""
+            handlers.load_all()
+            while worker.run_once(session=db):
+                pass
 
         hong = member_headers(client, db, workspace)
         # 기본 규칙(관리자: voc.registered, 모두: voc.changed)은 큐를 거쳐 붙는다.

@@ -23,13 +23,17 @@
  *
  * 표 위에 상자를 늘어놓으면 어느 상자가 어느 열을 거르는지 글자로 적어 둬야
  * 알 수 있다. 열 머리에 붙이면 그 설명이 필요 없다 — 칸이 곧 그 열이다.
+ *
+ * 재료·로트·규격·방향은 **서버가 센 목록에서 고른다**(재료·시험 목록과 같은
+ * 두 층 머리, 2026-09-12). 치면 「SECC」 가 「SECC-1」 까지 물고, 「규격 없음」 은
+ * 쳐서는 표현이 안 된다 — 목록이 많으면 칸 안에서 찾아 고른다.
  */
 
 import { useEffect, useState } from 'react'
 import { FlaskConical, PencilLine } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { ORIENTATIONS, materialsApi } from '@/modules/materials/api'
+import { materialsApi } from '@/modules/materials/api'
 import { BulkSpecimenDialog } from '@/modules/materials/BulkSpecimenDialog'
 import {
   ColumnFilter,
@@ -94,12 +98,18 @@ function Sizes({ row }: { row: { sizes: { label: string; value: number | null; s
   )
 }
 
+/** 서버가 센 줄을 거르개 선택지로 — 값은 이름이 아니라 key 다(재료는 id). */
+function pickable(rows: { key: string; label: string; count: number }[] | undefined) {
+  return (rows ?? []).map((one) => ({ value: one.key, label: one.label, count: one.count }))
+}
+
 export default function SpecimensPage() {
   const [material, setMaterial] = useState('')
   const [lot, setLot] = useState('')
   const [name, setName] = useState('')
   const [orientation, setOrientation] = useState('')
   const [standard, setStandard] = useState('')
+  const facets = useResource(() => materialsApi.specimenFacets(), [])
   const [offset, setOffset] = useState(0)
   // 기본은 **최근 등록순.** 목록에 늘 순서가 있어야 한다.
   const { sort, handle } = useSort('created_at', {
@@ -125,11 +135,11 @@ export default function SpecimensPage() {
   const page = useResource(
     () =>
       materialsApi.specimenRows({
-        material,
-        lot,
+        material_id: material,
+        lot_no: lot,
         q: name,
         orientation,
-        standard,
+        standard_exact: standard,
         sort: sort.key,
         desc: sort.descending,
         limit: PAGE,
@@ -156,7 +166,7 @@ export default function SpecimensPage() {
         description="재료를 거치지 않고 시편을 찾습니다. 규격·방향·치수가 시편에 붙어 있으므로, 규격으로 찾는 자리가 여기입니다."
       />
 
-      <ErrorNotice error={page.error} />
+      <ErrorNotice error={page.error ?? facets.error} />
 
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
         <span>
@@ -243,7 +253,7 @@ export default function SpecimensPage() {
                   sort={handle('material_name')}
                   value={material}
                   onChange={setMaterial}
-                  placeholder="SECC"
+                  options={pickable(facets.data?.materials)}
                 />
               </TableHead>
               <TableHead className={`min-w-[8rem] ${FILTER_HEAD}`}>
@@ -252,7 +262,7 @@ export default function SpecimensPage() {
                   sort={handle('lot_no')}
                   value={lot}
                   onChange={setLot}
-                  placeholder="L-9"
+                  options={pickable(facets.data?.lots)}
                 />
               </TableHead>
               <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
@@ -270,7 +280,7 @@ export default function SpecimensPage() {
                   sort={handle('orientation')}
                   value={orientation}
                   onChange={setOrientation}
-                  options={ORIENTATIONS}
+                  options={pickable(facets.data?.orientations)}
                 />
               </TableHead>
               <TableHead className={`min-w-[11rem] ${FILTER_HEAD}`}>
@@ -279,7 +289,7 @@ export default function SpecimensPage() {
                   sort={handle('standard')}
                   value={standard}
                   onChange={setStandard}
-                  placeholder="ASTM E8"
+                  options={pickable(facets.data?.standards)}
                 />
               </TableHead>
               {/* 치수와 시험 수는 **서버가 거르는 축이 아니다.** 거르는 칸을

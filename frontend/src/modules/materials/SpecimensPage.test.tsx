@@ -15,6 +15,24 @@ import SpecimensPage from '@/modules/materials/SpecimensPage'
 
 const specimenRows = vi.fn()
 const bulkUpdateSpecimens = vi.fn()
+const specimenFacets = vi.fn()
+
+//: 서버가 센 거르기 목록 — 재료는 id 가 key, 규격은 「(없음)」 이 끝에 선다.
+const FACETS = {
+  materials: [{ key: 'm1', label: 'SECC', count: 3 }],
+  lots: [
+    { key: 'L-9', label: 'L-9', count: 2 },
+    { key: 'L-90', label: 'L-90', count: 1 },
+  ],
+  standards: [
+    { key: 'ASTM E8/E8M 박판형', label: 'ASTM E8/E8M 박판형', count: 2 },
+    { key: '__none__', label: '(없음)', count: 1 },
+  ],
+  orientations: [
+    { key: 'MD', label: 'MD', count: 2 },
+    { key: 'TD', label: 'TD', count: 1 },
+  ],
+}
 
 // **이 화면은 이제 로그인한 사람을 안다** — 정렬을 그 계정 자리에 적어 두기
 // 때문이다. 프로바이더 없이 `useAuth` 를 부르면 던지는데, 그 가드는 옳다.
@@ -29,6 +47,7 @@ vi.mock('@/modules/materials/api', async () => {
     ...actual,
     materialsApi: {
       specimenRows: (...args: unknown[]) => specimenRows(...args),
+      specimenFacets: (...args: unknown[]) => specimenFacets(...args),
       bulkUpdateSpecimens: (...args: unknown[]) => bulkUpdateSpecimens(...args),
     },
   }
@@ -74,7 +93,9 @@ function open() {
 beforeEach(() => {
   specimenRows.mockReset()
   bulkUpdateSpecimens.mockReset()
+  specimenFacets.mockReset()
   specimenRows.mockResolvedValue(page())
+  specimenFacets.mockResolvedValue(FACETS)
   bulkUpdateSpecimens.mockResolvedValue({
     updated: 1,
     unchanged: 0,
@@ -116,13 +137,29 @@ describe('시편 표', () => {
 })
 
 describe('열 머리에서 거른다', () => {
-  it('규격을 치면 서버로 나간다', async () => {
+  it('규격은 서버가 센 목록에서 고르고, 고른 것은 정확히 나간다', async () => {
+    // 치면 「E8」 이 다른 규격까지 물고, 「규격 없음」 은 쳐서는 표현이 안 된다.
     open()
     await screen.findByText('SECC_MDOI_1.0')
 
-    await userEvent.type(screen.getByLabelText('규격 로 거르기'), 'E8')
+    const picker = await screen.findByLabelText('규격 로 거르기')
+    await userEvent.selectOptions(picker, '__none__')
     await waitFor(() =>
-      expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ standard: 'E8' }))
+      expect(specimenRows).toHaveBeenLastCalledWith(
+        expect.objectContaining({ standard_exact: '__none__' })
+      )
+    )
+    // 수가 옆에 붙는다 — 서버가 센 것이다.
+    expect(screen.getByRole('option', { name: /\(없음\).*1/ })).toBeInTheDocument()
+  })
+
+  it('재료는 이름이 아니라 id 로 나간다', async () => {
+    // 개명돼도 걸어 둔 거르개가 살아 있어야 한다.
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+    await userEvent.selectOptions(await screen.findByLabelText('재료 로 거르기'), 'm1')
+    await waitFor(() =>
+      expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ material_id: 'm1' }))
     )
   })
 
@@ -153,7 +190,7 @@ describe('열 머리에서 거른다', () => {
       expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 50 }))
     )
 
-    await userEvent.type(screen.getByLabelText('로트 로 거르기'), 'L')
+    await userEvent.selectOptions(await screen.findByLabelText('로트 로 거르기'), 'L-9')
     await waitFor(() =>
       expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }))
     )
@@ -193,7 +230,7 @@ describe('일괄 수정', () => {
     await userEvent.click(screen.getByLabelText('SECC_MDOI_1.0__01_MD_01 선택'))
     expect(screen.getByRole('button', { name: '일괄 수정' })).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('로트 로 거르기'), 'L')
+    await userEvent.selectOptions(await screen.findByLabelText('로트 로 거르기'), 'L-9')
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: '일괄 수정' })).not.toBeInTheDocument()
     )

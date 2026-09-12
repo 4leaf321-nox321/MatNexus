@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import Select, false, func, or_, select
+from sqlalchemy import ColumnElement, Select, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
@@ -71,6 +71,7 @@ from app.modules.materials.schemas import (
     SpecimenBulkUpdateOut,
     SpecimenBulkUpdateRequest,
     SpecimenCreateRequest,
+    SpecimenFacetsOut,
     SpecimenOut,
     SpecimenRowOut,
     SpecimenSizeOut,
@@ -91,6 +92,7 @@ from app.shared import (
     contention,
     display,
     exports,
+    facets,
     permissions,
     sorting,
     specimen_size,
@@ -1985,13 +1987,93 @@ SPECIMEN_SORTS = {
 _SPECIMEN_TEXT = (Specimen.record_name, Specimen.standard)
 
 
+def _specimen_scope(db: Session, user: User) -> list[ColumnElement[bool]]:
+    """시편 평면 목록의 범위 — 가시 범위는 재료를 따른다. 목록과 거르기 목록이 같이 탄다."""
+    return [
+        Specimen.deleted_at.is_(None),
+        Sample.deleted_at.is_(None),
+        Material.id.in_(select(services.visible_materials(db, user).subquery().c.id)),
+    ]
+
+
+def _visible_specimen_rows(
+    db: Session, user: User
+) -> Select[tuple[Specimen, Sample, Material]]:
+    return (
+        select(Specimen, Sample, Material)
+        .join(Sample, Specimen.sample_id == Sample.id)
+        .join(Material, Sample.material_id == Material.id)
+        .where(*_specimen_scope(db, user))
+    )
+
+
+@specimens_router.get("/facets", response_model=SpecimenFacetsOut)
+def specimen_facets(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> SpecimenFacetsOut:
+    """시편 목록을 무엇으로 거를 수 있나 — **화면이 목록에서 세지 않는다.**
+
+    한 쪽만 받아 세면 「SECC 50」 이라고 적히는데 실제로는 300장일 수 있다.
+    **지금 걸린 필터를 안 본다** — 「무엇이 있나」 를 답하는 자리다.
+    """
+    # 세 표를 join 하면 `id` 가 셋이라 subquery 열 이름이 겹친다 — 쓸 열만 이름 붙여 뽑는다.
+    base = (
+        select(
+            Material.id.label("material_id"),
+            Material.record_name.label("material_name"),
+            Sample.lot_no.label("lot_no"),
+            Specimen.standard.label("standard"),
+            Specimen.orientation.label("orientation"),
+        )
+        .join(Sample, Specimen.sample_id == Sample.id)
+        .join(Material, Sample.material_id == Material.id)
+        .where(*_specimen_scope(db, user))
+        .subquery()
+    )
+
+    def tally(*columns: Any) -> list[tuple[Any, ...]]:
+        return [
+            tuple(row)
+            for row in db.execute(
+                select(*columns, func.count()).select_from(base).group_by(*columns)
+            ).all()
+        ]
+
+    materials = sorted(
+        (
+            facets.FacetOut(key=str(key), label=str(name), count=int(count))
+            for key, name, count in tally(base.c.material_id, base.c.material_name)
+        ),
+        key=lambda one: one.label,
+    )
+
+    def pairs(column: Any) -> list[tuple[object, int]]:
+        return [(value, int(count)) for value, count in tally(column)]
+
+    return SpecimenFacetsOut(
+        materials=materials,
+        lots=facets.plain_rows(pairs(base.c.lot_no)),
+        standards=facets.plain_rows(pairs(base.c.standard)),
+        orientations=facets.plain_rows(pairs(base.c.orientation)),
+    )
+
+
 @specimens_router.get("", response_model=Page[SpecimenRowOut])
 def list_all_specimens(
     q: str | None = Query(default=None, description="시편 이름·규격 부분 일치"),
     material: str | None = Query(default=None, description="재료 이름 부분 일치"),
+    material_id: uuid.UUID | None = Query(
+        default=None, description="재료 하나. 거르기 목록의 key"
+    ),
     lot: str | None = Query(default=None, description="로트 부분 일치"),
+    lot_no: str | None = Query(
+        default=None, description="로트 정확히. `__none__` 이면 로트 없는 시편"
+    ),
     orientation: str | None = Query(default=None, description="방향. 정확히 맞아야 한다"),
     standard: str | None = Query(default=None, description="시편 규격 부분 일치"),
+    standard_exact: str | None = Query(
+        default=None, description="규격 정확히. `__none__` 이면 규격 없는 시편"
+    ),
     sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
     desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
     limit: int | None = Query(default=None, le=1000),
@@ -2014,26 +2096,31 @@ def list_all_specimens(
     """
     # **명시적 join 이다.** 시편마다 시료·재료를 물으면 N+1 이고, 그건 이 화면이
     # 느려지는 첫 번째 이유가 된다.
-    query = (
-        select(Specimen, Sample, Material)
-        .join(Sample, Specimen.sample_id == Sample.id)
-        .join(Material, Sample.material_id == Material.id)
-        .where(
-            Specimen.deleted_at.is_(None),
-            Sample.deleted_at.is_(None),
-            Material.id.in_(select(services.visible_materials(db, user).subquery().c.id)),
-        )
-    )
+    query = _visible_specimen_rows(db, user)
 
     for word in (q or "").split():
         query = query.where(or_(*[column.ilike(f"%{word}%") for column in _SPECIMEN_TEXT]))
     if material:
         query = query.where(Material.record_name.ilike(f"%{material}%"))
+    if material_id:
+        query = query.where(Material.id == material_id)
     if lot:
         query = query.where(Sample.lot_no.ilike(f"%{lot}%"))
+    # **거르기 목록에서 고른 것은 정확히 맞춘다.** 「L-9」 를 부분 일치로 두면 L-90
+    # 까지 물고, 「(없음)」 은 부분 일치로는 아예 표현이 안 된다.
+    if lot_no == facets.EMPTY_FILTER_KEY:
+        query = query.where(or_(Sample.lot_no.is_(None), Sample.lot_no == ""))
+    elif lot_no:
+        query = query.where(Sample.lot_no == lot_no)
     if standard:
         query = query.where(Specimen.standard.ilike(f"%{standard}%"))
-    if orientation:
+    if standard_exact == facets.EMPTY_FILTER_KEY:
+        query = query.where(or_(Specimen.standard.is_(None), Specimen.standard == ""))
+    elif standard_exact:
+        query = query.where(Specimen.standard == standard_exact)
+    if orientation == facets.EMPTY_FILTER_KEY:
+        query = query.where(Specimen.orientation.is_(None))
+    elif orientation:
         query = query.where(Specimen.orientation == orientation)
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0

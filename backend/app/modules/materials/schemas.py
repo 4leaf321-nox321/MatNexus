@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, model_validator
 #: 내보낸다(이 이름으로 읽는 자리가 여럿이라).
 from app.shared.display import DENSITY_UNIT as DENSITY_UNIT
 from app.shared.display import LENGTH_UNIT as LENGTH_UNIT
+from app.shared.facets import FacetOut
 
 MAX_USES = 20
 """한 재료에 붙일 수 있는 용도 수. 스무 개가 넘으면 그건 분류가 아니라 메모다."""
@@ -556,6 +557,18 @@ class SpecimenBulkUpdateOut(BaseModel):
 
     방향만 골랐는데 번호까지 달라지는 것은 사람이 예상 못 하는 일이라 조용히
     하면 안 된다(한 건 수정이 `renamed` 를 주는 것과 같은 이유)."""
+
+
+class SpecimenFacetsOut(BaseModel):
+    """시편 목록을 무엇으로 거를 수 있나. **지금 걸린 필터를 안 본다** — 「무엇이
+    있나」 를 답하는 자리다(시험 목록과 같은 판단)."""
+
+    materials: list[FacetOut]
+    """key 는 재료 id — 개명돼도 걸어 둔 거르개가 살아 있다."""
+    lots: list[FacetOut]
+    standards: list[FacetOut]
+    """빈 규격은 `(없음)` 으로 끝에 선다 — 규격을 안 붙인 시편을 찾는 자리."""
+    orientations: list[FacetOut]
 
 
 class SpecimenRowOut(SpecimenOut):

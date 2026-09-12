@@ -12,6 +12,7 @@ export type Specimen = components['schemas']['SpecimenOut']
 /** 평면 목록의 한 줄 — 시편에 재료·시료를 얹은 것. */
 export type SpecimenRow = components['schemas']['SpecimenRowOut']
 export type SpecimenRowPage = components['schemas']['Page_SpecimenRowOut_']
+export type SpecimenFacets = components['schemas']['SpecimenFacetsOut']
 export type SpecimenBulkField = components['schemas']['SpecimenBulkUpdateRequest']['field']
 export type SpecimenBulkResult = components['schemas']['SpecimenBulkUpdateOut']
 /** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
@@ -124,10 +125,16 @@ export interface MaterialQuery {
 export interface SpecimenQuery {
   q?: string
   material?: string
+  /** 거르기 목록에서 고른 재료 — id 라 개명돼도 살아 있다. */
+  material_id?: string
   lot?: string
+  /** 거르기 목록에서 고른 로트 — 정확히. `__none__` 은 로트 없음. */
+  lot_no?: string
   /** 방향만 정확히 맞춘다 — 넷뿐이라 부분 일치면 `D` 가 셋을 함께 문다. */
   orientation?: string
   standard?: string
+  /** 거르기 목록에서 고른 규격 — 정확히. `__none__` 은 규격 없음. */
+  standard_exact?: string
   /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
   sort?: string
   desc?: boolean
@@ -172,6 +179,8 @@ export const materialsApi = {
    */
   specimenRows: (query: SpecimenQuery = {}) =>
     api.get<SpecimenRowPage>(`/specimens${search(query)}`),
+  /** 시편 목록을 무엇으로 거를 수 있나 — 서버가 센다. 걸린 필터를 안 본다. */
+  specimenFacets: () => api.get<SpecimenFacets>('/specimens/facets'),
 
   /**
    * 고른 시편의 **칸 하나**를 같은 값으로 맞춘다.

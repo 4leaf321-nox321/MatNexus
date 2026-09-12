@@ -2368,6 +2368,51 @@ class Test시편을_가로질러_찾는다:
         body = client.get("/api/specimens", headers=admin_headers).json()
         assert made["md"]["id"] not in {one["id"] for one in body["items"]}
 
+    def test_거르기_목록은_서버가_세고_고른_것은_정확히_맞춘다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """재료·시험 목록과 같은 두 층 머리 — 목록이 아니라 서버가 센 것으로 고른다.
+
+        「L-9」 를 부분 일치로 두면 L-90 까지 물고, 「(없음)」 은 부분 일치로는 아예
+        표현이 안 된다 — 그래서 거르기 목록의 key 는 정확히 맞춘다.
+        """
+        made = self._two(client, admin_headers)
+        other = client.post(
+            f"/api/materials/{made['material']['id']}/samples",
+            json={"lot_no": "L-90"},
+            headers=admin_headers,
+        ).json()
+        bare = client.post(
+            f"/api/samples/{other['id']}/specimens",
+            json={"orientation": "MD", "seq_no": 1},  # 규격 없음
+            headers=admin_headers,
+        ).json()
+
+        facets = client.get("/api/specimens/facets", headers=admin_headers).json()
+        materials = {one["key"]: one for one in facets["materials"]}
+        assert materials[made["material"]["id"]]["count"] == 3
+        assert materials[made["material"]["id"]]["label"] == made["material"]["record_name"]
+        assert {one["key"]: one["count"] for one in facets["lots"]} == {"L-9": 2, "L-90": 1}
+        standards = {one["key"]: one["count"] for one in facets["standards"]}
+        assert standards["ASTM E8/E8M 박판형"] == 1
+        assert standards["__none__"] == 1
+        assert facets["standards"][-1]["label"] == "(없음)"  # 빈 것은 끝에
+        assert {one["key"] for one in facets["orientations"]} == {"MD", "TD"}
+
+        # 고른 것은 정확히 — L-9 가 L-90 을 안 문다.
+        rows = client.get("/api/specimens?lot_no=L-9", headers=admin_headers).json()["items"]
+        assert {one["id"] for one in rows} == {made["md"]["id"], made["td"]["id"]}
+        # 「(없음)」 으로 규격 안 붙인 시편을 찾는다.
+        rows = client.get(
+            "/api/specimens?standard_exact=__none__", headers=admin_headers
+        ).json()["items"]
+        assert {one["id"] for one in rows} == {bare["id"]}
+        rows = client.get(
+            f"/api/specimens?material_id={made['material']['id']}&orientation=TD",
+            headers=admin_headers,
+        ).json()["items"]
+        assert {one["id"] for one in rows} == {made["td"]["id"]}
+
 
 class Test열_머리에서_거른다:
     """`q` 는 여러 칸을 한꺼번에 뒤지는데, 열 머리에서 거를 때는 **그 열만** 봐야

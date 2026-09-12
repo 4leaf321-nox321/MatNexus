@@ -76,6 +76,7 @@ from app.shared import (
     audit,
     contention,
     curvedata,
+    facets,
     filestore,
     permissions,
     revision,
@@ -1637,20 +1638,10 @@ def reparse(
     )
 
 
-#: 「값이 없는 것」 을 가리키는 거르기 표식.
-#:
-#: **왜 별도 매개변수가 아니라 표식인가.** 거르기 목록은 서버가 준 `{key, label,
-#: count}` 를 그대로 그린다 — 화면은 그 key 를 되돌려 보낼 뿐 뜻을 모른다. 여기에
-#: `division_empty=true` 같은 칸을 더하면 거를 수 있는 열마다 매개변수가 하나씩
-#: 늘고, 화면이 열마다 다른 길을 알아야 한다.
-#:
-#: 진짜 값과 겹칠 위험이 있지만, 사업부·시험자·시험 그룹에 이 글자를 그대로 적는
-#: 일은 없다고 본다. 겹치면 그 값으로 거르는 대신 빈 것이 걸린다 — **틀린 값이
-#: 저장되는 종류의 사고는 아니다.**
-EMPTY_FILTER_KEY = "__none__"
-
-#: 빈 것을 가리키는 이름. 화면이 그대로 그린다.
-EMPTY_FILTER_LABEL = "(없음)"
+#: 「값이 없는 것」 을 가리키는 거르기 표식 — 정본은 `shared/facets.py`. 시편 목록도
+#: 같은 표식을 쓰므로 거기로 올렸다(2026-09-12). 여기 이름은 그대로 둔다.
+EMPTY_FILTER_KEY = facets.EMPTY_FILTER_KEY
+EMPTY_FILTER_LABEL = facets.EMPTY_FILTER_LABEL
 
 
 def _plain(value: object) -> object:

@@ -9080,6 +9080,30 @@
         "title": "ExportProfileSaveRequest",
         "type": "object"
       },
+      "FacetOut": {
+        "description": "거를 수 있는 값 하나와 **그것이 몇 건인가.**\n\n화면이 한 쪽에서 세면 안 된다 — 50건만 받아 세면 「인장시험 50」이라고\n적히는데 실제로는 300건일 수 있고, 그러면 필터 옆의 숫자가 거짓말을 한다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "count"
+        ],
+        "title": "FacetOut",
+        "type": "object"
+      },
       "FailedJobOut": {
         "properties": {
           "attempts": {
@@ -19487,6 +19511,47 @@
           }
         },
         "title": "SpecimenCreateRequest",
+        "type": "object"
+      },
+      "SpecimenFacetsOut": {
+        "description": "시편 목록을 무엇으로 거를 수 있나. **지금 걸린 필터를 안 본다** — 「무엇이\n있나」 를 답하는 자리다(시험 목록과 같은 판단).",
+        "properties": {
+          "lots": {
+            "items": {
+              "$ref": "#/components/schemas/FacetOut"
+            },
+            "title": "Lots",
+            "type": "array"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/FacetOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "orientations": {
+            "items": {
+              "$ref": "#/components/schemas/FacetOut"
+            },
+            "title": "Orientations",
+            "type": "array"
+          },
+          "standards": {
+            "items": {
+              "$ref": "#/components/schemas/FacetOut"
+            },
+            "title": "Standards",
+            "type": "array"
+          }
+        },
+        "required": [
+          "materials",
+          "lots",
+          "standards",
+          "orientations"
+        ],
+        "title": "SpecimenFacetsOut",
         "type": "object"
       },
       "SpecimenFieldOut": {
@@ -34505,6 +34570,25 @@
             }
           },
           {
+            "description": "재료 하나. 거르기 목록의 key",
+            "in": "query",
+            "name": "material_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "재료 하나. 거르기 목록의 key",
+              "title": "Material Id"
+            }
+          },
+          {
             "description": "로트 부분 일치",
             "in": "query",
             "name": "lot",
@@ -34520,6 +34604,24 @@
               ],
               "description": "로트 부분 일치",
               "title": "Lot"
+            }
+          },
+          {
+            "description": "로트 정확히. `__none__` 이면 로트 없는 시편",
+            "in": "query",
+            "name": "lot_no",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "로트 정확히. `__none__` 이면 로트 없는 시편",
+              "title": "Lot No"
             }
           },
           {
@@ -34556,6 +34658,24 @@
               ],
               "description": "시편 규격 부분 일치",
               "title": "Standard"
+            }
+          },
+          {
+            "description": "규격 정확히. `__none__` 이면 규격 없는 시편",
+            "in": "query",
+            "name": "standard_exact",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "규격 정확히. `__none__` 이면 규격 없는 시편",
+              "title": "Standard Exact"
             }
           },
           {
@@ -34682,6 +34802,28 @@
           }
         },
         "summary": "Bulk Update Specimens",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/specimens/facets": {
+      "get": {
+        "description": "시편 목록을 무엇으로 거를 수 있나 — **화면이 목록에서 세지 않는다.**\n\n한 쪽만 받아 세면 「SECC 50」 이라고 적히는데 실제로는 300장일 수 있다.\n**지금 걸린 필터를 안 본다** — 「무엇이 있나」 를 답하는 자리다.",
+        "operationId": "specimen_facets_api_specimens_facets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecimenFacetsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Specimen Facets",
         "tags": [
           "materials"
         ]

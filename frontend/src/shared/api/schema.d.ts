@@ -3961,6 +3961,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/specimens/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Specimen Facets
+         * @description 시편 목록을 무엇으로 거를 수 있나 — **화면이 목록에서 세지 않는다.**
+         *
+         *     한 쪽만 받아 세면 「SECC 50」 이라고 적히는데 실제로는 300장일 수 있다.
+         *     **지금 걸린 필터를 안 본다** — 「무엇이 있나」 를 답하는 자리다.
+         */
+        get: operations["specimen_facets_api_specimens_facets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/specimens/{specimen_id}": {
         parameters: {
             query?: never;
@@ -9372,6 +9395,21 @@ export interface components {
             /** Label */
             label: string;
         };
+        /**
+         * FacetOut
+         * @description 거를 수 있는 값 하나와 **그것이 몇 건인가.**
+         *
+         *     화면이 한 쪽에서 세면 안 된다 — 50건만 받아 세면 「인장시험 50」이라고
+         *     적히는데 실제로는 300건일 수 있고, 그러면 필터 옆의 숫자가 거짓말을 한다.
+         */
+        FacetOut: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
         /** FailedJobOut */
         FailedJobOut: {
             /** Attempts */
@@ -13426,6 +13464,21 @@ export interface components {
             thickness?: number | null;
             /** Width */
             width?: number | null;
+        };
+        /**
+         * SpecimenFacetsOut
+         * @description 시편 목록을 무엇으로 거를 수 있나. **지금 걸린 필터를 안 본다** — 「무엇이
+         *     있나」 를 답하는 자리다(시험 목록과 같은 판단).
+         */
+        SpecimenFacetsOut: {
+            /** Lots */
+            lots: components["schemas"]["FacetOut"][];
+            /** Materials */
+            materials: components["schemas"]["FacetOut"][];
+            /** Orientations */
+            orientations: components["schemas"]["FacetOut"][];
+            /** Standards */
+            standards: components["schemas"]["FacetOut"][];
         };
         /**
          * SpecimenFieldOut
@@ -21932,12 +21985,18 @@ export interface operations {
                 q?: string | null;
                 /** @description 재료 이름 부분 일치 */
                 material?: string | null;
+                /** @description 재료 하나. 거르기 목록의 key */
+                material_id?: string | null;
                 /** @description 로트 부분 일치 */
                 lot?: string | null;
+                /** @description 로트 정확히. `__none__` 이면 로트 없는 시편 */
+                lot_no?: string | null;
                 /** @description 방향. 정확히 맞아야 한다 */
                 orientation?: string | null;
                 /** @description 시편 규격 부분 일치 */
                 standard?: string | null;
+                /** @description 규격 정확히. `__none__` 이면 규격 없는 시편 */
+                standard_exact?: string | null;
                 /** @description 정렬할 열. 기본은 등록 일시 */
                 sort?: string | null;
                 /** @description 내림차순. 기본은 최근 등록순 */
@@ -22000,6 +22059,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    specimen_facets_api_specimens_facets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenFacetsOut"];
                 };
             };
         };
