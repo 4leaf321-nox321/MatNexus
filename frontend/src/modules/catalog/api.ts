@@ -327,6 +327,9 @@ export const catalogApi = {
     api.post<CatalogPropertyMigrated>(`/catalog/properties/${encodeURIComponent(key)}/migrate`, payload),
   createCatalogMaterial: (payload: CatalogMaterialCreate) =>
     api.post<CatalogMaterial>('/catalog/materials', payload),
+  /** 물성 이름 → 후보들. 값 넣기 창이 물성을 고를 때 쓴다. */
+  resolveProperty: (q: string) =>
+    api.get<PropertyResolve>(`/catalog/properties/resolve?q=${encodeURIComponent(q)}`),
   createValue: (materialId: string, payload: CatalogValueCreate) =>
     api.post<CatalogValueCreated>(`/catalog/materials/${materialId}/values`, payload),
   deleteValue: (valueId: string) => api.delete<void>(`/catalog/values/${valueId}`),
@@ -340,6 +343,8 @@ export type CatalogPropertyMigrated = components['schemas']['CatalogPropertyMigr
 export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate']
 export type CatalogValueCreate = components['schemas']['CatalogValueCreate']
 export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut']
+export type PropertyResolve = components['schemas']['PropertyResolveOut']
+export type PropertyCandidate = components['schemas']['PropertyCandidateOut']
 
 /** 카탈로그 도메인 — 서버 `contribute.DOMAINS` 와 같다. 새 값을 만들지 않는다. */
 export const DOMAINS = Object.keys(DOMAIN_LABELS)

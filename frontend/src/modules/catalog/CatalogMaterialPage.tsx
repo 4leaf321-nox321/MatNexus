@@ -13,10 +13,11 @@
  * 정본이라 여기서 못 지운다.
  */
 
-import { FilePlus2, PackagePlus, Trash2 } from 'lucide-react'
+import { FilePlus2, PackagePlus, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { AddValueDialog } from '@/modules/catalog/AddValueDialog'
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
 import { ParameterSetsSection } from '@/modules/catalog/ParameterSetsSection'
 import { CreateMaterialDialog } from '@/modules/catalog/CreateMaterialDialog'
@@ -109,6 +110,8 @@ export default function CatalogMaterialPage() {
   const item = detail.data
   const [adopting, setAdopting] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [added, setAdded] = useState<string | null>(null)
   const [units, setUnits] = useUnitMode()
   const { user } = useAuth()
   const [removeError, setRemoveError] = useState<Error | null>(null)
@@ -166,6 +169,10 @@ export default function CatalogMaterialPage() {
             <FilePlus2 className="size-4" />
             사내 재료로 등록
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Plus className="size-4" />
+            값 넣기
+          </Button>
           <Badge variant="outline">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
           <Badge variant="outline">{item.subsystem ?? '미분류'}</Badge>
           {item.origin === 'local' && (
@@ -184,6 +191,11 @@ export default function CatalogMaterialPage() {
         </div>
       )}
       {item?.description && <p className="text-muted-foreground text-sm">{item.description}</p>}
+      {added && (
+        <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm dark:border-emerald-800 dark:bg-emerald-950">
+          {added}
+        </p>
+      )}
 
       {item && item.values.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
@@ -338,6 +350,18 @@ export default function CatalogMaterialPage() {
       {id && <ParameterSetsSection materialId={id} />}
 
       {item && <AdoptDialog detail={item} open={adopting} onClose={() => setAdopting(false)} />}
+      {item && (
+        <AddValueDialog
+          detail={item}
+          open={adding}
+          onClose={() => setAdding(false)}
+          onDone={(message) => {
+            setAdding(false)
+            setAdded(message)
+            detail.reload()
+          }}
+        />
+      )}
       {item && (
         <CreateMaterialDialog detail={item} open={creating} onClose={() => setCreating(false)} />
       )}
