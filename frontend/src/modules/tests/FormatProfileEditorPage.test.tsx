@@ -127,14 +127,19 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
   },
 }))
 
+/** 누가 보는가. 시험이 바꿔 끼운다 — 기본은 시스템 관리자. */
+const viewer: { user: Record<string, unknown> } = {
+  user: { is_system_admin: true, memberships: [] },
+}
 vi.mock('@/shared/auth/AuthContext', () => ({
-  useAuth: () => ({ user: { is_system_admin: true, memberships: [] } }),
+  useAuth: () => viewer,
 }))
 
 function open(key = 'legacy_mtet') {
   return render(
     <MemoryRouter initialEntries={[`/settings/formats/${key}`]}>
       <Routes>
+        <Route path="/settings/formats/new" element={<FormatProfileEditorPage />} />
         <Route path="/settings/formats/:key" element={<FormatProfileEditorPage />} />
       </Routes>
     </MemoryRouter>
@@ -145,6 +150,41 @@ beforeEach(() => {
   updateFormat.mockClear()
   previewFormat.mockReset()
   window.localStorage.clear()
+  viewer.user = { is_system_admin: true, memberships: [] }
+})
+
+describe('부서 관리자가 전역 프로파일을 열었을 때', () => {
+  beforeEach(() => {
+    viewer.user = {
+      is_system_admin: false,
+      memberships: [{ slug: 'qa', name: '품질팀', path: '품질팀', depth: 0, role: 'manager' }],
+    }
+  })
+
+  it('왜 저장이 막히는지 말하고, 내 부서 것으로 복제하면 새 프로파일 화면에 그대로 펴진다', async () => {
+    const user = userEvent.setup()
+    open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+
+    // 저장은 막히고, 이유가 목록의 ✗ 한 줄이 아니라 문장으로 있다.
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
+    expect(
+      screen.getByText((_, node) =>
+        node?.tagName === 'SPAN' && /전역 프로파일이라 저장할 수 없습니다/.test(node.textContent ?? '')
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText(/시스템 관리자만 고칩니다. 「내 부서 것으로 복제」/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '내 부서 것으로 복제' }))
+
+    // 새 프로파일 — 키·이름은 부서로 갈라지고, 지문·매핑은 그대로다.
+    expect(await screen.findByText('형식 프로파일 만들기')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('legacy_mtet_qa')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('옛 앱 인장 결과 (품질팀)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('11')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('.mtet')).toBeInTheDocument()
+    expect(screen.getByText('품질팀')).toBeInTheDocument()
+  })
 })
 
 describe('저장된 프로파일을 열었을 때', () => {

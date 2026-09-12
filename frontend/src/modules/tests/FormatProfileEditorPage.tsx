@@ -28,12 +28,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Check,
   CheckCircle2,
   FileUp,
+  Copy,
   History,
   PlayCircle,
   Save,
@@ -79,7 +80,7 @@ import { CAPABILITIES, missingFor } from '@/modules/tests/capabilities'
 import { toChannelKey, toFallbackKey } from '@/modules/tests/keys'
 import { TablePreviewRows } from '@/modules/tests/TablePreviewRows'
 import type { ProfileDraft } from '@/modules/tests/profileDraft'
-import { forgetDraft, readDraft, since, writeDraft } from '@/modules/tests/profileDraft'
+import { DRAFT_VERSION, forgetDraft, readDraft, since, writeDraft } from '@/modules/tests/profileDraft'
 import type { ColumnRule } from '@/modules/tests/profileColumns'
 import {
   EMPTY_RULE,
@@ -337,6 +338,7 @@ interface DraftChannel {
 export default function FormatProfileEditorPage() {
   const { key: routeKey } = useParams<{ key: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const creating = routeKey === undefined
   const { user } = useAuth()
 
@@ -405,6 +407,19 @@ export default function FormatProfileEditorPage() {
   useEffect(() => {
     setDraft(readDraft(routeKey))
   }, [routeKey])
+
+  /**
+   * 「내 부서 것으로 복제」 로 들어왔으면 그 상태를 편다. 사람이 방금 누른 것이라
+   * 임시본과 달리 묻지 않는다 — 묻는 것은 「어제 것을 오늘 쓸까」 일 때다.
+   */
+  useEffect(() => {
+    const clone = (location.state as { clone?: ProfileDraft } | null)?.clone
+    if (!creating || !clone) return
+    applyDraft(clone)
+    // 한 번만. 뒤로 갔다 오면 다시 안 편다.
+    navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creating])
 
   /**
    * 고칠 때마다 적어 둔다.
@@ -850,9 +865,13 @@ export default function FormatProfileEditorPage() {
       where: '④',
     },
     {
+      // **전역은 시스템 관리자만 고친다.** 편집 화면에서는 ⑥ 에 고를 것이 없으므로
+      // 「누구 것인지」 라고만 적으면 무엇을 적어야 하는지 알 수 없다(VOC 2026-09-13).
       ok: owner !== null || Boolean(user?.is_system_admin),
-      label: '누구 것인지',
-      where: '⑥',
+      label: creating
+        ? '누구 것인지'
+        : '전역 프로파일 — 시스템 관리자만 고칩니다. 「내 부서 것으로 복제」 하세요',
+      where: creating ? '⑥' : '위',
     },
     { ok: Boolean(form.key), label: '키', where: '⑥' },
     { ok: Boolean(form.label), label: '이름', where: '⑥' },
@@ -1151,6 +1170,35 @@ export default function FormatProfileEditorPage() {
     }
   }
 
+  /**
+   * 전역 프로파일을 **내 부서 것으로** 복제한다.
+   *
+   * 전역은 여러 부서가 함께 쓰므로 시스템 관리자만 고친다. 그런데 장비 파일을
+   * 어떻게 읽을지는 사업부가 안다 — 막힌 자리에서 「그럼 어떻게 하나」 의 답이
+   * 이것이다. 같은 지문이면 우선순위를 하나 높여 부서 것이 먼저 잡히게 한다.
+   */
+  function cloneForMyWorkspace() {
+    const mine = managed[0]
+    if (!mine) return
+    const state = {
+      ...draftState(),
+      form: {
+        ...form,
+        key: `${form.key}_${mine.slug}`.replace(/[^a-z0-9_]/g, '_').slice(0, 50),
+        label: `${form.label} (${mine.name})`,
+        priority: form.priority + 1,
+      },
+      owner: mine.slug,
+    }
+    const clone: ProfileDraft = {
+      version: DRAFT_VERSION,
+      at: new Date().toISOString(),
+      fileName: file?.name ?? null,
+      state,
+    }
+    navigate('/settings/formats/new', { state: { clone } })
+  }
+
   /** 시험 종류를 만들거나, 새 채널을 기존 종류에 더한다. 종류 키를 돌려준다. */
   async function ensureTestType(): Promise<string> {
     const channels = drafts.map((draft, index) => ({
@@ -1246,6 +1294,31 @@ export default function FormatProfileEditorPage() {
       />
 
       <ErrorNotice error={types.error ?? existing.error ?? error} className="mb-4" />
+
+      {/* **막힌 이유와 갈 길을 한자리에.** 전에는 오른쪽 목록에 ✗ 하나만 있었고
+          이유는 ⑥ 의 작은 글씨에 있었다 — 사람은 ⑥ 에 무엇을 적어야 하는지
+          물었다(VOC 2026-09-13). */}
+      {!creating && existing.data?.is_global && !user?.is_system_admin && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+          <TriangleAlert className="size-4 shrink-0 text-amber-700" />
+          <span>
+            <b>전역 프로파일</b>이라 저장할 수 없습니다 — 여러 부서가 함께 쓰므로 시스템
+            관리자만 고칩니다. 내 부서 것으로 복제하면 지금 화면 그대로 부서 프로파일이
+            되고, 같은 파일은 그것이 먼저 잡습니다.
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-auto"
+            disabled={managed.length === 0}
+            title={managed.length === 0 ? '관리하는 부서가 없습니다' : undefined}
+            onClick={cloneForMyWorkspace}
+          >
+            <Copy className="size-4" />
+            내 부서 것으로 복제
+          </Button>
+        </div>
+      )}
 
       {/* **말없이 채우지 않는다.** 어제 만들다 만 것 위에 오늘 새로 만들려던
           사람이 그 사실을 모른 채 저장하면 안 된다. */}
