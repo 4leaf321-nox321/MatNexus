@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, FastAPI, Response
+from fastapi import APIRouter, Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app import version
 from app.config import Settings, get_settings
-from app.database import SessionLocal, engine
+from app.database import SessionLocal, engine, get_db
 from app.logging_setup import setup_logging
 from app.modules.accounts import routes as accounts_routes
 from app.modules.audit import routes as audit_routes
@@ -66,7 +67,7 @@ def _api_router() -> APIRouter:
     router = APIRouter(prefix=API_PREFIX)
 
     @router.get("/health", tags=["system"])
-    def health(response: Response) -> dict[str, str]:
+    def health(response: Response, db: Session = Depends(get_db)) -> dict[str, str]:
         """살아 있나 — **DB 까지 찔러 본다.**
 
         실측(2026-09-10, 두 번): 사내망에서 DB 연결이 잠깐 끊긴 뒤 백엔드가 요청을
@@ -84,8 +85,7 @@ def _api_router() -> APIRouter:
         """
         body = {"status": "ok", "version": version.current(), "database": "ok"}
         try:
-            with engine.connect() as connection:
-                connection.execute(text("SELECT 1"))
+            db.execute(text("SELECT 1"))
         except Exception as failed:  # 무엇이 됐든 「못 찔렀다」 가 답이다
             logger.warning("health: DB 를 찌르지 못했다 — %s", failed)
             response.status_code = 503

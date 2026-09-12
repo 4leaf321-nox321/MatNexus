@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app import version
@@ -10,7 +11,9 @@ from app.main import create_app
 client = TestClient(create_app(), raise_server_exceptions=False)
 
 
-def test_health() -> None:
+def test_health(client: TestClient) -> None:
+    """DB 까지 찔러 본다 — 그래서 시험 DB 를 묶은 `client` 픽스처로 부른다(CI 에는
+    기본 DB 가 없다)."""
     response = client.get("/api/health")
     assert response.status_code == 200
     # **버전을 함께 준다.** 원격에서 "지금 서버에 뭐가 깔렸나" 를 물을 수 있는
@@ -18,19 +21,24 @@ def test_health() -> None:
     assert response.json() == {"status": "ok", "version": version.current(), "database": "ok"}
 
 
-def test_DB_를_못_찌르면_503_이다() -> None:
+def test_DB_를_못_찌르면_503_이다(application: FastAPI) -> None:
     """**죽은 서버가 살아 있다고 대답하면 감시는 있으나 마나다.**
 
     실측(2026-09-10, 두 번): DB 연결이 끊긴 뒤 백엔드가 요청을 받지 않는 채로 남았는데
     이 주소는 「ok」 라고 답했다. DB 를 찔러 보고 못 찌르면 503 — 서비스 관리자가
     그것을 보고 재기동한다.
     """
-    from unittest.mock import patch
+    from app.database import get_db
 
-    from app.database import engine  # main 이 쓰는 것과 같은 객체다
+    class Dead:
+        def execute(self, *_args: object, **_kwargs: object) -> None:
+            raise OSError("연결 끊김")
 
-    with patch.object(engine, "connect", side_effect=OSError("연결 끊김")):
-        response = client.get("/api/health")
+    application.dependency_overrides[get_db] = lambda: Dead()
+    try:
+        response = TestClient(application, raise_server_exceptions=False).get("/api/health")
+    finally:
+        application.dependency_overrides.clear()
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "degraded"
