@@ -16,6 +16,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.voc.models import (
     ADMIN_MOVES,
@@ -191,8 +192,62 @@ def create_item(
     db.add(
         VocEvent(item_id=item.id, at=now, by_id=user.id, from_status=None, to_status="open")
     )
+    # 관리자에게 — 알림 모듈을 직접 부르지 않고 큐에 던진다(모듈 경계).
+    queue.enqueue(
+        db,
+        kind=kinds.NOTIFY_DELIVER,
+        payload={
+            "event_kind": "voc.registered",
+            "key": f"voc:{item.id}:registered",
+            "title": f"새 VOC #{item.seq}: {item.title}",
+            "body": f"{user.display_name} 님이 {item.page_path or '어디선가'} 에서 냈습니다.",
+            "link": f"/voc/{item.id}",
+            "to_user_id": None,
+        },
+    )
     db.commit()
     return _detail(db, item, user)
+
+
+def _notify_changed(
+    db: Session,
+    item: VocItem,
+    event: VocEvent,
+    actor: User,
+    previous_handler: uuid.UUID | None,
+) -> None:
+    """이 건이 움직였다고 **상대에게** 알린다.
+
+    남이 움직이면 낸 사람에게, 낸 사람이 움직이면 마지막으로 다룬 관리자에게 —
+    자기가 한 일을 자기에게 알리지 않는다. 받을 사람이 없으면 조용히 넘어간다.
+    """
+    if actor.id != item.created_by_id:
+        to_user = item.created_by_id
+    elif previous_handler is not None and previous_handler != item.created_by_id:
+        to_user = previous_handler
+    else:
+        return
+    moved = event.from_status != event.to_status
+    what = (
+        f"{VOC_STATUS_LABELS[event.from_status or event.to_status]} → "
+        f"{VOC_STATUS_LABELS[event.to_status]}"
+        if moved
+        else "말을 보탰습니다"
+    )
+    queue.enqueue(
+        db,
+        kind=kinds.NOTIFY_DELIVER,
+        payload={
+            "event_kind": "voc.changed",
+            "key": f"voc:{item.id}:{event.id}",
+            "title": f"VOC #{item.seq} {what}",
+            "body": f"{actor.display_name}: {event.note}"
+            if event.note
+            else actor.display_name,
+            "link": f"/voc/{item.id}",
+            "to_user_id": str(to_user),
+        },
+    )
 
 
 @router.get("/statuses", response_model=list[VocStatusOut])
@@ -371,19 +426,21 @@ def add_event(
             )
 
     now = datetime.now(UTC)
-    db.add(
-        VocEvent(
-            item_id=item.id,
-            at=now,
-            by_id=user.id,
-            from_status=item.status,
-            to_status=target or item.status,
-            note=note,
-        )
+    previous_handler = item.status_by_id
+    event = VocEvent(
+        item_id=item.id,
+        at=now,
+        by_id=user.id,
+        from_status=item.status,
+        to_status=target or item.status,
+        note=note,
     )
+    db.add(event)
+    db.flush()
     if target is not None:
         item.status = target
         item.status_at = now
         item.status_by_id = user.id
+    _notify_changed(db, item, event, user, previous_handler)
     db.commit()
     return _detail(db, item, user)

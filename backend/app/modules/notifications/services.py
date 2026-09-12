@@ -121,9 +121,12 @@ def ensure_rules(db: Session, user: User) -> None:
     "이 알림은 그만 받고 싶다"고 할 때 화면을 만든다 — 그 전에는 켜고 끌 것이
     무엇인지도 모른다.
     """
-    wanted = ["account.decided"]
+    # VOC: 내가 낸 건이 움직이면 누구나 받고, 새 건은 관리자가 받는다 — 게시판을
+    # 들여다보지 않으면 「해결됐다」 를 아무도 모른다(2026-09-12).
+    wanted = ["account.decided", "voc.changed"]
     if user.is_system_admin:
         wanted.append("account.signup")
+        wanted.append("voc.registered")
     # 장비 커넥터가 시편을 못 정한 파일은 **부서 관리자**가 붙인다(ADR 0021).
     if user.is_system_admin or permissions.is_any_manager(db, user):
         wanted.append("pipelines.needs_specimen")

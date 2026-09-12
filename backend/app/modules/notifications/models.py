@@ -28,7 +28,14 @@ from app.database import Base
 #:   account.signup   가입 신청이 들어왔다        → 시스템 관리자에게
 #:   account.decided  내 신청이 승인/거절됐다      → 신청자에게
 #:   pipelines.needs_specimen  장비에서 온 파일에 시편을 못 붙였다 → 부서 관리자에게
-EVENT_KINDS = ("account.signup", "account.decided", "pipelines.needs_specimen")
+EVENT_KINDS = (
+    "account.signup",
+    "account.decided",
+    "pipelines.needs_specimen",
+    # VOC — 낸 사람은 자기 건이 움직일 때, 관리자는 새 건이 올 때(2026-09-12).
+    "voc.registered",
+    "voc.changed",
+)
 
 CHANNELS = ("inapp",)  # 'email' 은 SMTP 가 열리면 추가한다
 

@@ -345,3 +345,67 @@ class Test고치기와_지우기:
         )
         # 두 번 지우면 없는 것이다 — 화면이 새로고침 전에 한 번 더 누를 수 있다.
         assert client.delete(f"/api/voc/{item_id}", headers=hong).status_code == 404
+
+
+class Test알림:
+    """게시판을 들여다보지 않아도 **내 건이 움직이면 안다.**
+
+    새 건은 관리자에게, 남이 옮기거나 말을 보태면 낸 사람에게, 낸 사람이 다시
+    열면 마지막으로 다룬 관리자에게. 자기가 한 일은 자기에게 안 간다.
+    """
+
+    def _inbox(self, client: TestClient, headers: dict[str, str]) -> list[str]:
+        return [
+            one["title"] for one in client.get("/api/notifications", headers=headers).json()
+        ]
+
+    def test_새_건은_관리자에게_움직임은_낸_사람에게(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin: User,
+        admin_headers: dict[str, str],
+    ) -> None:
+        from app.jobs import queue
+
+        from tests.api.test_notifications import drain
+
+        hong = member_headers(client, db, workspace)
+        # 기본 규칙(관리자: voc.registered, 모두: voc.changed)은 큐를 거쳐 붙는다.
+        for user in db.query(User).all():
+            queue.enqueue(
+                db, kind="notifications.ensure_rules", payload={"user_id": str(user.id)}
+            )
+        db.commit()
+        drain(db)
+
+        item = _voc(client, hong, title="검색이 느려요")
+        drain(db)
+        assert any(
+            "새 VOC" in one and "검색이 느려요" in one
+            for one in self._inbox(client, admin_headers)
+        )
+        # 낸 사람은 자기 등록으로 알림을 받지 않는다.
+        assert self._inbox(client, hong) == []
+
+        _move(client, admin_headers, item["id"], "accepted", None)
+        _move(client, admin_headers, item["id"], "resolved", note="색인을 붙였습니다")
+        drain(db)
+        mine = self._inbox(client, hong)
+        assert any("등록 → 접수" in one for one in mine), mine
+        assert any("접수 → 해결" in one for one in mine), mine
+        # 관리자는 자기가 옮긴 것으로 알림을 받지 않는다.
+        assert not any("→" in one for one in self._inbox(client, admin_headers))
+
+        # 낸 사람이 다시 열면 — 마지막으로 다룬 관리자에게 간다.
+        _move(client, hong, item["id"], "open", note="아직 느립니다")
+        drain(db)
+        assert any("해결 → 등록" in one for one in self._inbox(client, admin_headers))
+
+        # 말만 보태도 상대에게 간다.
+        _move(client, admin_headers, item["id"], None, note="다시 보겠습니다")
+        drain(db)
+        assert any("말을 보탰습니다" in one for one in self._inbox(client, hong))
+        detail = client.get("/api/notifications", headers=hong).json()[0]
+        assert detail["link"] == f"/voc/{item['id']}"
