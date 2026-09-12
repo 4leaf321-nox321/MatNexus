@@ -90,6 +90,20 @@ const KINDS = [
   { value: 'choice', label: '선택' },
 ] as const
 
+/**
+ * **코드가 이름으로 찾는 칸.** 시편의 게이지·폭·두께 칸, 일괄 등록의 공칭값, 단면적
+ * 계산이 이 키로 규격을 읽는다(`shared/specimen_size.py` 의 `LEGACY_COLUMNS`,
+ * `tests/nominalSizes.ts`). 키를 손으로 치면 `gauge_len` 처럼 비껴 적히고 — 값은
+ * 저장되는데 아무 데서도 안 읽힌다. 단추로 만들면 키가 맞는 채로 시작한다
+ * (VOC 2026-09-13: 「뭘 보고 변수명을 맞춰야 하는지 모르겠다」).
+ */
+const WELL_KNOWN: readonly { key: string; label: string; symbol: string | null }[] = [
+  { key: 'gauge_length', label: '게이지 길이', symbol: 'G' },
+  { key: 'width', label: '폭', symbol: 'W' },
+  { key: 'thickness', label: '두께', symbol: 'T' },
+  { key: 'diameter', label: '직경', symbol: 'D' },
+]
+
 export function SpecimenFieldsDialog({
   slug,
   term,
@@ -340,31 +354,78 @@ export function SpecimenFieldsDialog({
             </div>
           ))}
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs"
-            onClick={() =>
-              setRows((current) => [
-                ...current,
-                {
-                  key: '',
-                  label: '',
-                  kind: 'number',
-                  choices: [],
-                  symbol: null,
-                  dimension: 'length',
-                  si_unit: 'm',
-                  is_required: false,
-                  help: null,
-                  saved: false,
-                },
-              ])
-            }
-          >
-            <Plus className="size-3.5" />
-            칸 더하기
-          </Button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              onClick={() =>
+                setRows((current) => [
+                  ...current,
+                  {
+                    key: '',
+                    label: '',
+                    kind: 'number',
+                    choices: [],
+                    symbol: null,
+                    dimension: 'length',
+                    si_unit: 'm',
+                    is_required: false,
+                    help: null,
+                    saved: false,
+                  },
+                ])
+              }
+            >
+              <Plus className="size-3.5" />
+              칸 더하기
+            </Button>
+            <span className="text-muted-foreground text-xs">코드가 읽는 칸:</span>
+            {WELL_KNOWN.map((known) => {
+              const taken =
+                rows.some((row) => row.key === known.key) ||
+                inherited.some((field) => field.key === known.key)
+              return (
+                <Button
+                  key={known.key}
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs"
+                  disabled={taken}
+                  title={
+                    taken
+                      ? `${known.label} 칸은 이미 있습니다`
+                      : `키 ${known.key} — 시편 화면과 단면적 계산이 이 이름으로 읽습니다`
+                  }
+                  onClick={() =>
+                    setRows((current) => [
+                      ...current,
+                      {
+                        key: known.key,
+                        label: known.label,
+                        kind: 'number',
+                        choices: [],
+                        symbol: known.symbol,
+                        dimension: 'length',
+                        si_unit: 'm',
+                        is_required: false,
+                        help: null,
+                        saved: false,
+                      },
+                    ])
+                  }
+                >
+                  + {known.label}
+                </Button>
+              )
+            })}
+          </div>
+          <p className="text-muted-foreground text-xs">
+            게이지 길이·폭·두께·직경은 <b>키가 정해져 있습니다</b>(
+            <code>gauge_length</code> · <code>width</code> · <code>thickness</code> ·{' '}
+            <code>diameter</code>). 시편 화면의 칸과 단면적 계산이 그 이름으로 규격을 읽으므로,
+            다른 키로 만들면 값은 저장되지만 아무 데서도 안 읽힙니다.
+          </p>
         </div>
 
         {/* **뺀 칸의 값은 안 지운다.** 화면에서 사라질 뿐이고, 되살리면 다시

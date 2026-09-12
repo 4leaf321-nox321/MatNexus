@@ -126,6 +126,27 @@ describe('치수 칸 정의', () => {
     expect(screen.getByLabelText('3번 칸 키')).toHaveValue('grip_length')
   })
 
+  it('코드가 읽는 칸은 단추로 만들어 키가 맞는 채로 시작한다', async () => {
+    const user = userEvent.setup()
+    show(STANDARD)
+    await screen.findByLabelText('1번 칸 이름')
+
+    // 분류가 준 게이지 길이는 이미 있으니 못 누르고, 직경은 이 규격이 이미 가졌다.
+    expect(screen.getByRole('button', { name: '+ 게이지 길이' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '+ 직경' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: '+ 폭' }))
+    expect(screen.getByLabelText('2번 칸 키')).toHaveValue('width')
+    expect(screen.getByLabelText('2번 칸 이름')).toHaveValue('폭')
+    expect(screen.getByRole('button', { name: '+ 폭' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, , body] = update.mock.calls[0] as [string, string, { extra_fields: { key: string; symbol: string | null }[] }]
+    expect(body.extra_fields.map((one) => one.key)).toEqual(['diameter', 'width'])
+    expect(body.extra_fields[1].symbol).toBe('W')
+  })
+
   it('한글만 치면 키를 지어내지 않는다', async () => {
     // `field_1` 같은 것이 쌓이면 나중에 그게 무엇인지 알 방법이 없다.
     const user = userEvent.setup()
