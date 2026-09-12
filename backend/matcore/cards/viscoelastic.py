@@ -78,6 +78,7 @@ VISCOELASTIC = register_block(
             ),
         ),
         order=40,
+        kind_priority=4,
     )
 )
 
@@ -132,5 +133,6 @@ LVE = register_block(
             ),
         ),
         order=45,
+        kind_priority=5,
     )
 )

@@ -66,5 +66,6 @@ HYPERELASTIC = register_block(
             Produced(key="value", label="값", si_unit="1", help="행이 자기 단위를 든다."),
         ),
         order=25,
+        kind_priority=2,
     )
 )

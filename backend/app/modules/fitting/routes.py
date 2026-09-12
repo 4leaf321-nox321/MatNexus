@@ -181,6 +181,7 @@ def list_blocks(user: User = Depends(current_user)) -> list[BlockSpecOut]:
             rows=[_produced(one) for one in spec.rows],
             in_deck=spec.key in in_decks,
             curve=list(spec.curve) if spec.curve else None,
+            kind_priority=spec.kind_priority,
         )
         for spec in cards.list_blocks()
     ]

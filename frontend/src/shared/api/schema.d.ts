@@ -6603,6 +6603,8 @@ export interface components {
             in_deck: boolean;
             /** Key */
             key: string;
+            /** Kind Priority */
+            kind_priority?: number | null;
             /** Label */
             label: string;
             /** Produces */

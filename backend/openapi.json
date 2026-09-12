@@ -1086,6 +1086,17 @@
             "title": "Key",
             "type": "string"
           },
+          "kind_priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind Priority"
+          },
           "label": {
             "title": "Label",
             "type": "string"

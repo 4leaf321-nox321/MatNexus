@@ -677,10 +677,11 @@ describe('카드 목록은 접혀 있다', () => {
     const { fittingApi } = await import('@/modules/fitting/api')
     ;(fittingApi as unknown as { blocks: () => Promise<unknown[]> }).blocks = () =>
       Promise.resolve([
-        { key: 'elastic', label: '탄성', help: '', order: 10, produces: [], rows: [] },
-        { key: 'hardening', label: '경화식', help: '', order: 20, produces: [], rows: [] },
-        { key: 'table', label: '소성 표', help: '', order: 30, produces: [], rows: [] },
-        { key: 'lve', label: '선형탄성구간(LVE) 탄성률', help: '', order: 45, produces: [], rows: [] },
+        // 종류는 선언의 kind_priority 로 정한다 — 탄성·소성 표는 종류가 아니다(null).
+        { key: 'elastic', label: '탄성', help: '', order: 10, produces: [], rows: [], kind_priority: null },
+        { key: 'hardening', label: '경화식', help: '', order: 20, produces: [], rows: [], kind_priority: 3 },
+        { key: 'table', label: '소성 표', help: '', order: 30, produces: [], rows: [], kind_priority: null },
+        { key: 'lve', label: '선형탄성구간(LVE) 탄성률', help: '', order: 45, produces: [], rows: [], kind_priority: 5 },
       ])
     panel()
     await screen.findByText('Voce 카드')

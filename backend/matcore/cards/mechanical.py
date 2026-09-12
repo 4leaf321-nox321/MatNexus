@@ -59,6 +59,7 @@ ELASTIC = register_block(
         # **`values` 는 그때도 남는다** — 첫 줄(가장 낮은 온도)의 값이다. 표를
         # 못 먹는 형식이 그것을 쓰고, 목록이 대푯값 하나를 보일 때도 쓴다.
         order=10,
+        kind_priority=None,
     )
 )
 
@@ -107,6 +108,7 @@ HARDENING = register_block(
         ),
         # **덱에 안 실린다.** 실리지 않는다고 쓸모없는 것이 아니라 실리는 자리가
         order=20,
+        kind_priority=3,
     )
 )
 
@@ -160,6 +162,7 @@ TABLE = register_block(
         ),
         curve=("plastic_strain", "true_stress"),
         order=30,
+        kind_priority=None,
     )
 )
 
@@ -210,5 +213,6 @@ RATE_TABLE = register_block(
             Produced(key="true_stress", label="진응력", si_unit="Pa"),
         ),
         order=35,
+        kind_priority=1,
     )
 )

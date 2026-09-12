@@ -86,5 +86,6 @@ THERMAL = register_block(
         # 흔하다. 빈 칸은 그 온도에 그 값이 없다는 뜻이고, 렌더러는 값이 있는
         # 온도만 그 키워드의 표에 싣는다.
         order=15,
+        kind_priority=6,
     )
 )

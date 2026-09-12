@@ -68,5 +68,6 @@ MODEL_PARAMS = register_block(
             ),
         ),
         order=50,
+        kind_priority=None,
     )
 )

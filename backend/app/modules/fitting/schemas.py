@@ -512,6 +512,9 @@ class BlockSpecOut(BaseModel):
     """덱에 실리는가. 경화식은 안 실린다 — 표로 나가고 식은 주석에만 남는다."""
     curve: list[str] | None = None
     """표가 점 곡선이면 `[x 열, y 열]`. 덱 정의의 표 줄이 이것으로 x·y 를 건다."""
+    kind_priority: int | None = None
+    """이 블록이 들어 있으면 카드의 종류가 되는가 — 작을수록 먼저, `None` 은 종류가 아님.
+    화면이 이것으로 카드 목록을 가른다(블록 이름을 화면에 박지 않는다)."""
 
 
 class PropertyCardOut(BaseModel):
