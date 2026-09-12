@@ -210,3 +210,48 @@ def test_failed_job_is_retried_then_marked_failed(db: Session) -> None:
     assert len(calls) == 2
 
     handlers._HANDLERS.pop("test.always_fails")
+
+
+def test_rules_can_be_turned_off_and_stay_off(
+    client: TestClient, db: Session, admin: User, admin_headers: dict[str, str]
+) -> None:
+    """**끈 알림은 안 오고, 배포가 다시 켜지 않는다.**
+
+    끄기가 규칙을 지우는 것이면 다음 `ensure_rules` 가 다시 만들어 켠다 — 그러면
+    끈 사람이 다시 받는다. `enabled` 를 내리는 것이어야 한다.
+    """
+    rules = client.get("/api/notifications/rules", headers=admin_headers).json()
+    kinds = {one["event_kind"]: one for one in rules}
+    assert kinds["account.signup"]["enabled"] is True
+    assert kinds["account.signup"]["label"] == "가입 신청"
+    assert "voc.registered" in kinds  # 관리자라 보인다
+
+    off = client.patch(
+        "/api/notifications/rules/account.signup",
+        json={"enabled": False},
+        headers=admin_headers,
+    )
+    assert off.status_code == 200 and off.json()["enabled"] is False
+
+    # 규칙 보장을 다시 돌려도 꺼진 채다.
+    queue.enqueue(db, kind="notifications.ensure_rules", payload={"user_id": str(admin.id)})
+    db.commit()
+    drain(db)
+    again = client.get("/api/notifications/rules", headers=admin_headers).json()
+    assert (
+        next(one for one in again if one["event_kind"] == "account.signup")["enabled"] is False
+    )
+
+    client.post("/api/accounts/signup", json=SIGNUP)
+    drain(db)
+    titles = [
+        item["title"]
+        for item in client.get("/api/notifications", headers=admin_headers).json()
+    ]
+    assert "새 가입 신청" not in titles
+
+    # 받을 수 없는 사건은 못 켠다.
+    nope = client.patch(
+        "/api/notifications/rules/made.up", json={"enabled": True}, headers=admin_headers
+    )
+    assert nope.status_code == 404

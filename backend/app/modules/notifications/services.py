@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.notifications.models import (
+    EVENT_KINDS,
     Notification,
     NotificationRule,
     NotificationRuleState,
@@ -114,13 +115,8 @@ def ensure_rules_for_id(db: Session, user_id: uuid.UUID) -> None:
     db.commit()
 
 
-def ensure_rules(db: Session, user: User) -> None:
-    """그 사람에게 필요한 기본 규칙을 만든다.
-
-    규칙 관리 화면은 아직 없다. 지금은 역할에 따라 자동으로 붙이고, 사용자가
-    "이 알림은 그만 받고 싶다"고 할 때 화면을 만든다 — 그 전에는 켜고 끌 것이
-    무엇인지도 모른다.
-    """
+def wanted_kinds(db: Session, user: User) -> list[str]:
+    """이 사람이 받을 수 있는 사건 — 역할이 정한다. 설정 화면도 이 목록만 보인다."""
     # VOC: 내가 낸 건이 움직이면 누구나 받고, 새 건은 관리자가 받는다 — 게시판을
     # 들여다보지 않으면 「해결됐다」 를 아무도 모른다(2026-09-12).
     wanted = ["account.decided", "voc.changed"]
@@ -130,6 +126,49 @@ def ensure_rules(db: Session, user: User) -> None:
     # 장비 커넥터가 시편을 못 정한 파일은 **부서 관리자**가 붙인다(ADR 0021).
     if user.is_system_admin or permissions.is_any_manager(db, user):
         wanted.append("pipelines.needs_specimen")
+    return wanted
+
+
+def rules_for(db: Session, user: User) -> list[NotificationRule]:
+    """설정 화면이 보는 것 — 받을 수 있는 사건마다 규칙 한 줄. 없으면 만든다.
+
+    **끄는 것은 규칙을 지우는 게 아니라 `enabled` 를 내리는 것이다.** 지우면 다음
+    `ensure_rules` 가 다시 만들어 켜 버린다(2026-09-12) — 끈 사람이 다시 받게 된다.
+    """
+    ensure_rules(db, user)
+    db.commit()
+    order = {kind: at for at, kind in enumerate(EVENT_KINDS)}
+    rows = db.scalars(
+        select(NotificationRule).where(
+            NotificationRule.user_id == user.id,
+            NotificationRule.channel == "inapp",
+            NotificationRule.event_kind.in_(wanted_kinds(db, user)),
+        )
+    ).all()
+    return sorted(rows, key=lambda one: order.get(one.event_kind, 99))
+
+
+def set_rule(
+    db: Session, user: User, event_kind: str, *, enabled: bool
+) -> NotificationRule | None:
+    rule = db.scalar(
+        select(NotificationRule).where(
+            NotificationRule.user_id == user.id,
+            NotificationRule.event_kind == event_kind,
+            NotificationRule.channel == "inapp",
+        )
+    )
+    if rule is None or event_kind not in wanted_kinds(db, user):
+        return None
+    rule.enabled = enabled
+    db.commit()
+    return rule
+
+
+def ensure_rules(db: Session, user: User) -> None:
+    """그 사람에게 필요한 기본 규칙을 만든다. **이미 있는 것은 손대지 않는다** —
+    사람이 끈 것을 배포가 다시 켜면 안 된다."""
+    wanted = wanted_kinds(db, user)
 
     for event_kind in wanted:
         exists = db.scalar(

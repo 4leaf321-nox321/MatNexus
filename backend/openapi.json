@@ -13262,6 +13262,48 @@
         "title": "NotificationOut",
         "type": "object"
       },
+      "NotificationRuleOut": {
+        "description": "내가 받을 수 있는 알림 하나와, 지금 켜져 있는가.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "event_kind": {
+            "title": "Event Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_kind",
+          "label",
+          "description",
+          "enabled"
+        ],
+        "title": "NotificationRuleOut",
+        "type": "object"
+      },
+      "NotificationRuleUpdate": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "NotificationRuleUpdate",
+        "type": "object"
+      },
       "ObservationOut": {
         "description": "값 하나가 어떻게 됐는가. **없는 것과 못 쓰는 것을 가른다.**",
         "properties": {
@@ -32588,6 +32630,85 @@
           }
         },
         "summary": "Mark All Read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/notifications/rules": {
+      "get": {
+        "description": "내가 받을 수 있는 알림과 켜짐 여부. 역할이 정한 것만 보인다.",
+        "operationId": "list_rules_api_notifications_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationRuleOut"
+                  },
+                  "title": "Response List Rules Api Notifications Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Rules",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/notifications/rules/{event_kind}": {
+      "patch": {
+        "description": "알림 하나를 켜거나 끈다. 끄면 그 사건은 나에게 오지 않는다 — 다른 사람은 그대로.",
+        "operationId": "update_rule_api_notifications_rules__event_kind__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_kind",
+            "required": true,
+            "schema": {
+              "title": "Event Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationRuleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Rule",
         "tags": [
           "notifications"
         ]

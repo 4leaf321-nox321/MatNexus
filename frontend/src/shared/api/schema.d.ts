@@ -3073,6 +3073,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notifications/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Rules
+         * @description 내가 받을 수 있는 알림과 켜짐 여부. 역할이 정한 것만 보인다.
+         */
+        get: operations["list_rules_api_notifications_rules_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/rules/{event_kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Rule
+         * @description 알림 하나를 켜거나 끈다. 끄면 그 사건은 나에게 오지 않는다 — 다른 사람은 그대로.
+         */
+        patch: operations["update_rule_api_notifications_rules__event_kind__patch"];
+        trace?: never;
+    };
     "/api/notifications/unread-count": {
         parameters: {
             query?: never;
@@ -10979,6 +11019,25 @@ export interface components {
             read_at: string | null;
             /** Title */
             title: string;
+        };
+        /**
+         * NotificationRuleOut
+         * @description 내가 받을 수 있는 알림 하나와, 지금 켜져 있는가.
+         */
+        NotificationRuleOut: {
+            /** Description */
+            description: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Event Kind */
+            event_kind: string;
+            /** Label */
+            label: string;
+        };
+        /** NotificationRuleUpdate */
+        NotificationRuleUpdate: {
+            /** Enabled */
+            enabled: boolean;
         };
         /**
          * ObservationOut
@@ -20706,6 +20765,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnreadCountOut"];
+                };
+            };
+        };
+    };
+    list_rules_api_notifications_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRuleOut"][];
+                };
+            };
+        };
+    };
+    update_rule_api_notifications_rules__event_kind__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

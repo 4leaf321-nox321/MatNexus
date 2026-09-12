@@ -22,3 +22,16 @@ class NotificationOut(BaseModel):
 
 class UnreadCountOut(BaseModel):
     unread: int
+
+
+class NotificationRuleOut(BaseModel):
+    """내가 받을 수 있는 알림 하나와, 지금 켜져 있는가."""
+
+    event_kind: str
+    label: str
+    description: str
+    enabled: bool
+
+
+class NotificationRuleUpdate(BaseModel):
+    enabled: bool

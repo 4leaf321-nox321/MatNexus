@@ -37,6 +37,18 @@ EVENT_KINDS = (
     "voc.changed",
 )
 
+#: 사람이 읽는 이름과 설명 — 알림 설정 화면이 그대로 그린다. 새 사건을 더하면 여기도.
+EVENT_LABELS: dict[str, tuple[str, str]] = {
+    "account.signup": ("가입 신청", "새 계정이 가입을 신청했을 때 (시스템 관리자)"),
+    "account.decided": ("가입 결정", "내 가입 신청이 승인·거절됐을 때"),
+    "pipelines.needs_specimen": (
+        "시편 못 정한 파일",
+        "장비 커넥터가 올린 파일에 시편을 못 붙였을 때 (부서 관리자)",
+    ),
+    "voc.registered": ("새 VOC", "누군가 VOC 를 냈을 때 (시스템 관리자)"),
+    "voc.changed": ("내 VOC 가 움직임", "내가 낸 VOC 를 남이 옮기거나 말을 보탰을 때"),
+}
+
 CHANNELS = ("inapp",)  # 'email' 은 SMTP 가 열리면 추가한다
 
 
