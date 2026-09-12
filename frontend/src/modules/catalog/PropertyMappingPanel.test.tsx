@@ -17,12 +17,14 @@ import type { PropertyMapping } from '@/modules/catalog/api'
 
 const linkProperty = vi.fn()
 const unlinkProperty = vi.fn()
+const deprecateProperty = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
   catalogApi: {
     linkProperty: (...args: unknown[]) => linkProperty(...args),
     unlinkProperty: (...args: unknown[]) => unlinkProperty(...args),
+    deprecateProperty: (...args: unknown[]) => deprecateProperty(...args),
   },
 }))
 
@@ -47,6 +49,7 @@ const MAPPING: PropertyMapping = {
   rows: [
     {
       origin: 'catalog',
+      deprecated: false,
       key: 'mechanical.yield_strength',
       name: '항복강도',
       domain: 'mechanical',
@@ -71,6 +74,7 @@ const MAPPING: PropertyMapping = {
     },
     {
       origin: 'catalog',
+      deprecated: false,
       key: 'mechanical.hardness_vickers',
       name: '비커스 경도',
       domain: 'mechanical',
@@ -93,6 +97,7 @@ const MAPPING: PropertyMapping = {
     },
     {
       origin: 'catalog',
+      deprecated: false,
       key: 'mechanical.flexural_strength',
       name: '굽힘강도',
       domain: 'mechanical',
@@ -116,6 +121,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   linkProperty.mockResolvedValue({})
   unlinkProperty.mockResolvedValue(undefined)
+  deprecateProperty.mockResolvedValue({})
 })
 
 describe('물성 매핑', () => {
@@ -196,6 +202,22 @@ describe('물성 매핑', () => {
     await user.click(screen.getByRole('button', { name: '비커스 경도 ↔ 경도 (HV) 풀기' }))
     await waitFor(() => expect(unlinkProperty).toHaveBeenCalledWith('l-2'))
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('폐기는 후속 키를 골라 지우지 않고 표시한다', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(screen.getByRole('button', { name: '굽힘강도 폐기' }))
+    await user.type(screen.getByLabelText('후속 물성 찾기'), '항복')
+    await user.click(screen.getByRole('button', { name: /mechanical\.yield_strength/ }))
+    await user.type(screen.getByLabelText('왜'), '잘못 만듦')
+    await user.click(screen.getByRole('button', { name: '폐기' }))
+    await waitFor(() =>
+      expect(deprecateProperty).toHaveBeenCalledWith('mechanical.flexural_strength', {
+        superseded_by: 'mechanical.yield_strength',
+        note: '잘못 만듦',
+      })
+    )
   })
 
   it('관리자가 아니면 잇고 푸는 단추가 없다', () => {

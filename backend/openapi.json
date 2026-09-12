@@ -2868,6 +2868,22 @@
             ],
             "title": "Created By"
           },
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
+          "deprecation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Note"
+          },
           "description": {
             "anyOf": [
               {
@@ -2905,6 +2921,17 @@
               }
             ],
             "title": "Si Unit"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
           },
           "symbol": {
             "anyOf": [
@@ -3603,6 +3630,36 @@
           "slug"
         ],
         "title": "CatalogPropertyCreate",
+        "type": "object"
+      },
+      "CatalogPropertyDeprecate": {
+        "description": "키를 폐기한다 — 지우지 않는다. 후속 키가 있으면 그것을 가리킨다.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          }
+        },
+        "title": "CatalogPropertyDeprecate",
         "type": "object"
       },
       "CatalogSourceIn": {
@@ -15245,6 +15302,11 @@
       "PropertyCandidateOut": {
         "description": "물성 후보 하나 — **값을 묻기 전에 필요한 것을 다 들고 있다.**\n\n단위를 필드 이름에 박지 않고 값으로 싣는다(`si_unit`). 알루미늄 밀도가\n`2.68e-09 kg/m3` 로 나간 적이 있다 — 이름에 단위를 박은 탓이었다.",
         "properties": {
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
           "domain": {
             "title": "Domain",
             "type": "string"
@@ -15301,6 +15363,17 @@
           "si_unit": {
             "title": "Si Unit",
             "type": "string"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
           },
           "symbol": {
             "anyOf": [
@@ -15678,6 +15751,11 @@
             "title": "Aliases",
             "type": "array"
           },
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
           "domain": {
             "title": "Domain",
             "type": "string"
@@ -15719,6 +15797,17 @@
               }
             ],
             "title": "Si Unit"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
           },
           "symbol": {
             "anyOf": [
@@ -16107,6 +16196,22 @@
       "PropertyMappingRowOut": {
         "description": "물성 하나가 세 층에서 어떻게 불리는가 — 매핑 화면의 한 줄.",
         "properties": {
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
+          "deprecation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Note"
+          },
           "domain": {
             "title": "Domain",
             "type": "string"
@@ -16148,6 +16253,17 @@
               }
             ],
             "title": "Si Unit"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
           },
           "symbol": {
             "anyOf": [
@@ -26994,6 +27110,100 @@
           }
         },
         "summary": "Add Property Alias",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/{property_key}/deprecate": {
+      "delete": {
+        "description": "폐기를 되돌린다.",
+        "operationId": "undeprecate_property_api_catalog_properties__property_key__deprecate_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "property_key",
+            "required": true,
+            "schema": {
+              "title": "Property Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDefinitionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undeprecate Property",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "description": "키를 **폐기한다 — 지우지 않는다.** 값·매핑이 걸렸거나 사전이 이미 나간 키를\n물리는 길이다. 새 값을 못 달고, 채우기에서 빠지고, 이름 풀기에서 뒤로 밀리며\n후속 키를 함께 알려 준다. 사전에 `deprecated`·`superseded_by` 로 실린다.",
+        "operationId": "deprecate_property_api_catalog_properties__property_key__deprecate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "property_key",
+            "required": true,
+            "schema": {
+              "title": "Property Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogPropertyDeprecate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDefinitionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deprecate Property",
         "tags": [
           "catalog"
         ]

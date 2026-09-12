@@ -205,6 +205,18 @@ class CatalogDefinition(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    # **키는 지우지 않고 폐기한다**(2026-09-12). 값·매핑이 걸린 키는 못 지우고, 사전을
+    # 받아 간 다른 시스템이 그 키로 잇고 있다 — 지우면 그쪽이 같은 날 깨진다. 폐기는
+    # 「이 키는 그만 쓰고, 있으면 저 키를 써라」 는 표시다. 이관은 이 칸을 모른다.
+    deprecated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_by: Mapped[str | None] = mapped_column(String(100))
+    """대신 쓸 키. 비어 있으면 후속 없이 폐기."""
+    deprecation_note: Mapped[str | None] = mapped_column(Text)
+
+    @property
+    def deprecated(self) -> bool:
+        return self.deprecated_at is not None
+
 
 class CatalogValue(Base):
     """물성값 하나 — 값 + 조건 + 방법 + 등급 + 출처가 한 몸이다.

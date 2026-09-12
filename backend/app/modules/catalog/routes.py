@@ -51,6 +51,7 @@ from app.modules.catalog.schemas import (
     CatalogParameterSetOut,
     CatalogParameterTermOut,
     CatalogPropertyCreate,
+    CatalogPropertyDeprecate,
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueCreate,
@@ -845,7 +846,39 @@ def _definition_out(db: Session, one: CatalogDefinition) -> CatalogDefinitionOut
         condition_axes=one.condition_axes,
         origin=contribute.origin_of(one),
         created_by=names.get(one.created_by_id) if one.created_by_id else None,
+        deprecated=one.deprecated,
+        superseded_by=one.superseded_by,
+        deprecation_note=one.deprecation_note,
     )
+
+
+@router.post("/properties/{property_key}/deprecate", response_model=CatalogDefinitionOut)
+def deprecate_property(
+    property_key: str,
+    payload: CatalogPropertyDeprecate,
+    _user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CatalogDefinitionOut:
+    """키를 **폐기한다 — 지우지 않는다.** 값·매핑이 걸렸거나 사전이 이미 나간 키를
+    물리는 길이다. 새 값을 못 달고, 채우기에서 빠지고, 이름 풀기에서 뒤로 밀리며
+    후속 키를 함께 알려 준다. 사전에 `deprecated`·`superseded_by` 로 실린다."""
+    definition = contribute.deprecate_property(
+        db, property_key, superseded_by=payload.superseded_by, note=payload.note
+    )
+    db.commit()
+    return _definition_out(db, definition)
+
+
+@router.delete("/properties/{property_key}/deprecate", response_model=CatalogDefinitionOut)
+def undeprecate_property(
+    property_key: str,
+    _user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CatalogDefinitionOut:
+    """폐기를 되돌린다."""
+    definition = contribute.undeprecate_property(db, property_key)
+    db.commit()
+    return _definition_out(db, definition)
 
 
 @router.post("/properties", response_model=CatalogDefinitionOut, status_code=201)
@@ -1105,6 +1138,8 @@ def property_dictionary(
                 name=one.name,
                 domain=one.domain,
                 origin=contribute.origin_of(one),
+                deprecated=one.deprecated,
+                superseded_by=one.superseded_by,
                 si_unit=one.si_unit,
                 symbol=one.symbol,
                 test_standard=one.test_standard,
@@ -1128,10 +1163,16 @@ def property_adoptable(
     가 정한다.
     """
     out: list[PropertyAdoptableOut] = []
+    # 폐기된 키의 값은 담지 않는다 — 그 값은 후속 키로 옮겨야 할 것이다.
+    retired = set(
+        db.scalars(
+            select(CatalogDefinition.key).where(CatalogDefinition.deprecated_at.is_not(None))
+        )
+    )
     for link, item in db.execute(
         select(PropertyLink, VocabularyTerm.value)
         .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
-        .where(PropertyLink.kind == "same_as")
+        .where(PropertyLink.kind == "same_as", PropertyLink.property_key.not_in(retired))
         .order_by(PropertyLink.property_key, PropertyLink.scale)
     ).all():
         out.append(
@@ -1183,6 +1224,9 @@ def property_mapping(
     rows = [
         PropertyMappingRowOut(
             origin=contribute.origin_of(one),
+            deprecated=one.deprecated,
+            superseded_by=one.superseded_by,
+            deprecation_note=one.deprecation_note,
             key=one.key,
             name=one.name,
             domain=one.domain,
@@ -1453,6 +1497,15 @@ def search_by_property(
 
     hits: list[property_search.Hit] = []
     notes: list[str] = []
+    if chosen.deprecated:
+        notes.append(
+            f"'{chosen.name}' ({chosen.key}) 은 폐기된 키입니다"
+            + (
+                f" — 새 값은 {chosen.superseded_by} 에 있습니다."
+                if chosen.superseded_by
+                else "."
+            )
+        )
     if scope in ("all", "catalog"):
         hits += property_search.catalog_hits(
             db,

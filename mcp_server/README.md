@@ -119,6 +119,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     ★ add_catalog_material(...)        카탈로그에 없는 문헌 재료
     ★ add_catalog_value(...)           값 + 단위 + 조건 + 방법 + 등급 + 출처 (미리보기 기본)
     ★ delete_catalog_value(id)         직접 넣은 값만 (넣은 사람·관리자)
+    ★ deprecate_catalog_property(...)  키를 지우지 않고 폐기 — 후속 키를 가리킨다 (관리자)
 
 ### 카드 짓기 — **초안까지만**
 

@@ -28,11 +28,17 @@
  * 시작하게 만들고, 그 뒤로는 이관해 온 것과 같은 물성이다 — 값을 달고, 사내 항목에
  * 잇고, 사전에 실린다. 값·매핑·별칭이 하나도 없을 때만 지운다.
  *
+ * ## 키는 지우는 대신 폐기한다
+ *
+ * 값·매핑이 걸린 키, 사전이 이미 나간 키는 못 지운다 — 받아 간 시스템이 그 키로
+ * 잇고 있다. 「폐기」 는 「그만 쓰고 저 키를 써라」 는 표시다: 새 값을 못 달고,
+ * 채우기에서 빠지고, 이름 풀기에서 뒤로 밀리며 후속 키를 함께 알려 준다.
+ *
  * 기준정보 화면(`VocabularyAdminPage`)이 자리만 내준다 — 표는 catalog 의 것이다.
  */
 
 import { useMemo, useState } from 'react'
-import { Download, FilePlus2, Link2, Link2Off, Plus, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Download, FilePlus2, Link2, Link2Off, Plus, Trash2 } from 'lucide-react'
 
 import { DOMAINS, DOMAIN_LABELS, catalogApi } from '@/modules/catalog/api'
 import type {
@@ -91,6 +97,7 @@ export function PropertyMappingPanel({
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [adding, setAdding] = useState(false)
+  const [retiring, setRetiring] = useState<PropertyMappingRow | null>(null)
 
   const domains = useMemo(
     () => [...new Set(mapping.rows.map((one) => one.domain))].sort(),
@@ -121,6 +128,19 @@ export function PropertyMappingPanel({
       onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('풀지 못했습니다.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function restoreProperty(row: PropertyMappingRow) {
+    setBusy(row.key)
+    setError(null)
+    try {
+      await catalogApi.undeprecateProperty(row.key)
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('되돌리지 못했습니다.'))
     } finally {
       setBusy(null)
     }
@@ -283,6 +303,38 @@ export function PropertyMappingPanel({
                         직접 만듦
                       </Badge>
                     )}
+                    {row.deprecated && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500 text-amber-700 dark:text-amber-500"
+                        title={row.deprecation_note ?? '폐기된 키 — 새 값을 못 달고 채우기에서 빠집니다'}
+                      >
+                        폐기{row.superseded_by ? ` → ${row.superseded_by}` : ''}
+                      </Badge>
+                    )}
+                    {canEdit && !row.deprecated && (
+                      <button
+                        type="button"
+                        aria-label={`${row.name} 폐기`}
+                        title="지우지 않고 「그만 쓰고 저 키를 써라」 로 표시"
+                        className="text-muted-foreground hover:text-foreground rounded p-0.5"
+                        disabled={busy === row.key}
+                        onClick={() => setRetiring(row)}
+                      >
+                        <Archive className="size-3.5" />
+                      </button>
+                    )}
+                    {canEdit && row.deprecated && (
+                      <button
+                        type="button"
+                        aria-label={`${row.name} 폐기 취소`}
+                        className="text-muted-foreground hover:text-foreground rounded p-0.5"
+                        disabled={busy === row.key}
+                        onClick={() => restoreProperty(row)}
+                      >
+                        <ArchiveRestore className="size-3.5" />
+                      </button>
+                    )}
                     {canEdit &&
                       row.origin === 'local' &&
                       row.links.length === 0 &&
@@ -378,7 +430,150 @@ export function PropertyMappingPanel({
           onChanged()
         }}
       />
+      <DeprecateDialog
+        row={retiring}
+        mapping={mapping}
+        onClose={() => setRetiring(null)}
+        onDone={() => {
+          setRetiring(null)
+          onChanged()
+        }}
+      />
     </section>
+  )
+}
+
+/**
+ * 폐기 — **후속 키를 고른다.** 후속은 살아 있는 키여야 한다(폐기된 키는 목록에서
+ * 뺀다). 후속 없이 폐기할 수도 있다 — 그때는 새 값을 달 곳이 없다는 뜻이다.
+ */
+function DeprecateDialog({
+  row,
+  mapping,
+  onClose,
+  onDone,
+}: {
+  row: PropertyMappingRow | null
+  mapping: PropertyMapping
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [successor, setSuccessor] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [openedFor, setOpenedFor] = useState<string | null>(null)
+  if (row && openedFor !== row.key) {
+    setOpenedFor(row.key)
+    setQuery('')
+    setSuccessor(null)
+    setNote('')
+    setError(null)
+  }
+  if (!row && openedFor !== null) setOpenedFor(null)
+
+  const needle = query.trim().toLowerCase()
+  const candidates = useMemo(
+    () =>
+      needle && row
+        ? mapping.rows
+            .filter(
+              (one) =>
+                one.key !== row.key &&
+                !one.deprecated &&
+                (one.name.toLowerCase().includes(needle) ||
+                  one.key.toLowerCase().includes(needle))
+            )
+            .slice(0, 12)
+        : [],
+    [mapping.rows, needle, row]
+  )
+  const chosen = successor ? mapping.rows.find((one) => one.key === successor) : null
+
+  async function submit() {
+    if (!row) return
+    setSaving(true)
+    setError(null)
+    try {
+      await catalogApi.deprecateProperty(row.key, { superseded_by: successor, note: note || null })
+      onDone()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('폐기하지 못했습니다.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={row !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{row ? `'${row.name}' 폐기` : '폐기'}</DialogTitle>
+          <DialogDescription>
+            지우지 않습니다. 새 값을 못 달고, 채우기에서 빠지고, 이름을 풀 때 뒤로 밀리며 후속
+            키를 함께 알려 줍니다. 사전을 받아 간 시스템은 후속 키로 옮깁니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <Label>대신 쓸 키 (없어도 됨)</Label>
+            {chosen ? (
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <span className="font-medium">{chosen.name}</span>
+                <span className="text-muted-foreground font-mono">{chosen.key}</span>
+                <Button size="sm" variant="ghost" className="ml-auto h-7" onClick={() => setSuccessor(null)}>
+                  바꾸기
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Input
+                  aria-label="후속 물성 찾기"
+                  placeholder="이름이나 키로 쳐서 찾기"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                {candidates.length > 0 && (
+                  <ul className="max-h-48 overflow-y-auto rounded-md border">
+                    {candidates.map((one) => (
+                      <li key={one.key}>
+                        <button
+                          type="button"
+                          className="hover:bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
+                          onClick={() => setSuccessor(one.key)}
+                        >
+                          <span className="font-medium">{one.name}</span>
+                          <span className="text-muted-foreground font-mono">{one.key}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="deprecate-note">왜</Label>
+            <Input
+              id="deprecate-note"
+              value={note}
+              placeholder="이름을 잘못 지음 · 저쪽 키와 겹침 …"
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </div>
+          <ErrorNotice error={error} />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button onClick={submit} disabled={saving}>
+            폐기
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

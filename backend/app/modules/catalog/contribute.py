@@ -18,12 +18,16 @@
 - **tier 4 는 근거 없는 값**(계산·추정·가정)이다. 방법이 computed·estimated 면 tier 4
   여야 하고, tier 4 는 `conditions.assumption` 을 단다 — 그래야 화면·MCP 의 경고가 붙는다.
 - **지우기는 직접 넣은 줄만.** 이관해 온 줄은 원본이 정본이라 여기서 못 지운다.
+- **키는 지우는 대신 폐기한다.** 값·매핑이 걸렸거나 사전이 이미 나간 키는 「그만 쓰고
+  저 키를 써라」 로 표시한다. 폐기된 키에는 새 값을 못 달고, 채우기 목록에서 빠지고,
+  이름 풀기에서 뒤로 밀리며 새 키를 함께 알려 준다.
 """
 
 from __future__ import annotations
 
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -136,12 +140,14 @@ def create_property(
         )
     same = _same_property(db, name)
     if same is not None:
+        # 폐기된 키와 이름이 같으면 그 후속 키를 가리킨다 — 폐기한 것을 또 만들지 않게.
+        use = same.superseded_by if same.deprecated and same.superseded_by else same.key
         raise AppError(
             "MNX-CATALOG-0037",
-            f"'{name}' 은 이미 있는 물성입니다 — 키 {same.key} 를 쓰세요. "
+            f"'{name}' 은 이미 있는 물성입니다 — 키 {use} 를 쓰세요. "
             "같은 물성이 두 키로 살면 값 검색이 반씩 갈립니다.",
             status=409,
-            details={"key": same.key},
+            details={"key": use},
         )
 
     si_unit = clean(payload.si_unit or "") or None
@@ -215,6 +221,57 @@ def delete_property(db: Session, key: str) -> None:
         )
     db.delete(definition)
     db.flush()
+
+
+def deprecate_property(
+    db: Session, key: str, *, superseded_by: str | None, note: str | None
+) -> CatalogDefinition:
+    """키를 폐기한다 — 지우지 않는다. 후속 키가 있으면 그것을 가리킨다.
+
+    후속 키는 실재해야 하고, 자기 자신이 아니어야 하고, 그 자체가 폐기된 키면 안
+    된다(사슬을 따라가게 두면 언젠가 고리가 된다).
+    """
+    definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
+    if definition is None:
+        raise NotFound("MNX-CATALOG-0038", "없는 물성입니다.")
+    target = clean(superseded_by or "") or None
+    if target is not None:
+        if target == key:
+            raise AppError(
+                "MNX-CATALOG-0048", "자기 자신을 후속 키로 둘 수 없습니다.", status=422
+            )
+        successor = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == target))
+        if successor is None:
+            raise AppError("MNX-CATALOG-0048", f"후속 키가 없습니다: {target}", status=422)
+        if successor.deprecated:
+            raise AppError(
+                "MNX-CATALOG-0048",
+                f"후속 키 {target} 도 폐기된 키입니다 — "
+                + (
+                    f"그 후속인 {successor.superseded_by} 를 쓰세요."
+                    if successor.superseded_by
+                    else "살아 있는 키를 고르세요."
+                ),
+                status=422,
+            )
+    definition.deprecated_at = datetime.now(UTC)
+    definition.superseded_by = target
+    definition.deprecation_note = clean(note or "") or None
+    # 이 키를 후속으로 가리키던 것들은 그대로 둔다 — 서버가 사슬을 안 따라가므로
+    # 화면·MCP 가 「후속도 폐기됨」 을 보고 사람이 다시 가리키게 한다.
+    db.flush()
+    return definition
+
+
+def undeprecate_property(db: Session, key: str) -> CatalogDefinition:
+    definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
+    if definition is None:
+        raise NotFound("MNX-CATALOG-0038", "없는 물성입니다.")
+    definition.deprecated_at = None
+    definition.superseded_by = None
+    definition.deprecation_note = None
+    db.flush()
+    return definition
 
 
 # --- 재료 ---------------------------------------------------------------------
@@ -404,6 +461,18 @@ def create_value(
             "MNX-CATALOG-0038",
             f"없는 물성 키입니다: {payload.property_key} — "
             "resolve_property 로 키를 먼저 찾으세요.",
+        )
+    if definition.deprecated:
+        raise AppError(
+            "MNX-CATALOG-0049",
+            f"'{definition.name}' ({definition.key}) 은 폐기된 키라 새 값을 못 답니다"
+            + (
+                f" — 대신 {definition.superseded_by} 에 다세요."
+                if definition.superseded_by
+                else "."
+            ),
+            status=422,
+            details={"superseded_by": definition.superseded_by},
         )
     method = payload.method.strip().lower()
     if method not in METHODS:

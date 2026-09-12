@@ -1815,6 +1815,38 @@ async def add_catalog_value(
 
 
 @mcp.tool()
+async def deprecate_catalog_property(
+    ctx: Context, property_key: str, superseded_by: str | None = None, note: str | None = None
+) -> dict[str, Any]:
+    """물성 키를 **폐기한다 — 지우지 않는다.** 값·매핑이 걸렸거나 사전이 이미 나간 키를
+    물리는 길이다(관리자만).
+
+    폐기되면 새 값을 못 달고, 채우기에서 빠지고, `resolve_property` 에서 뒤로 밀리며
+    후속 키를 함께 말한다. `superseded_by` 는 살아 있는 키여야 한다 — 폐기된 키를 후속으로
+    못 둔다. 후속 없이 폐기하면 그 물성에 새 값을 달 곳이 없다는 뜻이다.
+
+    **사람에게 먼저 확인한다** — 폐기는 되돌릴 수 있지만, 사전을 받아 간 시스템은 그
+    사이에 옮겨 갔을 수 있다.
+    """
+    got = await _send(
+        ctx,
+        "POST",
+        f"/catalog/properties/{property_key}/deprecate",
+        {"superseded_by": superseded_by, "note": note},
+    )
+    if "error" in got:
+        return got
+    return {
+        **got,
+        "note": (
+            f"폐기했습니다: {property_key}"
+            + (f" → 대신 {superseded_by}" if superseded_by else " (후속 없음)")
+            + ". 되돌리려면 화면의 물성 매핑에서 「폐기 취소」."
+        ),
+    }
+
+
+@mcp.tool()
 async def delete_catalog_value(ctx: Context, value_id: str) -> dict[str, Any]:
     """직접 넣은 문헌 값 하나를 지운다 — 넣은 사람이거나 관리자만. 이관해 온 값은
     원본(MaterialTwin)이 정본이라 못 지운다."""
@@ -1990,6 +2022,9 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
 
     **사람에게는 `name` 으로 말한다.** `key`(`mechanical.yield_strength`)는 시스템끼리
     쓰는 이름표라 사람 앞에 안 꺼낸다 — 「항복강도」 라고 말한다.
+
+    **`deprecated` 가 참이면 그 키를 쓰지 않는다** — `superseded_by` 의 키로 값을 묻고
+    값을 단다. 폐기된 키는 뒤로 밀려 서므로 첫 후보가 살아 있는 키다.
 
     ## `parameterized` 가 참이면 **변수를 먼저 골라야 한다**
 

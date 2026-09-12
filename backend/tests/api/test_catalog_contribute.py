@@ -414,3 +414,125 @@ class Test이관과_공존:
             """
         )
         assert importer.verify(db, con) == []
+
+
+class Test폐기:
+    """**키는 지우지 않고 폐기한다.** 값·매핑이 걸린 키, 사전이 이미 나간 키를 물리는 길.
+
+    폐기되면: 새 값을 못 달고 · 채우기에서 빠지고 · 이름 풀기에서 뒤로 밀리며 후속 키를
+    말하고 · 사전에 표시된다. 후속 키는 실재하고 살아 있어야 한다.
+    """
+
+    def _retire(
+        self, client: TestClient, headers: dict[str, str], key: str, **body: Any
+    ) -> Any:
+        return client.post(
+            f"/api/catalog/properties/{key}/deprecate", json=body, headers=headers
+        )
+
+    def test_폐기하면_새_값을_못_달고_후속_키를_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], imported: CatalogMaterial
+    ) -> None:
+        old = make_property(
+            client, admin_headers, name="옛 굴곡탄성률", slug="flex_old"
+        ).json()
+        new = make_property(client, admin_headers, name="굴곡탄성률", slug="flex_new").json()
+        make_value(client, admin_headers, str(imported.id), property_key=old["key"])
+
+        retired = self._retire(
+            client, admin_headers, old["key"], superseded_by=new["key"], note="이름을 바꿈"
+        )
+        assert retired.status_code == 200, retired.text
+        assert retired.json()["deprecated"] is True
+        assert retired.json()["superseded_by"] == new["key"]
+
+        blocked = make_value(client, admin_headers, str(imported.id), property_key=old["key"])
+        assert blocked.status_code == 422
+        assert blocked.json()["error"]["code"] == "MNX-CATALOG-0049"
+        assert new["key"] in blocked.json()["error"]["message"]
+
+        # 이름을 풀면 뒤로 밀리고, 폐기·후속이 붙는다.
+        got = client.get(
+            "/api/catalog/properties/resolve",
+            params={"q": "굴곡탄성률"},
+            headers=admin_headers,
+        ).json()
+        keys = [one["key"] for one in got["candidates"]]
+        assert keys.index(new["key"]) < keys.index(old["key"])
+        stale = next(one for one in got["candidates"] if one["key"] == old["key"])
+        assert stale["deprecated"] is True and stale["superseded_by"] == new["key"]
+        assert any("폐기" in note for note in stale["notes"])
+
+        # 사전과 매핑 표에 실린다.
+        entry = next(
+            one
+            for one in client.get(
+                "/api/catalog/properties/dictionary", headers=admin_headers
+            ).json()["properties"]
+            if one["key"] == old["key"]
+        )
+        assert entry["deprecated"] is True and entry["superseded_by"] == new["key"]
+
+        # 같은 이름으로 또 만들면 후속 키를 가리킨다.
+        dup = make_property(client, admin_headers, name="옛 굴곡탄성률", slug="flex_again")
+        assert dup.status_code == 409 and dup.json()["error"]["details"]["key"] == new["key"]
+
+        # 되돌리기.
+        back = client.delete(
+            f"/api/catalog/properties/{old['key']}/deprecate", headers=admin_headers
+        )
+        assert back.status_code == 200 and back.json()["deprecated"] is False
+
+    def test_후속_키는_실재하고_살아_있어야_한다(
+        self, client: TestClient, admin_headers: dict[str, str], imported: CatalogMaterial
+    ) -> None:
+        a = make_property(client, admin_headers, name="A 물성", slug="a_prop").json()["key"]
+        b = make_property(client, admin_headers, name="B 물성", slug="b_prop").json()["key"]
+        assert self._retire(client, admin_headers, a, superseded_by=a).status_code == 422
+        assert (
+            self._retire(client, admin_headers, a, superseded_by="local.x.nope").status_code
+            == 422
+        )
+        assert self._retire(client, admin_headers, b, superseded_by=None).status_code == 200
+        # 폐기된 키를 후속으로 못 둔다.
+        chained = self._retire(client, admin_headers, a, superseded_by=b)
+        assert chained.status_code == 422
+        assert chained.json()["error"]["code"] == "MNX-CATALOG-0048"
+
+    def test_폐기된_키는_채우기_목록에서_빠진다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        imported: CatalogMaterial,
+    ) -> None:
+        from app.modules.catalog.ontology_models import PropertyLink
+        from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
+
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        term = VocabularyTerm(
+            vocabulary_id=axis.id,
+            value="탄성계수",
+            normalized="탄성계수",
+            attributes={"dimension": "stress"},
+        )
+        db.add(term)
+        db.flush()
+        db.add(
+            PropertyLink(
+                property_key="mechanical.youngs_modulus", term_id=term.id, kind="same_as"
+            )
+        )
+        db.commit()
+        before = client.get("/api/catalog/properties/adoptable", headers=admin_headers).json()
+        assert any(one["property_key"] == "mechanical.youngs_modulus" for one in before)
+        self._retire(client, admin_headers, "mechanical.youngs_modulus")
+        after = client.get("/api/catalog/properties/adoptable", headers=admin_headers).json()
+        assert not any(one["property_key"] == "mechanical.youngs_modulus" for one in after)
+
+    def test_관리자만_폐기한다(
+        self, client: TestClient, db: Session, workspace: Workspace, imported: CatalogMaterial
+    ) -> None:
+        hong = member_headers(client, db, workspace)
+        assert self._retire(client, hong, "mechanical.youngs_modulus").status_code == 403

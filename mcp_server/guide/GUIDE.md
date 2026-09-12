@@ -129,6 +129,11 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 값은 원본(MaterialTwin)이 정본이라 못 지운다. 물성 키가 `local.` 으로 시작하면 MatNexus
 에서 만든 것이다 — 사람에게는 여전히 `name` 으로 말한다.
 
+**키는 지우지 않고 폐기한다.** 잘못 만든 키에 값·매핑이 걸렸으면 지울 수 없고, 사전을
+받아 간 시스템이 그 키로 잇고 있을 수 있다. `deprecate_catalog_property` 로 「그만 쓰고
+저 키를 써라」 를 표시한다. `resolve_property` 가 `deprecated: true` 를 주면 그 키로 값을
+묻거나 달지 말고 `superseded_by` 로 간다.
+
 <!--@ layers -->
 ## 선언 물성의 층 — 재료 / 시료
 

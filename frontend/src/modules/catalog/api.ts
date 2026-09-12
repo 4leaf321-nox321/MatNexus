@@ -317,6 +317,11 @@ export const catalogApi = {
     api.post<CatalogDefinition>('/catalog/properties', payload),
   deleteProperty: (key: string) =>
     api.delete<void>(`/catalog/properties/${encodeURIComponent(key)}`),
+  /** 키를 폐기한다 — 지우지 않는다. 값·매핑이 걸렸거나 사전이 나간 키를 물리는 길. */
+  deprecateProperty: (key: string, payload: CatalogPropertyDeprecate) =>
+    api.post<CatalogDefinition>(`/catalog/properties/${encodeURIComponent(key)}/deprecate`, payload),
+  undeprecateProperty: (key: string) =>
+    api.delete<CatalogDefinition>(`/catalog/properties/${encodeURIComponent(key)}/deprecate`),
   createCatalogMaterial: (payload: CatalogMaterialCreate) =>
     api.post<CatalogMaterial>('/catalog/materials', payload),
   createValue: (materialId: string, payload: CatalogValueCreate) =>
@@ -326,6 +331,7 @@ export const catalogApi = {
 
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
 export type CatalogDefinition = components['schemas']['CatalogDefinitionOut']
+export type CatalogPropertyDeprecate = components['schemas']['CatalogPropertyDeprecate']
 export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate']
 export type CatalogValueCreate = components['schemas']['CatalogValueCreate']
 export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut']

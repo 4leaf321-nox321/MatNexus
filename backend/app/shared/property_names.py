@@ -78,6 +78,9 @@ class Candidate:
     matched_by: str = "partial"
     #: 걸린 그 문자열. 별칭으로 걸렸으면 그 별칭을 보여 준다.
     matched_text: str | None = None
+    #: **폐기된 키** — 그만 쓰고 `superseded_by` 를 쓴다. 후보에서 뒤로 밀린다.
+    deprecated: bool = False
+    superseded_by: str | None = None
     score: float = 0.0
     notes: tuple[str, ...] = field(default=())
 
@@ -205,6 +208,18 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
         measured = tuple(sorted({scalar for _plugin, scalar in registry.measured_by(one.key)}))
         if measured:
             notes.append("시험으로 재는 값: " + " · ".join(measured))
+        retired = one.deprecated_at is not None
+        if retired:
+            notes.insert(
+                0,
+                "**폐기된 키입니다** — "
+                + (
+                    f"대신 {one.superseded_by} 를 쓰세요."
+                    if one.superseded_by
+                    else "후속 키 없이 폐기됐습니다. 새 값을 달 수 없습니다."
+                )
+                + (f" ({one.deprecation_note})" if one.deprecation_note else ""),
+            )
 
         made.append(
             Candidate(
@@ -224,9 +239,15 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
                 terms=variables,
                 matched_by=matched,
                 matched_text=text_hit,
+                deprecated=retired,
+                superseded_by=one.superseded_by if retired else None,
                 # 사내에서 쓰는 물성이면 올린다. 값 개수는 로그로 눌러 — 486건과
                 # 9건의 차이는 중요하지만 486 대 4가 50배 차이로 벌어지면 안 된다.
-                score=base + (15.0 if linked else 0.0) + min(count, 500) ** 0.5,
+                # **폐기된 키는 뒤로** — 이름이 똑같이 맞아도 후속 키가 위에 서야 한다.
+                score=base
+                + (15.0 if linked else 0.0)
+                + min(count, 500) ** 0.5
+                - (200.0 if retired else 0.0),
                 notes=tuple(notes),
             )
         )
@@ -279,6 +300,8 @@ def describe(candidates: list[Candidate]) -> dict[str, Any]:
                 "terms": list(one.terms),
                 "matched_by": one.matched_by,
                 "matched_text": one.matched_text,
+                "deprecated": one.deprecated,
+                "superseded_by": one.superseded_by,
                 "notes": list(one.notes),
             }
             for one in candidates

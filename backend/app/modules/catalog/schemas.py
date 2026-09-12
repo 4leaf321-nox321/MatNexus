@@ -267,6 +267,16 @@ class CatalogDefinitionOut(BaseModel):
     condition_axes: list[str] | None
     origin: str
     created_by: str | None = None
+    deprecated: bool = False
+    superseded_by: str | None = None
+    deprecation_note: str | None = None
+
+
+class CatalogPropertyDeprecate(BaseModel):
+    """키를 폐기한다 — 지우지 않는다. 후속 키가 있으면 그것을 가리킨다."""
+
+    superseded_by: str | None = Field(default=None, max_length=100)
+    note: str | None = None
 
 
 class CatalogMaterialCreate(BaseModel):
@@ -335,6 +345,9 @@ class PropertyCandidateOut(BaseModel):
     """값이 몇 건인가. 0이면 이 물성으로는 아무것도 못 찾는다."""
     internal_items: list[str]
     measured_keys: list[str] = Field(default_factory=list)
+    deprecated: bool = False
+    """폐기된 키 — 그만 쓰고 `superseded_by` 를 쓴다. 뒤로 밀려 선다."""
+    superseded_by: str | None = None
     """시험 처리가 이 물성으로 내는 값 이름(`proof_stress`…). 비면 잰 값은 안 찾는다."""
     """이어진 사내 물성 항목. 있으면 우리가 실제로 쓰는 물성이다."""
     parameterized: bool = False
@@ -402,6 +415,9 @@ class PropertyDictionaryEntryOut(BaseModel):
     domain: str
     origin: str = "catalog"
     """`catalog`(MaterialTwin 키) · `local`(MatNexus 가 만든 키, `local.` 접두어)."""
+    deprecated: bool = False
+    """**폐기된 키.** 받아 간 쪽은 이 키로 새로 잇지 말고 `superseded_by` 로 옮긴다."""
+    superseded_by: str | None = None
     si_unit: str | None
     symbol: str | None
     test_standard: str | None
@@ -461,6 +477,9 @@ class PropertyMappingRowOut(BaseModel):
 
     origin: str = "catalog"
     """`local` 이면 MatNexus 에서 만든 물성 — 값·매핑이 없으면 지울 수 있다."""
+    deprecated: bool = False
+    superseded_by: str | None = None
+    deprecation_note: str | None = None
     key: str
     name: str
     domain: str

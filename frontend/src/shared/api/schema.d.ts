@@ -926,6 +926,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/{property_key}/deprecate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deprecate Property
+         * @description 키를 **폐기한다 — 지우지 않는다.** 값·매핑이 걸렸거나 사전이 이미 나간 키를
+         *     물리는 길이다. 새 값을 못 달고, 채우기에서 빠지고, 이름 풀기에서 뒤로 밀리며
+         *     후속 키를 함께 알려 준다. 사전에 `deprecated`·`superseded_by` 로 실린다.
+         */
+        post: operations["deprecate_property_api_catalog_properties__property_key__deprecate_post"];
+        /**
+         * Undeprecate Property
+         * @description 폐기를 되돌린다.
+         */
+        delete: operations["undeprecate_property_api_catalog_properties__property_key__deprecate_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/summary": {
         parameters: {
             query?: never;
@@ -7225,6 +7251,13 @@ export interface components {
             condition_axes: string[] | null;
             /** Created By */
             created_by?: string | null;
+            /**
+             * Deprecated
+             * @default false
+             */
+            deprecated: boolean;
+            /** Deprecation Note */
+            deprecation_note?: string | null;
             /** Description */
             description: string | null;
             /** Domain */
@@ -7237,6 +7270,8 @@ export interface components {
             origin: string;
             /** Si Unit */
             si_unit: string | null;
+            /** Superseded By */
+            superseded_by?: string | null;
             /** Symbol */
             symbol: string | null;
             /** Test Standard */
@@ -7456,6 +7491,16 @@ export interface components {
              * @default numeric
              */
             value_type: string;
+        };
+        /**
+         * CatalogPropertyDeprecate
+         * @description 키를 폐기한다 — 지우지 않는다. 후속 키가 있으면 그것을 가리킨다.
+         */
+        CatalogPropertyDeprecate: {
+            /** Note */
+            note?: string | null;
+            /** Superseded By */
+            superseded_by?: string | null;
         };
         /**
          * CatalogSourceIn
@@ -11838,6 +11883,11 @@ export interface components {
          *     `2.68e-09 kg/m3` 로 나간 적이 있다 — 이름에 단위를 박은 탓이었다.
          */
         PropertyCandidateOut: {
+            /**
+             * Deprecated
+             * @default false
+             */
+            deprecated: boolean;
             /** Domain */
             domain: string;
             /** Internal Items */
@@ -11861,6 +11911,8 @@ export interface components {
             parameterized: boolean;
             /** Si Unit */
             si_unit: string;
+            /** Superseded By */
+            superseded_by?: string | null;
             /** Symbol */
             symbol: string | null;
             /**
@@ -11984,6 +12036,11 @@ export interface components {
         PropertyDictionaryEntryOut: {
             /** Aliases */
             aliases: string[];
+            /**
+             * Deprecated
+             * @default false
+             */
+            deprecated: boolean;
             /** Domain */
             domain: string;
             /** Internal Items */
@@ -12001,6 +12058,8 @@ export interface components {
             origin: string;
             /** Si Unit */
             si_unit: string | null;
+            /** Superseded By */
+            superseded_by?: string | null;
             /** Symbol */
             symbol: string | null;
             /** Test Standard */
@@ -12150,6 +12209,13 @@ export interface components {
          * @description 물성 하나가 세 층에서 어떻게 불리는가 — 매핑 화면의 한 줄.
          */
         PropertyMappingRowOut: {
+            /**
+             * Deprecated
+             * @default false
+             */
+            deprecated: boolean;
+            /** Deprecation Note */
+            deprecation_note?: string | null;
             /** Domain */
             domain: string;
             /** Key */
@@ -12167,6 +12233,8 @@ export interface components {
             origin: string;
             /** Si Unit */
             si_unit: string | null;
+            /** Superseded By */
+            superseded_by?: string | null;
             /** Symbol */
             symbol: string | null;
             /** Test Standard */
@@ -17013,6 +17081,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyAliasOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deprecate_property_api_catalog_properties__property_key__deprecate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                property_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogPropertyDeprecate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogDefinitionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undeprecate_property_api_catalog_properties__property_key__deprecate_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                property_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogDefinitionOut"];
                 };
             };
             /** @description Validation Error */
