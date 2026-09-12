@@ -98,8 +98,13 @@ def same(a: Any, b: Any) -> bool:
 
 
 def existing(db: Session, model: Any) -> dict[int, Any]:
-    """mt_id → 행 선적재 — 수만 건에 행마다 SELECT 를 치지 않는다."""
-    return {row.mt_id: row for row in db.scalars(select(model))}
+    """mt_id → 행 선적재 — 수만 건에 행마다 SELECT 를 치지 않는다.
+
+    MatNexus 에서 직접 넣은 줄(`mt_id IS NULL`)은 원본에 없으므로 여기 안 든다.
+    """
+    return {
+        row.mt_id: row for row in db.scalars(select(model).where(model.mt_id.is_not(None)))
+    }
 
 
 def upsert(

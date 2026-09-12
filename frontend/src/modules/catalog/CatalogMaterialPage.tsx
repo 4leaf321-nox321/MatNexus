@@ -7,9 +7,13 @@
  *
  * tier4(추정·가정)도 똑같이 선다 — 배지로 구별만 한다. 추정값도 쓰라고 모은
  * 데이터다(2026-09-06 사용자 결정).
+ *
+ * **직접 넣은 값**(MCP·API 로, 2026-09-12)은 이관해 온 값과 나란히 서되 「직접 넣음 ·
+ * 누구」 로 구별되고, 넣은 사람과 관리자만 지울 수 있다. 이관해 온 값은 원본이
+ * 정본이라 여기서 못 지운다.
  */
 
-import { FilePlus2, PackagePlus } from 'lucide-react'
+import { FilePlus2, PackagePlus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -28,6 +32,8 @@ import {
 } from '@/modules/catalog/api'
 import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
 import type { CatalogValue } from '@/modules/catalog/api'
+import { useAuth } from '@/shared/auth/AuthContext'
+import { isSystemAdmin } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -104,6 +110,25 @@ export default function CatalogMaterialPage() {
   const [adopting, setAdopting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [units, setUnits] = useUnitMode()
+  const { user } = useAuth()
+  const [removeError, setRemoveError] = useState<Error | null>(null)
+
+  /** 직접 넣은 값을 넣은 사람이거나 관리자면 지울 수 있다 — 서버가 다시 확인한다. */
+  function canRemove(value: CatalogValue): boolean {
+    if (value.origin !== 'local') return false
+    return isSystemAdmin(user) || (value.created_by != null && value.created_by === user?.display_name)
+  }
+
+  async function remove(value: CatalogValue) {
+    if (!window.confirm(`'${value.property_name}' 값을 지울까요? 되돌릴 수 없습니다.`)) return
+    setRemoveError(null)
+    try {
+      await catalogApi.deleteValue(value.id)
+      detail.reload()
+    } catch (caught) {
+      setRemoveError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    }
+  }
 
   if (stale) {
     return (
@@ -129,6 +154,7 @@ export default function CatalogMaterialPage() {
       />
 
       <ErrorNotice error={detail.error} />
+      <ErrorNotice error={removeError} />
 
       {item && (
         <div className="flex flex-wrap items-center gap-2">
@@ -142,6 +168,11 @@ export default function CatalogMaterialPage() {
           </Button>
           <Badge variant="outline">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
           <Badge variant="outline">{item.subsystem ?? '미분류'}</Badge>
+          {item.origin === 'local' && (
+            <Badge variant="outline" title="MatNexus 에서 직접 넣은 재료">
+              직접 넣음{item.created_by ? ` · ${item.created_by}` : ''}
+            </Badge>
+          )}
           {item.role && <Badge variant="secondary">{item.role}</Badge>}
           {item.manufacturer && (
             <span className="text-muted-foreground text-sm">{item.manufacturer}</span>
@@ -214,6 +245,21 @@ export default function CatalogMaterialPage() {
                         <Badge variant="outline" className="text-muted-foreground ml-2">
                           대안 · {value.separated_by}
                         </Badge>
+                      )}
+                      {value.origin === 'local' && (
+                        <Badge variant="outline" className="ml-2" title="MatNexus 에서 직접 넣은 값">
+                          직접 넣음{value.created_by ? ` · ${value.created_by}` : ''}
+                        </Badge>
+                      )}
+                      {canRemove(value) && (
+                        <button
+                          type="button"
+                          aria-label={`${value.property_name} 값 지우기`}
+                          className="text-muted-foreground hover:text-destructive ml-1 rounded p-0.5 align-middle"
+                          onClick={() => remove(value)}
+                        >
+                          <Trash2 className="inline size-3.5" />
+                        </button>
                       )}
                       {value.representative && (
                         <Link

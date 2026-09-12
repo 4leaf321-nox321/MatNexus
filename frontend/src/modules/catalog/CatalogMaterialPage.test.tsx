@@ -5,6 +5,7 @@
  *   진 후보는 밀린 자리와 함께      「대안 · 등급」
  *   가정값은 가정이라고 말한다      tier4 + assumption → 「가정」 배지 (제외는 안 한다)
  *   출처가 값 옆에 산다            제목·연도·DOI 링크
+ *   직접 넣은 값은 그렇게 보인다     「직접 넣음 · 누구」, 넣은 사람만 지우기 단추
  */
 
 import { render, screen } from '@testing-library/react'
@@ -14,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CatalogMaterialPage from '@/modules/catalog/CatalogMaterialPage'
 
 const material = vi.fn()
+const deleteValue = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -21,7 +23,14 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     summary: vi.fn(),
     materials: vi.fn(),
     material: (...args: unknown[]) => material(...args),
+    deleteValue: (...args: unknown[]) => deleteValue(...args),
   },
+}))
+
+let me = { id: 'u1', email: 'hong', display_name: '홍길동', is_system_admin: false, memberships: [] }
+vi.mock('@/shared/auth/AuthContext', () => ({
+  useAuth: () => ({ user: me, reload: vi.fn(), logout: vi.fn() }),
+  useMaybeAuth: () => ({ user: me, reload: vi.fn(), logout: vi.fn() }),
 }))
 
 const SOURCE = {
@@ -109,12 +118,36 @@ const DETAIL = {
       n_candidates: 1,
       separated_by: null,
     },
+    {
+      id: 'aaaaaaaa-0000-0000-0000-000000000004',
+      property_key: 'thermal.conductivity',
+      property_name: '열전도율',
+      domain: 'thermal',
+      symbol: 'k',
+      value_num: 16.2,
+      value_text: null,
+      unit: 'W/(m.K)',
+      uncertainty: null,
+      conditions: null,
+      method: 'handbook',
+      quality_tier: 2,
+      source: SOURCE,
+      source_detail: null,
+      notes: null,
+      representative: true,
+      n_candidates: 1,
+      separated_by: null,
+      origin: 'local',
+      created_by: '홍길동',
+    },
   ],
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
   material.mockResolvedValue(DETAIL)
+  deleteValue.mockResolvedValue(undefined)
+  me = { id: 'u1', email: 'hong', display_name: '홍길동', is_system_admin: false, memberships: [] }
   // 단위 모드가 브라우저에 남는다 — 시험끼리 새지 않게 지운다.
   localStorage.clear()
 })
@@ -156,9 +189,9 @@ describe('진 후보를 숨기지 않는다', () => {
     expect(await screen.findByText('기계')).toBeInTheDocument()
     expect(screen.getByText('열')).toBeInTheDocument()
     expect(screen.getByText(/T 296\.15 K/)).toBeInTheDocument()
-    // 같은 출처가 값 두 줄(영률·Tg)에 붙어 링크도 둘이다 — 전부 DOI 로 간다.
+    // 같은 출처가 값 세 줄(영률·Tg·열전도율)에 붙어 링크도 셋이다 — 전부 DOI 로 간다.
     const links = screen.getAllByRole('link', { name: '어느 논문' })
-    expect(links).toHaveLength(2)
+    expect(links).toHaveLength(3)
     for (const link of links) {
       expect(link).toHaveAttribute('href', 'https://doi.org/10.1000/x')
     }
@@ -189,5 +222,25 @@ describe('CatalogMaterialPage — 후보를 가르는 조건', () => {
     })
     show()
     expect(await screen.findByText('범위 하한')).toBeInTheDocument()
+  })
+
+  it('직접 넣은 값은 「직접 넣음 · 누구」 로 보이고, 넣은 사람만 지운다', async () => {
+    show()
+    expect(await screen.findByText(/직접 넣음 · 홍길동/)).toBeInTheDocument()
+    // 이관해 온 값에는 지우기 단추가 없다.
+    expect(screen.queryByRole('button', { name: '영률 값 지우기' })).toBeNull()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { fireEvent, waitFor } = await import('@testing-library/react')
+    fireEvent.click(screen.getByRole('button', { name: '열전도율 값 지우기' }))
+    await waitFor(() =>
+      expect(deleteValue).toHaveBeenCalledWith('aaaaaaaa-0000-0000-0000-000000000004')
+    )
+  })
+
+  it('남이 넣은 값은 관리자만 지운다', async () => {
+    me = { ...me, display_name: '김철수' }
+    show()
+    await screen.findByText(/직접 넣음 · 홍길동/)
+    expect(screen.queryByRole('button', { name: '열전도율 값 지우기' })).toBeNull()
   })
 })

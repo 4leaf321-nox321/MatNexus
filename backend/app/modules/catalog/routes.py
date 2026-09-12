@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.catalog import mapping, parameters
+from app.modules.catalog import contribute, mapping, parameters
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -41,15 +41,20 @@ from app.modules.catalog.schemas import (
     CatalogCompareOut,
     CatalogCompareRowOut,
     CatalogCoverageOut,
+    CatalogDefinitionOut,
     CatalogLinkIn,
     CatalogLinkOut,
+    CatalogMaterialCreate,
     CatalogMaterialDetailOut,
     CatalogMaterialOut,
     CatalogMaterialPage,
     CatalogParameterSetOut,
     CatalogParameterTermOut,
+    CatalogPropertyCreate,
     CatalogSourceOut,
     CatalogSummaryOut,
+    CatalogValueCreate,
+    CatalogValueCreatedOut,
     CatalogValueOut,
     DeckBuildIn,
     DeckBuiltOut,
@@ -279,7 +284,8 @@ def list_materials(
         offset=offset,
         items=[
             CatalogMaterialOut.model_validate(
-                {**one.__dict__, "value_count": count}, from_attributes=False
+                {**one.__dict__, "value_count": count, "origin": contribute.origin_of(one)},
+                from_attributes=False,
             )
             for one, count in rows
         ],
@@ -489,7 +495,12 @@ def compare(
     return CatalogCompareOut(
         materials=[
             CatalogMaterialOut.model_validate(
-                {**found[one].__dict__, "value_count": 0}, from_attributes=False
+                {
+                    **found[one].__dict__,
+                    "value_count": 0,
+                    "origin": contribute.origin_of(found[one]),
+                },
+                from_attributes=False,
             )
             for one in material_ids
         ],
@@ -708,6 +719,7 @@ def _term_name(raw: object) -> str | None:
 
 def _values_out(
     rows: Sequence[Row[tuple[CatalogValue, CatalogDefinition, CatalogSource]]],
+    creators: dict[uuid.UUID, str] | None = None,
 ) -> list[CatalogValueOut]:
     """문헌 값들을 **대표 표시까지 붙여** 낸다. 상세와 내보내기가 한 벌로 쓴다.
 
@@ -724,7 +736,8 @@ def _values_out(
             row[1].domain,
             row[1].key,
             0 if marks[row[0].id].representative else 1,
-            row[0].mt_id,
+            # 직접 넣은 값(mt_id 없음)은 이관해 온 값 뒤에.
+            row[0].mt_id if row[0].mt_id is not None else float("inf"),
         ),
     )
 
@@ -756,6 +769,10 @@ def _values_out(
             separated_by=marks[value.id].separated_by,
             distinguishing=marks[value.id].distinguishing,
             summary=marks[value.id].summary,
+            origin=contribute.origin_of(value),
+            created_by=(creators or {}).get(value.created_by_id)
+            if value.created_by_id
+            else None,
         )
         for value, definition, source in rows
     ]
@@ -785,7 +802,12 @@ def get_material(
         .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
     ).all()
 
-    values = _values_out(rows)
+    creators = contribute.creator_names(
+        db,
+        {value.created_by_id for value, _, _ in rows if value.created_by_id}
+        | ({item.created_by_id} if item.created_by_id else set()),
+    )
+    values = _values_out(rows, creators)
     return CatalogMaterialDetailOut(
         id=item.id,
         name=item.name,
@@ -798,8 +820,128 @@ def get_material(
         material_class=item.material_class,
         grade=item.grade,
         attributes=item.attributes,
+        origin=contribute.origin_of(item),
+        created_by=creators.get(item.created_by_id) if item.created_by_id else None,
         values=values,
     )
+
+
+# --- 직접 넣기 -----------------------------------------------------------------
+#
+# MaterialTwin 에 없는 물성·재료·값을 여기서 넣는다(2026-09-12). 규칙은 `contribute.py`.
+
+
+def _definition_out(db: Session, one: CatalogDefinition) -> CatalogDefinitionOut:
+    names = contribute.creator_names(db, {one.created_by_id} if one.created_by_id else set())
+    return CatalogDefinitionOut(
+        key=one.key,
+        name=one.name,
+        domain=one.domain,
+        symbol=one.symbol,
+        si_unit=one.si_unit,
+        value_type=one.value_type,
+        description=one.description,
+        test_standard=one.test_standard,
+        condition_axes=one.condition_axes,
+        origin=contribute.origin_of(one),
+        created_by=names.get(one.created_by_id) if one.created_by_id else None,
+    )
+
+
+@router.post("/properties", response_model=CatalogDefinitionOut, status_code=201)
+def create_property(
+    payload: CatalogPropertyCreate,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CatalogDefinitionOut:
+    """문헌 물성 정의를 만든다 — 키는 `local.<domain>.<slug>`.
+
+    시스템 관리자만. 정의는 모든 부서의 검색·매핑·사전에 걸리고, 키는 한 번 나가면
+    못 바꾼다. 이름·별칭이 같은 물성이 이미 있으면 그 키를 알려 주고 거절한다(409).
+    """
+    definition = contribute.create_property(db, payload, user)
+    db.commit()
+    return _definition_out(db, definition)
+
+
+@router.delete("/properties/{property_key}", status_code=204)
+def delete_property(
+    property_key: str,
+    _user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """직접 만든 정의만, 값·매핑·별칭이 하나도 없을 때만 지운다."""
+    contribute.delete_property(db, property_key)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/materials", response_model=CatalogMaterialOut, status_code=201)
+def create_catalog_material(
+    payload: CatalogMaterialCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogMaterialOut:
+    """카탈로그 재료를 만든다 — 문헌상의 등급·제품이지 사내 lot 이 아니다.
+
+    같은 이름이 이미 있으면 그 id 를 알려 주고 거절한다(409) — 값은 그 재료에 더한다.
+    """
+    material = contribute.create_material(db, payload, user)
+    db.commit()
+    db.refresh(material)  # commit 이 속성을 비운다 — __dict__ 로 읽으려면 다시 채워야 한다
+    return CatalogMaterialOut.model_validate(
+        {**material.__dict__, "value_count": 0, "origin": "local"}, from_attributes=False
+    )
+
+
+@router.delete("/materials/{material_id}", status_code=204)
+def delete_catalog_material(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """직접 만든 재료만(넣은 사람·관리자), 값·연결이 없을 때만."""
+    contribute.delete_material(db, material_id, user)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post(
+    "/materials/{material_id}/values", response_model=CatalogValueCreatedOut, status_code=201
+)
+def create_catalog_value(
+    material_id: uuid.UUID,
+    payload: CatalogValueCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogValueCreatedOut:
+    """문헌 값 하나를 넣는다 — **값 · 단위 · 조건 · 방법 · 등급 · 출처가 한 몸이다.**
+
+    단위는 정의의 단위로 환산해 저장한다(같은 차원일 때만). 출처 없는 값은 안 받는다.
+    computed·estimated 는 tier 4 여야 하고, tier 4 는 가정값 표지가 붙는다.
+    """
+    row, converted = contribute.create_value(db, material_id, payload, user)
+    db.commit()
+    got = db.execute(
+        select(CatalogValue, CatalogDefinition, CatalogSource)
+        .join(CatalogDefinition, CatalogDefinition.key == CatalogValue.property_key)
+        .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
+        .where(CatalogValue.id == row.id)
+    ).all()
+    creators = contribute.creator_names(db, {user.id})
+    return CatalogValueCreatedOut(value=_values_out(got, creators)[0], converted=converted)
+
+
+@router.delete("/values/{value_id}", status_code=204)
+def delete_catalog_value(
+    value_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """직접 넣은 값만(넣은 사람·관리자). 이관해 온 값은 원본이 정본이다."""
+    contribute.delete_value(db, value_id, user)
+    db.commit()
+    return Response(status_code=204)
 
 
 # --- 물성 이름 사전 -----------------------------------------------------------
@@ -962,6 +1104,7 @@ def property_dictionary(
                 key=one.key,
                 name=one.name,
                 domain=one.domain,
+                origin=contribute.origin_of(one),
                 si_unit=one.si_unit,
                 symbol=one.symbol,
                 test_standard=one.test_standard,
@@ -1039,6 +1182,7 @@ def property_mapping(
     plugins = {one.id: one for one in registry.list_plugins()}
     rows = [
         PropertyMappingRowOut(
+            origin=contribute.origin_of(one),
             key=one.key,
             name=one.name,
             domain=one.domain,

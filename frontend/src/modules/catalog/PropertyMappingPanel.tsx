@@ -22,14 +22,21 @@
  * HRC 60 이 비커스 검색에 섞인다 — 서버가 눈금 있는 항목은 눈금 없이 못 잇게 막고,
  * 여기서는 그 눈금을 고르게 한다.
  *
+ * ## 문헌 물성 추가
+ *
+ * MaterialTwin 에 없는 물성은 여기서 만든다(2026-09-12). 키는 서버가 `local.` 으로
+ * 시작하게 만들고, 그 뒤로는 이관해 온 것과 같은 물성이다 — 값을 달고, 사내 항목에
+ * 잇고, 사전에 실린다. 값·매핑·별칭이 하나도 없을 때만 지운다.
+ *
  * 기준정보 화면(`VocabularyAdminPage`)이 자리만 내준다 — 표는 catalog 의 것이다.
  */
 
 import { useMemo, useState } from 'react'
-import { Download, Link2, Link2Off, Plus } from 'lucide-react'
+import { Download, FilePlus2, Link2, Link2Off, Plus, Trash2 } from 'lucide-react'
 
-import { catalogApi } from '@/modules/catalog/api'
+import { DOMAINS, DOMAIN_LABELS, catalogApi } from '@/modules/catalog/api'
 import type {
+  CatalogPropertyCreate,
   PropertyLinkCreate,
   PropertyMapping,
   PropertyMappingRow,
@@ -83,6 +90,7 @@ export function PropertyMappingPanel({
   } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  const [adding, setAdding] = useState(false)
 
   const domains = useMemo(
     () => [...new Set(mapping.rows.map((one) => one.domain))].sort(),
@@ -118,6 +126,21 @@ export function PropertyMappingPanel({
     }
   }
 
+  async function removeProperty(row: PropertyMappingRow) {
+    if (!window.confirm(`'${row.name}' (${row.key}) 을 지울까요? 값·매핑이 없을 때만 지워집니다.`))
+      return
+    setBusy(row.key)
+    setError(null)
+    try {
+      await catalogApi.deleteProperty(row.key)
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const { summary } = mapping
 
   return (
@@ -130,6 +153,12 @@ export function PropertyMappingPanel({
             문헌 키가 시스템끼리 쓰는 공용 이름표입니다.
           </p>
         </div>
+        {canEdit && (
+          <Button size="sm" onClick={() => setAdding(true)}>
+            <FilePlus2 className="size-4" />
+            문헌 물성 추가
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -246,7 +275,29 @@ export function PropertyMappingPanel({
             {rows.map((row) => (
               <TableRow key={row.key}>
                 <TableCell>
-                  <div className="font-medium">{row.name}</div>
+                  <div className="flex items-center gap-1.5 font-medium">
+                    {row.name}
+                    {/* 직접 만든 물성은 그렇게 보인다 — 값·매핑이 없으면 지울 수 있다. */}
+                    {row.origin === 'local' && (
+                      <Badge variant="outline" title="MatNexus 에서 직접 만든 물성">
+                        직접 만듦
+                      </Badge>
+                    )}
+                    {canEdit &&
+                      row.origin === 'local' &&
+                      row.links.length === 0 &&
+                      row.value_count === 0 && (
+                        <button
+                          type="button"
+                          aria-label={`${row.name} 지우기`}
+                          className="text-muted-foreground hover:text-destructive rounded p-0.5"
+                          disabled={busy === row.key}
+                          onClick={() => removeProperty(row)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                  </div>
                   <div className="text-muted-foreground font-mono">{row.key}</div>
                 </TableCell>
                 <TableCell>
@@ -319,7 +370,179 @@ export function PropertyMappingPanel({
           onChanged()
         }}
       />
+      <AddPropertyDialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        onDone={() => {
+          setAdding(false)
+          onChanged()
+        }}
+      />
     </section>
+  )
+}
+
+/**
+ * 문헌 물성 추가 — **키는 서버가 만든다**(`local.<domain>.<slug>`).
+ *
+ * 이름·별칭이 같은 물성이 이미 있으면 서버가 그 키를 알려 주고 거절한다 — 그
+ * 메시지를 그대로 보인다. 단위는 SI 정본으로 적는다(값은 이 단위로 환산돼 저장).
+ */
+function AddPropertyDialog({
+  open,
+  onClose,
+  onDone,
+}: {
+  open: boolean
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [form, setForm] = useState<CatalogPropertyCreate>({
+    name: '',
+    domain: 'mechanical',
+    slug: '',
+    si_unit: '',
+    symbol: '',
+    test_standard: '',
+    description: '',
+    value_type: 'numeric',
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  function set<K extends keyof CatalogPropertyCreate>(key: K, value: CatalogPropertyCreate[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function submit() {
+    setSaving(true)
+    setError(null)
+    try {
+      await catalogApi.createProperty({
+        ...form,
+        symbol: form.symbol || null,
+        test_standard: form.test_standard || null,
+        description: form.description || null,
+      })
+      setForm({
+        name: '',
+        domain: 'mechanical',
+        slug: '',
+        si_unit: '',
+        symbol: '',
+        test_standard: '',
+        description: '',
+        value_type: 'numeric',
+      })
+      onDone()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('만들지 못했습니다.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const slugOk = /^[a-z][a-z0-9_]{1,60}$/.test(form.slug)
+  const ready = form.name.trim() !== '' && slugOk && (form.si_unit ?? '').trim() !== ''
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>문헌 물성 추가</DialogTitle>
+          <DialogDescription>
+            문헌 카탈로그에 없는 물성을 만듭니다. 키는{' '}
+            <span className="font-mono">local.{form.domain}.{form.slug || '…'}</span> 가 되고,
+            한 번 만들면 바뀌지 않습니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="grid gap-1">
+            <Label htmlFor="new-prop-name">이름</Label>
+            <Input
+              id="new-prop-name"
+              value={form.name}
+              placeholder="습윤 굴곡탄성률"
+              onChange={(event) => set('name', event.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1">
+              <Label htmlFor="new-prop-domain">도메인</Label>
+              <select
+                id="new-prop-domain"
+                className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+                value={form.domain}
+                onChange={(event) => set('domain', event.target.value)}
+              >
+                {DOMAINS.map((one) => (
+                  <option key={one} value={one}>
+                    {DOMAIN_LABELS[one] ?? one} ({one})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="new-prop-slug">키 조각 (영문 snake_case)</Label>
+              <Input
+                id="new-prop-slug"
+                value={form.slug}
+                placeholder="flexural_modulus_wet"
+                className="font-mono"
+                onChange={(event) => set('slug', event.target.value.trim())}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1">
+              <Label htmlFor="new-prop-unit">SI 단위 (무차원은 1)</Label>
+              <Input
+                id="new-prop-unit"
+                value={form.si_unit ?? ''}
+                placeholder="Pa"
+                className="font-mono"
+                onChange={(event) => set('si_unit', event.target.value)}
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="new-prop-symbol">기호</Label>
+              <Input
+                id="new-prop-symbol"
+                value={form.symbol ?? ''}
+                placeholder="E_f"
+                onChange={(event) => set('symbol', event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="new-prop-standard">시험 규격</Label>
+            <Input
+              id="new-prop-standard"
+              value={form.test_standard ?? ''}
+              placeholder="ISO 178"
+              onChange={(event) => set('test_standard', event.target.value)}
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="new-prop-desc">설명</Label>
+            <Input
+              id="new-prop-desc"
+              value={form.description ?? ''}
+              onChange={(event) => set('description', event.target.value)}
+            />
+          </div>
+          <ErrorNotice error={error} />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button onClick={submit} disabled={!ready || saving}>
+            만들기
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

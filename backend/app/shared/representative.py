@@ -148,7 +148,8 @@ def _rank(value: Any) -> tuple[float, ...]:
         0.0 if value.value_num is not None else 1.0,
         _temperature_distance(conditions),
         float(len(conditions)),
-        float(value.mt_id),
+        # 직접 넣은 값(mt_id 없음)은 동률이면 이관해 온 값 뒤에 선다.
+        float(value.mt_id) if value.mt_id is not None else float("inf"),
     )
 
 

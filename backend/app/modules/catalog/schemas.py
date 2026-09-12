@@ -25,6 +25,8 @@ class CatalogMaterialOut(BaseModel):
     name: str
     material_code: str | None
     category: str
+    origin: str = "catalog"
+    """`catalog`(MaterialTwin 이관) · `local`(MatNexus 에서 직접 넣음)."""
     subsystem: str | None
     role: str | None
     manufacturer: str | None
@@ -86,6 +88,10 @@ class CatalogValueOut(BaseModel):
     source_detail: str | None
     notes: str | None
     representative: bool = False
+    origin: str = "catalog"
+    """`catalog`(이관) · `local`(직접 넣음). local 은 지울 수 있고 원본 검산에 안 든다."""
+    created_by: str | None = None
+    """직접 넣은 값이면 넣은 사람."""
     """같은 물성의 후보 중 대표로 뽑힌 값인가. **진 후보도 함께 온다** — 화면이
     이유와 같이 보여 준다."""
     n_candidates: int = 1
@@ -222,7 +228,95 @@ class CatalogMaterialDetailOut(BaseModel):
     material_class: str | None
     grade: str | None
     attributes: dict[str, Any] | None
+    origin: str = "catalog"
+    created_by: str | None = None
     values: list[CatalogValueOut]
+
+
+# --- 직접 넣기 (contribute.py) ------------------------------------------------
+
+
+class CatalogPropertyCreate(BaseModel):
+    """물성 정의 하나. 키는 서버가 `local.<domain>.<slug>` 로 만든다."""
+
+    name: str = Field(min_length=1, max_length=200)
+    """사람이 부르는 이름 — 「습윤 굴곡탄성률」."""
+    domain: str = Field(min_length=1, max_length=30)
+    """카탈로그 도메인 — mechanical · thermal · physical · electrical …"""
+    slug: str = Field(min_length=2, max_length=60)
+    """키의 마지막 조각. 영문 snake_case — flexural_modulus_wet."""
+    si_unit: str | None = Field(default=None, max_length=50)
+    """SI 정본 단위(Pa · J/(kg.K) · 1). 수치 물성이면 필수."""
+    symbol: str | None = Field(default=None, max_length=50)
+    value_type: str = "numeric"
+    description: str | None = None
+    test_standard: str | None = Field(default=None, max_length=200)
+    condition_axes: list[str] | None = None
+    """조건 없이는 무의미해지는 축 — 예: ["temperature_k"]."""
+
+
+class CatalogDefinitionOut(BaseModel):
+    key: str
+    name: str
+    domain: str
+    symbol: str | None
+    si_unit: str | None
+    value_type: str
+    description: str | None
+    test_standard: str | None
+    condition_axes: list[str] | None
+    origin: str
+    created_by: str | None = None
+
+
+class CatalogMaterialCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    category: str = Field(min_length=1, max_length=30)
+    """metal · polymer · ceramic · composite · foam · rubber · molecular."""
+    material_code: str | None = Field(default=None, max_length=100)
+    manufacturer: str | None = None
+    grade: str | None = None
+    material_class: str | None = None
+    subsystem: str | None = Field(default=None, max_length=50)
+    description: str | None = None
+
+
+class CatalogSourceIn(BaseModel):
+    """값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다."""
+
+    kind: str = Field(min_length=1, max_length=30)
+    """journal · book · database · datasheet · standard · web · other."""
+    title: str | None = None
+    authors: str | None = None
+    year: int | None = Field(default=None, ge=1800, le=2100)
+    doi: str | None = Field(default=None, max_length=200)
+    url: str | None = None
+    publisher: str | None = Field(default=None, max_length=300)
+
+
+class CatalogValueCreate(BaseModel):
+    property_key: str = Field(min_length=1, max_length=100)
+    value_num: float | None = None
+    value_text: str | None = None
+    unit: str | None = Field(default=None, max_length=50)
+    """값의 단위. 정의 단위와 같은 차원이면 서버가 정의 단위로 환산한다."""
+    uncertainty: float | None = None
+    conditions: dict[str, Any] | None = None
+    """조건 — temperature_k · strain_rate_1_s · state …"""
+    method: str = "handbook"
+    """measured · handbook · digitized · computed · estimated."""
+    quality_tier: int = Field(ge=1, le=4)
+    """1 실측 인쇄 · 2 핸드북·규격 · 3 계열 대표값·2차 인용 · 4 계산·추정·가정."""
+    source: CatalogSourceIn
+    source_detail: str | None = None
+    """출처 안의 위치 — 페이지·표·그림."""
+    notes: str | None = None
+
+
+class CatalogValueCreatedOut(BaseModel):
+    value: CatalogValueOut
+    converted: str | None = None
+    """단위를 환산했으면 그 내역 — "310 MPa → 3.1e+08 Pa"."""
 
 
 class PropertyCandidateOut(BaseModel):
@@ -306,6 +400,8 @@ class PropertyDictionaryEntryOut(BaseModel):
     key: str
     name: str
     domain: str
+    origin: str = "catalog"
+    """`catalog`(MaterialTwin 키) · `local`(MatNexus 가 만든 키, `local.` 접두어)."""
     si_unit: str | None
     symbol: str | None
     test_standard: str | None
@@ -363,6 +459,8 @@ class PropertyMeasuredOut(BaseModel):
 class PropertyMappingRowOut(BaseModel):
     """물성 하나가 세 층에서 어떻게 불리는가 — 매핑 화면의 한 줄."""
 
+    origin: str = "catalog"
+    """`local` 이면 MatNexus 에서 만든 물성 — 값·매핑이 없으면 지울 수 있다."""
     key: str
     name: str
     domain: str

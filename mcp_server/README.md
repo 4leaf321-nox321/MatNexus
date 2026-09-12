@@ -113,6 +113,13 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     ★ adopt_parameter_set(...)         파라미터 한 벌을 통째로
     ★ create_declared_card(...)        적어 둔 값만으로 카드 초안
 
+### 문헌 카탈로그에 직접 넣기 — **출처 없는 값은 안 받는다**
+
+    ★ add_catalog_property(...)        카탈로그에 없는 물성 (키는 `local.` 으로, 관리자)
+    ★ add_catalog_material(...)        카탈로그에 없는 문헌 재료
+    ★ add_catalog_value(...)           값 + 단위 + 조건 + 방법 + 등급 + 출처 (미리보기 기본)
+    ★ delete_catalog_value(id)         직접 넣은 값만 (넣은 사람·관리자)
+
 ### 카드 짓기 — **초안까지만**
 
     preview_card_fit(...)              경화식들을 견준다 — **RMSE 로 고르지 마라**

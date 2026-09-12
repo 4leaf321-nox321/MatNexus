@@ -17,6 +17,14 @@ JSON 쪽**이다.
 찾아 갱신하고, 지우지 않는다. 데이터는 어느 환경이든 「이관 스크립트 + 원본
 파일」로만 들어온다(개발 DB → 운영 복사 경로는 없다 — 개발 DB 에는 테스트
 데이터가 섞여 있다).
+
+## 여기서 직접 넣은 것 — `mt_id IS NULL`
+
+MaterialTwin 에 없는 물성·재료·값을 MatNexus 에서 직접 넣을 수 있다(2026-09-12,
+`contribute.py`). 그런 줄은 `mt_id` 가 비고 `created_by_id` 가 찬다. **정의의 키는
+`local.` 으로 시작한다** — 저쪽 키와 절대 안 겹치고, 사전을 받아 가는 다른
+시스템이 접두어만 보고 「MatNexus 가 만든 키」 를 안다. 이관은 이 줄들을 모른다:
+`mt_id` 로만 찾으므로 건드리지 않고, 검산(`verify`)은 `mt_id` 있는 줄만 센다.
 """
 
 from __future__ import annotations
@@ -60,8 +68,12 @@ class CatalogMaterial(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    #: 원본 material.id — 멱등의 열쇠.
-    mt_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    #: 원본 material.id — 멱등의 열쇠. 여기서 직접 넣은 재료는 비어 있다.
+    mt_id: Mapped[int | None] = mapped_column(Integer, unique=True, index=True)
+    #: **여기서 직접 넣은 줄이면** 누가. 이관해 온 줄은 비어 있다(2026-09-12).
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     name: Mapped[str] = mapped_column(String(300), index=True)
     material_code: Mapped[str | None] = mapped_column(String(100))
@@ -129,7 +141,11 @@ class CatalogSource(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    mt_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    mt_id: Mapped[int | None] = mapped_column(Integer, unique=True, index=True)
+    #: **여기서 직접 넣은 줄이면** 누가. 이관해 온 줄은 비어 있다(2026-09-12).
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     kind: Mapped[str] = mapped_column(String(30))
     """journal·datasheet·database·book·standard·web·computed·other."""
@@ -165,10 +181,15 @@ class CatalogDefinition(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    mt_id: Mapped[int] = mapped_column(Integer, unique=True)
+    mt_id: Mapped[int | None] = mapped_column(Integer, unique=True)
+    #: **여기서 직접 넣은 줄이면** 누가. 이관해 온 줄은 비어 있다(2026-09-12).
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    """`domain.name` 꼴 안정 id — 예: mechanical.youngs_modulus."""
+    """`domain.name` 꼴 안정 id — 예: mechanical.youngs_modulus.
+    여기서 직접 만든 것은 `local.domain.name` — 예: local.mechanical.flexural_modulus_wet."""
     domain: Mapped[str] = mapped_column(String(30), index=True)
     name: Mapped[str] = mapped_column(String(200))
     symbol: Mapped[str | None] = mapped_column(String(50))
@@ -198,7 +219,11 @@ class CatalogValue(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    mt_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    mt_id: Mapped[int | None] = mapped_column(Integer, unique=True, index=True)
+    #: **여기서 직접 넣은 줄이면** 누가. 이관해 온 줄은 비어 있다(2026-09-12).
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     material_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),

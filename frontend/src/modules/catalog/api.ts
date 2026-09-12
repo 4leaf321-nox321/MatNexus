@@ -308,7 +308,30 @@ export const catalogApi = {
   linkProperty: (payload: PropertyLinkCreate) =>
     api.post<PropertyLink>('/catalog/properties/links', payload),
   unlinkProperty: (linkId: string) => api.delete<void>(`/catalog/properties/links/${linkId}`),
+
+  /**
+   * 카탈로그에 직접 넣기 — MaterialTwin 에 없는 물성·재료·값(2026-09-12).
+   * 정의의 키는 서버가 `local.<domain>.<slug>` 로 만든다. 지우기는 직접 넣은 줄만.
+   */
+  createProperty: (payload: CatalogPropertyCreate) =>
+    api.post<CatalogDefinition>('/catalog/properties', payload),
+  deleteProperty: (key: string) =>
+    api.delete<void>(`/catalog/properties/${encodeURIComponent(key)}`),
+  createCatalogMaterial: (payload: CatalogMaterialCreate) =>
+    api.post<CatalogMaterial>('/catalog/materials', payload),
+  createValue: (materialId: string, payload: CatalogValueCreate) =>
+    api.post<CatalogValueCreated>(`/catalog/materials/${materialId}/values`, payload),
+  deleteValue: (valueId: string) => api.delete<void>(`/catalog/values/${valueId}`),
 }
+
+export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
+export type CatalogDefinition = components['schemas']['CatalogDefinitionOut']
+export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate']
+export type CatalogValueCreate = components['schemas']['CatalogValueCreate']
+export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut']
+
+/** 카탈로그 도메인 — 서버 `contribute.DOMAINS` 와 같다. 새 값을 만들지 않는다. */
+export const DOMAINS = Object.keys(DOMAIN_LABELS)
 
 export type PropertyMapping = components['schemas']['PropertyMappingOut']
 export type PropertyMappingRow = components['schemas']['PropertyMappingRowOut']

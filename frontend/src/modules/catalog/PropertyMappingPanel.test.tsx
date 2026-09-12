@@ -46,6 +46,7 @@ const MAPPING: PropertyMapping = {
   summary: { keys: 3, linked_keys: 2, measured_keys: 1, unlinked_items: 1 },
   rows: [
     {
+      origin: 'catalog',
       key: 'mechanical.yield_strength',
       name: '항복강도',
       domain: 'mechanical',
@@ -69,6 +70,7 @@ const MAPPING: PropertyMapping = {
       ],
     },
     {
+      origin: 'catalog',
       key: 'mechanical.hardness_vickers',
       name: '비커스 경도',
       domain: 'mechanical',
@@ -90,6 +92,7 @@ const MAPPING: PropertyMapping = {
       measured: [],
     },
     {
+      origin: 'catalog',
       key: 'mechanical.flexural_strength',
       name: '굽힘강도',
       domain: 'mechanical',

@@ -280,15 +280,16 @@ def verify(db: Session, con: sqlite3.Connection) -> list[str]:
     """이관 뒤 검산 — 원본 무결성 검사의 축소판. 빈 목록이 합격이다."""
     problems: list[str] = []
 
-    counts = {
-        "property_definition": (CatalogDefinition, "정의"),
-        "source": (CatalogSource, "출처"),
-        "material": (CatalogMaterial, "재료"),
-        "property_value": (CatalogValue, "값"),
-    }
-    for src_table, (model, label) in counts.items():
+    counts: list[tuple[str, Any, str]] = [
+        ("property_definition", CatalogDefinition.mt_id, "정의"),
+        ("source", CatalogSource.mt_id, "출처"),
+        ("material", CatalogMaterial.mt_id, "재료"),
+        ("property_value", CatalogValue.mt_id, "값"),
+    ]
+    # 여기서 직접 넣은 줄(`mt_id IS NULL`)은 원본에 없다 — 세면 늘 불일치다.
+    for src_table, mt_id, label in counts:
         src = con.execute(f"select count(*) from {src_table}").fetchone()[0]
-        dst = db.scalar(select(func.count()).select_from(model))
+        dst = db.scalar(select(func.count(mt_id)))
         if src != dst:
             problems.append(f"{label} 행수 불일치 — 원본 {src} vs 이관 {dst}")
 
@@ -297,7 +298,9 @@ def verify(db: Session, con: sqlite3.Connection) -> list[str]:
         "select count(*) from property_value where source_id is null"
     ).fetchone()[0]
     dst_null = db.scalar(
-        select(func.count()).select_from(CatalogValue).where(CatalogValue.source_id.is_(None))
+        select(func.count())
+        .select_from(CatalogValue)
+        .where(CatalogValue.source_id.is_(None), CatalogValue.mt_id.is_not(None))
     )
     if src_null != dst_null:
         problems.append(f"출처 없는 값 불일치 — 원본 {src_null} vs 이관 {dst_null}")
@@ -307,7 +310,9 @@ def verify(db: Session, con: sqlite3.Connection) -> list[str]:
         "select count(*) from property_value where quality_tier = 4"
     ).fetchone()[0]
     dst_t4 = db.scalar(
-        select(func.count()).select_from(CatalogValue).where(CatalogValue.quality_tier == 4)
+        select(func.count())
+        .select_from(CatalogValue)
+        .where(CatalogValue.quality_tier == 4, CatalogValue.mt_id.is_not(None))
     )
     if src_t4 != dst_t4:
         problems.append(f"tier4 개수 불일치 — 원본 {src_t4} vs 이관 {dst_t4}")

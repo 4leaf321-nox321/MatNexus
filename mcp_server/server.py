@@ -455,7 +455,9 @@ def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
         "conditions": row.get("conditions"),
         "method": row.get("method"),
         "quality_tier": tier,
-        "origin": "catalog",
+        # `local` 은 MatNexus 에서 직접 넣은 값 — 이관해 온 값과 같이 서되 구별된다.
+        "origin": row.get("origin") or "catalog",
+        **({"created_by": row["created_by"]} if row.get("created_by") else {}),
         "source": (
             {
                 "title": source.get("title"),
@@ -1616,6 +1618,210 @@ async def list_cards(
         "cards": [_card_summary(one) | {"material": one.get("material_name")}
                   for one in got.get("items", [])],
     }
+
+
+@mcp.tool()
+async def add_catalog_property(
+    ctx: Context,
+    name: str,
+    domain: str,
+    slug: str,
+    si_unit: str,
+    symbol: str | None = None,
+    test_standard: str | None = None,
+    description: str | None = None,
+    condition_axes: list[str] | None = None,
+) -> dict[str, Any]:
+    """문헌 카탈로그에 **없는 물성을 만든다.** 키는 서버가 `local.<domain>.<slug>` 로 짓는다.
+
+    **먼저 `resolve_property(name)` 로 이미 있는지 본다.** 이름·별칭이 같은 물성이
+    있으면 서버가 그 키를 알려 주며 거절한다(409) — 같은 물성이 두 키로 살면 값
+    검색이 반씩 갈린다. 비슷한 이름이 나오면 사람에게 같은 것인지 묻는다.
+
+    - `domain`: mechanical · thermal · physical · electrical · magnetic · optical ·
+      chemical · acoustic · rheological · surface · interface · structure
+    - `slug`: 영문 snake_case — `flexural_modulus_wet`. **한 번 만들면 못 바꾼다.**
+    - `si_unit`: SI 정본 — `Pa` · `W/(m.K)` · `J/(kg.K)` · 무차원이면 `1`. 값은 이
+      단위로 환산돼 저장된다. 단위표에 없는 눈금(HV 등)은 못 만든다.
+    - `condition_axes`: 조건 없이는 무의미한 축 — `["temperature_k"]`.
+
+    시스템 관리자만 만들 수 있다. 만든 뒤 `add_catalog_value` 로 값을 단다.
+    사람에게는 `name` 으로 말한다 — 키는 시스템끼리 쓰는 이름표다.
+    """
+    body: dict[str, Any] = {
+        "name": name,
+        "domain": domain,
+        "slug": slug,
+        "si_unit": si_unit,
+        "symbol": symbol,
+        "test_standard": test_standard,
+        "description": description,
+        "condition_axes": condition_axes,
+        "value_type": "numeric",
+    }
+    got = await _send(ctx, "POST", "/catalog/properties", body)
+    if "error" in got:
+        return got
+    return {
+        **got,
+        "note": (
+            f"만들었습니다: {got.get('key')}. 이제 add_catalog_value 로 값을 달거나, "
+            "기준정보의 물성 매핑에서 사내 항목에 이을 수 있습니다."
+        ),
+    }
+
+
+@mcp.tool()
+async def add_catalog_material(
+    ctx: Context,
+    name: str,
+    category: str,
+    manufacturer: str | None = None,
+    grade: str | None = None,
+    material_code: str | None = None,
+    material_class: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """문헌 카탈로그에 **재료를 만든다** — 문헌상의 등급·제품이지 사내 lot 이 아니다.
+
+    **먼저 `search_catalog(name)` 로 이미 있는지 본다.** 같은 이름이 있으면 서버가 그
+    id 를 알려 주며 거절한다(409) — 그 재료에 값을 더한다.
+
+    - `category`: metal · polymer · ceramic · composite · foam · rubber · molecular
+
+    사내 재료를 만들려는 것이면 이 도구가 아니다(`create_material`).
+    """
+    body = {
+        "name": name,
+        "category": category,
+        "manufacturer": manufacturer,
+        "grade": grade,
+        "material_code": material_code,
+        "material_class": material_class,
+        "description": description,
+    }
+    got = await _send(ctx, "POST", "/catalog/materials", body)
+    if "error" in got:
+        return got
+    return {**got, "note": "만들었습니다. add_catalog_value 로 값을 다세요."}
+
+
+@mcp.tool()
+async def add_catalog_value(
+    ctx: Context,
+    catalog_material_id: str,
+    property_key: str,
+    value: float,
+    unit: str,
+    quality_tier: int,
+    source_kind: str,
+    source_title: str | None = None,
+    source_year: int | None = None,
+    source_doi: str | None = None,
+    source_url: str | None = None,
+    source_authors: str | None = None,
+    source_detail: str | None = None,
+    method: str = "handbook",
+    conditions: dict[str, Any] | None = None,
+    uncertainty: float | None = None,
+    notes: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """문헌에서 찾은 값 하나를 **카탈로그 재료에 단다.** 값·단위·조건·방법·등급·출처가
+    한 몸이다 — 하나라도 빠지면 그 숫자는 나중에 아무도 못 믿는다.
+
+    **기본이 미리보기(dry_run=True)다.** 무엇이 어디에 어떤 단위로 들어갈지 보이고,
+    사람이 확인한 뒤 `dry_run=False` 로 다시 부른다. 값은 **정의의 단위로 환산돼**
+    저장된다 — `310 MPa` 로 넣으면 `3.1e8 Pa` 가 된다. 차원이 다르면 거절.
+
+    - `property_key`: `resolve_property` 로 찾은 키. 없는 물성이면 먼저
+      `add_catalog_property`.
+    - `quality_tier`: 1 그 제품 문서에 인쇄된 실측 · 2 핸드북·규격·공인 DB ·
+      3 계열 대표값·2차 인용 · **4 계산·추정·가정**(근거 없는 값).
+    - `method`: measured · handbook · digitized(그래프 판독) · computed · estimated.
+      computed·estimated 는 tier 4 여야 한다.
+    - **출처는 필수** — `source_title`·`source_doi`·`source_url` 중 하나는 있어야 한다.
+      `source_kind`: journal · book · database · datasheet · standard · web · other.
+      같은 DOI 나 같은 제목+연도의 출처가 이미 있으면 그것에 붙는다.
+    - `conditions`: `{"temperature_k": 296.15, "state": "solid"}` 처럼 잰 조건.
+      조건 없이 무의미한 물성(온도 의존)은 조건을 꼭 적는다.
+    - `source_detail`: 출처 안의 위치 — "표 3", "p. 214", "Fig. 5".
+
+    **찾은 값을 그대로 옮기지 말고, 출처에 적힌 단위와 조건을 같이 옮긴다.** 웹에서
+    본 숫자를 출처 없이 넣지 않는다 — 출처를 못 대면 넣지 않는 것이 맞다.
+    """
+    body: dict[str, Any] = {
+        "property_key": property_key,
+        "value_num": value,
+        "unit": unit,
+        "method": method,
+        "quality_tier": quality_tier,
+        "conditions": conditions,
+        "uncertainty": uncertainty,
+        "source": {
+            "kind": source_kind,
+            "title": source_title,
+            "year": source_year,
+            "doi": source_doi,
+            "url": source_url,
+            "authors": source_authors,
+        },
+        "source_detail": source_detail,
+        "notes": notes,
+    }
+    if dry_run:
+        material = await _get(ctx, f"/catalog/materials/{catalog_material_id}")
+        if "error" in material:
+            return material
+        resolved = await _get(ctx, "/catalog/properties/resolve", {"q": property_key})
+        found = next(
+            (
+                one
+                for one in (resolved.get("candidates") or [])
+                if one.get("key") == property_key
+            ),
+            None,
+        )
+        if found is None:
+            return {
+                "error": (
+                    f"없는 물성 키입니다: {property_key} — resolve_property 로 찾거나 "
+                    "add_catalog_property 로 만드세요."
+                )
+            }
+        if not (source_title or source_doi or source_url):
+            return {"error": "출처가 비었습니다 — source_title·source_doi·source_url 중 하나."}
+        return {
+            "dry_run": True,
+            "material": material.get("name"),
+            "property": found.get("name"),
+            "will_store": f"{value} {unit} → {found.get('si_unit')} 로 환산해 저장",
+            "quality_tier": quality_tier,
+            "method": method,
+            "conditions": conditions,
+            "source": body["source"],
+            "note": "이대로 넣으려면 dry_run=False 로 다시 부르세요.",
+        }
+    got = await _send(ctx, "POST", f"/catalog/materials/{catalog_material_id}/values", body)
+    if "error" in got:
+        return got
+    stored = _catalog_value(got.get("value") or {})
+    return {
+        "stored": stored,
+        "value_id": (got.get("value") or {}).get("id"),
+        **({"converted": got["converted"]} if got.get("converted") else {}),
+        "note": "넣었습니다. 잘못 넣었으면 delete_catalog_value 로 지웁니다(넣은 사람·관리자만).",
+    }
+
+
+@mcp.tool()
+async def delete_catalog_value(ctx: Context, value_id: str) -> dict[str, Any]:
+    """직접 넣은 문헌 값 하나를 지운다 — 넣은 사람이거나 관리자만. 이관해 온 값은
+    원본(MaterialTwin)이 정본이라 못 지운다."""
+    got = await _send(ctx, "DELETE", f"/catalog/values/{value_id}")
+    if "error" in got:
+        return got
+    return {"ok": True, "deleted": value_id}
 
 
 @mcp.tool()

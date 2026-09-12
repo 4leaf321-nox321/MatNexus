@@ -586,7 +586,13 @@ export interface paths {
          */
         get: operations["list_materials_api_catalog_materials_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Catalog Material
+         * @description 카탈로그 재료를 만든다 — 문헌상의 등급·제품이지 사내 lot 이 아니다.
+         *
+         *     같은 이름이 이미 있으면 그 id 를 알려 주고 거절한다(409) — 값은 그 재료에 더한다.
+         */
+        post: operations["create_catalog_material_api_catalog_materials_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -610,7 +616,11 @@ export interface paths {
         get: operations["get_material_api_catalog_materials__material_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Catalog Material
+         * @description 직접 만든 재료만(넣은 사람·관리자), 값·연결이 없을 때만.
+         */
+        delete: operations["delete_catalog_material_api_catalog_materials__material_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -633,6 +643,52 @@ export interface paths {
         get: operations["catalog_parameter_sets_api_catalog_materials__material_id__parameter_sets_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/materials/{material_id}/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Catalog Value
+         * @description 문헌 값 하나를 넣는다 — **값 · 단위 · 조건 · 방법 · 등급 · 출처가 한 몸이다.**
+         *
+         *     단위는 정의의 단위로 환산해 저장한다(같은 차원일 때만). 출처 없는 값은 안 받는다.
+         *     computed·estimated 는 tier 4 여야 하고, tier 4 는 가정값 표지가 붙는다.
+         */
+        post: operations["create_catalog_value_api_catalog_materials__material_id__values_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Property
+         * @description 문헌 물성 정의를 만든다 — 키는 `local.<domain>.<slug>`.
+         *
+         *     시스템 관리자만. 정의는 모든 부서의 검색·매핑·사전에 걸리고, 키는 한 번 나가면
+         *     못 바꾼다. 이름·별칭이 같은 물성이 이미 있으면 그 키를 알려 주고 거절한다(409).
+         */
+        post: operations["create_property_api_catalog_properties_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -825,6 +881,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/{property_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Property
+         * @description 직접 만든 정의만, 값·매핑·별칭이 하나도 없을 때만 지운다.
+         */
+        delete: operations["delete_property_api_catalog_properties__property_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/properties/{property_key}/aliases": {
         parameters: {
             query?: never;
@@ -865,6 +941,26 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/values/{value_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Catalog Value
+         * @description 직접 넣은 값만(넣은 사람·관리자). 이관해 온 값은 원본이 정본이다.
+         */
+        delete: operations["delete_catalog_value_api_catalog_values__value_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7100,6 +7196,31 @@ export interface components {
             /** Subsystems */
             subsystems: string[];
         };
+        /** CatalogDefinitionOut */
+        CatalogDefinitionOut: {
+            /** Condition Axes */
+            condition_axes: string[] | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Description */
+            description: string | null;
+            /** Domain */
+            domain: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Origin */
+            origin: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Test Standard */
+            test_standard: string | null;
+            /** Value Type */
+            value_type: string;
+        };
         /** CatalogLinkIn */
         CatalogLinkIn: {
             /**
@@ -7127,6 +7248,25 @@ export interface components {
              */
             value_count: number;
         };
+        /** CatalogMaterialCreate */
+        CatalogMaterialCreate: {
+            /** Category */
+            category: string;
+            /** Description */
+            description?: string | null;
+            /** Grade */
+            grade?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Material Class */
+            material_class?: string | null;
+            /** Material Code */
+            material_code?: string | null;
+            /** Name */
+            name: string;
+            /** Subsystem */
+            subsystem?: string | null;
+        };
         /** CatalogMaterialDetailOut */
         CatalogMaterialDetailOut: {
             /** Attributes */
@@ -7135,6 +7275,8 @@ export interface components {
             } | null;
             /** Category */
             category: string;
+            /** Created By */
+            created_by?: string | null;
             /** Description */
             description: string | null;
             /** Grade */
@@ -7152,6 +7294,11 @@ export interface components {
             material_code: string | null;
             /** Name */
             name: string;
+            /**
+             * Origin
+             * @default catalog
+             */
+            origin: string;
             /** Role */
             role: string | null;
             /** Subsystem */
@@ -7178,6 +7325,11 @@ export interface components {
             material_code: string | null;
             /** Name */
             name: string;
+            /**
+             * Origin
+             * @default catalog
+             */
+            origin: string;
             /** Role */
             role: string | null;
             /** Subsystem */
@@ -7255,6 +7407,53 @@ export interface components {
             /** Value */
             value?: number | null;
         };
+        /**
+         * CatalogPropertyCreate
+         * @description 물성 정의 하나. 키는 서버가 `local.<domain>.<slug>` 로 만든다.
+         */
+        CatalogPropertyCreate: {
+            /** Condition Axes */
+            condition_axes?: string[] | null;
+            /** Description */
+            description?: string | null;
+            /** Domain */
+            domain: string;
+            /** Name */
+            name: string;
+            /** Si Unit */
+            si_unit?: string | null;
+            /** Slug */
+            slug: string;
+            /** Symbol */
+            symbol?: string | null;
+            /** Test Standard */
+            test_standard?: string | null;
+            /**
+             * Value Type
+             * @default numeric
+             */
+            value_type: string;
+        };
+        /**
+         * CatalogSourceIn
+         * @description 값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.
+         */
+        CatalogSourceIn: {
+            /** Authors */
+            authors?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Kind */
+            kind: string;
+            /** Publisher */
+            publisher?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Year */
+            year?: number | null;
+        };
         /** CatalogSourceOut */
         CatalogSourceOut: {
             /** Doi */
@@ -7304,12 +7503,49 @@ export interface components {
             /** Values */
             values: number;
         };
+        /** CatalogValueCreate */
+        CatalogValueCreate: {
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Method
+             * @default handbook
+             */
+            method: string;
+            /** Notes */
+            notes?: string | null;
+            /** Property Key */
+            property_key: string;
+            /** Quality Tier */
+            quality_tier: number;
+            source: components["schemas"]["CatalogSourceIn"];
+            /** Source Detail */
+            source_detail?: string | null;
+            /** Uncertainty */
+            uncertainty?: number | null;
+            /** Unit */
+            unit?: string | null;
+            /** Value Num */
+            value_num?: number | null;
+            /** Value Text */
+            value_text?: string | null;
+        };
+        /** CatalogValueCreatedOut */
+        CatalogValueCreatedOut: {
+            /** Converted */
+            converted?: string | null;
+            value: components["schemas"]["CatalogValueOut"];
+        };
         /** CatalogValueOut */
         CatalogValueOut: {
             /** Conditions */
             conditions: {
                 [key: string]: unknown;
             } | null;
+            /** Created By */
+            created_by?: string | null;
             /**
              * Distinguishing
              * @default {}
@@ -7333,6 +7569,11 @@ export interface components {
             n_candidates: number;
             /** Notes */
             notes: string | null;
+            /**
+             * Origin
+             * @default catalog
+             */
+            origin: string;
             /** Property Key */
             property_key: string;
             /** Property Name */
@@ -11715,6 +11956,11 @@ export interface components {
             measured_keys: string[];
             /** Name */
             name: string;
+            /**
+             * Origin
+             * @default catalog
+             */
+            origin: string;
             /** Si Unit */
             si_unit: string | null;
             /** Symbol */
@@ -11876,6 +12122,11 @@ export interface components {
             measured: components["schemas"]["PropertyMeasuredOut"][];
             /** Name */
             name: string;
+            /**
+             * Origin
+             * @default catalog
+             */
+            origin: string;
             /** Si Unit */
             si_unit: string | null;
             /** Symbol */
@@ -16188,6 +16439,39 @@ export interface operations {
             };
         };
     };
+    create_catalog_material_api_catalog_materials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogMaterialCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogMaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_material_api_catalog_materials__material_id__get: {
         parameters: {
             query?: never;
@@ -16219,6 +16503,35 @@ export interface operations {
             };
         };
     };
+    delete_catalog_material_api_catalog_materials__material_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     catalog_parameter_sets_api_catalog_materials__material_id__parameter_sets_get: {
         parameters: {
             query?: never;
@@ -16237,6 +16550,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogParameterSetOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_catalog_value_api_catalog_materials__material_id__values_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogValueCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogValueCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_property_api_catalog_properties_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogPropertyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogDefinitionOut"];
                 };
             };
             /** @description Validation Error */
@@ -16497,6 +16878,35 @@ export interface operations {
             };
         };
     };
+    delete_property_api_catalog_properties__property_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                property_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_property_aliases_api_catalog_properties__property_key__aliases_get: {
         parameters: {
             query?: never;
@@ -16579,6 +16989,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogSummaryOut"];
+                };
+            };
+        };
+    };
+    delete_catalog_value_api_catalog_values__value_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                value_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

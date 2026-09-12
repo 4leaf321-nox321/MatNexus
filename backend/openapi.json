@@ -2841,6 +2841,113 @@
         "title": "CatalogCoverageOut",
         "type": "object"
       },
+      "CatalogDefinitionOut": {
+        "properties": {
+          "condition_axes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Axes"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "test_standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Standard"
+          },
+          "value_type": {
+            "title": "Value Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "domain",
+          "symbol",
+          "si_unit",
+          "value_type",
+          "description",
+          "test_standard",
+          "condition_axes",
+          "origin"
+        ],
+        "title": "CatalogDefinitionOut",
+        "type": "object"
+      },
       "CatalogLinkIn": {
         "properties": {
           "catalog_material_id": {
@@ -2912,6 +3019,96 @@
         "title": "CatalogLinkOut",
         "type": "object"
       },
+      "CatalogMaterialCreate": {
+        "properties": {
+          "category": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "material_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Class"
+          },
+          "material_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Code"
+          },
+          "name": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "subsystem": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subsystem"
+          }
+        },
+        "required": [
+          "name",
+          "category"
+        ],
+        "title": "CatalogMaterialCreate",
+        "type": "object"
+      },
       "CatalogMaterialDetailOut": {
         "properties": {
           "attributes": {
@@ -2929,6 +3126,17 @@
           "category": {
             "title": "Category",
             "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
           },
           "description": {
             "anyOf": [
@@ -2992,6 +3200,11 @@
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "default": "catalog",
+            "title": "Origin",
             "type": "string"
           },
           "role": {
@@ -3098,6 +3311,11 @@
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "default": "catalog",
+            "title": "Origin",
             "type": "string"
           },
           "role": {
@@ -3291,6 +3509,188 @@
         "title": "CatalogParameterTermOut",
         "type": "object"
       },
+      "CatalogPropertyCreate": {
+        "description": "물성 정의 하나. 키는 서버가 `local.<domain>.<slug>` 로 만든다.",
+        "properties": {
+          "condition_axes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Axes"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "domain": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "slug": {
+            "maxLength": 60,
+            "minLength": 2,
+            "title": "Slug",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "test_standard": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Standard"
+          },
+          "value_type": {
+            "default": "numeric",
+            "title": "Value Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "domain",
+          "slug"
+        ],
+        "title": "CatalogPropertyCreate",
+        "type": "object"
+      },
+      "CatalogSourceIn": {
+        "description": "값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.",
+        "properties": {
+          "authors": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "kind": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "maximum": 2100.0,
+                "minimum": 1800.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "CatalogSourceIn",
+        "type": "object"
+      },
       "CatalogSourceOut": {
         "properties": {
           "doi": {
@@ -3442,6 +3842,139 @@
         "title": "CatalogSummaryOut",
         "type": "object"
       },
+      "CatalogValueCreate": {
+        "properties": {
+          "conditions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "method": {
+            "default": "handbook",
+            "title": "Method",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "property_key": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Property Key",
+            "type": "string"
+          },
+          "quality_tier": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CatalogSourceIn"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "uncertainty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value_num": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Num"
+          },
+          "value_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Text"
+          }
+        },
+        "required": [
+          "property_key",
+          "quality_tier",
+          "source"
+        ],
+        "title": "CatalogValueCreate",
+        "type": "object"
+      },
+      "CatalogValueCreatedOut": {
+        "properties": {
+          "converted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Converted"
+          },
+          "value": {
+            "$ref": "#/components/schemas/CatalogValueOut"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "CatalogValueCreatedOut",
+        "type": "object"
+      },
       "CatalogValueOut": {
         "properties": {
           "conditions": {
@@ -3455,6 +3988,17 @@
               }
             ],
             "title": "Conditions"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
           },
           "distinguishing": {
             "additionalProperties": true,
@@ -3497,6 +4041,11 @@
               }
             ],
             "title": "Notes"
+          },
+          "origin": {
+            "default": "catalog",
+            "title": "Origin",
+            "type": "string"
           },
           "property_key": {
             "title": "Property Key",
@@ -15131,6 +15680,11 @@
             "title": "Name",
             "type": "string"
           },
+          "origin": {
+            "default": "catalog",
+            "title": "Origin",
+            "type": "string"
+          },
           "si_unit": {
             "anyOf": [
               {
@@ -15553,6 +16107,11 @@
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "default": "catalog",
+            "title": "Origin",
             "type": "string"
           },
           "si_unit": {
@@ -25560,9 +26119,84 @@
         "tags": [
           "catalog"
         ]
+      },
+      "post": {
+        "description": "카탈로그 재료를 만든다 — 문헌상의 등급·제품이지 사내 lot 이 아니다.\n\n같은 이름이 이미 있으면 그 id 를 알려 주고 거절한다(409) — 값은 그 재료에 더한다.",
+        "operationId": "create_catalog_material_api_catalog_materials_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogMaterialCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogMaterialOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Catalog Material",
+        "tags": [
+          "catalog"
+        ]
       }
     },
     "/api/catalog/materials/{material_id}": {
+      "delete": {
+        "description": "직접 만든 재료만(넣은 사람·관리자), 값·연결이 없을 때만.",
+        "operationId": "delete_catalog_material_api_catalog_materials__material_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Catalog Material",
+        "tags": [
+          "catalog"
+        ]
+      },
       "get": {
         "description": "재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.\n\n**후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을\n대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.",
         "operationId": "get_material_api_catalog_materials__material_id__get",
@@ -25649,6 +26283,102 @@
           }
         },
         "summary": "Catalog Parameter Sets",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/materials/{material_id}/values": {
+      "post": {
+        "description": "문헌 값 하나를 넣는다 — **값 · 단위 · 조건 · 방법 · 등급 · 출처가 한 몸이다.**\n\n단위는 정의의 단위로 환산해 저장한다(같은 차원일 때만). 출처 없는 값은 안 받는다.\ncomputed·estimated 는 tier 4 여야 하고, tier 4 는 가정값 표지가 붙는다.",
+        "operationId": "create_catalog_value_api_catalog_materials__material_id__values_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogValueCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogValueCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Catalog Value",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties": {
+      "post": {
+        "description": "문헌 물성 정의를 만든다 — 키는 `local.<domain>.<slug>`.\n\n시스템 관리자만. 정의는 모든 부서의 검색·매핑·사전에 걸리고, 키는 한 번 나가면\n못 바꾼다. 이름·별칭이 같은 물성이 이미 있으면 그 키를 알려 주고 거절한다(409).",
+        "operationId": "create_property_api_catalog_properties_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogPropertyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDefinitionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Property",
         "tags": [
           "catalog"
         ]
@@ -26071,6 +26801,42 @@
         ]
       }
     },
+    "/api/catalog/properties/{property_key}": {
+      "delete": {
+        "description": "직접 만든 정의만, 값·매핑·별칭이 하나도 없을 때만 지운다.",
+        "operationId": "delete_property_api_catalog_properties__property_key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "property_key",
+            "required": true,
+            "schema": {
+              "title": "Property Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Property",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/properties/{property_key}/aliases": {
       "get": {
         "operationId": "list_property_aliases_api_catalog_properties__property_key__aliases_get",
@@ -26185,6 +26951,43 @@
           }
         },
         "summary": "Summary",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/values/{value_id}": {
+      "delete": {
+        "description": "직접 넣은 값만(넣은 사람·관리자). 이관해 온 값은 원본이 정본이다.",
+        "operationId": "delete_catalog_value_api_catalog_values__value_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "value_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Value Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Catalog Value",
         "tags": [
           "catalog"
         ]
