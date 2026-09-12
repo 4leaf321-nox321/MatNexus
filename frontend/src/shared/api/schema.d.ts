@@ -5412,6 +5412,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voc/{item_id}/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Event
+         * @description 이력 한 줄을 지운다 — **시스템 관리자만.**
+         *
+         *     「해결」 로 옮겼다가 「처리 중」 으로 되돌리는 실수가 나는데, 그 줄을 지울 길이
+         *     없었다(VOC 2026-09-13). 지우면 **상태는 남은 이력에서 다시 정한다** — 마지막으로
+         *     상태를 옮긴 줄이 곧 지금 상태다. 등록 줄은 못 지운다: 그것이 건의 시작이다.
+         */
+        delete: operations["delete_event_api_voc__item_id__events__event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vocabularies": {
         parameters: {
             query?: never;
@@ -15754,6 +15778,11 @@ export interface components {
             };
             /** Body */
             body: string;
+            /**
+             * Can Delete Events
+             * @default false
+             */
+            can_delete_events: boolean;
             /** Can Edit */
             can_edit: boolean;
             /**
@@ -25004,6 +25033,38 @@ export interface operations {
                 "application/json": components["schemas"]["VocEventRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_event_api_voc__item_id__events__event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

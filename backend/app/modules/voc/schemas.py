@@ -60,6 +60,9 @@ class VocDetailOut(VocOut):
     """**이 사람이 지금 옮길 수 있는 상태.** 관리자와 낸 사람이 다르고 지금 상태에
     따라 다르다 — 화면이 규칙을 외우면 서버와 어긋나는 날이 온다."""
     allowed_labels: dict[str, str]
+    can_delete_events: bool = False
+    """이력 한 줄을 지울 수 있는가 — **시스템 관리자만.** 상태를 잘못 옮긴 줄을
+    되돌릴 길이 없었다(VOC 2026-09-13). 등록 줄은 못 지운다."""
     """`allowed` 의 각 상태로 옮기는 단추에 적을 말. 「해결」 이 아니라 「해결로 옮김」
     처럼 동사가 붙는다."""
     note_required: list[str]

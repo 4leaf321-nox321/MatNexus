@@ -158,6 +158,7 @@ def _detail(db: Session, item: VocItem, viewer: User) -> VocDetailOut:
             for one in events
         ],
         allowed=allowed,
+        can_delete_events=bool(viewer.is_system_admin),
         allowed_labels={one: MOVE_LABELS.get(one, one) for one in allowed},
         note_required=[one for one in allowed if one in NOTE_REQUIRED],
     )
@@ -374,6 +375,58 @@ def delete_item(
     """**행을 없앤다.** 이력도 함께 간다(CASCADE) — 화면이 먼저 묻는다."""
     db.delete(_mine(db, item_id, user))
     db.commit()
+
+
+@router.delete("/{item_id}/events/{event_id}", response_model=VocDetailOut)
+def delete_event(
+    item_id: uuid.UUID,
+    event_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> VocDetailOut:
+    """이력 한 줄을 지운다 — **시스템 관리자만.**
+
+    「해결」 로 옮겼다가 「처리 중」 으로 되돌리는 실수가 나는데, 그 줄을 지울 길이
+    없었다(VOC 2026-09-13). 지우면 **상태는 남은 이력에서 다시 정한다** — 마지막으로
+    상태를 옮긴 줄이 곧 지금 상태다. 등록 줄은 못 지운다: 그것이 건의 시작이다.
+    """
+    if not user.is_system_admin:
+        raise Forbidden("MNX-VOC-0008", "이력은 시스템 관리자만 지울 수 있습니다.")
+    item = _get(db, item_id)
+    event = db.get(VocEvent, event_id)
+    if event is None or event.item_id != item.id:
+        raise NotFound("MNX-VOC-0009", "그 이력이 없습니다.")
+    if event.from_status is None:
+        raise AppError(
+            "MNX-VOC-0010",
+            "등록 줄은 지울 수 없습니다 — 건 자체를 지우려면 접수 내역을 지우세요.",
+            status=422,
+        )
+    db.delete(event)
+    db.flush()
+
+    # 남은 이력에서 상태를 다시 정한다. 댓글(from == to)은 상태를 안 바꾼다.
+    remaining = list(
+        db.scalars(
+            select(VocEvent)
+            .where(VocEvent.item_id == item.id)
+            .order_by(VocEvent.at.desc(), VocEvent.id.desc())
+        )
+    )
+    last_move = next(
+        (
+            one
+            for one in remaining
+            if one.from_status is None or one.from_status != one.to_status
+        ),
+        None,
+    )
+    if last_move is not None:
+        item.status = last_move.to_status
+        item.status_at = last_move.at
+        item.status_by_id = last_move.by_id
+    db.commit()
+    return _detail(db, item, user)
 
 
 @router.post("/{item_id}/events", response_model=VocDetailOut)

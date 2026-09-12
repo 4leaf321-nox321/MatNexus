@@ -24987,6 +24987,11 @@
             "title": "Body",
             "type": "string"
           },
+          "can_delete_events": {
+            "default": false,
+            "title": "Can Delete Events",
+            "type": "boolean"
+          },
           "can_edit": {
             "title": "Can Edit",
             "type": "boolean"
@@ -39782,6 +39787,60 @@
           }
         },
         "summary": "Add Event",
+        "tags": [
+          "voc"
+        ]
+      }
+    },
+    "/api/voc/{item_id}/events/{event_id}": {
+      "delete": {
+        "description": "이력 한 줄을 지운다 — **시스템 관리자만.**\n\n「해결」 로 옮겼다가 「처리 중」 으로 되돌리는 실수가 나는데, 그 줄을 지울 길이\n없었다(VOC 2026-09-13). 지우면 **상태는 남은 이력에서 다시 정한다** — 마지막으로\n상태를 옮긴 줄이 곧 지금 상태다. 등록 줄은 못 지운다: 그것이 건의 시작이다.",
+        "operationId": "delete_event_api_voc__item_id__events__event_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VocDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Event",
         "tags": [
           "voc"
         ]

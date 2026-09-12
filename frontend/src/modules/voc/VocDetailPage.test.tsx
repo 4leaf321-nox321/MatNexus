@@ -17,6 +17,7 @@ import VocDetailPage from '@/modules/voc/VocDetailPage'
 const get = vi.fn()
 const event = vi.fn()
 const remove = vi.fn()
+const removeEvent = vi.fn()
 
 vi.mock('@/modules/voc/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/voc/api')>()),
@@ -24,6 +25,7 @@ vi.mock('@/modules/voc/api', async (importOriginal) => ({
     get: (id: string) => get(id),
     event: (...args: unknown[]) => event(...args),
     remove: (id: string) => remove(id),
+    removeEvent: (...args: unknown[]) => removeEvent(...args),
     update: vi.fn(),
   },
 }))
@@ -161,6 +163,30 @@ describe('VOC 상세', () => {
     expect(within(items[1]).getByText('저도 같은 증상입니다')).toBeInTheDocument()
     expect(within(items[2]).getByText('해결 로 옮김')).toBeInTheDocument()
     expect(within(items[2]).getByText('관리자')).toBeInTheDocument()
+  })
+
+  it('관리자만 이력 줄을 지울 수 있고, 등록 줄에는 단추가 없다', async () => {
+    const moved = {
+      id: 'e-3',
+      at: '2026-08-28T09:00:00Z',
+      by: '관리자',
+      from_status: 'in_progress',
+      to_status: 'resolved',
+      to_status_label: '해결',
+      note: '실수로 눌렀다',
+    }
+    await show(detail({ events: [registered, moved], can_delete_events: false }))
+    expect(screen.queryByRole('button', { name: '이력 삭제' })).toBeNull()
+
+    removeEvent.mockResolvedValue(detail({ events: [registered] }))
+    await show(detail({ events: [registered, moved], can_delete_events: true }))
+    const buttons = screen.getAllByRole('button', { name: '이력 삭제' })
+    expect(buttons).toHaveLength(1)
+    await userEvent.click(buttons[0])
+    expect(screen.getByRole('dialog')).toHaveTextContent('해결 로 옮김')
+    expect(screen.getByRole('dialog')).toHaveTextContent('실수로 눌렀다')
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(removeEvent).toHaveBeenCalledWith('voc-1', 'e-3'))
   })
 
   it('고치기·삭제는 can_edit 가 정한다 — 이름이 같아도 안 된다', async () => {

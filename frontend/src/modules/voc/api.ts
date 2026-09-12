@@ -58,4 +58,8 @@ export const vocApi = {
   /** 상태를 옮기거나(`status`) 말만 보탠다(`status` 없이). 갈 수 있는 곳은 상세의
    *  `allowed` 가 말한다 — 화면이 규칙을 외우지 않는다. */
   event: (id: string, payload: EventRequest) => api.post<VocDetail>(`/voc/${id}/events`, payload),
+  /** 이력 한 줄을 지운다 — 시스템 관리자만(`can_delete_events`). 상태는 남은 이력에서
+   *  다시 정해진다. */
+  removeEvent: (id: string, eventId: string) =>
+    api.delete<VocDetail>(`/voc/${id}/events/${eventId}`),
 }

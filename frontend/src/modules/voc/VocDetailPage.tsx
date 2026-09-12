@@ -45,6 +45,7 @@ export default function VocDetailPage() {
   const item = useResource(() => vocApi.get(id), [id])
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [removingEvent, setRemovingEvent] = useState<VocEvent | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
@@ -109,7 +110,10 @@ export default function VocDetailPage() {
 
           <section className="mb-6">
             <h2 className="mb-2 font-medium">이력</h2>
-            <Timeline events={detail.events} />
+            <Timeline
+              events={detail.events}
+              onRemove={detail.can_delete_events ? setRemovingEvent : undefined}
+            />
           </section>
 
           <ActionBox
@@ -126,6 +130,45 @@ export default function VocDetailPage() {
             onDone={() => {
               setEditing(false)
               item.reload()
+            }}
+          />
+
+          {/* **잘못 옮긴 줄을 지운다** — 관리자만. 「해결」 로 갔다가 「처리 중」 으로
+              되돌린 실수가 이력에 남아 있었다(VOC 2026-09-13). 지우면 상태는 남은
+              이력의 마지막 이동으로 돌아간다. */}
+          <ConfirmDialog
+            open={removingEvent !== null}
+            title="이력 한 줄을 지웁니다"
+            busy={busy}
+            body={
+              removingEvent ? (
+                <>
+                  <b>
+                    {removingEvent.from_status !== removingEvent.to_status
+                      ? `${removingEvent.to_status_label} 로 옮김`
+                      : '댓글'}
+                  </b>
+                  {removingEvent.note && <> — {removingEvent.note}</>}
+                  <p className="text-muted-foreground mt-2">
+                    상태를 옮긴 줄이면 이 건의 상태는 남은 이력의 마지막 이동으로 돌아갑니다.
+                  </p>
+                </>
+              ) : null
+            }
+            onClose={() => setRemovingEvent(null)}
+            onConfirm={async () => {
+              if (!removingEvent) return
+              setBusy(true)
+              setError(null)
+              try {
+                await vocApi.removeEvent(detail.id, removingEvent.id)
+                setRemovingEvent(null)
+                item.reload()
+              } catch (caught) {
+                setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+              } finally {
+                setBusy(false)
+              }
             }}
           />
 
@@ -169,7 +212,14 @@ export default function VocDetailPage() {
  * 이력 — 등록·상태 변경·댓글이 시간순으로. **상태가 바뀐 줄이 눈에 띈다** —
  * 댓글 사이에서 「언제 해결로 갔나」 를 찾는 것이 이 목록의 용도다.
  */
-function Timeline({ events }: { events: VocEvent[] }) {
+function Timeline({
+  events,
+  onRemove,
+}: {
+  events: VocEvent[]
+  /** 있으면 줄마다 삭제 단추가 선다 — 서버가 `can_delete_events` 로 정한다. 등록 줄은 못 지운다. */
+  onRemove?: (event: VocEvent) => void
+}) {
   return (
     <ol className="space-y-2" aria-label="이력">
       {events.map((one) => {
@@ -195,6 +245,18 @@ function Timeline({ events }: { events: VocEvent[] }) {
               )}
               {one.note && <p className="mt-1.5 whitespace-pre-wrap">{one.note}</p>}
             </div>
+            {onRemove && !registered && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0"
+                aria-label="이력 삭제"
+                title="이 줄을 지웁니다 — 잘못 옮긴 상태를 되돌릴 때"
+                onClick={() => onRemove(one)}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            )}
           </li>
         )
       })}

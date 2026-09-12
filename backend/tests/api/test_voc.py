@@ -160,6 +160,50 @@ class Test절차:
         assert body["status_by"] == "홍길동"
         assert body["event_count"] == 4
 
+    def test_관리자는_잘못_옮긴_이력을_지우고_상태가_남은_이력에서_되돌아온다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        """「해결」 로 옮겼다가 「처리 중」 으로 되돌리는 실수 — 지울 길이 없었다
+        (VOC 2026-09-13). 지우면 상태는 마지막으로 남은 이동이 정한다."""
+        hong = member_headers(client, db, workspace)
+        item_id = _voc(client, hong)["id"]
+        assert (
+            _move(client, admin_headers, item_id, "in_progress", "보는 중").status_code == 200
+        )
+        wrong = _move(client, admin_headers, item_id, "resolved", "실수로 눌렀다")
+        assert wrong.status_code == 200
+        wrong_event = wrong.json()["events"][-1]
+        assert wrong.json()["status"] == "resolved"
+        assert wrong.json()["can_delete_events"] is True
+
+        # 낸 사람은 못 지운다. 등록 줄도 못 지운다.
+        denied = client.delete(f"/api/voc/{item_id}/events/{wrong_event['id']}", headers=hong)
+        assert denied.status_code == 403
+        first = wrong.json()["events"][0]
+        kept = client.delete(f"/api/voc/{item_id}/events/{first['id']}", headers=admin_headers)
+        assert kept.status_code == 422
+
+        gone = client.delete(
+            f"/api/voc/{item_id}/events/{wrong_event['id']}", headers=admin_headers
+        )
+        assert gone.status_code == 200, gone.text
+        body = gone.json()
+        assert body["status"] == "in_progress", "남은 이력의 마지막 이동이 곧 상태다"
+        assert [one["to_status"] for one in body["events"]] == ["open", "in_progress"]
+        assert body["status_by"] == "시스템 관리자"
+
+        # 댓글은 상태를 안 바꾸므로, 댓글 뒤의 이동을 지워도 댓글은 남고 상태만 되돌아간다.
+        assert _move(client, admin_headers, item_id, None, "메모 하나").status_code == 200
+        again = _move(client, admin_headers, item_id, "resolved", "정말 해결")
+        last = again.json()["events"][-1]
+        back = client.delete(f"/api/voc/{item_id}/events/{last['id']}", headers=admin_headers)
+        assert back.json()["status"] == "in_progress"
+        assert [one["note"] for one in back.json()["events"]][-1] == "메모 하나"
+
     def test_해결과_반려는_말_없이는_못_옮긴다(
         self,
         client: TestClient,
