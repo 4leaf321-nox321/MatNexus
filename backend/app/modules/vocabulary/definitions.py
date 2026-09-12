@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import select
@@ -391,6 +392,60 @@ def measured_keys() -> list[str]:
     return sorted(
         {value.key for plugin in registry.list_plugins() for value in plugin.makes_values}
     )
+
+
+#: 선택지를 **코드가 정하는** 칸. 관리자가 고치는 것이 아니라 단위표·레지스트리가
+#: 정하므로, 그것이 늘면 DB 의 선택지도 따라가야 한다.
+CODE_CHOICE_FIELDS: dict[str, Callable[[], list[str]]] = {
+    "dimension": lambda: sorted(DIMENSIONS),
+    "measured_key": lambda: measured_keys(),
+}
+
+
+def refresh_builtin_axis_fields(db: Session) -> list[str]:
+    """이미 칸이 있는 축의 **코드가 정하는 선택지**를 맞추고, 빠진 기본 칸을 더한다.
+
+    `ensure_builtin_axis_fields` 는 칸이 하나라도 있으면 손대지 않는다 — 관리자가
+    고쳤을 수 있어서다. 그런데 `dimension` 의 선택지는 관리자가 아니라 단위표가
+    정한다: 실측(2026-09-12) 단위표에 44차원이 들어왔는데 개발 DB 의 「차원」
+    드롭다운은 축을 만들던 날의 19개 그대로였고, 새 물성 항목에 「선하중」 을 줄 길이
+    없었다. 뒤에 코드가 더한 기본 칸(`scales`·`level`)도 같은 이유로 안 들어와 있었다.
+
+    관리자가 고칠 수 있는 것(라벨·도움말·자기가 더한 칸)은 그대로 둔다 — 선택지와
+    빠진 칸만 만진다. 바뀐 축의 slug 를 돌려준다.
+    """
+    changed: list[str] = []
+    for slug, wanted in BUILTIN_AXIS_FIELDS.items():
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == slug))
+        if axis is None or not axis.base_fields:
+            continue
+        fields = [dict(field) for field in axis.base_fields]
+        have = {field.get("key") for field in fields}
+        touched = False
+        for field in fields:
+            make = CODE_CHOICE_FIELDS.get(str(field.get("key")))
+            if make is None:
+                continue
+            fresh = make()
+            if field.get("choices") != fresh:
+                field["choices"] = fresh
+                touched = True
+        for field in wanted:
+            if field["key"] in have:
+                continue
+            filled = (
+                {**field, "choices": measured_keys()}
+                if field["key"] == "measured_key"
+                else field
+            )
+            fields.append(dict(filled))
+            touched = True
+        if touched:
+            axis.base_fields = fields
+            changed.append(slug)
+    if changed:
+        db.flush()
+    return changed
 
 
 def ensure_builtin_axis_fields(db: Session) -> list[str]:

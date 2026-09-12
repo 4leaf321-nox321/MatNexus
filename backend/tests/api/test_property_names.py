@@ -917,3 +917,40 @@ class Test이을_만한_것:
         assert [(one["property_key"], one["scale"]) for one in body["suggestions"]] == [
             ("mechanical.hardness_vickers", "HV")
         ]
+
+
+class Test축_칸_맞추기:
+    """단위표가 늘면 「차원」 드롭다운도 늘어야 한다 — 선택지는 DB JSON 에 얼어 있다.
+
+    실측(2026-09-12): 44차원을 넣었는데 개발 DB 의 드롭다운은 19개 그대로였고, 새 항목에
+    「선하중」 을 줄 길이 없었다. 관리자가 고친 것은 그대로 두고 코드가 정하는 선택지와
+    빠진 기본 칸만 맞춘다.
+    """
+
+    def test_코드_선택지는_따라가고_관리자가_고친_것은_남는다(self, db: Session) -> None:
+        from app.modules.vocabulary.definitions import (
+            BUILTIN_AXIS_FIELDS,
+            refresh_builtin_axis_fields,
+        )
+
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        # 옛날 모양 — 차원 선택지 셋뿐이고, 라벨을 관리자가 고쳤고, 자기 칸을 하나 더했다.
+        axis.base_fields = [
+            {"key": "dimension", "label": "물리량", "kind": "choice", "choices": ["stress"]},
+            {"key": "symbol", "label": "기호", "kind": "text"},
+            {"key": "mine", "label": "부서 칸", "kind": "text"},
+        ]
+        db.commit()
+
+        assert refresh_builtin_axis_fields(db) == ["property_item"]
+        db.commit()
+        db.expire_all()
+        fields = {field["key"]: field for field in axis.base_fields}
+        assert "line_force" in fields["dimension"]["choices"]
+        assert fields["dimension"]["label"] == "물리량"  # 관리자가 고친 라벨은 그대로
+        assert "mine" in fields  # 관리자가 더한 칸도 그대로
+        assert {one["key"] for one in BUILTIN_AXIS_FIELDS["property_item"]} <= set(fields)
+        assert fields["measured_key"]["choices"]  # 레지스트리에서 채운다
+        # 두 번째는 할 일이 없다.
+        assert refresh_builtin_axis_fields(db) == []
