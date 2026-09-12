@@ -60,6 +60,66 @@ SI_UNITS = {
     "density": "kg/m3",
     "angle": "rad",
     "dimensionless": "1",
+    # --- 문헌 카탈로그가 쓰는 SI 조합 단위 (2026-09-12) ----------------------
+    #
+    # **왜 한꺼번에 늘었나.** 문헌 정의 271종 가운데 77종(값 7,325건)의 단위를 이 표가
+    # 몰랐다 — 박리강도 N/m(1,017건) · 체적저항률 ohm·m(661) · 표면에너지 J/m²(458)
+    # 같은 멀쩡한 SI 조합이다. 표가 모르면 그 물성은 **사내 물성 항목에 못 이어지고**
+    # (차원 검사가 막는다), 값으로 찾기에서 환산이 안 되고, 새 정의도 그 단위로는 못
+    # 만든다. 즉 7천 건이 검색·매핑·채우기에서 조용히 빠져 있었다.
+    #
+    # **정본 기호는 인수 1 이다.** 카탈로그가 그 단위로 값을 저장하고 있어서, 다른
+    # 인수를 주면 저장된 숫자를 다른 단위로 읽는다. 실무 표기(MPa·m^0.5 · ohm·cm ·
+    # kV/mm · cP)만 인수를 갖는다.
+    #
+    # **차원 이름은 물리량으로 짓는다.** 차원이 같아도(N/m 과 J/m² 는 같다) 뜻이 다른
+    # 물성은 다른 이름을 준다 — 잇지 못하는 쪽이 엉뚱한 것끼리 이어지는 쪽보다 낫다.
+    # 눈금(HV·Shore·HR·HBW·HK·GU)은 **넣지 않는다** — 환산할 수 없는 것을 표에 넣으면
+    # 환산할 수 있는 척하게 된다.
+    "line_force": "N/m",  # 선하중 (박리·택)
+    "energy_per_area": "J/m2",  # 단위면적당 에너지
+    "resistivity": "ohm.m",  # 체적저항률
+    "resistance": "ohm",  # 저항
+    "electric_conductivity": "S/m",  # 전기전도율
+    "viscosity": "Pa.s",  # 점도
+    "photon_energy": "eV",  # 준위 에너지
+    "gas_permeability": "mol/(m.s.Pa)",  # 기체 투과도
+    "molar_energy": "J/mol",  # 몰당 에너지
+    "diffusivity": "m2/s",  # 확산율
+    "fracture_toughness": "Pa.m0.5",  # 파괴인성
+    "electric_field": "V/m",  # 전계 강도
+    "magnetic_field": "A/m",  # 자계 강도
+    "mass_flux": "kg/(m2.s)",  # 질량 플럭스
+    "magnetic_flux_density": "T",  # 자속밀도
+    "specific_area": "m2/kg",  # 비표면적
+    "voltage": "V",  # 전위
+    "energy": "J",  # 에너지
+    "molar_mass": "kg/mol",  # 몰질량
+    "energy_density": "J/m3",  # 에너지 밀도
+    "thermal_resistance": "K.m2/W",  # 열저항
+    "specific_volume": "m3/kg",  # 비체적
+    "acoustic_impedance": "Pa.s/m",  # 음향 임피던스
+    "energy_per_length": "J/m",  # 길이당 에너지
+    "decibel": "dB",  # 데시벨
+    "concentration": "mol/m3",  # 농도
+    "charge_per_force": "C/N",  # 전하/힘 (압전상수)
+    "specific_energy": "J/kg",  # 질량당 에너지
+    "crack_growth_rate": "m/cycle",  # 균열성장률
+    "molar_absorptivity": "m2/mol",  # 몰흡광계수
+    "gas_solubility": "mol/(m3.Pa)",  # 기체 용해도
+    "volumetric_flux": "m3/(m2.s)",  # 부피 플럭스
+    "melt_flow_rate": "g/600s",  # 용융흐름지수
+    "mass_permeability": "kg/(m.s)",  # 질량 투과율
+    "carrier_mobility": "m2/(V.s)",  # 캐리어 이동도
+    "gas_permeance": "mol/(m2.s.Pa)",  # 기체 투과계수 (몰)
+    "specific_wear_rate": "m3/(N.m)",  # 비마모율
+    "number_density": "1/m3",  # 수밀도
+    "areal_density": "kg/m2",  # 단위면적당 질량
+    "gas_permeance_volumetric": "m3/(m2.s.Pa)",  # 기체 투과계수 (부피)
+    "molar_volume": "m3/mol",  # 몰부피
+    "hall_coefficient": "m3/C",  # 홀 계수
+    "rate_constant": "m3/(mol.s)",  # 반응속도상수
+    "heat_flux": "W/m2",  # 열유속
 }
 
 #: 받아들이는 단위. 표에 없는 단위는 **거부한다** — 조용히 계수 1로 통과시키면
@@ -143,6 +203,69 @@ UNITS: dict[str, Unit] = {
         _u("1/MPa", "compliance", "0.000001"),
         _u("rad", "angle", "1"),
         _u("deg", "angle", "0.0174532925199433"),
+        # --- 문헌 카탈로그의 SI 조합 단위. 정본은 인수 1(위 SI_UNITS 의 설명) ---
+        _u("N/m", "line_force", "1"),  # 선하중 (박리·택)
+        _u("mN/m", "line_force", "0.001"),
+        _u("J/m2", "energy_per_area", "1"),  # 단위면적당 에너지
+        _u("mJ/m2", "energy_per_area", "0.001"),
+        _u("ohm.m", "resistivity", "1"),  # 체적저항률
+        _u("ohm.cm", "resistivity", "0.01"),
+        _u("ohm", "resistance", "1"),  # 저항
+        _u("S/m", "electric_conductivity", "1"),  # 전기전도율
+        _u("S/cm", "electric_conductivity", "100"),
+        _u("Pa.s", "viscosity", "1"),  # 점도
+        _u("mPa.s", "viscosity", "0.001"),
+        _u("cP", "viscosity", "0.001"),
+        _u("eV", "photon_energy", "1"),  # 준위 에너지
+        _u("mol/(m.s.Pa)", "gas_permeability", "1"),  # 기체 투과도
+        _u("J/mol", "molar_energy", "1"),  # 몰당 에너지
+        _u("kJ/mol", "molar_energy", "1000"),
+        _u("m2/s", "diffusivity", "1"),  # 확산율
+        _u("mm2/s", "diffusivity", "0.000001"),
+        _u("Pa.m0.5", "fracture_toughness", "1"),  # 파괴인성
+        _u("MPa.m0.5", "fracture_toughness", "1000000"),
+        _u("V/m", "electric_field", "1"),  # 전계 강도
+        _u("kV/mm", "electric_field", "1000000"),
+        _u("A/m", "magnetic_field", "1"),  # 자계 강도
+        _u("kg/(m2.s)", "mass_flux", "1"),  # 질량 플럭스
+        _u("T", "magnetic_flux_density", "1"),  # 자속밀도
+        _u("mT", "magnetic_flux_density", "0.001"),
+        _u("m2/kg", "specific_area", "1"),  # 비표면적
+        _u("V", "voltage", "1"),  # 전위
+        _u("J", "energy", "1"),  # 에너지
+        _u("kJ", "energy", "1000"),
+        _u("kg/mol", "molar_mass", "1"),  # 몰질량
+        _u("g/mol", "molar_mass", "0.001"),
+        _u("J/m3", "energy_density", "1"),  # 에너지 밀도
+        _u("kJ/m3", "energy_density", "1000"),
+        _u("K.m2/W", "thermal_resistance", "1"),  # 열저항
+        _u("m3/kg", "specific_volume", "1"),  # 비체적
+        _u("Pa.s/m", "acoustic_impedance", "1"),  # 음향 임피던스
+        _u("J/m", "energy_per_length", "1"),  # 길이당 에너지
+        _u("kJ/m", "energy_per_length", "1000"),
+        _u("dB", "decibel", "1"),  # 데시벨
+        _u("mol/m3", "concentration", "1"),  # 농도
+        _u("C/N", "charge_per_force", "1"),  # 전하/힘 (압전상수)
+        _u("pC/N", "charge_per_force", "0.000000000001"),
+        _u("J/kg", "specific_energy", "1"),  # 질량당 에너지
+        _u("kJ/kg", "specific_energy", "1000"),
+        _u("m/cycle", "crack_growth_rate", "1"),  # 균열성장률
+        _u("m2/mol", "molar_absorptivity", "1"),  # 몰흡광계수
+        _u("mol/(m3.Pa)", "gas_solubility", "1"),  # 기체 용해도
+        _u("m3/(m2.s)", "volumetric_flux", "1"),  # 부피 플럭스
+        _u("g/600s", "melt_flow_rate", "1"),  # 용융흐름지수
+        _u("g/10min", "melt_flow_rate", "1"),
+        _u("kg/(m.s)", "mass_permeability", "1"),  # 질량 투과율
+        _u("m2/(V.s)", "carrier_mobility", "1"),  # 캐리어 이동도
+        _u("mol/(m2.s.Pa)", "gas_permeance", "1"),  # 기체 투과계수 (몰)
+        _u("m3/(N.m)", "specific_wear_rate", "1"),  # 비마모율
+        _u("1/m3", "number_density", "1"),  # 수밀도
+        _u("kg/m2", "areal_density", "1"),  # 단위면적당 질량
+        _u("m3/(m2.s.Pa)", "gas_permeance_volumetric", "1"),  # 기체 투과계수 (부피)
+        _u("m3/mol", "molar_volume", "1"),  # 몰부피
+        _u("m3/C", "hall_coefficient", "1"),  # 홀 계수
+        _u("m3/(mol.s)", "rate_constant", "1"),  # 반응속도상수
+        _u("W/m2", "heat_flux", "1"),  # 열유속
     )
 }
 

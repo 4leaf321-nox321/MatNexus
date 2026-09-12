@@ -57,7 +57,9 @@ class Test곱과_거듭제곱_표기:
             ("kJ/(kg·K)", "kJ/(kg.K)"),
             ("kg/m^3", "kg/m3"),
             ("m^2", "m2"),
-            ("Pa*s", None),  # 표에 없는 것은 표기를 맞춰도 모른다 — 지어내지 않는다
+            ("Pa*s", "Pa.s"),  # 문헌 카탈로그의 조합 단위 (2026-09-12 에 표에 들어왔다)
+            ("HV", None),  # **눈금은 넣지 않는다** — 환산할 수 없는 것을 표에 넣으면
+            #                환산할 수 있는 척하게 된다. 표기를 맞춰도 모른다.
         ],
     )
     def test_표기만_다르면_정본으로(self, written: str, expected: str | None) -> None:
@@ -199,3 +201,51 @@ class TestArea:
         """규격서와 성적서가 `mm²` 로 적는다."""
         assert units.canonical("mm²") == "mm2"
         assert units.canonical("m^2") == "m2"
+
+
+class Test문헌_조합_단위:
+    """문헌 카탈로그가 쓰는 SI 조합 단위(2026-09-12에 44차원이 들어왔다).
+
+    **정본은 인수 1 이다** — 카탈로그가 그 단위로 값을 저장하고 있어서, 인수를 잘못
+    주면 저장된 숫자를 다른 단위로 읽는다. 실무 표기만 인수를 갖는데 **그 인수가
+    조용히 틀리면 아무도 모른다** — 파괴인성 1 MPa·m^0.5 가 1 Pa·m^0.5 로 읽혀도
+    숫자는 그럴듯하다. 그래서 값으로 못 박는다.
+    """
+
+    @pytest.mark.parametrize(
+        ("written", "si_value"),
+        [
+            ("MPa*m^0.5", 1_000_000.0),  # 파괴인성 — 규격이 읽는 표기
+            ("ohm*cm", 0.01),  # 체적저항률
+            ("kV/mm", 1_000_000.0),  # 유전강도
+            ("cP", 0.001),  # 점도 (센티푸아즈)
+            ("mPa*s", 0.001),
+            ("kJ/mol", 1000.0),  # 활성화에너지
+            ("mm^2/s", 0.000001),  # 열확산율
+            ("S/cm", 100.0),
+            ("mN/m", 0.001),
+            ("mT", 0.001),
+            ("g/mol", 0.001),
+            ("g/10min", 1.0),  # MFI — g/600s 와 같은 것의 다른 이름이다
+        ],
+    )
+    def test_실무_표기가_정본으로_환산된다(self, written: str, si_value: float) -> None:
+        assert units.to_si(1.0, written) == pytest.approx(si_value)
+
+    @pytest.mark.parametrize(
+        "symbol",
+        ["N/m", "J/m^2", "ohm*m", "Pa*s", "S/m", "J/mol", "m^2/s", "Pa*m^0.5", "eV", "T"],
+    )
+    def test_정본은_인수_1_이다(self, symbol: str) -> None:
+        """카탈로그가 이 단위로 저장한다 — 인수를 주면 그 값들이 통째로 틀린다."""
+        assert units.to_si(123.0, symbol) == 123.0
+
+    def test_차원이_다른_것끼리는_안_섞인다(self) -> None:
+        """뜻이 다른 물성은 차원 이름을 달리 줬다 — 못 잇는 쪽이 엉뚱하게 이어지는
+        쪽보다 낫다. 박리강도(N/m)와 표면에너지(J/m²)는 물리 차원이 같지만 뜻이 다르다."""
+        assert not units.same_dimension(
+            units.unit_of("N/m").dimension, units.unit_of("J/m2").dimension
+        )
+        assert units.same_dimension(
+            units.unit_of("MPa*m^0.5").dimension, units.unit_of("Pa*m^0.5").dimension
+        )
