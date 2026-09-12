@@ -369,7 +369,7 @@ export function DeclaredPropertiesCard({
 
           {known.length === 0 && !items.loading && (
             <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-              {level}에 넣을 수 있는 물성 항목이 없습니다. 기준정보의 <b>물성 항목</b> 축에
+              {level}에 넣을 수 있는 물성 항목이 없습니다. 기준정보의 <b>사내 물성 항목</b> 축에
               먼저 등록하고 <b>붙는 곳</b>을 {level} 로 두세요.
             </p>
           )}

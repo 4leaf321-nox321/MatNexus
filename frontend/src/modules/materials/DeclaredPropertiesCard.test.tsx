@@ -184,7 +184,7 @@ describe('선언 물성 편집', () => {
     propertyItems.mockResolvedValue([])
     panel()
     await waitFor(() =>
-      expect(screen.getByText(/기준정보의/)).toHaveTextContent('물성 항목')
+      expect(screen.getByText(/기준정보의/)).toHaveTextContent('사내 물성 항목')
     )
   })
 

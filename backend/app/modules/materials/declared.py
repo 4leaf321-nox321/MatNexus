@@ -218,7 +218,7 @@ def check(
         raise AppError(
             "MNX-MATERIALS-0020",
             f"{level}에 넣을 수 있는 물성 항목이 하나도 없습니다. 기준정보의 "
-            f"'물성 항목' 축에 먼저 넣고, '붙는 곳' 을 {level} 로 두세요.",
+            f"'사내 물성 항목' 축에 먼저 넣고, '붙는 곳' 을 {level} 로 두세요.",
             status=422,
         )
 
@@ -274,7 +274,8 @@ def check(
                 raise AppError(
                     "MNX-MATERIALS-0021",
                     f"'{name}' 은 {level}에 넣을 수 있는 물성 항목이 아닙니다. 기준정보의 "
-                    f"'물성 항목' 축에 먼저 넣으세요 — 있는 것: {', '.join(sorted(known))}",
+                    "'사내 물성 항목' 축에 먼저 넣으세요 — 있는 것: "
+                    f"{', '.join(sorted(known))}",
                     status=422,
                 )
         key = compare_key(name)

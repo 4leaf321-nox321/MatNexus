@@ -103,7 +103,7 @@ export default function VocabularyAdminPage() {
   const [slug, setSlug] = useState<string | null>(null)
   const axes = vocabularies.data ?? []
   const active = axes.find((item) => item.slug === slug) ?? axes[0] ?? null
-  // **물성 항목 축에는 매핑 표가 붙는다.** 어느 축인지는 서버가 말한다(`axis_slug`) —
+  // **사내 물성 항목 축에는 매핑 표가 붙는다.** 어느 축인지는 서버가 말한다(`axis_slug`) —
   // 화면이 축 이름을 외우면 축이 바뀔 때 한 곳을 빠뜨린다(`roleOf` 와 같은 판단).
   const mapping = useResource(() => catalogApi.propertyMapping(), [])
   const { user } = useAuth()
