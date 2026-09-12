@@ -55,6 +55,8 @@ from app.modules.tests.schemas import (
     RunDeleteRequest,
     RunFacetOut,
     RunFacetsOut,
+    SourceReplaceOut,
+    SourceVersionOut,
     StorageReportOut,
     SummaryImportItemOut,
     SummaryImportOut,
@@ -63,6 +65,7 @@ from app.modules.tests.schemas import (
     TestConditionFieldOut,
     TestRunDetailOut,
     TestRunOut,
+    TestRunUpdateRequest,
     TestSummaryOut,
     TestTypeCapabilityOut,
     TestTypeCreateRequest,
@@ -709,6 +712,18 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         source_filename=run.source_filename,
         source_bytes=run.source_bytes,
         source_sha256=run.source_sha256,
+        source_replaced_at=run.source_replaced_at,
+        source_history=[
+            SourceVersionOut(
+                filename=one.get("filename"),
+                sha256=one.get("sha256"),
+                bytes=one.get("bytes"),
+                replaced_at=datetime.fromisoformat(str(one["replaced_at"])),
+                replaced_by=one.get("replaced_by"),
+            )
+            for one in run.source_history or []
+            if one.get("replaced_at")
+        ],
         note=run.note,
         row_count=curve.row_count if curve else None,
         channels=list(curve.channels) if curve else [],
@@ -1570,6 +1585,155 @@ def retype(
             f"이름이 '{before}' 에서 '{run.record_name}' 으로 바뀌었습니다."
             + (f" 조건 {len(dropped)}칸은 새 종류에 없어 버렸습니다." if dropped else "")
         ),
+    )
+
+
+@runs_router.patch("/{run_id}", response_model=TestRunOut)
+def update_run(
+    run_id: uuid.UUID,
+    payload: TestRunUpdateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> TestRunOut:
+    """메타·조건을 고친다 (VOC 2026-09-13: 지그·시험자를 나중에 적을 자리가 없었다).
+
+    **안 보낸 것은 그대로다.** 조건은 통째로 받되 단위를 함께 받아 SI 로 바꾼다 —
+    일괄 수정이 단위 딸린 조건을 안 받는 이유가 그 어긋남이었고, 여기서는 단위가
+    같이 오므로 받을 수 있다. 바뀐 칸만 감사 기록에 남긴다.
+    """
+    run = services.get_run(db, user, run_id)
+    data = payload.model_dump(exclude_unset=True)
+    changes: dict[str, dict[str, Any]] = {}
+
+    for field in ("tested_at", "operator", "note"):
+        if field in data and getattr(run, field) != data[field]:
+            changes[field] = {
+                "before": _plain(getattr(run, field)),
+                "after": _plain(data[field]),
+            }
+            setattr(run, field, data[field])
+
+    bound: dict[str, str | None] = {
+        key: data[key] for key in ("instrument", "division") if key in data
+    }
+    if bound:
+        before = {key: getattr(run, key) for key in bound}
+        vocabulary_services.apply_bindings(
+            db, run, vocabulary_services.TEST_RUN_BINDINGS, bound, created_by_id=user.id
+        )
+        for key in bound:
+            if before[key] != getattr(run, key):
+                changes[key] = {"before": before[key], "after": getattr(run, key)}
+
+    if data.get("conditions") is not None:
+        definition = db.get(TestType, run.test_type_id)
+        assert definition is not None
+        values, input_units = services.normalize_conditions(
+            db, definition, dict(data["conditions"]), dict(payload.condition_units)
+        )
+        known = {field.key for field in services.condition_fields(db, definition.id)}
+        # 정의에 없는 옛 키는 그대로 둔다 — 화면이 안 보여 준 것을 지우면 안 된다.
+        kept = {k: v for k, v in (run.conditions or {}).items() if k not in known}
+        merged = {**kept, **values}
+        if merged != (run.conditions or {}):
+            changes["conditions"] = {"before": dict(run.conditions or {}), "after": merged}
+            # JSONB 는 통째로 갈아 끼운다 — 제자리에서 고치면 UPDATE 가 안 나간다.
+            run.conditions = merged
+            run.input_units = {
+                **{k: v for k, v in (run.input_units or {}).items() if k not in known},
+                **input_units,
+            }
+
+    if changes:
+        audit.record(
+            db,
+            action=audit.TEST_RUN_UPDATED,
+            actor=user,
+            target_table="test_runs",
+            target_id=run.id,
+            target_label=run.record_name,
+            workspace_id=run.workspace_id,
+            changes=changes,
+        )
+    db.commit()
+    db.refresh(run)
+    return _run_out(run, _context(db, [run]))
+
+
+@runs_router.post("/{run_id}/source", response_model=SourceReplaceOut, status_code=202)
+def replace_source(
+    run_id: uuid.UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SourceReplaceOut:
+    """원본 파일을 바꾸고 다시 읽는다 (VOC 2026-09-13).
+
+    **옛 파일은 지우지 않는다** — `source_history` 에 남는다. 바뀐 뒤의 곡선이
+    이상할 때 무엇이 왔었는지 봐야 하고, 잘못 올렸으면 되돌릴 근거다.
+
+    **처리 결과는 안 건드린다.** 결과는 불변이고, 자동으로 다시 돌리면 저장된
+    레시피를 사람 모르게 돌리는 것이 된다. 대신 `source_replaced_at` 을 찍어 그
+    전의 결과가 「옛 곡선의 것」 으로 보이게 한다 — 다시 돌릴지는 사람이 정한다.
+    """
+    run = services.get_run(db, user, run_id)
+    definition = db.get(TestType, run.test_type_id)
+    assert definition is not None
+    now = _now()
+
+    stored = filestore.save_stream(
+        file.file,
+        relative_dir=f"{filestore.run_dir(run.id, run.created_at)}/source",
+        filename=file.filename or "upload.dat",
+        max_bytes=services.upload_limit(definition),
+    )
+    previous_filename = run.source_filename
+    previous: dict[str, Any] = {
+        "filename": run.source_filename,
+        "path": run.source_path,
+        "sha256": run.source_sha256,
+        "bytes": run.source_bytes,
+        "replaced_at": now.isoformat(),
+        "replaced_by": user.display_name,
+    }
+    run.source_history = [*(run.source_history or []), previous]
+    run.source_filename = file.filename
+    run.source_path = stored.relative_path
+    run.source_sha256 = stored.sha256
+    run.source_bytes = stored.size
+    run.source_replaced_at = now
+    run.status = "uploaded"
+    run.parse_error = None
+
+    stale = int(
+        db.scalar(
+            select(func.count())
+            .select_from(ProcessingResult)
+            .where(ProcessingResult.test_run_id == run.id)
+        )
+        or 0
+    )
+    audit.record(
+        db,
+        action=audit.TEST_RUN_UPDATED,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={
+            "source_filename": {"before": previous["filename"], "after": file.filename},
+            "source_sha256": {"before": previous["sha256"], "after": stored.sha256},
+        },
+    )
+    queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})
+    db.commit()
+    tail = f" 처리 결과 {stale}건은 옛 원본의 것입니다 — 다시 돌리세요." if stale else ""
+    return SourceReplaceOut(
+        status="queued",
+        message=f"원본을 '{file.filename}' 으로 바꾸고 다시 읽기를 큐에 넣었습니다.{tail}",
+        previous_filename=previous_filename,
+        stale_results=stale,
     )
 
 

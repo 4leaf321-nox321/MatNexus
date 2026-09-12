@@ -196,6 +196,9 @@ class ProcessingResultOut(BaseModel):
     id: uuid.UUID
     is_adopted: bool = False
     """**이 시험의 물성으로 삼은 것인가.** 시험당 하나뿐이다(ADR 0007)."""
+    stale: bool = False
+    """**원본이 바뀐 뒤의 결과가 아니다.** 시험의 원본 파일을 바꾼 시각보다 먼저
+    만든 결과 — 옛 곡선으로 돈 것이다. 결과 행은 불변이라 표시만 한다."""
     test_run_id: uuid.UUID
     source_curve_key: str
     recipe_key: str | None

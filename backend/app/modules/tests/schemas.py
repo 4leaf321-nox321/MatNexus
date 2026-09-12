@@ -286,6 +286,46 @@ class RunFacetsOut(BaseModel):
     개명을 따라 바뀌지만 거르는 값은 안 바뀌어야 한다."""
 
 
+class SourceVersionOut(BaseModel):
+    """바꾸기 전에 있던 원본 하나."""
+
+    filename: str | None
+    sha256: str | None
+    bytes: int | None
+    replaced_at: datetime
+    replaced_by: str | None
+
+
+class TestRunUpdateRequest(BaseModel):
+    """시험 하나의 메타·조건을 고친다. **안 보낸 것은 그대로, 보낸 것만 바뀐다.**
+
+    조건은 통째로 온다 — 화면이 그 시험 종류의 조건 칸 전부를 보여 주고 있으므로
+    「비운 칸」 은 빠진 키다. 단위 딸린 조건은 `condition_units` 로 화면 단위를
+    함께 받아 SI 로 바꿔 담는다 — 값만 갈아 끼우면 `input_units` 와 어긋나고 그
+    어긋남은 화면에 안 보인다(일괄 수정이 조건을 안 받던 이유). 정의에 없는
+    옛 키는 건드리지 않는다.
+    """
+
+    tested_at: datetime | None = None
+    operator: str | None = None
+    instrument: str | None = None
+    division: str | None = None
+    note: str | None = None
+    conditions: dict[str, Any] | None = None
+    condition_units: dict[str, str] = {}
+
+
+class SourceReplaceOut(BaseModel):
+    """원본을 바꾼 결과. 다시 읽기는 큐에 들어갔고, 옛 결과는 그대로다."""
+
+    status: str
+    message: str
+    previous_filename: str | None
+    stale_results: int
+    """이 시험에 있던 처리 결과 수 — 전부 옛 곡선의 것이 됐다. 자동으로 다시
+    돌리지 않는다."""
+
+
 class TestRunOut(BaseModel):
     id: uuid.UUID
     result_count: int = 0
@@ -338,6 +378,10 @@ class TestRunOut(BaseModel):
     source_filename: str | None
     source_bytes: int | None
     source_sha256: str | None
+    source_replaced_at: datetime | None = None
+    """원본을 마지막으로 바꾼 때. 이보다 먼저 만든 처리 결과는 옛 곡선의 것이다."""
+    source_history: list[SourceVersionOut] = []
+    """바꾸기 전의 원본들 — 최근 것이 뒤에."""
     note: str | None
     """등록 메모. 서버가 "내용이 같은 파일이 이미 N건 있습니다" 를 여기 적는다 —
     실을 곳이 없으면 서버만 알고 사용자는 끝내 모른다."""

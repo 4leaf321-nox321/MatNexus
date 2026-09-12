@@ -4722,7 +4722,15 @@ export interface paths {
         delete: operations["delete_run_api_test_runs__run_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Run
+         * @description 메타·조건을 고친다 (VOC 2026-09-13: 지그·시험자를 나중에 적을 자리가 없었다).
+         *
+         *     **안 보낸 것은 그대로다.** 조건은 통째로 받되 단위를 함께 받아 SI 로 바꾼다 —
+         *     일괄 수정이 단위 딸린 조건을 안 받는 이유가 그 어긋남이었고, 여기서는 단위가
+         *     같이 오므로 받을 수 있다. 바뀐 칸만 감사 기록에 남긴다.
+         */
+        patch: operations["update_run_api_test_runs__run_id__patch"];
         trace?: never;
     };
     "/api/test-runs/{run_id}/apply-instrument-dimensions": {
@@ -4846,7 +4854,18 @@ export interface paths {
          */
         get: operations["download_source_api_test_runs__run_id__source_get"];
         put?: never;
-        post?: never;
+        /**
+         * Replace Source
+         * @description 원본 파일을 바꾸고 다시 읽는다 (VOC 2026-09-13).
+         *
+         *     **옛 파일은 지우지 않는다** — `source_history` 에 남는다. 바뀐 뒤의 곡선이
+         *     이상할 때 무엇이 왔었는지 봐야 하고, 잘못 올렸으면 되돌릴 근거다.
+         *
+         *     **처리 결과는 안 건드린다.** 결과는 불변이고, 자동으로 다시 돌리면 저장된
+         *     레시피를 사람 모르게 돌리는 것이 된다. 대신 `source_replaced_at` 을 찍어 그
+         *     전의 결과가 「옛 곡선의 것」 으로 보이게 한다 — 다시 돌릴지는 사람이 정한다.
+         */
+        post: operations["replace_source_api_test_runs__run_id__source_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6761,6 +6780,11 @@ export interface components {
         };
         /** Body_preview_import_api_workspaces_import_preview_post */
         Body_preview_import_api_workspaces_import_preview_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_replace_source_api_test_runs__run_id__source_post */
+        Body_replace_source_api_test_runs__run_id__source_post: {
             /** File */
             file: string;
         };
@@ -11914,6 +11938,11 @@ export interface components {
             source_curve_key: string;
             /** Stages */
             stages: components["schemas"]["ProcessingStageOut"][];
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
             /** Steps */
             steps: {
                 [key: string]: unknown;
@@ -13877,6 +13906,39 @@ export interface components {
             record_name: string;
         };
         /**
+         * SourceReplaceOut
+         * @description 원본을 바꾼 결과. 다시 읽기는 큐에 들어갔고, 옛 결과는 그대로다.
+         */
+        SourceReplaceOut: {
+            /** Message */
+            message: string;
+            /** Previous Filename */
+            previous_filename: string | null;
+            /** Stale Results */
+            stale_results: number;
+            /** Status */
+            status: string;
+        };
+        /**
+         * SourceVersionOut
+         * @description 바꾸기 전에 있던 원본 하나.
+         */
+        SourceVersionOut: {
+            /** Bytes */
+            bytes: number | null;
+            /** Filename */
+            filename: string | null;
+            /**
+             * Replaced At
+             * Format: date-time
+             */
+            replaced_at: string;
+            /** Replaced By */
+            replaced_by: string | null;
+            /** Sha256 */
+            sha256: string | null;
+        };
+        /**
          * SpecGapOut
          * @description 선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**
          */
@@ -15010,10 +15072,17 @@ export interface components {
             source_bytes: number | null;
             /** Source Filename */
             source_filename: string | null;
+            /**
+             * Source History
+             * @default []
+             */
+            source_history: components["schemas"]["SourceVersionOut"][];
             /** Source Metadata */
             source_metadata: {
                 [key: string]: string;
             };
+            /** Source Replaced At */
+            source_replaced_at?: string | null;
             /** Source Sha256 */
             source_sha256: string | null;
             /**
@@ -15098,6 +15167,13 @@ export interface components {
             source_bytes: number | null;
             /** Source Filename */
             source_filename: string | null;
+            /**
+             * Source History
+             * @default []
+             */
+            source_history: components["schemas"]["SourceVersionOut"][];
+            /** Source Replaced At */
+            source_replaced_at?: string | null;
             /** Source Sha256 */
             source_sha256: string | null;
             /**
@@ -15121,6 +15197,39 @@ export interface components {
             tested_at: string | null;
             /** Warnings */
             warnings: string[];
+        };
+        /**
+         * TestRunUpdateRequest
+         * @description 시험 하나의 메타·조건을 고친다. **안 보낸 것은 그대로, 보낸 것만 바뀐다.**
+         *
+         *     조건은 통째로 온다 — 화면이 그 시험 종류의 조건 칸 전부를 보여 주고 있으므로
+         *     「비운 칸」 은 빠진 키다. 단위 딸린 조건은 `condition_units` 로 화면 단위를
+         *     함께 받아 SI 로 바꿔 담는다 — 값만 갈아 끼우면 `input_units` 와 어긋나고 그
+         *     어긋남은 화면에 안 보인다(일괄 수정이 조건을 안 받던 이유). 정의에 없는
+         *     옛 키는 건드리지 않는다.
+         */
+        TestRunUpdateRequest: {
+            /**
+             * Condition Units
+             * @default {}
+             */
+            condition_units: {
+                [key: string]: string;
+            };
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            } | null;
+            /** Division */
+            division?: string | null;
+            /** Instrument */
+            instrument?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Operator */
+            operator?: string | null;
+            /** Tested At */
+            tested_at?: string | null;
         };
         /** TestSummaryOut */
         TestSummaryOut: {
@@ -23781,6 +23890,41 @@ export interface operations {
             };
         };
     };
+    update_run_api_test_runs__run_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestRunUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     apply_instrument_dimensions_api_test_runs__run_id__apply_instrument_dimensions_post: {
         parameters: {
             query?: {
@@ -23935,6 +24079,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_source_api_test_runs__run_id__source_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_replace_source_api_test_runs__run_id__source_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceReplaceOut"];
                 };
             };
             /** @description Validation Error */

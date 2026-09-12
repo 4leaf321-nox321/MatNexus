@@ -1190,6 +1190,20 @@
         "title": "Body_preview_import_api_workspaces_import_preview_post",
         "type": "object"
       },
+      "Body_replace_source_api_test_runs__run_id__source_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_replace_source_api_test_runs__run_id__source_post",
+        "type": "object"
+      },
       "Body_try_profile_api_formats_try_post": {
         "properties": {
           "definition": {
@@ -15250,6 +15264,11 @@
             "title": "Stages",
             "type": "array"
           },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
           "steps": {
             "items": {
               "additionalProperties": true,
@@ -20223,6 +20242,105 @@
         "title": "SimilarNameOut",
         "type": "object"
       },
+      "SourceReplaceOut": {
+        "description": "원본을 바꾼 결과. 다시 읽기는 큐에 들어갔고, 옛 결과는 그대로다.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "previous_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Filename"
+          },
+          "stale_results": {
+            "title": "Stale Results",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "previous_filename",
+          "stale_results"
+        ],
+        "title": "SourceReplaceOut",
+        "type": "object"
+      },
+      "SourceVersionOut": {
+        "description": "바꾸기 전에 있던 원본 하나.",
+        "properties": {
+          "bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "replaced_at": {
+            "format": "date-time",
+            "title": "Replaced At",
+            "type": "string"
+          },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced By"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          }
+        },
+        "required": [
+          "filename",
+          "sha256",
+          "bytes",
+          "replaced_at",
+          "replaced_by"
+        ],
+        "title": "SourceVersionOut",
+        "type": "object"
+      },
       "SpecGapOut": {
         "description": "선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**",
         "properties": {
@@ -22953,12 +23071,32 @@
             ],
             "title": "Source Filename"
           },
+          "source_history": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceVersionOut"
+            },
+            "title": "Source History",
+            "type": "array"
+          },
           "source_metadata": {
             "additionalProperties": {
               "type": "string"
             },
             "title": "Source Metadata",
             "type": "object"
+          },
+          "source_replaced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Replaced At"
           },
           "source_sha256": {
             "anyOf": [
@@ -23268,6 +23406,26 @@
             ],
             "title": "Source Filename"
           },
+          "source_history": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceVersionOut"
+            },
+            "title": "Source History",
+            "type": "array"
+          },
+          "source_replaced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Replaced At"
+          },
           "source_sha256": {
             "anyOf": [
               {
@@ -23376,6 +23534,89 @@
           "created_at"
         ],
         "title": "TestRunOut",
+        "type": "object"
+      },
+      "TestRunUpdateRequest": {
+        "description": "시험 하나의 메타·조건을 고친다. **안 보낸 것은 그대로, 보낸 것만 바뀐다.**\n\n조건은 통째로 온다 — 화면이 그 시험 종류의 조건 칸 전부를 보여 주고 있으므로\n「비운 칸」 은 빠진 키다. 단위 딸린 조건은 `condition_units` 로 화면 단위를\n함께 받아 SI 로 바꿔 담는다 — 값만 갈아 끼우면 `input_units` 와 어긋나고 그\n어긋남은 화면에 안 보인다(일괄 수정이 조건을 안 받던 이유). 정의에 없는\n옛 키는 건드리지 않는다.",
+        "properties": {
+          "condition_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Condition Units",
+            "type": "object"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tested At"
+          }
+        },
+        "title": "TestRunUpdateRequest",
         "type": "object"
       },
       "TestSummaryOut": {
@@ -37762,6 +38003,58 @@
         "tags": [
           "tests"
         ]
+      },
+      "patch": {
+        "description": "메타·조건을 고친다 (VOC 2026-09-13: 지그·시험자를 나중에 적을 자리가 없었다).\n\n**안 보낸 것은 그대로다.** 조건은 통째로 받되 단위를 함께 받아 SI 로 바꾼다 —\n일괄 수정이 단위 딸린 조건을 안 받는 이유가 그 어긋남이었고, 여기서는 단위가\n같이 오므로 받을 수 있다. 바뀐 칸만 감사 기록에 남긴다.",
+        "operationId": "update_run_api_test_runs__run_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestRunUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Run",
+        "tags": [
+          "tests"
+        ]
       }
     },
     "/api/test-runs/{run_id}/apply-instrument-dimensions": {
@@ -38066,6 +38359,58 @@
           }
         },
         "summary": "Download Source",
+        "tags": [
+          "tests"
+        ]
+      },
+      "post": {
+        "description": "원본 파일을 바꾸고 다시 읽는다 (VOC 2026-09-13).\n\n**옛 파일은 지우지 않는다** — `source_history` 에 남는다. 바뀐 뒤의 곡선이\n이상할 때 무엇이 왔었는지 봐야 하고, 잘못 올렸으면 되돌릴 근거다.\n\n**처리 결과는 안 건드린다.** 결과는 불변이고, 자동으로 다시 돌리면 저장된\n레시피를 사람 모르게 돌리는 것이 된다. 대신 `source_replaced_at` 을 찍어 그\n전의 결과가 「옛 곡선의 것」 으로 보이게 한다 — 다시 돌릴지는 사람이 정한다.",
+        "operationId": "replace_source_api_test_runs__run_id__source_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_replace_source_api_test_runs__run_id__source_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceReplaceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Source",
         "tags": [
           "tests"
         ]

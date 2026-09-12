@@ -489,10 +489,18 @@ def _jsonable(options: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _result_out(item: ProcessingResult, *, adopted: bool = False) -> ProcessingResultOut:
+def _stale(item: ProcessingResult, run: TestRun) -> bool:
+    """원본을 바꾼 뒤에 만든 결과가 아니면 옛 곡선의 것이다."""
+    return run.source_replaced_at is not None and item.created_at < run.source_replaced_at
+
+
+def _result_out(
+    item: ProcessingResult, *, adopted: bool = False, stale: bool = False
+) -> ProcessingResultOut:
     return ProcessingResultOut(
         id=item.id,
         is_adopted=adopted,
+        stale=stale,
         test_run_id=item.test_run_id,
         source_curve_key=item.source_curve_key,
         recipe_key=None,
@@ -541,7 +549,10 @@ def list_results(
         .where(ProcessingResult.test_run_id == run.id)
         .order_by(ProcessingResult.created_at.desc())
     )
-    return [_result_out(item, adopted=item.id == run.adopted_result_id) for item in items]
+    return [
+        _result_out(item, adopted=item.id == run.adopted_result_id, stale=_stale(item, run))
+        for item in items
+    ]
 
 
 # --- 레시피 ------------------------------------------------------------------
@@ -788,7 +799,7 @@ def adopt(
     _project_summaries(db, run, item)
     db.commit()
     db.refresh(item)
-    return _result_out(item, adopted=True)
+    return _result_out(item, adopted=True, stale=_stale(item, run))
 
 
 #: 저장된 결과를 열었을 때 먼저 보여 줄 축. 앞이 우선이다.

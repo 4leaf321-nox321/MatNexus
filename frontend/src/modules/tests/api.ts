@@ -8,6 +8,8 @@ export type TestChannel = components['schemas']['TestChannelOut']
 export type TestTypeCapability = components['schemas']['TestTypeCapabilityOut']
 export type TestConditionField = components['schemas']['TestConditionFieldOut']
 export type TestRun = components['schemas']['TestRunOut']
+export type TestRunUpdate = components['schemas']['TestRunUpdateRequest']
+export type SourceReplaceOut = components['schemas']['SourceReplaceOut']
 export type RunFacets = components['schemas']['RunFacetsOut']
 export type RunDeleteResult = components['schemas']['RunDeleteOut']
 /** 표로 넣은 결과. **미리보기와 실제가 같은 모양이다** — 서버가 같은 코드로 답한다. */
@@ -309,6 +311,15 @@ export const testsApi = {
    * 아직 아무것도 안 나온 시험만 된다 — 곡선도 처리 결과도 없는 것. 이미
    * 읽힌 시험은 서버가 막는다(409).
    */
+  /** 메타·조건을 고친다. **보낸 칸만 바뀐다** — 조건은 통째로, 단위와 함께. */
+  update: (id: string, payload: TestRunUpdate) =>
+    api.patch<TestRunDetail>(`/test-runs/${id}`, payload),
+  /** 원본을 바꾸고 다시 읽는다. 옛 파일은 남고 옛 결과는 「옛 원본의 것」 이 된다. */
+  replaceSource: (id: string, file: File) => {
+    const form = new FormData()
+    form.set('file', file)
+    return api.postForm<SourceReplaceOut>(`/test-runs/${id}/source`, form)
+  },
   retype: (id: string, testTypeKey: string) =>
     api.post<RetypeResult>(`/test-runs/${id}/test-type`, { test_type_key: testTypeKey }),
 

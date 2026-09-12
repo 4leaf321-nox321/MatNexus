@@ -19,6 +19,7 @@ import {
   Download,
   Maximize2,
   Minimize2,
+  Pencil,
   RefreshCw,
   Trash2,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ import type { BackTarget } from '@/modules/tests/backTarget'
 import { ProcessingPanel } from '@/modules/processing/ProcessingPanel'
 import { ResultsPanel } from '@/modules/processing/ResultsPanel'
 import { CurveChart } from '@/modules/tests/CurveChart'
+import { EditRunDialog } from '@/modules/tests/EditRunDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
 import type { TestConditionField, TestRunDetail } from '@/modules/tests/api'
 import {
@@ -82,6 +84,7 @@ export default function TestRunDetailPage() {
   const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
   const [action, setAction] = useState<Error | null>(null)
   const [removing, setRemoving] = useState(false)
+  const [editing, setEditing] = useState(false)
   /** 이 시험 종류로 쓸 수 있는 형식들. **키를 외워서 치게 할 수는 없다.** */
   /**
    * 종류를 바꿀 수 있나. **아직 아무것도 안 나온 시험만** — 곡선이나 처리
@@ -284,6 +287,18 @@ export default function TestRunDetailPage() {
        화면이라 4xl(896px)에서는 곡선이 손바닥만 해진다. 다른 화면은 읽는
        화면이라 좁은 것이 맞다 — 여기만 넓힌다. */
     <div>
+      {editing && item && (
+        <EditRunDialog
+          run={item}
+          testType={definition ?? null}
+          onClose={() => setEditing(false)}
+          onDone={(message) => {
+            setEditing(false)
+            setNotice(message)
+            run.reload()
+          }}
+        />
+      )}
       <ConfirmDialog
         open={removing}
         title="이 시험을 지웁니다"
@@ -334,6 +349,12 @@ export default function TestRunDetailPage() {
             <Button variant="outline" size="sm" onClick={download} disabled={!item}>
               <Download className="size-4" />
               원본
+            </Button>
+            {/* **등록한 뒤에 적을 자리.** 지그·시험자·조건과 원본 교체 — 일괄
+                수정은 한 칸씩이고 단위 딸린 조건은 못 받는다(VOC 2026-09-13). */}
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)} disabled={!item}>
+              <Pencil className="size-4" />
+              고치기
             </Button>
             {/* **자동이 틀리면 고칠 자리가 있어야 한다.** 전에는 「다시 읽기」
                 뿐이라 같은 선택을 그대로 반복했다 — 실패한 파일은 손쓸 방법이

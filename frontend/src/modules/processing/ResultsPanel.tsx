@@ -196,6 +196,17 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                       채택됨
                     </Badge>
                   )}
+                  {/* **원본이 바뀐 뒤의 결과가 아니다.** 옛 곡선으로 돈 것 — 결과는
+                      불변이라 지우지 않고 표시만 한다. 다시 돌릴지는 사람이 정한다. */}
+                  {item.stale && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/60 text-amber-700 dark:text-amber-400"
+                      title="이 결과를 만든 뒤 원본 파일이 바뀌었습니다. 새 원본으로 다시 돌리세요."
+                    >
+                      옛 원본의 결과
+                    </Badge>
+                  )}
                   <span className="text-muted-foreground text-xs">
                     {when(item.created_at)}
                   </span>

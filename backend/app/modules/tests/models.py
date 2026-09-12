@@ -334,6 +334,23 @@ class TestRun(Base):
     source_sha256: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     source_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
+    source_replaced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """**원본을 마지막으로 바꾼 때.** 안 바꿨으면 `None`.
+
+    원본이 바뀌면 곡선이 바뀌고, 그 전에 채택한 처리 결과는 **옛 곡선의 결과**다.
+    결과 행을 건드리지 않고(불변이다) 이 시각보다 먼저 만들어진 결과를 「원본이
+    바뀐 뒤의 것이 아니다」 로 표시한다. 자동으로 다시 돌리지 않는다 — 저장된
+    레시피를 함부로 돌리지 않는 것과 같은 규율이다(VOC 2026-09-13)."""
+    source_history: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """바꾸기 전의 원본들. `[{filename, path, sha256, bytes, replaced_at, replaced_by}]`.
+
+    옛 파일은 지우지 않는다 — 바뀐 뒤의 곡선이 이상할 때 무엇이 왔었는지 볼 수
+    있어야 하고, 잘못 올렸으면 되돌릴 근거가 이것이다."""
+
     source_metadata: Mapped[dict[str, str]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )
