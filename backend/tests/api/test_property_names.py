@@ -181,7 +181,12 @@ class Test순위:
         """우리가 실제로 쓰는 물성이 먼저다."""
         axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
         assert axis is not None
-        term = VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도")
+        term = VocabularyTerm(
+            vocabulary_id=axis.id,
+            value="항복강도",
+            normalized="항복강도",
+            attributes={"dimension": "stress"},
+        )
         db.add(term)
         db.flush()
         db.add(PropertyLink(property_key=YIELD_STRENGTH[0], term_id=term.id, kind="same_as"))
@@ -249,7 +254,14 @@ class Test매핑:
         """**ADR 0027 이 미뤄 둔 매핑이다.** 사람이 폼에 id 를 적지 않는다."""
         axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
         assert axis is not None
-        db.add(VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도"))
+        db.add(
+            VocabularyTerm(
+                vocabulary_id=axis.id,
+                value="항복강도",
+                normalized="항복강도",
+                attributes={"dimension": "stress"},
+            )
+        )
         db.commit()
 
         made = client.post(
@@ -292,8 +304,22 @@ class Test매핑_화면:
     ) -> None:
         axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
         assert axis is not None
-        db.add(VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도"))
-        db.add(VocabularyTerm(vocabulary_id=axis.id, value="굴곡강도", normalized="굴곡강도"))
+        db.add(
+            VocabularyTerm(
+                vocabulary_id=axis.id,
+                value="항복강도",
+                normalized="항복강도",
+                attributes={"dimension": "stress"},
+            )
+        )
+        db.add(
+            VocabularyTerm(
+                vocabulary_id=axis.id,
+                value="굴곡강도",
+                normalized="굴곡강도",
+                attributes={"dimension": "stress"},
+            )
+        )
         db.commit()
         client.post(
             "/api/catalog/properties/links",
@@ -322,7 +348,14 @@ class Test매핑_화면:
     ) -> None:
         axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
         assert axis is not None
-        db.add(VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도"))
+        db.add(
+            VocabularyTerm(
+                vocabulary_id=axis.id,
+                value="항복강도",
+                normalized="항복강도",
+                attributes={"dimension": "stress"},
+            )
+        )
         db.commit()
         made = client.post(
             "/api/catalog/properties/links",
@@ -334,6 +367,48 @@ class Test매핑_화면:
         )
         assert gone.status_code == 204
         assert client.get("/api/catalog/properties/links", headers=admin_headers).json() == []
+
+
+class Test차원_검사:
+    def test_차원이_다르면_같은_것으로_못_잇는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        """열전도율을 「비열」 에 이어 두면 채우기가 W/(m·K) 숫자를 J/(kg·K) 자리에
+        그대로 넣는다 — 숫자는 그럴듯하다. 잇는 순간 막는다."""
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        db.add(
+            VocabularyTerm(
+                vocabulary_id=axis.id,
+                value="비열",
+                normalized="비열",
+                attributes={"dimension": "specific_heat"},
+            )
+        )
+        db.commit()
+        bad = client.post(
+            "/api/catalog/properties/links",
+            json={"property_key": YIELD_STRENGTH[0], "item": "비열"},
+            headers=admin_headers,
+        )
+        assert bad.status_code == 422, bad.text
+        assert bad.json()["error"]["code"] == "MNX-CATALOG-0029"
+        # 「관련」 으로는 잇는다 — 같은 값이라고 주장하는 것이 아니다.
+        ok = client.post(
+            "/api/catalog/properties/links",
+            json={"property_key": YIELD_STRENGTH[0], "item": "비열", "kind": "related"},
+            headers=admin_headers,
+        )
+        assert ok.status_code == 201, ok.text
+        # 그리고 채우기 목록에는 안 오른다 — same_as 만 담는다.
+        adoptable = client.get(
+            "/api/catalog/properties/adoptable", headers=admin_headers
+        ).json()
+        assert not any(one["item"] == "비열" for one in adoptable)
 
 
 class Test눈금_매핑:
@@ -505,7 +580,12 @@ class Test값으로_찾기:
         )
         axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
         assert axis is not None
-        term = VocabularyTerm(vocabulary_id=axis.id, value="항복강도", normalized="항복강도")
+        term = VocabularyTerm(
+            vocabulary_id=axis.id,
+            value="항복강도",
+            normalized="항복강도",
+            attributes={"dimension": "stress"},
+        )
         db.add(term)
         db.flush()
         db.add(PropertyLink(property_key=YIELD_STRENGTH[0], term_id=term.id))

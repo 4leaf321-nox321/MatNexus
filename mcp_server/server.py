@@ -1200,20 +1200,21 @@ async def adopt_catalog_values(
             )
         }
 
-    # 매핑은 백엔드 mapping.PROPERTY_ITEM_MAP 이 정본이다. 여기서는 그 표를
-    # 다시 쓰지 않고 **채택 가능한 것만** 추려 화면과 같은 PATCH 를 만든다.
-    items = {
-        "mechanical.youngs_modulus": ("declared", "탄성계수"),
-        "mechanical.shear_modulus": ("declared", "전단탄성계수"),
-        "mechanical.yield_strength": ("declared", "항복강도"),
-        "mechanical.tensile_strength": ("declared", "인장강도"),
-        "mechanical.elongation_at_break": ("declared", "연신율"),
-        "thermal.specific_heat": ("declared", "비열"),
-        "thermal.conductivity": ("declared", "열전도율"),
-        "thermal.expansion_linear": ("declared", "선팽창계수(CTE)"),
-        "physical.density": ("column", "density"),
-        "mechanical.poisson_ratio": ("column", "poisson_ratio"),
-    }
+    # **어디에 담을 수 있는지는 서버의 물성 매핑이 정한다.** 기준정보에서 항목을
+    # 이으면 그 자리에서 여기 목록이 바뀐다 — 표를 여기 박아 두면 이어도 아무 일이
+    # 없었다(2026-09-12). 같은 키에 눈금별로 여럿이면 첫 것을 쓴다.
+    slots = await _get(ctx, "/catalog/properties/adoptable")
+    if isinstance(slots, dict) and "error" in slots:
+        return slots
+    items: dict[str, tuple[str, str, str | None]] = {}
+    for slot in slots:
+        key = slot["property_key"]
+        if key in items:
+            continue
+        if slot["place"] == "column":
+            items[key] = ("column", slot["field"], None)
+        elif slot.get("item"):
+            items[key] = ("declared", slot["item"], slot.get("scale"))
     kinds = {"journal": "literature", "book": "literature", "database": "literature",
              "web": "literature", "other": "literature", "standard": "standard",
              "datasheet": "datasheet"}
@@ -1224,9 +1225,14 @@ async def adopt_catalog_values(
     for row in picked:
         target = items.get(row["property_key"])
         if target is None:
-            planned.append({"property_key": row["property_key"], "skipped": "담을 자리가 없는 물성"})
+            planned.append(
+                {
+                    "property_key": row["property_key"],
+                    "skipped": "담을 자리가 없는 물성 — 기준정보의 물성 매핑에서 사내 항목에 이으면 담긴다",
+                }
+            )
             continue
-        place, name = target
+        place, name, scale = target
         source = row.get("source") or {}
         origin = "estimate" if row.get("quality_tier") == 4 else kinds.get(source.get("kind"), "literature")
         reference = " · ".join(
@@ -1249,6 +1255,8 @@ async def adopt_catalog_values(
                 {
                     "item": name,
                     "points": [{"value": row["value_num"]}],
+                    # 눈금이 붙은 매핑(경도 HV)은 그 눈금으로 — 서버가 눈금 없는 경도를 거절한다.
+                    **({"scale": scale} if scale else {}),
                     "source": origin,
                     "reference": reference,
                     "note": "문헌 물성 카탈로그에서 채택 (스냅샷)",

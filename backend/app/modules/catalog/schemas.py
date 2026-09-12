@@ -333,6 +333,25 @@ class PropertyDictionaryOut(BaseModel):
     properties: list[PropertyDictionaryEntryOut]
 
 
+class PropertyAdoptableOut(BaseModel):
+    """문헌값 하나를 **사내 어디에 담을 수 있는가.** 채우기 화면과 MCP 가 이것만 본다.
+
+    전에는 이 표가 화면·MCP·백엔드에 세 벌로 박혀 있었고, 매핑 화면에서 항목을
+    이어도 채우기에는 아무 일도 안 일어났다(2026-09-12). 지금은 `property_links`
+    (사람이 잇는 것)와 재료 기본 칸(코드)에서 만든다.
+    """
+
+    property_key: str
+    place: str
+    """`declared`(선언 물성 항목) · `column`(재료 기본 칸 — 밀도·푸아송비)."""
+    item: str | None = None
+    """`declared` 면 항목 이름."""
+    scale: str | None = None
+    """`declared` 에 눈금이 붙었으면(경도 HV) 담을 때 그 눈금으로."""
+    field: str | None = None
+    """`column` 이면 재료 칸 이름(`density` · `poisson_ratio`)."""
+
+
 class PropertyMeasuredOut(BaseModel):
     """시험 처리가 이 물성으로 내는 값 하나 — 어느 계산의 어느 값."""
 

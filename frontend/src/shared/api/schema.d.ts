@@ -639,6 +639,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/adoptable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Property Adoptable
+         * @description 문헌값을 사내 어디에 담을 수 있는가 — **매핑 화면에서 이은 것이 곧 이 목록이다.**
+         *
+         *     `same_as` 만 담는다. 「더 좁은 것」·「관련」 은 같은 값이 아니라 담으면 뜻이 바뀐다.
+         *     재료 기본 칸(밀도·푸아송비)은 선언 항목이 아니라 코드 표(`mapping.PROPERTY_ITEM_MAP`)
+         *     가 정한다.
+         */
+        get: operations["property_adoptable_api_catalog_properties_adoptable_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/properties/aliases/{alias_id}": {
         parameters: {
             query?: never;
@@ -11479,6 +11503,26 @@ export interface components {
             /** Relaxation Time S */
             relaxation_time_s: number;
         };
+        /**
+         * PropertyAdoptableOut
+         * @description 문헌값 하나를 **사내 어디에 담을 수 있는가.** 채우기 화면과 MCP 가 이것만 본다.
+         *
+         *     전에는 이 표가 화면·MCP·백엔드에 세 벌로 박혀 있었고, 매핑 화면에서 항목을
+         *     이어도 채우기에는 아무 일도 안 일어났다(2026-09-12). 지금은 `property_links`
+         *     (사람이 잇는 것)와 재료 기본 칸(코드)에서 만든다.
+         */
+        PropertyAdoptableOut: {
+            /** Field */
+            field?: string | null;
+            /** Item */
+            item?: string | null;
+            /** Place */
+            place: string;
+            /** Property Key */
+            property_key: string;
+            /** Scale */
+            scale?: string | null;
+        };
         /** PropertyAliasCreate */
         PropertyAliasCreate: {
             /** Alias */
@@ -16202,6 +16246,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    property_adoptable_api_catalog_properties_adoptable_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAdoptableOut"][];
                 };
             };
         };

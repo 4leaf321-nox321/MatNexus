@@ -130,6 +130,29 @@ describe('물성 매핑', () => {
     expect(screen.getByText(/안 이어진 사내 항목 1개/)).toBeInTheDocument()
   })
 
+  it('요약 칸이 곧 거르개다 — 이어진 것·재는 것·안 쓰는 것만 남긴다', async () => {
+    const user = userEvent.setup()
+    show()
+    const group = screen.getByRole('group', { name: '무엇을 볼까' })
+    const keysShown = () =>
+      screen.getAllByRole('row').filter((row) => within(row).queryByText(/^mechanical\./)).length
+
+    await user.click(within(group).getByRole('button', { name: /사내 항목과 이어짐/ }))
+    expect(keysShown()).toBe(2)
+    expect(screen.queryByText('mechanical.flexural_strength')).toBeNull()
+
+    await user.click(within(group).getByRole('button', { name: /시험으로 재는 것/ }))
+    expect(keysShown()).toBe(1)
+    expect(screen.getByText('mechanical.yield_strength')).toBeInTheDocument()
+
+    await user.click(within(group).getByRole('button', { name: /사내에서 안 쓰는 것/ }))
+    expect(keysShown()).toBe(1)
+    expect(screen.getByText('mechanical.flexural_strength')).toBeInTheDocument()
+
+    await user.click(within(group).getByRole('button', { name: /문헌 물성/ }))
+    expect(keysShown()).toBe(3)
+  })
+
   it('안 이어진 항목의 「잇기」 는 문헌 물성을 쳐서 찾아 잇는다', async () => {
     const user = userEvent.setup()
     const onChanged = show()

@@ -28,15 +28,15 @@ import { Loader2, PackagePlus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
-  ADOPTABLE,
   TIER_LABELS,
   adoptionReference,
   pooledReference,
   adoptionSource,
   fmtValueAs,
+  slotsByKey,
 } from '@/modules/catalog/api'
 import { useUnitMode } from '@/modules/catalog/unitMode'
-import type { CatalogMaterialDetail, CatalogValue } from '@/modules/catalog/api'
+import type { AdoptableSlot, CatalogMaterialDetail, CatalogValue } from '@/modules/catalog/api'
 import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -56,9 +56,11 @@ type MaterialPage = components['schemas']['Page_MaterialOut_']
 type DeclaredIn = components['schemas']['DeclaredPropertyIn']
 type PropertyItem = components['schemas']['PropertyItemOut']
 
+type Slots = Record<string, AdoptableSlot>
+
 /** 담을 수 있는 값인가 — 매핑에 있고, 수치이며, 서버 제약을 넘지 않는 것. */
-function adoptable(value: CatalogValue): boolean {
-  const target = ADOPTABLE[value.property_key]
+function adoptable(slots: Slots, value: CatalogValue): boolean {
+  const target = slots[value.property_key]
   if (!target || value.value_num === null || value.value_num === undefined) return false
   // 포아송비의 서버 제약(0 ≤ ν < 0.5). 카탈로그에는 음의 포아송비(열분해흑연)가
   // 실재한다 — 그런 값은 기본 칸에 못 담으므로 목록에서 뺀다.
@@ -112,9 +114,12 @@ export function AdoptDialog({
   const [error, setError] = useState<Error | null>(null)
   const [doneCount, setDoneCount] = useState<number | null>(null)
   const [levels, setLevels] = useState<Map<string, string> | null>(null)
+  // **어디에 담을 수 있는지는 서버의 매핑이 정한다.** 기준정보의 물성 매핑에서
+  // 이은 것이 곧 이 목록이다 — 화면이 표를 들고 있으면 이어도 아무 일이 없다.
+  const [slots, setSlots] = useState<Slots>({})
   const [units] = useUnitMode()
 
-  const candidates = detail.values.filter(adoptable)
+  const candidates = detail.values.filter((value) => adoptable(slots, value))
 
   // 항목의 층은 기준정보가 정한다 — 코드에 박으면 부서가 층을 옮긴 날 어긋난다.
   useEffect(() => {
@@ -124,12 +129,16 @@ export function AdoptDialog({
       .then((items) => setLevels(new Map(items.map((one) => [one.item, one.level]))))
       // 못 읽으면 잠그지 않는다 — 서버 검증이 최종 방어라 조용히 틀리지는 않는다.
       .catch(() => setLevels(null))
+    api
+      .get<AdoptableSlot[]>('/catalog/properties/adoptable')
+      .then((list) => setSlots(slotsByKey(list)))
+      .catch(() => setSlots({}))
   }, [open])
 
   /** 재료에 못 담는 값인가 — 담으면 요청 전체가 거부되므로 미리 잠근다. */
   function blockedReason(value: CatalogValue): string | null {
-    const slot = ADOPTABLE[value.property_key]
-    if (!slot || slot.place !== 'declared' || levels === null) return null
+    const slot = slots[value.property_key]
+    if (!slot || slot.place !== 'declared' || !slot.item || levels === null) return null
     const level = levels.get(slot.item)
     if (level === undefined) return "기준정보 '물성 항목' 축에 없어 못 담습니다"
     // 시료 층 항목도 문헌 공칭값은 재료에 담긴다 — 로트를 증명하는 밀시트만
@@ -188,12 +197,12 @@ export function AdoptDialog({
   /** 이미 그 항목이 있는가 — 있으면 기본으로 안 담는다(담으면 교체). */
   const existingItems = new Set((target?.declared_properties ?? []).map((row) => row.item))
   function taken(value: CatalogValue): boolean {
-    const slot = ADOPTABLE[value.property_key]
+    const slot = slots[value.property_key]
     if (!slot) return false
     if (slot.place === 'column') {
       return slot.field === 'density' ? target?.density != null : target?.poisson_ratio != null
     }
-    return existingItems.has(slot.item)
+    return slot.item !== null && slot.item !== undefined && existingItems.has(slot.item)
   }
 
   function chooseTarget(one: MaterialOut) {
@@ -209,7 +218,7 @@ export function AdoptDialog({
   }
 
   function isTakenFor(one: MaterialOut, value: CatalogValue): boolean {
-    const slot = ADOPTABLE[value.property_key]
+    const slot = slots[value.property_key]
     if (!slot) return false
     if (slot.place === 'column') {
       return slot.field === 'density' ? one.density != null : one.poisson_ratio != null
@@ -228,9 +237,10 @@ export function AdoptDialog({
 
       // 선언 항목별로 묶는다 — 항목 하나가 온도점 여러 개를 든다.
       const byItem = new Map<string, CatalogValue[]>()
+      const scaleOf = new Map<string, string>()
       const patch: Record<string, unknown> = {}
       for (const value of chosen) {
-        const slot = ADOPTABLE[value.property_key]
+        const slot = slots[value.property_key]
         if (!slot) continue
         if (slot.place === 'column') {
           if (slot.field === 'density') {
@@ -241,9 +251,12 @@ export function AdoptDialog({
           }
           continue
         }
+        if (!slot.item) continue
         const list = byItem.get(slot.item) ?? []
         list.push(value)
         byItem.set(slot.item, list)
+        // 눈금이 붙은 매핑(경도 HV)은 그 눈금으로 담는다 — 서버가 눈금 없는 경도를 거절한다.
+        if (slot.scale) scaleOf.set(slot.item, slot.scale)
       }
 
       if (byItem.size > 0) {
@@ -269,6 +282,7 @@ export function AdoptDialog({
             item,
             points,
             // input_unit 비움 = 정본 SI — 카탈로그 값이 이미 SI 라 변환이 없다.
+            scale: scaleOf.get(item) ?? null,
             source: adoptionSource(values[0]),
             reference: values
               .map((value) =>
@@ -354,12 +368,13 @@ export function AdoptDialog({
               </p>
               {candidates.length === 0 && (
                 <p className="text-muted-foreground text-sm">
-                  이 재료에는 담을 수 있는 물성(매핑된 10종)이 없습니다.
+                  이 재료에는 담을 수 있는 물성이 없습니다 — 기준정보의 물성 매핑에서 이은
+                  것만 담깁니다.
                 </p>
               )}
               <div className="space-y-1">
                 {candidates.map((value) => {
-                  const slot = ADOPTABLE[value.property_key]
+                  const slot = slots[value.property_key]
                   const already = taken(value)
                   const blocked = blockedReason(value)
                   return (

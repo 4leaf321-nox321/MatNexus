@@ -126,12 +126,26 @@ const PROPERTY_ITEMS = [
   { item: '인장강도', level: '시료' },
 ]
 
+/** 서버의 매핑 — 기준정보 물성 매핑에서 이은 것. **화면이 표를 안 든다.** */
+const ADOPTABLE = [
+  { property_key: 'mechanical.youngs_modulus', place: 'declared', item: '탄성계수' },
+  { property_key: 'mechanical.shear_modulus', place: 'declared', item: '전단탄성계수' },
+  { property_key: 'mechanical.yield_strength', place: 'declared', item: '항복강도' },
+  { property_key: 'mechanical.tensile_strength', place: 'declared', item: '인장강도' },
+  { property_key: 'mechanical.elongation_at_break', place: 'declared', item: '연신율' },
+  { property_key: 'thermal.specific_heat', place: 'declared', item: '비열' },
+  { property_key: 'thermal.conductivity', place: 'declared', item: '열전도율' },
+  { property_key: 'thermal.expansion_linear', place: 'declared', item: '선팽창계수(CTE)' },
+  { property_key: 'physical.density', place: 'column', field: 'density' },
+  { property_key: 'mechanical.poisson_ratio', place: 'column', field: 'poisson_ratio' },
+]
+
 function mockGets(searchItems: unknown[] = [TARGET]) {
-  get.mockImplementation((url: unknown) =>
-    String(url).startsWith('/materials/property-items')
-      ? Promise.resolve(PROPERTY_ITEMS)
-      : Promise.resolve({ total: 1, limit: 8, offset: 0, items: searchItems })
-  )
+  get.mockImplementation((url: unknown) => {
+    if (String(url).startsWith('/materials/property-items')) return Promise.resolve(PROPERTY_ITEMS)
+    if (String(url).startsWith('/catalog/properties/adoptable')) return Promise.resolve(ADOPTABLE)
+    return Promise.resolve({ total: 1, limit: 8, offset: 0, items: searchItems })
+  })
 }
 
 beforeEach(() => {

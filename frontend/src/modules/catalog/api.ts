@@ -188,27 +188,24 @@ export function fmtConditions(conditions: Record<string, unknown> | null | undef
 }
 
 /**
- * 채택 가능한 물성 — backend catalog/mapping.py 의 PROPERTY_ITEM_MAP 과 짝.
+ * 채택 가능한 물성 — **서버의 매핑이 정본이다**(`/catalog/properties/adoptable`).
  *
- * **단위 변환은 없다.** 카탈로그 값은 SI 로 저장돼 있고, 선언 물성은
- * `input_unit` 을 비우면 정본 SI 로 받는다 — 숫자가 그대로 흐른다. 표기 등가
- * (`J/(kg*K)` ↔ `J/(kg.K)`)는 백엔드 계약 테스트가 지킨다. 이 표에 없는
- * 물성(비SI 눈금·matcore 밖 차원)은 채택 목록에 오르지 않는다.
+ * 전에는 이 표가 여기와 MCP 와 백엔드에 세 벌로 박혀 있었고, 기준정보의 물성
+ * 매핑에서 항목을 이어도 채우기에는 아무 일도 안 일어났다(2026-09-12). 이제 매핑
+ * 화면에서 이은 것이 곧 담을 수 있는 것이다. 눈금이 붙은 매핑(경도 HV)은 담을 때
+ * 그 눈금으로 들어간다.
+ *
+ * **단위 변환은 없다.** 카탈로그 값은 SI 로 저장돼 있고, 선언 물성은 `input_unit`
+ * 을 비우면 정본 SI 로 받는다 — 숫자가 그대로 흐른다. 차원이 다른 것은 이을 때
+ * 서버가 막는다(MNX-CATALOG-0029).
  */
-export const ADOPTABLE: Record<
-  string,
-  { item: string; place: 'declared' } | { item: string; place: 'column'; field: 'density' | 'poisson_ratio' }
-> = {
-  'mechanical.youngs_modulus': { item: '탄성계수', place: 'declared' },
-  'mechanical.shear_modulus': { item: '전단탄성계수', place: 'declared' },
-  'mechanical.yield_strength': { item: '항복강도', place: 'declared' },
-  'mechanical.tensile_strength': { item: '인장강도', place: 'declared' },
-  'mechanical.elongation_at_break': { item: '연신율', place: 'declared' },
-  'thermal.specific_heat': { item: '비열', place: 'declared' },
-  'thermal.conductivity': { item: '열전도율', place: 'declared' },
-  'thermal.expansion_linear': { item: '선팽창계수(CTE)', place: 'declared' },
-  'physical.density': { item: '밀도', place: 'column', field: 'density' },
-  'mechanical.poisson_ratio': { item: '포아송비', place: 'column', field: 'poisson_ratio' },
+export type AdoptableSlot = components['schemas']['PropertyAdoptableOut']
+
+/** 키 → 자리. 같은 키에 눈금별로 여럿이면 첫 것을 쓴다 — 문헌값은 눈금이 하나다. */
+export function slotsByKey(list: AdoptableSlot[]): Record<string, AdoptableSlot> {
+  const out: Record<string, AdoptableSlot> = {}
+  for (const one of list) if (!(one.property_key in out)) out[one.property_key] = one
+  return out
 }
 
 /** 카탈로그 출처 종류 → 선언 물성의 source 어휘. */

@@ -37,6 +37,12 @@ class Target:
 
 #: MT 물성 키 → 우리 자리. **MT key 는 안정 id 다**(`domain.name` 꼴) — 이름이
 #: 개명돼도 매핑은 안 깨진다.
+#:
+#: **`declared` 줄은 씨앗이다**(2026-09-12). 실행 중의 정본은 `property_links`
+#: (기준정보 화면의 물성 매핑)이고, 채우기·값 검색·MCP 는 그쪽(`/properties/adoptable`
+#: · `/properties/mapping`)을 읽는다. 여기 적힌 것은 이관 `888bca60a86b` 이 처음 심은
+#: 것과 같아야 하고, 아래 계약 시험이 그 씨앗의 단위 등가를 지킨다. `column` 줄은
+#: 지금도 여기가 정본이다 — 재료 기본 칸은 기준정보 항목이 아니다.
 PROPERTY_ITEM_MAP: dict[str, Target] = {
     "mechanical.youngs_modulus": Target("탄성계수", "declared", "Pa"),
     "mechanical.shear_modulus": Target("전단탄성계수", "declared", "Pa"),

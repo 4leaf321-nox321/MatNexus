@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.catalog import parameters
+from app.modules.catalog import mapping, parameters
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -57,6 +57,7 @@ from app.modules.catalog.schemas import (
     DeckMatchIn,
     DeckMatchRowOut,
     DeckSkippedOut,
+    PropertyAdoptableOut,
     PropertyAliasCreate,
     PropertyAliasOut,
     PropertyCandidateOut,
@@ -973,6 +974,40 @@ def property_dictionary(
     )
 
 
+@router.get("/properties/adoptable", response_model=list[PropertyAdoptableOut])
+def property_adoptable(
+    _user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> list[PropertyAdoptableOut]:
+    """문헌값을 사내 어디에 담을 수 있는가 — **매핑 화면에서 이은 것이 곧 이 목록이다.**
+
+    `same_as` 만 담는다. 「더 좁은 것」·「관련」 은 같은 값이 아니라 담으면 뜻이 바뀐다.
+    재료 기본 칸(밀도·푸아송비)은 선언 항목이 아니라 코드 표(`mapping.PROPERTY_ITEM_MAP`)
+    가 정한다.
+    """
+    out: list[PropertyAdoptableOut] = []
+    for link, item in db.execute(
+        select(PropertyLink, VocabularyTerm.value)
+        .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
+        .where(PropertyLink.kind == "same_as")
+        .order_by(PropertyLink.property_key, PropertyLink.scale)
+    ).all():
+        out.append(
+            PropertyAdoptableOut(
+                property_key=link.property_key, place="declared", item=item, scale=link.scale
+            )
+        )
+    for key, target in mapping.PROPERTY_ITEM_MAP.items():
+        if target.place == "column":
+            out.append(
+                PropertyAdoptableOut(
+                    property_key=key,
+                    place="column",
+                    field=mapping.COLUMN_TARGETS[target.label].removesuffix("_si"),
+                )
+            )
+    return out
+
+
 @router.get("/properties/mapping", response_model=PropertyMappingOut)
 def property_mapping(
     _user: User = Depends(current_user), db: Session = Depends(get_db)
@@ -1089,6 +1124,11 @@ def add_property_link(
             "MNX-CATALOG-0025",
             f"'{payload.item}' 이(가) 사내 물성 항목에 없습니다. 기준정보에서 먼저 만드세요.",
         )
+    definition = db.scalar(
+        select(CatalogDefinition).where(CatalogDefinition.key == payload.property_key)
+    )
+    assert definition is not None  # 위에서 없으면 404
+    _check_same_dimension(definition, term, payload.kind)
     scale = clean(payload.scale or "") or None
     declared_scales = [
         part.strip()
@@ -1131,6 +1171,40 @@ def add_property_link(
         db.commit()
         db.refresh(found)
     return _link_out(found, term.value)
+
+
+def _check_same_dimension(
+    definition: CatalogDefinition, term: VocabularyTerm, kind: str
+) -> None:
+    """**차원이 다르면 「같은 것」 으로 못 잇는다.**
+
+    이 매핑은 채우기의 정본이고, 채우기는 SI 값을 환산 없이 옮긴다. 열전도율을 「비열」
+    에 이어 두면 W/(m·K) 숫자가 J/(kg·K) 자리에 조용히 들어간다 — 숫자는 그럴듯하다.
+    표가 모르는 눈금(HV)은 무차원·눈금 항목(경도)에만 간다.
+    """
+    if kind != "same_as":
+        return
+    dimension = str((term.attributes or {}).get("dimension") or "dimensionless")
+    has_scales = bool(str((term.attributes or {}).get("scales") or "").strip())
+    symbol = definition.si_unit or ""
+    found = units.canonical(symbol) if symbol else None
+    if found is None:
+        if has_scales:
+            return
+        raise AppError(
+            "MNX-CATALOG-0029",
+            f"'{definition.name}' 의 단위 '{symbol or '(없음)'}' 는 표가 모르는 단위라 "
+            f"눈금 있는 항목에만 이을 수 있습니다 — '{term.value}' 은 눈금이 없습니다.",
+            status=422,
+        )
+    if not units.same_dimension(units.unit_of(found).dimension, dimension):
+        raise AppError(
+            "MNX-CATALOG-0029",
+            f"'{definition.name}' 은 {units.unit_of(found).dimension} 인데 '{term.value}' 은 "
+            f"{dimension} 입니다 — 차원이 달라 같은 것으로 이을 수 없습니다. 담으면 숫자가 "
+            "다른 단위 자리에 그대로 들어갑니다.",
+            status=422,
+        )
 
 
 @router.delete("/properties/links/{link_id}", status_code=204)

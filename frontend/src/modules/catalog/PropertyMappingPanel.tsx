@@ -75,7 +75,7 @@ export function PropertyMappingPanel({
   onChanged: () => void
 }) {
   const [domain, setDomain] = useState('')
-  const [onlyOurs, setOnlyOurs] = useState(false)
+  const [mode, setMode] = useState<Mode>('all')
   const [q, setQ] = useState('')
   const [linking, setLinking] = useState<{
     row?: PropertyMappingRow
@@ -93,7 +93,7 @@ export function PropertyMappingPanel({
     () =>
       mapping.rows.filter((one) => {
         if (domain && one.domain !== domain) return false
-        if (onlyOurs && one.links.length === 0 && one.measured.length === 0) return false
+        if (!MODES[mode].keep(one)) return false
         if (!needle) return true
         return (
           one.name.toLowerCase().includes(needle) ||
@@ -102,7 +102,7 @@ export function PropertyMappingPanel({
           one.measured.some((m) => m.scalar_key.toLowerCase().includes(needle))
         )
       }),
-    [mapping.rows, domain, onlyOurs, needle]
+    [mapping.rows, domain, mode, needle]
   )
 
   async function unlink(linkId: string) {
@@ -142,17 +142,34 @@ export function PropertyMappingPanel({
         </Button>
       </div>
 
-      {/* **수를 먼저 보인다.** 「안 이어진 사내 항목」 이 0 이 아니면 그것부터다. */}
-      <dl className="flex flex-wrap gap-2 text-sm">
-        <Stat label="문헌 물성" value={summary.keys} />
-        <Stat label="사내 항목과 이어짐" value={summary.linked_keys} />
-        <Stat label="시험으로 재는 것" value={summary.measured_keys} />
+      {/* **수를 먼저 보이고, 누르면 그것으로 거른다.** 「안 이어진 사내 항목」 이
+          0 이 아니면 그것부터다 — 그 칸은 표가 아니라 아래 목록을 가리킨다. */}
+      <div className="flex flex-wrap gap-2 text-sm" role="group" aria-label="무엇을 볼까">
+        <Stat label="문헌 물성" value={summary.keys} active={mode === 'all'} onClick={() => setMode('all')} />
+        <Stat
+          label="사내 항목과 이어짐"
+          value={summary.linked_keys}
+          active={mode === 'linked'}
+          onClick={() => setMode('linked')}
+        />
+        <Stat
+          label="시험으로 재는 것"
+          value={summary.measured_keys}
+          active={mode === 'measured'}
+          onClick={() => setMode('measured')}
+        />
+        <Stat
+          label="사내에서 안 쓰는 것"
+          value={summary.keys - mapping.rows.filter((one) => one.links.length > 0 || one.measured.length > 0).length}
+          active={mode === 'unused'}
+          onClick={() => setMode('unused')}
+        />
         <Stat
           label="안 이어진 사내 항목"
           value={summary.unlinked_items}
           tone={summary.unlinked_items > 0 ? 'warn' : undefined}
         />
-      </dl>
+      </div>
 
       <ErrorNotice error={error} />
 
@@ -198,14 +215,6 @@ export function PropertyMappingPanel({
             </option>
           ))}
         </select>
-        <label className="flex items-center gap-1.5 text-sm">
-          <input
-            type="checkbox"
-            checked={onlyOurs}
-            onChange={(event) => setOnlyOurs(event.target.checked)}
-          />
-          사내에서 쓰는 것만
-        </label>
         <Input
           aria-label="물성 찾기"
           className="w-full sm:ml-auto sm:w-64"
@@ -314,18 +323,48 @@ export function PropertyMappingPanel({
   )
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
+/** 표를 무엇으로 거를까. 요약 칸이 곧 거르개다. */
+type Mode = 'all' | 'linked' | 'measured' | 'unused'
+
+const MODES: Record<Mode, { keep: (row: PropertyMappingRow) => boolean }> = {
+  all: { keep: () => true },
+  linked: { keep: (row) => row.links.length > 0 },
+  measured: { keep: (row) => row.measured.length > 0 },
+  // 문헌에만 있고 사내에서는 적지도 재지도 않는 것 — 매핑을 늘릴 후보다.
+  unused: { keep: (row) => row.links.length === 0 && row.measured.length === 0 },
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string
+  value: number
+  tone?: 'warn'
+  active?: boolean
+  onClick?: () => void
+}) {
+  const body = (
+    <>
+      <span className="text-muted-foreground block text-xs">{label}</span>
+      <span className="font-medium tabular-nums">{value}</span>
+    </>
+  )
+  const frame = `rounded-md border px-3 py-1.5 text-left ${
+    tone === 'warn' && value > 0
+      ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
+      : active
+        ? 'border-primary bg-primary/10'
+        : ''
+  }`
+  if (!onClick) return <div className={frame}>{body}</div>
   return (
-    <div
-      className={`rounded-md border px-3 py-1.5 ${
-        tone === 'warn' && value > 0
-          ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
-          : ''
-      }`}
-    >
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="font-medium tabular-nums">{value}</dd>
-    </div>
+    <button type="button" aria-pressed={active} onClick={onClick} className={`${frame} hover:bg-muted`}>
+      {body}
+    </button>
   )
 }
 
