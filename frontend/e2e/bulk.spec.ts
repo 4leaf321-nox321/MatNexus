@@ -13,12 +13,12 @@ test('채널을 여러 개 붙여넣는다', async ({ page }) => {
   await expect(page.getByRole('banner')).toBeVisible()
 
   await page.goto('/settings/test-types')
-  await page.getByRole('button', { name: /종류 만들기|만들기/ }).first().click()
+  await page.getByRole('button', { name: /종류 생성|생성/ }).first().click()
   const editor = page.getByRole('dialog')
   await expect(editor.getByText('채널 (곡선의 열)')).toBeVisible()
 
-  await editor.getByRole('button', { name: '여러 개 넣기' }).first().click()
-  await expect(page.getByText('채널 여러 개 넣기')).toBeVisible()
+  await editor.getByRole('button', { name: '여러 개 입력' }).first().click()
+  await expect(page.getByText('채널 여러 개 입력')).toBeVisible()
 
   // 엑셀에서 복사한 것처럼 탭으로 갈린 여러 줄을 첫 칸에 붙인다.
   const first = page.getByLabel('1번 줄 키')
@@ -39,7 +39,7 @@ test('채널을 여러 개 붙여넣는다', async ({ page }) => {
   await expect(page.getByText(/1줄은 못 넣습니다/)).toBeVisible()
   await expect(page.getByText(/길이\(mm\)/)).toBeVisible()
 
-  const add = page.getByRole('button', { name: /3줄 넣기/ })
+  const add = page.getByRole('button', { name: /3줄 입력/ })
   await expect(add).toBeVisible()
   await add.click()
 

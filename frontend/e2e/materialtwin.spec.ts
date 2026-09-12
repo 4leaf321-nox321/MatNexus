@@ -64,7 +64,7 @@ test('문헌 물성부터 혼합 덱까지', async ({ page, request }) => {
     // 디바운스 검색 — 목록에 뜰 때까지.
     await page.getByRole('link', { name: /SAC305/ }).first().click()
     // 상세: 채우기·등록 입구와 값 표가 선다.
-    await expect(page.getByRole('button', { name: '사내 재료에 채우기' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '사내 재료에 반영' })).toBeVisible()
     await expect(page.getByRole('button', { name: '사내 재료로 등록' })).toBeVisible()
   })
 
@@ -86,11 +86,11 @@ test('문헌 물성부터 혼합 덱까지', async ({ page, request }) => {
     // 사이드바의 영역 탭(「재료 물성」·「복합 물성」)도 tab 이라 exact 로 집는다.
     await page.getByRole('tab', { name: '물성', exact: true }).click()
     // 연결이 걸려 있으므로 「채우기」 가 바로 있다.
-    await page.getByRole('button', { name: '채우기', exact: true }).click()
-    const adopt = page.getByRole('dialog', { name: /채우기/ })
+    await page.getByRole('button', { name: '반영', exact: true }).click()
+    const adopt = page.getByRole('dialog', { name: /반영/ })
     await expect(adopt).toBeVisible()
     // 기본 선택(대표값) 그대로 담는다 — 공칭 강도(항복·인장)가 담기는 경로다.
-    await adopt.getByRole('button', { name: /건 담기/ }).click()
+    await adopt.getByRole('button', { name: /건 추가/ }).click()
     await expect(adopt.getByText('담았습니다.')).toBeVisible()
     await adopt.getByRole('button', { name: '닫기' }).click()
   })
@@ -121,7 +121,7 @@ test('문헌 물성부터 혼합 덱까지', async ({ page, request }) => {
     }
     await expect(row.getByText(/사내 카드 \(곡선\)|문헌 스칼라/)).toBeVisible()
 
-    await page.getByRole('button', { name: '덱 만들기' }).click()
+    await page.getByRole('button', { name: '덱 생성' }).click()
     // 파일 버튼이 뜨면 빌드·각주·합본이 끝에 닿은 것이다.
     await expect(page.getByRole('button', { name: /bom_deck_.*\.k/ })).toBeVisible()
   })

@@ -142,7 +142,7 @@ test('로그인부터 곡선까지', async ({ page }) => {
     // 시편은 새로 만든다.
     await page.getByRole('button', { name: 'MD', exact: true }).click()
 
-    await page.getByRole('button', { name: /올리기/ }).click()
+    await page.getByRole('button', { name: /업로드/ }).click()
     await expect(page.getByText(/완료 1/)).toBeVisible({ timeout: 30_000 })
   })
 
@@ -177,7 +177,7 @@ test('로그인부터 곡선까지', async ({ page }) => {
       await expect(page.getByRole('tab', { name: new RegExp(name) })).toBeVisible()
     }
     await page.getByRole('tab', { name: '처리' }).click()
-    await expect(page.getByRole('button', { name: '돌려 보기' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '미리보기' })).toBeVisible()
   })
 })
 
@@ -225,7 +225,7 @@ test('메뉴에서 형식 프로파일까지 갈 수 있다', async ({ page }) =
     .getByRole('link', { name: '장비 파일 정의' })
     .click()
   await expect(page).toHaveURL(/\/settings\/formats$/)
-  await expect(page.getByRole('link', { name: '프로파일 만들기' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '프로파일 생성' })).toBeVisible()
 
   // **목록이든 "없습니다" 든, 화면이 무엇이라도 말해야 한다.**
   //
