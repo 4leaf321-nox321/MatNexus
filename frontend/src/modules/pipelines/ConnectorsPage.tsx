@@ -752,7 +752,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
                     disabled={busy}
                     onClick={() => act(() => pipelinesApi.retry(item.id))}
                   >
-                    재파싱
+                    다시 읽기
                   </Button>
                 )}
                 <div className="flex flex-1 items-end gap-2">

@@ -254,7 +254,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
             ) : (
               <Upload className="size-4" />
             )}
-            원본 교체 후 재파싱
+            원본 교체 후 다시 읽기
           </Button>
         </div>
       </DialogContent>

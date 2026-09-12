@@ -104,6 +104,6 @@ describe('EditRunDialog', () => {
   it('원본을 바꾸면 옛 결과가 옛 원본의 것이 된다고 먼저 말한다', async () => {
     render(<EditRunDialog run={RUN} testType={TYPE} onClose={vi.fn()} onDone={vi.fn()} />)
     expect(screen.getByText(/처리 결과 2건은 옛 원본의 것이 됩니다/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /원본 교체 후 재파싱/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /원본 교체 후 다시 읽기/ })).toBeDisabled()
   })
 })

@@ -278,7 +278,7 @@ describe('실패 탭', () => {
     mount('/settings/connectors?tab=failed')
     expect(await screen.findByText('읽을 방법이 없습니다.')).toBeInTheDocument()
     await user.click(screen.getByText('Example.tra'))
-    await user.click(await screen.findByRole('button', { name: '재파싱' }))
+    await user.click(await screen.findByRole('button', { name: '다시 읽기' }))
     await waitFor(() => expect(retry).toHaveBeenCalledWith('i1'))
   })
 })
