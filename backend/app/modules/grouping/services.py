@@ -34,7 +34,7 @@ from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.shared import filestore, permissions, specimen_size
 from app.shared.errors import AppError, NotFound
 from matcore import curves as curvekit
-from matcore import groups
+from matcore import groups, registry
 from matcore import prony as pronykit
 from matcore.groups import prony as _prony_group  # noqa: F401  (등록시킨다)
 from matcore.groups import rate as rate_group
@@ -68,10 +68,114 @@ def collector(
     return wrap
 
 
+#: 확장이 선언하는 구성원 규칙의 자리 — `Plugin.meta["members"]`.
+#:
+#: **확장은 이 파일을 못 고친다**(app 을 모른다 — AGENTS). 그런데 「채택된 결과에서
+#: 어느 열과 어느 조건을 꺼내는가」 는 파이썬이 아니라 선언으로 충분하다. 속도 가족의
+#: 수집기를 보면 변형률 속도 하나만 계산이고 나머지는 「열 꺼내기·조건 꺼내기」 다.
+#: 그래서 플러그인이 이렇게 적으면 여기가 모은다(2026-09-13):
+#:
+#:     meta={"members": {
+#:         "from": "adopted_result",
+#:         "columns": ["strain_true_plastic", "stress_true"],   # 채택된 결과의 곡선 열
+#:         "conditions": ["temperature"],                       # 시험 조건 → values (SI)
+#:         "values": ["youngs_modulus"],                        # 채택된 결과의 스칼라 → values
+#:     }}
+#:
+#: 파이썬 수집기(`@collector`)가 있으면 그것이 먼저다 — 계산이 필요한 것(변형률 속도)은
+#: 그 길로. `matcore/groups/__init__.py` 가 "다음 물성을 붙일 때 그 한 줄이 거슬리면
+#: 레지스트리로 옮길 때" 라고 적어 둔 것의 절반이다 — 선언으로 되는 것은 옮겼다.
+MEMBERS_META = "members"
+
+
+def _declared_rule(plugin_id: str) -> dict[str, Any] | None:
+    try:
+        plugin = registry.get(plugin_id)
+    except KeyError:
+        return None
+    rule = plugin.meta.get(MEMBERS_META)
+    return rule if isinstance(rule, dict) else None
+
+
 def member_needs(plugin_id: str) -> Needs:
     """이 묶음의 구성원이 갖고 있어야 하는 것. 모르는 묶음은 마스터커브로 본다 —
     그쪽이 더 좁아서, 틀려도 후보가 덜 뜰 뿐 잘못된 시험이 뜨지는 않는다."""
-    return _NEEDS.get(plugin_id, "master_curve")
+    found = _NEEDS.get(plugin_id)
+    if found is not None:
+        return found
+    rule = _declared_rule(plugin_id)
+    if rule is not None and rule.get("from") == "adopted_result":
+        return "adopted_result"
+    return "master_curve"
+
+
+def _declared_members(
+    db: Session, runs: list[TestRun], rule: dict[str, Any], plugin_id: str
+) -> list[groups.Member]:
+    """선언대로 채택된 결과에서 열·조건·스칼라를 꺼낸다. 없으면 **어느 시험이 무엇이
+    없는지** 말한다 — 속도 가족 수집기와 같은 문장이다."""
+    if rule.get("from") != "adopted_result":
+        raise AppError(
+            "MNX-GROUPING-0001",
+            f"{plugin_id}: 구성원 규칙의 `from` 은 'adopted_result' 만 됩니다.",
+            status=422,
+        )
+    wanted_columns = [str(one) for one in rule.get("columns") or []]
+    wanted_conditions = [str(one) for one in rule.get("conditions") or []]
+    wanted_values = [str(one) for one in rule.get("values") or []]
+    results = {
+        one.id: one
+        for one in db.scalars(
+            select(ProcessingResult).where(
+                ProcessingResult.id.in_(
+                    {run.adopted_result_id for run in runs if run.adopted_result_id}
+                )
+            )
+        )
+    }
+    members: list[groups.Member] = []
+    for run in runs:
+        result = results.get(run.adopted_result_id) if run.adopted_result_id else None
+        if result is None:
+            raise AppError(
+                "MNX-GROUPING-0009",
+                f"{run.record_name} 에 채택된 처리 결과가 없습니다. 먼저 처리하고 "
+                f"「결과」 탭에서 채택하세요.",
+                status=422,
+            )
+        columns = _read_points(result.storage_path) if wanted_columns else {}
+        missing = [one for one in wanted_columns if one not in columns]
+        if missing:
+            raise AppError(
+                "MNX-GROUPING-0010",
+                f"{run.record_name} 의 채택된 결과에 {', '.join(missing)} 열이 없습니다. "
+                f"그 열을 만드는 단계를 거친 결과를 채택하세요.",
+                status=422,
+            )
+        values: dict[str, float] = {}
+        conditions = run.conditions or {}
+        for key in wanted_conditions:
+            found = conditions.get(key)
+            if isinstance(found, int | float):
+                values[key] = float(found)
+        # 채택된 결과의 스칼라는 `[{"key": …, "value": …}, …]` 로 남는다.
+        scalars = {
+            str(one.get("key")): one.get("value")
+            for one in (result.scalars or [])
+            if isinstance(one, dict)
+        }
+        for key in wanted_values:
+            found = scalars.get(key)
+            if isinstance(found, int | float):
+                values[key] = float(found)
+        members.append(
+            groups.Member(
+                label=run.record_name,
+                columns={one: columns[one] for one in wanted_columns},
+                values=values,
+            )
+        )
+    return members
 
 
 def _read_points(relative: str) -> dict[str, np.ndarray]:
@@ -320,7 +424,8 @@ def create(
 ) -> GroupResult:
     """묶어서 **행으로 남긴다.** 커밋은 부르는 쪽이 한다."""
     collect = _COLLECTORS.get(plugin_id)
-    if collect is None:
+    rule = _declared_rule(plugin_id) if collect is None else None
+    if collect is None and rule is None:
         raise AppError(
             "MNX-GROUPING-0001",
             f"구성원을 모으는 법을 모르는 묶음입니다: {plugin_id}",
@@ -329,7 +434,11 @@ def create(
 
     runs = [permissions.get_run(db, user, run_id) for run_id in run_ids]
     material = _material_of(db, runs)
-    members = collect(db, runs)
+    members = (
+        collect(db, runs)
+        if collect is not None
+        else _declared_members(db, runs, rule or {}, plugin_id)
+    )
 
     try:
         outcome = groups.run_group(plugin_id, members, options or {})

@@ -67,6 +67,50 @@ def render(deck: export.Deck) -> export.Rendered: ...
 
 셋 다 필요한 것은 아니다. 계산만 더하면 ②만, 새 솔버만 더하면 ③만 쓴다.
 
+창구가 둘 더 있다 — **처리 단계**(시험 하나: 곡선 → 곡선·스칼라)와 **묶음**(여러 시험
+→ 하나). 등록 함수는 같은 `registry.register` 이고 `kind` 만 다르다. `tensile_extras/`
+가 둘을 실제로 붙인 예다(2026-09-13).
+
+```python
+from matcore.registry import ParamSpec, Produced, register
+
+# ④ 처리 단계 — 앞 단계가 낸 값을 "@키" 로 받는다
+register(
+    id="tensile.yield_ratio",
+    kind="processing",
+    label="항복비",
+    params=(
+        ParamSpec(
+            name="proof_stress",
+            label="항복강도",
+            type="float",
+            unit="Pa",
+            default="@proof_stress",
+            required=True,
+        ),
+        ...,
+    ),
+    makes_values=(Produced(key="yield_ratio", label="항복비", si_unit="1"),),
+)(ratio.yield_ratio)  # (Frame, options) -> StepResult
+
+# ⑤ 묶음 — 구성원을 모으는 법을 **선언**한다(파이썬 수집기가 필요 없다)
+register(
+    id="tensile.temperature_family",
+    kind="grouping",
+    label="온도별 소성 곡선",
+    members={
+        "from": "adopted_result",
+        "columns": ["strain_true_plastic", "stress_true"],
+        "conditions": ["temperature"],
+    },
+    makes_values=(Produced(key="softening_slope", label="온도 연화 기울기", si_unit="Pa/K"),),
+)(temperature.temperature_family)  # (list[Member], **options) -> GroupOutcome
+```
+
+**받는 것과 내는 것의 이름**(어느 열이 있고, 앞 단계가 무엇을 내는지)은
+[docs/확장-계약.md](../../docs/확장-계약.md) 에 있다 — 레지스트리에서 **생성**하는
+문서라 코드와 어긋나지 않는다(`scripts/describe_extension_api.py`).
+
 ## 실제로 붙여 보고 배운 것 둘
 
 `ghosh_hardening/` 이 첫 확장이다. 만들면서 걸린 자리가 둘 있었다.
