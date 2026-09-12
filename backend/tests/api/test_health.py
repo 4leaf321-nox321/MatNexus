@@ -27,9 +27,9 @@ def test_DB_를_못_찌르면_503_이다() -> None:
     """
     from unittest.mock import patch
 
-    from app import main
+    from app.database import engine  # main 이 쓰는 것과 같은 객체다
 
-    with patch.object(main.engine, "connect", side_effect=OSError("연결 끊김")):
+    with patch.object(engine, "connect", side_effect=OSError("연결 끊김")):
         response = client.get("/api/health")
     assert response.status_code == 503
     body = response.json()
