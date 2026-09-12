@@ -74,11 +74,11 @@ export default function VocDetailPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    aria-label="고치기"
+                    aria-label="편집"
                     onClick={() => setEditing(true)}
                   >
                     <Pencil className="size-3.5" />
-                    고치기
+                    편집
                   </Button>
                   <Button
                     size="sm"
@@ -231,7 +231,7 @@ function ActionBox({ detail, onDone }: { detail: VocDetail; onDone: () => void }
   return (
     <section className="rounded-md border p-4">
       <Label htmlFor="voc-note" className="mb-1.5 block">
-        말 남기기
+        댓글 등록
       </Label>
       <textarea
         id="voc-note"
@@ -321,7 +321,7 @@ function EditDialog({
     <Dialog open={item !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>고치기</DialogTitle>
+          <DialogTitle>편집</DialogTitle>
           <DialogDescription>남이 말을 남기기 전까지만 고칠 수 있습니다.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

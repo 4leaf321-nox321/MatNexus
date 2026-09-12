@@ -113,7 +113,7 @@ export function BulkEditDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>시험 {runIds.length}건 한꺼번에 고치기</DialogTitle>
+          <DialogTitle>시험 {runIds.length}건 한꺼번에 편집</DialogTitle>
           <DialogDescription>
             <b>칸 하나</b>를 골라 고른 시험 전부에 같은 값을 넣습니다. 시편·재료·시험 종류와
             상태는 여기서 못 바꿉니다 — 이름과 처리 흐름이 매달려 있습니다.

@@ -75,7 +75,7 @@ export function RecipePicker({
   recipes,
   value,
   onSelect,
-  placeholder = '레시피 고르기',
+  placeholder = '레시피 선택',
   ariaLabel,
   className,
   action = false,

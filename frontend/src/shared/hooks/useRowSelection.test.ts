@@ -87,7 +87,7 @@ describe('Shift 범위', () => {
   })
 })
 
-describe('전부 고르기', () => {
+describe('전부 선택', () => {
   it('켜고 끈다', () => {
     const { result } = renderHook(() => useRowSelection(ROWS))
 

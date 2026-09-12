@@ -135,7 +135,7 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
               두었습니다 — 로트번호·생산일만 적으면 됩니다.
             </span>
             <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs" onClick={clearInherited}>
-              비우기
+              초기화
             </Button>
           </p>
         )}

@@ -130,7 +130,7 @@ export default function CardsPage() {
             재료: {rows[0]?.material_name ?? materialId}
             <button
               type="button"
-              aria-label="재료 거르기 풀기"
+              aria-label="재료 필터 해제"
               className="hover:text-foreground ml-0.5 opacity-70"
               onClick={() =>
                 setSearch((now) => {
@@ -220,7 +220,7 @@ function Row({
           묶음은 여럿을 고를 때만 뜬다. */}
       <input
         type="checkbox"
-        aria-label={`${card.label} 묶음에 담기`}
+        aria-label={`${card.label} 묶음에 추가`}
         checked={picked}
         onChange={(event) => onPick(event.target.checked)}
       />

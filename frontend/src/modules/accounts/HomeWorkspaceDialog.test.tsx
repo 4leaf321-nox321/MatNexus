@@ -86,7 +86,7 @@ describe('대표 소속', () => {
 
     await user.click(screen.getByRole('button', { name: /금속재료팀/ }))
     await user.click(await screen.findByText('고분자팀'))
-    await user.click(screen.getByRole('button', { name: '정하기' }))
+    await user.click(screen.getByRole('button', { name: '설정' }))
 
     await waitFor(() => expect(setHomeWorkspace).toHaveBeenCalledWith('account-1', 'polymer'))
     expect(onSaved).toHaveBeenCalledWith(expect.stringContaining('고분자팀'))
@@ -94,16 +94,16 @@ describe('대표 소속', () => {
 
   it('지금 값 그대로면 저장할 수 없다', () => {
     show()
-    expect(screen.getByRole('button', { name: '정하기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '설정' })).toBeDisabled()
   })
 
   it('대표 소속이 없던 사람도 정할 수 있다', async () => {
     const user = userEvent.setup()
     show({ ...ACCOUNT, home_workspace_slug: null })
 
-    await user.click(screen.getByRole('button', { name: /부서 고르기/ }))
+    await user.click(screen.getByRole('button', { name: /부서 선택/ }))
     await user.click(await screen.findByText('금속재료팀'))
-    await user.click(screen.getByRole('button', { name: '정하기' }))
+    await user.click(screen.getByRole('button', { name: '설정' }))
 
     await waitFor(() => expect(setHomeWorkspace).toHaveBeenCalledWith('account-1', 'metal'))
   })

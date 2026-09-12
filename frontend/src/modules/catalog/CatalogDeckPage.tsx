@@ -101,7 +101,7 @@ export default function CatalogDeckPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="문헌 덱 만들기"
+        title="문헌 덱 생성"
         description="해석 모델은 부품마다 재료가 필요합니다. 부품표(BOM)의 재료명들을 통째로 붙여넣으면 문헌 카탈로그와 매칭해 재료 카드 덱을 한 번에 만듭니다 — 하나씩 값을 찾아 손으로 옮기는 일의 일괄판입니다. 모델에서 쓰는 재료 번호(MID)를 줄 앞에 적으면 만들어진 카드가 그 번호로 나가 기존 모델에 그대로 꽂히고, 안 적으면 자동으로 매깁니다. 덱의 모든 값 옆에 출처·등급 각주가 $ 주석으로 들어갑니다."
       />
       <ErrorNotice error={error} />
@@ -208,7 +208,7 @@ export default function CatalogDeckPage() {
               onClick={() => void build()}
               disabled={busy || rows.every((row) => !row.choice)}
             >
-              <FileCode2 className="size-4" />덱 만들기
+              <FileCode2 className="size-4" />덱 생성
             </Button>
             {unmatched.length > 0 && (
               <span className="text-muted-foreground text-xs">
@@ -254,7 +254,7 @@ export default function CatalogDeckPage() {
             </Button>
             <Button variant="outline" size="sm" onClick={download}>
               <Download className="size-4" />
-              내려받기
+              다운로드
             </Button>
           </div>
           <pre className="bg-muted/40 max-h-[480px] overflow-auto rounded-md border p-3 text-xs">

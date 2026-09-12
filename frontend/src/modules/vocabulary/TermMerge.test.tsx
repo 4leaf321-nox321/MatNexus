@@ -88,14 +88,14 @@ beforeEach(() => {
 
 /** 합칠 대상을 고른다. 피커는 서버 검색으로 목록을 낸다. */
 async function choose(user: ReturnType<typeof userEvent.setup>, value: string) {
-  await user.click(await screen.findByRole('button', { name: /^다른 값에 합치기:/ }))
-  await user.type(await screen.findByPlaceholderText('다른 값에 합치기 찾기'), value)
+  await user.click(await screen.findByRole('button', { name: /^다른 값에 병합:/ }))
+  await user.type(await screen.findByPlaceholderText('다른 값에 병합 찾기'), value)
   // **행 이름은 `포스코3` 이다** — 값 뒤에 쓰는 곳 수가 붙고, jsdom 에는 그
   // 사이에 공백이 없다(스모크가 쓰는 `^값(\s|$)` 은 여기서 안 맞는다).
   await user.click(await screen.findByRole('button', { name: new RegExp(`^${value}\\d*$`) }))
 }
 
-describe('다른 값에 합치기', () => {
+describe('다른 값에 병합', () => {
   it('무엇이 옮겨지고 무엇이 남는지 먼저 말한다', async () => {
     open()
     // **별칭으로 남는 것이 요점이다.** 병합이 일회성 청소가 아니라 규칙이 되는
@@ -109,7 +109,7 @@ describe('다른 값에 합치기', () => {
   it('고르기 전에는 합치기 단추가 없다', async () => {
     open()
     await screen.findByText(/별칭으로 남습니다/)
-    expect(screen.queryByRole('button', { name: '합치기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '병합' })).not.toBeInTheDocument()
   })
 
   it('한 번 더 물은 뒤에 부른다', async () => {
@@ -118,7 +118,7 @@ describe('다른 값에 합치기', () => {
     open()
     await choose(user, '포스코')
 
-    await user.click(await screen.findByRole('button', { name: '합치기' }))
+    await user.click(await screen.findByRole('button', { name: '병합' }))
     expect(merge).not.toHaveBeenCalled()
 
     await user.click(
@@ -133,7 +133,7 @@ describe('다른 값에 합치기', () => {
     const user = userEvent.setup()
     open()
     await choose(user, '포스코')
-    await user.click(await screen.findByRole('button', { name: '합치기' }))
+    await user.click(await screen.findByRole('button', { name: '병합' }))
     await user.click(await screen.findByRole('button', { name: '취소' }))
 
     expect(
@@ -149,7 +149,7 @@ describe('다른 값에 합치기', () => {
     await choose(user, 'POSCO')
 
     expect(await screen.findByText(/자기 자신입니다/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '합치기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '병합' })).not.toBeInTheDocument()
   })
 
   it('못 찾으면 말하고 안 부른다', async () => {
@@ -159,7 +159,7 @@ describe('다른 값에 합치기', () => {
     await choose(user, '포스코')
     search.mockResolvedValue({ items: [MINE], total: 1, limit: 20, offset: 0 })
 
-    await user.click(await screen.findByRole('button', { name: '합치기' }))
+    await user.click(await screen.findByRole('button', { name: '병합' }))
     await user.click(await screen.findByRole('button', { name: /합칩니다/ }))
 
     expect(await screen.findByText(/'포스코' 를 못 찾았습니다/)).toBeInTheDocument()

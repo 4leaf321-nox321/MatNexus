@@ -99,7 +99,7 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
           size="icon"
           onClick={leftPanel.toggle}
           aria-pressed={leftPanel.open}
-          aria-label={`${leftPanel.label} ${leftPanel.open ? '접기' : '펴기'}`}
+          aria-label={`${leftPanel.label} ${leftPanel.open ? '접기' : '펼치기'}`}
           title={leftPanel.label}
         >
           <PanelLeftClose className="size-4" />
@@ -156,7 +156,7 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
           size="icon"
           onClick={rightPanel.toggle}
           aria-pressed={rightPanel.open}
-          aria-label={`${rightPanel.label} ${rightPanel.open ? '접기' : '펴기'}`}
+          aria-label={`${rightPanel.label} ${rightPanel.open ? '접기' : '펼치기'}`}
           title={rightPanel.label}
         >
           <PanelRight className="size-4" />

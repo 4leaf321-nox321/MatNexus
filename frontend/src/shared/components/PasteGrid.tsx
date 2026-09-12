@@ -147,7 +147,7 @@ export function PasteGrid({
                       size="icon"
                       variant="ghost"
                       className="size-6"
-                      aria-label={`${atRow + 1}번 줄 빼기`}
+                      aria-label={`${atRow + 1}번 줄 제거`}
                       onClick={() => onRows(rows.filter((_, at) => at !== atRow))}
                     >
                       <Trash2 className="size-3" />
@@ -167,7 +167,7 @@ export function PasteGrid({
           className="h-7 text-xs"
           onClick={() => onRows([...rows, columns.map(() => '')])}
         >
-          <Plus className="size-3.5" />줄 더하기
+          <Plus className="size-3.5" />줄 추가
         </Button>
         {/* **엑셀에서 채워 오는 길.** 빈 표라도 헤더가 복사되므로, 그것을 붙여
             놓고 채운 뒤 다시 가져오면 열 이름이 맞는다. */}

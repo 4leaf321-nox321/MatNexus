@@ -252,7 +252,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                         variant="ghost"
                         className="text-muted-foreground hover:text-destructive"
                         disabled={busy}
-                        aria-label="이 결과 지우기"
+                        aria-label="이 결과 삭제"
                         onClick={() => setRemoving(item)}
                       >
                         <Trash2 className="size-3.5" />

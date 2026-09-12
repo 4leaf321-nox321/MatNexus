@@ -69,7 +69,7 @@ beforeEach(() => {
   importSummaries.mockResolvedValue(ANSWER)
 })
 
-describe('표로 시험 넣기', () => {
+describe('표로 시험 입력', () => {
   it('곡선이 없다는 것을 먼저 말한다', () => {
     // **모자란 데이터라는 뜻이 아니다** — 낼 수 있는 물성의 범위가 다를 뿐이다.
     show()
@@ -90,7 +90,7 @@ describe('표로 시험 넣기', () => {
     const user = userEvent.setup()
     show()
     await type(user, 'MD-2')
-    await user.click(screen.getByRole('button', { name: '미리 보기' }))
+    await user.click(screen.getByRole('button', { name: '미리보기' }))
 
     await waitFor(() => expect(importSummaries).toHaveBeenCalled())
     expect(importSummaries.mock.calls[0][1]).toMatchObject({ dry: true })
@@ -101,7 +101,7 @@ describe('표로 시험 넣기', () => {
     const user = userEvent.setup()
     show()
     await type(user, 'MD-2')
-    await user.click(screen.getByRole('button', { name: '넣기' }))
+    await user.click(screen.getByRole('button', { name: '입력' }))
 
     await waitFor(() => expect(importSummaries).toHaveBeenCalled())
     expect(importSummaries.mock.calls[0][1]).toMatchObject({
@@ -115,7 +115,7 @@ describe('표로 시험 넣기', () => {
     show()
     await user.click(screen.getByRole('checkbox'))
     await type(user, 'MD-2')
-    await user.click(screen.getByRole('button', { name: '넣기' }))
+    await user.click(screen.getByRole('button', { name: '입력' }))
 
     await waitFor(() => expect(importSummaries).toHaveBeenCalled())
     expect(importSummaries.mock.calls[0][1]).toMatchObject({ createMissing: true })
@@ -126,13 +126,13 @@ describe('표로 시험 넣기', () => {
     const user = userEvent.setup()
     show()
     await type(user, 'MD-2')
-    await user.click(screen.getByRole('button', { name: '미리 보기' }))
+    await user.click(screen.getByRole('button', { name: '미리보기' }))
 
     expect(await screen.findByText('시편도 만듦')).toBeInTheDocument()
   })
 
   it('빈 표로는 못 보낸다', () => {
     show()
-    expect(screen.getByRole('button', { name: '넣기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '입력' })).toBeDisabled()
   })
 })

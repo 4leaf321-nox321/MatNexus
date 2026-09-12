@@ -176,7 +176,7 @@ describe('아코디언에 있던 일', () => {
     screenWidth(true)
     show()
     await screen.findByText('MD_01')
-    expect(screen.getByRole('button', { name: /표로 시험 넣기/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /표로 시험 입력/ })).toBeInTheDocument()
   })
 
   it('시편 줄마다 편집 · 삭제가 있다', async () => {
@@ -187,7 +187,7 @@ describe('아코디언에 있던 일', () => {
   })
 })
 
-describe('고르기', () => {
+describe('선택', () => {
   it('시료를 바꾸면 그 시료의 시편으로 갈린다', async () => {
     const user = userEvent.setup()
     show()
@@ -340,7 +340,7 @@ describe('일이 붙는 자리', () => {
     screenWidth(true)
     show()
     await screen.findByText('MD_01')
-    const bulk = screen.getByRole('button', { name: /표로 시험 넣기/ })
+    const bulk = screen.getByRole('button', { name: /표로 시험 입력/ })
     const add = screen.getByRole('button', { name: /시편 추가/ })
     expect(bulk.closest('.min-w-0')).not.toBe(add.closest('.min-w-0'))
   })
@@ -361,7 +361,7 @@ describe('보기 모드에 따라', () => {
     screenWidth(false)
     show()
     await screen.findByText('MD_01')
-    expect(screen.getByRole('button', { name: /표로 시험 넣기/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /표로 시험 입력/ })).toBeInTheDocument()
   })
 
   it('두 모드에서 한 번씩만 나온다', async () => {
@@ -369,7 +369,7 @@ describe('보기 모드에 따라', () => {
     screenWidth(true)
     show()
     await screen.findByText('MD_01')
-    expect(screen.getAllByRole('button', { name: /표로 시험 넣기/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /표로 시험 입력/ })).toHaveLength(1)
   })
 })
 

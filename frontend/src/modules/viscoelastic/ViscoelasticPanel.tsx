@@ -451,7 +451,7 @@ function ImportRow({
   return (
     <button
       type="button"
-      aria-label={`${name} 고르기`}
+      aria-label={`${name} 선택`}
       disabled={!curve.usable}
       onClick={onChoose}
       className={`w-full rounded-md border p-2 text-left text-xs disabled:opacity-60 ${
@@ -671,7 +671,7 @@ function MasterCurveView({ curve, materialId }: { curve: MasterCurve; materialId
           <div className="mb-1 flex items-center gap-2">
             <h3 className="flex items-center gap-2 font-medium">
               <span className="text-muted-foreground">②</span>
-              Prony 계수 맞추기
+              Prony 계수 적합
               {latest && (
                 <Badge variant="secondary" className="text-xs">
                   됨
@@ -684,7 +684,7 @@ function MasterCurveView({ curve, materialId }: { curve: MasterCurve; materialId
               disabled={busy}
               onClick={() => void fit()}
             >
-              맞추기
+              적합
             </Button>
           </div>
           <p className="text-muted-foreground mb-2 text-sm">
@@ -847,7 +847,7 @@ function PronyView({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-sm">③</span>
         <Button size="sm" onClick={() => setMaking(true)} disabled={busy}>
-          이 계수로 물성 카드 만들기
+          이 계수로 물성 카드 생성
         </Button>
         {made ? (
           <span className="text-muted-foreground text-xs">

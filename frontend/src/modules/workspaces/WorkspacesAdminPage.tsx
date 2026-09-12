@@ -114,7 +114,7 @@ export default function WorkspacesAdminPage() {
             </Button>
             <Button onClick={() => setCreating(true)}>
               <Plus className="size-4" />
-              부서 만들기
+              부서 생성
             </Button>
           </span>
         }
@@ -283,7 +283,7 @@ export default function WorkspacesAdminPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  title="이름 바꾸기"
+                  title="이름 변경"
                   disabled={busy}
                   onClick={() => setEditing(workspace)}
                 >
@@ -296,7 +296,7 @@ export default function WorkspacesAdminPage() {
                   disabled={busy}
                   onClick={() => setMoving(workspace)}
                 >
-                  상위 바꾸기
+                  상위 변경
                 </Button>
 
                 {/* **자료가 매달려 못 지우는 부서의 출구.** 자료·멤버를 다른
@@ -308,7 +308,7 @@ export default function WorkspacesAdminPage() {
                   disabled={busy}
                   onClick={() => setMerging(workspace)}
                 >
-                  합치기
+                  병합
                 </Button>
 
                 <Button size="sm" variant="outline" asChild>
@@ -632,7 +632,7 @@ function MoveDialog({
           workspaces={all.filter((row) => !forbidden.has(row.slug))}
           value={workspace.parent_slug}
           excludeArchived={workspace.is_active}
-          placeholder="상위 부서 고르기"
+          placeholder="상위 부서 선택"
           className="w-full"
           emptyLabel="옮길 수 있는 부서가 없습니다"
           onChange={onMove}
@@ -640,7 +640,7 @@ function MoveDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onMove(null)}>
-            최상위로 올리기
+            최상위로 이동
           </Button>
           <Button variant="ghost" onClick={onClose}>
             닫기
@@ -688,7 +688,7 @@ function CreateDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>부서 만들기</DialogTitle>
+          <DialogTitle>부서 생성</DialogTitle>
           <DialogDescription>
             만든 사람이 그 부서의 관리자가 됩니다. 관리자가 없는 부서는 멤버를 넣을 수 없습니다.
           </DialogDescription>
@@ -730,7 +730,7 @@ function CreateDialog({
               />
               {parent && (
                 <Button variant="ghost" onClick={() => setParent(null)}>
-                  지우기
+                  삭제
                 </Button>
               )}
             </div>
@@ -747,7 +747,7 @@ function CreateDialog({
             취소
           </Button>
           <Button disabled={busy || !slug || !name} onClick={submit}>
-            만들기
+            생성
           </Button>
         </DialogFooter>
       </DialogContent>

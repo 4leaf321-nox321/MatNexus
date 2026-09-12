@@ -198,13 +198,13 @@ function withCard(status: string) {
   })
 }
 
-describe('점 수 맞추기', () => {
+describe('점 수 적합', () => {
   const openSave = async () => {
     // 비교 화면은 **후보가 있어야** 뜬다 — 그 안에 저장 단추가 있다.
     preview.mockResolvedValue(body([fit()]))
     panel()
     await compare()
-    await userEvent.click(await screen.findByRole('button', { name: /이 값으로 카드 만들기/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /이 값으로 카드 생성/ }))
   }
 
   it('안 켜면 안 건다 — 측정 그대로 나간다', async () => {
@@ -223,7 +223,7 @@ describe('점 수 맞추기', () => {
   it('켜면 방법과 점 수를 함께 보낸다', async () => {
     create.mockResolvedValue({})
     await openSave()
-    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 맞추기'))
+    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 일치'))
     await userEvent.selectOptions(screen.getByLabelText('어떻게 고를까'), 'uniform')
     const points = screen.getByLabelText('점 수')
     await userEvent.clear(points)
@@ -239,7 +239,7 @@ describe('점 수 맞추기', () => {
   it('무엇을 하는 방법인지 서버가 적은 설명을 보여 준다', async () => {
     // 화면이 베껴 두면 새 방법이 붙을 때 설명만 옛것으로 남는다.
     await openSave()
-    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 맞추기'))
+    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 일치'))
     expect(screen.getByText('무릎에 점을 몰아 줍니다.')).toBeInTheDocument()
   })
 })
@@ -263,19 +263,19 @@ describe('확정한 값을 못 쓰게 만들 때', () => {
     withCard('deprecated')
     restore.mockResolvedValue({})
     panel()
-    await userEvent.click(await screen.findByRole('button', { name: '초안으로 되살리기' }))
+    await userEvent.click(await screen.findByRole('button', { name: '초안으로 복원' }))
     await waitFor(() => expect(restore).toHaveBeenCalledWith('c1'))
   })
 })
 
-describe('늘리기 칸', () => {
+describe('연장 칸', () => {
   it('금속 경화식에서는 열린다', async () => {
     preview.mockResolvedValue(body([fit()]))
     panel()
     await compare()
-    const input = await screen.findByLabelText(/시험 구간 밖까지 늘리기/)
+    const input = await screen.findByLabelText(/시험 구간 밖까지 연장/)
     expect(input).toBeEnabled()
-    expect(screen.getByText(/시험 구간 밖까지 늘리기 \(진소성변형률\)/)).toBeInTheDocument()
+    expect(screen.getByText(/시험 구간 밖까지 연장 \(진소성변형률\)/)).toBeInTheDocument()
   })
 
   it('초탄성에서는 잠기고 이유를 말한다', async () => {
@@ -293,7 +293,7 @@ describe('늘리기 칸', () => {
     )
     panel()
     await compare()
-    const input = await screen.findByLabelText(/시험 구간 밖까지 늘리기/)
+    const input = await screen.findByLabelText(/시험 구간 밖까지 연장/)
     expect(input).toBeDisabled()
     expect(screen.getByText(/소성 표를 만드는 식이 아닙니다/)).toBeInTheDocument()
   })
@@ -313,8 +313,8 @@ describe('늘리기 칸', () => {
     )
     panel()
     await compare()
-    expect(await screen.findByText(/시험 구간 밖까지 늘리기 \(공칭 변형률\)/)).toBeInTheDocument()
-    expect(screen.queryByText(/시험 구간 밖까지 늘리기 \(진소성변형률\)/)).not.toBeInTheDocument()
+    expect(await screen.findByText(/시험 구간 밖까지 연장 \(공칭 변형률\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/시험 구간 밖까지 연장 \(진소성변형률\)/)).not.toBeInTheDocument()
   })
 
   it('식을 안 고르면 잠기고 그 이유를 말한다', async () => {
@@ -323,12 +323,12 @@ describe('늘리기 칸', () => {
     panel()
     await compare()
     await userEvent.click(await screen.findByRole('button', { name: /식 없이 표만/ }))
-    expect(await screen.findByLabelText(/시험 구간 밖까지 늘리기/)).toBeDisabled()
+    expect(await screen.findByLabelText(/시험 구간 밖까지 연장/)).toBeDisabled()
     expect(screen.getByText(/식을 골라야 늘릴 수 있습니다/)).toBeInTheDocument()
   })
 })
 
-describe('섞기', () => {
+describe('혼합', () => {
   /**
    * 주식 Voce + 상대 Swift. **혼합은 후보가 아니라 상태다** — 서버가 `voce+swift`
    * 키로 돌려주는 곡선을 후보처럼 눌렀더니 그것이 주식이 되어 서버가 혼합을 빼고
@@ -361,10 +361,10 @@ describe('섞기', () => {
     return body(fits)
   }
 
-  it('후보의 「섞기」 로 상대를 고르면 혼합 줄이 서고, 그래프에는 혼합 곡선이 오른다', async () => {
+  it('후보의 「혼합」 으로 상대를 고르면 혼합 줄이 서고, 그래프에는 혼합 곡선이 오른다', async () => {
     panel()
     await compare()
-    await userEvent.click(await screen.findByRole('button', { name: 'Swift 섞기' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Swift 혼합' }))
 
     await waitFor(() =>
       expect(preview).toHaveBeenLastCalledWith(
@@ -382,7 +382,7 @@ describe('섞기', () => {
   it('혼합 줄을 눌러도 아무것도 사라지지 않는다', async () => {
     panel()
     await compare()
-    await userEvent.click(await screen.findByRole('button', { name: 'Swift 섞기' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Swift 혼합' }))
     const row = await screen.findByRole('group', { name: '혼합' })
     // 서버 답이 와서 혼합 곡선까지 오른 뒤에 센다 — 그 전에 세면 늦게 온 답을 「다시 물었다」 로 읽는다.
     await screen.findByText('Voce 0.50 + Swift 0.50 적합')
@@ -401,7 +401,7 @@ describe('섞기', () => {
     // 같은 식을 주식이자 상대로 두면 서버는 혼합을 못 만든다.
     panel()
     await compare()
-    await userEvent.click(await screen.findByRole('button', { name: 'Swift 섞기' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Swift 혼합' }))
     await screen.findByRole('group', { name: '혼합' })
 
     // 후보 박스 본체(이름 뒤에 지표가 이어진다) — 「Swift 섞기 해제」 단추와 가른다.
@@ -461,7 +461,7 @@ describe('시험 종류에 맞는 길만 연다', () => {
   it('DMA 만 있으면 경화식 단계가 아예 없다', async () => {
     forMaterial.mockResolvedValue({ material_id: 'm1', material_name: 'X', groups: [dma()] })
     panel()
-    await screen.findByText(/새 카드 만들기/)
+    await screen.findByText(/새 카드 생성/)
     expect(screen.queryByRole('button', { name: /^탄소성 카드$/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /경화식 맞춰 보기/ })).not.toBeInTheDocument()
     expect(screen.queryByText('무엇으로')).not.toBeInTheDocument()
@@ -488,9 +488,9 @@ describe('시험 종류에 맞는 길만 연다', () => {
       buttons.findIndex((text) => text.includes('선형탄성구간(LVE) 카드'))
     )
     await userEvent.click(lve)
-    expect(await screen.findByRole('dialog')).toHaveTextContent('선형탄성구간(LVE) 카드 만들기')
+    expect(await screen.findByRole('dialog')).toHaveTextContent('선형탄성구간(LVE) 카드 생성')
     // 재료에 적어 둔 열물성을 함께 실을지 고른다 — 기본은 켜짐. 없으면 없다고 말한다.
-    expect(screen.getByRole('checkbox', { name: '재료 기본 정보 함께 싣기' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: '재료 기본 정보 함께 포함' })).toBeChecked()
     expect(await screen.findByText(/함께 실릴 것이 없습니다/)).toBeInTheDocument()
   })
 
@@ -640,7 +640,7 @@ describe('카드 목록은 접혀 있다', () => {
     // 접힌 상태: 블록 이름과 첫 값만.
     expect(await screen.findByText('탄성')).toBeInTheDocument()
     expect(screen.queryByText('푸아송비')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'LVE 하나 펴기' }))
+    await userEvent.click(screen.getByRole('button', { name: 'LVE 하나 펼치기' }))
     expect(await screen.findByText('푸아송비')).toBeInTheDocument()
     expect(screen.getByText('선형 한계 변형률')).toBeInTheDocument()
   })

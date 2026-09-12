@@ -140,7 +140,7 @@ export default function TrashPage() {
             두 묶음으로 갈라 세운다: 재료 계층은 아래로 딸린 것이 있고 수집
             체계는 정의 한 줄이 통째로 하나라, 되살릴 때 무슨 일이 나는지가
             다르다. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="종류로 거르기">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="종류로 필터">
           <Button
             size="sm"
             variant={kind === '' ? 'default' : 'outline'}
@@ -277,7 +277,7 @@ export default function TrashPage() {
                         run(() => trashApi.restore(row.kind, row.id), `restore-${row.id}`)
                       }
                     >
-                      {busy === `restore-${row.id}` ? '되살리는 중…' : '되살리기'}
+                      {busy === `restore-${row.id}` ? '되살리는 중…' : '복원'}
                     </Button>
                     <Button
                       size="sm"

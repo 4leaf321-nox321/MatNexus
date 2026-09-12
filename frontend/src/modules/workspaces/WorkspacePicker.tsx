@@ -48,7 +48,7 @@ export function WorkspacePicker({
   workspaces,
   value,
   onChange,
-  placeholder = '부서 고르기',
+  placeholder = '부서 선택',
   excludeArchived = false,
   disabled,
   className,

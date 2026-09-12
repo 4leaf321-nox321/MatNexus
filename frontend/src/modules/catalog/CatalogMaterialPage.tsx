@@ -163,7 +163,7 @@ export default function CatalogMaterialPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => setAdopting(true)} disabled={item.values.length === 0}>
             <PackagePlus className="size-4" />
-            사내 재료에 채우기
+            사내 재료에 반영
           </Button>
           <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
             <FilePlus2 className="size-4" />
@@ -171,7 +171,7 @@ export default function CatalogMaterialPage() {
           </Button>
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
             <Plus className="size-4" />
-            값 넣기
+            값 입력
           </Button>
           <Badge variant="outline">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
           <Badge variant="outline">{item.subsystem ?? '미분류'}</Badge>
@@ -266,7 +266,7 @@ export default function CatalogMaterialPage() {
                       {canRemove(value) && (
                         <button
                           type="button"
-                          aria-label={`${value.property_name} 값 지우기`}
+                          aria-label={`${value.property_name} 값 삭제`}
                           className="text-muted-foreground hover:text-destructive ml-1 rounded p-0.5 align-middle"
                           onClick={() => remove(value)}
                         >

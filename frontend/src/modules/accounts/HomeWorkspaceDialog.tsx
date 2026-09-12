@@ -76,7 +76,7 @@ export function HomeWorkspaceDialog({ account, workspaces, onClose, onSaved }: P
           workspaces={mine}
           value={slug}
           onChange={setSlug}
-          placeholder="부서 고르기"
+          placeholder="부서 선택"
           emptyLabel="이 사람은 아직 어느 부서에도 없습니다"
           className="w-full"
         />
@@ -103,7 +103,7 @@ export function HomeWorkspaceDialog({ account, workspaces, onClose, onSaved }: P
             disabled={busy || !slug || slug === account.home_workspace_slug}
             onClick={() => void save()}
           >
-            정하기
+            설정
           </Button>
         </DialogFooter>
       </DialogContent>

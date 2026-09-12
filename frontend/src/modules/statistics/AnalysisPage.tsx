@@ -203,7 +203,7 @@ function CompareTab() {
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={() => setOpen(true)}>
-          재료 고르기
+          재료 선택
         </Button>
         {picked.length > 0 && (
           <span className="text-muted-foreground text-xs">{picked.length}개 담김</span>
@@ -220,7 +220,7 @@ function CompareTab() {
               {one.material_name}
               <button
                 type="button"
-                aria-label={`${one.material_name} 빼기`}
+                aria-label={`${one.material_name} 제거`}
                 className="text-muted-foreground hover:text-foreground"
                 onClick={() => setPicked((now) => now.filter((id) => id !== one.material_id))}
               >
@@ -229,7 +229,7 @@ function CompareTab() {
             </Badge>
           ))}
           <Button size="sm" variant="ghost" onClick={() => setPicked([])}>
-            모두 빼기
+            모두 제거
           </Button>
         </div>
       )}
@@ -237,7 +237,7 @@ function CompareTab() {
       <ErrorNotice error={compare.error} className="mb-3" />
       {picked.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          「재료 고르기」 를 눌러 담아 주세요 — 채택된 물성이 있는 재료만 뜹니다. 두 개부터 표가
+          「재료 선택」 을 눌러 담아 주세요 — 채택된 물성이 있는 재료만 뜹니다. 두 개부터 표가
           뜻이 있습니다.
         </p>
       )}
@@ -339,7 +339,7 @@ function MaterialPickerDialog({
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>재료 고르기</DialogTitle>
+          <DialogTitle>재료 선택</DialogTitle>
           <DialogDescription>
             채택된 물성이 있는 재료만 있습니다 — 물성이 없는 재료는 담아도 빈 줄입니다.
           </DialogDescription>
@@ -347,7 +347,7 @@ function MaterialPickerDialog({
         <Input
           value={term}
           onChange={(event) => setTerm(event.target.value)}
-          placeholder="이름·재료군·분류로 좁히기"
+          placeholder="이름·재료군·분류로 검색"
           aria-label="재료 찾기"
         />
         <ErrorNotice error={list.error} />
@@ -390,7 +390,7 @@ function MaterialPickerDialog({
         )}
         <div className="flex justify-between">
           <Button variant="ghost" onClick={() => onChange([])} disabled={picked.length === 0}>
-            모두 빼기
+            모두 제거
           </Button>
           <Button onClick={onClose}>{picked.length}개 담고 닫기</Button>
         </div>

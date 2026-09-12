@@ -213,7 +213,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
           덮으면 뒤가 안 보여 어디서 열었는지 잃는다. */}
       <DialogContent className="sm:max-w-6xl">
         <DialogHeader>
-          <DialogTitle>{creating ? '시험 종류 만들기' : `${type?.label} 편집`}</DialogTitle>
+          <DialogTitle>{creating ? '시험 종류 생성' : `${type?.label} 편집`}</DialogTitle>
           <DialogDescription>
             정의는 데이터입니다 — 배포 없이 추가·수정됩니다. 다만 파일을 실제로 읽는
             파서는 코드입니다.
@@ -599,7 +599,7 @@ function RowEditor({
           {onBulk && (
             <Button size="sm" variant="outline" onClick={onBulk}>
               <Rows3 className="size-3.5" />
-              여러 개 넣기
+              여러 개 입력
             </Button>
           )}
           <Button size="sm" variant="secondary" onClick={onAdd}>
@@ -727,7 +727,7 @@ function RowEditor({
               size="sm"
               variant="ghost"
               disabled={frozen}
-              title={frozen ? '등록된 시험이 있어 지울 수 없습니다' : '지우기'}
+              title={frozen ? '등록된 시험이 있어 지울 수 없습니다' : '삭제'}
               onClick={() => onRemove(index)}
             >
               <Trash2 className="size-3.5" />

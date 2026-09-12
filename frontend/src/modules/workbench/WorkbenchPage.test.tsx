@@ -73,14 +73,14 @@ describe('무엇을 할지 고른다', () => {
   it('워크플로 목록과 단계 수를 미리 보여 준다', async () => {
     // **시작하고 나서 알면 되돌리는 값이 든다.**
     show()
-    expect(await screen.findByText('해석에 쓸 물성 갖추기')).toBeInTheDocument()
+    expect(await screen.findByText('해석에 쓸 물성 준비')).toBeInTheDocument()
     expect(screen.getByText('DMA 한 벌로 점탄성 계수 내기')).toBeInTheDocument()
     expect(screen.getByText(/1\. 무엇에 쓰나/)).toBeInTheDocument()
   })
 
   it('이름을 적어 시작하면 그 워크플로로 만든다', async () => {
     show()
-    const name = await screen.findByLabelText('해석에 쓸 물성 갖추기 작업 이름')
+    const name = await screen.findByLabelText('해석에 쓸 물성 준비 작업 이름')
     await userEvent.type(name, 'EPDM 도어씰')
     await userEvent.click(within(name.closest('div')!.parentElement!).getByRole('button', { name: /시작/ }))
 
@@ -102,12 +102,12 @@ describe('무엇을 할지 고른다', () => {
   })
 })
 
-describe('이어서 하기', () => {
+describe('계속', () => {
   it('진행 중인 작업이 목록 위에 뜬다', async () => {
     // 어제 하던 것이 아래에 묻히면 서버에 둔 뜻이 없다.
     runs.mockResolvedValue([{ ...DETAIL, item_count: 3 }])
     show()
-    expect(await screen.findByText('이어서 하기')).toBeInTheDocument()
+    expect(await screen.findByText('계속')).toBeInTheDocument()
     expect(screen.getByText('EPDM 도어씰 2026-09')).toBeInTheDocument()
     expect(screen.getByText(/담은 것 3/)).toBeInTheDocument()
   })
@@ -228,7 +228,7 @@ describe('담고 나서 돌아오면', () => {
     // 남이 끝냈거나 지운 작업의 주소를 눌렀을 수 있다. **빈 화면으로 두지 않는다.**
     run.mockRejectedValue(new Error('없습니다'))
     show('/w/metal/workbench?run=없는것')
-    expect(await screen.findByText('해석에 쓸 물성 갖추기')).toBeInTheDocument()
+    expect(await screen.findByText('해석에 쓸 물성 준비')).toBeInTheDocument()
   })
 })
 

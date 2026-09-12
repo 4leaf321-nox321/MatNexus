@@ -115,7 +115,7 @@ export function SummaryImportDialog({
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-4xl gap-3">
         <DialogHeader>
-          <DialogTitle>표로 {testTypeLabel} 넣기</DialogTitle>
+          <DialogTitle>표로 {testTypeLabel} 입력</DialogTitle>
           <DialogDescription>
             <b>{sampleName}</b> 의 시편들입니다. 한 줄이 시험 하나가 되고, <b>곡선은
             없습니다</b> — 요약값이 답할 수 있는 데까지 쓰입니다(통계·카드 근거).
@@ -149,7 +149,7 @@ export function SummaryImportDialog({
             }}
           />
           <span>
-            <b>없는 시편 만들기</b>
+            <b>없는 시편 생성</b>
             <span className="text-muted-foreground block">
               끄면 이 시료에 없는 시편을 가리킨 줄은 안 들어가고 이유를 말합니다. 켜면
               그 줄이 시편까지 만듭니다 — 오타 하나가 유령 시편이 됩니다.
@@ -220,10 +220,10 @@ export function SummaryImportDialog({
             닫기
           </Button>
           <Button variant="outline" onClick={() => void send(true)} disabled={busy || !filled}>
-            미리 보기
+            미리보기
           </Button>
           <Button onClick={() => void send(false)} disabled={busy || !filled}>
-            넣기
+            입력
           </Button>
         </DialogFooter>
       </DialogContent>

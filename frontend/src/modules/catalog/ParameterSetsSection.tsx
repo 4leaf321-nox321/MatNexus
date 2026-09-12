@@ -102,7 +102,7 @@ export function ParameterSetsSection({ materialId }: { materialId: string }) {
                 onClick={() => setAdopting(set)}
               >
                 <PackagePlus className="size-4" />
-                사내 재료에 담기
+                사내 재료에 추가
               </Button>
             </div>
 
@@ -208,7 +208,7 @@ function AdoptParameterSetDialog({
     <Dialog open={set !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>사내 재료에 담기</DialogTitle>
+          <DialogTitle>사내 재료에 추가</DialogTitle>
           <DialogDescription>
             {set?.label} · {set?.model} — 변수 {set?.terms?.length ?? 0}개를{' '}
             <strong>한 벌로</strong> 담습니다. 담긴 뒤에는 그 재료의 물성 탭에 섭니다.
@@ -240,7 +240,7 @@ function AdoptParameterSetDialog({
                 <li key={one.id} className="flex items-center justify-between gap-2 px-3 py-2">
                   <span className="min-w-0 truncate">{one.record_name}</span>
                   <Button type="button" size="sm" disabled={busy} onClick={() => adopt(one)}>
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : '담기'}
+                    {busy ? <Loader2 className="size-4 animate-spin" /> : '추가'}
                   </Button>
                 </li>
               ))}

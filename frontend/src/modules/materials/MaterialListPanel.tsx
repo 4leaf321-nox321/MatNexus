@@ -137,8 +137,8 @@ export function MaterialListPanel({ currentId }: { currentId: string | undefined
             variant="ghost"
             className="size-7"
             onClick={panel.toggle}
-            aria-label="재료 목록 펴기"
-            title="재료 목록 펴기"
+            aria-label="재료 목록 펼치기"
+            title="재료 목록 펼치기"
           >
             <ChevronRight className="size-4" />
           </Button>

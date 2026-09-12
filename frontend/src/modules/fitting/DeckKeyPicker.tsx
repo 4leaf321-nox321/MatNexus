@@ -74,7 +74,7 @@ export function DeckKeyPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="h-8" aria-label={label} title={label}>
-          고르기
+          선택
           <ChevronDown className="size-3" />
         </Button>
       </PopoverTrigger>

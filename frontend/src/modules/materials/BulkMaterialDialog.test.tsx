@@ -55,8 +55,8 @@ describe('여러 개 등록', () => {
 
   it('열을 켜면 그 칸이 표에 생긴다', async () => {
     open()
-    fireEvent.keyDown(screen.getByRole('button', { name: /열 고르기/ }), { key: 'Enter' })
-    fireEvent.click(await screen.findByLabelText('시료 열 켜기'))
+    fireEvent.keyDown(screen.getByRole('button', { name: /열 선택/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByLabelText('시료 열 활성화'))
     await waitFor(() => expect(cell(1, '시료', '로트번호')).toBeInTheDocument())
   })
 
@@ -64,13 +64,13 @@ describe('여러 개 등록', () => {
     // 시료 칸을 켜서 적고 다시 끄면, 적어 둔 값이 함께 나가면 안 된다 —
     // 사람은 만들지 않기로 한 것이 만들어진 것을 나중에 안다.
     open()
-    fireEvent.keyDown(screen.getByRole('button', { name: /열 고르기/ }), { key: 'Enter' })
-    fireEvent.click(await screen.findByLabelText('시료 열 켜기'))
+    fireEvent.keyDown(screen.getByRole('button', { name: /열 선택/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByLabelText('시료 열 활성화'))
     await waitFor(() => expect(cell(1, '시료', '로트번호')).toBeInTheDocument())
     type(1, '시료', '로트번호', 'LOT-A')
     material(1, 'SECC')
 
-    fireEvent.click(await screen.findByLabelText('시료 열 끄기'))
+    fireEvent.click(await screen.findByLabelText('시료 열 비활성화'))
     await waitFor(() => expect(screen.queryByLabelText('1번 줄 시료 로트번호')).toBeNull())
     // 메뉴가 열려 있으면 나머지 화면이 `aria-hidden` 이라 눌리지 않는다.
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
@@ -87,7 +87,7 @@ describe('여러 개 등록', () => {
     open()
     expect(screen.queryByText(/세미콜론/)).toBeNull()
 
-    fireEvent.keyDown(screen.getByRole('button', { name: /열 고르기/ }), { key: 'Enter' })
+    fireEvent.keyDown(screen.getByRole('button', { name: /열 선택/ }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: '적용 제품' }))
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
 

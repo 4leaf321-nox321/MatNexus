@@ -56,7 +56,7 @@ export function ViscoelasticSummary({
           들어갑니다.
           <div className="mt-2">
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onGo}>
-              점탄성 탭에서 만들기
+              점탄성 탭에서 생성
             </Button>
           </div>
         </div>

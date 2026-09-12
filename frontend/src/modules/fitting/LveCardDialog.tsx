@@ -52,7 +52,7 @@ export function LveCardDialog({
   return (
     <CardFromDialog
       materialId={materialId}
-      title="선형탄성구간(LVE) 카드 만들기"
+      title="선형탄성구간(LVE) 카드 생성"
       description={
         <>
           DMA 변형률 스윕의 <b>선형 구간 저장 탄성률 E′</b> 와 <b>선형 한계 변형률</b>이
@@ -78,7 +78,7 @@ export function LveCardDialog({
       }
       suggestedLabel={`${group.test_type_label} 선형탄성구간(LVE) · ${group.orientation}`}
       declaredOption={{
-        label: '재료 기본 정보 함께 싣기',
+        label: '재료 기본 정보 함께 포함',
         help: '재료에 적어 둔 선팽창계수(CTE)·열전도율·비열이 열물성 블록으로 따라옵니다. 저장 탄성률은 잰 값 그대로입니다.',
         carried:
           carried === null ? null : carried.length > 0 ? (

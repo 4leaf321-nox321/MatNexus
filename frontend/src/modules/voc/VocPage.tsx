@@ -107,7 +107,7 @@ export default function VocPage() {
         actions={
           <Button onClick={() => setWriting(true)}>
             <MessageSquarePlus className="size-4" />
-            의견 남기기
+            의견 등록
           </Button>
         }
       />
@@ -116,7 +116,7 @@ export default function VocPage() {
 
       {/* **상태로 거른다.** 「내가 낸 것 중 아직 안 된 것」 이 가장 흔한 물음이다. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1" role="group" aria-label="상태로 거르기">
+        <div className="flex flex-wrap gap-1" role="group" aria-label="상태로 필터">
           <Chip active={status === ''} onClick={() => narrow({ status: '' })}>
             전체
           </Chip>
@@ -331,7 +331,7 @@ function WriteDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>의견 남기기</DialogTitle>
+          <DialogTitle>의견 등록</DialogTitle>
           <DialogDescription>
             등록되면 번호가 붙고, 관리자가 접수해 처리합니다. 진행은 그 건의 이력에 남습니다.
           </DialogDescription>

@@ -81,7 +81,7 @@ export default function TestTypesPage() {
               }}
             >
               <Plus className="size-4" />
-              종류 만들기
+              종류 생성
             </Button>
           ) : null
         }

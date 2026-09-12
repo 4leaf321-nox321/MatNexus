@@ -79,7 +79,7 @@ describe('변경 이력', () => {
     // **없는 것을 검사할 때가 더 위험하다.** 안 그려진 화면에서는 무엇이든
     // 없으므로, 기다리지 않으면 **틀린 이유로 통과한다.**
     await screen.findByText('물성 카드 확정')
-    for (const name of [/만들기/, /추가/, /고치기/, /지우기/, /삭제/]) {
+    for (const name of [/생성/, /추가/, /편집/, /삭제/, /삭제/]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
   })

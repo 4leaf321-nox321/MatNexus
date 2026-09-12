@@ -77,9 +77,9 @@ describe('ParameterSetsSection', () => {
     post.mockResolvedValue({ id: 'ps-1' })
     render(<ParameterSetsSection materialId="cat-1" />)
 
-    await userEvent.click(await screen.findByRole('button', { name: /사내 재료에 담기/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /사내 재료에 추가/ }))
     await userEvent.type(screen.getByLabelText('사내 재료 찾기'), 'SECC')
-    await userEvent.click(await screen.findByRole('button', { name: '담기' }))
+    await userEvent.click(await screen.findByRole('button', { name: '추가' }))
 
     await waitFor(() => expect(post).toHaveBeenCalled())
     expect(post.mock.calls[0][0]).toBe('/materials/m-9/parameter-sets')

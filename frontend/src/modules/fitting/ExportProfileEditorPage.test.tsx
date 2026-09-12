@@ -158,11 +158,11 @@ beforeEach(() => {
 })
 
 describe('값을 고른다', () => {
-  it('칸의 「고르기」 가 블록 선언의 값을 보이고, 고르면 블록.값이 채워진다', async () => {
+  it('칸의 「선택」 이 블록 선언의 값을 보이고, 고르면 블록.값이 채워진다', async () => {
     page()
     await screen.findByLabelText('이 카드에 든 것')
     await userEvent.click(screen.getByRole('button', { name: '1번 묶음에 값 줄' }))
-    await userEvent.click(screen.getByRole('button', { name: '2번 줄 1번 칸 고르기' }))
+    await userEvent.click(screen.getByRole('button', { name: '2번 줄 1번 칸 선택' }))
     await userEvent.click(await screen.findByRole('button', { name: /푸아송비 elastic.poisson_ratio/ }))
     expect(screen.getByLabelText('2번 줄 1번 칸')).toHaveValue('elastic.poisson_ratio')
   })
@@ -171,7 +171,7 @@ describe('값을 고른다', () => {
     page()
     await screen.findByLabelText('이 카드에 든 것')
     await userEvent.click(screen.getByRole('button', { name: '1번 묶음에 값 줄' }))
-    await userEvent.click(screen.getByRole('button', { name: '2번 줄 1번 칸 고르기' }))
+    await userEvent.click(screen.getByRole('button', { name: '2번 줄 1번 칸 선택' }))
     const density = await screen.findByRole('button', { name: /밀도 elastic.density/ })
     expect(density).toHaveTextContent('이 카드엔 없음')
     expect(screen.getByRole('button', { name: /탄성계수 elastic.youngs_modulus/ })).not.toHaveTextContent(
@@ -181,7 +181,7 @@ describe('값을 고른다', () => {
 })
 
 describe('이 카드에 든 것', () => {
-  it('값과 표를 보이고, 「넣기」 가 마지막 묶음의 값 줄에 칸을 더한다', async () => {
+  it('값과 표를 보이고, 「입력」 이 마지막 묶음의 값 줄에 칸을 더한다', async () => {
     page()
     const box = within(await screen.findByLabelText('이 카드에 든 것'))
     expect(box.getByText('탄성계수')).toBeInTheDocument()
@@ -189,10 +189,10 @@ describe('이 카드에 든 것', () => {
     await waitFor(() => expect(deckKeys).toHaveBeenCalledWith('c1'))
 
     // 값 줄이 없으면 하나 만들어 넣는다.
-    await userEvent.click(box.getByRole('button', { name: '순간 탄성률 넣기' }))
+    await userEvent.click(box.getByRole('button', { name: '순간 탄성률 입력' }))
     expect(screen.getByLabelText('2번 줄 1번 칸')).toHaveValue('viscoelastic.instantaneous_pa')
     // 있으면 그 줄에 칸을 더한다.
-    await userEvent.click(box.getByRole('button', { name: '탄성계수 넣기' }))
+    await userEvent.click(box.getByRole('button', { name: '탄성계수 입력' }))
     expect(screen.getByLabelText('2번 줄 2번 칸')).toHaveValue('elastic.youngs_modulus')
   })
 
@@ -212,7 +212,7 @@ describe('식 칸과 글자 줄', () => {
   it('값 칸을 「계산」 으로 식으로 바꾸고, 고른 값은 식에 끼워 넣는다', async () => {
     page()
     const box = within(await screen.findByLabelText('이 카드에 든 것'))
-    await userEvent.click(box.getByRole('button', { name: '탄성계수 넣기' }))
+    await userEvent.click(box.getByRole('button', { name: '탄성계수 입력' }))
     expect(screen.getByLabelText('2번 줄 1번 칸')).toHaveValue('elastic.youngs_modulus')
     await userEvent.click(screen.getByLabelText('2번 줄 1번 칸 식으로'))
     const cell = screen.getByLabelText('2번 줄 1번 칸')
@@ -226,7 +226,7 @@ describe('식 칸과 글자 줄', () => {
       })
     })
     // 고르기는 값을 덮지 않고 식에 덧붙인다.
-    await userEvent.click(screen.getByLabelText('2번 줄 1번 칸 고르기'))
+    await userEvent.click(screen.getByLabelText('2번 줄 1번 칸 선택'))
     await userEvent.click(await screen.findByLabelText('순간 탄성률 viscoelastic.instantaneous_pa'))
     expect(screen.getByLabelText('2번 줄 1번 칸')).toHaveValue(
       'elastic.youngs_modulus / 1000 viscoelastic.instantaneous_pa'
@@ -282,7 +282,7 @@ describe('조건은 묶음에 한 번', () => {
   it('값을 고르고 있을 때/없을 때를 뒤집는다', async () => {
     page()
     await screen.findByLabelText('이 카드에 든 것')
-    await userEvent.click(screen.getByRole('button', { name: '1번 묶음 조건 값 고르기' }))
+    await userEvent.click(screen.getByRole('button', { name: '1번 묶음 조건 값 선택' }))
     await userEvent.click(await screen.findByRole('button', { name: /밀도 elastic.density/ }))
     expect(screen.getByLabelText('1번 묶음 조건')).toHaveValue('elastic.density')
     await userEvent.click(screen.getByRole('button', { name: '있을 때' }))
@@ -300,7 +300,7 @@ describe('단위계', () => {
   })
 })
 
-describe('미리보기 줄 잇기', () => {
+describe('미리보기 줄 연결', () => {
   it('묶음에 마우스를 올리면 그 묶음이 만든 줄이 강조된다', async () => {
     previewDeck.mockResolvedValue({
       text: ['*MATERIAL', '*ELASTIC', '2.0E11, 0.3', ''].join('\n'),

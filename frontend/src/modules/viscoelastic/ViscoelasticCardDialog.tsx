@@ -78,7 +78,7 @@ export function ViscoelasticCardDialog({
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>물성 카드 만들기</DialogTitle>
+          <DialogTitle>물성 카드 생성</DialogTitle>
           <DialogDescription>
             이 적합의 계수 {fit.terms.length}항이 카드가 됩니다. <b>시편 한 건</b>의
             마스터커브에서 나온 값이라, 재료의 대푯값이 아니라 그 시편의 값이라는 사실이
@@ -125,7 +125,7 @@ export function ViscoelasticCardDialog({
             닫기
           </Button>
           <Button onClick={() => void save()} disabled={busy || !label.trim()}>
-            만들기
+            생성
           </Button>
         </DialogFooter>
       </DialogContent>

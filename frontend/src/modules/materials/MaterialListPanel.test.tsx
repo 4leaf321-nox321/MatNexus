@@ -206,7 +206,7 @@ describe('재료 목록 옆패널', () => {
   })
 })
 
-describe('접기 · 펴기', () => {
+describe('접기 · 펼치기', () => {
   /**
    * **여닫는 손잡이는 여닫히는 것 옆에 있어야 한다.** 접는 단추가 상단 바에만
    * 있었는데, 패널에서 멀어 그것이 있는 줄도 몰랐다 — 실제로 「접기·열기 핸들을
@@ -224,7 +224,7 @@ describe('접기 · 펴기', () => {
     expect(screen.queryByLabelText('재료 찾기')).not.toBeInTheDocument()
 
     // **여기가 요점이다.** 접힌 자리에 펴는 단추가 남아야 한다.
-    const open = screen.getByRole('button', { name: '재료 목록 펴기' })
+    const open = screen.getByRole('button', { name: '재료 목록 펼치기' })
     await user.click(open)
     expect(await screen.findByLabelText('재료 찾기')).toBeInTheDocument()
   })

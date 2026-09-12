@@ -131,13 +131,13 @@ describe('부서 축', () => {
         <TestTypeFilterPanel label="프로파일 종류" rows={ROWS} current={null} onPick={vi.fn()} />
       </LeftPanelProvider>
     )
-    expect(screen.queryByRole('button', { name: /부서로 나누기/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /부서로 분할/ })).not.toBeInTheDocument()
   })
 
   it('기본은 꺼져 있다', () => {
     // **부서가 하나뿐인 조직에서는 늘 한 줄짜리 소음이다.**
     owned()
-    expect(screen.getByRole('button', { name: /부서로 나누기/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /부서로 분할/ })).toHaveAttribute(
       'aria-pressed',
       'false'
     )
@@ -146,7 +146,7 @@ describe('부서 축', () => {
 
   it('켜면 부서가 개수와 함께 나온다', async () => {
     owned()
-    await userEvent.click(screen.getByRole('button', { name: /부서로 나누기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /부서로 분할/ }))
     expect(screen.getByRole('button', { name: /금속재료팀/ })).toHaveTextContent('1')
     expect(screen.getByRole('button', { name: new RegExp(GLOBAL.replace(/[()]/g, '\$&')) }))
       .toBeInTheDocument()
@@ -155,7 +155,7 @@ describe('부서 축', () => {
   it('부서를 고르면 그 이름을 넘긴다', async () => {
     const onPickOwner = vi.fn()
     owned(null, onPickOwner)
-    await userEvent.click(screen.getByRole('button', { name: /부서로 나누기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /부서로 분할/ }))
     await userEvent.click(screen.getByRole('button', { name: /고분자팀/ }))
     expect(onPickOwner).toHaveBeenCalledWith('고분자팀')
   })
@@ -164,7 +164,7 @@ describe('부서 축', () => {
     // **안 풀면 안 보이는 필터가 걸린 채로 남고**, 목록이 왜 짧은지 알 수 없다.
     const onPickOwner = vi.fn()
     owned('금속재료팀', onPickOwner)
-    const toggle = screen.getByRole('button', { name: /부서로 나누기/ })
+    const toggle = screen.getByRole('button', { name: /부서로 분할/ })
     await userEvent.click(toggle)  // 켠다
     await userEvent.click(toggle)  // 끈다
     expect(onPickOwner).toHaveBeenLastCalledWith(null)
@@ -173,11 +173,11 @@ describe('부서 축', () => {
   it('켠 상태가 다음에도 남는다', async () => {
     // 부서가 여럿인 조직에서는 매번 켜는 것이 그 자체로 일이다.
     const first = owned()
-    await userEvent.click(screen.getByRole('button', { name: /부서로 나누기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /부서로 분할/ }))
     first.unmount()
 
     owned()
-    expect(screen.getByRole('button', { name: /부서로 나누기/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /부서로 분할/ })).toHaveAttribute(
       'aria-pressed',
       'true'
     )

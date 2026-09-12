@@ -507,7 +507,7 @@ export default function BatchUploadPage() {
           disabled={running}
           onClick={() => fileInput.current?.click()}
         >
-          파일 고르기
+          파일 선택
         </Button>
         <input
           ref={fileInput}
@@ -1007,7 +1007,7 @@ export default function BatchUploadPage() {
               ) : (
                 <Upload className="size-4" />
               )}
-              {running ? '올리는 중… (편집 잠김)' : `올리기 (${ready.length})`}
+              {running ? '올리는 중… (편집 잠김)' : `업로드 (${ready.length})`}
             </Button>
             <p className="text-muted-foreground text-sm">
               완료 {doneCount} · 실패 {failedCount} · 준비 안 됨{' '}
@@ -1037,7 +1037,7 @@ export default function BatchUploadPage() {
                   ) : (
                     <Ruler className="size-4" />
                   )}
-                  파일 값으로 시편 치수 채우기
+                  파일 값으로 시편 치수 반영
                 </Button>
                 {fillResult && (
                   <span className="text-muted-foreground text-xs">{fillResult}</span>

@@ -188,7 +188,7 @@ const clickStep = async (user: User, label: string) => user.click(await findStep
  * 아니라 「요소 없음」 으로. 형제 도우미(`findStep`)는 처음부터 기다리고 있었다.
  */
 const turnOff = async (user: User, label: string) =>
-  user.click(await screen.findByRole('button', { name: new RegExp(`${label}.*끄기`) }))
+  user.click(await screen.findByRole('button', { name: new RegExp(`${label}.*비활성화`) }))
 
 /** 장비가 실제로 주는 것. 응력도 변형률도 없다. */
 const SOURCE = ['displacement', 'force', 'width']
@@ -199,7 +199,7 @@ function FakeHeader() {
   if (!label) return null
   return (
     <button type="button" onClick={toggle} aria-pressed={open}>
-      {label} {open ? '접기' : '펴기'}
+      {label} {open ? '접기' : '펼치기'}
     </button>
   )
 }
@@ -295,14 +295,14 @@ describe('처리 순서도', () => {
   it('돌려 보기는 늘 눌린다 — 회색 버튼은 이유를 말할 자리가 없다', async () => {
     show()
     await findStep('공칭 응력-변형률')
-    expect(screen.getByRole('button', { name: '돌려 보기' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: '미리보기' })).not.toBeDisabled()
   })
 
   it('아무것도 안 켜고 누르면 무엇부터 켜야 하는지 말한다', async () => {
     const user = userEvent.setup()
     show()
     await findStep('공칭 응력-변형률')
-    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
+    await user.click(screen.getByRole('button', { name: '미리보기' }))
 
     expect(await screen.findByText(/켠 단계가 없습니다/)).toBeInTheDocument()
     // 단계가 없으면 서버를 부르지 않는다 — 부를 것이 없다.
@@ -330,13 +330,13 @@ describe('변수 목록', () => {
   /** 껍데기의 오른쪽 영역. 여는 단추는 **상단 바**에 있다. */
   const sidebar = () => screen.getByRole('complementary')
   const openSidebar = async (user: ReturnType<typeof userEvent.setup>) =>
-    user.click(await screen.findByRole('button', { name: '변수 목록 펴기' }))
+    user.click(await screen.findByRole('button', { name: '변수 목록 펼치기' }))
 
   it('처리 화면을 열면 상단 바에 여는 단추가 생긴다 — 기본은 닫힘', async () => {
     // 처음에는 화면 오른쪽 끝의 흐린 세로 띠로 뒀는데 아무도 못 봤다.
     // 껍데기를 여닫는 단추는 왼쪽 사이드바 토글과 같은 자리에 있어야 한다.
     show()
-    expect(await screen.findByRole('button', { name: '변수 목록 펴기' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '변수 목록 펼치기' })).toBeInTheDocument()
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
   })
 
@@ -471,14 +471,14 @@ describe('돌려 보기가 막힐 때', () => {
     const user = userEvent.setup()
     show()
     await clickStep(user, '공칭 응력-변형률')
-    await user.click(screen.getByRole('button', { name: /돌려 보기/ }))
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
 
     const chip = await screen.findByRole('button', { name: /1\. 공칭 응력-변형률/ })
     expect(chip).toHaveAttribute('aria-pressed', 'false')
     await user.click(chip)
     expect(chip).toHaveAttribute('aria-pressed', 'true')
     // **끄는 길이 있어야 한다.** 켜기만 되면 그림이 금세 못 읽게 된다.
-    await user.click(screen.getByRole('button', { name: '모두 끄기' }))
+    await user.click(screen.getByRole('button', { name: '모두 비활성화' }))
     expect(screen.getByRole('button', { name: /1\. 공칭 응력-변형률/ })).toHaveAttribute(
       'aria-pressed',
       'false'
@@ -529,7 +529,7 @@ describe('돌려 보기가 막힐 때', () => {
     const user = userEvent.setup()
     show()
     await clickStep(user, '공칭 응력-변형률')
-    await user.click(screen.getByRole('button', { name: /돌려 보기/ }))
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
 
     expect(await screen.findByRole('button', { name: /1\. 공칭 응력-변형률/ })).toBeDisabled()
     expect(screen.getByText(/에서\s*생겼습니다/)).toBeInTheDocument()
@@ -566,7 +566,7 @@ describe('돌려 보기가 막힐 때', () => {
     const user = userEvent.setup()
     show()
     await clickStep(user, '공칭 응력-변형률')
-    await user.click(screen.getByRole('button', { name: /돌려 보기/ }))
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
 
     expect(await screen.findByText(/여기까지만 돌았습니다/)).toBeInTheDocument()
     expect(screen.getByText(/구간 \[9, 10\] 안에 0점/)).toBeInTheDocument()
@@ -591,7 +591,7 @@ describe('돌려 보기가 막힐 때', () => {
     await clickStep(user, '인장강도')
     await turnOff(user, '공칭 응력-변형률')
 
-    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
+    await user.click(screen.getByRole('button', { name: '미리보기' }))
 
     const notice = await screen.findByText(/못 도는 단계가 1개 있습니다/)
     expect(notice).toBeInTheDocument()
@@ -608,7 +608,7 @@ describe('돌려 보기가 막힐 때', () => {
     await clickStep(user, '인장강도')
     await turnOff(user, '공칭 응력-변형률')
 
-    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
+    await user.click(screen.getByRole('button', { name: '미리보기' }))
     await waitFor(() => expect(preview).toHaveBeenCalled())
   })
 
@@ -618,7 +618,7 @@ describe('돌려 보기가 막힐 때', () => {
     await clickStep(user, '공칭 응력-변형률')
     await clickStep(user, '인장강도')
     await turnOff(user, '공칭 응력-변형률')
-    await user.click(screen.getByRole('button', { name: '돌려 보기' }))
+    await user.click(screen.getByRole('button', { name: '미리보기' }))
     await screen.findByText(/못 도는 단계가/)
 
     // 다시 켜면 문제가 사라진다.
@@ -666,7 +666,7 @@ describe('접힌 줄이 설정을 말한다', () => {
     await clickStep(user, '공칭 응력-변형률')
     await clickStep(user, '인장강도')
 
-    await user.click(screen.getByRole('button', { name: '모두 펴기' }))
+    await user.click(screen.getByRole('button', { name: '모두 펼치기' }))
     expect(await screen.findByRole('combobox', { name: '변위 열' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '변형률 열' })).toBeInTheDocument()
 
@@ -731,7 +731,7 @@ describe('덜 채운 단계는 붉다', () => {
   })
 })
 
-describe('시편 값 이어 붙이기', () => {
+describe('시편 값 이어 연결', () => {
   const GIVEN = [
     {
       key: 'specimen_gauge_length',

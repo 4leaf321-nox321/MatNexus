@@ -71,12 +71,12 @@ beforeEach(() => {
 describe('어디에 담기는지', () => {
   it('단추에 작업 이름을 적는다', async () => {
     show()
-    expect(await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 담기/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 추가/ })).toBeTruthy()
   })
 
   it('누르면 그 작업에 담는다', async () => {
     show(['c1', 'c2'])
-    await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
     await waitFor(() => expect(add).toHaveBeenCalledWith('r1', 'card', ['c1', 'c2']))
     expect(screen.getByText(/2건 담았습니다/)).toBeInTheDocument()
   })
@@ -87,7 +87,7 @@ describe('어디에 담기는지', () => {
     // 작업 목록은 나중에 온다 — 고를 항목이 생길 때까지 기다린다.
     await screen.findByRole('option', { name: '도어트림 검토' })
     await userEvent.selectOptions(screen.getByLabelText('담을 작업'), 'r2')
-    await userEvent.click(screen.getByRole('button', { name: /「도어트림 검토」에 담기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /「도어트림 검토」에 추가/ }))
     await waitFor(() => expect(add).toHaveBeenCalledWith('r2', 'card', ['c1']))
   })
 
@@ -95,9 +95,9 @@ describe('어디에 담기는지', () => {
     // 「test11에 담기」 만 떠서 「test11 이 뭔데」 가 됐다(2026-09-05). 진행 중인
     // 워크벤치 작업이라는 말과 목록이 늘 보여야 한다.
     show()
-    expect(await screen.findByText(/워크벤치 작업에 담기/)).toBeInTheDocument()
+    expect(await screen.findByText(/워크벤치 작업에 추가/)).toBeInTheDocument()
     // 작업 목록은 나중에 온다 — 단추에 이름이 실릴 때까지 기다린다.
-    await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 담기/ })
+    await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 추가/ })
     expect(screen.getByText(/진행 중인/)).toBeInTheDocument()
     const picker = screen.getByLabelText('담을 작업') as HTMLSelectElement
     expect(picker.options).toHaveLength(1)
@@ -128,13 +128,13 @@ describe('담을 데가 없을 때', () => {
     runs.mockResolvedValue([])
     show()
     expect(await screen.findByText(/워크벤치에서 작업을 시작/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /담기/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /추가/ })).toBeNull()
   })
 
   it('고른 것이 없으면 아예 안 뜬다', () => {
     // **떠 있는 것은 무언가를 가린다.** 할 일이 없는데 떠 있으면 그냥 방해물이다.
     show([])
-    expect(screen.queryByLabelText('담기')).toBeNull()
+    expect(screen.queryByLabelText('추가')).toBeNull()
   })
 })
 
@@ -142,9 +142,9 @@ describe('끌어서 옮긴다', () => {
   // 떠 있는 패널은 **하필 지금 보려는 줄을 가릴 수 있다.** 못 치우면 방해물이 된다.
   /** 손잡이를 잡고 `dx·dy` 만큼 끈다. 끌기 전 자리를 함께 돌려준다. */
   const drag = async (dx: number, dy: number) => {
-    const panel = await screen.findByLabelText('담기')
+    const panel = await screen.findByLabelText('추가')
     const from = { x: Number.parseInt(panel.style.left), y: Number.parseInt(panel.style.top) }
-    fireEvent.pointerDown(screen.getByLabelText('끌어서 옮기기'), { clientX: 500, clientY: 500 })
+    fireEvent.pointerDown(screen.getByLabelText('끌어서 이동'), { clientX: 500, clientY: 500 })
     fireEvent.pointerMove(window, { clientX: 500 + dx, clientY: 500 + dy })
     fireEvent.pointerUp(window)
     return from
@@ -154,7 +154,7 @@ describe('끌어서 옮긴다', () => {
     // **구석에 두면 「떠 있다」 는 것부터 못 알아본다** — 줄 안의 단추를 두 번 못
     // 찾은 것이 그 이유였다. 가려서 거슬리면 끌어서 치우면 된다.
     show()
-    const panel = await screen.findByLabelText('담기')
+    const panel = await screen.findByLabelText('추가')
     const left = Number.parseInt(panel.style.left)
     const top = Number.parseInt(panel.style.top)
     expect(Math.abs(left + 320 / 2 - window.innerWidth / 2)).toBeLessThan(2)
@@ -165,7 +165,7 @@ describe('끌어서 옮긴다', () => {
     // **손잡이를 쥔 지점을 유지한다** — 잡는 순간 패널이 커서로 튀면 옮기기 어렵다.
     show()
     const from = await drag(-200, -150)
-    expect(screen.getByLabelText('담기')).toHaveStyle({
+    expect(screen.getByLabelText('추가')).toHaveStyle({
       left: `${from.x - 200}px`,
       top: `${from.y - 150}px`,
     })
@@ -188,7 +188,7 @@ describe('끌어서 옮긴다', () => {
     // **그대로 쓰면 패널이 안 보이고, 그것은 없어진 것과 구별이 안 된다.**
     window.localStorage.setItem('matnexus.basket.spot', JSON.stringify({ x: 9000, y: 9000 }))
     show()
-    const panel = await screen.findByLabelText('담기')
+    const panel = await screen.findByLabelText('추가')
     expect(Number.parseInt(panel.style.left)).toBeLessThan(window.innerWidth)
     expect(Number.parseInt(panel.style.top)).toBeLessThan(window.innerHeight)
   })
@@ -200,7 +200,7 @@ describe('기억해 둔 작업', () => {
     // 조용히 실패하거나, 더 나쁘게 엉뚱한 데로 간다.
     window.localStorage.setItem('matnexus.basket.active', '없어진작업')
     show()
-    await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
     await waitFor(() => expect(add).toHaveBeenCalledWith('r1', 'card', ['c1']))
   })
 
@@ -209,7 +209,7 @@ describe('기억해 둔 작업', () => {
     // 보내면 방금 담은 작업을 다시 골라야 한다 — 진행 중인 것이 여럿이면 어느
     // 것이었는지 헷갈린다.
     show()
-    await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
     const back = await screen.findByRole('link', { name: '워크벤치로' })
     expect(back).toHaveAttribute('href', '/w/metal/workbench?run=r1')
   })
@@ -217,7 +217,7 @@ describe('기억해 둔 작업', () => {
   it('담고 나면 그 작업을 기억한다', async () => {
     // 다음 화면에서도 같은 작업에 담긴다 — 목록을 오가며 모으는 것이 이 단추의 쓰임이다.
     show()
-    await userEvent.click(await screen.findByRole('button', { name: /담기/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
     await waitFor(() => expect(window.localStorage.getItem('matnexus.basket.active')).toBe('r1'))
   })
 })
@@ -237,8 +237,8 @@ describe('언제 뜨는가', () => {
         <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" />
       </MemoryRouter>
     )
-    expect(await screen.findByRole('button', { name: /워크벤치에 담기/ })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '담기' })).toBeNull()
+    expect(await screen.findByRole('button', { name: /워크벤치에 추가/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '추가' })).toBeNull()
   })
 
   it('단추를 누르면 창이 뜬다', async () => {
@@ -249,8 +249,8 @@ describe('언제 뜨는가', () => {
         <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" />
       </MemoryRouter>
     )
-    await user.click(await screen.findByRole('button', { name: /워크벤치에 담기/ }))
-    expect(await screen.findByRole('region', { name: '담기' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /워크벤치에 추가/ }))
+    expect(await screen.findByRole('region', { name: '추가' })).toBeInTheDocument()
   })
 
   it('담으러 온 길에서는 고르는 순간 뜬다', async () => {
@@ -260,7 +260,7 @@ describe('언제 뜨는가', () => {
         <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" auto />
       </MemoryRouter>
     )
-    expect(await screen.findByRole('region', { name: '담기' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '추가' })).toBeInTheDocument()
   })
 
   it('닫을 수 있다', async () => {
@@ -273,8 +273,8 @@ describe('언제 뜨는가', () => {
       </MemoryRouter>
     )
     await user.click(await screen.findByRole('button', { name: '닫기' }))
-    expect(screen.queryByRole('region', { name: '담기' })).toBeNull()
+    expect(screen.queryByRole('region', { name: '추가' })).toBeNull()
     // 선택은 그대로다 — 담기만 접은 것이다.
-    expect(screen.getByRole('button', { name: /워크벤치에 담기/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /워크벤치에 추가/ })).toBeInTheDocument()
   })
 })

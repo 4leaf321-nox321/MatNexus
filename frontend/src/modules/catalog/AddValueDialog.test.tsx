@@ -53,10 +53,10 @@ describe('AddValueDialog', () => {
     await user.type(screen.getByLabelText('값'), '0.3')
     await user.type(screen.getByLabelText('온도 (°C)'), '23')
     // 출처가 없으면 못 누른다.
-    expect(screen.getByRole('button', { name: '넣기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '입력' })).toBeDisabled()
     await user.type(screen.getByLabelText('제목'), 'PA66-GF30 데이터시트')
     await user.type(screen.getByLabelText('출처 안의 위치'), '표 2')
-    await user.click(screen.getByRole('button', { name: '넣기' }))
+    await user.click(screen.getByRole('button', { name: '입력' }))
 
     await waitFor(() => expect(createValue).toHaveBeenCalled())
     const [materialId, payload] = createValue.mock.calls[0] as [string, Record<string, unknown>]

@@ -88,7 +88,7 @@ describe('FormulasPage', () => {
 
     const free = screen.getByText('Swift 2').closest('tr') as HTMLElement
     expect(within(free).getByText('없음')).toBeInTheDocument()
-    expect(within(free).getByTitle('지우기')).toBeEnabled()
+    expect(within(free).getByTitle('삭제')).toBeEnabled()
   })
 
   it('값 단계를 적어 보내면 입력·결과·시험 종류가 서버 모양으로 간다', async () => {
@@ -102,11 +102,11 @@ describe('FormulasPage', () => {
     await user.type(screen.getByLabelText('식'), 'a * 2')
     const names = screen.getAllByPlaceholderText('이름')
     await user.type(names[0], 'a')
-    expect(screen.getByRole('button', { name: '만들기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '생성' })).toBeDisabled()
     await user.type(screen.getByLabelText('내는 값의 키'), 'ratio2')
     await user.type(screen.getByLabelText('내는 값의 이름'), '비율')
     await user.type(screen.getByLabelText(/시험 종류/), 'tensile, compression')
-    await user.click(screen.getByRole('button', { name: '만들기' }))
+    await user.click(screen.getByRole('button', { name: '생성' }))
 
     await waitFor(() => expect(create).toHaveBeenCalled())
     const [payload] = create.mock.calls[0] as [Record<string, unknown>]

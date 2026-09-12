@@ -80,7 +80,7 @@ describe('BOM 3단계', () => {
 
   it('덱을 만들면 미리보기와 「못 실은 재료」 가 이유와 함께 선다', async () => {
     await toStep2()
-    await userEvent.click(screen.getByRole('button', { name: /덱 만들기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /덱 생성/ }))
     await waitFor(() => expect(deckBuild).toHaveBeenCalledTimes(1))
     const body = deckBuild.mock.calls[0][0] as {
       items: { mid: number; catalog_material_id: string }[]

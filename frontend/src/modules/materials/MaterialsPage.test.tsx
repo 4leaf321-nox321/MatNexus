@@ -100,7 +100,7 @@ async function pickAndOpen(user: ReturnType<typeof userEvent.setup>) {
   const boxes = screen.getAllByRole('checkbox')
   // 첫 칸은 '전부 고르기' 다. 그것을 눌러 둘을 함께 고른다.
   await user.click(boxes[0])
-  await user.click(await screen.findByRole('button', { name: /지우기/ }))
+  await user.click(await screen.findByRole('button', { name: /삭제/ }))
 }
 
 describe('일괄 삭제', () => {
@@ -124,7 +124,7 @@ describe('일괄 삭제', () => {
     await pickAndOpen(user)
     await screen.findByText(/시료 2건/)
 
-    await user.click(screen.getByRole('button', { name: '지우기', hidden: false }))
+    await user.click(screen.getByRole('button', { name: '삭제', hidden: false }))
     await waitFor(() =>
       expect(removeMany).toHaveBeenCalledWith(['m1', 'm2'], {
         cascade: false,
@@ -141,7 +141,7 @@ describe('일괄 삭제', () => {
     await screen.findByText(/시료 2건/)
 
     await user.click(screen.getByRole('checkbox', { name: /아래까지 함께 지웁니다/ }))
-    await user.click(screen.getByRole('button', { name: '지우기' }))
+    await user.click(screen.getByRole('button', { name: '삭제' }))
     await waitFor(() =>
       expect(removeMany).toHaveBeenCalledWith(['m1', 'm2'], {
         cascade: true,
@@ -177,7 +177,7 @@ describe('일괄 삭제', () => {
     await user.click(cascade)
     await user.click(cascade)
 
-    await user.click(screen.getByRole('button', { name: '지우기' }))
+    await user.click(screen.getByRole('button', { name: '삭제' }))
     await waitFor(() =>
       expect(removeMany).toHaveBeenCalledWith(['m1', 'm2'], {
         cascade: true,
@@ -201,7 +201,7 @@ describe('일괄 삭제', () => {
     await pickAndOpen(user)
     await screen.findByText(/시료 2건/)
     await user.click(screen.getByRole('checkbox', { name: /아래까지 함께 지웁니다/ }))
-    await user.click(screen.getByRole('button', { name: '지우기' }))
+    await user.click(screen.getByRole('button', { name: '삭제' }))
 
     expect(
       await screen.findByText(/재료 2건과 함께 시료 2건 · 시편 6건을 지웠습니다/)

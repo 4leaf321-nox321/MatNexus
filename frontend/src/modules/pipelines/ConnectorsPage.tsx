@@ -305,7 +305,7 @@ function ConnectorsTab() {
                           disabled={busy === row.id}
                           onClick={() => toggle(row)}
                         >
-                          {row.is_active ? '끄기' : '켜기'}
+                          {row.is_active ? '비활성화' : '활성화'}
                         </Button>
                         {/* **끄기와 다르다.** 끄는 것은 「잠시 안 받는다」 이고
                             이것은 「더 안 쓴다」 다 — 바꾼 장비·반납한 PC 가
@@ -338,7 +338,7 @@ function ConnectorsTab() {
       <ConfirmDialog
         open={removing !== null}
         title="이 커넥터를 목록에서 치울까요?"
-        confirmLabel="치우기"
+        confirmLabel="정리"
         busy={busy === removing?.id}
         body={
           <>
@@ -514,7 +514,7 @@ function InboxRow({
             // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
             onClick={onPick}
             onChange={() => {}}
-            aria-label={`${row.filename} 고르기`}
+            aria-label={`${row.filename} 선택`}
           />
         </TableCell>
       )}
@@ -696,7 +696,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
                           )
                         }
                       >
-                        이 시편에 붙이기
+                        이 시편에 연결
                       </Button>
                     </li>
                   ))}
@@ -735,7 +735,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
                             )
                           }
                         >
-                          붙이기
+                          연결
                         </Button>
                       </li>
                     ))}
@@ -752,7 +752,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
                     disabled={busy}
                     onClick={() => act(() => pipelinesApi.retry(item.id))}
                   >
-                    다시 읽기
+                    재파싱
                   </Button>
                 )}
                 <div className="flex flex-1 items-end gap-2">
@@ -769,7 +769,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
                     disabled={busy || reason.trim().length === 0}
                     onClick={() => act(() => pipelinesApi.discard(item.id, reason.trim()))}
                   >
-                    버리기
+                    폐기
                   </Button>
                 </div>
               </section>

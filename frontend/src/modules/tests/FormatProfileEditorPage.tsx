@@ -165,7 +165,7 @@ const META_ROLE: Record<MetaRole, { label: string; where: string }> = {
     where: '그 시험의 두께·폭·게이지 — 응력이 이 값으로 계산됩니다',
   },
   identity: {
-    label: '재료·시료·시편 짚기',
+    label: '재료·시료·시편 지정',
     where: '아무 데도 저장하지 않습니다 — 일괄 등록과 이관이 짝을 찾을 때만 씁니다',
   },
   material: {
@@ -875,7 +875,7 @@ export default function FormatProfileEditorPage() {
     },
     { ok: Boolean(form.key), label: '키', where: '⑥' },
     { ok: Boolean(form.label), label: '이름', where: '⑥' },
-    { ok: file === null || tried !== null, label: '적용해 보기', where: '오른쪽' },
+    { ok: file === null || tried !== null, label: '적용 미리보기', where: '오른쪽' },
   ]
   const remaining = checklist.filter((item) => !item.ok)
 
@@ -1283,7 +1283,7 @@ export default function FormatProfileEditorPage() {
     // 읽기 나쁘다.
     <div className="mx-auto flex w-full max-w-[112rem] flex-col lg:h-full">
       <PageHeader
-        title={creating ? '형식 프로파일 만들기' : `${form.label || routeKey} 편집`}
+        title={creating ? '형식 프로파일 생성' : `${form.label || routeKey} 편집`}
         description="장비 파일을 놓으면 구조는 자동으로 읽습니다. 사람이 정하는 것은 '이 열이 무엇인가' 하나뿐입니다 — 코드도 배포도 필요 없습니다."
         actions={
           <Button variant="ghost" onClick={() => navigate('/settings/formats')}>
@@ -1334,7 +1334,7 @@ export default function FormatProfileEditorPage() {
           </span>
           <div className="ml-auto flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => applyDraft(draft)}>
-              이어서 하기
+              계속
             </Button>
             <Button
               size="sm"
@@ -1344,7 +1344,7 @@ export default function FormatProfileEditorPage() {
                 setDraft(null)
               }}
             >
-              버리기
+              폐기
             </Button>
           </div>
           {draft.fileName && (
@@ -1675,7 +1675,7 @@ export default function FormatProfileEditorPage() {
                         {item.label}
                       </SelectItem>
                     ))}
-                    <SelectItem value={NEW_TYPE}>+ 새 시험 종류 만들기</SelectItem>
+                    <SelectItem value={NEW_TYPE}>+ 새 시험 종류 생성</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1724,7 +1724,7 @@ export default function FormatProfileEditorPage() {
                     })
                   }
                 >
-                  이름이 비슷한 것끼리 채우기
+                  이름이 비슷한 것끼리 반영
                 </Button>
               )}
 
@@ -1914,7 +1914,7 @@ export default function FormatProfileEditorPage() {
                               </SelectItem>
                             ))}
                             {(testType || newType) && (
-                              <SelectItem value={NEW_CHANNEL}>+ 새 채널로 만들기</SelectItem>
+                              <SelectItem value={NEW_CHANNEL}>+ 새 채널로 생성</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
@@ -2258,7 +2258,7 @@ export default function FormatProfileEditorPage() {
                             {KEY_ELSEWHERE[rule.role] && (
                               <p className="text-muted-foreground border-t px-2 py-1.5 text-xs">
                                 {KEY_ELSEWHERE[rule.role]} 는 여기 없습니다 —{' '}
-                                <b>「재료·시료·시편 짚기」</b> 에서 정합니다. 그것이
+                                <b>「재료·시료·시편 지정」</b> 에서 정합니다. 그것이
                                 <b>어느 것인가</b> 를 정하는 열쇠라서, 여기서 또
                                 정하면 두 곳이 어긋납니다.
                               </p>
@@ -2407,7 +2407,7 @@ export default function FormatProfileEditorPage() {
           {/* ⑥ 이름 ───────────────────────────────────────────── */}
           <Section
             step="⑥"
-            title="이름 붙이기"
+            title="이름 지정"
             hint="키는 나중에 못 바꿉니다. 지문이 겹치면 우선순위가 높은 쪽이 이깁니다."
           >
             <div className="grid gap-3 sm:grid-cols-4">
@@ -2602,7 +2602,7 @@ export default function FormatProfileEditorPage() {
                 disabled={!file || busy !== null}
               >
                 <PlayCircle className="size-4" />
-                {busy === 'try' ? '적용하는 중…' : '이 파일에 적용해 보기'}
+                {busy === 'try' ? '적용하는 중…' : '이 파일에 적용 미리보기'}
               </Button>
             </div>
 

@@ -167,7 +167,7 @@ describe('병합이 정확해야 한다', () => {
     for (const box of boxes) {
       if (!(box as HTMLInputElement).checked) await userEvent.click(box)
     }
-    await userEvent.click(screen.getByRole('button', { name: /담기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /추가/ }))
 
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
     const [path, body] = patch.mock.calls[0] as [string, Record<string, unknown>]
@@ -262,7 +262,7 @@ describe('병합이 정확해야 한다', () => {
       expect((row.querySelector('input') as HTMLInputElement).disabled).toBe(false)
     }
 
-    await userEvent.click(screen.getByRole('button', { name: /담기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /추가/ }))
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
     const [, body] = patch.mock.calls[0] as [string, Record<string, unknown>]
     const rows = body.declared_properties as Array<Record<string, unknown>>

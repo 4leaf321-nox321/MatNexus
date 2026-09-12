@@ -53,7 +53,7 @@ export function VocabularyMultiField({
               {value}
               <button
                 type="button"
-                aria-label={`${value} 빼기`}
+                aria-label={`${value} 제거`}
                 className="hover:text-destructive"
                 onClick={() => onChange(values.filter((one) => one !== value))}
               >

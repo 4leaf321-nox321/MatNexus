@@ -125,7 +125,7 @@ export function DeclaredCardDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>재료 기본 정보로 카드 만들기</DialogTitle>
+          <DialogTitle>재료 기본 정보로 카드 생성</DialogTitle>
           <DialogDescription>
             시험에서 나온 값은 들어가지 않습니다. 재료에 적어 둔 값(문헌·규격·밀시트)과
             밀도·푸아송비만 싣고, 덱에는 「사람이 적은 값」이라고 근거와 함께 나갑니다.
@@ -259,7 +259,7 @@ export function DeclaredCardDialog({
             취소
           </Button>
           <Button onClick={save} disabled={saving || !label || blocks.length === 0}>
-            {saving ? '만드는 중…' : '만들기'}
+            {saving ? '만드는 중…' : '생성'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -190,7 +190,7 @@ export function AddValueDialog({
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>문헌 값 넣기 — {detail.name}</DialogTitle>
+          <DialogTitle>문헌 값 입력 — {detail.name}</DialogTitle>
           <DialogDescription>
             값·단위·조건·방법·등급·출처를 함께 적습니다. 출처 없는 값은 받지 않습니다.
           </DialogDescription>
@@ -204,7 +204,7 @@ export function AddValueDialog({
                 <span className="font-medium">{property.name}</span>
                 <span className="text-muted-foreground font-mono">{property.key}</span>
                 <Button size="sm" variant="ghost" className="ml-auto h-7" onClick={() => setProperty(null)}>
-                  바꾸기
+                  변경
                 </Button>
               </div>
             ) : (
@@ -368,7 +368,7 @@ export function AddValueDialog({
           </Button>
           <Button onClick={submit} disabled={!ready || saving}>
             {saving && <Loader2 className="size-4 animate-spin" />}
-            넣기
+            입력
           </Button>
         </DialogFooter>
       </DialogContent>

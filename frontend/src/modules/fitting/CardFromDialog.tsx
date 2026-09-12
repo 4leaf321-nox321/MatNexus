@@ -172,7 +172,7 @@ export function CardFromDialog({
             닫기
           </Button>
           <Button onClick={() => void save()} disabled={busy || !label.trim()}>
-            {busy ? '만드는 중…' : '만들기'}
+            {busy ? '만드는 중…' : '생성'}
           </Button>
         </DialogFooter>
       </DialogContent>

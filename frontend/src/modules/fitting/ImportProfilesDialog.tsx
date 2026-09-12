@@ -183,7 +183,7 @@ export function ImportProfilesDialog({ incoming, existing, onClose, onDone }: Pr
           </Button>
           <Button onClick={() => void apply()} disabled={busy || willWrite === 0}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-            {willWrite === 0 ? '넣을 것이 없습니다' : `${willWrite}건 넣기`}
+            {willWrite === 0 ? '넣을 것이 없습니다' : `${willWrite}건 입력`}
           </Button>
         </DialogFooter>
       </DialogContent>

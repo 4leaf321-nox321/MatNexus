@@ -128,7 +128,7 @@ describe('작업 큐', () => {
         {
           id: 'j1',
           kind: 'notifications.deliver',
-          kind_label: '알림 보내기',
+          kind_label: '알림 전송',
           attempts: 3,
           max_attempts: 3,
           last_error: 'SMTP 연결 거부',
@@ -138,7 +138,7 @@ describe('작업 큐', () => {
       ],
     })
     mount()
-    expect(await screen.findByText('알림 보내기')).toBeInTheDocument()
+    expect(await screen.findByText('알림 전송')).toBeInTheDocument()
     expect(screen.getByText('SMTP 연결 거부')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /다시 시도/ }))
     await waitFor(() => expect(retry).toHaveBeenCalledWith('j1'))

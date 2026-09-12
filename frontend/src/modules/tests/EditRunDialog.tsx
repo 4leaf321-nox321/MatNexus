@@ -130,7 +130,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>시험 고치기 — {run.record_name}</DialogTitle>
+          <DialogTitle>시험 편집 — {run.record_name}</DialogTitle>
           <DialogDescription>
             등록 창과 같은 칸입니다. 조건은 화면 단위로 적으면 서버가 저장 단위로 바꿉니다.
           </DialogDescription>
@@ -220,7 +220,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
 
         {/* 원본 교체 — 저장과 별개다. 누르는 순간 다시 읽기가 큐에 들어간다. */}
         <div className="mt-2 space-y-2 rounded-md border border-dashed p-3">
-          <Label>원본 파일 바꾸기</Label>
+          <Label>원본 파일 변경</Label>
           <p className="text-muted-foreground text-xs">
             지금 원본: <b className="text-foreground font-mono">{run.source_filename ?? '없음'}</b>
             {(run.source_history?.length ?? 0) > 0 && ` · 전에 ${run.source_history.length}번 바꿈`}
@@ -254,7 +254,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
             ) : (
               <Upload className="size-4" />
             )}
-            원본 바꾸고 다시 읽기
+            원본 교체 후 재파싱
           </Button>
         </div>
       </DialogContent>

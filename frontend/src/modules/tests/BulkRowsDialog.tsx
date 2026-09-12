@@ -59,7 +59,7 @@ export function BulkRowsDialog({
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
       <DialogContent className="sm:max-w-5xl">
         <DialogHeader>
-          <DialogTitle>{kind === 'channel' ? '채널' : '조건'} 여러 개 넣기</DialogTitle>
+          <DialogTitle>{kind === 'channel' ? '채널' : '조건'} 여러 개 입력</DialogTitle>
           <DialogDescription>
             엑셀에서 복사해 아무 칸에나 붙여 넣으세요. 표는 사람이 보라고 있는
             것이고, 저장 단위는 <b>차원이 정합니다</b> — 고르는 칸이 아닙니다.
@@ -131,7 +131,7 @@ export function BulkRowsDialog({
               close()
             }}
           >
-            {parsed.length}줄 넣기
+            {parsed.length}줄 입력
           </Button>
         </DialogFooter>
       </DialogContent>

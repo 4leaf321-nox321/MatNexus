@@ -189,7 +189,7 @@ describe('표준 규격 가져오기', () => {
     // 통째로 가져오는 것이 보통이다.
     const user = userEvent.setup()
     show()
-    await user.click(await screen.findByRole('button', { name: '금속 인장 묶음 고르기' }))
+    await user.click(await screen.findByRole('button', { name: '금속 인장 묶음 선택' }))
 
     // 이미 있는 박판형은 안 섞인다 — 골라 봐야 아무 일도 안 일어난다.
     await user.click(screen.getByRole('button', { name: /1개 가져오기/ }))
@@ -199,9 +199,9 @@ describe('표준 규격 가져오기', () => {
   it('한 번 더 누르면 그 묶음이 풀린다', async () => {
     const user = userEvent.setup()
     show()
-    const button = await screen.findByRole('button', { name: '금속 인장 묶음 고르기' })
+    const button = await screen.findByRole('button', { name: '금속 인장 묶음 선택' })
     await user.click(button)
-    await user.click(await screen.findByRole('button', { name: '금속 인장 묶음 지우기' }))
+    await user.click(await screen.findByRole('button', { name: '금속 인장 묶음 삭제' }))
 
     expect(screen.getByRole('button', { name: /가져오기/ })).toBeDisabled()
   })
@@ -209,7 +209,7 @@ describe('표준 규격 가져오기', () => {
   it('전체를 한 번에 고른다', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(await screen.findByRole('button', { name: '전체 고르기' }))
+    await user.click(await screen.findByRole('button', { name: '전체 선택' }))
 
     // 고를 수 있는 것은 둘이다(박판형은 이미 있음).
     await user.click(screen.getByRole('button', { name: /2개 가져오기/ }))

@@ -343,7 +343,7 @@ export function FittingPanel({ materialId }: Props) {
           쌓인 뒤로는 만드는 자리가 화면 아래로 밀려 「어디서 만드나」 가 됐다.
           머리는 늘 선다 — 시험이 없어도 적어 둔 값으로 만드는 길은 있다. */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="font-medium">새 카드 만들기</h3>
+        <h3 className="font-medium">새 카드 생성</h3>
         {/* **재료 기본 정보가 맨 앞이다.** 시험이 없어도 열리는 길이고, 다른 카드가 이것을 함께 싣기도 한다(2026-09-05). 「적어 둔 값으로」 라는 이름으로
             따로 아래 두었더니 만드는 자리가 둘로 읽혔다(2026-09-05). 시험에서 나온
             값이 하나도 안 들어간다는 것은 대화상자가 말한다. */}
@@ -495,10 +495,10 @@ export function FittingPanel({ materialId }: Props) {
         <Dialog open onOpenChange={(next) => !next && setFitting(false)}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
             <DialogHeader>
-              <DialogTitle>탄소성 카드 만들기</DialogTitle>
+              <DialogTitle>탄소성 카드 생성</DialogTitle>
               <DialogDescription>
                 채택된 응력–변형률 곡선을 평균 낸 대표 곡선에 여러 경화식을 맞춰 나란히 놓고,
-                하나를 골라 소성 표와 식 계수를 카드로 만듭니다. 「만들기」 전까지는 아무것도
+                하나를 골라 소성 표와 식 계수를 카드로 만듭니다. 「생성」 전까지는 아무것도
                 저장되지 않습니다.
               </DialogDescription>
             </DialogHeader>
@@ -734,7 +734,7 @@ function FitComparison({
         </span>
         <Button size="sm" className="ml-auto" onClick={onSave}>
           <Plus className="size-3.5" />
-          이 값으로 카드 만들기
+          이 값으로 카드 생성
         </Button>
       </header>
 
@@ -751,7 +751,7 @@ function FitComparison({
                 "진소성변형률" 이라고 붙으면 그것은 거짓말이다. 식이 자기 축을
                 선언하므로(ADR 0013) 그것을 그대로 쓴다. */}
             <Label htmlFor="extrapolate" title="시험이 준 구간 밖까지 식으로 그려 봅니다. 저장하면 그 구간이 소성 표에 들어갑니다.">
-              시험 구간 밖까지 늘리기 ({stretchAxis})
+              시험 구간 밖까지 연장 ({stretchAxis})
             </Label>
             <Input
               id="extrapolate"
@@ -988,11 +988,11 @@ function FitCard({
           <button
             type="button"
             onClick={onBlend}
-            aria-label={`${fit.label} ${partner ? '섞기 해제' : '섞기'}`}
+            aria-label={`${fit.label} ${partner ? '혼합 해제' : '혼합'}`}
             className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
           >
             <Blend className="size-3" />
-            {partner ? '섞기 해제' : '고른 식과 섞기'}
+            {partner ? '혼합 해제' : '고른 식과 혼합'}
           </button>
         </div>
       )}
@@ -1188,7 +1188,7 @@ function CardList({
               size="icon"
               variant="ghost"
               className="size-6"
-              aria-label={`${card.label} ${opened.has(card.id) ? '접기' : '펴기'}`}
+              aria-label={`${card.label} ${opened.has(card.id) ? '접기' : '펼치기'}`}
               onClick={() => toggle(card.id)}
             >
               {opened.has(card.id) ? (
@@ -1236,7 +1236,7 @@ function CardList({
                   <Button
                     size="sm"
                     variant="ghost"
-                    title="이름·메모 고치기 (값은 안 바뀝니다)"
+                    title="이름·메모 편집 (값은 안 바뀝니다)"
                     onClick={() => setRenaming(card.id)}
                   >
                     <Pencil className="size-3.5" />
@@ -1276,7 +1276,7 @@ function CardList({
                   onClick={() => act(() => fittingApi.restore(card.id))}
                   title="초안으로 되살립니다 — 값은 그대로이고, 확정은 다시 받습니다."
                 >
-                  초안으로 되살리기
+                  초안으로 복원
                 </Button>
               )}
             </div>
@@ -1415,7 +1415,7 @@ function SaveDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>물성 카드 만들기</DialogTitle>
+          <DialogTitle>물성 카드 생성</DialogTitle>
           <DialogDescription>
             초안으로 저장됩니다. 확정은 부서 관리자가 하고, 확정한 뒤에는 값을 바꿀 수
             없습니다.
@@ -1487,7 +1487,7 @@ function SaveDialog({
                 checked={resampleOn}
                 onChange={(event) => setResampleOn(event.target.checked)}
               />
-              소성 표의 점 수 맞추기
+              소성 표의 점 수 일치
             </label>
             {!resampleOn && (
               <p className="text-muted-foreground text-xs">
@@ -1625,7 +1625,7 @@ function RenameCardDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>카드 이름 고치기</DialogTitle>
+          <DialogTitle>카드 이름 편집</DialogTitle>
           <DialogDescription>
             이름과 메모만 바뀝니다. <b>값은 못 바꿉니다</b> — 다시 적합하려면 새 카드를
             만드세요.

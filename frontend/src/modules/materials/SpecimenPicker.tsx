@@ -135,7 +135,7 @@ export function SpecimenPicker({ onChange }: Props) {
                 피커가 「새로 추가」 를 목록에 두는 것과 같은 방식이다. */}
             <SelectItem value={NEW}>
               <span className="flex items-center gap-1.5">
-                <Plus className="size-3.5 opacity-60" />새 시료 만들기
+                <Plus className="size-3.5 opacity-60" />새 시료 생성
               </span>
             </SelectItem>
             {samples.map((sample) => (
@@ -165,7 +165,7 @@ export function SpecimenPicker({ onChange }: Props) {
           <SelectContent>
             <SelectItem value={NEW}>
               <span className="flex items-center gap-1.5">
-                <Plus className="size-3.5 opacity-60" />새 시편 만들기
+                <Plus className="size-3.5 opacity-60" />새 시편 생성
               </span>
             </SelectItem>
             {specimens.map((specimen) => (

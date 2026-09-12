@@ -488,7 +488,7 @@ export function DeclaredPropertiesCard({
                 }}
               >
                 <Trash2 className="size-4" />
-                이 항목 지우기
+                이 항목 삭제
               </Button>
             </div>
 

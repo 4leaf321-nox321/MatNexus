@@ -75,7 +75,7 @@ describe('같은 이름이 양쪽에 있으면', () => {
     await userEvent.click(screen.getByRole('option', { name: /새 팀/ }))
     await waitFor(() => expect(mergeConflicts).toHaveBeenCalledWith('old-team', 'new-team'))
     expect(await screen.findByRole('alert')).toHaveTextContent('재료 1건: SECC_MDOI_1.0')
-    expect(screen.getByRole('button', { name: /옮기고 합치기/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /옮기고 병합/ })).toBeDisabled()
     expect(merge).not.toHaveBeenCalled()
   })
 })
@@ -90,7 +90,7 @@ describe('무엇이 옮겨지는지 보고 누른다', () => {
 
   it('대상을 안 고르면 못 누른다', async () => {
     show()
-    expect(await screen.findByRole('button', { name: /46건을 옮기고 합치기/ })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: /46건을 옮기고 병합/ })).toBeDisabled()
   })
 
   it('원본과 보관된 부서는 대상 후보에 없다', async () => {
@@ -110,7 +110,7 @@ describe('무엇이 옮겨지는지 보고 누른다', () => {
     const onDone = show()
     await userEvent.click(await screen.findByLabelText('합칠 대상 부서'))
     await userEvent.click(screen.getByRole('option', { name: /새 팀/ }))
-    await userEvent.click(screen.getByRole('button', { name: /46건을 옮기고 합치기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /46건을 옮기고 병합/ }))
 
     await waitFor(() => expect(merge).toHaveBeenCalledWith('old-team', 'new-team'))
     expect(await screen.findByText(/46건이 대상 부서 소속이 됐습니다/)).toBeInTheDocument()

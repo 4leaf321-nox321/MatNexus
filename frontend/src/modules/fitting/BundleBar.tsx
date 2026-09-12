@@ -124,7 +124,7 @@ export function BundleBar({
       {onClear && !embedded && (
         <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
           <X className="size-3.5" />
-          고른 것 비우기
+          고른 것 초기화
         </Button>
       )}
     </div>

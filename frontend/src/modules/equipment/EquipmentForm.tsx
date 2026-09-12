@@ -268,7 +268,7 @@ export function EquipmentForm({
               workspaces={workspaces}
               value={draft.workspace || null}
               onChange={(next) => set('workspace', next)}
-              placeholder="부서 고르기"
+              placeholder="부서 선택"
             />
             <Button
               type="button"

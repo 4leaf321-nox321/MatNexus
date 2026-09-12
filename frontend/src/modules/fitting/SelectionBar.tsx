@@ -49,7 +49,7 @@ export function SelectionBar({
         <div role="tablist" aria-label="고른 카드로 할 일" className="flex gap-1">
           <TabButton active={tab === 'basket'} onClick={() => setTab('basket')}>
             <Inbox className="size-3.5" />
-            워크벤치 작업에 담기
+            워크벤치 작업에 추가
           </TabButton>
           <TabButton active={tab === 'export'} onClick={() => setTab('export')}>
             <FileDown className="size-3.5" />
@@ -58,7 +58,7 @@ export function SelectionBar({
         </div>
         <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
           <X className="size-3.5" />
-          고른 것 비우기
+          고른 것 초기화
         </Button>
       </div>
 

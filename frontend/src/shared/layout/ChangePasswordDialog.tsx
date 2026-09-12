@@ -130,7 +130,7 @@ export function ChangePasswordDialog({ open, onClose, onChanged }: Props) {
               취소
             </Button>
             <Button type="submit" disabled={busy || !current || !next}>
-              바꾸기
+              변경
             </Button>
           </DialogFooter>
         </form>

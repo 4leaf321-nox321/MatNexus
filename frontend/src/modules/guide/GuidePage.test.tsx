@@ -135,7 +135,7 @@ describe('절', () => {
     expect(screen.getByTestId('editor')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '저장 (바로 반영)' })).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('고친 이유'), '오타')
-    await user.click(screen.getByRole('button', { name: '초안 보내기' }))
+    await user.click(screen.getByRole('button', { name: '초안 전송' }))
     await waitFor(() =>
       expect(submit).toHaveBeenCalledWith('s1', expect.objectContaining({ note: '오타', publish: false }))
     )

@@ -312,7 +312,7 @@ export function AdoptDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>「{detail.name}」 의 값을 사내 재료에 채우기</DialogTitle>
+          <DialogTitle>「{detail.name}」 의 값을 사내 재료에 반영</DialogTitle>
           <DialogDescription>
             담은 값은 복사본(스냅샷)이고 출처·등급이 함께 적힙니다. 카탈로그가
             갱신돼도 담은 값은 바뀌지 않습니다.
@@ -363,7 +363,7 @@ export function AdoptDialog({
                   onClick={() => setTarget(null)}
                   disabled={busy}
                 >
-                  바꾸기
+                  변경
                 </Button>
               </p>
               {candidates.length === 0 && (
@@ -425,7 +425,7 @@ export function AdoptDialog({
                         >
                           {pooled.has(value.id)
                             ? `중앙값 ${fmtValueAs(units, value.summary['median'] as number, value.unit)} 로 담는 중`
-                            : `같은 조건 ${value.summary['n']}건 · 중앙값으로 담기`}
+                            : `같은 조건 ${value.summary['n']}건 · 중앙값으로 추가`}
                         </button>
                       )}
                       {blocked ? (
@@ -462,7 +462,7 @@ export function AdoptDialog({
               ) : (
                 <PackagePlus className="size-4" />
               )}
-              {picked.size}건 담기
+              {picked.size}건 추가
             </Button>
           )}
         </DialogFooter>

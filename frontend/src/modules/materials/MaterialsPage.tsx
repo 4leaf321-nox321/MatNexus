@@ -315,7 +315,7 @@ export default function MaterialsPage() {
             }}
           >
             <Trash2 className="size-3.5" />
-            지우기
+            삭제
           </Button>
           {/* **여기가 「해석에 쓸 물성 갖추기」 의 첫 단계다**(ADR 0024). 적용
               제품·파트로 좁힌 재료를 담아 두면, 워크벤치가 재료마다 카드가 있는지
@@ -413,7 +413,7 @@ export default function MaterialsPage() {
             )}
           </>
         }
-        confirmLabel="지우기"
+        confirmLabel="삭제"
         busy={busy}
         onConfirm={removePicked}
       />

@@ -346,7 +346,7 @@ export function SpecimenFieldsDialog({
                 size="icon"
                 variant="ghost"
                 className="size-8"
-                aria-label={`${index + 1}번 칸 빼기`}
+                aria-label={`${index + 1}번 칸 제거`}
                 onClick={() => setRows((current) => current.filter((_, at) => at !== index))}
               >
                 <Trash2 className="size-3.5" />
@@ -378,7 +378,7 @@ export function SpecimenFieldsDialog({
               }
             >
               <Plus className="size-3.5" />
-              칸 더하기
+              칸 추가
             </Button>
             <span className="text-muted-foreground text-xs">코드가 읽는 칸:</span>
             {WELL_KNOWN.map((known) => {

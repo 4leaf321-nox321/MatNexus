@@ -61,7 +61,7 @@ export function FileDrop({
         disabled={disabled}
         onClick={() => input.current?.click()}
       >
-        파일 고르기
+        파일 선택
       </Button>
       {hint && <p className="text-muted-foreground mt-1.5 text-xs">{hint}</p>}
       <input

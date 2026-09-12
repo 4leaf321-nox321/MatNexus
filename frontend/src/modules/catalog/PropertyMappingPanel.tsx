@@ -255,7 +255,7 @@ export function PropertyMappingPanel({
           }
         >
           <Download className="size-4" />
-          사전 내려받기
+          사전 다운로드
         </Button>
       </div>
 
@@ -305,11 +305,11 @@ export function PropertyMappingPanel({
                     size="sm"
                     variant="ghost"
                     className="h-7 px-2"
-                    aria-label={`${item.item} 잇기`}
+                    aria-label={`${item.item} 연결`}
                     onClick={() => setLinking({ item })}
                   >
                     <Link2 className="size-3.5" />
-                    잇기
+                    연결
                   </Button>
                 )}
               </li>
@@ -339,12 +339,12 @@ export function PropertyMappingPanel({
                     size="sm"
                     variant="ghost"
                     className="h-7 px-2"
-                    aria-label={`${one.item} 을 ${one.name} 에 잇기`}
+                    aria-label={`${one.item} 을 ${one.name} 에 연결`}
                     disabled={busy === one.property_key + one.term_id}
                     onClick={() => acceptSuggestion(one)}
                   >
                     <Link2 className="size-3.5" />
-                    잇기
+                    연결
                   </Button>
                 )}
               </li>
@@ -355,7 +355,7 @@ export function PropertyMappingPanel({
 
       <div className="flex flex-wrap items-center gap-2">
         <select
-          aria-label="도메인으로 거르기"
+          aria-label="도메인으로 필터"
           className="border-input bg-background h-9 rounded-md border px-2 text-sm"
           value={domain}
           onChange={(event) => setDomain(event.target.value)}
@@ -433,7 +433,7 @@ export function PropertyMappingPanel({
                       (row.links.length > 0 || row.value_count > 0) && (
                         <button
                           type="button"
-                          aria-label={`${row.name} 의 값·매핑을 ${row.superseded_by} 로 옮기기`}
+                          aria-label={`${row.name} 의 값·매핑을 ${row.superseded_by} 로 이동`}
                           title="직접 넣은 값·매핑·별칭을 후속 키로 옮깁니다 (미리보기 뒤 확인)"
                           className="text-muted-foreground hover:text-foreground rounded p-0.5"
                           disabled={busy === row.key}
@@ -459,7 +459,7 @@ export function PropertyMappingPanel({
                       row.value_count === 0 && (
                         <button
                           type="button"
-                          aria-label={`${row.name} 지우기`}
+                          aria-label={`${row.name} 삭제`}
                           className="text-muted-foreground hover:text-destructive rounded p-0.5"
                           disabled={busy === row.key}
                           onClick={() => removeProperty(row)}
@@ -484,7 +484,7 @@ export function PropertyMappingPanel({
                         {canEdit && (
                           <button
                             type="button"
-                            aria-label={`${row.name} ↔ ${link.item}${link.scale ? ` (${link.scale})` : ''} 풀기`}
+                            aria-label={`${row.name} ↔ ${link.item}${link.scale ? ` (${link.scale})` : ''} 해제`}
                             className="text-muted-foreground hover:text-foreground rounded p-0.5"
                             disabled={busy === link.id}
                             onClick={() => unlink(link.id)}
@@ -497,7 +497,7 @@ export function PropertyMappingPanel({
                     {canEdit && (
                       <button
                         type="button"
-                        aria-label={`${row.name} 에 사내 항목 잇기`}
+                        aria-label={`${row.name} 에 사내 항목 연결`}
                         className="text-muted-foreground hover:text-foreground rounded border border-dashed px-1.5 py-0.5"
                         onClick={() => setLinking({ row })}
                       >
@@ -641,7 +641,7 @@ function DeprecateDialog({
                 <span className="font-medium">{chosen.name}</span>
                 <span className="text-muted-foreground font-mono">{chosen.key}</span>
                 <Button size="sm" variant="ghost" className="ml-auto h-7" onClick={() => setSuccessor(null)}>
-                  바꾸기
+                  변경
                 </Button>
               </div>
             ) : (
@@ -851,7 +851,7 @@ function AddPropertyDialog({
             취소
           </Button>
           <Button onClick={submit} disabled={!ready || saving}>
-            만들기
+            생성
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -988,7 +988,7 @@ function LinkDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>사내 항목을 문헌 물성에 잇기</DialogTitle>
+          <DialogTitle>사내 항목을 문헌 물성에 연결</DialogTitle>
           <DialogDescription>
             이어 두면 값으로 찾기가 사내 값까지 보고, 다른 시스템이 같은 키로 만납니다.
           </DialogDescription>
@@ -1008,7 +1008,7 @@ function LinkDialog({
                     className="ml-auto h-7"
                     onClick={() => setKey(null)}
                   >
-                    바꾸기
+                    변경
                   </Button>
                 )}
               </div>
@@ -1113,7 +1113,7 @@ function LinkDialog({
           </Button>
           <Button disabled={busy || !ready} onClick={submit}>
             <Link2 className="size-4" />
-            잇기
+            연결
           </Button>
         </DialogFooter>
       </DialogContent>

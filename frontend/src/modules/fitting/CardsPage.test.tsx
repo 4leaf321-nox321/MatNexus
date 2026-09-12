@@ -252,22 +252,22 @@ describe('묶음 내보내기', () => {
     // (2026-09-05). 이제 띠 하나 안에서 탭으로 가른다.
     two()
     page()
-    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 추가'))
     const bar = within(screen.getByLabelText('고른 카드'))
-    expect(bar.getByRole('tab', { name: /워크벤치 작업에 담기/ })).toHaveAttribute(
+    expect(bar.getByRole('tab', { name: /워크벤치 작업에 추가/ })).toHaveAttribute(
       'aria-selected',
       'true'
     )
     expect(await bar.findByText(/워크벤치 작업이 없습니다|담을 작업/)).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '담기' })).toBeNull()
+    expect(screen.queryByRole('region', { name: '추가' })).toBeNull()
     expect(bar.queryByLabelText('묶음 내보내기')).toBeNull()
   })
 
   it('고른 수를 말하고 형식을 고르면 그것으로 내보낸다', async () => {
     two()
     page()
-    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
-    await userEvent.click(screen.getByLabelText('둘째 카드 묶음에 담기'))
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 추가'))
+    await userEvent.click(screen.getByLabelText('둘째 카드 묶음에 추가'))
 
     const bar = within(screen.getByLabelText('고른 카드'))
     expect(bar.getByText('2장 골랐습니다')).toBeInTheDocument()
@@ -285,9 +285,9 @@ describe('묶음 내보내기', () => {
   it('비우면 띠가 사라진다', async () => {
     two()
     page()
-    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 추가'))
     const bar = within(screen.getByLabelText('고른 카드'))
-    await userEvent.click(bar.getByRole('button', { name: /고른 것 비우기/ }))
+    await userEvent.click(bar.getByRole('button', { name: /고른 것 초기화/ }))
     expect(screen.queryByLabelText('고른 카드')).toBeNull()
   })
 
@@ -296,7 +296,7 @@ describe('묶음 내보내기', () => {
     // 그것을 쓰는 사람이 생긴다.
     two()
     page()
-    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 담기'))
+    await userEvent.click(await screen.findByLabelText('인장 MD 묶음에 추가'))
     const outer = within(screen.getByLabelText('고른 카드'))
     await userEvent.click(outer.getByRole('tab', { name: /묶음 내보내기/ }))
     const bar = within(screen.getByLabelText('묶음 내보내기'))
@@ -318,7 +318,7 @@ describe('재료로 걸러 들어온다', () => {
     )
     expect(await screen.findByText(/재료: SECC_MDOI_1.0/)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: '재료 거르기 풀기' }))
+    await userEvent.click(screen.getByRole('button', { name: '재료 필터 해제' }))
     await waitFor(() =>
       expect(cards).toHaveBeenLastCalledWith(expect.not.objectContaining({ material_id: 'm1' }))
     )

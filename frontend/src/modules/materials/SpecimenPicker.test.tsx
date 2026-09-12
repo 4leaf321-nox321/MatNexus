@@ -33,7 +33,7 @@ vi.mock('@/modules/materials/api', async (importOriginal) => ({
 /** 재료 검색은 서버에 묻는다. 이 시험이 보는 것은 그게 아니라 만들기 경로다. */
 vi.mock('@/modules/materials/MaterialPicker', () => ({
   MaterialPicker: ({ onSelect }: { onSelect: (m: unknown) => void }) => (
-    <button onClick={() => onSelect({ id: 'm1', record_name: 'DP600 1.2t' })}>재료 고르기</button>
+    <button onClick={() => onSelect({ id: 'm1', record_name: 'DP600 1.2t' })}>재료 선택</button>
   ),
 }))
 
@@ -47,7 +47,7 @@ vi.mock('@/modules/materials/NewMaterialDialog', () => ({
     onDone: (m: unknown) => void
   }) =>
     open ? (
-      <button onClick={() => onDone({ id: 'm9', record_name: '새 재료' })}>재료 만들기</button>
+      <button onClick={() => onDone({ id: 'm9', record_name: '새 재료' })}>재료 생성</button>
     ) : null,
 }))
 vi.mock('@/modules/materials/NewSampleDialog', () => ({
@@ -60,7 +60,7 @@ vi.mock('@/modules/materials/NewSampleDialog', () => ({
   }) =>
     open ? (
       <button onClick={() => onCreated({ id: 's9', seq_no: 9, lot_no: 'L9', material_id: 'm1' })}>
-        시료 만들기
+        시료 생성
       </button>
     ) : null,
 }))
@@ -74,7 +74,7 @@ vi.mock('@/modules/materials/NewSpecimenDialog', () => ({
   }) =>
     open ? (
       <button onClick={() => onDone({ id: 'p9', orientation: 'MD', seq_no: 9 })}>
-        시편 만들기
+        시편 생성
       </button>
     ) : null,
 }))
@@ -92,11 +92,11 @@ async function openList(label: string, name: RegExp) {
 }
 
 async function pickMaterial() {
-  await userEvent.click(screen.getByRole('button', { name: '재료 고르기' }))
+  await userEvent.click(screen.getByRole('button', { name: '재료 선택' }))
   await waitFor(() => expect(samples).toHaveBeenCalled())
 }
 
-describe('시편 고르기', () => {
+describe('시편 선택', () => {
   it('재료를 고르기 전에도 새 재료를 만들 수 있다', async () => {
     // **여기서 막히면 나머지 두 층도 못 간다.**
     render(<SpecimenPicker onChange={vi.fn()} />)
@@ -106,7 +106,7 @@ describe('시편 고르기', () => {
   it('만든 재료를 곧바로 고른다', async () => {
     render(<SpecimenPicker onChange={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: /\+ 새 재료/ }))
-    await userEvent.click(await screen.findByRole('button', { name: '재료 만들기' }))
+    await userEvent.click(await screen.findByRole('button', { name: '재료 생성' }))
     // 고른 재료의 시료를 곧바로 받으러 간다 — 사람이 다시 고를 필요가 없다.
     await waitFor(() => expect(samples).toHaveBeenCalledWith('m9'))
   })
@@ -114,8 +114,8 @@ describe('시편 고르기', () => {
   it('만든 시료를 곧바로 고른다', async () => {
     render(<SpecimenPicker onChange={vi.fn()} />)
     await pickMaterial()
-    await openList('시료', /새 시료 만들기/)
-    await userEvent.click(await screen.findByRole('button', { name: '시료 만들기' }))
+    await openList('시료', /새 시료 생성/)
+    await userEvent.click(await screen.findByRole('button', { name: '시료 생성' }))
     await waitFor(() => expect(specimens).toHaveBeenCalledWith('s9'))
   })
 
@@ -127,8 +127,8 @@ describe('시편 고르기', () => {
     await pickMaterial()
     // 시료가 하나면 그것은 골라 준다 — 시편만 사람이 고른다.
     await waitFor(() => expect(specimens).toHaveBeenCalled())
-    await openList('시편', /새 시편 만들기/)
-    await userEvent.click(await screen.findByRole('button', { name: '시편 만들기' }))
+    await openList('시편', /새 시편 생성/)
+    await userEvent.click(await screen.findByRole('button', { name: '시편 생성' }))
     expect(onChange).toHaveBeenCalledWith({ id: 'p9', orientation: 'MD', seq_no: 9 })
   })
 
@@ -163,7 +163,7 @@ describe('시편 고르기', () => {
     await pickMaterial()
 
     await userEvent.click(await screen.findByRole('combobox', { name: /시료/ }))
-    expect(await screen.findByRole('option', { name: /새 시료 만들기/ })).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: /새 시료 생성/ })).toBeInTheDocument()
   })
 
   it('비었을 때 다른 화면으로 보내지 않는다', async () => {

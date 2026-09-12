@@ -94,7 +94,7 @@ export default function NoticesPage() {
                     size="icon"
                     variant="ghost"
                     className="size-7"
-                    aria-label={`${notice.title} 고치기`}
+                    aria-label={`${notice.title} 편집`}
                     onClick={() => setEditing(notice)}
                   >
                     <Pencil className="size-3.5" />
@@ -233,7 +233,7 @@ function NoticeDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{notice ? '공지 고치기' : '공지 작성'}</DialogTitle>
+          <DialogTitle>{notice ? '공지 편집' : '공지 작성'}</DialogTitle>
           <DialogDescription>
             {notice
               ? '이미 읽은 사람에게도 바뀐 내용이 보입니다.'

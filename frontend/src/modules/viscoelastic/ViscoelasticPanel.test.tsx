@@ -120,7 +120,7 @@ describe('장비가 만든 마스터커브 가져오기', () => {
   it('못 쓰는 표는 고를 수 없다', async () => {
     show()
     await screen.findByText('TTS - shift factors')
-    expect(block().getByLabelText('TTS - shift factors 고르기')).toBeDisabled()
+    expect(block().getByLabelText('TTS - shift factors 선택')).toBeDisabled()
   })
 
   it('기준 온도를 안 적으면 안 보낸다', async () => {
@@ -157,7 +157,7 @@ describe('장비가 만든 마스터커브 가져오기', () => {
     importableCurves.mockResolvedValue([MASTER, other, SHIFTS])
     show()
     await screen.findByText('TTS - 60 °C')
-    await userEvent.click(block().getByLabelText('TTS - 60 °C 고르기'))
+    await userEvent.click(block().getByLabelText('TTS - 60 °C 선택'))
     await userEvent.type(block().getByLabelText('기준 온도'), '60')
     await userEvent.click(block().getByRole('button', { name: '가져오기' }))
     await waitFor(() => expect(importMasterCurve).toHaveBeenCalled())
@@ -182,7 +182,7 @@ describe('마스터커브 상세', () => {
     masterCurves.mockResolvedValue([CURVE])
     show()
     expect(await screen.findByText('이동인자')).toBeInTheDocument()
-    expect(screen.getByText(/Prony 계수 맞추기/)).toBeInTheDocument()
+    expect(screen.getByText(/Prony 계수 적합/)).toBeInTheDocument()
     // 겹치기에 쓴 모델의 계수도 그대로 남는다.
     expect(screen.getByText(/c1/)).toBeInTheDocument()
   })

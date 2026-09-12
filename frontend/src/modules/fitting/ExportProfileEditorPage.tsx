@@ -396,7 +396,7 @@ export default function ExportProfileEditorPage() {
     <div>
       <PageHeader
         sticky
-        title={editing ? `해석용 물성 정의 · ${key}` : '해석용 물성 정의 만들기'}
+        title={editing ? `해석용 물성 정의 · ${key}` : '해석용 물성 정의 생성'}
         description="물성 묶음을 쌓습니다. 오른쪽은 고른 카드로 지금 정의를 실제로 그려 본 것입니다 — 저장하기 전에 봅니다."
         actions={
           <Button onClick={() => void save()} disabled={saving || !label || !profileKey}>
@@ -538,7 +538,7 @@ export default function ExportProfileEditorPage() {
                     <button
                       type="button"
                       className="text-muted-foreground flex size-6 items-center justify-center"
-                      aria-label={`${n}번 묶음 ${open ? '접기' : '펴기'}`}
+                      aria-label={`${n}번 묶음 ${open ? '접기' : '펼치기'}`}
                       onClick={() =>
                         setCollapsed((now) => {
                           const next = new Set(now)
@@ -575,7 +575,7 @@ export default function ExportProfileEditorPage() {
                               patchSection(index, { keyword: { kind: 'text', text: '' } })
                             }
                           >
-                            키워드 줄 붙이기
+                            키워드 줄 추가
                           </Button>
                         )}
                       </span>
@@ -603,8 +603,8 @@ export default function ExportProfileEditorPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        title="묶음 지우기"
-                        aria-label={`${n}번 묶음 지우기`}
+                        title="묶음 삭제"
+                        aria-label={`${n}번 묶음 삭제`}
                         onClick={() => setSections((old) => old.filter((_, at) => at !== index))}
                       >
                         <Trash2 className="size-4" />
@@ -688,7 +688,7 @@ export default function ExportProfileEditorPage() {
                               specs={specs.data ?? []}
                               cardKeys={cardKeys.data ?? null}
                               target="value"
-                              label={`${n}번 묶음 조건 값 고르기`}
+                              label={`${n}번 묶음 조건 값 선택`}
                               onPick={(path) =>
                                 patchSection(index, {
                                   when: section.when.startsWith('missing:') ? `missing:${path}` : path,
@@ -936,8 +936,8 @@ function LineEditor({
           variant="ghost"
           size="icon"
           className="ml-auto"
-          title="줄 지우기"
-          aria-label={`${lineNo}번 줄 지우기`}
+          title="줄 삭제"
+          aria-label={`${lineNo}번 줄 삭제`}
           onClick={onRemove}
         >
           <Trash2 className="size-4" />
@@ -981,7 +981,7 @@ function LineEditor({
                   cardKeys={cardKeys}
                   target={line.kind === 'rows' ? 'column' : 'value'}
                   table={line.rows}
-                  label={`${lineNo}번 줄 ${at + 1}번 칸 고르기`}
+                  label={`${lineNo}번 줄 ${at + 1}번 칸 선택`}
                   onPick={(path) =>
                     kind === 'expr'
                       ? // 식에는 **끼워 넣는다** — 고른 값이 식의 재료다.
@@ -1010,7 +1010,7 @@ function LineEditor({
               <Button
                 variant="ghost"
                 size="icon"
-                title="칸 지우기"
+                title="칸 삭제"
                 onClick={() => onChange({ fields: (line.fields ?? []).filter((_, j) => j !== at) })}
               >
                 <Trash2 className="size-4" />
@@ -1178,12 +1178,12 @@ function CardContents({
                     variant="ghost"
                     size="sm"
                     className="ml-auto h-6 px-2 text-xs"
-                    aria-label={`${one.label} 넣기`}
+                    aria-label={`${one.label} 입력`}
                     title="마지막 묶음의 값 줄에 칸으로 넣습니다"
                     onClick={() => onValue(one.path)}
                   >
                     <Plus className="size-3" />
-                    넣기
+                    입력
                   </Button>
                 </li>
               ))}

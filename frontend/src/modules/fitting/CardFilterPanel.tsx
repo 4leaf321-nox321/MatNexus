@@ -128,11 +128,11 @@ export function CardFilterPanel({
   }, [split, owner, onPickOwner])
 
   return (
-    <LeftPanel label="카드 거르기">
+    <LeftPanel label="카드 필터">
       <aside className="bg-background flex h-full w-60 flex-col border-r">
         {/* **맨 위다.** 목록을 가르는 스위치라 목록 사이에 두면 못 찾는다. */}
         <div className="flex items-center justify-between gap-1 border-b px-3 py-2">
-          <span className="text-muted-foreground text-xs">부서로 나누기</span>
+          <span className="text-muted-foreground text-xs">부서로 분할</span>
           <Button
             size="sm"
             variant={split ? 'default' : 'outline'}
@@ -187,7 +187,7 @@ export function CardFilterPanel({
                 onPickOwner(null)
               }}
             >
-              모두 풀기
+              모두 해제
             </Button>
           </div>
         )}

@@ -282,7 +282,7 @@ export default function CatalogAshbyPage() {
       value={value}
       onChange={(event) => set(key, event.target.value)}
     >
-      <option value="">{label} 고르기</option>
+      <option value="">{label} 선택</option>
       {[...byDomain.entries()].map(([domain, list]) => (
         <optgroup key={domain} label={DOMAIN_LABELS[domain] ?? domain}>
           {list.map((axis) => (

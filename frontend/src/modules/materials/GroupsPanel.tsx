@@ -171,7 +171,7 @@ function GroupCard({
       {askingProny && (
         <CardFromDialog
           materialId={row.material_id}
-          title="점탄성 카드 만들기 (글로벌 피팅)"
+          title="점탄성 카드 생성 (글로벌 피팅)"
           description={
             <>
               시편 여럿의 마스터커브를 한 번에 맞춘 <b>Prony 계수 한 벌</b>이 점탄성 블록으로,
@@ -227,7 +227,7 @@ function GroupCard({
             onClick={() => setAsking(true)}
           >
             <FileDown className="size-3.5" />
-            만들기
+            생성
           </Button>
         )}
         {/* **Prony 묶음도 카드가 된다.** 서버는 `group_result_id` 를 받았는데 화면에 단추가
@@ -242,7 +242,7 @@ function GroupCard({
             onClick={() => setAskingProny(true)}
           >
             <FileDown className="size-3.5" />
-            만들기
+            생성
           </Button>
         )}
         {/* **숫자는 못 고친다 — 설정을 바꿔 다시 맞춘다.** 결과는 시편들로 계산한 값이라
@@ -257,14 +257,14 @@ function GroupCard({
           onClick={() => onRefit(row)}
         >
           <RefreshCw className="size-3.5" />
-          설정 바꿔 다시 맞추기
+          설정 변경 후 재적합
         </Button>
         <Button
           size="sm"
           variant="ghost"
           className="h-7 text-xs"
-          title="메모 고치기 (값은 안 바뀝니다)"
-          aria-label="묶음 메모 고치기"
+          title="메모 편집 (값은 안 바뀝니다)"
+          aria-label="묶음 메모 편집"
           disabled={busy}
           onClick={() => setEditingNote(row.note ?? '')}
         >
@@ -275,7 +275,7 @@ function GroupCard({
           variant="ghost"
           className="h-7 text-xs"
           title="이 묶음 지우기. 이 묶음으로 만든 카드가 있으면 못 지웁니다."
-          aria-label="묶음 지우기"
+          aria-label="묶음 삭제"
           disabled={busy}
           onClick={() => setRemoving(true)}
         >
@@ -806,7 +806,7 @@ export function GroupsPanel({
                   >
                     <input
                       type="checkbox"
-                      aria-label={`${run.record_name} 고르기`}
+                      aria-label={`${run.record_name} 선택`}
                       checked={picked.has(run.id)}
                       // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
                       onClick={(event) => selection.toggle(run.id, event)}

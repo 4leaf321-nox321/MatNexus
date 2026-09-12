@@ -137,7 +137,7 @@ export default function WorkspaceHomePage() {
           title="업로드"
           detail="장비 파일을 그대로 올립니다. 어떻게 읽을지는 부서가 정한 「파일 형식」이 압니다 — 손으로 옮겨 적지 않습니다."
           to={`/w/${workspaceSlug}/tests/upload`}
-          action="파일 올리기"
+          action="파일 업로드"
           count={{ value: recent.data?.total ?? 0, unit: '건 등록됨' }}
           loading={loading}
         />

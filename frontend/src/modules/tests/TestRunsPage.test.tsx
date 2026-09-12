@@ -113,13 +113,13 @@ beforeEach(() => {
   facets.mockResolvedValue(FACETS)
 })
 
-describe('처리로 거르기', () => {
+describe('처리로 필터', () => {
   it('처리 단계(안 함·채택됨)를 서버에 묻는다', async () => {
     const user = userEvent.setup()
     show()
     await screen.findByText(/SECC_1.0__01__MD_01__TEN_01/)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '처리 로 거르기' }), 'adopted')
+    await user.selectOptions(screen.getByRole('combobox', { name: '처리 로 필터' }), 'adopted')
 
     await waitFor(() => expect(asked().processing).toBe('adopted'))
   })
@@ -158,7 +158,7 @@ describe('처리로 거르기', () => {
     await user.click(within(did).getByRole('button', { name: /진응력/ }))
     await waitFor(() => expect(asked().step).toBe('tensile.true_plastic'))
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '처리 로 거르기' }), 'none')
+    await user.selectOptions(screen.getByRole('combobox', { name: '처리 로 필터' }), 'none')
     await waitFor(() => expect(asked().processing).toBe('none'))
     expect(asked().step).toBeUndefined()
   })
@@ -172,8 +172,8 @@ describe('많으면 쳐서 찾는다', () => {
     show()
     await screen.findByText(/SECC_1.0__01__MD_01__TEN_01/)
 
-    await user.click(screen.getByRole('button', { name: '재료 로 거르기' }))
-    await user.type(await screen.findByPlaceholderText('쳐서 좁히기'), 'SPCC')
+    await user.click(screen.getByRole('button', { name: '재료 로 필터' }))
+    await user.type(await screen.findByPlaceholderText('검색'), 'SPCC')
     // 친 글자에 안 맞는 줄은 사라진다 — 남은 하나를 Enter 로 집는다.
     expect(screen.queryByRole('button', { name: /SECC_1\.0/ })).toBeNull()
     await user.keyboard('{Enter}')
@@ -189,6 +189,6 @@ describe('많으면 쳐서 찾는다', () => {
 
     await user.click(screen.getByRole('button', { name: /처리 단계/ }))
     expect(await screen.findByText('채택된 결과가 거친 단계')).toBeTruthy()
-    expect(screen.queryByPlaceholderText('쳐서 좁히기')).toBeNull()
+    expect(screen.queryByPlaceholderText('검색')).toBeNull()
   })
 })

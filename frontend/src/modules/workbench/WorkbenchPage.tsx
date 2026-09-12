@@ -113,7 +113,7 @@ export default function WorkbenchPage() {
       {/* **이어서 하기가 먼저다.** 어제 하던 것이 아래에 묻히면 서버에 둔 뜻이 없다. */}
       {(running.data ?? []).length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-2 text-sm font-medium">이어서 하기</h2>
+          <h2 className="mb-2 text-sm font-medium">계속</h2>
           <div className="space-y-2">
             {(running.data ?? []).map((run) => (
               <ResumeRow key={run.id} run={run} onOpen={() => void reload(run.id)} />
@@ -384,7 +384,7 @@ function RunView({
                   >
                     {KIND_LABELS[step.collects]} 목록
                   </Link>
-                  에서 고른 뒤 「담기」 를 누르면 여기 모입니다.
+                  에서 고른 뒤 「추가」 를 누르면 여기 모입니다.
                 </p>
               )}
 
@@ -535,7 +535,7 @@ function Basket({
                 size="icon"
                 variant="ghost"
                 className="ml-auto size-6"
-                aria-label={`${item.label} 빼기`}
+                aria-label={`${item.label} 제거`}
                 onClick={() => void remove(item.id)}
               >
                 <X className="size-3" />

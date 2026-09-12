@@ -353,7 +353,7 @@ export default function BomDeckPage() {
             </select>
           </label>
           <Button size="sm" onClick={() => void build()} disabled={busy || ready.length === 0}>
-            {busy && rows ? <Loader2 className="size-4 animate-spin" /> : null}덱 만들기
+            {busy && rows ? <Loader2 className="size-4 animate-spin" /> : null}덱 생성
           </Button>
           {built && (
             <>
@@ -485,7 +485,7 @@ function MatchRow({
               onChange({ ...row, material: null, cardId: null, cardLabel: null, fromMemory: false })
             }
           >
-            바꾸기
+            변경
           </Button>
         )}
       </td>

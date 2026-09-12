@@ -603,7 +603,7 @@ function GroupCard({
           size="icon"
           variant="ghost"
           className="size-6"
-          aria-label={`${group.test_type_label} ${group.orientation} ${open ? '접기' : '펴기'}`}
+          aria-label={`${group.test_type_label} ${group.orientation} ${open ? '접기' : '펼치기'}`}
           onClick={onToggle}
         >
           {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
@@ -628,7 +628,7 @@ function GroupCard({
             만드나」 가 둘이 된다. */}
         {enough && (
           <Button size="sm" variant="outline" className="ml-auto" onClick={onSave}>
-            <Save className="size-3.5" />이 통계 남기기
+            <Save className="size-3.5" />이 통계 저장
           </Button>
         )}
       </header>

@@ -44,7 +44,7 @@ beforeEach(() => {
   removeMany.mockResolvedValue({ deleted: 1, blocked: 0, items: [{ deleted: true }] })
 })
 
-describe('지우기 확인', () => {
+describe('삭제 확인', () => {
   it('무엇을 지우는지 이름으로 다시 보여 준다', async () => {
     show()
     expect(await screen.findByText('쓰는 곳 1')).toBeInTheDocument()
@@ -60,7 +60,7 @@ describe('지우기 확인', () => {
   it('확인하면 지운다', async () => {
     const user = userEvent.setup()
     const onRemoved = show()
-    await user.click(await screen.findByRole('button', { name: '지우기' }))
+    await user.click(await screen.findByRole('button', { name: '삭제' }))
 
     await waitFor(() => expect(removeMany).toHaveBeenCalledWith('manufacturer', ['term-1']))
     expect(onRemoved).toHaveBeenCalled()
@@ -70,9 +70,9 @@ describe('지우기 확인', () => {
     // **눌러 보고 알게 하지 않는다.** 그리고 대신 쓸 길을 짚는다.
     show(12)
     const notice = await screen.findByText(/12곳/)
-    expect(notice.closest('p')).toHaveTextContent('감추기')
+    expect(notice.closest('p')).toHaveTextContent('숨김')
     expect(notice.closest('p')).toHaveTextContent('병합')
-    expect(screen.getByRole('button', { name: '지우기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '삭제' })).toBeDisabled()
   })
 
   it('서버가 막으면 그 이유를 그대로 보여 준다', async () => {
@@ -85,7 +85,7 @@ describe('지우기 확인', () => {
       items: [{ deleted: false, reason: '하위 값 3개가 달려 있습니다.' }],
     })
     show()
-    await user.click(await screen.findByRole('button', { name: '지우기' }))
+    await user.click(await screen.findByRole('button', { name: '삭제' }))
 
     expect(await screen.findByText('하위 값 3개가 달려 있습니다.')).toBeInTheDocument()
   })

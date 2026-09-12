@@ -596,7 +596,7 @@ export function ProcessingPanel({
               없다 — 누르면 부족한 곳을 짚는다. */}
           <Button size="sm" variant="outline" onClick={run} disabled={busy}>
             <Play className="size-3.5" />
-            돌려 보기
+            미리보기
           </Button>
           {/* **멈춘 결과는 저장 못 한다.** 서버도 거절하지만, 눌러 놓고 거절당하는
               것과 처음부터 못 누르는 것은 다르다 — 앞의 것은 「고장」 으로 읽힌다. */}
@@ -721,12 +721,12 @@ export function ProcessingPanel({
                 </Badge>
               ))}
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={fill}>
-                시편에 채우기
+                시편에 반영
               </Button>
             </div>
           )}
           {/* **파일에 없는 것은 없다고 말한다.** 게이지 길이는 시험기 설정값이라
-              적히지 않는 것이 보통인데, 그 말을 안 하면 사람은 '채우기' 를 누르고
+              적히지 않는 것이 보통인데, 그 말을 안 하면 사람은 '반영' 을 누르고
               아무 일도 안 일어나는 것을 보게 된다. */}
           {/* 이름 뒤에 조사를 붙이지 않는다 — '게이지 길이 은' 이 된다. 한국어
               조사는 앞말의 받침을 봐야 해서, 이름이 바뀔 때마다 틀린다. */}
@@ -734,7 +734,7 @@ export function ProcessingPanel({
             <p className="mt-2">
               이 파일에 없는 것: <b>{byHand.map((item) => item.label).join(', ')}</b>{' '}
               — 시험기 설정값이라 사람이 넣어야 합니다. 재료 상세의 시편 기록에
-              넣거나, 아래 칸의 <b>직접 넣기</b>로 이번만 쓰세요.
+              넣거나, 아래 칸의 <b>직접 입력</b>으로 이번만 쓰세요.
             </p>
           )}
         </div>
@@ -852,7 +852,7 @@ export function ProcessingPanel({
                 됩니다.
               </p>
               <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={fillStandard}>
-                <Plus className="size-3.5" />표준 인장 처리 채우기
+                <Plus className="size-3.5" />표준 인장 처리 반영
               </Button>
             </div>
           )}
@@ -876,7 +876,7 @@ export function ProcessingPanel({
                 className="mt-2 h-7 text-xs"
                 onClick={fillStandard}
               >
-                <Plus className="size-3.5" />빠진 표준 단계 넣기
+                <Plus className="size-3.5" />빠진 표준 단계 입력
               </Button>
             </div>
           )}
@@ -901,7 +901,7 @@ export function ProcessingPanel({
                     )
                   }
                 >
-                  {open.size === steps.length ? '모두 접기' : '모두 펴기'}
+                  {open.size === steps.length ? '모두 접기' : '모두 펼치기'}
                 </Button>
               )}
             </div>
@@ -961,7 +961,7 @@ export function ProcessingPanel({
                     <button
                       type="button"
                       aria-pressed
-                      aria-label={`${plugin?.label ?? step.plugin} 끄기`}
+                      aria-label={`${plugin?.label ?? step.plugin} 비활성화`}
                       onClick={() => toggle(step.plugin)}
                       className="shrink-0"
                     >
@@ -1257,7 +1257,7 @@ export function ProcessingPanel({
                       className="text-muted-foreground ml-1 text-xs underline"
                       onClick={() => setCompared([])}
                     >
-                      모두 끄기
+                      모두 비활성화
                     </button>
                   )}
                 </div>
@@ -1332,7 +1332,7 @@ export function ProcessingPanel({
               <Play className="mx-auto mb-2 size-5 opacity-50" />
               아직 돌리지 않았습니다.
               <p className="mx-auto mt-2 max-w-sm text-xs">
-                <b>돌려 보기</b>는 아무것도 저장하지 않습니다. 처리가 잘못되면 곡선이
+                <b>미리보기</b>는 아무것도 저장하지 않습니다. 처리가 잘못되면 곡선이
                 오류 없이 그럴듯한 다른 모양이 되는데, 저장한 뒤에는 찾기 어렵습니다.
               </p>
             </div>

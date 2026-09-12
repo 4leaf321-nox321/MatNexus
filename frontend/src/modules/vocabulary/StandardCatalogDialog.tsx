@@ -165,7 +165,7 @@ export function StandardCatalogDialog({
               className="h-7 text-xs"
               onClick={() => toggleMany(catalog.data ?? [])}
             >
-              {allPicked ? '전체 지우기' : '전체 고르기'}
+              {allPicked ? '전체 해제' : '전체 선택'}
             </Button>
             <span className="text-muted-foreground text-xs">
               {picked.size > 0
@@ -192,7 +192,7 @@ export function StandardCatalogDialog({
             것은 하나다 — 금속을 고르는 사람에게 DMA 아홉 줄은 방해다.
 
             탭 이름에 **고른 개수를 함께 적는다.** 탭을 옮기면 앞서 고른 것이
-            안 보이는데, 그러면 "몇 개 고르기" 버튼의 숫자와 눈앞이 어긋난다. */}
+            안 보이는데, 그러면 "몇 개 선택" 버튼의 숫자와 눈앞이 어긋난다. */}
         <Tabs
           value={tab || (families[0]?.[0] ?? '')}
           onValueChange={setTab}
@@ -233,11 +233,11 @@ export function StandardCatalogDialog({
                       variant="outline"
                       className="h-7 text-xs"
                       /* **이름이 동작을 따라가야 한다.** 고정해 두면 다 켠 뒤에도
-                         '고르기' 로 읽힌다 — 화면 낭독기가 그 거짓말을 듣는다. */
-                      aria-label={`${family} 묶음 ${on ? '지우기' : '고르기'}`}
+                         '선택' 으로 읽힌다 — 화면 낭독기가 그 거짓말을 듣는다. */
+                      aria-label={`${family} 묶음 ${on ? '삭제' : '선택'}`}
                       onClick={() => toggleMany(items)}
                     >
-                      {on ? '묶음 지우기' : '묶음 고르기'}
+                      {on ? '묶음 삭제' : '묶음 선택'}
                     </Button>
                   )
                 })()}

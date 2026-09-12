@@ -167,7 +167,7 @@ export function BatchDialog({
         <DialogHeader>
           <DialogTitle>
             <Layers className="mr-1.5 inline size-4" />
-            {testRunIds.length}건에 같은 단계 걸기
+            {testRunIds.length}건에 같은 단계 적용
           </DialogTitle>
           <DialogDescription>
             {result
@@ -272,7 +272,7 @@ export function BatchDialog({
           ) : preview ? (
             <>
               <Button variant="ghost" onClick={() => setPreview(null)} disabled={busy}>
-                단계 다시 고르기
+                단계 다시 선택
               </Button>
               <Button onClick={() => go(false)} disabled={busy || preview.succeeded === 0}>
                 {busy ? '저장하는 중…' : `${preview.succeeded}건 저장`}

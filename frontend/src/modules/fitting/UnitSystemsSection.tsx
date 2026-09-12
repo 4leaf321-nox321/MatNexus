@@ -89,7 +89,7 @@ export function UnitSystemsSection({ canEdit }: { canEdit: boolean }) {
         {canEdit ? (
           <Button variant="outline" onClick={() => setMaking(true)}>
             <Plus className="size-4" />
-            단위계 만들기
+            단위계 생성
           </Button>
         ) : null}
       </div>
@@ -131,8 +131,8 @@ export function UnitSystemsSection({ canEdit }: { canEdit: boolean }) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    title="지우기"
-                    aria-label={`${item.label} 지우기`}
+                    title="삭제"
+                    aria-label={`${item.label} 삭제`}
                     onClick={() => setRemoving(item)}
                   >
                     <Trash2 className="size-4" />
@@ -264,7 +264,7 @@ function NewUnitSystemDialog({
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>단위계 만들기</DialogTitle>
+          <DialogTitle>단위계 생성</DialogTitle>
           <DialogDescription>
             질량·길이·시간을 고르면 나머지는 차원식으로 따라옵니다. 응력이 MPa 인지 GPa
             인지 아래에서 먼저 확인하세요.
@@ -331,7 +331,7 @@ function NewUnitSystemDialog({
             닫기
           </Button>
           <Button disabled={busy || taken || !keyOk || !preview} onClick={() => void make()}>
-            만들기
+            생성
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -139,7 +139,7 @@ export function ImportWorkspacesDialog({
             ) : (
               <FileUp className="size-4" />
             )}
-            {file ? `다른 파일 고르기 (지금: ${file.name})` : 'CSV 파일 고르기'}
+            {file ? `다른 파일 선택 (지금: ${file.name})` : 'CSV 파일 선택'}
           </Button>
 
           <ErrorNotice error={error} />

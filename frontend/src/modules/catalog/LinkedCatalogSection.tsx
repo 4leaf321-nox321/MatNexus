@@ -130,7 +130,7 @@ export function LinkedCatalogSection({
               onClick={() => setAdopting(true)}
             >
               <PackagePlus className="size-4" />
-              채우기
+              반영
             </Button>
             <Button size="sm" variant="ghost" onClick={() => void disconnect()}>
               <Link2Off className="size-4" />

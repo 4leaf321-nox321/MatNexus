@@ -66,7 +66,7 @@ describe('멤버', () => {
     // 「우리 시험이 무엇을 받나」 를 물을 데가 없었다.
     await show()
     expect((await screen.findAllByText(/인장/)).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: /종류 만들기/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /종류 생성/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '편집' })).not.toBeInTheDocument()
   })
 })
@@ -75,7 +75,7 @@ describe('부서 관리자', () => {
   it('고치는 단추가 있다', async () => {
     memberships = [{ role: 'manager' }]
     await show()
-    expect(await screen.findByRole('button', { name: /종류 만들기/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /종류 생성/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '편집' })).toBeInTheDocument()
   })
 })

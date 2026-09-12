@@ -142,7 +142,7 @@ describe('열 머리에서 거른다', () => {
     open()
     await screen.findByText('SECC_MDOI_1.0')
 
-    const picker = await screen.findByLabelText('규격 로 거르기')
+    const picker = await screen.findByLabelText('규격 로 필터')
     await userEvent.selectOptions(picker, '__none__')
     await waitFor(() =>
       expect(specimenRows).toHaveBeenLastCalledWith(
@@ -157,7 +157,7 @@ describe('열 머리에서 거른다', () => {
     // 개명돼도 걸어 둔 거르개가 살아 있어야 한다.
     open()
     await screen.findByText('SECC_MDOI_1.0')
-    await userEvent.selectOptions(await screen.findByLabelText('재료 로 거르기'), 'm1')
+    await userEvent.selectOptions(await screen.findByLabelText('재료 로 필터'), 'm1')
     await waitFor(() =>
       expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ material_id: 'm1' }))
     )
@@ -168,7 +168,7 @@ describe('열 머리에서 거른다', () => {
     open()
     await screen.findByText('SECC_MDOI_1.0')
 
-    await userEvent.selectOptions(screen.getByLabelText('방향 로 거르기'), 'TD')
+    await userEvent.selectOptions(screen.getByLabelText('방향 로 필터'), 'TD')
     await waitFor(() =>
       expect(specimenRows).toHaveBeenLastCalledWith(
         expect.objectContaining({ orientation: 'TD' })
@@ -190,7 +190,7 @@ describe('열 머리에서 거른다', () => {
       expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 50 }))
     )
 
-    await userEvent.selectOptions(await screen.findByLabelText('로트 로 거르기'), 'L-9')
+    await userEvent.selectOptions(await screen.findByLabelText('로트 로 필터'), 'L-9')
     await waitFor(() =>
       expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }))
     )
@@ -214,7 +214,7 @@ describe('일괄 수정', () => {
     await userEvent.click(screen.getByRole('button', { name: '일괄 수정' }))
     await screen.findByRole('dialog')
 
-    await userEvent.click(screen.getByRole('button', { name: /1건에 걸기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /1건에 적용/ }))
     await waitFor(() =>
       expect(bulkUpdateSpecimens).toHaveBeenCalledWith(['sp1'], 'standard', null)
     )
@@ -230,7 +230,7 @@ describe('일괄 수정', () => {
     await userEvent.click(screen.getByLabelText('SECC_MDOI_1.0__01_MD_01 선택'))
     expect(screen.getByRole('button', { name: '일괄 수정' })).toBeInTheDocument()
 
-    await userEvent.selectOptions(await screen.findByLabelText('로트 로 거르기'), 'L-9')
+    await userEvent.selectOptions(await screen.findByLabelText('로트 로 필터'), 'L-9')
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: '일괄 수정' })).not.toBeInTheDocument()
     )

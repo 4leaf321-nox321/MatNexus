@@ -605,7 +605,7 @@ function CreateAccountDialog({
             취소
           </Button>
           <Button disabled={busy || !email || !displayName || !slug} onClick={submit}>
-            만들기
+            생성
           </Button>
         </DialogFooter>
       </DialogContent>

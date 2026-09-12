@@ -169,7 +169,7 @@ export function DeleteMaterialDialog({
             취소
           </Button>
           <Button variant="destructive" onClick={remove} disabled={!ready || busy}>
-            {busy ? '지우는 중…' : '지우기'}
+            {busy ? '지우는 중…' : '삭제'}
           </Button>
         </DialogFooter>
       </DialogContent>

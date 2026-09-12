@@ -185,7 +185,7 @@ export default function SpecimensPage() {
               setStandard('')
             }}
           >
-            거르기 지우기
+            필터 해제
           </Button>
         )}
       </div>

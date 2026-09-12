@@ -119,7 +119,7 @@ describe('불러오기', () => {
       )
     )
     await screen.findByRole('dialog')
-    await userEvent.click(screen.getByRole('button', { name: '1건 넣기' }))
+    await userEvent.click(screen.getByRole('button', { name: '1건 입력' }))
 
     await waitFor(() => expect(createExportProfile).toHaveBeenCalledTimes(1))
     expect(
@@ -135,7 +135,7 @@ describe('불러오기', () => {
     await drop(makeFile([toFileEntry({ ...LSDYNA, label: '고친 이름' })], 'dev'))
     await screen.findByRole('dialog')
     await userEvent.click(screen.getByRole('checkbox', { name: 'lsdyna 덮어쓰기' }))
-    await userEvent.click(screen.getByRole('button', { name: '1건 넣기' }))
+    await userEvent.click(screen.getByRole('button', { name: '1건 입력' }))
 
     await waitFor(() =>
       expect(saveExportProfile).toHaveBeenCalledWith(
@@ -153,7 +153,7 @@ describe('불러오기', () => {
 
     await drop(makeFile([toFileEntry({ ...LSDYNA, key: 'optistruct' })], 'dev'))
     await screen.findByRole('dialog')
-    await userEvent.click(screen.getByRole('button', { name: '1건 넣기' }))
+    await userEvent.click(screen.getByRole('button', { name: '1건 입력' }))
 
     await waitFor(() => expect(createExportProfile).toHaveBeenCalled())
     const sent = createExportProfile.mock.calls[0][0] as Record<string, unknown>
@@ -190,7 +190,7 @@ describe('불러오기', () => {
       )
     )
     await screen.findByRole('dialog')
-    await userEvent.click(screen.getByRole('button', { name: '2건 넣기' }))
+    await userEvent.click(screen.getByRole('button', { name: '2건 입력' }))
 
     expect(await screen.findByText(/1건이 안 들어갔습니다/)).toBeInTheDocument()
     expect(screen.getByText(/abaqus — /)).toBeInTheDocument()

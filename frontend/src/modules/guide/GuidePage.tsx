@@ -386,7 +386,7 @@ function SectionView({
                     </Button>
                   ) : (
                     <Button disabled={busy} onClick={() => save(false)}>
-                      초안 보내기
+                      초안 전송
                     </Button>
                   )}
                   {isReviewer && (

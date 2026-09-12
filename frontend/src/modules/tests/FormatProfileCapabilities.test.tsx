@@ -271,7 +271,7 @@ describe('무엇이 열리는지 보여 준다', () => {
     // 측정 표에 온도·주파수·저장 탄성률이 다 있다 — 매핑을 안 해도 영문 표기가
     // 그대로 키가 되므로(`slug`) 열린다.
     await open('dma_sweep')
-    expect(opened('겹치기 (마스터커브 만들기)').getByText('열림')).toBeInTheDocument()
+    expect(opened('겹치기 (마스터커브 생성)').getByText('열림')).toBeInTheDocument()
   })
 
   it('가져오기는 처리결과 표의 열로 판단한다', async () => {

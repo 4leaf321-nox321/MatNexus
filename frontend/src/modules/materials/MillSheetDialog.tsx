@@ -92,7 +92,7 @@ export function MillSheetDialog({
 
         {rows.length > 0 && (
           <section className="rounded-md border p-4">
-            <h3 className="mb-1 text-sm font-medium">우리가 잰 값과 견주기</h3>
+            <h3 className="mb-1 text-sm font-medium">우리가 잰 값과 비교</h3>
             <p className="text-muted-foreground mb-3 text-xs">
               채택된 처리 결과만 셉니다. <b>맞다·틀리다를 말하지 않습니다</b> — 몇 %부터
               문제인지는 규격과 용도가 정합니다.

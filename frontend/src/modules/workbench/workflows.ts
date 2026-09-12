@@ -145,7 +145,7 @@ export const WORKFLOWS: Workflow[] = [
     steps: [
       {
         key: 'pick',
-        title: '오늘 것 담기',
+        title: '오늘 것 추가',
         what: '올라온 시험을 담습니다. 커넥터가 물어 온 파일은 시편에 붙이면 여기 목록에 섭니다(ADR 0021).',
         collects: 'test_run',
         where: '/tests',
@@ -228,7 +228,7 @@ export const WORKFLOWS: Workflow[] = [
     steps: [
       {
         key: 'pick',
-        title: '시험 고르기',
+        title: '시험 선택',
         what: '그 재료의 DMA 시험을 담습니다.',
         collects: 'test_run',
         where: '/tests',
@@ -248,7 +248,7 @@ export const WORKFLOWS: Workflow[] = [
       },
       {
         key: 'master',
-        title: '마스터커브 갖추기',
+        title: '마스터커브 준비',
         what: '시험 상세의 「점탄성」 탭에서 겹칩니다. 장비가 만든 것은 가져오면 됩니다.',
         where: '/tests',
         whereLabel: '시험 목록으로',
@@ -307,7 +307,7 @@ export const WORKFLOWS: Workflow[] = [
       },
       {
         key: 'card',
-        title: '카드 만들기',
+        title: '카드 생성',
         what: '맞춘 계수에서 물성 카드를 만듭니다 — 시험 상세의 「점탄성」 탭, 또는 재료의 묶음에서.',
         where: '/cards',
         whereLabel: '카드 목록으로',
@@ -331,7 +331,7 @@ export const WORKFLOWS: Workflow[] = [
   },
   {
     key: 'analysis_deck',
-    title: '해석에 쓸 물성 갖추기',
+    title: '해석에 쓸 물성 준비',
     when: '제품군에 쓰이는 재료의 카드를 모아 한 덱 묶음으로 내보냅니다.',
     cadence: '프로젝트마다',
     steps: [
@@ -375,7 +375,7 @@ export const WORKFLOWS: Workflow[] = [
       },
       {
         key: 'collect',
-        title: '골라 담기',
+        title: '선택 추가',
         what: '해석에 쓸 카드를 담습니다.',
         collects: 'card',
         where: '/cards',
@@ -450,7 +450,7 @@ export const WORKFLOWS: Workflow[] = [
   },
   {
     key: 'new_instrument',
-    title: '새 장비 파일 붙이기',
+    title: '새 장비 파일 연결',
     when: '새 장비의 출력 파일을 읽게 만들고, 한 벌 올려 확인합니다.',
     cadence: '이따금',
     steps: [
@@ -461,11 +461,11 @@ export const WORKFLOWS: Workflow[] = [
         title: '예제 파일',
         what: '한 벌 올려 구조를 읽습니다. 고치는 중이면 목록에서 그 정의를 여세요.',
         where: '/settings/formats/new',
-        whereLabel: '새 정의 만들기',
+        whereLabel: '새 정의 생성',
       },
       {
         key: 'tables',
-        title: '표 고르기',
+        title: '표 선택',
         what: '측정과 처리결과를 가릅니다 — 정의 편집기의 같은 화면에서 이어서.',
         where: '/settings/formats',
         whereLabel: '정의 목록으로',
@@ -512,13 +512,13 @@ export const WORKFLOWS: Workflow[] = [
   },
   {
     key: 'review_cards',
-    title: '확정 전 근거 훑기',
+    title: '확정 전 근거 검토',
     when: '초안 카드의 근거를 보고 확정하거나 반려합니다.',
     cadence: '이따금',
     steps: [
       {
         key: 'pick',
-        title: '초안 고르기',
+        title: '초안 선택',
         what: '확정 대기 카드를 담습니다.',
         collects: 'card',
         where: '/cards',

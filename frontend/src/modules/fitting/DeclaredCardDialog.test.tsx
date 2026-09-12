@@ -88,7 +88,7 @@ beforeEach(() => {
   createDeclaredCard.mockResolvedValue({ id: 'c-1' })
 })
 
-describe('재료 기본 정보로 카드 만들기', () => {
+describe('재료 기본 정보로 카드 생성', () => {
   it('무엇이 실릴지 먼저 보인다', async () => {
     // **만들기를 누른 뒤에 "적어 둔 물성이 없습니다" 를 보는 것은 늦다.**
     dialog()
@@ -130,7 +130,7 @@ describe('재료 기본 정보로 카드 만들기', () => {
     await waitFor(() =>
       expect(screen.getByText(/적어 둔 물성이 없습니다/)).toBeInTheDocument()
     )
-    expect(screen.getByRole('button', { name: '만들기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '생성' })).toBeDisabled()
   })
 
   it('비운 칸은 안 보낸다', async () => {
@@ -138,7 +138,7 @@ describe('재료 기본 정보로 카드 만들기', () => {
     // 판정할 근거가 없다.
     dialog()
     await waitFor(() => expect(screen.getByText('탄성계수')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: '만들기' }))
+    await userEvent.click(screen.getByRole('button', { name: '생성' }))
     await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
     expect(createDeclaredCard.mock.calls[0][0]).toMatchObject({
       material_id: 'm-1',
@@ -152,7 +152,7 @@ describe('재료 기본 정보로 카드 만들기', () => {
     dialog()
     await waitFor(() => expect(screen.getByText('탄성계수')).toBeInTheDocument())
     await userEvent.type(screen.getByLabelText(/밀도/), '7.85e-9')
-    await userEvent.click(screen.getByRole('button', { name: '만들기' }))
+    await userEvent.click(screen.getByRole('button', { name: '생성' }))
     await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
     expect(createDeclaredCard.mock.calls[0][0].density).toBeCloseTo(7850, 3)
   })
@@ -161,7 +161,7 @@ describe('재료 기본 정보로 카드 만들기', () => {
     dialog()
     await waitFor(() => expect(screen.getByText('탄성계수')).toBeInTheDocument())
     await userEvent.type(screen.getByLabelText('푸아송비'), '0.29')
-    await userEvent.click(screen.getByRole('button', { name: '만들기' }))
+    await userEvent.click(screen.getByRole('button', { name: '생성' }))
     await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
     expect(createDeclaredCard.mock.calls[0][0]).toMatchObject({ poisson_ratio: 0.29 })
   })
@@ -182,7 +182,7 @@ describe('재료 기본 정보로 카드 만들기', () => {
     expect(await screen.findByText('실측 아님')).toBeInTheDocument()
     expect(screen.getByText(/Hollomon/)).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox'))
-    await user.click(screen.getByRole('button', { name: '만들기' }))
+    await user.click(screen.getByRole('button', { name: '생성' }))
     await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
     expect(createDeclaredCard.mock.calls[0][0]).toMatchObject({ synthesize_plastic: true })
   })

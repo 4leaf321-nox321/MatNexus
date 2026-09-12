@@ -41,7 +41,7 @@ const SECC = {
   'material.spec_thickness': '1.0',
 }
 
-describe('붙여 넣기', () => {
+describe('붙여넣기', () => {
   it('탭으로 나눈다', () => {
     // 엑셀에서 그대로 붙여 넣는 것이 실제 작업이다.
     const rows = paste(blankRows(2), 'Metal\tSteel\tSECC', 0, 0, COLUMNS)
@@ -98,7 +98,7 @@ describe('붙여 넣기', () => {
   })
 })
 
-describe('열 켜고 끄기', () => {
+describe('열 켜고 비활성화', () => {
   it('열자마자 보이는 것은 재료뿐이다', () => {
     // 스물 몇 개를 다 펼치면 아무것도 못 읽는다.
     const shown = initialShown()
@@ -271,7 +271,7 @@ describe('같은 것을 다시 적어도 하나다', () => {
   })
 })
 
-describe('흠 짚기', () => {
+describe('흠 지정', () => {
   it('빈 줄은 짚지 않는다', () => {
     // 빈 줄을 그려 두는 것이 이 표의 방식이다. 그것을 흠이라 하면 늘 빨갛다.
     expect(problems(blankRows(5))).toEqual({})

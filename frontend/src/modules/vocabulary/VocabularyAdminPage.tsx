@@ -306,7 +306,7 @@ function DriftPanel({ onRepaired }: { onRepaired: () => void }) {
               행은 반대로 문자열을 기준정보로 올린다 — 지우면 그 재료가 무엇이었는지
               사라진다. */}
           <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => void run(true)}>
-            기준정보에 맞춰 고치기
+            기준정보에 맞춰 편집
           </Button>
         </div>
       )}
@@ -589,7 +589,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
             onClick={() => void removeSelected()}
           >
             <Trash2 className="size-3.5" />
-            지우기
+            삭제
           </Button>
         </div>
       )}
@@ -732,7 +732,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                 <Button
                   size="sm"
                   variant="ghost"
-                  title="이름 고치기 — 가리키던 것이 전부 따라옵니다"
+                  title="이름 편집 — 가리키던 것이 전부 따라옵니다"
                   onClick={() => setEditing(item)}
                 >
                   <Pencil className="size-3.5" />
@@ -743,8 +743,8 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                   size="sm"
                   variant="ghost"
                   className="hover:text-destructive"
-                  title="지우기 — 되돌릴 수 없습니다"
-                  aria-label={`${item.value} 지우기`}
+                  title="삭제 — 되돌릴 수 없습니다"
+                  aria-label={`${item.value} 삭제`}
                   onClick={() => setRemoving(item)}
                 >
                   <Trash2 className="size-3.5" />
@@ -764,7 +764,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
                   <Button
                     size="sm"
                     variant="ghost"
-                    title="피커에서 감추기 — 이미 쓰는 곳은 그대로입니다"
+                    title="피커에서 숨김 — 이미 쓰는 곳은 그대로입니다"
                     onClick={() => void toggle(item, 'deprecated')}
                   >
                     <EyeOff className="size-3.5" />
@@ -890,7 +890,7 @@ function RenameDialog({
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>이름 고치기</DialogTitle>
+          <DialogTitle>이름 편집</DialogTitle>
           <DialogDescription>
             이 값을 쓰는 <b>{term.usage_count}곳</b>이 함께 바뀝니다.
             {RENAME_IMPACT[slug] && (
@@ -917,7 +917,7 @@ function RenameDialog({
             취소
           </Button>
           <Button onClick={submit} disabled={busy || value.trim() === ''}>
-            고치기
+            편집
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1053,7 +1053,7 @@ export function TermDetailDialog({
                 })
               }
             >
-              잇기
+              연결
             </Button>
           </div>
           {/* **예방이다.** 등록해 두면 값을 만들 때 게이트가 여기까지 뒤져서
@@ -1089,7 +1089,7 @@ export function TermDetailDialog({
         <div className="space-y-1.5 border-t pt-3">
           <VocabularyField
             slug={slug}
-            label="다른 값에 합치기"
+            label="다른 값에 병합"
             value={into}
             // **새로 만들지 못하게 둔다.** 여기는 정리하는 자리다 — 합치려다
             // 값을 하나 더 만드는 것은 정반대의 일이다.
@@ -1124,7 +1124,7 @@ export function TermDetailDialog({
               ) : (
                 <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
                   <GitMerge className="size-3.5" />
-                  합치기
+                  병합
                 </Button>
               )}
             </div>
@@ -1211,7 +1211,7 @@ function MergeCandidates({
                 if (pair) void guarded(() => vocabularyApi.merge(slug, pair.from.id, pair.into.id))
               }}
             >
-              {asking?.from.usage_count ?? 0}곳 옮기고 합치기
+              {asking?.from.usage_count ?? 0}곳 옮기고 병합
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1672,7 +1672,7 @@ function AddTermDialog({
               onClick={() => void look()}
               disabled={busy || filled === 0}
             >
-              미리 보기
+              미리보기
             </Button>
           )}
           <Button
@@ -1744,7 +1744,7 @@ export function ConfirmDeleteDialog({
           /* **쓰이는 값은 못 지운다.** 눌러 보고 알게 하는 대신 미리 말한다. */
           <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
             이 값을 <b>{term.usage_count}곳</b>에서 쓰고 있어 지울 수 없습니다. 목록에서만
-            치우려면 <b>감추기</b>를, 다른 값으로 합치려면 <b>병합</b>을 쓰세요 — 지우면서
+            치우려면 <b>숨김</b>을, 다른 값으로 합치려면 <b>병합</b>을 쓰세요 — 지우면서
             참조를 끊으면 그 시료가 무엇이었는지 알 수 없게 됩니다.
           </p>
         ) : (
@@ -1762,7 +1762,7 @@ export function ConfirmDeleteDialog({
           </Button>
           <Button variant="destructive" disabled={busy || used} onClick={() => void remove()}>
             <Trash2 className="size-3.5" />
-            지우기
+            삭제
           </Button>
         </DialogFooter>
       </DialogContent>

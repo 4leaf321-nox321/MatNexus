@@ -53,7 +53,7 @@ describe('마스터커브가 없을 때', () => {
     masterCurves.mockResolvedValue([])
     const onGo = show(0)
     expect(await screen.findByText(/아직 마스터커브가 없습니다/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '점탄성 탭에서 만들기' }))
+    await userEvent.click(screen.getByRole('button', { name: '점탄성 탭에서 생성' }))
     expect(onGo).toHaveBeenCalled()
   })
 

@@ -258,7 +258,7 @@ export default function FormulasPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    title="고치기"
+                    title="편집"
                     onClick={() => setEditing({ row, kind: row.kind as FormulaKind })}
                   >
                     <Pencil className="h-4 w-4" />
@@ -266,7 +266,7 @@ export default function FormulasPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    title={row.enabled ? '끄기 — 목록에서 빠지되 옛 결과는 그대로' : '켜기'}
+                    title={row.enabled ? '비활성화 — 목록에서 빠지되 옛 결과는 그대로' : '활성화'}
                     disabled={busy}
                     onClick={() => void toggle(row)}
                   >
@@ -275,7 +275,7 @@ export default function FormulasPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    title={isReferenced(row) ? '쓰는 곳이 있어 못 지웁니다 — 대신 끄세요' : '지우기'}
+                    title={isReferenced(row) ? '쓰는 곳이 있어 못 지웁니다 — 대신 끄세요' : '삭제'}
                     disabled={busy || isReferenced(row)}
                     onClick={() => setRemoving(row)}
                   >
@@ -304,7 +304,7 @@ export default function FormulasPage() {
 
       <ConfirmDialog
         open={removing !== null}
-        title="계산식 지우기"
+        title="계산식 삭제"
         body={
           removing ? (
             <>
@@ -450,7 +450,7 @@ function FormulaDialog({
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {row ? '계산식 고치기' : `${kindMeta.label} 만들기`}
+            {row ? '계산식 편집' : `${kindMeta.label} 생성`}
             {row && (
               <span className="text-muted-foreground ml-2 text-sm font-normal">
                 {row.registry_key} · v{row.version}
@@ -763,7 +763,7 @@ function FormulaDialog({
             )}
             <Button variant="outline" size="sm" disabled={!picked || !ready || previewing} onClick={() => void runPreview()}>
               {previewing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Play className="mr-1 h-4 w-4" />}
-              돌려 보기
+              미리보기
             </Button>
             {preview && <PreviewResult preview={preview} />}
           </div>
@@ -777,7 +777,7 @@ function FormulaDialog({
           </Button>
           <Button disabled={!ready || saving} onClick={() => void submit()}>
             {saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-            {row ? '고치기' : '만들기'}
+            {row ? '편집' : '생성'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -75,7 +75,7 @@ export default function FormatProfilesPage() {
             <Button asChild>
               <Link to="/settings/formats/new">
                 <Plus className="size-4" />
-                프로파일 만들기
+                프로파일 생성
               </Link>
             </Button>
           ) : null

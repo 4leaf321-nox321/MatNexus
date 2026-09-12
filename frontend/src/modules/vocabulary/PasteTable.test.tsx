@@ -122,7 +122,7 @@ describe('표', () => {
 
   it('줄이 하나뿐이면 뺄 수 없다', () => {
     show()
-    expect(screen.queryByLabelText('1번 줄 빼기')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('1번 줄 제거')).not.toBeInTheDocument()
   })
 
   it('헤더까지 함께 복사한다', async () => {

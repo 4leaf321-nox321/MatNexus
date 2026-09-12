@@ -247,7 +247,7 @@ describe('접기', () => {
     show()
     await screen.findAllByText('항복강도')
     expect(
-      screen.getByRole('button', { name: /인장시험 MD 펴기/ })
+      screen.getByRole('button', { name: /인장시험 MD 펼치기/ })
     ).toBeInTheDocument()
   })
 
@@ -278,7 +278,7 @@ describe('접기', () => {
     const user = userEvent.setup()
     show()
     await screen.findAllByText('항복강도')
-    await user.click(screen.getByRole('button', { name: /인장시험 MD 펴기/ }))
+    await user.click(screen.getByRole('button', { name: /인장시험 MD 펼치기/ }))
     await waitFor(() => expect(screen.getAllByText('중앙값').length).toBeGreaterThan(0))
   })
 })
@@ -326,7 +326,7 @@ describe('시험종류 칩', () => {
     // **붙기를 기다린 뒤 누른다.** 곧바로 집으면 전체 스위트에서만 깨진다.
     await user.click(await screen.findByRole('button', { name: 'DMA 스윕 만 보기' }))
     // 인장 묶음 카드가 사라진다 — **요약의 값은 그대로다.**
-    expect(screen.queryByRole('button', { name: /인장시험 MD 펴기/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /인장시험 MD 펼치기/ })).not.toBeInTheDocument()
     expect((await summary()).getAllByLabelText('항복강도').length).toBeGreaterThan(0)
   })
 
@@ -338,7 +338,7 @@ describe('시험종류 칩', () => {
     // **붙기를 기다린 뒤 누른다.** 곧바로 집으면 전체 스위트에서만 깨진다.
     await user.click(await screen.findByRole('button', { name: 'DMA 스윕 만 보기' }))
     await user.click(screen.getByRole('button', { name: '모든 시험종류 보기' }))
-    expect(screen.getByRole('button', { name: /인장시험 MD 펴기/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /인장시험 MD 펼치기/ })).toBeInTheDocument()
   })
 })
 
@@ -412,7 +412,7 @@ describe('전체 여닫기', () => {
     show()
     await user.click(await screen.findByRole('button', { name: /전체 펼치기/ }))
     await user.click(screen.getByRole('button', { name: /전체 접기/ }))
-    expect(screen.getByRole('button', { name: /인장시험 MD 펴기/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /인장시험 MD 펼치기/ })).toBeInTheDocument()
   })
 
   it('문구가 지금 상태를 말한다', async () => {
@@ -422,7 +422,7 @@ describe('전체 여닫기', () => {
     show()
     expect(await screen.findByRole('button', { name: /전체 펼치기/ })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /인장시험 MD 펴기/ }))
+    await user.click(screen.getByRole('button', { name: /인장시험 MD 펼치기/ }))
     expect(screen.getByRole('button', { name: /전체 접기/ })).toBeInTheDocument()
   })
 
@@ -435,7 +435,7 @@ describe('전체 여닫기', () => {
     })
     show()
     await user.click(await screen.findByRole('button', { name: /전체 접기/ }))
-    expect(screen.getByRole('button', { name: /인장시험 MD 펴기/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /인장시험 MD 펼치기/ })).toBeInTheDocument()
   })
 })
 
@@ -662,7 +662,7 @@ describe('글로벌 피팅 자리', () => {
     mount(<PropertiesPanel materialId="m1" groupSlot={<button>글로벌 피팅</button>} />)
     await screen.findByLabelText('물성 요약')
     // 카드는 접혀 있다. **붙기를 기다린다** — 부하에서 요약보다 늦게 온다.
-    expect(await screen.findByRole('button', { name: /인장시험 MD 펴기/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /인장시험 MD 펼치기/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '글로벌 피팅' })).toBeInTheDocument()
   })
 

@@ -73,7 +73,7 @@ export default function AuditPage() {
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">행위</span>
         <select
-          aria-label="행위로 거르기"
+          aria-label="행위로 필터"
           className="border-input bg-background h-8 rounded-md border px-2 text-sm"
           value={action}
           onChange={(event) => setAction(event.target.value)}

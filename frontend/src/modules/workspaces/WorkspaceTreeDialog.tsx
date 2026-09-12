@@ -72,7 +72,7 @@ function Node({
           <button
             type="button"
             className="text-muted-foreground"
-            aria-label={expanded ? '접기' : '펴기'}
+            aria-label={expanded ? '접기' : '펼치기'}
             onClick={() => onToggle(node.slug)}
           >
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -141,7 +141,7 @@ export function WorkspaceTreeDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Building2 size={16} /> 조직도에서 고르기
+            <Building2 size={16} /> 조직도에서 선택
           </DialogTitle>
           <DialogDescription>
             본부를 펴 내려가며 고릅니다. 이름을 알고 있으면 위 칸에서 검색하는 편이
@@ -179,7 +179,7 @@ export function WorkspaceTreeDialog({
                 onClose()
               }}
             >
-              고른 것 지우기
+              고른 것 삭제
             </Button>
           )}
           <Button variant="outline" onClick={onClose}>

@@ -306,7 +306,7 @@ export default function TestRunsPage() {
             }}
           >
             <X className="size-4" />
-            지우기
+            삭제
           </Button>
         )}
         <Button type="submit" variant="secondary">

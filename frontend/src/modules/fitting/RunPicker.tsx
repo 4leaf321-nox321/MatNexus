@@ -86,7 +86,7 @@ export function RunPicker({
               )
             }
           >
-            이상치 후보 {suspects.length}건 빼기
+            이상치 후보 {suspects.length}건 제거
           </Button>
         )}
       </div>

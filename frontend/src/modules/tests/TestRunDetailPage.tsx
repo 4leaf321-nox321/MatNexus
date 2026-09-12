@@ -354,7 +354,7 @@ export default function TestRunDetailPage() {
                 수정은 한 칸씩이고 단위 딸린 조건은 못 받는다(VOC 2026-09-13). */}
             <Button variant="outline" size="sm" onClick={() => setEditing(true)} disabled={!item}>
               <Pencil className="size-4" />
-              고치기
+              편집
             </Button>
             {/* **자동이 틀리면 고칠 자리가 있어야 한다.** 전에는 「다시 읽기」
                 뿐이라 같은 선택을 그대로 반복했다 — 실패한 파일은 손쓸 방법이
@@ -363,7 +363,7 @@ export default function TestRunDetailPage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
                   <RefreshCw className="size-4" />
-                  다시 읽기
+                  재파싱
                   <ChevronDown className="size-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -399,7 +399,7 @@ export default function TestRunDetailPage() {
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => void reparse(null)}>
-                      고정 풀고 자동으로
+                      고정 해제 (자동)
                     </DropdownMenuItem>
                   </>
                 )}
@@ -486,7 +486,7 @@ export default function TestRunDetailPage() {
             <p className="font-medium">읽지 못했습니다</p>
             <p className="mt-1">{item.parse_error}</p>
             <p className="mt-2 text-xs opacity-80">
-              원본을 내려받아 형식을 확인하세요. <b>「다시 읽기」 를 열면 형식을 골라
+              원본을 내려받아 형식을 확인하세요. <b>「재파싱」 을 열면 형식을 골라
               읽을 수 있습니다</b> — 자동으로 고른 것이 틀렸을 때 쓰는 길입니다. 맞는
               형식이 없으면 <b>기준정보 · 파일 형식</b>에서 새로 만들고 다시 읽습니다.
             </p>

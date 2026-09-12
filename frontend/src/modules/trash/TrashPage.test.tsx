@@ -77,7 +77,7 @@ beforeEach(() => {
   purgeMany.mockResolvedValue({ requested: 2, purged: 2, skipped: 0, counts: {}, said: '시편 2건' })
 })
 
-describe('되살리기', () => {
+describe('복원', () => {
   it('막힌 줄은 이유를 적고 단추를 잠근다', async () => {
     /**
      * **단추만 끄면 사람은 그 자리에서 멈춘다.** 처리 화면이 「돌려 보기가 그냥
@@ -87,7 +87,7 @@ describe('되살리기', () => {
     await screen.findByText('SECC_MDOI_1.0')
 
     expect(screen.getByText(/이미 살아 있습니다/)).toBeInTheDocument()
-    const buttons = screen.getAllByRole('button', { name: '되살리기' })
+    const buttons = screen.getAllByRole('button', { name: '복원' })
     // 목록 순서는 서버가 준 그대로 — 둘째 줄이 막힌 것이다.
     expect(buttons[1]).toBeDisabled()
     expect(buttons[0]).not.toBeDisabled()
@@ -103,7 +103,7 @@ describe('되살리기', () => {
     render(<TrashPage />)
     await screen.findByText('SECC__01_MD_01')
 
-    await userEvent.click(screen.getAllByRole('button', { name: '되살리기' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: '복원' })[0])
     await waitFor(() => expect(restore).toHaveBeenCalledWith('specimen', 's1'))
   })
 })
@@ -151,7 +151,7 @@ describe('수집 체계', () => {
     // 고를 것이 여덟이고 그중 무엇에 지운 것이 있는지가 매번 다르다. 드롭다운은
     // 고르고 나면 나머지가 무엇이었는지 사라진다.
     render(<TrashPage />)
-    const picker = await screen.findByRole('group', { name: '종류로 거르기' })
+    const picker = await screen.findByRole('group', { name: '종류로 필터' })
     for (const name of ['전부', '재료', '시험 정의', '장비 파일 정의', '장비 커넥터']) {
       expect(within(picker).getByRole('button', { name }), name).toBeInTheDocument()
     }
@@ -161,7 +161,7 @@ describe('수집 체계', () => {
     // **끄는 길이 있어야 토글이다.** 없으면 「전부」 를 찾아 눈이 되돌아간다.
     const user = userEvent.setup()
     render(<TrashPage />)
-    const picker = await screen.findByRole('group', { name: '종류로 거르기' })
+    const picker = await screen.findByRole('group', { name: '종류로 필터' })
     const one = within(picker).getByRole('button', { name: '시험 정의' })
     await user.click(one)
     expect(one).toHaveAttribute('aria-pressed', 'true')
@@ -175,7 +175,7 @@ describe('수집 체계', () => {
 })
 
 
-describe('골라서 한꺼번에 지우기', () => {
+describe('골라서 한꺼번에 삭제', () => {
   /**
    * **되돌릴 수 없는 자리다.** 무는 데를 고를 때 「여러 개가 지워진다」 보다
    * **「고르지 않은 것이 안 나간다」·「묻기 전에는 안 나간다」** 를 우선한다.

@@ -120,7 +120,7 @@ describe('치수 칸 정의', () => {
     show(CATEGORY)
     await screen.findByLabelText('1번 칸 이름')
 
-    await user.click(screen.getByRole('button', { name: /칸 더하기/ }))
+    await user.click(screen.getByRole('button', { name: /칸 추가/ }))
     await user.type(screen.getByLabelText('3번 칸 이름'), 'grip length')
 
     expect(screen.getByLabelText('3번 칸 키')).toHaveValue('grip_length')
@@ -153,7 +153,7 @@ describe('치수 칸 정의', () => {
     show(CATEGORY)
     await screen.findByLabelText('1번 칸 이름')
 
-    await user.click(screen.getByRole('button', { name: /칸 더하기/ }))
+    await user.click(screen.getByRole('button', { name: /칸 추가/ }))
     await user.type(screen.getByLabelText('3번 칸 이름'), '그립부 길이')
 
     expect(screen.getByLabelText('3번 칸 키')).toHaveValue('')
@@ -165,7 +165,7 @@ describe('치수 칸 정의', () => {
     show(CATEGORY)
     await screen.findByLabelText('1번 칸 이름')
 
-    await user.click(screen.getByRole('button', { name: '1번 칸 빼기' }))
+    await user.click(screen.getByRole('button', { name: '1번 칸 제거' }))
     await user.click(screen.getByRole('button', { name: '저장' }))
 
     await waitFor(() => expect(saveCategoryFields).toHaveBeenCalled())
@@ -200,7 +200,7 @@ describe('치수 칸 정의', () => {
     show(CATEGORY)
     await screen.findByLabelText('2번 칸 이름')
 
-    await user.click(screen.getByRole('button', { name: '2번 칸 빼기' }))
+    await user.click(screen.getByRole('button', { name: '2번 칸 제거' }))
 
     // **"뺀다" 만으로는 부족하다.** 이미 적어 둔 치수가 어떻게 되는지가 궁금하다.
     const notice = (await screen.findByText(/화면에 안 보이게 됩니다/)).closest('p')
@@ -214,7 +214,7 @@ describe('치수 칸 정의', () => {
     const user = userEvent.setup()
     show(STANDARD)
     await screen.findByLabelText('1번 칸 이름')
-    await user.click(screen.getByRole('button', { name: '칸 더하기' }))
+    await user.click(screen.getByRole('button', { name: '칸 추가' }))
 
     const row = screen.getAllByLabelText(/번 칸 이름$/).length
     await user.type(screen.getByLabelText(`${row}번 칸 이름`), 'section area')

@@ -413,7 +413,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
                 size="icon"
                 variant="ghost"
                 className="size-7"
-                aria-label={`${index + 1}번 조건 빼기`}
+                aria-label={`${index + 1}번 조건 제거`}
                 onClick={() => setChecks((now) => now.filter((_, at) => at !== index))}
               >
                 <Trash2 className="size-3.5" />
@@ -434,7 +434,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
               }
             >
               <Plus className="size-3.5" />
-              조건 더하기
+              조건 추가
             </Button>
             <span className="text-muted-foreground text-xs">
               {numbers.length < 2

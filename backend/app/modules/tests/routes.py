@@ -1581,7 +1581,7 @@ def retype(
         test_type_key=fresh.key,
         dropped_conditions=dropped,
         message=(
-            f"'{fresh.label}' 로 바꾸고 다시 읽기를 큐에 넣었습니다. "
+            f"'{fresh.label}' 로 바꾸고 재파싱을 큐에 넣었습니다. "
             f"이름이 '{before}' 에서 '{run.record_name}' 으로 바뀌었습니다."
             + (f" 조건 {len(dropped)}칸은 새 종류에 없어 버렸습니다." if dropped else "")
         ),
@@ -1731,7 +1731,7 @@ def replace_source(
     tail = f" 처리 결과 {stale}건은 옛 원본의 것입니다 — 다시 돌리세요." if stale else ""
     return SourceReplaceOut(
         status="queued",
-        message=f"원본을 '{file.filename}' 으로 바꾸고 다시 읽기를 큐에 넣었습니다.{tail}",
+        message=f"원본을 '{file.filename}' 으로 바꾸고 재파싱을 큐에 넣었습니다.{tail}",
         previous_filename=previous_filename,
         stale_results=stale,
     )
@@ -1750,7 +1750,7 @@ def reparse(
 
     자동 선택이 틀리는 자리가 있다. 같은 장비의 형식이 조금 달라져 프로파일을
     하나 더 만들면 지문이 겹치고, 우선순위가 높은 쪽이 이겨서 **엉뚱한 것으로
-    읽거나 아예 실패한다.** 그때 「다시 읽기」 만 있으면 **같은 선택을 그대로
+    읽거나 아예 실패한다.** 그때 「재파싱」 만 있으면 **같은 선택을 그대로
     반복한다** — 고칠 자리가 없었다.
 
     고른 것은 시험에 남는다(`parse_profile_id`). 큐 페이로드에만 실으면
@@ -1762,7 +1762,7 @@ def reparse(
     if not run.source_path:
         raise AppError("MNX-TESTS-0014", "원본 파일이 없어 다시 읽을 수 없습니다.", status=422)
 
-    # **안 보낸 것과 비운 것을 구별한다.** 안 구별하면 그냥 「다시 읽기」 를
+    # **안 보낸 것과 비운 것을 구별한다.** 안 구별하면 그냥 「재파싱」 을
     # 누를 때마다 고정이 풀리고, 그 사실은 또 실패해야 드러난다.
     given = payload is not None and "profile_key" in payload.model_fields_set
     key = payload.profile_key if payload else None
@@ -1794,9 +1794,9 @@ def reparse(
     return ReparseOut(
         status="queued",
         message=(
-            f"'{pinned.key}' 로 다시 읽기를 큐에 넣었습니다."
+            f"'{pinned.key}' 로 재파싱을 큐에 넣었습니다."
             if pinned
-            else "다시 읽기를 큐에 넣었습니다(형식은 자동으로 고릅니다)."
+            else "재파싱을 큐에 넣었습니다(형식은 자동으로 고릅니다)."
         ),
         profile_key=pinned.key if pinned else None,
     )

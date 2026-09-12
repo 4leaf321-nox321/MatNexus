@@ -71,7 +71,7 @@ describe('접기', () => {
   })
 })
 
-describe('펴기', () => {
+describe('펼치기', () => {
   it('접었다 펴면 같은 줄이다', () => {
     expect(fromSections(toSections(LINES))).toEqual(LINES)
   })

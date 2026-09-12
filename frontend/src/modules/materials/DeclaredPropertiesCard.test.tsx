@@ -570,7 +570,7 @@ describe('편집 창의 차례', () => {
   it('지우기가 맨 위다', async () => {
     panel([DECLARED_E])
     await openFirst()
-    const [trash, unit] = order(['이 항목 지우기', '단위'])
+    const [trash, unit] = order(['이 항목 삭제', '단위'])
     expect(trash).toBeGreaterThanOrEqual(0)
     expect(trash).toBeLessThan(unit)
   })

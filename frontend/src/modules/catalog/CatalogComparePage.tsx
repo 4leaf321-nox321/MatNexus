@@ -87,7 +87,7 @@ export default function CatalogComparePage() {
             {one.name}
             <button
               type="button"
-              aria-label={`${one.name} 빼기`}
+              aria-label={`${one.name} 제거`}
               onClick={() => setIds(ids.filter((id) => id !== String(one.id)))}
             >
               <X className="size-3" />
@@ -221,7 +221,7 @@ export default function CatalogComparePage() {
 
       {rows.length > 0 && (
         <Button variant="outline" size="sm" onClick={() => setIds([])}>
-          모두 지우기
+          모두 삭제
         </Button>
       )}
     </div>

@@ -228,10 +228,10 @@ describe('CatalogMaterialPage — 후보를 가르는 조건', () => {
     show()
     expect(await screen.findByText(/직접 넣음 · 홍길동/)).toBeInTheDocument()
     // 이관해 온 값에는 지우기 단추가 없다.
-    expect(screen.queryByRole('button', { name: '영률 값 지우기' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '영률 값 삭제' })).toBeNull()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { fireEvent, waitFor } = await import('@testing-library/react')
-    fireEvent.click(screen.getByRole('button', { name: '열전도율 값 지우기' }))
+    fireEvent.click(screen.getByRole('button', { name: '열전도율 값 삭제' }))
     await waitFor(() =>
       expect(deleteValue).toHaveBeenCalledWith('aaaaaaaa-0000-0000-0000-000000000004')
     )
@@ -241,6 +241,6 @@ describe('CatalogMaterialPage — 후보를 가르는 조건', () => {
     me = { ...me, display_name: '김철수' }
     show()
     await screen.findByText(/직접 넣음 · 홍길동/)
-    expect(screen.queryByRole('button', { name: '열전도율 값 지우기' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '열전도율 값 삭제' })).toBeNull()
   })
 })

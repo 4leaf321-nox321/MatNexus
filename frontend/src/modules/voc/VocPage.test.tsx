@@ -111,7 +111,7 @@ describe('VOC 게시판', () => {
   it('상태 칩은 서버가 준 것으로 서고, 누르면 서버에 묻는다', async () => {
     const user = userEvent.setup()
     await show([item()])
-    const chips = await screen.findByRole('group', { name: '상태로 거르기' })
+    const chips = await screen.findByRole('group', { name: '상태로 필터' })
     expect(within(chips).getAllByRole('button')).toHaveLength(STATUSES.length + 1)
 
     await user.click(within(chips).getByRole('button', { name: '처리 중' }))

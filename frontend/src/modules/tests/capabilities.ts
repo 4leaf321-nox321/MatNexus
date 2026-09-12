@@ -52,7 +52,7 @@ export const CAPABILITIES: Capability[] = [
   },
   {
     id: 'master_curve',
-    label: '겹치기 (마스터커브 만들기)',
+    label: '겹치기 (마스터커브 생성)',
     where: '점탄성 탭의 첫 블록',
     scope: 'measured',
     // 주파수는 각주파수로 대신할 수 있다 — 실측 파일의 첫 표에만 `Frequency` 가 있었다.

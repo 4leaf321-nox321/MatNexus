@@ -80,7 +80,7 @@ describe('시험이 달려 있으면', () => {
     open()
     expect(await screen.findByText(/곡선과 처리 결과가 여기 매달려/)).toBeInTheDocument()
 
-    const button = screen.getByRole('button', { name: '지우기' })
+    const button = screen.getByRole('button', { name: '삭제' })
     expect(button).toBeDisabled()
 
     await userEvent.click(screen.getByRole('checkbox'))
@@ -92,7 +92,7 @@ describe('시험이 달려 있으면', () => {
     open()
     await screen.findByRole('checkbox')
     await userEvent.click(screen.getByRole('checkbox'))
-    await userEvent.click(screen.getByRole('button', { name: '지우기' }))
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
 
     await waitFor(() => expect(removeCascade).toHaveBeenCalledWith('m1', true))
     expect(onDeleted).toHaveBeenCalled()
@@ -105,14 +105,14 @@ describe('시험이 달려 있으면', () => {
     open()
     await screen.findByText(/함께 사라집니다/)
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '지우기' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '삭제' })).toBeEnabled()
   })
 
   it('시험이 없으면 안 지운다고 보낸다', async () => {
     deletePlan.mockResolvedValue(plan(1, 3, 0))
     open()
     await screen.findByText(/함께 사라집니다/)
-    await userEvent.click(screen.getByRole('button', { name: '지우기' }))
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
     await waitFor(() => expect(removeCascade).toHaveBeenCalledWith('m1', false))
   })
 })
@@ -125,7 +125,7 @@ describe('실패하면', () => {
     removeCascade.mockRejectedValue(new Error('권한이 없습니다'))
     open()
     await screen.findByText(/함께 사라집니다/)
-    await userEvent.click(screen.getByRole('button', { name: '지우기' }))
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
 
     expect(await screen.findByText(/권한이 없습니다/)).toBeInTheDocument()
     expect(onDeleted).not.toHaveBeenCalled()
@@ -136,6 +136,6 @@ describe('실패하면', () => {
     open()
     expect(await screen.findByText(/세지 못했습니다/)).toBeInTheDocument()
     // 셀 수 없으면 지울 수도 없다 — 무엇이 사라지는지 모르는 채로 누르게 된다.
-    expect(screen.getByRole('button', { name: '지우기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '삭제' })).toBeDisabled()
   })
 })

@@ -178,7 +178,7 @@ describe('부서 관리자가 전역 프로파일을 열었을 때', () => {
     await user.click(screen.getByRole('button', { name: '내 부서 것으로 복제' }))
 
     // 새 프로파일 — 키·이름은 부서로 갈라지고, 지문·매핑은 그대로다.
-    expect(await screen.findByText('형식 프로파일 만들기')).toBeInTheDocument()
+    expect(await screen.findByText('형식 프로파일 생성')).toBeInTheDocument()
     expect(screen.getByDisplayValue('legacy_mtet_qa')).toBeInTheDocument()
     expect(screen.getByDisplayValue('옛 앱 인장 결과 (품질팀)')).toBeInTheDocument()
     expect(screen.getByDisplayValue('11')).toBeInTheDocument()
@@ -247,7 +247,7 @@ describe('메타 기본값', () => {
     await waitFor(() => expect(screen.getAllByText('Instrument name').length).toBeGreaterThan(0))
 
     // 파일을 놓았으면 **적용해 봐야** 저장이 열린다 — 자동 감지는 틀린다.
-    await userEvent.click(screen.getByRole('button', { name: /이 파일에 적용해 보기/ }))
+    await userEvent.click(screen.getByRole('button', { name: /이 파일에 적용 미리보기/ }))
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^저장$/ })).not.toBeDisabled()
     )
@@ -259,7 +259,7 @@ describe('메타 기본값', () => {
   })
 })
 
-describe('메타 역할 고르기', () => {
+describe('메타 역할 선택', () => {
   it('갈 곳을 안 정하면 저장을 막는다', async () => {
     // **고르고 나서 아무 일도 안 일어나는 것**이 이 화면에서 제일 헷갈리는
     // 자리였다. `definition()` 은 대상이 있을 때만 담고, 안 담기면 보관
@@ -416,7 +416,7 @@ describe('임시 저장', () => {
     // 그러고도 배너는 떠 있고 **말없이 채우지는 않았다** — 이것이 요점이다.
     expect(screen.getByText(/만들다 만 것이 이 브라우저에 남아 있습니다/)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: '이어서 하기' }))
+    await userEvent.click(screen.getByRole('button', { name: '계속' }))
     expect(await screen.findByDisplayValue('되살린 이름')).toBeInTheDocument()
   })
 
@@ -426,7 +426,7 @@ describe('임시 저장', () => {
       JSON.stringify({ version: 1, at: new Date().toISOString(), fileName: null, state: {} })
     )
     open()
-    await userEvent.click(await screen.findByRole('button', { name: '버리기' }))
+    await userEvent.click(await screen.findByRole('button', { name: '폐기' }))
     expect(
       screen.queryByText(/만들다 만 것이 이 브라우저에 남아 있습니다/)
     ).not.toBeInTheDocument()

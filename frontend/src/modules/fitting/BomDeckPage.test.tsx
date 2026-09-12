@@ -121,7 +121,7 @@ describe('BOM 혼합 덱', () => {
     const pickers = screen.getAllByRole('combobox')
     await user.selectOptions(pickers[0], CATALOG_ID)
 
-    await user.click(screen.getByRole('button', { name: '덱 만들기' }))
+    await user.click(screen.getByRole('button', { name: '덱 생성' }))
     await waitFor(() => expect(screen.getByText('bom_deck_si.k')).toBeInTheDocument())
 
     const [, body] = post.mock.calls.find(([url]) => String(url) === '/fitting/decks/bom') as [
@@ -147,7 +147,7 @@ describe('BOM 혼합 덱', () => {
     await user.selectOptions(pickers[0], CATALOG_ID)
     expect(screen.getByText('문헌 스칼라')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '덱 만들기' }))
+    await user.click(screen.getByRole('button', { name: '덱 생성' }))
     await waitFor(() =>
       expect(post.mock.calls.some(([url]) => String(url) === '/fitting/decks/bom')).toBe(true)
     )
@@ -173,7 +173,7 @@ describe('BOM 혼합 덱', () => {
     await user.click(screen.getByRole('checkbox'))
     expect(screen.getByText('문헌 합성 곡선')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '덱 만들기' }))
+    await user.click(screen.getByRole('button', { name: '덱 생성' }))
     await waitFor(() =>
       expect(post.mock.calls.some(([url]) => String(url) === '/fitting/decks/bom')).toBe(true)
     )

@@ -200,7 +200,7 @@ describe('수집함', () => {
     inbox.mockResolvedValue({ items: [suggested], total: 1, limit: 100, offset: 0 })
     const user = userEvent.setup()
     mount()
-    await user.click(await screen.findByLabelText('Example.tra 고르기'))
+    await user.click(await screen.findByLabelText('Example.tra 선택'))
     await user.click(screen.getByRole('button', { name: '고른 1건 승인' }))
     await waitFor(() => expect(approveMany).toHaveBeenCalledWith(['i1']))
   })
@@ -213,7 +213,7 @@ describe('수집함', () => {
 
     // **화면이 먼저 찍지 않는다** — 사람이 누르기 전에는 아무것도 안 보낸다.
     expect(assign).not.toHaveBeenCalled()
-    const buttons = screen.getAllByRole('button', { name: '이 시편에 붙이기' })
+    const buttons = screen.getAllByRole('button', { name: '이 시편에 연결' })
     expect(buttons).toHaveLength(2)
     await user.click(buttons[1])
     await waitFor(() => expect(assign).toHaveBeenCalledWith('i1', { specimen_id: 's2' }))
@@ -223,7 +223,7 @@ describe('수집함', () => {
     const user = userEvent.setup()
     mount()
     await user.click(await screen.findByText('Example.tra'))
-    const button = await screen.findByRole('button', { name: '버리기' })
+    const button = await screen.findByRole('button', { name: '폐기' })
     expect(button).toBeDisabled()
     await user.type(screen.getByLabelText('버리는 이유'), '시험 실패')
     expect(button).toBeEnabled()
@@ -244,7 +244,7 @@ describe('수집함', () => {
     mount()
     await user.click(await screen.findByText('Example.tra'))
     await user.type(await screen.findByLabelText('시편 찾기'), 'PA66')
-    await user.click(await screen.findByRole('button', { name: '붙이기' }))
+    await user.click(await screen.findByRole('button', { name: '연결' }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith('i1', { specimen_id: 's9' }))
   })
 })
@@ -278,12 +278,12 @@ describe('실패 탭', () => {
     mount('/settings/connectors?tab=failed')
     expect(await screen.findByText('읽을 방법이 없습니다.')).toBeInTheDocument()
     await user.click(screen.getByText('Example.tra'))
-    await user.click(await screen.findByRole('button', { name: '다시 읽기' }))
+    await user.click(await screen.findByRole('button', { name: '재파싱' }))
     await waitFor(() => expect(retry).toHaveBeenCalledWith('i1'))
   })
 })
 
-describe('커넥터 치우기', () => {
+describe('커넥터 정리', () => {
   it('무엇이 남는지 함께 묻는다', async () => {
     // 「지웁니다」 만으로는 수집함까지 사라지는 줄 알고 못 누른다.
     const user = userEvent.setup()
@@ -327,7 +327,7 @@ describe('멤버', () => {
     // 「내 장비가 살아 있나」 는 실험하는 사람이 먼저 묻는다.
     mount('/settings/connectors?tab=connectors')
     expect(await screen.findByText('ZWICK-PC')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '끄기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '비활성화' })).not.toBeInTheDocument()
   })
 
   it('연결 정보 탭은 아예 안 보인다 — 자격 증명이다', async () => {

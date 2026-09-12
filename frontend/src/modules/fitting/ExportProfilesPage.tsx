@@ -132,7 +132,7 @@ export default function ExportProfilesPage() {
               <Button asChild>
                 <Link to="/settings/export-profiles/new">
                   <Plus className="size-4" />
-                  정의 만들기
+                  정의 생성
                 </Link>
               </Button>
             </span>
@@ -208,7 +208,7 @@ export default function ExportProfilesPage() {
                       >
                         <Download className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" asChild title="고치기">
+                      <Button variant="ghost" size="icon" asChild title="편집">
                         <Link to={`/settings/export-profiles/${item.key}`}>
                           <Pencil className="size-4" />
                         </Link>
@@ -216,7 +216,7 @@ export default function ExportProfilesPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        title="지우기"
+                        title="삭제"
                         onClick={() => void remove(item)}
                       >
                         <Trash2 className="size-4" />

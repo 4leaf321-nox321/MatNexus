@@ -124,7 +124,7 @@ export function MergeWorkspaceDialog({
     <Dialog open={workspace !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>「{workspace?.name}」 을 다른 부서로 합치기</DialogTitle>
+          <DialogTitle>「{workspace?.name}」 을 다른 부서로 병합</DialogTitle>
           <DialogDescription>
             이 부서의 자료가 전부 대상 부서 소속이 되고, 멤버도 옮겨 갑니다(양쪽에 다
             있던 사람은 한 명으로 — 관리자는 관리자로 남습니다). 이 부서는 빈 채로
@@ -207,7 +207,7 @@ export function MergeWorkspaceDialog({
               disabled={busy || !target || (conflicts?.length ?? 0) > 0}
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Merge className="size-4" />}
-              {total > 0 ? `${total.toLocaleString('ko-KR')}건을 옮기고 합치기` : '합치기'}
+              {total > 0 ? `${total.toLocaleString('ko-KR')}건을 옮기고 병합` : '병합'}
             </Button>
           )}
         </DialogFooter>

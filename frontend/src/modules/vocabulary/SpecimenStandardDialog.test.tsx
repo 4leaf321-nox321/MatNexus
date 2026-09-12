@@ -206,7 +206,7 @@ describe('시편 규격 치수', () => {
     show()
     await screen.findByLabelText('게이지 길이')
 
-    await user.click(screen.getByRole('button', { name: /조건 더하기/ }))
+    await user.click(screen.getByRole('button', { name: /조건 추가/ }))
     await user.selectOptions(screen.getByLabelText('1번 조건 분자'), 'gauge_length')
     await user.selectOptions(screen.getByLabelText('1번 조건 분모'), 'thickness')
     await user.type(screen.getByLabelText('1번 조건 최소'), '50')

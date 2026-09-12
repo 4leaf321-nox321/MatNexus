@@ -184,7 +184,7 @@ def _rows(db: Session, kind: str, *, limit: int) -> list[Any]:
 def _below(db: Session, kind: str, row: Any) -> dict[str, int]:
     """이 행 아래에 **함께 지워진** 것의 수. 살아 있는 것은 안 센다.
 
-    되살리면 함께 돌아오는 것이 곧 이 숫자다 — 사람이 「되살리기」 를 누를 근거다.
+    되살리면 함께 돌아오는 것이 곧 이 숫자다 — 사람이 「복원」 을 누를 근거다.
     """
     if kind == "test_run" or kind in FLAT_KINDS:
         # 정의 한 줄이 통째로 하나다 — 아래로 딸린 것이 없다.

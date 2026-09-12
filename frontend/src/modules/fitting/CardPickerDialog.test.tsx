@@ -135,7 +135,7 @@ describe('찾기', () => {
   })
 })
 
-describe('고르기', () => {
+describe('선택', () => {
   it('고르면 그 카드를 넘기고 닫는다', async () => {
     const onPick = vi.fn()
     const onOpenChange = vi.fn()
@@ -144,7 +144,7 @@ describe('고르기', () => {
     await screen.findByText('SECC_1.0')
 
     const row = screen.getByText('SECC_1.0').closest('tr') as HTMLElement
-    await user.click(within(row).getByRole('button', { name: '고르기' }))
+    await user.click(within(row).getByRole('button', { name: '선택' }))
     expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })

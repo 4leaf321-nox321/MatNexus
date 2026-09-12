@@ -374,7 +374,7 @@ export function SampleExplorer({
                 onClick={() => setImporting(true)}
               >
                 <Table2 className="size-3.5" />
-                표로 시험 넣기
+                표로 시험 입력
               </Button>
             )}
             <Button
@@ -566,7 +566,7 @@ export function SampleExplorer({
                       }`}
                     >
                       <FileUp className="size-3.5" />
-                      파일 여러 개 올리기
+                      파일 여러 개 업로드
                     </Link>
                   </Button>
                   <Button
@@ -576,7 +576,7 @@ export function SampleExplorer({
                     onClick={() => setImporting(true)}
                   >
                     <Table2 className="size-3.5" />
-                    표로 시험 넣기
+                    표로 시험 입력
                   </Button>
                 </span>
               </div>
@@ -585,7 +585,7 @@ export function SampleExplorer({
               ) : (
                 <p className="text-muted-foreground text-sm">
                   왼쪽 표에서 시편을 고르면 그 시험이 여기 뜹니다. 곡선 없이 요약값만
-                  있는 시험은 위의 <b>표로 시험 넣기</b> 로 한꺼번에 넣습니다.
+                  있는 시험은 위의 <b>표로 시험 입력</b> 으로 한꺼번에 넣습니다.
                 </p>
               )}
             </div>

@@ -111,7 +111,7 @@ export default function CatalogPage() {
             <Button variant="outline" asChild>
               <Link to="/catalog/deck">
                 <FileCode2 className="size-4" />
-                문헌 덱 만들기
+                문헌 덱 생성
               </Link>
             </Button>
             {/* **지금 거른 것을 그대로 받는다.** 화면과 다른 것이 내려오면
@@ -145,7 +145,7 @@ export default function CatalogPage() {
           onChange={(event) => setTyped(event.target.value)}
         />
         <select
-          aria-label="부품 계통으로 거르기"
+          aria-label="부품 계통으로 필터"
           className="border-input bg-background h-9 rounded-md border px-2 text-sm"
           value={subsystem ?? '전체'}
           onChange={(event) => {
@@ -164,7 +164,7 @@ export default function CatalogPage() {
             ))}
         </select>
         <select
-          aria-label="재료 분류로 거르기"
+          aria-label="재료 분류로 필터"
           className="border-input bg-background h-9 rounded-md border px-2 text-sm"
           value={category ?? '전체'}
           onChange={(event) => {

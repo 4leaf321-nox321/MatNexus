@@ -193,7 +193,7 @@ describe('물성 매핑', () => {
     const user = userEvent.setup()
     const onChanged = show()
     expect(screen.getByText(/이을 만한 것 1건/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '굴곡강도 을 굽힘강도 에 잇기' }))
+    await user.click(screen.getByRole('button', { name: '굴곡강도 을 굽힘강도 에 연결' }))
     await waitFor(() =>
       expect(linkProperty).toHaveBeenCalledWith({
         property_key: 'mechanical.flexural_strength',
@@ -205,13 +205,13 @@ describe('물성 매핑', () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
-  it('안 이어진 항목의 「잇기」 는 문헌 물성을 쳐서 찾아 잇는다', async () => {
+  it('안 이어진 항목의 「연결」 은 문헌 물성을 쳐서 찾아 잇는다', async () => {
     const user = userEvent.setup()
     const onChanged = show()
-    await user.click(screen.getByRole('button', { name: '굴곡강도 잇기' }))
+    await user.click(screen.getByRole('button', { name: '굴곡강도 연결' }))
     await user.type(screen.getByLabelText('문헌 물성 찾기'), '굽힘')
     await user.click(screen.getByRole('button', { name: /굽힘강도/ }))
-    await user.click(screen.getByRole('button', { name: '잇기' }))
+    await user.click(screen.getByRole('button', { name: '연결' }))
     await waitFor(() =>
       expect(linkProperty).toHaveBeenCalledWith({
         property_key: 'mechanical.flexural_strength',
@@ -226,12 +226,12 @@ describe('물성 매핑', () => {
   it('눈금 있는 항목은 눈금을 골라야 이어진다', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: '비커스 경도 에 사내 항목 잇기' }))
+    await user.click(screen.getByRole('button', { name: '비커스 경도 에 사내 항목 연결' }))
     await user.selectOptions(screen.getByLabelText('사내 항목'), 't-hard')
     // 눈금을 안 고르면 안 눌린다.
-    expect(screen.getByRole('button', { name: '잇기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '연결' })).toBeDisabled()
     await user.selectOptions(screen.getByLabelText('눈금'), 'HRC')
-    await user.click(screen.getByRole('button', { name: '잇기' }))
+    await user.click(screen.getByRole('button', { name: '연결' }))
     await waitFor(() =>
       expect(linkProperty).toHaveBeenCalledWith(
         expect.objectContaining({ property_key: 'mechanical.hardness_vickers', scale: 'HRC' })
@@ -239,10 +239,10 @@ describe('물성 매핑', () => {
     )
   })
 
-  it('풀기는 링크 id 로 부른다', async () => {
+  it('해제는 링크 id 로 부른다', async () => {
     const user = userEvent.setup()
     const onChanged = show()
-    await user.click(screen.getByRole('button', { name: '비커스 경도 ↔ 경도 (HV) 풀기' }))
+    await user.click(screen.getByRole('button', { name: '비커스 경도 ↔ 경도 (HV) 해제' }))
     await waitFor(() => expect(unlinkProperty).toHaveBeenCalledWith('l-2'))
     expect(onChanged).toHaveBeenCalled()
   })
@@ -263,7 +263,7 @@ describe('물성 매핑', () => {
     )
   })
 
-  it('옮기기는 미리보기를 보이고 확인받은 뒤에 실행한다', async () => {
+  it('이동은 미리보기를 보이고 확인받은 뒤에 실행한다', async () => {
     const user = userEvent.setup()
     const retired = {
       ...MAPPING,
@@ -278,7 +278,7 @@ describe('물성 매핑', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     await user.click(
       screen.getByRole('button', {
-        name: '비커스 경도 의 값·매핑을 mechanical.hardness_brinell 로 옮기기',
+        name: '비커스 경도 의 값·매핑을 mechanical.hardness_brinell 로 이동',
       })
     )
     await waitFor(() => expect(migrateProperty).toHaveBeenCalledTimes(2))
@@ -296,7 +296,7 @@ describe('물성 매핑', () => {
 
   it('관리자가 아니면 잇고 푸는 단추가 없다', () => {
     show(false)
-    expect(screen.queryByRole('button', { name: /잇기$/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: /풀기$/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /연결$/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /해제$/ })).toBeNull()
   })
 })

@@ -98,7 +98,7 @@ def list_runs(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[RunOut]:
-    """내 부서의 작업들. **진행 중인 것이 먼저다** — 「이어서 하기」 가 이 목록이다."""
+    """내 부서의 작업들. **진행 중인 것이 먼저다** — 「계속」 이 이 목록이다."""
     query = select(WorkbenchRun).order_by(WorkbenchRun.updated_at.desc()).limit(limit)
     if not user.is_system_admin:
         query = query.where(
@@ -201,7 +201,7 @@ def add_items(
         db.add(item)
         made.append(item)
         already.add(target_id)
-    # 담으면 목록에서 위로 올라와야 한다 — 「이어서 하기」 가 최근 순이다.
+    # 담으면 목록에서 위로 올라와야 한다 — 「계속」 이 최근 순이다.
     run.updated_at = datetime.now(UTC)
     db.commit()
     for item in made:

@@ -100,7 +100,7 @@ describe('시료 추가', () => {
     const user = userEvent.setup()
     render(<NewSampleDialog materialId="m1" open onClose={vi.fn()} onCreated={vi.fn()} />)
     await screen.findByText(/채워 두었습니다/)
-    await user.click(screen.getByRole('button', { name: '비우기' }))
+    await user.click(screen.getByRole('button', { name: '초기화' }))
     expect(screen.getByLabelText('제조사')).toHaveValue('')
     expect(screen.queryByText(/채워 두었습니다/)).toBeNull()
   })

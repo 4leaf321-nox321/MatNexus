@@ -42,7 +42,7 @@ interface Props {
 export function MaterialPicker({
   value,
   onSelect,
-  placeholder = '재료 고르기',
+  placeholder = '재료 선택',
   disabled,
   className,
   action = false,

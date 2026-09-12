@@ -77,7 +77,7 @@ describe('탭', () => {
     for (const name of ['재료 비교', '분포', '사양 대비', '추이', '커버리지']) {
       expect(screen.getByRole('tab', { name })).toBeInTheDocument()
     }
-    expect(await screen.findByText(/재료 고르기.*담아 주세요/)).toBeInTheDocument()
+    expect(await screen.findByText(/재료 선택.*담아 주세요/)).toBeInTheDocument()
   })
 })
 
@@ -119,7 +119,7 @@ describe('재료 비교', () => {
     const user = userEvent.setup()
     mount()
     // **자유 입력이 아니라 목록이다** — 물성이 있는 재료만 뜬다.
-    await user.click(screen.getByRole('button', { name: '재료 고르기' }))
+    await user.click(screen.getByRole('button', { name: '재료 선택' }))
     await user.click(await screen.findByRole('button', { name: /SECC_1\.0/ }))
     await waitFor(() => expect(compare).toHaveBeenCalledWith(['m1']))
     await user.click(screen.getByRole('button', { name: '1개 담고 닫기' }))

@@ -25,7 +25,7 @@ function draw(used: string[] | null = null, onChange = vi.fn()) {
   return onChange
 }
 
-describe('쓸 시험 고르기', () => {
+describe('쓸 시험 선택', () => {
   it('안 건드리면 전부 켜져 있다', () => {
     draw()
     for (const run of RUNS) {
@@ -58,7 +58,7 @@ describe('쓸 시험 고르기', () => {
   it('이상치 후보를 한 번에 뺀다', () => {
     // 하나씩 누르게 하면 열 건에서 그것 자체가 일이 된다.
     const onChange = draw()
-    fireEvent.click(screen.getByRole('button', { name: /이상치 후보 1건 빼기/ }))
+    fireEvent.click(screen.getByRole('button', { name: /이상치 후보 1건 제거/ }))
     expect(onChange).toHaveBeenCalledWith(['r-1', 'r-3'])
   })
 

@@ -86,7 +86,7 @@ export function CardPickerDialog({ open, onOpenChange, onPick, specs, current }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
-          <DialogTitle>미리보기에 쓸 카드 고르기</DialogTitle>
+          <DialogTitle>미리보기에 쓸 카드 선택</DialogTitle>
           <DialogDescription>
             정의가 쓰는 값이 든 카드를 고르면 오른쪽 덱이 제대로 그려집니다. 재료
             이름이나 카드 이름으로 찾을 수 있습니다.
@@ -152,7 +152,7 @@ export function CardPickerDialog({ open, onOpenChange, onPick, specs, current }:
                         onOpenChange(false)
                       }}
                     >
-                      {card.id === current ? '고른 것' : '고르기'}
+                      {card.id === current ? '고른 것' : '선택'}
                     </Button>
                   </TableCell>
                 </TableRow>

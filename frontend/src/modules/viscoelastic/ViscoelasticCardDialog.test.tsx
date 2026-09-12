@@ -54,7 +54,7 @@ beforeEach(() => {
   createViscoelastic.mockResolvedValue({ id: 'card-1' })
 })
 
-describe('점탄성 카드 만들기', () => {
+describe('점탄성 카드 생성', () => {
   it('이름을 미리 채워 준다', () => {
     // 같은 재료의 카드가 여럿이면 **어느 온도의 것인지**가 이름에서 보여야 한다.
     show()
@@ -70,7 +70,7 @@ describe('점탄성 카드 만들기', () => {
     // **0 으로 채우면 그것이 잰 값인지 알 수 없다.**
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: '만들기' }))
+    await user.click(screen.getByRole('button', { name: '생성' }))
 
     await waitFor(() => expect(createViscoelastic).toHaveBeenCalled())
     expect(createViscoelastic.mock.calls[0][0]).toMatchObject({
@@ -84,7 +84,7 @@ describe('점탄성 카드 만들기', () => {
     const user = userEvent.setup()
     show()
     await user.type(screen.getByLabelText('푸아송비'), '0.45')
-    await user.click(screen.getByRole('button', { name: '만들기' }))
+    await user.click(screen.getByRole('button', { name: '생성' }))
 
     await waitFor(() => expect(createViscoelastic).toHaveBeenCalled())
     expect(createViscoelastic.mock.calls[0][0]).toMatchObject({ poisson_ratio: 0.45 })
@@ -94,7 +94,7 @@ describe('점탄성 카드 만들기', () => {
     const user = userEvent.setup()
     show()
     await user.clear(screen.getByLabelText('이름'))
-    expect(screen.getByRole('button', { name: '만들기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '생성' })).toBeDisabled()
   })
 
   it('DMA 가 안 재는 값이라는 것을 적어 둔다', () => {

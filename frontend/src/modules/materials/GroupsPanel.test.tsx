@@ -69,7 +69,7 @@ const SPEC = {
       choice_labels: {
         pooled: '한 번에 적합',
         averaged: '시편별 적합 후 평균',
-        representative: '대표 하나 고르기',
+        representative: '대표 하나 선택',
       },
       choice_help: {
         pooled: '시편들의 점을 모두 모아 한 번에 맞춥니다.',
@@ -188,7 +188,7 @@ describe('글로벌 피팅', () => {
     expect([...picker.querySelectorAll('option')].map((one) => one.textContent)).toEqual([
       '한 번에 적합 (pooled) · 추천',
       '시편별 적합 후 평균 (averaged)',
-      '대표 하나 고르기 (representative)',
+      '대표 하나 선택 (representative)',
     ])
   })
 
@@ -198,7 +198,7 @@ describe('글로벌 피팅', () => {
     await screen.findByText(/고른 3건/)
     await userEvent.click(screen.getByRole('button', { name: '글로벌 피팅' }))
 
-    await userEvent.click(await screen.findByLabelText('A_TEN_01 고르기'))
+    await userEvent.click(await screen.findByLabelText('A_TEN_01 선택'))
     expect(screen.getByRole('button', { name: /시편 1건 적합/ })).toBeDisabled()
   })
 
@@ -207,8 +207,8 @@ describe('글로벌 피팅', () => {
     await screen.findByText(/고른 3건/)
     await userEvent.click(screen.getByRole('button', { name: '글로벌 피팅' }))
 
-    await userEvent.click(await screen.findByLabelText('A_TEN_01 고르기'))
-    await userEvent.click(screen.getByLabelText('B_TEN_01 고르기'))
+    await userEvent.click(await screen.findByLabelText('A_TEN_01 선택'))
+    await userEvent.click(screen.getByLabelText('B_TEN_01 선택'))
     await userEvent.click(screen.getByRole('button', { name: /시편 2건 적합/ }))
 
     await waitFor(() =>
@@ -230,8 +230,8 @@ describe('글로벌 피팅', () => {
     // **입력칸이 아니라 고르는 칸이다**(2026-08-30) — 몇 항을 적어야 하는지
     // 사람이 알 길이 없어서 목록으로 바꿨다. `0` 은 「자동」 이라고 적는다.
     await userEvent.selectOptions(await screen.findByLabelText('항 수'), '3')
-    await userEvent.click(screen.getByLabelText('A_TEN_01 고르기'))
-    await userEvent.click(screen.getByLabelText('B_TEN_01 고르기'))
+    await userEvent.click(screen.getByLabelText('A_TEN_01 선택'))
+    await userEvent.click(screen.getByLabelText('B_TEN_01 선택'))
     await userEvent.click(screen.getByRole('button', { name: /시편 2건 적합/ }))
 
     await waitFor(() =>
@@ -281,7 +281,7 @@ describe('쓰기 쉽게', () => {
   it('대표 시편은 고른 것 중에서 고른다', async () => {
     // **이름을 손으로 적게 하지 않는다** — 오타 하나면 서버가 못 찾는다.
     await open()
-    await userEvent.click(await screen.findByLabelText('A_TEN_01 고르기'))
+    await userEvent.click(await screen.findByLabelText('A_TEN_01 선택'))
     await userEvent.selectOptions(screen.getByLabelText('적합 방법'), 'representative')
     const box = await screen.findByLabelText('대표 시편')
     expect(within(box).getByRole('option', { name: 'A_TEN_01' })).toBeInTheDocument()
@@ -326,8 +326,8 @@ describe('쓰기 쉽게', () => {
       offset: 0,
     })
     await open()
-    expect(await screen.findByLabelText('DMA_01 고르기')).toBeInTheDocument()
-    expect(screen.queryByLabelText('TENSILE_01 고르기')).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('DMA_01 선택')).toBeInTheDocument()
+    expect(screen.queryByLabelText('TENSILE_01 선택')).not.toBeInTheDocument()
   })
 
   it('왜 이것만 뜨는지 말한다', async () => {
@@ -375,8 +375,8 @@ describe('마스터커브가 있어야 후보다', () => {
       offset: 0,
     })
     await open()
-    expect(await screen.findByLabelText('TEMP_SWEEP 고르기')).toBeInTheDocument()
-    expect(screen.queryByLabelText('STRAIN_SWEEP 고르기')).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('TEMP_SWEEP 선택')).toBeInTheDocument()
+    expect(screen.queryByLabelText('STRAIN_SWEEP 선택')).not.toBeInTheDocument()
   })
 
   it('몇 건이 왜 빠졌는지 말한다', async () => {
@@ -442,7 +442,7 @@ describe('마스터커브가 있어야 후보다', () => {
   it('빠진 것이 없으면 그 말을 안 한다', async () => {
     // **없는 문제를 말하면 다음부터 안 읽는다.**
     await open()
-    await screen.findByLabelText('A_TEN_01 고르기')
+    await screen.findByLabelText('A_TEN_01 선택')
     expect(screen.queryByText(/제외/)).not.toBeInTheDocument()
   })
 })
@@ -514,8 +514,8 @@ describe('후보의 조건은 서버가 말한다', () => {
     show(<GroupsPanel materialId="m1" />)
     await userEvent.click(await screen.findByRole('button', { name: '글로벌 피팅' }))
 
-    expect(await screen.findByLabelText('A_TEN_01 고르기')).toBeInTheDocument()
-    expect(screen.queryByLabelText('B_TEN_01 고르기')).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('A_TEN_01 선택')).toBeInTheDocument()
+    expect(screen.queryByLabelText('B_TEN_01 선택')).not.toBeInTheDocument()
     expect(screen.getByText(/채택된 처리 결과가 있는 시험만 표시/)).toBeInTheDocument()
     expect(screen.getByText(/1건은 미채택으로 제외/)).toBeInTheDocument()
     expect(screen.queryByText(/마스터커브가 있는 시험만/)).not.toBeInTheDocument()
@@ -535,8 +535,8 @@ describe('후보의 조건은 서버가 말한다', () => {
     show(<GroupsPanel materialId="m1" />)
     await userEvent.click(await screen.findByRole('button', { name: '글로벌 피팅' }))
     await userEvent.type(await screen.findByLabelText('같은 속도로 볼 폭'), '0.5')
-    await userEvent.click(screen.getByLabelText('A 고르기'))
-    await userEvent.click(screen.getByLabelText('B 고르기'))
+    await userEvent.click(screen.getByLabelText('A 선택'))
+    await userEvent.click(screen.getByLabelText('B 선택'))
     await userEvent.click(screen.getByRole('button', { name: /시편 2건 적합/ }))
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(
@@ -566,22 +566,22 @@ describe('후보의 조건은 서버가 말한다', () => {
     ])
     kinds.mockResolvedValue([RATE_SPEC])
     show(<GroupsPanel materialId="m1" />)
-    expect(await screen.findByRole('button', { name: /만들기/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /생성/ })).toBeInTheDocument()
     expect(screen.getByText('1.080')).toBeInTheDocument()
     expect(screen.getByText(/2속도/)).toBeInTheDocument()
   })
 
-  it('설정 바꿔 다시 맞추기 — 그때의 방법·옵션·시편이 채워진 채 열리고, 새 결과를 만든다', async () => {
+  it('설정 변경 후 재적합 — 그때의 방법·옵션·시편이 채워진 채 열리고, 새 결과를 만든다', async () => {
     // 숫자는 못 고친다(계산한 값이다). 대신 설정을 채운 모달에서 바꿔 다시 맞춘다.
     show(<GroupsPanel materialId="m1" />)
-    await userEvent.click(await screen.findByRole('button', { name: /설정 바꿔 다시 맞추기/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /설정 변경 후 재적합/ }))
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('결과의 방법·옵션·시편을 채웠습니다')
     expect(within(dialog).getByLabelText('적합 계산')).toHaveValue(ROW.plugin_id)
     expect(within(dialog).getByLabelText('적합 방법')).toHaveValue('representative')
     // 그때 고른 시편이 켜져 있다.
-    expect(within(dialog).getByLabelText('A_TEN_01 고르기')).toBeChecked()
-    expect(within(dialog).getByLabelText('B_TEN_01 고르기')).toBeChecked()
+    expect(within(dialog).getByLabelText('A_TEN_01 선택')).toBeChecked()
+    expect(within(dialog).getByLabelText('B_TEN_01 선택')).toBeChecked()
     await userEvent.click(within(dialog).getByRole('button', { name: /건 적합/ }))
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(
@@ -597,7 +597,7 @@ describe('후보의 조건은 서버가 말한다', () => {
   it('메모를 고칠 수 있고, 값은 안 건드린다', async () => {
     updateNote.mockResolvedValue({ ...ROW, note: '상온 기준' })
     show(<GroupsPanel materialId="m1" />)
-    await userEvent.click(await screen.findByRole('button', { name: '묶음 메모 고치기' }))
+    await userEvent.click(await screen.findByRole('button', { name: '묶음 메모 편집' }))
     await userEvent.type(screen.getByLabelText('묶음 메모'), '상온 기준')
     await userEvent.click(screen.getByRole('button', { name: '메모 저장' }))
     await waitFor(() => expect(updateNote).toHaveBeenCalledWith(ROW.id, '상온 기준'))
@@ -606,7 +606,7 @@ describe('후보의 조건은 서버가 말한다', () => {
   it('지우기는 한 번 묻고 나서 부른다', async () => {
     remove.mockResolvedValue(undefined)
     show(<GroupsPanel materialId="m1" />)
-    await userEvent.click(await screen.findByRole('button', { name: '묶음 지우기' }))
+    await userEvent.click(await screen.findByRole('button', { name: '묶음 삭제' }))
     expect(remove).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: '삭제' }))
     await waitFor(() => expect(remove).toHaveBeenCalledWith(ROW.id))
@@ -617,10 +617,10 @@ describe('후보의 조건은 서버가 말한다', () => {
     createViscoelastic.mockResolvedValue({ id: 'c7', material_id: 'm1' })
     const onCardMade = vi.fn()
     show(<GroupsPanel materialId="m1" onCardMade={onCardMade} />)
-    await userEvent.click(await screen.findByRole('button', { name: /^만들기$/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^생성$/ }))
     const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('점탄성 카드 만들기')
-    await userEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
+    expect(dialog).toHaveTextContent('점탄성 카드 생성')
+    await userEvent.click(within(dialog).getByRole('button', { name: '생성' }))
     await waitFor(() =>
       expect(createViscoelastic).toHaveBeenCalledWith(
         expect.objectContaining({ group_result_id: ROW.id })
@@ -652,13 +652,13 @@ describe('후보의 조건은 서버가 말한다', () => {
     createRateCard.mockResolvedValue({ id: 'c9', material_id: 'm1' })
     show(<GroupsPanel materialId="m1" />)
 
-    await userEvent.click(await screen.findByRole('button', { name: /^만들기$/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^생성$/ }))
     // 누르자마자 만들지 않는다.
     expect(createRateCard).not.toHaveBeenCalled()
     expect(await screen.findByRole('dialog')).toHaveTextContent('속도 의존 소성 카드 만들기')
     expect(screen.getByRole('dialog')).toHaveTextContent('속도 묶음 2개')
 
-    await userEvent.click(screen.getByRole('button', { name: '만들기' }))
+    await userEvent.click(screen.getByRole('button', { name: '생성' }))
     await waitFor(() =>
       expect(createRateCard).toHaveBeenCalledWith(
         expect.objectContaining({ group_result_id: 'g2', poisson_ratio: null, density: null })

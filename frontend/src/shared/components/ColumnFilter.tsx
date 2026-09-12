@@ -210,7 +210,7 @@ export function FacetPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`${label} 로 거르기`}
+          aria-label={`${label} 로 필터`}
           className={`${field(on)} flex items-center gap-1 px-2 text-left`}
         >
           <span className={`min-w-0 flex-1 truncate ${on ? '' : 'text-muted-foreground'}`}>
@@ -226,7 +226,7 @@ export function FacetPicker({
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="쳐서 좁히기"
+              placeholder="검색"
               className="h-8"
               onKeyDown={(event) => {
                 // **Enter 로 첫 줄을 고른다.** 치고 나서 마우스를 다시 잡게
@@ -366,7 +366,7 @@ export function ColumnFilter({
         />
       ) : options ? (
         <select
-          aria-label={`${label} 로 거르기`}
+          aria-label={`${label} 로 필터`}
           className={`${field(on)} px-2`}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -386,7 +386,7 @@ export function ColumnFilter({
         <div className="relative w-full">
           <Search className="text-muted-foreground/70 pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
           <input
-            aria-label={`${label} 로 거르기`}
+            aria-label={`${label} 로 필터`}
             className={`${field(on)} pr-7 pl-7 font-normal`}
             value={value}
             placeholder={placeholder ?? '찾기'}
@@ -397,7 +397,7 @@ export function ColumnFilter({
           {on && (
             <button
               type="button"
-              aria-label={`${label} 거르기 지우기`}
+              aria-label={`${label} 필터 해제`}
               className="text-muted-foreground hover:bg-muted hover:text-foreground absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-full transition-colors"
               onClick={() => onChange('')}
             >

@@ -228,7 +228,7 @@ export function BulkSpecimenDialog({
                 취소
               </Button>
               <Button onClick={() => void apply()} disabled={busy || blocked}>
-                {busy ? '거는 중…' : `${specimenIds.length}건에 걸기`}
+                {busy ? '거는 중…' : `${specimenIds.length}건에 적용`}
               </Button>
             </>
           )}

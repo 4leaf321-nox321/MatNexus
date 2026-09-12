@@ -271,7 +271,7 @@ describe('새 장비 파일 — 읽혔다고 매핑이 된 것은 아니다', ()
   })
 })
 
-describe('확정 전 근거 훑기 — 근거의 두께', () => {
+describe('확정 전 근거 검토 — 근거의 두께', () => {
   const card = (label: string, facts: Record<string, number>) =>
     item({ kind: 'card', label, facts })
 

@@ -184,7 +184,7 @@ export function AddToBasket({ kind, ids, labels, onError, workspaceSlug, auto }:
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <Inbox className="size-4" />
-        워크벤치에 담기
+        워크벤치에 추가
       </Button>
     )
   }
@@ -194,19 +194,19 @@ export function AddToBasket({ kind, ids, labels, onError, workspaceSlug, auto }:
       className="fixed z-50 w-80 overflow-hidden rounded-xl border border-sky-300 bg-white shadow-2xl ring-1 ring-sky-400/25 dark:border-sky-500/40 dark:bg-neutral-900"
       style={{ left: spot.x, top: spot.y }}
       role="region"
-      aria-label="담기"
+      aria-label="추가"
     >
       {/* 손잡이. **끌어서 옮긴다** — 하필 지금 보려는 줄을 가리면 방해물이 된다. */}
       <div
         className="flex cursor-grab items-center gap-2 border-b border-sky-200 bg-gradient-to-r from-sky-100 via-sky-100 to-blue-100 px-3 py-2 text-sky-900 select-none active:cursor-grabbing dark:border-sky-500/30 dark:from-sky-950 dark:via-sky-900 dark:to-blue-950 dark:text-sky-100"
-        aria-label="끌어서 옮기기"
+        aria-label="끌어서 이동"
         onPointerDown={(event) => {
           grab.current = { dx: event.clientX - spot.x, dy: event.clientY - spot.y }
         }}
       >
         <GripHorizontal className="size-4 shrink-0 opacity-80" />
         <Inbox className="size-4 shrink-0" />
-        <span className="text-sm font-semibold">워크벤치 작업에 담기</span>
+        <span className="text-sm font-semibold">워크벤치 작업에 추가</span>
         <span className="ml-auto text-xs font-medium opacity-80">{ids.length}건</span>
         {/* **닫을 수 있어야 한다.** 저절로 뜬 것을 치울 길이 없으면 그것은
             창이 아니라 방해물이다. 선택은 그대로 둔다 — 담기만 접는 것이다. */}
@@ -346,7 +346,7 @@ export function BasketForm({ kind, ids, labels, onError, workspaceSlug }: Basket
               onClick={() => void add()}
             >
               <Inbox className="size-4 shrink-0" />
-              <span className="truncate">{target ? `「${target.title}」에 담기` : '담기'}</span>
+              <span className="truncate">{target ? `「${target.title}」에 추가` : '추가'}</span>
             </Button>
 
             {added > 0 && (

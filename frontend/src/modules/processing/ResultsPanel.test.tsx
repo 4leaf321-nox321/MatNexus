@@ -104,7 +104,7 @@ describe('시도 지우기', () => {
     removeResult.mockResolvedValue(undefined)
     render(<ResultsPanel testRunId="t1" />)
 
-    await user.click(await screen.findByRole('button', { name: '이 결과 지우기' }))
+    await user.click(await screen.findByRole('button', { name: '이 결과 삭제' }))
     // **무엇이 사라지는지 적는다.** 결과는 되살릴 데가 없다.
     expect(
       await screen.findByRole('heading', { name: '이 처리 결과를 지울까요?' })
@@ -121,7 +121,7 @@ describe('시도 지우기', () => {
     render(<ResultsPanel testRunId="t1" />)
 
     expect(await screen.findByRole('button', { name: '채택 거두기' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '이 결과 지우기' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '이 결과 삭제' })).toBeNull()
   })
 
   it('막히면 그 이유가 보인다', async () => {
@@ -131,7 +131,7 @@ describe('시도 지우기', () => {
     removeResult.mockRejectedValue(new Error('반복 시편 통계 2건이 이 결과를 근거로 싣고 있어'))
     render(<ResultsPanel testRunId="t1" />)
 
-    await user.click(await screen.findByRole('button', { name: '이 결과 지우기' }))
+    await user.click(await screen.findByRole('button', { name: '이 결과 삭제' }))
     await user.click(screen.getByRole('button', { name: '삭제' }))
     expect(await screen.findByText(/반복 시편 통계 2건/)).toBeInTheDocument()
   })

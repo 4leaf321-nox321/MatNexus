@@ -118,7 +118,7 @@ function ColumnPicker({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
-          <Columns3 className="size-3.5" />열 고르기 ({shown.size})
+          <Columns3 className="size-3.5" />열 선택 ({shown.size})
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-96 w-56 overflow-y-auto">
@@ -129,14 +129,14 @@ function ColumnPicker({
               {groupLabel(target)}
               <button
                 type="button"
-                aria-label={`${groupLabel(target)} 열 ${on(target) ? '끄기' : '켜기'}`}
+                aria-label={`${groupLabel(target)} 열 ${on(target) ? '비활성화' : '활성화'}`}
                 className="text-primary text-xs font-normal hover:underline"
                 onClick={(event) => {
                   event.preventDefault()
                   toggleGroup(target)
                 }}
               >
-                {on(target) ? '끄기' : '켜기'}
+                {on(target) ? '비활성화' : '활성화'}
               </button>
             </DropdownMenuLabel>
             {COLUMNS.filter((column) => column.group === target).map((column) => (
@@ -425,7 +425,7 @@ export function BulkMaterialDialog({
                         variant="ghost"
                         size="icon"
                         className="size-7"
-                        aria-label={`${at + 1}번 줄 지우기`}
+                        aria-label={`${at + 1}번 줄 삭제`}
                         disabled={rows.length === 1}
                         onClick={() => setRows((current) => current.filter((_, i) => i !== at))}
                       >

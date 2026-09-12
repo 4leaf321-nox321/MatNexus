@@ -89,7 +89,7 @@ describe('VOC 상세', () => {
     const say = screen.getByRole('button', { name: '말만 남기기' })
     expect(say).toBeDisabled()
 
-    await user.type(screen.getByLabelText('말 남기기'), '덧붙입니다')
+    await user.type(screen.getByLabelText('댓글 등록'), '덧붙입니다')
     await user.click(say)
     await waitFor(() =>
       expect(event).toHaveBeenCalledWith('voc-1', { status: null, note: '덧붙입니다' })
@@ -115,7 +115,7 @@ describe('VOC 상세', () => {
     expect(screen.getByRole('button', { name: '해결로 옮김' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '반려' })).toBeDisabled()
 
-    await user.type(screen.getByLabelText('말 남기기'), '다음 배포에 반영')
+    await user.type(screen.getByLabelText('댓글 등록'), '다음 배포에 반영')
     expect(screen.getByRole('button', { name: '해결로 옮김' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: '해결로 옮김' }))
     await waitFor(() =>
@@ -165,7 +165,7 @@ describe('VOC 상세', () => {
 
   it('고치기·삭제는 can_edit 가 정한다 — 이름이 같아도 안 된다', async () => {
     await show(detail({ is_mine: false, created_by: '홍길동', can_edit: false }))
-    expect(screen.queryByRole('button', { name: '고치기' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '편집' })).toBeNull()
     expect(screen.queryByRole('button', { name: '삭제' })).toBeNull()
   })
 

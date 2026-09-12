@@ -136,7 +136,7 @@ export function TestTypeFilterPanel<Row extends HasTestType & HasOwner>({
             onClick={() => setSplit(!split)}
           >
             <Building2 className="size-3.5" />
-            부서로 나누기 {split ? '끄기' : '켜기'}
+            부서로 분할 {split ? '비활성화' : '활성화'}
           </Button>
         )}
 

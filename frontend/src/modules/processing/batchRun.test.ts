@@ -52,7 +52,7 @@ function scalar(key: string, value: number) {
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('나눠 보내기', () => {
+describe('나눠 전송', () => {
   it('조각으로 잘라 보낸다', async () => {
     batch.mockImplementation((body: { test_run_ids: string[] }) =>
       Promise.resolve(reply(body.test_run_ids))
@@ -120,7 +120,7 @@ describe('나눠 보내기', () => {
   })
 })
 
-describe('전후 견주기', () => {
+describe('전후 비교', () => {
   const item = (previous: ReturnType<typeof scalar>[], scalars: ReturnType<typeof scalar>[]) =>
     ({
       test_run_id: 't1',
