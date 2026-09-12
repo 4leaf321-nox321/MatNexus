@@ -79,6 +79,7 @@ from app.modules.catalog.schemas import (
     PropertyMeasuredOut,
     PropertyResolveOut,
     PropertySearchOut,
+    PropertySuggestionOut,
     PropertyUnlinkedItemOut,
 )
 from app.modules.materials.models import Material
@@ -1291,17 +1292,33 @@ def property_mapping(
         for term in property_names.item_terms(db)
     ]
     unlinked = [one for one in items if one.term_id not in linked_terms]
+    suggestions = [
+        PropertySuggestionOut(
+            term_id=one.term_id,
+            item=one.item,
+            property_key=one.property_key,
+            name=one.name,
+            domain=one.domain,
+            si_unit=one.si_unit,
+            value_count=one.value_count,
+            matched_by=one.matched_by,
+            scale=one.scale,
+        )
+        for one in property_names.suggest_links(db)
+    ]
     return PropertyMappingOut(
         axis_slug=property_names.ITEM_AXIS,
         rows=rows,
         items=items,
         unlinked_items=unlinked,
+        suggestions=suggestions,
         kinds=list(LINK_KINDS),
         summary={
             "keys": len(rows),
             "linked_keys": sum(1 for one in rows if one.links),
             "measured_keys": sum(1 for one in rows if one.measured),
             "unlinked_items": len(unlinked),
+            "suggestions": len(suggestions),
         },
     )
 

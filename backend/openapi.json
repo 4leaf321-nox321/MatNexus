@@ -16298,6 +16298,13 @@
             "title": "Rows",
             "type": "array"
           },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/PropertySuggestionOut"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
           "summary": {
             "additionalProperties": {
               "type": "integer"
@@ -16592,6 +16599,74 @@
           "rows"
         ],
         "title": "PropertySourcesOut",
+        "type": "object"
+      },
+      "PropertySuggestionOut": {
+        "description": "사내 항목 하나에 **이을 만한 문헌 키** 하나. 잇지는 않는다 — 사람이 누른다.",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "matched_by": {
+            "title": "Matched By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "term_id": {
+            "format": "uuid",
+            "title": "Term Id",
+            "type": "string"
+          },
+          "value_count": {
+            "title": "Value Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "term_id",
+          "item",
+          "property_key",
+          "name",
+          "domain",
+          "si_unit",
+          "value_count",
+          "matched_by"
+        ],
+        "title": "PropertySuggestionOut",
         "type": "object"
       },
       "PropertyUnlinkedItemOut": {

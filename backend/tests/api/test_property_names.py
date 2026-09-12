@@ -769,3 +769,151 @@ class Test값으로_찾기:
         ).json()
         assert got["resolved"]["key"] == YIELD_STRESS[0]
         assert any("사내 재료는 안 봤습니다" in note for note in got["notes"])
+
+
+class Test이을_만한_것:
+    """**271종을 눈으로 훑지 않게 한다.** 다만 반만 맞는 것은 제안하지 않는다.
+
+    제안은 「눌러도 되는 것」 이라는 뜻이다. 이름이 겹치기만 하는 것을 올리면
+    (「탄성계수」 ↔ 전단탄성계수) 누른 사람이 잘못 잇는다 — 실측으로 걸렀다.
+    """
+
+    def _term(
+        self, db: Session, value: str, dimension: str, **attributes: object
+    ) -> VocabularyTerm:
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        term = VocabularyTerm(
+            vocabulary_id=axis.id,
+            value=value,
+            normalized=value,
+            attributes={"dimension": dimension, **attributes},
+        )
+        db.add(term)
+        db.commit()
+        return term
+
+    def test_이름이_같으면_제안하고_겹치기만_하면_안_한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        db.add(
+            CatalogDefinition(
+                mt_id=991001,
+                key="mechanical.shear_yield_strength",
+                name="전단항복강도",  # 「항복강도」 를 품지만 **다른 물성이다**
+                domain="mechanical",
+                si_unit="Pa",
+                value_type="numeric",
+            )
+        )
+        db.commit()
+        self._term(db, "항복강도", "stress")
+
+        body = client.get("/api/catalog/properties/mapping", headers=admin_headers).json()
+        keys = {one["property_key"] for one in body["suggestions"]}
+        assert keys == {YIELD_STRENGTH[0]}
+        assert body["summary"]["suggestions"] == 1
+        one = body["suggestions"][0]
+        assert one["item"] == "항복강도" and one["matched_by"] == "name"
+        assert one["value_count"] == 0  # 값이 없어도 제안한다 — 개수는 순위에만 쓴다
+
+    def test_별칭으로도_걸리고_이미_이은_것은_빠진다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        db.add(
+            PropertyAlias(
+                property_key=YIELD_STRENGTH[0],
+                alias="Rp0.2",
+                normalized="rp0.2",
+                source="manual",
+            )
+        )
+        db.commit()
+        self._term(db, "Rp0.2", "stress")
+
+        first = client.get("/api/catalog/properties/mapping", headers=admin_headers).json()
+        assert [one["matched_by"] for one in first["suggestions"]] == ["alias"]
+
+        client.post(
+            "/api/catalog/properties/links",
+            json={"property_key": YIELD_STRENGTH[0], "item": "Rp0.2"},
+            headers=admin_headers,
+        )
+        again = client.get("/api/catalog/properties/mapping", headers=admin_headers).json()
+        assert again["suggestions"] == []
+
+    def test_차원이_다르거나_폐기된_것은_제안하지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        """잇는 순간 거절될 것을 제안하면 거짓말이다(MNX-CATALOG-0029)."""
+        self._term(db, "항복강도", "temperature")  # 응력 물성에 온도 차원
+        assert (
+            client.get("/api/catalog/properties/mapping", headers=admin_headers).json()[
+                "suggestions"
+            ]
+            == []
+        )
+
+        # 차원을 맞추면 뜨고, 폐기하면 다시 사라진다.
+        term = db.scalar(select(VocabularyTerm).where(VocabularyTerm.value == "항복강도"))
+        assert term is not None
+        term.attributes = {"dimension": "stress"}
+        db.commit()
+        assert client.get("/api/catalog/properties/mapping", headers=admin_headers).json()[
+            "suggestions"
+        ]
+        client.post(
+            f"/api/catalog/properties/{YIELD_STRENGTH[0]}/deprecate",
+            json={},
+            headers=admin_headers,
+        )
+        assert (
+            client.get("/api/catalog/properties/mapping", headers=admin_headers).json()[
+                "suggestions"
+            ]
+            == []
+        )
+
+    def test_눈금_항목은_그_눈금으로_읽히는_키만_제안한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        definitions: CatalogMaterial,
+    ) -> None:
+        """쇼어 A 를 눈금 HV·HB 짜리 「경도」 에 제안해 봐야 잇는 순간 거절된다."""
+        for at, (key, name, unit) in enumerate(
+            (
+                ("mechanical.hardness_vickers", "경도", "HV"),
+                ("mechanical.hardness_shore_a", "쇼어 A 경도", "ShoreA"),
+            )
+        ):
+            db.add(
+                CatalogDefinition(
+                    mt_id=992001 + at,
+                    key=key,
+                    name=name,
+                    domain="mechanical",
+                    si_unit=unit,
+                    value_type="numeric",
+                )
+            )
+        db.commit()
+        self._term(db, "경도", "dimensionless", scales="HV, HB")
+
+        body = client.get("/api/catalog/properties/mapping", headers=admin_headers).json()
+        assert [(one["property_key"], one["scale"]) for one in body["suggestions"]] == [
+            ("mechanical.hardness_vickers", "HV")
+        ]

@@ -354,6 +354,7 @@ export type PropertyMappingRow = components['schemas']['PropertyMappingRowOut']
 export type PropertyLink = components['schemas']['PropertyLinkOut']
 export type PropertyLinkCreate = components['schemas']['PropertyLinkCreate']
 export type PropertyUnlinkedItem = components['schemas']['PropertyUnlinkedItemOut']
+export type PropertySuggestion = components['schemas']['PropertySuggestionOut']
 
 /**
  * 종합값으로 담을 때의 참고문헌 — **무엇을 종합했는지 숫자로 남긴다.**

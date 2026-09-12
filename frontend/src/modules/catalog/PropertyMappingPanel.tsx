@@ -16,6 +16,13 @@
  * 잇는다 — 허브 키 하나를 두고 각자 스포크를 갖는다. 그래서 **사전 내려받기**가
  * 있다: 저쪽이 자기 매핑의 키가 실재하는지 이 파일로 검사한다.
  *
+ * ## 이을 만한 것
+ *
+ * 문헌 키는 271종이고 사내 항목은 아홉이다 — 이으려면 271종을 눈으로 훑어야 했다.
+ * 서버가 **이름·별칭·기호가 정확히 맞고 차원이 맞는 것만** 골라 준다. 반만 맞는 것
+ * (「탄성계수」 ↔ 전단탄성계수)은 안 올린다 — 제안은 「눌러도 되는 것」 이라는 뜻이라,
+ * 올리는 순간 누군가 잘못 잇는다.
+ *
  * ## 눈금
  *
  * 「경도」 는 하나인데 문헌은 비커스·브리넬·로크웰이 다른 키다. 눈금 없이 이으면
@@ -56,6 +63,7 @@ import type {
   PropertyLinkCreate,
   PropertyMapping,
   PropertyMappingRow,
+  PropertySuggestion,
   PropertyUnlinkedItem,
 } from '@/modules/catalog/api'
 import { downloadFile } from '@/shared/api/client'
@@ -130,6 +138,25 @@ export function PropertyMappingPanel({
     [mapping.rows, domain, mode, needle]
   )
 
+  /** 제안대로 잇는다 — 종류는 「같은 것」, 눈금은 서버가 짚어 준 것. */
+  async function acceptSuggestion(one: PropertySuggestion) {
+    setBusy(one.property_key + one.term_id)
+    setError(null)
+    try {
+      await catalogApi.linkProperty({
+        property_key: one.property_key,
+        item: one.item,
+        kind: 'same_as',
+        scale: one.scale ?? null,
+      })
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('잇지 못했습니다.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function unlink(linkId: string) {
     setBusy(linkId)
     setError(null)
@@ -201,6 +228,8 @@ export function PropertyMappingPanel({
   }
 
   const { summary } = mapping
+  // 서버가 안 준 판(옛 번들)에서도 화면이 서야 한다 — 목록이 없으면 블록이 안 뜬다.
+  const suggestions = mapping.suggestions ?? []
 
   return (
     <section className="mt-8 space-y-4" aria-label="물성 매핑">
@@ -278,6 +307,41 @@ export function PropertyMappingPanel({
                     className="h-7 px-2"
                     aria-label={`${item.item} 잇기`}
                     onClick={() => setLinking({ item })}
+                  >
+                    <Link2 className="size-3.5" />
+                    잇기
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* **이을 만한 것.** 안 이어진 항목 목록 바로 아래 — 「무엇이 비었나」 다음은
+          「그래서 무엇을 누르면 되나」 다. */}
+      {suggestions.length > 0 && (
+        <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm dark:border-sky-800 dark:bg-sky-950">
+          <p className="mb-2 font-medium">
+            이을 만한 것 {suggestions.length}건 — 이름·별칭이 정확히 맞고 차원도 맞습니다.
+          </p>
+          <ul className="space-y-1">
+            {suggestions.map((one) => (
+              <li key={`${one.term_id}-${one.property_key}`} className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{one.item}</Badge>
+                <span aria-hidden>↔</span>
+                <span className="font-medium">{one.name}</span>
+                <span className="text-muted-foreground font-mono">{one.property_key}</span>
+                {one.scale && <Badge variant="secondary">{one.scale}</Badge>}
+                <span className="text-muted-foreground tabular-nums">문헌값 {one.value_count}</span>
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2"
+                    aria-label={`${one.item} 을 ${one.name} 에 잇기`}
+                    disabled={busy === one.property_key + one.term_id}
+                    onClick={() => acceptSuggestion(one)}
                   >
                     <Link2 className="size-3.5" />
                     잇기

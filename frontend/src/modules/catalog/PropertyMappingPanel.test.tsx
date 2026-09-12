@@ -47,6 +47,19 @@ const MAPPING: PropertyMapping = {
     FLEX,
   ],
   unlinked_items: [FLEX],
+  suggestions: [
+    {
+      term_id: 't-flex',
+      item: '굴곡강도',
+      property_key: 'mechanical.flexural_strength',
+      name: '굽힘강도',
+      domain: 'mechanical',
+      si_unit: 'Pa',
+      value_count: 415,
+      matched_by: 'alias',
+      scale: null,
+    },
+  ],
   summary: { keys: 3, linked_keys: 2, measured_keys: 1, unlinked_items: 1 },
   rows: [
     {
@@ -155,12 +168,14 @@ describe('물성 매핑', () => {
     const user = userEvent.setup()
     show()
     const group = screen.getByRole('group', { name: '무엇을 볼까' })
-    const keysShown = () =>
-      screen.getAllByRole('row').filter((row) => within(row).queryByText(/^mechanical\./)).length
+    const rows = () =>
+      screen.getAllByRole('row').filter((row) => within(row).queryByText(/^mechanical\./))
+    const keysShown = () => rows().length
 
     await user.click(within(group).getByRole('button', { name: /사내 항목과 이어짐/ }))
     expect(keysShown()).toBe(2)
-    expect(screen.queryByText('mechanical.flexural_strength')).toBeNull()
+    // 표에서만 빠진다 — 「이을 만한 것」 은 거르개와 무관하게 위에 선다.
+    expect(rows().some((row) => within(row).queryByText('mechanical.flexural_strength'))).toBe(false)
 
     await user.click(within(group).getByRole('button', { name: /시험으로 재는 것/ }))
     expect(keysShown()).toBe(1)
@@ -168,10 +183,26 @@ describe('물성 매핑', () => {
 
     await user.click(within(group).getByRole('button', { name: /사내에서 안 쓰는 것/ }))
     expect(keysShown()).toBe(1)
-    expect(screen.getByText('mechanical.flexural_strength')).toBeInTheDocument()
+    expect(rows()[0]).toHaveTextContent('mechanical.flexural_strength')
 
     await user.click(within(group).getByRole('button', { name: /문헌 물성/ }))
     expect(keysShown()).toBe(3)
+  })
+
+  it('이을 만한 것은 한 번 눌러 이어진다 — 눈금도 서버가 짚어 준 대로', async () => {
+    const user = userEvent.setup()
+    const onChanged = show()
+    expect(screen.getByText(/이을 만한 것 1건/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '굴곡강도 을 굽힘강도 에 잇기' }))
+    await waitFor(() =>
+      expect(linkProperty).toHaveBeenCalledWith({
+        property_key: 'mechanical.flexural_strength',
+        item: '굴곡강도',
+        kind: 'same_as',
+        scale: null,
+      })
+    )
+    expect(onChanged).toHaveBeenCalled()
   })
 
   it('안 이어진 항목의 「잇기」 는 문헌 물성을 쳐서 찾아 잇는다', async () => {

@@ -527,6 +527,22 @@ class PropertyUnlinkedItemOut(BaseModel):
     scales: list[str]
 
 
+class PropertySuggestionOut(BaseModel):
+    """사내 항목 하나에 **이을 만한 문헌 키** 하나. 잇지는 않는다 — 사람이 누른다."""
+
+    term_id: uuid.UUID
+    item: str
+    property_key: str
+    name: str
+    domain: str
+    si_unit: str | None
+    value_count: int
+    matched_by: str
+    """`alias` · `name` · `symbol` · `partial` — 왜 걸렸나."""
+    scale: str | None = None
+    """눈금 있는 항목이면 어느 눈금으로 이어야 하나(「경도」 + 비커스 → HV)."""
+
+
 class PropertyMappingOut(BaseModel):
     axis_slug: str
     """사내 항목이 사는 기준정보 축. 화면이 이 축의 탭에 매핑을 붙인다 — 이름을
@@ -535,6 +551,8 @@ class PropertyMappingOut(BaseModel):
     items: list[PropertyUnlinkedItemOut]
     """사내 항목 전부(잇는 창의 후보). 눈금이 있으면 `scales` 에 든다."""
     unlinked_items: list[PropertyUnlinkedItemOut]
+    suggestions: list[PropertySuggestionOut] = Field(default_factory=list)
+    """이을 만한 것 — 차원이 맞고 아직 안 이어진 쌍만. 271종을 눈으로 훑지 않게."""
     kinds: list[str]
     summary: dict[str, int]
     """`keys` · `linked_keys` · `measured_keys` · `unlinked_items`."""

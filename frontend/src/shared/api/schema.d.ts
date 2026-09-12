@@ -12313,6 +12313,8 @@ export interface components {
             kinds: string[];
             /** Rows */
             rows: components["schemas"]["PropertyMappingRowOut"][];
+            /** Suggestions */
+            suggestions?: components["schemas"]["PropertySuggestionOut"][];
             /** Summary */
             summary: {
                 [key: string]: number;
@@ -12422,6 +12424,33 @@ export interface components {
             material_name: string;
             /** Rows */
             rows: components["schemas"]["ValueSourceOut"][];
+        };
+        /**
+         * PropertySuggestionOut
+         * @description 사내 항목 하나에 **이을 만한 문헌 키** 하나. 잇지는 않는다 — 사람이 누른다.
+         */
+        PropertySuggestionOut: {
+            /** Domain */
+            domain: string;
+            /** Item */
+            item: string;
+            /** Matched By */
+            matched_by: string;
+            /** Name */
+            name: string;
+            /** Property Key */
+            property_key: string;
+            /** Scale */
+            scale?: string | null;
+            /** Si Unit */
+            si_unit: string | null;
+            /**
+             * Term Id
+             * Format: uuid
+             */
+            term_id: string;
+            /** Value Count */
+            value_count: number;
         };
         /**
          * PropertyUnlinkedItemOut

@@ -29,6 +29,7 @@ processing)을 가로지르므로 `shared` 에 있다(AGENTS.md: 로직 공유�
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,7 +41,7 @@ from app.modules.catalog.models import CatalogDefinition, CatalogValue
 from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
 from app.shared.text import compare_key
-from matcore import registry
+from matcore import registry, units
 
 #: 사내 물성 항목이 사는 축.
 ITEM_AXIS = "property_item"
@@ -321,3 +322,143 @@ def item_terms(db: Session) -> list[VocabularyTerm]:
             .order_by(VocabularyTerm.value)
         ).all()
     )
+
+
+# --- 이을 만한 것 찾기 --------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    """사내 항목 하나에 **이을 만한 문헌 키** 하나."""
+
+    term_id: uuid.UUID
+    item: str
+    property_key: str
+    name: str
+    domain: str
+    si_unit: str | None
+    value_count: int
+    #: 왜 걸렸나 — `alias`(별칭이 같다) · `name`(이름이 같다) · `symbol`(기호가 같다) ·
+    #: `partial`(이름이 한쪽에 들어 있다).
+    matched_by: str
+    #: 눈금 있는 항목이면 어느 눈금으로 이어야 하나(「경도」 + 비커스 → `HV`).
+    scale: str | None
+    score: float
+
+
+#: 눈금 이름을 문헌 키에서 짐작하는 표. **키가 눈금을 말한다** — 비커스 경도는
+#: `hardness_vickers` 다. 없으면 사람이 고른다(창이 눈금을 묻는다).
+_SCALE_HINTS = (
+    ("vickers", "HV"),
+    ("brinell", "HB"),
+    ("rockwell", "HR"),
+    ("knoop", "HK"),
+    ("shore", "Shore"),
+)
+
+
+def _scale_for(term_scales: tuple[str, ...], key: str) -> str | None:
+    """그 항목의 눈금 가운데 이 키가 말하는 것. 못 고르면 `None` — 창이 묻는다."""
+    if not term_scales:
+        return None
+    lowered = key.lower()
+    for word, prefix in _SCALE_HINTS:
+        if word in lowered:
+            for scale in term_scales:
+                if scale.upper().startswith(prefix.upper()):
+                    return scale
+    return None
+
+
+def _term_scales(term: VocabularyTerm) -> tuple[str, ...]:
+    raw = str((term.attributes or {}).get("scales") or "")
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def suggest_links(db: Session, *, limit_per_item: int = 5) -> list[Suggestion]:
+    """사내 항목마다 **이을 만한 문헌 키**를 찾는다. 잇지는 않는다.
+
+    ## 왜 필요한가
+
+    문헌 키는 271종이고 사내 항목은 아홉이다. 이으려면 관리자가 271종을 눈으로
+    훑어야 했다(2026-09-12) — 그러면 「박리강도」 처럼 이름이 똑같은 것조차 안 이어진
+    채 남는다. 단위표가 조합 단위를 알게 되면서(v1.224.0) 이을 수 있는 것이 194 →
+    254종으로 늘었는데, 그것을 사람이 다시 훑게 둘 수는 없다.
+
+    ## 무엇을 제안하나
+
+    **차원이 맞는 것만.** 차원이 다르면 서버가 잇는 순간 거절하므로
+    (MNX-CATALOG-0029), 제안에 올리면 거짓말이다. 표가 모르는 눈금 단위(HV)는 눈금
+    있는 항목에만 올린다 — 잇기 규칙과 같은 판단이다.
+
+    이미 이어진 쌍은 뺀다. 폐기된 키도 뺀다. **고르지 않는다** — 근거(`matched_by`)와
+    값 개수를 함께 주고 사람이 누른다.
+    """
+    terms = item_terms(db)
+    if not terms:
+        return []
+    definitions = list(db.scalars(select(CatalogDefinition)))
+    counts = _counts(db, [one.key for one in definitions])
+    taken = {(link.term_id, link.property_key) for link in db.scalars(select(PropertyLink))}
+    aliases: dict[str, set[str]] = {}
+    for key, normalized in db.execute(
+        select(PropertyAlias.property_key, PropertyAlias.normalized)
+    ).all():
+        aliases.setdefault(normalized, set()).add(key)
+
+    made: list[Suggestion] = []
+    for term in terms:
+        needle = compare_key(term.value)
+        if not needle:
+            continue
+        dimension = str((term.attributes or {}).get("dimension") or "")
+        scales = _term_scales(term)
+        found: list[Suggestion] = []
+        for one in definitions:
+            if (term.id, one.key) in taken or one.deprecated_at is not None:
+                continue
+            symbol = (one.si_unit or "").strip()
+            canonical = units.canonical(symbol) if symbol else None
+            if canonical is None:
+                # 표가 모르는 눈금(HV·ShoreA) — 눈금 있는 항목에만, 그리고 **그 항목이
+                # 가진 눈금으로 읽히는 키만** 오른다. 쇼어 A 를 눈금 HV·HB·HRC 짜리
+                # 「경도」 에 제안해 봐야 잇는 순간 거절된다(눈금이 목록에 없다).
+                if not scales or _scale_for(scales, one.key) is None:
+                    continue
+            elif not dimension or not units.same_dimension(
+                units.unit_of(canonical).dimension, dimension
+            ):
+                continue
+
+            name_key = compare_key(one.name)
+            if needle in aliases and one.key in aliases[needle]:
+                matched, base = "alias", 100.0
+            elif name_key == needle:
+                matched, base = "name", 90.0
+            elif compare_key(one.symbol) and compare_key(one.symbol) == needle:
+                matched, base = "symbol", 60.0
+            else:
+                # **이름이 겹치기만 하는 것은 제안하지 않는다**(2026-09-12 실측). 「탄성계수」
+                # 로 훑으면 전단·굽힘·체적·압축 탄성계수가 줄줄이 걸리는데 **그것들은 같은
+                # 물성이 아니다** — 전단탄성계수는 이미 자기 사내 항목을 갖고 있다. 제안은
+                # 「눌러도 되는 것」 이라는 뜻이라, 반만 맞는 것을 올리면 잘못 이어진다.
+                continue
+            count = counts.get(one.key, 0)
+            found.append(
+                Suggestion(
+                    term_id=term.id,
+                    item=term.value,
+                    property_key=one.key,
+                    name=one.name,
+                    domain=one.domain,
+                    si_unit=one.si_unit,
+                    value_count=count,
+                    matched_by=matched,
+                    scale=_scale_for(scales, one.key),
+                    # 값이 많은 쪽을 위로 — 0건짜리를 1등으로 주면 안 된다.
+                    score=base + min(count, 500) ** 0.5,
+                )
+            )
+        found.sort(key=lambda one: (-one.score, one.property_key))
+        made.extend(found[:limit_per_item])
+    return made
