@@ -18,6 +18,7 @@ import type { PropertyMapping } from '@/modules/catalog/api'
 const linkProperty = vi.fn()
 const unlinkProperty = vi.fn()
 const deprecateProperty = vi.fn()
+const migrateProperty = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -25,6 +26,7 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     linkProperty: (...args: unknown[]) => linkProperty(...args),
     unlinkProperty: (...args: unknown[]) => unlinkProperty(...args),
     deprecateProperty: (...args: unknown[]) => deprecateProperty(...args),
+    migrateProperty: (...args: unknown[]) => migrateProperty(...args),
   },
 }))
 
@@ -122,6 +124,16 @@ beforeEach(() => {
   linkProperty.mockResolvedValue({})
   unlinkProperty.mockResolvedValue(undefined)
   deprecateProperty.mockResolvedValue({})
+  migrateProperty.mockResolvedValue({
+    from_key: 'mechanical.hardness_vickers',
+    to_key: 'mechanical.hardness_brinell',
+    dry_run: true,
+    values: 2,
+    values_imported: 246,
+    links: 1,
+    aliases: 0,
+    converted: null,
+  })
 })
 
 describe('물성 매핑', () => {
@@ -218,6 +230,37 @@ describe('물성 매핑', () => {
         note: '잘못 만듦',
       })
     )
+  })
+
+  it('옮기기는 미리보기를 보이고 확인받은 뒤에 실행한다', async () => {
+    const user = userEvent.setup()
+    const retired = {
+      ...MAPPING,
+      rows: MAPPING.rows.map((row) =>
+        row.key === 'mechanical.hardness_vickers'
+          ? { ...row, deprecated: true, superseded_by: 'mechanical.hardness_brinell' }
+          : row
+      ),
+    }
+    const onChanged = vi.fn()
+    render(<PropertyMappingPanel mapping={retired} canEdit onChanged={onChanged} />)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await user.click(
+      screen.getByRole('button', {
+        name: '비커스 경도 의 값·매핑을 mechanical.hardness_brinell 로 옮기기',
+      })
+    )
+    await waitFor(() => expect(migrateProperty).toHaveBeenCalledTimes(2))
+    expect(migrateProperty).toHaveBeenNthCalledWith(1, 'mechanical.hardness_vickers', {
+      dry_run: true,
+    })
+    // 미리보기가 사람에게 보인다 — 이관해 온 값은 못 옮긴다는 말까지.
+    expect(confirm.mock.calls[0]?.[0]).toMatch(/직접 넣은 값 2건/)
+    expect(confirm.mock.calls[0]?.[0]).toMatch(/이관해 온 값 246건은 못 옮깁니다/)
+    expect(migrateProperty).toHaveBeenNthCalledWith(2, 'mechanical.hardness_vickers', {
+      dry_run: false,
+    })
+    expect(onChanged).toHaveBeenCalled()
   })
 
   it('관리자가 아니면 잇고 푸는 단추가 없다', () => {

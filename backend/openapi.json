@@ -3673,6 +3673,84 @@
         "title": "CatalogPropertyDeprecate",
         "type": "object"
       },
+      "CatalogPropertyMigrateIn": {
+        "description": "폐기된 키에 걸린 것을 후속 키로 옮긴다 — 관리자가 누르는 동작이지 자동이 아니다.",
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "title": "CatalogPropertyMigrateIn",
+        "type": "object"
+      },
+      "CatalogPropertyMigrateOut": {
+        "properties": {
+          "aliases": {
+            "title": "Aliases",
+            "type": "integer"
+          },
+          "converted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Converted"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "from_key": {
+            "title": "From Key",
+            "type": "string"
+          },
+          "links": {
+            "title": "Links",
+            "type": "integer"
+          },
+          "to_key": {
+            "title": "To Key",
+            "type": "string"
+          },
+          "values": {
+            "title": "Values",
+            "type": "integer"
+          },
+          "values_imported": {
+            "title": "Values Imported",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "from_key",
+          "to_key",
+          "dry_run",
+          "values",
+          "values_imported",
+          "links",
+          "aliases"
+        ],
+        "title": "CatalogPropertyMigrateOut",
+        "type": "object"
+      },
       "CatalogSourceIn": {
         "description": "값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.",
         "properties": {
@@ -27257,6 +27335,59 @@
           }
         },
         "summary": "Deprecate Property",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/{property_key}/migrate": {
+      "post": {
+        "description": "폐기된 키에 걸린 값·매핑·별칭을 후속 키로 옮긴다 — **미리보기가 기본이다.**\n\n직접 넣은 값만 옮긴다. 이관해 온 값은 원본이 정본이라 못 옮긴다(다시 이관하면\n돌아온다). 단위가 다르면 같은 차원일 때만 환산한다.",
+        "operationId": "migrate_property_api_catalog_properties__property_key__migrate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "property_key",
+            "required": true,
+            "schema": {
+              "title": "Property Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogPropertyMigrateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogPropertyMigrateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Migrate Property",
         "tags": [
           "catalog"
         ]

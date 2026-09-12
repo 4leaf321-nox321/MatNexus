@@ -322,6 +322,9 @@ export const catalogApi = {
     api.post<CatalogDefinition>(`/catalog/properties/${encodeURIComponent(key)}/deprecate`, payload),
   undeprecateProperty: (key: string) =>
     api.delete<CatalogDefinition>(`/catalog/properties/${encodeURIComponent(key)}/deprecate`),
+  /** 폐기된 키에 걸린 값·매핑·별칭을 후속 키로 — 미리보기(dry_run) 뒤 실행. 직접 넣은 값만. */
+  migrateProperty: (key: string, payload: CatalogPropertyMigrate) =>
+    api.post<CatalogPropertyMigrated>(`/catalog/properties/${encodeURIComponent(key)}/migrate`, payload),
   createCatalogMaterial: (payload: CatalogMaterialCreate) =>
     api.post<CatalogMaterial>('/catalog/materials', payload),
   createValue: (materialId: string, payload: CatalogValueCreate) =>
@@ -332,6 +335,8 @@ export const catalogApi = {
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
 export type CatalogDefinition = components['schemas']['CatalogDefinitionOut']
 export type CatalogPropertyDeprecate = components['schemas']['CatalogPropertyDeprecate']
+export type CatalogPropertyMigrate = components['schemas']['CatalogPropertyMigrateIn']
+export type CatalogPropertyMigrated = components['schemas']['CatalogPropertyMigrateOut']
 export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate']
 export type CatalogValueCreate = components['schemas']['CatalogValueCreate']
 export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut']

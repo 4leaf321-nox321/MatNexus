@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import sqlite3
+import uuid
 from typing import Any
 
 import pytest
@@ -536,3 +537,90 @@ class Test폐기:
     ) -> None:
         hong = member_headers(client, db, workspace)
         assert self._retire(client, hong, "mechanical.youngs_modulus").status_code == 403
+
+
+class Test옮기기:
+    """폐기된 키에 걸린 것을 후속 키로 — **관리자가 누르고, 직접 넣은 값만, 단위는 환산.**"""
+
+    def test_미리보기_뒤_옮기고_이관해_온_값은_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        imported: CatalogMaterial,
+    ) -> None:
+        old = make_property(
+            client, admin_headers, name="옛 탄성계수(MPa)", slug="e_old", si_unit="MPa"
+        ).json()["key"]
+        new = "mechanical.youngs_modulus"  # 이관해 온 키, 단위 Pa
+        made = make_value(
+            client,
+            admin_headers,
+            str(imported.id),
+            property_key=old,
+            value_num=210,
+            unit="GPa",
+        ).json()["value"]
+        assert made["unit"] == "MPa" and made["value_num"] == pytest.approx(210_000)
+        client.post(
+            f"/api/catalog/properties/{old}/aliases",
+            json={"alias": "E_old"},
+            headers=admin_headers,
+        )
+
+        # 폐기 전에는 못 옮긴다.
+        early = client.post(
+            f"/api/catalog/properties/{old}/migrate", json={}, headers=admin_headers
+        )
+        assert early.status_code == 422 and early.json()["error"]["code"] == "MNX-CATALOG-0050"
+
+        client.post(
+            f"/api/catalog/properties/{old}/deprecate",
+            json={"superseded_by": new},
+            headers=admin_headers,
+        )
+        plan = client.post(
+            f"/api/catalog/properties/{old}/migrate", json={}, headers=admin_headers
+        ).json()
+        assert plan["dry_run"] is True
+        assert plan == {
+            **plan,
+            "to_key": new,
+            "values": 1,
+            "values_imported": 0,
+            "links": 0,
+            "aliases": 1,
+            "converted": "MPa → Pa",
+        }
+        # 미리보기는 아무것도 안 바꾼다.
+        db.expire_all()
+        untouched = db.scalar(
+            select(CatalogValue).where(CatalogValue.id == uuid.UUID(made["id"]))
+        )
+        assert untouched is not None and untouched.property_key == old
+
+        done = client.post(
+            f"/api/catalog/properties/{old}/migrate",
+            json={"dry_run": False},
+            headers=admin_headers,
+        ).json()
+        assert done["dry_run"] is False and done["values"] == 1
+        db.expire_all()
+        moved = db.scalar(select(CatalogValue).where(CatalogValue.id == uuid.UUID(made["id"])))
+        assert moved is not None
+        assert moved.property_key == new
+        assert moved.unit == "Pa" and moved.value_num == pytest.approx(210e9)
+        alias = db.scalar(select(PropertyAlias).where(PropertyAlias.alias == "E_old"))
+        assert alias is not None and alias.property_key == new
+
+        # 이관해 온 값은 어디로도 안 간다 — 옛 키(이관)를 폐기해도 값은 못 옮긴다.
+        client.post(
+            f"/api/catalog/properties/{new}/deprecate",
+            json={"superseded_by": "physical.density"},
+            headers=admin_headers,
+        )
+        # 차원이 달라 거절.
+        wrong = client.post(
+            f"/api/catalog/properties/{new}/migrate", json={}, headers=admin_headers
+        )
+        assert wrong.status_code == 422 and "차원" in wrong.json()["error"]["message"]

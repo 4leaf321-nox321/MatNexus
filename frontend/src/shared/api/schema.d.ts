@@ -952,6 +952,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/{property_key}/migrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Migrate Property
+         * @description 폐기된 키에 걸린 값·매핑·별칭을 후속 키로 옮긴다 — **미리보기가 기본이다.**
+         *
+         *     직접 넣은 값만 옮긴다. 이관해 온 값은 원본이 정본이라 못 옮긴다(다시 이관하면
+         *     돌아온다). 단위가 다르면 같은 차원일 때만 환산한다.
+         */
+        post: operations["migrate_property_api_catalog_properties__property_key__migrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/summary": {
         parameters: {
             query?: never;
@@ -7543,6 +7566,38 @@ export interface components {
             note?: string | null;
             /** Superseded By */
             superseded_by?: string | null;
+        };
+        /**
+         * CatalogPropertyMigrateIn
+         * @description 폐기된 키에 걸린 것을 후속 키로 옮긴다 — 관리자가 누르는 동작이지 자동이 아니다.
+         */
+        CatalogPropertyMigrateIn: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** To */
+            to?: string | null;
+        };
+        /** CatalogPropertyMigrateOut */
+        CatalogPropertyMigrateOut: {
+            /** Aliases */
+            aliases: number;
+            /** Converted */
+            converted?: string | null;
+            /** Dry Run */
+            dry_run: boolean;
+            /** From Key */
+            from_key: string;
+            /** Links */
+            links: number;
+            /** To Key */
+            to_key: string;
+            /** Values */
+            values: number;
+            /** Values Imported */
+            values_imported: number;
         };
         /**
          * CatalogSourceIn
@@ -17208,6 +17263,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogDefinitionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    migrate_property_api_catalog_properties__property_key__migrate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                property_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogPropertyMigrateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogPropertyMigrateOut"];
                 };
             };
             /** @description Validation Error */

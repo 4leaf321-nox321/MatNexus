@@ -52,6 +52,8 @@ from app.modules.catalog.schemas import (
     CatalogParameterTermOut,
     CatalogPropertyCreate,
     CatalogPropertyDeprecate,
+    CatalogPropertyMigrateIn,
+    CatalogPropertyMigrateOut,
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueCreate,
@@ -867,6 +869,35 @@ def deprecate_property(
     )
     db.commit()
     return _definition_out(db, definition)
+
+
+@router.post("/properties/{property_key}/migrate", response_model=CatalogPropertyMigrateOut)
+def migrate_property(
+    property_key: str,
+    payload: CatalogPropertyMigrateIn,
+    _user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CatalogPropertyMigrateOut:
+    """폐기된 키에 걸린 값·매핑·별칭을 후속 키로 옮긴다 — **미리보기가 기본이다.**
+
+    직접 넣은 값만 옮긴다. 이관해 온 값은 원본이 정본이라 못 옮긴다(다시 이관하면
+    돌아온다). 단위가 다르면 같은 차원일 때만 환산한다.
+    """
+    plan = contribute.migrate_property(
+        db, property_key, to=payload.to, dry_run=payload.dry_run
+    )
+    if not payload.dry_run:
+        db.commit()
+    return CatalogPropertyMigrateOut(
+        from_key=plan.from_key,
+        to_key=plan.to_key,
+        dry_run=payload.dry_run,
+        values=plan.values,
+        values_imported=plan.values_imported,
+        links=plan.links,
+        aliases=plan.aliases,
+        converted=plan.converted,
+    )
 
 
 @router.delete("/properties/{property_key}/deprecate", response_model=CatalogDefinitionOut)

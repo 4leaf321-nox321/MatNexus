@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -261,6 +262,132 @@ def deprecate_property(
     # 화면·MCP 가 「후속도 폐기됨」 을 보고 사람이 다시 가리키게 한다.
     db.flush()
     return definition
+
+
+@dataclass(frozen=True)
+class MigratePlan:
+    from_key: str
+    to_key: str
+    values: int
+    values_imported: int
+    links: int
+    aliases: int
+    converted: str | None
+
+
+def migrate_property(db: Session, key: str, *, to: str | None, dry_run: bool) -> MigratePlan:
+    """폐기된 키에 걸린 값·매핑·별칭을 후속 키로 옮긴다.
+
+    **자동으로 하지 않는 이유**: 값은 출처·조건과 한 몸이라 「같은 물성」 이라는 판단을
+    기계가 하면 조용히 틀린다. 관리자가 폐기 뒤에 목록을 보고 누른다.
+
+    - 옮기는 값은 **직접 넣은 것만**(`mt_id IS NULL`). 이관해 온 값을 옮기면 다음
+      이관이 원래 키로 되돌린다 — 그건 원본(MaterialTwin)에서 고칠 일이다.
+    - 두 키의 단위가 다르면 같은 차원일 때만 환산한다. 표가 모르는 눈금은 같은 기호일
+      때만 옮긴다.
+    - 매핑·별칭은 후속 키에 같은 것이 이미 있으면 겹치는 쪽을 지운다.
+    """
+    source = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
+    if source is None:
+        raise NotFound("MNX-CATALOG-0038", "없는 물성입니다.")
+    if not source.deprecated:
+        raise AppError(
+            "MNX-CATALOG-0050",
+            "폐기되지 않은 키입니다 — 먼저 폐기하고 후속 키를 적으세요.",
+            status=422,
+        )
+    target_key = clean(to or "") or source.superseded_by
+    if not target_key:
+        raise AppError(
+            "MNX-CATALOG-0050", "옮길 곳이 없습니다 — 후속 키를 적으세요.", status=422
+        )
+    target = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == target_key))
+    if target is None or target.deprecated or target.key == source.key:
+        raise AppError(
+            "MNX-CATALOG-0050",
+            f"옮길 곳 {target_key} 이 없거나 폐기된 키입니다.",
+            status=422,
+        )
+
+    # 단위 — 두 정의의 단위가 다르면 값마다 환산한다.
+    factor_note: str | None = None
+    src_unit, dst_unit = source.si_unit, target.si_unit
+    src_c = units.canonical(src_unit) if src_unit else None
+    dst_c = units.canonical(dst_unit) if dst_unit else None
+    if src_unit != dst_unit:
+        if src_c is None or dst_c is None:
+            if units.loose_key(src_unit or "") != units.loose_key(dst_unit or ""):
+                raise AppError(
+                    "MNX-CATALOG-0050",
+                    f"단위가 다릅니다({src_unit} → {dst_unit}) — 표가 모르는 눈금이라 "
+                    "환산할 수 없습니다.",
+                    status=422,
+                )
+        elif not units.same_dimension(
+            units.unit_of(src_c).dimension, units.unit_of(dst_c).dimension
+        ):
+            raise AppError(
+                "MNX-CATALOG-0050",
+                f"차원이 다릅니다({src_unit} → {dst_unit}) — 값을 옮길 수 없습니다.",
+                status=422,
+            )
+        elif src_c != dst_c:
+            factor_note = f"{src_c} → {dst_c}"
+
+    local_values = db.scalars(
+        select(CatalogValue).where(
+            CatalogValue.property_key == key, CatalogValue.mt_id.is_(None)
+        )
+    ).all()
+    imported = db.scalar(
+        select(func.count())
+        .select_from(CatalogValue)
+        .where(CatalogValue.property_key == key, CatalogValue.mt_id.is_not(None))
+    )
+    links = db.scalars(select(PropertyLink).where(PropertyLink.property_key == key)).all()
+    aliases = db.scalars(select(PropertyAlias).where(PropertyAlias.property_key == key)).all()
+
+    plan = MigratePlan(
+        from_key=key,
+        to_key=target.key,
+        values=len(local_values),
+        values_imported=int(imported or 0),
+        links=len(links),
+        aliases=len(aliases),
+        converted=factor_note,
+    )
+    if dry_run:
+        return plan
+
+    for value in local_values:
+        if factor_note and value.value_num is not None and src_c and dst_c:
+            value.value_num = units.from_si(units.to_si(value.value_num, src_c), dst_c)
+            value.unit = dst_c
+        value.property_key = target.key
+    taken_links = {
+        (link.term_id, link.scale)
+        for link in db.scalars(
+            select(PropertyLink).where(PropertyLink.property_key == target.key)
+        )
+    }
+    for link in links:
+        if (link.term_id, link.scale) in taken_links:
+            db.delete(link)
+        else:
+            link.property_key = target.key
+    taken_aliases = {
+        alias.normalized
+        for alias in db.scalars(
+            select(PropertyAlias).where(PropertyAlias.property_key == target.key)
+        )
+    }
+    for alias in aliases:
+        if alias.normalized in taken_aliases:
+            db.delete(alias)
+        else:
+            alias.property_key = target.key
+    db.flush()
+    return plan
 
 
 def undeprecate_property(db: Session, key: str) -> CatalogDefinition:

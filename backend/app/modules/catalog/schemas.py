@@ -272,6 +272,29 @@ class CatalogDefinitionOut(BaseModel):
     deprecation_note: str | None = None
 
 
+class CatalogPropertyMigrateIn(BaseModel):
+    """폐기된 키에 걸린 것을 후속 키로 옮긴다 — 관리자가 누르는 동작이지 자동이 아니다."""
+
+    to: str | None = Field(default=None, max_length=100)
+    """옮길 곳. 비우면 폐기 때 적어 둔 후속 키."""
+    dry_run: bool = True
+
+
+class CatalogPropertyMigrateOut(BaseModel):
+    from_key: str
+    to_key: str
+    dry_run: bool
+    values: int
+    """옮긴(옮길) 값 — MatNexus 에서 직접 넣은 것만."""
+    values_imported: int
+    """못 옮기는 값 — 이관해 온 것. 원본(MaterialTwin)이 정본이라 다시 이관하면 돌아온다."""
+    links: int
+    """옮긴(옮길) 사내 항목 매핑. 후속 키에 같은 것이 있으면 겹치는 것은 지운다."""
+    aliases: int
+    converted: str | None = None
+    """단위가 달라 환산했으면 그 내역."""
+
+
 class CatalogPropertyDeprecate(BaseModel):
     """키를 폐기한다 — 지우지 않는다. 후속 키가 있으면 그것을 가리킨다."""
 

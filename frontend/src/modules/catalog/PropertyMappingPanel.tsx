@@ -38,7 +38,17 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Archive, ArchiveRestore, Download, FilePlus2, Link2, Link2Off, Plus, Trash2 } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowRightToLine,
+  Download,
+  FilePlus2,
+  Link2,
+  Link2Off,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 
 import { DOMAINS, DOMAIN_LABELS, catalogApi } from '@/modules/catalog/api'
 import type {
@@ -128,6 +138,35 @@ export function PropertyMappingPanel({
       onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('풀지 못했습니다.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /**
+   * 폐기된 키의 값·매핑·별칭을 후속 키로. **미리보기를 먼저 보이고 묻는다** —
+   * 값은 출처·조건과 한 몸이라 옮기는 판단은 사람이 한다. 이관해 온 값은 안 옮겨진다.
+   */
+  async function migrateProperty(row: PropertyMappingRow) {
+    setBusy(row.key)
+    setError(null)
+    try {
+      const plan = await catalogApi.migrateProperty(row.key, { dry_run: true })
+      const lines = [
+        `'${row.name}' → ${plan.to_key}`,
+        `직접 넣은 값 ${plan.values}건 · 사내 항목 매핑 ${plan.links}건 · 별칭 ${plan.aliases}건을 옮깁니다.`,
+        plan.values_imported > 0
+          ? `이관해 온 값 ${plan.values_imported}건은 못 옮깁니다 — 원본(MaterialTwin)이 정본입니다.`
+          : null,
+        plan.converted ? `단위를 환산합니다: ${plan.converted}` : null,
+        '',
+        '옮길까요?',
+      ].filter((one): one is string => one !== null)
+      if (!window.confirm(lines.join('\n'))) return
+      await catalogApi.migrateProperty(row.key, { dry_run: false })
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('옮기지 못했습니다.'))
     } finally {
       setBusy(null)
     }
@@ -324,6 +363,21 @@ export function PropertyMappingPanel({
                         <Archive className="size-3.5" />
                       </button>
                     )}
+                    {canEdit &&
+                      row.deprecated &&
+                      row.superseded_by &&
+                      (row.links.length > 0 || row.value_count > 0) && (
+                        <button
+                          type="button"
+                          aria-label={`${row.name} 의 값·매핑을 ${row.superseded_by} 로 옮기기`}
+                          title="직접 넣은 값·매핑·별칭을 후속 키로 옮깁니다 (미리보기 뒤 확인)"
+                          className="text-muted-foreground hover:text-foreground rounded p-0.5"
+                          disabled={busy === row.key}
+                          onClick={() => migrateProperty(row)}
+                        >
+                          <ArrowRightToLine className="size-3.5" />
+                        </button>
+                      )}
                     {canEdit && row.deprecated && (
                       <button
                         type="button"

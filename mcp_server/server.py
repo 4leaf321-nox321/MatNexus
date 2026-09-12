@@ -1847,6 +1847,43 @@ async def deprecate_catalog_property(
 
 
 @mcp.tool()
+async def migrate_catalog_property(
+    ctx: Context, property_key: str, to: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    """폐기된 키에 걸린 값·사내 매핑·별칭을 **후속 키로 옮긴다**(관리자만).
+
+    **기본이 미리보기(dry_run=True)다** — 몇 건이 옮겨지고 몇 건이 남는지 사람에게 보이고
+    확인받은 뒤 `dry_run=False` 로 다시 부른다. 자동으로 옮기지 않는 이유: 값은 출처·조건과
+    한 몸이라 「같은 물성」 이라는 판단은 사람이 한다.
+
+    - 옮기는 값은 **MatNexus 에서 직접 넣은 것만.** 이관해 온 값(`values_imported`)은
+      원본(MaterialTwin)이 정본이라 못 옮긴다.
+    - 두 키의 단위가 다르면 같은 차원일 때만 환산한다(`converted`). 차원이 다르면 거절.
+    - `to` 를 비우면 폐기 때 적어 둔 후속 키.
+    """
+    got = await _send(
+        ctx, "POST", f"/catalog/properties/{property_key}/migrate", {"to": to, "dry_run": dry_run}
+    )
+    if "error" in got:
+        return got
+    if dry_run:
+        return {
+            **got,
+            "note": (
+                f"직접 넣은 값 {got.get('values')}건 · 매핑 {got.get('links')}건 · 별칭 "
+                f"{got.get('aliases')}건을 {got.get('to_key')} 로 옮깁니다"
+                + (
+                    f" — 이관해 온 값 {got['values_imported']}건은 못 옮깁니다."
+                    if got.get("values_imported")
+                    else "."
+                )
+                + " 이대로 옮기려면 dry_run=False 로 다시 부르세요."
+            ),
+        }
+    return {**got, "note": "옮겼습니다."}
+
+
+@mcp.tool()
 async def delete_catalog_value(ctx: Context, value_id: str) -> dict[str, Any]:
     """직접 넣은 문헌 값 하나를 지운다 — 넣은 사람이거나 관리자만. 이관해 온 값은
     원본(MaterialTwin)이 정본이라 못 지운다."""
