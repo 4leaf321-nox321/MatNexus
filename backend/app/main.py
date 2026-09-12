@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app import version
 from app.config import Settings, get_settings
@@ -65,10 +66,32 @@ def _api_router() -> APIRouter:
     router = APIRouter(prefix=API_PREFIX)
 
     @router.get("/health", tags=["system"])
-    def health() -> dict[str, str]:
-        # **버전을 함께 준다.** 원격에서 "지금 서버에 뭐가 깔렸나" 를 물을 수 있는
-        # 유일한 자리다. 배포 뒤 확인도, 나중의 점검 스크립트도 여기를 본다.
-        return {"status": "ok", "version": version.current()}
+    def health(response: Response) -> dict[str, str]:
+        """살아 있나 — **DB 까지 찔러 본다.**
+
+        실측(2026-09-10, 두 번): 사내망에서 DB 연결이 잠깐 끊긴 뒤 백엔드가 요청을
+        받지 않는 채로 남았다. DB 는 멀쩡했고 재기동하면 바로 돌아왔다. 그동안 이
+        주소는 DB 를 안 보고 「ok」 라고 답했으므로, 감시를 붙였어도 못 잡았을 것이다
+        — 죽은 서버가 살아 있다고 대답하면 감시는 있으나 마나다.
+
+        그래서 `SELECT 1` 을 한 번 날린다. 못 하면 **503** 과 이유를 낸다 — 서비스
+        관리자(NSSM·스케줄러)가 그것을 보고 재기동한다. 연결이 매달리는 것은 엔진의
+        `connect_timeout` 이 끊는다(`database.py`) — health 자체가 매달리면 감시도
+        같이 매달린다.
+
+        **버전을 함께 준다.** 원격에서 "지금 서버에 뭐가 깔렸나" 를 물을 수 있는
+        유일한 자리다. 배포 뒤 확인도, 점검 스크립트도 여기를 본다.
+        """
+        body = {"status": "ok", "version": version.current(), "database": "ok"}
+        try:
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except Exception as failed:  # 무엇이 됐든 「못 찔렀다」 가 답이다
+            logger.warning("health: DB 를 찌르지 못했다 — %s", failed)
+            response.status_code = 503
+            body["status"] = "degraded"
+            body["database"] = f"unreachable: {type(failed).__name__}"
+        return body
 
     # 모듈 라우터는 여기서만 모은다. 모듈이 서로를 import 하지 않게 하려면
     # 조립 지점이 하나여야 한다 (tests/architecture 가 검사).

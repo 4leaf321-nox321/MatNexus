@@ -32,6 +32,12 @@ _settings = get_settings()
 engine = create_engine(
     _settings.database_url,
     pool_pre_ping=True,  # 사내망에서 유휴 커넥션이 끊겨도 조용히 재연결
+    # **연결 시도는 기다리다 끊는다.** psycopg 의 기본은 무한 대기다 — 실측(2026-09-10,
+    # 두 번): 사내망에서 DB 연결이 잠깐 안 되자 백엔드가 요청을 받지 않는 채로 남았다.
+    # 연결 하나가 매달리면 그 요청을 든 스레드가 영영 안 돌아오고, 그런 것이 쌓이면
+    # 서버 전체가 멈춘 것처럼 보인다. 10초면 정상 연결(수 ms)에는 넉넉하고, 매달린
+    # 것은 오류로 바뀌어 `/api/health` 가 503 을 낼 수 있다.
+    connect_args={"connect_timeout": 10},
     future=True,
 )
 

@@ -15,7 +15,27 @@ def test_health() -> None:
     assert response.status_code == 200
     # **버전을 함께 준다.** 원격에서 "지금 서버에 뭐가 깔렸나" 를 물을 수 있는
     # 유일한 자리다 — 값 자체는 tests/api/test_version.py 가 본다.
-    assert response.json() == {"status": "ok", "version": version.current()}
+    assert response.json() == {"status": "ok", "version": version.current(), "database": "ok"}
+
+
+def test_DB_를_못_찌르면_503_이다() -> None:
+    """**죽은 서버가 살아 있다고 대답하면 감시는 있으나 마나다.**
+
+    실측(2026-09-10, 두 번): DB 연결이 끊긴 뒤 백엔드가 요청을 받지 않는 채로 남았는데
+    이 주소는 「ok」 라고 답했다. DB 를 찔러 보고 못 찌르면 503 — 서비스 관리자가
+    그것을 보고 재기동한다.
+    """
+    from unittest.mock import patch
+
+    from app import main
+
+    with patch.object(main.engine, "connect", side_effect=OSError("연결 끊김")):
+        response = client.get("/api/health")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["database"].startswith("unreachable")
+    assert body["version"] == version.current()  # 버전은 죽어도 말한다
 
 
 def test_request_id_is_returned() -> None:
