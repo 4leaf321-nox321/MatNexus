@@ -431,6 +431,23 @@ if ($SkipMigrations) {
     Pop-Location
 }
 
+# --- 배포에 실려 온 안내 → 공지 초안 -------------------------------------------
+#
+# 새 기능은 코드와 함께 도착하는데, 알리는 글은 사람이 따로 써야 했다(2026-09-12).
+# `backend/seeds/notices/*.md` 를 **초안**으로 넣는다 — 관리자만 보고, 읽고 발행한다.
+# 같은 키는 두 번 안 들어온다. 실패해도 배포는 세우지 않는다.
+if ($SkipMigrations) {
+    Write-Log '안내 공지 건너뜀 (마이그레이션과 함께)'
+} else {
+    Push-Location (Join-Path $AppPath 'backend')
+    try {
+        Invoke-Native '안내 공지 적재 실패' { & $backendPython scripts\import_notices.py }
+    } catch {
+        Write-Log "안내 공지 적재 실패 (배포는 계속합니다): $_"
+    }
+    Pop-Location
+}
+
 # --- 문헌 카탈로그 씨앗 -------------------------------------------------------
 #
 # 문헌 물성 42,209건과 측정법 750건도 **행이라 `alembic upgrade` 로는 안 들어간다**

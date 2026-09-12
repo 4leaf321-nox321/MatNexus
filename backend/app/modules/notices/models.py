@@ -42,6 +42,12 @@ class Notice(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    seed_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    """**배포에 실려 온 안내**면 그 파일 이름(2026-09-12). 새 기능은 코드와 함께 도착하는데
+    그것을 알리는 글은 사람이 따로 써야 했고, 그러면 언젠가 아무도 안 쓴다. 이제
+    `seeds/notices/*.md` 가 배포마다 **초안**으로 들어오고(`import_notices.py`), 관리자가
+    읽고 발행한다. 같은 키는 두 번 안 들어온다 — 운영에서 고친 글을 덮지 않는다."""
+
 
 class NoticeRead(Base):
     """누가 어떤 공지를 읽었는가. 팝업을 한 번만 띄우기 위한 것."""

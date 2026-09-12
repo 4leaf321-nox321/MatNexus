@@ -27,6 +27,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { display, fromDisplay } from '@/shared/units'
 
 const METHODS: [string, string][] = [
   ['handbook', '핸드북·규격'],
@@ -137,7 +138,8 @@ export function AddValueDialog({
     if (!property) return null
     const conditions: Record<string, unknown> = {}
     if (temperature.trim() !== '' && !Number.isNaN(Number(temperature))) {
-      conditions['temperature_k'] = Number((Number(temperature) + 273.15).toFixed(2))
+      // 표시 단위(°C) → SI(K). 숫자를 여기 적지 않는다 — 표(`shared/units.ts`)가 안다.
+      conditions['temperature_k'] = Number(fromDisplay(Number(temperature), 'K').toFixed(2))
     }
     return {
       property_key: property.key,
@@ -256,7 +258,7 @@ export function AddValueDialog({
               />
             </div>
             <div className="grid gap-1">
-              <Label htmlFor="new-temp">온도 (°C)</Label>
+              <Label htmlFor="new-temp">온도 ({display('K').unit})</Label>
               <Input
                 id="new-temp"
                 inputMode="decimal"
