@@ -330,6 +330,48 @@ BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None]] 
 ]
 
 
+def refresh_builtin_property_items(db: Session) -> list[str]:
+    """이미 있는 기본 물성 항목에 **빠진 속성**만 채운다. 있는 속성은 안 바꾼다.
+
+    실측(2026-09-12): 탄성계수·비열 등 다섯 항목에 `level` 이 없었다 — `level` 칸이
+    뒤에 생겼고 `ensure` 는 있는 항목을 건너뛰기 때문이다. 비면 「재료」 로 보므로
+    지금은 무해하지만, 같은 길로 `measured_key` 가 빠지면 「적은 값과 잰 값 나란히」
+    가 조용히 안 뜬다. 바뀐 항목의 값을 돌려준다.
+    """
+    from app.modules.vocabulary.models import VocabularyTerm
+    from app.shared.text import compare_key
+
+    db.flush()
+    axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+    if axis is None:
+        return []
+    changed: list[str] = []
+    for value, dimension, symbol, level, measured, scales in BUILTIN_PROPERTY_ITEMS:
+        term = db.scalar(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == axis.id,
+                VocabularyTerm.normalized == compare_key(value),
+            )
+        )
+        if term is None:
+            continue
+        wanted = {
+            "dimension": dimension,
+            "symbol": symbol,
+            "level": level,
+            "measured_key": measured,
+            "scales": scales,
+        }
+        attributes = dict(term.attributes or {})
+        missing = {key: one for key, one in wanted.items() if one and key not in attributes}
+        if missing:
+            term.attributes = {**attributes, **missing}
+            changed.append(value)
+    if changed:
+        db.flush()
+    return changed
+
+
 def ensure_builtin_property_items(db: Session) -> list[str]:
     """기본 물성 항목을 보장한다. **이미 있는 것은 손대지 않는다.**
 

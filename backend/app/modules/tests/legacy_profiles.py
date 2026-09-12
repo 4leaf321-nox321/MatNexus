@@ -43,6 +43,7 @@ DMA 는 읽히기는 하지만 담을 시험 종류가 없다 — 정의만 있�
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from sqlalchemy import select
@@ -211,6 +212,51 @@ BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
         TA_DMA850_DEFINITION,
     ),
 ]
+
+
+def _fill_missing(target: dict[str, Any], source: dict[str, Any]) -> bool:
+    """`source` 에 있고 `target` 에 없는 키를 채운다. **있는 값은 절대 안 바꾼다.**
+
+    관리자가 고친 열 이름은 그대로고, 코드가 뒤에 더한 규칙만 들어온다."""
+    changed = False
+    for key, value in source.items():
+        if key not in target:
+            target[key] = value
+            changed = True
+        elif isinstance(value, dict) and isinstance(target[key], dict):
+            changed = _fill_missing(target[key], value) or changed
+    return changed
+
+
+def refresh_builtin_format_profiles(db: Session) -> list[str]:
+    """이미 있는 기본 프로파일에 **코드가 뒤에 더한 규칙**을 채운다.
+
+    실측(2026-09-12): `ta_dma850` 에 `tables.master_curve` 규칙이 08-31 에 들어갔는데
+    (ADR 0023 B — 겹친 표를 읽자마자 마스터커브로 등록), 그 전에 설치된 DB 의
+    프로파일은 08-21 씨앗 그대로였다. 규칙이 없으면 자동 등록은 「아무것도 안 한다」
+    — 오류도 없이 기능이 없는 것처럼 보인다. `ensure` 는 있으면 건너뛰므로 누군가
+    마이그레이션을 써야만 했고, 한 번 잊었다.
+
+    **있는 값은 안 바꾼다.** 관리자가 고친 열 이름(같은 장비라도 부서마다 소프트웨어
+    설정이 다르다)은 그대로다. 없는 키만 채운다. 바뀐 프로파일의 key 를 돌려준다.
+    """
+    db.flush()
+    changed: list[str] = []
+    for key, _label, _type_key, _description, definition in BUILTIN_FORMAT_PROFILES:
+        existing = db.scalar(
+            select(FormatProfile).where(
+                FormatProfile.key == key, FormatProfile.owner_workspace_id.is_(None)
+            )
+        )
+        if existing is None:
+            continue
+        merged = copy.deepcopy(existing.definition or {})
+        if _fill_missing(merged, definition):
+            existing.definition = merged
+            changed.append(key)
+    if changed:
+        db.flush()
+    return changed
 
 
 def ensure_builtin_format_profiles(db: Session) -> list[str]:

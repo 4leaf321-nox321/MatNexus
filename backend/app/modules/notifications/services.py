@@ -167,8 +167,21 @@ def set_rule(
 
 def ensure_rules(db: Session, user: User) -> None:
     """그 사람에게 필요한 기본 규칙을 만든다. **이미 있는 것은 손대지 않는다** —
-    사람이 끈 것을 배포가 다시 켜면 안 된다."""
+    사람이 끈 것을 배포가 다시 켜면 안 된다.
+
+    **더는 자격 없는 규칙은 지운다**(2026-09-12). 관리자에서 내려온 사람에게
+    「가입 신청」 규칙이 남아 있으면 계속 받는다 — 역할이 바뀌면 이 함수가 다시
+    불리고(승격·강등·부서 관리자 지정), 그때 받을 수 없는 것을 걷어낸다. 다시
+    자격이 생기면 켜진 채로 새로 만들어진다.
+    """
     wanted = wanted_kinds(db, user)
+    for stale in db.scalars(
+        select(NotificationRule).where(
+            NotificationRule.user_id == user.id,
+            NotificationRule.event_kind.not_in(wanted),
+        )
+    ).all():
+        db.delete(stale)
 
     for event_kind in wanted:
         exists = db.scalar(

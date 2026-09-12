@@ -363,6 +363,8 @@ def set_system_admin(db: Session, *, user_id: uuid.UUID, grant: bool, actor: Use
         # 「변경」 으로 두 줄 남으면, 나중에 누가 무엇을 했는지 읽을 때 방해가 된다.
         return user
     user.is_system_admin = grant
+    # 관리자만 받는 알림(가입 신청·새 VOC)이 있다 — 역할이 바뀌면 규칙을 다시 맞춘다.
+    _on_activated(db, user)
 
     audit.record(
         db,

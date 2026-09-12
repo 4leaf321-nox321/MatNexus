@@ -95,6 +95,73 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
 ]
 
 
+def refresh_builtin_test_types(db: Session) -> list[str]:
+    """이미 있는 기본 시험 종류에 **빠진 채널·조건**을 더한다. 있는 것은 안 건드린다.
+
+    `ensure` 는 종류가 있으면 통째로 건너뛴다 — 라벨·정렬은 관리자 것이라 옳다.
+    그런데 코드가 채널을 더하면(예: DMA 의 위상각·복소 탄성률) 기존 DB 는 그것을
+    못 받고, 그 채널을 읽는 처리가 조용히 「채널 없음」 으로 빠진다. 형식 프로파일과
+    같은 부류다(2026-09-12). 바뀐 종류의 key 를 돌려준다.
+    """
+    # `ensure` 가 방금 더한 것이 아직 안 내려갔을 수 있다 — 자동 flush 가 꺼진 세션에서
+    # 같은 채널을 두 번 넣는다(시험에서 실측).
+    db.flush()
+    changed: list[str] = []
+    for spec in BUILTIN_TEST_TYPES:
+        test_type = db.scalar(select(TestType).where(TestType.key == spec["key"]))
+        if test_type is None:
+            continue
+        touched = False
+        have = set(
+            db.scalars(select(TestChannel.key).where(TestChannel.test_type_id == test_type.id))
+        )
+        for order, (key, label, dimension, si_unit, required) in enumerate(spec["channels"]):
+            if key in have:
+                continue
+            db.add(
+                TestChannel(
+                    test_type_id=test_type.id,
+                    key=key,
+                    label=label,
+                    dimension=dimension,
+                    si_unit=si_unit,
+                    is_required=required,
+                    sort_order=order * 10,
+                )
+            )
+            touched = True
+        have_conditions = set(
+            db.scalars(
+                select(TestConditionField.key).where(
+                    TestConditionField.test_type_id == test_type.id
+                )
+            )
+        )
+        for order, condition in enumerate(spec["conditions"]):
+            key, label, value_type, dimension, si_unit, choices, required = condition
+            if key in have_conditions:
+                continue
+            db.add(
+                TestConditionField(
+                    test_type_id=test_type.id,
+                    key=key,
+                    label=label,
+                    value_type=value_type,
+                    dimension=dimension,
+                    si_unit=si_unit,
+                    choices=choices,
+                    is_required=required,
+                    sort_order=order * 10,
+                )
+            )
+            touched = True
+        if touched:
+            changed.append(spec["key"])
+    if changed:
+        db.flush()
+    return changed
+
+
 def ensure_builtin_test_types(db: Session) -> list[str]:
     """기본 시험 종류를 보장한다. 새로 만든 것의 key 를 돌려준다.
 

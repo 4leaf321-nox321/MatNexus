@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.fitting.models import ExportProfile
 from app.modules.materials.models import Material
@@ -673,6 +674,7 @@ def add_member(db: Session, *, workspace: Workspace, email: str, role: str) -> M
     db.add(member)
     if user.home_workspace_id is None:
         user.home_workspace_id = workspace.id
+    _rules_follow_role(db, user.id)
     db.commit()
     db.refresh(member)
     return MemberOut(
@@ -685,6 +687,12 @@ def add_member(db: Session, *, workspace: Workspace, email: str, role: str) -> M
     )
 
 
+def _rules_follow_role(db: Session, user_id: uuid.UUID) -> None:
+    """부서 관리자만 받는 알림이 있다(시편 못 정한 파일). 역할이 바뀌면 규칙을 다시
+    맞춘다 — 알림 모듈을 직접 부르지 않고 큐로 넘긴다(모듈 경계)."""
+    queue.enqueue(db, kind=kinds.NOTIFY_ENSURE_RULES, payload={"user_id": str(user_id)})
+
+
 def set_role(db: Session, *, workspace: Workspace, user_id: uuid.UUID, role: str) -> MemberOut:
     _check_role(role)
     member = membership_of(db, workspace_id=workspace.id, user_id=user_id)
@@ -695,6 +703,7 @@ def set_role(db: Session, *, workspace: Workspace, user_id: uuid.UUID, role: str
         _ensure_another_manager(db, workspace=workspace, excluding=user_id)
 
     member.role = role
+    _rules_follow_role(db, user_id)
     db.commit()
     user = db.get(User, user_id)
     assert user is not None
@@ -727,6 +736,7 @@ def remove_member(db: Session, *, workspace: Workspace, user_id: uuid.UUID) -> N
         user.home_workspace_id = remaining.workspace_id if remaining else None
 
     db.delete(member)
+    _rules_follow_role(db, user_id)  # 관리자였으면 그 자격의 알림도 함께 걷힌다
     db.commit()
 
 
