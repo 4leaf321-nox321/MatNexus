@@ -29,7 +29,9 @@ def upgrade() -> None:
     op.add_column(
         "catalog_definitions", sa.Column("superseded_by", sa.String(length=100), nullable=True)
     )
-    op.add_column("catalog_definitions", sa.Column("deprecation_note", sa.Text(), nullable=True))
+    op.add_column(
+        "catalog_definitions", sa.Column("deprecation_note", sa.Text(), nullable=True)
+    )
 
 
 def downgrade() -> None:
