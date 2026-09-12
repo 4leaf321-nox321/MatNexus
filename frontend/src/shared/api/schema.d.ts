@@ -2137,6 +2137,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/formulas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Formulas */
+        get: operations["list_formulas_api_formulas_get"];
+        put?: never;
+        /** Create Formula */
+        post: operations["create_formula_api_formulas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formulas/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description 저장 전에 실제 채택 결과 하나로 돌려 본다 (D6). **아무것도 저장하지 않는다.**
+         *
+         *     문법은 맞는데 뜻이 틀린 식(축을 바꿔 적음, 단위가 천 배)은 여기서 드러난다.
+         */
+        post: operations["preview_api_formulas_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formulas/vocabulary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Vocabulary
+         * @description 식을 적을 때 고를 수 있는 이름 — 계약서(`docs/확장-계약.md`)와 같은 어휘.
+         *
+         *     열·스칼라는 내장·확장 단계의 `makes_columns`·`makes_values` 에서, 블록은 카드
+         *     레지스트리에서. 화면이 이것으로 드롭다운을 그린다 — 이름을 손으로 치면 오타가
+         *     난 채로 저장되고, 그 식은 돌 때마다 「열이 없습니다」 만 남긴다.
+         */
+        get: operations["vocabulary_api_formulas_vocabulary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formulas/{formula_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Formula
+         * @description 참조가 없을 때만. 있으면 409 — 대신 끈다.
+         */
+        delete: operations["delete_formula_api_formulas__formula_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Formula
+         * @description 식이 바뀌면 판이 오른다. 저장된 레시피·결과·카드는 옛 판을 든 채 그대로다.
+         */
+        patch: operations["update_formula_api_formulas__formula_id__patch"];
+        trace?: never;
+    };
     "/api/groups": {
         parameters: {
             query?: never;
@@ -9825,6 +9913,224 @@ export interface components {
             priority: number;
             /** Test Type Key */
             test_type_key: string;
+        };
+        /**
+         * FormulaCreate
+         * @description 계산식 하나. **자리(kind)에 따라 필요한 칸이 다르다** — 서버가 검사한다.
+         */
+        FormulaCreate: {
+            /** Applies To */
+            applies_to?: string[];
+            /** Block */
+            block?: string | null;
+            /** Describe */
+            describe?: string | null;
+            /** Expression */
+            expression: string;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Parameters */
+            parameters?: components["schemas"]["FormulaParameterIn"][];
+            result?: components["schemas"]["FormulaResultIn"] | null;
+            /** Variables */
+            variables?: components["schemas"]["FormulaVariableIn"][];
+            /** X Column */
+            x_column?: string | null;
+            /** Y Column */
+            y_column?: string | null;
+        };
+        /** FormulaOut */
+        FormulaOut: {
+            /** Applies To */
+            applies_to: string[];
+            /** Block */
+            block: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Describe */
+            describe: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Expression */
+            expression: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Kind Label */
+            kind_label: string;
+            /** Label */
+            label: string;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            }[];
+            /** References */
+            references?: {
+                [key: string]: number;
+            };
+            /** Registry Key */
+            registry_key: string;
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Variables */
+            variables: {
+                [key: string]: unknown;
+            }[];
+            /** Version */
+            version: number;
+            /** X Column */
+            x_column: string | null;
+            /** Y Column */
+            y_column: string | null;
+        };
+        /** FormulaParameterIn */
+        FormulaParameterIn: {
+            /**
+             * Initial
+             * @default 1
+             */
+            initial: number;
+            /** Lower */
+            lower?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Unit
+             * @default 1
+             */
+            unit: string;
+            /** Upper */
+            upper?: number | null;
+        };
+        /**
+         * FormulaPreviewIn
+         * @description 저장 전에 **실제 채택 결과 하나로** 돌려 본다 (D6).
+         */
+        FormulaPreviewIn: {
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            spec: components["schemas"]["FormulaCreate"];
+        };
+        /** FormulaPreviewOut */
+        FormulaPreviewOut: {
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Notes */
+            notes?: string[];
+            /** Ok */
+            ok: boolean;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            }[];
+            /** R Squared */
+            r_squared?: number | null;
+            /** Sample */
+            sample?: {
+                [key: string]: number;
+            }[];
+            /** Value */
+            value?: number | null;
+        };
+        /** FormulaResultIn */
+        FormulaResultIn: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Si Unit
+             * @default 1
+             */
+            si_unit: string;
+        };
+        /**
+         * FormulaUpdate
+         * @description 안 보낸 것과 비운 것을 가른다 — 보낸 칸만 바뀐다. 식이 바뀌면 판이 오른다.
+         */
+        FormulaUpdate: {
+            /** Applies To */
+            applies_to?: string[] | null;
+            /** Block */
+            block?: string | null;
+            /** Describe */
+            describe?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Expression */
+            expression?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Parameters */
+            parameters?: components["schemas"]["FormulaParameterIn"][] | null;
+            result?: components["schemas"]["FormulaResultIn"] | null;
+            /** Variables */
+            variables?: components["schemas"]["FormulaVariableIn"][] | null;
+            /** X Column */
+            x_column?: string | null;
+            /** Y Column */
+            y_column?: string | null;
+        };
+        /** FormulaVariableIn */
+        FormulaVariableIn: {
+            /** Label */
+            label?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Unit
+             * @default 1
+             */
+            unit: string;
+        };
+        /**
+         * FormulaVocabularyOut
+         * @description 식을 적을 때 고를 수 있는 것 — 열·스칼라·블록·함수. 계약서와 같은 어휘.
+         */
+        FormulaVocabularyOut: {
+            /** Blocks */
+            blocks: {
+                [key: string]: string;
+            }[];
+            /** Columns */
+            columns: {
+                [key: string]: string;
+            }[];
+            /** Constants */
+            constants: string[];
+            /** Functions */
+            functions: string[];
+            /** Scalars */
+            scalars: {
+                [key: string]: string;
+            }[];
         };
         /** GraphEdgeOut */
         GraphEdgeOut: {
@@ -19129,6 +19435,176 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_formulas_api_formulas_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormulaOut"][];
+                };
+            };
+        };
+    };
+    create_formula_api_formulas_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormulaCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormulaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_formulas_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormulaPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormulaPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    vocabulary_api_formulas_vocabulary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormulaVocabularyOut"];
+                };
+            };
+        };
+    };
+    delete_formula_api_formulas__formula_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                formula_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_formula_api_formulas__formula_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                formula_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormulaUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormulaOut"];
+                };
             };
             /** @description Validation Error */
             422: {

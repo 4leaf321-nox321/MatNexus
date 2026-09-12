@@ -9896,6 +9896,680 @@
         "title": "FormatProfileSaveRequest",
         "type": "object"
       },
+      "FormulaCreate": {
+        "description": "계산식 하나. **자리(kind)에 따라 필요한 칸이 다르다** — 서버가 검사한다.",
+        "properties": {
+          "applies_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applies To",
+            "type": "array"
+          },
+          "block": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block"
+          },
+          "describe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Describe"
+          },
+          "expression": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 60,
+            "minLength": 2,
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaParameterIn"
+            },
+            "title": "Parameters",
+            "type": "array"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaResultIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaVariableIn"
+            },
+            "title": "Variables",
+            "type": "array"
+          },
+          "x_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Column"
+          },
+          "y_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y Column"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "label",
+          "expression"
+        ],
+        "title": "FormulaCreate",
+        "type": "object"
+      },
+      "FormulaOut": {
+        "properties": {
+          "applies_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applies To",
+            "type": "array"
+          },
+          "block": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "describe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Describe"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "parameters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Parameters",
+            "type": "array"
+          },
+          "references": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "References",
+            "type": "object"
+          },
+          "registry_key": {
+            "title": "Registry Key",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Variables",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "x_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Column"
+          },
+          "y_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y Column"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "registry_key",
+          "kind",
+          "kind_label",
+          "label",
+          "expression",
+          "describe",
+          "variables",
+          "parameters",
+          "result",
+          "x_column",
+          "y_column",
+          "block",
+          "applies_to",
+          "version",
+          "enabled",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FormulaOut",
+        "type": "object"
+      },
+      "FormulaParameterIn": {
+        "properties": {
+          "initial": {
+            "default": 1.0,
+            "title": "Initial",
+            "type": "number"
+          },
+          "lower": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "unit": {
+            "default": "1",
+            "title": "Unit",
+            "type": "string"
+          },
+          "upper": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upper"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FormulaParameterIn",
+        "type": "object"
+      },
+      "FormulaPreviewIn": {
+        "description": "저장 전에 **실제 채택 결과 하나로** 돌려 본다 (D6).",
+        "properties": {
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FormulaCreate"
+          }
+        },
+        "required": [
+          "spec",
+          "result_id"
+        ],
+        "title": "FormulaPreviewIn",
+        "type": "object"
+      },
+      "FormulaPreviewOut": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "parameters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Parameters",
+            "type": "array"
+          },
+          "r_squared": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R Squared"
+          },
+          "sample": {
+            "items": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Sample",
+            "type": "array"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "kind",
+          "ok",
+          "message"
+        ],
+        "title": "FormulaPreviewOut",
+        "type": "object"
+      },
+      "FormulaResultIn": {
+        "properties": {
+          "key": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "default": "1",
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "FormulaResultIn",
+        "type": "object"
+      },
+      "FormulaUpdate": {
+        "description": "안 보낸 것과 비운 것을 가른다 — 보낸 칸만 바뀐다. 식이 바뀌면 판이 오른다.",
+        "properties": {
+          "applies_to": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applies To"
+          },
+          "block": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block"
+          },
+          "describe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Describe"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "parameters": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FormulaParameterIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameters"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaResultIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variables": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FormulaVariableIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variables"
+          },
+          "x_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Column"
+          },
+          "y_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y Column"
+          }
+        },
+        "title": "FormulaUpdate",
+        "type": "object"
+      },
+      "FormulaVariableIn": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "unit": {
+            "default": "1",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FormulaVariableIn",
+        "type": "object"
+      },
+      "FormulaVocabularyOut": {
+        "description": "식을 적을 때 고를 수 있는 것 — 열·스칼라·블록·함수. 계약서와 같은 어휘.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "columns": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "constants": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Constants",
+            "type": "array"
+          },
+          "functions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Functions",
+            "type": "array"
+          },
+          "scalars": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Scalars",
+            "type": "array"
+          }
+        },
+        "required": [
+          "columns",
+          "scalars",
+          "blocks",
+          "functions",
+          "constants"
+        ],
+        "title": "FormulaVocabularyOut",
+        "type": "object"
+      },
       "GraphEdgeOut": {
         "properties": {
           "dst_id": {
@@ -30101,6 +30775,223 @@
         "summary": "Update Profile",
         "tags": [
           "tests"
+        ]
+      }
+    },
+    "/api/formulas": {
+      "get": {
+        "operationId": "list_formulas_api_formulas_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FormulaOut"
+                  },
+                  "title": "Response List Formulas Api Formulas Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Formulas",
+        "tags": [
+          "formulas"
+        ]
+      },
+      "post": {
+        "operationId": "create_formula_api_formulas_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormulaCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormulaOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Formula",
+        "tags": [
+          "formulas"
+        ]
+      }
+    },
+    "/api/formulas/preview": {
+      "post": {
+        "description": "저장 전에 실제 채택 결과 하나로 돌려 본다 (D6). **아무것도 저장하지 않는다.**\n\n문법은 맞는데 뜻이 틀린 식(축을 바꿔 적음, 단위가 천 배)은 여기서 드러난다.",
+        "operationId": "preview_api_formulas_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormulaPreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormulaPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "formulas"
+        ]
+      }
+    },
+    "/api/formulas/vocabulary": {
+      "get": {
+        "description": "식을 적을 때 고를 수 있는 이름 — 계약서(`docs/확장-계약.md`)와 같은 어휘.\n\n열·스칼라는 내장·확장 단계의 `makes_columns`·`makes_values` 에서, 블록은 카드\n레지스트리에서. 화면이 이것으로 드롭다운을 그린다 — 이름을 손으로 치면 오타가\n난 채로 저장되고, 그 식은 돌 때마다 「열이 없습니다」 만 남긴다.",
+        "operationId": "vocabulary_api_formulas_vocabulary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormulaVocabularyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Vocabulary",
+        "tags": [
+          "formulas"
+        ]
+      }
+    },
+    "/api/formulas/{formula_id}": {
+      "delete": {
+        "description": "참조가 없을 때만. 있으면 409 — 대신 끈다.",
+        "operationId": "delete_formula_api_formulas__formula_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "formula_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Formula Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Formula",
+        "tags": [
+          "formulas"
+        ]
+      },
+      "patch": {
+        "description": "식이 바뀌면 판이 오른다. 저장된 레시피·결과·카드는 옛 판을 든 채 그대로다.",
+        "operationId": "update_formula_api_formulas__formula_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "formula_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Formula Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormulaUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormulaOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Formula",
+        "tags": [
+          "formulas"
         ]
       }
     },

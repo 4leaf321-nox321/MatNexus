@@ -186,6 +186,8 @@ EXCLUDED_TABLES: dict[str, str] = {
     "test_condition_fields": 설정,
     "unit_systems": 설정,
     "pipeline_connectors": 설정,
+    "formulas": "화면에서 적은 계산식(ADR 0030) — 처리 단계·적합식의 정의이지 자료가 아니다. "
+    + 설정,
     "guide_revisions": 이력,
     "jobs": 이력,
     "pipeline_inbox_items": 이력,

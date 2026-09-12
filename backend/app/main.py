@@ -26,6 +26,8 @@ from app.modules.auth import routes as auth_routes
 from app.modules.catalog import routes as catalog_routes
 from app.modules.equipment import routes as equipment_routes
 from app.modules.fitting import routes as fitting_routes
+from app.modules.formulas import routes as formulas_routes
+from app.modules.formulas import services as formulas_services
 from app.modules.grouping import routes as grouping_routes
 from app.modules.guide import routes as guide_routes
 from app.modules.materials import routes as materials_routes
@@ -116,6 +118,7 @@ def _api_router() -> APIRouter:
     router.include_router(statistics_routes.router)
     router.include_router(equipment_routes.router)
     router.include_router(fitting_routes.router)
+    router.include_router(formulas_routes.router)
     router.include_router(grouping_routes.router)
     router.include_router(units_routes.router)
     router.include_router(ontology_routes.router)
@@ -176,6 +179,17 @@ def _guard_production_secrets(settings: Settings) -> None:
         )
 
 
+def _sync_formulas() -> None:
+    try:
+        with SessionLocal() as db:
+            keys = formulas_services.sync(db)
+    except Exception as exc:  # 기동을 막지 않는다
+        logger.warning("계산식을 레지스트리에 올리지 못했습니다 — %s", exc)
+        return
+    if keys:
+        logger.info("계산식 %d개를 올렸습니다: %s", len(keys), ", ".join(keys))
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings)
@@ -231,6 +245,12 @@ def create_app() -> FastAPI:
     # 500 으로 먼저 만나는데, 거기엔 원인이 안 적힌다. 운영은 배포가 알아서
     # `alembic upgrade head` 를 돌리므로 이건 개발 서버를 위한 안내다.
     warn_if_behind(engine)
+
+    # **표에 적힌 계산식을 레지스트리에 올린다** (ADR 0030). 확장 다음이다 — 확장이
+    # 같은 키를 내장으로 등록했다면 식이 그것을 덮지 못하게 `formula.` 접두어가
+    # 가른다. DB 가 안 닿거나 표가 아직 없으면(마이그레이션 전) 경고만 남기고 뜬다 —
+    # 식 없이 뜨는 서버가 안 뜨는 서버보다 낫다.
+    _sync_formulas()
 
     logger.info("MatNexus 기동 (env=%s)", settings.app_env)
     return app

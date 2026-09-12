@@ -71,6 +71,7 @@ const SignupPage = lazy(() => import('@/modules/auth/SignupPage'))
 const ServerPage = lazy(() => import('@/modules/server/ServerPage'))
 const StoragePage = lazy(() => import('@/modules/tests/StoragePage'))
 const TrashPage = lazy(() => import('@/modules/trash/TrashPage'))
+const FormulasPage = lazy(() => import('@/modules/formulas/FormulasPage'))
 const ConnectorsPage = lazy(() => import('@/modules/pipelines/ConnectorsPage'))
 const GuidePage = lazy(() => import('@/modules/guide/GuidePage'))
 const ProfilePage = lazy(() => import('@/modules/auth/ProfilePage'))
@@ -215,6 +216,7 @@ export const router = createBrowserRouter([
           { path: 'admin/vocabulary', element: <VocabularyAdminPage /> },
           { path: 'admin/storage', element: <StoragePage /> },
           { path: 'admin/trash', element: <TrashPage /> },
+          { path: 'admin/formulas', element: <FormulasPage /> },
           // 저장소 정리는 이 화면의 탭 하나다 — 주소는 둘로 남는다(`SubTabs`).
           { path: 'server', element: <ServerPage /> },
 
