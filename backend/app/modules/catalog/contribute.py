@@ -470,7 +470,32 @@ def delete_value(db: Session, value_id: uuid.UUID, user: User) -> None:
             status=422,
         )
     _require_owner(row.created_by_id, user)
+    source_id = row.source_id
     db.delete(row)
+    db.flush()
+    _drop_orphan_source(db, source_id)
+
+
+def _drop_orphan_source(db: Session, source_id: uuid.UUID | None) -> None:
+    """값을 지운 뒤 **아무 값도 안 가리키는 직접 만든 출처**는 같이 지운다.
+
+    출처는 여러 값이 나눠 쓰므로 값과 함께 지우면 안 되고, 그렇다고 두면 값을 넣고
+    지울 때마다 빈 출처가 조용히 쌓인다(실측 2026-09-12). 이관해 온 출처는 원본이
+    정본이라 값이 없어도 둔다.
+    """
+    if source_id is None:
+        return
+    source = db.get(CatalogSource, source_id)
+    if source is None or not is_local(source):
+        return
+    still = db.scalar(
+        select(func.count())
+        .select_from(CatalogValue)
+        .where(CatalogValue.source_id == source_id)
+    )
+    if still:
+        return
+    db.delete(source)
     db.flush()
 
 

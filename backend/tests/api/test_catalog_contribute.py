@@ -277,6 +277,44 @@ class Test값:
         assert db.scalar(select(CatalogSource).where(CatalogSource.year == 2024)) is not None
         assert len(db.scalars(select(CatalogSource)).all()) == 2
 
+    def test_값을_지우면_아무도_안_가리키는_직접_만든_출처도_지워진다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        imported: CatalogMaterial,
+    ) -> None:
+        """출처는 여러 값이 나눠 쓴다 — 마지막 값이 사라질 때만 같이 사라진다."""
+        first = make_value(client, admin_headers, str(imported.id)).json()["value"]["id"]
+        second = make_value(client, admin_headers, str(imported.id)).json()["value"]["id"]
+        client.delete(f"/api/catalog/values/{first}", headers=admin_headers)
+        assert db.scalar(select(CatalogSource).where(CatalogSource.year == 2024)) is not None
+        client.delete(f"/api/catalog/values/{second}", headers=admin_headers)
+        db.expire_all()
+        assert db.scalar(select(CatalogSource).where(CatalogSource.year == 2024)) is None
+
+    def test_이관해_온_출처는_값이_없어도_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        imported: CatalogMaterial,
+    ) -> None:
+        db.add(CatalogSource(mt_id=900010, kind="book", title="핸드북", year=1999))
+        db.commit()
+        made = make_value(
+            client,
+            admin_headers,
+            str(imported.id),
+            source={"kind": "book", "title": "핸드북", "year": 1999},
+        ).json()["value"]
+        assert made["source"]["title"] == "핸드북"
+        client.delete(f"/api/catalog/values/{made['id']}", headers=admin_headers)
+        db.expire_all()
+        assert (
+            db.scalar(select(CatalogSource).where(CatalogSource.mt_id == 900010)) is not None
+        )
+
     def test_추정값은_tier_4_이고_가정_표지가_붙는다(
         self, client: TestClient, admin_headers: dict[str, str], imported: CatalogMaterial
     ) -> None:
