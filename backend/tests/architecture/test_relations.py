@@ -174,6 +174,12 @@ EXCLUDED_TABLES: dict[str, str] = {
     "property_aliases": 기준정보,
     "voc_events": 제보,
     "voc_items": 제보,
+    "commission_events": "측정 의뢰의 이력(등록·접수·시험 연결) — 사람 사이의 절차 기록이다. "
+    + 제보,
+    "commission_items": (
+        "측정 의뢰의 항목(어느 시험 종류를 몇 개) — 의뢰에 딸린 줄이다. 시험이 이것을"
+        " 가리키지만(`test_runs.commission_item_id`) 그 물음은 의뢰 표에서 답한다"
+    ),
     "vocabularies": 기준정보,
     "vocabulary_aliases": 기준정보,
     "vocabulary_dismissals": 기준정보,
@@ -220,6 +226,11 @@ PENDING_TABLES: dict[str, str] = {
     "processing_recipes": (
         "「이 레시피로 돌린 결과들」 — 부서가 합의해 둔 단계 묶음이라 물음이 선다."
         " 목록은 `list_recipes` 로 닿지만 결과에서 거슬러 오를 길이 없다"
+    ),
+    "commissions": (
+        "측정 의뢰 — 「이 시험은 어느 의뢰에서 나왔나」·「이 의뢰로 어떤 카드가 나왔나」 는"
+        " 물성 사이의 물음에 가깝다(2026-09-14). 사람 사이의 절차이기도 해서 첫 의뢰가"
+        " 실제로 오간 뒤 마디로 둘지 정한다"
     ),
     "workbench_items": "워크벤치는 사람의 작업 공간이다 — 물성 그래프에 넣을 것인지 안 정했다",
     "workbench_runs": (

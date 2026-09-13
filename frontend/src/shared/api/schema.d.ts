@@ -1015,6 +1015,154 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/commissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Commissions
+         * @description 낸 부서·받는 부서가 보는 게시판. 최신이 위다.
+         */
+        get: operations["list_commissions_api_commissions_get"];
+        put?: never;
+        /** Create Commission */
+        post: operations["create_commission_api_commissions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commissions/statuses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Statuses
+         * @description 상태의 차례와 이름. 화면이 표를 갖지 않는다.
+         */
+        get: operations["list_statuses_api_commissions_statuses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commissions/{commission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Commission */
+        get: operations["get_commission_api_commissions__commission_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Commission
+         * @description **작성 중인 것만 지운다.** 낸 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로 둔다.
+         */
+        delete: operations["delete_commission_api_commissions__commission_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Commission
+         * @description **안 보낸 것과 비운 것을 가른다.** 기한은 비울 수 있는 칸이라 `model_fields_set`
+         *     으로 가른다.
+         */
+        patch: operations["update_commission_api_commissions__commission_id__patch"];
+        trace?: never;
+    };
+    "/api/commissions/{commission_id}/assignee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign
+         * @description 담당자 — 받는 부서 멤버 가운데. 받는 쪽만 정한다.
+         */
+        post: operations["assign_api_commissions__commission_id__assignee_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commissions/{commission_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Event
+         * @description 상태를 옮기거나 말을 보탠다. **갈 수 있는 곳만 간다.**
+         */
+        post: operations["add_event_api_commissions__commission_id__events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commissions/{commission_id}/items/{item_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link Run
+         * @description 시험을 항목에 붙인다. **같은 시료, 같은 시험 종류**여야 한다 — 다른 시료의 시험을
+         *     붙이면 의뢰가 재지도 않은 것을 잰 것으로 적는다. 붙으면 「접수」 는 「시험 중」 이 된다.
+         */
+        post: operations["link_run_api_commissions__commission_id__items__item_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commissions/{commission_id}/items/{item_id}/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink Run
+         * @description 연결을 푼다. 시험은 남는다 — 잘못 붙였을 때.
+         */
+        delete: operations["unlink_run_api_commissions__commission_id__items__item_id__runs__run_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/equipment/parts/{part_id}": {
         parameters: {
             query?: never;
@@ -6588,6 +6736,14 @@ export interface components {
             test_type?: string | null;
         };
         /**
+         * AssignRequest
+         * @description 담당자 지정 — 받는 쪽. `None` 이면 비운다.
+         */
+        AssignRequest: {
+            /** Assignee Id */
+            assignee_id?: string | null;
+        };
+        /**
          * AttributeOut
          * @description 이 값이 실제로 들고 있는 치수 하나 — **이름·기호·단위까지 붙여서.**
          *
@@ -8021,6 +8177,287 @@ export interface components {
             dry_run: boolean;
             /** Retention Days */
             retention_days?: number | null;
+        };
+        /** CommissionCreateRequest */
+        CommissionCreateRequest: {
+            /** Due On */
+            due_on?: string | null;
+            /** Items */
+            items: components["schemas"]["CommissionItemIn"][];
+            /** Lab Workspace Slug */
+            lab_workspace_slug: string;
+            /**
+             * Priority
+             * @default normal
+             */
+            priority: string;
+            /** Purpose */
+            purpose: string;
+            /**
+             * Sample Id
+             * Format: uuid
+             */
+            sample_id: string;
+            /** Sample Plan */
+            sample_plan?: string | null;
+            /**
+             * Submit
+             * @default false
+             */
+            submit: boolean;
+            /** Title */
+            title: string;
+        };
+        /** CommissionDetailOut */
+        CommissionDetailOut: {
+            /** Allowed */
+            allowed: string[];
+            /** Allowed Labels */
+            allowed_labels: {
+                [key: string]: string;
+            };
+            assignee: components["schemas"]["NamedOut"] | null;
+            /** Assignees */
+            assignees?: components["schemas"]["NamedOut"][];
+            /** Can Assign */
+            can_assign: boolean;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Can Link */
+            can_link: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Due On */
+            due_on: string | null;
+            /** Event Count */
+            event_count: number;
+            /** Events */
+            events: components["schemas"]["CommissionEventOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Mine */
+            is_mine: boolean;
+            /** Item Count */
+            item_count: number;
+            /** Items */
+            items: components["schemas"]["CommissionItemOut"][];
+            lab_workspace: components["schemas"]["WorkspaceRefOut"];
+            /** Note Required */
+            note_required: string[];
+            /** Priority */
+            priority: string;
+            /** Priority Label */
+            priority_label: string;
+            progress: components["schemas"]["ProgressOut"];
+            /** Purpose */
+            purpose: string;
+            requester_workspace: components["schemas"]["WorkspaceRefOut"];
+            sample: components["schemas"]["SampleRefOut"];
+            /** Sample Plan */
+            sample_plan: string | null;
+            /** Seq */
+            seq: number;
+            /** Side */
+            side: string;
+            /** Status */
+            status: string;
+            /**
+             * Status At
+             * Format: date-time
+             */
+            status_at: string;
+            /** Status By */
+            status_by: string | null;
+            /** Status Label */
+            status_label: string;
+            /** Title */
+            title: string;
+        };
+        /** CommissionEventOut */
+        CommissionEventOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** By */
+            by: string | null;
+            /** From Status */
+            from_status: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note: string | null;
+            /** To Status */
+            to_status: string;
+            /** To Status Label */
+            to_status_label: string;
+        };
+        /**
+         * CommissionEventRequest
+         * @description 상태를 옮기거나 말을 보탠다. **둘 중 하나는 있어야 한다.**
+         */
+        CommissionEventRequest: {
+            /** Note */
+            note?: string | null;
+            /** Status */
+            status?: string | null;
+        };
+        /** CommissionItemIn */
+        CommissionItemIn: {
+            /** Condition Units */
+            condition_units?: {
+                [key: string]: string;
+            };
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /** Deliverable */
+            deliverable?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Orientations */
+            orientations?: string[];
+            /** Test Type Key */
+            test_type_key: string;
+        };
+        /** CommissionItemOut */
+        CommissionItemOut: {
+            /** Candidates */
+            candidates?: components["schemas"]["LinkedRunOut"][];
+            /** Conditions */
+            conditions: {
+                [key: string]: unknown;
+            };
+            /** Count */
+            count: number;
+            /** Deliverable */
+            deliverable: string | null;
+            /** Done */
+            done: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Input Units */
+            input_units: {
+                [key: string]: string;
+            };
+            /** Note */
+            note: string | null;
+            /** Orientations */
+            orientations: string[];
+            /** Position */
+            position: number;
+            /** Runs */
+            runs: components["schemas"]["LinkedRunOut"][];
+            /** Test Type Key */
+            test_type_key: string;
+            /** Test Type Label */
+            test_type_label: string;
+        };
+        /**
+         * CommissionOut
+         * @description 목록 한 줄. 상세는 `CommissionDetailOut`.
+         */
+        CommissionOut: {
+            assignee: components["schemas"]["NamedOut"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Due On */
+            due_on: string | null;
+            /** Event Count */
+            event_count: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Mine */
+            is_mine: boolean;
+            /** Item Count */
+            item_count: number;
+            lab_workspace: components["schemas"]["WorkspaceRefOut"];
+            /** Priority */
+            priority: string;
+            /** Priority Label */
+            priority_label: string;
+            progress: components["schemas"]["ProgressOut"];
+            requester_workspace: components["schemas"]["WorkspaceRefOut"];
+            sample: components["schemas"]["SampleRefOut"];
+            /** Seq */
+            seq: number;
+            /** Side */
+            side: string;
+            /** Status */
+            status: string;
+            /**
+             * Status At
+             * Format: date-time
+             */
+            status_at: string;
+            /** Status By */
+            status_by: string | null;
+            /** Status Label */
+            status_label: string;
+            /** Title */
+            title: string;
+        };
+        /** CommissionStatusOut */
+        CommissionStatusOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * CommissionUpdateRequest
+         * @description 낸 것을 고친다 — 작성 중·접수 대기에서 낸 사람만. **안 보낸 칸은 안 건드린다.**
+         *
+         *     `due_on` 은 비울 수 있는 칸이라 「안 보냄」 과 「비움」 을 `model_fields_set` 으로
+         *     가른다(AGENTS.md). `items` 를 보내면 항목 전부를 갈아 넣는다 — 항목은 표 한 장으로
+         *     편집하는 것이라 낱개로 받으면 순서가 꼬인다.
+         */
+        CommissionUpdateRequest: {
+            /** Due On */
+            due_on?: string | null;
+            /** Items */
+            items?: components["schemas"]["CommissionItemIn"][] | null;
+            /** Lab Workspace Slug */
+            lab_workspace_slug?: string | null;
+            /** Priority */
+            priority?: string | null;
+            /** Purpose */
+            purpose?: string | null;
+            /** Sample Id */
+            sample_id?: string | null;
+            /** Sample Plan */
+            sample_plan?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** CompareCellOut */
         CompareCellOut: {
@@ -10810,6 +11247,32 @@ export interface components {
              */
             target_id: string;
         };
+        /** LinkRunRequest */
+        LinkRunRequest: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+        };
+        /** LinkedRunOut */
+        LinkedRunOut: {
+            /** Adopted */
+            adopted: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Record Name */
+            record_name: string;
+            /** Specimen Name */
+            specimen_name: string | null;
+            /** Status */
+            status: string;
+            /** Tested At */
+            tested_at: string | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -11444,6 +11907,19 @@ export interface components {
              */
             spec_thickness_unit: string;
         };
+        /**
+         * NamedOut
+         * @description 이름 붙은 참조 하나 — 부서·사람·재료.
+         */
+        NamedOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** NoticeCreateRequest */
         NoticeCreateRequest: {
             /** Body */
@@ -11686,6 +12162,17 @@ export interface components {
             test_types: components["schemas"]["TallyOut"][];
             /** Waiting To Process */
             waiting_to_process: number;
+        };
+        /** Page[CommissionOut] */
+        Page_CommissionOut_: {
+            /** Items */
+            items: components["schemas"]["CommissionOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /** Page[EquipmentUnitOut] */
         Page_EquipmentUnitOut_: {
@@ -12329,6 +12816,18 @@ export interface components {
         ProfileUpdateRequest: {
             /** Display Name */
             display_name: string;
+        };
+        /**
+         * ProgressOut
+         * @description 항목 전부를 합친 진행률. **저장하지 않고 센다** — 시험이 지워지면 함께 준다.
+         */
+        ProgressOut: {
+            /** Done */
+            done: number;
+            /** Linked */
+            linked: number;
+            /** Total */
+            total: number;
         };
         /** PronyCandidateOut */
         PronyCandidateOut: {
@@ -13672,6 +14171,23 @@ export interface components {
             workspace_id: string;
             /** Workspace Name */
             workspace_name: string | null;
+        };
+        /** SampleRefOut */
+        SampleRefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Record Name */
+            record_name: string;
         };
         /** SampleUpdateRequest */
         SampleUpdateRequest: {
@@ -16122,6 +16638,13 @@ export interface components {
             /** Sort Order */
             sort_order: number;
         };
+        /** WorkspaceRefOut */
+        WorkspaceRefOut: {
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+        };
         /**
          * WorkspaceReferenceOut
          * @description 이 부서를 가리키는 참조 하나. **삭제 버튼을 누르기 전에 보여 준다.**
@@ -17920,6 +18443,328 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_commissions_api_commissions_get: {
+        parameters: {
+            query?: {
+                scope?: string;
+                status?: string | null;
+                q?: string | null;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CommissionOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_commission_api_commissions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommissionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_statuses_api_commissions_statuses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionStatusOut"][];
+                };
+            };
+        };
+    };
+    get_commission_api_commissions__commission_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_commission_api_commissions__commission_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_commission_api_commissions__commission_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommissionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_api_commissions__commission_id__assignee_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_event_api_commissions__commission_id__events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommissionEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_run_api_commissions__commission_id__items__item_id__runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_run_api_commissions__commission_id__items__item_id__runs__run_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+                item_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -22,6 +22,7 @@ from app.modules.catalog.models import (
     CatalogValue,
 )
 from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
+from app.modules.commissions.models import Commission, CommissionEvent, CommissionItem
 from app.modules.equipment.models import (
     EquipmentCalibration,
     EquipmentPart,
@@ -75,6 +76,9 @@ __all__ = [
     "CatalogMaterial",
     "CatalogSource",
     "CatalogValue",
+    "Commission",
+    "CommissionEvent",
+    "CommissionItem",
     "Curve",
     "EnsembleResult",
     "EquipmentCalibration",

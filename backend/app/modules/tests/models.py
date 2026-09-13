@@ -406,6 +406,18 @@ class TestRun(Base):
     이어져야** 하기 때문이다. 큐 페이로드에만 실으면 재시도에서 사라진다.
     """
 
+    commission_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("commission_items.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """**이 시험은 어느 측정 의뢰 항목에 답하는가.** 비어 있으면 의뢰 없이 한 시험.
+
+    연결표가 아니라 열 하나인 이유: 한 시험이 두 의뢰에 답하는 것은 「같은 물성을
+    두 번 의뢰했다」 는 신호라 허용하지 않는다. 열 하나면 시험 상세가 join 없이
+    「의뢰 12번 ①」 배지를 그린다. 의뢰 항목이 지워지면 시험은 남고 연결만 풀린다."""
+
     temperature_step_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     """**겹칠 수 있는 온도 단이 몇이었나.** 읽을 때 세어 둔다. 안 세어 본 것은 `None`.
 

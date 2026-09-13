@@ -28,6 +28,24 @@ const MODULES = path.join(SRC, 'modules')
  * 것은 도메인상 자연스럽다 — 재료 모듈이 그 선택기를 제공하고 시험이 조립한다.
  */
 const ALLOWED: Record<string, { to: string; why: string }[]> = {
+  commissions: [
+    {
+      to: 'materials',
+      why: '의뢰는 **시료**에 건다 — 재료를 찾아 시료를 고르는 것은 재료 모듈의 API 고, 방향 목록(`ORIENTATIONS`)도 시편의 주인인 재료 모듈이 든다. 여기서 다시 적으면 방향이 늘었을 때 의뢰만 옛 목록을 든다.',
+    },
+    {
+      to: 'tests',
+      why: '항목의 조건 칸은 **시험 종류의 조건 정의**에서 온다 — 시험 등록과 같은 칸, 같은 단위. 종류 목록을 여기서 다시 만들면 조건이 늘었을 때 의뢰만 옛 칸을 든다.',
+    },
+    {
+      to: 'fitting',
+      why: '「받을 것」 은 카드 종류다 — 종류가 되는 블록과 그 이름(`kindLabel`, 경화식→탄소성)은 카드 모듈이 정한다. 여기서 이름을 적어 두면 확장이 블록을 더해도 의뢰 후보에 안 뜬다.',
+    },
+    {
+      to: 'workspaces',
+      why: '받는 부서를 고른다 — 측정 조직이 하나가 아니다. 부서 목록(경로 포함)은 부서 모듈의 API 다.',
+    },
+  ],
   equipment: [
     {
       to: 'vocabulary',
@@ -288,6 +306,9 @@ const NARROW_BY_DESIGN = new Set([
   path.join('notifications', 'NotificationsPage.tsx'),
   // 게시판(`VocPage`)은 표라 좁히지 않는다. 한 건을 읽는 상세만 좁힌다.
   path.join('voc', 'VocDetailPage.tsx'),
+  // 측정 의뢰도 같다 — 목록은 표, 상세와 새 의뢰 폼은 읽고 적는 화면이라 좁힌다.
+  path.join('commissions', 'CommissionDetailPage.tsx'),
+  path.join('commissions', 'CommissionNewPage.tsx'),
 ])
 
 describe('본문 폭', () => {

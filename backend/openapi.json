@@ -523,6 +523,25 @@
         "title": "AssignIn",
         "type": "object"
       },
+      "AssignRequest": {
+        "description": "담당자 지정 — 받는 쪽. `None` 이면 비운다.",
+        "properties": {
+          "assignee_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Id"
+          }
+        },
+        "title": "AssignRequest",
+        "type": "object"
+      },
       "AttributeOut": {
         "description": "이 값이 실제로 들고 있는 치수 하나 — **이름·기호·단위까지 붙여서.**\n\n`attributes` 만으로는 화면이 아무것도 못 그린다. 키는 `gauge_length` 이고\n값은 SI(0.05)라, 이름도 단위도 칸 선언(`SpecimenField`)에 있다. 화면이 그\n셋을 따로 맞추게 두면 목록 한 줄마다 칸을 다시 물어야 하고, 그러면 100줄에\n200번이다 — 서버가 한 번에 풀어서 붙인다.\n\n**칸 선언이 없는 키도 낸다.** 칸을 지웠는데 값이 남은 경우가 그것인데,\n감추면 그 값은 화면 어디에도 없으면서 계속 저장돼 있다. 그때는 키를 이름\n자리에 그대로 적는다 — **지어내지 않는다.**",
         "properties": {
@@ -4503,6 +4522,832 @@
           }
         },
         "title": "CleanupRequest",
+        "type": "object"
+      },
+      "CommissionCreateRequest": {
+        "properties": {
+          "due_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due On"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommissionItemIn"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "lab_workspace_slug": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Lab Workspace Slug",
+            "type": "string"
+          },
+          "priority": {
+            "default": "normal",
+            "title": "Priority",
+            "type": "string"
+          },
+          "purpose": {
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "sample_id": {
+            "format": "uuid",
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "sample_plan": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Plan"
+          },
+          "submit": {
+            "default": false,
+            "title": "Submit",
+            "type": "boolean"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "purpose",
+          "sample_id",
+          "lab_workspace_slug",
+          "items"
+        ],
+        "title": "CommissionCreateRequest",
+        "type": "object"
+      },
+      "CommissionDetailOut": {
+        "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed",
+            "type": "array"
+          },
+          "allowed_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Allowed Labels",
+            "type": "object"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assignees": {
+            "items": {
+              "$ref": "#/components/schemas/NamedOut"
+            },
+            "title": "Assignees",
+            "type": "array"
+          },
+          "can_assign": {
+            "title": "Can Assign",
+            "type": "boolean"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "can_link": {
+            "title": "Can Link",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "due_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due On"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CommissionEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_mine": {
+            "title": "Is Mine",
+            "type": "boolean"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommissionItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "lab_workspace": {
+            "$ref": "#/components/schemas/WorkspaceRefOut"
+          },
+          "note_required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Note Required",
+            "type": "array"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "priority_label": {
+            "title": "Priority Label",
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/ProgressOut"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "requester_workspace": {
+            "$ref": "#/components/schemas/WorkspaceRefOut"
+          },
+          "sample": {
+            "$ref": "#/components/schemas/SampleRefOut"
+          },
+          "sample_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Plan"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "side": {
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_at": {
+            "format": "date-time",
+            "title": "Status At",
+            "type": "string"
+          },
+          "status_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status By"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "title",
+          "status",
+          "status_label",
+          "priority",
+          "priority_label",
+          "requester_workspace",
+          "lab_workspace",
+          "sample",
+          "due_on",
+          "created_at",
+          "created_by",
+          "status_at",
+          "status_by",
+          "assignee",
+          "item_count",
+          "progress",
+          "is_mine",
+          "side",
+          "event_count",
+          "purpose",
+          "sample_plan",
+          "items",
+          "events",
+          "allowed",
+          "allowed_labels",
+          "note_required",
+          "can_edit",
+          "can_link",
+          "can_assign"
+        ],
+        "title": "CommissionDetailOut",
+        "type": "object"
+      },
+      "CommissionEventOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Status"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "to_status": {
+            "title": "To Status",
+            "type": "string"
+          },
+          "to_status_label": {
+            "title": "To Status Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "by",
+          "from_status",
+          "to_status",
+          "to_status_label",
+          "note"
+        ],
+        "title": "CommissionEventOut",
+        "type": "object"
+      },
+      "CommissionEventRequest": {
+        "description": "상태를 옮기거나 말을 보탠다. **둘 중 하나는 있어야 한다.**",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "CommissionEventRequest",
+        "type": "object"
+      },
+      "CommissionItemIn": {
+        "properties": {
+          "condition_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Condition Units",
+            "type": "object"
+          },
+          "conditions": {
+            "additionalProperties": true,
+            "title": "Conditions",
+            "type": "object"
+          },
+          "count": {
+            "default": 1,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "deliverable": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deliverable"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "orientations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Orientations",
+            "type": "array"
+          },
+          "test_type_key": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Test Type Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_type_key"
+        ],
+        "title": "CommissionItemIn",
+        "type": "object"
+      },
+      "CommissionItemOut": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedRunOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "conditions": {
+            "additionalProperties": true,
+            "title": "Conditions",
+            "type": "object"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "deliverable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deliverable"
+          },
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Input Units",
+            "type": "object"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "orientations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Orientations",
+            "type": "array"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "test_type_key": {
+            "title": "Test Type Key",
+            "type": "string"
+          },
+          "test_type_label": {
+            "title": "Test Type Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "test_type_key",
+          "test_type_label",
+          "conditions",
+          "input_units",
+          "orientations",
+          "count",
+          "deliverable",
+          "note",
+          "runs",
+          "done"
+        ],
+        "title": "CommissionItemOut",
+        "type": "object"
+      },
+      "CommissionOut": {
+        "description": "목록 한 줄. 상세는 `CommissionDetailOut`.",
+        "properties": {
+          "assignee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "due_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due On"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_mine": {
+            "title": "Is Mine",
+            "type": "boolean"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "lab_workspace": {
+            "$ref": "#/components/schemas/WorkspaceRefOut"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "priority_label": {
+            "title": "Priority Label",
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/ProgressOut"
+          },
+          "requester_workspace": {
+            "$ref": "#/components/schemas/WorkspaceRefOut"
+          },
+          "sample": {
+            "$ref": "#/components/schemas/SampleRefOut"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "side": {
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_at": {
+            "format": "date-time",
+            "title": "Status At",
+            "type": "string"
+          },
+          "status_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status By"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "title",
+          "status",
+          "status_label",
+          "priority",
+          "priority_label",
+          "requester_workspace",
+          "lab_workspace",
+          "sample",
+          "due_on",
+          "created_at",
+          "created_by",
+          "status_at",
+          "status_by",
+          "assignee",
+          "item_count",
+          "progress",
+          "is_mine",
+          "side",
+          "event_count"
+        ],
+        "title": "CommissionOut",
+        "type": "object"
+      },
+      "CommissionStatusOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "CommissionStatusOut",
+        "type": "object"
+      },
+      "CommissionUpdateRequest": {
+        "description": "낸 것을 고친다 — 작성 중·접수 대기에서 낸 사람만. **안 보낸 칸은 안 건드린다.**\n\n`due_on` 은 비울 수 있는 칸이라 「안 보냄」 과 「비움」 을 `model_fields_set` 으로\n가른다(AGENTS.md). `items` 를 보내면 항목 전부를 갈아 넣는다 — 항목은 표 한 장으로\n편집하는 것이라 낱개로 받으면 순서가 꼬인다.",
+        "properties": {
+          "due_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due On"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CommissionItemIn"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "lab_workspace_slug": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lab Workspace Slug"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "sample_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
+          "sample_plan": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Plan"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "CommissionUpdateRequest",
         "type": "object"
       },
       "CompareCellOut": {
@@ -12120,6 +12965,74 @@
         "title": "ItemOut",
         "type": "object"
       },
+      "LinkRunRequest": {
+        "properties": {
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "LinkRunRequest",
+        "type": "object"
+      },
+      "LinkedRunOut": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "specimen_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Name"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tested At"
+          }
+        },
+        "required": [
+          "id",
+          "record_name",
+          "status",
+          "adopted",
+          "specimen_name",
+          "tested_at"
+        ],
+        "title": "LinkedRunOut",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -13901,6 +14814,26 @@
         "title": "NamePreviewRequest",
         "type": "object"
       },
+      "NamedOut": {
+        "description": "이름 붙은 참조 하나 — 부서·사람·재료.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "NamedOut",
+        "type": "object"
+      },
       "NoticeCreateRequest": {
         "properties": {
           "body": {
@@ -14475,6 +15408,37 @@
           "inbox_waiting"
         ],
         "title": "OverviewOut",
+        "type": "object"
+      },
+      "Page_CommissionOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommissionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[CommissionOut]",
         "type": "object"
       },
       "Page_EquipmentUnitOut_": {
@@ -15912,6 +16876,30 @@
           "display_name"
         ],
         "title": "ProfileUpdateRequest",
+        "type": "object"
+      },
+      "ProgressOut": {
+        "description": "항목 전부를 합친 진행률. **저장하지 않고 센다** — 시험이 지워지면 함께 준다.",
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "linked": {
+            "title": "Linked",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "linked",
+          "done"
+        ],
+        "title": "ProgressOut",
         "type": "object"
       },
       "PronyCandidateOut": {
@@ -19387,6 +20375,36 @@
           "created_at"
         ],
         "title": "SampleOut",
+        "type": "object"
+      },
+      "SampleRefOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "record_name",
+          "material_id",
+          "material_name"
+        ],
+        "title": "SampleRefOut",
         "type": "object"
       },
       "SampleUpdateRequest": {
@@ -25727,6 +26745,24 @@
         "title": "WorkspaceOut",
         "type": "object"
       },
+      "WorkspaceRefOut": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name"
+        ],
+        "title": "WorkspaceRefOut",
+        "type": "object"
+      },
       "WorkspaceReferenceOut": {
         "description": "이 부서를 가리키는 참조 하나. **삭제 버튼을 누르기 전에 보여 준다.**\n\n이름에 `Workspace` 를 붙인 이유: 계정 모듈에 이미 `ReferenceOut` 이 있다.\n같은 이름을 쓰면 FastAPI 가 **둘 다** `app__modules__…__ReferenceOut` 으로\n바꿔 버려서, 아무 관계도 없는 계정 화면의 프론트 타입이 깨진다(실제로 깨졌다).",
         "properties": {
@@ -28534,6 +29570,543 @@
         "summary": "Delete Catalog Value",
         "tags": [
           "catalog"
+        ]
+      }
+    },
+    "/api/commissions": {
+      "get": {
+        "description": "낸 부서·받는 부서가 보는 게시판. 최신이 위다.",
+        "operationId": "list_commissions_api_commissions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "pattern": "^(mine|received|all)$",
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_CommissionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Commissions",
+        "tags": [
+          "commissions"
+        ]
+      },
+      "post": {
+        "operationId": "create_commission_api_commissions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommissionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Commission",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/statuses": {
+      "get": {
+        "description": "상태의 차례와 이름. 화면이 표를 갖지 않는다.",
+        "operationId": "list_statuses_api_commissions_statuses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CommissionStatusOut"
+                  },
+                  "title": "Response List Statuses Api Commissions Statuses Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Statuses",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/{commission_id}": {
+      "delete": {
+        "description": "**작성 중인 것만 지운다.** 낸 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로 둔다.",
+        "operationId": "delete_commission_api_commissions__commission_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Commission",
+        "tags": [
+          "commissions"
+        ]
+      },
+      "get": {
+        "operationId": "get_commission_api_commissions__commission_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Commission",
+        "tags": [
+          "commissions"
+        ]
+      },
+      "patch": {
+        "description": "**안 보낸 것과 비운 것을 가른다.** 기한은 비울 수 있는 칸이라 `model_fields_set`\n으로 가른다.",
+        "operationId": "update_commission_api_commissions__commission_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommissionUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Commission",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/{commission_id}/assignee": {
+      "post": {
+        "description": "담당자 — 받는 부서 멤버 가운데. 받는 쪽만 정한다.",
+        "operationId": "assign_api_commissions__commission_id__assignee_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/{commission_id}/events": {
+      "post": {
+        "description": "상태를 옮기거나 말을 보탠다. **갈 수 있는 곳만 간다.**",
+        "operationId": "add_event_api_commissions__commission_id__events_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommissionEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Event",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/{commission_id}/items/{item_id}/runs": {
+      "post": {
+        "description": "시험을 항목에 붙인다. **같은 시료, 같은 시험 종류**여야 한다 — 다른 시료의 시험을\n붙이면 의뢰가 재지도 않은 것을 잰 것으로 적는다. 붙으면 「접수」 는 「시험 중」 이 된다.",
+        "operationId": "link_run_api_commissions__commission_id__items__item_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Run",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/{commission_id}/items/{item_id}/runs/{run_id}": {
+      "delete": {
+        "description": "연결을 푼다. 시험은 남는다 — 잘못 붙였을 때.",
+        "operationId": "unlink_run_api_commissions__commission_id__items__item_id__runs__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink Run",
+        "tags": [
+          "commissions"
         ]
       }
     },

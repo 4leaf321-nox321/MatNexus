@@ -14,6 +14,7 @@ import {
   Boxes,
   BookMarked,
   Building2,
+  ClipboardCheck,
   ClipboardList,
   FileCode2,
   FileOutput,
@@ -158,6 +159,11 @@ export const NAV_GROUPS: NavGroup[] = [
       // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
       { label: '물성 카드', icon: FileDown, to: '/cards' },
       { label: '물성 분석', icon: GitCompare, to: '/compare' },
+      // **사슬(재료→시편→시험→카드) 뒤, 사슬 밖의 절차.** 「이 시료의 이 물성을 재 달라」
+      // 를 낸 부서와 받는 부서가 번호로 부르며 접수 → 시험 중 → 결과 전달 → 완료 로
+      // 옮긴다. 항목에 시험이 붙고 결과가 채택되면 진행률이 저절로 오른다 — 사슬의
+      // 마디가 아니라 사슬을 **시작시키는** 것이라 마디 사이에 끼우지 않는다(2026-09-14).
+      { label: '측정 의뢰', icon: ClipboardCheck, to: '/commissions' },
       // **문헌 물성 — 실물 없는 재료의 물성 저수지**(ADR 0027, MaterialTwin 이관).
       // 사슬(재료→시편→시험→카드)의 마디가 아니라 사슬 밖의 참고 자료라 맨 뒤에
       // 선다. 사내 재료와는 연결·채택으로 잇는다.

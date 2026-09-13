@@ -119,13 +119,15 @@ def wanted_kinds(db: Session, user: User) -> list[str]:
     """이 사람이 받을 수 있는 사건 — 역할이 정한다. 설정 화면도 이 목록만 보인다."""
     # VOC: 내가 낸 건이 움직이면 누구나 받고, 새 건은 관리자가 받는다 — 게시판을
     # 들여다보지 않으면 「해결됐다」 를 아무도 모른다(2026-09-12).
-    wanted = ["account.decided", "voc.changed"]
+    wanted = ["account.decided", "voc.changed", "commission.changed"]
     if user.is_system_admin:
         wanted.append("account.signup")
         wanted.append("voc.registered")
     # 장비 커넥터가 시편을 못 정한 파일은 **부서 관리자**가 붙인다(ADR 0021).
     if user.is_system_admin or permissions.is_any_manager(db, user):
         wanted.append("pipelines.needs_specimen")
+        # 측정 의뢰는 **받는 부서 관리자**가 접수한다 — 발송은 그 부서 관리자에게만 간다.
+        wanted.append("commission.submitted")
     return wanted
 
 

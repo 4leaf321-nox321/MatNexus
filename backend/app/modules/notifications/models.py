@@ -35,6 +35,9 @@ EVENT_KINDS = (
     # VOC — 낸 사람은 자기 건이 움직일 때, 관리자는 새 건이 올 때(2026-09-12).
     "voc.registered",
     "voc.changed",
+    # 측정 의뢰 — 받는 부서 관리자는 새 의뢰가 올 때, 낸 사람·담당자는 움직일 때(2026-09-14).
+    "commission.submitted",
+    "commission.changed",
 )
 
 #: 사람이 읽는 이름과 설명 — 알림 설정 화면이 그대로 그린다. 새 사건을 더하면 여기도.
@@ -47,6 +50,11 @@ EVENT_LABELS: dict[str, tuple[str, str]] = {
     ),
     "voc.registered": ("새 VOC", "누군가 VOC 를 냈을 때 (시스템 관리자)"),
     "voc.changed": ("내 VOC 가 움직임", "내가 낸 VOC 를 남이 옮기거나 말을 보탰을 때"),
+    "commission.submitted": ("새 측정 의뢰", "우리 부서로 측정 의뢰가 왔을 때 (부서 관리자)"),
+    "commission.changed": (
+        "측정 의뢰가 움직임",
+        "내가 낸 의뢰나 내가 맡은 의뢰를 상대가 옮기거나 말을 보탰을 때",
+    ),
 }
 
 CHANNELS = ("inapp",)  # 'email' 은 SMTP 가 열리면 추가한다

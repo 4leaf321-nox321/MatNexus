@@ -80,6 +80,9 @@ const TestTypesPage = lazy(() => import('@/modules/tests/TestTypesPage'))
 const VocabularyAdminPage = lazy(() => import('@/modules/vocabulary/VocabularyAdminPage'))
 const VocabularyPage = lazy(() => import('@/modules/vocabulary/VocabularyPage'))
 const VocPage = lazy(() => import('@/modules/voc/VocPage'))
+const CommissionsPage = lazy(() => import('@/modules/commissions/CommissionsPage'))
+const CommissionNewPage = lazy(() => import('@/modules/commissions/CommissionNewPage'))
+const CommissionDetailPage = lazy(() => import('@/modules/commissions/CommissionDetailPage'))
 const VocDetailPage = lazy(() => import('@/modules/voc/VocDetailPage'))
 const WorkspaceHomePage = lazy(() => import('@/modules/workspaces/WorkspaceHomePage'))
 const WorkspacesAdminPage = lazy(() => import('@/modules/workspaces/WorkspacesAdminPage'))
@@ -148,6 +151,10 @@ export const router = createBrowserRouter([
           // 보내는데 부서 스코프(`/w/:slug/tests/upload`)에만 있어 404 였다(VOC 2026-09-13).
           // 위의 전역 시험 목록과 같은 이유로 둘 다 산다.
           { path: 'tests/upload', element: <BatchUploadPage /> },
+          // 측정 의뢰 — 시험 옆. 「재 달라」 는 절차가 잰 데이터(시험) 바로 앞에 선다.
+          { path: 'commissions', element: <CommissionsPage /> },
+          { path: 'commissions/new', element: <CommissionNewPage /> },
+          { path: 'commissions/:id', element: <CommissionDetailPage /> },
           // **재료를 거치지 않고 카드를 찾는 자리.** 재료 상세의 'CAE 카드'
           // 탭은 그 재료의 것만 본다.
           { path: 'cards', element: <CardsPage /> },
