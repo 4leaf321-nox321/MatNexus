@@ -179,6 +179,27 @@ describe('아코디언에 있던 일', () => {
     expect(screen.getByRole('button', { name: /표로 시험 입력/ })).toBeInTheDocument()
   })
 
+  it('「파일 여러 개 업로드」 는 있는 주소로 간다 — 전역 일괄 등록', async () => {
+    // `/tests/upload` 가 부서 스코프에만 있어 「없는 페이지」 였다(VOC 2026-09-13).
+    // 링크와 라우터가 같은 주소를 말하는지를 라우터 정의로 본다.
+    screenWidth(true)
+    show()
+    await screen.findByText('MD_01')
+    const link = screen.getByRole('link', { name: /파일 여러 개 업로드/ })
+    expect(link.getAttribute('href')).toMatch(/^\/tests\/upload\?material=/)
+    const { router } = await import('@/routes/router')
+    const paths = new Set<string>()
+    const walk = (routes: { path?: string; children?: unknown[] }[], base: string) => {
+      for (const route of routes) {
+        const here = route.path ? `${base}/${route.path}`.replace(/\/+/g, '/') : base
+        if (route.path) paths.add(here)
+        if (route.children) walk(route.children as typeof routes, here)
+      }
+    }
+    walk(router.routes as { path?: string; children?: unknown[] }[], '')
+    expect(paths.has('/tests/upload')).toBe(true)
+  })
+
   it('시편 줄마다 편집 · 삭제가 있다', async () => {
     show()
     await screen.findByText('MD_01')

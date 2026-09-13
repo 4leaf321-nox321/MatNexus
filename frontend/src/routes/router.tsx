@@ -144,6 +144,10 @@ export const router = createBrowserRouter([
           // 같은 범위여야 한다. `/w/<부서>/tests` 도 살아 있고 그쪽은 홈에서
           // 사업부 현황을 눌러 들어가는 길이다(같은 화면이 slug 유무로 갈린다).
           { path: 'tests', element: <TestRunsPage /> },
+          // **전역 일괄 등록.** 재료 화면의 「파일 여러 개 업로드」 가 `/tests/upload` 로
+          // 보내는데 부서 스코프(`/w/:slug/tests/upload`)에만 있어 404 였다(VOC 2026-09-13).
+          // 위의 전역 시험 목록과 같은 이유로 둘 다 산다.
+          { path: 'tests/upload', element: <BatchUploadPage /> },
           // **재료를 거치지 않고 카드를 찾는 자리.** 재료 상세의 'CAE 카드'
           // 탭은 그 재료의 것만 본다.
           { path: 'cards', element: <CardsPage /> },

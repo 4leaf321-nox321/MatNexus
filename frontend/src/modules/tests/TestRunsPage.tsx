@@ -260,7 +260,7 @@ export default function TestRunsPage() {
               새로고침
             </Button>
             <Button variant="secondary" size="sm" asChild>
-              <Link to={`/w/${slug ?? 'default'}/tests/upload`}>
+              <Link to={slug ? `/w/${slug}/tests/upload` : '/tests/upload'}>
                 <FileUp className="size-4" />
                 일괄 등록
               </Link>

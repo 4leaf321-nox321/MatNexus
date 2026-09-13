@@ -475,7 +475,7 @@ export default function BatchUploadPage() {
         title="일괄 등록"
         description="파일을 한꺼번에 올립니다. 줄마다 다른 재료·시료·시험 종류를 가리킬 수 있습니다."
         actions={
-          <Button variant="outline" onClick={() => navigate(`/w/${slug ?? 'default'}/tests`)}>
+          <Button variant="outline" onClick={() => navigate(slug ? `/w/${slug}/tests` : '/tests')}>
             목록으로
           </Button>
         }
@@ -1048,7 +1048,7 @@ export default function BatchUploadPage() {
               <Button
                 variant="outline"
                 className="ml-auto"
-                onClick={() => navigate(`/w/${slug ?? 'default'}/tests`)}
+                onClick={() => navigate(slug ? `/w/${slug}/tests` : '/tests')}
               >
                 목록에서 확인
               </Button>
