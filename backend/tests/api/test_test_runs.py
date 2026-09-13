@@ -99,7 +99,7 @@ class TestDefinitions:
         # 형식 프로파일이 생기면서 넓어졌다 — DMA 는 전용 파서 없이 프로파일로
         # 읽힌다(ADR 0005). 정의만 있고 못 읽는 종류가 목록에 보이면 사용자가
         # 올렸다가 실패하므로, 그 선은 그대로다.
-        assert [t["key"] for t in types] == ["tensile", "dma_sweep"]
+        assert [t["key"] for t in types] == ["tensile", "dma_sweep", "rheometer_flow"]
         dma_type = next(t for t in types if t["key"] == "dma_sweep")
         assert dma_type["parser_key"] is None  # 프로파일이 읽는다
         assert {"storage_modulus", "loss_modulus"} <= {c["key"] for c in dma_type["channels"]}

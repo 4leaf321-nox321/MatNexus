@@ -31,6 +31,7 @@ from app.modules.workspaces.models import Workspace, WorkspaceMember
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 STRAIN_SWEEP = FIXTURES / "dma_strain_sweep.csv"
 FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
+RHEO_FLOW = FIXTURES / "rheometer_flow_sweep.csv"
 LEGACY_MTET = FIXTURES / "legacy_tensile.mtet"
 
 #: 사람이 화면에서 만들 내용. **코드가 아니라 데이터다.**
@@ -671,6 +672,54 @@ class TestDetect:
 
 
 class TestEndToEnd:
+    def test_기본_레오미터_프로파일이_설치되고_지문으로_잡혀_곡선까지_만든다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        specimen: dict[str, Any],
+    ) -> None:
+        """레오미터 유동(`rheometer_flow`)은 파서가 없다 — 기본 프로파일 `ta_hr_flow`
+        가 읽는다(TRIOS 내보내기, DMA850 과 같은 구조). 시험 종류와 프로파일 둘 다
+        씨앗이고, 설치·배포가 심는다(`refresh_builtins`)."""
+        ensure_builtin_test_types(db)
+        created = ensure_builtin_format_profiles(db)
+        assert "ta_hr_flow" in created
+        db.commit()
+
+        detected = client.post(
+            "/api/test-types/detect",
+            files={"file": ("flow.csv", RHEO_FLOW.read_bytes())},
+            headers=admin_headers,
+        )
+        assert detected.status_code == 200, detected.text
+        assert detected.json()["test_type_key"] == "rheometer_flow"
+        assert detected.json()["profile_key"] == "ta_hr_flow"
+
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "rheometer_flow",
+                "conditions": '{"temperature": 25}',
+                "condition_units": '{"temperature": "degC"}',
+            },
+            files={"file": ("flow.csv", RHEO_FLOW.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run_id = uuid.UUID(response.json()["id"])
+        assert services.parse_run(db, run_id) == "parsed"
+        run = db.get(TestRun, run_id)
+        assert run is not None
+        assert run.parser_version == "profile:ta_hr_flow"
+        curve_rows = list(db.scalars(select(Curve).where(Curve.test_run_id == run_id)))
+        # Flow sweep 하나만 — Peak hold 는 곡선이 아니다.
+        assert len(curve_rows) == 1
+        assert curve_rows[0].row_count == 25
+        assert {"shear_rate", "viscosity", "shear_stress"} <= set(curve_rows[0].channels)
+        assert run.source_metadata["geometry_name"] == "25.0mm Parallel Plates"
+
     def test_코드_없이_DMA_를_읽어_곡선까지_만든다(
         self,
         client: TestClient,

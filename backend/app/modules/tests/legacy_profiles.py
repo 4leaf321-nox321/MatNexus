@@ -195,6 +195,39 @@ TA_DMA850_DEFINITION: dict[str, Any] = {
     ],
 }
 
+TA_HR_FLOW_KEY = "ta_hr_flow"
+
+TA_HR_FLOW_DEFINITION: dict[str, Any] = {
+    "match": {
+        # TRIOS 는 `.csv`(쉼표)와 `.txt`(탭) 둘 다 낸다 — 구분자는 읽는 쪽이 알아본다.
+        # **열 이름이 지문이다.** DMA 파일에는 `Shear rate` 가 없고 인장에는
+        # `Viscosity` 가 없다.
+        "extensions": [".csv", ".txt"],
+        "header_any": ["Shear rate", "Viscosity"],
+    },
+    # 한 파일에 Peak hold·Flow sweep·Amplitude sweep 이 같이 온다 — 유동 곡선은
+    # `Flow sweep` 단만이다. Peak hold 는 한 전단율에서 시간을 보는 것이라 점도 곡선이
+    # 아니고, Amplitude sweep 은 진동이라 축이 다르다.
+    "tables": {"mode": "all", "include": "^Flow sweep"},
+    "columns": {
+        "Shear rate": {"channel": "shear_rate"},
+        "Viscosity": {"channel": "viscosity"},
+        "Stress": {"channel": "shear_stress"},
+        "Temperature": {"channel": "temperature"},
+        "Step time": {"channel": "step_time"},
+        "Normal stress": {"channel": "normal_stress"},
+    },
+    "metadata": [
+        "rundate",
+        "Instrument name",
+        "Operator",
+        "Sample name",
+        "Geometry name",
+        "Procedure name",
+        "proceduresegments",
+    ],
+}
+
 #: (key, label, 시험 종류 key, description, definition)
 BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
     (
@@ -210,6 +243,14 @@ BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
         "dma_sweep",
         "온도·주파수 스윕과 장비가 계산한 TTS 결과가 함께 들어온다.",
         TA_DMA850_DEFINITION,
+    ),
+    (
+        TA_HR_FLOW_KEY,
+        "TA HR 레오미터 유동 스윕 (TRIOS)",
+        "rheometer_flow",
+        "Flow sweep 단의 전단율·점도·전단응력이 들어온다. "
+        "Peak hold·Amplitude sweep 은 건너뛴다.",
+        TA_HR_FLOW_DEFINITION,
     ),
 ]
 

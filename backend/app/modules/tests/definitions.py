@@ -92,6 +92,33 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("clamp", "지그", "text", None, None, None, False),
         ],
     },
+    {
+        # **레오미터 유동 곡선** — 전단율에 따른 점도. TA HR 시리즈의 TRIOS 내보내기
+        # (`Flow sweep` 단)를 프로파일이 읽는다(`ta_hr_flow`). 채널은 공개 실파일
+        # (read-rheol 의 HR30 내보내기)의 열을 그대로 따랐다:
+        #     Stress,Shear rate,Viscosity,Step time,Temperature,Normal stress
+        #     Pa,1/s,Pa.s,min,°C,Pa
+        # 유변 식(Cross·Carreau)이 전단율·점도를 x·y 로 맞춘다.
+        "key": "rheometer_flow",
+        "label": "레오미터 유동",
+        "abbr": "RHE",
+        "parser_key": None,
+        "description": "회전 레오미터 유동 스윕. 전단율별 점도·전단응력 곡선을 얻는다.",
+        "sort_order": 30,
+        "channels": [
+            ("shear_rate", "전단율", "strain_rate", "1/s", True),
+            ("viscosity", "점도", "viscosity", "Pa.s", True),
+            ("shear_stress", "전단응력", "stress", "Pa", False),
+            ("temperature", "온도", "temperature", "K", False),
+            ("step_time", "구간 시간", "time", "s", False),
+            ("normal_stress", "수직응력", "stress", "Pa", False),
+        ],
+        "conditions": [
+            ("temperature", "시험 온도", "number", "temperature", "K", None, False),
+            ("geometry", "지오메트리", "text", None, None, None, False),
+            ("testing_group", "시험 그룹", "text", None, None, None, False),
+        ],
+    },
 ]
 
 
