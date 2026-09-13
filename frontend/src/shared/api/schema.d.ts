@@ -10294,6 +10294,11 @@ export interface components {
         GroupOut: {
             curve: components["schemas"]["CurveStatsOut"] | null;
             /**
+             * Fit Blocks
+             * @default []
+             */
+            fit_blocks: string[];
+            /**
              * Fittable
              * @default false
              */

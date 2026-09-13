@@ -157,6 +157,9 @@ class Test묶는다:
             f"/api/statistics/materials/{sample['material_id']}", headers=admin_headers
         ).json()
         assert all(group["fittable"] for group in stats["groups"])
+        # 인장 묶음은 경화식(탄소성)과 초탄성 축을 다 갖는다 — 단추 둘이 선다. 유변은 아니다.
+        assert {"hardening", "hyperelastic"} <= set(stats["groups"][0]["fit_blocks"])
+        assert "rheology" not in stats["groups"][0]["fit_blocks"]
         assert body["values"]["reference_rate"] == pytest.approx(0.01, rel=1e-6)
         assert body["values"]["rate_max"] == pytest.approx(1.0, rel=1e-6)
         rates = body["detail"]["rates"]

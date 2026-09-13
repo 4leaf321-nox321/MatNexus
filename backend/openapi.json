@@ -10776,6 +10776,14 @@
               }
             ]
           },
+          "fit_blocks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Fit Blocks",
+            "type": "array"
+          },
           "fittable": {
             "default": false,
             "title": "Fittable",

@@ -28,6 +28,15 @@ const KIND_LABELS: Record<string, string> = { hardening: '탄소성' }
 
 export const DECLARED_KIND = '재료 기본 정보'
 
+/**
+ * 블록 하나의 **카드 종류 이름**. 「탄소성 카드 · MD」「유변 카드 · NA」 단추가 이것으로
+ * 선다 — 이름은 서버의 블록 선언에서 오고, 경화식만 「탄소성」 으로 바꿔 부른다.
+ * 선언이 아직 안 왔으면 키를 그대로 보인다(빈 단추가 되지 않게).
+ */
+export function kindLabel(block: string, specs: BlockSpec[]): string {
+  return KIND_LABELS[block] ?? specs.find((spec) => spec.key === block)?.label ?? block
+}
+
 export function cardKind(card: PropertyCard, specs: BlockSpec[]): string {
   const blocks = Object.keys(card.blocks ?? {})
   const found = defining(specs).find((spec) => blocks.includes(spec.key))

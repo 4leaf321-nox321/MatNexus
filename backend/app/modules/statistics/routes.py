@@ -68,7 +68,7 @@ from app.shared import curvedata, ops, permissions
 from app.shared import divisions as divisions_order
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
-from matcore import distributions, fitting, statistics
+from matcore import cards, distributions, fitting, statistics
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
@@ -136,17 +136,25 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
     # 등록된 식이 알고(`Family.x_column`), 그중 하나라도 이 묶음의 열에 있으면 된다.
     # 전에는 진소성변형률·진응력을 상수로 들고 있어서 레오미터 묶음이 「적합 불가」 였다.
     fitting.load_builtin()
-    axes = {(item.x_column, item.y_column) for item in fitting.FAMILIES.values()}
-    fittable = any(
-        x in member.result.columns and y in member.result.columns
-        for member in group.members
-        for x, y in axes
-    )
+    cards.load_builtin()
+    present: set[str] = set()
+    for member in group.members:
+        present.update(member.result.columns)
+    fit_blocks = [
+        spec.key
+        for spec in cards.list_blocks()
+        if any(
+            item.block == spec.key and {item.x_column, item.y_column} <= present
+            for item in fitting.FAMILIES.values()
+        )
+    ]
+    fittable = bool(fit_blocks)
     return GroupOut(
         test_type_key=group.test_type.key,
         test_type_label=group.test_type.label,
         orientation=group.orientation,
         fittable=fittable,
+        fit_blocks=fit_blocks,
         sample_count=len(group.members),
         skipped_unadopted=group.skipped_unadopted,
         test_run_ids=[member.run.id for member in group.members],

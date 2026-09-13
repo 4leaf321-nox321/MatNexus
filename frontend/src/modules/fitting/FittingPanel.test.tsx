@@ -48,6 +48,13 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     // 카드 목록이 비어 있어도 화면은 형식·블록 선언을 먼저 읽는다.
     formats: () => Promise.resolve([]),
     blocks: () => Promise.resolve([]),
+    // 「탄소성 카드」 단추가 연 모달은 그 블록의 식만 견준다 — 식 목록은 서버가 준다.
+    families: () =>
+      Promise.resolve([
+        { key: 'voce', label: 'Voce', block: 'hardening' },
+        { key: 'swift', label: 'Swift', block: 'hardening' },
+        { key: 'ogden_1', label: 'Ogden', block: 'hyperelastic' },
+      ]),
     // 선형탄성구간 대화상자가 「함께 실리는 것」 을 보여 주려고 읽는다.
     declaredPreview: (...args: unknown[]) => declaredPreview(...args),
   },
@@ -557,11 +564,11 @@ describe('시험 종류에 맞는 길만 연다', () => {
     expect(screen.queryByRole('button', { name: /^점탄성 카드$/ })).not.toBeInTheDocument()
   })
 
-  it('「정보」 가 다섯 카드의 입력과 결과를 표로 보인다', async () => {
+  it('「정보」 가 카드 종류의 입력과 결과를 표로 보인다', async () => {
     panel()
     await userEvent.click(await screen.findByRole('button', { name: '카드 종류 설명' }))
     const dialog = await screen.findByRole('dialog')
-    for (const name of ['재료 기본 정보 카드', '탄소성 카드', '선형탄성구간(LVE) 카드', '점탄성 카드', '속도 의존 카드']) {
+    for (const name of ['재료 기본 정보 카드', '탄소성 카드', '초탄성 카드', '유변 카드', '선형탄성구간(LVE) 카드', '점탄성 카드', '속도 의존 카드']) {
       expect(within(dialog).getByText(name)).toBeInTheDocument()
     }
     expect(dialog).toHaveTextContent('*ELASTIC + *PLASTIC')
@@ -575,6 +582,69 @@ describe('시험 종류에 맞는 길만 연다', () => {
     await userEvent.click(screen.getByRole('button', { name: /^탄소성 카드$/ }))
     expect(await screen.findByText('무엇으로')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /경화식 맞춰 보기/ })).toBeInTheDocument()
+  })
+})
+
+describe('적합 카드 단추는 나오는 물성의 이름으로 선다', () => {
+  // 「적합 카드」 처럼 중립인 이름은 무엇이 나오는지 말해 주지 않아 탄소성을 찾던 사람도
+  // 헤맨다(2026-09-13). 어느 단추가 서는지는 서버의 `fit_blocks` 가 정한다.
+  const group = (over: Record<string, unknown>) => ({
+    test_type_key: 'tensile',
+    test_type_label: '인장',
+    orientation: 'MD',
+    sample_count: 2,
+    test_run_ids: ['r-1', 'r-2'],
+    record_names: ['A', 'B'],
+    scalars: [],
+    curve: null,
+    notes: [],
+    skipped_unadopted: 0,
+    fittable: true,
+    ...over,
+  })
+
+  it('블록마다 하나 — 인장은 탄소성·초탄성, 레오미터는 유변', async () => {
+    forMaterial.mockResolvedValue({
+      material_id: 'm1',
+      material_name: 'X',
+      groups: [
+        group({ fit_blocks: ['hardening', 'hyperelastic'] }),
+        group({
+          test_type_key: 'rheometer_flow',
+          test_type_label: '레오미터 유동',
+          orientation: 'NA',
+          fit_blocks: ['rheology'],
+        }),
+      ],
+    })
+    panel()
+    expect(await screen.findByRole('button', { name: /^탄소성 카드$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^hyperelastic 카드$|^초탄성 카드$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^rheology 카드$|^유변 카드$/ })).toBeInTheDocument()
+  })
+
+  it('같은 블록의 묶음이 둘이면 방향을 붙이고, 연 단추의 식만 견준다', async () => {
+    forMaterial.mockResolvedValue({
+      material_id: 'm1',
+      material_name: 'X',
+      groups: [
+        group({ fit_blocks: ['hardening', 'hyperelastic'] }),
+        group({ orientation: 'TD', fit_blocks: ['hardening'] }),
+      ],
+    })
+    preview.mockResolvedValue(body([fit()]))
+    panel()
+    expect(await screen.findByRole('button', { name: /^탄소성 카드 · MD$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^탄소성 카드 · TD$/ })).toBeInTheDocument()
+    // 초탄성은 MD 하나뿐이라 방향이 없다.
+    await userEvent.click(screen.getByRole('button', { name: /^hyperelastic 카드$|^초탄성 카드$/ }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent(/카드 생성/)
+    // 초탄성 묶음(MD)만 1단계에 뜬다 — TD 는 초탄성 식의 축이 없다.
+    expect(screen.queryByRole('button', { name: /인장 · TD/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /식 맞춰 보기/ }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    const [request] = preview.mock.calls[0] as [Record<string, unknown>]
+    expect(request.families).toEqual(['ogden_1'])
   })
 })
 

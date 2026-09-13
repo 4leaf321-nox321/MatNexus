@@ -67,7 +67,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { BlockChips, CardBlocks } from '@/modules/fitting/CardBlocks'
-import { cardKind } from '@/modules/fitting/cardKind'
+import { cardKind, kindLabel } from '@/modules/fitting/cardKind'
 import { LveCardDialog } from '@/modules/fitting/LveCardDialog'
 import { hasLve } from '@/modules/fitting/lve'
 import { useResource } from '@/shared/hooks/useResource'
@@ -83,8 +83,10 @@ interface Props {
 interface GroupKey {
   test_type_key: string
   test_type_label: string
-  /** 경화식·초탄성에 넣을 수 있나 — 서버가 채택 결과의 열로 판단한다. */
+  /** 경화식·초탄성·유변 식에 넣을 수 있나 — 서버가 채택 결과의 열로 판단한다. */
   fittable: boolean
+  /** 이 묶음의 곡선에 맞출 수 있는 식이 담기는 블록 — 단추 이름의 근거. */
+  fit_blocks: string[]
   orientation: string
   sample_count: number
 }
@@ -129,6 +131,18 @@ const CARD_KINDS: { name: string; input: string; output: string; deck: string }[
     input: '인장 채택 곡선들의 대표 곡선(진소성변형률–진응력)',
     output: '탄성계수 + 경화식 계수(Voce·Swift…) + 소성 표',
     deck: '*ELASTIC + *PLASTIC',
+  },
+  {
+    name: '초탄성 카드',
+    input: '고무 인장의 채택 곡선 — 공칭 응력·공칭 변형률',
+    output: 'Neo-Hookean·Mooney-Rivlin·Yeoh·Ogden 계수 + 초기 전단탄성률',
+    deck: '*HYPERELASTIC',
+  },
+  {
+    name: '유변 카드',
+    input: '레오미터 유동 스윕의 채택 곡선 — 전단율·점도',
+    output: 'Cross·Carreau 계수 + 영전단 점도',
+    deck: '*VISCOSITY',
   },
   {
     name: '선형탄성구간(LVE) 카드',
@@ -185,8 +199,18 @@ export function FittingPanel({ materialId }: Props) {
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
   const [declaring, setDeclaring] = useState(false)
-  // 탄소성 카드 만들기 모달. 위의 「탄소성 카드」 단추가 연다.
+  // 적합 카드 모달. 「탄소성 카드」「초탄성 카드」「유변 카드」 단추가 연다 — 어느 단추로
+  // 열었는지(`fitBlock`)가 곧 어느 식을 견줄지다.
   const [fitting, setFitting] = useState(false)
+  const [fitBlock, setFitBlock] = useState<string | null>(null)
+  const blockSpecs = useResource(() => fittingApi.blocks(), [])
+  const familyList = useResource(() => fittingApi.families(), [])
+  /** 이 블록에 담기는 식들 — 미리보기에 그것만 견주게 보낸다. 목록이 아직이면 빈 것(전부). */
+  const familiesOf = (block: string | null) =>
+    block ? (familyList.data ?? []).filter((one) => one.block === block).map((one) => one.key) : []
+  const fitKind = fitBlock ? kindLabel(fitBlock, blockSpecs.data ?? []) : '탄소성'
+  /** 식을 부르는 말 — 탄소성은 「경화식」 이 이름이고, 나머지는 「<종류> 식」 이다. */
+  const fitFamilyWord = fitBlock && fitBlock !== 'hardening' ? `${fitKind} 식` : '경화식'
 
   const groups: GroupKey[] = (stats.data?.groups ?? [])
     // **채택된 것이 있으면 적합할 수 있다.** 1건이면 그 곡선이 곧 입력이다 —
@@ -204,10 +228,17 @@ export function FittingPanel({ materialId }: Props) {
       sample_count: item.sample_count,
       // 옛 응답(칸이 없음)은 된다고 본다 — 서버가 늘 보내므로 실제로는 안 걸린다.
       fittable: item.fittable ?? true,
+      // 옛 응답이면 경화식 하나 — 그것이 이 단추의 원래 뜻이었다.
+      fit_blocks: item.fit_blocks ?? (item.fittable ?? true ? ['hardening'] : []),
     }))
   // **경화식·초탄성 길은 적합할 곡선이 있는 묶음에만 연다.** DMA 묶음에 「경화식
   // 맞춰 보기」 가 떠서 누르면 422 였다(2026-09-05 실사용).
   const fittableGroups = groups.filter((item) => item.fittable)
+  /** 「탄소성 카드 · MD」 처럼 블록마다 묶음마다 하나. 같은 블록의 묶음이 하나뿐이면 방향은 뺀다. */
+  const fitButtons = fittableGroups.flatMap((item) =>
+    item.fit_blocks.map((block) => ({ item, block }))
+  )
+  const blockCount = (block: string) => fitButtons.filter((one) => one.block === block).length
   // 선형탄성구간(LVE) 길 — 선형 한계 변형률을 낸 DMA 묶음.
   const lveGroups = (stats.data?.groups ?? []).filter(
     (item) => item.sample_count >= 1 && hasLve(item)
@@ -260,8 +291,8 @@ export function FittingPanel({ materialId }: Props) {
         material_id: materialId,
         test_type_key: target.test_type_key,
         orientation: target.orientation,
-        // 비우면 등록된 식 전부를 견준다.
-        families: [],
+        // 연 단추의 블록에 담기는 식만 — 비우면 이 묶음의 열에 맞는 식 전부를 견준다.
+        families: familiesOf(fitBlock),
         // **저장하고 나서야 알면 늦다.** 뺀 것과 안 뺀 것의 적합이 어떻게
         // 다른지 눈으로 보고 정해야 한다.
         test_run_ids: usedRuns,
@@ -359,17 +390,32 @@ export function FittingPanel({ materialId }: Props) {
         {/* **시험 종류에 맞는 길만 보인다.** 경화식·초탄성은 응력–변형률 곡선, LVE 는
             변형률 스윕, 점탄성은 마스터커브에서 온다 — 없는 길을 보여 주면 눌러 보고
             422 로 배운다. */}
-        {fittableGroups.length > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setFitting(true)}
-            title="채택된 응력–변형률 곡선에 경화식을 맞춰 탄성계수 + 소성 표 + 식 계수(탄소성)를 카드로 만듭니다. 덱에서는 *ELASTIC + *PLASTIC 입니다."
-          >
-            <FileDown className="size-3.5" />
-            탄소성 카드
-          </Button>
-        )}
+        {/* **나오는 물성의 이름으로 선다.** 「적합 카드」 처럼 중립인 이름은 무엇이 나오는지
+            말해 주지 않아 탄소성을 찾던 사람도 헤맨다(2026-09-13). 어느 블록의 단추가 서는지는
+            서버가 묶음의 열과 등록된 식의 축으로 정한다(`fit_blocks`) — 확장이 유변 식을
+            더하면 「유변 카드」 가 저절로 선다. */}
+        {fitButtons.map(({ item, block }) => {
+          const label = kindLabel(block, blockSpecs.data ?? [])
+          return (
+            <Button
+              key={`${block}-${item.test_type_key}-${item.orientation}`}
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setGroup(item)
+                setFitBlock(block)
+                setPreview(null)
+                setChosen(null)
+                setFitting(true)
+              }}
+              title={`${item.test_type_label} 채택 곡선의 대표 곡선에 ${label} 식을 맞춰 카드로 만듭니다.`}
+            >
+              <FileDown className="size-3.5" />
+              {label} 카드
+              {blockCount(block) > 1 && ` · ${item.orientation}`}
+            </Button>
+          )
+        })}
         {lveGroups.map((item) => (
           <Button
             key={`${item.test_type_key}-${item.orientation}`}
@@ -495,11 +541,11 @@ export function FittingPanel({ materialId }: Props) {
         <Dialog open onOpenChange={(next) => !next && setFitting(false)}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
             <DialogHeader>
-              <DialogTitle>탄소성 카드 생성</DialogTitle>
+              <DialogTitle>{fitKind} 카드 생성</DialogTitle>
               <DialogDescription>
-                채택된 응력–변형률 곡선을 평균 낸 대표 곡선에 여러 경화식을 맞춰 나란히 놓고,
-                하나를 골라 소성 표와 식 계수를 카드로 만듭니다. 「생성」 전까지는 아무것도
-                저장되지 않습니다.
+                채택된 곡선을 평균 낸 대표 곡선에 {fitFamilyWord} 여럿을 맞춰 나란히 놓고, 하나를
+                골라 식 계수{fitBlock === 'hardening' && '와 소성 표'}를 카드로 만듭니다. 「생성」
+                전까지는 아무것도 저장되지 않습니다.
               </DialogDescription>
             </DialogHeader>
             <ErrorNotice error={error} />
@@ -510,7 +556,9 @@ export function FittingPanel({ materialId }: Props) {
                     시험·어느 방향을 볼지 고르는 자리이고, 그 안의 채택된 곡선들이
                     평균 나서 대표 곡선이 된다. */}
                 <Step n={1} label="무엇으로" hint="시험 종류 · 방향으로 묶습니다. n 은 평균 낸 시편 수입니다." />
-                {fittableGroups.map((item) => {
+                {fittableGroups
+                  .filter((item) => !fitBlock || item.fit_blocks.includes(fitBlock))
+                  .map((item) => {
                   const key = `${item.test_type_key}-${item.orientation}`
                   const active =
                     group?.test_type_key === item.test_type_key &&
@@ -560,7 +608,7 @@ export function FittingPanel({ materialId }: Props) {
                         는 무엇과 무엇을 견주는지가 안 보였다 — 이 버튼이 하는 일은
                         **여러 경화식을 같은 곡선에 맞춰 나란히 놓고, 시험 구간 밖을
                         얼마나 늘릴지 정하게 하는 것**이다. 저장은 아직 아니다. */}
-                    {busy ? '맞춰 보는 중…' : '경화식 맞춰 보기'}
+                    {busy ? '맞춰 보는 중…' : `${fitFamilyWord} 맞춰 보기`}
                   </Button>
                 </div>
                 {/* **한 줄로 무엇을 하는 자리인지 말한다.** 단추 이름만으로는 담기지

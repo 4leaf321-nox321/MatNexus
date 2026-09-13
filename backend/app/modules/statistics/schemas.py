@@ -91,6 +91,12 @@ class GroupOut(BaseModel):
     화면이 시험 종류 이름으로 짐작하면(「인장이면 된다」) 부서가 만든 종류에서 틀리고,
     DMA 묶음에 「경화식 맞춰 보기」 가 떠서 누르면 422 가 났다(2026-09-05 실사용).
     적합이 실제로 읽는 열이 있는지를 서버가 말한다."""
+    fit_blocks: list[str] = []
+    """이 묶음의 곡선에 맞출 수 있는 식들이 **담기는 블록** — `hardening`(탄소성)·
+    `hyperelastic`(초탄성)·`rheology`(유변) …. 등록된 식의 축이 이 묶음의 열에 있으면 그
+    식의 블록이 든다. 화면은 이것으로 「탄소성 카드 · MD」「유변 카드 · NA」 단추를 세운다
+    — 「적합 카드」 처럼 중립인 이름은 무엇이 나오는지 말해 주지 않아 사람이 못 찾는다
+    (2026-09-13). 확장이 식을 더하면 그 블록의 단추가 저절로 선다."""
     test_run_ids: list[uuid.UUID]
     record_names: list[str]
     scalars: list[ScalarStatsOut]
