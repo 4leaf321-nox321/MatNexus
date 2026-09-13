@@ -232,7 +232,7 @@ def preview(
         return FormulaPreviewOut(
             kind=spec.kind,
             ok=True,
-            message=f"{got.point_count}점에 맞췄습니다. R² = {got.r_squared:.4f}",
+            message=f"적합 완료 — {got.point_count}점, R² = {got.r_squared:.4f}",
             parameters=[
                 {"name": p.name, "value": p.value, "unit": p.si_unit} for p in got.parameters
             ],
@@ -275,7 +275,7 @@ def preview(
     return FormulaPreviewOut(
         kind=spec.kind,
         ok=True,
-        message=f"{len(made)}점 가운데 {finite}점이 수로 나왔습니다.",
+        message=f"계산 완료 — {len(made)}점 중 유효 {finite}점.",
         sample=sample,
         notes=list(out.notes),
     )

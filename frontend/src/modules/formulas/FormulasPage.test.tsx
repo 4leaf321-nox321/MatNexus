@@ -87,7 +87,7 @@ describe('FormulasPage', () => {
     const used = (await screen.findByText('항복비')).closest('tr') as HTMLElement
     expect(within(used).getByText('v2')).toBeInTheDocument()
     expect(within(used).getByText('레시피 1 · 결과 3')).toBeInTheDocument()
-    expect(within(used).getByTitle(/못 지웁니다/)).toBeDisabled()
+    expect(within(used).getByTitle(/삭제 불가/)).toBeDisabled()
 
     const free = screen.getByText('Swift 2').closest('tr') as HTMLElement
     expect(within(free).getByText('없음')).toBeInTheDocument()
@@ -100,7 +100,7 @@ describe('FormulasPage', () => {
     await screen.findByText('항복비')
     // 첫 화면은 「무엇을 만들까요」 카드 — 용도·어디에·변수는 어디서가 적혀 있다.
     expect(screen.getByText('무엇을 만들까요?')).toBeInTheDocument()
-    expect(screen.getByText(/앞 단계가 낸 값들로 새 값 하나/)).toBeInTheDocument()
+    expect(screen.getByText(/앞 단계의 값들로 새 값 하나/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /값에서 값을 내는 식/ }))
 
     // 예시(항복비)가 채워져 있다 — 지워 쓰는 편이 빠르다. 키만 비어 있다.

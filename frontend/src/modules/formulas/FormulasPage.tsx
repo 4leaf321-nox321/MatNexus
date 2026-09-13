@@ -186,7 +186,7 @@ export default function FormulasPage() {
     setError(null)
     try {
       await formulasApi.update(row.id, { enabled: !row.enabled })
-      setNotice(row.enabled ? `${row.label} 을 껐습니다 — 목록에서 빠집니다.` : `${row.label} 을 켰습니다.`)
+      setNotice(row.enabled ? `${row.label} 비활성화 — 목록에서 제외.` : `${row.label} 활성화.`)
       rows.reload()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('바꾸지 못했습니다.'))
@@ -201,7 +201,7 @@ export default function FormulasPage() {
     setError(null)
     try {
       await formulasApi.remove(removing.id)
-      setNotice(`${removing.label} 을 지웠습니다.`)
+      setNotice(`${removing.label} 삭제 완료.`)
       setRemoving(null)
       rows.reload()
     } catch (caught) {
@@ -215,7 +215,7 @@ export default function FormulasPage() {
     <div className="space-y-4">
       <PageHeader
         title="계산식"
-        description="식 한 줄을 적으면 처리 단계나 카드의 식이 됩니다 — 개발자 없이, 배포 없이."
+        description="식 한 줄 → 처리 단계 또는 카드의 식. 개발자·배포 없이."
       />
 
       {/* **무엇을 만들까요 — 셋 중 하나를 고른다.** 단추 이름(적합식·값 단계·열 단계)만으로는
@@ -246,8 +246,8 @@ export default function FormulasPage() {
           ))}
         </div>
         <p className="text-muted-foreground text-xs">
-          한 줄로 적히는 식까지입니다. 정렬·구간 탐색·회귀·교점처럼 <b className="text-foreground">순서와 조건이 있는 계산</b>은
-          여기서 못 만들고 개발자가 확장 폴더로 붙입니다.
+          범위: 한 줄로 적히는 식까지. 정렬·구간 탐색·회귀·교점처럼{' '}
+          <b className="text-foreground">순서와 조건이 있는 계산</b>은 확장 폴더(개발자)의 일.
         </p>
       </section>
 
@@ -272,7 +272,7 @@ export default function FormulasPage() {
           {rows.data?.length === 0 && (
             <TableRow>
               <TableCell colSpan={8} className="text-muted-foreground">
-                아직 계산식이 없습니다. 위 단추로 첫 식을 적으세요.
+                계산식 없음 — 위 카드에서 생성.
               </TableCell>
             </TableRow>
           )}
@@ -315,7 +315,7 @@ export default function FormulasPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    title={isReferenced(row) ? '쓰는 곳이 있어 못 지웁니다 — 대신 끄세요' : '삭제'}
+                    title={isReferenced(row) ? '삭제 불가 (쓰는 곳 있음) — 비활성화로 대체' : '삭제'}
                     disabled={busy || isReferenced(row)}
                     onClick={() => setRemoving(row)}
                   >
@@ -349,8 +349,8 @@ export default function FormulasPage() {
         body={
           removing ? (
             <>
-              <code>{removing.registry_key}</code> ({removing.label}) 을 지웁니다. 쓰는 곳이 없어 되돌릴
-              것도 없습니다.
+              <code>{removing.registry_key}</code> ({removing.label}) 삭제. 쓰는 곳 없음 — 되돌릴 것도
+              없음.
             </>
           ) : null
         }
@@ -474,12 +474,12 @@ function FormulaDialog({
         const saved = await formulasApi.update(row.id, rest)
         onDone(
           saved.version > row.version
-            ? `${saved.label} 을 고쳤습니다 — v${saved.version}. 저장된 결과는 옛 판 그대로입니다.`
-            : `${saved.label} 을 고쳤습니다.`,
+            ? `${saved.label} 편집 완료 — v${saved.version}. 저장된 결과는 옛 판 그대로.`
+            : `${saved.label} 편집 완료.`,
         )
       } else {
         const saved = await formulasApi.create(payload)
-        onDone(`${saved.label} 을 만들었습니다 — ${kindMeta.where} 에 바로 뜹니다.`)
+        onDone(`${saved.label} 생성 완료 — ${kindMeta.where} 에 바로 표시.`)
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
@@ -502,7 +502,7 @@ function FormulaDialog({
           </DialogTitle>
           <DialogDescription>
             {kindMeta.purpose}
-            {row && ' 식·변수·계수를 고치면 판이 오릅니다. 저장된 결과는 옛 판 그대로입니다.'}
+            {row && ' 식·변수·계수 변경 시 판이 오름 — 저장된 결과는 옛 판 그대로.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -518,8 +518,8 @@ function FormulaDialog({
             </div>
             {!row && (
               <div className="text-muted-foreground md:col-span-2">
-                예시가 채워져 있습니다. 키를 적고, 식과 이름을 지워 쓰세요. 저장 전에 아래
-                「미리보기」 로 실제 시험에 돌려 보면 값이 맞는지 보입니다.
+                예시 채워짐 — 키 입력 후 식·이름을 지워 쓰기. 저장 전 아래 「미리보기」 로 실제
+                시험에 적용해 값 확인.
               </div>
             )}
           </div>
@@ -534,7 +534,7 @@ function FormulaDialog({
                 onChange={(event) => setSpec({ ...spec, key: event.target.value })}
               />
               <p className="text-muted-foreground text-xs">
-                <code>formula.{spec.key || '…'}</code> 로 등록됩니다. 한 번 나가면 안 바뀝니다.
+                등록 키 <code>formula.{spec.key || '…'}</code> — 저장 후 변경 불가.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -558,10 +558,9 @@ function FormulaDialog({
               onChange={(event) => setSpec({ ...spec, expression: event.target.value })}
             />
             <p className="text-muted-foreground text-xs">
-              쓸 수 있는 함수: {vocabulary?.functions.join(' ') ?? '…'} · 상수:{' '}
-              {vocabulary?.constants.join(' ') ?? '…'}. 식에 쓰는 이름은 아래{' '}
-              {isFamily ? '변수·계수' : '입력'}에 전부 적혀 있어야 합니다 — 적지 않은 이름은 저장이
-              막힙니다.
+              함수: {vocabulary?.functions.join(' ') ?? '…'} · 상수:{' '}
+              {vocabulary?.constants.join(' ') ?? '…'}. 식의 이름은 전부 아래{' '}
+              {isFamily ? '변수·계수' : '입력'}에 선언 — 미선언 이름은 저장 불가.
             </p>
           </div>
 
@@ -569,10 +568,10 @@ function FormulaDialog({
             <div className="flex items-center justify-between">
               <Label>
                 {isFamily
-                  ? '변수 — x 는 아래 「x 열」 의 값입니다'
+                  ? '변수 — x = 아래 「x 열」 의 값'
                   : kind === 'scalar_step'
-                    ? '입력 — 앞 단계가 낸 값 (어느 단계가 내는지 함께 보입니다)'
-                    : '입력 — 곡선의 열 (원본 파일 채널 또는 앞 단계가 만든 열)'}
+                    ? '입력 — 앞 단계의 값 (출처 단계 표시)'
+                    : '입력 — 곡선의 열 (원본 파일 채널 또는 앞 단계의 열)'}
               </Label>
               {!isFamily && (
                 <Button
@@ -621,7 +620,7 @@ function FormulaDialog({
                       setVariable(index, { name: next, ...(unit && unit !== '?' ? { unit } : {}) })
                     }}
                   >
-                    <option value="">— 고르세요 —</option>
+                    <option value="">— 선택 —</option>
                     {names.map((n) => (
                       <option key={n['key']} value={n['key']}>
                         {n['key']} · {n['label']}
@@ -663,7 +662,7 @@ function FormulaDialog({
             <>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label>계수 — 구할 것. 초기값과 경계는 결과에 남습니다</Label>
+                  <Label>계수 — 산출 대상. 초기값·경계는 결과에 기록</Label>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -797,7 +796,7 @@ function FormulaDialog({
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="formula-applies">{isFamily ? '재료군' : '시험 종류'} (비우면 제한 없음)</Label>
+              <Label htmlFor="formula-applies">{isFamily ? '재료군' : '시험 종류'} (공란 = 제한 없음)</Label>
               <Input
                 id="formula-applies"
                 value={appliesText}
@@ -810,7 +809,7 @@ function FormulaDialog({
               <Input
                 id="formula-describe"
                 value={spec.describe ?? ''}
-                placeholder="카드·레시피에 적힐 한 줄"
+                placeholder="카드·레시피에 실릴 한 줄"
                 onChange={(event) => setSpec({ ...spec, describe: event.target.value || null })}
               />
             </div>
@@ -818,7 +817,7 @@ function FormulaDialog({
 
           {/* 미리보기 — 저장 전에 실제 결과로 돌려 본다. 아무것도 남기지 않는다. */}
           <div className="space-y-2 rounded-md border p-3">
-            <Label>저장 전에 돌려 보기 — 채택된 시험을 고르세요</Label>
+            <Label>저장 전 미리보기 — 채택된 시험 선택</Label>
             {picked ? (
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span>
@@ -833,7 +832,7 @@ function FormulaDialog({
               <>
                 <Input
                   value={query}
-                  placeholder="시험 이름·재료로 찾기"
+                  placeholder="시험 이름·재료로 검색"
                   onChange={(event) => setQuery(event.target.value)}
                 />
                 {runs.length > 0 && (

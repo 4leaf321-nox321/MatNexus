@@ -47,7 +47,7 @@ import {
 } from '@/shared/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
-import { axisLabel, toDisplay } from '@/shared/units'
+import { axisLabel, display, toDisplay } from '@/shared/units'
 
 const TABS = [
   { key: 'compare', label: '재료 비교' },
@@ -67,6 +67,16 @@ export function show(value: number, siUnit: string): string {
   if (size >= 10) return shown.toFixed(1)
   if (size >= 0.1) return shown.toFixed(3)
   return shown.toPrecision(3)
+}
+
+/**
+ * 값 옆에 단위 — `320.0 MPa`. **머리에 단위를 못 두는 표**에서 쓴다: 줄마다 항목(과
+ * 단위)이 다른 「선언 vs 실측」, 열이 연도인 「추이」. 단위가 어디에도 없으면 숫자가
+ * Pa 인지 MPa 인지 사람이 짐작해야 한다(2026-09-14 지적).
+ */
+export function showWithUnit(value: number, siUnit: string): string {
+  const { unit } = display(siUnit)
+  return unit ? `${show(value, siUnit)} ${unit}` : show(value, siUnit)
 }
 
 const TABLE_PAD =
@@ -133,7 +143,7 @@ function ScalarPicker({
     >
       {scalars.map((one) => (
         <option key={one.key} value={one.key}>
-          {one.label} ({one.count})
+          {axisLabel(one.label, one.si_unit)} · {one.count}건
         </option>
       ))}
     </select>
@@ -667,10 +677,10 @@ function SpecGapTab() {
                     </TableCell>
                     <TableCell>{row.item}</TableCell>
                     <TableCell className="text-center tabular-nums">
-                      {show(row.declared_si, row.si_unit)}
+                      {showWithUnit(row.declared_si, row.si_unit)}
                     </TableCell>
                     <TableCell className="text-center tabular-nums">
-                      {show(row.measured_mean, row.si_unit)}
+                      {showWithUnit(row.measured_mean, row.si_unit)}
                       <span className="text-muted-foreground ml-1 text-xs">
                         n={row.measured_count}
                       </span>
@@ -741,7 +751,16 @@ function TrendTab() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{TREND_GROUPS.find((o) => o.key === groupBy)?.label}</TableHead>
+                <TableHead>
+                  {TREND_GROUPS.find((o) => o.key === groupBy)?.label}
+                  {/* 어느 물성을 어느 단위로 보는지 — 열이 연도라 여기 말고는 둘 자리가 없다. */}
+                  <span className="text-muted-foreground ml-2 font-normal">
+                    {axisLabel(
+                      data.scalars.find((one) => one.key === data.scalar_key)?.label ?? '',
+                      data.si_unit
+                    )}
+                  </span>
+                </TableHead>
                 {years.map((year) => (
                   <TableHead key={year} className="text-center">
                     {year}

@@ -204,6 +204,30 @@ describe('사양 대비', () => {
     mount('spec')
     expect(await screen.findByText('+55.0%')).toBeInTheDocument()
     expect(screen.getByText(/못 견준 항목: 열전도율/)).toBeInTheDocument()
+    // **값 옆에 단위.** 줄마다 항목이 달라 머리에 단위를 못 두는 표다 — 숫자만 있으면
+    // Pa 인지 MPa 인지 짐작해야 한다(2026-09-14 지적).
+    expect(screen.getByText('200.0 MPa')).toBeInTheDocument()
+    expect(screen.getByText(/310\.0 MPa/)).toBeInTheDocument()
+  })
+})
+
+describe('추이', () => {
+  it('열이 연도라 머리 첫 칸에 항목과 단위를 적는다', async () => {
+    trend.mockResolvedValue({
+      scalar_key: 'youngs_modulus',
+      scalar_label: '탄성계수',
+      si_unit: 'Pa',
+      group_by: 'division',
+      series: [
+        { key: 'a', label: '전장', points: [{ period: '2025', mean: 205e9, count: 4 }] },
+      ],
+      scalars: [{ key: 'youngs_modulus', label: '탄성계수', si_unit: 'Pa', count: 4 }],
+      skipped_unadopted: 0,
+    })
+    mount('trend')
+    expect(await screen.findByText('탄성계수 (MPa)')).toBeInTheDocument()
+    // 항목 고르기에도 단위가 붙는다.
+    expect(screen.getByRole('option', { name: /탄성계수 \(MPa\) · 4건/ })).toBeInTheDocument()
   })
 })
 
