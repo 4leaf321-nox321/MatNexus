@@ -68,8 +68,7 @@ from app.shared import curvedata, ops, permissions
 from app.shared import divisions as divisions_order
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
-from matcore import distributions, statistics
-from matcore.processing.tensile import PLASTIC_STRAIN, TRUE_STRESS
+from matcore import distributions, fitting, statistics
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
@@ -133,10 +132,15 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
     # 처리하고 채택까지 한 사람이 빈 카드를 본다.
     scalars = services.scalar_table(group, threshold=threshold) if group.members else []
     # **적합이 읽는 열이 있는가.** 종류 이름이 아니라 채택 결과의 열로 판단한다 —
-    # 경화식은 진소성변형률·진응력을 맞추므로 그 둘이 없으면 어떤 시험이든 못 넣는다.
+    # 경화식은 진소성변형률·진응력을, 유변 식은 전단율·점도를 맞춘다. 어느 축인지는
+    # 등록된 식이 알고(`Family.x_column`), 그중 하나라도 이 묶음의 열에 있으면 된다.
+    # 전에는 진소성변형률·진응력을 상수로 들고 있어서 레오미터 묶음이 「적합 불가」 였다.
+    fitting.load_builtin()
+    axes = {(item.x_column, item.y_column) for item in fitting.FAMILIES.values()}
     fittable = any(
-        PLASTIC_STRAIN in member.result.columns and TRUE_STRESS in member.result.columns
+        x in member.result.columns and y in member.result.columns
         for member in group.members
+        for x, y in axes
     )
     return GroupOut(
         test_type_key=group.test_type.key,

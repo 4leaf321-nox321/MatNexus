@@ -823,6 +823,26 @@ def _chosen(
     )
 
 
+def _available_columns(db: Session, user: User, payload: FitPreviewRequest) -> set[str]:
+    """이 묶음의 채택 결과가 가진 열 — 어느 식을 물릴 수 있는지 가르는 근거."""
+    _, groups = statistics_services.groups_for_material(db, user, payload.material_id)
+    group = next(
+        (
+            item
+            for item in groups
+            if item.test_type.key == payload.test_type_key
+            and item.orientation == payload.orientation
+        ),
+        None,
+    )
+    if group is None:
+        return set()
+    found: set[str] = set()
+    for member in group.members:
+        found.update(member.result.columns)
+    return found
+
+
 def _representative(
     db: Session,
     user: User,
@@ -981,6 +1001,23 @@ def preview(
     ]
     if not chosen:
         raise NotFound("MNX-FITTING-0013", "고른 식이 이 재료군에 없습니다.")
+    notes: list[str] = []
+    if not payload.families:
+        # **식을 안 골랐으면 이 묶음의 열에 맞는 식만 견준다.** 「전부」 에는 축이 다른
+        # 식이 섞여 있다 — 레오미터 묶음에 경화식을 물리면 진소성변형률이 없어서 첫
+        # 식에서 422 가 나고, 맞는 식이 있어도 아무것도 못 본다.
+        available = _available_columns(db, user, payload)
+        if available:
+            dropped = [
+                item for item in chosen if not {item.x_column, item.y_column} <= available
+            ]
+            if dropped and len(dropped) < len(chosen):
+                chosen = [item for item in chosen if item not in dropped]
+                notes.append(
+                    "이 묶음의 열에 맞는 식만 견줬습니다 — 뺀 식: "
+                    + ", ".join(item.label for item in dropped)
+                    + "."
+                )
 
     # **축이 다르면 곡선도 다르다.** 같은 대표 곡선에서 금속은 진응력을, 고무는
     # 공칭을 꺼낸다 — 축마다 한 번씩만 꺼내고 그 축을 쓰는 식들에 함께 물린다.
@@ -988,7 +1025,6 @@ def preview(
     group = None
     strain = np.asarray([], dtype=np.float64)
     stress = np.asarray([], dtype=np.float64)
-    notes: list[str] = []
     for axes in dict.fromkeys((item.x_column, item.y_column) for item in chosen):
         same = [item for item in chosen if (item.x_column, item.y_column) == axes]
         found, x, y, axis_notes = _representative(

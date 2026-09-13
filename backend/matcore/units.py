@@ -215,6 +215,9 @@ UNITS: dict[str, Unit] = {
         _u("S/cm", "electric_conductivity", "100"),
         _u("Pa.s", "viscosity", "1"),  # 점도
         _u("mPa.s", "viscosity", "0.001"),
+        # mm·N·tonne 계의 점도 — MPa·s 와 같다. 기호를 `MPa.s` 로 두면 대소문자를
+        # 안 가리는 찾기가 `mPa.s` 와 부딪히므로 힘·시간·길이로 적는다.
+        _u("N.s/mm2", "viscosity", "1000000"),
         _u("cP", "viscosity", "0.001"),
         _u("eV", "photon_energy", "1"),  # 준위 에너지
         _u("mol/(m.s.Pa)", "gas_permeability", "1"),  # 기체 투과도

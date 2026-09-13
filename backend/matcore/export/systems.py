@@ -57,7 +57,7 @@ from matcore import units
 #: 적는다** — `tests/unit/test_export_units.py` 가 블록 선언과 대조한다. 실측(2026-09-05):
 #: 속도 의존(`1/s`)·선형탄성구간(`Hz`) 카드가 기본 계(mm·N·tonne)로 내려받기가 전부
 #: 422 였다. 기본 계를 SI 에서 바꾼 날 드러났다.
-DECLARED = ("1", "Pa", "K", "s", "kg/m3", "1/K", "J/(kg.K)", "W/(m.K)", "1/s", "Hz")
+DECLARED = ("1", "Pa", "K", "s", "kg/m3", "1/K", "J/(kg.K)", "W/(m.K)", "1/s", "Hz", "Pa.s")
 
 
 @dataclass(frozen=True)
@@ -134,6 +134,9 @@ MM_N_TONNE = UnitSystem(
         # 시간이 s 라 변형률 속도·주파수는 SI 와 같다.
         "1/s": "1/s",
         "Hz": "Hz",
+        # 점도(유변 카드). 1 Pa·s = 1e-6 N·s/mm²(= MPa·s). 기호를 `MPa.s` 로 두면
+        # 단위표의 대소문자 없는 찾기가 `mPa.s` 로 읽는다 — 1e9 배 사고라 피한다.
+        "Pa.s": "N.s/mm2",
     },
 )
 
@@ -153,6 +156,7 @@ EXPONENTS: dict[str, tuple[int, int, int]] = {
     "W/(m.K)": (1, 1, -3),
     "1/s": (0, 0, -1),
     "Hz": (0, 0, -1),
+    "Pa.s": (1, -1, -1),
 }
 
 #: 분모에 K 가 드는 것. 지수로는 0 이지만 기호에는 있어야 한다 — mm2/(ms2.K).

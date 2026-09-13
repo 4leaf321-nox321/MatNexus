@@ -194,6 +194,14 @@ class Family:
     """`(파라미터, x) -> 경고 목록`. 적합 자체는 됐는데 **해석이 발산하는** 계수를
     짚는다. 고무에서 실제로 나는 일이다 — 막지 않고 말한다."""
 
+    residual: str = "linear"
+    """잔차를 어느 눈금으로 재나 — `linear`(기본) 또는 `log`.
+
+    **여러 자릿수를 지나는 곡선은 로그로 맞춘다.** 점도-전단율은 0.1~1000 1/s 에서
+    점도가 12 → 0.3 Pa·s 로 40배 내려간다. 선형 잔차면 큰 점도 몇 점이 적합을
+    지배해 낮은 점도 구간은 두 배 틀려도 RMSE 에 안 보인다 — 유변학이 로그-로그로
+    그리는 이유가 그것이다. `log` 면 y 가 0 이하인 점은 못 쓰고 뺀다."""
+
     jacobian: Any = None
     """`(파라미터, x) -> (점 수, 파라미터 수)` 행렬. `∂y/∂p` 를 해석적으로 준다.
 
@@ -817,6 +825,9 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
     if strain.shape != stress.shape:
         raise FittingError("변형률과 응력의 점 수가 다릅니다.")
     keep = np.isfinite(strain) & np.isfinite(stress) & (strain >= 0)
+    if family.residual == "log":
+        # 로그 잔차는 양수에서만 뜻이 있다 — 0 이나 음수 점은 조용히 빼지 않고 센다.
+        keep &= stress > 0
     strain, stress = strain[keep], stress[keep]
     if len(strain) < MIN_POINTS:
         raise FittingError(
@@ -836,14 +847,22 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
     # 초기 구간(항복 근처)이 크게 어긋나도 RMSE 가 작게 나온다.
     scale = max(float(np.mean(np.abs(stress))), 1.0)
 
+    log_scale = family.residual == "log"
+    log_stress = np.log(stress) if log_scale else stress
+
     def residual(parameters: np.ndarray) -> np.ndarray:
-        difference: np.ndarray = family.evaluate(parameters, strain) - stress
+        predicted_here: np.ndarray = family.evaluate(parameters, strain)
+        if log_scale:
+            # 예측이 0 이하로 떨어지면 로그가 없다 — 그 자리는 큰 잔차로 밀어낸다.
+            safe = np.where(predicted_here > 0, predicted_here, 1e-300)
+            return np.log(safe) - log_stress
+        difference: np.ndarray = predicted_here - stress
         return difference / scale
 
     # **해석적 미분이 있으면 준다.** 없으면 scipy 가 차분으로 낸다 — 답은 같고
     # 1.3~1.5배 느릴 뿐이다(실측은 `Family.jacobian` 주석).
     jacobian: Any = "2-point"
-    if family.jacobian is not None:
+    if family.jacobian is not None and not log_scale:
 
         def analytic(parameters: np.ndarray) -> np.ndarray:
             assert family is not None
