@@ -207,7 +207,7 @@ def test_값_단계_식이_레시피에서_돌고_고치면_판이_오르고_쓰
     assert created.status_code == 201, created.text
     body = created.json()
     assert body["registry_key"] == "formula.yield_ratio_api"
-    assert body["kind_label"] == "값 단계"
+    assert body["kind_label"] == "값에서 값을 내는 식"
     assert body["version"] == 1
     assert body["references"] == {"recipes": 0, "results": 0, "cards": 0}
 
@@ -380,6 +380,8 @@ def test_열_단계와_값_단계_미리보기(
 def test_검사_어휘_권한(
     client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
 ) -> None:
+    ensure_builtin_test_types(db)
+    db.commit()
     # 관리자만 만든다. 보는 것은 누구나.
     member = _member_headers(client, db, workspace)
     denied = client.post("/api/formulas", json=RATIO, headers=member)
@@ -388,7 +390,12 @@ def test_검사_어휘_권한(
 
     # 어휘 — 화면이 드롭다운을 그리는 재료.
     vocab = client.get("/api/formulas/vocabulary", headers=member).json()
-    assert {"key": "stress_true", "label": "진응력 (Pa)"} in vocab["columns"]
+    stress = next(one for one in vocab["columns"] if one["key"] == "stress_true")
+    assert stress["label"] == "진응력 (Pa)"
+    assert stress["made_by"], "어느 단계가 내는지 말한다"
+    # 원본 파일의 채널도 열 후보다 — 「어디서 오나」 가 「원본 파일」 이다.
+    force = next(one for one in vocab["columns"] if one["key"] == "force")
+    assert force["made_by"] == "원본 파일"
     assert any(one["key"] == "proof_stress" for one in vocab["scalars"])
     assert any(one["key"] == "hardening" for one in vocab["blocks"])
     assert "pow" in vocab["functions"] and "pi" in vocab["constants"]

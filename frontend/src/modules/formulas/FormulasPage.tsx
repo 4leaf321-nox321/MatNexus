@@ -67,32 +67,60 @@ const SELECT = 'border-input bg-background h-9 w-full rounded-md border px-2 tex
 const REFERENCE_LABELS: Record<string, string> = { recipes: '레시피', results: '결과', cards: '카드' }
 const SI_UNITS = Array.from(new Set(Object.values(SI_BY_DIMENSION))).sort()
 
+/**
+ * 새 식의 첫 모양 — **예시가 채워진 채로.** 빈 칸 여덟 개를 앞에 두면 사람은 무엇을 적어야
+ * 하는지부터 물었다(2026-09-13). 지워 쓰는 편이 빠르고, 예시가 곧 설명이다. 키는 비워 둔다 —
+ * 예시 키를 그대로 저장하면 다음 사람이 같은 키에 부딪힌다.
+ */
 function emptySpec(kind: FormulaKind): FormulaSpec {
   if (kind === 'family') {
     return {
       key: '',
       kind,
-      label: '',
-      expression: '',
+      label: 'Swift (예)',
+      expression: 'K * pow(e0 + x, n)',
       describe: null,
       variables: [{ name: 'x', unit: '1', label: null }],
-      parameters: [{ name: 'K', unit: 'Pa', initial: 1e9, lower: 0, upper: null }],
+      parameters: [
+        { name: 'K', unit: 'Pa', initial: 5e8, lower: 0, upper: 5e9 },
+        { name: 'e0', unit: '1', initial: 0.01, lower: 1e-6, upper: 1 },
+        { name: 'n', unit: '1', initial: 0.2, lower: 0, upper: 1 },
+      ],
       result: null,
       x_column: 'strain_true_plastic',
       y_column: 'stress_true',
       block: 'hardening',
-      applies_to: [],
+      applies_to: ['Metal'],
+    }
+  }
+  if (kind === 'scalar_step') {
+    return {
+      key: '',
+      kind,
+      label: '항복비 (예)',
+      expression: 'proof_stress / tensile_strength',
+      describe: null,
+      variables: [
+        { name: 'proof_stress', unit: 'Pa', label: null },
+        { name: 'tensile_strength', unit: 'Pa', label: null },
+      ],
+      parameters: [],
+      result: { key: 'yield_ratio', label: '항복비', si_unit: '1' },
+      x_column: null,
+      y_column: null,
+      block: null,
+      applies_to: ['tensile'],
     }
   }
   return {
     key: '',
     kind,
-    label: '',
-    expression: '',
+    label: '진응력 MPa (예)',
+    expression: 'stress_true * 1e-6',
     describe: null,
-    variables: [{ name: '', unit: '1', label: null }],
+    variables: [{ name: 'stress_true', unit: 'Pa', label: null }],
     parameters: [],
-    result: { key: '', label: '', si_unit: '1' },
+    result: { key: 'stress_true_mpa', label: '진응력 (MPa)', si_unit: '1' },
     x_column: null,
     y_column: null,
     block: null,
@@ -187,30 +215,41 @@ export default function FormulasPage() {
     <div className="space-y-4">
       <PageHeader
         title="계산식"
-        description="화면에서 적은 식이 적합식·처리 단계가 됩니다 — 파이썬 폴더 없이, 배포 없이."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {KINDS.map((kind) => (
-              <Button key={kind.key} size="sm" onClick={() => setEditing({ row: null, kind: kind.key })}>
-                <Plus className="mr-1 h-4 w-4" />
-                {kind.label}
-              </Button>
-            ))}
-          </div>
-        }
+        description="식 한 줄을 적으면 처리 단계나 카드의 식이 됩니다 — 개발자 없이, 배포 없이."
       />
 
-      <div className="text-muted-foreground grid gap-1 rounded-md border p-3 text-sm md:grid-cols-3">
-        {KINDS.map((kind) => (
-          <div key={kind.key}>
-            <span className="text-foreground font-medium">{kind.label}</span> — {kind.where}
-          </div>
-        ))}
-        <div className="md:col-span-3">
-          정렬·구간 탐색·회귀 같은 <span className="text-foreground">알고리즘은 여기서 못 만듭니다</span> — 그것은
-          확장 폴더의 일입니다. 여기는 한 줄로 적히는 식까지입니다.
+      {/* **무엇을 만들까요 — 셋 중 하나를 고른다.** 단추 이름(적합식·값 단계·열 단계)만으로는
+          무엇이 나오는지 안 보였다. 카드마다 용도·어디에 뜨나·변수는 어디서 오나·예를 적는다. */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium">무엇을 만들까요?</h2>
+        <div className="grid gap-3 md:grid-cols-3">
+          {KINDS.map((kind) => (
+            <button
+              key={kind.key}
+              type="button"
+              className="hover:bg-muted/50 flex flex-col gap-1.5 rounded-md border p-3 text-left"
+              onClick={() => setEditing({ row: null, kind: kind.key })}
+            >
+              <span className="flex items-center gap-1 font-medium">
+                <Plus className="h-4 w-4" />
+                {kind.label}
+              </span>
+              <span className="text-sm">{kind.purpose}</span>
+              <span className="text-muted-foreground text-xs">
+                <b className="text-foreground">어디에</b> {kind.where}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                <b className="text-foreground">변수는</b> {kind.inputs}
+              </span>
+              <code className="bg-muted mt-1 rounded px-1.5 py-0.5 text-xs">{kind.example}</code>
+            </button>
+          ))}
         </div>
-      </div>
+        <p className="text-muted-foreground text-xs">
+          한 줄로 적히는 식까지입니다. 정렬·구간 탐색·회귀·교점처럼 <b className="text-foreground">순서와 조건이 있는 계산</b>은
+          여기서 못 만들고 개발자가 확장 폴더로 붙입니다.
+        </p>
+      </section>
 
       <ErrorNotice error={error ?? rows.error} />
       {notice && <div className="rounded-md border p-3 text-sm">{notice}</div>}
@@ -339,7 +378,9 @@ function FormulaDialog({
   onDone: (message: string) => void
 }) {
   const [spec, setSpec] = useState<FormulaSpec>(() => (row ? specOf(row) : emptySpec(kind)))
-  const [appliesText, setAppliesText] = useState(() => (row ? row.applies_to.join(', ') : ''))
+  const [appliesText, setAppliesText] = useState(() =>
+    (row ? row.applies_to : emptySpec(kind).applies_to).join(', ')
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
@@ -460,12 +501,28 @@ function FormulaDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            {kindMeta.where}
-            {row && ' — 식·변수·계수를 고치면 판이 오릅니다. 저장된 결과는 옛 판 그대로입니다.'}
+            {kindMeta.purpose}
+            {row && ' 식·변수·계수를 고치면 판이 오릅니다. 저장된 결과는 옛 판 그대로입니다.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3">
+          {/* **어디에 뜨고 변수는 어디서 오나** — 창 안에서도 한 번 더. 첫 화면을 안 거치고
+              「편집」 으로 들어오는 사람이 있다. */}
+          <div className="bg-muted/40 grid gap-1 rounded-md p-3 text-xs md:grid-cols-2">
+            <div>
+              <b>어디에 뜨나</b> — {kindMeta.where}
+            </div>
+            <div>
+              <b>변수는 어디서</b> — {kindMeta.inputs}
+            </div>
+            {!row && (
+              <div className="text-muted-foreground md:col-span-2">
+                예시가 채워져 있습니다. 키를 적고, 식과 이름을 지워 쓰세요. 저장 전에 아래
+                「미리보기」 로 실제 시험에 돌려 보면 값이 맞는지 보입니다.
+              </div>
+            )}
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="formula-key">키</Label>
@@ -501,14 +558,22 @@ function FormulaDialog({
               onChange={(event) => setSpec({ ...spec, expression: event.target.value })}
             />
             <p className="text-muted-foreground text-xs">
-              함수: {vocabulary?.functions.join(' ') ?? '…'} · 상수: {vocabulary?.constants.join(' ') ?? '…'}.
-              식에 쓰는 이름은 아래 {isFamily ? '변수·계수' : '입력'}에 전부 적혀 있어야 합니다.
+              쓸 수 있는 함수: {vocabulary?.functions.join(' ') ?? '…'} · 상수:{' '}
+              {vocabulary?.constants.join(' ') ?? '…'}. 식에 쓰는 이름은 아래{' '}
+              {isFamily ? '변수·계수' : '입력'}에 전부 적혀 있어야 합니다 — 적지 않은 이름은 저장이
+              막힙니다.
             </p>
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label>{isFamily ? '변수 (x 하나)' : kind === 'scalar_step' ? '입력 — 앞 단계의 값' : '입력 — 프레임의 열'}</Label>
+              <Label>
+                {isFamily
+                  ? '변수 — x 는 아래 「x 열」 의 값입니다'
+                  : kind === 'scalar_step'
+                    ? '입력 — 앞 단계가 낸 값 (어느 단계가 내는지 함께 보입니다)'
+                    : '입력 — 곡선의 열 (원본 파일 채널 또는 앞 단계가 만든 열)'}
+              </Label>
               {!isFamily && (
                 <Button
                   variant="ghost"
@@ -535,13 +600,45 @@ function FormulaDialog({
             </datalist>
             {spec.variables.map((one, index) => (
               <div key={index} className="grid grid-cols-[1fr_8rem_auto] gap-2">
-                <Input
-                  list={isFamily ? undefined : 'formula-names'}
-                  value={one.name}
-                  placeholder="이름"
-                  disabled={isFamily}
-                  onChange={(event) => setVariable(index, { name: event.target.value })}
-                />
+                {isFamily ? (
+                  <Input value={one.name} placeholder="이름" disabled />
+                ) : (
+                  // **목록에서 고른다.** 이름을 손으로 치면 오타가 저장되고, 그 식은 돌 때마다
+                  // 「값이 없습니다」 만 남긴다. 어느 단계가 내는지가 옆에 붙어 「어디서 오나」 에
+                  // 답한다. 목록에 없는 이름(확장이 나중에 낼 것)은 「직접 입력」 으로.
+                  <select
+                    className={SELECT}
+                    aria-label={`${index + 1}번 입력`}
+                    value={names.some((n) => n['key'] === one.name) ? one.name : one.name ? '__custom__' : ''}
+                    onChange={(event) => {
+                      const next = event.target.value
+                      if (next === '__custom__') {
+                        setVariable(index, { name: one.name || 'x' })
+                        return
+                      }
+                      const found = names.find((n) => n['key'] === next)
+                      const unit = found?.['label']?.match(/\(([^)]*)\)\s*$/)?.[1]
+                      setVariable(index, { name: next, ...(unit && unit !== '?' ? { unit } : {}) })
+                    }}
+                  >
+                    <option value="">— 고르세요 —</option>
+                    {names.map((n) => (
+                      <option key={n['key']} value={n['key']}>
+                        {n['key']} · {n['label']}
+                        {n['made_by'] ? ` ← ${n['made_by']}` : ''}
+                      </option>
+                    ))}
+                    <option value="__custom__">직접 입력…</option>
+                  </select>
+                )}
+                {!isFamily && !names.some((n) => n['key'] === one.name) && one.name !== '' && (
+                  <Input
+                    className="col-span-3"
+                    value={one.name}
+                    placeholder="이름 (영문 snake_case)"
+                    onChange={(event) => setVariable(index, { name: event.target.value })}
+                  />
+                )}
                 <Input
                   list="formula-units"
                   value={one.unit ?? '1'}

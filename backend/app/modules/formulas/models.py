@@ -30,7 +30,13 @@ from app.database import Base
 
 #: 자리 셋 — `matcore.formulas.KINDS` 와 같다.
 KINDS = ("family", "scalar_step", "column_step")
-KIND_LABELS = {"family": "적합식", "scalar_step": "값 단계", "column_step": "열 단계"}
+#: 사람이 읽는 자리 이름 — **무엇으로 무엇을 만드나**. 「적합식·값 단계·열 단계」 는 내부
+#: 구조의 이름이라 사용자가 못 알아들었다(2026-09-13).
+KIND_LABELS = {
+    "family": "곡선에 맞추는 식",
+    "scalar_step": "값에서 값을 내는 식",
+    "column_step": "곡선에서 열을 내는 식",
+}
 
 
 class Formula(Base):

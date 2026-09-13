@@ -26,6 +26,7 @@ from app.modules.formulas.schemas import (
     FormulaVocabularyOut,
 )
 from app.modules.processing.models import ProcessingResult
+from app.modules.tests.models import TestChannel
 from app.shared import filestore, permissions
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
@@ -73,7 +74,9 @@ def list_formulas(
 
 
 @router.get("/vocabulary", response_model=FormulaVocabularyOut)
-def vocabulary(_user: User = Depends(current_user)) -> FormulaVocabularyOut:
+def vocabulary(
+    _user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> FormulaVocabularyOut:
     """식을 적을 때 고를 수 있는 이름 — 계약서(`docs/확장-계약.md`)와 같은 어휘.
 
     열·스칼라는 내장·확장 단계의 `makes_columns`·`makes_values` 에서, 블록은 카드
@@ -82,19 +85,42 @@ def vocabulary(_user: User = Depends(current_user)) -> FormulaVocabularyOut:
     """
     processing.load_builtin()
     cards.load_builtin()
-    columns: dict[str, str] = {}
-    scalars: dict[str, str] = {}
+    columns: dict[str, dict[str, str]] = {}
+    scalars: dict[str, dict[str, str]] = {}
+    # 원본 파일의 채널 — 단계가 만든 열이 아니라 파일에서 온 열. 「어디서 오나」 의 답이
+    # 「원본 파일」 인 것들이다. 시험 종류가 데이터라 DB 에서 읽는다.
+    for key, label, si_unit in db.execute(
+        select(TestChannel.key, TestChannel.label, TestChannel.si_unit).distinct()
+    ).all():
+        columns.setdefault(
+            str(key),
+            {"key": str(key), "label": f"{label} ({si_unit or '?'})", "made_by": "원본 파일"},
+        )
     for plugin in registry.list_plugins(kind="processing"):
         for made in plugin.makes_columns:
-            if (
-                "{" not in made.key
-            ):  # `{column}_smoothed` 처럼 옵션에 따라 이름이 정해지는 것은 뺀다
-                columns.setdefault(made.key, f"{made.label} ({made.si_unit or '?'})")
+            # `{column}_smoothed` 처럼 옵션에 따라 이름이 정해지는 것은 뺀다
+            if "{" in made.key:
+                continue
+            columns.setdefault(
+                made.key,
+                {
+                    "key": made.key,
+                    "label": f"{made.label} ({made.si_unit or '?'})",
+                    "made_by": plugin.label,
+                },
+            )
         for made in plugin.makes_values:
-            scalars.setdefault(made.key, f"{made.label} ({made.si_unit or '?'})")
+            scalars.setdefault(
+                made.key,
+                {
+                    "key": made.key,
+                    "label": f"{made.label} ({made.si_unit or '?'})",
+                    "made_by": plugin.label,
+                },
+            )
     return FormulaVocabularyOut(
-        columns=[{"key": key, "label": label} for key, label in sorted(columns.items())],
-        scalars=[{"key": key, "label": label} for key, label in sorted(scalars.items())],
+        columns=[columns[key] for key in sorted(columns)],
+        scalars=[scalars[key] for key in sorted(scalars)],
         blocks=[{"key": block.key, "label": block.label} for block in cards.list_blocks()],
         functions=sorted(formula.FUNCTIONS),
         constants=sorted(formula.CONSTANTS),

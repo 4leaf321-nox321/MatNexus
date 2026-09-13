@@ -116,7 +116,11 @@ class FormulaPreviewOut(BaseModel):
 
 
 class FormulaVocabularyOut(BaseModel):
-    """식을 적을 때 고를 수 있는 것 — 열·스칼라·블록·함수. 계약서와 같은 어휘."""
+    """식을 적을 때 고를 수 있는 것 — 열·스칼라·블록·함수. 계약서와 같은 어휘.
+
+    열·스칼라 항목은 `{key, label, made_by}` — `made_by` 는 그 이름을 **어느 처리 단계가
+    내는지**(단계 이름). 사람이 「이 변수는 어디서 오나」 를 묻는 자리라(2026-09-13),
+    이름만 주면 답이 안 된다. 파일 채널은 「원본 파일」 로 적는다."""
 
     columns: list[dict[str, str]]
     scalars: list[dict[str, str]]

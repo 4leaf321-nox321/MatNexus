@@ -70,7 +70,10 @@ beforeEach(() => {
   list.mockResolvedValue([USED, FREE])
   vocabulary.mockResolvedValue({
     columns: [{ key: 'stress_true', label: '진응력 (Pa)' }],
-    scalars: [{ key: 'proof_stress', label: '항복강도 (Pa)' }],
+    scalars: [
+      { key: 'proof_stress', label: '항복강도 (Pa)', made_by: '항복강도' },
+      { key: 'tensile_strength', label: '인장강도 (Pa)', made_by: '인장강도' },
+    ],
     blocks: [{ key: 'hardening', label: '경화' }],
     functions: ['pow', 'exp'],
     constants: ['pi'],
@@ -91,21 +94,26 @@ describe('FormulasPage', () => {
     expect(within(free).getByTitle('삭제')).toBeEnabled()
   })
 
-  it('값 단계를 적어 보내면 입력·결과·시험 종류가 서버 모양으로 간다', async () => {
+  it('「값에서 값을 내는 식」 은 예시가 채워진 채 열리고, 입력은 목록에서 골라 서버 모양으로 간다', async () => {
     const user = userEvent.setup()
     render(<FormulasPage />)
     await screen.findByText('항복비')
-    await user.click(screen.getByRole('button', { name: '값 단계' }))
+    // 첫 화면은 「무엇을 만들까요」 카드 — 용도·어디에·변수는 어디서가 적혀 있다.
+    expect(screen.getByText('무엇을 만들까요?')).toBeInTheDocument()
+    expect(screen.getByText(/앞 단계가 낸 값들로 새 값 하나/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /값에서 값을 내는 식/ }))
+
+    // 예시(항복비)가 채워져 있다 — 지워 쓰는 편이 빠르다. 키만 비어 있다.
+    expect(screen.getByLabelText('키')).toHaveValue('')
+    expect(screen.getByLabelText('식')).toHaveValue('proof_stress / tensile_strength')
+    // 입력은 목록에서 고른다 — 어느 단계가 내는지 함께 보인다.
+    const first = screen.getByLabelText('1번 입력') as HTMLSelectElement
+    expect(first.value).toBe('proof_stress')
+    expect(Array.from(first.options).some((o) => o.text.includes('항복강도 (Pa)'))).toBe(true)
+    expect(screen.getByRole('button', { name: '생성' })).toBeDisabled()
 
     await user.type(screen.getByLabelText('키'), 'ratio2')
-    await user.type(screen.getByLabelText('이름'), '비율')
-    await user.type(screen.getByLabelText('식'), 'a * 2')
-    const names = screen.getAllByPlaceholderText('이름')
-    await user.type(names[0], 'a')
-    expect(screen.getByRole('button', { name: '생성' })).toBeDisabled()
-    await user.type(screen.getByLabelText('내는 값의 키'), 'ratio2')
-    await user.type(screen.getByLabelText('내는 값의 이름'), '비율')
-    await user.type(screen.getByLabelText(/시험 종류/), 'tensile, compression')
+    await user.type(screen.getByLabelText(/시험 종류/), ', compression')
     await user.click(screen.getByRole('button', { name: '생성' }))
 
     await waitFor(() => expect(create).toHaveBeenCalled())
@@ -113,9 +121,12 @@ describe('FormulasPage', () => {
     expect(payload).toMatchObject({
       key: 'ratio2',
       kind: 'scalar_step',
-      expression: 'a * 2',
-      variables: [{ name: 'a', unit: '1' }],
-      result: { key: 'ratio2', label: '비율', si_unit: '1' },
+      expression: 'proof_stress / tensile_strength',
+      variables: [
+        { name: 'proof_stress', unit: 'Pa' },
+        { name: 'tensile_strength', unit: 'Pa' },
+      ],
+      result: { key: 'yield_ratio', label: '항복비', si_unit: '1' },
       applies_to: ['tensile', 'compression'],
     })
   })
