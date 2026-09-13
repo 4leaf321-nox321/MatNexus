@@ -122,6 +122,9 @@ def test_시험종류를_가리키면_채널도_함께_적는다() -> None:
         and plugin.id not in NOT_YET_CHANNELS
         and any(target in known for target in plugin.applies_to)
         and not plugin.requires_channels
+        # **요약값 묶음은 채널이 없다** — 피로는 시편마다 점 하나라 곡선 채널이 없는 것이
+        # 그 종류의 데이터 모양이다. 적을 채널이 없으니 키로만 거른다.
+        and (plugin.meta.get("members") or {}).get("from") != "summary"
     ]
     assert not naked, (
         "시험종류 키만 보고 거릅니다 — `requires_channels` 를 함께 적으세요: "

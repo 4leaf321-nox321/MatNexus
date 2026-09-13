@@ -119,6 +119,29 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("testing_group", "시험 그룹", "text", None, None, None, False),
         ],
     },
+    {
+        # **피로(S-N)** — 시편마다 점 하나다. 곡선 파일이 없고 「표로 시험 입력」 으로
+        # 들어온다: 조건(응력 진폭·응력비·주파수)과 요약값(파단 수명 `cycles_to_failure`,
+        # 런아웃 `runout`). 채널이 없는 첫 시험 종류다 — 채널이 없다는 것이 이 종류의
+        # 데이터 모양이다. S-N 묶음(`fatigue.sn_curve`, 확장)이 시편들을 Basquin 으로 잇는다.
+        "key": "fatigue",
+        "label": "피로",
+        "abbr": "FAT",
+        "parser_key": None,
+        "description": (
+            "정하중 진폭 피로. 시편마다 (응력 진폭, 파단 수명) 점 하나 — 표로 넣는다."
+        ),
+        "sort_order": 40,
+        "channels": [],
+        "conditions": [
+            ("stress_amplitude", "응력 진폭", "number", "stress", "Pa", None, True),
+            ("stress_ratio", "응력비 R", "number", "dimensionless", "1", None, False),
+            ("frequency", "주파수", "number", "frequency", "Hz", None, False),
+            ("temperature", "시험 온도", "number", "temperature", "K", None, False),
+            ("loading", "하중 방식", "text", None, None, None, False),
+            ("testing_group", "시험 그룹", "text", None, None, None, False),
+        ],
+    },
 ]
 
 

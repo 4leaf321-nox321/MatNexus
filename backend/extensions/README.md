@@ -113,6 +113,8 @@ register(
     # ⑥ 카드 — 묶음 결과를 블록으로 바꾸는 법도 선언한다. 블록은 ① 처럼 이 폴더가
     #    `cards.register_block` 으로 등록하고, 재료·탄성·계보는 중심의 공용 길이 맡는다
     #    (`POST /fitting/cards/from-group`). 화면의 「생성」 단추도 따라온다.
+    #    곡선 없는 시험(피로)은 `members={"from": "summary", "conditions": [...],
+    #    "values": [...]}` — 조건과 표로 넣은 요약값에서 모은다(`extensions/fatigue`).
     card=temperature.card_blocks,  # (values, detail, warnings) -> {블록 키: {values, rows, notes}}
 )(temperature.temperature_family)  # (list[Member], **options) -> GroupOutcome
 ```

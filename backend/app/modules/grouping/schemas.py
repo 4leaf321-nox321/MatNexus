@@ -53,7 +53,8 @@ class GroupingSpecOut(BaseModel):
     """필요한 채널. **안쪽 묶음은 「그중 하나」.** 시험 종류를 만드는 화면이 이것을
     읽어 「이 채널을 넣으면 무엇이 열리나」 를 보여 준다."""
     needs: str = "master_curve"
-    """구성원이 시험에서 갖고 있어야 하는 것 — `master_curve` 또는 `adopted_result`.
+    """구성원이 시험에서 갖고 있어야 하는 것 — `master_curve`·`adopted_result`·`summary`
+    (곡선 없이 표로 넣은 시험 — 피로).
     화면이 후보 시험을 이것으로 거른다. 플러그인 id 로 알아맞히면 새 묶음마다 화면을
     고쳐야 한다."""
     params: list[GroupingParamOut]

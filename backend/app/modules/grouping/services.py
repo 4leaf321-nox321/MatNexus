@@ -29,7 +29,7 @@ from app.modules.accounts.models import User
 from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestRun
+from app.modules.tests.models import TestRun, TestSummary
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.shared import filestore, permissions, specimen_size
 from app.shared.errors import AppError, NotFound
@@ -48,7 +48,7 @@ _COLLECTORS: dict[str, Callable[[Session, list[TestRun]], list[groups.Member]]] 
 #: 화면이 후보를 거르는 근거다. Prony 는 마스터커브가 있는 시험만, 속도별 묶음은
 #: 채택된 처리 결과가 있는 시험만 받는데, 화면이 그것을 플러그인 id 로 알아맞히면
 #: 새 묶음이 생길 때마다 화면을 고쳐야 한다(D7). 여기서 선언하고 API 가 준다.
-Needs = Literal["master_curve", "adopted_result"]
+Needs = Literal["master_curve", "adopted_result", "summary"]
 _NEEDS: dict[str, Needs] = {}
 
 
@@ -82,6 +82,10 @@ def collector(
 #:         "values": ["youngs_modulus"],                        # 채택된 결과의 스칼라 → values
 #:     }}
 #:
+#: `"from": "summary"` 면 곡선이 없는 시험이다 — 피로처럼 시편마다 점 하나. `conditions`
+#: 는 같고 `values` 는 요약값(`TestSummary`, 표로 넣은 것)에서 꺼낸다. 글자 요약값은
+#: 예/아니오로 읽어 1/0 이 된다(런아웃).
+#:
 #: 파이썬 수집기(`@collector`)가 있으면 그것이 먼저다 — 계산이 필요한 것(변형률 속도)은
 #: 그 길로. `matcore/groups/__init__.py` 가 "다음 물성을 붙일 때 그 한 줄이 거슬리면
 #: 레지스트리로 옮길 때" 라고 적어 둔 것의 절반이다 — 선언으로 되는 것은 옮겼다.
@@ -106,7 +110,53 @@ def member_needs(plugin_id: str) -> Needs:
     rule = _declared_rule(plugin_id)
     if rule is not None and rule.get("from") == "adopted_result":
         return "adopted_result"
+    if rule is not None and rule.get("from") == "summary":
+        return "summary"
     return "master_curve"
+
+
+_YES = {"yes", "y", "true", "1", "o", "예", "런아웃", "runout", "run-out"}
+_NO = {"no", "n", "false", "0", "x", "아니오", "파단", "failure", "failed"}
+
+
+def _summary_members(
+    db: Session, runs: list[TestRun], rule: dict[str, Any], plugin_id: str
+) -> list[groups.Member]:
+    """곡선 없는 시험 — 조건과 요약값만 든 구성원. 없는 값은 **어느 시험이 무엇이 없는지**
+    말한다."""
+    wanted_conditions = [str(one) for one in rule.get("conditions") or []]
+    wanted_values = [str(one) for one in rule.get("values") or []]
+    if rule.get("columns"):
+        raise AppError(
+            "MNX-GROUPING-0001",
+            f"{plugin_id}: 요약값 구성원에는 곡선 열이 없습니다 — `columns` 를 비우세요.",
+            status=422,
+        )
+    by_run: dict[uuid.UUID, dict[str, float]] = {}
+    for row in db.scalars(
+        select(TestSummary).where(TestSummary.test_run_id.in_([run.id for run in runs]))
+    ):
+        if row.key not in wanted_values:
+            continue
+        value: float | None = None
+        if row.value_num is not None:
+            value = float(row.value_num)
+        elif row.value_text is not None:
+            text = row.value_text.strip().casefold()
+            value = 1.0 if text in _YES else 0.0 if text in _NO else None
+        if value is not None:
+            by_run.setdefault(row.test_run_id, {})[row.key] = value
+    members: list[groups.Member] = []
+    for run in runs:
+        values: dict[str, float] = {}
+        conditions = run.conditions or {}
+        for key in wanted_conditions:
+            found = conditions.get(key)
+            if isinstance(found, int | float):
+                values[key] = float(found)
+        values.update(by_run.get(run.id, {}))
+        members.append(groups.Member(label=run.record_name, columns={}, values=values))
+    return members
 
 
 def _declared_members(
@@ -114,10 +164,12 @@ def _declared_members(
 ) -> list[groups.Member]:
     """선언대로 채택된 결과에서 열·조건·스칼라를 꺼낸다. 없으면 **어느 시험이 무엇이
     없는지** 말한다 — 속도 가족 수집기와 같은 문장이다."""
+    if rule.get("from") == "summary":
+        return _summary_members(db, runs, rule, plugin_id)
     if rule.get("from") != "adopted_result":
         raise AppError(
             "MNX-GROUPING-0001",
-            f"{plugin_id}: 구성원 규칙의 `from` 은 'adopted_result' 만 됩니다.",
+            f"{plugin_id}: 구성원 규칙의 `from` 은 'adopted_result'·'summary' 만 됩니다.",
             status=422,
         )
     wanted_columns = [str(one) for one in rule.get("columns") or []]

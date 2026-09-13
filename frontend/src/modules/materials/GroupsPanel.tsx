@@ -515,10 +515,14 @@ export function GroupsPanel({
   // 속도별 묶음은 채택된 처리 결과가 있어야 한다 — 화면이 플러그인 id 로
   // 알아맞히면 새 묶음마다 여기를 고쳐야 한다. 없으면 마스터커브로 본다(옛 응답).
   const needs = chosen?.needs ?? 'master_curve'
+  // `summary` 는 곡선 없이 표로 넣은 시험(피로) — 종류가 맞으면 전부 후보다. 요약값이
+  // 빠진 시험은 서버가 묶을 때 이름을 대고 막는다.
   const candidates =
     needs === 'adopted_result'
       ? kindMatched.filter((run) => !!run.adopted_result_id)
-      : kindMatched.filter((run) => (run.master_curve_count ?? 0) > 0)
+      : needs === 'summary'
+        ? kindMatched
+        : kindMatched.filter((run) => (run.master_curve_count ?? 0) > 0)
   const unadopted = kindMatched.length - candidates.length
   // **Shift 로 범위를 고른다.** 온도 여섯 단이면 여섯 번 누르게 된다.
   const selection = useRowSelection(candidates.map((run) => run.id))
@@ -668,7 +672,14 @@ export function GroupsPanel({
 
                 **명사형으로 적는다**(2026-09-05). 「~합니다」 로 풀어 쓴 설명은
                 길고 말투가 도드라져 읽히지 않았다 — 보고서처럼 끊는다. */}
-            {needs === 'adopted_result' ? (
+            {needs === 'summary' ? (
+              <DialogDescription>
+                <b>표로 넣은 시험 여럿의 조건·요약값을 한 계산에 투입.</b>
+                <br />
+                S-N 의 경우: 시험 조건의 응력 진폭과 요약값의 파단 수명(cycles_to_failure)·
+                런아웃(runout)으로 Basquin 곡선 산출. 채택 결과 불필요.
+              </DialogDescription>
+            ) : needs === 'adopted_result' ? (
               <DialogDescription>
                 <b>채택된 처리 결과 여럿을 한 계산에 투입.</b>
                 <br />
@@ -874,7 +885,12 @@ export function GroupsPanel({
               {/* **왜 이것만 뜨는지 말한다.** 아무 말 없이 걸러 두면 「내 시험이
                   왜 없지」 가 된다. 그리고 **몇 건이 왜 빠졌는지**가 다음 할 일을
                   가리킨다 — 마스터커브를 만들면 그것도 쓸 수 있다. */}
-              {needs === 'adopted_result' ? (
+              {needs === 'summary' ? (
+                <p className="text-muted-foreground text-xs">
+                  이 종류의 시험 전부 표시 — 조건·요약값이 빠진 시험은 묶을 때 이름을 대고
+                  막힘.
+                </p>
+              ) : needs === 'adopted_result' ? (
                 <p className="text-muted-foreground text-xs">
                   채택된 처리 결과가 있는 시험만 표시.
                   {unadopted > 0 &&
