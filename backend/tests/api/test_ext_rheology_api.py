@@ -83,7 +83,8 @@ def test_레오미터_곡선이_적합_카드_덱까지_간다(
         one for one in stats.json()["groups"] if one["test_type_key"] == "rheometer_flow"
     )
     assert group["fittable"] is True
-    # 단추 이름의 근거 — 이 묶음의 열에 맞는 식이 담기는 블록. 경화식·초탄성은 축이 없어 빠진다.
+    # 단추 이름의 근거 — 이 묶음의 열에 맞는 식이 담기는 블록.
+    # 경화식·초탄성은 축이 없어 빠진다.
     assert group["fit_blocks"] == ["rheology"]
 
     # ② 식을 안 고르고 미리보기 — 축이 안 맞는 경화식은 빠지고 유변 식만 견준다.
