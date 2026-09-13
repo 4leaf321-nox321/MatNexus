@@ -134,3 +134,17 @@ def test_장비_폼이_서버_칸을_다_그린다() -> None:
         "화면에서 채울 수 없는 칸이 생겼습니다 — 그릴 자리를 넣거나, "
         "안 그릴 이유를 `_EQUIPMENT_NOT_IN_FORM` 에 적으세요."
     )
+
+
+def test_시험_상태_라벨이_서버와_같다() -> None:
+    """배지(화면 라벨)와 거르개(서버 라벨)가 같은 말을 해야 한다. 「표로 입력」 이 화면에
+    없어 `imported` 가 영문 그대로 떴다(2026-09-13)."""
+    from app.modules.tests.routes import RUN_STATUS_LABELS
+
+    api = EDITOR.parent / "api.ts"
+    text = api.read_text(encoding="utf-8")
+    block = re.search(
+        r"export const RUN_STATUS_LABEL: Record<string, string> = \{(.*?)\n\}", text, re.DOTALL
+    )
+    assert block, "api.ts 에서 RUN_STATUS_LABEL 을 찾지 못했습니다."
+    assert dict(_ENTRY.findall(block.group(1))) == RUN_STATUS_LABELS

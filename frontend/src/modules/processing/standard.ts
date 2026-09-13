@@ -163,6 +163,15 @@ export const DMA_STARTER: RecipeStep[] = [
   { plugin: 'curve.sort_unique', options: { x: 'temperature', duplicate_policy: 'mean' } },
 ]
 
+/**
+ * 레오미터 유동 — 원본 채널(전단율·점도)이 곧 축이라 계산할 것이 없다. 정렬 하나만
+ * 깔아 둔다: 유변 식(Cross·Carreau)이 전단율 오름차순의 곡선을 받는다. 비워 두면
+ * 사람은 「무엇을 넣어야 하나」 에서 멈춘다(2026-09-13).
+ */
+export const RHEOMETER_STARTER: RecipeStep[] = [
+  { plugin: 'curve.sort_unique', options: { x: 'shear_rate', duplicate_policy: 'mean' } },
+]
+
 export const TENSILE_STARTER: RecipeStep[] = TENSILE_STANDARD.map((step) => ({
   plugin: step.plugin,
   options: { ...step.options },

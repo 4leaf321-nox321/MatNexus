@@ -37524,7 +37524,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^(uploaded|parsing|parsed|failed)$",
+                  "pattern": "^(uploaded|parsing|parsed|failed|imported)$",
                   "type": "string"
                 },
                 {

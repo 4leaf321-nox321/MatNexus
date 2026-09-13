@@ -967,6 +967,16 @@ def upload_test_run(
 # --- 조회 -------------------------------------------------------------------
 
 
+#: 시험 상태 → 사람이 읽는 말. 화면의 `RUN_STATUS_LABEL` 과 같아야 한다 — 거르개(서버
+#: 라벨)와 배지(화면 라벨)가 다른 말을 하면 같은 상태가 둘로 보인다.
+RUN_STATUS_LABELS: dict[str, str] = {
+    "uploaded": "대기",
+    "parsing": "읽는 중",
+    "parsed": "완료",
+    "failed": "실패",
+    "imported": "표로 입력",
+}
+
 #: 시험 목록에서 정렬할 수 있는 열. **화면이 목록을 정하지 않는다.**
 #:
 #: 시험일(`tested_at`)이 등록 일시와 따로 있는 것이 요점이다 — 옛 시험을 오늘
@@ -1014,7 +1024,9 @@ def list_runs(
     ),
     specimen_id: uuid.UUID | None = None,
     material_id: uuid.UUID | None = None,
-    status: str | None = Query(default=None, pattern="^(uploaded|parsing|parsed|failed)$"),
+    status: str | None = Query(
+        default=None, pattern="^(uploaded|parsing|parsed|failed|imported)$"
+    ),
     test_type_key: str | None = Query(default=None),
     orientation: str | None = Query(default=None),
     registered_by: str | None = Query(default=None),
@@ -1270,8 +1282,12 @@ def run_facets(
         for value, count in orientation_pairs
         if value
     ]
+    # **상태는 사람 말로.** 거르개에 `parsed`·`imported` 가 그대로 떴다 — 배지는 화면이
+    # 우리말로 바꾸는데 거르개는 서버 라벨을 그대로 써서 둘이 달랐다(2026-09-13).
     statuses = [
-        RunFacetOut(key=str(value), label=str(value), count=count)
+        RunFacetOut(
+            key=str(value), label=RUN_STATUS_LABELS.get(str(value), str(value)), count=count
+        )
         for value, count in tally(base.c.status)
     ]
     operators = [

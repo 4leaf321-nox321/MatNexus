@@ -130,7 +130,7 @@ export interface RunQuery extends Record<string, unknown> {
   workspace?: string
   specimen_id?: string
   material_id?: string
-  status?: 'uploaded' | 'parsing' | 'parsed' | 'failed'
+  status?: 'uploaded' | 'parsing' | 'parsed' | 'failed' | 'imported'
   /**
    * 채택된 처리 결과가 있는가. **"올렸는데 아직 아무것도 안 한 것"** 을 세려면
    * `false`. 목록을 받아 화면이 세면 상한에 걸린 순간 숫자가 조용히 틀린다.
@@ -380,6 +380,9 @@ export const RUN_STATUS_LABEL: Record<string, string> = {
   parsing: '읽는 중',
   parsed: '완료',
   failed: '실패',
+  // 「표로 시험 입력」 으로 들어온 것 — 곡선 파일이 없다. 빠져 있어 배지에 `imported` 가
+  // 영문 그대로 떴다(2026-09-13). 서버의 `RUN_STATUS_LABELS` 와 같아야 한다.
+  imported: '표로 입력',
 }
 
 /** 아직 끝나지 않은 상태. 목록이 스스로 갱신할지 판단하는 데 쓴다. */

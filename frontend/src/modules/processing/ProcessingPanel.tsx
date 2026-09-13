@@ -72,7 +72,12 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { missingSteps } from '@/modules/processing/gaps'
-import { DMA_STARTER, TENSILE_STARTER, missingStandard } from '@/modules/processing/standard'
+import {
+  DMA_STARTER,
+  RHEOMETER_STARTER,
+  TENSILE_STARTER,
+  missingStandard,
+} from '@/modules/processing/standard'
 import {
   blockersAt,
   columnsAt,
@@ -300,7 +305,9 @@ export function ProcessingPanel({
         ? TENSILE_STARTER
         : testTypeKey === 'dma_sweep'
           ? DMA_STARTER
-          : []
+          : testTypeKey === 'rheometer_flow'
+            ? RHEOMETER_STARTER
+            : []
     setSteps(
       starter.map((step) => ({
         ...step,
