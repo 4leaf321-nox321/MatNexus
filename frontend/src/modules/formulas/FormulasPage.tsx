@@ -215,6 +215,7 @@ export default function FormulasPage() {
       <ErrorNotice error={error ?? rows.error} />
       {notice && <div className="rounded-md border p-3 text-sm">{notice}</div>}
 
+      <div className="overflow-x-auto rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
@@ -287,6 +288,7 @@ export default function FormulasPage() {
           ))}
         </TableBody>
       </Table>
+      </div>
 
       {editing && (
         <FormulaDialog

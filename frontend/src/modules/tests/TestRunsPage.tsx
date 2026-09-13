@@ -457,6 +457,8 @@ export default function TestRunsPage() {
       )}
 
       {rows.length > 0 && (
+        // **표에 테두리를 두른다** — 시편 목록과 같은 틀(2026-09-13 지적).
+        <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             {/* **머리 띠를 본문과 가른다.** 거르는 칸이 들어가 두 층이 되면서
@@ -706,6 +708,7 @@ export default function TestRunsPage() {
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {rows.length > 0 && (

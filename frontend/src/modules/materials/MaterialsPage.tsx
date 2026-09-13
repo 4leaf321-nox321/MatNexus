@@ -429,6 +429,10 @@ export default function MaterialsPage() {
 
       {rows.length > 0 && (
         <>
+          {/* **표에 테두리를 두른다** — 시편 목록과 같은 틀. 머리 띠의 칸 사이 선만 있고
+              바깥 테두리가 없으면 띠가 어디서 시작하는지 흐릿하다(2026-09-13 지적: 시편
+              목록은 잘 보이는데 재료·시험 목록은 안 보인다). */}
+          <div className="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>
               {/* **머리 띠를 본문과 가른다.** 거르는 칸이 들어가 두 층이 되면서
@@ -616,6 +620,7 @@ export default function MaterialsPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
             <span className="text-muted-foreground tabular-nums">
               {all ? `전체 ${rows.length}` : `${offset + 1}–${offset + rows.length}`} / {total}건
