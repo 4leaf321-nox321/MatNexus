@@ -38,11 +38,13 @@ vi.mock('@/modules/materials/api.groups', () => ({
 
 const createRateCard = vi.fn()
 const createViscoelastic = vi.fn()
+const createCardFromGroup = vi.fn()
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
     createRateCard: (...args: unknown[]) => createRateCard(...args),
     createViscoelastic: (...args: unknown[]) => createViscoelastic(...args),
+    createCardFromGroup: (...args: unknown[]) => createCardFromGroup(...args),
     // 카드 대화상자가 물려받을 밀도·푸아송비를 묻는다.
     inherited: () => Promise.resolve([]),
   },
@@ -627,6 +629,49 @@ describe('후보의 조건은 서버가 말한다', () => {
       )
     )
     expect(onCardMade).toHaveBeenCalled()
+  })
+
+  it('카드를 만들 수 있다고 서버가 말한 묶음은 공용 길로 카드가 된다', async () => {
+    // 확장 폴더의 묶음(온도별 소성 곡선)이 화면 한 줄 없이 카드까지 가는 자리다.
+    ofMaterial.mockResolvedValue([
+      {
+        ...ROW,
+        id: 'g3',
+        plugin_id: 'tensile.temperature_family',
+        options: {},
+        used: ['A', 'B', 'C'],
+        values: { temperature_count: 3, reference_temperature: 293.15 },
+        detail: { temperatures: [] },
+        warnings: [],
+      },
+    ])
+    kinds.mockResolvedValue([
+      {
+        id: 'tensile.temperature_family',
+        label: '온도별 소성 곡선',
+        applies_to: ['tensile'],
+        needs: 'adopted_result',
+        params: [],
+        makes_values: [
+          { key: 'temperature_count', label: '온도 묶음 수', si_unit: '1' },
+          { key: 'reference_temperature', label: '기준 온도', si_unit: 'K' },
+        ],
+        makes_card: true,
+      },
+    ])
+    createCardFromGroup.mockResolvedValue({ id: 'c11', material_id: 'm1' })
+    show(<GroupsPanel materialId="m1" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /^생성$/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('온도별 소성 곡선 카드 생성')
+    expect(dialog).toHaveTextContent('온도 묶음 수: 3')
+    await userEvent.click(within(dialog).getByRole('button', { name: '생성' }))
+    await waitFor(() =>
+      expect(createCardFromGroup).toHaveBeenCalledWith(
+        expect.objectContaining({ group_result_id: 'g3' })
+      )
+    )
   })
 
   it('카드 단추는 묻고 나서 만든다 — 묻지 않으면 누를 때마다 초안이 쌓인다', async () => {

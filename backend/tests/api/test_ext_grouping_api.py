@@ -133,7 +133,7 @@ def test_확장_단계가_레시피에서_돌고_확장_묶음이_선언만으�
         json={
             "plugin_id": "tensile.temperature_family",
             "run_ids": [one["run_id"] for one in runs],
-            "options": {"level": 0.01},
+            "options": {"levels": "0.01"},
         },
         headers=admin_headers,
     )
@@ -145,6 +145,36 @@ def test_확장_단계가_레시피에서_돌고_확장_묶음이_선언만으�
     assert len(body["used"]) == 3
     # 같은 파일 셋이라 응력이 같다 — 기울기는 0 에 가깝다. 값이 「나온다」 가 요점이다.
     assert abs(body["values"]["softening_slope"]) < 1e3
+    assert found["makes_card"] is True
+
+    # ③-1 묶음 → 카드, 중심 코드 한 줄 없이 — 플러그인이 선언한 `card=` 가 블록을 낸다.
+    card = client.post(
+        "/api/fitting/cards/from-group",
+        json={"group_result_id": body["id"], "label": "온도 의존 시험"},
+        headers=admin_headers,
+    )
+    assert card.status_code == 201, card.text
+    made_card = card.json()
+    assert set(made_card["blocks"]) >= {"elastic", "table", "temperature_table"}
+    temperature_table = made_card["blocks"]["temperature_table"]
+    assert temperature_table["values"]["temperature_count"] == 3
+    assert {round(row["temperature"], 2) for row in temperature_table["rows"]} == {
+        293.15,
+        323.15,
+        353.15,
+    }
+    assert made_card["blocks"]["elastic"]["values"]["youngs_modulus"] == pytest.approx(200e9)
+    assert made_card["source"]["plugin_id"] == "tensile.temperature_family"
+
+    # ③-2 그 카드는 확장이 등록한 Abaqus 온도 의존 덱으로 나간다.
+    assert "abaqus_temperature" in made_card["available_formats"]
+    deck = client.get(
+        f"/api/fitting/cards/{made_card['id']}/export?format=abaqus_temperature",
+        headers=admin_headers,
+    )
+    assert deck.status_code == 200, deck.text
+    assert "*PLASTIC, HARDENING=ISOTROPIC" in deck.text
+    assert "3.531500000000E+02" in deck.text
 
     # ④ 채택 결과가 없는 시험은 선언 수집기도 같은 문장으로 막는다.
     bare = client.post(

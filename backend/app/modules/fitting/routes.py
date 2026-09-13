@@ -60,6 +60,7 @@ from app.modules.fitting.schemas import (
     FitPreviewOut,
     FitPreviewRequest,
     FittedParameterOut,
+    GroupCardSaveRequest,
     InheritedValueOut,
     LveCardSaveRequest,
     MemberCurveOut,
@@ -98,6 +99,7 @@ from matcore import (
     export,
     fitting,
     prony,
+    registry,
     resample,
     runtime,
     statistics,
@@ -2292,6 +2294,115 @@ def create_rate_card(
             },
         },
         point_count=len(reference_rows),
+        note=payload.note,
+        created_by_id=user.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
+
+
+@router.post("/cards/from-group", response_model=PropertyCardOut, status_code=201)
+def create_card_from_group(
+    payload: GroupCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """묶음 플러그인이 선언한 대로 카드를 만든다 — **공용 길.**
+
+    속도·점탄성 카드는 저마다 경로가 있다(그 카드만의 규칙이 있어서). 그 밖의 묶음은
+    플러그인이 `register(..., card=fn)` 으로 「값·상세·경고 → 블록」 을 선언하고, 이
+    경로가 나머지 — 계보(재료·시험 종류·방향), 탄성 블록 물려받기, 출처·메모 — 를
+    맡는다. 그래서 확장 폴더의 묶음이 **중심 코드 한 줄 없이** 카드까지 간다.
+    """
+    cards.load_builtin()
+    row = db.get(GroupResult, payload.group_result_id)
+    if row is None:
+        raise NotFound("MNX-FITTING-0011", "묶음을 찾을 수 없습니다.")
+    try:
+        plugin = registry.get(row.plugin_id)
+    except KeyError as exc:
+        raise AppError(
+            "MNX-FITTING-0016",
+            f"이 묶음의 방법('{row.plugin_id}')이 지금 등록돼 있지 않습니다.",
+            status=422,
+        ) from exc
+    builder = plugin.meta.get("card")
+    if not callable(builder):
+        raise AppError(
+            "MNX-FITTING-0016",
+            f"「{plugin.label}」 묶음은 카드를 만드는 법을 선언하지 않았습니다.",
+            status=422,
+        )
+    try:
+        blocks = builder(dict(row.values), dict(row.detail), list(row.warnings))
+    except ValueError as exc:
+        raise AppError("MNX-FITTING-0016", str(exc), status=422) from exc
+    if not isinstance(blocks, dict) or not blocks:
+        raise AppError("MNX-FITTING-0016", "묶음이 카드 블록을 내지 않았습니다.", status=422)
+    known = {spec.key for spec in cards.list_blocks()}
+    unknown = sorted(set(blocks) - known)
+    if unknown:
+        raise AppError(
+            "MNX-FITTING-0016",
+            f"등록되지 않은 블록입니다: {', '.join(unknown)} — "
+            "확장이 `cards.register_block` 으로 먼저 등록해야 합니다.",
+            status=422,
+        )
+
+    lineage = _lineage_of_group(db, user, row)
+    material = lineage.material
+    modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
+    modulus_source = "statistics"
+    if modulus is None:
+        stated = _declared(material, "탄성계수")
+        modulus, modulus_source = stated.value, stated.source
+    poisson = _inherit_poisson(material, payload.poisson_ratio)
+    density = _inherit_density(material, lineage.samples, payload.density)
+
+    notes = [
+        f"「{plugin.label}」 묶음 · 시편 {len(lineage.runs)}건에서 만들었습니다.",
+        (
+            f"탄성계수: 채택 결과 {modulus_count}건의 평균입니다."
+            if modulus_source == "statistics"
+            else f"탄성계수: 재료에 적어 둔 값입니다({modulus_source})."
+        ),
+        f"푸아송비: {poisson.detail}" if poisson.detail else "",
+        f"밀도: {density.detail}" if density.detail else "",
+        *row.warnings,
+    ]
+    elastic_values: dict[str, Any] = {}
+    if modulus is not None:
+        elastic_values.update(
+            {"youngs_modulus": modulus, "youngs_modulus_source": modulus_source}
+        )
+    if poisson.value is not None:
+        elastic_values.update(
+            {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
+        )
+    if density.value is not None:
+        elastic_values.update({"density": density.value, "density_source": density.source})
+
+    table_rows = list((blocks.get("table") or {}).get("rows") or [])
+    item = PropertyCard(
+        material_id=material.id,
+        test_type_id=lineage.test_type_id,
+        orientation=lineage.orientation,
+        label=payload.label,
+        status="draft",
+        source={
+            "sample_count": len(lineage.runs),
+            "test_run_ids": [str(run.id) for run in lineage.runs],
+            "record_names": [run.record_name for run in lineage.runs],
+            "group_result_id": str(row.id),
+            "plugin_id": row.plugin_id,
+            "notes": [line for line in notes if line],
+            "runtime": runtime.manifest(),
+        },
+        # 확장이 낸 블록이 먼저, 탄성은 확장이 안 냈을 때만 물려받은 것으로 채운다.
+        blocks={"elastic": {"values": elastic_values}, **blocks},
+        point_count=len(table_rows),
         note=payload.note,
         created_by_id=user.id,
     )

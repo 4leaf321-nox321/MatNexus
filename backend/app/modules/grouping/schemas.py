@@ -58,6 +58,10 @@ class GroupingSpecOut(BaseModel):
     고쳐야 한다."""
     params: list[GroupingParamOut]
     makes_values: list[GroupingProducedOut]
+    makes_card: bool = False
+    """이 묶음 결과로 카드를 만들 수 있는가 — 플러그인이 `card=` 로 블록을 선언했으면.
+    화면은 이것을 보고 「카드 생성」 을 세운다(`/fitting/cards/from-group`). 속도·점탄성
+    처럼 제 경로가 있는 것은 결과의 모양으로 따로 안다."""
 
 
 class GroupNoteRequest(BaseModel):

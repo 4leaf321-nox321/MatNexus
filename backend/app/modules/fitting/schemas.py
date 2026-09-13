@@ -670,6 +670,21 @@ class CardBundleRequest(BaseModel):
     """덱의 단위계. 파일 이름과 덱 머리에 들어간다."""
 
 
+class GroupCardSaveRequest(BaseModel):
+    """묶음에서 카드 — **묶음 플러그인이 `card=` 로 블록을 선언한 것이면 무엇이든.**
+
+    확장 폴더의 묶음(온도별 소성 곡선 …)이 중심 코드 한 줄 없이 카드까지 가는 길이다.
+    재료·시험 종류·방향·구성원은 묶음이 들고 있고, 탄성계수는 구성원의 채택 결과
+    (`youngs_modulus`)를 평균하고 없으면 재료에 적어 둔 값 — 속도 카드와 같은 규칙.
+    """
+
+    group_result_id: uuid.UUID
+    label: str = Field(default="", max_length=200)
+    poisson_ratio: float | None = Field(default=None, gt=-1, lt=0.5)
+    density: float | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class RateCardSaveRequest(BaseModel):
     """속도 의존 소성 카드 — **속도별 묶음(`tensile.rate_family`)에서.**
 

@@ -1354,6 +1354,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/from-group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Card From Group
+         * @description 묶음 플러그인이 선언한 대로 카드를 만든다 — **공용 길.**
+         *
+         *     속도·점탄성 카드는 저마다 경로가 있다(그 카드만의 규칙이 있어서). 그 밖의 묶음은
+         *     플러그인이 `register(..., card=fn)` 으로 「값·상세·경고 → 블록」 을 선언하고, 이
+         *     경로가 나머지 — 계보(재료·시험 종류·방향), 탄성 블록 물려받기, 출처·메모 — 를
+         *     맡는다. 그래서 확장 폴더의 묶음이 **중심 코드 한 줄 없이** 카드까지 간다.
+         */
+        post: operations["create_card_from_group_api_fitting_cards_from_group_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/inherited": {
         parameters: {
             query?: never;
@@ -10215,6 +10240,32 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * GroupCardSaveRequest
+         * @description 묶음에서 카드 — **묶음 플러그인이 `card=` 로 블록을 선언한 것이면 무엇이든.**
+         *
+         *     확장 폴더의 묶음(온도별 소성 곡선 …)이 중심 코드 한 줄 없이 카드까지 가는 길이다.
+         *     재료·시험 종류·방향·구성원은 묶음이 들고 있고, 탄성계수는 구성원의 채택 결과
+         *     (`youngs_modulus`)를 평균하고 없으면 재료에 적어 둔 값 — 속도 카드와 같은 규칙.
+         */
+        GroupCardSaveRequest: {
+            /** Density */
+            density?: number | null;
+            /**
+             * Group Result Id
+             * Format: uuid
+             */
+            group_result_id: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+        };
         /** GroupCreateRequest */
         GroupCreateRequest: {
             /** Note */
@@ -10362,6 +10413,11 @@ export interface components {
             id: string;
             /** Label */
             label: string;
+            /**
+             * Makes Card
+             * @default false
+             */
+            makes_card: boolean;
             /** Makes Values */
             makes_values: components["schemas"]["GroupingProducedOut"][];
             /**
@@ -18489,6 +18545,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CardFacetsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_card_from_group_api_fitting_cards_from_group_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupCardSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
                 };
             };
             /** @description Validation Error */

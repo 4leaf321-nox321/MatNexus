@@ -104,6 +104,7 @@ function GroupCard({
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
   const [askingProny, setAskingProny] = useState(false)
+  const [askingGeneric, setAskingGeneric] = useState(false)
   // **고칠 수 있는 것은 메모뿐이다.** 값·멤버·옵션은 그때 계산의 스냅샷이다(2026-09-05).
   const [editingNote, setEditingNote] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
@@ -130,6 +131,11 @@ function GroupCard({
   // 묶음마다 화면을 고쳐야 한다 — 속도 묶음(`rates`)이 있으면 속도 의존 카드가 선다.
   const rates = (row.detail?.rates as RateBin[] | undefined) ?? []
   const fit = (row.detail?.fit as Record<string, number> | undefined) ?? {}
+  // **그 밖의 묶음은 서버가 「카드를 만들 수 있다」 고 말한 것만.** 플러그인이 `card=` 로
+  // 블록을 선언했으면 공용 길(`/fitting/cards/from-group`)로 간다 — 확장 폴더의 묶음이
+  // 화면 한 줄 없이 카드까지 가는 자리다. 제 경로가 있는 속도·Prony 는 위에서 잡힌다.
+  const generic = Boolean(spec?.makes_card) && rates.length === 0 && terms.length === 0
+  const makes = (spec?.makes_values ?? []).filter((one) => row.values[one.key] != null)
 
   return (
     <div className="rounded-md border p-3">
@@ -206,6 +212,35 @@ function GroupCard({
           }}
         />
       )}
+      {askingGeneric && spec && (
+        <CardFromDialog
+          materialId={row.material_id}
+          title={`${spec.label} 카드 생성`}
+          description={
+            <>
+              이 묶음의 결과가 카드 블록으로 실립니다. 탄성계수는 구성원의 채택 결과를
+              평균하고, 없으면 재료에 적어 둔 값을 씁니다.
+            </>
+          }
+          preview={
+            <ul className="space-y-0.5">
+              {makes.slice(0, 6).map((one) => (
+                <li key={one.key}>
+                  {one.label}: {formatScalar(Number(row.values[one.key]), one.si_unit ?? '1')}
+                </li>
+              ))}
+              <li>시편 {row.used.length}건</li>
+            </ul>
+          }
+          suggestedLabel={spec.label}
+          onSubmit={(values) => fittingApi.createCardFromGroup({ group_result_id: row.id, ...values })}
+          onClose={() => setAskingGeneric(false)}
+          onDone={() => {
+            setAskingGeneric(false)
+            made()
+          }}
+        />
+      )}
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge variant="outline">{spec?.label ?? row.plugin_id}</Badge>
         {method && <Badge>{method}</Badge>}
@@ -240,6 +275,18 @@ function GroupCard({
             className="h-7 text-xs"
             title="이 묶음의 Prony 계수 한 벌을 점탄성 카드로 만듭니다."
             onClick={() => setAskingProny(true)}
+          >
+            <FileDown className="size-3.5" />
+            생성
+          </Button>
+        )}
+        {generic && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            title="이 묶음의 결과로 카드를 만듭니다 — 묶음이 선언한 블록이 실립니다."
+            onClick={() => setAskingGeneric(true)}
           >
             <FileDown className="size-3.5" />
             생성

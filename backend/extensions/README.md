@@ -110,6 +110,10 @@ register(
         "conditions": ["temperature"],
     },
     makes_values=(Produced(key="softening_slope", label="온도 연화 기울기", si_unit="Pa/K"),),
+    # ⑥ 카드 — 묶음 결과를 블록으로 바꾸는 법도 선언한다. 블록은 ① 처럼 이 폴더가
+    #    `cards.register_block` 으로 등록하고, 재료·탄성·계보는 중심의 공용 길이 맡는다
+    #    (`POST /fitting/cards/from-group`). 화면의 「생성」 단추도 따라온다.
+    card=temperature.card_blocks,  # (values, detail, warnings) -> {블록 키: {values, rows, notes}}
 )(temperature.temperature_family)  # (list[Member], **options) -> GroupOutcome
 ```
 

@@ -29,6 +29,7 @@ export type Produced = components['schemas']['CardValueOut']
 export type ViscoelasticCardSaveRequest =
   components['schemas']['ViscoelasticCardSaveRequest']
 export type RateCardSaveRequest = components['schemas']['RateCardSaveRequest']
+export type GroupCardSaveRequest = components['schemas']['GroupCardSaveRequest']
 export type LveCardSaveRequest = components['schemas']['LveCardSaveRequest']
 export type DeclaredCardSaveRequest = components['schemas']['DeclaredCardSaveRequest']
 export type DeclaredCardPreview = components['schemas']['DeclaredCardPreviewOut']
@@ -166,6 +167,14 @@ export const fittingApi = {
    */
   createRateCard: (body: RateCardSaveRequest) =>
     api.post<PropertyCard>('/fitting/cards/rate-dependent', body),
+
+  /**
+   * 묶음이 `card=` 로 블록을 선언한 것이면 무엇이든 — 공용 길. 확장 폴더의 묶음
+   * (온도별 소성 곡선 …)이 중심 코드 없이 카드까지 가는 자리다. 서버의 `makes_card`
+   * 가 참인 묶음에만 단추가 선다.
+   */
+  createCardFromGroup: (body: GroupCardSaveRequest) =>
+    api.post<PropertyCard>('/fitting/cards/from-group', body),
 
   /**
    * DMA 변형률 스윕의 선형 구간 탄성률 카드. 통계 묶음(재료·종류·방향)의 채택

@@ -10646,6 +10646,64 @@
         "title": "GraphNodeOut",
         "type": "object"
       },
+      "GroupCardSaveRequest": {
+        "description": "묶음에서 카드 — **묶음 플러그인이 `card=` 로 블록을 선언한 것이면 무엇이든.**\n\n확장 폴더의 묶음(온도별 소성 곡선 …)이 중심 코드 한 줄 없이 카드까지 가는 길이다.\n재료·시험 종류·방향·구성원은 묶음이 들고 있고, 탄성계수는 구성원의 채택 결과\n(`youngs_modulus`)를 평균하고 없으면 재료에 적어 둔 값 — 속도 카드와 같은 규칙.",
+        "properties": {
+          "density": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density"
+          },
+          "group_result_id": {
+            "format": "uuid",
+            "title": "Group Result Id",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Label",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "poisson_ratio": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 0.5,
+                "exclusiveMinimum": -1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio"
+          }
+        },
+        "required": [
+          "group_result_id"
+        ],
+        "title": "GroupCardSaveRequest",
+        "type": "object"
+      },
       "GroupCreateRequest": {
         "properties": {
           "note": {
@@ -10981,6 +11039,11 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "makes_card": {
+            "default": false,
+            "title": "Makes Card",
+            "type": "boolean"
           },
           "makes_values": {
             "items": {
@@ -29540,6 +29603,48 @@
           }
         },
         "summary": "Card Facets",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/cards/from-group": {
+      "post": {
+        "description": "묶음 플러그인이 선언한 대로 카드를 만든다 — **공용 길.**\n\n속도·점탄성 카드는 저마다 경로가 있다(그 카드만의 규칙이 있어서). 그 밖의 묶음은\n플러그인이 `register(..., card=fn)` 으로 「값·상세·경고 → 블록」 을 선언하고, 이\n경로가 나머지 — 계보(재료·시험 종류·방향), 탄성 블록 물려받기, 출처·메모 — 를\n맡는다. 그래서 확장 폴더의 묶음이 **중심 코드 한 줄 없이** 카드까지 간다.",
+        "operationId": "create_card_from_group_api_fitting_cards_from_group_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupCardSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyCardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Card From Group",
         "tags": [
           "fitting"
         ]
