@@ -353,10 +353,15 @@ class Test흐름:
         ).json()
         assert cleared["due_on"] is None
 
-        # 낸다 → 받는 쪽이 보인다. 낸 뒤에는 못 지운다.
+        # 낸다 → 받는 쪽이 보인다. 받는 쪽이 손대기 전까지는 낸 사람이 지울 수 있다.
         submitted = _move(client, kim, draft["id"], "submitted", None).json()
         assert submitted["status"] == "submitted"
+        assert submitted["can_delete"]
         assert client.get(f"/api/commissions/{draft['id']}", headers=lee).status_code == 200
+        # 받는 쪽이 말을 남기면 낸 사람은 못 지운다.
+        _move(client, lee, draft["id"], None, "시료 언제 옵니까")
+        seen = client.get(f"/api/commissions/{draft['id']}", headers=kim).json()
+        assert not seen["can_delete"]
         assert client.delete(f"/api/commissions/{draft['id']}", headers=kim).status_code == 403
 
         # 접수되면 낸 사람도 못 고친다.
@@ -368,12 +373,44 @@ class Test흐름:
             == 403
         )
 
-        # 작성 중으로 되돌린 것은 지운다.
-        another = _create(client, kim, world["sample"]["id"], submit=False)
+        # 작성 중인 것은 지운다. 받는 쪽은 남의 것을 못 지운다.
+        another = _create(client, kim, world["sample"]["id"], submit=True)
+        assert (
+            client.delete(f"/api/commissions/{another['id']}", headers=lee).status_code == 403
+        )
         assert (
             client.delete(f"/api/commissions/{another['id']}", headers=kim).status_code == 204
         )
         assert client.get(f"/api/commissions/{another['id']}", headers=kim).status_code == 404
+
+    def test_시스템_관리자는_언제나_지우고_붙은_시험은_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        world: dict[str, Any],
+        admin_headers: dict[str, str],
+    ) -> None:
+        kim, lee = world["kim"], world["lee"]
+        made = _create(client, kim, world["sample"]["id"])
+        _move(client, lee, made["id"], "accepted", "다음 주")
+        run = _run(client, lee, world["sample"]["id"])
+        client.post(
+            f"/api/commissions/{made['id']}/items/{made['items'][0]['id']}/runs",
+            json={"run_id": run["id"]},
+            headers=lee,
+        )
+        # 접수된 뒤라 낸 사람은 못 지운다. 목록도 같은 답을 든다.
+        row = client.get("/api/commissions?scope=mine", headers=kim).json()["items"][0]
+        assert not row["can_delete"]
+        assert client.delete(f"/api/commissions/{made['id']}", headers=kim).status_code == 403
+        # 관리자는 지운다 — 시험은 남고 연결만 풀린다.
+        assert (
+            client.delete(f"/api/commissions/{made['id']}", headers=admin_headers).status_code
+            == 204
+        )
+        db.expire_all()
+        left = db.get(TestRun, run["id"])
+        assert left is not None and left.commission_item_id is None
 
 
 class Test권한:

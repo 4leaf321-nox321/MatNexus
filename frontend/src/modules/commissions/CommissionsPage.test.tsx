@@ -15,12 +15,14 @@ import CommissionsPage from '@/modules/commissions/CommissionsPage'
 
 const list = vi.fn()
 const statuses = vi.fn()
+const remove = vi.fn()
 
 vi.mock('@/modules/commissions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/commissions/api')>()),
   commissionsApi: {
     list: (...args: unknown[]) => list(...args),
     statuses: () => statuses(),
+    remove: (id: string) => remove(id),
   },
 }))
 
@@ -47,6 +49,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   is_mine: true,
   side: 'requester',
   event_count: 2,
+  can_delete: false,
   ...over,
 })
 
@@ -70,6 +73,7 @@ describe('측정 의뢰 게시판', () => {
   beforeEach(() => {
     list.mockReset()
     statuses.mockReset()
+    remove.mockReset()
     statuses.mockResolvedValue(STATUSES)
   })
 
@@ -109,6 +113,24 @@ describe('측정 의뢰 게시판', () => {
     const line = (await screen.findByText('SECC 인장 물성')).closest('tr') as HTMLElement
     expect(within(line).getByText('새 재료')).toBeInTheDocument()
     expect(within(line).getByText('SGARC440 1.2t, 포스코')).toBeInTheDocument()
+  })
+
+  it('지울 수 있는 건에만 삭제 단추가 서고, 묻고 나서 지운다', async () => {
+    await show([
+      row({ id: 'c-1', seq: 7, can_delete: true, status: 'submitted', status_label: '접수 대기' }),
+      row({ id: 'c-2', seq: 8, title: '남의 것', can_delete: false }),
+    ])
+    expect(screen.getByRole('button', { name: '#7 삭제' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '#8 삭제' })).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: '#7 삭제' }))
+    expect(await screen.findByText('의뢰를 지웁니다')).toBeInTheDocument()
+    expect(screen.getByText(/아직 받는 부서가 손대지 않은 건/)).toBeInTheDocument()
+    remove.mockResolvedValue(undefined)
+    list.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('c-1'))
+    expect(await screen.findByText('측정 의뢰가 없습니다.')).toBeInTheDocument()
   })
 
   it('급한 건은 배지가 붙고, 없으면 안내가 선다', async () => {

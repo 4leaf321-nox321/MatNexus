@@ -1069,7 +1069,11 @@ export interface paths {
         post?: never;
         /**
          * Delete Commission
-         * @description **작성 중인 것만 지운다.** 낸 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로 둔다.
+         * @description **낸 사람은 받는 쪽이 손대기 전까지, 시스템 관리자는 언제나.**
+         *
+         *     받는 쪽이 접수하거나 말을 남긴 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로
+         *     둔다. 관리자가 지우면 이력도 함께 가고(CASCADE) 붙은 시험은 남는다 — 화면이 먼저
+         *     묻는다.
          */
         delete: operations["delete_commission_api_commissions__commission_id__delete"];
         options?: never;
@@ -8279,6 +8283,8 @@ export interface components {
             assignees?: components["schemas"]["NamedOut"][];
             /** Can Assign */
             can_assign: boolean;
+            /** Can Delete */
+            can_delete: boolean;
             /** Can Edit */
             can_edit: boolean;
             /** Can Link */
@@ -8450,6 +8456,8 @@ export interface components {
          */
         CommissionOut: {
             assignee: components["schemas"]["NamedOut"] | null;
+            /** Can Delete */
+            can_delete: boolean;
             /**
              * Created At
              * Format: date-time

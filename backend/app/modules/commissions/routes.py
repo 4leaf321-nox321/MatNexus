@@ -71,6 +71,7 @@ def _rows(
     samples = services.samples(db, {one.sample_id for one in items if one.sample_id})
     progress = services.progress(db, ids)
     counts = services.event_counts(db, ids)
+    spoken = services.spoken_by_others(db, items)
     item_counts: dict[uuid.UUID, int] = {}
     if ids:
         for commission_id, count in db.execute(
@@ -123,6 +124,7 @@ def _rows(
                 is_mine=one.created_by_id == viewer.id,
                 side=sides[one.id],
                 event_count=max(counts.get(one.id, 0) - 1, 0),
+                can_delete=services.can_delete(one, viewer, others_spoke=one.id in spoken),
             )
         )
     return out
@@ -397,13 +399,19 @@ def delete_commission(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    """**작성 중인 것만 지운다.** 낸 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로 둔다."""
+    """**낸 사람은 받는 쪽이 손대기 전까지, 시스템 관리자는 언제나.**
+
+    받는 쪽이 접수하거나 말을 남긴 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로
+    둔다. 관리자가 지우면 이력도 함께 가고(CASCADE) 붙은 시험은 남는다 — 화면이 먼저
+    묻는다.
+    """
     item = services.get(db, user, commission_id)
-    if item.status != "draft" or not services.can_edit(item, user):
+    others = item.id in services.spoken_by_others(db, [item])
+    if not services.can_delete(item, user, others_spoke=others):
         raise Forbidden(
             "MNX-COMMISSIONS-0015",
-            "작성 중인 의뢰만 지울 수 있습니다. "
-            "낸 뒤에는 작성 중으로 되돌리거나 반려로 두세요.",
+            "받는 부서가 손댄 의뢰는 낸 사람이 지울 수 없습니다 — "
+            "반려나 완료로 두거나 시스템 관리자에게 요청하세요.",
         )
     db.delete(item)
     db.commit()

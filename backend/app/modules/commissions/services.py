@@ -532,6 +532,36 @@ def lab_members(db: Session, workspace_id: uuid.UUID) -> list[tuple[uuid.UUID, s
     return [(row.id, row.display_name) for row in rows]
 
 
+def spoken_by_others(db: Session, items: list[Commission]) -> set[uuid.UUID]:
+    """낸 사람 아닌 누군가가 말을 남긴 건. **한 번에** 센다 — 목록이 N+1 이 되지 않게."""
+    if not items:
+        return set()
+    by_item = {one.id: one.created_by_id for one in items}
+    out: set[uuid.UUID] = set()
+    for commission_id, by_id in db.execute(
+        select(CommissionEvent.commission_id, CommissionEvent.by_id)
+        .where(CommissionEvent.commission_id.in_(list(by_item)))
+        .distinct()
+    ).all():
+        if by_id != by_item.get(commission_id):
+            out.add(commission_id)
+    return out
+
+
+def can_delete(item: Commission, user: User, *, others_spoke: bool) -> bool:
+    """지울 수 있는가.
+
+    **낸 사람은 받는 쪽이 손대기 전까지, 시스템 관리자는 언제나.** 받는 쪽이 접수하거나
+    말을 남긴 뒤에 지우면 그쪽이 한 일이 사라진다 — 그때는 반려·완료로 둔다. 관리자가
+    지우면 붙어 있던 시험은 남고 연결만 풀린다(`TestRun.commission_item_id` SET NULL).
+    """
+    if user.is_system_admin:
+        return True
+    if item.created_by_id != user.id:
+        return False
+    return item.status in ("draft", "submitted") and not others_spoke
+
+
 def event_counts(db: Session, commission_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     if not commission_ids:
         return {}

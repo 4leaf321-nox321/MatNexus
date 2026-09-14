@@ -11,11 +11,13 @@
  */
 
 import { useState } from 'react'
-import { ClipboardPlus, MessageSquare, Search } from 'lucide-react'
+import { ClipboardPlus, MessageSquare, Search, Trash2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
+import { DeleteBody } from '@/modules/commissions/DeleteBody'
 import { STATUS_TONES, commissionsApi } from '@/modules/commissions/api'
 import type { Commission, Scope } from '@/modules/commissions/api'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Stamp } from '@/shared/components/Stamp'
@@ -72,6 +74,9 @@ export default function CommissionsPage() {
   const [typed, setTyped] = useState('')
   const [q, setQ] = useState('')
   const [offset, setOffset] = useState(0)
+  const [removing, setRemoving] = useState<Commission | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
 
   const statuses = useResource(() => commissionsApi.statuses(), [])
   const page = useResource(
@@ -102,7 +107,7 @@ export default function CommissionsPage() {
         }
       />
 
-      <ErrorNotice error={page.error ?? statuses.error} className="mb-4" />
+      <ErrorNotice error={page.error ?? statuses.error ?? error} className="mb-4" />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1" role="group" aria-label="범위">
@@ -161,6 +166,7 @@ export default function CommissionsPage() {
                 <TableHead className="w-24">상태</TableHead>
                 <TableHead className="w-28">기한</TableHead>
                 <TableHead className="w-48">최근 처리</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -228,12 +234,52 @@ export default function CommissionsPage() {
                   <TableCell>
                     {item.status_by ?? '알 수 없음'} · <Stamp at={item.status_at} />
                   </TableCell>
+                  <TableCell className="text-right">
+                    {/* 지울 수 있는 건에만 — 낸 사람은 받는 쪽이 손대기 전까지, 관리자는 언제나. */}
+                    {item.can_delete && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        aria-label={`#${item.seq} 삭제`}
+                        title="이 의뢰를 지웁니다"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setRemoving(item)
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={removing !== null}
+        title="의뢰를 지웁니다"
+        busy={busy}
+        body={removing ? <DeleteBody item={removing} /> : null}
+        onClose={() => setRemoving(null)}
+        onConfirm={async () => {
+          if (!removing) return
+          setBusy(true)
+          setError(null)
+          try {
+            await commissionsApi.remove(removing.id)
+            setRemoving(null)
+            page.reload()
+          } catch (caught) {
+            setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+          } finally {
+            setBusy(false)
+          }
+        }}
+      />
 
       {total > PAGE && (
         <div className="mt-3 flex items-center justify-between text-sm">

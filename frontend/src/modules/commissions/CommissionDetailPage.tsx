@@ -23,6 +23,7 @@ import {
   toPayload,
 } from '@/modules/commissions/ItemsEditor'
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
+import { DeleteBody } from '@/modules/commissions/DeleteBody'
 import { SamplePicker } from '@/modules/commissions/SamplePicker'
 import { STATUS_TONES, commissionsApi } from '@/modules/commissions/api'
 import type { CommissionDetail, CommissionEvent, CommissionItem } from '@/modules/commissions/api'
@@ -101,13 +102,16 @@ export default function CommissionDetailPage() {
               {detail.priority === 'urgent' && (
                 <Badge variant="destructive">{detail.priority_label}</Badge>
               )}
-              {detail.can_edit && (
+              {(detail.can_edit || detail.can_delete) && (
                 <div className="ml-auto flex shrink-0 gap-1">
-                  <Button size="sm" variant="ghost" aria-label="편집" onClick={() => setEditing(true)}>
-                    <Pencil className="size-3.5" />
-                    편집
-                  </Button>
-                  {detail.status === 'draft' && (
+                  {detail.can_edit && (
+                    <Button size="sm" variant="ghost" aria-label="편집" onClick={() => setEditing(true)}>
+                      <Pencil className="size-3.5" />
+                      편집
+                    </Button>
+                  )}
+                  {/* 낸 사람은 받는 쪽이 손대기 전까지, 관리자는 언제나 — 서버가 정한다. */}
+                  {detail.can_delete && (
                     <Button size="sm" variant="ghost" aria-label="삭제" onClick={() => setDeleting(true)}>
                       <Trash2 className="size-3.5" />
                       삭제
@@ -254,16 +258,9 @@ export default function CommissionDetailPage() {
 
           <ConfirmDialog
             open={deleting}
-            title="작성 중인 의뢰를 지웁니다"
+            title="의뢰를 지웁니다"
             busy={busy}
-            body={
-              <>
-                <b>
-                  #{detail.seq} {detail.title}
-                </b>{' '}
-                이 항목 {detail.items.length}건과 함께 사라집니다. 아직 낸 것이 아니라 받는 부서는 모릅니다.
-              </>
-            }
+            body={<DeleteBody item={detail} />}
             onClose={() => setDeleting(false)}
             onConfirm={() =>
               act(async () => {
@@ -731,3 +728,4 @@ function AttachSample({
     </div>
   )
 }
+

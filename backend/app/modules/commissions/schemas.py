@@ -70,6 +70,9 @@ class CommissionOut(BaseModel):
     단추를 이것으로 가른다 — 부서 멤버십을 화면이 다시 따지지 않는다."""
     event_count: int
     """등록을 뺀 이벤트 수."""
+    can_delete: bool
+    """지울 수 있는가 — 낸 사람은 받는 쪽이 손대기 전까지, 시스템 관리자는 언제나.
+    서버가 정한다 — 목록과 상세가 같은 규칙으로 단추를 보인다."""
 
 
 class LinkedRunOut(BaseModel):

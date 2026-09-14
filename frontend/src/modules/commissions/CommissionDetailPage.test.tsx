@@ -170,6 +170,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   can_link: true,
   can_assign: true,
   can_resolve: true,
+  can_delete: false,
   assignees: [{ id: 'u-2', name: '박측정' }],
   ...over,
 })

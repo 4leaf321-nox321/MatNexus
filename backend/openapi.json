@@ -4673,6 +4673,10 @@
             "title": "Can Assign",
             "type": "boolean"
           },
+          "can_delete": {
+            "title": "Can Delete",
+            "type": "boolean"
+          },
           "can_edit": {
             "title": "Can Edit",
             "type": "boolean"
@@ -4864,6 +4868,7 @@
           "is_mine",
           "side",
           "event_count",
+          "can_delete",
           "purpose",
           "sample_plan",
           "items",
@@ -5196,6 +5201,10 @@
               }
             ]
           },
+          "can_delete": {
+            "title": "Can Delete",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5338,7 +5347,8 @@
           "progress",
           "is_mine",
           "side",
-          "event_count"
+          "event_count",
+          "can_delete"
         ],
         "title": "CommissionOut",
         "type": "object"
@@ -29905,7 +29915,7 @@
     },
     "/api/commissions/{commission_id}": {
       "delete": {
-        "description": "**작성 중인 것만 지운다.** 낸 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로 둔다.",
+        "description": "**낸 사람은 받는 쪽이 손대기 전까지, 시스템 관리자는 언제나.**\n\n받는 쪽이 접수하거나 말을 남긴 뒤에는 절차의 기록이다 — 안 할 거면 반려·완료로\n둔다. 관리자가 지우면 이력도 함께 가고(CASCADE) 붙은 시험은 남는다 — 화면이 먼저\n묻는다.",
         "operationId": "delete_commission_api_commissions__commission_id__delete",
         "parameters": [
           {
