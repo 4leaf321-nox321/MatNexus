@@ -66,6 +66,7 @@ export default function StoragePage() {
         items={[
           { to: '/server', label: '서버 정보' },
           { to: '/admin/storage', label: '저장소 정리' },
+          { to: '/admin/trash', label: '휴지통' },
         ]}
       />
       <PageHeader

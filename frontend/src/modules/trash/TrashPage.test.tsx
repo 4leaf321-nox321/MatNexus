@@ -10,6 +10,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { MemoryRouter } from 'react-router-dom'
+
 import TrashPage from '@/modules/trash/TrashPage'
 
 const list = vi.fn()
@@ -83,7 +85,7 @@ describe('복원', () => {
      * **단추만 끄면 사람은 그 자리에서 멈춘다.** 처리 화면이 「돌려 보기가 그냥
      * 비활성」 이었을 때 같은 실패를 했다 — 왜 안 되는지가 안 보였다.
      */
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC_MDOI_1.0')
 
     expect(screen.getByText(/이미 살아 있습니다/)).toBeInTheDocument()
@@ -95,12 +97,12 @@ describe('복원', () => {
 
   it('함께 돌아오는 것을 서버가 준 대로 보인다', async () => {
     // 화면이 스스로 세면 사람이 본 숫자와 실제가 어긋난다.
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     expect(await screen.findByText('시료 2건 · 시편 6건')).toBeInTheDocument()
   })
 
   it('누르면 그 종류와 id 로 부른다', async () => {
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC__01_MD_01')
 
     await userEvent.click(screen.getAllByRole('button', { name: '복원' })[0])
@@ -111,7 +113,7 @@ describe('복원', () => {
 describe('영구 삭제', () => {
   it('묻기 전에는 안 부른다', async () => {
     /** **되돌릴 수 없다.** 단추 한 번에 나가면 안 된다. */
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC__01_MD_01')
 
     await userEvent.click(screen.getAllByRole('button', { name: '영구 삭제' })[0])
@@ -120,7 +122,7 @@ describe('영구 삭제', () => {
 
   it('무엇이 사라지는지 이름과 수로 적는다', async () => {
     // 「정말 지울까요?」 만으로는 사람이 무엇에 동의하는지 모른다.
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC_MDOI_1.0')
 
     await userEvent.click(screen.getAllByRole('button', { name: '영구 삭제' })[1])
@@ -130,7 +132,7 @@ describe('영구 삭제', () => {
   })
 
   it('확인해야 나간다', async () => {
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC__01_MD_01')
 
     await userEvent.click(screen.getAllByRole('button', { name: '영구 삭제' })[0])
@@ -150,7 +152,7 @@ describe('수집 체계', () => {
   it('종류가 펼쳐져 있다 — 열어 봐야 아는 목록이 아니다', async () => {
     // 고를 것이 여덟이고 그중 무엇에 지운 것이 있는지가 매번 다르다. 드롭다운은
     // 고르고 나면 나머지가 무엇이었는지 사라진다.
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     const picker = await screen.findByRole('group', { name: '종류로 필터' })
     for (const name of ['전부', '재료', '시험 정의', '장비 파일 정의', '장비 커넥터']) {
       expect(within(picker).getByRole('button', { name }), name).toBeInTheDocument()
@@ -160,7 +162,7 @@ describe('수집 체계', () => {
   it('누른 것을 다시 누르면 전부로 돌아온다', async () => {
     // **끄는 길이 있어야 토글이다.** 없으면 「전부」 를 찾아 눈이 되돌아간다.
     const user = userEvent.setup()
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     const picker = await screen.findByRole('group', { name: '종류로 필터' })
     const one = within(picker).getByRole('button', { name: '시험 정의' })
     await user.click(one)
@@ -182,7 +184,7 @@ describe('골라서 한꺼번에 삭제', () => {
    */
 
   it('고르기 전에는 일괄 단추가 없다', async () => {
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC__01_MD_01')
 
     expect(screen.queryByRole('button', { name: '선택한 것 영구 삭제' })).toBeNull()
@@ -190,7 +192,7 @@ describe('골라서 한꺼번에 삭제', () => {
 
   it('고른 것만 보낸다', async () => {
     /** **제일 위험한 자리다.** 하나를 더 보내면 그것은 돌아오지 않는다. */
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC__01_MD_01')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
@@ -204,7 +206,7 @@ describe('골라서 한꺼번에 삭제', () => {
   })
 
   it('묻기 전에는 안 부른다', async () => {
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC__01_MD_01')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
@@ -221,7 +223,7 @@ describe('골라서 한꺼번에 삭제', () => {
      * 2건이라 **범위가 먹었는지 안 먹었는지 구별할 수 없다.**
      */
     list.mockResolvedValue([FREE, MIDDLE, BLOCKED])
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC_MDOI_1.0')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))
@@ -235,7 +237,7 @@ describe('골라서 한꺼번에 삭제', () => {
   })
 
   it('머리 칸으로 이 쪽 전부를 고른다', async () => {
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC_MDOI_1.0')
 
     await userEvent.click(screen.getByRole('checkbox', { name: '이 쪽 전부 선택' }))
@@ -255,7 +257,7 @@ describe('골라서 한꺼번에 삭제', () => {
 
   it('무엇이 사라지는지 이름으로 적는다', async () => {
     // 「2건을 지웁니다」 만으로는 어느 둘인지 모른다 — 옆줄을 눌렀을 수 있다.
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC_MDOI_1.0')
 
     await userEvent.click(screen.getByRole('checkbox', { name: '이 쪽 전부 선택' }))
@@ -279,7 +281,7 @@ describe('골라서 한꺼번에 삭제', () => {
       counts: { 시료: 2 },
       said: '시료 2건',
     })
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC_MDOI_1.0')
 
     await userEvent.click(screen.getByRole('checkbox', { name: '이 쪽 전부 선택' }))
@@ -292,7 +294,7 @@ describe('골라서 한꺼번에 삭제', () => {
 
   it('종류를 바꾸면 선택이 풀린다', async () => {
     // 걸러서 안 보이는 줄이 선택에 남아 있으면, 본 수와 지워지는 수가 어긋난다.
-    render(<TrashPage />)
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
     await screen.findByText('SECC__01_MD_01')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'SECC__01_MD_01 선택' }))

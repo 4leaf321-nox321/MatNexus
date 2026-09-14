@@ -37,6 +37,7 @@ import type { TrashItem } from '@/modules/trash/api'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { SubTabs } from '@/shared/components/SubTabs'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -118,6 +119,15 @@ export default function TrashPage() {
 
   return (
     <div className="space-y-4">
+      {/* **휴지통은 서버의 한 면이다.** 지운 것이 어디로 갔는지(휴지통)와 무엇이 쌓였는지
+          (저장소 정리)는 같은 「공간」 의 물음이라 서버 탭 아래 나란히 선다(2026-09-14). */}
+      <SubTabs
+        items={[
+          { to: '/server', label: '서버 정보' },
+          { to: '/admin/storage', label: '저장소 정리' },
+          { to: '/admin/trash', label: '휴지통' },
+        ]}
+      />
       <PageHeader
         title="휴지통"
         description="지운 재료·시료·시편·시험입니다. 삭제는 행을 남기므로 되살릴 수 있습니다 — 다만 영구 삭제는 되돌릴 수 없습니다."
