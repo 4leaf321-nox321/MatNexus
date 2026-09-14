@@ -19,13 +19,16 @@ import {
   ItemsEditor,
   deliverableLabel,
   draftFromItem,
+  itemReady,
   toPayload,
 } from '@/modules/commissions/ItemsEditor'
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
+import { SamplePicker } from '@/modules/commissions/SamplePicker'
 import { STATUS_TONES, commissionsApi } from '@/modules/commissions/api'
 import type { CommissionDetail, CommissionEvent, CommissionItem } from '@/modules/commissions/api'
 import { fittingApi } from '@/modules/fitting/api'
 import type { BlockSpec } from '@/modules/fitting/api'
+import type { Sample } from '@/modules/materials/api'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { workspacesApi } from '@/modules/workspaces/api'
@@ -127,13 +130,37 @@ export default function CommissionDetailPage() {
                 <p className="whitespace-pre-wrap">{detail.purpose}</p>
               </div>
               <div>
-                <h2 className="text-muted-foreground mb-1 text-xs font-medium">시료</h2>
-                <p>
-                  <Link to={`/materials/${detail.sample.material_id}`} className="font-medium hover:underline">
-                    {detail.sample.record_name}
-                  </Link>{' '}
-                  <span className="text-muted-foreground">· {detail.sample.material_name}</span>
-                </p>
+                <h2 className="text-muted-foreground mb-1 text-xs font-medium">
+                  {detail.sample ? '시료' : '새 재료 — 시료 미등록'}
+                </h2>
+                {detail.sample ? (
+                  <p>
+                    <Link to={`/materials/${detail.sample.material_id}`} className="font-medium hover:underline">
+                      {detail.sample.record_name}
+                    </Link>{' '}
+                    <span className="text-muted-foreground">· {detail.sample.material_name}</span>
+                  </p>
+                ) : (
+                  <p className="whitespace-pre-wrap">{detail.material_hint}</p>
+                )}
+                {/* 시료가 이어진 뒤에도 「무엇을 달라고 했는지」 는 남는다. */}
+                {detail.sample && detail.material_hint && (
+                  <p className="text-muted-foreground mt-1 text-sm">의뢰 당시: {detail.material_hint}</p>
+                )}
+                {/* **받는 쪽이 재료·시료를 등록한 뒤 잇는다.** 시료가 없으면 시험을 못 붙인다. */}
+                {!detail.sample && detail.can_resolve && (
+                  <AttachSample
+                    busy={busy}
+                    onAttach={(sampleId) =>
+                      act(() => commissionsApi.attachSample(detail.id, sampleId), '시료를 잇지 못했습니다.')
+                    }
+                  />
+                )}
+                {!detail.sample && !detail.can_resolve && (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    받는 부서가 접수한 뒤 재료·시료를 등록해 이 의뢰에 잇습니다.
+                  </p>
+                )}
                 {detail.sample_plan && (
                   <p className="text-muted-foreground mt-1 whitespace-pre-wrap text-sm">{detail.sample_plan}</p>
                 )}
@@ -189,6 +216,10 @@ export default function CommissionDetailPage() {
                   }
                   onUnlink={(runId) =>
                     act(() => commissionsApi.unlinkRun(detail.id, one.id, runId), '연결을 풀지 못했습니다.')
+                  }
+                  testTypes={testTypes.data ?? []}
+                  onResolve={(key) =>
+                    act(() => commissionsApi.resolveItem(detail.id, one.id, key), '종류를 정하지 못했습니다.')
                   }
                 />
               ))}
@@ -278,6 +309,8 @@ function ItemCard({
   busy,
   onLink,
   onUnlink,
+  testTypes,
+  onResolve,
 }: {
   detail: CommissionDetail
   item: CommissionItem
@@ -286,8 +319,11 @@ function ItemCard({
   busy: boolean
   onLink: (runId: string) => void
   onUnlink: (runId: string) => void
+  testTypes: TestType[]
+  onResolve: (testTypeKey: string) => void
 }) {
   const [picked, setPicked] = useState('')
+  const [pickedType, setPickedType] = useState('')
   const candidates = item.candidates ?? []
   const conditions = conditionText(item, testType)
   const done = item.done >= item.count
@@ -296,7 +332,14 @@ function ItemCard({
     <div className="rounded-md border p-3" aria-label={`${item.position + 1}번 항목`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground tabular-nums">{item.position + 1}.</span>
-        <span className="font-medium">{item.test_type_label}</span>
+        {item.test_type_label ? (
+          <span className="font-medium">{item.test_type_label}</span>
+        ) : (
+          <Badge variant="outline" className={STATUS_TONES.on_hold}>
+            시험 종류 미정
+          </Badge>
+        )}
+        {item.property_hint && <span className="font-medium">{item.property_hint}</span>}
         {item.orientations.length > 0 && (
           <span className="text-muted-foreground">{item.orientations.join('·')}</span>
         )}
@@ -308,8 +351,37 @@ function ItemCard({
       </div>
       {conditions && <p className="text-muted-foreground mt-1 text-sm">{conditions}</p>}
       {item.note && <p className="mt-1 text-sm">{item.note}</p>}
+      {/* **종류 미정은 받는 쪽이 정한다.** 정해져야 시험을 붙일 수 있다. */}
+      {!item.test_type_key && detail.can_resolve && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+          <select
+            aria-label={`${item.position + 1}번 항목의 시험 종류 정하기`}
+            className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+            value={pickedType}
+            onChange={(event) => setPickedType(event.target.value)}
+          >
+            <option value="">— 무슨 시험으로 잴지 —</option>
+            {testTypes.map((one) => (
+              <option key={one.key} value={one.key}>
+                {one.label}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !pickedType}
+            onClick={() => {
+              onResolve(pickedType)
+              setPickedType('')
+            }}
+          >
+            종류 정하기
+          </Button>
+        </div>
+      )}
 
-      {(item.runs.length > 0 || detail.can_link) && (
+      {(item.runs.length > 0 || (detail.can_link && item.test_type_key && detail.sample)) && (
         <div className="mt-2 border-t pt-2">
           {item.runs.length > 0 && (
             <ul className="space-y-1 text-sm" aria-label={`${item.position + 1}번 항목의 시험`}>
@@ -342,7 +414,7 @@ function ItemCard({
               ))}
             </ul>
           )}
-          {detail.can_link && (
+          {detail.can_link && item.test_type_key && detail.sample && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
               <select
                 aria-label={`${item.position + 1}번 항목에 붙일 시험`}
@@ -369,12 +441,14 @@ function ItemCard({
                 <Link2 className="size-3.5" />
                 붙이기
               </Button>
-              <Link
-                to={`/materials/${detail.sample.material_id}`}
-                className="text-muted-foreground ml-auto text-xs hover:underline"
-              >
-                재료 상세에서 시편·시험 등록 →
-              </Link>
+              {detail.sample && (
+                <Link
+                  to={`/materials/${detail.sample.material_id}`}
+                  className="text-muted-foreground ml-auto text-xs hover:underline"
+                >
+                  재료 상세에서 시편·시험 등록 →
+                </Link>
+              )}
             </div>
           )}
         </div>
@@ -501,6 +575,7 @@ function EditDialog({
   const [dueOn, setDueOn] = useState(detail.due_on ?? '')
   const [priority, setPriority] = useState(detail.priority)
   const [lab, setLab] = useState(detail.lab_workspace.slug)
+  const [materialHint, setMaterialHint] = useState(detail.material_hint ?? '')
   const [items, setItems] = useState<ItemDraft[]>(() =>
     detail.items.map((one) =>
       draftFromItem(one, testTypes.find((type) => type.key === one.test_type_key))
@@ -521,6 +596,7 @@ function EditDialog({
         due_on: dueOn || null,
         priority,
         lab_workspace_slug: lab,
+        material_hint: detail.sample ? detail.material_hint : materialHint.trim() || null,
         items: items.map((one) =>
           toPayload(one, testTypes.find((type) => type.key === one.test_type_key))
         ),
@@ -551,6 +627,12 @@ function EditDialog({
             <Label htmlFor="edit-purpose">목적</Label>
             <textarea id="edit-purpose" className={TEXTAREA} rows={3} value={purpose} onChange={(event) => setPurpose(event.target.value)} />
           </div>
+          {!detail.sample && (
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-material-hint">새 재료 — 무엇인지</Label>
+              <textarea id="edit-material-hint" className={TEXTAREA} rows={2} value={materialHint} onChange={(event) => setMaterialHint(event.target.value)} />
+            </div>
+          )}
           <ItemsEditor items={items} onChange={setItems} testTypes={testTypes} blocks={blocks} />
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-3">
@@ -585,11 +667,62 @@ function EditDialog({
           <Button variant="outline" onClick={onClose}>
             취소
           </Button>
-          <Button disabled={busy || !title.trim() || !purpose.trim() || items.some((one) => !one.test_type_key)} onClick={save}>
+          <Button
+            disabled={
+              busy ||
+              !title.trim() ||
+              !purpose.trim() ||
+              (!detail.sample && !materialHint.trim()) ||
+              !items.every(itemReady)
+            }
+            onClick={save}
+          >
             저장
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** 새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽. 재료·시료는 재료 화면에서 먼저 만든다. */
+function AttachSample({
+  busy,
+  onAttach,
+}: {
+  busy: boolean
+  onAttach: (sampleId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [sample, setSample] = useState<Sample | null>(null)
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" className="mt-2" onClick={() => setOpen(true)}>
+        시료 잇기
+      </Button>
+    )
+  }
+  return (
+    <div className="mt-2 grid gap-3 rounded-md border p-3 sm:grid-cols-2" aria-label="시료 잇기">
+      <SamplePicker sample={sample} onChange={setSample} idPrefix="attach" />
+      <div className="flex items-end gap-2 sm:col-span-2">
+        <Button
+          size="sm"
+          disabled={busy || !sample}
+          onClick={() => {
+            if (sample) onAttach(sample.id)
+            setOpen(false)
+          }}
+        >
+          이 시료로 잇기
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          취소
+        </Button>
+        <Link to="/materials" className="text-muted-foreground ml-auto text-xs hover:underline">
+          재료가 없으면 재료 목록에서 먼저 등록 →
+        </Link>
+      </div>
+    </div>
   )
 }

@@ -542,6 +542,21 @@
         "title": "AssignRequest",
         "type": "object"
       },
+      "AttachSampleRequest": {
+        "description": "새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽이 재료·시료를 만든 뒤.",
+        "properties": {
+          "sample_id": {
+            "format": "uuid",
+            "title": "Sample Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sample_id"
+        ],
+        "title": "AttachSampleRequest",
+        "type": "object"
+      },
       "AttributeOut": {
         "description": "이 값이 실제로 들고 있는 치수 하나 — **이름·기호·단위까지 붙여서.**\n\n`attributes` 만으로는 화면이 아무것도 못 그린다. 키는 `gauge_length` 이고\n값은 SI(0.05)라, 이름도 단위도 칸 선언(`SpecimenField`)에 있다. 화면이 그\n셋을 따로 맞추게 두면 목록 한 줄마다 칸을 다시 물어야 하고, 그러면 100줄에\n200번이다 — 서버가 한 번에 풀어서 붙인다.\n\n**칸 선언이 없는 키도 낸다.** 칸을 지웠는데 값이 남은 경우가 그것인데,\n감추면 그 값은 화면 어디에도 없으면서 계속 저장돼 있다. 그때는 키를 이름\n자리에 그대로 적는다 — **지어내지 않는다.**",
         "properties": {
@@ -4525,6 +4540,7 @@
         "type": "object"
       },
       "CommissionCreateRequest": {
+        "description": "**시료 또는 새 재료 설명** 중 하나는 있어야 한다 — 등록된 시료가 없는 새 재료도\n의뢰한다. 그때는 받는 쪽이 재료·시료를 등록한 뒤 잇는다.",
         "properties": {
           "due_on": {
             "anyOf": [
@@ -4553,6 +4569,18 @@
             "title": "Lab Workspace Slug",
             "type": "string"
           },
+          "material_hint": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Hint"
+          },
           "priority": {
             "default": "normal",
             "title": "Priority",
@@ -4564,9 +4592,16 @@
             "type": "string"
           },
           "sample_id": {
-            "format": "uuid",
-            "title": "Sample Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
           },
           "sample_plan": {
             "anyOf": [
@@ -4595,7 +4630,6 @@
         "required": [
           "title",
           "purpose",
-          "sample_id",
           "lab_workspace_slug",
           "items"
         ],
@@ -4645,6 +4679,10 @@
           },
           "can_link": {
             "title": "Can Link",
+            "type": "boolean"
+          },
+          "can_resolve": {
+            "title": "Can Resolve",
             "type": "boolean"
           },
           "created_at": {
@@ -4709,6 +4747,17 @@
           "lab_workspace": {
             "$ref": "#/components/schemas/WorkspaceRefOut"
           },
+          "material_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Hint"
+          },
           "note_required": {
             "items": {
               "type": "string"
@@ -4735,7 +4784,14 @@
             "$ref": "#/components/schemas/WorkspaceRefOut"
           },
           "sample": {
-            "$ref": "#/components/schemas/SampleRefOut"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sample_plan": {
             "anyOf": [
@@ -4796,6 +4852,7 @@
           "requester_workspace",
           "lab_workspace",
           "sample",
+          "material_hint",
           "due_on",
           "created_at",
           "created_by",
@@ -4816,7 +4873,8 @@
           "note_required",
           "can_edit",
           "can_link",
-          "can_assign"
+          "can_assign",
+          "can_resolve"
         ],
         "title": "CommissionDetailOut",
         "type": "object"
@@ -4918,6 +4976,7 @@
         "type": "object"
       },
       "CommissionItemIn": {
+        "description": "항목 하나. **시험 종류 또는 물성 이름** 중 하나는 있어야 한다 — 종류를 모르면\n「무엇을 재는지」 를 글로 적고 받는 쪽이 종류를 정한다.",
         "properties": {
           "condition_units": {
             "additionalProperties": {
@@ -4970,16 +5029,31 @@
             "title": "Orientations",
             "type": "array"
           },
+          "property_hint": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Hint"
+          },
           "test_type_key": {
-            "maxLength": 50,
-            "minLength": 1,
-            "title": "Test Type Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Key"
           }
         },
-        "required": [
-          "test_type_key"
-        ],
         "title": "CommissionItemIn",
         "type": "object"
       },
@@ -5050,6 +5124,17 @@
             "title": "Position",
             "type": "integer"
           },
+          "property_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Hint"
+          },
           "runs": {
             "items": {
               "$ref": "#/components/schemas/LinkedRunOut"
@@ -5058,12 +5143,26 @@
             "type": "array"
           },
           "test_type_key": {
-            "title": "Test Type Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Key"
           },
           "test_type_label": {
-            "title": "Test Type Label",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Label"
           }
         },
         "required": [
@@ -5071,6 +5170,7 @@
           "position",
           "test_type_key",
           "test_type_label",
+          "property_hint",
           "conditions",
           "input_units",
           "orientations",
@@ -5144,6 +5244,17 @@
           "lab_workspace": {
             "$ref": "#/components/schemas/WorkspaceRefOut"
           },
+          "material_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Hint"
+          },
           "priority": {
             "title": "Priority",
             "type": "string"
@@ -5159,7 +5270,14 @@
             "$ref": "#/components/schemas/WorkspaceRefOut"
           },
           "sample": {
-            "$ref": "#/components/schemas/SampleRefOut"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "seq": {
             "title": "Seq",
@@ -5209,6 +5327,7 @@
           "requester_workspace",
           "lab_workspace",
           "sample",
+          "material_hint",
           "due_on",
           "created_at",
           "created_by",
@@ -5285,6 +5404,18 @@
               }
             ],
             "title": "Lab Workspace Slug"
+          },
+          "material_hint": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Hint"
           },
           "priority": {
             "anyOf": [
@@ -19173,6 +19304,34 @@
         "title": "ResolveIn",
         "type": "object"
       },
+      "ResolveItemRequest": {
+        "description": "종류 미정 항목에 시험 종류를 정한다 — 받는 쪽. 조건은 그 종류의 칸으로 함께.",
+        "properties": {
+          "condition_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Condition Units",
+            "type": "object"
+          },
+          "conditions": {
+            "additionalProperties": true,
+            "title": "Conditions",
+            "type": "object"
+          },
+          "test_type_key": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Test Type Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_type_key"
+        ],
+        "title": "ResolveItemRequest",
+        "type": "object"
+      },
       "ResolveOut": {
         "properties": {
           "results": {
@@ -30105,6 +30264,124 @@
           }
         },
         "summary": "Unlink Run",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/{commission_id}/items/{item_id}/test-type": {
+      "post": {
+        "description": "종류 미정 항목에 시험 종류를 정한다 — 받는 쪽. 「무엇을 재는지」 만 있던 항목이\n이것으로 시험을 붙일 수 있게 된다. 시험이 붙은 항목의 종류는 못 바꾼다.",
+        "operationId": "resolve_item_api_commissions__commission_id__items__item_id__test_type_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Item",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
+    "/api/commissions/{commission_id}/sample": {
+      "post": {
+        "description": "새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽이 재료·시료를 만든 뒤.\n\n시험이 이미 붙어 있으면 못 바꾼다 — 붙은 시험은 옛 시료의 것이라 「무엇을 쟀는지」 가\n어긋난다. 그때는 연결을 풀고 잇는다. `material_hint` 는 남긴다(무엇을 달라고 했는지).",
+        "operationId": "attach_sample_api_commissions__commission_id__sample_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "commission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Commission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachSampleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Sample",
         "tags": [
           "commissions"
         ]

@@ -51,7 +51,9 @@ class CommissionOut(BaseModel):
     priority_label: str
     requester_workspace: WorkspaceRefOut
     lab_workspace: WorkspaceRefOut
-    sample: SampleRefOut
+    sample: SampleRefOut | None
+    """등록된 시료. 새 재료 의뢰면 비어 있고 `material_hint` 가 대신 말한다."""
+    material_hint: str | None
     due_on: date | None
     created_at: datetime
     created_by: str | None
@@ -83,8 +85,10 @@ class LinkedRunOut(BaseModel):
 class CommissionItemOut(BaseModel):
     id: uuid.UUID
     position: int
-    test_type_key: str
-    test_type_label: str
+    test_type_key: str | None
+    """비어 있으면 시험 종류 미정 — `property_hint` 가 무엇을 재는지 말한다."""
+    test_type_label: str | None
+    property_hint: str | None
     conditions: dict[str, Any]
     """SI 값. 화면이 `input_units` 로 되돌려 보인다."""
     input_units: dict[str, str]
@@ -125,6 +129,8 @@ class CommissionDetailOut(CommissionOut):
     """시험을 붙이고 뗄 수 있는가 — 받는 쪽이 접수 뒤."""
     can_assign: bool
     """담당자를 정할 수 있는가 — 받는 쪽."""
+    can_resolve: bool
+    """시료를 잇거나 항목의 시험 종류를 정할 수 있는가 — 받는 쪽, 완료·반려 전."""
     assignees: list[NamedOut] = Field(default_factory=list)
     """담당자 후보 — 받는 부서 멤버. `can_assign` 일 때만."""
 
@@ -135,7 +141,11 @@ class CommissionStatusOut(BaseModel):
 
 
 class CommissionItemIn(BaseModel):
-    test_type_key: str = Field(min_length=1, max_length=50)
+    """항목 하나. **시험 종류 또는 물성 이름** 중 하나는 있어야 한다 — 종류를 모르면
+    「무엇을 재는지」 를 글로 적고 받는 쪽이 종류를 정한다."""
+
+    test_type_key: str | None = Field(default=None, max_length=50)
+    property_hint: str | None = Field(default=None, max_length=500)
     conditions: dict[str, Any] = Field(default_factory=dict)
     """화면이 받은 값 그대로 — 단위는 `condition_units` 에. 서버가 SI 로 바꾼다."""
     condition_units: dict[str, str] = Field(default_factory=dict)
@@ -144,11 +154,21 @@ class CommissionItemIn(BaseModel):
     deliverable: str | None = Field(default=None, max_length=50)
     note: str | None = Field(default=None, max_length=2000)
 
+    @model_validator(mode="after")
+    def _what(self) -> CommissionItemIn:
+        if not (self.test_type_key or "").strip() and not (self.property_hint or "").strip():
+            raise ValueError("시험 종류를 고르거나, 무엇을 잴지(물성 이름)를 적어야 합니다.")
+        return self
+
 
 class CommissionCreateRequest(BaseModel):
+    """**시료 또는 새 재료 설명** 중 하나는 있어야 한다 — 등록된 시료가 없는 새 재료도
+    의뢰한다. 그때는 받는 쪽이 재료·시료를 등록한 뒤 잇는다."""
+
     title: str = Field(min_length=1, max_length=200)
     purpose: str = Field(min_length=1)
-    sample_id: uuid.UUID
+    sample_id: uuid.UUID | None = None
+    material_hint: str | None = Field(default=None, max_length=2000)
     lab_workspace_slug: str = Field(min_length=1, max_length=100)
     sample_plan: str | None = Field(default=None, max_length=5000)
     due_on: date | None = None
@@ -156,6 +176,12 @@ class CommissionCreateRequest(BaseModel):
     items: list[CommissionItemIn] = Field(min_length=1, max_length=50)
     submit: bool = False
     """참이면 바로 접수 대기로, 아니면 작성 중으로 둔다."""
+
+    @model_validator(mode="after")
+    def _target(self) -> CommissionCreateRequest:
+        if self.sample_id is None and not (self.material_hint or "").strip():
+            raise ValueError("시료를 고르거나, 새 재료가 무엇인지 적어야 합니다.")
+        return self
 
 
 class CommissionUpdateRequest(BaseModel):
@@ -169,6 +195,7 @@ class CommissionUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     purpose: str | None = Field(default=None, min_length=1)
     sample_id: uuid.UUID | None = None
+    material_hint: str | None = Field(default=None, max_length=2000)
     lab_workspace_slug: str | None = Field(default=None, min_length=1, max_length=100)
     sample_plan: str | None = Field(default=None, max_length=5000)
     due_on: date | None = None
@@ -197,3 +224,17 @@ class CommissionEventRequest(BaseModel):
 
 class LinkRunRequest(BaseModel):
     run_id: uuid.UUID
+
+
+class AttachSampleRequest(BaseModel):
+    """새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽이 재료·시료를 만든 뒤."""
+
+    sample_id: uuid.UUID
+
+
+class ResolveItemRequest(BaseModel):
+    """종류 미정 항목에 시험 종류를 정한다 — 받는 쪽. 조건은 그 종류의 칸으로 함께."""
+
+    test_type_key: str = Field(min_length=1, max_length=50)
+    conditions: dict[str, Any] = Field(default_factory=dict)
+    condition_units: dict[str, str] = Field(default_factory=dict)

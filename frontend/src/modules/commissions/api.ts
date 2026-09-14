@@ -79,4 +79,12 @@ export const commissionsApi = {
     api.post<CommissionDetail>(`/commissions/${id}/items/${itemId}/runs`, { run_id: runId }),
   unlinkRun: (id: string, itemId: string, runId: string) =>
     api.delete<CommissionDetail>(`/commissions/${id}/items/${itemId}/runs/${runId}`),
+  /** 새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽이 재료·시료를 만든 뒤(`can_resolve`). */
+  attachSample: (id: string, sampleId: string) =>
+    api.post<CommissionDetail>(`/commissions/${id}/sample`, { sample_id: sampleId }),
+  /** 종류 미정 항목에 시험 종류를 정한다 — 받는 쪽(`can_resolve`). */
+  resolveItem: (id: string, itemId: string, testTypeKey: string) =>
+    api.post<CommissionDetail>(`/commissions/${id}/items/${itemId}/test-type`, {
+      test_type_key: testTypeKey,
+    }),
 }

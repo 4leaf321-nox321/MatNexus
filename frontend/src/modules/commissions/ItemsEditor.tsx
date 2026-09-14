@@ -7,6 +7,10 @@
  *
  * 「받을 것」 은 카드 블록 선언(`fittingApi.blocks`)의 종류가 되는 블록 + 「곡선·처리
  * 결과」. 이름은 `kindLabel` 이 정한다 — 경화식 블록은 「탄소성」 으로 읽힌다.
+ *
+ * **시험 종류를 모르면 물성 이름만 적는다**(2026-09-14). 「80 °C 탄성계수」 처럼 무엇을
+ * 잴지만 있고 무슨 시험으로 잴지는 받는 쪽이 정한다 — 그때 조건 칸은 없다(종류가
+ * 정해진 뒤 그 칸으로). 둘 중 하나는 있어야 보낼 수 있다.
  */
 
 import { Plus, Trash2 } from 'lucide-react'
@@ -27,6 +31,8 @@ import { conditionUnits, display, toDisplay } from '@/shared/units'
 /** 화면이 들고 있는 항목 한 줄 — 조건은 **화면 단위의 글자**다. 보낼 때 단위를 함께 싣는다. */
 export interface ItemDraft {
   test_type_key: string
+  /** 종류 미정일 때 무엇을 재는지 — 물성 이름. */
+  property_hint: string
   conditions: Record<string, string>
   orientations: string[]
   count: number
@@ -37,6 +43,7 @@ export interface ItemDraft {
 export function emptyItem(testTypeKey = ''): ItemDraft {
   return {
     test_type_key: testTypeKey,
+    property_hint: '',
     conditions: {},
     orientations: [],
     count: 1,
@@ -48,7 +55,8 @@ export function emptyItem(testTypeKey = ''): ItemDraft {
 /** 서버가 준 항목(SI)을 화면 단위 글자로 — 편집 폼을 채울 때. */
 export function draftFromItem(
   item: {
-    test_type_key: string
+    test_type_key: string | null
+    property_hint: string | null
     conditions: Record<string, unknown>
     input_units: Record<string, string>
     orientations: string[]
@@ -69,7 +77,8 @@ export function draftFromItem(
     }
   }
   return {
-    test_type_key: item.test_type_key,
+    test_type_key: item.test_type_key ?? '',
+    property_hint: item.property_hint ?? '',
     conditions,
     orientations: [...item.orientations],
     count: item.count,
@@ -90,14 +99,20 @@ export function toPayload(draft: ItemDraft, testType: TestType | undefined) {
       })
   )
   return {
-    test_type_key: draft.test_type_key,
-    conditions,
-    condition_units: conditionUnits(fields),
+    test_type_key: draft.test_type_key || null,
+    property_hint: draft.property_hint.trim() || null,
+    conditions: draft.test_type_key ? conditions : {},
+    condition_units: draft.test_type_key ? conditionUnits(fields) : {},
     orientations: draft.orientations,
     count: draft.count,
     deliverable: draft.deliverable || null,
     note: draft.note || null,
   }
+}
+
+/** 보낼 수 있는 항목인가 — 시험 종류 또는 물성 이름 중 하나는 있어야 한다. */
+export function itemReady(draft: ItemDraft): boolean {
+  return draft.test_type_key !== '' || draft.property_hint.trim() !== ''
 }
 
 /** 받을 것 후보 — 종류가 되는 블록만(`kind_priority` 있는 것). */
@@ -149,7 +164,7 @@ export function ItemsEditor({
                   update(index, { test_type_key: event.target.value, conditions: {} })
                 }
               >
-                <option value="">— 시험 종류 —</option>
+                <option value="">— 미정 (물성 이름으로) —</option>
                 {testTypes.map((one) => (
                   <option key={one.key} value={one.key}>
                     {one.label}
@@ -192,6 +207,20 @@ export function ItemsEditor({
                 </Button>
               )}
             </div>
+
+            {!item.test_type_key && (
+              <div className="mb-2 space-y-1">
+                <Label htmlFor={`item-${index}-property`} className="text-muted-foreground text-xs">
+                  무엇을 잴지 (물성 이름) <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id={`item-${index}-property`}
+                  value={item.property_hint}
+                  onChange={(event) => update(index, { property_hint: event.target.value })}
+                  placeholder="예: 80 °C 탄성계수, 접착 강도 — 시험 종류는 받는 부서가 정합니다"
+                />
+              </div>
+            )}
 
             <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
               <span className="text-muted-foreground">방향</span>

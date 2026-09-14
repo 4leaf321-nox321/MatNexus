@@ -18,6 +18,8 @@ const get = vi.fn()
 const event = vi.fn()
 const linkRun = vi.fn()
 const unlinkRun = vi.fn()
+const attachSample = vi.fn()
+const resolveItem = vi.fn()
 
 vi.mock('@/modules/commissions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/commissions/api')>()),
@@ -29,6 +31,8 @@ vi.mock('@/modules/commissions/api', async (importOriginal) => ({
     assign: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    attachSample: (...args: unknown[]) => attachSample(...args),
+    resolveItem: (...args: unknown[]) => resolveItem(...args),
   },
 }))
 
@@ -100,6 +104,7 @@ const item = (over: Record<string, unknown> = {}) => ({
   position: 0,
   test_type_key: 'tensile',
   test_type_label: '인장시험',
+  property_hint: null,
   conditions: { temperature: 298.15, speed_elastic: 10 / 60000 },
   input_units: { temperature: 'degC', speed_elastic: 'mm/min' },
   orientations: ['MD', 'TD'],
@@ -125,6 +130,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   requester_workspace: { slug: 'metal', name: '금속재료팀' },
   lab_workspace: { slug: 'reliability', name: '신뢰성그룹' },
   sample: { id: 's-1', record_name: 'SECC-1.0-S01', material_id: 'm-1', material_name: 'SECC 1.0t' },
+  material_hint: null,
   due_on: '2026-10-15',
   created_at: '2026-09-14T01:00:00Z',
   created_by: '김해석',
@@ -163,6 +169,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   can_edit: false,
   can_link: true,
   can_assign: true,
+  can_resolve: true,
   assignees: [{ id: 'u-2', name: '박측정' }],
   ...over,
 })
@@ -185,6 +192,8 @@ describe('측정 의뢰 상세', () => {
     event.mockReset()
     linkRun.mockReset()
     unlinkRun.mockReset()
+    attachSample.mockReset()
+    resolveItem.mockReset()
   })
 
   it('항목의 조건은 입력 단위로, 시험은 채택 여부와 함께 보인다', async () => {
@@ -236,12 +245,51 @@ describe('측정 의뢰 상세', () => {
     await waitFor(() => expect(linkRun).toHaveBeenCalledWith('c-1', 'i-1', 'r-9'))
   })
 
+  it('종류 미정 항목은 물성 이름으로 서고, 받는 쪽이 종류를 정한다 — 붙이기는 그 뒤', async () => {
+    await show(
+      detail({
+        items: [
+          item({
+            test_type_key: null,
+            test_type_label: null,
+            property_hint: '80 °C 탄성계수',
+            conditions: {},
+            input_units: {},
+            runs: [],
+            done: 0,
+            candidates: [],
+          }),
+        ],
+      })
+    )
+    const card = await screen.findByLabelText('1번 항목')
+    expect(within(card).getByText('시험 종류 미정')).toBeInTheDocument()
+    expect(within(card).getByText('80 °C 탄성계수')).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: '붙이기' })).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    const pick = await within(card).findByLabelText('1번 항목의 시험 종류 정하기')
+    await user.selectOptions(pick, 'tensile')
+    resolveItem.mockResolvedValue(detail())
+    await user.click(within(card).getByRole('button', { name: '종류 정하기' }))
+    await waitFor(() => expect(resolveItem).toHaveBeenCalledWith('c-1', 'i-1', 'tensile'))
+  })
+
+  it('새 재료 의뢰는 적은 글이 서고, 받는 쪽에만 「시료 잇기」 가 있다', async () => {
+    await show(detail({ sample: null, material_hint: 'SGARC440 1.2t, 포스코' }))
+    expect(screen.getByText('새 재료 — 시료 미등록')).toBeInTheDocument()
+    expect(screen.getByText('SGARC440 1.2t, 포스코')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '시료 잇기' })).toBeInTheDocument()
+    // 시료가 없으면 항목에 붙이기도 없다.
+    expect(screen.queryByRole('button', { name: '붙이기' })).not.toBeInTheDocument()
+  })
+
   it('낸 쪽 화면에는 붙이기·담당자 선택이 없고 이력이 시간순으로 흐른다', async () => {
     await show(
       detail({
         side: 'requester',
         can_link: false,
         can_assign: false,
+        can_resolve: false,
         assignees: [],
         allowed: [],
         allowed_labels: {},

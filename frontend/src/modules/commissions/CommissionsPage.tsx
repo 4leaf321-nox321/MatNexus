@@ -198,8 +198,21 @@ export default function CommissionsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <span className="block">{item.sample.record_name}</span>
-                    <span className="text-muted-foreground block">{item.sample.material_name}</span>
+                    {item.sample ? (
+                      <>
+                        <span className="block">{item.sample.record_name}</span>
+                        <span className="text-muted-foreground block">{item.sample.material_name}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Badge variant="outline" className={STATUS_TONES.on_hold}>
+                          새 재료
+                        </Badge>
+                        <span className="text-muted-foreground mt-0.5 block truncate" title={item.material_hint ?? ''}>
+                          {item.material_hint}
+                        </span>
+                      </>
+                    )}
                   </TableCell>
                   <TableCell>{item.requester_workspace.name}</TableCell>
                   <TableCell>{item.lab_workspace.name}</TableCell>

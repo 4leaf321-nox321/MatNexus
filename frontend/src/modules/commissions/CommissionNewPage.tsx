@@ -1,9 +1,10 @@
 /**
  * 새 측정 의뢰 — 한 화면 세 묶음.
  *
- *   ① 무엇을   재료를 찾아 시료를 고른다. **시료가 있어야 의뢰한다** — 재료만으로는
- *              잴 것이 없다. 목적은 자유 글(과제를 특정하는 키는 적지 않는다).
- *   ② 어떤 시험을  항목 표 — 시험 종류·조건·방향·수량·받을 것.
+ *   ① 무엇을   **등록된 시료**를 고르거나, **아직 등록 안 된 새 재료**를 글로 적는다.
+ *              새 재료면 받는 부서가 재료·시료를 등록한 뒤 의뢰에 잇는다(2026-09-14).
+ *              목적은 자유 글(과제를 특정하는 키는 적지 않는다).
+ *   ② 어떤 시험을  항목 표 — 시험 종류·조건·방향·수량·받을 것. 종류를 모르면 물성 이름만.
  *   ③ 시료·기한   시료 전달, 희망일, 우선순위, **받는 부서**(측정 조직이 하나가 아니다).
  *
  * 「임시 저장」 은 작성 중(나만 봄), 「의뢰」 는 접수 대기(받는 부서 관리자에게 알림).
@@ -11,16 +12,16 @@
  * 단추가 이 주소로 보낸다.
  */
 
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Search } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { commissionsApi } from '@/modules/commissions/api'
-import { ItemsEditor, emptyItem, toPayload } from '@/modules/commissions/ItemsEditor'
+import { ItemsEditor, emptyItem, itemReady, toPayload } from '@/modules/commissions/ItemsEditor'
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
+import { SamplePicker } from '@/modules/commissions/SamplePicker'
 import { fittingApi } from '@/modules/fitting/api'
-import { materialsApi } from '@/modules/materials/api'
-import type { Material, Sample } from '@/modules/materials/api'
+import type { Sample } from '@/modules/materials/api'
 import { testsApi } from '@/modules/tests/api'
 import { workspacesApi } from '@/modules/workspaces/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -33,14 +34,17 @@ import { useResource } from '@/shared/hooks/useResource'
 const TEXTAREA =
   'border-input bg-transparent focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none'
 
+type Target = 'sample' | 'new'
+
 export default function CommissionNewPage() {
   const navigate = useNavigate()
   const [asked] = useSearchParams()
 
   const [title, setTitle] = useState('')
   const [purpose, setPurpose] = useState('')
-  const [material, setMaterial] = useState<Material | null>(null)
+  const [target, setTarget] = useState<Target>('sample')
   const [sample, setSample] = useState<Sample | null>(null)
+  const [materialHint, setMaterialHint] = useState('')
   const [items, setItems] = useState<ItemDraft[]>([emptyItem('tensile')])
   const [samplePlan, setSamplePlan] = useState('')
   const [dueOn, setDueOn] = useState('')
@@ -53,44 +57,24 @@ export default function CommissionNewPage() {
   const blocks = useResource(() => fittingApi.blocks(), [])
   const labs = useResource(() => workspacesApi.options(), [])
 
-  // `?material=` / `?sample=` — 재료·시료 화면에서 온 경우.
-  const askedMaterial = asked.get('material')
-  const askedSample = asked.get('sample')
-  useEffect(() => {
-    if (!askedMaterial) return
-    materialsApi
-      .get(askedMaterial)
-      .then((found) => setMaterial(found))
-      .catch(() => undefined)
-  }, [askedMaterial])
-
-  const samples = useResource(
-    () => (material ? materialsApi.samples(material.id) : Promise.resolve<Sample[]>([])),
-    [material?.id]
-  )
-  useEffect(() => {
-    if (!askedSample || !samples.data) return
-    const found = samples.data.find((one) => one.id === askedSample)
-    if (found) setSample(found)
-  }, [askedSample, samples.data])
-
+  const targetReady = target === 'sample' ? sample !== null : materialHint.trim() !== ''
   const ready =
     title.trim() !== '' &&
     purpose.trim() !== '' &&
-    sample !== null &&
+    targetReady &&
     lab !== '' &&
     items.length > 0 &&
-    items.every((one) => one.test_type_key !== '')
+    items.every(itemReady)
 
   async function save(submit: boolean) {
-    if (!sample) return
     setBusy(submit ? 'submit' : 'draft')
     setError(null)
     try {
       const made = await commissionsApi.create({
         title: title.trim(),
         purpose: purpose.trim(),
-        sample_id: sample.id,
+        sample_id: target === 'sample' ? (sample?.id ?? null) : null,
+        material_hint: target === 'new' ? materialHint.trim() : null,
         lab_workspace_slug: lab,
         sample_plan: samplePlan.trim() || null,
         due_on: dueOn || null,
@@ -122,7 +106,7 @@ export default function CommissionNewPage() {
       </Link>
       <PageHeader
         title="새 측정 의뢰"
-        description="시료 하나에 대해 어떤 시험을 어떤 조건으로 몇 개 할지 적고, 받는 부서에 보냅니다."
+        description="시료(또는 새 재료)에 대해 어떤 시험을 어떤 조건으로 몇 개 할지 적고, 받는 부서에 보냅니다."
       />
 
       <ErrorNotice error={error ?? testTypes.error ?? labs.error} className="mb-4" />
@@ -150,49 +134,58 @@ export default function CommissionNewPage() {
               placeholder="왜 필요한가 — 어느 해석·판정·비교에 쓸지. 과제를 특정하는 키는 적지 않습니다."
             />
           </div>
-          <MaterialPicker
-            value={material}
-            onChange={(next) => {
-              setMaterial(next)
-              setSample(null)
-            }}
-          />
-          <div className="space-y-1.5">
-            <Label htmlFor="commission-sample">시료</Label>
-            <select
-              id="commission-sample"
-              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
-              disabled={!material}
-              value={sample?.id ?? ''}
-              onChange={(event) =>
-                setSample(samples.data?.find((one) => one.id === event.target.value) ?? null)
-              }
-            >
-              <option value="">{material ? '— 시료 선택 —' : '재료를 먼저 고르세요'}</option>
-              {(samples.data ?? []).map((one) => (
-                <option key={one.id} value={one.id}>
-                  {one.record_name}
-                  {one.lot_no ? ` · ${one.lot_no}` : ''}
-                </option>
-              ))}
-            </select>
-            {material && samples.data?.length === 0 && (
-              <p className="text-muted-foreground text-xs">
-                이 재료에 시료가 없습니다 —{' '}
-                <Link to={`/materials/${material.id}`} className="underline">
-                  재료 상세
-                </Link>
-                에서 시료를 먼저 등록하세요.
-              </p>
-            )}
+
+          {/* **등록된 시료인가, 새 재료인가.** 새 재료는 아직 재료 목록에 없어 고를 수 없다 —
+              무엇인지 글로 적고, 받는 부서가 등록한 뒤 의뢰에 잇는다. */}
+          <div className="flex flex-wrap gap-4 text-sm sm:col-span-2" role="radiogroup" aria-label="대상">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="commission-target"
+                checked={target === 'sample'}
+                onChange={() => setTarget('sample')}
+              />
+              등록된 시료
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="commission-target"
+                checked={target === 'new'}
+                onChange={() => setTarget('new')}
+              />
+              새 재료 (아직 등록 전)
+            </label>
           </div>
+
+          {target === 'sample' ? (
+            <SamplePicker
+              sample={sample}
+              onChange={setSample}
+              presetMaterialId={asked.get('material')}
+              presetSampleId={asked.get('sample')}
+            />
+          ) : (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="commission-material-hint">새 재료 — 무엇인지</Label>
+              <textarea
+                id="commission-material-hint"
+                className={TEXTAREA}
+                rows={3}
+                value={materialHint}
+                onChange={(event) => setMaterialHint(event.target.value)}
+                placeholder="이름·등급·업체·두께 — 예: SGARC440 1.2t, 포스코, 신규 강종 후보. 받는 부서가 재료·시료를 등록한 뒤 이 의뢰에 잇습니다."
+              />
+            </div>
+          )}
         </div>
       </section>
 
       <section className="mb-6 rounded-md border p-4">
         <h2 className="mb-1 font-medium">② 어떤 시험을</h2>
         <p className="text-muted-foreground mb-3 text-sm">
-          조건 칸은 시험 종류의 정의에서 옵니다 — 시험 등록과 같은 칸, 같은 단위.
+          조건 칸은 시험 종류의 정의에서 옵니다 — 시험 등록과 같은 칸, 같은 단위. 종류를 모르면
+          「미정」 으로 두고 무엇을 잴지(물성 이름)만 적으세요 — 받는 부서가 종류를 정합니다.
         </p>
         <ItemsEditor
           items={items}
@@ -264,87 +257,6 @@ export default function CommissionNewPage() {
           의뢰
         </Button>
       </div>
-    </div>
-  )
-}
-
-/** 재료 찾기 — 이름·등급으로 검색해 하나 고른다. */
-function MaterialPicker({
-  value,
-  onChange,
-}: {
-  value: Material | null
-  onChange: (next: Material | null) => void
-}) {
-  const [typed, setTyped] = useState('')
-  const [q, setQ] = useState('')
-  const found = useResource(
-    () => (q ? materialsApi.list({ q, limit: 20 }) : Promise.resolve(null)),
-    [q]
-  )
-
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor="commission-material">재료</Label>
-      {value ? (
-        <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <span className="font-medium">{value.record_name}</span>
-          <span className="text-muted-foreground">{value.grade}</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ml-auto"
-            onClick={() => {
-              onChange(null)
-              setQ('')
-              setTyped('')
-            }}
-          >
-            다시 선택
-          </Button>
-        </div>
-      ) : (
-        <>
-          <form
-            className="relative"
-            onSubmit={(event) => {
-              event.preventDefault()
-              setQ(typed.trim())
-            }}
-          >
-            <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-            <Input
-              id="commission-material"
-              className="pl-8"
-              value={typed}
-              onChange={(event) => setTyped(event.target.value)}
-              placeholder="재료 이름·등급으로 검색 후 Enter"
-            />
-          </form>
-          {found.data && (
-            <ul className="max-h-48 overflow-y-auto rounded-md border text-sm" aria-label="재료 후보">
-              {found.data.items.length === 0 && (
-                <li className="text-muted-foreground px-3 py-2">맞는 재료가 없습니다.</li>
-              )}
-              {found.data.items.map((one) => (
-                <li key={one.id}>
-                  <button
-                    type="button"
-                    className="hover:bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left"
-                    onClick={() => onChange(one)}
-                  >
-                    <span className="font-medium">{one.record_name}</span>
-                    <span className="text-muted-foreground">
-                      {one.family} · {one.grade}
-                    </span>
-                    <span className="text-muted-foreground ml-auto tabular-nums">시료 {one.sample_count}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
     </div>
   )
 }

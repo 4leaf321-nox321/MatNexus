@@ -1163,6 +1163,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/commissions/{commission_id}/items/{item_id}/test-type": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Item
+         * @description 종류 미정 항목에 시험 종류를 정한다 — 받는 쪽. 「무엇을 재는지」 만 있던 항목이
+         *     이것으로 시험을 붙일 수 있게 된다. 시험이 붙은 항목의 종류는 못 바꾼다.
+         */
+        post: operations["resolve_item_api_commissions__commission_id__items__item_id__test_type_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commissions/{commission_id}/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach Sample
+         * @description 새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽이 재료·시료를 만든 뒤.
+         *
+         *     시험이 이미 붙어 있으면 못 바꾼다 — 붙은 시험은 옛 시료의 것이라 「무엇을 쟀는지」 가
+         *     어긋난다. 그때는 연결을 풀고 잇는다. `material_hint` 는 남긴다(무엇을 달라고 했는지).
+         */
+        post: operations["attach_sample_api_commissions__commission_id__sample_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/equipment/parts/{part_id}": {
         parameters: {
             query?: never;
@@ -6744,6 +6788,17 @@ export interface components {
             assignee_id?: string | null;
         };
         /**
+         * AttachSampleRequest
+         * @description 새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽이 재료·시료를 만든 뒤.
+         */
+        AttachSampleRequest: {
+            /**
+             * Sample Id
+             * Format: uuid
+             */
+            sample_id: string;
+        };
+        /**
          * AttributeOut
          * @description 이 값이 실제로 들고 있는 치수 하나 — **이름·기호·단위까지 붙여서.**
          *
@@ -8178,7 +8233,11 @@ export interface components {
             /** Retention Days */
             retention_days?: number | null;
         };
-        /** CommissionCreateRequest */
+        /**
+         * CommissionCreateRequest
+         * @description **시료 또는 새 재료 설명** 중 하나는 있어야 한다 — 등록된 시료가 없는 새 재료도
+         *     의뢰한다. 그때는 받는 쪽이 재료·시료를 등록한 뒤 잇는다.
+         */
         CommissionCreateRequest: {
             /** Due On */
             due_on?: string | null;
@@ -8186,6 +8245,8 @@ export interface components {
             items: components["schemas"]["CommissionItemIn"][];
             /** Lab Workspace Slug */
             lab_workspace_slug: string;
+            /** Material Hint */
+            material_hint?: string | null;
             /**
              * Priority
              * @default normal
@@ -8193,11 +8254,8 @@ export interface components {
             priority: string;
             /** Purpose */
             purpose: string;
-            /**
-             * Sample Id
-             * Format: uuid
-             */
-            sample_id: string;
+            /** Sample Id */
+            sample_id?: string | null;
             /** Sample Plan */
             sample_plan?: string | null;
             /**
@@ -8225,6 +8283,8 @@ export interface components {
             can_edit: boolean;
             /** Can Link */
             can_link: boolean;
+            /** Can Resolve */
+            can_resolve: boolean;
             /**
              * Created At
              * Format: date-time
@@ -8250,6 +8310,8 @@ export interface components {
             /** Items */
             items: components["schemas"]["CommissionItemOut"][];
             lab_workspace: components["schemas"]["WorkspaceRefOut"];
+            /** Material Hint */
+            material_hint: string | null;
             /** Note Required */
             note_required: string[];
             /** Priority */
@@ -8260,7 +8322,7 @@ export interface components {
             /** Purpose */
             purpose: string;
             requester_workspace: components["schemas"]["WorkspaceRefOut"];
-            sample: components["schemas"]["SampleRefOut"];
+            sample: components["schemas"]["SampleRefOut"] | null;
             /** Sample Plan */
             sample_plan: string | null;
             /** Seq */
@@ -8314,7 +8376,11 @@ export interface components {
             /** Status */
             status?: string | null;
         };
-        /** CommissionItemIn */
+        /**
+         * CommissionItemIn
+         * @description 항목 하나. **시험 종류 또는 물성 이름** 중 하나는 있어야 한다 — 종류를 모르면
+         *     「무엇을 재는지」 를 글로 적고 받는 쪽이 종류를 정한다.
+         */
         CommissionItemIn: {
             /** Condition Units */
             condition_units?: {
@@ -8335,8 +8401,10 @@ export interface components {
             note?: string | null;
             /** Orientations */
             orientations?: string[];
+            /** Property Hint */
+            property_hint?: string | null;
             /** Test Type Key */
-            test_type_key: string;
+            test_type_key?: string | null;
         };
         /** CommissionItemOut */
         CommissionItemOut: {
@@ -8367,12 +8435,14 @@ export interface components {
             orientations: string[];
             /** Position */
             position: number;
+            /** Property Hint */
+            property_hint: string | null;
             /** Runs */
             runs: components["schemas"]["LinkedRunOut"][];
             /** Test Type Key */
-            test_type_key: string;
+            test_type_key: string | null;
             /** Test Type Label */
-            test_type_label: string;
+            test_type_label: string | null;
         };
         /**
          * CommissionOut
@@ -8401,13 +8471,15 @@ export interface components {
             /** Item Count */
             item_count: number;
             lab_workspace: components["schemas"]["WorkspaceRefOut"];
+            /** Material Hint */
+            material_hint: string | null;
             /** Priority */
             priority: string;
             /** Priority Label */
             priority_label: string;
             progress: components["schemas"]["ProgressOut"];
             requester_workspace: components["schemas"]["WorkspaceRefOut"];
-            sample: components["schemas"]["SampleRefOut"];
+            sample: components["schemas"]["SampleRefOut"] | null;
             /** Seq */
             seq: number;
             /** Side */
@@ -8448,6 +8520,8 @@ export interface components {
             items?: components["schemas"]["CommissionItemIn"][] | null;
             /** Lab Workspace Slug */
             lab_workspace_slug?: string | null;
+            /** Material Hint */
+            material_hint?: string | null;
             /** Priority */
             priority?: string | null;
             /** Purpose */
@@ -13727,6 +13801,22 @@ export interface components {
              */
             workspace_id: string;
         };
+        /**
+         * ResolveItemRequest
+         * @description 종류 미정 항목에 시험 종류를 정한다 — 받는 쪽. 조건은 그 종류의 칸으로 함께.
+         */
+        ResolveItemRequest: {
+            /** Condition Units */
+            condition_units?: {
+                [key: string]: string;
+            };
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            };
+            /** Test Type Key */
+            test_type_key: string;
+        };
         /** ResolveOut */
         ResolveOut: {
             /** Results */
@@ -18756,6 +18846,77 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_item_api_commissions__commission_id__items__item_id__test_type_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attach_sample_api_commissions__commission_id__sample_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachSampleRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

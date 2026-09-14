@@ -119,12 +119,20 @@ class Commission(Base):
         PgUUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
     )
     """받는 부서 — 측정하는 곳. 낸 사람이 고른다(측정 조직이 하나가 아니다)."""
-    sample_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("samples.id", ondelete="RESTRICT"), index=True
+    sample_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("samples.id", ondelete="RESTRICT"),
+        index=True,
+        nullable=True,
     )
-    """무엇을 재는가 — **시료가 있어야 의뢰한다.** 재료만으로는 잴 것이 없다. 시료가
-    의뢰에 묶여 있으면 지우지 못한다(RESTRICT) — 의뢰가 가리키는 것이 사라지면
-    「무엇을 재 달라고 했는지」 가 없어진다."""
+    """무엇을 재는가 — 등록된 시료. 시료가 의뢰에 묶여 있으면 지우지 못한다(RESTRICT).
+
+    **비어 있을 수 있다** — 아직 등록 안 된 새 재료를 재 달라는 의뢰(2026-09-14). 그때는
+    `material_hint` 가 무엇인지 말하고, 받는 쪽이 재료·시료를 등록한 뒤 여기에 잇는다.
+    시험을 붙이려면 시료가 있어야 한다. 둘 중 하나는 있어야 한다(`create`·`update` 가 본다)."""
+    material_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """새 재료의 이름·등급·업체·두께 — 시료가 아직 없을 때 「무엇을」 의 답. 시료가
+    이어진 뒤에도 남긴다(무엇을 달라고 했는지의 기록)."""
     sample_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
     """시료 전달 — 몇 개, 어떻게, 언제. 자유 글."""
     due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -167,9 +175,17 @@ class CommissionItem(Base):
         PgUUID(as_uuid=True), ForeignKey("commissions.id", ondelete="CASCADE"), index=True
     )
     position: Mapped[int] = mapped_column(Integer, default=0)
-    test_type_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("test_types.id", ondelete="RESTRICT"), index=True
+    test_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("test_types.id", ondelete="RESTRICT"),
+        index=True,
+        nullable=True,
     )
+    """시험 종류. **비어 있을 수 있다** — 「이 물성을 재 달라」 만 있고 무슨 시험으로 잴지는
+    받는 쪽이 정하는 의뢰(2026-09-14). 그때는 `property_hint` 가 무엇을 재는지 말하고,
+    받는 쪽이 종류를 정한 뒤 시험을 붙인다. 둘 중 하나는 있어야 한다."""
+    property_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """무엇을 재는가 — 시험 종류가 미정일 때. 「고온 탄성계수」 같은 물성 이름."""
     conditions: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )

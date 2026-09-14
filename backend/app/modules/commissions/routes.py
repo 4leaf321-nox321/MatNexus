@@ -26,6 +26,7 @@ from app.modules.commissions.models import (
 )
 from app.modules.commissions.schemas import (
     AssignRequest,
+    AttachSampleRequest,
     CommissionCreateRequest,
     CommissionDetailOut,
     CommissionEventOut,
@@ -38,11 +39,13 @@ from app.modules.commissions.schemas import (
     LinkRunRequest,
     NamedOut,
     ProgressOut,
+    ResolveItemRequest,
     SampleRefOut,
     WorkspaceRefOut,
 )
 from app.modules.materials.models import Specimen
 from app.modules.tests.models import TestRun, TestType
+from app.shared import conditions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -65,7 +68,7 @@ def _rows(
         {one.requester_workspace_id for one in items}
         | {one.lab_workspace_id for one in items},
     )
-    samples = services.samples(db, {one.sample_id for one in items})
+    samples = services.samples(db, {one.sample_id for one in items if one.sample_id})
     progress = services.progress(db, ids)
     counts = services.event_counts(db, ids)
     item_counts: dict[uuid.UUID, int] = {}
@@ -81,7 +84,7 @@ def _rows(
     for one in items:
         requester = workspaces[one.requester_workspace_id]
         lab = workspaces[one.lab_workspace_id]
-        sample, material = samples[one.sample_id]
+        found = samples.get(one.sample_id) if one.sample_id else None
         total, linked, done = progress.get(one.id, (0, 0, 0))
         out.append(
             CommissionOut(
@@ -94,12 +97,17 @@ def _rows(
                 priority_label=PRIORITY_LABELS.get(one.priority, one.priority),
                 requester_workspace=WorkspaceRefOut(slug=requester.slug, name=requester.name),
                 lab_workspace=WorkspaceRefOut(slug=lab.slug, name=lab.name),
-                sample=SampleRefOut(
-                    id=sample.id,
-                    record_name=sample.record_name,
-                    material_id=material.id,
-                    material_name=material.record_name,
+                sample=(
+                    SampleRefOut(
+                        id=found[0].id,
+                        record_name=found[0].record_name,
+                        material_id=found[1].id,
+                        material_name=found[1].record_name,
+                    )
+                    if found
+                    else None
                 ),
+                material_hint=one.material_hint,
                 due_on=one.due_on,
                 created_at=one.created_at,
                 created_by=names.get(one.created_by_id) if one.created_by_id else None,
@@ -141,7 +149,7 @@ def _detail(db: Session, item: Commission, viewer: User) -> CommissionDetailOut:
             .order_by(CommissionItem.position)
         )
     )
-    type_ids = {one.test_type_id for one in rows}
+    type_ids = {one.test_type_id for one in rows if one.test_type_id}
     type_labels = (
         {
             row.id: (row.key, row.label)
@@ -180,8 +188,17 @@ def _detail(db: Session, item: Commission, viewer: User) -> CommissionDetailOut:
             CommissionItemOut(
                 id=one.id,
                 position=one.position,
-                test_type_key=type_labels.get(one.test_type_id, ("?", "?"))[0],
-                test_type_label=type_labels.get(one.test_type_id, ("?", "?"))[1],
+                test_type_key=(
+                    type_labels[one.test_type_id][0]
+                    if one.test_type_id in type_labels
+                    else None
+                ),
+                test_type_label=(
+                    type_labels[one.test_type_id][1]
+                    if one.test_type_id in type_labels
+                    else None
+                ),
+                property_hint=one.property_hint,
                 conditions=dict(one.conditions),
                 input_units=dict(one.input_units),
                 orientations=list(one.orientations),
@@ -216,6 +233,7 @@ def _detail(db: Session, item: Commission, viewer: User) -> CommissionDetailOut:
         can_edit=services.can_edit(item, viewer),
         can_link=services.can_link(item, side, viewer),
         can_assign=can_assign,
+        can_resolve=services.can_resolve(item, side, viewer),
         assignees=(
             [
                 NamedOut(id=user_id, name=name)
@@ -275,7 +293,11 @@ def create_commission(
 ) -> CommissionDetailOut:
     requester = services.requester_workspace(db, user)
     lab = services.lab_workspace(db, payload.lab_workspace_slug)
-    sample = services.visible_sample(db, user, payload.sample_id)
+    sample = (
+        services.visible_sample(db, user, payload.sample_id)
+        if payload.sample_id is not None
+        else None
+    )
     now = services._now()
     status = "submitted" if payload.submit else "draft"
     item = Commission(
@@ -285,7 +307,8 @@ def create_commission(
         priority=services.check_priority(payload.priority),
         requester_workspace_id=requester.id,
         lab_workspace_id=lab.id,
-        sample_id=sample.id,
+        sample_id=sample.id if sample is not None else None,
+        material_hint=(payload.material_hint or "").strip() or None,
         sample_plan=(payload.sample_plan or "").strip() or None,
         due_on=payload.due_on,
         created_by_id=user.id,
@@ -346,6 +369,14 @@ def update_commission(
         item.purpose = payload.purpose.strip()
     if payload.sample_id is not None:
         item.sample_id = services.visible_sample(db, user, payload.sample_id).id
+    if "material_hint" in sent:
+        item.material_hint = (payload.material_hint or "").strip() or None
+    if item.sample_id is None and not item.material_hint:
+        raise AppError(
+            "MNX-COMMISSIONS-0027",
+            "시료를 고르거나, 새 재료가 무엇인지 적어야 합니다.",
+            status=422,
+        )
     if payload.lab_workspace_slug is not None:
         item.lab_workspace_id = services.lab_workspace(db, payload.lab_workspace_slug).id
     if "sample_plan" in sent:
@@ -469,6 +500,18 @@ def link_run(
     붙이면 의뢰가 재지도 않은 것을 잰 것으로 적는다. 붙으면 「접수」 는 「시험 중」 이 된다."""
     item = _linkable(db, commission_id, user)
     row = _item_of(db, item, item_id)
+    if item.sample_id is None:
+        raise AppError(
+            "MNX-COMMISSIONS-0028",
+            "시료가 아직 없습니다 — 재료·시료를 등록하고 이 의뢰에 이은 뒤 시험을 붙이세요.",
+            status=422,
+        )
+    if row.test_type_id is None:
+        raise AppError(
+            "MNX-COMMISSIONS-0029",
+            "이 항목은 시험 종류가 미정입니다 — 종류를 먼저 정하세요.",
+            status=422,
+        )
     run = db.scalar(
         select(TestRun)
         .join(Specimen, Specimen.id == TestRun.specimen_id)
@@ -527,6 +570,83 @@ def unlink_run(
         actor=user,
         target=None,
         note=f"{row.position + 1}번 항목의 시험 연결 해제: {run.record_name}",
+    )
+    db.commit()
+    return _detail(db, item, user)
+
+
+def _resolvable(db: Session, commission_id: uuid.UUID, user: User) -> Commission:
+    item = services.get(db, user, commission_id)
+    side = services.side_of(db, item, user)
+    if not services.can_resolve(item, side, user):
+        raise Forbidden(
+            "MNX-COMMISSIONS-0030",
+            "시료를 잇거나 종류를 정하는 것은 받는 부서가 접수한 뒤에 합니다.",
+        )
+    return item
+
+
+@router.post("/{commission_id}/sample", response_model=CommissionDetailOut)
+def attach_sample(
+    commission_id: uuid.UUID,
+    payload: AttachSampleRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CommissionDetailOut:
+    """새 재료 의뢰에 등록된 시료를 잇는다 — 받는 쪽이 재료·시료를 만든 뒤.
+
+    시험이 이미 붙어 있으면 못 바꾼다 — 붙은 시험은 옛 시료의 것이라 「무엇을 쟀는지」 가
+    어긋난다. 그때는 연결을 풀고 잇는다. `material_hint` 는 남긴다(무엇을 달라고 했는지).
+    """
+    item = _resolvable(db, commission_id, user)
+    sample = services.visible_sample(db, user, payload.sample_id)
+    rows = list(
+        db.scalars(select(CommissionItem).where(CommissionItem.commission_id == item.id))
+    )
+    linked = services.linked_runs(db, [one.id for one in rows])
+    if item.sample_id is not None and item.sample_id != sample.id and any(linked.values()):
+        raise AppError(
+            "MNX-COMMISSIONS-0031",
+            "시험이 붙어 있어 시료를 바꿀 수 없습니다 — 먼저 시험 연결을 푸세요.",
+            status=422,
+        )
+    item.sample_id = sample.id
+    services.move(db, item, actor=user, target=None, note=f"시료 연결: {sample.record_name}")
+    db.commit()
+    return _detail(db, item, user)
+
+
+@router.post("/{commission_id}/items/{item_id}/test-type", response_model=CommissionDetailOut)
+def resolve_item(
+    commission_id: uuid.UUID,
+    item_id: uuid.UUID,
+    payload: ResolveItemRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CommissionDetailOut:
+    """종류 미정 항목에 시험 종류를 정한다 — 받는 쪽. 「무엇을 재는지」 만 있던 항목이
+    이것으로 시험을 붙일 수 있게 된다. 시험이 붙은 항목의 종류는 못 바꾼다."""
+    item = _resolvable(db, commission_id, user)
+    row = _item_of(db, item, item_id)
+    if services.linked_runs(db, [row.id]).get(row.id):
+        raise AppError(
+            "MNX-COMMISSIONS-0032",
+            "시험이 붙은 항목의 종류는 바꿀 수 없습니다 — 먼저 시험 연결을 푸세요.",
+            status=422,
+        )
+    test_type = services.visible_test_type(db, user, payload.test_type_key)
+    values, input_units = conditions.normalize_conditions(
+        db, test_type, dict(payload.conditions), dict(payload.condition_units)
+    )
+    row.test_type_id = test_type.id
+    row.conditions = values
+    row.input_units = input_units
+    services.move(
+        db,
+        item,
+        actor=user,
+        target=None,
+        note=f"{row.position + 1}번 항목의 시험 종류 결정: {test_type.label}",
     )
     db.commit()
     return _detail(db, item, user)

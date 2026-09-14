@@ -172,11 +172,14 @@ def candidate_runs(
     db: Session, item: Commission, items: list[CommissionItem]
 ) -> dict[uuid.UUID, list[TestRun]]:
     """항목에 붙일 수 있는 시험 — 같은 시료, 같은 시험 종류, 아직 아무 항목에도 안 붙은 것."""
-    if not items:
+    if not items or item.sample_id is None:
         return {}
     by_type: dict[uuid.UUID, list[uuid.UUID]] = {}
     for one in items:
-        by_type.setdefault(one.test_type_id, []).append(one.id)
+        if one.test_type_id is not None:
+            by_type.setdefault(one.test_type_id, []).append(one.id)
+    if not by_type:
+        return {one.id: [] for one in items}
     runs = list(
         db.scalars(
             select(TestRun)
@@ -247,6 +250,26 @@ def _deliverable_keys() -> set[str]:
     return {spec.key for spec in cards.list_blocks()} | {DELIVERABLE_CURVES}
 
 
+def visible_test_type(db: Session, user: User, key: str) -> TestType:
+    test_type = db.scalar(
+        select(TestType).where(
+            TestType.key == key,
+            TestType.deleted_at.is_(None),
+            TestType.is_active.is_(True),
+            permissions.visible_owner_clause(db, user, TestType.owner_workspace_id),
+        )
+    )
+    if test_type is None:
+        raise NotFound("MNX-COMMISSIONS-0006", f"시험 종류를 찾을 수 없습니다: {key}")
+    return test_type
+
+
+def can_resolve(item: Commission, side: str, user: User) -> bool:
+    """시료를 잇거나 항목의 종류를 정할 수 있는가 — 받는 쪽, 접수 뒤·완료 전. 낸 사람은
+    접수 전이면 편집으로 고친다(`can_edit`)."""
+    return is_lab_side(side, user) and item.status not in ("draft", "closed", "rejected")
+
+
 def build_items(
     db: Session, user: User, commission_id: uuid.UUID, payload: list[CommissionItemIn]
 ) -> list[CommissionItem]:
@@ -254,21 +277,16 @@ def build_items(
     allowed_deliverables = _deliverable_keys()
     made: list[CommissionItem] = []
     for position, one in enumerate(payload):
-        test_type = db.scalar(
-            select(TestType).where(
-                TestType.key == one.test_type_key,
-                TestType.deleted_at.is_(None),
-                TestType.is_active.is_(True),
-                permissions.visible_owner_clause(db, user, TestType.owner_workspace_id),
+        key = (one.test_type_key or "").strip()
+        test_type: TestType | None = None
+        values: dict[str, Any] = {}
+        input_units: dict[str, str] = {}
+        if key:
+            test_type = visible_test_type(db, user, key)
+            values, input_units = conditions.normalize_conditions(
+                db, test_type, dict(one.conditions), dict(one.condition_units)
             )
-        )
-        if test_type is None:
-            raise NotFound(
-                "MNX-COMMISSIONS-0006", f"시험 종류를 찾을 수 없습니다: {one.test_type_key}"
-            )
-        values, input_units = conditions.normalize_conditions(
-            db, test_type, dict(one.conditions), dict(one.condition_units)
-        )
+        # 아니면 종류 미정 — 「무엇을 재는지」 만 있다. 조건은 종류가 정해진 뒤 그 칸으로.
         if one.deliverable and one.deliverable not in allowed_deliverables:
             raise AppError(
                 "MNX-COMMISSIONS-0007",
@@ -281,7 +299,8 @@ def build_items(
             CommissionItem(
                 commission_id=commission_id,
                 position=position,
-                test_type_id=test_type.id,
+                test_type_id=test_type.id if test_type is not None else None,
+                property_hint=(one.property_hint or "").strip() or None,
                 conditions=values,
                 input_units=input_units,
                 orientations=orientations,

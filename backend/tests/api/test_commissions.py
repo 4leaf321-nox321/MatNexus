@@ -87,7 +87,7 @@ def world(
     }
 
 
-def _payload(sample_id: str, **over: Any) -> dict[str, Any]:
+def _payload(sample_id: str | None, **over: Any) -> dict[str, Any]:
     body: dict[str, Any] = {
         "title": "SECC 인장 물성",
         "purpose": "성형 해석용 탄소성 카드",
@@ -112,7 +112,7 @@ def _payload(sample_id: str, **over: Any) -> dict[str, Any]:
 
 
 def _create(
-    client: TestClient, headers: dict[str, str], sample_id: str, **over: Any
+    client: TestClient, headers: dict[str, str], sample_id: str | None, **over: Any
 ) -> dict[str, Any]:
     made = client.post("/api/commissions", json=_payload(sample_id, **over), headers=headers)
     assert made.status_code == 201, made.text
@@ -567,3 +567,160 @@ class Test알림:
         assert any("말을 보탰습니다" in one for one in self._inbox(client, lee))
         detail = client.get("/api/notifications", headers=lee).json()[0]
         assert detail["link"] == f"/commissions/{made['id']}"
+
+
+class Test새재료와종류미정:
+    def test_시료_없이_새_재료를_적어_의뢰하고_받는_쪽이_시료를_잇는다(
+        self,
+        client: TestClient,
+        db: Session,
+        world: dict[str, Any],
+        admin_headers: dict[str, str],
+    ) -> None:
+        kim, lee = world["kim"], world["lee"]
+        # 둘 다 없으면 거절.
+        bare = client.post(
+            "/api/commissions",
+            json=_payload(None, material_hint=None),
+            headers=kim,
+        )
+        assert bare.status_code == 422
+        made = _create(client, kim, None, material_hint="SGARC440 1.2t, 포스코, 새 강종")
+        assert made["sample"] is None
+        assert made["material_hint"] == "SGARC440 1.2t, 포스코, 새 강종"
+        _move(client, lee, made["id"], "accepted", "재료 등록 후 진행")
+        item_id = made["items"][0]["id"]
+
+        # 시료가 없으면 시험을 못 붙인다.
+        run = _run(client, lee, world["sample"]["id"])
+        early = client.post(
+            f"/api/commissions/{made['id']}/items/{item_id}/runs",
+            json={"run_id": run["id"]},
+            headers=lee,
+        )
+        assert early.status_code == 422
+        assert "시료가 아직 없습니다" in early.json()["error"]["message"]
+
+        # 받는 쪽이 재료·시료를 등록하고 잇는다. 낸 쪽은 접수 뒤라 못 잇는다.
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "SGARC440",
+                "spec_thickness": 1.2,
+            },
+            headers=admin_headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=lee
+        ).json()
+        assert (
+            client.post(
+                f"/api/commissions/{made['id']}/sample",
+                json={"sample_id": sample["id"]},
+                headers=kim,
+            ).status_code
+            == 403
+        )
+        attached = client.post(
+            f"/api/commissions/{made['id']}/sample",
+            json={"sample_id": sample["id"]},
+            headers=lee,
+        )
+        assert attached.status_code == 200, attached.text
+        body = attached.json()
+        assert body["sample"]["record_name"] == sample["record_name"]
+        assert body["material_hint"] == "SGARC440 1.2t, 포스코, 새 강종"
+        assert any("시료 연결" in (one["note"] or "") for one in body["events"])
+
+        # 이제 그 시료의 시험만 붙는다.
+        new_run = _run(client, lee, sample["id"])
+        linked = client.post(
+            f"/api/commissions/{made['id']}/items/{item_id}/runs",
+            json={"run_id": new_run["id"]},
+            headers=lee,
+        )
+        assert linked.status_code == 200, linked.text
+        # 시험이 붙은 뒤에는 시료를 못 바꾼다.
+        swap = client.post(
+            f"/api/commissions/{made['id']}/sample",
+            json={"sample_id": world["sample"]["id"]},
+            headers=lee,
+        )
+        assert swap.status_code == 422
+
+    def test_종류_미정_항목은_물성_이름으로_적고_받는_쪽이_종류를_정한다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        kim, lee = world["kim"], world["lee"]
+        # 종류도 물성 이름도 없으면 거절.
+        bare = client.post(
+            "/api/commissions",
+            json=_payload(world["sample"]["id"], items=[{"count": 2}]),
+            headers=kim,
+        )
+        assert bare.status_code == 422
+        made = _create(
+            client,
+            kim,
+            world["sample"]["id"],
+            items=[{"property_hint": "80 °C 탄성계수", "count": 2, "deliverable": "curves"}],
+        )
+        item = made["items"][0]
+        assert item["test_type_key"] is None and item["test_type_label"] is None
+        assert item["property_hint"] == "80 °C 탄성계수"
+        assert item["conditions"] == {}
+        _move(client, lee, made["id"], "accepted", "고온 인장으로")
+
+        # 종류 미정이면 시험을 못 붙인다. 후보도 없다.
+        run = _run(client, lee, world["sample"]["id"])
+        detail = client.get(f"/api/commissions/{made['id']}", headers=lee).json()
+        assert detail["items"][0]["candidates"] == []
+        assert detail["can_resolve"]
+        early = client.post(
+            f"/api/commissions/{made['id']}/items/{item['id']}/runs",
+            json={"run_id": run["id"]},
+            headers=lee,
+        )
+        assert early.status_code == 422
+        assert "종류가 미정" in early.json()["error"]["message"]
+
+        # 낸 쪽은 못 정한다(접수 뒤). 받는 쪽이 종류와 조건을 정한다 — 조건은 SI 로.
+        assert (
+            client.post(
+                f"/api/commissions/{made['id']}/items/{item['id']}/test-type",
+                json={"test_type_key": "tensile"},
+                headers=kim,
+            ).status_code
+            == 403
+        )
+        resolved = client.post(
+            f"/api/commissions/{made['id']}/items/{item['id']}/test-type",
+            json={
+                "test_type_key": "tensile",
+                "conditions": {"temperature": 80},
+                "condition_units": {"temperature": "degC"},
+            },
+            headers=lee,
+        )
+        assert resolved.status_code == 200, resolved.text
+        body = resolved.json()
+        assert body["items"][0]["test_type_key"] == "tensile"
+        assert body["items"][0]["conditions"]["temperature"] == pytest.approx(353.15)
+        assert body["items"][0]["property_hint"] == "80 °C 탄성계수"
+        assert [one["id"] for one in body["items"][0]["candidates"]] == [run["id"]]
+        assert any("시험 종류 결정" in (one["note"] or "") for one in body["events"])
+
+        # 붙은 뒤에는 종류를 못 바꾼다.
+        client.post(
+            f"/api/commissions/{made['id']}/items/{item['id']}/runs",
+            json={"run_id": run["id"]},
+            headers=lee,
+        )
+        again = client.post(
+            f"/api/commissions/{made['id']}/items/{item['id']}/test-type",
+            json={"test_type_key": "tensile"},
+            headers=lee,
+        )
+        assert again.status_code == 422

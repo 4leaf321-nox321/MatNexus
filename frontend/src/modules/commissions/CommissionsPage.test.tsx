@@ -35,6 +35,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   requester_workspace: { slug: 'metal', name: '금속재료팀' },
   lab_workspace: { slug: 'reliability', name: '신뢰성그룹' },
   sample: { id: 's-1', record_name: 'SECC-1.0-S01', material_id: 'm-1', material_name: 'SECC 1.0t' },
+  material_hint: null,
   due_on: '2026-10-15',
   created_at: '2026-09-14T01:00:00Z',
   created_by: '김해석',
@@ -101,6 +102,13 @@ describe('측정 의뢰 게시판', () => {
         expect.objectContaining({ scope: 'received', status: 'submitted' })
       )
     )
+  })
+
+  it('새 재료 의뢰는 시료 자리에 「새 재료」 와 적은 글이 선다', async () => {
+    await show([row({ sample: null, material_hint: 'SGARC440 1.2t, 포스코' })])
+    const line = (await screen.findByText('SECC 인장 물성')).closest('tr') as HTMLElement
+    expect(within(line).getByText('새 재료')).toBeInTheDocument()
+    expect(within(line).getByText('SGARC440 1.2t, 포스코')).toBeInTheDocument()
   })
 
   it('급한 건은 배지가 붙고, 없으면 안내가 선다', async () => {
