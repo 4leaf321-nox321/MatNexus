@@ -17,7 +17,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { commissionsApi } from '@/modules/commissions/api'
-import { ItemsEditor, emptyItem, itemReady, toPayload } from '@/modules/commissions/ItemsEditor'
+import { ItemsEditor, emptyItem, missingInItems, toPayload } from '@/modules/commissions/ItemsEditor'
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
 import { SamplePicker } from '@/modules/commissions/SamplePicker'
 import { fittingApi } from '@/modules/fitting/api'
@@ -57,14 +57,16 @@ export default function CommissionNewPage() {
   const blocks = useResource(() => fittingApi.blocks(), [])
   const labs = useResource(() => workspacesApi.options(), [])
 
-  const targetReady = target === 'sample' ? sample !== null : materialHint.trim() !== ''
-  const ready =
-    title.trim() !== '' &&
-    purpose.trim() !== '' &&
-    targetReady &&
-    lab !== '' &&
-    items.length > 0 &&
-    items.every(itemReady)
+  // **무엇이 비어서 못 보내는지 말로 든다.** 단추만 잠그면 사용자가 폼을 훑어야 한다.
+  const missing: string[] = []
+  if (title.trim() === '') missing.push('제목')
+  if (purpose.trim() === '') missing.push('목적')
+  if (target === 'sample' ? sample === null : materialHint.trim() === '') {
+    missing.push(target === 'sample' ? '시료 (재료를 찾아 고르기)' : '새 재료가 무엇인지')
+  }
+  missing.push(...missingInItems(items))
+  if (lab === '') missing.push('받는 부서')
+  const ready = missing.length === 0
 
   async function save(submit: boolean) {
     setBusy(submit ? 'submit' : 'draft')
@@ -250,10 +252,24 @@ export default function CommissionNewPage() {
       </section>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button variant="outline" disabled={busy !== null || !ready} onClick={() => save(false)}>
+        {!ready && (
+          <p className="text-muted-foreground mr-auto text-sm" role="status" aria-live="polite">
+            아직 필요한 것: <b className="text-foreground">{missing.join(' · ')}</b>
+          </p>
+        )}
+        <Button
+          variant="outline"
+          disabled={busy !== null || !ready}
+          title={ready ? undefined : `아직 필요한 것: ${missing.join(', ')}`}
+          onClick={() => save(false)}
+        >
           임시 저장
         </Button>
-        <Button disabled={busy !== null || !ready} onClick={() => save(true)}>
+        <Button
+          disabled={busy !== null || !ready}
+          title={ready ? undefined : `아직 필요한 것: ${missing.join(', ')}`}
+          onClick={() => save(true)}
+        >
           의뢰
         </Button>
       </div>

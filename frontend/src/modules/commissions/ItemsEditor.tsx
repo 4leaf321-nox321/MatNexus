@@ -115,6 +115,19 @@ export function itemReady(draft: ItemDraft): boolean {
   return draft.test_type_key !== '' || draft.property_hint.trim() !== ''
 }
 
+/**
+ * 항목마다 빠진 것을 **말로**. 단추가 왜 안 눌리는지 화면이 말해야 한다 — 비활성 단추만
+ * 있으면 사용자는 폼을 위아래로 훑으며 무엇이 비었는지 찾는다(2026-09-14).
+ */
+export function missingInItems(items: ItemDraft[]): string[] {
+  const out: string[] = []
+  if (items.length === 0) out.push('항목 하나 이상')
+  items.forEach((one, index) => {
+    if (!itemReady(one)) out.push(`${index + 1}번 항목의 시험 종류 또는 물성 이름`)
+  })
+  return out
+}
+
 /** 받을 것 후보 — 종류가 되는 블록만(`kind_priority` 있는 것). */
 export function deliverableOptions(specs: BlockSpec[]): { key: string; label: string }[] {
   const kinds = specs

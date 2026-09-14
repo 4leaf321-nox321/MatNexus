@@ -19,7 +19,7 @@ import {
   ItemsEditor,
   deliverableLabel,
   draftFromItem,
-  itemReady,
+  missingInItems,
   toPayload,
 } from '@/modules/commissions/ItemsEditor'
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
@@ -584,6 +584,11 @@ function EditDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const labs = useResource(() => workspacesApi.options(), [])
+  const missing: string[] = []
+  if (!title.trim()) missing.push('제목')
+  if (!purpose.trim()) missing.push('목적')
+  if (!detail.sample && !materialHint.trim()) missing.push('새 재료가 무엇인지')
+  missing.push(...missingInItems(items))
 
   async function save() {
     setBusy(true)
@@ -664,17 +669,17 @@ function EditDialog({
         </div>
         <ErrorNotice error={error} />
         <DialogFooter>
+          {missing.length > 0 && (
+            <p className="text-muted-foreground mr-auto self-center text-sm" role="status">
+              아직 필요한 것: <b className="text-foreground">{missing.join(' · ')}</b>
+            </p>
+          )}
           <Button variant="outline" onClick={onClose}>
             취소
           </Button>
           <Button
-            disabled={
-              busy ||
-              !title.trim() ||
-              !purpose.trim() ||
-              (!detail.sample && !materialHint.trim()) ||
-              !items.every(itemReady)
-            }
+            disabled={busy || missing.length > 0}
+            title={missing.length > 0 ? `아직 필요한 것: ${missing.join(', ')}` : undefined}
             onClick={save}
           >
             저장
