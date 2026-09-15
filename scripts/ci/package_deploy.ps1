@@ -166,6 +166,8 @@ Copy-Item -Force .\scripts\deploy\service.ps1 .\deploy\service.ps1
 New-Item -ItemType Directory -Force -Path .\deploy\bin | Out-Null
 Copy-Item -Force .\scripts\deploy\bin\nssm.exe .\deploy\bin\nssm.exe
 Copy-Item -Force .\scripts\deploy\bin\README.md .\deploy\bin\README.md
+# pgvector 빌드 산출물(판별 폴더) — 서버 이전 때 사람이 따로 나르던 유일한 것이었다(2026-09-15).
+Copy-Item -Recurse -Force .\scripts\deploy\pgvector .\deploy\pgvector
 
 # 선택 부품(의미 검색) 설치. **한 번만 돌리는 것들이라 deploy.ps1 이 부르지 않지만**,
 # zip 에 없으면 서버의 관리자가 그 스크립트를 손에 넣을 방법이 없다.

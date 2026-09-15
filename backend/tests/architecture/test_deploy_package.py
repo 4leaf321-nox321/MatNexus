@@ -103,3 +103,23 @@ def test_서비스_래퍼가_패키지에_들어간다() -> None:
         if line.strip().startswith("Copy-Item")
     )
     assert "bin\\nssm.exe" in copied, "package_deploy.ps1 이 bin\\nssm.exe 를 안 담습니다."
+
+
+def test_pgvector_산출물이_패키지에_들어간다() -> None:
+    """서버 이전 때 사람이 따로 나르던 유일한 것이었다(2026-09-15). zip 에 없으면
+    `install_pgvector.ps1` 이 -FromDir 없이는 멈춘다."""
+    bundle = DEPLOY_SCRIPTS / "pgvector" / "pg17"
+    assert (bundle / "vector.dll").exists(), (
+        "scripts/deploy/pgvector/pg17/vector.dll 이 없습니다."
+    )
+    assert (bundle / "vector.control").exists()
+    assert list(bundle.glob("vector--*.sql")), "vector--*.sql 이 없습니다."
+    assert (bundle / "build-info.json").exists(), "build-info.json(판 확인용)이 없습니다."
+    copied = chr(10).join(
+        line
+        for line in PACKAGER.read_text(encoding="utf-8-sig").splitlines()
+        if line.strip().startswith("Copy-Item")
+    )
+    assert "scripts\\deploy\\pgvector" in copied, (
+        "package_deploy.ps1 이 pgvector 폴더를 안 담습니다."
+    )

@@ -22,7 +22,8 @@ pgvector 설치 — **파일 세 개를 PostgreSQL 에 넣고 확장을 켠다.*
 있는 프로세스가 있으면 복사가 막히므로, 그때는 서비스를 잠깐 멈춘다.
 
 사용 (관리자 PowerShell):
-  .\install_pgvector.ps1 -FromDir '..\..\build\pgvector\pg17'
+  .\install_pgvector.ps1 -PgRoot 'D:\PostgreSQL\17'          # 패키지에 든 pgvector\pg17 을 쓴다
+  .\install_pgvector.ps1 -FromDir '..\..\build\pgvector\pg17'   # 다른 곳의 산출물
   .\install_pgvector.ps1 -FromDir ... -DatabaseUrl 'postgresql://postgres:root@localhost:5432/matnexus'
   .\install_pgvector.ps1 -CheckOnly
 #>
@@ -72,7 +73,17 @@ if ($CheckOnly) {
     exit 0
 }
 
-if (-not $FromDir) { throw '-FromDir 로 산출물 폴더를 주세요(build_pgvector.ps1 이 만든 곳).' }
+# **패키지에 든 산출물이 기본이다**(2026-09-15). `pgvector\pg<판>` 이 이 스크립트 옆에 있다 —
+# 서버 이전 때 사람이 따로 나르던 유일한 것이었다. 다른 곳의 것을 쓰려면 -FromDir.
+if (-not $FromDir) {
+    $bundled = Join-Path $PSScriptRoot ('pgvector\pg' + (Split-Path $PgRoot -Leaf))
+    if (Test-Path (Join-Path $bundled 'vector.dll')) {
+        $FromDir = $bundled
+        Write-Log "패키지의 산출물을 씁니다: $FromDir"
+    } else {
+        throw "이 PostgreSQL 판($(Split-Path $PgRoot -Leaf))용 산출물이 패키지에 없습니다($bundled). build_pgvector.ps1 로 뽑아 -FromDir 로 주세요."
+    }
+}
 $FromDir = [System.IO.Path]::GetFullPath($FromDir)
 foreach ($needed in @('vector.dll', 'vector.control')) {
     if (-not (Test-Path (Join-Path $FromDir $needed))) { throw "$FromDir 에 $needed 이 없습니다." }
