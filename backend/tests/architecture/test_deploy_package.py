@@ -84,3 +84,22 @@ def test_확장_폴더가_패키지에_남는다() -> None:
         "backend/extensions 폴더가 없습니다. 비어 있어도 README 로 남겨 둡니다 — "
         "폴더가 없으면 어디에 확장을 넣어야 하는지 알 길이 없습니다."
     )
+
+
+def test_서비스_래퍼가_패키지에_들어간다() -> None:
+    """서비스 등록(`service.ps1`)은 `bin/nssm.exe` 가 있어야 한다.
+
+    폐쇄망 서버는 zip 하나만 받는다 — 바이너리가 저장소에만 있으면 `-Action Install`
+    이 「nssm.exe 가 패키지에 없습니다」 로 멈춘다. README 는 출처·버전·해시를 든다.
+    """
+    binary = DEPLOY_SCRIPTS / "bin" / "nssm.exe"
+    assert binary.exists() and binary.stat().st_size > 100_000, "bin/nssm.exe 가 없습니다."
+    assert (DEPLOY_SCRIPTS / "bin" / "README.md").exists(), (
+        "bin/README.md(출처·해시)가 없습니다."
+    )
+    copied = chr(10).join(
+        line
+        for line in PACKAGER.read_text(encoding="utf-8-sig").splitlines()
+        if line.strip().startswith("Copy-Item")
+    )
+    assert "bin\\nssm.exe" in copied, "package_deploy.ps1 이 bin\\nssm.exe 를 안 담습니다."

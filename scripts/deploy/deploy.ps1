@@ -117,6 +117,21 @@ $isFirstRun = -not (Test-Path $AppPath)
 
 if ($isFirstRun) { Write-Log "$AppPath 에 기존 설치가 없습니다 — 첫 배포로 처리합니다." }
 
+# --- 서비스로 돌고 있으면 먼저 멈춘다 (service.ps1, 2026-09-15) -----------------
+#
+# 서비스는 죽여도 SCM 이 되살린다 — 프로세스가 아니라 서비스를 멈춰야 폴더가 풀린다.
+# 멈춘 것은 기억해 뒀다가 배포가 끝나면 다시 띄운다. 그래서 서비스로 등록한 서버는
+# 배포 뒤에 창을 열 일이 없고, 워커도 새 코드로 다시 뜬다.
+$serviceNames = @('MatNexusWorker', 'MatNexus')   # 워커부터 멈춘다
+$installedServices = @($serviceNames | Where-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue })
+foreach ($name in $installedServices) {
+    $svc = Get-Service -Name $name
+    if ($svc.Status -ne 'Stopped') {
+        Write-Log "서비스 $name 멈춤 (배포 뒤 다시 띄웁니다)"
+        Stop-Service -Name $name -Force
+    }
+}
+
 # 폴더가 잠겨 있으면 시작 전에 멈춘다.
 #
 # **루트에 파일을 써 보는 것으로는 부족하다.** 실측: run_server.ps1 이 작업
@@ -396,6 +411,9 @@ if ($SkipMigrations) {
         Write-Error "마이그레이션 실패: $_"
         Write-Host ''
         Write-Host '새 코드는 배치됐지만 데이터베이스가 일부만 적용됐을 수 있습니다.'
+        if ($installedServices.Count -gt 0) {
+            Write-Host "서비스($($installedServices -join ', '))는 멈춘 채입니다 — 롤백 뒤 .\service.ps1 -Action Start 로 띄우세요."
+        }
         Write-Host "파일만 되돌리려면:  .\rollback.ps1 -AppPath '$AppPath'"
         exit 10
     }
@@ -528,6 +546,23 @@ if ($installed) { Write-Log ("배포한 버전: " + ($installed -replace '^versi
 
 Write-Log '배포 완료'
 Write-Host ''
+if ($installedServices.Count -gt 0) {
+    # 서버부터, 워커는 그 다음 — 등록된 것만.
+    foreach ($name in @('MatNexus', 'MatNexusWorker')) {
+        if ($installedServices -notcontains $name) { continue }
+        Start-Service -Name $name
+        Write-Log "서비스 $name 시작"
+    }
+    Write-Host '서비스로 다시 떴습니다 — 창을 열 필요가 없습니다.'
+    Write-Host "  상태:  .\service.ps1 -AppPath '$AppPath' -Action Status"
+    Write-Host "  로그:  $($AppPath)_data\logs\service-server.log · service-worker.log"
+    if ($installedServices -notcontains 'MatNexusWorker') {
+        Write-Host '  워커는 서비스가 아닙니다 — 창에서 .\run_worker.ps1 을 다시 띄우세요(옛 워커는 새 작업 종류를 모릅니다).'
+    }
+    Write-Host ''
+    Write-Host "배포한 것이 $AppPath 에, 직전 버전이 $prevPath 에 있습니다."
+    exit 0
+}
 Write-Host '시작 — 창 두 개:'
 Write-Host "  cd '$AppPath'"
 Write-Host '  .\run_server.ps1     # 창 1'
@@ -538,5 +573,7 @@ Write-Host ''
 # 있으면 새 작업 종류를 몰라 실패로 닫는다(2026-08-28 실측: 배포 전 워커가
 # `pipelines.parse_inbox` 를 세 번 실패시켰다).
 Write-Host '  워커는 코드를 다시 읽지 않습니다. 옛 워커가 떠 있으면 새 작업 종류를 몰라 실패로 닫습니다 — 반드시 다시 띄우세요.'
+Write-Host ''
+Write-Host "재부팅해도 저절로 뜨게 하려면(한 번):  .\service.ps1 -AppPath '$AppPath' -Action Install   (관리자 PowerShell)"
 Write-Host ''
 Write-Host "직전 버전은 $prevPath 에 있습니다 (롤백: .\rollback.ps1 -AppPath '$AppPath')"
