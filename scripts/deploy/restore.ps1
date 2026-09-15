@@ -174,7 +174,7 @@ try {
     # --- 어느 서버에 붙었는지 **눈으로 확인시킨다** --------------------------------
     # PostgreSQL 이 둘인 서버에서 포트를 잘못 잡으면 복구는 멀쩡히 끝나고 앱은 다른
     # 쪽을 본다. 판·데이터 폴더를 찍어 두면 「D: 의 17 이 맞나」 를 여기서 안다.
-    $target = Invoke-Sql 'postgres' "select current_setting('server_version') || ' · data_directory=' || current_setting('data_directory')"
+    $target = Invoke-Sql 'postgres' "select current_setting('server_version') || ' / data_directory=' || current_setting('data_directory')"
     Write-Log "복구 대상 서버: PostgreSQL $target"
     $restoreVersion = (& $PgRestoreExe --version 2>$null) -join ''
     if ($restoreVersion -match '(\d+)\.' -and $target -match '^(\d+)\.') {
