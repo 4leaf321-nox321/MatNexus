@@ -149,24 +149,38 @@ if (Test-Path $infoPath) {
     Write-Log "산출물: pgvector $($info.pgvector) / PostgreSQL $($info.postgres_major) / $($info.built_at)"
 }
 
-# --- 권한 --------------------------------------------------------------------
-# **반쯤 복사된 상태가 제일 나쁘다.** 확장은 있다고 나오는데 DLL 이 없으면 그
-# 데이터베이스는 연결마다 오류를 낸다. 그래서 쓰기가 되는지 먼저 시험한다.
-try {
-    $probe = Join-Path $libDir '.mnx_write_test'
-    New-Item -ItemType File -Path $probe -ErrorAction Stop | Out-Null
-    Remove-Item $probe -Force
-} catch {
-    throw "$libDir 에 쓸 수 없습니다. **관리자 권한으로** PowerShell 을 다시 열고 돌리세요."
-}
-
 # --- 복사 --------------------------------------------------------------------
-Write-Log '파일을 넣습니다.'
-Copy-Item (Join-Path $FromDir 'vector.dll') $libDir -Force
-Copy-Item (Join-Path $FromDir 'vector.control') $extDir -Force
-foreach ($one in $sqlFiles) { Copy-Item $one.FullName $extDir -Force }
-Write-Log "  $libDir\vector.dll"
-Write-Log "  $extDir\vector.control (+ sql $($sqlFiles.Count)개)"
+# **같은 파일이 이미 있으면 안 건드린다**(실측 2026-09-16). 같은 PostgreSQL 을 다른 앱(TestScope)이
+# 먼저 쓰고 있으면 vector.dll 이 postgres 프로세스에 로드돼 있어 덮어쓰기가 「다른 프로세스에서
+# 사용 중」 으로 막힌다 — 그런데 내용이 같으니 덮어쓸 이유가 없다. 다른 판이면(업그레이드) 그때만
+# 복사하고, 그 경우 서비스를 잠깐 멈춰야 한다.
+$srcDll = Join-Path $FromDir 'vector.dll'
+$dstDll = Join-Path $libDir 'vector.dll'
+$same = (Test-Path $dstDll) -and ((Get-FileHash $srcDll).Hash -eq (Get-FileHash $dstDll).Hash)
+if ($same) {
+    Write-Log "같은 vector.dll 이 이미 있습니다 — 파일은 그대로 두고 확장만 켭니다."
+} else {
+    # **반쯤 복사된 상태가 제일 나쁘다.** 확장은 있다고 나오는데 DLL 이 없으면 그
+    # 데이터베이스는 연결마다 오류를 낸다. 그래서 쓰기가 되는지 먼저 시험한다.
+    try {
+        $probe = Join-Path $libDir '.mnx_write_test'
+        New-Item -ItemType File -Path $probe -ErrorAction Stop | Out-Null
+        Remove-Item $probe -Force
+    } catch {
+        throw "$libDir 에 쓸 수 없습니다. **관리자 권한으로** PowerShell 을 다시 열고 돌리세요."
+    }
+
+    Write-Log '파일을 넣습니다.'
+    try {
+        Copy-Item $srcDll $libDir -Force -ErrorAction Stop
+    } catch {
+        throw "vector.dll 을 덮어쓰지 못했습니다 — 다른 판이 로드된 채입니다. PostgreSQL 서비스를 잠깐 멈추고 다시 돌리세요: $_"
+    }
+    Copy-Item (Join-Path $FromDir 'vector.control') $extDir -Force
+    foreach ($one in $sqlFiles) { Copy-Item $one.FullName $extDir -Force }
+    Write-Log "  $dstDll"
+    Write-Log "  $extDir\vector.control (+ sql $($sqlFiles.Count)개)"
+}
 
 # --- 확장 켜기 ---------------------------------------------------------------
 if (-not $DatabaseUrl) {
