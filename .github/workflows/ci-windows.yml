@@ -207,13 +207,11 @@ jobs:
         working-directory: backend
         shell: pwsh
         run: |
-          # **출력을 파일로 남긴다.** 창 없이 띄우면 워커가 왜 죽었는지 어디에도 안 남는다 —
-          # 실측(2026-09-15): 워커가 첫 파싱에서 죽었는데 스모크는 「완료」 를 60초 기다리다
-          # 실패했고, 로그가 없어 로컬에서 처음부터 다시 재현해야 했다.
-          Start-Process -FilePath python -ArgumentList 'run.py' -WindowStyle Hidden `
-            -RedirectStandardOutput smoke-server.out -RedirectStandardError smoke-server.err
-          Start-Process -FilePath python -ArgumentList 'run_worker.py' -WindowStyle Hidden `
-            -RedirectStandardOutput smoke-worker.out -RedirectStandardError smoke-worker.err
+          # **`-RedirectStandardOutput` 을 쓰지 않는다.** 그렇게 띄우면 이 단계의 pwsh 가 끝날 때
+          # 자식도 함께 죽는다(실측 2026-09-15: health 는 200 이었는데 다음 단계에서 접속 거부).
+          # 서버·워커의 기록은 앱 로그(backend\logspp.log)에 있고, 실패하면 그것을 올린다.
+          Start-Process -FilePath python -ArgumentList 'run.py' -WindowStyle Hidden
+          Start-Process -FilePath python -ArgumentList 'run_worker.py' -WindowStyle Hidden
           # 준비될 때까지 기다린다. 고정 sleep 은 느리거나 모자라거나 둘 중 하나다.
           $deadline = (Get-Date).AddSeconds(60)
           while ((Get-Date) -lt $deadline) {
@@ -269,8 +267,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-흔적
+          # 앱 로그도 함께 — 워커가 왜 죽었는지는 화면이 아니라 여기에 남는다(실측 2026-09-15:
+          # 워커가 첫 파싱에서 죽었는데 로그가 없어 로컬에서 처음부터 재현해야 했다).
           path: |
             frontend/test-results
-            backend/smoke-*.out
-            backend/smoke-*.err
+            backend/logs
           retention-days: 7
