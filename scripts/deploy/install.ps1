@@ -41,7 +41,11 @@ param(
     [int]$Port = 8010,
     [string]$PythonExe,
     [string]$AdminEmail = 'admin@matnexus.local',
-    [switch]$SkipPrecheck
+    [switch]$SkipPrecheck,
+    # 서비스로 등록하지 않는다 — 콘솔(run_server.ps1)로 띄울 때. 나중에 service.ps1 로 더할 수 있다.
+    [switch]$NoService,
+    # pgvector(의미 검색)를 PostgreSQL 에 넣지 않는다. 기본은 **DB 가 이 PC 에 있을 때만** 넣는다.
+    [switch]$NoPgvector
 )
 
 $ErrorActionPreference = 'Stop'
@@ -221,6 +225,47 @@ if ($existing) {
     }
 }
 
+# --- 8-b. pgvector (선택) -------------------------------------------------------
+# 의미 검색의 부품이다. **없어도 앱은 돈다** — 검색이 이름·별칭으로만 답할 뿐이다. DB 가 이
+# PC 에 있고 패키지에 그 판의 산출물이 있으면 넣는다(관리자 권한이 필요한 자리라 실패해도
+# 설치는 계속한다). 어느 PostgreSQL 인지는 install_pgvector.ps1 이 **DB 에 물어서** 정한다 —
+# 둘이 깔린 서버에서 엉뚱한 쪽에 넣지 않게. 원격 DB 면 그 서버에서 따로 돌린다.
+$localDb = $DbHost -in @('localhost', '127.0.0.1', '::1', $env:COMPUTERNAME)
+if ($NoPgvector) {
+    Write-Log 'pgvector 건너뜀 (-NoPgvector)'
+} elseif (-not $localDb) {
+    Write-Log "pgvector 건너뜀 — DB 가 다른 PC($DbHost)에 있습니다. 그 서버에서 install_pgvector.ps1 을 돌리세요."
+} else {
+    Write-Log 'pgvector 설치'
+    try {
+        & (Join-Path $scriptDir 'install_pgvector.ps1') -DatabaseUrl $dsn
+        if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) { throw "exit $LASTEXITCODE" }
+    } catch {
+        Write-Warning "pgvector 를 넣지 못했습니다(의미 검색만 꺼진 채 갑니다): $_"
+        Write-Warning "나중에 관리자 PowerShell 에서:  .\install_pgvector.ps1 -DatabaseUrl '<DATABASE_URL>'"
+    }
+}
+
+# --- 9. 서비스 ----------------------------------------------------------------
+# 부팅하면 뜨고 죽으면 되살아난다. 이것이 없으면 재부팅 뒤 누군가 로그인해서
+# run_server.ps1 을 켜야 하고, 그 사실은 화면이 안 열리는 날 아침에야 드러난다.
+# 등록은 service.ps1 한 곳이 한다(기존 설치에 더할 때도 같은 스크립트).
+$serviceRegistered = $false
+if ($NoService) {
+    Write-Log '서비스 등록 건너뜀 (-NoService)'
+} else {
+    Write-Log '서비스 등록 (API · 워커 · MCP)'
+    try {
+        & (Join-Path $scriptDir 'service.ps1') -AppPath $AppPath -Action Install
+        if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) { throw "exit $LASTEXITCODE" }
+        $serviceRegistered = $true
+    } catch {
+        Write-Warning "서비스를 등록하지 못했습니다: $_"
+        Write-Warning "관리자 PowerShell 에서 다시 시도하세요:  .\service.ps1 -AppPath '$AppPath' -Action Install"
+        Write-Warning "그때까지는 콘솔로 띄웁니다:  cd '$AppPath' ; .\run_server.ps1"
+    }
+}
+
 Write-Host ''
 # **무엇이 깔렸는지 남긴다.** 태그를 지정하지 않고 배포하면 나중에 되짚을 방법이
 # 없었다. 패키지가 자기 버전을 들고 오므로 여기서 읽어 적기만 하면 된다.
@@ -230,7 +275,11 @@ if ($installed) { Write-Log ("배포한 버전: " + ($installed -replace '^versi
 
 Write-Host '설치 완료.'
 Write-Host ''
-Write-Host "  시작        : cd '$AppPath' ; .\run_server.ps1"
+if ($serviceRegistered) {
+    Write-Host "  서비스      : MatNexus · MatNexusWorker · MatNexusMcp — 이미 떠 있습니다 (.\service.ps1 -AppPath '$AppPath' -Action Status)"
+} else {
+    Write-Host "  시작        : cd '$AppPath' ; .\run_server.ps1   (워커 .\run_worker.ps1 · MCP .\run_mcp.ps1)"
+}
 Write-Host "  접속        : http://<서버주소>:$Port/"
 Write-Host "  운영 데이터 : $dataPath  (백업 대상 — DB와 함께 받아야 복구가 성립한다)"
 Write-Host ''

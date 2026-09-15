@@ -53,16 +53,62 @@ function Invoke-Native {
 }
 
 # --- PostgreSQL 찾기 ---------------------------------------------------------
+#
+# **DB 주소를 받았으면 그 서버에 직접 묻는다**(2026-09-15). PostgreSQL 이 둘인 서버(18 은
+# C: 5432, 17 은 D: 5434)에서 `C:\Program Files\PostgreSQL` 을 훑어 가장 높은 판을 집으면
+# 18 에 DLL 을 넣고 17 의 DB 에서 `CREATE EXTENSION` 이 「모듈을 로드할 수 없음」 으로 죽는다.
+# `pg_config` 뷰의 PKGLIBDIR·SHAREDIR 이 그 인스턴스의 진짜 자리다 — 어느 psql 로 물어도 된다.
+function Find-AnyPsql {
+    foreach ($root in @('C:\Program Files\PostgreSQL', 'D:\PostgreSQL', 'D:\Program Files\PostgreSQL')) {
+        $hit = Get-ChildItem "$root\*\bin\psql.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($hit) { return $hit.FullName }
+    }
+    if (Get-Command psql -ErrorAction SilentlyContinue) { return 'psql' }
+    return $null
+}
+$serverMajor = $null
+if (-not $PgRoot -and $DatabaseUrl) {
+    $anyPsql = Find-AnyPsql
+    if ($anyPsql) {
+        $clean = $DatabaseUrl -replace '^postgresql\+psycopg://', 'postgresql://'
+        # 확장을 켤 DB 가 아직 없어도 서버는 답한다 — postgres DB 로 묻는다.
+        $probeUrl = $clean -replace '/[^/]+$', '/postgres'
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $answer = & $anyPsql $probeUrl -tA -c "select string_agg(name || '=' || setting, ';') from pg_config where name in ('PKGLIBDIR','SHAREDIR')" 2>$null
+            $version = & $anyPsql $probeUrl -tA -c "show server_version_num" 2>$null
+            $code = $LASTEXITCODE
+        } finally { $ErrorActionPreference = $previous }
+        if ($code -eq 0 -and $answer) {
+            $parts = @{}
+            foreach ($pair in ("$answer" -split ';')) { $k, $v = $pair -split '=', 2; $parts[$k] = $v }
+            if ($parts['PKGLIBDIR'] -and $parts['SHAREDIR']) {
+                # pg_config 는 8.3 단축 경로(C:\PROGRA~1\…)로 답하기도 한다 — 긴 이름으로 편다.
+                $libDir = (Get-Item ($parts['PKGLIBDIR'] -replace '/', '\')).FullName
+                $extDir = (Join-Path (Get-Item ($parts['SHAREDIR'] -replace '/', '\')).FullName 'extension')
+                $PgRoot = Split-Path $libDir -Parent
+                # server_version_num 170005 → 17 (정수 나눗셈 — 5.1 의 / 는 실수를 낸다).
+                if ("$version" -match '^(\d+)') { $serverMajor = [string][math]::Floor([int]$Matches[1] / 10000) }
+                Write-Log "PostgreSQL(접속한 서버가 말한 자리): lib=$libDir · 판 $serverMajor"
+            }
+        } else {
+            Write-Warning "DB 에 물어보지 못해 설치 폴더를 훑습니다 — PostgreSQL 이 둘이면 -PgRoot 로 알려 주세요."
+        }
+    }
+}
 if (-not $PgRoot) {
     $found = Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory -ErrorAction SilentlyContinue |
         Sort-Object { [int]($_.Name -replace '\D', '0') } -Descending | Select-Object -First 1
     if (-not $found) { throw 'PostgreSQL 을 못 찾았습니다. -PgRoot 로 알려 주세요.' }
     $PgRoot = $found.FullName
 }
-$libDir = Join-Path $PgRoot 'lib'
-$extDir = Join-Path $PgRoot 'share\extension'
+if (-not $libDir) { $libDir = Join-Path $PgRoot 'lib' }
+if (-not $extDir) { $extDir = Join-Path $PgRoot 'share\extension' }
+if (-not $serverMajor) { $serverMajor = Split-Path $PgRoot -Leaf }
 $psql = Join-Path $PgRoot 'bin\psql.exe'
-Write-Log "PostgreSQL: $PgRoot"
+if (-not (Test-Path $psql)) { $psql = Find-AnyPsql }
+Write-Log "PostgreSQL: $PgRoot (판 $serverMajor)"
 
 $installed = Test-Path (Join-Path $libDir 'vector.dll')
 Write-Log ("vector.dll : " + $(if ($installed) { '있음' } else { '없음' }))
@@ -76,12 +122,12 @@ if ($CheckOnly) {
 # **패키지에 든 산출물이 기본이다**(2026-09-15). `pgvector\pg<판>` 이 이 스크립트 옆에 있다 —
 # 서버 이전 때 사람이 따로 나르던 유일한 것이었다. 다른 곳의 것을 쓰려면 -FromDir.
 if (-not $FromDir) {
-    $bundled = Join-Path $PSScriptRoot ('pgvector\pg' + (Split-Path $PgRoot -Leaf))
+    $bundled = Join-Path $PSScriptRoot ('pgvector\pg' + $serverMajor)
     if (Test-Path (Join-Path $bundled 'vector.dll')) {
         $FromDir = $bundled
         Write-Log "패키지의 산출물을 씁니다: $FromDir"
     } else {
-        throw "이 PostgreSQL 판($(Split-Path $PgRoot -Leaf))용 산출물이 패키지에 없습니다($bundled). build_pgvector.ps1 로 뽑아 -FromDir 로 주세요."
+        throw "이 PostgreSQL 판($serverMajor)용 산출물이 패키지에 없습니다($bundled). build_pgvector.ps1 로 뽑아 -FromDir 로 주세요."
     }
 }
 $FromDir = [System.IO.Path]::GetFullPath($FromDir)
@@ -96,8 +142,8 @@ if ($sqlFiles.Count -eq 0) { throw "$FromDir 에 vector--*.sql 이 없습니다.
 $infoPath = Join-Path $FromDir 'build-info.json'
 if (Test-Path $infoPath) {
     $info = Get-Content $infoPath -Raw | ConvertFrom-Json
-    $here = Split-Path $PgRoot -Leaf
-    if ($info.postgres_major -and $info.postgres_major -ne $here) {
+    $here = $serverMajor
+    if ($info.postgres_major -and "$($info.postgres_major)" -ne "$here") {
         throw "판이 다릅니다 — 산출물은 PostgreSQL $($info.postgres_major) 용인데 여기는 $here 입니다. 그 판으로 다시 빌드하세요."
     }
     Write-Log "산출물: pgvector $($info.pgvector) / PostgreSQL $($info.postgres_major) / $($info.built_at)"
