@@ -165,3 +165,129 @@ class TestMeaning:
         made = semantic.reindex(db)
         assert made["removed"] >= 1
         assert all(one.entity_id != str(section.id) for one in semantic.search(db, BODY))
+
+
+#: 재료 메모 — 이름(등급 코드)에는 없는 말. 「뜻으로만 걸리는」 상황을 만든다.
+MATERIAL_NOTE = (
+    "전기아연도금 냉연강판으로 가전 외판과 섀시에 쓴다. 도장성이 좋고 내식성이 "
+    "필요한 부위에 고르며, 성형 해석에는 인장 곡선을 경화식으로 적합해 쓴다."
+)
+
+
+def _member_of(client: TestClient, admin_headers: dict[str, str], slug: str) -> dict[str, str]:
+    email = f"sem-{uuid.uuid4().hex[:6]}@x.com"
+    made = client.post(
+        "/api/accounts",
+        json={"email": email, "display_name": email, "workspace_slug": slug, "role": "member"},
+        headers=admin_headers,
+    )
+    assert made.status_code in (200, 201), made.text
+    token = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": made.json()["temporary_password"]},
+    ).json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.usefixtures("semantic_ready")
+class TestMaterials:
+    """사내 재료도 **말로** 색인한다(2026-09-15). 「SECC」 로는 뜻이 없고, 분류·별칭·
+    용도·메모를 엮은 문장이 뜻이다."""
+
+    def test_메모로_재료를_되찾는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        made = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "SEMCODE1",
+                "alias": "가전용 아연도금",
+                "note": MATERIAL_NOTE,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        material_id = made.json()["id"]
+        counted = semantic.reindex(db)
+        assert counted["chunks"] >= 1
+
+        row = db.execute(
+            text(f"SELECT title, body FROM {semantic.TABLE} WHERE entity_id = :id"),
+            {"id": material_id},
+        ).first()
+        assert row is not None
+        # 분류·별칭·용도·메모가 한 문장에 든다 — 이름만 심으면 뜻이 없다.
+        assert "Metal · Steel · SEMCODE1" in row[1]
+        assert "별칭 가전용 아연도금" in row[1]
+        assert MATERIAL_NOTE in row[1]
+
+        # 글자로는 안 걸린다(이름·별칭에 메모의 낱말이 없다) — 뜻으로만 걸린다.
+        letters = client.get(
+            "/api/search",
+            params={"q": MATERIAL_NOTE[:80], "mode": "contains", "kind": ["material"]},
+            headers=admin_headers,
+        ).json()
+        assert letters["total"] == 0
+        meaning = client.get(
+            "/api/search",
+            params={"q": f"{row[0]}\n{row[1]}"[:200], "mode": "similar", "kind": ["material"]},
+            headers=admin_headers,
+        ).json()
+        hits = meaning["groups"][0]["hits"] if meaning["groups"] else []
+        assert material_id in [one["id"] for one in hits], meaning
+        assert next(one for one in hits if one["id"] == material_id)["matched"] in (
+            "meaning",
+            "both",
+        )
+
+    def test_잠긴_부서의_재료는_뜻으로도_안_샌다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """조각 표에는 부서가 없다 — 검색이 권한을 다시 안 걸면 색인이 유출 통로다."""
+        for slug, name in (("sem-a", "A 부서"), ("sem-b", "B 부서")):
+            client.post(
+                "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
+            )
+        made = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "SEMSECRET",
+                "note": MATERIAL_NOTE,
+                "workspace_slug": "sem-a",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        material_id = made.json()["id"]
+        locked = client.patch(
+            "/api/workspaces/sem-a", json={"restricted": True}, headers=admin_headers
+        )
+        assert locked.status_code == 200, locked.text
+        semantic.reindex(db)
+        row = db.execute(
+            text(f"SELECT title, body FROM {semantic.TABLE} WHERE entity_id = :id"),
+            {"id": material_id},
+        ).first()
+        assert row is not None
+        query = f"{row[0]}\n{row[1]}"[:200]
+
+        outsider = _member_of(client, admin_headers, "sem-b")
+        hidden = client.get(
+            "/api/search",
+            params={"q": query, "mode": "similar", "kind": ["material"]},
+            headers=outsider,
+        ).json()
+        assert material_id not in [
+            one["id"] for group in hidden["groups"] for one in group["hits"]
+        ], hidden
+        # 주인에게는 보인다.
+        mine = client.get(
+            "/api/search",
+            params={"q": query, "mode": "similar", "kind": ["material"]},
+            headers=admin_headers,
+        ).json()
+        assert material_id in [one["id"] for group in mine["groups"] for one in group["hits"]]

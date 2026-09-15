@@ -172,7 +172,10 @@ def split(body: str) -> list[str]:
 
 
 def collect(db: Session) -> list[Chunk]:
-    """색인할 산문을 모은다. **이름 열은 여기 없다** — 그건 트라이그램의 일이다."""
+    """색인할 산문을 모은다. **이름 열은 여기 없다** — 그건 트라이그램의 일이다.
+
+    사내 재료는 예외다: 이름이 아니라 분류·별칭·용도·메모를 **말로 엮어** 심는다
+    (`_material_chunks`). 「아연도금 강판」 으로 SECC 를 찾는 것은 이름으로는 안 된다."""
     made: list[Chunk] = []
 
     rows = db.execute(
@@ -217,6 +220,49 @@ def collect(db: Session) -> list[Chunk]:
                 )
             )
 
+    made.extend(_material_chunks(db))
+    return made
+
+
+def _material_chunks(db: Session) -> list[Chunk]:
+    """사내 재료 — **이름이 아니라 「말로 된 설명」 을 심는다**(2026-09-15).
+
+    「SECC」 만 심으면 임베딩에 담길 뜻이 없다. 사람이 뜻으로 묻는 것은 「아연도금
+    냉연강판」 「범퍼에 쓰는 플라스틱」 같은 말이고, 그 답은 분류·등급·별칭·용도·메모에
+    있다. 그래서 그것들을 한 문장으로 엮어 재료 하나에 조각 하나로 둔다. 이름·별칭
+    자체는 트라이그램이 이미 찾는다 — 여기서는 겹쳐도 상관없고(RRF 가 합친다),
+    빠지면 「뜻으로는 못 찾는」 구멍이 된다.
+
+    설명거리가 분류밖에 없는 재료도 심는다 — 「금속 · 강 · SECC」 만으로도 「강판」 은
+    닿는다. 권한은 검색 쪽이 `graph.fetch` 로 다시 건다.
+    """
+    rows = db.execute(
+        text("""
+        SELECT m.id::text, m.record_name, m.alias, m.family, m.category, m.grade,
+               m.details, m.note,
+               (SELECT string_agg(u.value, ', ' ORDER BY u.axis, u.position)
+                  FROM material_uses u WHERE u.material_id = m.id) AS uses
+        FROM materials m
+        WHERE m.deleted_at IS NULL
+        """)
+    ).all()
+    made: list[Chunk] = []
+    for material_id, name, alias, family, category, grade, details, note, uses in rows:
+        parts = [f"{name} — {' · '.join(one for one in (family, category, grade) if one)}"]
+        if details:
+            parts.append(f"세부 {details}")
+        if alias:
+            parts.append(f"별칭 {alias}")
+        if uses:
+            parts.append(f"용도 {uses}")
+        if note:
+            parts.append(note)
+        body = ". ".join(one.strip() for one in parts if one and one.strip())
+        # 긴 메모는 조각으로 — 첫 조각에 분류·별칭·용도가 들어 있으면 된다.
+        for seq, piece in enumerate(split(body)):
+            made.append(
+                Chunk(kind="material", entity_id=material_id, seq=seq, title=name, body=piece)
+            )
     return made
 
 
