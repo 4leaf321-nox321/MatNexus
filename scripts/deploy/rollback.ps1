@@ -51,13 +51,20 @@ $tempPath = $AppPath + '_rollback_tmp'
 if (-not (Test-Path $prevPath)) { throw "직전 버전이 없습니다: $prevPath" }
 if (-not (Test-Path $AppPath)) { throw "현재 설치가 없습니다: $AppPath" }
 
-# 서비스로 돌고 있으면 먼저 멈춘다(deploy.ps1 과 같은 규칙). 끝나면 다시 띄운다.
+# 서비스로 돌고 있으면 먼저 멈춘다(deploy.ps1 과 같은 규칙). 돌고 있던 것만 기억했다가
+# 끝나면 그것만 다시 띄운다 — 옮기지 못해 멈추면 그 자리에서 되살린다.
 $installedServices = @(@('MatNexusWorker', 'MatNexus') | Where-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue })
-foreach ($name in $installedServices) {
-    if ((Get-Service -Name $name).Status -ne 'Stopped') {
-        Write-Log "서비스 $name 멈춤 (롤백 뒤 다시 띄웁니다)"
-        Stop-Service -Name $name -Force
+$runningServices = @($installedServices | Where-Object { (Get-Service -Name $_).Status -ne 'Stopped' })
+function Start-KnownServices([string[]]$names) {
+    foreach ($name in @('MatNexus', 'MatNexusWorker')) {
+        if ($names -notcontains $name) { continue }
+        try { Start-Service -Name $name; Write-Log "서비스 $name 시작" }
+        catch { Write-Warning "서비스 $name 을 시작하지 못했습니다: $_" }
     }
+}
+foreach ($name in $runningServices) {
+    Write-Log "서비스 $name 멈춤 (롤백 뒤 다시 띄웁니다)"
+    Stop-Service -Name $name -Force
 }
 
 # 잠금 확인은 실제로 할 연산(이름 바꾸기)으로 한다. 루트에 파일을 써 보는 것은
@@ -66,7 +73,8 @@ if (Test-Path $tempPath) { Remove-Item -Recurse -Force $tempPath }
 try {
     [System.IO.Directory]::Move($AppPath, $tempPath)
 } catch {
-    throw "$AppPath 를 옮길 수 없습니다. 실행 중인 앱과 그 폴더(하위 폴더 포함)에 들어가 있는 창을 닫고 다시 시도하세요."
+    Start-KnownServices $runningServices
+    throw "$AppPath 를 옮길 수 없습니다. 실행 중인 앱과 그 폴더(하위 폴더 포함)에 들어가 있는 창을 닫고 다시 시도하세요. (서비스는 다시 띄웠습니다)"
 }
 
 # 제3의 이름을 거쳐 교환한다. 중간에 실패해도 두 이름이 같은 내용을 가리키거나
@@ -84,13 +92,11 @@ try {
 
 Write-Log '롤백 완료'
 Write-Host ''
-if ($installedServices.Count -gt 0) {
-    foreach ($name in @('MatNexus', 'MatNexusWorker')) {
-        if ($installedServices -notcontains $name) { continue }
-        Start-Service -Name $name
-        Write-Log "서비스 $name 시작"
-    }
+if ($runningServices.Count -gt 0) {
+    Start-KnownServices $runningServices
     Write-Host '서비스로 다시 떴습니다.'
+} elseif ($installedServices.Count -gt 0) {
+    Write-Host '서비스가 등록돼 있지만 롤백 전에 멈춰 있었습니다 — 띄우려면 .\service.ps1 -Action Start'
 } else {
     Write-Host '시작:'
     Write-Host "  cd '$AppPath'"

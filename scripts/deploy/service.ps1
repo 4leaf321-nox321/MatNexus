@@ -141,6 +141,12 @@ function Install-Services {
 
     $db = Resolve-DbService
 
+    # -NoWorker 로 다시 등록해도 전에 등록한 워커 서비스는 안 지운다 — 지우는 것은 -Action
+    # Uninstall 의 일이다. 다만 남아 있다는 것은 말한다 — 모르고 두면 옛 코드의 워커가 돈다.
+    if ($NoWorker -and (Get-ServiceOrNull 'MatNexusWorker')) {
+        Write-Warning "-NoWorker 인데 MatNexusWorker 서비스가 남아 있습니다. 빼려면: Stop-Service MatNexusWorker ; & '$nssmInstalled' remove MatNexusWorker confirm"
+    }
+
     foreach ($svc in $services) {
         $name = $svc.Name
         if (Get-ServiceOrNull $name) {
