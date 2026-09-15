@@ -19,8 +19,21 @@ from types import FrameType
 
 from sqlalchemy.orm import Session
 
+import app.all_models  # noqa: F401  — 모델을 전부 메타데이터에 올린다(아래 설명)
 from app.database import SessionLocal
 from app.jobs import handlers, queue, schedule
+
+# **워커는 라우터를 안 부른다.** 서버는 `main` 이 라우터를 다 실으면서 모델이 전부
+# 따라오지만, 워커는 핸들러가 손대는 모델만 import 한다. 그래서 어느 모델이 워커가
+# 모르는 표를 외래키로 가리키는 순간 첫 flush 에서 죽는다:
+#
+#     NoReferencedTableError: Foreign key associated with column
+#     'test_runs.commission_item_id' could not find table 'commission_items'
+#
+# 실측(2026-09-15, v1.234): 측정 의뢰가 `test_runs` 에 열 하나를 더했더니 CI 스모크의
+# 워커가 파싱마다 이 오류로 죽었다 — pytest 는 `app.main` 을 먼저 실어 못 봤고, 서버는
+# 멀쩡했고, 화면은 「대기」 만 보였다. 배포용 스크립트에 걸어 둔 규칙(AGENTS.md,
+# `test_scripts_models`)이 워커에도 똑같이 필요했다.
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +66,18 @@ def run_once(session: Session | None = None) -> bool:
         if job is None:
             return False
 
-        logger.info("작업 시작 %s (%s, 시도 %s)", job.id, job.kind, job.attempts)
+        # **이름을 먼저 떼어 둔다.** 핸들러가 flush 에서 죽으면 세션은 롤백 대기
+        # 상태고, 그때 `job.id` 를 읽는 것도 DB 를 건드리는 일이라 또 터진다 —
+        # except 절 안에서 터지면 워커가 통째로 죽는다(실측 2026-09-15: 파싱 하나가
+        # NoReferencedTableError 로 죽자 워커가 로그 한 줄을 남기다 사라졌고, 그 뒤
+        # 모든 시험이 「대기」 로 남았다).
+        job_id, job_kind = job.id, job.kind
+        logger.info("작업 시작 %s (%s, 시도 %s)", job_id, job_kind, job.attempts)
         try:
-            handlers.get(job.kind)(db, job.payload)
+            handlers.get(job_kind)(db, job.payload)
         except Exception as exc:  # 핸들러의 어떤 실패도 워커를 죽이지 않는다
-            logger.exception("작업 실패 %s (%s)", job.id, job.kind)
             db.rollback()
+            logger.exception("작업 실패 %s (%s)", job_id, job_kind)
             queue.fail(db, job, f"{type(exc).__name__}: {exc}")
         else:
             queue.complete(db, job)

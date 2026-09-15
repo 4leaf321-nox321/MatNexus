@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -210,6 +212,39 @@ def test_failed_job_is_retried_then_marked_failed(db: Session) -> None:
     assert len(calls) == 2
 
     handlers._HANDLERS.pop("test.always_fails")
+
+
+def test_flush_failure_does_not_kill_the_worker(db: Session) -> None:
+    """**flush 에서 죽은 핸들러도 워커를 못 죽인다.**
+
+    실측(2026-09-15): 파싱 핸들러가 flush 에서 NoReferencedTableError 로 죽자, except
+    절이 `job.id` 를 읽는 순간 롤백 대기 세션이 PendingRollbackError 를 또 던져
+    워커 프로세스가 통째로 사라졌다. 그 뒤 모든 시험이 「대기」 로 남았다. 여기서는
+    세션을 그 상태로 만드는 핸들러로 같은 길을 밟는다.
+    """
+    from app.jobs.handlers import handler
+    from app.modules.workspaces.models import WorkspaceMember
+
+    @handler("test.dies_in_flush")
+    def _dies_in_flush(session: Session, payload: dict[str, object]) -> None:
+        # 없는 부서·계정을 가리키는 행 — flush 가 FK 로 거절하고 세션이 롤백 대기가 된다.
+        session.add(WorkspaceMember(workspace_id=uuid.uuid4(), user_id=uuid.uuid4()))
+        session.flush()
+
+    job = queue.enqueue(db, kind="test.dies_in_flush", max_attempts=1)
+    db.commit()
+    job_id = job.id
+
+    # 예외가 여기까지 오면 워커가 죽은 것이다 — 「처리했다」 로 돌아와야 한다.
+    assert worker.run_once(session=db) is True
+    failed = db.get(type(job), job_id)
+    assert failed is not None
+    assert failed.status == "failed"
+    assert "IntegrityError" in (failed.last_error or "")
+    # 세션은 다음 작업을 받을 수 있는 상태다.
+    assert worker.run_once(session=db) is False
+
+    handlers._HANDLERS.pop("test.dies_in_flush")
 
 
 def test_rules_can_be_turned_off_and_stay_off(

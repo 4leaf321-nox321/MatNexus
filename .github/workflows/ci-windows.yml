@@ -207,8 +207,13 @@ jobs:
         working-directory: backend
         shell: pwsh
         run: |
-          Start-Process -FilePath python -ArgumentList 'run.py' -WindowStyle Hidden
-          Start-Process -FilePath python -ArgumentList 'run_worker.py' -WindowStyle Hidden
+          # **출력을 파일로 남긴다.** 창 없이 띄우면 워커가 왜 죽었는지 어디에도 안 남는다 —
+          # 실측(2026-09-15): 워커가 첫 파싱에서 죽었는데 스모크는 「완료」 를 60초 기다리다
+          # 실패했고, 로그가 없어 로컬에서 처음부터 다시 재현해야 했다.
+          Start-Process -FilePath python -ArgumentList 'run.py' -WindowStyle Hidden `
+            -RedirectStandardOutput smoke-server.out -RedirectStandardError smoke-server.err
+          Start-Process -FilePath python -ArgumentList 'run_worker.py' -WindowStyle Hidden `
+            -RedirectStandardOutput smoke-worker.out -RedirectStandardError smoke-worker.err
           # 준비될 때까지 기다린다. 고정 sleep 은 느리거나 모자라거나 둘 중 하나다.
           $deadline = (Get-Date).AddSeconds(60)
           while ((Get-Date) -lt $deadline) {
@@ -264,5 +269,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-흔적
-          path: frontend/test-results
+          path: |
+            frontend/test-results
+            backend/smoke-*.out
+            backend/smoke-*.err
           retention-days: 7

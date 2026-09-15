@@ -44,3 +44,17 @@ def test_모델을_전부_등록시킨다(script: Path) -> None:
         f"NoReferencedTableError 로 죽습니다 — 앱에서는 안 드러나고 "
         f"배포 뒤 이 스크립트를 돌릴 때만 터집니다."
     )
+
+
+def test_워커도_모델을_전부_등록시킨다() -> None:
+    """워커는 라우터를 안 부르므로 서버와 같은 함정에 빠진다.
+
+    실측(2026-09-15, v1.234): `test_runs.commission_item_id` 가 생기자 CI 스모크의
+    워커가 파싱마다 NoReferencedTableError 로 죽었다 — pytest 는 `app.main` 을 먼저
+    실어 못 봤다.
+    """
+    worker = SCRIPTS.parent / "app" / "jobs" / "worker.py"
+    assert "app.all_models" in worker.read_text(encoding="utf-8"), (
+        "app/jobs/worker.py 가 `import app.all_models` 를 하지 않습니다 — 워커가 모르는 "
+        "표를 가리키는 외래키가 생기는 순간 첫 flush 에서 죽습니다."
+    )
