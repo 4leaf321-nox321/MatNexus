@@ -16,6 +16,7 @@ import {
   ShieldMinus,
   ShieldOff,
   ShieldPlus,
+  ClipboardList,
   Trash2,
   UserCheck,
   UserPlus,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react'
 
 import { DeleteAccountDialog } from '@/modules/accounts/DeleteAccountDialog'
+import { ExportIdsDialog } from '@/modules/accounts/ExportIdsDialog'
 import { HomeWorkspaceDialog } from '@/modules/accounts/HomeWorkspaceDialog'
 import { accountsApi } from '@/modules/accounts/api'
 import type { Account, AccountStatus } from '@/modules/accounts/api'
@@ -78,6 +80,7 @@ export default function AccountsAdminPage() {
   const [rejecting, setRejecting] = useState<Account | null>(null)
   const [deleting, setDeleting] = useState<Account | null>(null)
   const [creating, setCreating] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [homing, setHoming] = useState<Account | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -135,10 +138,20 @@ export default function AccountsAdminPage() {
         title="계정 관리"
         description="가입 신청을 승인하고 계정 상태를 관리합니다."
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <UserPlus className="size-4" />
-            계정 직접 생성
-          </Button>
+          <div className="flex gap-2">
+            {/* 가입한 사람의 아이디를 한 줄로 — 「전체」 탭에서만. 대기 탭에서 보이면 대기자만
+                내보내는 것으로 읽힌다. */}
+            {tab === 'all' && (
+              <Button variant="outline" onClick={() => setExporting(true)}>
+                <ClipboardList className="size-4" />
+                아이디 내보내기
+              </Button>
+            )}
+            <Button onClick={() => setCreating(true)}>
+              <UserPlus className="size-4" />
+              계정 직접 생성
+            </Button>
+          </div>
         }
       />
 
@@ -364,6 +377,7 @@ export default function AccountsAdminPage() {
         />
       )}
 
+      <ExportIdsDialog open={exporting} onClose={() => setExporting(false)} />
       <CreateAccountDialog
         open={creating}
         workspaces={(workspaces.data ?? []).map((w) => ({ slug: w.slug, name: w.name }))}

@@ -210,6 +210,52 @@ def test_pending_list_shows_applicants(
     assert {row["email"] for row in pending.json()} == {"hong", "kim"}
 
 
+def test_아이디_내보내기는_전부를_한_줄로_활성만_기본(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """목록은 100 개 상한이라 화면이 모으면 뒤가 잘린다 — 서버가 전부 모아 `;` 로 잇는다.
+    「가입한 사람」 은 활성 계정이다 — 승인 대기·정지는 기본에서 빠진다."""
+    for at in range(120):
+        signup(client, email=f"bulk{at:03d}@example.com")
+    for at in range(120):
+        user = db.scalar(select(User).where(User.email == f"bulk{at:03d}@example.com"))
+        assert user is not None
+        user.status = "active" if at < 110 else "pending"
+    db.commit()
+
+    out = client.get("/api/accounts/ids", headers=admin_headers)
+    assert out.status_code == 200, out.text
+    body = out.json()
+    # 관리자 자신(admin) + 활성 110 — 110 이 100 상한을 넘는 것이 이 시험의 요점이다.
+    assert body["count"] == 111
+    assert body["ids"] == sorted(body["ids"])
+    assert "bulk109@example.com" in body["ids"] and "bulk110@example.com" not in body["ids"]
+    assert body["text"] == ";".join(body["ids"])
+    assert body["text"].count(";") == 110
+
+    everyone = client.get(
+        "/api/accounts/ids?include_inactive=true", headers=admin_headers
+    ).json()
+    assert everyone["count"] == 121
+    assert "bulk119@example.com" in everyone["ids"]
+
+    # 시스템 관리자만.
+    signup(client, email="plain")
+    plain = db.scalar(select(User).where(User.email == "plain"))
+    assert plain is not None
+    plain.status = "active"
+    db.commit()
+    token = client.post(
+        "/api/auth/login", json={"email": "plain", "password": SIGNUP["password"]}
+    ).json()["access_token"]
+    assert (
+        client.get(
+            "/api/accounts/ids", headers={"Authorization": f"Bearer {token}"}
+        ).status_code
+        == 403
+    )
+
+
 # --- 대표 소속 ----------------------------------------------------------------
 #
 # **로그인해서 처음 서는 자리다.** 이 값이 없으면 `memberships[0]`, 즉 이름 순

@@ -559,6 +559,14 @@ def active_system_admin_count(db: Session) -> int:
     )
 
 
+def account_ids(db: Session, *, include_inactive: bool) -> list[str]:
+    """아이디 전부, 아이디순. 기본은 `active` 만."""
+    query = select(User.email).order_by(User.email)
+    if not include_inactive:
+        query = query.where(User.status == "active")
+    return [str(one) for one in db.scalars(query)]
+
+
 def list_accounts(db: Session, *, status: str | None, limit: int, offset: int) -> list[User]:
     query = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
     if status:

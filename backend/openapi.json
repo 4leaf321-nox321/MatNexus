@@ -1,6 +1,33 @@
 {
   "components": {
     "schemas": {
+      "AccountIdsOut": {
+        "description": "가입한 사람의 아이디를 **한 줄로** — 메일 수신자 칸이나 다른 시스템의 계정 등록에\n붙여 넣는 용도(2026-09-15). 목록은 쪽 단위(최대 100)라 화면이 모으면 뒤가 잘린다 —\n서버가 전부 모아 준다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "ids",
+          "text"
+        ],
+        "title": "AccountIdsOut",
+        "type": "object"
+      },
       "AccountOut": {
         "properties": {
           "created_at": {
@@ -27252,6 +27279,52 @@
           }
         },
         "summary": "Create Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/ids": {
+      "get": {
+        "description": "가입한 사람의 아이디 전부 — `id1;id2;…` 한 줄. **쪽이 없다.** 목록 API 는 100 개가\n상한이라 화면이 모으면 101 번째부터 조용히 빠진다. 기본은 활성 계정만 — 승인 대기와\n정지된 사람은 「가입한 사람」 이 아니다.",
+        "operationId": "account_ids_api_accounts_ids_get",
+        "parameters": [
+          {
+            "description": "승인 대기·정지 계정도 넣을지. 기본은 활성만",
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "승인 대기·정지 계정도 넣을지. 기본은 활성만",
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountIdsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Account Ids",
         "tags": [
           "accounts"
         ]

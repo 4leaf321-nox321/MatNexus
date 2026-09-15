@@ -16,6 +16,7 @@ from app.database import get_db
 from app.modules.accounts import services
 from app.modules.accounts.models import User
 from app.modules.accounts.schemas import (
+    AccountIdsOut,
     AccountOut,
     AccountSummaryOut,
     ApproveRequest,
@@ -53,6 +54,21 @@ def account_summary(
 ) -> AccountSummaryOut:
     """활성 시스템 관리자가 몇 명인가. 1명이면 계정 화면이 안내 한 줄을 띄운다."""
     return AccountSummaryOut(active_system_admins=services.active_system_admin_count(db))
+
+
+@router.get("/ids", response_model=AccountIdsOut)
+def account_ids(
+    include_inactive: bool = Query(
+        default=False, description="승인 대기·정지 계정도 넣을지. 기본은 활성만"
+    ),
+    _: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> AccountIdsOut:
+    """가입한 사람의 아이디 전부 — `id1;id2;…` 한 줄. **쪽이 없다.** 목록 API 는 100 개가
+    상한이라 화면이 모으면 101 번째부터 조용히 빠진다. 기본은 활성 계정만 — 승인 대기와
+    정지된 사람은 「가입한 사람」 이 아니다."""
+    ids = services.account_ids(db, include_inactive=include_inactive)
+    return AccountIdsOut(count=len(ids), ids=ids, text=";".join(ids))
 
 
 @router.get("", response_model=list[AccountOut])

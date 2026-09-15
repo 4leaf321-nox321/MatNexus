@@ -17,6 +17,7 @@ type TemporaryPassword = components['schemas']['TemporaryPasswordResponse']
 type SignupRequest = components['schemas']['SignupRequest']
 type CreateAccountRequest = components['schemas']['CreateAccountRequest']
 export type AccountSummary = components['schemas']['AccountSummaryOut']
+export type AccountIds = components['schemas']['AccountIdsOut']
 type SystemAdminRequest = components['schemas']['SystemAdminRequest']
 
 export const accountsApi = {
@@ -27,6 +28,10 @@ export const accountsApi = {
 
   /** 활성 시스템 관리자 수. **서버가 센다** — 목록은 쪽 단위라 화면이 세면 틀린다. */
   summary: () => api.get<AccountSummary>('/accounts/summary'),
+
+  /** 가입한 사람의 아이디 전부 — `id1;id2;…`. 서버가 전부 모은다(목록은 100 개 상한). */
+  ids: (includeInactive = false) =>
+    api.get<AccountIds>(includeInactive ? '/accounts/ids?include_inactive=true' : '/accounts/ids'),
 
   create: (payload: CreateAccountRequest) =>
     api.post<TemporaryPassword>('/accounts', payload),
