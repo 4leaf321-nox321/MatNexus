@@ -209,7 +209,7 @@ jobs:
         run: |
           # **`-RedirectStandardOutput` 을 쓰지 않는다.** 그렇게 띄우면 이 단계의 pwsh 가 끝날 때
           # 자식도 함께 죽는다(실측 2026-09-15: health 는 200 이었는데 다음 단계에서 접속 거부).
-          # 서버·워커의 기록은 앱 로그(backend\logspp.log)에 있고, 실패하면 그것을 올린다.
+          # 서버·워커의 기록은 앱 로그(backend/logs/app.log)에 있고, 실패하면 그것을 올린다.
           Start-Process -FilePath python -ArgumentList 'run.py' -WindowStyle Hidden
           Start-Process -FilePath python -ArgumentList 'run_worker.py' -WindowStyle Hidden
           # 준비될 때까지 기다린다. 고정 sleep 은 느리거나 모자라거나 둘 중 하나다.
