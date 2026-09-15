@@ -192,6 +192,15 @@ Write-Log '마이그레이션 적용'
 Push-Location (Join-Path $AppPath 'backend')
 try {
     Invoke-Native '마이그레이션 실패' { & $backendPython -m alembic upgrade head }
+    # **의미 검색 표도 여기서.** 위 2번이 deploy.ps1 을 -SkipMigrations 로 부르는 바람에 그쪽의
+    # 「의미 검색 표」 단계까지 건너뛰어, 첫 설치는 갱신 배포를 한 번 할 때까지 표가 없었다
+    # (실측 2026-09-16, 새 운영 서버 — 워커가 색인을 조용히 건너뛰었다). pgvector 가 없으면
+    # 스크립트가 조용히 넘어가므로 실패로 치지 않는다.
+    try {
+        Invoke-Native '의미 검색 표 준비 실패' { & $backendPython scripts\ensure_semantic_schema.py }
+    } catch {
+        Write-Warning "의미 검색 표를 준비하지 못했습니다(검색은 글자로만 돕니다): $_"
+    }
 } finally {
     Pop-Location
 }
