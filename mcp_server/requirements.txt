@@ -2,5 +2,9 @@
 # 올릴 수 있고(ReportArchive 는 그것으로 FastAPI 와 충돌했다), 그때 앱이 인질이
 # 되면 안 된다. 실측(2026-09-06): mcp 2.1.1 은 starlette 1.6.0 · pydantic 2.13.5 로
 # 우리 백엔드와 충돌하지 않는다 — 그래도 분리는 유지한다.
-mcp>=2.1.0
+# 상한을 둔다 — 2.2.0 까지는 `MCPServer.run(transport='streamable-http', host=, port=,
+# transport_security=)` 가 그대로다(실측 2026-09-15, 진짜 클라이언트로 initialize·
+# list_tools 57개). 3.x 가 나오면 그때 다시 본다 — 폐쇄망 zip 이 모르는 판을 실어 가면
+# 서버에서 처음 터진다.
+mcp>=2.1.0,<3
 httpx>=0.27.0
