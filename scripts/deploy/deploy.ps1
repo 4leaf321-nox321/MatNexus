@@ -123,7 +123,7 @@ if ($isFirstRun) { Write-Log "$AppPath 에 기존 설치가 없습니다 — 첫
 # **멈추는 것은 교체 직전이다.** 여기서 멈추면 zip 이 없거나 wheel 이 빠진 채 실패했을
 # 때 서버가 내려간 채로 끝난다 — 「운영 폴더는 그대로입니다」 가 거짓이 된다. 돌고 있던
 # 것만 기억해 뒀다가 배포가 끝나면 그것만 다시 띄운다(일부러 멈춰 둔 서비스는 그대로).
-$serviceNames = @('MatNexusWorker', 'MatNexus')   # 멈추는 차례 — 워커부터
+$serviceNames = @('MatNexusMcp', 'MatNexusWorker', 'MatNexus')   # 멈추는 차례 — MCP·워커부터
 $installedServices = @($serviceNames | Where-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue })
 $runningServices = @($installedServices | Where-Object { (Get-Service -Name $_).Status -ne 'Stopped' })
 if ($runningServices.Count -gt 0) {
@@ -131,8 +131,8 @@ if ($runningServices.Count -gt 0) {
 }
 
 function Start-KnownServices([string[]]$names) {
-    # 서버부터, 워커는 그 다음 — 등록된 것 가운데 돌고 있던 것만.
-    foreach ($name in @('MatNexus', 'MatNexusWorker')) {
+    # 서버부터, 워커·MCP 는 그 다음 — 등록된 것 가운데 돌고 있던 것만.
+    foreach ($name in @('MatNexus', 'MatNexusWorker', 'MatNexusMcp')) {
         if ($names -notcontains $name) { continue }
         try {
             Start-Service -Name $name
@@ -582,7 +582,7 @@ if ($installedServices.Count -gt 0) {
         Write-Host ("배포 전에 멈춰 있던 서비스는 그대로 둡니다: " + ($stayed -join ', ') + " — 띄우려면 .\service.ps1 -Action Start")
     }
     Write-Host "  상태:  .\service.ps1 -AppPath '$AppPath' -Action Status"
-    Write-Host "  로그:  $($AppPath)_data\logs\service-server.log · service-worker.log"
+    Write-Host "  로그:  $($AppPath)_data\logs\service-server.log · service-worker.log · service-mcp.log"
     if ($installedServices -notcontains 'MatNexusWorker') {
         Write-Host '  워커는 서비스가 아닙니다 — 창에서 .\run_worker.ps1 을 다시 띄우세요(옛 워커는 새 작업 종류를 모릅니다).'
     }

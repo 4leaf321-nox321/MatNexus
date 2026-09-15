@@ -36,6 +36,41 @@ import retry_plan
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
+def _load_env_defaults() -> None:
+    """`backend/.env` 의 값을 **환경변수가 비어 있을 때만** 채운다.
+
+    창으로 띄울 때는 `run_mcp.ps1` 이 .env 를 읽어 `MATNEXUS_*` 를 준다. 서비스로 띄우면
+    (service.ps1, 2026-09-15) 그 스크립트를 안 거치므로 여기서 같은 일을 한다 — 등록할 때
+    값을 박아 두면 .env 를 고쳐도 서비스는 옛 포트를 본다. 이미 있는 환경변수가 이긴다.
+
+        PORT               → MATNEXUS_API_BASE  (http://127.0.0.1:<PORT>/api)
+        MCP_PORT           → MATNEXUS_MCP_PORT
+        MCP_HOST           → MATNEXUS_MCP_HOST
+        MCP_ALLOWED_HOSTS  → MATNEXUS_MCP_ALLOWED_HOSTS
+    """
+    env_file = Path(__file__).resolve().parent.parent / "backend" / ".env"
+    if not env_file.exists():
+        return
+    values: dict[str, str] = {}
+    for raw in env_file.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    if "MATNEXUS_API_BASE" not in os.environ and values.get("PORT"):
+        os.environ["MATNEXUS_API_BASE"] = f"http://127.0.0.1:{values['PORT']}/api"
+    for source, target in (
+        ("MCP_PORT", "MATNEXUS_MCP_PORT"),
+        ("MCP_HOST", "MATNEXUS_MCP_HOST"),
+        ("MCP_ALLOWED_HOSTS", "MATNEXUS_MCP_ALLOWED_HOSTS"),
+    ):
+        if target not in os.environ and values.get(source):
+            os.environ[target] = values[source]
+
+
+_load_env_defaults()
+
 #: 백엔드 API. 같은 기계에서 도는 것이 기본이다.
 API_BASE = os.environ.get("MATNEXUS_API_BASE", "http://127.0.0.1:8010/api").rstrip("/")
 

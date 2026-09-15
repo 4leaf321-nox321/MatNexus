@@ -23,8 +23,13 @@ NSSM(bin\nssm.exe, 2.24, 퍼블릭 도메인)이 python.exe 를 감싼다. 폐�
 
 ## 등록되는 것
 
-    MatNexus         backend\run.py        (API + 화면)
-    MatNexusWorker   backend\run_worker.py (작업 큐 — 파싱·처리·알림)
+    MatNexus         backend\run.py          (API + 화면)
+    MatNexusWorker   backend\run_worker.py   (작업 큐 — 파싱·처리·알림)
+    MatNexusMcp      mcp_server\server.py    (AI 연결 — 다른 가상환경 `_venvs\mcp_server`)
+
+MCP 는 창 방식(`run_mcp.ps1`)이 읽어 주던 `backend\.env` 의 PORT·MCP_PORT·MCP_HOST·
+MCP_ALLOWED_HOSTS 를 `server.py` 가 직접 읽는다(환경변수가 비어 있을 때만) — 등록할 때
+값을 박아 두면 .env 를 고쳐도 서비스는 옛 포트를 보기 때문이다. `-NoMcp` 로 뺀다.
 
 둘 다 지연 자동 시작(부팅 뒤 PostgreSQL 이 먼저 뜰 시간을 준다), PostgreSQL 서비스가
 있으면 그것에 의존을 걸고, 죽으면 10초 뒤 되살린다. stdout/stderr 는
@@ -46,6 +51,8 @@ param(
     [string]$Action = 'Status',
     # 워커를 서비스로 안 두고 싶을 때(예: 워커를 다른 PC 에서 돌린다).
     [switch]$NoWorker,
+    # MCP(AI 연결)를 서비스로 안 두고 싶을 때. 없어도 앱은 멀쩡히 돈다.
+    [switch]$NoMcp,
     # PostgreSQL 서비스 이름. 비우면 'postgresql*' 로 찾는다. 'none' 이면 의존을 안 건다.
     [string]$DbService
 )
@@ -80,7 +87,9 @@ $AppPath = $AppPath.TrimEnd('\')
 $toolsPath = $AppPath + '_tools'
 $dataPath = $AppPath + '_data'
 $venvPython = Join-Path ($AppPath + '_venvs') 'backend\Scripts\python.exe'
+$mcpPython = Join-Path ($AppPath + '_venvs') 'mcp_server\Scripts\python.exe'
 $backend = Join-Path $AppPath 'backend'
+$mcpDir = Join-Path $AppPath 'mcp_server'
 $logDir = Join-Path $dataPath 'logs'
 
 # nssm 은 등록할 때 패키지에서 _tools 로 복사한다. 그 뒤로는 _tools 것을 쓴다 —
@@ -88,13 +97,21 @@ $logDir = Join-Path $dataPath 'logs'
 $nssmInstalled = Join-Path $toolsPath 'nssm.exe'
 $nssmPackaged = Join-Path $PSScriptRoot 'bin\nssm.exe'
 
+# 차례가 곧 시작 순서다(멈출 때는 역순). Python·Dir 이 서비스마다 다르다 — MCP 는 제 가상환경.
 $services = @(
     @{ Name = 'MatNexus'; Display = 'MatNexus API'; Script = 'run.py'; Log = 'service-server.log'
+       Python = $venvPython; Dir = $backend
        Description = 'MatNexus 물성 데이터 플랫폼 — API 와 화면' }
 )
 if (-not $NoWorker) {
     $services += @{ Name = 'MatNexusWorker'; Display = 'MatNexus Worker'; Script = 'run_worker.py'; Log = 'service-worker.log'
+                    Python = $venvPython; Dir = $backend
                     Description = 'MatNexus 작업 큐 워커 — 파싱·처리·알림' }
+}
+if (-not $NoMcp) {
+    $services += @{ Name = 'MatNexusMcp'; Display = 'MatNexus MCP'; Script = 'server.py'; Log = 'service-mcp.log'
+                    Python = $mcpPython; Dir = $mcpDir
+                    Description = 'MatNexus AI 연결(MCP) — 물성을 AI 가 직접 묻는 자리' }
 }
 
 function Get-ServiceOrNull([string]$name) {
@@ -133,6 +150,10 @@ function Install-Services {
     if (-not (Test-Path (Join-Path $backend 'run.py'))) { throw "backend\run.py 가 없습니다: $backend" }
     if (-not (Test-Path (Join-Path $backend '.env'))) { throw "backend\.env 가 없습니다. install.ps1 로 먼저 만드세요." }
     if (-not (Test-Path $nssmPackaged)) { throw "nssm.exe 가 패키지에 없습니다: $nssmPackaged" }
+    foreach ($svc in $services) {
+        if (-not (Test-Path $svc.Python)) { throw "$($svc.Name) 의 가상환경이 없습니다: $($svc.Python) — deploy.ps1 을 먼저 실행하세요(-NoMcp 로 뺄 수도 있습니다)." }
+        if (-not (Test-Path (Join-Path $svc.Dir $svc.Script))) { throw "$($svc.Name) 의 진입점이 없습니다: $(Join-Path $svc.Dir $svc.Script)" }
+    }
 
     New-Item -ItemType Directory -Force -Path $toolsPath | Out-Null
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -146,6 +167,9 @@ function Install-Services {
     if ($NoWorker -and (Get-ServiceOrNull 'MatNexusWorker')) {
         Write-Warning "-NoWorker 인데 MatNexusWorker 서비스가 남아 있습니다. 빼려면: Stop-Service MatNexusWorker ; & '$nssmInstalled' remove MatNexusWorker confirm"
     }
+    if ($NoMcp -and (Get-ServiceOrNull 'MatNexusMcp')) {
+        Write-Warning "-NoMcp 인데 MatNexusMcp 서비스가 남아 있습니다. 빼려면: Stop-Service MatNexusMcp ; & '$nssmInstalled' remove MatNexusMcp confirm"
+    }
 
     foreach ($svc in $services) {
         $name = $svc.Name
@@ -154,14 +178,14 @@ function Install-Services {
             $state = (Get-Service $name).Status
             if ($state -eq 'Running') { Stop-Service $name -Force; Write-Log "$name 멈춤" }
         } else {
-            Invoke-Native "$name 등록 실패" { & $nssmInstalled install $name $venvPython $svc.Script }
+            Invoke-Native "$name 등록 실패" { & $nssmInstalled install $name $svc.Python $svc.Script }
             Write-Log "$name 등록"
         }
         $logPath = Join-Path $logDir $svc.Log
         $settings = @(
-            @('Application', $venvPython),
+            @('Application', $svc.Python),
             @('AppParameters', $svc.Script),
-            @('AppDirectory', $backend),
+            @('AppDirectory', $svc.Dir),
             @('DisplayName', $svc.Display),
             @('Description', $svc.Description),
             @('Start', 'SERVICE_DELAYED_AUTO_START'),
@@ -243,7 +267,7 @@ function Show-Status {
     }
     Write-Host ''
     if (Get-ServiceOrNull 'MatNexus') {
-        Write-Host '  멈추기/시작:  Stop-Service MatNexus ; Start-Service MatNexus   (워커는 MatNexusWorker)'
+        Write-Host '  멈추기/시작:  Stop-Service MatNexus ; Start-Service MatNexus   (워커는 MatNexusWorker, MCP 는 MatNexusMcp)'
         Write-Host "  또는:         .\service.ps1 -AppPath '$AppPath' -Action Restart"
     }
 }

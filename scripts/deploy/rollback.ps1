@@ -53,10 +53,10 @@ if (-not (Test-Path $AppPath)) { throw "현재 설치가 없습니다: $AppPath"
 
 # 서비스로 돌고 있으면 먼저 멈춘다(deploy.ps1 과 같은 규칙). 돌고 있던 것만 기억했다가
 # 끝나면 그것만 다시 띄운다 — 옮기지 못해 멈추면 그 자리에서 되살린다.
-$installedServices = @(@('MatNexusWorker', 'MatNexus') | Where-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue })
+$installedServices = @(@('MatNexusMcp', 'MatNexusWorker', 'MatNexus') | Where-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue })
 $runningServices = @($installedServices | Where-Object { (Get-Service -Name $_).Status -ne 'Stopped' })
 function Start-KnownServices([string[]]$names) {
-    foreach ($name in @('MatNexus', 'MatNexusWorker')) {
+    foreach ($name in @('MatNexus', 'MatNexusWorker', 'MatNexusMcp')) {
         if ($names -notcontains $name) { continue }
         try { Start-Service -Name $name; Write-Log "서비스 $name 시작" }
         catch { Write-Warning "서비스 $name 을 시작하지 못했습니다: $_" }
