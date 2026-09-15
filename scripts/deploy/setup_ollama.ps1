@@ -22,9 +22,25 @@ SYSTEM 으로 돌면 모델이 `C:\Windows\System32\config\systemprofile\.ollama
 「분명히 받았는데 서비스는 없다고 한다」 가 된다. `OLLAMA_MODELS` 를 기계 전역
 변수로 박아 양쪽이 같은 자리를 보게 한다.
 
+## 드라이브를 바꾸려면 (2026-09-15)
+
+둘이 따로다 — **프로그램**(≈1 GB, 기본은 `%LOCALAPPDATA%\Programs\Ollama`)과
+**모델**(bge-m3 1.2 GB, `-ModelPath`). 디스크를 먹는 것은 모델이고 늘어나는 것도 모델이다.
+
+    # 처음 설치할 때 — 둘 다 D: 로
+    .\setup_ollama.ps1 -InstallDir 'D:\Ollama' -ModelPath 'D:\MatNexus\ollama-models'
+
+    # 이미 설치돼 있고 모델만 옮길 때 — 받아 둔 모델을 그대로 옮긴다(다시 안 받는다)
+    .\setup_ollama.ps1 -ModelPath 'D:\MatNexus\ollama-models'
+
+옛 모델 폴더(기계 변수 `OLLAMA_MODELS` 가 가리키던 곳)에 파일이 있으면 새 자리로
+**옮기고** 나서 변수를 바꾼다. 폐쇄망 서버는 1.2 GB 를 다시 받을 길이 없어서
+그렇다. 프로그램 자체를 옮기는 것은 재설치다 — 지우고 `-InstallDir` 로 다시 깐다.
+
 사용:
   .\setup_ollama.ps1                          # 설치 + 서비스 + bge-m3
   .\setup_ollama.ps1 -Model bge-m3 -Port 11434
+  .\setup_ollama.ps1 -InstallDir 'D:\Ollama' -ModelPath 'D:\MatNexus\ollama-models'
   .\setup_ollama.ps1 -SkipService             # 서비스 없이 지금 세션에서만
   .\setup_ollama.ps1 -CheckOnly               # 아무것도 안 바꾸고 상태만 본다
 #>
@@ -33,6 +49,9 @@ param(
     [string]$Model = 'bge-m3',
     [int]$Port = 11434,
     [string]$ModelPath = 'C:\ProgramData\MatNexus\ollama-models',
+    # 프로그램을 깔 자리. 비우면 설치본 기본(%LOCALAPPDATA%\Programs\Ollama). 처음 설치할
+    # 때만 듣는다 — 이미 깔린 것은 옮기지 않는다(재설치가 답이다).
+    [string]$InstallDir,
     [string]$TaskName = 'MatNexus-Ollama',
     [switch]$SkipService,
     [switch]$CheckOnly
@@ -66,6 +85,14 @@ function Get-OllamaExe {
         "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe",
         "$env:ProgramFiles\Ollama\ollama.exe"
     )
+    if ($InstallDir) { $candidates = @((Join-Path $InstallDir 'ollama.exe')) + $candidates }
+    # 전에 -InstallDir 로 깐 자리 — 작업 스케줄러가 기억하고 있다.
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        foreach ($action in $task.Actions) {
+            if ($action.Execute -and (Test-Path $action.Execute)) { $candidates += $action.Execute }
+        }
+    }
     foreach ($one in $candidates) { if (Test-Path $one) { return $one } }
     return $null
 }
@@ -110,7 +137,8 @@ if (-not $exe) {
     # winget 이 있으면 그쪽이 낫다 — 나중에 올릴 때도 같은 길이다. 윈도우 서버
     # 이미지에는 없는 일이 흔해서, 없으면 설치본을 직접 받는다.
     $winget = Get-Command winget -ErrorAction SilentlyContinue
-    if ($winget) {
+    # winget 은 설치 자리를 못 고른다 — -InstallDir 를 줬으면 설치본을 직접 받는다.
+    if ($winget -and -not $InstallDir) {
         Invoke-Native 'winget 설치 실패' {
             & winget install --id Ollama.Ollama -e --silent --accept-source-agreements --accept-package-agreements
         }
@@ -126,7 +154,9 @@ if (-not $exe) {
             $ProgressPreference = $previousProgress
         }
         Write-Log '조용히 설치합니다 (Inno Setup).'
-        $run = Start-Process -FilePath $temp -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+        $setupArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
+        if ($InstallDir) { $setupArgs += "/DIR=$InstallDir"; Write-Log "설치 자리: $InstallDir" }
+        $run = Start-Process -FilePath $temp -ArgumentList $setupArgs -Wait -PassThru
         if ($run.ExitCode -ne 0) { throw "설치본이 실패했습니다 (exit $($run.ExitCode))" }
     }
     $exe = Get-OllamaExe
@@ -139,6 +169,26 @@ if (-not $exe) {
 # --- 2. 모델 자리 ------------------------------------------------------------
 # **기계 전역이어야 한다.** SYSTEM 으로 도는 서비스와 사람이 손으로 돌리는
 # `ollama pull` 이 같은 자리를 봐야 「받았는데 없다」 가 안 생긴다.
+#
+# **자리가 바뀌면 받아 둔 모델을 옮긴다.** 변수만 바꾸면 새 자리는 비어 있고, 폐쇄망
+# 서버는 1.2 GB 를 다시 받을 길이 없다. 옮기는 동안은 엔진을 멈춘다 — 열린 파일은 못
+# 옮긴다.
+$previousPath = [Environment]::GetEnvironmentVariable('OLLAMA_MODELS', 'Machine')
+$resolvedNew = [System.IO.Path]::GetFullPath($ModelPath).TrimEnd('\')
+$moving = $previousPath -and ([System.IO.Path]::GetFullPath($previousPath).TrimEnd('\') -ne $resolvedNew) `
+    -and (Test-Path $previousPath) -and (Get-ChildItem $previousPath -Force -ErrorAction SilentlyContinue)
+if ($moving) {
+    Write-Log "모델 자리를 옮깁니다: $previousPath → $ModelPath"
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($task -and $task.State -eq 'Running') { Stop-ScheduledTask -TaskName $TaskName; Start-Sleep -Seconds 2 }
+    Get-Process ollama* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force $ModelPath | Out-Null
+    # robocopy /MOVE — 같은 드라이브면 이름만 바꾸고, 다른 드라이브면 복사 뒤 지운다.
+    # 종료 코드 8 미만이 성공이다(1 = 복사함, 2 = 추가 파일, 4 = 불일치).
+    & robocopy $previousPath $ModelPath /E /MOVE /R:2 /W:2 /NFL /NDL /NJH /NJS | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "모델 폴더를 옮기지 못했습니다 (robocopy exit $LASTEXITCODE). 옛 자리는 그대로입니다: $previousPath" }
+    Write-Log '옮겼습니다.'
+}
 if (-not (Test-Path $ModelPath)) { New-Item -ItemType Directory -Force $ModelPath | Out-Null }
 [Environment]::SetEnvironmentVariable('OLLAMA_MODELS', $ModelPath, 'Machine')
 $env:OLLAMA_MODELS = $ModelPath
