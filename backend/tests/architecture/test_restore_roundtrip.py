@@ -168,7 +168,11 @@ def _text(done: subprocess.CompletedProcess[bytes]) -> str:
 
 
 def _restore(
-    backup: Path, db: str, app: Path | None = None, force: bool = False
+    backup: Path,
+    db: str,
+    app: Path | None = None,
+    force: bool = False,
+    port: int | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     args = [
         "powershell",
@@ -185,6 +189,8 @@ def _restore(
         args += ["-AppPath", str(app)]
     if force:
         args += ["-Force"]
+    if port is not None:
+        args += ["-DbPort", str(port)]
     return subprocess.run(args, capture_output=True)
 
 
@@ -220,6 +226,28 @@ def test_넣은_것이_그대로_돌아온다(backup: Path, spare: str, ascii_tm
 
     # 파일스토어도 함께 돌아왔다.
     assert (app.parent / f"{app.name}_data" / "filestore" / "a" / "one.tra").exists()
+
+
+def test_DbPort_가_백업의_포트를_이긴다(backup: Path, spare: str, ascii_tmp: Path) -> None:
+    """새 서버의 PostgreSQL 이 다른 포트일 때 — 백업 .env 는 옛 포트를 들고 온다.
+
+    실측(2026-09-16): `-DbPort 5434` 를 줬는데 5432 로 붙었다. 매개변수 `$DbPort` 와
+    스크립트 변수 `$dbPort` 가 PowerShell 에서는 **같은 변수**라 .env 값이 매개변수를
+    덮었다. 여기서는 .env 에 엉뚱한 포트를 적어 두고 진짜 포트를 -DbPort 로 준다 —
+    덮어쓰기가 안 되면 엉뚱한 포트로 붙다가 실패한다.
+    """
+    url = make_url(get_settings().database_url)
+    env_file = backup / ".env"
+    wrong = env_file.read_text(encoding="utf-8").replace(f":{url.port}/", ":1/")
+    assert ":1/" in wrong
+    env_file.write_text(wrong, encoding="utf-8")
+
+    done = _restore(backup, spare, app=ascii_tmp / "app", port=int(url.port or 5432))
+    output = _text(done)
+    assert done.returncode == 0, output
+    assert f"접속 포트를 바꿉니다: {url.port} (-DbPort)" in output, output
+    # **어느 서버에 붙었는지 말한다** — PostgreSQL 이 둘인 서버에서 눈으로 확인하는 줄.
+    assert "복구 대상 서버: PostgreSQL" in output and "data_directory=" in output, output
 
 
 def test_시점이_어긋나면_멈춘다(backup: Path, spare: str, ascii_tmp: Path) -> None:

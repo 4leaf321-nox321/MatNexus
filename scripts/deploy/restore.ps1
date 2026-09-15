@@ -137,11 +137,14 @@ if ($dsn -notmatch '://(?<user>[^:]+):(?<pw>[^@]*)@(?<host>[^:/]+):(?<port>\d+)/
     throw 'DATABASE_URL 을 해석하지 못했습니다.'
 }
 $dbUser = $Matches['user']; $dbPw = $Matches['pw']
-$dbHost = $Matches['host']; $dbPort = $Matches['port']; $sourceDb = $Matches['db']
-if ($DbHost) { $dbHost = $DbHost; Write-Log "접속 호스트를 바꿉니다: $dbHost (-DbHost)" }
-if ($DbPort) { $dbPort = $DbPort; Write-Log "접속 포트를 바꿉니다: $dbPort (-DbPort)" }
+# **매개변수와 다른 이름을 쓴다.** PowerShell 변수는 대소문자를 안 가려서 `$dbPort` 에 백업의
+# 포트를 담는 순간 매개변수 `$DbPort` 가 덮였다 — `-DbPort 5434` 를 줘도 5432 로 붙고, 게다가
+# 「-DbPort 로 바꿉니다: 5432」 라고 찍었다(실측 2026-09-16, 새 운영 서버 리허설).
+$targetHost = $Matches['host']; $targetPort = $Matches['port']; $sourceDb = $Matches['db']
+if ($PSBoundParameters.ContainsKey('DbHost')) { $targetHost = $DbHost; Write-Log "접속 호스트를 바꿉니다: $targetHost (-DbHost)" }
+if ($PSBoundParameters.ContainsKey('DbPort')) { $targetPort = $DbPort; Write-Log "접속 포트를 바꿉니다: $targetPort (-DbPort)" }
 
-Write-Log "백업 원본: $sourceDb @ ${dbHost}:${dbPort}"
+Write-Log "백업 원본: $sourceDb @ ${targetHost}:${targetPort}"
 Write-Log "되돌릴 곳: $DbName"
 
 # --- 도구 찾기 ----------------------------------------------------------------
@@ -158,7 +161,7 @@ $PsqlExe = Find-PgTool 'psql' $PsqlExe
 
 $env:PGPASSWORD = $dbPw
 try {
-    $connect = @("--host=$dbHost", "--port=$dbPort", "--username=$dbUser")
+    $connect = @("--host=$targetHost", "--port=$targetPort", "--username=$dbUser")
 
     function Invoke-Sql([string]$db, [string]$sql) {
         $previous = $ErrorActionPreference
@@ -210,7 +213,7 @@ try {
     # --- 되돌리기 --------------------------------------------------------------
     Write-Log 'pg_restore 실행'
     Invoke-Native $PgRestoreExe (@(
-        "--host=$dbHost", "--port=$dbPort", "--username=$dbUser",
+        "--host=$targetHost", "--port=$targetPort", "--username=$dbUser",
         "--dbname=$DbName", '--no-owner', '--no-privileges', $dumpPath
     )) 'pg_restore'
 
@@ -303,7 +306,7 @@ DB 가 가리키는 파일 $missing 개가 없습니다 (확인한 것 $checked 
     if (-not $AppPath) {
         Write-Host ''
         Write-Host '  리허설이었습니다. 이 DB 는 앱이 안 씁니다 — 확인이 끝나면 지우세요:'
-        Write-Host "    dropdb --host=$dbHost --port=$dbPort --username=$dbUser $DbName"
+        Write-Host "    dropdb --host=$targetHost --port=$targetPort --username=$dbUser $DbName"
     }
     Write-Host ''
 } finally {
