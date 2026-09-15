@@ -52,7 +52,12 @@ param(
     [string]$AppPath,
     [switch]$Force,
     [string]$PgRestoreExe,
-    [string]$PsqlExe
+    [string]$PsqlExe,
+    # **새 서버의 PostgreSQL 이 옛 서버와 다른 자리에 있을 때.** 접속 정보는 백업의 .env 에서
+    # 오는데, 새 서버에 PostgreSQL 이 둘(예: 18 은 C: 5432, 17 은 D: 5433)이면 그 포트가
+    # 엉뚱한 쪽을 가리킨다 — 그리고 복구는 조용히 그쪽에 들어간다. 여기로 고쳐 준다.
+    [string]$DbHost,
+    [int]$DbPort
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +79,7 @@ Assert-NotFlag $DumpFile 'DumpFile'
 Assert-NotFlag $BackupPath 'BackupPath'
 Assert-NotFlag $DbName 'DbName'
 Assert-NotFlag $AppPath 'AppPath'
+Assert-NotFlag $DbHost 'DbHost'
 
 function Write-Log([string]$m) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $m" }
 
@@ -132,6 +138,8 @@ if ($dsn -notmatch '://(?<user>[^:]+):(?<pw>[^@]*)@(?<host>[^:/]+):(?<port>\d+)/
 }
 $dbUser = $Matches['user']; $dbPw = $Matches['pw']
 $dbHost = $Matches['host']; $dbPort = $Matches['port']; $sourceDb = $Matches['db']
+if ($DbHost) { $dbHost = $DbHost; Write-Log "접속 호스트를 바꿉니다: $dbHost (-DbHost)" }
+if ($DbPort) { $dbPort = $DbPort; Write-Log "접속 포트를 바꿉니다: $dbPort (-DbPort)" }
 
 Write-Log "백업 원본: $sourceDb @ ${dbHost}:${dbPort}"
 Write-Log "되돌릴 곳: $DbName"
@@ -161,6 +169,18 @@ try {
         } finally { $ErrorActionPreference = $previous }
         if ($code -ne 0) { throw "psql 실패 (exit $code): $sql" }
         return ($out -join "`n").Trim()
+    }
+
+    # --- 어느 서버에 붙었는지 **눈으로 확인시킨다** --------------------------------
+    # PostgreSQL 이 둘인 서버에서 포트를 잘못 잡으면 복구는 멀쩡히 끝나고 앱은 다른
+    # 쪽을 본다. 판·데이터 폴더를 찍어 두면 「D: 의 17 이 맞나」 를 여기서 안다.
+    $target = Invoke-Sql 'postgres' "select current_setting('server_version') || ' · data_directory=' || current_setting('data_directory')"
+    Write-Log "복구 대상 서버: PostgreSQL $target"
+    $restoreVersion = (& $PgRestoreExe --version 2>$null) -join ''
+    if ($restoreVersion -match '(\d+)\.' -and $target -match '^(\d+)\.') {
+        if ([int]$Matches[1] -ne [int]([regex]::Match($restoreVersion, '(\d+)\.').Groups[1].Value)) {
+            Write-Warning "pg_restore 판($restoreVersion)과 서버 판이 다릅니다 — 서버와 같은 판의 bin 을 -PgRestoreExe/-PsqlExe 로 주는 것이 안전합니다."
+        }
     }
 
     # --- 있는 DB 를 덮지 않는다 -----------------------------------------------
