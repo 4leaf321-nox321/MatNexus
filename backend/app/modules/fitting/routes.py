@@ -28,7 +28,7 @@ from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.catalog.models import CatalogMaterial
-from app.modules.fitting import bundle, readiness, renderers
+from app.modules.fitting import bundle, card_tiers, readiness, renderers
 from app.modules.fitting.models import ExportProfile, PropertyCard, UnitSystemDef
 from app.modules.fitting.schemas import (
     BlockSpecOut,
@@ -3302,6 +3302,10 @@ def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
             f"적합 구간 소성변형률 {float(hardening.get('strain_min', 0.0)):.5g}~"
             f"{float(hardening.get('strain_max', 0.0)):.5g} (그 밖은 검증되지 않았습니다)"
         )
+
+    # **값마다 등급** — 덱만 받은 사람이 「이 값 믿을 만한가」 를 파일 안에서 본다(2026-09-16).
+    # 문헌과 같은 1~4 척도, 카드가 자기 근거에서 산출한다.
+    provenance.extend(card_tiers.summary_lines(item))
 
     return _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
 

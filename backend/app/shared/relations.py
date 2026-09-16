@@ -179,6 +179,35 @@ KINDS: dict[str, EntityKind] = {
             name_columns=("recipe_label",),
         ),
         EntityKind(
+            slug="commission",
+            label="측정 의뢰",
+            table="commissions",
+            module="commissions",
+            name_columns=("title",),
+        ),
+        EntityKind(
+            slug="commission_item",
+            label="의뢰 항목",
+            table="commission_items",
+            module="commissions",
+            name_columns=("property_hint",),
+        ),
+        EntityKind(
+            slug="formula",
+            label="계산식",
+            table="formulas",
+            module="formulas",
+            name_columns=("label",),
+        ),
+        EntityKind(
+            slug="recipe",
+            label="처리 레시피",
+            table="processing_recipes",
+            module="processing",
+            name_columns=("label",),
+            soft_delete=True,
+        ),
+        EntityKind(
             slug="property",
             label="문헌 물성 정의",
             table="catalog_definitions",
@@ -312,6 +341,73 @@ RELATIONS: dict[str, RelationType] = {
         # 처리 결과 *전부*를 준다 — 되돌린 것, 실패한 것, 견줘 본 것까지. 어느
         # 것이 쓰이는 값인지는 이 관계만 안다(실측 2026-09-10: 시험 261건 중
         # 60건이 채택본을 갖고 있는데, 그래프에서는 그 60건을 못 집었다).
+        RelationType(
+            slug="requested_by",
+            label="이 시험을 부른 의뢰 항목",
+            inverse_label="이 항목에 붙은 시험",
+            src="test_run",
+            dst="commission_item",
+            source=fk("test_runs", "commission_item_id"),
+            note="측정 의뢰(v1.234)가 만든 길. 「이 의뢰에서 나온 값 어디까지 됐나」 를 "
+            "AI 가 걷는다 — 의뢰 → 항목 → 시험 → 처리 결과 → 카드(4단계, 2026-09-16).",
+        ),
+        RelationType(
+            slug="item_of",
+            label="이 항목이 딸린 의뢰",
+            inverse_label="이 의뢰의 항목",
+            src="commission_item",
+            dst="commission",
+            source=fk("commission_items", "commission_id"),
+        ),
+        RelationType(
+            slug="asks_for",
+            label="이 항목이 부르는 시험 종류",
+            inverse_label="이 시험 종류를 부른 의뢰 항목",
+            src="commission_item",
+            dst="test_type",
+            source=fk("commission_items", "test_type_id"),
+            note="종류 미정 항목은 비어 있다 — 그때는 `property_hint`(무엇을 잴지)만 있다.",
+        ),
+        RelationType(
+            slug="about_sample",
+            label="이 의뢰가 다루는 시료",
+            inverse_label="이 시료를 다룬 의뢰",
+            src="commission",
+            dst="sample",
+            source=fk("commissions", "sample_id"),
+            note="새 재료 의뢰는 시료가 아직 없다 — 그때는 비어 있다.",
+        ),
+        RelationType(
+            slug="computed_by",
+            label="이 결과를 내는 데 돈 계산식",
+            inverse_label="이 식으로 계산한 결과",
+            src="processing_result",
+            dst="formula",
+            source=via("processing_result_formulas", "result_id", "formula_id"),
+            note="계산식은 데이터다(ADR 0030). 식이 단계로 돈 결과마다 연결 한 줄 — "
+            "「이 값 어느 식으로 계산됐나」 가 측정·문헌과 같은 도구(`related`)로 답한다.",
+        ),
+        RelationType(
+            slug="ran_with",
+            label="이 결과를 낸 레시피",
+            inverse_label="이 레시피로 돌린 결과",
+            src="processing_result",
+            dst="recipe",
+            source=fk("processing_results", "recipe_id"),
+            note="「이 레시피로 돌린 결과들」 — AI 가 실제로 물었고 못 찾았다(2026-09-10). "
+            "결과는 단계 스냅샷을 따로 들고 있어 레시피가 바뀌어도 이 관계는 「무엇으로 "
+            "돌렸나」 의 기록이다(4단계, 2026-09-16).",
+        ),
+        RelationType(
+            slug="recipe_for",
+            label="이 레시피가 다루는 시험 종류",
+            inverse_label="이 시험 종류의 레시피",
+            src="recipe",
+            dst="test_type",
+            source=fk("processing_recipes", "test_type_id"),
+            note="레시피는 시험 종류마다 따로다(단계가 그 종류의 채널을 안다). "
+            "「인장 레시피 뭐 있어」.",
+        ),
         RelationType(
             slug="adopted",
             label="이 시험이 채택한 처리 결과",

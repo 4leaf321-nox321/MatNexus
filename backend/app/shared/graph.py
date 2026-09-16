@@ -37,14 +37,15 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import Base
 from app.modules.accounts.models import User
+from app.modules.commissions.models import Commission, CommissionItem
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import MaterialParameterSet, Sample, Specimen
-from app.modules.processing.models import ProcessingResult
+from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.tests.models import TestRun
 from app.shared import permissions, relations
 
@@ -161,6 +162,25 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
         return select(ProcessingResult.id).where(ProcessingResult.test_run_id.in_(runs))
     if kind.slug == "property_card":
         return select(PropertyCard.id).where(PropertyCard.material_id.in_(materials))
+    if kind.slug in ("commission", "commission_item"):
+        # **의뢰의 가시 규칙을 베끼지 않는다** — 낸 부서·받는 부서·작성 중은 낸 사람만은
+        # `commissions.services.visible` 의 것이다. 여기서는 열만 좁힌다.
+        from app.modules.commissions import services as commission_services
+
+        commissions = commission_services.visible(db, user).with_only_columns(Commission.id)
+        if kind.slug == "commission":
+            return commissions
+        return select(CommissionItem.id).where(CommissionItem.commission_id.in_(commissions))
+    if kind.slug == "recipe":
+        # 레시피는 전역 것 + 내 부서 것 — 레시피 목록(`processing.routes`)과 같은 규칙.
+        mine = permissions.my_workspace_ids(db, user)
+        return select(ProcessingRecipe.id).where(
+            ProcessingRecipe.deleted_at.is_(None),
+            or_(
+                ProcessingRecipe.owner_workspace_id.is_(None),
+                ProcessingRecipe.owner_workspace_id.in_(mine),
+            ),
+        )
     if kind.slug == "parameter_set":
         # **재료를 따라간다.** 안 붙이면 남의 부서 재료가 받아 온 벌이 검색에 뜨고,
         # 열면 404 가 난다 — 이 함수가 있는 이유가 그 어긋남을 막는 것이다.

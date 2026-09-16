@@ -441,3 +441,59 @@ class Test출처와_파라미터_벌:
         allowed = graph.visible_ids(db, outsider, relations.KINDS["parameter_set"])
         assert allowed is not None, "가리는 규칙이 아예 없다"
         assert db.scalars(allowed).all() == [], "남의 부서 벌이 보인다"
+
+
+class Test레시피:
+    """「이 레시피로 돌린 결과들」 — AI 가 실제로 물었고 못 찾았던 길(4단계, 2026-09-16)."""
+
+    def test_레시피에서_결과로_내려간다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        from app.modules.processing.models import ProcessingRecipe, ProcessingResult
+        from app.modules.tests.models import TestRun, TestType
+
+        made = _chain(client, db, admin_headers, owner_slug=None)
+        tensile = db.scalar(select(TestType).where(TestType.key == "tensile"))
+        assert tensile is not None
+        recipe = ProcessingRecipe(
+            key="ont_recipe", label="표준 인장", test_type_id=tensile.id, steps=[]
+        )
+        db.add(recipe)
+        db.flush()
+        run = db.get(TestRun, uuid.UUID(made["test_run"]))
+        assert run is not None
+        result = ProcessingResult(
+            test_run_id=run.id,
+            source_curve_key="raw",
+            recipe_id=recipe.id,
+            recipe_label=recipe.label,
+            storage_path="test/none.parquet",
+            row_count=0,
+            sha256="0" * 64,
+            byte_size=0,
+        )
+        db.add(result)
+        db.commit()
+
+        answer = client.get(
+            RELATED,
+            params={"kind": "recipe", "id": str(recipe.id), "relation": "ran_with"},
+            headers=admin_headers,
+        )
+        assert answer.status_code == 200, answer.text
+        body = answer.json()
+        assert body["counts"]["ran_with"] == 1
+        assert {one["dst_id"] for one in body["edges"]} | {
+            one["src_id"] for one in body["edges"]
+        } >= {str(result.id)}
+        # 레시피는 시험 종류에도 이어진다 — 「인장 레시피 뭐 있어」.
+        kinds = client.get(
+            RELATED,
+            params={"kind": "recipe", "id": str(recipe.id), "relation": "recipe_for"},
+            headers=admin_headers,
+        ).json()
+        assert kinds["counts"]["recipe_for"] == 1
+        # 지도에 마디와 관계가 실린다.
+        shape = client.get("/api/ontology", headers=admin_headers).json()
+        assert "recipe" in {one["slug"] for one in shape["kinds"]}
+        assert {"ran_with", "recipe_for"} <= {one["slug"] for one in shape["relations"]}

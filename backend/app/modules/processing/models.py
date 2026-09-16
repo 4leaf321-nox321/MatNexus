@@ -198,3 +198,33 @@ class ProcessingResult(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+
+
+class ProcessingResultFormula(Base):
+    """이 결과를 내는 데 **어느 계산식이 돌았나** — 결과 ↔ 식 연결표(4단계, 2026-09-16).
+
+    식은 `stages[].plugin = "formula.<key>"` 로 JSON 안에 이미 남지만, 그것으로는 그래프를
+    못 걷는다(관계 레지스트리는 열·연결표만 안다). 결과를 저장할 때 식 단계마다 한 줄 —
+    「이 값 어느 식으로 계산됐나」 「이 식으로 낸 결과들」 을 `computed_by` 로 걷는다.
+
+    식은 쓰이는 동안 지울 수 없다(`formulas`) — FK 가 그것을 DB 에서도 지킨다.
+    """
+
+    __tablename__ = "processing_result_formulas"
+    __table_args__ = (
+        Index("uq_processing_result_formulas_pair", "result_id", "formula_id", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    result_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("processing_results.id", ondelete="CASCADE"),
+        index=True,
+    )
+    formula_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("formulas.id", ondelete="RESTRICT"), index=True
+    )
+    formula_version: Mapped[int] = mapped_column(Integer)
+    """돌았을 때의 식 판. 식이 고쳐져도 이 결과는 옛 판으로 났다(D4)."""

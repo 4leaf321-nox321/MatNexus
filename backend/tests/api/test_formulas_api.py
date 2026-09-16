@@ -438,3 +438,49 @@ def test_검사_어휘_권한(
     assert gone.status_code == 204
     assert "formula.yield_ratio_api" not in _step_ids(client, admin_headers)
     assert client.get("/api/formulas", headers=admin_headers).json() == []
+
+
+def test_식으로_낸_결과가_그래프에서_식으로_이어진다(
+    client: TestClient, db: Session, admin_headers: dict[str, str], sample: dict[str, Any]
+) -> None:
+    """「이 값 어느 식으로 계산됐나」 — 측정·문헌과 같은 도구(`related`)로 답한다(4단계,
+    2026-09-16). 식 단계가 돈 결과마다 연결 한 줄이 생긴다."""
+    created = client.post("/api/formulas", json=RATIO, headers=admin_headers)
+    assert created.status_code == 201, created.text
+    formula_id = created.json()["id"]
+    steps = [
+        *STEPS,
+        {
+            "plugin": "formula.yield_ratio_api",
+            "options": {
+                "proof_stress": "@proof_stress",
+                "tensile_strength": "@tensile_strength",
+            },
+        },
+    ]
+    result = _run(client, db, admin_headers, sample["id"], steps)
+
+    around = client.get(
+        "/api/ontology/related",
+        params={"kind": "processing_result", "id": result["id"], "relation": "computed_by"},
+        headers=admin_headers,
+    )
+    assert around.status_code == 200, around.text
+    body = around.json()
+    assert body["counts"]["computed_by"] == 1
+    assert formula_id in {one["dst_id"] for one in body["edges"]}
+    # 거꾸로 — 이 식으로 계산한 결과들.
+    back = client.get(
+        "/api/ontology/related",
+        params={"kind": "formula", "id": formula_id, "relation": "computed_by"},
+        headers=admin_headers,
+    ).json()
+    assert result["id"] in {one["src_id"] for one in back["edges"]}
+    # 식이 없는 결과는 이어지지 않는다 — 없는 관계를 만들지 않는다.
+    plain = _run(client, db, admin_headers, sample["id"], STEPS)
+    none = client.get(
+        "/api/ontology/related",
+        params={"kind": "processing_result", "id": plain["id"], "relation": "computed_by"},
+        headers=admin_headers,
+    ).json()
+    assert none["counts"].get("computed_by", 0) == 0

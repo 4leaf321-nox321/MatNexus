@@ -26,7 +26,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.processing.models import ProcessingRecipe, ProcessingResult
+from app.modules.formulas.models import Formula
+from app.modules.processing.models import (
+    ProcessingRecipe,
+    ProcessingResult,
+    ProcessingResultFormula,
+)
 from app.modules.processing.schemas import (
     BatchItemOut,
     BatchOut,
@@ -263,7 +268,30 @@ def _store(
     )
     db.add(item)
     db.flush()
+    # **식 단계마다 연결 한 줄** — 「이 값 어느 식으로 계산됐나」 를 그래프가 걷는다(4단계).
+    # 식이 지워졌거나 키가 바뀐 경우는 그냥 넘어간다 — 결과 저장이 식 목록에 막히면 안 된다.
+    _link_formulas(db, item)
     return item
+
+
+def _link_formulas(db: Session, item: ProcessingResult) -> None:
+    """`stages[].plugin == "formula.<key>"` 인 단계를 식 행에 잇는다(4단계, 2026-09-16).
+
+    식이 지워졌거나 키가 바뀐 경우는 그냥 넘어간다 — 결과 저장이 식 목록에 막히면 안 된다.
+    """
+    keys = {
+        str(stage.get("plugin", "")).removeprefix("formula.")
+        for stage in item.stages or []
+        if str(stage.get("plugin", "")).startswith("formula.")
+    }
+    if not keys:
+        return
+    for row in db.scalars(select(Formula).where(Formula.key.in_(keys))):
+        db.add(
+            ProcessingResultFormula(
+                result_id=item.id, formula_id=row.id, formula_version=int(row.version)
+            )
+        )
 
 
 def _batch_scalars(rows: Any) -> list[ProcessingScalarOut]:

@@ -177,10 +177,6 @@ EXCLUDED_TABLES: dict[str, str] = {
     "voc_items": 제보,
     "commission_events": "측정 의뢰의 이력(등록·접수·시험 연결) — 사람 사이의 절차 기록이다. "
     + 제보,
-    "commission_items": (
-        "측정 의뢰의 항목(어느 시험 종류를 몇 개) — 의뢰에 딸린 줄이다. 시험이 이것을"
-        " 가리키지만(`test_runs.commission_item_id`) 그 물음은 의뢰 표에서 답한다"
-    ),
     "vocabularies": 기준정보,
     "vocabulary_aliases": 기준정보,
     "vocabulary_dismissals": 기준정보,
@@ -193,8 +189,6 @@ EXCLUDED_TABLES: dict[str, str] = {
     "test_condition_fields": 설정,
     "unit_systems": 설정,
     "pipeline_connectors": 설정,
-    "formulas": "화면에서 적은 계산식(ADR 0030) — 처리 단계·적합식의 정의이지 자료가 아니다. "
-    + 설정,
     "guide_revisions": 이력,
     "jobs": 이력,
     "pipeline_inbox_items": 이력,
@@ -223,15 +217,6 @@ PENDING_TABLES: dict[str, str] = {
     "equipment_calibrations": (
         "「이 장비의 교정이 언제까지 유효한가」 — AI 가 실제로 물었고 못 찾았다"
         "(실측 2026-09-10). 지금은 보유 장비가 6대·교정 4건이라 물어도 거의 빈손이다"
-    ),
-    "processing_recipes": (
-        "「이 레시피로 돌린 결과들」 — 부서가 합의해 둔 단계 묶음이라 물음이 선다."
-        " 목록은 `list_recipes` 로 닿지만 결과에서 거슬러 오를 길이 없다"
-    ),
-    "commissions": (
-        "측정 의뢰 — 「이 시험은 어느 의뢰에서 나왔나」·「이 의뢰로 어떤 카드가 나왔나」 는"
-        " 물성 사이의 물음에 가깝다(2026-09-14). 사람 사이의 절차이기도 해서 첫 의뢰가"
-        " 실제로 오간 뒤 마디로 둘지 정한다"
     ),
     "workbench_items": "워크벤치는 사람의 작업 공간이다 — 물성 그래프에 넣을 것인지 안 정했다",
     "workbench_runs": (
@@ -270,6 +255,9 @@ EXCLUDED_FKS: dict[tuple[str, str], str] = {
     ("specimens", "workspace_id"): 소유,
     ("test_runs", "workspace_id"): 소유,
     ("test_types", "owner_workspace_id"): 소유,
+    ("processing_recipes", "owner_workspace_id"): 소유,
+    ("commissions", "requester_workspace_id"): 소유,
+    ("commissions", "lab_workspace_id"): 소유,
     # 용어끼리의 상하(등급 172개가 분류 아래에 선다). **들머리가 없어서 지금은
     # 뜻이 없다** — 재료에서 용어로 가는 길을 위의 `축` 판단으로 일부러 안 냈으니,
     # 용어 상하만 이어 두면 아무 데서도 그 사슬에 못 들어간다. 축을 열면 이것도

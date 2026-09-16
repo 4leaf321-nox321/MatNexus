@@ -52,7 +52,11 @@ from app.modules.notifications.models import (
     NotificationRuleState,
 )
 from app.modules.pipelines.models import PipelineConnector, PipelineInboxItem
-from app.modules.processing.models import ProcessingRecipe, ProcessingResult
+from app.modules.processing.models import (
+    ProcessingRecipe,
+    ProcessingResult,
+    ProcessingResultFormula,
+)
 from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import (
     Curve,
@@ -109,6 +113,7 @@ __all__ = [
     "PipelineInboxItem",
     "ProcessingRecipe",
     "ProcessingResult",
+    "ProcessingResultFormula",
     "PropertyAlias",
     "PropertyCard",
     "PropertyLink",

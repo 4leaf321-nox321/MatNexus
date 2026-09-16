@@ -761,3 +761,74 @@ class Test새재료와종류미정:
             headers=lee,
         )
         assert again.status_code == 422
+
+
+class Test온톨로지:
+    """「이 의뢰에서 나온 시험은 어디까지 됐나」 — 의뢰 → 항목 → 시험을 AI 가 걷는다(4단계,
+    2026-09-16). 두 부서 사이의 약속이라 제3부서에는 마디 자체가 없다."""
+
+    def test_의뢰에서_항목을_지나_시험까지_걷는다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        kim, lee, oh = world["kim"], world["lee"], world["oh"]
+        made = _create(client, kim, world["sample"]["id"])
+        accepted = _move(client, lee, made["id"], "accepted", "다음 주").json()
+        run = _run(client, lee, world["sample"]["id"])
+        item_id = accepted["items"][0]["id"]
+        linked = client.post(
+            f"/api/commissions/{made['id']}/items/{item_id}/runs",
+            json={"run_id": run["id"]},
+            headers=lee,
+        )
+        assert linked.status_code == 200, linked.text
+
+        # 의뢰 → 항목 (item_of 역방향) · 의뢰 → 시료
+        around = client.get(
+            "/api/ontology/related",
+            params={"kind": "commission", "id": made["id"]},
+            headers=kim,
+        )
+        assert around.status_code == 200, around.text
+        counts = around.json()["counts"]
+        assert counts["item_of"] == 1 and counts["about_sample"] == 1
+        # 항목 → 시험 (requested_by 역방향)
+        runs = client.get(
+            "/api/ontology/related",
+            params={"kind": "commission_item", "id": item_id, "relation": "requested_by"},
+            headers=kim,
+        ).json()
+        assert runs["counts"]["requested_by"] == 1
+        assert run["id"] in {one["src_id"] for one in runs["edges"]}
+        # 의뢰에서 재료까지 길이 있다 — 시료를 거쳐서.
+        path = client.get(
+            "/api/ontology/path",
+            params={
+                "from_kind": "commission",
+                "from_id": made["id"],
+                "to_kind": "material",
+                "to_id": world["material"]["id"],
+            },
+            headers=kim,
+        )
+        assert path.status_code == 200, path.text
+        found = path.json()
+        assert found["found"], found
+        assert [one["relation"] for one in found["steps"]] == ["about_sample", "derived_from"]
+
+        # **제3부서에는 마디가 없다** — 검색에 뜨는데 열면 404 가 아니라, 처음부터 없다.
+        assert (
+            client.get(
+                "/api/ontology/related",
+                params={"kind": "commission", "id": made["id"]},
+                headers=oh,
+            ).status_code
+            == 404
+        )
+        assert (
+            client.get(
+                "/api/ontology/related",
+                params={"kind": "commission_item", "id": item_id},
+                headers=oh,
+            ).status_code
+            == 404
+        )

@@ -3208,6 +3208,11 @@ _ENTRY: dict[str, str] = {
     "property": "resolve_property(name=…) → key. **UUID 가 아니라 이 문자열이다**",
     "property_card": "list_cards(material_id=…) → items[].id. `blocks` 에 담긴 갈래가 보인다",
     "test_run": "list_test_runs(material_id=…) → items[].id",
+    "recipe": "list_recipes() → items[].id · 그 마디에서 `ran_with` 역방향이 「이 레시피로 돌린 결과」",
+    "commission": 'search_all(q=제목, kind="commission") → 그 마디에서 `item_of` 역방향 → 항목 → '
+    "`requested_by` 역방향 → 시험",
+    "formula": 'search_all(q=식 이름, kind="formula") → 그 마디에서 `computed_by` 역방향이 '
+    "「이 식으로 계산한 결과」",
     "parameter_set": "get_parameter_sets(material_id=…)(사내) · "
     "get_catalog_parameter_sets(catalog_material_id=…)(문헌)",
     "instrument": "how_to_measure(property_key=…) → 그 물성을 재는 장비들",
@@ -3249,6 +3254,27 @@ _RECIPES: list[dict[str, str]] = [
         "steps": "resolve_property(name) → how_to_measure(property_key) → "
         'related(kind="instrument", id=…, relation="unit_of")',
         "note": "`unit_of` 가 비면 **정의만 있고 보유 장비가 없는 것**이다.",
+    },
+    {
+        "question": "이 측정 의뢰에서 나온 시험·값은 어디까지 됐나",
+        "steps": 'search_all(q=의뢰 제목, kind="commission") → related(kind="commission", id=…) '
+        '→ 항목마다 related(kind="commission_item", id=…, relation="requested_by") → '
+        'related(kind="test_run", id=…, relation="processed_from")',
+        "note": "의뢰 → 항목 → 시험 → 처리 결과 → 카드. 낸 부서·받는 부서만 본다 — 남의 의뢰는 "
+        "404 가 정상이다.",
+    },
+    {
+        "question": "이 값은 어느 계산식으로 나왔나 / 이 식으로 계산한 결과들",
+        "steps": 'related(kind="processing_result", id=…, relation="computed_by") · '
+        '거꾸로는 related(kind="formula", id=…, relation="computed_by")',
+        "note": "측정이면 시험으로, 문헌이면 출처로, 계산이면 식으로 — 셋 다 `related` 한 번이다. "
+        "식이 그 뒤 고쳐졌어도 결과는 옛 판으로 났다(stages 의 version).",
+    },
+    {
+        "question": "이 레시피로 돌린 결과들 / 이 결과는 어느 레시피로 돌렸나",
+        "steps": 'list_recipes() → related(kind="recipe", id=…, relation="ran_with")',
+        "note": "결과는 단계 스냅샷을 따로 들고 있다 — 레시피가 그 뒤 바뀌었어도 이 관계는 "
+        "「그때 무엇으로 돌렸나」 다.",
     },
     {
         "question": "이 시험 값이 어느 재료에서 나왔나",
