@@ -414,6 +414,26 @@ if (-not (Test-Path (Join-Path $AppPath 'backend\.env'))) {
     Write-Warning 'backend\.env 가 없습니다. 마이그레이션과 기동에 DATABASE_URL 이 필요합니다.'
 }
 
+# --- 직전 버전의 프론트 자산 이어받기 ------------------------------------------
+# 배포 순간에 화면을 열어 둔 사람의 브라우저는 **옛 index.html** 을 들고 있고, 그 안의
+# 청크 이름(해시)은 옛 파일을 가리킨다. 폴더를 통째로 바꾸면 그 파일이 사라져, 아직 안
+# 들어가 본 화면을 여는 순간 "Failed to fetch dynamically imported module" 로 창이 안
+# 열린다 — 새로고침하면 새 index 를 받아 되고(실측 2026-09-16, 매일 릴리스하니 자주 났다).
+# 해시 이름은 내용이 같으면 같고 다르면 다르므로 옛 파일을 **새 폴더에 그대로 두어도**
+# 충돌이 없다. 한 세대만 이어받는다 — 그 다음 배포 때는 그 사람도 새로고침한 뒤다.
+if (-not $isFirstRun) {
+    $assetsFrom = Join-Path $prevPath 'frontend\dist\assets'
+    $assetsTo = Join-Path $AppPath 'frontend\dist\assets'
+    if ((Test-Path $assetsFrom) -and (Test-Path $assetsTo)) {
+        $carried = 0
+        foreach ($one in Get-ChildItem -File $assetsFrom) {
+            $target = Join-Path $assetsTo $one.Name
+            if (-not (Test-Path $target)) { Copy-Item $one.FullName $target; $carried++ }
+        }
+        Write-Log "직전 버전의 프론트 자산 $carried 개 이어받기(열어 둔 화면이 배포 중에도 열리게)"
+    }
+}
+
 # --- 가상환경 -----------------------------------------------------------------
 $syncScript = Join-Path $AppPath 'venv_sync.ps1'
 if (-not (Test-Path $syncScript)) { throw "패키지에 venv_sync.ps1 이 없습니다 ($syncScript)." }
