@@ -30,6 +30,7 @@ type CardPage = components['schemas']['Page_PropertyCardOut_']
 type CatalogMatchRow = components['schemas']['DeckMatchRowOut']
 type AliasLookup = components['schemas']['BomAliasLookupOut']
 type BomBuilt = components['schemas']['BomDeckOut']
+type ExportFormat = components['schemas']['ExportFormatOut']
 type UnitSystemOut = components['schemas']['UnitSystemOut']
 
 /** 붙여넣은 한 줄의 매칭 상태 — 화면이 들고 있는 전부다. */
@@ -96,11 +97,14 @@ export default function BomDeckPage() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [catalogRows, setCatalogRows] = useState<Map<string, CatalogMatchRow>>(new Map())
   const [units, setUnits] = useState('si')
+  // **한 파일은 한 솔버다.** 비우면 전처럼 LS-DYNA 안에서 카드마다 가장 곡선다운 형식.
+  const [format, setFormat] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [built, setBuilt] = useState<BomBuilt | null>(null)
 
   const systems = useResource(() => api.get<UnitSystemOut[]>('/fitting/unit-systems'), [])
+  const formats = useResource(() => api.get<ExportFormat[]>('/fitting/formats'), [])
 
   const columns = useMemo(() => splitColumns(pasted), [pasted])
   const width = Math.max(0, ...columns.map((line) => line.length))
@@ -190,6 +194,7 @@ export default function BomDeckPage() {
           synthesize: !row.cardId && row.synthesize,
         })),
         units: units === 'si' ? null : units,
+        format: format || null,
       })
       setBuilt(made)
 
@@ -335,6 +340,24 @@ export default function BomDeckPage() {
       {rows && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border p-3">
           <div className="text-sm font-medium">3. 내보내기</div>
+          <label className="text-muted-foreground flex items-center gap-1 text-xs">
+            솔버
+            <select
+              className="border-input rounded border px-1 py-0.5"
+              value={format}
+              onChange={(event) => setFormat(event.target.value)}
+              aria-label="솔버 형식"
+            >
+              <option value="">LS-DYNA (카드마다 자동)</option>
+              {(formats.data ?? [])
+                .filter((one) => one.key !== 'json')
+                .map((one) => (
+                  <option key={one.key} value={one.key}>
+                    {one.label}
+                  </option>
+                ))}
+            </select>
+          </label>
           <label className="text-muted-foreground flex items-center gap-1 text-xs">
             단위계
             <select

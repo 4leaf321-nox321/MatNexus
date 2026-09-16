@@ -192,6 +192,21 @@ class TestMcp도구:
             )
         assert checked >= 3, f"units 를 받는 덱 도구를 {checked}개만 찾았다 — 이름이 바뀌었나"
 
+    def test_덱_도구는_받는_쪽_번호와_솔버를_받는다(self) -> None:
+        """연결된 플랫폼은 **재료 · 그 모델의 MID · 솔버**만 안다(2026-09-16).
+
+        `render_card_deck` 이 `mid` 를, `build_deck` 이 `format` 을 못 받으면 AI 는 덱을
+        뽑은 뒤 파일을 손으로 고치거나(고정폭 칸 — 한 칸 어긋나면 다른 값) LS-DYNA 만
+        낸다. 인자 이름이 바뀌면 안내서의 예시도 함께 고쳐야 하므로 여기서 잡는다.
+        """
+        by_name = {tool.name: {a.arg for a in tool.args.args} for tool in _tools()}
+        assert "mid" in by_name["render_card_deck"], "render_card_deck 이 mid 를 안 받는다"
+        assert "format" in by_name["build_deck"], "build_deck 이 format(솔버)을 안 받는다"
+        guide = (SERVER.parent / "guide" / "GUIDE.md").read_text(encoding="utf-8")
+        assert "mid=" in guide and 'format="abaqus"' in guide, (
+            "안내서가 mid · format 을 넘기는 예시를 잃었다 — AI 는 안내서대로 부른다"
+        )
+
 
 def _map_hints() -> str:
     """`get_ontology` 에 실어 보내는 들머리·길잡이의 원문."""

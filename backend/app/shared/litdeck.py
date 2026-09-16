@@ -196,6 +196,36 @@ def combine(rendered: list[str]) -> str:
     return "*KEYWORD\n" + "\n$\n".join(bodies) + "\n*END\n"
 
 
+def format_family(format_key: str) -> str:
+    """형식 key 의 솔버 — `dyna_elastic` → `dyna`, `abaqus_rate` → `abaqus`.
+
+    한 파일에는 한 솔버만 선다. 이름 규약(`<솔버>[_<변형>]`)이 곧 판정이다 —
+    렌더러마다 `solver` 칸을 더하지 않는 이유는, 정의 렌더러(ExportProfile)도 같은
+    규약으로 key 를 짓기 때문이다.
+    """
+    return format_key.split("_", 1)[0]
+
+
+def combine_family(rendered: list[str], family: str) -> str:
+    """재료별 덱을 **그 솔버의 규약으로** 한 파일로.
+
+    LS-DYNA 는 `*KEYWORD`/`*END` 를 한 번만, OpenRadioss 는 `#RADIOSS STARTER` 를 한
+    번만, Abaqus 는 `*MATERIAL` 묶음이 이어 서면 그대로 성립한다. 모르는 솔버는
+    Abaqus 처럼 잇는다 — 머리말이 있는 형식이면 그 형식이 여기 한 줄을 더한다.
+    """
+    if family == "dyna":
+        return combine(rendered)
+    if family == "openradioss":
+        bodies: list[str] = []
+        for index, text in enumerate(rendered):
+            lines = text.rstrip("\n").split("\n")
+            if index > 0 and lines and lines[0] == "#RADIOSS STARTER":
+                lines = lines[1:]
+            bodies.append("\n".join(lines))
+        return "\n".join(bodies) + "\n"
+    return "\n".join(text.rstrip("\n") for text in rendered) + "\n"
+
+
 def build(
     db: Session,
     items: list[tuple[int, uuid.UUID]],

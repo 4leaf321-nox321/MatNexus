@@ -1821,6 +1821,13 @@ export interface paths {
          * Export Card
          * @description 솔버 카드를 텍스트로 만든다.
          *
+         *     ## 재료 번호(MID)를 받는다 (2026-09-16)
+         *
+         *     덱 안의 번호는 **그 해석 모델 안에서만 뜻이 있는 수**다. 연결된 플랫폼은 자기
+         *     모델의 번호를 이미 갖고 있어, 우리가 카드 id 에서 만든 수를 주면 받는 쪽이 파일을
+         *     열어 고쳐야 한다 — 고정폭 칸에 손을 대는 일이고 한 칸 어긋나면 솔버는 다른 값을
+         *     조용히 읽는다. 그래서 번호를 여기서 받아 서버가 박는다(BOM 덱과 같은 범위).
+         *
          *     **초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의
          *     실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면
          *     카드 안에 그렇게 적어 둔다.
@@ -7234,6 +7241,8 @@ export interface components {
         };
         /** BomDeckIn */
         BomDeckIn: {
+            /** Format */
+            format?: string | null;
             /**
              * Lit Format
              * @default dyna_elastic
@@ -7250,6 +7259,8 @@ export interface components {
             card_count: number;
             /** Filename */
             filename: string;
+            /** Format Family */
+            format_family: string;
             /** Literature Count */
             literature_count: number;
             /** Notes */
@@ -7267,12 +7278,20 @@ export interface components {
         /**
          * BomDeckRowIn
          * @description BOM 한 줄의 확정 — 사내 카드가 있으면 그것, 없으면 문헌 재료.
+         *
+         *     **재료 id 만 주어도 된다**(2026-09-16). 연결된 플랫폼은 카드 id 를 모른다 —
+         *     재료와 시뮬레이션 안의 번호(MID)와 솔버만 안다. 서버가 그 재료의 카드 중
+         *     그 형식으로 나오는 것을 고른다(확정된 것 먼저).
          */
         BomDeckRowIn: {
             /** Card Id */
             card_id?: string | null;
             /** Catalog Material Id */
             catalog_material_id?: string | null;
+            /** Format */
+            format?: string | null;
+            /** Material Id */
+            material_id?: string | null;
             /** Mid */
             mid: number;
             /** Name */
@@ -20024,6 +20043,8 @@ export interface operations {
                 format?: string;
                 /** @description 덱의 단위계. 기본은 SI. */
                 units?: string;
+                /** @description 덱 안의 재료 번호. 비우면 카드 id 에서 만든 수. */
+                mid?: number | null;
             };
             header?: never;
             path: {

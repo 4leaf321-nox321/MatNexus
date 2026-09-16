@@ -4,6 +4,8 @@
 합쳐서 *KEYWORD/*END 한 번 — MID 는 부품표의 번호 그대로
 모자란 줄은 거르지 않고 알린다 · MID 중복은 요청째 거부
 매칭 기억(워크벤치)은 넣은 대로 돌아오고, 비우면 지워진다
+솔버를 고른다(2026-09-16) — 한 파일은 한 솔버, 재료 id 만 줘도 카드를 서버가 고른다,
+    단일 카드 export 도 MID 를 받는다
 """
 
 from __future__ import annotations
@@ -279,3 +281,149 @@ class Test매칭_기억:
             headers=admin_headers,
         ).json()["found"]
         assert again == [None]
+
+
+class Test솔버를_고른다:
+    """연결된 플랫폼은 **재료 · MID · 솔버**만 안다 — 카드 id 를 모르고, LS-DYNA 만 쓰지
+    않는다. 그래서 형식을 받고, 재료 id 로 카드를 서버가 고르고, 단일 export 도 MID 를
+    박는다. 틀리면 조용히 다른 재료 번호가 해석에 들어간다."""
+
+    def test_재료_id와_형식으로_한_파일(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        material, card = make_card(db)
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "format": "openradioss",
+                "rows": [{"mid": 7, "name": "도어", "material_id": str(material.id)}],
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        made = body.json()
+        assert made["format_family"] == "openradioss"
+        assert made["filename"].endswith(".rad")
+        assert made["skipped"] == [] and made["card_count"] == 1
+        # 요청의 MID 가 그 솔버의 자리에 박힌다 — 카드 유래 번호가 아니다.
+        assert "/MAT/LAW36/7/1" in made["text"]
+        from matcore import export
+
+        assert f"/MAT/LAW36/{export.solver_id_from(str(card.id))}/1" not in made["text"]
+
+    def test_abaqus_여러_재료가_한_파일에_이어_선다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        material, card = make_card(db)
+        other = Material(
+            record_name="SPCC_1.0", family="Metal", category="Steel", grade="SPCC"
+        )
+        db.add(other)
+        db.flush()
+        db.add(
+            PropertyCard(
+                material_id=other.id, label="대표", status="draft", blocks=card.blocks
+            )
+        )
+        db.commit()
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "format": "abaqus",
+                "rows": [
+                    {"mid": 1, "name": "A", "material_id": str(material.id)},
+                    {"mid": 2, "name": "B", "material_id": str(other.id)},
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        made = body.json()
+        assert made["text"].count("*MATERIAL, NAME=") == 2
+        assert made["filename"].endswith(".inp")
+        assert made["card_count"] == 2
+
+    def test_다른_솔버_줄과_문헌_줄은_건너뛰고_이유를_말한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        """조용히 섞이면 솔버가 다른 카드를 읽는다. 문헌은 LS-DYNA 형식만 낼 수 있다."""
+        material, _ = make_card(db)
+        ids = catalog_ids(db, tmp_path)
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "format": "abaqus",
+                "rows": [
+                    {"mid": 1, "name": "A", "material_id": str(material.id)},
+                    {"mid": 2, "name": "B", "material_id": str(material.id), "format": "dyna"},
+                    {"mid": 3, "name": "C", "catalog_material_id": str(ids["sus"])},
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        made = body.json()
+        why = {one["mid"]: one["why"] for one in made["skipped"]}
+        assert "다른 솔버" in why[2]
+        assert "LS-DYNA" in why[3]
+        assert made["card_count"] == 1
+
+    def test_카드가_없는_재료는_이유와_함께_건너뛴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        bare = Material(record_name="빈재료", family="Metal", category="Steel", grade="X")
+        db.add(bare)
+        db.commit()
+        _, card = make_card(db)
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "rows": [
+                    {"mid": 1, "name": "A", "card_id": str(card.id)},
+                    {"mid": 2, "name": "B", "material_id": str(bare.id)},
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        skipped = body.json()["skipped"]
+        assert skipped and skipped[0]["mid"] == 2 and "카드가 없는" in skipped[0]["why"]
+
+    def test_모르는_형식은_있는_것을_알려_준다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        _, card = make_card(db)
+        refused = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "format": "nastran",
+                "rows": [{"mid": 1, "name": "A", "card_id": str(card.id)}],
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        assert "abaqus" in refused.json()["error"]["message"]
+
+    def test_단일_export_도_MID_를_받는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        _, card = make_card(db)
+        got = client.get(
+            f"/api/fitting/cards/{card.id}/export",
+            params={"format": "dyna", "units": "si", "mid": 42},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        assert f"{42:>10d}{7850.0:>10.3E}" in got.text
+        from matcore import export
+
+        assert f"{export.solver_id_from(str(card.id)):>10d}" not in got.text
+        # 범위 밖은 거절 — 솔버는 0 이나 음수를 조용히 다른 뜻으로 읽는다.
+        assert (
+            client.get(
+                f"/api/fitting/cards/{card.id}/export",
+                params={"format": "dyna", "mid": 0},
+                headers=admin_headers,
+            ).status_code
+            == 422
+        )

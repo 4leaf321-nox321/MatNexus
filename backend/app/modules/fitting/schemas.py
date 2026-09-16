@@ -773,13 +773,22 @@ class PropertyCardUpdateRequest(BaseModel):
 
 
 class BomDeckRowIn(BaseModel):
-    """BOM 한 줄의 확정 — 사내 카드가 있으면 그것, 없으면 문헌 재료."""
+    """BOM 한 줄의 확정 — 사내 카드가 있으면 그것, 없으면 문헌 재료.
+
+    **재료 id 만 주어도 된다**(2026-09-16). 연결된 플랫폼은 카드 id 를 모른다 —
+    재료와 시뮬레이션 안의 번호(MID)와 솔버만 안다. 서버가 그 재료의 카드 중
+    그 형식으로 나오는 것을 고른다(확정된 것 먼저).
+    """
 
     mid: int
     name: str = Field(min_length=1, max_length=200)
     """부품표의 원문 이름 — 건너뛴 줄을 사람이 알아보는 데 쓴다."""
     card_id: uuid.UUID | None = None
+    material_id: uuid.UUID | None = None
+    """사내 재료. `card_id` 가 없을 때 서버가 카드를 고른다."""
     catalog_material_id: uuid.UUID | None = None
+    format: str | None = None
+    """이 줄만 다른 형식으로. 비우면 요청의 `format`. 같은 솔버여야 한다."""
     synthesize: bool = False
     """문헌 스칼라로 곡선을 **지어** *MAT_024 까지 낸다 — 사람이 켜야 켜진다.
     지은 곡선은 덱 각주에 「합성 — 실측이 아니다」 와 모델·주의가 실린다."""
@@ -789,8 +798,13 @@ class BomDeckIn(BaseModel):
     rows: list[BomDeckRowIn] = Field(min_length=1, max_length=200)
     units: str | None = None
     """단위계 key. 비우면 SI."""
+    format: str | None = None
+    """카드에 쓸 **솔버 형식**(`GET /fitting/formats` 의 key — abaqus · openradioss · dyna …).
+    비우면 전처럼 LS-DYNA 안에서 카드마다 가장 곡선다운 것을 고른다. 한 파일은 한
+    솔버다 — 줄마다 다른 솔버를 섞을 수 없다."""
     lit_format: str = "dyna_elastic"
-    """문헌 재료(스칼라)에 쓸 형식. 카드는 낼 수 있는 가장 곡선다운 형식을 스스로 고른다."""
+    """문헌 재료(스칼라)에 쓸 형식. 문헌은 LS-DYNA 형식만 낼 수 있어, `format` 이 다른
+    솔버면 문헌 줄은 건너뛰고 이유를 적는다."""
 
 
 class BomDeckSkippedOut(BaseModel):
@@ -802,6 +816,8 @@ class BomDeckSkippedOut(BaseModel):
 class BomDeckOut(BaseModel):
     text: str
     filename: str
+    format_family: str
+    """이 파일의 솔버(`dyna` · `abaqus` · `openradioss`) — 받는 쪽이 확장자로 짐작하지 않게."""
     skipped: list[BomDeckSkippedOut]
     notes: list[str]
     card_count: int

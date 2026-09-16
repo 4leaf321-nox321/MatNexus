@@ -40,6 +40,11 @@ function mockApis({
   get.mockImplementation((url: unknown) => {
     const path = String(url)
     if (path.startsWith('/fitting/unit-systems')) return Promise.resolve([])
+    if (path.startsWith('/fitting/formats'))
+      return Promise.resolve([
+        { key: 'abaqus', label: 'Abaqus', extension: 'inp', describe: '', requires: [] },
+        { key: 'json', label: 'JSON', extension: 'json', describe: '', requires: [] },
+      ])
     if (path.startsWith('/fitting/cards'))
       return Promise.resolve({ total: cards.length, limit: 1, offset: 0, items: cards })
     if (path.startsWith('/materials/'))
@@ -72,6 +77,7 @@ function mockApis({
       return Promise.resolve({
         text: '*KEYWORD\n*END\n',
         filename: 'bom_deck_si.k',
+        format_family: 'dyna',
         skipped: [],
         notes: [],
         card_count: 1,
@@ -126,10 +132,12 @@ describe('BOM 혼합 덱', () => {
 
     const [, body] = post.mock.calls.find(([url]) => String(url) === '/fitting/decks/bom') as [
       string,
-      { rows: Array<Record<string, unknown>>; units: unknown },
+      { rows: Array<Record<string, unknown>>; units: unknown; format: unknown },
     ]
     expect(body.rows[0]).toMatchObject({ mid: 1, card_id: CARD_ID, catalog_material_id: null })
     expect(body.units).toBeNull()
+    // 솔버를 안 고르면 서버 기본(LS-DYNA 자동) — null 로 간다.
+    expect(body.format).toBeNull()
 
     // 매칭 기억 + 문헌 연결.
     const putUrls = put.mock.calls.map(([url]) => String(url))

@@ -1122,18 +1122,33 @@ async def build_deck(
     ctx: Context,
     rows: list[dict[str, Any]],
     units: str = DEFAULT_DECK_UNITS,
+    format: str | None = None,
     include_text: bool = False,
     synthesize_missing_curves: bool = False,
 ) -> dict[str, Any]:
-    """확정된 부품 목록 → **해석용 덱 한 파일**(LS-DYNA).
+    """재료 목록 → **해석용 덱 한 파일**. 재료 · 그 모델 안의 번호(MID) · 솔버만 있으면 된다.
 
-    `rows` 는 부품마다 하나씩, 이렇게 준다:
+    `rows` 는 재료마다 하나씩. **재료 id 만 주면 서버가 카드를 고른다**(확정된 것
+    먼저, 그 형식으로 나오는 것):
 
-        {"mid": 1, "name": "도어 이너", "card_id": "<사내 카드 id>"}
-        {"mid": 2, "name": "힌지", "catalog_material_id": "<문헌 재료 id>"}
+        {"mid": 1, "name": "도어 이너", "material_id": "<사내 재료 id>"}
+        {"mid": 2, "name": "필러", "card_id": "<특정 카드 id>"}          # 카드를 정해 줄 때
+        {"mid": 3, "name": "힌지", "catalog_material_id": "<문헌 재료 id>"}
 
-    사내 카드가 있으면 **곡선 덱**(*MAT_024)으로, 문헌만 있으면 스칼라 덱으로
-    나가고 한 파일로 합쳐진다. 값마다 출처 각주가 파일 안에 들어간다.
+    ## `format` — 솔버를 고른다
+
+    `get_card` 의 `available_formats` 나 `GET /fitting/formats` 의 key 다 — `abaqus` ·
+    `openradioss` · `dyna` · `dyna_viscoelastic` …. **한 파일은 한 솔버다.** 비우면
+    LS-DYNA 안에서 카드마다 가장 곡선다운 형식을 고른다. 줄 하나만 다른 형식으로
+    내려면 그 줄에 `"format"` 을 준다 — 같은 솔버 안에서만 된다(다른 솔버면 그 줄은
+    `skipped` 에 이유와 함께). 문헌 재료(`catalog_material_id`)는 LS-DYNA 형식만 낼
+    수 있어, 다른 솔버를 골랐으면 문헌 줄은 건너뛴다.
+
+    `mid` 는 **요청 쪽 모델의 번호 그대로** 덱에 박힌다(1~9,999,999, 파일 안에서
+    유일). 돌아온 `format_family` 가 이 파일의 솔버다.
+
+    사내 카드가 있으면 **곡선 덱**으로, 문헌만 있으면 스칼라 덱으로 나가고 한
+    파일로 합쳐진다. 값마다 출처 각주가 파일 안에 들어간다.
 
     `units` 는 `list_unit_systems()` 의 key 다. **기본은 `mm_n_tonne`(판재 CAE 의
     관행)이고 SI 가 아니다** — 받는 쪽 해석 모델의 계를 사용자에게 확인하고 넘겨라.
@@ -1152,25 +1167,34 @@ async def build_deck(
     **본문을 손으로 고치지 마라.** 단위가 다르면 `units` 로 다시 뽑아라. 고정폭
     필드에 손대는 일이고, 한 칸만 어긋나도 솔버는 다른 값을 조용히 읽는다.
     """
-    payload = {
+    payload: dict[str, Any] = {
         "rows": [
             {
                 "mid": one.get("mid"),
                 "name": one.get("name") or "",
                 "card_id": one.get("card_id"),
+                "material_id": one.get("material_id"),
                 "catalog_material_id": one.get("catalog_material_id"),
-                "synthesize": bool(synthesize_missing_curves and not one.get("card_id")),
+                "format": one.get("format"),
+                "synthesize": bool(
+                    synthesize_missing_curves
+                    and not one.get("card_id")
+                    and not one.get("material_id")
+                ),
             }
             for one in rows
         ],
         "units": units,
     }
+    if format:
+        payload["format"] = format
     got = await _send(ctx, "POST", "/fitting/decks/bom", payload)
     if "error" in got:
         return got
     text = got.get("text", "")
     return {
         "filename": got.get("filename"),
+        "format_family": got.get("format_family"),
         "line_count": len(text.splitlines()),
         "card_count": got.get("card_count"),
         "literature_count": got.get("literature_count"),
@@ -1178,7 +1202,7 @@ async def build_deck(
         "skipped": got.get("skipped", []),
         # **기본은 머리(출처 각주)만이다.** 수백 줄이면 대화가 그것으로 찬다.
         "header": "\n".join(
-            line for line in text.splitlines()[:40] if line.startswith(("$", "*"))
+            line for line in text.splitlines()[:40] if line.startswith(("$", "*", "#", "/"))
         ),
         **_deck_body(text, include_text),
         **(
@@ -2477,9 +2501,20 @@ async def scan_deck_format(ctx: Context, deck_text: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def render_card_deck(
-    ctx: Context, card_id: str, format: str, units: str = DEFAULT_DECK_UNITS
+    ctx: Context,
+    card_id: str,
+    format: str,
+    units: str = DEFAULT_DECK_UNITS,
+    mid: int | None = None,
 ) -> dict[str, Any]:
     """물성 카드를 **덱 글자로 뽑는다** — 그대로 파일로 저장할 수 있는 본문.
+
+    ## `mid` — 받는 쪽 모델의 재료 번호를 준다
+
+    연결된 플랫폼이 자기 모델의 번호를 알면 **그 번호를 여기 넘겨라**(1~9,999,999).
+    서버가 그 자리에 박아 준다. 안 주면 카드 id 에서 만든 수가 나가고, 그러면 받는
+    쪽이 파일을 열어 고쳐야 한다 — 고정폭 칸을 손대는 일이다. 여러 재료를 한 파일로
+    낼 것이면 이 도구가 아니라 `build_deck` 이다.
 
     형식 목록은 `list_unit_systems` 가 아니라 `get_card` 의 `available_formats` 에
     있다.
@@ -2499,9 +2534,9 @@ async def render_card_deck(
 
     ## MID(재료 번호)를 사람에게 말해라
 
-    덱 안의 재료 번호는 **그 파일 안에서만 뜻이 있는 수**다 — 카드 UUID 에서 만든
-    것이라 전역으로 유일하지 않다. **덱 여럿을 손으로 합치면 겹칠 수 있고, 솔버는
-    중복 MID 를 조용히 덮는다.**
+    `mid` 를 안 줬으면 덱 안의 재료 번호는 **그 파일 안에서만 뜻이 있는 수**다 —
+    카드 UUID 에서 만든 것이라 전역으로 유일하지 않다. **덱 여럿을 손으로 합치면
+    겹칠 수 있고, 솔버는 중복 MID 를 조용히 덮는다.**
 
     그 수는 **돌려주는 덱 글자 안에 있다**(솔버 재료 카드의 첫 칸). 따로 실어
     주지 않는 이유는 만드는 규칙이 백엔드에 있기 때문이다 — 여기서 다시 계산하면
@@ -2511,12 +2546,13 @@ async def render_card_deck(
     다른 덱과 합치실 거면 겹치는지 확인하세요.」 여러 재료를 한 덱으로 묶는
     자리(BOM 혼합 덱)는 서버가 중복을 막지만, 낱개로 뽑아 합칠 때는 사람이 본다.
     """
-    deck = await _get_text(
-        ctx, f"/fitting/cards/{card_id}/export", {"format": format, "units": units}
-    )
+    params: dict[str, Any] = {"format": format, "units": units}
+    if mid is not None:
+        params["mid"] = mid
+    deck = await _get_text(ctx, f"/fitting/cards/{card_id}/export", params)
     if isinstance(deck, dict):
         return deck  # 오류 봉투
-    return {"format": format, "units": units, "deck": deck}
+    return {"format": format, "units": units, "mid": mid, "deck": deck}
 
 
 @mcp.tool()

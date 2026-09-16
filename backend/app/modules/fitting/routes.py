@@ -1779,7 +1779,7 @@ def create_declared_card(
             # 켰는데 못 지으면 조용히 빼지 않는다 — 만들어진 카드가 「소성까지
             # 있는 카드」 인 줄 알고 쓰게 된다.
             raise AppError(
-                "MNX-FITTING-0035", f"소성 표를 합성할 수 없습니다: {made_synth}", status=422
+                "MNX-FITTING-0038", f"소성 표를 합성할 수 없습니다: {made_synth}", status=422
             )
         synthetic_rows, synthetic_notes = made_synth
 
@@ -3374,10 +3374,23 @@ def export_card(
     card_id: uuid.UUID,
     format: str = Query(default="json"),
     units: str = Query(default="si", description="덱의 단위계. 기본은 SI."),
+    mid: int | None = Query(
+        default=None,
+        ge=1,
+        le=export.MAX_SOLVER_ID,
+        description="덱 안의 재료 번호. 비우면 카드 id 에서 만든 수.",
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
     """솔버 카드를 텍스트로 만든다.
+
+    ## 재료 번호(MID)를 받는다 (2026-09-16)
+
+    덱 안의 번호는 **그 해석 모델 안에서만 뜻이 있는 수**다. 연결된 플랫폼은 자기
+    모델의 번호를 이미 갖고 있어, 우리가 카드 id 에서 만든 수를 주면 받는 쪽이 파일을
+    열어 고쳐야 한다 — 고정폭 칸에 손을 대는 일이고 한 칸 어긋나면 솔버는 다른 값을
+    조용히 읽는다. 그래서 번호를 여기서 받아 서버가 박는다(BOM 덱과 같은 범위).
 
     **초안도 내보낼 수 있다.** 확정 전에 덱에 넣어 한 번 돌려 보는 것이 검토의
     실체다 — 돌려 보지 않고 확정하라고 하면 확정이 형식이 된다. 대신 초안이면
@@ -3393,6 +3406,8 @@ def export_card(
     생긴다.
     """
     deck = _deck_for_card(db, user, card_id)
+    if mid is not None:
+        deck = replace(deck, solver_id=mid)
     system = _unit_system(db, units)
     try:
         target = renderers.renderer_for(db, user.home_workspace_id, format)
@@ -3857,8 +3872,44 @@ def remove_card(
 # 매칭·기억·연결은 워크벤치 화면이 각 도메인 API 를 조립한다(ADR 0024).
 
 #: 카드가 낼 형식의 우선순위 — 가장 곡선다운 것부터. 실측을 스칼라로 뭉개면
-#: 카드를 만든 이유가 사라진다.
+#: 카드를 만든 이유가 사라진다. 요청이 `format` 을 주면 이 목록 대신 그것 하나다.
 _BOM_CARD_FORMATS = ("dyna", "dyna_viscoelastic", "dyna_elastic")
+
+
+def _cards_for_material(db: Session, user: User, material_id: uuid.UUID) -> list[PropertyCard]:
+    """재료의 카드 — **확정된 것 먼저**, 같은 상태면 최근 것 먼저. 가시성은 재료로 판정."""
+    _visible_material(db, user, material_id)
+    rows = list(
+        db.scalars(
+            select(PropertyCard)
+            .where(PropertyCard.material_id == material_id)
+            .where(PropertyCard.status != "deprecated")
+            .order_by(PropertyCard.updated_at.desc())
+        )
+    )
+    rows.sort(key=lambda one: 0 if one.status == "published" else 1)
+    return rows
+
+
+def _pick_card_deck(
+    db: Session,
+    user: User,
+    cards_: list[PropertyCard],
+    targets: Sequence[export.Renderer],
+    mid: int,
+) -> tuple[export.Deck, export.Renderer] | tuple[None, str]:
+    """카드 중 **그 형식으로 나오는 첫 것**. 없으면 첫 카드에 무엇이 빠졌는지."""
+    for item in cards_:
+        deck = replace(_deck_for_card(db, user, item.id), solver_id=mid)
+        for target in targets:
+            if not export.missing_for(deck, target):
+                return deck, target
+    if not cards_:
+        return None, "카드가 없는 재료입니다 — 문헌 재료면 catalog_material_id 로 주세요."
+    first = replace(_deck_for_card(db, user, cards_[0].id), solver_id=mid)
+    return None, "카드로 낼 수 있는 형식이 없습니다 — " + "; ".join(
+        export.missing_for(first, targets[0])
+    )
 
 
 @router.post("/decks/bom", response_model=BomDeckOut)
@@ -3887,6 +3938,23 @@ def build_bom_deck(
             "MNX-FITTING-0032", f"모르는 단위계입니다: {payload.units}", status=422
         ) from None
 
+    # 솔버 — 한 파일은 한 솔버다. 요청이 형식을 주면 그것, 아니면 LS-DYNA 안에서 카드마다.
+    if payload.format is not None:
+        if payload.format == "json":
+            raise AppError("MNX-FITTING-0038", "json 은 합칠 수 없는 형식입니다.", status=422)
+        try:
+            chosen = renderers.renderer_for(db, user.home_workspace_id, payload.format)
+        except export.ExportError as exc:
+            raise AppError("MNX-FITTING-0038", str(exc), status=422) from exc
+        card_targets: list[export.Renderer] = [chosen]
+    else:
+        card_targets = [
+            renderers.renderer_for(db, user.home_workspace_id, key)
+            for key in _BOM_CARD_FORMATS
+        ]
+    family = litdeck.format_family(card_targets[0].key)
+    extension = card_targets[0].extension
+
     seen: set[int] = set()
     for row in payload.rows:
         if not 1 <= row.mid <= export.MAX_SOLVER_ID:
@@ -3910,22 +3978,41 @@ def build_bom_deck(
     literature_count = 0
     synthetic_count = 0
     for row in payload.rows:
-        if row.card_id is not None:
-            deck = replace(_deck_for_card(db, user, row.card_id), solver_id=row.mid)
-            target = next(
-                (key for key in _BOM_CARD_FORMATS if not export.missing_for(deck, key)),
-                None,
-            )
-            if target is None:
+        # 줄마다 다른 형식 — 같은 솔버 안에서만.
+        row_targets = card_targets
+        if row.format is not None:
+            try:
+                override = renderers.renderer_for(db, user.home_workspace_id, row.format)
+            except export.ExportError as refused:
+                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
+                continue
+            if litdeck.format_family(override.key) != family:
                 skipped.append(
                     BomDeckSkippedOut(
                         mid=row.mid,
                         name=row.name,
-                        why="카드로 낼 수 있는 형식이 없습니다 — "
-                        + "; ".join(export.missing_for(deck, _BOM_CARD_FORMATS[0])),
+                        why=(
+                            f"{override.key} 는 다른 솔버의 형식입니다 — "
+                            f"이 파일은 {family} 입니다."
+                        ),
                     )
                 )
                 continue
+            row_targets = [override]
+
+        if row.card_id is not None or row.material_id is not None:
+            if row.card_id is not None:
+                cards_ = [_visible_card(db, user, row.card_id)]
+            else:
+                assert row.material_id is not None
+                cards_ = _cards_for_material(db, user, row.material_id)
+            picked = _pick_card_deck(db, user, cards_, row_targets, row.mid)
+            if picked[0] is None:
+                skipped.append(
+                    BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(picked[1]))
+                )
+                continue
+            deck, target = picked
             try:
                 made = export.render(target, deck, system)
             except export.ExportError as refused:
@@ -3937,6 +4024,18 @@ def build_bom_deck(
             continue
 
         if row.catalog_material_id is not None:
+            if family != "dyna":
+                skipped.append(
+                    BomDeckSkippedOut(
+                        mid=row.mid,
+                        name=row.name,
+                        why=(
+                            "문헌 재료는 LS-DYNA 형식으로만 낼 수 있습니다 — "
+                            f"이 파일은 {family} 입니다."
+                        ),
+                    )
+                )
+                continue
             material = db.get(CatalogMaterial, row.catalog_material_id)
             if material is None:
                 skipped.append(
@@ -4004,8 +4103,9 @@ def build_bom_deck(
             details={"skipped": [one.model_dump(mode="json") for one in skipped]},
         )
     return BomDeckOut(
-        text=litdeck.combine(rendered),
-        filename=f"bom_deck_{system.key}.k",
+        text=litdeck.combine_family(rendered, family),
+        filename=f"bom_deck_{system.key}.{extension}",
+        format_family=family,
         skipped=skipped,
         notes=notes,
         card_count=card_count,
