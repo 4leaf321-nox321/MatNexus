@@ -136,6 +136,39 @@ class PropertyItemOut(BaseModel):
     날 비열 자리에 W/(m.K) 가 뜬다. 여기서 주면 화면은 그리기만 한다."""
 
 
+class CoverageEntryOut(BaseModel):
+    origin: str
+    """`measured`(시험으로 잰 값) · `internal`(선언) · `catalog`(이어진 문헌 재료)."""
+    tier: int
+    value_si: float
+    count: int
+    spread_si: float | None
+    conditions: dict[str, float]
+    """표준 조건 키 → SI. 비면 조건을 적지 않은 값."""
+    method: str | None
+    ref_kind: str
+    ref_id: str
+    ref_label: str
+
+
+class CoveragePropertyOut(BaseModel):
+    key: str
+    name: str
+    si_unit: str | None
+    entries: list[CoverageEntryOut]
+
+
+class PropertyCoverageOut(BaseModel):
+    """물성 지도 — 이 재료에 어떤 물성이 어떤 조건에 어떤 등급으로 있나(2026-09-16).
+
+    세 세계(시험·선언·문헌)를 같은 줄 모양으로. 공용어(문헌 물성 키)에 안 이어진 스칼라·
+    항목은 `unmapped` 에 — 지도에서 사라지면 없는 줄 안다."""
+
+    material_id: uuid.UUID
+    properties: list[CoveragePropertyOut]
+    unmapped: dict[str, list[str]]
+
+
 class MaterialOut(BaseModel):
     id: uuid.UUID
     code: str

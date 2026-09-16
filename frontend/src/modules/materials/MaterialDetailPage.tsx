@@ -18,6 +18,7 @@ import { MaterialListPanel } from '@/modules/materials/MaterialListPanel'
 import { SampleExplorer } from '@/modules/materials/SampleExplorer'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
+import { PropertyCoverageTable } from '@/modules/materials/PropertyCoverageTable'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { LinkedCatalogSection } from '@/modules/catalog/LinkedCatalogSection'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
@@ -228,6 +229,7 @@ export default function MaterialDetailPage() {
           <TabsList>
             <TabsTrigger value="samples">시료·시편</TabsTrigger>
             <TabsTrigger value="properties">물성</TabsTrigger>
+            <TabsTrigger value="coverage">물성 지도</TabsTrigger>
             <TabsTrigger value="cards">CAE 카드</TabsTrigger>
           </TabsList>
       {/* **계층을 한 줄로.** 시료 ▸ 시편 ▸ 시험이 아코디언 3단이라, 펼치기
@@ -313,6 +315,12 @@ export default function MaterialDetailPage() {
             탭의 대표 곡선이기 때문이다. */}
         <TabsContent value="cards" className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2">
           {id && <FittingPanel materialId={id} />}
+        </TabsContent>
+
+        {/* 물성 탭이 통계를 곡선·표로 보인다면, 여기는 **무엇이 있고 없나**다 — 시험·선언·
+            문헌을 물성 하나 아래 조건·등급과 함께 한 장으로(2026-09-16). */}
+        <TabsContent value="coverage" className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2">
+          {id && <PropertyCoverageTable materialId={id} />}
         </TabsContent>
 
         <TabsContent value="samples" className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2">

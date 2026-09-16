@@ -61,6 +61,7 @@ from app.modules.materials.schemas import (
     ParameterSetAdoptIn,
     ParameterSetOut,
     ParameterTermOut,
+    PropertyCoverageOut,
     PropertyItemOut,
     PropertySourcesOut,
     SampleCreateRequest,
@@ -90,6 +91,7 @@ from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
     contention,
+    coverage,
     display,
     exports,
     facets,
@@ -1124,6 +1126,22 @@ def material_summary(
         run_count=count(runs),
         specimens_without_run=specimen_count - count(with_run.distinct()),
     )
+
+
+@router.get("/{material_id}/property-coverage", response_model=PropertyCoverageOut)
+def property_coverage(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCoverageOut:
+    """물성 지도 — 이 재료에 **어떤 물성이 어떤 조건에 어떤 등급으로** 있나, 한 장.
+
+    시험으로 잰 값·선언·이어진 문헌값을 같은 줄 모양으로 편다. 공용어에 안 이어진
+    스칼라·항목은 `unmapped` 로 함께 — 지도에서 사라지면 없는 줄 안다.
+    """
+    services.get_material(db, user, material_id)  # 가시성 판정
+    made = coverage.collect(db, material_id)
+    return PropertyCoverageOut.model_validate(made, from_attributes=True)
 
 
 @router.get("/{material_id}", response_model=MaterialOut)

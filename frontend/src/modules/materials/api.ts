@@ -5,6 +5,8 @@ import type { components } from '@/shared/api/schema'
 import { display } from '@/shared/units'
 
 export type Material = components['schemas']['MaterialOut']
+export type PropertyCoverage = components['schemas']['PropertyCoverageOut']
+export type CoverageEntry = components['schemas']['CoverageEntryOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
 export type MaterialTreeSummary = components['schemas']['MaterialTreeSummaryOut']
 export type Sample = components['schemas']['SampleOut']
@@ -157,6 +159,9 @@ function search(query: MaterialQuery | SpecimenQuery): string {
 export type WorkspaceChoice = components['schemas']['WorkspaceOut']
 
 export const materialsApi = {
+  /** 물성 지도 — 어떤 물성이 어떤 조건에 어떤 등급으로 있나(시험·선언·문헌 한 장). */
+  propertyCoverage: (id: string) =>
+    api.get<PropertyCoverage>(`/materials/${id}/property-coverage`),
   /** 이 재료가 문헌에서 받아 온 모델 파라미터 벌들(ADR 0029). */
   parameterSets: (id: string) => api.get<ParameterSet[]>(`/materials/${id}/parameter-sets`),
   /** 소속 거르기의 선택지. 내가 볼 수 있는 부서. */

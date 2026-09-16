@@ -9,7 +9,7 @@
  * **빈 화면을 보이는 대신** 뭐라도 보여 준다.
  */
 
-export const TABS = ['samples', 'properties', 'cards'] as const
+export const TABS = ['samples', 'properties', 'coverage', 'cards'] as const
 
 export type MaterialTab = (typeof TABS)[number]
 
