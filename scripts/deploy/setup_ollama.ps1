@@ -37,10 +37,27 @@ SYSTEM 으로 돌면 모델이 `C:\Windows\System32\config\systemprofile\.ollama
 **옮기고** 나서 변수를 바꾼다. 폐쇄망 서버는 1.2 GB 를 다시 받을 길이 없어서
 그렇다. 프로그램 자체를 옮기는 것은 재설치다 — 지우고 `-InstallDir` 로 다시 깐다.
 
+## 이미 도는 Ollama 가 있으면 그것을 쓴다
+
+같은 서버에 다른 앱(TestScope 등)이 올린 Ollama 가 11434 에서 응답하면 **작업을 또 등록하지
+않는다** — 두 작업이 같은 포트를 두고 다투면 뒤에 뜬 쪽이 조용히 죽는다. 모델만 확인하고
+받는다. 이 스크립트는 「내 것」 이 아니라 「이 PC 의 임베딩 엔진」 을 준비하는 것이다
+(TestScope 와 같은 판단, 2026-09-16).
+
+## 이미 트레이 앱으로 깔려 있는 서버 — `-TakeOver`
+
+사람이 설치 프로그램으로 깐 Ollama 는 **로그인한 사람의 트레이 앱**으로 떠 있다. 응답은 하니
+이 스크립트는 그것을 「이미 도는 엔진」 으로 보고 작업을 안 만든다 — 그런데 그 사람이
+로그아웃하거나 재부팅하면 사라지고, 그 사실은 「의미 검색이 안 되네」 로만 드러난다.
+`-TakeOver` 를 주면 트레이 인스턴스를 내리고, 로그인 시 자동 실행 항목을 지우고, SYSTEM
+작업으로 넘긴다. 그 사람 프로필(`~\.ollama\models`)에 받아 둔 모델은 새 자리로 **복사**한다
+(옛 것은 지우지 않는다) — SYSTEM 은 사람 프로필을 못 본다.
+
 사용:
   .\setup_ollama.ps1                          # 설치 + 서비스 + bge-m3
   .\setup_ollama.ps1 -Model bge-m3 -Port 11434
   .\setup_ollama.ps1 -InstallDir 'D:\Ollama' -ModelPath 'D:\MatNexus\ollama-models'
+  .\setup_ollama.ps1 -ModelPath 'D:\MatNexus\ollama-models' -TakeOver   # 트레이 앱을 SYSTEM 작업으로
   .\setup_ollama.ps1 -SkipService             # 서비스 없이 지금 세션에서만
   .\setup_ollama.ps1 -CheckOnly               # 아무것도 안 바꾸고 상태만 본다
 #>
@@ -54,7 +71,9 @@ param(
     [string]$InstallDir,
     [string]$TaskName = 'MatNexus-Ollama',
     [switch]$SkipService,
-    [switch]$CheckOnly
+    [switch]$CheckOnly,
+    # 트레이 앱으로 떠 있는 인스턴스를 내리고 SYSTEM 작업으로 넘긴다(위 설명).
+    [switch]$TakeOver
 )
 
 $ErrorActionPreference = 'Stop'
@@ -190,12 +209,45 @@ if ($moving) {
     Write-Log '옮겼습니다.'
 }
 if (-not (Test-Path $ModelPath)) { New-Item -ItemType Directory -Force $ModelPath | Out-Null }
+# 트레이 앱은 사람 프로필(.ollama\models)에 받아 둔다. 넘겨받을 때 새 자리가 비어 있으면 거기서
+# **복사**한다 — 지우지 않는다(사람 것은 사람 것이다). 폐쇄망은 1.2 GB 를 다시 받을 길이 없다.
+$profileModels = Join-Path $env:USERPROFILE '.ollama\models'
+if ($TakeOver -and -not (Test-Path (Join-Path $ModelPath 'blobs')) -and (Test-Path (Join-Path $profileModels 'blobs'))) {
+    Write-Log "트레이 앱의 모델을 복사합니다: $profileModels → $ModelPath (몇 분 걸릴 수 있습니다)"
+    & robocopy $profileModels $ModelPath /E /R:1 /W:1 /NFL /NDL /NJH /NJS | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "모델 복사 실패 (robocopy exit $LASTEXITCODE)" }
+}
 [Environment]::SetEnvironmentVariable('OLLAMA_MODELS', $ModelPath, 'Machine')
 $env:OLLAMA_MODELS = $ModelPath
 Write-Log "모델 자리: $ModelPath"
 
+# --- 2-b. 트레이 인스턴스 내리기 (-TakeOver) ------------------------------------
+# 사람 세션의 트레이 앱이 11434 를 물고 있으면 SYSTEM 작업이 떠도 포트를 못 잡는다.
+# 그리고 그 앱은 로그인 시 자동 실행 항목으로 되살아나니 그것도 지운다(현재 사용자의 Run 키).
+if ($TakeOver) {
+    $tray = Get-Process -Name 'ollama app', 'ollama' -ErrorAction SilentlyContinue
+    if ($tray) {
+        Write-Log ("트레이 인스턴스를 내립니다: " + (($tray | ForEach-Object { "$($_.ProcessName)($($_.Id))" }) -join ', '))
+        $tray | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $entry = Get-ItemProperty -Path $runKey -Name 'Ollama' -ErrorAction SilentlyContinue
+    if ($entry) {
+        Remove-ItemProperty -Path $runKey -Name 'Ollama'
+        Write-Log '로그인 시 자동 실행(트레이) 항목을 지웠습니다 — 이제 SYSTEM 작업이 띄웁니다.'
+    }
+    if (Test-Alive) { throw '11434 가 아직 응답합니다 — 다른 계정의 세션에서 도는 인스턴스일 수 있습니다. 그 세션에서 종료한 뒤 다시 돌리세요.' }
+}
+
 # --- 3. 서비스(작업 스케줄러) ------------------------------------------------
-if ($SkipService) {
+if (Test-Alive) {
+    # 누가 띄웠든 이미 도는 것을 쓴다. 우리 작업이 없어도 등록하지 않는다 — 같은 포트를 두고
+    # 두 작업이 다투면 뒤에 뜬 쪽이 조용히 죽는다. 재부팅 뒤 그쪽이 안 뜨면 그때 다시 돌린다
+    # (그때는 응답이 없으니 등록한다).
+    $ours = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Write-Log ("엔진이 이미 응답합니다 — 작업을 " + $(if ($ours) { "다시 등록하지 않습니다('$TaskName' 있음)." } else { '등록하지 않습니다(다른 앱이 띄운 것을 씁니다). 트레이 앱이라 재부팅하면 사라지는 것이면 -TakeOver 를 주세요.' }))
+} elseif ($SkipService) {
     Write-Log '서비스 등록을 건너뜁니다.'
     if (-not (Test-Alive)) {
         Write-Log '이 세션에서만 띄웁니다 — 재부팅하면 사라집니다.'
