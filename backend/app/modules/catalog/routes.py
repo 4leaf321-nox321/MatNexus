@@ -30,10 +30,13 @@ from app.modules.catalog.models import (
 from app.modules.catalog.ontology_models import (
     ALIAS_SOURCES,
     LINK_KINDS,
+    AliasCandidate,
     PropertyAlias,
     PropertyLink,
 )
 from app.modules.catalog.schemas import (
+    AliasCandidateAccept,
+    AliasCandidateOut,
     AshbyAxisOut,
     AshbyOut,
     AshbyPointOut,
@@ -84,7 +87,13 @@ from app.modules.catalog.schemas import (
 )
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import exports, property_names, property_search, representative
+from app.shared import (
+    alias_candidates,
+    exports,
+    property_names,
+    property_search,
+    representative,
+)
 from app.shared import litdeck as deck_builder
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
@@ -1030,11 +1039,105 @@ def resolve_property(
     고르면 조용히 틀린다 — 부르는 쪽이 되물어야 한다.
     """
     found = property_names.describe(property_names.resolve(db, q, limit=limit))
+    if not found["candidates"]:
+        # **실패를 남긴다.** 사전에 없는 말은 사람이 별칭으로 이어야 다음부터 찾힌다.
+        alias_candidates.record(db, q, source="resolve")
     return PropertyResolveOut(
         query=q,
         ambiguous=bool(found["ambiguous"]),
         candidates=[PropertyCandidateOut(**one) for one in found["candidates"]],
     )
+
+
+@router.get("/properties/alias-candidates", response_model=list[AliasCandidateOut])
+def list_alias_candidates(
+    status: str = Query(default="open", description="`open` · `accepted` · `ignored` · `all`"),
+    limit: int = Query(default=100, ge=1, le=500),
+    _user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> list[AliasCandidateOut]:
+    """못 푼 이름들 — **많이 물은 것부터.** 관리자가 별칭으로 잇거나 무시한다.
+
+    AI 나 사람이 「UTS」 로 찾아 빈손이면 여기 쌓인다. 전에는 그 사실이 아무 데도 남지
+    않아 다음 사람도 같은 말로 다시 실패했다(2026-09-16).
+    """
+    query = select(AliasCandidate).order_by(
+        AliasCandidate.count.desc(), AliasCandidate.last_seen_at.desc()
+    )
+    if status != "all":
+        query = query.where(AliasCandidate.status == status)
+    return [AliasCandidateOut.model_validate(one) for one in db.scalars(query.limit(limit))]
+
+
+@router.post(
+    "/properties/alias-candidates/{candidate_id}/accept", response_model=AliasCandidateOut
+)
+def accept_alias_candidate(
+    candidate_id: uuid.UUID,
+    payload: AliasCandidateAccept,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> AliasCandidateOut:
+    """이 말을 **그 물성의 별칭으로.** 다음부터 이름 해소가 그 물성을 찾는다.
+
+    별칭이 이미 있으면 그것을 그대로 두고 후보만 닫는다 — 같은 별칭을 두 번 만들지
+    않는다(`add_property_alias` 와 같은 판단).
+    """
+    candidate = db.get(AliasCandidate, candidate_id)
+    if candidate is None:
+        raise NotFound("MNX-CATALOG-0052", "별칭 후보를 찾을 수 없습니다.")
+    definition = db.scalar(
+        select(CatalogDefinition).where(CatalogDefinition.key == payload.property_key)
+    )
+    if definition is None:
+        raise NotFound(
+            "MNX-CATALOG-0021", f"'{payload.property_key}' 물성 정의를 찾을 수 없습니다."
+        )
+    exists = db.scalar(
+        select(PropertyAlias).where(
+            PropertyAlias.property_key == payload.property_key,
+            PropertyAlias.normalized == candidate.normalized,
+        )
+    )
+    if exists is None:
+        db.add(
+            PropertyAlias(
+                property_key=payload.property_key,
+                alias=candidate.text,
+                normalized=candidate.normalized,
+                source="manual",
+                note=f"별칭 후보에서 받아들임 — {candidate.count}번 물었다",
+                created_by_id=user.id,
+            )
+        )
+    candidate.status = "accepted"
+    candidate.resolved_to = payload.property_key
+    candidate.resolved_by_id = user.id
+    candidate.resolved_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(candidate)
+    return AliasCandidateOut.model_validate(candidate)
+
+
+@router.post(
+    "/properties/alias-candidates/{candidate_id}/ignore", response_model=AliasCandidateOut
+)
+def ignore_alias_candidate(
+    candidate_id: uuid.UUID,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> AliasCandidateOut:
+    """물성 이름이 아니다(오타·다른 것). 목록에서 내리되 지우지 않는다 — 다시 오면 횟수만
+    오른다."""
+    candidate = db.get(AliasCandidate, candidate_id)
+    if candidate is None:
+        raise NotFound("MNX-CATALOG-0052", "별칭 후보를 찾을 수 없습니다.")
+    candidate.status = "ignored"
+    candidate.resolved_by_id = user.id
+    candidate.resolved_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(candidate)
+    return AliasCandidateOut.model_validate(candidate)
 
 
 @router.get("/properties/{property_key}/aliases", response_model=list[PropertyAliasOut])
@@ -1523,7 +1626,14 @@ def search_by_property(
     """
     candidates = property_names.resolve(db, q, limit=5)
     if not candidates:
-        return PropertySearchOut(query=q, notes=[f"'{q}' 로 물성을 찾지 못했습니다."])
+        alias_candidates.record(db, q, source="search")
+        return PropertySearchOut(
+            query=q,
+            notes=[
+                f"'{q}' 로 물성을 찾지 못했습니다 — 이 이름은 별칭 후보로 남겨 두었습니다. "
+                "관리자가 어느 물성인지 이어 주면 다음부터 찾힙니다."
+            ],
+        )
     if property_names.ambiguous(candidates):
         return PropertySearchOut(
             query=q,

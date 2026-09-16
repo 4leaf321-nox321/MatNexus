@@ -172,6 +172,7 @@ EXCLUDED_TABLES: dict[str, str] = {
     "notifications": 알림,
     "bom_aliases": 기준정보,
     "property_aliases": 기준정보,
+    "alias_candidates": 기준정보 + " — 못 푼 이름의 큐. 사전이 되기 전 단계라 마디가 아니다",
     "voc_events": 제보,
     "voc_items": 제보,
     "commission_events": "측정 의뢰의 이력(등록·접수·시험 연결) — 사람 사이의 절차 기록이다. "

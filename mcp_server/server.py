@@ -1118,6 +1118,30 @@ def _deck_body(text: str, include_text: bool) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def property_coverage(ctx: Context, material_id: str) -> dict[str, Any]:
+    """이 재료에 **어떤 물성이 어떤 조건에 어떤 등급으로** 있나 — 한 장(2026-09-16).
+
+    `find_by_property` 의 반대 방향이다. 시험으로 잰 값(`measured`) · 사람이 적은 선언
+    (`internal`) · 이어진 문헌 재료의 값(`catalog`)이 **물성 키 하나 아래** 같은 줄 모양으로
+    선다:
+
+        properties[].key / name / si_unit
+        properties[].entries[]   origin · tier(1 좋음~4) · value_si · count · spread_si
+                                 · conditions{temperature: K …} · method · ref_kind/ref_id
+        unmapped                 공용어에 안 이어진 시험 스칼라·선언 항목 — **없는 게 아니라
+                                 안 이어진 것**이다. 사람에게 「물성 매핑에서 이으면 보인다」
+
+    ## 읽는 법
+
+    「이 재료에 뭐가 있나」 에는 물성 이름을 죽 말하지 말고 **조건·등급과 함께** 말해라 —
+    「항복강도: 23 °C 실측(등급 1, 표본 3) 305 MPa, 80 °C 문헌(등급 2) 500 MPa. 열물성은
+    없음」. 값은 SI 다 — 사람에게는 `si_unit` 을 보고 관행 단위로 바꿔 말한다(Pa → MPa).
+    빈 `properties` 는 「이 재료에 값이 하나도 없다」 다.
+    """
+    return await _get(ctx, f"/materials/{material_id}/property-coverage")
+
+
+@mcp.tool()
 async def deck_readiness(ctx: Context, material_id: str) -> dict[str, Any]:
     """이 재료로 **어느 솔버 형식이 나오나 · 안 나오면 무엇이 없나 · 어디서 채우나** — 한 번에.
 
@@ -3208,6 +3232,12 @@ _RECIPES: list[dict[str, str]] = [
         "format=…) · 아니면 missing[].tests / .catalog / .declarable_values 를 사람에게",
         "note": "카드를 열어 available_formats 를 보지 마라 — 준비도가 형식마다 한 번에 답한다. "
         "지도의 deck_requirements 가 그 규칙(형식→블록, 블록→시험·문헌)이다.",
+    },
+    {
+        "question": "이 재료에 어떤 물성이 어떤 조건에 있나 / 무엇이 비었나",
+        "steps": "property_coverage(material_id) → 물성마다 entries 의 origin·tier·conditions 를 "
+        "사람 말로 · 비었으면 deck_readiness / measurement_gaps",
+        "note": "값을 찾는 것이 아니라 재료 하나의 지도다. 반대 방향(값→재료)은 find_by_property.",
     },
     {
         "question": "점탄성·Prony·경화식 같은 갈래가 카드에 있나",

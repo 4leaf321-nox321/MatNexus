@@ -64,7 +64,7 @@ from app.modules.statistics.schemas import (
     YearTallyOut,
 )
 from app.modules.tests.models import TestRun, TestType
-from app.shared import curvedata, ops, permissions
+from app.shared import alias_candidates, curvedata, ops, permissions
 from app.shared import divisions as divisions_order
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
@@ -852,6 +852,7 @@ def overview(
                 expired_deleted_count=ops.expired_deleted_run_count(db),
                 failed_jobs=ops.failed_job_count(db),
                 backup_problem=ops.backup_status().problem,
+                unresolved_names=alias_candidates.open_count(db),
             )
             if user.is_system_admin
             else None

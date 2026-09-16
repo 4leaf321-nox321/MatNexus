@@ -61,6 +61,7 @@ export function OverviewPanel({
         ops.expired_deleted_count > 0,
         ops.failed_jobs > 0,
         Boolean(ops.backup_problem),
+        ops.unresolved_names > 0,
       ].filter(Boolean).length
     : 0
 
@@ -85,6 +86,10 @@ export function OverviewPanel({
             </Pending>
           )}
           {ops.failed_jobs > 0 && <Pending to="/server">실패한 작업 {ops.failed_jobs}</Pending>}
+          {/* 사람·AI 가 물성을 찾다 빈손이었던 말 — 별칭으로 이어 주면 다음부터 찾힌다. */}
+          {ops.unresolved_names > 0 && (
+            <Pending to="/admin/vocabulary">해소 못 한 물성 이름 {ops.unresolved_names}</Pending>
+          )}
         </div>
       )}
 

@@ -327,6 +327,14 @@ export const catalogApi = {
     api.post<CatalogPropertyMigrated>(`/catalog/properties/${encodeURIComponent(key)}/migrate`, payload),
   createCatalogMaterial: (payload: CatalogMaterialCreate) =>
     api.post<CatalogMaterial>('/catalog/materials', payload),
+  /** 못 푼 물성 이름들 — 관리자가 별칭으로 잇거나 무시한다(2026-09-16). */
+  aliasCandidates: () => api.get<AliasCandidate[]>('/catalog/properties/alias-candidates'),
+  acceptAliasCandidate: (id: string, propertyKey: string) =>
+    api.post<AliasCandidate>(`/catalog/properties/alias-candidates/${id}/accept`, {
+      property_key: propertyKey,
+    }),
+  ignoreAliasCandidate: (id: string) =>
+    api.post<AliasCandidate>(`/catalog/properties/alias-candidates/${id}/ignore`),
   /** 물성 이름 → 후보들. 값 넣기 창이 물성을 고를 때 쓴다. */
   resolveProperty: (q: string) =>
     api.get<PropertyResolve>(`/catalog/properties/resolve?q=${encodeURIComponent(q)}`),
@@ -344,6 +352,7 @@ export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate
 export type CatalogValueCreate = components['schemas']['CatalogValueCreate']
 export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut']
 export type PropertyResolve = components['schemas']['PropertyResolveOut']
+export type AliasCandidate = components['schemas']['AliasCandidateOut']
 export type PropertyCandidate = components['schemas']['PropertyCandidateOut']
 
 /** 카탈로그 도메인 — 서버 `contribute.DOMAINS` 와 같다. 새 값을 만들지 않는다. */

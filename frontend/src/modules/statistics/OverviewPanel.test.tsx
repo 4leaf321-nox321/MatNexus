@@ -48,6 +48,7 @@ const OPS = {
   expired_deleted_count: 0,
   failed_jobs: 0,
   backup_problem: null,
+  unresolved_names: 0,
 }
 
 function panel(overrides: Partial<Overview> = {}) {
@@ -77,9 +78,15 @@ describe('운영 경고', () => {
         expired_deleted_count: 12,
         failed_jobs: 2,
         backup_problem: '백업 폴더에 덤프가 없습니다.',
+        unresolved_names: 3,
       },
     })
     const row = screen.getByRole('alert')
+    expect(row).toHaveTextContent('해소 못 한 물성 이름 3')
+    expect(screen.getByRole('link', { name: /해소 못 한 물성 이름/ })).toHaveAttribute(
+      'href',
+      '/admin/vocabulary'
+    )
     expect(row).toHaveTextContent('디스크 91% (임계 85%)')
     expect(row).toHaveTextContent('보존기간 지난 삭제 12건')
     expect(row).toHaveTextContent('실패한 작업 2')

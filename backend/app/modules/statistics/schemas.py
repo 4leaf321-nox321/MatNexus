@@ -435,6 +435,8 @@ class OpsWarningsOut(BaseModel):
     failed_jobs: int
     backup_problem: str | None
     """백업이 없거나 밀렸으면 그 말. 정상이면 비어 있다."""
+    unresolved_names: int = 0
+    """물성 이름 해소에 실패해 별칭 후보로 남은 말의 수(2026-09-16). 사람이 잇거나 무시한다."""
 
 
 class OverviewOut(BaseModel):

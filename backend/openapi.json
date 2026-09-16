@@ -144,6 +144,85 @@
         "title": "AccountSummaryOut",
         "type": "object"
       },
+      "AliasCandidateAccept": {
+        "properties": {
+          "property_key": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Property Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property_key"
+        ],
+        "title": "AliasCandidateAccept",
+        "type": "object"
+      },
+      "AliasCandidateOut": {
+        "description": "못 푼 이름 하나 — 관리자가 별칭으로 받아들이거나 무시한다(2026-09-16).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "resolved_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved To"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "text",
+          "source",
+          "count",
+          "status",
+          "resolved_to",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "AliasCandidateOut",
+        "type": "object"
+      },
       "AliasOut": {
         "description": "같은 단위의 다른 표기. **장비마다 다르게 적는다.**\n\n실측: 마이크로를 마이크로 기호(U+00B5)로 적는 장비와 그리스 뮤(U+03BC)로\n적는 장비가 섞여 있다 — 눈으로는 같아 보이는데 코드포인트가 다르다.",
         "properties": {
@@ -5984,6 +6063,81 @@
         "title": "CoverageCellOut",
         "type": "object"
       },
+      "CoverageEntryOut": {
+        "properties": {
+          "conditions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Conditions",
+            "type": "object"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "ref_id": {
+            "title": "Ref Id",
+            "type": "string"
+          },
+          "ref_kind": {
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "ref_label": {
+            "title": "Ref Label",
+            "type": "string"
+          },
+          "spread_si": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Si"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "integer"
+          },
+          "value_si": {
+            "title": "Value Si",
+            "type": "number"
+          }
+        },
+        "required": [
+          "origin",
+          "tier",
+          "value_si",
+          "count",
+          "spread_si",
+          "conditions",
+          "method",
+          "ref_kind",
+          "ref_id",
+          "ref_label"
+        ],
+        "title": "CoverageEntryOut",
+        "type": "object"
+      },
       "CoverageGroupOut": {
         "description": "재료 분류 한 칸 — **재료가 아니라 분류가 행이다.**\n\n재료마다 한 줄이면 94줄이 되고, 그 표에서 「무엇을 안 쟀나」 를 읽을 수 없다.\n분류로 접으면 「Metal/Steel 은 인장은 했고 점탄성은 안 했다」 가 한 줄에 온다.",
         "properties": {
@@ -6014,6 +6168,44 @@
           "cells"
         ],
         "title": "CoverageGroupOut",
+        "type": "object"
+      },
+      "CoveragePropertyOut": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "si_unit",
+          "entries"
+        ],
+        "title": "CoveragePropertyOut",
         "type": "object"
       },
       "CoverageTypeOut": {
@@ -15567,6 +15759,11 @@
           "failed_jobs": {
             "title": "Failed Jobs",
             "type": "integer"
+          },
+          "unresolved_names": {
+            "default": 0,
+            "title": "Unresolved Names",
+            "type": "integer"
           }
         },
         "required": [
@@ -17928,6 +18125,40 @@
           }
         },
         "title": "PropertyCardUpdateRequest",
+        "type": "object"
+      },
+      "PropertyCoverageOut": {
+        "description": "물성 지도 — 이 재료에 어떤 물성이 어떤 조건에 어떤 등급으로 있나(2026-09-16).\n\n세 세계(시험·선언·문헌)를 같은 줄 모양으로. 공용어(문헌 물성 키)에 안 이어진 스칼라·\n항목은 `unmapped` 에 — 지도에서 사라지면 없는 줄 안다.",
+        "properties": {
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/CoveragePropertyOut"
+            },
+            "title": "Properties",
+            "type": "array"
+          },
+          "unmapped": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Unmapped",
+            "type": "object"
+          }
+        },
+        "required": [
+          "material_id",
+          "properties",
+          "unmapped"
+        ],
+        "title": "PropertyCoverageOut",
         "type": "object"
       },
       "PropertyDictionaryEntryOut": {
@@ -29504,6 +29735,166 @@
         ]
       }
     },
+    "/api/catalog/properties/alias-candidates": {
+      "get": {
+        "description": "못 푼 이름들 — **많이 물은 것부터.** 관리자가 별칭으로 잇거나 무시한다.\n\nAI 나 사람이 「UTS」 로 찾아 빈손이면 여기 쌓인다. 전에는 그 사실이 아무 데도 남지\n않아 다음 사람도 같은 말로 다시 실패했다(2026-09-16).",
+        "operationId": "list_alias_candidates_api_catalog_properties_alias_candidates_get",
+        "parameters": [
+          {
+            "description": "`open` · `accepted` · `ignored` · `all`",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "description": "`open` · `accepted` · `ignored` · `all`",
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AliasCandidateOut"
+                  },
+                  "title": "Response List Alias Candidates Api Catalog Properties Alias Candidates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alias Candidates",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/alias-candidates/{candidate_id}/accept": {
+      "post": {
+        "description": "이 말을 **그 물성의 별칭으로.** 다음부터 이름 해소가 그 물성을 찾는다.\n\n별칭이 이미 있으면 그것을 그대로 두고 후보만 닫는다 — 같은 별칭을 두 번 만들지\n않는다(`add_property_alias` 와 같은 판단).",
+        "operationId": "accept_alias_candidate_api_catalog_properties_alias_candidates__candidate_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasCandidateAccept"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasCandidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Alias Candidate",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/alias-candidates/{candidate_id}/ignore": {
+      "post": {
+        "description": "물성 이름이 아니다(오타·다른 것). 목록에서 내리되 지우지 않는다 — 다시 오면 횟수만\n오른다.",
+        "operationId": "ignore_alias_candidate_api_catalog_properties_alias_candidates__candidate_id__ignore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasCandidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ignore Alias Candidate",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/properties/aliases/{alias_id}": {
       "delete": {
         "operationId": "remove_property_alias_api_catalog_properties_aliases__alias_id__delete",
@@ -36105,6 +36496,50 @@
           }
         },
         "summary": "Drop Parameter Set",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/property-coverage": {
+      "get": {
+        "description": "물성 지도 — 이 재료에 **어떤 물성이 어떤 조건에 어떤 등급으로** 있나, 한 장.\n\n시험으로 잰 값·선언·이어진 문헌값을 같은 줄 모양으로 편다. 공용어에 안 이어진\n스칼라·항목은 `unmapped` 로 함께 — 지도에서 사라지면 없는 줄 안다.",
+        "operationId": "property_coverage_api_materials__material_id__property_coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyCoverageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Property Coverage",
         "tags": [
           "materials"
         ]

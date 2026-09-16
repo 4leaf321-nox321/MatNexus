@@ -37,6 +37,7 @@ from datetime import datetime
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -139,5 +140,48 @@ class PropertyLink(Base):
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+#: 후보의 상태.
+CANDIDATE_STATUSES = ("open", "accepted", "ignored")
+
+
+class AliasCandidate(Base):
+    """**못 푼 이름** — 사람이나 AI 가 물성을 찾다 빈손이었던 말(2026-09-16).
+
+    전에는 「UTS」 로 찾아 실패하면 그 사실이 아무 데도 남지 않아 다음 사람도 같은 말로
+    다시 실패했다. 여기 쌓아 두고 관리자가 「인장강도의 별칭으로」 또는 「무시」 를 한 번
+    누르면 다음부터 찾힌다 — 실패를 사전으로 바꾸는 줄이다([계획] 온톨로지 고도화 §2-F).
+
+    AI 는 후보를 **만들 뿐** 사전을 고치지 못한다. 같은 말이 다시 오면 횟수만 오른다.
+    """
+
+    __tablename__ = "alias_candidates"
+    __table_args__ = (UniqueConstraint("kind", "normalized", name="uq_alias_candidates_text"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    kind: Mapped[str] = mapped_column(String(20), default="property")
+    """무엇의 이름인가 — 지금은 `property` 만. 재료 이름이 뒤따를 자리."""
+    text: Mapped[str] = mapped_column(String(200))
+    """사람이 친 그대로(처음 본 모양)."""
+    normalized: Mapped[str] = mapped_column(String(200), index=True)
+    source: Mapped[str] = mapped_column(String(20))
+    """어디서 왔나 — `search`(값 검색) · `resolve`(이름 해소) · `import`(이관)."""
+    count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    resolved_to: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    """받아들였으면 어느 물성 키의 별칭이 됐나."""
+    resolved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -762,6 +762,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/properties/alias-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Alias Candidates
+         * @description 못 푼 이름들 — **많이 물은 것부터.** 관리자가 별칭으로 잇거나 무시한다.
+         *
+         *     AI 나 사람이 「UTS」 로 찾아 빈손이면 여기 쌓인다. 전에는 그 사실이 아무 데도 남지
+         *     않아 다음 사람도 같은 말로 다시 실패했다(2026-09-16).
+         */
+        get: operations["list_alias_candidates_api_catalog_properties_alias_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/alias-candidates/{candidate_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Alias Candidate
+         * @description 이 말을 **그 물성의 별칭으로.** 다음부터 이름 해소가 그 물성을 찾는다.
+         *
+         *     별칭이 이미 있으면 그것을 그대로 두고 후보만 닫는다 — 같은 별칭을 두 번 만들지
+         *     않는다(`add_property_alias` 와 같은 판단).
+         */
+        post: operations["accept_alias_candidate_api_catalog_properties_alias_candidates__candidate_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/alias-candidates/{candidate_id}/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ignore Alias Candidate
+         * @description 물성 이름이 아니다(오타·다른 것). 목록에서 내리되 지우지 않는다 — 다시 오면 횟수만
+         *     오른다.
+         */
+        post: operations["ignore_alias_candidate_api_catalog_properties_alias_candidates__candidate_id__ignore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/properties/aliases/{alias_id}": {
         parameters: {
             query?: never;
@@ -3259,6 +3326,29 @@ export interface paths {
         post?: never;
         /** Drop Parameter Set */
         delete: operations["drop_parameter_set_api_materials__material_id__parameter_sets__set_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/property-coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Property Coverage
+         * @description 물성 지도 — 이 재료에 **어떤 물성이 어떤 조건에 어떤 등급으로** 있나, 한 장.
+         *
+         *     시험으로 잰 값·선언·이어진 문헌값을 같은 줄 모양으로 편다. 공용어에 안 이어진
+         *     스칼라·항목은 `unmapped` 로 함께 — 지도에서 사라지면 없는 줄 안다.
+         */
+        get: operations["property_coverage_api_materials__material_id__property_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -6742,6 +6832,44 @@ export interface components {
             /** Active System Admins */
             active_system_admins: number;
         };
+        /** AliasCandidateAccept */
+        AliasCandidateAccept: {
+            /** Property Key */
+            property_key: string;
+        };
+        /**
+         * AliasCandidateOut
+         * @description 못 푼 이름 하나 — 관리자가 별칭으로 받아들이거나 무시한다(2026-09-16).
+         */
+        AliasCandidateOut: {
+            /** Count */
+            count: number;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Resolved To */
+            resolved_to: string | null;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Text */
+            text: string;
+        };
         /**
          * AliasOut
          * @description 같은 단위의 다른 표기. **장비마다 다르게 적는다.**
@@ -8832,6 +8960,31 @@ export interface components {
             /** Run Count */
             run_count: number;
         };
+        /** CoverageEntryOut */
+        CoverageEntryOut: {
+            /** Conditions */
+            conditions: {
+                [key: string]: number;
+            };
+            /** Count */
+            count: number;
+            /** Method */
+            method: string | null;
+            /** Origin */
+            origin: string;
+            /** Ref Id */
+            ref_id: string;
+            /** Ref Kind */
+            ref_kind: string;
+            /** Ref Label */
+            ref_label: string;
+            /** Spread Si */
+            spread_si: number | null;
+            /** Tier */
+            tier: number;
+            /** Value Si */
+            value_si: number;
+        };
         /**
          * CoverageGroupOut
          * @description 재료 분류 한 칸 — **재료가 아니라 분류가 행이다.**
@@ -8850,6 +9003,17 @@ export interface components {
             family: string;
             /** Material Count */
             material_count: number;
+        };
+        /** CoveragePropertyOut */
+        CoveragePropertyOut: {
+            /** Entries */
+            entries: components["schemas"]["CoverageEntryOut"][];
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Si Unit */
+            si_unit: string | null;
         };
         /** CoverageTypeOut */
         CoverageTypeOut: {
@@ -12364,6 +12528,11 @@ export interface components {
             expired_deleted_count: number;
             /** Failed Jobs */
             failed_jobs: number;
+            /**
+             * Unresolved Names
+             * @default 0
+             */
+            unresolved_names: number;
         };
         /**
          * OutlierOut
@@ -13354,6 +13523,26 @@ export interface components {
             label?: string | null;
             /** Note */
             note?: string | null;
+        };
+        /**
+         * PropertyCoverageOut
+         * @description 물성 지도 — 이 재료에 어떤 물성이 어떤 조건에 어떤 등급으로 있나(2026-09-16).
+         *
+         *     세 세계(시험·선언·문헌)를 같은 줄 모양으로. 공용어(문헌 물성 키)에 안 이어진 스칼라·
+         *     항목은 `unmapped` 에 — 지도에서 사라지면 없는 줄 안다.
+         */
+        PropertyCoverageOut: {
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Properties */
+            properties: components["schemas"]["CoveragePropertyOut"][];
+            /** Unmapped */
+            unmapped: {
+                [key: string]: string[];
+            };
         };
         /**
          * PropertyDictionaryEntryOut
@@ -18401,6 +18590,105 @@ export interface operations {
             };
         };
     };
+    list_alias_candidates_api_catalog_properties_alias_candidates_get: {
+        parameters: {
+            query?: {
+                /** @description `open` · `accepted` · `ignored` · `all` */
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AliasCandidateOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_alias_candidate_api_catalog_properties_alias_candidates__candidate_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AliasCandidateAccept"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AliasCandidateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ignore_alias_candidate_api_catalog_properties_alias_candidates__candidate_id__ignore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AliasCandidateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_property_alias_api_catalog_properties_aliases__alias_id__delete: {
         parameters: {
             query?: never;
@@ -22587,6 +22875,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    property_coverage_api_materials__material_id__property_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCoverageOut"];
+                };
             };
             /** @description Validation Error */
             422: {

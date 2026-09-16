@@ -407,6 +407,27 @@ class PropertyAliasCreate(BaseModel):
     note: str | None = None
 
 
+class AliasCandidateOut(BaseModel):
+    """못 푼 이름 하나 — 관리자가 별칭으로 받아들이거나 무시한다(2026-09-16)."""
+
+    id: uuid.UUID
+    kind: str
+    text: str
+    source: str
+    count: int
+    status: str
+    resolved_to: str | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AliasCandidateAccept(BaseModel):
+    property_key: str = Field(min_length=1, max_length=120)
+    """이 물성의 별칭이 된다."""
+
+
 class PropertyLinkOut(BaseModel):
     id: uuid.UUID
     property_key: str

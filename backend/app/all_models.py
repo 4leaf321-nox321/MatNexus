@@ -21,7 +21,7 @@ from app.modules.catalog.models import (
     CatalogSource,
     CatalogValue,
 )
-from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
+from app.modules.catalog.ontology_models import AliasCandidate, PropertyAlias, PropertyLink
 from app.modules.commissions.models import Commission, CommissionEvent, CommissionItem
 from app.modules.equipment.models import (
     EquipmentCalibration,
@@ -69,6 +69,7 @@ from app.modules.workspaces.models import Workspace, WorkspaceMember
 
 __all__ = [
     "AccessLog",
+    "AliasCandidate",
     "Base",
     "BomAlias",
     "CatalogDefinition",

@@ -33,6 +33,7 @@ import {
   X,
 } from 'lucide-react'
 
+import { AliasCandidatesPanel } from '@/modules/catalog/AliasCandidatesPanel'
 import { PropertyMappingPanel } from '@/modules/catalog/PropertyMappingPanel'
 import { catalogApi } from '@/modules/catalog/api'
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
@@ -132,6 +133,9 @@ export default function VocabularyAdminPage() {
           onChanged={() => mapping.reload()}
         />
       )}
+
+      {/* **못 푼 이름은 시스템 관리자가 잇는다** — 사전은 전사 자산이다. */}
+      {user?.is_system_admin && <AliasCandidatesPanel />}
 
       <DriftPanel onRepaired={() => vocabularies.reload()} />
     </div>
